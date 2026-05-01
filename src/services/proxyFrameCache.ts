@@ -1,4 +1,4 @@
-// Proxy frame cache - loads and caches WebP frames for fast playback
+// Proxy frame cache - loads and caches proxy image frames for fast playback
 
 import { Logger } from './logger';
 import { projectFileService } from './projectFileService';

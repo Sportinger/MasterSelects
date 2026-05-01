@@ -4,6 +4,7 @@ import {
   getLayerOverlayHandles,
   pointInLayerOverlayBounds,
   resolvePositionDeltaForCanvasDelta,
+  resolveScaleDeltaForHandle,
 } from '../../src/components/preview/editModeOverlayMath';
 
 const baseParams = {
@@ -88,6 +89,46 @@ describe('editModeOverlayMath', () => {
     expect(pointInLayerOverlayBounds({ x: -100, y: -100 }, bounds)).toBe(false);
     expect(handles.t.x).toBeCloseTo((bounds.corners.tl.x + bounds.corners.tr.x) / 2);
     expect(handles.r.y).toBeCloseTo((bounds.corners.tr.y + bounds.corners.br.y) / 2);
+  });
+
+  it('applies non-uniform scale in local layer space before rotation', () => {
+    const bounds = calculateLayerOverlayBounds({
+      ...baseParams,
+      sourceWidth: 100,
+      sourceHeight: 100,
+      outputWidth: 100,
+      outputHeight: 100,
+      canvasWidth: 100,
+      canvasHeight: 100,
+      scale: { x: 2, y: 0.5 },
+      rotation: Math.PI / 2,
+    });
+
+    expect(bounds.width).toBeCloseTo(200);
+    expect(bounds.height).toBeCloseTo(50);
+    expect(bounds.rotation).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it('projects scale handle drags onto the rotated local layer axes', () => {
+    const bounds = calculateLayerOverlayBounds({
+      ...baseParams,
+      sourceWidth: 100,
+      sourceHeight: 100,
+      outputWidth: 100,
+      outputHeight: 100,
+      canvasWidth: 100,
+      canvasHeight: 100,
+      rotation: Math.PI / 2,
+    });
+    const handles = getLayerOverlayHandles(bounds);
+    const localRightDrag = {
+      x: handles.r.x - bounds.x,
+      y: handles.r.y - bounds.y,
+    };
+    const scaleDelta = resolveScaleDeltaForHandle(bounds, 'r', localRightDrag);
+
+    expect(scaleDelta.x).toBeGreaterThan(0);
+    expect(scaleDelta.y).toBeCloseTo(0);
   });
 
   it('converts mouse drag pixels back into compositor position space after scale and rotation', () => {

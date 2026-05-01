@@ -1234,6 +1234,7 @@ export class RenderDispatcher {
       activeSplatEffectors,
       isRealtimePlayback,
       sceneGizmo,
+      d.maskTextureManager,
     );
     const hasSplatSequence = nativeSplatLayers.some((layer) => layer.gaussianSplatIsSequence === true);
     if (textureView && hasSplatSequence) {

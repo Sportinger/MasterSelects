@@ -5,6 +5,15 @@ import type { ClipMask, MaskVertex } from '../types';
 // Canvas for rendering masks (reused for performance)
 let maskCanvas: OffscreenCanvas | null = null;
 let maskCtx: OffscreenCanvasRenderingContext2D | null = null;
+let maskShapeCanvas: OffscreenCanvas | null = null;
+let maskShapeCtx: OffscreenCanvasRenderingContext2D | null = null;
+let blurCanvas: OffscreenCanvas | null = null;
+let blurCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+export interface MaskTextureRenderOptions {
+  featherScale?: number;
+  maxFeatherQualityScale?: number;
+}
 
 // Ensure canvas exists at given size
 function ensureMaskCanvas(width: number, height: number): OffscreenCanvasRenderingContext2D {
@@ -18,8 +27,8 @@ function ensureMaskCanvas(width: number, height: number): OffscreenCanvasRenderi
   return maskCtx;
 }
 
-// Draw a single bezier path for a mask
-function drawMaskPath(
+// Append a single bezier path for a mask to the current Canvas2D path
+function traceMaskPath(
   ctx: OffscreenCanvasRenderingContext2D,
   vertices: MaskVertex[],
   closed: boolean,
@@ -27,10 +36,8 @@ function drawMaskPath(
   height: number,
   offsetX: number = 0,
   offsetY: number = 0
-): void {
-  if (vertices.length < 2) return;
-
-  ctx.beginPath();
+): boolean {
+  if (vertices.length < 2) return false;
 
   for (let i = 0; i < vertices.length; i++) {
     const v = vertices[i];
@@ -89,84 +96,180 @@ function drawMaskPath(
     }
     ctx.closePath();
   }
+
+  return true;
+}
+
+function ensureBlurCanvas(width: number, height: number): OffscreenCanvasRenderingContext2D {
+  if (!blurCanvas || blurCanvas.width !== width || blurCanvas.height !== height) {
+    blurCanvas = new OffscreenCanvas(width, height);
+    blurCtx = blurCanvas.getContext('2d', { willReadFrequently: false });
+  }
+  if (!blurCtx) {
+    throw new Error('Failed to get 2D context for mask blur canvas');
+  }
+  return blurCtx;
+}
+
+function ensureMaskShapeCanvas(width: number, height: number): OffscreenCanvasRenderingContext2D {
+  if (!maskShapeCanvas || maskShapeCanvas.width !== width || maskShapeCanvas.height !== height) {
+    maskShapeCanvas = new OffscreenCanvas(width, height);
+    maskShapeCtx = maskShapeCanvas.getContext('2d', { willReadFrequently: false });
+  }
+  if (!maskShapeCtx) {
+    throw new Error('Failed to get 2D context for mask shape canvas');
+  }
+  return maskShapeCtx;
+}
+
+// Draw a single bezier path for a mask
+function drawMaskPath(
+  ctx: OffscreenCanvasRenderingContext2D,
+  vertices: MaskVertex[],
+  closed: boolean,
+  width: number,
+  height: number,
+  offsetX: number = 0,
+  offsetY: number = 0,
+  inverted: boolean = false
+): void {
+  ctx.beginPath();
+
+  if (inverted) {
+    ctx.rect(0, 0, width, height);
+  }
+
+  if (!traceMaskPath(ctx, vertices, closed, width, height, offsetX, offsetY)) {
+    return;
+  }
+
+  ctx.fill(inverted ? 'evenodd' : 'nonzero');
+}
+
+function getFeatherQualityScale(featherQuality: number | undefined): number {
+  const quality = Math.min(100, Math.max(1, Math.round(featherQuality ?? 50)));
+  if (quality <= 33) return 0.5;
+  if (quality <= 66) return 0.75;
+  return 1;
+}
+
+function renderMaskAlpha(mask: ClipMask, width: number, height: number): OffscreenCanvas {
+  const shapeCtx = ensureMaskShapeCanvas(width, height);
+  shapeCtx.globalCompositeOperation = 'source-over';
+  shapeCtx.filter = 'none';
+  shapeCtx.clearRect(0, 0, width, height);
+  shapeCtx.fillStyle = '#ffffff';
+  drawMaskPath(
+    shapeCtx,
+    mask.vertices,
+    mask.closed,
+    width,
+    height,
+    mask.position.x,
+    mask.position.y,
+    mask.inverted,
+  );
+  return maskShapeCanvas!;
+}
+
+function applyFeatherToShapeCanvas(
+  width: number,
+  height: number,
+  feather: number,
+  featherQualityScale: number,
+): OffscreenCanvas {
+  if (feather <= 0.5) return maskShapeCanvas!;
+
+  const blurWidth = Math.max(1, Math.round(width * featherQualityScale));
+  const blurHeight = Math.max(1, Math.round(height * featherQualityScale));
+  const tempCtx = ensureBlurCanvas(blurWidth, blurHeight);
+  tempCtx.globalCompositeOperation = 'source-over';
+  tempCtx.filter = 'none';
+  tempCtx.clearRect(0, 0, blurWidth, blurHeight);
+  tempCtx.drawImage(maskShapeCanvas!, 0, 0, blurWidth, blurHeight);
+
+  const shapeCtx = ensureMaskShapeCanvas(width, height);
+  shapeCtx.globalCompositeOperation = 'source-over';
+  shapeCtx.clearRect(0, 0, width, height);
+  shapeCtx.filter = `blur(${feather}px)`;
+  shapeCtx.drawImage(blurCanvas!, 0, 0, width, height);
+  shapeCtx.filter = 'none';
+  return maskShapeCanvas!;
+}
+
+function alphaToMaskImageData(ctx: OffscreenCanvasRenderingContext2D, width: number, height: number): ImageData {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const { data } = imageData;
+  for (let i = 0; i < data.length; i += 4) {
+    const value = data[i + 3];
+    data[i] = value;
+    data[i + 1] = value;
+    data[i + 2] = value;
+    data[i + 3] = 255;
+  }
+  return imageData;
 }
 
 // Generate a mask texture from an array of ClipMask
 export function generateMaskTexture(
   masks: ClipMask[],
   width: number,
-  height: number
+  height: number,
+  options: MaskTextureRenderOptions = {},
 ): ImageData | null {
   if (!masks || masks.length === 0) return null;
 
+  const enabledMasks = masks.filter(m => m.enabled !== false && m.vertices.length >= 3 && m.closed);
+  if (enabledMasks.length === 0) return null;
+
   const ctx = ensureMaskCanvas(width, height);
+  const featherScale = options.featherScale ?? 1;
 
-  // Get max feather for blur (apply blur on CPU for smooth results)
-  const maxFeather = Math.max(...masks.map(m => m.feather || 0));
-
-  // Start with white (full visibility) if first mask is subtract/intersect,
-  // otherwise start with black (no visibility) for add mode
-  const firstMask = masks[0];
+  // Compose mask semantics into alpha, then copy alpha into RGB at the end.
+  // Canvas destination-out/destination-in operate on alpha, while the GPU
+  // compositor samples the red channel.
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  const firstMask = enabledMasks[0];
   if (firstMask?.mode === 'subtract' || firstMask?.mode === 'intersect') {
     ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
   } else {
-    ctx.fillStyle = '#000000';
+    ctx.clearRect(0, 0, width, height);
   }
-  ctx.fillRect(0, 0, width, height);
 
   // Process each mask
-  for (const mask of masks) {
-    if (mask.vertices.length < 3 || !mask.closed) continue;
-
-    ctx.save();
+  for (const mask of enabledMasks) {
+    renderMaskAlpha(mask, width, height);
+    const feather = (mask.feather || 0) * featherScale;
+    const baseFeatherQualityScale = getFeatherQualityScale(mask.featherQuality);
+    const featherQualityScale = options.maxFeatherQualityScale
+      ? Math.min(baseFeatherQualityScale, options.maxFeatherQualityScale)
+      : baseFeatherQualityScale;
+    const maskCanvasSource = applyFeatherToShapeCanvas(width, height, feather, featherQualityScale);
 
     // Set composite operation based on mask mode
     switch (mask.mode) {
       case 'add':
-        // Add to existing visibility
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = `rgba(255, 255, 255, ${mask.opacity})`;
+        // Union this mask into the visible alpha.
+        ctx.globalCompositeOperation = 'source-over';
         break;
       case 'subtract':
-        // Remove from existing visibility (use destination-out with white alpha)
+        // Remove this mask's alpha from the visible alpha.
         ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillStyle = `rgba(255, 255, 255, ${mask.opacity})`;
         break;
       case 'intersect':
-        // Keep only intersecting areas
+        // Keep only the overlap between current alpha and this mask's alpha.
         ctx.globalCompositeOperation = 'destination-in';
-        ctx.fillStyle = `rgba(255, 255, 255, ${mask.opacity})`;
         break;
     }
 
-    // Draw the mask path with position offset
-    drawMaskPath(ctx, mask.vertices, mask.closed, width, height, mask.position.x, mask.position.y);
-    ctx.fill();
-
-    ctx.restore();
+    ctx.drawImage(maskCanvasSource, 0, 0);
   }
 
-  // Apply feather blur on CPU using Canvas2D's optimized blur filter
-  // This produces much smoother results than GPU sampling
-  if (maxFeather > 0.5) {
-    // Get the current mask image
-    const maskData = ctx.getImageData(0, 0, width, height);
-
-    // Clear and apply blur filter
-    ctx.clearRect(0, 0, width, height);
-    ctx.filter = `blur(${maxFeather}px)`;
-
-    // Create temporary canvas to hold the mask for blur
-    const tempCanvas = new OffscreenCanvas(width, height);
-    const tempCtx = tempCanvas.getContext('2d')!;
-    tempCtx.putImageData(maskData, 0, 0);
-
-    // Draw blurred version
-    ctx.drawImage(tempCanvas, 0, 0);
-    ctx.filter = 'none';
-  }
-
-  return ctx.getImageData(0, 0, width, height);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  return alphaToMaskImageData(ctx, width, height);
 }
 
 // Generate mask texture for a single mask (simpler API for common case)
@@ -175,20 +278,21 @@ export function generateSingleMaskTexture(
   width: number,
   height: number
 ): ImageData | null {
-  if (!mask || mask.vertices.length < 3 || !mask.closed) return null;
+  if (!mask || mask.enabled === false || mask.vertices.length < 3 || !mask.closed) return null;
 
   const ctx = ensureMaskCanvas(width, height);
 
   // Start with black (mask area = white, outside = black)
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, width, height);
 
-  // Draw mask as white
-  ctx.fillStyle = `rgba(255, 255, 255, ${mask.opacity})`;
-  drawMaskPath(ctx, mask.vertices, mask.closed, width, height);
-  ctx.fill();
+  // Draw mask as white. Layer opacity is handled by the clip transform.
+  ctx.fillStyle = '#ffffff';
+  drawMaskPath(ctx, mask.vertices, mask.closed, width, height, mask.position.x, mask.position.y, mask.inverted);
 
-  // NOTE: Feather (blur) and inversion are now handled in GPU shader for performance
+  // Feather is applied by generateMaskTexture for the multi-mask render path.
 
   return ctx.getImageData(0, 0, width, height);
 }

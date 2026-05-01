@@ -9,10 +9,70 @@ type IterableDirectoryHandle = FileSystemDirectoryHandle & {
   values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
 };
 
+const PROXY_FRAME_EXTENSION = 'jpg';
+const PROXY_FRAME_MATCH = /^frame_(\d+)\.(?:jpe?g|webp)$/i;
+
+export interface ProxyFrameWriter {
+  saveFrame: (frameIndex: number, blob: Blob) => Promise<boolean>;
+}
+
+function getProxyFrameFileName(frameIndex: number, extension = PROXY_FRAME_EXTENSION): string {
+  return `frame_${frameIndex.toString().padStart(6, '0')}.${extension}`;
+}
+
 export class ProxyStorageService {
   // ============================================
   // VIDEO PROXY OPERATIONS
   // ============================================
+
+  private async getProxyMediaFolder(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string,
+    create: boolean
+  ): Promise<FileSystemDirectoryHandle> {
+    const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create });
+    return proxyFolder.getDirectoryHandle(mediaId, { create });
+  }
+
+  private async writeProxyFrameToFolder(
+    projectName: string,
+    mediaId: string,
+    mediaFolder: FileSystemDirectoryHandle,
+    frameIndex: number,
+    blob: Blob
+  ): Promise<boolean> {
+    try {
+      const fileName = getProxyFrameFileName(frameIndex);
+      const fileHandle = await mediaFolder.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+
+      if (frameIndex === 0 || frameIndex === 5) {
+        log.debug(`Saved proxy frame ${frameIndex} to ${projectName}/${PROJECT_FOLDERS.PROXY}/${mediaId}/${fileName} (${blob.size} bytes)`);
+      }
+      return true;
+    } catch (e) {
+      log.error('Failed to save proxy frame:', e);
+      return false;
+    }
+  }
+
+  async createProxyFrameWriter(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string
+  ): Promise<ProxyFrameWriter | null> {
+    try {
+      const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, true);
+      return {
+        saveFrame: (frameIndex, blob) =>
+          this.writeProxyFrameToFolder(projectHandle.name, mediaId, mediaFolder, frameIndex, blob),
+      };
+    } catch (e) {
+      log.error('Failed to create proxy frame writer:', e);
+      return null;
+    }
+  }
 
   /**
    * Save proxy frame
@@ -24,20 +84,8 @@ export class ProxyStorageService {
     blob: Blob
   ): Promise<boolean> {
     try {
-      // Get or create media subfolder in Proxy/
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create: true });
-      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId, { create: true });
-
-      const fileName = `frame_${frameIndex.toString().padStart(6, '0')}.webp`;
-      const fileHandle = await mediaFolder.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-
-      if (frameIndex === 0 || frameIndex === 5) {
-        log.debug(`Saved proxy frame ${frameIndex} to ${projectHandle.name}/${PROJECT_FOLDERS.PROXY}/${mediaId}/${fileName} (${blob.size} bytes)`);
-      }
-      return true;
+      const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, true);
+      return this.writeProxyFrameToFolder(projectHandle.name, mediaId, mediaFolder, frameIndex, blob);
     } catch (e) {
       log.error('Failed to save proxy frame:', e);
       return false;
@@ -53,14 +101,24 @@ export class ProxyStorageService {
     frameIndex: number
   ): Promise<Blob | null> {
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
-      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
-      const fileName = `frame_${frameIndex.toString().padStart(6, '0')}.webp`;
-      const fileHandle = await mediaFolder.getFileHandle(fileName);
-      return await fileHandle.getFile();
+      const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, false);
+      const fileNames = [
+        getProxyFrameFileName(frameIndex),
+        getProxyFrameFileName(frameIndex, 'webp'),
+      ];
+
+      for (const fileName of fileNames) {
+        try {
+          const fileHandle = await mediaFolder.getFileHandle(fileName);
+          return await fileHandle.getFile();
+        } catch {
+          // Try next extension.
+        }
+      }
     } catch (e) {
-      return null;
+      // No proxy folder exists
     }
+    return null;
   }
 
   /**
@@ -88,17 +146,17 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<number> {
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
-      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
-
-      // Count .webp files in the folder
-      let count = 0;
+      const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, false);
+      const indices = new Set<number>();
       for await (const entry of (mediaFolder as IterableDirectoryHandle).values()) {
-        if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
-          count++;
+        if (entry.kind === 'file') {
+          const match = entry.name.match(PROXY_FRAME_MATCH);
+          if (match) {
+            indices.add(parseInt(match[1], 10));
+          }
         }
       }
-      return count;
+      return indices.size;
     } catch (e) {
       return 0;
     }
@@ -114,12 +172,11 @@ export class ProxyStorageService {
   ): Promise<Set<number>> {
     const indices = new Set<number>();
     try {
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
-      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
+      const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, false);
 
       for await (const entry of (mediaFolder as IterableDirectoryHandle).values()) {
-        if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
-          const match = entry.name.match(/^frame_(\d+)\.webp$/);
+        if (entry.kind === 'file') {
+          const match = entry.name.match(PROXY_FRAME_MATCH);
           if (match) {
             indices.add(parseInt(match[1], 10));
           }

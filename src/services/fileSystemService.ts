@@ -211,7 +211,7 @@ export async function saveProxyFrame(
     }
 
     // Create the frame file
-    const fileName = `frame_${frameIndex.toString().padStart(6, '0')}.webp`;
+    const fileName = `frame_${frameIndex.toString().padStart(6, '0')}.jpg`;
     const fileHandle = await mediaDir.getFileHandle(fileName, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(blob);

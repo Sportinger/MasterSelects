@@ -363,6 +363,7 @@ describe('mask serialization', () => {
         mode: 'add',
         expanded: false,
         position: { x: 0, y: 0 },
+        enabled: true,
         visible: true,
       },
     ];
@@ -499,6 +500,7 @@ describe('complex timeline round-trip', () => {
             mode: 'subtract',
             expanded: false,
             position: { x: 0, y: 0 },
+            enabled: true,
             visible: true,
           }],
         }),

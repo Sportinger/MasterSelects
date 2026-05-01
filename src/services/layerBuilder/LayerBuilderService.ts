@@ -1173,9 +1173,9 @@ export class LayerBuilderService {
    * Add mask properties to layer if clip has masks
    */
   private addMaskProperties(layer: Layer, clip: TimelineClip): void {
-    if (clip.masks && clip.masks.length > 0) {
+    if (clip.masks?.some(m => m.enabled !== false)) {
       layer.maskClipId = clip.id;
-      layer.maskInvert = clip.masks.some(m => m.inverted);
+      layer.maskInvert = false;
     }
   }
 
@@ -1332,9 +1332,9 @@ export class LayerBuilderService {
     };
 
     // Add mask properties
-    if (nestedClip.masks && nestedClip.masks.length > 0) {
+    if (nestedClip.masks?.some(m => m.enabled !== false)) {
       baseLayer.maskClipId = nestedClip.id;
-      baseLayer.maskInvert = nestedClip.masks.some(m => m.inverted);
+      baseLayer.maskInvert = false;
     }
 
     // Handle sub-nested composition clips (Level 3+)

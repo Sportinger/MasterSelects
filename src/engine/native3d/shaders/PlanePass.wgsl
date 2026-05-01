@@ -2,7 +2,8 @@ struct PlaneUniforms {
   mvp: mat4x4f,
   opacity: f32,
   forceOpaqueAlpha: f32,
-  _pad: vec2f,
+  hasMask: f32,
+  maskInvert: f32,
 }
 
 struct VertexOutput {
@@ -13,6 +14,7 @@ struct VertexOutput {
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTexture: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> plane: PlaneUniforms;
+@group(0) @binding(3) var maskTexture: texture_2d<f32>;
 
 @vertex
 fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
@@ -44,7 +46,14 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let color = textureSample(inputTexture, texSampler, input.uv);
   let sourceAlpha = select(color.a, 1.0, plane.forceOpaqueAlpha > 0.5);
-  let alpha = sourceAlpha * plane.opacity;
+  var maskValue = 1.0;
+  if (plane.hasMask > 0.5) {
+    maskValue = textureSample(maskTexture, texSampler, input.uv).r;
+    if (plane.maskInvert > 0.5) {
+      maskValue = 1.0 - maskValue;
+    }
+  }
+  let alpha = sourceAlpha * plane.opacity * maskValue;
   if (alpha < 1.0 / 255.0) {
     discard;
   }

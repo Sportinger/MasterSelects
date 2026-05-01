@@ -5,6 +5,7 @@ import type { Layer, TimelineClip } from '../../types';
 import {
   getLayerOverlayHandles,
   resolvePositionDeltaForCanvasDelta,
+  resolveScaleDeltaForHandle,
   scaleLayerOverlayBounds,
   type LayerOverlayBounds,
   type OverlayPoint,
@@ -97,6 +98,7 @@ export function useLayerDrag({
   const layersRef = useRef(layers);
   const clipsRef = useRef(clips);
   const movePositionBasis = useRef<MovePositionBasis | null>(null);
+  const scaleDragBounds = useRef<LayerOverlayBounds | null>(null);
   const pendingDragUpdate = useRef<PendingDragUpdate | null>(null);
   const dragUpdateFrame = useRef<number | null>(null);
 
@@ -240,6 +242,7 @@ export function useLayerDrag({
       const handle = findHandleAtPosition(x, y, selectedLayer);
       if (handle) {
         movePositionBasis.current = null;
+        scaleDragBounds.current = calculateLayerBounds(selectedLayer, canvasSize.width, canvasSize.height);
         currentDragPos.current = { x: selectedLayer.position.x, y: selectedLayer.position.y };
         setIsDragging(true);
         setDragLayerId(selectedLayer.id);
@@ -266,6 +269,7 @@ export function useLayerDrag({
       }
       selectLayer(layer.id);
       currentDragPos.current = { x: layer.position.x, y: layer.position.y };
+      scaleDragBounds.current = null;
 
       movePositionBasis.current = {
         baseBounds: calculateLayerBounds(layer, canvasSize.width, canvasSize.height, layer.position),
@@ -321,6 +325,7 @@ export function useLayerDrag({
     setIsDragging(false);
     setDragLayerId(null);
     movePositionBasis.current = null;
+    scaleDragBounds.current = null;
     currentDragPos.current = { x: 0, y: 0 };
   }, [flushPendingDragUpdateNow]);
 
@@ -341,39 +346,47 @@ export function useLayerDrag({
       if (dragMode === 'scale' && dragHandle) {
         const originalScaleX = dragStart.current.layerScaleX;
         const originalScaleY = dragStart.current.layerScaleY;
-        const scaleSensitivity = 0.005 / viewZoom;
+        const scaleSensitivity = 0.005;
+        const localScaleDelta = resolveScaleDeltaForHandle(
+          scaleDragBounds.current ?? calculateLayerBounds(layer, canvasSize.width, canvasSize.height, {
+            x: dragStart.current.layerPosX,
+            y: dragStart.current.layerPosY,
+          }),
+          dragHandle,
+          { x: dx / viewZoom, y: dy / viewZoom },
+        );
 
         let newScaleX = originalScaleX;
         let newScaleY = originalScaleY;
 
         switch (dragHandle) {
           case 'tl':
-            newScaleX = originalScaleX - dx * scaleSensitivity;
-            newScaleY = originalScaleY - dy * scaleSensitivity;
+            newScaleX = originalScaleX + localScaleDelta.x * scaleSensitivity;
+            newScaleY = originalScaleY + localScaleDelta.y * scaleSensitivity;
             break;
           case 'tr':
-            newScaleX = originalScaleX + dx * scaleSensitivity;
-            newScaleY = originalScaleY - dy * scaleSensitivity;
+            newScaleX = originalScaleX + localScaleDelta.x * scaleSensitivity;
+            newScaleY = originalScaleY + localScaleDelta.y * scaleSensitivity;
             break;
           case 'bl':
-            newScaleX = originalScaleX - dx * scaleSensitivity;
-            newScaleY = originalScaleY + dy * scaleSensitivity;
+            newScaleX = originalScaleX + localScaleDelta.x * scaleSensitivity;
+            newScaleY = originalScaleY + localScaleDelta.y * scaleSensitivity;
             break;
           case 'br':
-            newScaleX = originalScaleX + dx * scaleSensitivity;
-            newScaleY = originalScaleY + dy * scaleSensitivity;
+            newScaleX = originalScaleX + localScaleDelta.x * scaleSensitivity;
+            newScaleY = originalScaleY + localScaleDelta.y * scaleSensitivity;
             break;
           case 't':
-            newScaleY = originalScaleY - dy * scaleSensitivity;
+            newScaleY = originalScaleY + localScaleDelta.y * scaleSensitivity;
             break;
           case 'b':
-            newScaleY = originalScaleY + dy * scaleSensitivity;
+            newScaleY = originalScaleY + localScaleDelta.y * scaleSensitivity;
             break;
           case 'l':
-            newScaleX = originalScaleX - dx * scaleSensitivity;
+            newScaleX = originalScaleX + localScaleDelta.x * scaleSensitivity;
             break;
           case 'r':
-            newScaleX = originalScaleX + dx * scaleSensitivity;
+            newScaleX = originalScaleX + localScaleDelta.x * scaleSensitivity;
             break;
         }
 
@@ -436,6 +449,7 @@ export function useLayerDrag({
       setDragMode('move');
       setDragHandle(null);
       movePositionBasis.current = null;
+      scaleDragBounds.current = null;
       currentDragPos.current = { x: 0, y: 0 };
     };
 

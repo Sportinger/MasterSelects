@@ -30,6 +30,7 @@ export interface ProjectMaskVertex {
   y: number;
   inTangent: { x: number; y: number };
   outTangent: { x: number; y: number };
+  handleMode?: 'none' | 'mirrored' | 'split';
 }
 
 export interface ProjectMask {
@@ -40,6 +41,7 @@ export interface ProjectMask {
   opacity: number;
   feather: number;
   featherQuality: number;
+  enabled: boolean;
   visible: boolean;
   closed: boolean;
   vertices: ProjectMaskVertex[];

@@ -13,6 +13,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
+import { syncExportMaskTextures } from '../../engine/export/ExportMaskTextures';
 import {
   getFFmpegBridge,
   PRORES_PROFILES,
@@ -411,6 +412,7 @@ export function ExportPanel() {
         }
 
         engine.setRenderTimeOverride(time);
+        syncExportMaskTextures(layers, actualWidth, actualHeight);
         await engine.ensureExportLayersReady(layers);
         engine.render(layers);
 
@@ -703,6 +705,7 @@ export function ExportPanel() {
       engine.setRenderTimeOverride(exportTime);
 
       const layers = await frameRenderer.buildLayersAtTime(exportTime);
+      syncExportMaskTextures(layers, actualWidth, actualHeight);
       await engine.ensureExportLayersReady(layers);
       engine.render(layers);
 

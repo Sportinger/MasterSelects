@@ -432,9 +432,6 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Center the UV coordinates
   uv = uv - vec2f(0.5);
 
-  // Apply user scale first
-  uv = uv / vec2f(layer.scaleX, layer.scaleY);
-
   // For 3D rotation, we need to work in world coordinates where the panel
   // has its actual aspect ratio. The panel spans -0.5 to 0.5 in both U and V,
   // but in world space, a 16:9 panel is wider than tall.
@@ -489,6 +486,10 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   // Convert back from world coordinates to UV coordinates
   // Scale Y back up to UV range
   uv = vec2f(projectedX, projectedY * layer.outputAspect);
+
+  // Undo user scale after rotation so forward transforms scale in local layer
+  // space first, then rotate the scaled plane.
+  uv = uv / vec2f(layer.scaleX, layer.scaleY);
 
   // Apply source aspect ratio correction (fit source into output)
   let aspectRatio = layer.sourceAspect / layer.outputAspect;
@@ -586,11 +587,10 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     default: { blended = layerColor.rgb; }
   }
 
-  // Apply mask if present
-  // Mask texture is already blurred on CPU using Canvas2D's optimized blur filter
-  // Sample mask in output frame space (input.uv), not layer space
+  // Apply mask in layer-local UV space so it follows position, scale, rotation,
+  // and perspective transforms with the clip.
   if (layer.hasMask == 1u) {
-    var maskValue = textureSample(maskTexture, texSampler, input.uv).r;
+    var maskValue = textureSample(maskTexture, texSampler, clampedUV).r;
 
     // Apply inversion in shader
     if (layer.maskInvert == 1u) {

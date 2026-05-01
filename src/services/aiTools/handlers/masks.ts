@@ -9,6 +9,7 @@ interface VertexInput {
   y: number;
   handleIn?: { x: number; y: number };
   handleOut?: { x: number; y: number };
+  handleMode?: 'none' | 'mirrored' | 'split';
 }
 
 export async function handleGetMasks(
@@ -32,6 +33,7 @@ export async function handleGetMasks(
         feather: m.feather,
         featherQuality: m.featherQuality,
         inverted: m.inverted,
+        enabled: m.enabled !== false,
         mode: m.mode,
         visible: m.visible,
         position: m.position,
@@ -41,6 +43,7 @@ export async function handleGetMasks(
           y: v.y,
           handleIn: v.handleIn,
           handleOut: v.handleOut,
+          handleMode: v.handleMode,
         })),
       })),
     },
@@ -102,6 +105,8 @@ export async function handleAddMask(
     feather: args.feather as number | undefined,
     opacity: args.opacity as number | undefined,
     inverted: args.inverted as boolean | undefined,
+    enabled: args.enabled as boolean | undefined,
+    visible: args.visible as boolean | undefined,
     mode: args.mode as string | undefined,
   };
 
@@ -122,6 +127,7 @@ export async function handleAddMask(
         y: v.y,
         handleIn: v.handleIn || { x: 0, y: 0 },
         handleOut: v.handleOut || { x: 0, y: 0 },
+        handleMode: v.handleMode,
       });
     }
     // Close the mask if requested
@@ -183,6 +189,7 @@ export async function handleUpdateMask(
   if (args.featherQuality !== undefined) updates.featherQuality = args.featherQuality;
   if (args.opacity !== undefined) updates.opacity = args.opacity;
   if (args.inverted !== undefined) updates.inverted = args.inverted;
+  if (args.enabled !== undefined) updates.enabled = args.enabled;
   if (args.mode !== undefined) updates.mode = args.mode;
   if (args.visible !== undefined) updates.visible = args.visible;
   if (args.closed !== undefined) updates.closed = args.closed;
@@ -225,6 +232,7 @@ export async function handleAddVertex(
     y: args.y as number,
     handleIn: { x: (args.handleInX as number) || 0, y: (args.handleInY as number) || 0 },
     handleOut: { x: (args.handleOutX as number) || 0, y: (args.handleOutY as number) || 0 },
+    handleMode: args.handleMode as 'none' | 'mirrored' | 'split' | undefined,
   }, args.index as number | undefined);
 
   return {
@@ -289,6 +297,7 @@ export async function handleUpdateVertex(
       y: args.handleOutY !== undefined ? args.handleOutY as number : vertex.handleOut.y,
     };
   }
+  if (args.handleMode !== undefined) updates.handleMode = args.handleMode;
 
   if (Object.keys(updates).length === 0) {
     return { success: false, error: 'No vertex properties provided' };

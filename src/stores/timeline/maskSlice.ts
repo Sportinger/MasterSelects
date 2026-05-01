@@ -1,6 +1,7 @@
 // Mask-related actions slice
 
 import type { MaskActions, SliceCreator, ClipMask, MaskVertex, MaskEditMode } from './types';
+import { getMaskVerticesHandleModeUpdates, inferMaskVertexHandleMode } from '../../utils/maskVertexHandles';
 
 export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
   setMaskEditMode: (mode: MaskEditMode) => {
@@ -8,6 +9,10 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     if (mode === 'none') {
       set({ activeMaskId: null, selectedVertexIds: new Set() });
     }
+  },
+
+  setMaskPanelActive: (active: boolean) => {
+    set({ maskPanelActive: active });
   },
 
   setMaskDragging: (dragging: boolean) => {
@@ -40,6 +45,10 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     }
   },
 
+  selectVertices: (vertexIds) => {
+    set({ selectedVertexIds: new Set(vertexIds) });
+  },
+
   deselectAllVertices: () => {
     set({ selectedVertexIds: new Set() });
   },
@@ -64,6 +73,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       mode: maskData?.mode ?? 'add',
       expanded: maskData?.expanded ?? true,
       position: maskData?.position ?? { x: 0, y: 0 },
+      enabled: maskData?.enabled ?? true,
       visible: maskData?.visible ?? true,
     };
 
@@ -95,7 +105,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
   },
 
   updateMask: (clipId, maskId, updates) => {
-    const { clips, invalidateCache } = get();
+    const { clips, invalidateCache, maskDragging } = get();
 
     set({
       clips: clips.map(c =>
@@ -110,7 +120,9 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       ),
     });
 
-    invalidateCache();
+    if (!maskDragging) {
+      invalidateCache();
+    }
   },
 
   reorderMasks: (clipId, fromIndex, toIndex) => {
@@ -147,6 +159,13 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       y: vertexData.y,
       handleIn: vertexData.handleIn || { x: 0, y: 0 },
       handleOut: vertexData.handleOut || { x: 0, y: 0 },
+      handleMode: vertexData.handleMode ?? inferMaskVertexHandleMode({
+        id: vertexId,
+        x: vertexData.x,
+        y: vertexData.y,
+        handleIn: vertexData.handleIn || { x: 0, y: 0 },
+        handleOut: vertexData.handleOut || { x: 0, y: 0 },
+      }),
     };
 
     set({
@@ -225,6 +244,46 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     }
   },
 
+  updateVertices: (clipId, maskId, vertexUpdates, skipCacheInvalidation = false) => {
+    const { clips, invalidateCache } = get();
+    const updatesById = new Map(vertexUpdates.map(({ id, updates }) => [id, updates]));
+
+    set({
+      clips: clips.map(c => {
+        if (c.id !== clipId) return c;
+        return {
+          ...c,
+          masks: (c.masks || []).map(m => {
+            if (m.id !== maskId) return m;
+            return {
+              ...m,
+              vertices: m.vertices.map(v => {
+                const updates = updatesById.get(v.id);
+                return updates ? { ...v, ...updates } : v;
+              }),
+            };
+          }),
+        };
+      }),
+    });
+
+    if (!skipCacheInvalidation) {
+      invalidateCache();
+    }
+  },
+
+  setVertexHandleMode: (clipId, maskId, vertexIds, mode) => {
+    const { clips, updateVertices } = get();
+    const clip = clips.find(c => c.id === clipId);
+    const mask = clip?.masks?.find(m => m.id === maskId);
+    if (!mask || vertexIds.length === 0) return;
+
+    const vertexUpdates = getMaskVerticesHandleModeUpdates(mask.vertices, vertexIds, mode, mask.closed);
+    if (vertexUpdates.length === 0) return;
+
+    updateVertices(clipId, maskId, vertexUpdates);
+  },
+
   closeMask: (clipId, maskId) => {
     const { updateMask } = get();
     updateMask(clipId, maskId, { closed: true });
@@ -239,10 +298,10 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     // Default rectangle covers 80% of the clip area, centered
     const margin = 0.1;
     const vertices: MaskVertex[] = [
-      { id: `v-${Date.now()}-1`, x: margin, y: margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
-      { id: `v-${Date.now()}-2`, x: 1 - margin, y: margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
-      { id: `v-${Date.now()}-3`, x: 1 - margin, y: 1 - margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
-      { id: `v-${Date.now()}-4`, x: margin, y: 1 - margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+      { id: `v-${Date.now()}-1`, x: margin, y: margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      { id: `v-${Date.now()}-2`, x: 1 - margin, y: margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      { id: `v-${Date.now()}-3`, x: 1 - margin, y: 1 - margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      { id: `v-${Date.now()}-4`, x: margin, y: 1 - margin, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
     ];
 
     const currentClips = get().clips;
@@ -282,6 +341,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
         y: cy - ry,
         handleIn: { x: -rx * k, y: 0 },
         handleOut: { x: rx * k, y: 0 },
+        handleMode: 'mirrored',
       },
       // Right
       {
@@ -290,6 +350,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
         y: cy,
         handleIn: { x: 0, y: -ry * k },
         handleOut: { x: 0, y: ry * k },
+        handleMode: 'mirrored',
       },
       // Bottom
       {
@@ -298,6 +359,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
         y: cy + ry,
         handleIn: { x: rx * k, y: 0 },
         handleOut: { x: -rx * k, y: 0 },
+        handleMode: 'mirrored',
       },
       // Left
       {
@@ -306,6 +368,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
         y: cy,
         handleIn: { x: 0, y: ry * k },
         handleOut: { x: 0, y: -ry * k },
+        handleMode: 'mirrored',
       },
     ];
 

@@ -15,7 +15,6 @@ function TimelineControlsComponent({
   snappingEnabled,
   inPoint,
   outPoint,
-  ramPreviewEnabled,
   proxyEnabled,
   currentlyGeneratingProxyId,
   mediaFilesWithProxy,
@@ -32,7 +31,6 @@ function TimelineControlsComponent({
   onSetInPoint,
   onSetOutPoint,
   onClearInOut,
-  onToggleRamPreview,
   onToggleProxy,
   onToggleTranscriptMarkers,
   onToggleThumbnails,
@@ -50,7 +48,11 @@ function TimelineControlsComponent({
   const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
   const durationInputRef = useRef<HTMLInputElement>(null);
   const viewDropdownRef = useRef<HTMLDivElement>(null);
-  const ramPreviewButtonDisabled = true;
+  const proxyTitle = proxyEnabled
+    ? 'Proxy ON - Click to disable proxy playback'
+    : currentlyGeneratingProxyId
+    ? 'Proxy OFF - Proxy generation is running. Click to enable proxy playback'
+    : 'Proxy OFF - Click to enable proxy playback and proxy generation';
 
   // Focus input when editing starts
   useEffect(() => {
@@ -213,18 +215,11 @@ function TimelineControlsComponent({
       </div>
       <div className="timeline-ram-preview">
         <button
-          className={`btn btn-sm ${ramPreviewEnabled ? 'btn-active' : ''}`}
-          onClick={ramPreviewButtonDisabled ? undefined : onToggleRamPreview}
-          disabled={ramPreviewButtonDisabled}
-          title={
-            ramPreviewButtonDisabled
-              ? 'RAM Preview temporarily disabled'
-              : ramPreviewEnabled
-              ? 'RAM Preview ON - Auto-caches frames for instant scrubbing. Click to disable and clear cache.'
-              : 'RAM Preview OFF - Click to enable auto-caching for instant scrubbing'
-          }
+          className={`btn btn-sm ${proxyEnabled ? 'btn-active' : ''}`}
+          onClick={onToggleProxy}
+          title={proxyTitle}
         >
-          RAM OFF <span className="menu-wip-badge">🐛</span>
+          Proxy
         </button>
         <WebCodecsToggle />
         <div className="view-dropdown" ref={viewDropdownRef}>

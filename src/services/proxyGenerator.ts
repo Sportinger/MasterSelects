@@ -25,9 +25,53 @@ const PROXY_MAX_WIDTH = 1280;
 const JPEG_QUALITY = 0.82;
 const CANVAS_POOL_SIZE = 8;       // Parallel encoding canvases
 const DECODE_BATCH_SIZE = 30;     // Feed 30 samples at a time before yielding
+const MAX_PENDING_ENCODE_FRAMES = CANVAS_POOL_SIZE * 8;
+const BACKPRESSURE_TARGET_FRAMES = CANVAS_POOL_SIZE * 4;
+const BACKPRESSURE_POLL_MS = 5;
 const MIN_FLUSH_TIMEOUT_MS = 30000;
 const MAX_FLUSH_TIMEOUT_MS = 180000;
 const FLUSH_TIMEOUT_PER_SAMPLE_MS = 120;
+
+interface EncodeQueueItem {
+  frameIndex: number;
+  frame: VideoFrame;
+}
+
+interface ProxyGenerationMetrics {
+  demuxMs: number;
+  decodeFeedMs: number;
+  decodeWallMs: number;
+  decoderFlushMs: number;
+  drawMs: number;
+  jpegMs: number;
+  saveMs: number;
+  backpressureMs: number;
+  backpressureWaits: number;
+  maxPendingFrames: number;
+  decodedOutputFrames: number;
+  savedBytes: number;
+}
+
+function createMetrics(): ProxyGenerationMetrics {
+  return {
+    demuxMs: 0,
+    decodeFeedMs: 0,
+    decodeWallMs: 0,
+    decoderFlushMs: 0,
+    drawMs: 0,
+    jpegMs: 0,
+    saveMs: 0,
+    backpressureMs: 0,
+    backpressureWaits: 0,
+    maxPendingFrames: 0,
+    decodedOutputFrames: 0,
+    savedBytes: 0,
+  };
+}
+
+function formatMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms.toFixed(0)}ms`;
+}
 
 interface AVCConfigurationBox {
   AVCProfileIndication: number;
@@ -82,6 +126,14 @@ class ProxyGeneratorWebCodecs {
   private processedFrames = 0;
   private savedFrameIndices = new Set<number>();
   private decodedFrames: Map<number, VideoFrame> = new Map();
+  private processingFrameIndices = new Set<number>();
+  private encodeQueue: EncodeQueueItem[] = [];
+  private encodeWorkers: Promise<void>[] = [];
+  private encodeWakeResolvers: Array<() => void> = [];
+  private decodeDone = false;
+  private encodeStopRequested = false;
+  private metrics: ProxyGenerationMetrics = createMetrics();
+  private lastReportedProgress = -1;
 
   // Pool of canvases for parallel encoding
   private canvasPool: CanvasSlot[] = [];
@@ -105,6 +157,14 @@ class ProxyGeneratorWebCodecs {
     this.isCancelled = false;
     this.samples = [];
     this.decodedFrames.clear();
+    this.processingFrameIndices.clear();
+    this.closeQueuedEncodeFrames();
+    this.encodeWorkers = [];
+    this.encodeWakeResolvers = [];
+    this.decodeDone = false;
+    this.encodeStopRequested = false;
+    this.metrics = createMetrics();
+    this.lastReportedProgress = -1;
     this.canvasPool = [];
     this.proxyFps = PROXY_FPS;
     let resumeFrameIndices = existingFrameIndices;
@@ -125,7 +185,9 @@ class ProxyGeneratorWebCodecs {
       }
 
       // Load file with MP4Box
+      const demuxStart = performance.now();
       const loaded = await this.loadWithMP4Box(file);
+      this.metrics.demuxMs += performance.now() - demuxStart;
       if (!loaded) {
         throw new Error('Failed to parse video file or no supported codec found');
       }
@@ -447,13 +509,20 @@ class ProxyGeneratorWebCodecs {
   }
 
   private handleDecodedFrame(frame: VideoFrame) {
+    this.metrics.decodedOutputFrames++;
     const timestamp = frame.timestamp / 1_000_000;
     const frameIndex = Math.round(timestamp * this.proxyFps);
 
-    if (frameIndex >= 0 && frameIndex < this.totalFrames && !this.savedFrameIndices.has(frameIndex)) {
+    if (
+      frameIndex >= 0 &&
+      frameIndex < this.totalFrames &&
+      !this.savedFrameIndices.has(frameIndex) &&
+      !this.processingFrameIndices.has(frameIndex)
+    ) {
       const existing = this.decodedFrames.get(frameIndex);
       if (existing) existing.close();
       this.decodedFrames.set(frameIndex, frame);
+      this.updateMaxPendingFrames();
     } else {
       frame.close();
     }
@@ -468,48 +537,175 @@ class ProxyGeneratorWebCodecs {
   }
 
   /**
-   * Encode + save a batch of decoded frames in parallel using the canvas pool.
-   * Each canvas independently does drawImage → convertToBlob → saveFrame.
+   * Hand decoded frames to background encode/save workers.
    */
-  private async processAccumulatedFrames(): Promise<void> {
-    if (this.decodedFrames.size === 0) return;
+  private queueDecodedFrames(): void {
+    if (this.decodedFrames.size === 0 || this.encodeStopRequested) return;
 
     const sortedIndices = Array.from(this.decodedFrames.keys()).sort((a, b) => a - b);
+    for (const frameIndex of sortedIndices) {
+      const frame = this.decodedFrames.get(frameIndex);
+      if (!frame) continue;
 
-    // Process in chunks of CANVAS_POOL_SIZE
-    for (let offset = 0; offset < sortedIndices.length; offset += CANVAS_POOL_SIZE) {
-      const batch = sortedIndices.slice(offset, offset + CANVAS_POOL_SIZE);
+      this.decodedFrames.delete(frameIndex);
 
-      await Promise.all(batch.map(async (frameIdx, slotIdx) => {
-        const frame = this.decodedFrames.get(frameIdx);
-        if (!frame) return;
-        this.decodedFrames.delete(frameIdx);
-
-        const slot = this.canvasPool[slotIdx];
-
-        // Resize onto this slot's canvas
-        slot.ctx.drawImage(frame, 0, 0, this.outputWidth, this.outputHeight);
+      if (this.savedFrameIndices.has(frameIndex) || this.processingFrameIndices.has(frameIndex)) {
         frame.close();
+        continue;
+      }
 
-        // Encode to JPEG (3-5x faster than WebP)
-        const blob = await slot.canvas.convertToBlob({
-          type: 'image/jpeg',
-          quality: JPEG_QUALITY,
-        });
-
-        // Save via callback
-        await this.saveFrame!({ frameIndex: frameIdx, blob });
-
-        this.savedFrameIndices.add(frameIdx);
-        this.processedFrames++;
-      }));
-
-      this.onProgress?.(Math.min(100, Math.round((this.processedFrames / this.totalFrames) * 100)));
+      this.processingFrameIndices.add(frameIndex);
+      this.encodeQueue.push({ frameIndex, frame });
     }
+
+    this.updateMaxPendingFrames();
+    this.wakeEncodeWorkers();
+  }
+
+  private startEncodeWorkers(): void {
+    this.encodeWorkers = this.canvasPool.map((slot) => this.encodeWorker(slot));
+  }
+
+  private async encodeWorker(slot: CanvasSlot): Promise<void> {
+    while (true) {
+      if (this.encodeStopRequested) {
+        this.closeQueuedEncodeFrames();
+        return;
+      }
+
+      const item = this.encodeQueue.shift();
+      if (item) {
+        await this.encodeAndSaveFrame(slot, item);
+        continue;
+      }
+
+      if (this.decodeDone) {
+        return;
+      }
+
+      await this.waitForEncodeWork();
+    }
+  }
+
+  private async encodeAndSaveFrame(slot: CanvasSlot, item: EncodeQueueItem): Promise<void> {
+    try {
+      const drawStart = performance.now();
+      slot.ctx.drawImage(item.frame, 0, 0, this.outputWidth, this.outputHeight);
+      this.metrics.drawMs += performance.now() - drawStart;
+      item.frame.close();
+
+      const jpegStart = performance.now();
+      const blob = await slot.canvas.convertToBlob({
+        type: 'image/jpeg',
+        quality: JPEG_QUALITY,
+      });
+      this.metrics.jpegMs += performance.now() - jpegStart;
+      this.metrics.savedBytes += blob.size;
+
+      const saveStart = performance.now();
+      await this.saveFrame!({ frameIndex: item.frameIndex, blob });
+      this.metrics.saveMs += performance.now() - saveStart;
+
+      this.savedFrameIndices.add(item.frameIndex);
+      this.processedFrames++;
+      this.reportProgress();
+    } finally {
+      this.processingFrameIndices.delete(item.frameIndex);
+      try {
+        item.frame.close();
+      } catch {
+        // Frame may already be closed after drawImage.
+      }
+      this.wakeEncodeWorkers();
+    }
+  }
+
+  private waitForEncodeWork(): Promise<void> {
+    return new Promise(resolve => {
+      this.encodeWakeResolvers.push(resolve);
+    });
+  }
+
+  private wakeEncodeWorkers(): void {
+    const resolvers = this.encodeWakeResolvers.splice(0);
+    resolvers.forEach(resolve => resolve());
+  }
+
+  private async waitForEncodeBackpressure(): Promise<void> {
+    while (!this.isCancelled && !this.encodeStopRequested && this.getPendingEncodeFrameCount() > MAX_PENDING_ENCODE_FRAMES) {
+      const waitStart = performance.now();
+      this.metrics.backpressureWaits++;
+      await new Promise(resolve => setTimeout(resolve, BACKPRESSURE_POLL_MS));
+      this.metrics.backpressureMs += performance.now() - waitStart;
+
+      if (this.getPendingEncodeFrameCount() <= BACKPRESSURE_TARGET_FRAMES) {
+        break;
+      }
+    }
+  }
+
+  private getPendingEncodeFrameCount(): number {
+    return this.processingFrameIndices.size + this.decodedFrames.size;
+  }
+
+  private updateMaxPendingFrames(): void {
+    this.metrics.maxPendingFrames = Math.max(this.metrics.maxPendingFrames, this.getPendingEncodeFrameCount());
+  }
+
+  private reportProgress(): void {
+    if (this.totalFrames <= 0) return;
+    const progress = Math.min(100, Math.round((this.processedFrames / this.totalFrames) * 100));
+    if (progress !== this.lastReportedProgress) {
+      this.lastReportedProgress = progress;
+      this.onProgress?.(progress);
+    }
+  }
+
+  private closeQueuedEncodeFrames(): void {
+    for (const item of this.encodeQueue) {
+      this.processingFrameIndices.delete(item.frameIndex);
+      item.frame.close();
+    }
+    this.encodeQueue = [];
+  }
+
+  private resetEncodePipeline(): void {
+    this.closeQueuedEncodeFrames();
+    this.processingFrameIndices.clear();
+    this.encodeWakeResolvers = [];
+    this.encodeWorkers = [];
+    this.decodeDone = false;
+    this.encodeStopRequested = false;
+  }
+
+  private logPerformance(totalMs: number): void {
+    const metrics = this.metrics;
+    const encodedFrames = Math.max(1, this.processedFrames);
+
+    log.info('Performance', {
+      frames: `${this.processedFrames}/${this.totalFrames}`,
+      total: formatMs(totalMs),
+      demux: formatMs(metrics.demuxMs),
+      decodeWall: formatMs(metrics.decodeWallMs),
+      decodeFeed: formatMs(metrics.decodeFeedMs),
+      decoderFlush: formatMs(metrics.decoderFlushMs),
+      drawImage: formatMs(metrics.drawMs),
+      jpegEncode: formatMs(metrics.jpegMs),
+      save: formatMs(metrics.saveMs),
+      backpressure: formatMs(metrics.backpressureMs),
+      backpressureWaits: metrics.backpressureWaits,
+      maxPendingFrames: metrics.maxPendingFrames,
+      decodedOutputFrames: metrics.decodedOutputFrames,
+      avgDraw: formatMs(metrics.drawMs / encodedFrames),
+      avgJpeg: formatMs(metrics.jpegMs / encodedFrames),
+      avgSave: formatMs(metrics.saveMs / encodedFrames),
+      outputMB: Number((metrics.savedBytes / 1024 / 1024).toFixed(2)),
+    });
   }
 
   private async processSamples(): Promise<void> {
     if (!this.decoder) return;
+    const decoder = this.decoder;
 
     const sortedSamples = [...this.samples].sort((a, b) => a.dts - b.dts);
 
@@ -521,86 +717,120 @@ class ProxyGeneratorWebCodecs {
 
     const startTime = performance.now();
     let decodeErrors = 0;
-
-    // Feed decoder in batches, then yield + process accumulated frames
-    for (let batchStart = firstKeyframeIdx; batchStart < sortedSamples.length; batchStart += DECODE_BATCH_SIZE) {
-      if (this.checkCancelled?.()) {
-        this.isCancelled = true;
-        break;
-      }
-
-      if (this.decoder.state === 'closed') {
-        log.error('Decoder closed unexpectedly');
-        break;
-      }
-
-      const batchEnd = Math.min(batchStart + DECODE_BATCH_SIZE, sortedSamples.length);
-
-      // Feed a batch of samples to the decoder
-      for (let i = batchStart; i < batchEnd; i++) {
-        const sample = sortedSamples[i];
-
-        const chunk = new EncodedVideoChunk({
-          type: sample.is_sync ? 'key' : 'delta',
-          timestamp: (sample.cts / sample.timescale) * 1_000_000,
-          duration: (sample.duration / sample.timescale) * 1_000_000,
-          data: sample.data,
-        });
-
-        try {
-          this.decoder.decode(chunk);
-        } catch {
-          decodeErrors++;
-          if (decodeErrors > 50) {
-            log.error('Too many decode errors, stopping');
-            return;
-          }
-        }
-      }
-
-      // Yield to let decoder output callbacks fire
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Process accumulated decoded frames in parallel
-      if (this.decodedFrames.size >= CANVAS_POOL_SIZE) {
-        await this.processAccumulatedFrames();
-      }
-    }
-
-    const flushTimeoutMs = Math.max(
-      MIN_FLUSH_TIMEOUT_MS,
-      Math.min(MAX_FLUSH_TIMEOUT_MS, sortedSamples.length * FLUSH_TIMEOUT_PER_SAMPLE_MS)
-    );
-    const flushed = await this.flushDecoder(flushTimeoutMs);
-    if (!flushed && !this.isCancelled) {
-      throw new Error(`Decoder flush timed out after ${flushTimeoutMs}ms`);
-    }
+    let primaryError: unknown = null;
+    let workerFailureReason: unknown = null;
+    this.resetEncodePipeline();
+    this.startEncodeWorkers();
 
     try {
-      if (this.decoder.state !== 'closed') this.decoder.close();
-    } catch { /* ignore */ }
+      const decodeWallStart = performance.now();
 
-    // Yield to collect last decoded frames
-    await new Promise(resolve => setTimeout(resolve, 10));
+      // Feed decoder in batches. Encoding and saving runs on background workers.
+      for (let batchStart = firstKeyframeIdx; batchStart < sortedSamples.length; batchStart += DECODE_BATCH_SIZE) {
+        if (this.checkCancelled?.()) {
+          this.isCancelled = true;
+          break;
+        }
 
-    // Process all remaining decoded frames
-    if (this.decodedFrames.size > 0) {
-      await this.processAccumulatedFrames();
+        if (decoder.state === 'closed') {
+          log.error('Decoder closed unexpectedly');
+          break;
+        }
+
+        const batchEnd = Math.min(batchStart + DECODE_BATCH_SIZE, sortedSamples.length);
+
+        // Feed a batch of samples to the decoder
+        for (let i = batchStart; i < batchEnd; i++) {
+          const sample = sortedSamples[i];
+
+          const chunk = new EncodedVideoChunk({
+            type: sample.is_sync ? 'key' : 'delta',
+            timestamp: (sample.cts / sample.timescale) * 1_000_000,
+            duration: (sample.duration / sample.timescale) * 1_000_000,
+            data: sample.data,
+          });
+
+          try {
+            const feedStart = performance.now();
+            decoder.decode(chunk);
+            this.metrics.decodeFeedMs += performance.now() - feedStart;
+          } catch {
+            decodeErrors++;
+            if (decodeErrors > 50) {
+              log.error('Too many decode errors, stopping');
+              return;
+            }
+          }
+        }
+
+        // Yield to let decoder output callbacks fire, then hand frames to encode workers.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        this.queueDecodedFrames();
+        await this.waitForEncodeBackpressure();
+      }
+
+      const flushTimeoutMs = Math.max(
+        MIN_FLUSH_TIMEOUT_MS,
+        Math.min(MAX_FLUSH_TIMEOUT_MS, sortedSamples.length * FLUSH_TIMEOUT_PER_SAMPLE_MS)
+      );
+      const flushStart = performance.now();
+      const flushed = await this.flushDecoder(flushTimeoutMs);
+      this.metrics.decoderFlushMs += performance.now() - flushStart;
+      if (!flushed && !this.isCancelled) {
+        throw new Error(`Decoder flush timed out after ${flushTimeoutMs}ms`);
+      }
+
+      this.metrics.decodeWallMs += performance.now() - decodeWallStart;
+
+      try {
+        if (decoder.state !== 'closed') decoder.close();
+      } catch { /* ignore */ }
+
+      // Yield to collect last decoded frames.
+      await new Promise(resolve => setTimeout(resolve, 10));
+      this.queueDecodedFrames();
+    } catch (error) {
+      primaryError = error;
+      this.encodeStopRequested = true;
+      throw error;
+    } finally {
+      if (this.encodeStopRequested) {
+        this.closeDecodedFrames();
+      } else {
+        this.queueDecodedFrames();
+      }
+
+      this.decodeDone = true;
+      this.wakeEncodeWorkers();
+
+      const workerResults = await Promise.allSettled(this.encodeWorkers);
+      const workerFailure = workerResults.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected'
+      );
+      if (!primaryError && workerFailure) {
+        workerFailureReason = workerFailure.reason;
+      }
+    }
+
+    if (workerFailureReason) {
+      throw workerFailureReason;
     }
 
     const totalTime = performance.now() - startTime;
     const fps = this.processedFrames / (totalTime / 1000);
     log.info(`Complete: ${this.processedFrames}/${this.totalFrames} frames in ${(totalTime / 1000).toFixed(1)}s (${fps.toFixed(1)} fps encode)`);
+    this.logPerformance(totalTime);
   }
 
   private async flushDecoder(timeoutMs: number): Promise<boolean> {
     if (!this.decoder || this.decoder.state === 'closed') return true;
+    const decoder = this.decoder;
 
     let settled = false;
     let succeeded = false;
     const startedAt = performance.now();
 
-    const flushPromise = this.decoder.flush()
+    const flushPromise = decoder.flush()
       .then(() => {
         succeeded = true;
       })
@@ -617,15 +847,15 @@ class ProxyGeneratorWebCodecs {
         break;
       }
 
-      if (this.decodedFrames.size >= CANVAS_POOL_SIZE) {
-        await this.processAccumulatedFrames();
-      } else {
+      this.queueDecodedFrames();
+      await this.waitForEncodeBackpressure();
+      if (this.decodedFrames.size === 0) {
         await new Promise(resolve => setTimeout(resolve, 20));
       }
 
       if (performance.now() - startedAt > timeoutMs) {
         log.warn('Decoder flush timed out', {
-          decodeQueueSize: this.decoder.decodeQueueSize,
+          decodeQueueSize: decoder.decodeQueueSize,
           decodedFrames: this.decodedFrames.size,
           processedFrames: this.processedFrames,
           totalFrames: this.totalFrames,
@@ -648,7 +878,12 @@ class ProxyGeneratorWebCodecs {
 
   private cleanup() {
     try { this.decoder?.close(); } catch { /* ignore */ }
+    this.encodeStopRequested = true;
+    this.decodeDone = true;
+    this.wakeEncodeWorkers();
     this.closeDecodedFrames();
+    this.closeQueuedEncodeFrames();
+    this.processingFrameIndices.clear();
     this.canvasPool = [];
     this.decoder = null;
   }

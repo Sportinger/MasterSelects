@@ -105,7 +105,6 @@ export interface TimelineControlsProps {
   snappingEnabled: boolean;
   inPoint: number | null;
   outPoint: number | null;
-  ramPreviewEnabled: boolean;
   proxyEnabled: boolean;
   currentlyGeneratingProxyId: string | null;
   mediaFilesWithProxy: number;
@@ -122,7 +121,6 @@ export interface TimelineControlsProps {
   onSetInPoint: () => void;
   onSetOutPoint: () => void;
   onClearInOut: () => void;
-  onToggleRamPreview: () => void;
   onToggleProxy: () => void;
   onToggleTranscriptMarkers: () => void;
   onToggleThumbnails: () => void;

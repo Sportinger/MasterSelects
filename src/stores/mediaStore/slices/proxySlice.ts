@@ -339,9 +339,15 @@ async function generateVideoProxy(
 ): Promise<{ frameCount: number; fps: number; frameIndices: Set<number> } | null> {
   const { getProxyGenerator } = await import('../../../services/proxyGenerator');
   const generator = getProxyGenerator();
+  const writer = await projectFileService.createProxyFrameWriter(storageKey);
 
   const saveFrame = async (frame: { frameIndex: number; blob: Blob }) => {
-    await projectFileService.saveProxyFrame(storageKey, frame.frameIndex, frame.blob);
+    const saved = writer
+      ? await writer.saveFrame(frame.frameIndex, frame.blob)
+      : await projectFileService.saveProxyFrame(storageKey, frame.frameIndex, frame.blob);
+    if (!saved) {
+      throw new Error(`Failed to save proxy frame ${frame.frameIndex}`);
+    }
   };
 
   return generator.generate(

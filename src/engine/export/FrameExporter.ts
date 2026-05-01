@@ -14,6 +14,7 @@ import { VideoEncoderWrapper } from './VideoEncoderWrapper';
 import { prepareClipsForExport, cleanupExportMode } from './ClipPreparation';
 import { seekAllClipsToTime, waitForAllVideosReady } from './VideoSeeker';
 import { buildLayersAtTime, initializeLayerBuilder, cleanupLayerBuilder } from './ExportLayerBuilder';
+import { syncExportMaskTextures } from './ExportMaskTextures';
 import {
   collectRenderableExportClipsInRange,
   preloadGaussianSplatsForExport,
@@ -243,6 +244,7 @@ export class FrameExporter {
         }
 
         engine.setRenderTimeOverride(time);
+        syncExportMaskTextures(layers, width, height);
         await engine.ensureExportLayersReady(layers);
         engine.render(layers);
 

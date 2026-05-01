@@ -50,6 +50,16 @@ export const ACTION_META: ShortcutActionMeta[] = [
   { id: 'preview.slot2', label: 'Preview Slot 2', category: 'Preview' },
   { id: 'preview.slot3', label: 'Preview Slot 3', category: 'Preview' },
   { id: 'preview.slot4', label: 'Preview Slot 4', category: 'Preview' },
+  // Masking
+  { id: 'mask.pen', label: 'Pen Mask Tool', category: 'Masking' },
+  { id: 'mask.edit', label: 'Edit Mask Path', category: 'Masking' },
+  { id: 'mask.rectangle', label: 'Rectangle Mask Tool', category: 'Masking' },
+  { id: 'mask.ellipse', label: 'Ellipse Mask Tool', category: 'Masking' },
+  { id: 'mask.closePath', label: 'Close Mask Path', category: 'Masking' },
+  { id: 'mask.invert', label: 'Invert Active Mask', category: 'Masking' },
+  { id: 'mask.toggleOutline', label: 'Toggle Mask Outline', category: 'Masking' },
+  { id: 'mask.selectAllVertices', label: 'Select All Mask Vertices', category: 'Masking' },
+  { id: 'mask.toggleVertexHandles', label: 'Toggle Selected Vertex Handles', category: 'Masking' },
 ];
 
 // All valid action IDs (for runtime validation)
@@ -100,6 +110,16 @@ const BASE_MAP: ShortcutMap = {
   'preview.slot2': [{ key: '2' }],
   'preview.slot3': [{ key: '3' }],
   'preview.slot4': [{ key: '4' }],
+  // Masking
+  'mask.pen': [{ key: 'p' }],
+  'mask.edit': [{ key: 'v' }],
+  'mask.rectangle': [{ key: 'r' }],
+  'mask.ellipse': [{ key: 'e' }],
+  'mask.closePath': [{ key: 'enter' }],
+  'mask.invert': [{ key: 'i', alt: true }],
+  'mask.toggleOutline': [{ key: 'h', alt: true }],
+  'mask.selectAllVertices': [{ key: 'a', ctrl: true }],
+  'mask.toggleVertexHandles': [{ key: 'b' }],
 };
 
 // ─── Helper: create preset by overriding base ───────────────────────
