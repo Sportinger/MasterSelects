@@ -213,12 +213,6 @@ export function Timeline() {
   const handleToggleSlotGrid = useCallback(() => {
     animateSlotGrid(slotGridProgress < 0.5 ? 1 : 0);
   }, [slotGridProgress]);
-  const handleToggleRamPreview = useCallback(() => {
-    if (RAM_PREVIEW_FEATURE_ENABLED) {
-      toggleRamPreviewEnabled();
-    }
-  }, [toggleRamPreviewEnabled]);
-
   useEffect(() => {
     if (RAM_PREVIEW_FEATURE_ENABLED) return;
 
@@ -954,7 +948,6 @@ export function Timeline() {
           snappingEnabled={snappingEnabled}
           inPoint={inPoint}
           outPoint={outPoint}
-          ramPreviewEnabled={effectiveRamPreviewEnabled}
           proxyEnabled={proxyEnabled}
           currentlyGeneratingProxyId={currentlyGeneratingProxyId}
           mediaFilesWithProxy={mediaFilesWithProxyCount}
@@ -971,7 +964,6 @@ export function Timeline() {
           onSetInPoint={setInPointAtPlayhead}
           onSetOutPoint={setOutPointAtPlayhead}
           onClearInOut={clearInOut}
-          onToggleRamPreview={handleToggleRamPreview}
           onToggleProxy={toggleProxyEnabled}
           onToggleTranscriptMarkers={toggleTranscriptMarkers}
           onToggleThumbnails={toggleThumbnailsEnabled}

@@ -10,6 +10,7 @@ export class MaskTextureManager {
   // Mask textures per layer
   private maskTextures: Map<string, GPUTexture> = new Map();
   private maskTextureViews: Map<string, GPUTextureView> = new Map();
+  private maskTextureSizes: Map<string, { width: number; height: number }> = new Map();
   private lastMaskDebugLog: number | null = null;
 
   // Fallback mask texture (fully white = no masking)
@@ -40,24 +41,29 @@ export class MaskTextureManager {
 
   // Update mask texture for a layer
   updateMaskTexture(layerId: string, imageData: ImageData | null): void {
-    // Destroy the old mask texture to free VRAM
-    const oldTexture = this.maskTextures.get(layerId);
-    if (oldTexture) oldTexture.destroy();
-    this.maskTextures.delete(layerId);
-    this.maskTextureViews.delete(layerId);
-
     // If no imageData, layer will use white fallback (no masking)
     if (!imageData) {
+      this.removeMaskTexture(layerId);
       log.debug(`No mask data for layer ${layerId}, using white fallback`);
       return;
     }
 
-    // Create new mask texture
-    const maskTexture = this.device.createTexture({
-      size: [imageData.width, imageData.height],
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
+    let maskTexture = this.maskTextures.get(layerId);
+    const currentSize = this.maskTextureSizes.get(layerId);
+
+    if (!maskTexture || currentSize?.width !== imageData.width || currentSize?.height !== imageData.height) {
+      maskTexture?.destroy();
+
+      maskTexture = this.device.createTexture({
+        size: [imageData.width, imageData.height],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      });
+
+      this.maskTextures.set(layerId, maskTexture);
+      this.maskTextureViews.set(layerId, maskTexture.createView());
+      this.maskTextureSizes.set(layerId, { width: imageData.width, height: imageData.height });
+    }
 
     // Upload mask data
     this.device.queue.writeTexture(
@@ -70,10 +76,6 @@ export class MaskTextureManager {
       [imageData.width, imageData.height]
     );
 
-    // Cache texture and view
-    this.maskTextures.set(layerId, maskTexture);
-    this.maskTextureViews.set(layerId, maskTexture.createView());
-
     log.debug(`Uploaded mask texture for layer ${layerId}: ${imageData.width}x${imageData.height}`);
   }
 
@@ -83,6 +85,7 @@ export class MaskTextureManager {
     if (texture) texture.destroy();
     this.maskTextures.delete(layerId);
     this.maskTextureViews.delete(layerId);
+    this.maskTextureSizes.delete(layerId);
   }
 
   // Check if a layer has a mask texture
@@ -123,6 +126,7 @@ export class MaskTextureManager {
     }
     this.maskTextures.clear();
     this.maskTextureViews.clear();
+    this.maskTextureSizes.clear();
   }
 
   destroy(): void {

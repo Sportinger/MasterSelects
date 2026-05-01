@@ -42,7 +42,17 @@ export type ShortcutActionId =
   | 'preview.slot1'
   | 'preview.slot2'
   | 'preview.slot3'
-  | 'preview.slot4';
+  | 'preview.slot4'
+  // Masking
+  | 'mask.pen'
+  | 'mask.edit'
+  | 'mask.rectangle'
+  | 'mask.ellipse'
+  | 'mask.closePath'
+  | 'mask.invert'
+  | 'mask.toggleOutline'
+  | 'mask.selectAllVertices'
+  | 'mask.toggleVertexHandles';
 
 // A single key combination
 export interface KeyCombo {
@@ -65,7 +75,8 @@ export type ShortcutCategory =
   | 'Panels'
   | 'Project'
   | 'History'
-  | 'Preview';
+  | 'Preview'
+  | 'Masking';
 
 // Action metadata for settings UI display
 export interface ShortcutActionMeta {

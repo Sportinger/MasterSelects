@@ -12,6 +12,7 @@ import type {
   SceneSplatLayer,
 } from '../scene/types';
 import type { ModelSequenceData } from '../../types';
+import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { ModelRuntimeCache, type ModelRuntimePreloadOptions } from './assets/ModelRuntimeCache';
 import { EffectorCompute } from './passes/EffectorCompute';
 import { GizmoPass } from './passes/GizmoPass';
@@ -55,6 +56,8 @@ export class NativeSceneRenderer {
   private planePipelineTransparent: GPURenderPipeline | null = null;
   private planeBindGroupLayout: GPUBindGroupLayout | null = null;
   private planeSampler: GPUSampler | null = null;
+  private planeWhiteMaskTexture: GPUTexture | null = null;
+  private planeWhiteMaskView: GPUTextureView | null = null;
   private planeTextures = new Map<string, CachedPlaneTexture>();
   private readonly planePass = new PlanePass();
   private readonly meshPass = new MeshPass();
@@ -96,6 +99,7 @@ export class NativeSceneRenderer {
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
     gizmo?: SceneGizmoRenderOptions | null,
+    maskTextureManager?: MaskTextureManager | null,
   ): GPUTextureView | null {
     if (!this.initialized) {
       return null;
@@ -124,6 +128,7 @@ export class NativeSceneRenderer {
       effectors,
       realtimePlayback,
       gizmo,
+      maskTextureManager,
     );
     if (!nativeSceneView) {
       return null;
@@ -152,6 +157,9 @@ export class NativeSceneRenderer {
     this.planePipelineTransparent = null;
     this.planeBindGroupLayout = null;
     this.planeSampler = null;
+    this.planeWhiteMaskTexture?.destroy();
+    this.planeWhiteMaskTexture = null;
+    this.planeWhiteMaskView = null;
     this.initialized = false;
     this.meshPass.dispose();
     this.gizmoPass.dispose();
@@ -213,6 +221,7 @@ export class NativeSceneRenderer {
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
     gizmo?: SceneGizmoRenderOptions | null,
+    maskTextureManager?: MaskTextureManager | null,
   ): GPUTextureView | null {
     const renderer = getGaussianSplatGpuRenderer();
     if (layers.length > 0 && !renderer.isInitialized) {
@@ -310,7 +319,7 @@ export class NativeSceneRenderer {
       return null;
     }
 
-    if (!this.renderPlanePass(device, commandEncoder, opaquePlanes, camera, false, temporaryBuffers)) {
+    if (!this.renderPlanePass(device, commandEncoder, opaquePlanes, camera, false, temporaryBuffers, maskTextureManager)) {
       return null;
     }
 
@@ -400,7 +409,7 @@ export class NativeSceneRenderer {
       return null;
     }
 
-    if (!this.renderPlanePass(device, commandEncoder, transparentPlanes, camera, true, temporaryBuffers)) {
+    if (!this.renderPlanePass(device, commandEncoder, transparentPlanes, camera, true, temporaryBuffers, maskTextureManager)) {
       return null;
     }
     const gizmoLayer = gizmo
@@ -506,7 +515,8 @@ export class NativeSceneRenderer {
       this.planePipelineOpaque &&
       this.planePipelineTransparent &&
       this.planeBindGroupLayout &&
-      this.planeSampler
+      this.planeSampler &&
+      this.planeWhiteMaskView
     ) {
       return;
     }
@@ -520,6 +530,7 @@ export class NativeSceneRenderer {
           visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' },
         },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: {} },
       ],
       label: 'native-scene-plane-bind-group-layout',
     });
@@ -604,6 +615,15 @@ export class NativeSceneRenderer {
       magFilter: 'linear',
       minFilter: 'linear',
     });
+
+    this.planeWhiteMaskTexture?.destroy();
+    this.planeWhiteMaskTexture = device.createTexture({
+      size: { width: 1, height: 1 },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING,
+      label: 'native-scene-plane-white-mask-texture',
+    });
+    this.planeWhiteMaskView = this.planeWhiteMaskTexture.createView();
   }
 
   private renderPlanePass(
@@ -613,6 +633,7 @@ export class NativeSceneRenderer {
     camera: SceneCamera,
     transparent: boolean,
     temporaryBuffers: GPUBuffer[],
+    maskTextureManager?: MaskTextureManager | null,
   ): boolean {
     if (layers.length === 0) {
       return true;
@@ -623,7 +644,8 @@ export class NativeSceneRenderer {
       !this.planePipelineOpaque ||
       !this.planePipelineTransparent ||
       !this.planeBindGroupLayout ||
-      !this.planeSampler
+      !this.planeSampler ||
+      !this.planeWhiteMaskView
     ) {
       return false;
     }
@@ -664,6 +686,8 @@ export class NativeSceneRenderer {
         this.buildPlaneMvp(layer, camera),
         layer.opacity,
         !transparent && layer.alphaMode === 'opaque',
+        !!(layer.maskClipId && maskTextureManager?.hasMaskTexture(layer.maskClipId)),
+        layer.maskInvert === true,
       );
       device.queue.writeBuffer(
         uniformBuffer,
@@ -673,12 +697,17 @@ export class NativeSceneRenderer {
         uniformData.byteLength,
       );
 
+      const maskTextureView = layer.maskClipId && maskTextureManager
+        ? maskTextureManager.getMaskInfo(layer.maskClipId).view
+        : this.planeWhiteMaskView;
+
       const bindGroup = device.createBindGroup({
         layout: this.planeBindGroupLayout,
         entries: [
           { binding: 0, resource: this.planeSampler },
           { binding: 1, resource: textureView },
           { binding: 2, resource: { buffer: uniformBuffer } },
+          { binding: 3, resource: maskTextureView },
         ],
         label: `native-scene-plane-bind-group-${layer.layerId}`,
       });
@@ -1037,11 +1066,15 @@ export class NativeSceneRenderer {
     mvp: Float32Array,
     opacity: number,
     forceOpaqueAlpha: boolean,
+    hasMask: boolean,
+    maskInvert: boolean,
   ): Float32Array {
     const data = new Float32Array(PLANE_UNIFORM_SIZE / 4);
     data.set(mvp, 0);
     data[16] = opacity;
     data[17] = forceOpaqueAlpha ? 1 : 0;
+    data[18] = hasMask ? 1 : 0;
+    data[19] = maskInvert ? 1 : 0;
     return data;
   }
 
@@ -1082,6 +1115,9 @@ export class NativeSceneRenderer {
       return false;
     }
     if (layer.opacity < 1) {
+      return false;
+    }
+    if (layer.maskClipId) {
       return false;
     }
     if (layer.alphaMode === 'straight' || layer.alphaMode === 'premultiplied') {

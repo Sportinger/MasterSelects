@@ -211,7 +211,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         inverted: m.inverted || false,
         opacity: m.opacity ?? 1,
         feather: m.feather || 0,
-        featherQuality: m.featherQuality || 8,
+        featherQuality: m.featherQuality ?? 50,
+        enabled: m.enabled !== false,
         visible: m.visible !== false,
         closed: m.closed !== false,
         vertices: (m.vertices || []).map((vertex) => ({
@@ -219,6 +220,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
           y: vertex.y,
           inTangent: vertex.handleIn ?? { x: 0, y: 0 },
           outTangent: vertex.handleOut ?? { x: 0, y: 0 },
+          handleMode: vertex.handleMode,
         })),
         position: m.position || { x: 0, y: 0 },
       })),

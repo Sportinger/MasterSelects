@@ -11,6 +11,7 @@ import type {
   BezierHandle,
   ClipMask,
   MaskVertex,
+  MaskVertexHandleMode,
   Effect,
   TextClipProperties,
   Text3DProperties,
@@ -33,6 +34,7 @@ export type {
   BezierHandle,
   ClipMask,
   MaskVertex,
+  MaskVertexHandleMode,
   Effect,
   Composition,
   TextClipProperties,
@@ -143,6 +145,7 @@ export interface TimelineState {
 
   // Mask state
   maskEditMode: MaskEditMode;
+  maskPanelActive: boolean;
   activeMaskId: string | null;
   selectedVertexIds: Set<string>;
   maskDrawStart: { x: number; y: number } | null;
@@ -468,10 +471,12 @@ export interface ClipboardActions {
 // Mask actions interface
 export interface MaskActions {
   setMaskEditMode: (mode: MaskEditMode) => void;
+  setMaskPanelActive: (active: boolean) => void;
   setMaskDragging: (dragging: boolean) => void;
   setMaskDrawStart: (point: { x: number; y: number } | null) => void;
   setActiveMask: (clipId: string | null, maskId: string | null) => void;
   selectVertex: (vertexId: string, addToSelection?: boolean) => void;
+  selectVertices: (vertexIds: string[]) => void;
   deselectAllVertices: () => void;
   addMask: (clipId: string, mask?: Partial<ClipMask>) => string;
   removeMask: (clipId: string, maskId: string) => void;
@@ -481,6 +486,13 @@ export interface MaskActions {
   addVertex: (clipId: string, maskId: string, vertex: Omit<MaskVertex, 'id'>, index?: number) => string;
   removeVertex: (clipId: string, maskId: string, vertexId: string) => void;
   updateVertex: (clipId: string, maskId: string, vertexId: string, updates: Partial<MaskVertex>, skipCacheInvalidation?: boolean) => void;
+  updateVertices: (
+    clipId: string,
+    maskId: string,
+    vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>,
+    skipCacheInvalidation?: boolean
+  ) => void;
+  setVertexHandleMode: (clipId: string, maskId: string, vertexIds: string[], mode: MaskVertexHandleMode) => void;
   closeMask: (clipId: string, maskId: string) => void;
   addRectangleMask: (clipId: string) => string;
   addEllipseMask: (clipId: string) => string;

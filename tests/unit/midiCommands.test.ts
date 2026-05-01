@@ -602,6 +602,7 @@ describe('midiCommands', () => {
               mode: 'add',
               expanded: true,
               position: { x: 0, y: 0 },
+              enabled: true,
               visible: true,
             },
           ],

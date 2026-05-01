@@ -250,18 +250,6 @@ function MaskItem({ clipId, mask, isActive, onSelect }: MaskItemProps) {
       {mask.expanded && (
         <div className="mask-item-properties">
           <div className="control-row">
-            <label>Opacity</label>
-            <DraggableNumber
-              value={mask.opacity * 100}
-              onChange={(v) => updateMask(clipId, mask.id, { opacity: v / 100 })}
-              defaultValue={100}
-              sensitivity={1}
-              decimals={0}
-              suffix="%"
-            />
-          </div>
-
-          <div className="control-row">
             <label>Feather</label>
             <DraggableNumber
               value={mask.feather}

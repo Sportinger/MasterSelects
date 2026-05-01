@@ -758,12 +758,15 @@ export function createEffectProperty(effectId: string, paramName: string): Effec
 }
 
 // Mask types for After Effects-style clip masking
+export type MaskVertexHandleMode = 'none' | 'mirrored' | 'split';
+
 export interface MaskVertex {
   id: string;
   x: number;              // Position relative to clip (0-1 normalized)
   y: number;
   handleIn: { x: number; y: number };   // Bezier control handle (relative to vertex)
   handleOut: { x: number; y: number };  // Bezier control handle (relative to vertex)
+  handleMode?: MaskVertexHandleMode;     // Corner, linked bezier handles, or split handles
 }
 
 export type MaskMode = 'add' | 'subtract' | 'intersect';
@@ -780,6 +783,7 @@ export interface ClipMask {
   mode: MaskMode;
   expanded: boolean;      // UI state - expanded in properties panel
   position: { x: number; y: number };  // Offset in normalized coords (0-1)
+  enabled: boolean;       // Whether the mask affects rendering
   visible: boolean;       // Toggle outline visibility
 }
 

@@ -18,14 +18,24 @@ import { playbackHealthMonitor } from '../services/playbackHealthMonitor';
 import { Logger } from '../services/logger';
 
 const log = Logger.create('Engine');
+const MASK_TEXTURE_DRAG_THROTTLE_MS = 80;
+const MASK_TEXTURE_DRAG_MAX_EDGE = 640;
 
 // Create a stable hash of mask properties (including feather since blur is CPU-side now)
 // This is faster than JSON.stringify for comparison
 function getMaskShapeHash(masks: ClipMask[]): string {
   return masks.map(m =>
-    `${m.vertices.map((v: MaskVertex) => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(';')}|` +
-    `${m.position.x.toFixed(2)},${m.position.y.toFixed(2)}|` +
-    `${m.opacity.toFixed(2)}|${m.mode}|${m.closed}|${(m.feather || 0).toFixed(1)}`
+    `${m.enabled !== false}|${m.inverted}|${m.closed}|${m.mode}|` +
+    `${m.vertices.map((v: MaskVertex) => [
+      v.x.toFixed(4),
+      v.y.toFixed(4),
+      v.handleIn.x.toFixed(4),
+      v.handleIn.y.toFixed(4),
+      v.handleOut.x.toFixed(4),
+      v.handleOut.y.toFixed(4),
+    ].join(',')).join(';')}|` +
+    `${m.position.x.toFixed(4)},${m.position.y.toFixed(4)}|` +
+    `${(m.feather || 0).toFixed(2)}|${m.featherQuality ?? 50}`
   ).join('||');
 }
 
@@ -152,7 +162,15 @@ export function useEngine() {
   const maskVersionRef = useRef<Map<string, string>>(new Map());
 
   // Helper function to process a single clip's mask
-  const processClipMask = useCallback((clip: { id: string; masks?: import('../types').ClipMask[] }, engineDimensions: { width: number; height: number }) => {
+  const processClipMask = useCallback((
+    clip: { id: string; masks?: import('../types').ClipMask[] },
+    engineDimensions: { width: number; height: number },
+    options: {
+      cacheSuffix?: string;
+      featherScale?: number;
+      maxFeatherQualityScale?: number;
+    } = {},
+  ): boolean => {
     // Check for SAM2 AI mask (takes priority over bezier masks)
     const sam2State = useSAM2Store.getState();
     if (sam2State.isActive && sam2State.currentClipId === clip.id && sam2State.liveMask) {
@@ -164,13 +182,14 @@ export function useEngine() {
       if (maskVersionRef.current.get(cacheKey) !== sam2Version) {
         maskVersionRef.current.set(cacheKey, sam2Version);
         engine.updateMaskTexture(clip.id, maskImageData);
+        return true;
       }
-      return;
+      return false;
     }
 
     if (clip.masks && clip.masks.length > 0) {
       // Create version string - includes feather since blur is applied on CPU
-      const maskVersion = `${getMaskShapeHash(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}`;
+      const maskVersion = `${getMaskShapeHash(clip.masks)}_${engineDimensions.width}x${engineDimensions.height}_${options.cacheSuffix ?? 'full'}`;
       const cacheKey = clip.id;
       const prevVersion = maskVersionRef.current.get(cacheKey);
 
@@ -182,15 +201,20 @@ export function useEngine() {
         const maskImageData = generateMaskTexture(
           clip.masks,
           engineDimensions.width,
-          engineDimensions.height
+          engineDimensions.height,
+          {
+            featherScale: options.featherScale,
+            maxFeatherQualityScale: options.maxFeatherQualityScale,
+          },
         );
 
         if (maskImageData) {
           log.debug(`Generated mask texture for clip ${clip.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
           engine.updateMaskTexture(clip.id, maskImageData);
         } else {
-          log.warn(`Failed to generate mask texture for clip ${clip.id}`);
+          engine.removeMaskTexture(clip.id);
         }
+        return true;
       }
     } else if (clip.id) {
       // Clip exists but no masks, clear the mask texture
@@ -198,22 +222,22 @@ export function useEngine() {
       if (maskVersionRef.current.has(cacheKey)) {
         maskVersionRef.current.delete(cacheKey);
         engine.removeMaskTexture(clip.id);
+        return true;
       }
     }
+    return false;
   }, []);
 
-  // Throttle mask texture updates during drag (100ms = 10fps for GPU texture)
+  // Throttle mask texture updates during drag; the SVG overlay stays exact.
   const lastMaskTextureUpdate = useRef(0);
-  const MASK_TEXTURE_THROTTLE_MS = 32; // Update GPU texture ~30fps during drag
 
   // Helper function to update mask textures - extracted to avoid duplication
-  const updateMaskTextures = useCallback(() => {
+  const updateMaskTextures = useCallback((force = false) => {
     const { clips, playheadPosition, maskDragging } = useTimelineStore.getState();
 
-    // Throttle texture regeneration during drag (expensive CPU operation)
-    if (maskDragging) {
+    if (maskDragging && !force) {
       const now = performance.now();
-      if (now - lastMaskTextureUpdate.current < MASK_TEXTURE_THROTTLE_MS) {
+      if (now - lastMaskTextureUpdate.current < MASK_TEXTURE_DRAG_THROTTLE_MS) {
         return; // Skip this update, too soon
       }
       lastMaskTextureUpdate.current = now;
@@ -221,6 +245,22 @@ export function useEngine() {
 
     // Get engine output dimensions (the actual render resolution)
     const engineDimensions = engine.getOutputDimensions();
+    const dragScale = maskDragging
+      ? Math.min(1, MASK_TEXTURE_DRAG_MAX_EDGE / Math.max(engineDimensions.width, engineDimensions.height))
+      : 1;
+    const maskDimensions = dragScale < 1
+      ? {
+          width: Math.max(1, Math.round(engineDimensions.width * dragScale)),
+          height: Math.max(1, Math.round(engineDimensions.height * dragScale)),
+        }
+      : engineDimensions;
+    const renderOptions = maskDragging
+      ? {
+          cacheSuffix: `drag_${maskDimensions.width}x${maskDimensions.height}`,
+          featherScale: dragScale,
+          maxFeatherQualityScale: 0.5,
+        }
+      : undefined;
 
     // Find clips at current playhead position that have masks
     // Don't rely on layers (generated by render loop, may be stale during comp switch)
@@ -230,9 +270,10 @@ export function useEngine() {
 
     // Process all clips at current time (both with and without masks)
     // Clips without masks need processing to clear stale mask textures
+    let changed = false;
     for (const clip of clipsAtTime) {
       // Process main clip's mask (or clear if no masks)
-      processClipMask(clip, engineDimensions);
+      changed = processClipMask(clip, maskDimensions, renderOptions) || changed;
 
       // Process nested clips' masks if this is a nested composition
       if (clip.nestedClips && clip.nestedClips.length > 0) {
@@ -240,10 +281,13 @@ export function useEngine() {
         for (const nestedClip of clip.nestedClips) {
           // Check if nested clip is active at current time within the nested comp
           if (clipTime >= nestedClip.startTime && clipTime < nestedClip.startTime + nestedClip.duration) {
-            processClipMask(nestedClip, engineDimensions);
+            changed = processClipMask(nestedClip, maskDimensions, renderOptions) || changed;
           }
         }
       }
+    }
+    if (changed) {
+      engine.requestRender();
     }
   }, [processClipMask]);
 
@@ -299,7 +343,7 @@ export function useEngine() {
               maskVersionRef.current.delete(activeClip.id);
             }
           }
-          updateMaskTextures();
+          updateMaskTextures(true);
         }
         wasDragging = maskDragging;
       }
@@ -507,7 +551,11 @@ export function useEngine() {
     // Clips changes (content, transforms, effects, etc.)
     const unsubClips = useTimelineStore.subscribe(
       (state) => state.clips,
-      () => engine.requestRender()
+      () => {
+        if (!useTimelineStore.getState().maskDragging) {
+          engine.requestRender();
+        }
+      }
     );
 
     // Track changes

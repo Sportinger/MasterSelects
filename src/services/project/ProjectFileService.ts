@@ -13,7 +13,7 @@ import { ProjectCoreService } from './core/ProjectCoreService';
 import { AnalysisService } from './domains/AnalysisService';
 import { TranscriptService } from './domains/TranscriptService';
 import { CacheService } from './domains/CacheService';
-import { ProxyStorageService } from './domains/ProxyStorageService';
+import { ProxyStorageService, type ProxyFrameWriter } from './domains/ProxyStorageService';
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS, type ProjectFolderKey } from './core/constants';
 import {
@@ -813,6 +813,15 @@ class ProjectFileService {
       return false;
     }
     return this.proxyStorageService.saveProxyFrame(handle, mediaId, frameIndex, blob);
+  }
+
+  async createProxyFrameWriter(mediaId: string): Promise<ProxyFrameWriter | null> {
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) {
+      log.error('No project handle for proxy writer!');
+      return null;
+    }
+    return this.proxyStorageService.createProxyFrameWriter(handle, mediaId);
   }
 
   async getProxyFrame(mediaId: string, frameIndex: number): Promise<Blob | null> {

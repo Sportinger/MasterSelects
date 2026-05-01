@@ -186,6 +186,7 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Mask state
       maskEditMode: 'none' as const,
+      maskPanelActive: false,
       activeMaskId: null as string | null,
       selectedVertexIds: new Set<string>(),
       maskDrawStart: null as { x: number; y: number } | null,

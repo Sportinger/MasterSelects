@@ -3,6 +3,7 @@
 import { useRef, useCallback } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { ClipMask, TimelineClip } from '../../types';
+import { startBatch, endBatch } from '../../stores/historyStore';
 
 export function useMaskEdgeDrag(
   svgRef: React.RefObject<SVGSVGElement | null>,
@@ -10,6 +11,7 @@ export function useMaskEdgeDrag(
   canvasHeight: number,
   selectedClip: TimelineClip | undefined,
   activeMask: ClipMask | undefined,
+  clientToLocalPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null,
 ) {
   const { setMaskDragging } = useTimelineStore();
 
@@ -17,9 +19,11 @@ export function useMaskEdgeDrag(
     isDragging: boolean;
     startX: number;
     startY: number;
+    startLocalX: number;
+    startLocalY: number;
     vertexA: { id: string; x: number; y: number };
     vertexB: { id: string; x: number; y: number };
-  }>({ isDragging: false, startX: 0, startY: 0, vertexA: { id: '', x: 0, y: 0 }, vertexB: { id: '', x: 0, y: 0 } });
+  }>({ isDragging: false, startX: 0, startY: 0, startLocalX: 0, startLocalY: 0, vertexA: { id: '', x: 0, y: 0 }, vertexB: { id: '', x: 0, y: 0 } });
 
   const handleEdgeMouseDown = useCallback((e: React.MouseEvent, vertexIdA: string, vertexIdB: string) => {
     e.stopPropagation();
@@ -30,11 +34,15 @@ export function useMaskEdgeDrag(
     const vB = activeMask.vertices.find(v => v.id === vertexIdB);
     if (!vA || !vB) return;
 
+    startBatch('Move mask edge');
     setMaskDragging(true);
+    const startLocalPoint = clientToLocalPoint?.(e.clientX, e.clientY);
     edgeDragState.current = {
       isDragging: true,
       startX: e.clientX,
       startY: e.clientY,
+      startLocalX: startLocalPoint?.x ?? 0,
+      startLocalY: startLocalPoint?.y ?? 0,
       vertexA: { id: vA.id, x: vA.x, y: vA.y },
       vertexB: { id: vB.id, x: vB.x, y: vB.y },
     };
@@ -52,8 +60,13 @@ export function useMaskEdgeDrag(
       const scaleX = canvasWidth / rect.width;
       const scaleY = canvasHeight / rect.height;
 
-      const dx = (moveEvent.clientX - edgeDragState.current.startX) * scaleX / canvasWidth;
-      const dy = (moveEvent.clientY - edgeDragState.current.startY) * scaleY / canvasHeight;
+      const localPoint = clientToLocalPoint?.(moveEvent.clientX, moveEvent.clientY);
+      const dx = localPoint
+        ? localPoint.x - edgeDragState.current.startLocalX
+        : (moveEvent.clientX - edgeDragState.current.startX) * scaleX / canvasWidth;
+      const dy = localPoint
+        ? localPoint.y - edgeDragState.current.startLocalY
+        : (moveEvent.clientY - edgeDragState.current.startY) * scaleY / canvasHeight;
 
       const { vertexA, vertexB } = edgeDragState.current;
       const newAx = Math.max(0, Math.min(1, vertexA.x + dx));
@@ -61,37 +74,30 @@ export function useMaskEdgeDrag(
       const newBx = Math.max(0, Math.min(1, vertexB.x + dx));
       const newBy = Math.max(0, Math.min(1, vertexB.y + dy));
 
-      const { clips } = useTimelineStore.getState();
-      const updatedClips = clips.map(c => {
-        if (c.id !== selectedClip.id) return c;
-        return {
-          ...c,
-          masks: (c.masks || []).map(m => {
-            if (m.id !== activeMask.id) return m;
-            return {
-              ...m,
-              vertices: m.vertices.map(v => {
-                if (v.id === vertexA.id) return { ...v, x: newAx, y: newAy };
-                if (v.id === vertexB.id) return { ...v, x: newBx, y: newBy };
-                return v;
-              }),
-            };
-          }),
-        };
-      });
-      useTimelineStore.setState({ clips: updatedClips });
+      useTimelineStore.getState().updateVertices(
+        selectedClip.id,
+        activeMask.id,
+        [
+          { id: vertexA.id, updates: { x: newAx, y: newAy } },
+          { id: vertexB.id, updates: { x: newBx, y: newBy } },
+        ],
+        true
+      );
     };
 
     const handleMouseUp = () => {
-      edgeDragState.current = { isDragging: false, startX: 0, startY: 0, vertexA: { id: '', x: 0, y: 0 }, vertexB: { id: '', x: 0, y: 0 } };
+      const store = useTimelineStore.getState();
+      store.invalidateCache();
+      store.setMaskDragging(false);
+      endBatch();
+      edgeDragState.current = { isDragging: false, startX: 0, startY: 0, startLocalX: 0, startLocalY: 0, vertexA: { id: '', x: 0, y: 0 }, vertexB: { id: '', x: 0, y: 0 } };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      setMaskDragging(false);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [activeMask, selectedClip, canvasWidth, canvasHeight, setMaskDragging, svgRef]);
+  }, [activeMask, selectedClip, canvasWidth, canvasHeight, setMaskDragging, svgRef, clientToLocalPoint]);
 
   return { handleEdgeMouseDown };
 }

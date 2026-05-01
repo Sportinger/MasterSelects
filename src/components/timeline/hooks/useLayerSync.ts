@@ -218,6 +218,7 @@ export function useLayerSync({
           layers.push({
             id: `nested-layer-${nestedClip.id}`,
             name: nestedClip.name,
+            sourceClipId: nestedClip.id,
             visible: true,
             opacity: transform.opacity ?? 1,
             blendMode: transform.blendMode || 'normal',
@@ -243,6 +244,7 @@ export function useLayerSync({
           layers.push({
             id: `nested-layer-${nestedClip.id}`,
             name: nestedClip.name,
+            sourceClipId: nestedClip.id,
             visible: true,
             opacity: transform.opacity ?? 1,
             blendMode: transform.blendMode || 'normal',
@@ -271,6 +273,7 @@ export function useLayerSync({
           layers.push({
             id: `nested-layer-${nestedClip.id}`,
             name: nestedClip.name,
+            sourceClipId: nestedClip.id,
             visible: true,
             opacity: transform.opacity ?? 1,
             blendMode: transform.blendMode || 'normal',
@@ -422,6 +425,7 @@ export function useLayerSync({
           newLayers[layerIndex] = {
             id: `timeline_layer_${layerIndex}`,
             name: clip.name,
+            sourceClipId: clip.id,
             visible: trackVisible,
             opacity: interpolatedTransform.opacity,
             blendMode: interpolatedTransform.blendMode,
@@ -476,6 +480,7 @@ export function useLayerSync({
           newLayers[layerIndex] = {
             id: `timeline_layer_${layerIndex}`,
             name: clip.name,
+            sourceClipId: clip.id,
             visible: trackVisible,
             opacity: transform.opacity,
             blendMode: transform.blendMode,
@@ -560,6 +565,7 @@ export function useLayerSync({
             newLayers[layerIndex] = {
               id: `timeline_layer_${layerIndex}`,
               name: clip.name,
+              sourceClipId: clip.id,
               visible: isVideoTrackVisible(track),
               opacity: transform.opacity,
               blendMode: transform.blendMode,
@@ -587,6 +593,7 @@ export function useLayerSync({
                 keyframeLocalTime
               );
               const capturedTrackVisible = isVideoTrackVisible(track);
+              const capturedClipId = clip.id;
               const capturedClipName = clip.name;
               const capturedEffects = interpolatedEffectsForProxy;
 
@@ -602,6 +609,7 @@ export function useLayerSync({
                     updatedLayers[capturedLayerIndex] = {
                       id: `timeline_layer_${capturedLayerIndex}`,
                       name: capturedClipName,
+                      sourceClipId: capturedClipId,
                       visible: capturedTrackVisible,
                       opacity: capturedTransform.opacity,
                       blendMode: capturedTransform.blendMode,
@@ -634,6 +642,7 @@ export function useLayerSync({
               newLayers[layerIndex] = {
                 id: `timeline_layer_${layerIndex}`,
                 name: clip.name,
+                sourceClipId: clip.id,
                 visible: isVideoTrackVisible(track),
                 opacity: transform.opacity,
                 blendMode: transform.blendMode,
@@ -666,6 +675,7 @@ export function useLayerSync({
               newLayers[layerIndex] = {
                 id: `timeline_layer_${layerIndex}`,
                 name: clip.name,
+                sourceClipId: clip.id,
                 visible: trackVisible,
                 opacity: transform.opacity,
                 blendMode: transform.blendMode,
@@ -717,6 +727,7 @@ export function useLayerSync({
             newLayers[layerIndex] = {
               id: `timeline_layer_${layerIndex}`,
               name: clip.name,
+              sourceClipId: clip.id,
               visible: trackVisible,
               opacity: transform.opacity,
               blendMode: transform.blendMode,
@@ -768,6 +779,7 @@ export function useLayerSync({
           newLayers[layerIndex] = {
             id: `timeline_layer_${layerIndex}`,
             name: clip.name,
+            sourceClipId: clip.id,
             visible: trackVisible,
             opacity: transform.opacity,
             blendMode: transform.blendMode,
@@ -822,6 +834,7 @@ export function useLayerSync({
           newLayers[layerIndex] = {
             id: `timeline_layer_${layerIndex}`,
             name: clip.name,
+            sourceClipId: clip.id,
             visible: trackVisible,
             opacity: transform.opacity,
             blendMode: transform.blendMode,

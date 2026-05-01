@@ -36,6 +36,8 @@ export interface SceneLayerBase {
   doubleSided?: boolean;
   castsDepth?: boolean;
   receivesDepth?: boolean;
+  maskClipId?: string;
+  maskInvert?: boolean;
 }
 
 export interface ScenePlaneLayer extends SceneLayerBase {

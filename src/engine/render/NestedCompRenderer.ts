@@ -624,6 +624,8 @@ export class NestedCompRenderer {
       resolveRenderableSharedSceneCamera({ width, height }, currentTime ?? 0, sceneContext),
       activeSplatEffectors,
       isRealtimePlayback,
+      null,
+      this.maskTextureManager,
     );
     if (!textureView) {
       for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);

@@ -27,6 +27,7 @@ describe('maskSlice', () => {
     expect(mask.feather).toBe(0);
     expect(mask.inverted).toBe(false);
     expect(mask.mode).toBe('add');
+    expect(mask.enabled).toBe(true);
     expect(mask.visible).toBe(true);
   });
 
@@ -62,16 +63,18 @@ describe('maskSlice', () => {
     expect(mask.featherQuality).toBe(50);
   });
 
-  it('addMask: uses provided expanded, position, visible, and featherQuality', () => {
+  it('addMask: uses provided expanded, position, enabled, visible, and featherQuality', () => {
     store.getState().addMask('clip-1', {
       expanded: false,
       position: { x: 0.25, y: 0.75 },
+      enabled: false,
       visible: false,
       featherQuality: 80,
     });
     const mask = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0];
     expect(mask.expanded).toBe(false);
     expect(mask.position).toEqual({ x: 0.25, y: 0.75 });
+    expect(mask.enabled).toBe(false);
     expect(mask.visible).toBe(false);
     expect(mask.featherQuality).toBe(80);
   });
@@ -190,8 +193,9 @@ describe('maskSlice', () => {
 
   it('updateMask: changes visible and expanded', () => {
     const maskId = store.getState().addMask('clip-1');
-    store.getState().updateMask('clip-1', maskId, { visible: false, expanded: false });
+    store.getState().updateMask('clip-1', maskId, { enabled: false, visible: false, expanded: false });
     const mask = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0];
+    expect(mask.enabled).toBe(false);
     expect(mask.visible).toBe(false);
     expect(mask.expanded).toBe(false);
   });
@@ -448,6 +452,39 @@ describe('maskSlice', () => {
   });
 
   // ─── Preset shapes ───────────────────────────────────────────────
+
+  it('setVertexHandleMode: creates mirrored handles for a corner vertex', () => {
+    const maskId = store.getState().addMask('clip-1', { closed: true });
+    store.getState().addVertex('clip-1', maskId, { x: 0.1, y: 0.5, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } });
+    const vertexId = store.getState().addVertex('clip-1', maskId, { x: 0.5, y: 0.1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } });
+    store.getState().addVertex('clip-1', maskId, { x: 0.9, y: 0.5, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } });
+
+    store.getState().setVertexHandleMode('clip-1', maskId, [vertexId], 'mirrored');
+
+    const vertex = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0].vertices.find(v => v.id === vertexId)!;
+    expect(vertex.handleMode).toBe('mirrored');
+    expect(Math.hypot(vertex.handleOut.x, vertex.handleOut.y)).toBeGreaterThan(0);
+    expect(vertex.handleIn.x).toBeCloseTo(-vertex.handleOut.x);
+    expect(vertex.handleIn.y).toBeCloseTo(-vertex.handleOut.y);
+  });
+
+  it('setVertexHandleMode: clears handles for corner mode', () => {
+    const maskId = store.getState().addMask('clip-1');
+    const vertexId = store.getState().addVertex('clip-1', maskId, {
+      x: 0.5,
+      y: 0.5,
+      handleIn: { x: -0.1, y: 0 },
+      handleOut: { x: 0.1, y: 0 },
+      handleMode: 'mirrored',
+    });
+
+    store.getState().setVertexHandleMode('clip-1', maskId, [vertexId], 'none');
+
+    const vertex = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0].vertices[0];
+    expect(vertex.handleMode).toBe('none');
+    expect(vertex.handleIn).toEqual({ x: 0, y: 0 });
+    expect(vertex.handleOut).toEqual({ x: 0, y: 0 });
+  });
 
   it('addRectangleMask: creates a closed mask with 4 vertices', () => {
     const maskId = store.getState().addRectangleMask('clip-1');

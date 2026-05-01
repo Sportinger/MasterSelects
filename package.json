@@ -1,7 +1,7 @@
 {
   "name": "masterselects",
   "private": true,
-  "version": "1.5.4",
+  "version": "1.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

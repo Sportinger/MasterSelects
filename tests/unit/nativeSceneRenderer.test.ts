@@ -456,6 +456,45 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(planeUniform[17]).toBe(0);
   });
 
+  it('applies clip masks in native 3D plane UV space', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device, renderPasses } = createFakeDevice();
+    const maskView = { label: 'clip-mask-view' };
+    const maskTextureManager = {
+      hasMaskTexture: vi.fn(() => true),
+      getMaskInfo: vi.fn(() => ({ hasMask: true, view: maskView })),
+    };
+
+    const result = renderer.renderScene(
+      device,
+      [{
+        ...makePlaneLayer('masked-video-plane', 1),
+        maskClipId: 'masked-video-plane-clip',
+      }],
+      makeCamera(),
+      [],
+      false,
+      null,
+      maskTextureManager as never,
+    );
+
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
+      'native-scene-clear-pass',
+      'native-scene-plane-transparent-pass',
+    ]);
+    const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
+    expect(planeUniform[18]).toBe(1);
+    expect(planeUniform[19]).toBe(0);
+    expect(maskTextureManager.getMaskInfo).toHaveBeenCalledWith('masked-video-plane-clip');
+
+    const planeBindGroupCall = device.createBindGroup.mock.calls.find(
+      ([descriptor]: [{ label?: string }]) => descriptor.label === 'native-scene-plane-bind-group-masked-video-plane',
+    );
+    expect(planeBindGroupCall?.[0].entries).toContainEqual({ binding: 3, resource: maskView });
+  });
+
   it('reuses the cached video plane texture while a scrubbed video frame is not ready', async () => {
     const renderer = await createInitializedRenderer();
 

@@ -134,6 +134,8 @@ export function collectScene3DLayers(
       threeDEffectorsEnabled: source?.threeDEffectorsEnabled,
       worldMatrix,
       worldTransform,
+      maskClipId: layer.maskClipId,
+      maskInvert: layer.maskInvert,
     };
 
     if (base.kind === 'splat') {

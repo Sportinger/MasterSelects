@@ -1,6 +1,20 @@
 [
   {
     "date": "2026-05-01",
+    "type": "improve",
+    "title": "Professional Mask Path Editing",
+    "description": "Mask editing now supports persistent vertex selection, arrow-key nudging, edge insertion with the pen tool, visible bezier handles for selected bezier points, handle mode toggles, and a mask-aware Tab edit mode for canvas pan and zoom without accidentally moving layers.",
+    "section": "Masks"
+  },
+  {
+    "date": "2026-05-01",
+    "type": "fix",
+    "title": "Masks Render Reliably in Preview and Export",
+    "description": "Mask outlines now appear only while the mask tab is open, masks stay attached to transformed 2D and 3D layers, feathered add/subtract combinations compose correctly, mask dragging uses lighter preview textures, and video/image export now synchronizes full-resolution mask textures before rendering.",
+    "section": "Masks / Export"
+  },
+  {
+    "date": "2026-05-01",
     "type": "fix",
     "title": "Preview Edit Handles Track Scaled and Rotated 2D Layers",
     "description": "2D edit-mode outlines, handles, hit testing, and drag movement now use the same transform geometry as the WebGPU compositor, so scaled or rotated clips stay aligned while being moved.",

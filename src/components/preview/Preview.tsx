@@ -422,13 +422,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const setSceneGizmoClipIdOverride = useEngineStore((s) => s.setSceneGizmoClipIdOverride);
   const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
-  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying, playheadPosition } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, maskPanelActive, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying, playheadPosition } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     primarySelectedClipId: s.primarySelectedClipId,
     selectClip: s.selectClip,
     updateClipTransform: s.updateClipTransform,
     maskEditMode: s.maskEditMode,
+    maskPanelActive: s.maskPanelActive,
     layers: s.layers,
     selectedLayerId: s.selectedLayerId,
     selectLayer: s.selectLayer,
@@ -772,6 +773,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     ),
   );
   const layerEditMode = editMode && !editCameraModeActive;
+  const maskTabActive = isEditableSource && maskPanelActive;
+  const maskNavigationMode = layerEditMode && maskTabActive;
+  const layerTransformMode = layerEditMode && !maskNavigationMode;
+  const freeCanvasNavigationMode = layerTransformMode || maskNavigationMode;
   const effectiveSceneNavFpsMode = sceneNavFpsMode && !editCameraModeActive;
   const editCameraClipSelected = Boolean(
     editCameraModeActive &&
@@ -1797,7 +1802,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       return;
     }
 
-    if (!layerEditMode || !containerRef.current) return;
+    if (!freeCanvasNavigationMode || !containerRef.current) return;
 
     e.preventDefault();
 
@@ -1828,7 +1833,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
   }, [
     containerSize,
-    layerEditMode,
+    freeCanvasNavigationMode,
     sceneNavEnabled,
     effectiveSceneNavFpsMode,
     getFreshSceneNavTransform,
@@ -1955,7 +1960,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       }
     }
 
-    if (!layerEditMode) return;
+    if (!freeCanvasNavigationMode) return;
 
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
       e.preventDefault();
@@ -1971,7 +1976,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     activeEditCameraOrthoFrame,
     editCameraOrthoMode,
     editCameraOrthoViewActive,
-    layerEditMode,
+    freeCanvasNavigationMode,
     endGaussianWheelBatch,
     sceneNavEnabled,
     effectiveSceneNavFpsMode,
@@ -2047,14 +2052,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   // Layer drag logic (move/scale, overlay drawing, document-level listeners)
   const { isDragging, dragMode, dragHandle, hoverHandle, handleOverlayMouseDown, handleOverlayMouseMove, handleOverlayMouseUp } =
     useLayerDrag({
-      editMode: layerEditMode, overlayRef, canvasSize, canvasInContainer, viewZoom,
+      editMode: layerTransformMode, overlayRef, canvasSize, canvasInContainer, viewZoom,
       layers, clips, selectedLayerId, selectedClipId,
       selectClip, selectLayer, updateClipTransform, updateLayer,
       calculateLayerBounds, findLayerAtPosition, findHandleAtPosition,
     });
 
   // Calculate transform for zoomed/panned view
-  const viewTransform = layerEditMode ? {
+  const viewTransform = freeCanvasNavigationMode ? {
     transform: `scale(${viewZoom}) translate(${viewPan.x / viewZoom}px, ${viewPan.y / viewZoom}px)`,
   } : {};
   const splatLoadPercent = activeSplatLoadProgress
@@ -2095,17 +2100,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           ? 'grabbing'
           : isGaussianFpsLooking
             ? 'crosshair'
-          : isEditCameraOrthoPanning
-            ? 'grabbing'
-          : isPanning
-            ? 'grabbing'
-          : editCameraOrthoViewActive
-            ? 'default'
-            : sceneNavEnabled
-              ? (effectiveSceneNavFpsMode ? 'crosshair' : 'grab')
-              : layerEditMode
-                ? 'crosshair'
-                : 'default',
+            : isEditCameraOrthoPanning || isPanning
+              ? 'grabbing'
+              : editCameraOrthoViewActive
+                ? 'default'
+                : sceneNavEnabled
+                  ? (effectiveSceneNavFpsMode ? 'crosshair' : 'grab')
+                  : layerTransformMode
+                    ? 'crosshair'
+                    : 'default',
       }}
     >
       {/* Controls bar */}
@@ -2116,7 +2119,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         editMode={editMode}
         canEdit={isEditableSource}
         setEditMode={setPanelEditMode}
-        showEditViewControls={layerEditMode}
+        showEditViewControls={freeCanvasNavigationMode}
         sceneObjectOverlayEnabled={sceneObjectOverlayEnabled}
         setSceneObjectOverlayEnabled={setSceneObjectOverlayEnabled}
         viewZoom={viewZoom}
@@ -2192,10 +2195,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
                   height: canvasSize.height,
                 }}
               />
-              {isEditableSource && maskEditMode !== 'none' && (
+              {isEditableSource && maskPanelActive && maskEditMode !== 'none' && (
                 <MaskOverlay
                   canvasWidth={effectiveResolution.width}
                   canvasHeight={effectiveResolution.height}
+                  displayWidth={canvasSize.width}
+                  displayHeight={canvasSize.height}
                 />
               )}
               {isEditableSource && sam2Active && (
@@ -2257,7 +2262,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         )}
 
         {/* Edit mode overlay - covers full container for pasteboard support */}
-        {layerEditMode && isEngineReady && (
+        {layerTransformMode && isEngineReady && (
           <canvas
             ref={overlayRef}
             width={containerSize.width || 100}
@@ -2281,9 +2286,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           />
         )}
 
-        {layerEditMode && isEditableSource && (
+        {layerTransformMode && isEditableSource && (
           <div className="preview-edit-hint">
             Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
+          </div>
+        )}
+        {maskNavigationMode && isEditableSource && (
+          <div className="preview-edit-hint">
+            Mask Edit: Scroll Zoom | Alt+Drag/MMB Pan
           </div>
         )}
         {editCameraOrthoViewActive && activeEditCameraOrthoFrame && (

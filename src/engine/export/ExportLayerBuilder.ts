@@ -336,6 +336,7 @@ function buildBaseLayerProps(
       y: ((transform.rotation?.y ?? 0) * Math.PI) / 180,
       z: ((transform.rotation?.z ?? 0) * Math.PI) / 180,
     },
+    ...(clip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: clip.id, maskInvert: false } : {}),
     ...(clip.is3D ? { is3D: true } : {}),
   };
 }
@@ -693,6 +694,7 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
       y: ((transform.rotation?.y || 0) * Math.PI) / 180,
       z: ((transform.rotation?.z || 0) * Math.PI) / 180,
     },
+    ...(nestedClip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: nestedClip.id, maskInvert: false } : {}),
     ...(nestedClip.is3D ? { is3D: true } : {}),
   };
 }

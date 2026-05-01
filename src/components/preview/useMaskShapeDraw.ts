@@ -16,6 +16,7 @@ export function useMaskShapeDraw(
   svgRef: React.RefObject<SVGSVGElement | null>,
   selectedClip: TimelineClip | undefined,
   maskEditMode: string,
+  clientToLocalPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null,
 ) {
   const {
     addMask,
@@ -40,9 +41,10 @@ export function useMaskShapeDraw(
     const svg = svgRef.current;
     if (!svg) return;
 
+    const localPoint = clientToLocalPoint?.(e.clientX, e.clientY);
     const rect = svg.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    const x = localPoint?.x ?? (e.clientX - rect.left) / rect.width;
+    const y = localPoint?.y ?? (e.clientY - rect.top) / rect.height;
 
     setShapeDrawState({
       startX: x,
@@ -53,7 +55,7 @@ export function useMaskShapeDraw(
     });
 
     e.preventDefault();
-  }, [selectedClip, maskEditMode, svgRef]);
+  }, [clientToLocalPoint, selectedClip, maskEditMode, svgRef]);
 
   const handleShapeMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!shapeDrawState.isDrawing) return;
@@ -61,16 +63,17 @@ export function useMaskShapeDraw(
     const svg = svgRef.current;
     if (!svg) return;
 
+    const localPoint = clientToLocalPoint?.(e.clientX, e.clientY);
     const rect = svg.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    const x = localPoint?.x ?? (e.clientX - rect.left) / rect.width;
+    const y = localPoint?.y ?? (e.clientY - rect.top) / rect.height;
 
     setShapeDrawState(prev => ({
       ...prev,
       currentX: x,
       currentY: y,
     }));
-  }, [shapeDrawState.isDrawing, svgRef]);
+  }, [clientToLocalPoint, shapeDrawState.isDrawing, svgRef]);
 
   const handleShapeMouseUp = useCallback((e?: React.MouseEvent) => {
     if (!shapeDrawState.isDrawing || !selectedClip) {
@@ -94,19 +97,16 @@ export function useMaskShapeDraw(
       return;
     }
 
-    let maskId: string;
     let vertices: MaskVertex[];
 
     if (maskEditMode === 'drawingRect') {
-      maskId = addMask(selectedClip.id, { name: 'Rectangle Mask' });
       vertices = [
-        { id: `v-${Date.now()}-1`, x: minX, y: minY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
-        { id: `v-${Date.now()}-2`, x: maxX, y: minY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
-        { id: `v-${Date.now()}-3`, x: maxX, y: maxY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
-        { id: `v-${Date.now()}-4`, x: minX, y: maxY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+        { id: `v-${Date.now()}-1`, x: minX, y: minY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: `v-${Date.now()}-2`, x: maxX, y: minY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: `v-${Date.now()}-3`, x: maxX, y: maxY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: `v-${Date.now()}-4`, x: minX, y: maxY, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
       ];
     } else {
-      maskId = addMask(selectedClip.id, { name: 'Ellipse Mask' });
       const cx = (minX + maxX) / 2;
       const cy = (minY + maxY) / 2;
       const rx = (maxX - minX) / 2;
@@ -114,24 +114,18 @@ export function useMaskShapeDraw(
       const k = 0.5523;
 
       vertices = [
-        { id: `v-${Date.now()}-1`, x: cx, y: minY, handleIn: { x: -rx * k, y: 0 }, handleOut: { x: rx * k, y: 0 } },
-        { id: `v-${Date.now()}-2`, x: maxX, y: cy, handleIn: { x: 0, y: -ry * k }, handleOut: { x: 0, y: ry * k } },
-        { id: `v-${Date.now()}-3`, x: cx, y: maxY, handleIn: { x: rx * k, y: 0 }, handleOut: { x: -rx * k, y: 0 } },
-        { id: `v-${Date.now()}-4`, x: minX, y: cy, handleIn: { x: 0, y: ry * k }, handleOut: { x: 0, y: -ry * k } },
+        { id: `v-${Date.now()}-1`, x: cx, y: minY, handleIn: { x: -rx * k, y: 0 }, handleOut: { x: rx * k, y: 0 }, handleMode: 'mirrored' },
+        { id: `v-${Date.now()}-2`, x: maxX, y: cy, handleIn: { x: 0, y: -ry * k }, handleOut: { x: 0, y: ry * k }, handleMode: 'mirrored' },
+        { id: `v-${Date.now()}-3`, x: cx, y: maxY, handleIn: { x: rx * k, y: 0 }, handleOut: { x: -rx * k, y: 0 }, handleMode: 'mirrored' },
+        { id: `v-${Date.now()}-4`, x: minX, y: cy, handleIn: { x: 0, y: ry * k }, handleOut: { x: 0, y: -ry * k }, handleMode: 'mirrored' },
       ];
     }
 
-    const { clips } = useTimelineStore.getState();
-    const updatedClips = clips.map(c => {
-      if (c.id !== selectedClip.id) return c;
-      return {
-        ...c,
-        masks: (c.masks || []).map(m =>
-          m.id === maskId ? { ...m, vertices, closed: true } : m
-        ),
-      };
+    const maskId = addMask(selectedClip.id, {
+      name: maskEditMode === 'drawingRect' ? 'Rectangle Mask' : 'Ellipse Mask',
+      vertices,
+      closed: true,
     });
-    useTimelineStore.setState({ clips: updatedClips });
     setActiveMask(selectedClip.id, maskId);
     setMaskEditMode('editing');
 
