@@ -162,9 +162,9 @@ describe('SceneEffectorUtils', () => {
       scale: {
         x: 0.4,
         y: 0.6,
-        z: 1,
+        z: 0.8,
       },
-      radius: 1,
+      radius: 0.8,
     });
   });
 });
