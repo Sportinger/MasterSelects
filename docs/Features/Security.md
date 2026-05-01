@@ -33,6 +33,8 @@ The main trust boundaries are:
 
 External services are only contacted when the user enables a feature that needs them, such as AI chat, transcription, AI video generation, or multicam EDL generation.
 
+Local Lemonade chat is treated as a local provider rather than a MasterSelects bridge. The app sends chat prompts, timeline summaries, tool definitions, and tool results to the configured Lemonade Server, but the configured endpoint is restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`).
+
 ---
 
 ## Secret Handling
@@ -138,6 +140,17 @@ The helper enforces:
 
 The AI chat approval UI is separate from these bridge checks. It is a user-experience gate for mutating or sensitive tools, not the underlying security boundary.
 
+### Lemonade Local Provider
+
+Lemonade is not allowed to call the MasterSelects bridge directly. It only receives the chat request and can return text or OpenAI-compatible tool-call suggestions.
+
+Those tool calls still execute through the normal chat path:
+- The AI chat approval mode is applied before mutating or sensitive tools run
+- Tool execution goes through the shared `executeAITool()` dispatcher
+- Local file tools continue to rely on the dev bridge or Native Helper file-access checks
+
+The Lemonade request includes `Authorization: Bearer lemonade` because Lemonade's OpenAI-compatible endpoint accepts that convention. It is a static compatibility header, not a secret and not equivalent to the dev bridge token or Native Helper startup token.
+
 ---
 
 ## Known Limitations
@@ -148,6 +161,7 @@ The AI chat approval UI is separate from these bridge checks. It is a user-exper
 4. The dev bridge token is local-process-scoped. The token file is stored in the project root as `.ai-bridge-token`, so any local process with file access can read it.
 5. The Native Helper can be started with `--no-auth`, but that disables the auth boundary entirely and is not recommended.
 6. API keys are still sent to external services over HTTPS when you enable AI features that need them.
+7. Lemonade runs outside the app. Any local process that controls the configured local Lemonade server can see the chat prompt, timeline summary, tool definitions, and tool results sent to it.
 
 ---
 
@@ -162,4 +176,4 @@ If you discover a security vulnerability:
 
 ---
 
-*Source: `src/services/security/redact.ts`, `src/services/logger.ts`, `src/services/security/fileAccessBroker.ts`, `src/services/security/devBridgeAuth.ts`, `vite.config.ts`, `tools/native-helper/src/server.rs`, `tools/native-helper/src/main.rs`, `src/components/panels/AIChatPanel.tsx`*
+*Source: `src/services/security/redact.ts`, `src/services/logger.ts`, `src/services/security/fileAccessBroker.ts`, `src/services/security/devBridgeAuth.ts`, `src/services/lemonadeProvider.ts`, `vite.config.ts`, `tools/native-helper/src/server.rs`, `tools/native-helper/src/main.rs`, `src/components/panels/AIChatPanel.tsx`*

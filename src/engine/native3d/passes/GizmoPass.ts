@@ -9,6 +9,7 @@ import {
   SCENE_GIZMO_AXIS_SCREEN_LENGTH,
   SCENE_GIZMO_ROTATE_RING_SCREEN_RADIUS,
 } from '../../scene/SceneGizmoConstants';
+import { resolveAxisBasisFromWorldMatrix } from '../../scene/SceneTransformUtils';
 import shaderSource from '../shaders/GizmoPass.wgsl?raw';
 
 type SceneGizmoLayer = Pick<SceneLayer3DData, 'clipId' | 'worldMatrix' | 'worldTransform'>;
@@ -112,7 +113,7 @@ export class GizmoPass {
     const vertices: number[] = [];
     const viewProjection = multiplyMat4(camera.projectionMatrix, camera.viewMatrix);
     const origin = layer.worldTransform.position;
-    const basis = resolveAxisBasis(layer.worldMatrix);
+    const basis = resolveAxisBasisFromWorldMatrix(layer.worldMatrix);
     const worldPerPixel = resolveWorldPerPixel(origin, camera);
 
     if (mode === 'rotate') {
@@ -457,14 +458,6 @@ function resolveWorldPerPixel(origin: SceneVector3, camera: SceneCamera): number
   );
   const fovRadians = (camera.fov * Math.PI) / 180;
   return (2 * distance * Math.tan(fovRadians * 0.5)) / Math.max(1, camera.viewport.height);
-}
-
-function resolveAxisBasis(worldMatrix: Float32Array): Record<SceneGizmoAxis, Vec3> {
-  return {
-    x: normalize({ x: worldMatrix[0] ?? 1, y: worldMatrix[1] ?? 0, z: worldMatrix[2] ?? 0 }),
-    y: normalize({ x: worldMatrix[4] ?? 0, y: worldMatrix[5] ?? 1, z: worldMatrix[6] ?? 0 }),
-    z: normalize({ x: worldMatrix[8] ?? 0, y: worldMatrix[9] ?? 0, z: worldMatrix[10] ?? 1 }),
-  };
 }
 
 function resolveArrowSide(axis: Vec3, cameraForward: Vec3): Vec3 {

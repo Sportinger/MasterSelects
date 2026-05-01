@@ -35,6 +35,8 @@ export class NativeFileStorageService {
     content: Blob | string
   ): Promise<boolean> {
     try {
+      const folderPath = PROJECT_FOLDERS[subFolder];
+      await this.client.createDir(this.joinPath(projectPath, folderPath));
       const fullPath = this.resolvePath(projectPath, subFolder, fileName);
 
       if (typeof content === 'string') {

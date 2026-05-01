@@ -251,8 +251,11 @@ When opening a project, the app automatically:
 2. Falls back to stored handles in IndexedDB
 3. Checks read permission on restored handles
 4. Scans the `Raw/` folder for missing files (exact filename match, case-insensitive)
-5. Also checks stored IndexedDB handles for files not found in Raw
-6. Regenerates missing object URLs for files that were restored successfully and rebuilds previews when the underlying `File` object is still available
+5. Recursively scans the opened project folder and all subfolders for remaining missing files, with `Raw/` matches kept first if names collide
+6. Also checks stored IndexedDB handles for files not found in the project folder
+7. Regenerates missing object URLs for files that were restored successfully and rebuilds previews when the underlying `File` object is still available
+
+Manual relink uses the same filename matching for normal media and sequence frames. For renamed single files, selecting one file directly assigns it to the clicked missing item.
 
 ### Reload All Button
 In Media Panel toolbar:

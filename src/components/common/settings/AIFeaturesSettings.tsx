@@ -1,6 +1,13 @@
 import { useState, useCallback } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useMatAnyoneStore, type MatAnyoneSetupStatus } from '../../../stores/matanyoneStore';
+import {
+  checkLemonadeHealth,
+  DEFAULT_LEMONADE_ENDPOINT,
+  DEFAULT_LEMONADE_MODEL,
+  LEMONADE_MODEL_PRESETS,
+  type LemonadeModelInfo,
+} from '../../../services/lemonadeProvider';
 
 type DirectoryPickerWindow = Window & {
   showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>;
@@ -60,8 +67,14 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
   const {
     matanyoneEnabled,
     matanyonePythonPath,
+    aiProvider,
+    lemonadeEndpoint,
+    lemonadeModel,
     setMatAnyoneEnabled,
     setMatAnyonePythonPath,
+    setAiProvider,
+    setLemonadeEndpoint,
+    setLemonadeModel,
   } = useSettingsStore();
 
   const {
@@ -75,6 +88,9 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmUninstall, setConfirmUninstall] = useState(false);
+  const [lemonadeStatus, setLemonadeStatus] = useState<'idle' | 'checking' | 'online' | 'offline'>('idle');
+  const [lemonadeStatusMessage, setLemonadeStatusMessage] = useState('');
+  const [lemonadeModels, setLemonadeModels] = useState<LemonadeModelInfo[]>([]);
 
   const isInstalled = setupStatus === 'installed' || setupStatus === 'ready'
     || setupStatus === 'model-needed' || setupStatus === 'starting';
@@ -101,8 +117,110 @@ export function AIFeaturesSettings({ embedded }: AIFeaturesSettingsProps = {}) {
     }
   }, [setMatAnyonePythonPath]);
 
+  const handleCheckLemonade = useCallback(async () => {
+    setLemonadeStatus('checking');
+    setLemonadeStatusMessage('');
+
+    const health = await checkLemonadeHealth(lemonadeEndpoint);
+    setLemonadeModels(health.models);
+    setLemonadeStatus(health.available ? 'online' : 'offline');
+    setLemonadeStatusMessage(health.available
+      ? `${health.models.length} model${health.models.length === 1 ? '' : 's'} available`
+      : health.error || 'Unable to reach Lemonade Server');
+  }, [lemonadeEndpoint]);
+
+  const lemonadeModelOptions = lemonadeModels.length > 0
+    ? lemonadeModels.map((model) => ({ id: model.id, name: model.name || model.id }))
+    : LEMONADE_MODEL_PRESETS.map((preset) => ({ id: preset.id, name: preset.name }));
+
+  if (lemonadeModels.length === 0 && lemonadeModel && !lemonadeModelOptions.some((option) => option.id === lemonadeModel)) {
+    lemonadeModelOptions.push({ id: lemonadeModel, name: lemonadeModel });
+  }
+
+  const configuredLemonadeModel = lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL;
+  const selectedLemonadeModel = lemonadeModelOptions.some((option) => option.id === configuredLemonadeModel)
+    ? configuredLemonadeModel
+    : lemonadeModelOptions[0]?.id || '';
+
   const matAnyoneContent = (
     <>
+      <div className="settings-group">
+        <div className="settings-group-title">{embedded ? 'AI Features - Chat' : 'Chat Provider'}</div>
+
+        <label className="settings-row">
+          <span className="settings-label">Provider</span>
+          <select
+            className="settings-select"
+            value={aiProvider}
+            onChange={(e) => setAiProvider(e.target.value as 'openai' | 'lemonade')}
+          >
+            <option value="openai">OpenAI / Cloud</option>
+            <option value="lemonade">Lemonade Local</option>
+          </select>
+        </label>
+
+        <label className="settings-row">
+          <span className="settings-label">Lemonade Endpoint</span>
+          <input
+            type="text"
+            value={lemonadeEndpoint}
+            onChange={(e) => {
+              setLemonadeEndpoint(e.target.value);
+              setLemonadeStatus('idle');
+            }}
+            placeholder={DEFAULT_LEMONADE_ENDPOINT}
+            className="settings-input"
+            style={{ width: 260 }}
+          />
+        </label>
+
+        <label className="settings-row">
+          <span className="settings-label">Lemonade Model</span>
+          <select
+            className="settings-select"
+            value={selectedLemonadeModel}
+            onChange={(e) => setLemonadeModel(e.target.value)}
+            disabled={lemonadeModelOptions.length === 0}
+          >
+            {lemonadeModelOptions.length === 0 && (
+              <option value="">No Lemonade models found</option>
+            )}
+            {lemonadeModelOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="settings-row">
+          <span className="settings-label">Lemonade Status</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{
+              fontSize: 11,
+              color: lemonadeStatus === 'online'
+                ? '#22c55e'
+                : lemonadeStatus === 'offline'
+                  ? '#ef4444'
+                  : 'var(--text-secondary)',
+            }}>
+              {lemonadeStatus === 'idle'
+                ? 'Not checked'
+                : lemonadeStatus === 'checking'
+                  ? 'Checking...'
+                  : lemonadeStatusMessage}
+            </span>
+            <button
+              className="settings-button"
+              onClick={handleCheckLemonade}
+              disabled={lemonadeStatus === 'checking'}
+            >
+              Check
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* MatAnyone2 Section */}
       <div className="settings-group">
         <div className="settings-group-title">{embedded ? 'AI Features — MatAnyone2' : 'MatAnyone2 - AI Video Matting'}</div>

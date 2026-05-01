@@ -33,6 +33,11 @@ import {
   getProjectRawPathCandidates,
   getStoredProjectFileHandle,
 } from './mediaSourceResolver';
+import {
+  applyRelinkMatch,
+  createRelinkCandidateMapFromHandles,
+  findRelinkMatch,
+} from './relinkMedia';
 import { fromProjectTransform } from './transformSerialization';
 import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
 import type {
@@ -983,7 +988,7 @@ async function autoRelinkFromRawFolder(): Promise<void> {
 
   log.info(`Attempting auto-relink for ${missingFiles.length} missing files...`);
 
-  // Scan the Raw folder - retry if empty (handle may not be ready yet)
+  // Scan Raw first, then the whole project folder. Raw keeps priority if duplicate names exist.
   let rawFiles = await projectFileService.scanRawFolder();
   if (rawFiles.size === 0) {
     // Wait briefly and retry - the directory handle may need time on first load
@@ -991,114 +996,102 @@ async function autoRelinkFromRawFolder(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 200));
     rawFiles = await projectFileService.scanRawFolder();
   }
-  if (rawFiles.size === 0) {
-    log.info(' Raw folder is empty or not accessible');
+  const projectFiles = await projectFileService.scanProjectFolder();
+  const relinkCandidates = new Map(rawFiles);
+  for (const [name, handle] of projectFiles) {
+    if (!relinkCandidates.has(name)) {
+      relinkCandidates.set(name, handle);
+    }
+  }
+
+  if (relinkCandidates.size === 0) {
+    log.info(' Project media folders are empty or not accessible');
     return;
   }
 
-  log.debug(`Found ${rawFiles.size} files in Raw folder`);
+  log.debug(`Found ${relinkCandidates.size} candidate files in project folder`, {
+    rawFiles: rawFiles.size,
+    projectFiles: projectFiles.size,
+  });
 
-  // Match and relink files
+  // Match and relink files. This handles normal media and numbered 3D sequences.
   let relinkedCount = 0;
-  const updatedFiles = [...mediaState.files];
+  const relinkedByProjectScan = new Set<string>();
+  const candidateMap = await createRelinkCandidateMapFromHandles(relinkCandidates.values());
 
+  for (const file of missingFiles) {
+    const match = findRelinkMatch(file, candidateMap);
+    if (!match) {
+      continue;
+    }
+
+    const applied = await applyRelinkMatch(file.id, match);
+    if (applied) {
+      relinkedByProjectScan.add(file.id);
+      relinkedCount++;
+      log.debug('Auto-relinked from project folder', { name: file.name, kind: match.kind });
+    }
+  }
+
+  let fallbackRelinkedCount = 0;
+  const updatedFiles = [...useMediaStore.getState().files];
   for (let i = 0; i < updatedFiles.length; i++) {
     const file = updatedFiles[i];
     if (file.file || file.url) continue; // Already has file
+    if (relinkedByProjectScan.has(file.id)) continue;
 
-    const searchName = file.name.toLowerCase();
-    const handle = rawFiles.get(searchName);
+    // Try to get from stored file handle in IndexedDB
+    try {
+      const storedHandle = await projectDB.getStoredHandle(`media_${file.id}`);
+      if (storedHandle && storedHandle.kind === 'file') {
+        const fileHandle = storedHandle as FileSystemFileHandle;
+        const permission = await fileHandle.queryPermission({ mode: 'read' });
 
-    if (handle) {
-      // Try with retries - file handle may need a moment to be ready
-      let fileObj: File | undefined;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          fileObj = await handle.getFile();
-          break; // Success
-        } catch (e) {
-          if (attempt < 2) {
-            // Wait before retry
-            await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
-          } else {
-            log.warn(`Could not read file from Raw: ${file.name}`, e);
-          }
+        if (permission === 'granted') {
+          const fileObj = await fileHandle.getFile();
+          const url = URL.createObjectURL(fileObj);
+
+          fileSystemService.storeFileHandle(file.id, fileHandle);
+
+          updatedFiles[i] = {
+            ...file,
+            file: fileObj,
+            url,
+            hasFileHandle: true,
+          };
+
+          relinkedCount++;
+          fallbackRelinkedCount++;
+          log.debug(`Auto-relinked from IndexedDB handle: ${file.name}`);
         }
       }
-
-      if (fileObj) {
-        const url = URL.createObjectURL(fileObj);
-
-        // Store handle for future access
-        fileSystemService.storeFileHandle(file.id, handle);
-        try {
-          await projectDB.storeHandle(`media_${file.id}`, handle);
-        } catch (e) {
-          // IndexedDB may fail, but we can still use the file
-          log.debug(`Could not store handle in IndexedDB: ${file.name}`);
-        }
-
-        // Update file entry
-        updatedFiles[i] = {
-          ...file,
-          file: fileObj,
-          url,
-          hasFileHandle: true,
-        };
-
-        relinkedCount++;
-        log.debug(`Auto-relinked from Raw: ${file.name}`);
-      }
-    } else {
-      // Try to get from stored file handle in IndexedDB
-      try {
-        const storedHandle = await projectDB.getStoredHandle(`media_${file.id}`);
-        if (storedHandle && storedHandle.kind === 'file') {
-          const fileHandle = storedHandle as FileSystemFileHandle;
-          const permission = await fileHandle.queryPermission({ mode: 'read' });
-
-          if (permission === 'granted') {
-            const fileObj = await fileHandle.getFile();
-            const url = URL.createObjectURL(fileObj);
-
-            fileSystemService.storeFileHandle(file.id, fileHandle);
-
-            updatedFiles[i] = {
-              ...file,
-              file: fileObj,
-              url,
-              hasFileHandle: true,
-            };
-
-            relinkedCount++;
-            log.debug(`Auto-relinked from IndexedDB handle: ${file.name}`);
-          }
-        }
-      } catch (e) {
-        // Silently ignore - will need manual reload
-      }
+    } catch (e) {
+      // Silently ignore - will need manual reload
     }
   }
 
   if (relinkedCount > 0) {
-    // Update media store with relinked files
-    useMediaStore.setState({ files: updatedFiles });
-    log.info(`Auto-relinked ${relinkedCount}/${missingFiles.length} files from Raw folder`);
+    if (fallbackRelinkedCount > 0) {
+      // Update media store with handle-restored files. Project-folder relinks already update stores directly.
+      useMediaStore.setState({ files: updatedFiles });
 
-    // Small delay to allow state to settle before updating timeline clips
-    await new Promise(resolve => setTimeout(resolve, 50));
+      // Small delay to allow state to settle before updating timeline clips
+      await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Update timeline clips with proper source elements (video/audio/image)
-    for (const file of updatedFiles) {
-      if (file.file) {
-        await updateTimelineClips(file.id, file.file);
+      // Update timeline clips with proper source elements (video/audio/image)
+      for (const file of updatedFiles) {
+        if (file.file && !relinkedByProjectScan.has(file.id)) {
+          await updateTimelineClips(file.id, file.file);
+        }
       }
     }
+
+    log.info(`Auto-relinked ${relinkedCount}/${missingFiles.length} files from project folder or stored handles`);
 
     // Reload nested composition clips that may need their content updated
     await reloadNestedCompositionClips();
   } else {
-    log.info(' No files could be auto-relinked from Raw folder');
+    log.info(' No files could be auto-relinked from project folder');
   }
 }
 

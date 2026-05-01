@@ -5,10 +5,16 @@ import { useState, useCallback, useEffect } from 'react';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('RelinkDialog');
-import { useMediaStore } from '../../stores/mediaStore';
-import { fileSystemService } from '../../services/fileSystemService';
-import { projectDB } from '../../services/projectDB';
+import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import { projectFileService } from '../../services/projectFileService';
+import {
+  applyRelinkMatch,
+  createRelinkCandidateMapFromHandles,
+  findRelinkMatch,
+  type RelinkCandidate,
+  type RelinkCandidateMap,
+  type RelinkMatch,
+} from '../../services/project/relinkMedia';
 
 interface RelinkDialogProps {
   onClose: () => void;
@@ -19,8 +25,7 @@ interface FileStatus {
   name: string;
   filePath?: string;
   status: 'missing' | 'found' | 'searching';
-  newFile?: File;
-  newHandle?: FileSystemFileHandle;
+  match?: RelinkMatch;
 }
 
 type FileSystemEntryHandle = FileSystemFileHandle | FileSystemDirectoryHandle;
@@ -37,6 +42,38 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function getMissingFiles(files: MediaFile[]): MediaFile[] {
+  return files.filter(f => !f.file);
+}
+
+function matchStatuses(
+  statuses: FileStatus[],
+  mediaFiles: MediaFile[],
+  candidates: RelinkCandidateMap,
+  direct?: { statusId: string; candidate: RelinkCandidate },
+): FileStatus[] {
+  const mediaById = new Map(mediaFiles.map(file => [file.id, file]));
+
+  return statuses.map((status) => {
+    if (status.status === 'found' && status.match) {
+      return status;
+    }
+
+    const mediaFile = mediaById.get(status.id);
+    if (!mediaFile) {
+      return status;
+    }
+
+    const match = findRelinkMatch(mediaFile, candidates, {
+      directCandidate: direct?.statusId === status.id ? direct.candidate : undefined,
+    });
+
+    return match
+      ? { ...status, status: 'found' as const, match }
+      : status;
+  });
+}
+
 export function RelinkDialog({ onClose }: RelinkDialogProps) {
   const { files } = useMediaStore();
   const [fileStatuses, setFileStatuses] = useState<FileStatus[]>([]);
@@ -46,7 +83,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   // Initialize file statuses and auto-scan Raw folder
   useEffect(() => {
     const initializeStatuses = async () => {
-      const missingFiles = files.filter(f => !f.file);
+      const missingFiles = getMissingFiles(files);
       const initialStatuses: FileStatus[] = missingFiles.map(f => ({
         id: f.id,
         name: f.name,
@@ -55,39 +92,38 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
       }));
       setFileStatuses(initialStatuses);
 
-      // Auto-scan Raw folder for missing files if project is open
+      // Auto-scan the project folder for missing files if project is open.
+      // Raw is matched first so canonical project media wins over duplicate names.
       if (projectFileService.isProjectOpen() && missingFiles.length > 0) {
-        log.debug('Auto-scanning project Raw folder...');
+        log.debug('Auto-scanning project folder...');
         const rawFiles = await projectFileService.scanRawFolder();
+        let updatedStatuses = initialStatuses;
+        const searched: string[] = [];
 
         if (rawFiles.size > 0) {
           log.debug(`Found ${rawFiles.size} files in Raw folder`);
+          const candidates = await createRelinkCandidateMapFromHandles(rawFiles.values());
+          if (candidates.size > 0) {
+            updatedStatuses = matchStatuses(updatedStatuses, missingFiles, candidates);
+            searched.push('Raw (project folder)');
+          }
+        }
 
-          // Match missing files against Raw folder contents
-          const updatedStatuses = [...initialStatuses];
-          for (const status of updatedStatuses) {
-            if (status.status === 'missing') {
-              const searchName = status.name.toLowerCase();
-              const handle = rawFiles.get(searchName);
-
-              if (handle) {
-                try {
-                  const file = await handle.getFile();
-                  status.status = 'found';
-                  status.newHandle = handle;
-                  status.newFile = file;
-                  log.debug(`Found in Raw folder: ${status.name}`);
-                } catch (e) {
-                  log.warn(`Could not read file from Raw: ${status.name}`, e);
-                }
-              }
+        if (updatedStatuses.some(status => status.status === 'missing')) {
+          const projectFiles = await projectFileService.scanProjectFolder();
+          if (projectFiles.size > 0) {
+            log.debug(`Found ${projectFiles.size} files in project folder`);
+            const candidates = await createRelinkCandidateMapFromHandles(projectFiles.values());
+            if (candidates.size > 0) {
+              updatedStatuses = matchStatuses(updatedStatuses, missingFiles, candidates);
+              searched.push('Project folder');
             }
           }
+        }
 
-          setFileStatuses(updatedStatuses);
-          if (rawFiles.size > 0) {
-            setSearchedFolders(['Raw (project folder)']);
-          }
+        setFileStatuses(updatedStatuses);
+        if (searched.length > 0) {
+          setSearchedFolders(searched);
         }
       }
     };
@@ -120,32 +156,12 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     await scanDirectory(dirHandle);
     log.debug(`Found ${foundFiles.size} files in ${dirHandle.name}`);
 
-    // Match missing files
-    setFileStatuses(prev => {
-      const updated = [...prev];
-      for (const status of updated) {
-        if (status.status === 'missing') {
-          const searchName = status.name.toLowerCase();
-          const handle = foundFiles.get(searchName);
-
-          if (handle) {
-            status.status = 'found';
-            status.newHandle = handle;
-            // Get the file async
-            handle.getFile().then(file => {
-              setFileStatuses(curr => curr.map(s =>
-                s.id === status.id ? { ...s, newFile: file } : s
-              ));
-            });
-          }
-        }
-      }
-      return updated;
-    });
+    const candidates = await createRelinkCandidateMapFromHandles(foundFiles.values());
+    setFileStatuses(prev => matchStatuses(prev, files, candidates));
 
     setSearchedFolders(prev => [...prev, dirHandle.name]);
     setIsSearching(false);
-  }, []);
+  }, [files]);
 
   // Handle browse button
   const handleBrowse = useCallback(async () => {
@@ -174,50 +190,24 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     try {
       const handles = await (window as RelinkPickerWindow).showOpenFilePicker({
         multiple: allowMultiple, // Allow multiple selection if there are multiple missing files
-        types: [{
-          description: allowMultiple
-            ? `Select missing files (${missingFiles.length} missing)`
-            : `Locate: ${fileStatus.name}`,
-          accept: {
-            'video/*': [],
-            'audio/*': [],
-            'image/*': [],
-          },
-        }],
+        excludeAcceptAllOption: false,
       });
 
       if (handles && handles.length > 0) {
-        // Build a map of selected files by name (lowercase for matching)
-        const selectedFiles = new Map<string, { file: File; handle: FileSystemFileHandle }>();
-
-        for (const handle of handles) {
-          const file = await handle.getFile();
-          selectedFiles.set(file.name.toLowerCase(), { file, handle });
-        }
+        const selectedFiles = await createRelinkCandidateMapFromHandles(handles);
+        const directCandidate = handles.length === 1
+          ? [...selectedFiles.values()][0]
+          : undefined;
 
         log.debug(`User selected ${selectedFiles.size} file(s)`);
 
-        // Match selected files against missing files
-        setFileStatuses(prev => prev.map(status => {
-          if (status.status === 'missing') {
-            const match = selectedFiles.get(status.name.toLowerCase());
-            if (match) {
-              log.debug(`Matched: ${status.name}`);
-              return {
-                ...status,
-                status: 'found',
-                newFile: match.file,
-                newHandle: match.handle,
-              };
-            }
-          }
-          return status;
-        }));
+        const updatedStatuses = matchStatuses(fileStatuses, files, selectedFiles, directCandidate
+          ? { statusId: fileStatus.id, candidate: directCandidate }
+          : undefined);
+        setFileStatuses(updatedStatuses);
 
         // If there are still missing files after selection, offer to scan the folder
-        const stillMissing = fileStatuses.filter(s =>
-          s.status === 'missing' && !selectedFiles.has(s.name.toLowerCase())
-        );
+        const stillMissing = updatedStatuses.filter(s => s.status === 'missing');
 
         if (stillMissing.length > 0 && handles.length > 0) {
           // Automatically open folder picker starting from the selected file's location
@@ -243,44 +233,16 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
         log.error('Pick file error', e);
       }
     }
-  }, [fileStatuses, scanFolder]);
+  }, [fileStatuses, files, scanFolder]);
 
   // Apply all found files
   const handleApply = useCallback(async () => {
-    const { useTimelineStore } = await import('../../stores/timeline');
-    const timelineStore = useTimelineStore.getState();
-
     for (const status of fileStatuses) {
-      if (status.status === 'found' && status.newFile && status.newHandle) {
-        const url = URL.createObjectURL(status.newFile);
-
-        // Store handle
-        fileSystemService.storeFileHandle(status.id, status.newHandle);
-        await projectDB.storeHandle(`media_${status.id}`, status.newHandle);
-
-        // Update media store
-        useMediaStore.setState(state => ({
-          files: state.files.map(f =>
-            f.id === status.id
-              ? { ...f, file: status.newFile, url, hasFileHandle: true }
-              : f
-          ),
-        }));
-
-        // Update timeline clips
-        const clips = timelineStore.clips.filter(
-          c => c.source?.mediaFileId === status.id && c.needsReload
-        );
-
-        for (const clip of clips) {
-          timelineStore.updateClip(clip.id, {
-            file: status.newFile,
-            needsReload: false,
-            isLoading: true,
-          });
+      if (status.status === 'found' && status.match) {
+        const applied = await applyRelinkMatch(status.id, status.match);
+        if (applied) {
+          log.info(`Applied: ${status.name}`);
         }
-
-        log.info(`Applied: ${status.name}`);
       }
     }
 

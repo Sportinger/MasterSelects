@@ -1,11 +1,28 @@
 // AI Chat Panel - Chat interface with timeline editing tools using OpenAI API
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, type AIProvider } from '../../stores/settingsStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary, getToolPolicy } from '../../services/aiTools';
 import { cloudAiService } from '../../services/cloudAiService';
 import type { ToolPolicyEntry } from '../../services/aiTools';
+import {
+  getDefaultProjectPromptName,
+  isProjectPromptStorageAvailable,
+  listProjectSystemPrompts,
+  loadProjectSystemPrompt,
+  normalizeProjectPromptName,
+  saveProjectSystemPrompt,
+  type SavedAiSystemPrompt,
+} from '../../services/aiPromptLibrary';
+import {
+  checkLemonadeHealth,
+  createLemonadeChatCompletionStream,
+  DEFAULT_LEMONADE_ENDPOINT,
+  DEFAULT_LEMONADE_MODEL,
+  LEMONADE_MODEL_PRESETS,
+  type LemonadeModelInfo,
+} from '../../services/lemonadeProvider';
 import './AIChatPanel.css';
 
 // Available OpenAI models with credit cost per request
@@ -33,6 +50,79 @@ const OPENAI_MODELS = [
   { id: 'gpt-4o', name: 'GPT-4o', credits: 5 },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', credits: 1 },
 ];
+
+const LEMONADE_EDITOR_TOOL_NAMES = new Set([
+  'getTimelineState',
+  'getClipDetails',
+  'getClipsInTimeRange',
+  'selectClips',
+  'clearSelection',
+  'setPlayhead',
+  'setInOutPoints',
+  'splitClip',
+  'deleteClip',
+  'moveClip',
+  'trimClip',
+  'cutRangesFromClip',
+  'getMediaItems',
+  'setTransform',
+  'listEffects',
+  'addEffect',
+  'updateEffect',
+  'undo',
+  'redo',
+  'play',
+  'pause',
+]);
+
+const LEMONADE_EDITOR_TOOLS = AI_TOOLS.filter((tool) => LEMONADE_EDITOR_TOOL_NAMES.has(tool.function.name));
+const LEMONADE_CHAT_TIMEOUT_MS = 45_000;
+const LEMONADE_TOOL_FOLLOWUP_TIMEOUT_MS = 12_000;
+const LEMONADE_STREAM_IDLE_TIMEOUT_MS = 12_000;
+const LEMONADE_MAX_COMPLETION_TOKENS = 512;
+const LEMONADE_MAX_TOOL_RESULT_MESSAGE_CHARS = 2_000;
+
+function getLemonadeModelOptions(
+  availableModels: LemonadeModelInfo[],
+  selectedModel: string,
+): Array<{ id: string; name: string; description?: string; available: boolean }> {
+  if (availableModels.length > 0) {
+    return availableModels.map((model) => ({
+      id: model.id,
+      name: model.name || model.id,
+      available: true,
+    }));
+  }
+
+  const options = new Map<string, { id: string; name: string; description?: string; available: boolean }>();
+
+  for (const preset of LEMONADE_MODEL_PRESETS) {
+    options.set(preset.id, {
+      id: preset.id,
+      name: preset.name,
+      description: preset.description,
+      available: false,
+    });
+  }
+
+  for (const model of availableModels) {
+    options.set(model.id, {
+      id: model.id,
+      name: model.name || model.id,
+      available: true,
+    });
+  }
+
+  if (selectedModel && !options.has(selectedModel)) {
+    options.set(selectedModel, {
+      id: selectedModel,
+      name: selectedModel,
+      available: false,
+    });
+  }
+
+  return Array.from(options.values());
+}
 
 // System prompt for editor mode
 const EDITOR_SYSTEM_PROMPT = `You are an AI video editing assistant with direct access to the timeline AND media panel. You can:
@@ -74,13 +164,18 @@ CRITICAL RULES - FOLLOW EXACTLY:
 8. The timeline state is already included in this prompt — do NOT call getTimelineState unless you specifically need updated clip IDs after performing edits.
 9. For splitting clips into equal parts, use splitClipEvenly. For splitting at specific times, use splitClipAtTimes. These are much faster than executeBatch with individual splitClip calls.
 10. For reordering/shuffling clips, use reorderClips with the clip IDs in the desired order. This is much faster and more reliable than executeBatch with multiple moveClip calls.
+11. After receiving tool results, always provide a concise human-readable follow-up. Do not stop after a tool call.
 
 CUT EVALUATION WORKFLOW:
 - Use getCutPreviewQuad(cutTime) to see 4 frames before and 4 frames after a potential cut point
 - This helps evaluate if a cut will look smooth (similar frames = good) or jarring (big jump = maybe bad)
-- Use getFramesAtTimes([...times]) to capture specific moments for comparison
+- Use getFramesAtTimes([...times]) to capture specific moments for comparison`;
 
-Current timeline summary: `;
+const LEMONADE_EDITOR_SYSTEM_PROMPT = `You are a local AI video editing assistant.
+Use the provided tools to inspect and edit the timeline.
+Prefer the selected clip. If clip IDs are unclear, inspect the timeline first.
+Use seconds for all time values.
+After every tool result, answer briefly with what you did or found.`;
 
 interface Message {
   id: string;
@@ -114,6 +209,13 @@ interface PendingApproval {
   args: Record<string, unknown>;
   resolve: (approved: boolean) => void;
 }
+
+interface ExecutedToolResult {
+  result: { success: boolean; data?: unknown; error?: string };
+  toolName: string;
+}
+
+type SelectorMenu = 'provider' | 'model' | null;
 
 const MAX_TOOL_RESULT_MESSAGE_CHARS = 12000;
 const MAX_TOOL_RESULT_ARRAY_ITEMS = 20;
@@ -176,10 +278,13 @@ function summarizeToolResultValue(value: unknown, depth = 0): unknown {
   return String(value);
 }
 
-function formatToolResultForApi(result: { success: boolean; data?: unknown; error?: string }): string {
+function formatToolResultForApi(
+  result: { success: boolean; data?: unknown; error?: string },
+  maxLength = MAX_TOOL_RESULT_MESSAGE_CHARS,
+): string {
   const serialized = JSON.stringify(result);
 
-  if (serialized.length <= MAX_TOOL_RESULT_MESSAGE_CHARS) {
+  if (serialized.length <= maxLength) {
     return serialized;
   }
 
@@ -190,13 +295,13 @@ function formatToolResultForApi(result: { success: boolean; data?: unknown; erro
     truncated: true,
   });
 
-  if (summarized.length <= MAX_TOOL_RESULT_MESSAGE_CHARS) {
+  if (summarized.length <= maxLength) {
     return summarized;
   }
 
   return JSON.stringify({
     error: result.error ?? null,
-    preview: truncateText(serialized, MAX_TOOL_RESULT_MESSAGE_CHARS - 128),
+    preview: truncateText(serialized, Math.max(256, maxLength - 128)),
     success: result.success,
     truncated: true,
   });
@@ -224,6 +329,109 @@ function getErrorMessage(error: unknown): string {
   }
 
   return 'Failed to send message';
+}
+
+function getNumericValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function formatSecondsForChat(value: unknown): string | null {
+  const seconds = getNumericValue(value);
+  if (seconds === null) {
+    return null;
+  }
+
+  return `${seconds.toFixed(seconds % 1 === 0 ? 0 : 2)}s`;
+}
+
+function summarizeTimelineToolResult(data: unknown): string | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const timeline = data as {
+    duration?: unknown;
+    playheadPosition?: unknown;
+    selectedClipIds?: unknown;
+    totalClips?: unknown;
+  };
+  const parts: string[] = [];
+  const clipCount = getNumericValue(timeline.totalClips);
+  const duration = formatSecondsForChat(timeline.duration);
+  const playhead = formatSecondsForChat(timeline.playheadPosition);
+  const selectedCount = Array.isArray(timeline.selectedClipIds) ? timeline.selectedClipIds.length : null;
+
+  if (clipCount !== null) {
+    parts.push(`${clipCount} clip${clipCount === 1 ? '' : 's'}`);
+  }
+  if (duration) {
+    parts.push(`${duration} duration`);
+  }
+  if (playhead) {
+    parts.push(`playhead at ${playhead}`);
+  }
+  if (selectedCount !== null) {
+    parts.push(`${selectedCount} selected`);
+  }
+
+  return parts.length > 0 ? `I checked the timeline: ${parts.join(', ')}.` : null;
+}
+
+function summarizeMediaToolResult(data: unknown): string | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const media = data as { items?: unknown; files?: unknown; folders?: unknown };
+  const itemCount = Array.isArray(media.items)
+    ? media.items.length
+    : Array.isArray(media.files)
+      ? media.files.length
+      : null;
+  const folderCount = Array.isArray(media.folders) ? media.folders.length : null;
+
+  if (itemCount === null && folderCount === null) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (itemCount !== null) {
+    parts.push(`${itemCount} item${itemCount === 1 ? '' : 's'}`);
+  }
+  if (folderCount !== null) {
+    parts.push(`${folderCount} folder${folderCount === 1 ? '' : 's'}`);
+  }
+
+  return `I checked the media panel: ${parts.join(', ')}.`;
+}
+
+function formatToolFollowupFallback(executedToolResults: ExecutedToolResult[]): string {
+  const lastToolResult = executedToolResults[executedToolResults.length - 1];
+
+  if (!lastToolResult) {
+    return 'The local model did not return a response.';
+  }
+
+  if (!lastToolResult.result.success) {
+    return `The ${lastToolResult.toolName} tool failed: ${lastToolResult.result.error || 'Unknown error'}.`;
+  }
+
+  if (lastToolResult.toolName === 'getTimelineState') {
+    return summarizeTimelineToolResult(lastToolResult.result.data)
+      || 'I checked the timeline. The local model did not return a follow-up answer.';
+  }
+
+  if (lastToolResult.toolName === 'getMediaItems') {
+    return summarizeMediaToolResult(lastToolResult.result.data)
+      || 'I checked the media panel. The local model did not return a follow-up answer.';
+  }
+
+  const toolNames = Array.from(new Set(executedToolResults.map((entry) => entry.toolName)));
+  return `Done. I ran ${toolNames.join(', ')}.`;
+}
+
+function buildSystemPromptForApi(prompt: string): string {
+  return `${prompt.trim()}\n\nCurrent timeline summary: ${getQuickTimelineSummary()}`;
 }
 
 function createHostedPromptIdempotencyKey(): string {
@@ -298,7 +506,18 @@ function parseChatCompletionPayload(data: unknown): {
 }
 
 export function AIChatPanel() {
-  const { apiKeys, openSettings, aiApprovalMode } = useSettingsStore();
+  const {
+    apiKeys,
+    openSettings,
+    aiApprovalMode,
+    aiProvider,
+    aiSystemPromptOverrides,
+    lemonadeEndpoint,
+    lemonadeModel,
+    setAiProvider,
+    setAiSystemPromptOverride,
+    setLemonadeModel,
+  } = useSettingsStore();
   const hasSeenAIChatOnboarding = useSettingsStore((s) => s.hasSeenAIChatOnboarding);
   const setHasSeenAIChatOnboarding = useSettingsStore((s) => s.setHasSeenAIChatOnboarding);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
@@ -311,61 +530,195 @@ export function AIChatPanel() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState('gpt-5.1');
+  const [lemonadeStatus, setLemonadeStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+  const [lemonadeModels, setLemonadeModels] = useState<LemonadeModelInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editorMode, setEditorMode] = useState(true); // Enable tools by default
   const [currentToolAction, setCurrentToolAction] = useState<string | null>(null);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [onboardingClosing, setOnboardingClosing] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
+  const [promptDraft, setPromptDraft] = useState('');
+  const [promptNameDraft, setPromptNameDraft] = useState('');
+  const [savedPromptFiles, setSavedPromptFiles] = useState<SavedAiSystemPrompt[]>([]);
+  const [selectedPromptFile, setSelectedPromptFile] = useState('');
+  const [promptDialogError, setPromptDialogError] = useState<string | null>(null);
+  const [promptDialogStatus, setPromptDialogStatus] = useState<string | null>(null);
+  const [isPromptLibraryLoading, setIsPromptLibraryLoading] = useState(false);
+  const [openSelectorMenu, setOpenSelectorMenu] = useState<SelectorMenu>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const promptFileInputRef = useRef<HTMLInputElement>(null);
+  const selectorMenuRef = useRef<HTMLDivElement>(null);
+  const shouldRefocusInputAfterLoadingRef = useRef(false);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentToolAction]);
 
+  useEffect(() => {
+    if (!isLoading) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        shouldRefocusInputAfterLoadingRef.current = false;
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (!openSelectorMenu) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!selectorMenuRef.current?.contains(event.target as Node)) {
+        setOpenSelectorMenu(null);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenSelectorMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openSelectorMenu]);
+
+  useEffect(() => {
+    if (aiProvider !== 'lemonade') {
+      return;
+    }
+
+    let cancelled = false;
+    setLemonadeStatus('checking');
+
+    void checkLemonadeHealth(lemonadeEndpoint).then((health) => {
+      if (cancelled) {
+        return;
+      }
+
+      setLemonadeModels(health.models);
+      setLemonadeStatus(health.available ? 'online' : 'offline');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aiProvider, lemonadeEndpoint]);
+
   const hasHostedAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
   const hasApiKey = !!apiKeys.openai;
-  const accessMode: 'hosted' | 'byo' | 'none' = hasHostedAccess ? 'hosted' : hasApiKey ? 'byo' : 'none';
+  const openAiAccessMode: 'hosted' | 'byo' | 'none' = hasHostedAccess ? 'hosted' : hasApiKey ? 'byo' : 'none';
+  const accessMode: 'hosted' | 'byo' | 'lemonade' | 'none' =
+    aiProvider === 'lemonade'
+      ? (lemonadeStatus === 'online' ? 'lemonade' : 'none')
+      : openAiAccessMode;
   const hasAccess = accessMode !== 'none';
+  const lemonadeModelOptions = getLemonadeModelOptions(lemonadeModels, lemonadeModel);
+  const configuredLemonadeModel = lemonadeModel.trim() || DEFAULT_LEMONADE_MODEL;
+  const activeLemonadeModel = lemonadeModelOptions.some((option) => option.id === configuredLemonadeModel)
+    ? configuredLemonadeModel
+    : lemonadeModelOptions[0]?.id || configuredLemonadeModel;
+  const accessLabel = accessMode === 'hosted'
+    ? 'Cloud'
+    : accessMode === 'byo'
+      ? 'OpenAI key'
+      : accessMode === 'lemonade'
+        ? 'Local'
+        : 'Locked';
+  const activeModelName = aiProvider === 'lemonade'
+    ? lemonadeModelOptions.find((option) => option.id === activeLemonadeModel)?.name || activeLemonadeModel
+    : OPENAI_MODELS.find((option) => option.id === model)?.name || model;
+  const activeProviderName = aiProvider === 'lemonade' ? 'Lemonade' : 'OpenAI';
+  const activeProviderFullName = aiProvider === 'lemonade' ? 'Lemonade Local' : 'OpenAI / Cloud';
+  const activeModelId = aiProvider === 'lemonade' ? activeLemonadeModel : model;
+  const modelMenuOptions = aiProvider === 'lemonade'
+    ? lemonadeModelOptions.map((option) => ({
+      id: option.id,
+      label: option.available ? option.name : `${option.name} (preset)`,
+      meta: option.available ? 'loaded' : 'preset',
+      disabled: false,
+    }))
+    : OPENAI_MODELS.map((option) => ({
+      id: option.id,
+      label: option.name,
+      meta: option.credits === 1 ? '1 credit' : `${option.credits} credits`,
+      disabled: false,
+    }));
+  const modelMenuDisabled = isLoading || (aiProvider === 'lemonade' && lemonadeModelOptions.length === 0);
+  const defaultSystemPrompt = aiProvider === 'lemonade'
+    ? LEMONADE_EDITOR_SYSTEM_PROMPT
+    : EDITOR_SYSTEM_PROMPT;
+  const activeSystemPrompt = aiSystemPromptOverrides[aiProvider]?.trim()
+    ? aiSystemPromptOverrides[aiProvider]!
+    : defaultSystemPrompt;
+  const promptHasOverride = Boolean(aiSystemPromptOverrides[aiProvider]?.trim());
+  const projectPromptStorageReady = isProjectPromptStorageAvailable();
 
   // Build API messages from chat history
   const buildAPIMessages = useCallback((userContent: string): APIMessage[] => {
     const apiMessages: APIMessage[] = [];
     const safeMessages = sanitizeConversationHistory(messages);
+    const includeHistory = aiProvider !== 'lemonade' || !editorMode;
 
     // Add system prompt in editor mode
     if (editorMode) {
       apiMessages.push({
         role: 'system',
-        content: EDITOR_SYSTEM_PROMPT + getQuickTimelineSummary(),
+        content: buildSystemPromptForApi(activeSystemPrompt),
       });
     }
 
     // Add conversation history
-    for (const msg of safeMessages) {
-      if (msg.role === 'user') {
-        apiMessages.push({ role: 'user', content: msg.content });
-      } else if (msg.role === 'assistant') {
-        if (msg.toolCalls && msg.toolCalls.length > 0) {
+    if (includeHistory) {
+      for (const msg of safeMessages) {
+        if (msg.role === 'user') {
+          apiMessages.push({ role: 'user', content: msg.content });
+        } else if (msg.role === 'assistant') {
+          if (aiProvider === 'lemonade' && msg.toolCalls && msg.toolCalls.length > 0) {
+            continue;
+          }
+
+          if (msg.toolCalls && msg.toolCalls.length > 0) {
+            apiMessages.push({
+              role: 'assistant',
+              content: msg.content || null,
+              tool_calls: msg.toolCalls.map(tc => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: { name: tc.name, arguments: tc.arguments },
+              })),
+            });
+          } else {
+            apiMessages.push({ role: 'assistant', content: msg.content });
+          }
+        } else if (msg.role === 'tool' && msg.toolName) {
+          if (aiProvider === 'lemonade') {
+            continue;
+          }
+
           apiMessages.push({
-            role: 'assistant',
-            content: msg.content || null,
-            tool_calls: msg.toolCalls.map(tc => ({
-              id: tc.id,
-              type: 'function' as const,
-              function: { name: tc.name, arguments: tc.arguments },
-            })),
+            role: 'tool',
+            content: msg.content,
+            tool_call_id: msg.id,
           });
-        } else {
-          apiMessages.push({ role: 'assistant', content: msg.content });
         }
-      } else if (msg.role === 'tool' && msg.toolName) {
-        apiMessages.push({
-          role: 'tool',
-          content: msg.content,
-          tool_call_id: msg.id,
-        });
       }
     }
 
@@ -373,7 +726,7 @@ export function AIChatPanel() {
     apiMessages.push({ role: 'user', content: userContent });
 
     return apiMessages;
-  }, [messages, editorMode]);
+  }, [messages, editorMode, activeSystemPrompt, aiProvider]);
 
   // Call OpenAI API
   const callOpenAI = useCallback(async (
@@ -425,12 +778,35 @@ export function AIChatPanel() {
     return parseChatCompletionPayload(await response.json());
   }, [accessMode, model, editorMode, apiKeys.openai]);
 
-  // Send message to OpenAI (with tool calling loop)
+  const callLemonade = useCallback(async (
+    apiMessages: APIMessage[],
+    onContentDelta?: (delta: string) => void,
+    options?: {
+      allowTools?: boolean;
+      streamIdleTimeoutMs?: number;
+      timeoutMs?: number;
+    },
+  ): Promise<{
+    content: string | null;
+    toolCalls: ToolCall[];
+  }> => createLemonadeChatCompletionStream({
+    endpoint: lemonadeEndpoint,
+    model: activeLemonadeModel,
+    messages: apiMessages,
+    tools: editorMode && options?.allowTools !== false ? LEMONADE_EDITOR_TOOLS : undefined,
+    maxTokens: LEMONADE_MAX_COMPLETION_TOKENS,
+    onContentDelta,
+    streamIdleTimeoutMs: options?.streamIdleTimeoutMs ?? LEMONADE_STREAM_IDLE_TIMEOUT_MS,
+    timeoutMs: options?.timeoutMs ?? LEMONADE_CHAT_TIMEOUT_MS,
+  }), [activeLemonadeModel, editorMode, lemonadeEndpoint]);
+
+  // Send message to the selected AI provider (with tool calling loop)
   const sendMessage = useCallback(async () => {
     if (!input.trim() || !hasAccess || isLoading) return;
 
     const userContent = input.trim();
     const transientMessageIds = new Set<string>();
+    const executedToolResults: ExecutedToolResult[] = [];
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -442,6 +818,7 @@ export function AIChatPanel() {
     setInput('');
     setError(null);
     setIsLoading(true);
+    shouldRefocusInputAfterLoadingRef.current = true;
 
     try {
       const apiMessages = buildAPIMessages(userContent);
@@ -454,15 +831,105 @@ export function AIChatPanel() {
       while (iterationCount < maxIterations) {
         iterationCount++;
 
-        const { content, toolCalls } = await callOpenAI(apiMessages, hostedPromptIdempotencyKey);
+        let content: string | null;
+        let toolCalls: ToolCall[];
+        let streamedAssistantMessageId: string | null = null;
+
+        if (aiProvider === 'lemonade') {
+          const assistantMessageId = `assistant-${Date.now()}-${iterationCount}`;
+          streamedAssistantMessageId = assistantMessageId;
+          transientMessageIds.add(assistantMessageId);
+          let streamedContent = '';
+          const hasToolContext = executedToolResults.length > 0;
+
+          setMessages(prev => [...prev, {
+            id: assistantMessageId,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+          }]);
+          setStreamingMessageId(assistantMessageId);
+
+          let result: { content: string | null; toolCalls: ToolCall[] };
+
+          try {
+            result = await callLemonade(apiMessages, (delta) => {
+              streamedContent += delta;
+              setMessages(prev => prev.map((message) => (
+                message.id === assistantMessageId
+                  ? { ...message, content: streamedContent }
+                  : message
+              )));
+            }, {
+              allowTools: !hasToolContext,
+              streamIdleTimeoutMs: LEMONADE_STREAM_IDLE_TIMEOUT_MS,
+              timeoutMs: hasToolContext ? LEMONADE_TOOL_FOLLOWUP_TIMEOUT_MS : LEMONADE_CHAT_TIMEOUT_MS,
+            });
+          } catch (lemonadeError) {
+            if (!hasToolContext && editorMode && streamedContent.length === 0) {
+              result = await callLemonade(apiMessages, (delta) => {
+                streamedContent += delta;
+                setMessages(prev => prev.map((message) => (
+                  message.id === assistantMessageId
+                    ? { ...message, content: streamedContent }
+                    : message
+                )));
+              }, {
+                allowTools: false,
+                streamIdleTimeoutMs: LEMONADE_STREAM_IDLE_TIMEOUT_MS,
+                timeoutMs: LEMONADE_CHAT_TIMEOUT_MS,
+              });
+            } else if (!hasToolContext) {
+              throw lemonadeError;
+            } else {
+              result = {
+                content: formatToolFollowupFallback(executedToolResults),
+                toolCalls: [],
+              };
+            }
+          }
+
+          setStreamingMessageId(null);
+          content = result.content || (hasToolContext ? formatToolFollowupFallback(executedToolResults) : null);
+          toolCalls = result.toolCalls;
+
+          if (content !== streamedContent) {
+            setMessages(prev => prev.map((message) => (
+              message.id === assistantMessageId
+                ? { ...message, content: content || '' }
+                : message
+            )));
+          }
+        } else {
+          const result = await callOpenAI(apiMessages, hostedPromptIdempotencyKey);
+          content = result.content;
+          toolCalls = result.toolCalls;
+        }
 
         if (toolCalls.length === 0) {
+          const finalContent = content || (executedToolResults.length > 0
+            ? formatToolFollowupFallback(executedToolResults)
+            : null);
+
           // No tool calls - add final assistant message
-          if (content) {
+          if (streamedAssistantMessageId) {
+            if (finalContent) {
+              if (finalContent !== content) {
+                setMessages(prev => prev.map((message) => (
+                  message.id === streamedAssistantMessageId
+                    ? { ...message, content: finalContent }
+                    : message
+                )));
+              }
+              transientMessageIds.delete(streamedAssistantMessageId);
+            } else {
+              setMessages(prev => prev.filter((message) => message.id !== streamedAssistantMessageId));
+            }
+          } else if (finalContent) {
             const assistantMessage: Message = {
               id: `assistant-${Date.now()}`,
               role: 'assistant',
-              content,
+              content: finalContent,
               timestamp: new Date(),
             };
             setMessages(prev => [...prev, assistantMessage]);
@@ -472,14 +939,20 @@ export function AIChatPanel() {
 
         // Handle tool calls
         const assistantMessage: Message = {
-          id: `assistant-${Date.now()}-${iterationCount}`,
+          id: streamedAssistantMessageId || `assistant-${Date.now()}-${iterationCount}`,
           role: 'assistant',
           content: content || '',
           timestamp: new Date(),
           toolCalls,
         };
-        transientMessageIds.add(assistantMessage.id);
-        setMessages(prev => [...prev, assistantMessage]);
+        if (streamedAssistantMessageId) {
+          setMessages(prev => prev.map((message) => (
+            message.id === streamedAssistantMessageId ? assistantMessage : message
+          )));
+        } else {
+          transientMessageIds.add(assistantMessage.id);
+          setMessages(prev => [...prev, assistantMessage]);
+        }
 
         // Add assistant message to API messages
         apiMessages.push({
@@ -545,12 +1018,18 @@ export function AIChatPanel() {
             isToolResult: true,
           };
           transientMessageIds.add(toolResultMessage.id);
+          executedToolResults.push({ toolName: toolCall.name, result });
           setMessages(prev => [...prev, toolResultMessage]);
 
           // Add tool result to API messages
           apiMessages.push({
             role: 'tool',
-            content: formatToolResultForApi(result),
+            content: formatToolResultForApi(
+              result,
+              aiProvider === 'lemonade'
+                ? LEMONADE_MAX_TOOL_RESULT_MESSAGE_CHARS
+                : MAX_TOOL_RESULT_MESSAGE_CHARS,
+            ),
             tool_call_id: toolCall.id,
           });
         }
@@ -562,6 +1041,7 @@ export function AIChatPanel() {
         setError('Too many tool iterations - stopping to prevent infinite loop');
       }
     } catch (err) {
+      setStreamingMessageId(null);
       setMessages((prev) => sanitizeConversationHistory(
         prev.filter((message) => !transientMessageIds.has(message.id)),
       ));
@@ -572,16 +1052,27 @@ export function AIChatPanel() {
       }
       setIsLoading(false);
       setCurrentToolAction(null);
+      setStreamingMessageId(null);
+      window.setTimeout(() => {
+        if (shouldRefocusInputAfterLoadingRef.current) {
+          inputRef.current?.focus();
+        }
+        shouldRefocusInputAfterLoadingRef.current = false;
+      }, 0);
     }
-  }, [input, hasAccess, isLoading, buildAPIMessages, callOpenAI, aiApprovalMode, accessMode, loadAccountState]);
+  }, [input, hasAccess, isLoading, buildAPIMessages, accessMode, aiProvider, callLemonade, callOpenAI, aiApprovalMode, editorMode, loadAccountState]);
 
   // Handle key press
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (isLoading) {
+        return;
+      }
+
       e.preventDefault();
       sendMessage();
     }
-  }, [sendMessage]);
+  }, [isLoading, sendMessage]);
 
   // Clear chat
   const clearChat = useCallback(() => {
@@ -597,36 +1088,186 @@ export function AIChatPanel() {
     }, 300);
   }, [setHasSeenAIChatOnboarding]);
 
+  const selectProvider = useCallback((provider: AIProvider) => {
+    setAiProvider(provider);
+    setOpenSelectorMenu(null);
+  }, [setAiProvider]);
+
+  const selectModel = useCallback((modelId: string) => {
+    if (aiProvider === 'lemonade') {
+      setLemonadeModel(modelId);
+    } else {
+      setModel(modelId);
+    }
+    setOpenSelectorMenu(null);
+  }, [aiProvider, setLemonadeModel]);
+
+  const refreshSavedPromptFiles = useCallback(async () => {
+    setIsPromptLibraryLoading(true);
+    setPromptDialogError(null);
+
+    try {
+      const prompts = await listProjectSystemPrompts(aiProvider);
+      setSavedPromptFiles(prompts);
+      setSelectedPromptFile((current) => (
+        prompts.some((prompt) => prompt.fileName === current)
+          ? current
+          : prompts[0]?.fileName || ''
+      ));
+    } catch (promptError) {
+      setPromptDialogError(getErrorMessage(promptError));
+    } finally {
+      setIsPromptLibraryLoading(false);
+    }
+  }, [aiProvider]);
+
+  const openPromptDialog = useCallback(() => {
+    setPromptDraft(activeSystemPrompt);
+    setPromptNameDraft(getDefaultProjectPromptName(aiProvider));
+    setPromptDialogError(null);
+    setPromptDialogStatus(null);
+    setIsPromptDialogOpen(true);
+    void refreshSavedPromptFiles();
+  }, [activeSystemPrompt, aiProvider, refreshSavedPromptFiles]);
+
+  const savePromptDialog = useCallback(async () => {
+    if (!promptDraft.trim()) {
+      return;
+    }
+
+    setPromptDialogError(null);
+    setPromptDialogStatus(null);
+    setIsPromptLibraryLoading(true);
+
+    try {
+      const savedPrompt = await saveProjectSystemPrompt(aiProvider, promptNameDraft, promptDraft);
+      const nextPrompt = promptDraft.trim() === defaultSystemPrompt.trim() ? '' : promptDraft;
+      setAiSystemPromptOverride(aiProvider, nextPrompt);
+      setPromptNameDraft(savedPrompt.name);
+      setSelectedPromptFile(savedPrompt.fileName);
+      setPromptDialogStatus('Saved to project.');
+      await refreshSavedPromptFiles();
+      setSelectedPromptFile(savedPrompt.fileName);
+    } catch (promptError) {
+      setPromptDialogError(getErrorMessage(promptError));
+    } finally {
+      setIsPromptLibraryLoading(false);
+    }
+  }, [
+    aiProvider,
+    defaultSystemPrompt,
+    promptDraft,
+    promptNameDraft,
+    refreshSavedPromptFiles,
+    setAiSystemPromptOverride,
+  ]);
+
+  const loadSelectedProjectPrompt = useCallback(async () => {
+    if (!selectedPromptFile) {
+      return;
+    }
+
+    setPromptDialogError(null);
+    setPromptDialogStatus(null);
+    setIsPromptLibraryLoading(true);
+
+    try {
+      const loadedPrompt = await loadProjectSystemPrompt(selectedPromptFile);
+      const nextPrompt = loadedPrompt.prompt.trim() === defaultSystemPrompt.trim() ? '' : loadedPrompt.prompt;
+      setPromptDraft(loadedPrompt.prompt);
+      setPromptNameDraft(loadedPrompt.name);
+      setAiSystemPromptOverride(loadedPrompt.provider, nextPrompt);
+      setPromptDialogStatus('Loaded and applied.');
+    } catch (promptError) {
+      setPromptDialogError(getErrorMessage(promptError));
+    } finally {
+      setIsPromptLibraryLoading(false);
+    }
+  }, [defaultSystemPrompt, selectedPromptFile, setAiSystemPromptOverride]);
+
+  const resetPromptDraft = useCallback(() => {
+    setPromptDraft(defaultSystemPrompt);
+    setPromptNameDraft(getDefaultProjectPromptName(aiProvider));
+    setPromptDialogError(null);
+    setPromptDialogStatus(null);
+  }, [aiProvider, defaultSystemPrompt]);
+
+  const exportPromptDraft = useCallback(() => {
+    const blob = new Blob([promptDraft], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `masterselects-${aiProvider}-system-prompt.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, [aiProvider, promptDraft]);
+
+  const loadPromptFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setPromptDraft(await file.text());
+    setPromptNameDraft(normalizeProjectPromptName(file.name.replace(/\.[^.]+$/, ''), aiProvider));
+    setPromptDialogError(null);
+    setPromptDialogStatus('Imported. Save to project.');
+    event.target.value = '';
+  }, [aiProvider]);
+
   return (
-    <div className={`ai-chat-panel ${!hasAccess ? 'no-api-key' : ''}`}>
-      {/* API Key Required Overlay */}
+    <div ref={panelRef} className={`ai-chat-panel ${!hasAccess ? 'no-api-key' : ''}`}>
+      {/* AI access overlay */}
       {!hasAccess && (
         <div className="ai-panel-overlay">
           <div className="ai-panel-overlay-content">
             <span className="no-key-icon">🔑</span>
-            <p>{accountSession?.authenticated ? 'Hosted AI chat needs a plan' : 'Sign in for hosted AI chat'}</p>
+            <p>
+              {aiProvider === 'lemonade'
+                ? (lemonadeStatus === 'checking' ? 'Checking Lemonade' : 'Lemonade is not ready')
+                : 'Choose an AI provider'}
+            </p>
             <span className="ai-panel-overlay-subtext">
-              MasterSelects Cloud is the default path. Advanced users can still add their own OpenAI key.
+              {aiProvider === 'lemonade'
+                ? `Load a local model in Lemonade, then retry ${lemonadeEndpoint || DEFAULT_LEMONADE_ENDPOINT}.`
+                : 'Use a local Lemonade model, sign in for Cloud, or add your own OpenAI key.'}
             </span>
             <div className="ai-panel-overlay-actions">
-              {!accountSession?.authenticated ? (
-                <button className="btn-settings" onClick={openAuthDialog}>
-                  Sign in
-                </button>
+              {aiProvider === 'lemonade' ? (
+                <>
+                  <button className="btn-settings primary" onClick={openSettings}>
+                    Settings
+                  </button>
+                  <button className="btn-settings secondary" onClick={() => setAiProvider('openai')}>
+                    Use OpenAI
+                  </button>
+                </>
               ) : (
-                <button className="btn-settings" onClick={openPricingDialog}>
-                  View plans
-                </button>
+                <>
+                  <button className="btn-settings primary" onClick={() => setAiProvider('lemonade')}>
+                    Use Lemonade
+                  </button>
+                  {!accountSession?.authenticated ? (
+                    <button className="btn-settings secondary" onClick={openAuthDialog}>
+                      Sign in
+                    </button>
+                  ) : (
+                    <button className="btn-settings secondary" onClick={openPricingDialog}>
+                      View plans
+                    </button>
+                  )}
+                  {accountSession?.authenticated && (
+                    <button className="btn-settings ghost" onClick={openAccountDialog}>
+                      Account
+                    </button>
+                  )}
+                  <button className="btn-settings ghost" onClick={openSettings}>
+                    API Keys
+                  </button>
+                </>
               )}
-              {accountSession?.authenticated && (
-                <button className="btn-settings" onClick={openAccountDialog}>
-                  Account
-                </button>
-              )}
-              <span className="ai-panel-overlay-or">or</span>
-              <button className="btn-settings" onClick={openSettings}>
-                API Keys
-              </button>
             </div>
           </div>
         </div>
@@ -636,10 +1277,82 @@ export function AIChatPanel() {
         <div className="ai-chat-title-group">
           <h2>AI Editor</h2>
           <span className={`ai-access-chip ${accessMode}`}>
-            {accessMode === 'hosted' ? 'Cloud' : accessMode === 'byo' ? 'OpenAI key' : 'Locked'}
+            {accessLabel}
           </span>
         </div>
         <div className="ai-chat-controls">
+          <div className="ai-selector-group" ref={selectorMenuRef}>
+            <div className="ai-selector">
+              <button
+                className={`ai-selector-trigger ${openSelectorMenu === 'provider' ? 'active' : ''}`}
+                onClick={() => setOpenSelectorMenu((current) => current === 'provider' ? null : 'provider')}
+                disabled={isLoading}
+                title={activeProviderFullName}
+                aria-haspopup="menu"
+                aria-expanded={openSelectorMenu === 'provider'}
+              >
+                <span className="ai-selector-value">{activeProviderName}</span>
+                <span className="ai-selector-caret" aria-hidden="true" />
+              </button>
+              {openSelectorMenu === 'provider' && (
+                <div className="ai-selector-menu provider-menu" role="menu">
+                  <button
+                    className={`ai-selector-option ${aiProvider === 'openai' ? 'selected' : ''}`}
+                    onClick={() => selectProvider('openai')}
+                    role="menuitemradio"
+                    aria-checked={aiProvider === 'openai'}
+                  >
+                    <span className="ai-selector-option-title">OpenAI / Cloud</span>
+                    <span className="ai-selector-option-meta">hosted or key</span>
+                  </button>
+                  <button
+                    className={`ai-selector-option ${aiProvider === 'lemonade' ? 'selected' : ''}`}
+                    onClick={() => selectProvider('lemonade')}
+                    role="menuitemradio"
+                    aria-checked={aiProvider === 'lemonade'}
+                  >
+                    <span className="ai-selector-option-title">Lemonade Local</span>
+                    <span className="ai-selector-option-meta">local model</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="ai-selector">
+              <button
+                className={`ai-selector-trigger model-trigger ${openSelectorMenu === 'model' ? 'active' : ''}`}
+                onClick={() => setOpenSelectorMenu((current) => current === 'model' ? null : 'model')}
+                disabled={modelMenuDisabled}
+                title={aiProvider === 'lemonade' && lemonadeModelOptions.length === 0 ? 'No Lemonade models found' : activeModelName}
+                aria-haspopup="menu"
+                aria-expanded={openSelectorMenu === 'model'}
+              >
+                <span className="ai-selector-value">{activeModelName}</span>
+                <span className="ai-selector-caret" aria-hidden="true" />
+              </button>
+              {openSelectorMenu === 'model' && (
+                <div className="ai-selector-menu model-menu" role="menu">
+                  {modelMenuOptions.length === 0 ? (
+                    <div className="ai-selector-empty">No Lemonade models found</div>
+                  ) : (
+                    modelMenuOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        className={`ai-selector-option ${option.id === activeModelId ? 'selected' : ''}`}
+                        onClick={() => selectModel(option.id)}
+                        disabled={option.disabled}
+                        role="menuitemradio"
+                        aria-checked={option.id === activeModelId}
+                        title={option.label}
+                      >
+                        <span className="ai-selector-option-title">{option.label}</span>
+                        <span className="ai-selector-option-meta">{option.meta}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
           <label className="editor-mode-toggle" title="Enable timeline editing tools">
             <input
               type="checkbox"
@@ -649,16 +1362,14 @@ export function AIChatPanel() {
             />
             <span className="toggle-label">Tools</span>
           </label>
-          <select
-            className="model-select"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
+          <button
+            className={`btn-prompt ${promptHasOverride ? 'active' : ''}`}
+            onClick={openPromptDialog}
             disabled={isLoading}
+            title="Edit system prompt"
           >
-            {OPENAI_MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.name} ({m.credits === 1 ? '1 credit' : `${m.credits} credits`})</option>
-            ))}
-          </select>
+            Prompt
+          </button>
           <button
             className="btn-clear"
             onClick={clearChat}
@@ -669,6 +1380,108 @@ export function AIChatPanel() {
           </button>
         </div>
       </div>
+
+      {isPromptDialogOpen && (
+        <div className="ai-prompt-dialog-backdrop" onClick={() => setIsPromptDialogOpen(false)}>
+          <div className="ai-prompt-dialog" onClick={(event) => event.stopPropagation()}>
+            <input
+              ref={promptFileInputRef}
+              type="file"
+              accept=".txt,.md,.prompt,text/plain,text/markdown"
+              className="ai-prompt-file-input"
+              onChange={loadPromptFile}
+            />
+            <div className="ai-prompt-dialog-header">
+              <div>
+                <h3>System Prompt</h3>
+                <span>{aiProvider === 'lemonade' ? 'Lemonade Local' : 'OpenAI / Cloud'}</span>
+              </div>
+              <button
+                className="ai-prompt-dialog-close"
+                onClick={() => setIsPromptDialogOpen(false)}
+                title="Close"
+              >
+                x
+              </button>
+            </div>
+            <div className="ai-prompt-library">
+              <label className="ai-prompt-name-field">
+                <span>Name</span>
+                <input
+                  value={promptNameDraft}
+                  onChange={(event) => setPromptNameDraft(event.target.value)}
+                  placeholder={getDefaultProjectPromptName(aiProvider)}
+                  disabled={isPromptLibraryLoading}
+                />
+              </label>
+              <div className="ai-prompt-load-row">
+                <select
+                  className="ai-prompt-select"
+                  value={selectedPromptFile}
+                  onChange={(event) => setSelectedPromptFile(event.target.value)}
+                  disabled={!projectPromptStorageReady || isPromptLibraryLoading || savedPromptFiles.length === 0}
+                >
+                  {savedPromptFiles.length === 0 ? (
+                    <option value="">No saved prompts</option>
+                  ) : (
+                    savedPromptFiles.map((prompt) => (
+                      <option key={prompt.fileName} value={prompt.fileName}>
+                        {prompt.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  onClick={loadSelectedProjectPrompt}
+                  disabled={!selectedPromptFile || isPromptLibraryLoading}
+                >
+                  Load
+                </button>
+                <button onClick={refreshSavedPromptFiles} disabled={isPromptLibraryLoading}>
+                  Refresh
+                </button>
+              </div>
+              {(promptDialogError || promptDialogStatus || !projectPromptStorageReady) && (
+                <div className={`ai-prompt-feedback ${promptDialogError ? 'error' : ''}`}>
+                  {promptDialogError || promptDialogStatus || 'Open a project to use saved prompts.'}
+                </div>
+              )}
+            </div>
+            <textarea
+              className="ai-prompt-textarea"
+              value={promptDraft}
+              onChange={(event) => setPromptDraft(event.target.value)}
+              spellCheck={false}
+            />
+            <div className="ai-prompt-dialog-footer">
+              <span className="ai-prompt-status">
+                {promptHasOverride ? 'Custom' : 'Default'} - {promptDraft.length} chars
+              </span>
+              <div className="ai-prompt-actions">
+                <button onClick={() => promptFileInputRef.current?.click()} disabled={isPromptLibraryLoading}>
+                  Import
+                </button>
+                <button onClick={exportPromptDraft} disabled={!promptDraft.trim()}>
+                  Export
+                </button>
+                <button onClick={resetPromptDraft} disabled={isPromptLibraryLoading}>
+                  Reset
+                </button>
+                <button onClick={() => setIsPromptDialogOpen(false)}>
+                  Cancel
+                </button>
+                <button
+                  className="primary"
+                  onClick={savePromptDialog}
+                  disabled={!promptDraft.trim() || !projectPromptStorageReady || isPromptLibraryLoading}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="ai-chat-messages">
@@ -708,8 +1521,10 @@ export function AIChatPanel() {
               <p>{editorMode ? 'AI Editor Ready' : 'Start a conversation'}</p>
               <span className="welcome-hint">
                 {editorMode
-                  ? 'Ask me to edit your timeline - cut clips, remove silence, etc.'
-                  : `Using ${OPENAI_MODELS.find(m => m.id === model)?.name}`}
+                  ? (aiProvider === 'lemonade'
+                    ? `Using local ${activeModelName} with timeline tools`
+                    : 'Ask me to edit your timeline - cut clips, remove silence, etc.')
+                  : `Using ${activeModelName}`}
               </span>
             </div>
           </>
@@ -775,9 +1590,15 @@ export function AIChatPanel() {
                   </span>
                 </div>
                 <div className="message-content">
-                  {msg.content.split('\n').map((line, i) => (
-                    <p key={i}>{line || '\u00A0'}</p>
-                  ))}
+                  {msg.id === streamingMessageId && msg.content.length === 0 ? (
+                    <span className="typing-indicator">
+                      <span></span><span></span><span></span>
+                    </span>
+                  ) : (
+                    msg.content.split('\n').map((line, i) => (
+                      <p key={i}>{line || '\u00A0'}</p>
+                    ))
+                  )}
                 </div>
               </div>
             );
@@ -808,7 +1629,7 @@ export function AIChatPanel() {
             </div>
           </div>
         )}
-        {isLoading && (
+        {isLoading && (currentToolAction || !streamingMessageId) && (
           <div className="ai-chat-message assistant loading">
             <div className="message-header">
               <span className="message-role">AI</span>
@@ -844,7 +1665,7 @@ export function AIChatPanel() {
           placeholder={editorMode
             ? "e.g., 'Remove all silent parts' or 'Split clip at 5 seconds'"
             : "Type a message... (Enter to send)"}
-          disabled={isLoading || !hasAccess}
+          disabled={!hasAccess}
           rows={2}
         />
         <button

@@ -64,6 +64,23 @@ type GaussianSplatSceneLoadRequest = {
   maxSplats?: number;
 };
 
+export interface GaussianSplatSequenceWarmupOptions {
+  time?: number;
+  frameCount?: number;
+  waitFrameCount?: number;
+  timeoutMs?: number;
+  includeFocusedClip?: boolean;
+  priority?: boolean;
+}
+
+export interface GaussianSplatSequenceWarmupResult {
+  requested: number;
+  alreadyReady: number;
+  waited: number;
+  scheduled: number;
+  timedOut: boolean;
+}
+
 const SPLAT_SEQUENCE_PREVIEW_MAX_SPLATS = 65536;
 const SPLAT_SEQUENCE_MAX_BACKGROUND_LOADS = 3;
 const SPLAT_SEQUENCE_PLAYBACK_PRELOAD_FRAMES = 72;

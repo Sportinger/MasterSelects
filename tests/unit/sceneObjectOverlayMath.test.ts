@@ -131,6 +131,36 @@ describe('sceneObjectOverlayMath', () => {
     expect(endDistance).toBeCloseTo(SCENE_GIZMO_AXIS_SCREEN_LENGTH, 5);
   });
 
+  it('aligns gaussian splat axis hitboxes with native orientation presets', () => {
+    const canvasSize = { width: 960, height: 540 };
+    const { camera, objects } = collectPreviewSceneObjects({
+      clips: [
+        makeClip({
+          id: 'oriented-splat',
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatSettings: {
+              render: {
+                orientationPreset: 'flip-x-180',
+              },
+            },
+          },
+        }),
+      ],
+      tracks,
+      clipKeyframes: new Map(),
+      playheadPosition: 1,
+      viewport: { width: 1920, height: 1080 },
+      canvasSize,
+    });
+    const object = objects[0]!;
+    const yHandle = resolveAxisScreenHandle('y', object.worldPosition, camera, canvasSize, object.axisBasis.y);
+
+    expect(object.axisBasis.y.y).toBeCloseTo(-1);
+    expect(object.axisBasis.z.z).toBeCloseTo(-1);
+    expect(yHandle.direction.y).toBeGreaterThan(0);
+  });
+
   it('maps effector transform into shared scene space', () => {
     const clips = [
       makeClip({
