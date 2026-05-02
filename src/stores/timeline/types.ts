@@ -173,6 +173,12 @@ export interface TimelineState {
   // Clip animation phase for enter/exit transitions
   clipAnimationPhase: 'idle' | 'exiting' | 'entering';
 
+  // Direction derived from composition tab positions
+  compositionSwitchDirection: 'forward' | 'backward';
+
+  // Target track layout shown while old clips exit during a composition switch
+  compositionSwitchTargetTracks: TimelineTrack[] | null;
+
   // Slot grid view progress (0 = full timeline, 1 = full grid view)
   slotGridProgress: number;
 
@@ -329,6 +335,8 @@ export interface PlaybackActions {
   toggleCutTool: () => void;
   // Clip animation phase for composition transitions
   setClipAnimationPhase: (phase: 'idle' | 'exiting' | 'entering') => void;
+  setCompositionSwitchDirection: (direction: 'forward' | 'backward') => void;
+  setCompositionSwitchTargetTracks: (tracks: TimelineTrack[] | null) => void;
   // Slot grid view
   setSlotGridProgress: (progress: number) => void;
   // Performance toggles

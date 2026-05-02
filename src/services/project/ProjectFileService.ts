@@ -3,6 +3,7 @@
 // Supports two backends: FSA (Chrome) and Native Helper (Firefox)
 
 import { Logger } from '../logger';
+import { projectDB } from '../projectDB';
 import { FileStorageService, fileStorageService } from './core/FileStorageService';
 import { NativeFileStorageService, nativeFileStorageService } from './core/NativeFileStorageService';
 import { NativeProjectCoreService } from './core/NativeProjectCoreService';
@@ -22,6 +23,13 @@ import {
   getRawRelativePath,
   parseRawRelativePath,
 } from './core/rawPath';
+import {
+  clearRecentProjects,
+  getRecentProject,
+  getRecentProjects,
+  removeRecentProject,
+  type RecentProjectEntry,
+} from './recentProjects';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from './types';
 
 type IterableDirectoryHandle = FileSystemDirectoryHandle & {
@@ -462,6 +470,69 @@ class ProjectFileService {
 
     if (!projectPath) return false;
     return nativeCore.loadProject(projectPath);
+  }
+
+  getRecentProjects(): RecentProjectEntry[] {
+    return getRecentProjects();
+  }
+
+  async removeRecentProject(id: string): Promise<void> {
+    await removeRecentProject(id);
+  }
+
+  async clearRecentProjects(): Promise<void> {
+    await clearRecentProjects();
+  }
+
+  async openRecentProject(id: string): Promise<boolean> {
+    const recentProject = getRecentProject(id);
+    if (!recentProject) {
+      return false;
+    }
+
+    if (recentProject.backend === 'native') {
+      if (!recentProject.path) {
+        await removeRecentProject(id);
+        return false;
+      }
+
+      const nativeCore = await this.ensureNativeBackendReady();
+      return nativeCore ? nativeCore.loadProject(recentProject.path) : false;
+    }
+
+    if (!this.isFsaAvailable || !recentProject.handleKey) {
+      return false;
+    }
+
+    let storedHandle: FileSystemHandle | null = null;
+    try {
+      storedHandle = await projectDB.getStoredHandle(recentProject.handleKey);
+    } catch (error) {
+      log.warn('Failed to read recent project handle', error);
+      return false;
+    }
+
+    if (!storedHandle || storedHandle.kind !== 'directory') {
+      await removeRecentProject(id);
+      return false;
+    }
+
+    const projectHandle = storedHandle as FileSystemDirectoryHandle;
+    let permission = await projectHandle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted') {
+      permission = await projectHandle.requestPermission({ mode: 'readwrite' });
+    }
+
+    if (permission !== 'granted') {
+      return false;
+    }
+
+    this.activateFsaBackend();
+    const loaded = await this.coreService.loadProject(projectHandle);
+    if (!loaded) {
+      await removeRecentProject(id);
+    }
+    return loaded;
   }
 
   async loadProject(handleOrPath: FileSystemDirectoryHandle | string): Promise<boolean> {

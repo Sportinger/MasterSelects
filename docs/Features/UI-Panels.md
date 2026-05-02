@@ -29,7 +29,7 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 
 | Menu | Contents |
 |------|----------|
-| **File** | New Project, Open Project, Save, Save As, Project Info, Autosave, Clear All Cache and Reload |
+| **File** | New Project, Open Project, Open Recent, Save, Save As, Project Info, Autosave, Clear All Cache and Reload |
 | **Edit** | Copy, Paste, Settings |
 | **View** | Panels submenu, Layouts submenu |
 | **Output** | New Output Window, Open Output Manager, Active Outputs |
@@ -54,6 +54,7 @@ Dockable desktop panel system with an After Effects-style menu bar, unified clip
 
 - **New Project** prompts for a project name and folder
 - **Open Project** opens an existing project folder
+- **Open Recent** shows browser-remembered projects and can clear that recent list
 - **Save / Save As** follow the folder-based project model
 - **Autosave** still exposes enable/disable plus 1, 2, 5, and 10 minute intervals for interval-save mode
 - **Save Mode** itself lives in Settings -> General, and the default branch behavior is continuous save with a short debounce after changes

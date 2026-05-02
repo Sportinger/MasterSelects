@@ -320,6 +320,14 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     set({ clipAnimationPhase: phase });
   },
 
+  setCompositionSwitchDirection: (direction) => {
+    set({ compositionSwitchDirection: direction });
+  },
+
+  setCompositionSwitchTargetTracks: (tracks) => {
+    set({ compositionSwitchTargetTracks: tracks ? tracks.map((track) => ({ ...track })) : null });
+  },
+
   // Slot grid view progress
   setSlotGridProgress: (progress: number) => {
     set({ slotGridProgress: Math.max(0, Math.min(1, progress)) });

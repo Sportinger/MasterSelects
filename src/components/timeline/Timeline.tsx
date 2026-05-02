@@ -13,7 +13,7 @@ import {
   selectPreviewExportState,
   selectKeyframeState,
 } from '../../stores/timeline/selectors';
-import type { AnimatableProperty, Keyframe, TimelineClip as TimelineClipType } from '../../types';
+import type { AnimatableProperty, Keyframe, TimelineClip as TimelineClipType, TimelineTrack as TimelineTrackType } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
 
 import { TimelineRuler } from './TimelineRuler';
@@ -59,6 +59,62 @@ import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 
 const KEYFRAME_TIME_GROUP_PRECISION = 1000;
 const RAM_PREVIEW_FEATURE_ENABLED = false;
+const TRACK_HEADER_WIDTH = 150;
+
+function buildCompositionSwitchTracks(
+  currentTracks: TimelineTrackType[],
+  targetTracks: TimelineTrackType[] | null
+): TimelineTrackType[] {
+  if (!targetTracks || targetTracks.length === 0) return currentTracks;
+
+  const currentById = new Map(currentTracks.map((track) => [track.id, track]));
+  const currentByType = {
+    video: currentTracks.filter((track) => track.type === 'video'),
+    audio: currentTracks.filter((track) => track.type === 'audio'),
+  };
+  const usedCurrentIds = new Set<string>();
+  const typeCursor: Record<TimelineTrackType['type'], number> = { video: 0, audio: 0 };
+
+  const mappedTargetTracks = targetTracks.map((targetTrack) => {
+    const sameIdTrack = currentById.get(targetTrack.id);
+    let matchedCurrent = sameIdTrack && !usedCurrentIds.has(sameIdTrack.id)
+      ? sameIdTrack
+      : undefined;
+
+    if (!matchedCurrent) {
+      const tracksOfType = currentByType[targetTrack.type];
+      while (typeCursor[targetTrack.type] < tracksOfType.length) {
+        const candidate = tracksOfType[typeCursor[targetTrack.type]];
+        typeCursor[targetTrack.type] += 1;
+        if (!usedCurrentIds.has(candidate.id)) {
+          matchedCurrent = candidate;
+          break;
+        }
+      }
+    }
+
+    if (!matchedCurrent) return { ...targetTrack };
+
+    usedCurrentIds.add(matchedCurrent.id);
+    return {
+      ...targetTrack,
+      id: matchedCurrent.id,
+    };
+  });
+
+  const departingTracks = currentTracks
+    .filter((track) => !usedCurrentIds.has(track.id))
+    .map((track) => ({
+      ...track,
+      name: '',
+      height: 0,
+      muted: false,
+      visible: false,
+      solo: false,
+    }));
+
+  return [...mappedTargetTracks, ...departingTracks];
+}
 
 function getClipKeyframeTimeGroups(
   keyframes: Array<Pick<Keyframe, 'id' | 'time' | 'property'>>
@@ -200,6 +256,28 @@ export function Timeline() {
 
   // Composition switch animation phase for tracks/ruler
   const clipAnimationPhase = useTimelineStore(s => s.clipAnimationPhase);
+  const compositionSwitchDirection = useTimelineStore(s => s.compositionSwitchDirection);
+  const compositionSwitchTargetTracks = useTimelineStore(s => s.compositionSwitchTargetTracks);
+  const compositionSwitchSourceTracksRef = useRef<TimelineTrackType[] | null>(null);
+  const isCompositionTrackMorphing = clipAnimationPhase !== 'idle' && compositionSwitchTargetTracks !== null;
+  const timelineViewTracks = useMemo(
+    () => isCompositionTrackMorphing
+      ? buildCompositionSwitchTracks(
+          compositionSwitchSourceTracksRef.current ?? tracks,
+          compositionSwitchTargetTracks
+        )
+      : tracks,
+    [isCompositionTrackMorphing, tracks, compositionSwitchTargetTracks]
+  );
+
+  useEffect(() => {
+    if (clipAnimationPhase === 'exiting' && compositionSwitchTargetTracks && !compositionSwitchSourceTracksRef.current) {
+      compositionSwitchSourceTracksRef.current = tracks.map((track) => ({ ...track }));
+    }
+    if (clipAnimationPhase === 'idle') {
+      compositionSwitchSourceTracksRef.current = null;
+    }
+  }, [clipAnimationPhase, compositionSwitchTargetTracks, tracks]);
 
   // Cut tool hover state (shared across linked clips)
   const [cutHoverInfo, setCutHoverInfo] = useState<{ clipId: string; time: number } | null>(null);
@@ -499,6 +577,15 @@ export function Timeline() {
     };
   }, [tracks]);
 
+  const { anyViewVideoSolo, anyViewAudioSolo } = useMemo(() => {
+    const vTracks = timelineViewTracks.filter(t => t.type === 'video');
+    const aTracks = timelineViewTracks.filter(t => t.type === 'audio');
+    return {
+      anyViewVideoSolo: vTracks.some(t => t.solo),
+      anyViewAudioSolo: aTracks.some(t => t.solo),
+    };
+  }, [timelineViewTracks]);
+
   // Performance: Memoize track visibility check functions
   const isVideoTrackVisible = useCallback((track: typeof tracks[0]) => {
     if (!track.visible) return false;
@@ -520,14 +607,14 @@ export function Timeline() {
   const { contentHeight, trackSnapPositions } = useMemo(() => {
     let totalHeight = 0;
     const snapPositions: number[] = [0];
-    for (const track of tracks) {
-      const isExpanded = isTrackExpanded(track.id);
+    for (const track of timelineViewTracks) {
+      const isExpanded = !isCompositionTrackMorphing && isTrackExpanded(track.id);
       totalHeight += isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
       snapPositions.push(totalHeight);
     }
     return { contentHeight: totalHeight, trackSnapPositions: snapPositions };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tracks, isTrackExpanded, getExpandedTrackHeight, expandedCurveProperties, curveEditorHeight, selectedClipIds, clipKeyframes]);
+  }, [timelineViewTracks, isCompositionTrackMorphing, isTrackExpanded, getExpandedTrackHeight, expandedCurveProperties, curveEditorHeight, selectedClipIds, clipKeyframes]);
 
   // Track viewport height for scrollbar
   const [viewportHeight, setViewportHeight] = useState(300);
@@ -882,9 +969,13 @@ export function Timeline() {
     ]
   );
 
-  const trackHeaderWidth = 150;
-  const playheadLeft = timeToPixel(playheadPosition) - scrollX + trackHeaderWidth;
-  const showPlayhead = playheadLeft >= trackHeaderWidth;
+  const playheadLeft = timeToPixel(playheadPosition) - scrollX + TRACK_HEADER_WIDTH;
+  const showPlayhead = playheadLeft >= TRACK_HEADER_WIDTH;
+  const timelineSwitchMotionClass = clipAnimationPhase === 'exiting'
+    ? (compositionSwitchDirection === 'backward' ? 'timeline-switch-exit-left' : 'timeline-switch-exit-right')
+    : clipAnimationPhase === 'entering'
+      ? (compositionSwitchDirection === 'backward' ? 'timeline-switch-enter-right' : 'timeline-switch-enter-left')
+      : '';
 
   useEffect(() => {
     if (!isPlaying || isDraggingPlayhead) return;
@@ -1056,24 +1147,24 @@ export function Timeline() {
                 <span className="track-header-preview-label">+ New Video Track</span>
               </div>
             )}
-            {tracks.map((track) => {
+            {timelineViewTracks.map((track) => {
               const isDimmed =
-                (track.type === 'video' && anyVideoSolo && !track.solo) ||
-                (track.type === 'audio' && anyAudioSolo && !track.solo);
-              const isExpanded = isTrackExpanded(track.id);
-              const dynamicHeight = getExpandedTrackHeight(track.id, track.height);
+                (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
+                (track.type === 'audio' && anyViewAudioSolo && !track.solo);
+              const isExpanded = !isCompositionTrackMorphing && isTrackExpanded(track.id);
+              const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
 
               return (
                   <TimelineHeader
                     key={track.id}
                     track={track}
-                    tracks={tracks}
+                    tracks={timelineViewTracks}
                     isDimmed={isDimmed}
                     isExpanded={isExpanded}
                     dynamicHeight={dynamicHeight}
-                    hasKeyframes={trackHasKeyframes(track.id)}
+                    hasKeyframes={!isCompositionTrackMorphing && trackHasKeyframes(track.id)}
                     selectedClipIds={selectedClipIds}
-                    clips={clips}
+                    clips={isCompositionTrackMorphing ? [] : clips}
                     playheadPosition={playheadPosition}
                     onToggleExpand={() => toggleTrackExpanded(track.id)}
                     onToggleSolo={() =>
@@ -1180,18 +1271,18 @@ export function Timeline() {
                 </div>
               )}
 
-              {tracks.map((track) => {
+              {timelineViewTracks.map((track) => {
                 const isDimmed =
-                  (track.type === 'video' && anyVideoSolo && !track.solo) ||
-                  (track.type === 'audio' && anyAudioSolo && !track.solo);
-                const isExpanded = isTrackExpanded(track.id);
-                const dynamicHeight = getExpandedTrackHeight(track.id, track.height);
+                  (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
+                  (track.type === 'audio' && anyViewAudioSolo && !track.solo);
+                const isExpanded = !isCompositionTrackMorphing && isTrackExpanded(track.id);
+                const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
 
                 return (
                   <TimelineTrack
                 key={track.id}
                 track={track}
-                clips={clips}
+                clips={isCompositionTrackMorphing ? [] : clips}
                 isDimmed={isDimmed}
                 isExpanded={isExpanded}
                 dynamicHeight={dynamicHeight}
@@ -1229,21 +1320,47 @@ export function Timeline() {
             );
           })}
 
-          <TransitionOverlays
-            activeJunction={activeJunction}
-            clips={clips}
-            tracks={tracks}
-            timeToPixel={timeToPixel}
-            isTrackExpanded={isTrackExpanded}
-            getExpandedTrackHeight={getExpandedTrackHeight}
-          />
+          {isCompositionTrackMorphing && (
+            <div className="composition-exit-clips-overlay">
+              {tracks.map((track) => {
+                const isExpanded = isTrackExpanded(track.id);
+                const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
+                const trackClips = clips.filter((clip) => clip.trackId === track.id);
 
-          <AIActionOverlays
-            tracks={tracks}
-            timeToPixel={timeToPixel}
-            isTrackExpanded={isTrackExpanded}
-            getExpandedTrackHeight={getExpandedTrackHeight}
-          />
+                return (
+                  <div
+                    key={`exit-${track.id}`}
+                    className="composition-exit-track-row"
+                    style={{ height: dynamicHeight }}
+                  >
+                    <div className="track-clip-row" style={{ height: track.height }}>
+                      {trackClips.map((clip) => renderClip(clip, track.id))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!isCompositionTrackMorphing && (
+            <TransitionOverlays
+              activeJunction={activeJunction}
+              clips={clips}
+              tracks={tracks}
+              timeToPixel={timeToPixel}
+              isTrackExpanded={isTrackExpanded}
+              getExpandedTrackHeight={getExpandedTrackHeight}
+            />
+          )}
+
+          {!isCompositionTrackMorphing && (
+            <AIActionOverlays
+              tracks={tracks}
+              timeToPixel={timeToPixel}
+              isTrackExpanded={isTrackExpanded}
+              getExpandedTrackHeight={getExpandedTrackHeight}
+            />
+          )}
 
           {/* New video track preview for linked audio-to-video */}
           {/* When hovering audio track, show linked video preview as new track */}
@@ -1330,6 +1447,7 @@ export function Timeline() {
             duration={duration}
             markerDrag={markerDrag}
             onMarkerMouseDown={handleMarkerMouseDown}
+            switchMotionClass={timelineSwitchMotionClass}
             clipDrag={clipDrag}
             isRamPreviewing={effectiveIsRamPreviewing}
             ramPreviewProgress={effectiveRamPreviewProgress}
@@ -1354,15 +1472,17 @@ export function Timeline() {
                 />
               )}
 
-              <ParentChildLinksOverlay
-                clips={clips}
-                tracks={tracks}
-                clipDrag={clipDrag}
-                timelineRef={timelineRef}
-                scrollX={scrollX}
-                zoom={zoom}
-                getExpandedTrackHeight={getExpandedTrackHeight}
-              />
+              {!isCompositionTrackMorphing && (
+                <ParentChildLinksOverlay
+                  clips={clips}
+                  tracks={tracks}
+                  clipDrag={clipDrag}
+                  timelineRef={timelineRef}
+                  scrollX={scrollX}
+                  zoom={zoom}
+                  getExpandedTrackHeight={getExpandedTrackHeight}
+                />
+              )}
 
 
             </div>{/* track-lanes-scroll */}
@@ -1373,7 +1493,7 @@ export function Timeline() {
           {/* Playhead - spans from ruler through all tracks */}
           {showPlayhead && (
             <div
-              className="playhead"
+              className={`playhead ${timelineSwitchMotionClass}`}
               data-ai-id="timeline-playhead"
               style={{ left: playheadLeft }}
               onMouseDown={handlePlayheadMouseDown}
@@ -1387,9 +1507,9 @@ export function Timeline() {
           {markers.map(marker => (
             <div
               key={marker.id}
-              className={`timeline-marker ${marker.stopPlayback ? 'is-stop-marker' : ''} ${timelineMarkerDrag?.markerId === marker.id ? 'dragging' : ''} ${aiAnimatedMarkers.get(marker.id) === 'add' ? 'ai-marker-added' : aiAnimatedMarkers.get(marker.id) === 'remove' ? 'ai-marker-removed' : ''}`}
+              className={`timeline-marker ${timelineSwitchMotionClass} ${marker.stopPlayback ? 'is-stop-marker' : ''} ${timelineMarkerDrag?.markerId === marker.id ? 'dragging' : ''} ${aiAnimatedMarkers.get(marker.id) === 'add' ? 'ai-marker-added' : aiAnimatedMarkers.get(marker.id) === 'remove' ? 'ai-marker-removed' : ''}`}
               style={{
-                left: timeToPixel(marker.time) - scrollX + 150,
+                left: timeToPixel(marker.time) - scrollX + TRACK_HEADER_WIDTH,
                 '--marker-color': marker.color,
               } as React.CSSProperties}
               title={`${marker.stopPlayback ? 'Stop Marker' : (marker.label || 'Marker')}: ${formatTime(marker.time)} (drag to move, right-click for MIDI and transport actions)${marker.stopPlayback ? ' - playback stops automatically here' : ''}`}

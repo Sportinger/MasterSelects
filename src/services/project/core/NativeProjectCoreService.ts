@@ -7,6 +7,7 @@ import { apiKeyManager } from '../../apiKeyManager';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
 import { PROJECT_FOLDER_PATHS, MAX_BACKUPS } from './constants';
 import { shouldPreferAutosave, shouldSkipEmptyProjectSave } from './autosaveRecovery';
+import { addRecentNativeProject, removeRecentNativeProject } from '../recentProjects';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 
 const log = Logger.create('NativeProjectCore');
@@ -185,6 +186,7 @@ export class NativeProjectCoreService {
       this.isDirty = false;
 
       this.storeLastProject(projectPath);
+      await addRecentNativeProject(projectPath, initialProject);
       this.startAutoSave();
 
       // Save any existing API keys
@@ -223,6 +225,7 @@ export class NativeProjectCoreService {
       this.isDirty = false;
 
       this.storeLastProject(projectPath);
+      await addRecentNativeProject(projectPath, projectData);
       this.startAutoSave();
 
       // Try to restore API keys from file if IndexedDB keys are empty
@@ -383,6 +386,7 @@ export class NativeProjectCoreService {
 
     try {
       // Get parent directory
+      const oldPath = this.projectPath;
       const parts = this.projectPath.replace(/\\/g, '/').split('/');
       parts.pop(); // Remove current folder name
       const parentPath = parts.join('/');
@@ -408,6 +412,7 @@ export class NativeProjectCoreService {
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
         await this.saveProject();
+        await addRecentNativeProject(this.projectPath, this.projectData);
         return true;
       }
 
@@ -420,6 +425,8 @@ export class NativeProjectCoreService {
       await this.client.writeFile(jsonPath, JSON.stringify(this.projectData, null, 2));
 
       this.storeLastProject(newPath);
+      await removeRecentNativeProject(oldPath);
+      await addRecentNativeProject(newPath, this.projectData);
       this.isDirty = false;
 
       log.info(`Project renamed to "${trimmedName}"`);

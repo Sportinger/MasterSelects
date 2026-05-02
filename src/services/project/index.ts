@@ -28,6 +28,8 @@ export { FileStorageService, fileStorageService } from './core/FileStorageServic
 export { ProjectCoreService } from './core/ProjectCoreService';
 export { PROJECT_FOLDERS, MAX_BACKUPS, PROJECT_FOLDER_PATHS } from './core/constants';
 export type { ProjectFolderKey } from './core/constants';
+export { RECENT_PROJECTS_CHANGED_EVENT } from './recentProjects';
+export type { RecentProjectEntry, RecentProjectBackend } from './recentProjects';
 
 // Domain services (for advanced usage)
 export { AnalysisService } from './domains/AnalysisService';

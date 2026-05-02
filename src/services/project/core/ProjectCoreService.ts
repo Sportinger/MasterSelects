@@ -5,6 +5,7 @@ import { Logger } from '../../logger';
 import { projectDB } from '../../projectDB';
 import { apiKeyManager } from '../../apiKeyManager';
 import { shouldPreferAutosave, shouldSkipEmptyProjectSave } from './autosaveRecovery';
+import { addRecentFsaProject, removeRecentFsaProject } from '../recentProjects';
 
 const log = Logger.create('ProjectCore');
 import { FileStorageService } from './FileStorageService';
@@ -209,6 +210,7 @@ export class ProjectCoreService {
       this.isDirty = false;
 
       await this.storeLastProject(projectFolder);
+      await addRecentFsaProject(projectFolder, initialProject);
       this.startAutoSave();
 
       // Save any existing API keys to the new project
@@ -258,6 +260,7 @@ export class ProjectCoreService {
       this.isDirty = false;
 
       await this.storeLastProject(handle);
+      await addRecentFsaProject(handle, projectData);
       this.startAutoSave();
 
       // Try to restore API keys from file if IndexedDB keys are empty
@@ -425,6 +428,7 @@ export class ProjectCoreService {
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
         await this.writeProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
+        await addRecentFsaProject(this.projectHandle, this.projectData);
         this.isDirty = false;
         return true;
       }
@@ -439,17 +443,20 @@ export class ProjectCoreService {
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
         await this.writeProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
+        await addRecentFsaProject(this.projectHandle, this.projectData);
         this.isDirty = false;
         return true;
       }
 
       const oldName = this.projectHandle.name;
+      const oldProjectHandle = this.projectHandle;
 
       // If the folder name already matches the new name, just update project data
       if (trimmedName === oldName) {
         this.projectData.name = trimmedName;
         this.projectData.updatedAt = new Date().toISOString();
         await this.writeProjectFile(this.projectHandle, PROJECT_FILE_NAME, this.projectData);
+        await addRecentFsaProject(this.projectHandle, this.projectData);
         this.isDirty = false;
         log.info(`Project display name updated to "${trimmedName}"`);
         return true;
@@ -498,6 +505,8 @@ export class ProjectCoreService {
       this.projectHandle = newFolder;
 
       await projectDB.storeHandle('lastProject', newFolder);
+      await removeRecentFsaProject(oldProjectHandle);
+      await addRecentFsaProject(newFolder, this.projectData);
 
       try {
         await parentDir.removeEntry(oldName, { recursive: true });
