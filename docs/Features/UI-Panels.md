@@ -346,13 +346,19 @@ The unified Properties panel adapts its tabs to the selected clip type and to sl
 | **Lottie** | Lottie, Transform, Effects, Masks |
 | **Gaussian avatar** | Blendshapes, Transform, Effects, Masks |
 | **Gaussian splat** | Transform, Gaussian Splat, Effects, Masks |
-| **Camera** | Transform, Camera |
+| **Camera** | Transform |
 | **Splat effector** | Transform, Effector |
 | **Slot Grid clip** | Slot Clip |
 
 ### Camera Transform Controls
 
 - Camera clips expose `Nav Mode` controls at the top of the Transform tab.
+- Camera lens and gate controls also live in the Transform tab: FOV, full-frame-equivalent millimeters, Near, Far, and Resolution X/Y.
+- The legacy camera Zoom and Distance controls are hidden from the Camera Transform UI to avoid mixing a real-camera surface with orbit-rig controls.
+- In Scene Nav, mouse wheel over the preview moves the real camera position along the current view direction, so X/Y/Z can all change. It does not change FOV or the mm lens field.
+- Camera Position X/Y/Z is the camera eye position in world space and is edited independently from lens FOV/mm; changing the lens does not rewrite or recalculate the position fields.
+- Camera Resolution X/Y sets the edit-view gate aspect used to draw the camera frame; it is stored with the camera clip and has keyframe controls like the other camera settings.
+- Camera Edit mode uses its own 35 mm free-camera lens by default, independent of the timeline camera clip's lens or keyframes.
 - `FPS` switches preview navigation between orbit-style look and FPS-style look.
 - `NO KF` keeps existing camera keyframes active during playback, but routes preview navigation and MIDI camera-look input into temporary live offsets instead of writing new camera keyframes.
 - Live `NO KF` offsets are added on top of the keyframed camera pose for preview control and are cleared when `NO KF` is turned off.

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip } from '../../helpers/mockData';
 import { KEYFRAME_RECORDING_FEEDBACK_EVENT } from '../../../src/utils/keyframeRecordingFeedback';
+import { createMaskPathProperty, createMaskNumericProperty, type ClipMask } from '../../../src/types';
 
 describe('keyframeSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -86,6 +87,79 @@ describe('keyframeSlice', () => {
     store.getState().addKeyframe('clip-1', 'opacity', 0.5, 1, 'easeOut');
     const kfs = store.getState().clipKeyframes.get('clip-1')!;
     expect(kfs[0].easing).toBe('ease-out');
+  });
+
+  it('addMaskPathKeyframe: captures all vertices as one path keyframe', () => {
+    const mask: ClipMask = {
+      id: 'mask-1',
+      name: 'Mask 1',
+      vertices: [
+        { id: 'v1', x: 0, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0.1, y: 0 }, handleMode: 'mirrored' },
+        { id: 'v2', x: 1, y: 0, handleIn: { x: -0.1, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'mirrored' },
+        { id: 'v3', x: 1, y: 1, handleIn: { x: 0, y: -0.1 }, handleOut: { x: 0, y: 0 }, handleMode: 'split' },
+      ],
+      closed: true,
+      opacity: 1,
+      feather: 0,
+      featherQuality: 50,
+      inverted: false,
+      mode: 'add',
+      expanded: true,
+      position: { x: 0, y: 0 },
+      enabled: true,
+      visible: true,
+    };
+    store = createTestTimelineStore({
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 10, masks: [mask] })],
+    });
+
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', undefined, 2);
+
+    const keyframe = store.getState().clipKeyframes.get('clip-1')?.[0];
+    expect(keyframe?.property).toBe(createMaskPathProperty('mask-1'));
+    expect(keyframe?.pathValue?.vertices).toHaveLength(3);
+    expect(keyframe?.pathValue?.vertices[1].x).toBe(1);
+    expect(keyframe?.pathValue?.closed).toBe(true);
+  });
+
+  it('getInterpolatedMasks: interpolates mask path and position keyframes', () => {
+    const mask: ClipMask = {
+      id: 'mask-1',
+      name: 'Mask 1',
+      vertices: [
+        { id: 'v1', x: 0, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v2', x: 1, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v3', x: 1, y: 1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      ],
+      closed: true,
+      opacity: 1,
+      feather: 0,
+      featherQuality: 50,
+      inverted: false,
+      mode: 'add',
+      expanded: true,
+      position: { x: 0, y: 0 },
+      enabled: true,
+      visible: true,
+    };
+    store = createTestTimelineStore({
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 10, masks: [mask] })],
+    });
+
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', undefined, 0, 'linear');
+    store.getState().updateVertices('clip-1', 'mask-1', [
+      { id: 'v1', updates: { x: 0.5, y: 0.5 } },
+      { id: 'v2', updates: { x: 0.75, y: 0.5 } },
+      { id: 'v3', updates: { x: 0.75, y: 0.75 } },
+    ], true);
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', undefined, 10, 'linear');
+    store.getState().addKeyframe('clip-1', createMaskNumericProperty('mask-1', 'position.x'), 0, 0);
+    store.getState().addKeyframe('clip-1', createMaskNumericProperty('mask-1', 'position.x'), 1, 10);
+
+    const interpolatedMask = store.getState().getInterpolatedMasks('clip-1', 5)?.[0];
+    expect(interpolatedMask?.vertices[0].x).toBeCloseTo(0.25);
+    expect(interpolatedMask?.vertices[0].y).toBeCloseTo(0.25);
+    expect(interpolatedMask?.position.x).toBeCloseTo(0.5);
   });
 
   it('addKeyframe: defaults easing to linear', () => {
@@ -645,7 +719,63 @@ describe('keyframeSlice', () => {
     expect(t.rotation.y).toBeCloseTo(360, 5);
   });
 
-  // ─── getInterpolatedEffects ────────────────────────────────────────
+  it('getInterpolatedTransform: allows camera rotation segments to preserve full orbits', () => {
+    const cameraClip = createMockClip({
+      id: 'camera-1',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 10,
+      source: {
+        type: 'camera',
+        naturalDuration: Number.MAX_SAFE_INTEGER,
+        cameraSettings: { fov: 60, near: 0.1, far: 1000 },
+      },
+    });
+    store = createTestTimelineStore({ clips: [cameraClip] });
+
+    store.getState().addKeyframe('camera-1', 'rotation.y', 0, 0);
+    store.getState().addKeyframe('camera-1', 'rotation.y', 360, 10);
+    const firstKeyframe = store.getState().getClipKeyframes('camera-1')[0];
+    expect(firstKeyframe).toBeTruthy();
+    store.getState().updateKeyframe(firstKeyframe!.id, { rotationInterpolation: 'continuous' });
+
+    const t = store.getState().getInterpolatedTransform('camera-1', 5);
+    expect(t.rotation.y).toBeCloseTo(180, 5);
+  });
+
+  it('getInterpolatedCameraSettings: interpolates camera lens keyframes', () => {
+    const cameraClip = createMockClip({
+      id: 'camera-1',
+      source: {
+        type: 'camera',
+        duration: 10,
+        cameraSettings: { fov: 60, near: 0.1, far: 1000 },
+      },
+      duration: 10,
+      outPoint: 10,
+    });
+    store = createTestTimelineStore({ clips: [cameraClip] });
+
+    store.getState().addKeyframe('camera-1', 'camera.fov', 60, 0);
+    store.getState().addKeyframe('camera-1', 'camera.fov', 30, 10);
+    store.getState().addKeyframe('camera-1', 'camera.near', 0.1, 0);
+    store.getState().addKeyframe('camera-1', 'camera.near', 1.1, 10);
+    store.getState().addKeyframe('camera-1', 'camera.far', 1000, 0);
+    store.getState().addKeyframe('camera-1', 'camera.far', 2000, 10);
+    store.getState().addKeyframe('camera-1', 'camera.resolutionWidth', 1920, 0);
+    store.getState().addKeyframe('camera-1', 'camera.resolutionWidth', 1280, 10);
+    store.getState().addKeyframe('camera-1', 'camera.resolutionHeight', 1080, 0);
+    store.getState().addKeyframe('camera-1', 'camera.resolutionHeight', 720, 10);
+
+    const settings = store.getState().getInterpolatedCameraSettings('camera-1', 5);
+    expect(settings.fov).toBeCloseTo(45);
+    expect(settings.near).toBeCloseTo(0.6);
+    expect(settings.far).toBeCloseTo(1500);
+    expect(settings.resolutionWidth).toBe(1600);
+    expect(settings.resolutionHeight).toBe(900);
+  });
+
+    // ─── getInterpolatedEffects ────────────────────────────────────────
 
   it('getInterpolatedEffects: returns empty array for unknown clip', () => {
     const effects = store.getState().getInterpolatedEffects('nonexistent', 0);
@@ -762,6 +892,34 @@ describe('keyframeSlice', () => {
     store.getState().setPropertyValue('clip-1', 'position.x', 100);
     const updatedClip = store.getState().clips.find(c => c.id === 'clip-1')!;
     expect(updatedClip.transform.position.x).toBe(100);
+  });
+
+  it('setPropertyValue: handles camera settings as static or keyed values', () => {
+    const cameraClip = createMockClip({
+      id: 'camera-1',
+      source: {
+        type: 'camera',
+        duration: 10,
+        cameraSettings: { fov: 60, near: 0.1, far: 1000 },
+      },
+      duration: 10,
+      outPoint: 10,
+    });
+    store = createTestTimelineStore({ clips: [cameraClip], playheadPosition: 0 });
+
+    store.getState().setPropertyValue('camera-1', 'camera.fov', 70);
+    expect(store.getState().clips[0]?.source?.cameraSettings?.fov).toBe(70);
+    store.getState().setPropertyValue('camera-1', 'camera.resolutionWidth', 2048.4);
+    expect(store.getState().clips[0]?.source?.cameraSettings?.resolutionWidth).toBe(2048);
+    expect(store.getState().clipKeyframes.get('camera-1')).toBeUndefined();
+
+    store.getState().toggleKeyframeRecording('camera-1', 'camera.fov');
+    store.setState({ playheadPosition: 5 });
+    store.getState().setPropertyValue('camera-1', 'camera.fov', 40);
+
+    const keyframes = store.getState().clipKeyframes.get('camera-1') ?? [];
+    expect(keyframes).toHaveLength(1);
+    expect(keyframes[0]).toMatchObject({ property: 'camera.fov', value: 40, time: 5 });
   });
 
   it('setPropertyValue: handles scale.y as transform update when not recording', () => {

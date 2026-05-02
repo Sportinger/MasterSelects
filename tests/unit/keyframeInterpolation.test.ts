@@ -161,6 +161,32 @@ describe('interpolateKeyframes', () => {
     expect(interpolateKeyframes(kfs, 'rotation.y', 2, 0, { angleMode: 'shortest' })).toBe(10);
   });
 
+  it('lets rotation keyframes override the segment angle path', () => {
+    const continuousKfs = [
+      createMockKeyframe({
+        property: 'rotation.y',
+        time: 0,
+        value: 350,
+        easing: 'linear',
+        rotationInterpolation: 'continuous',
+      }),
+      createMockKeyframe({ property: 'rotation.y', time: 2, value: 10 }),
+    ];
+    const shortestKfs = [
+      createMockKeyframe({
+        property: 'rotation.y',
+        time: 0,
+        value: 350,
+        easing: 'linear',
+        rotationInterpolation: 'shortest',
+      }),
+      createMockKeyframe({ property: 'rotation.y', time: 2, value: 10 }),
+    ];
+
+    expect(interpolateKeyframes(continuousKfs, 'rotation.y', 1, 0, { angleMode: 'shortest' })).toBeCloseTo(180, 5);
+    expect(interpolateKeyframes(shortestKfs, 'rotation.y', 1, 0)).toBeCloseTo(360, 5);
+  });
+
   it('ease-in interpolation: midpoint < 0.5 of range', () => {
     const kfs = [
       createMockKeyframe({ property: 'opacity', time: 0, value: 0, easing: 'ease-in' }),
@@ -292,6 +318,22 @@ describe('getInterpolatedClipTransform', () => {
 
     expect(getInterpolatedClipTransform(kfs, 1, base).rotation.y).toBeCloseTo(180, 5);
     expect(getInterpolatedClipTransform(kfs, 1, base, { rotationMode: 'shortest' }).rotation.y).toBeCloseTo(360, 5);
+  });
+
+  it('preserves deliberate camera revolutions when the segment is continuous', () => {
+    const base = createMockTransform();
+    const kfs: Keyframe[] = [
+      createMockKeyframe({
+        property: 'rotation.y',
+        time: 0,
+        value: 0,
+        easing: 'linear',
+        rotationInterpolation: 'continuous',
+      }),
+      createMockKeyframe({ property: 'rotation.y', time: 2, value: 360 }),
+    ];
+
+    expect(getInterpolatedClipTransform(kfs, 1, base, { rotationMode: 'shortest' }).rotation.y).toBeCloseTo(180, 5);
   });
 
   it('blendMode is always from baseTransform (not animatable)', () => {

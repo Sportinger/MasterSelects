@@ -71,6 +71,7 @@ type NativeHelperJsonMessage = JsonObject & {
 };
 type ProgressLikeResponse = Response & {
   type?: string;
+  job_id?: string;
   percent?: number;
   speed?: string;
   eta?: string;
@@ -100,6 +101,11 @@ class NativeHelperClientImpl {
   private pendingRequests = new Map<string, ResponseCallback>();
   private progressCallbacks = new Map<string, (percent: number, speed?: string) => void>();
   private frameCallbacks = new Map<string, FrameCallback>();
+  private activeMatAnyoneMatte: {
+    id: string;
+    timeout: ReturnType<typeof setTimeout>;
+    reject: (error: Error) => void;
+  } | null = null;
   private statusListeners = new Set<(status: ConnectionStatus) => void>();
   private reconnectTimer: number | null = null;
   private wasEverConnected = false;
@@ -1228,25 +1234,38 @@ class NativeHelperClientImpl {
     maskPath: string,
     outputDir: string,
     options?: { startFrame?: number; endFrame?: number },
-    onProgress?: (currentFrame: number, totalFrames: number, percent: number) => void,
+    onProgress?: (currentFrame: number, totalFrames: number, percent: number, jobId?: string) => void,
   ): Promise<MatAnyoneMatteResult> {
     const id = this.nextId();
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
+        if (this.activeMatAnyoneMatte?.id === id) {
+          this.activeMatAnyoneMatte = null;
+        }
         reject(new Error('Matting timeout'));
       }, 600000); // 10 minutes
+
+      this.activeMatAnyoneMatte = { id, timeout, reject };
 
       this.pendingRequests.set(id, (response: ProgressLikeResponse) => {
         if (response.type === 'progress') {
           if (onProgress) {
-            onProgress(response.current_frame ?? 0, response.total_frames ?? 0, response.percent ?? 0);
+            onProgress(
+              response.current_frame ?? 0,
+              response.total_frames ?? 0,
+              response.percent ?? 0,
+              response.job_id,
+            );
           }
           return;
         }
 
         clearTimeout(timeout);
+        if (this.activeMatAnyoneMatte?.id === id) {
+          this.activeMatAnyoneMatte = null;
+        }
         if (response.ok) {
           resolve({
             foreground_path: okField<string>(response, 'foreground_path') ?? '',
@@ -1276,6 +1295,9 @@ class NativeHelperClientImpl {
       this.sendRaw(JSON.stringify(cmd)).catch((err) => {
         clearTimeout(timeout);
         this.pendingRequests.delete(id);
+        if (this.activeMatAnyoneMatte?.id === id) {
+          this.activeMatAnyoneMatte = null;
+        }
         reject(err);
       });
     });
@@ -1286,7 +1308,18 @@ class NativeHelperClientImpl {
    */
   async matanyoneCancel(jobId: string): Promise<void> {
     const id = this.nextId();
-    await this.send({ cmd: 'mat_anyone_cancel', id, job_id: jobId });
+    const response = await this.send({ cmd: 'mat_anyone_cancel', id, job_id: jobId });
+    if (!response.ok) {
+      throw new Error(getErrorMessage(response, 'Failed to cancel MatAnyone2 job'));
+    }
+
+    const active = this.activeMatAnyoneMatte;
+    if (active) {
+      clearTimeout(active.timeout);
+      this.pendingRequests.delete(active.id);
+      this.activeMatAnyoneMatte = null;
+      active.reject(new Error('Matte job cancelled'));
+    }
   }
 
   /**

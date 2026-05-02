@@ -7,6 +7,7 @@ import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
 import type { TextureManager } from '../../src/engine/texture/TextureManager';
 import type { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
 import type { Layer, TimelineClip, TimelineTrack } from '../../src/types';
+import { DEFAULT_PRIMARY_COLOR_PARAMS } from '../../src/types';
 import {
   getSharedSceneDefaultCameraDistance,
   resolveRenderableSharedSceneCamera,
@@ -73,6 +74,7 @@ function createRuntimeColorGrade(): NonNullable<Layer['colorCorrection']> {
     graphHash: 'nested-grade-1',
     nodeIds: ['node_primary'],
     primary: {
+      ...DEFAULT_PRIMARY_COLOR_PARAMS,
       exposure: 0.2,
       contrast: 1.15,
       pivot: 0.5,
@@ -88,7 +90,6 @@ function createRuntimeColorGrade(): NonNullable<Layer['colorCorrection']> {
       offset: 0,
       shadows: 0,
       highlights: 0,
-      hue: 0,
     },
     primaryNodes: [],
     diagnostics: [],

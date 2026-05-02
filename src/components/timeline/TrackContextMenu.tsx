@@ -59,6 +59,16 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
     onClose();
   };
 
+  const handleAddMathScene = () => {
+    if (menu.trackType !== 'video') return;
+    const { playheadPosition, addMathSceneClip, selectClip } = useTimelineStore.getState();
+    const clipId = addMathSceneClip(menu.trackId, playheadPosition);
+    if (clipId) {
+      selectClip(clipId);
+    }
+    onClose();
+  };
+
   const handleDeleteTrack = () => {
     useTimelineStore.getState().removeTrack(menu.trackId);
     onClose();
@@ -88,6 +98,14 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
       <div className="context-menu-item" onClick={handleAddAudioTrack}>
         + Add Audio Track
       </div>
+      {menu.trackType === 'video' && (
+        <>
+          <div className="context-menu-separator" />
+          <div className="context-menu-item" onClick={handleAddMathScene}>
+            + Add Math Scene
+          </div>
+        </>
+      )}
       <div className="context-menu-separator" />
       <div className="context-menu-item" onClick={handleDuplicateTrack}>
         Duplicate Track

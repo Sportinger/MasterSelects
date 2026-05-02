@@ -1,4 +1,6 @@
 import type { Keyframe, EasingType, AnimatableProperty, ClipTransform, BezierHandle } from '../types';
+import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../stores/mediaStore/types';
+import { clampCameraFov } from './cameraLens';
 import { normalizeEasingType } from './easing';
 
 // Preset easing functions (for non-bezier easing types)
@@ -36,6 +38,27 @@ export function getShortestAngleDeltaDegrees(from: number, to: number): number {
 
 export function interpolateAngleDegrees(from: number, to: number, t: number): number {
   return from + getShortestAngleDeltaDegrees(from, to) * t;
+}
+
+function isRotationProperty(property: AnimatableProperty): boolean {
+  return property.startsWith('rotation.');
+}
+
+function getSegmentAngleMode(
+  prevKey: Keyframe,
+  property: AnimatableProperty,
+  options?: KeyframeInterpolationOptions,
+): 'linear' | 'shortest' {
+  if (!isRotationProperty(property)) {
+    return 'linear';
+  }
+  if (prevKey.rotationInterpolation === 'shortest') {
+    return 'shortest';
+  }
+  if (prevKey.rotationInterpolation === 'continuous') {
+    return 'linear';
+  }
+  return options?.angleMode === 'shortest' ? 'shortest' : 'linear';
 }
 
 /**
@@ -130,6 +153,24 @@ export function interpolateBezier(
   return prevKey.value + valueDelta * easedT;
 }
 
+export function interpolateKeyframeProgress(
+  prevKey: Keyframe,
+  nextKey: Keyframe,
+  t: number,
+): number {
+  const easing = normalizeEasingType(prevKey.easing, 'linear');
+
+  if (easing === 'bezier' || prevKey.handleOut || nextKey.handleIn) {
+    return interpolateBezier(
+      { ...prevKey, value: 0 },
+      { ...nextKey, value: 1 },
+      t,
+    );
+  }
+
+  return easingFunctions[easing](t);
+}
+
 /**
  * Convert a preset easing type to bezier handles for a specific keyframe segment.
  * Useful when user wants to customize an existing preset.
@@ -197,7 +238,8 @@ export function interpolateKeyframes(
 
   // Use bezier interpolation if easing is 'bezier' or if keyframe has custom handles
   const easing = normalizeEasingType(prevKey.easing, 'linear');
-  const nextValue = options?.angleMode === 'shortest'
+  const angleMode = getSegmentAngleMode(prevKey, property, options);
+  const nextValue = angleMode === 'shortest'
     ? prevKey.value + getShortestAngleDeltaDegrees(prevKey.value, nextKey.value)
     : nextKey.value;
   const valueDelta = nextValue - prevKey.value;
@@ -248,6 +290,49 @@ export function getInterpolatedClipTransform(
       z: interpolateKeyframes(keyframes, 'rotation.z', time, baseTransform.rotation.z, rotationOptions),
     },
   };
+}
+
+export function getInterpolatedClipCameraSettings(
+  keyframes: Keyframe[],
+  time: number,
+  baseSettings: SceneCameraSettings,
+): SceneCameraSettings {
+  if (!keyframes.some((keyframe) => keyframe.property.startsWith('camera.'))) {
+    return baseSettings;
+  }
+
+  const fov = clampCameraFov(interpolateKeyframes(
+    keyframes,
+    'camera.fov',
+    time,
+    baseSettings.fov,
+  ));
+  const near = Math.max(0.001, interpolateKeyframes(
+    keyframes,
+    'camera.near',
+    time,
+    baseSettings.near,
+  ));
+  const far = Math.max(near + 0.1, interpolateKeyframes(
+    keyframes,
+    'camera.far',
+    time,
+    baseSettings.far,
+  ));
+  const resolutionWidth = Math.max(1, Math.round(interpolateKeyframes(
+    keyframes,
+    'camera.resolutionWidth',
+    time,
+    baseSettings.resolutionWidth ?? DEFAULT_SCENE_CAMERA_SETTINGS.resolutionWidth ?? 1920,
+  )));
+  const resolutionHeight = Math.max(1, Math.round(interpolateKeyframes(
+    keyframes,
+    'camera.resolutionHeight',
+    time,
+    baseSettings.resolutionHeight ?? DEFAULT_SCENE_CAMERA_SETTINGS.resolutionHeight ?? 1080,
+  )));
+
+  return { ...baseSettings, fov, near, far, resolutionWidth, resolutionHeight };
 }
 
 // Check if a property has keyframes

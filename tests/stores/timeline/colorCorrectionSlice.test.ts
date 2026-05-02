@@ -77,6 +77,63 @@ describe('colorCorrectionSlice', () => {
     expect(clip.colorCorrection?.activeVersionId).toBe('version_main');
   });
 
+  it('adds wheels nodes and compiles flat lift gamma gain values', () => {
+    const wheelsNodeId = store.getState().addColorNode('clip-1', 'wheels');
+    const gainRProperty = createColorProperty('version_main', wheelsNodeId, 'gainR');
+    const gainBProperty = createColorProperty('version_main', wheelsNodeId, 'gainB');
+
+    store.getState().setPropertyValue('clip-1', gainRProperty, 1.4);
+    store.getState().setPropertyValue('clip-1', gainBProperty, 0.8);
+
+    const clip = store.getState().clips.find(candidate => candidate.id === 'clip-1')!;
+    const version = clip.colorCorrection!.versions[0];
+    const wheelsNode = version.nodes.find(node => node.id === wheelsNodeId);
+    const grade = store.getState().getInterpolatedColorCorrection('clip-1', 0);
+
+    expect(version.nodes.map(node => node.type)).toEqual(['input', 'primary', 'wheels', 'output']);
+    expect(wheelsNode?.type).toBe('wheels');
+    expect(wheelsNode?.params.gainR).toBe(1.4);
+    expect(wheelsNode?.params.gainB).toBe(0.8);
+    expect(grade?.nodeIds).toEqual([wheelsNodeId]);
+    expect(grade?.primaryNodes[0].gainR).toBeCloseTo(1.4);
+    expect(grade?.primaryNodes[0].gainB).toBeCloseTo(0.8);
+    expect(grade?.primary.gainR).toBeCloseTo(1.4);
+  });
+
+  it('interpolates wheels keyframes through the color runtime grade', () => {
+    const wheelsNodeId = store.getState().addColorNode('clip-1', 'wheels');
+    const property = createColorProperty('version_main', wheelsNodeId, 'gammaG');
+
+    store.getState().addKeyframe('clip-1', property, 1, 0);
+    store.getState().addKeyframe('clip-1', property, 1.8, 10);
+
+    const grade = store.getState().getInterpolatedColorCorrection('clip-1', 5);
+
+    expect(grade?.nodeIds).toEqual([wheelsNodeId]);
+    expect(grade?.primaryNodes[0].gammaG).toBeCloseTo(1.4);
+  });
+
+  it('removeColorNode removes wheel keyframes and recording state', () => {
+    const wheelsNodeId = store.getState().addColorNode('clip-1', 'wheels');
+    const property = createColorProperty('version_main', wheelsNodeId, 'liftR');
+
+    store.getState().addKeyframe('clip-1', property, 0.2, 1);
+    store.getState().addKeyframe('clip-1', 'opacity', 0.7, 1);
+    store.setState({
+      keyframeRecordingEnabled: new Set([
+        `clip-1:${property}`,
+        'clip-1:opacity',
+      ]),
+    });
+
+    store.getState().removeColorNode('clip-1', wheelsNodeId);
+
+    const remainingKeyframes = store.getState().clipKeyframes.get('clip-1') ?? [];
+    expect(remainingKeyframes.map(keyframe => keyframe.property)).toEqual(['opacity']);
+    expect(store.getState().keyframeRecordingEnabled.has(`clip-1:${property}`)).toBe(false);
+    expect(store.getState().keyframeRecordingEnabled.has('clip-1:opacity')).toBe(true);
+  });
+
   it('stores the color workspace viewport without touching graph data', () => {
     store.getState().setColorWorkspaceViewport('clip-1', { x: 120, y: -48, zoom: 1 });
 

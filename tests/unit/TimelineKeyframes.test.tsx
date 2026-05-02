@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { RefObject } from 'react';
 import { TimelineKeyframes } from '../../src/components/timeline/TimelineKeyframes';
 import type { TimelineKeyframesProps } from '../../src/components/timeline/types';
+import type { AnimatableProperty, Keyframe } from '../../src/types';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
 
 describe('TimelineKeyframes', () => {
@@ -23,17 +24,23 @@ describe('TimelineKeyframes', () => {
     onKeyframeRowHover = vi.fn(),
     onMoveKeyframe = vi.fn(),
     onToggleCurveExpanded = vi.fn(),
+    property = 'opacity',
+    clip: providedClip,
+    keyframes: providedKeyframes,
   }: {
     isRowHovered?: boolean;
     onKeyframeRowHover?: ReturnType<typeof vi.fn>;
     onMoveKeyframe?: ReturnType<typeof vi.fn>;
     onToggleCurveExpanded?: ReturnType<typeof vi.fn>;
+    property?: AnimatableProperty;
+    clip?: TimelineKeyframesProps['clips'][0];
+    keyframes?: Keyframe[];
   } = {}) {
-    const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
+    const clip = providedClip ?? createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
     const leftKeyframe = createMockKeyframe({
       id: 'kf-left',
       clipId: clip.id,
-      property: 'opacity',
+      property,
       time: 1,
       value: 0.25,
       easing: 'linear',
@@ -41,18 +48,19 @@ describe('TimelineKeyframes', () => {
     const rightKeyframe = createMockKeyframe({
       id: 'kf-right',
       clipId: clip.id,
-      property: 'opacity',
+      property,
       time: 4,
       value: 0.75,
       easing: 'ease-in',
     });
-    const clipKeyframes: TimelineKeyframesProps['clipKeyframes'] = new Map([[clip.id, [leftKeyframe, rightKeyframe]]]);
+    const keyframes = providedKeyframes ?? [leftKeyframe, rightKeyframe];
+    const clipKeyframes: TimelineKeyframesProps['clipKeyframes'] = new Map([[clip.id, keyframes]]);
     const onUpdateKeyframe = vi.fn();
 
     const renderResult = render(
       <TimelineKeyframes
         trackId="video-1"
-        property="opacity"
+        property={property}
         clips={[clip]}
         selectedKeyframeIds={new Set()}
         clipKeyframes={clipKeyframes}
@@ -88,6 +96,55 @@ describe('TimelineKeyframes', () => {
     fireEvent.click(screen.getByText('Ease Out'));
 
     expect(onUpdateKeyframe).toHaveBeenCalledWith(leftKeyframe.id, { easing: 'ease-out' });
+  });
+
+  it('shows rotation path letters and edits the visible incoming rotation segment', () => {
+    const clip = createMockClip({
+      id: 'camera-clip',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 5,
+      source: {
+        type: 'camera',
+        naturalDuration: 10,
+        cameraSettings: {
+          fov: 60,
+          near: 0.1,
+          far: 1000,
+        },
+      },
+    });
+    const firstKeyframe = createMockKeyframe({
+      id: 'camera-ry-start',
+      clipId: clip.id,
+      property: 'rotation.y',
+      time: 1,
+      value: 0,
+      easing: 'linear',
+      rotationInterpolation: 'continuous',
+    });
+    const secondKeyframe = createMockKeyframe({
+      id: 'camera-ry-end',
+      clipId: clip.id,
+      property: 'rotation.y',
+      time: 4,
+      value: 360,
+      easing: 'linear',
+    });
+    const { container, onUpdateKeyframe } = renderKeyframes({
+      property: 'rotation.y',
+      clip,
+      keyframes: [firstKeyframe, secondKeyframe],
+    });
+
+    const labels = Array.from(container.querySelectorAll('.keyframe-rotation-path-label'));
+    expect(labels.map(label => label.textContent)).toEqual(['C']);
+
+    const diamonds = container.querySelectorAll('.keyframe-diamond');
+    fireEvent.contextMenu(diamonds[0], { clientX: 80, clientY: 40 });
+    fireEvent.click(screen.getByText('Shortest Path'));
+
+    expect(onUpdateKeyframe).toHaveBeenCalledWith(firstKeyframe.id, { rotationInterpolation: 'shortest' });
   });
 
   it('highlights every visible keyframe when its property row is hovered', () => {

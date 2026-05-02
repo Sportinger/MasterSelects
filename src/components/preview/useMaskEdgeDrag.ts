@@ -2,8 +2,34 @@
 
 import { useRef, useCallback } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
-import type { ClipMask, TimelineClip } from '../../types';
+import { createMaskPathProperty, type ClipMask, type MaskPathKeyframeValue, type MaskVertex, type TimelineClip } from '../../types';
 import { startBatch, endBatch } from '../../stores/historyStore';
+
+function buildPathValueWithVertexUpdates(
+  mask: ClipMask,
+  vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>,
+): MaskPathKeyframeValue {
+  const updatesById = new Map(vertexUpdates.map(({ id, updates }) => [id, updates]));
+  return {
+    closed: mask.closed,
+    vertices: mask.vertices.map(vertex => {
+      const updates = updatesById.get(vertex.id);
+      const nextVertex = updates ? { ...vertex, ...updates } : vertex;
+      return {
+        ...nextVertex,
+        handleIn: updates?.handleIn ? { ...updates.handleIn } : { ...vertex.handleIn },
+        handleOut: updates?.handleOut ? { ...updates.handleOut } : { ...vertex.handleOut },
+      };
+    }),
+  };
+}
+
+function recordPathIfAnimated(clipId: string, mask: ClipMask, vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>): void {
+  const store = useTimelineStore.getState();
+  const property = createMaskPathProperty(mask.id);
+  if (!store.isRecording(clipId, property) && !store.hasKeyframes(clipId, property)) return;
+  store.addMaskPathKeyframe(clipId, mask.id, buildPathValueWithVertexUpdates(mask, vertexUpdates));
+}
 
 export function useMaskEdgeDrag(
   svgRef: React.RefObject<SVGSVGElement | null>,
@@ -74,15 +100,18 @@ export function useMaskEdgeDrag(
       const newBx = Math.max(0, Math.min(1, vertexB.x + dx));
       const newBy = Math.max(0, Math.min(1, vertexB.y + dy));
 
+      const vertexUpdates = [
+        { id: vertexA.id, updates: { x: newAx, y: newAy } },
+        { id: vertexB.id, updates: { x: newBx, y: newBy } },
+      ];
+
       useTimelineStore.getState().updateVertices(
         selectedClip.id,
         activeMask.id,
-        [
-          { id: vertexA.id, updates: { x: newAx, y: newAy } },
-          { id: vertexB.id, updates: { x: newBx, y: newBy } },
-        ],
+        vertexUpdates,
         true
       );
+      recordPathIfAnimated(selectedClip.id, activeMask, vertexUpdates);
     };
 
     const handleMouseUp = () => {

@@ -1,7 +1,8 @@
 import type { ClipTransform, Keyframe, TimelineClip, TimelineTrack } from '../../types';
 import type { SceneCameraConfig } from './types';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
-import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
+import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../stores/mediaStore/types';
+import { getInterpolatedClipCameraSettings, getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { composeTransforms } from '../../utils/transformComposition';
 
 export interface SceneTimelineContext {
@@ -67,4 +68,21 @@ export function resolveSceneClipTransform(
     context,
   );
   return composeTransforms(parentTransform, ownTransform);
+}
+
+export function resolveSceneClipCameraSettings(
+  clip: TimelineClip,
+  clipLocalTime: number,
+  context: Pick<SceneTimelineContext, 'clipKeyframes'>,
+): SceneCameraSettings {
+  if (clip.source?.type !== 'camera') {
+    return { ...DEFAULT_SCENE_CAMERA_SETTINGS };
+  }
+
+  const baseSettings: SceneCameraSettings = {
+    ...DEFAULT_SCENE_CAMERA_SETTINGS,
+    ...clip.source.cameraSettings,
+  };
+  const keyframes = context.clipKeyframes?.get(clip.id) ?? [];
+  return getInterpolatedClipCameraSettings(keyframes, clipLocalTime, baseSettings);
 }

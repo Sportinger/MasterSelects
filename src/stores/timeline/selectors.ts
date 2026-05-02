@@ -159,6 +159,7 @@ export const selectClipActions = (state: TimelineStore) => ({
   addCompClip: state.addCompClip,
   addTextClip: state.addTextClip,
   addSolidClip: state.addSolidClip,
+  addMathSceneClip: state.addMathSceneClip,
   updateSolidColor: state.updateSolidColor,
   moveClip: state.moveClip,
   trimClip: state.trimClip,
@@ -176,6 +177,7 @@ export const selectClipActions = (state: TimelineStore) => ({
 // Transform/interpolation getters (stable functions)
 export const selectTransformGetters = (state: TimelineStore) => ({
   getInterpolatedTransform: state.getInterpolatedTransform,
+  getInterpolatedCameraSettings: state.getInterpolatedCameraSettings,
   getInterpolatedEffects: state.getInterpolatedEffects,
   getInterpolatedVectorAnimationSettings: state.getInterpolatedVectorAnimationSettings,
   getInterpolatedSpeed: state.getInterpolatedSpeed,

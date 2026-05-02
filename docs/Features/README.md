@@ -39,7 +39,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | [Timeline](./Timeline.md) | Tracks, clips, nested comps, markers, selection, and editing flow |
 | [Slot Grid](./Slot-Grid.md) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |
-| [Keyframes](./Keyframes.md) | Animated properties, effect params, fades, easing, and visibility rules |
+| [Keyframes](./Keyframes.md) | Animated properties, effect params, masks, fades, easing, and visibility rules |
 | [Preview](./Preview.md) | Main preview, source monitor, output windows, RAM preview, and target routing |
 | [UI Panels](./UI-Panels.md) | Dock layout, panel catalog, properties tabs, mobile UI, and workspace surfaces |
 | [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Current shortcut registry, playback controls, and preset behavior |
@@ -52,7 +52,8 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
 | [Effects](./Effects.md) | Current effect registry, categories, quality controls, and inline effect behavior |
 | [Color Correction](./Color-Correction.md) | Planned node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
-| [Masks](./Masks.md) | Overlay mask editing, feathering, stored modes, and current limitations |
+| [Professional Color Correction Plan](./Color-Correction-Professional-Plan.md) | Tactical roadmap for wheels, curves, LUTs, secondaries, float precision, scopes, compare, and presets |
+| [Masks](./Masks.md) | Overlay mask editing, whole-path keyframes, feathering, and stored modes |
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Vector Animation](./Vector-Animation.md) | Lottie import, runtime playback, bounce modes, state-machine keyframes, and export behavior |

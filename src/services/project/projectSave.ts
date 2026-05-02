@@ -239,6 +239,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       textProperties: c.textProperties || undefined,
       // Solid clip support
       solidColor: c.solidColor || undefined,
+      // Math scene clip support
+      mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
       vectorAnimationSettings: c.source?.vectorAnimationSettings || c.vectorAnimationSettings || undefined,
       // Transcript data
       transcript: c.transcript || undefined,

@@ -7,7 +7,7 @@ import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
 import { TextTab } from '../TextTab';
 
 // Tab type
-type PropertiesTab = 'transform' | 'color' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip';
+type PropertiesTab = 'transform' | 'color' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
@@ -18,11 +18,11 @@ const TranscriptTab = lazy(() => import('./TranscriptTab').then(m => ({ default:
 const AnalysisTab = lazy(() => import('./AnalysisTab').then(m => ({ default: m.AnalysisTab })));
 const BlendshapesTab = lazy(() => import('./BlendshapesTab').then(m => ({ default: m.BlendshapesTab })));
 const GaussianSplatTab = lazy(() => import('./GaussianSplatTab').then(m => ({ default: m.GaussianSplatTab })));
-const CameraTab = lazy(() => import('./CameraTab').then(m => ({ default: m.CameraTab })));
 const SplatEffectorTab = lazy(() => import('./SplatEffectorTab').then(m => ({ default: m.SplatEffectorTab })));
 const ThreeDTextTab = lazy(() => import('./ThreeDTextTab').then(m => ({ default: m.ThreeDTextTab })));
 const LottieTab = lazy(() => import('./LottieTab').then(m => ({ default: m.LottieTab })));
 const SlotClipTab = lazy(() => import('./SlotClipTab').then(m => ({ default: m.SlotClipTab })));
+const MathSceneTab = lazy(() => import('./MathSceneTab').then(m => ({ default: m.MathSceneTab })));
 
 // Tab loading fallback
 function TabLoading() {
@@ -44,7 +44,7 @@ export function PropertiesPanel() {
   const selectSlotComposition = useMediaStore(state => state.selectSlotComposition) as (compositionId: string | null) => void;
   const ensureSlotClipSettings = useMediaStore(state => state.ensureSlotClipSettings) as (compositionId: string, duration: number) => void;
   // Actions from getState() - stable, no subscription needed
-  const { getInterpolatedTransform, getInterpolatedSpeed } = useTimelineStore.getState();
+  const { getInterpolatedTransform, getInterpolatedCameraSettings, getInterpolatedSpeed } = useTimelineStore.getState();
   const [activeTab, setActiveTab] = useState<PropertiesTab>('transform');
   const [lastClipId, setLastClipId] = useState<string | null>(null);
   const pendingTabRef = useRef<PropertiesTab | null>(null);
@@ -69,6 +69,7 @@ export function PropertiesPanel() {
 
   // Check if it's a solid clip
   const isSolidClip = selectedClip?.source?.type === 'solid';
+  const isMathSceneClip = selectedClip?.source?.type === 'math-scene';
   const isLottieClip = selectedClip?.source?.type === 'lottie';
   const selectedMeshType = selectedClip?.meshType ?? selectedClip?.source?.meshType;
   const is3DTextClip = selectedClip?.source?.type === 'model' && selectedMeshType === 'text3d';
@@ -112,6 +113,12 @@ export function PropertiesPanel() {
     }
   }, [activeTab, isSlotMode]);
 
+  useEffect(() => {
+    if (isCameraClip && activeTab === 'camera') {
+      setActiveTab('transform');
+    }
+  }, [activeTab, isCameraClip]);
+
   // Reset tab when switching between audio/video/text/solid clips
   useEffect(() => {
     if (isSlotMode) {
@@ -139,6 +146,8 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       } else if (isGaussianSplat) {
         setActiveTab('transform');
+      } else if (isMathSceneClip) {
+        setActiveTab('math');
       } else if (isSolidClip) {
         setActiveTab('transform');
       } else if (is3DTextClip) {
@@ -154,6 +163,7 @@ export function PropertiesPanel() {
         (
           activeTab === 'text' ||
           activeTab === '3d-text' ||
+          (!isMathSceneClip && activeTab === 'math') ||
           (!isGaussianAvatar && activeTab === 'blendshapes') ||
           (!isGaussianSplat && activeTab === 'gaussian-splat') ||
           (!isCameraClip && activeTab === 'camera') ||
@@ -164,16 +174,17 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       }
     }
-  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isSolidClip, isLottieClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastClipId, activeTab]);
+  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isMathSceneClip, isSolidClip, isLottieClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastClipId, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
     const handler = (e: Event) => {
       const tab = (e as CustomEvent).detail?.tab as PropertiesTab;
       if (!tab) return;
+      const requestedTab = tab === 'camera' ? 'transform' : tab;
       // Store as pending so clip-switch effect doesn't override it
-      pendingTabRef.current = tab;
-      setActiveTab(tab);
+      pendingTabRef.current = requestedTab;
+      setActiveTab(requestedTab);
     };
     window.addEventListener('openPropertiesTab', handler);
     return () => window.removeEventListener('openPropertiesTab', handler);
@@ -228,6 +239,9 @@ export function PropertiesPanel() {
   // ensuring getInterpolatedTransform returns fresh values
   const hasKeyframes = clipKeyframes.has(selectedClip.id);
   const transform = getInterpolatedTransform(selectedClip.id, clipLocalTime);
+  const cameraSettings = isCameraClip
+    ? getInterpolatedCameraSettings(selectedClip.id, clipLocalTime)
+    : undefined;
   const interpolatedSpeed = getInterpolatedSpeed(selectedClip.id, clipLocalTime);
 
   // Count non-audio effects for badge
@@ -265,7 +279,18 @@ export function PropertiesPanel() {
         ) : isCameraClip ? (
           <>
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
-            <button className={`tab-btn ${activeTab === 'camera' ? 'active' : ''}`} onClick={() => setActiveTab('camera')}>Camera</button>
+          </>
+        ) : isMathSceneClip ? (
+          <>
+            <button className={`tab-btn ${activeTab === 'math' ? 'active' : ''}`} onClick={() => setActiveTab('math')}>Math</button>
+            <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
+            <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
+              Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+            </button>
+            <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} onClick={() => setActiveTab('masks')}>
+              Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
+            </button>
           </>
         ) : isTextClip ? (
           <>
@@ -348,9 +373,11 @@ export function PropertiesPanel() {
           {activeTab === 'lottie' && isLottieClip && (
             <LottieTab clipId={selectedClip.id} />
           )}
-          {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} is3D={selectedClip.is3D} hasKeyframes={hasKeyframes} />}
+          {activeTab === 'math' && isMathSceneClip && selectedClip.mathScene && (
+            <MathSceneTab clipId={selectedClip.id} mathScene={selectedClip.mathScene} />
+          )}
+          {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} is3D={selectedClip.is3D} hasKeyframes={hasKeyframes} cameraSettings={cameraSettings} />}
           {activeTab === 'color' && !isAudioClip && !isCameraClip && !isSplatEffectorClip && <ColorTab clipId={selectedClip.id} />}
-          {activeTab === 'camera' && isCameraClip && <CameraTab clipId={selectedClip.id} />}
           {activeTab === 'blendshapes' && isGaussianAvatar && <BlendshapesTab clipId={selectedClip.id} />}
           {activeTab === 'gaussian-splat' && isGaussianSplat && <GaussianSplatTab clipId={selectedClip.id} />}
           {activeTab === 'splat-effector' && isSplatEffectorClip && <SplatEffectorTab clipId={selectedClip.id} />}

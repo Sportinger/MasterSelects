@@ -1,9 +1,9 @@
 import type { ColorCorrectionState, ColorNode, ColorParamValue, ColorViewMode } from '../../types';
 import {
   cloneColorCorrectionState,
+  createColorNode,
   createColorNodeId,
   createDefaultColorCorrectionState,
-  createPrimaryColorNode,
   ensureColorCorrectionState,
   getActiveColorVersion,
   setColorNodeParamValue,
@@ -177,9 +177,7 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
 
   addColorNode: (clipId, type = 'primary') => {
     const nodeId = createColorNodeId('color');
-    const node: ColorNode = type === 'primary'
-      ? createPrimaryColorNode(nodeId, 'Primary')
-      : createPrimaryColorNode(nodeId, 'Primary');
+    const node: ColorNode = createColorNode(type, nodeId);
 
     get().updateColorCorrection(clipId, current => {
       const activeVersion = getActiveColorVersion(current);
@@ -266,7 +264,7 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
       }
 
       const selectedNodeId = current.ui.selectedNodeId === nodeId
-        ? remainingNodes.find(candidate => candidate.type === 'primary')?.id
+        ? remainingNodes.find(candidate => candidate.type !== 'input' && candidate.type !== 'output')?.id
         : current.ui.selectedNodeId;
 
       return {
@@ -421,8 +419,8 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
       versions: current.versions.map(version => ({
         ...version,
         nodes: version.nodes.map(node =>
-          node.id === nodeId && node.type === 'primary'
-            ? { ...node, params: createPrimaryColorNode(node.id, node.name).params }
+          node.id === nodeId && node.type !== 'input' && node.type !== 'output'
+            ? { ...node, params: createColorNode(node.type, node.id, node.name).params }
             : node
         ),
       })),
@@ -499,7 +497,7 @@ export const createColorCorrectionSlice: SliceCreator<ColorCorrectionActions> = 
         versions,
         ui: {
           ...current.ui,
-          selectedNodeId: nextActiveVersion.nodes.find(node => node.type === 'primary')?.id,
+          selectedNodeId: nextActiveVersion.nodes.find(node => node.type !== 'input' && node.type !== 'output')?.id,
         },
       };
     });

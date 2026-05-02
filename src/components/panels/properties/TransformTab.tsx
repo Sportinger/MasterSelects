@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../../stores/mediaStore/types';
 import {
   CAMERA_POSE_TRANSFORM_PROPERTIES,
   buildCameraTransformPatchFromUpdates,
@@ -26,6 +27,35 @@ import {
 } from './shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from './sharedConstants';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
+import {
+  MAX_CAMERA_FOV_DEGREES,
+  MIN_CAMERA_FOV_DEGREES,
+  clampCameraFov,
+  fovToFullFrameFocalLengthMm,
+  fullFrameFocalLengthMmToFov,
+} from '../../../utils/cameraLens';
+
+const CAMERA_TRANSFORM_KEYFRAME_PROPERTIES: AnimatableProperty[] = [
+  'camera.fov',
+  'camera.near',
+  'camera.far',
+  'camera.resolutionWidth',
+  'camera.resolutionHeight',
+  'position.x',
+  'position.y',
+  'position.z',
+  'rotation.x',
+  'rotation.y',
+  'rotation.z',
+];
+
+const CAMERA_RESET_KEYFRAME_PROPERTIES: AnimatableProperty[] = [
+  ...CAMERA_TRANSFORM_KEYFRAME_PROPERTIES,
+  'scale.all',
+  'scale.x',
+  'scale.y',
+  'scale.z',
+];
 
 interface TransformTabProps {
   clipId: string;
@@ -39,6 +69,7 @@ interface TransformTabProps {
   speed?: number;
   is3D?: boolean;
   hasKeyframes?: boolean;
+  cameraSettings?: SceneCameraSettings;
 }
 
 function LabeledValue({
@@ -107,8 +138,69 @@ function RotationValue({ label, degrees, onChange, onDragStart, onDragEnd, midiT
   );
 }
 
-export function TransformTab({ clipId, transform, speed = 1, is3D = false }: TransformTabProps) {
-  const { setPropertyValue, updateClipTransform, toggle3D, updateClip, hasKeyframes, isRecording, addKeyframe } = useTimelineStore.getState();
+function SetAllKeyframesIcon() {
+  return (
+    <svg className="scene-nav-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M4 2.5 6.4 5 4 7.5 1.6 5 4 2.5Z" />
+      <path d="M4 8.5 6.4 11 4 13.5 1.6 11 4 8.5Z" />
+      <path d="M10 2.5 12.4 5 10 7.5 7.6 5 10 2.5Z" />
+      <path d="M12 9.2v5.2M9.4 11.8h5.2" />
+    </svg>
+  );
+}
+
+function FpsModeIcon() {
+  return (
+    <svg className="scene-nav-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M3 6V3h3" />
+      <path d="M10 3h3v3" />
+      <path d="M13 10v3h-3" />
+      <path d="M6 13H3v-3" />
+      <path d="M8 5.2v5.6" />
+      <path d="M5.2 8h5.6" />
+    </svg>
+  );
+}
+
+function NoKeyframesIcon() {
+  return (
+    <svg className="scene-nav-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M6.4 2.8 10.2 6.6 6.4 10.4 2.6 6.6 6.4 2.8Z" />
+      <path d="M2.4 13.6 13.6 2.4" />
+      <path d="M11.2 10.8h3.2" />
+      <path d="M12.8 9.2v3.2" />
+    </svg>
+  );
+}
+
+function ResetAllIcon() {
+  return (
+    <svg className="scene-nav-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M12.8 5.4A5 5 0 1 0 13 10" />
+      <path d="M12.8 2.2v3.2H9.6" />
+    </svg>
+  );
+}
+
+export function TransformTab({
+  clipId,
+  transform,
+  speed = 1,
+  is3D = false,
+  cameraSettings: cameraSettingsOverride,
+}: TransformTabProps) {
+  const {
+    setPropertyValue,
+    updateClipTransform,
+    toggle3D,
+    updateClip,
+    hasKeyframes,
+    isRecording,
+    addKeyframe,
+    removeKeyframe,
+    getClipKeyframes,
+    toggleKeyframeRecording,
+  } = useTimelineStore.getState();
   const sceneNavFpsMode = useEngineStore(selectSceneNavFpsMode);
   const sceneNavFpsMoveSpeed = useEngineStore(selectSceneNavFpsMoveSpeed);
   const sceneNavNoKeyframes = useEngineStore(selectSceneNavNoKeyframes);
@@ -130,6 +222,14 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const usesCameraControls = isCameraClip;
   const isLocked3D = isModel || isGaussianSplat || isSplatEffector;
   const isEffectively3D = isCameraClip || isLocked3D || is3D;
+  const cameraSettings: SceneCameraSettings = isCameraClip
+    ? (cameraSettingsOverride ?? clip?.source?.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS)
+    : DEFAULT_SCENE_CAMERA_SETTINGS;
+  const cameraFocalLengthMm = fovToFullFrameFocalLengthMm(cameraSettings.fov);
+  const minCameraFocalLengthMm = fovToFullFrameFocalLengthMm(MAX_CAMERA_FOV_DEGREES);
+  const maxCameraFocalLengthMm = fovToFullFrameFocalLengthMm(MIN_CAMERA_FOV_DEGREES);
+  const cameraResolutionWidth = cameraSettings.resolutionWidth ?? DEFAULT_SCENE_CAMERA_SETTINGS.resolutionWidth ?? 1920;
+  const cameraResolutionHeight = cameraSettings.resolutionHeight ?? DEFAULT_SCENE_CAMERA_SETTINGS.resolutionHeight ?? 1080;
 
   const handleBatchStart = useCallback(() => startBatch('Adjust transform'), []);
   const handleBatchEnd = useCallback(() => endBatch(), []);
@@ -138,9 +238,9 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const compWidth = activeComp?.width || 1920;
   const compHeight = activeComp?.height || 1080;
 
-  const handlePropertyChange = (property: AnimatableProperty, value: number) => {
+  const handlePropertyChange = useCallback((property: AnimatableProperty, value: number) => {
     setPropertyValue(clipId, property, value);
-  };
+  }, [clipId, setPropertyValue]);
 
   const applyCameraPropertyUpdates = (updates: Array<{ property: AnimatableProperty; value: number }>) => {
     const needsKeyframePath = updates.some(({ property }) =>
@@ -185,10 +285,9 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
   const posZValue = usesScenePositionUnits ? transform.position.z : posZPx;
   const positionDecimals = usesScenePositionUnits || usesCameraControls ? 3 : 1;
   const positionSensitivity = usesScenePositionUnits || usesCameraControls ? 0.02 : 0.5;
-  const cameraMoveX = transform.position.x;
-  const cameraMoveY = transform.position.y;
-  const cameraMoveZ = transform.scale.z ?? 0;
-  const cameraDist = transform.position.z;
+  const cameraPositionX = transform.position.x;
+  const cameraPositionY = transform.position.y;
+  const cameraPositionZ = transform.position.z;
   const scaleAll = transform.scale.all ?? 1;
   const handlePosXChange = (value: number) => handlePropertyChange(
     'position.x',
@@ -202,10 +301,27 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
     'position.z',
     usesScenePositionUnits ? value : value / (compWidth / 2),
   );
-  const handleCameraMoveXChange = (value: number) => handlePropertyChange('position.x', value);
-  const handleCameraMoveYChange = (value: number) => handlePropertyChange('position.y', value);
-  const handleCameraMoveZChange = (value: number) => handlePropertyChange('scale.z', value);
-  const handleCameraDistChange = (value: number) => handlePropertyChange('position.z', value);
+  const handleCameraPositionXChange = (value: number) => handlePropertyChange('position.x', value);
+  const handleCameraPositionYChange = (value: number) => handlePropertyChange('position.y', value);
+  const handleCameraPositionZChange = (value: number) => handlePropertyChange('position.z', value);
+  const handleCameraFovChange = useCallback((value: number) => {
+    handlePropertyChange('camera.fov', clampCameraFov(value));
+  }, [handlePropertyChange]);
+  const handleCameraFocalLengthChange = useCallback((value: number) => {
+    handlePropertyChange('camera.fov', fullFrameFocalLengthMmToFov(value));
+  }, [handlePropertyChange]);
+  const handleCameraNearChange = useCallback((value: number) => {
+    handlePropertyChange('camera.near', Math.max(0.001, value));
+  }, [handlePropertyChange]);
+  const handleCameraFarChange = useCallback((value: number) => {
+    handlePropertyChange('camera.far', Math.max(cameraSettings.near + 0.1, value));
+  }, [cameraSettings.near, handlePropertyChange]);
+  const handleCameraResolutionWidthChange = useCallback((value: number) => {
+    handlePropertyChange('camera.resolutionWidth', Math.max(1, Math.round(value)));
+  }, [handlePropertyChange]);
+  const handleCameraResolutionHeightChange = useCallback((value: number) => {
+    handlePropertyChange('camera.resolutionHeight', Math.max(1, Math.round(value)));
+  }, [handlePropertyChange]);
   const handleCameraLookRotationChange = (axis: CameraLookRotationAxis, value: number) => {
     if (!clip || clip.source?.type !== 'camera') {
       handlePropertyChange(`rotation.${axis}` as AnimatableProperty, value);
@@ -217,6 +333,7 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
       transform,
       { [axis]: value },
       { width: compWidth, height: compHeight },
+      cameraSettings,
     );
     if (!updates) {
       handlePropertyChange(`rotation.${axis}` as AnimatableProperty, value);
@@ -225,6 +342,96 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
 
     applyCameraPropertyUpdates(updates);
   };
+
+  const handleSetAllCameraKeyframes = useCallback(() => {
+    if (!usesCameraControls) return;
+
+    const entries: Array<{ property: AnimatableProperty; value: number }> = [
+      { property: 'camera.fov', value: cameraSettings.fov },
+      { property: 'camera.near', value: cameraSettings.near },
+      { property: 'camera.far', value: cameraSettings.far },
+      { property: 'camera.resolutionWidth', value: cameraResolutionWidth },
+      { property: 'camera.resolutionHeight', value: cameraResolutionHeight },
+      { property: 'position.x', value: transform.position.x },
+      { property: 'position.y', value: transform.position.y },
+      { property: 'position.z', value: transform.position.z },
+      { property: 'rotation.x', value: transform.rotation.x },
+      { property: 'rotation.y', value: transform.rotation.y },
+      { property: 'rotation.z', value: transform.rotation.z },
+    ];
+
+    startBatch('Set camera keyframes');
+    try {
+      entries.forEach(({ property, value }) => {
+        if (!isRecording(clipId, property)) {
+          toggleKeyframeRecording(clipId, property);
+        }
+        addKeyframe(clipId, property, value);
+      });
+    } finally {
+      endBatch();
+    }
+  }, [
+    addKeyframe,
+    cameraResolutionHeight,
+    cameraResolutionWidth,
+    cameraSettings.far,
+    cameraSettings.fov,
+    cameraSettings.near,
+    clipId,
+    isRecording,
+    toggleKeyframeRecording,
+    transform.position.x,
+    transform.position.y,
+    transform.position.z,
+    transform.rotation.x,
+    transform.rotation.y,
+    transform.rotation.z,
+    usesCameraControls,
+  ]);
+  const clearCameraKeyframesAndStopwatches = useCallback(() => {
+    const resetProperties = new Set(CAMERA_RESET_KEYFRAME_PROPERTIES);
+
+    getClipKeyframes(clipId)
+      .filter((keyframe) => resetProperties.has(keyframe.property))
+      .forEach((keyframe) => removeKeyframe(keyframe.id));
+
+    CAMERA_RESET_KEYFRAME_PROPERTIES.forEach((property) => {
+      if (isRecording(clipId, property)) {
+        toggleKeyframeRecording(clipId, property);
+      }
+    });
+  }, [
+    clipId,
+    getClipKeyframes,
+    isRecording,
+    removeKeyframe,
+    toggleKeyframeRecording,
+  ]);
+  const handleResetAll = useCallback(() => {
+    if (usesCameraControls) {
+      startBatch('Reset camera transform');
+      try {
+        clearCameraKeyframesAndStopwatches();
+        updateClipTransform(clipId, {
+          position: { x: 0, y: 0, z: 0 },
+          scale: { all: 1, x: 1, y: 1, z: 0 },
+          rotation: { x: 0, y: 0, z: 0 },
+        });
+      } finally {
+        endBatch();
+      }
+      return;
+    }
+
+    updateClipTransform(clipId, {
+      opacity: 1,
+      blendMode: 'normal',
+      position: { x: 0, y: 0, z: 0 },
+      scale: supportsScaleZ ? { all: 1, x: 1, y: 1, z: 1 } : { all: 1, x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+    });
+  }, [clearCameraKeyframesAndStopwatches, clipId, supportsScaleZ, updateClipTransform, usesCameraControls]);
 
   const scaleAllPct = scaleAll * 100;
   const scaleXPct = transform.scale.x * 100;
@@ -256,23 +463,41 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
           <div
             className="control-row transform-option-row scene-nav-row"
             title={sceneNavFpsMode
-              ? 'Click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel zoom otherwise. Distance = orbit/dolly distance.'
-              : 'Click preview, then WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom. Distance = orbit/dolly distance.'}
+              ? 'Click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel speed while moving/looking, wheel moves camera otherwise.'
+              : 'Click preview, then WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel moves camera.'}
           >
             <label className="prop-label">Nav Mode</label>
             <button
-              className={`btn btn-xs ${sceneNavFpsMode ? 'btn-active' : ''}`}
+              className={`btn btn-xs scene-nav-icon-btn ${sceneNavFpsMode ? 'btn-active' : ''}`}
               onClick={() => setSceneNavFpsMode(!sceneNavFpsMode)}
               title={sceneNavFpsMode ? 'Use orbit mouse look' : 'Use FPS mouse look'}
+              aria-label={sceneNavFpsMode ? 'Use orbit mouse look' : 'Use FPS mouse look'}
             >
-              FPS
+              <FpsModeIcon />
             </button>
             <button
-              className={`btn btn-xs ${sceneNavNoKeyframes ? 'btn-active' : ''}`}
+              className={`btn btn-xs scene-nav-icon-btn ${sceneNavNoKeyframes ? 'btn-active' : ''}`}
               onClick={() => setSceneNavNoKeyframes(!sceneNavNoKeyframes)}
               title="Live camera override: MIDI and scene-nav controls do not write camera keyframes"
+              aria-label="Live camera override: MIDI and scene-nav controls do not write camera keyframes"
             >
-              NO KF
+              <NoKeyframesIcon />
+            </button>
+            <button
+              className="btn btn-xs scene-nav-icon-btn"
+              onClick={handleSetAllCameraKeyframes}
+              title="Enable all camera transform stopwatches and set keyframes at the playhead"
+              aria-label="Enable all camera transform stopwatches and set keyframes at the playhead"
+            >
+              <SetAllKeyframesIcon />
+            </button>
+            <button
+              className="btn btn-xs scene-nav-icon-btn"
+              onClick={handleResetAll}
+              title="Reset camera transform"
+              aria-label="Reset camera transform"
+            >
+              <ResetAllIcon />
             </button>
             {sceneNavFpsMode && (
               <div className="scene-nav-speed-control" title="FPS movement speed">
@@ -399,46 +624,183 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
         )}
       </div>
 
+      {usesCameraControls && (
+        <div className="properties-section">
+          <div className="control-row transform-param-row">
+            <span className="keyframe-toggle-placeholder" />
+            <label className="prop-label">Lens</label>
+            <div className="multi-value-row">
+              <LabeledValue
+                label="FOV"
+                value={cameraSettings.fov}
+                onChange={handleCameraFovChange}
+                defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.fov}
+                decimals={1}
+                suffix="deg"
+                min={MIN_CAMERA_FOV_DEGREES}
+                max={MAX_CAMERA_FOV_DEGREES}
+                sensitivity={0.5}
+                onDragStart={handleBatchStart}
+                onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="camera.fov" value={cameraSettings.fov} />}
+                midiTarget={createMIDIParameterTarget(
+                  'camera.fov',
+                  'Camera FOV',
+                  cameraSettings.fov,
+                  MIN_CAMERA_FOV_DEGREES,
+                  MAX_CAMERA_FOV_DEGREES,
+                )}
+              />
+              <LabeledValue
+                label="mm"
+                value={cameraFocalLengthMm}
+                onChange={handleCameraFocalLengthChange}
+                defaultValue={fovToFullFrameFocalLengthMm(DEFAULT_SCENE_CAMERA_SETTINGS.fov)}
+                decimals={1}
+                suffix="mm"
+                min={minCameraFocalLengthMm}
+                max={maxCameraFocalLengthMm}
+                sensitivity={0.5}
+                onDragStart={handleBatchStart}
+                onDragEnd={handleBatchEnd}
+              />
+            </div>
+          </div>
+          <div className="control-row transform-param-row">
+            <span className="keyframe-toggle-placeholder" />
+            <label className="prop-label">Planes</label>
+            <div className="multi-value-row">
+              <LabeledValue
+                label="Near"
+                value={cameraSettings.near}
+                onChange={handleCameraNearChange}
+                defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.near}
+                decimals={3}
+                min={0.001}
+                max={100}
+                sensitivity={0.05}
+                onDragStart={handleBatchStart}
+                onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="camera.near" value={cameraSettings.near} />}
+                midiTarget={createMIDIParameterTarget('camera.near', 'Camera Near', cameraSettings.near, 0.001, 100)}
+              />
+              <LabeledValue
+                label="Far"
+                value={cameraSettings.far}
+                onChange={handleCameraFarChange}
+                defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.far}
+                decimals={1}
+                min={1}
+                max={100000}
+                sensitivity={10}
+                onDragStart={handleBatchStart}
+                onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="camera.far" value={cameraSettings.far} />}
+                midiTarget={createMIDIParameterTarget('camera.far', 'Camera Far', cameraSettings.far, 1, 100000)}
+              />
+            </div>
+          </div>
+          <div className="control-row transform-param-row">
+            <span className="keyframe-toggle-placeholder" />
+            <label className="prop-label">Res</label>
+            <div className="multi-value-row">
+              <LabeledValue
+                label="X"
+                value={cameraResolutionWidth}
+                onChange={handleCameraResolutionWidthChange}
+                defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.resolutionWidth ?? 1920}
+                decimals={0}
+                min={1}
+                max={32768}
+                sensitivity={16}
+                onDragStart={handleBatchStart}
+                onDragEnd={handleBatchEnd}
+                keyframeToggle={
+                  <KeyframeToggle
+                    clipId={clipId}
+                    property="camera.resolutionWidth"
+                    value={cameraResolutionWidth}
+                  />
+                }
+                midiTarget={createMIDIParameterTarget(
+                  'camera.resolutionWidth',
+                  'Camera Res X',
+                  cameraResolutionWidth,
+                  1,
+                  32768,
+                )}
+              />
+              <LabeledValue
+                label="Y"
+                value={cameraResolutionHeight}
+                onChange={handleCameraResolutionHeightChange}
+                defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.resolutionHeight ?? 1080}
+                decimals={0}
+                min={1}
+                max={32768}
+                sensitivity={16}
+                onDragStart={handleBatchStart}
+                onDragEnd={handleBatchEnd}
+                keyframeToggle={
+                  <KeyframeToggle
+                    clipId={clipId}
+                    property="camera.resolutionHeight"
+                    value={cameraResolutionHeight}
+                  />
+                }
+                midiTarget={createMIDIParameterTarget(
+                  'camera.resolutionHeight',
+                  'Camera Res Y',
+                  cameraResolutionHeight,
+                  1,
+                  32768,
+                )}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="properties-section">
         <div className="control-row transform-param-row">
           <span className="keyframe-toggle-placeholder" />
-          <label className="prop-label">{usesCameraControls ? 'Move' : 'Position'}</label>
+          <label className="prop-label">Position</label>
           <div className="multi-value-row">
             <LabeledValue
-              label={usesCameraControls ? 'Pan X' : 'X'}
-              value={usesCameraControls ? cameraMoveX : posXValue}
-              onChange={usesCameraControls ? handleCameraMoveXChange : handlePosXChange}
+              label="X"
+              value={usesCameraControls ? cameraPositionX : posXValue}
+              onChange={usesCameraControls ? handleCameraPositionXChange : handlePosXChange}
               defaultValue={0}
               decimals={positionDecimals}
               sensitivity={positionSensitivity}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}
               keyframeToggle={
-                <KeyframeToggle clipId={clipId} property="position.x" value={usesCameraControls ? cameraMoveX : transform.position.x} />
+                <KeyframeToggle clipId={clipId} property="position.x" value={transform.position.x} />
               }
               midiTarget={createMIDIParameterTarget(
                 'position.x',
-                usesCameraControls ? 'Camera Pan X' : 'Position X',
+                usesCameraControls ? 'Camera Position X' : 'Position X',
                 transform.position.x,
                 usesCameraControls ? -5 : -2,
                 usesCameraControls ? 5 : 2,
               )}
             />
             <LabeledValue
-              label={usesCameraControls ? 'Pan Y' : 'Y'}
-              value={usesCameraControls ? cameraMoveY : posYValue}
-              onChange={usesCameraControls ? handleCameraMoveYChange : handlePosYChange}
+              label="Y"
+              value={usesCameraControls ? cameraPositionY : posYValue}
+              onChange={usesCameraControls ? handleCameraPositionYChange : handlePosYChange}
               defaultValue={0}
               decimals={positionDecimals}
               sensitivity={positionSensitivity}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}
               keyframeToggle={
-                <KeyframeToggle clipId={clipId} property="position.y" value={usesCameraControls ? cameraMoveY : transform.position.y} />
+                <KeyframeToggle clipId={clipId} property="position.y" value={transform.position.y} />
               }
               midiTarget={createMIDIParameterTarget(
                 'position.y',
-                usesCameraControls ? 'Camera Pan Y' : 'Position Y',
+                usesCameraControls ? 'Camera Position Y' : 'Position Y',
                 transform.position.y,
                 usesCameraControls ? -5 : -2,
                 usesCameraControls ? 5 : 2,
@@ -446,9 +808,9 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
             />
             {isEffectively3D && (
               <LabeledValue
-                label={usesCameraControls ? 'Fwd' : 'Z'}
-                value={usesCameraControls ? cameraMoveZ : posZValue}
-                onChange={usesCameraControls ? handleCameraMoveZChange : handlePosZChange}
+                label="Z"
+                value={usesCameraControls ? cameraPositionZ : posZValue}
+                onChange={usesCameraControls ? handleCameraPositionZChange : handlePosZChange}
                 defaultValue={0}
                 decimals={positionDecimals}
                 sensitivity={positionSensitivity}
@@ -457,14 +819,14 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 keyframeToggle={
                   <KeyframeToggle
                     clipId={clipId}
-                    property={usesCameraControls ? 'scale.z' : 'position.z'}
-                    value={usesCameraControls ? cameraMoveZ : transform.position.z}
+                    property="position.z"
+                    value={transform.position.z}
                   />
                 }
                 midiTarget={createMIDIParameterTarget(
-                  usesCameraControls ? 'scale.z' : 'position.z',
-                  usesCameraControls ? 'Camera Forward' : 'Position Z',
-                  usesCameraControls ? cameraMoveZ : transform.position.z,
+                  'position.z',
+                  usesCameraControls ? 'Camera Position Z' : 'Position Z',
+                  transform.position.z,
                   usesCameraControls ? -20 : -2,
                   usesCameraControls ? 20 : 2,
                 )}
@@ -474,53 +836,32 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
         </div>
       </div>
 
-      {usesCameraControls && (
+      {!usesCameraControls && (
         <div className="properties-section">
           <div className="control-row transform-param-row">
             <span className="keyframe-toggle-placeholder" />
-            <label className="prop-label">Distance</label>
-            <LabeledValue
-              label="Dist"
-              value={cameraDist}
-              onChange={handleCameraDistChange}
-              defaultValue={0}
-              decimals={3}
-              sensitivity={0.02}
-              onDragStart={handleBatchStart}
-              onDragEnd={handleBatchEnd}
-              keyframeToggle={<KeyframeToggle clipId={clipId} property="position.z" value={cameraDist} />}
-              midiTarget={createMIDIParameterTarget('position.z', 'Camera Distance', cameraDist, -20, 20)}
-            />
-          </div>
-        </div>
-      )}
-
-      <div className="properties-section">
-        <div className="control-row transform-param-row">
-          <span className="keyframe-toggle-placeholder" />
-          <label className="prop-label">{usesCameraControls ? 'Zoom' : 'Scale'}</label>
-          <div className="multi-value-row">
-            <LabeledValue
-              label={usesCameraControls ? 'Zoom' : 'All'}
-              value={scaleAllPct}
-              onChange={handleScaleAllChange}
-              defaultValue={100}
-              decimals={1}
-              suffix="%"
-              min={1}
-              sensitivity={1}
-              onDragStart={handleBatchStart}
-              onDragEnd={handleBatchEnd}
-              keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.all" value={scaleAll} />}
-              midiTarget={createMIDIParameterTarget(
-                'scale.all',
-                usesCameraControls ? 'Camera Zoom' : 'Scale All',
-                scaleAll,
-                usesCameraControls ? 0.05 : 0.01,
-                usesCameraControls ? 40 : 4,
-              )}
-            />
-            {!usesCameraControls && (
+            <label className="prop-label">Scale</label>
+            <div className="multi-value-row">
+              <LabeledValue
+                label="All"
+                value={scaleAllPct}
+                onChange={handleScaleAllChange}
+                defaultValue={100}
+                decimals={1}
+                suffix="%"
+                min={1}
+                sensitivity={1}
+                onDragStart={handleBatchStart}
+                onDragEnd={handleBatchEnd}
+                keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.all" value={scaleAll} />}
+                midiTarget={createMIDIParameterTarget(
+                  'scale.all',
+                  'Scale All',
+                  scaleAll,
+                  0.01,
+                  4,
+                )}
+              />
               <LabeledValue
                 label="X"
                 value={scaleXPct}
@@ -535,8 +876,6 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.x" value={transform.scale.x} />}
                 midiTarget={createMIDIParameterTarget('scale.x', 'Scale X', transform.scale.x, 0.01, 4)}
               />
-            )}
-            {!usesCameraControls && (
               <LabeledValue
                 label="Y"
                 value={scaleYPct}
@@ -551,31 +890,31 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
                 keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.y" value={transform.scale.y} />}
                 midiTarget={createMIDIParameterTarget('scale.y', 'Scale Y', transform.scale.y, 0.01, 4)}
               />
-            )}
-            {supportsScaleZ && (
-              <LabeledValue
-                label="Z"
-                value={scaleZPct}
-                onChange={handleScaleZChange}
-                defaultValue={100}
-                decimals={1}
-                suffix="%"
-                min={1}
-                sensitivity={1}
-                onDragStart={handleBatchStart}
-                onDragEnd={handleBatchEnd}
-                keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.z" value={transform.scale.z ?? 1} />}
-                midiTarget={createMIDIParameterTarget('scale.z', 'Scale Z', transform.scale.z ?? 1, 0.01, 4)}
-              />
-            )}
+              {supportsScaleZ && (
+                <LabeledValue
+                  label="Z"
+                  value={scaleZPct}
+                  onChange={handleScaleZChange}
+                  defaultValue={100}
+                  decimals={1}
+                  suffix="%"
+                  min={1}
+                  sensitivity={1}
+                  onDragStart={handleBatchStart}
+                  onDragEnd={handleBatchEnd}
+                  keyframeToggle={<KeyframeToggle clipId={clipId} property="scale.z" value={transform.scale.z ?? 1} />}
+                  midiTarget={createMIDIParameterTarget('scale.z', 'Scale Z', transform.scale.z ?? 1, 0.01, 4)}
+                />
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="properties-section">
         <div className="control-row transform-param-row">
           <span className="keyframe-toggle-placeholder" />
-          <label className="prop-label">{usesCameraControls ? 'Look' : 'Rotation'}</label>
+          <label className="prop-label">Rotation</label>
           <div className="multi-value-row rotation-row">
             {isEffectively3D && (
               <RotationValue
@@ -636,31 +975,16 @@ export function TransformTab({ clipId, transform, speed = 1, is3D = false }: Tra
         </div>
       </div>
 
-      <div className="properties-actions">
-        <button
-          className="btn btn-sm"
-          onClick={() => {
-            if (usesCameraControls) {
-              updateClipTransform(clipId, {
-                position: { x: 0, y: 0, z: 0 },
-                scale: { all: 1, x: 1, y: 1, z: 0 },
-                rotation: { x: 0, y: 0, z: 0 },
-              });
-              return;
-            }
-
-            updateClipTransform(clipId, {
-              opacity: 1,
-              blendMode: 'normal',
-              position: { x: 0, y: 0, z: 0 },
-              scale: supportsScaleZ ? { all: 1, x: 1, y: 1, z: 1 } : { all: 1, x: 1, y: 1 },
-              rotation: { x: 0, y: 0, z: 0 },
-            });
-          }}
-        >
-          Reset All
-        </button>
-      </div>
+      {!usesCameraControls && (
+        <div className="properties-actions">
+          <button
+            className="btn btn-sm"
+            onClick={handleResetAll}
+          >
+            Reset All
+          </button>
+        </div>
+      )}
     </div>
   );
 }

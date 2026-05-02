@@ -11,28 +11,36 @@ const mockState = vi.hoisted(() => ({
   updateClipTransform: vi.fn(),
   toggle3D: vi.fn(),
   updateClip: vi.fn(),
+  setTimelineState: vi.fn(),
   isRecording: vi.fn(() => false),
   hasKeyframes: vi.fn(() => false),
   addKeyframe: vi.fn(),
   toggleKeyframeRecording: vi.fn(),
   disablePropertyKeyframes: vi.fn(),
+  cameraSettings: { fov: 60, near: 0.1, far: 1000 },
 }));
 
 vi.mock('../../src/stores/timeline', () => {
+  const buildClip = () => ({
+    id: 'clip-1',
+    source: {
+      type: mockState.sourceType,
+      threeDEffectorsEnabled: true,
+      ...(mockState.sourceType === 'camera'
+        ? { cameraSettings: mockState.cameraSettings }
+        : {}),
+    },
+    wireframe: false,
+  });
+
   const useTimelineStore = Object.assign(
     vi.fn((selector: (state: unknown) => unknown) => selector({
-      clips: [{
-        id: 'clip-1',
-        source: {
-          type: mockState.sourceType,
-          threeDEffectorsEnabled: true,
-        },
-        wireframe: false,
-      }],
+      clips: [buildClip()],
       isPlaying: mockState.isPlaying,
     })),
     {
       getState: vi.fn(() => ({
+        clips: [buildClip()],
         setPropertyValue: mockState.setPropertyValue,
         updateClipTransform: mockState.updateClipTransform,
         toggle3D: mockState.toggle3D,
@@ -43,6 +51,7 @@ vi.mock('../../src/stores/timeline', () => {
         toggleKeyframeRecording: mockState.toggleKeyframeRecording,
         disablePropertyKeyframes: mockState.disablePropertyKeyframes,
       })),
+      setState: mockState.setTimelineState,
     },
   );
 
@@ -50,6 +59,7 @@ vi.mock('../../src/stores/timeline', () => {
 });
 
 vi.mock('../../src/stores/mediaStore', () => ({
+  DEFAULT_SCENE_CAMERA_SETTINGS: { fov: 60, near: 0.1, far: 1000 },
   useMediaStore: Object.assign(vi.fn(), {
     getState: vi.fn(() => ({
       getActiveComposition: () => ({ width: 1920, height: 1080 }),
@@ -107,6 +117,7 @@ describe('TransformTab position units', () => {
     mockState.isPlaying = false;
     mockState.setPropertyValue.mockClear();
     mockState.updateClipTransform.mockClear();
+    mockState.setTimelineState.mockClear();
     mockState.toggle3D.mockClear();
     mockState.updateClip.mockClear();
     mockState.isRecording.mockClear();
@@ -116,6 +127,7 @@ describe('TransformTab position units', () => {
     mockState.addKeyframe.mockClear();
     mockState.toggleKeyframeRecording.mockClear();
     mockState.disablePropertyKeyframes.mockClear();
+    mockState.cameraSettings = { fov: 60, near: 0.1, far: 1000 };
   });
 
   it('edits native 3D splat positions in scene units', () => {
@@ -175,6 +187,52 @@ describe('TransformTab position units', () => {
     expect(numberTexts(container)).toContain('-0.250');
     expect(numberTexts(container)).toContain('2.000');
     expect(numberTexts(container)).not.toContain('480.0');
+  });
+
+  it('shows camera lens controls in transform tab without legacy zoom', () => {
+    mockState.sourceType = 'camera';
+
+    const { container } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={{
+          ...makeTransform({ x: 0, y: 0, z: 5 }),
+          scale: { all: 1, x: 1, y: 1, z: 0 },
+        }}
+      />,
+    );
+
+    const text = container.textContent ?? '';
+    expect(text).toContain('Lens');
+    expect(text).toContain('FOV');
+    expect(text).toContain('mm');
+    expect(text).toContain('Planes');
+    expect(text).toContain('Near');
+    expect(text).toContain('Far');
+    expect(text).toContain('Res');
+    expect(text).not.toContain('Zoom');
+
+    const values = numberTexts(container);
+    expect(values.some((value) => value.includes('60.0deg'))).toBe(true);
+    expect(values.some((value) => value.includes('20.8mm'))).toBe(true);
+    expect(values.some((value) => value.includes('100.0%'))).toBe(false);
+
+    const fovControl = container.querySelectorAll('.draggable-number')[0];
+    fireEvent.doubleClick(fovControl);
+    const input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '45' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'camera.fov', 45);
+
+    const resolutionXControl = Array.from(container.querySelectorAll('.draggable-number'))
+      .find((element) => element.textContent?.includes('1920')) as HTMLElement;
+    fireEvent.doubleClick(resolutionXControl);
+    const resolutionInput = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+    fireEvent.change(resolutionInput, { target: { value: '2048' } });
+    fireEvent.keyDown(resolutionInput, { key: 'Enter' });
+
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'camera.resolutionWidth', 2048);
   });
 
   it('left-clicking an active stopwatch adds a keyframe instead of disabling it', () => {

@@ -78,6 +78,7 @@ struct CancelResponse {
 // ---------------------------------------------------------------------------
 
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
+const MAX_PROGRESS_POLL_FAILURES: u32 = 10;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -98,8 +99,8 @@ pub async fn run_matte_job(
     );
 
     // 1. POST /matte → get job_id
-    let body = serde_json::to_string(&request)
-        .map_err(|e| format!("Failed to serialize request: {e}"))?;
+    let body =
+        serde_json::to_string(&request).map_err(|e| format!("Failed to serialize request: {e}"))?;
 
     let response_text = http_post_json(port, "/matte", &body).await?;
     let submit: SubmitResponse = serde_json::from_str(&response_text)
@@ -107,16 +108,26 @@ pub async fn run_matte_job(
 
     let job_id = submit.job_id;
     info!("Matte job submitted: {job_id}");
+    let mut poll_failures = 0u32;
 
     // 2. Poll /progress/{job_id} until terminal state
     loop {
         tokio::time::sleep(POLL_INTERVAL).await;
 
         let progress_text = match http_get(port, &format!("/progress/{job_id}")).await {
-            Ok(text) => text,
+            Ok(text) => {
+                poll_failures = 0;
+                text
+            }
             Err(e) => {
+                poll_failures += 1;
                 warn!("Progress poll failed for {job_id}: {e}");
-                // Transient network error — keep retrying
+                if poll_failures >= MAX_PROGRESS_POLL_FAILURES {
+                    return Err(format!(
+                        "Progress polling failed for {job_id} after {poll_failures} attempts: {e}"
+                    ));
+                }
+                // Transient network error; keep retrying briefly.
                 continue;
             }
         };
@@ -148,12 +159,12 @@ pub async fn run_matte_job(
         // 4. Check terminal states
         match progress.status.as_str() {
             "complete" => {
-                let foreground_path = progress.foreground_path.ok_or_else(|| {
-                    "Server reported complete but no foreground_path".to_string()
-                })?;
-                let alpha_path = progress.alpha_path.ok_or_else(|| {
-                    "Server reported complete but no alpha_path".to_string()
-                })?;
+                let foreground_path = progress
+                    .foreground_path
+                    .ok_or_else(|| "Server reported complete but no foreground_path".to_string())?;
+                let alpha_path = progress
+                    .alpha_path
+                    .ok_or_else(|| "Server reported complete but no alpha_path".to_string())?;
 
                 info!("Matte job {job_id} complete: fg={foreground_path} alpha={alpha_path}");
 
@@ -169,6 +180,13 @@ pub async fn run_matte_job(
                     .unwrap_or_else(|| "Unknown error".to_string());
                 error!("Matte job {job_id} failed: {msg}");
                 return Err(format!("Matte job failed: {msg}"));
+            }
+            "cancelled" => {
+                let msg = progress
+                    .message
+                    .unwrap_or_else(|| "Job cancelled by user".to_string());
+                info!("Matte job {job_id} cancelled: {msg}");
+                return Err(format!("Matte job cancelled: {msg}"));
             }
             "processing" | "queued" => {
                 // Keep polling

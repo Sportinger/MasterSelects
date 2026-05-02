@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.3';
+export const APP_VERSION = '1.7.4';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Composition tab switching upgraded',
-  message: 'Timeline comps now switch with directional clip motion, matching playhead and marker motion, and animated layer-height changes.',
+  title: 'World-space camera controls',
+  message: 'Camera Position X/Y/Z now represents the real camera eye, with lens FOV/mm and resolution kept as independent keyframable camera settings.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Recent projects are easier to reopen',
-  message: 'The File menu now shows recent browser and native projects for quicker access.',
+  title: 'Timeline and mask editing polish',
+  message: 'Keyframe rows, camera tracks, mask editing, and native-helper workflows received another round of production hardening.',
   animated: true,
 };
 

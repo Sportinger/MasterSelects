@@ -25,17 +25,19 @@ import {
 } from './mediaRuntime/runtimePlayback';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
 import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
+import { mathSceneRenderer } from './mathScene/MathSceneRenderer';
 import { getEffectiveScale } from '../utils/transformScale';
 
 type CompositionClipSourceEntry = {
   clipId: string;
-  type: 'video' | 'image' | 'audio' | 'text' | 'lottie';
+  type: 'video' | 'image' | 'audio' | 'text' | 'math-scene' | 'lottie';
   videoElement?: HTMLVideoElement;
   webCodecsPlayer?: LayerSource['webCodecsPlayer'];
   imageElement?: HTMLImageElement;
   textCanvas?: HTMLCanvasElement;
   file?: File;
   lottieClip?: TimelineClip;
+  mathSceneClip?: TimelineClip;
   naturalDuration: number;
   runtimeSourceId?: string;
   runtimeSessionKey?: string;
@@ -131,6 +133,37 @@ class CompositionRendererService {
       reversed: clip.reversed,
       isLoading: false,
     } as TimelineClip;
+  }
+
+  private buildSerializableMathSceneClip(clip: SerializableClip): TimelineClip | null {
+    if (!clip.mathScene) {
+      return null;
+    }
+
+    const canvas = mathSceneRenderer.createCanvas();
+    const mathClip: TimelineClip = {
+      id: clip.id,
+      trackId: clip.trackId,
+      name: clip.name,
+      file: new File([JSON.stringify(clip.mathScene)], 'math-scene.json', { type: 'application/json' }),
+      startTime: clip.startTime,
+      duration: clip.duration,
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+      source: {
+        type: 'math-scene',
+        textCanvas: canvas,
+        naturalDuration: clip.duration,
+      },
+      mathScene: structuredClone(clip.mathScene),
+      effects: clip.effects || [],
+      transform: clip.transform,
+      reversed: clip.reversed,
+      isLoading: false,
+    } as TimelineClip;
+
+    mathSceneRenderer.renderClip(mathClip, 0);
+    return mathClip;
   }
 
   private buildBackgroundVideoLayerSource(
@@ -307,13 +340,14 @@ class CompositionRendererService {
           continue;
         }
 
-        if ((sourceType === 'text' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
+        if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
           sources.clipSources.set(clip.id, {
             clipId: clip.id,
             type: sourceType,
             textCanvas: timelineClip.source.textCanvas,
             naturalDuration: clip.duration,
             ...(sourceType === 'lottie' ? { lottieClip: timelineClip } : {}),
+            ...(sourceType === 'math-scene' ? { mathSceneClip: timelineClip } : {}),
           });
           continue;
         }
@@ -351,13 +385,14 @@ class CompositionRendererService {
                 timelineClip.source
               ),
             });
-          } else if ((sourceType === 'text' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
+          } else if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
             sources.clipSources.set(clip.id, {
               clipId: clip.id,
               type: sourceType,
               textCanvas: timelineClip.source.textCanvas,
               naturalDuration: clip.duration,
               ...(sourceType === 'lottie' ? { lottieClip: timelineClip } : {}),
+              ...(sourceType === 'math-scene' ? { mathSceneClip: timelineClip } : {}),
             });
           }
         }
@@ -370,6 +405,19 @@ class CompositionRendererService {
               clipId: clip.id,
               type: 'text',
               textCanvas,
+              naturalDuration: clip.duration,
+            });
+          }
+        }
+
+        if (sourceType === 'math-scene' && serializableClip.mathScene) {
+          const mathSceneClip = this.buildSerializableMathSceneClip(serializableClip);
+          if (mathSceneClip?.source?.textCanvas) {
+            sources.clipSources.set(clip.id, {
+              clipId: clip.id,
+              type: 'math-scene',
+              textCanvas: mathSceneClip.source.textCanvas,
+              mathSceneClip,
               naturalDuration: clip.duration,
             });
           }
@@ -675,6 +723,14 @@ class CompositionRendererService {
             textCanvas: runtimeClip.source?.textCanvas ?? source.textCanvas,
           };
         }
+      } else if (source.type === 'math-scene') {
+        if (source.mathSceneClip) {
+          mathSceneRenderer.renderClip(source.mathSceneClip, clipTime);
+        }
+        layerSource = {
+          type: 'text',
+          textCanvas: source.mathSceneClip?.source?.textCanvas ?? source.textCanvas,
+        };
       } else if (source.textCanvas) {
         layerSource = this.getBaseLayerSource(source);
       }
@@ -840,6 +896,8 @@ class CompositionRendererService {
               nestedLocalTime,
             ),
           );
+        } else if (nestedClip.source.type === 'math-scene') {
+          mathSceneRenderer.renderClip(nestedClip, nestedClipTime);
         }
         nestedLayers.push({
           ...baseLayer,

@@ -53,7 +53,9 @@ export interface ProjectKeyframe {
   property: string;
   time: number;
   value: number;
+  pathValue?: import('../../../types').MaskPathKeyframeValue;
   easing: string;
+  rotationInterpolation?: import('../../../types').RotationInterpolationMode;
   bezierHandles?: {
     x1: number;
     y1: number;

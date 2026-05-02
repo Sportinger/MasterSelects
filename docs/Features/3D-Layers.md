@@ -97,17 +97,20 @@ There are two camera concepts in the product:
 - Composition camera: project-level camera settings on the composition itself.
 - Camera clips: timeline clips that drive the active shared scene camera.
 
-Camera clips expose their own Properties tab with:
+Camera clips expose camera settings inside the Transform tab:
 
-- FOV
+- FOV with editable full-frame-equivalent focal length in millimeters
 - Near plane
 - Far plane
+- Resolution X/Y for the camera gate aspect
+- Position X/Y/Z as camera placement controls that stay independent from lens FOV/mm
 
 The Transform tab becomes scene-navigation controls for the active camera clip. In FPS mode, the preview accepts WASD/QE navigation plus uncapped mouse look. Free scene navigation now belongs to camera clips rather than gaussian-splat clips.
+Lens controls change the projection/FOV without rewriting camera position fields. Camera Position X/Y/Z is the real camera eye position in world space. The camera Edit view draws the timeline-camera frame from FOV/mm and Resolution X/Y, so the front frame grows for wider lenses, shrinks for tele lenses, and follows the configured gate aspect. The preview wheel in Scene Nav moves that camera position along the current view direction and does not edit `camera.fov` or the full-frame-equivalent mm field. The old camera `scale.all` Zoom and Distance controls are hidden from the camera UI to avoid a second focal-length-like orbit-rig surface next to camera Position/Rotation.
 
-When Edit mode is enabled while the playhead is over a camera clip, the preview switches to a temporary edit-view camera. Orbiting, panning, and zooming this view does not write transform changes back to the real camera clip; entering and leaving Edit mode blends between the edit-view camera and the timeline camera. In that edit-view, shortcuts `1`, `2`, and `3` animate to orthographic Front, Side, and Top views, and `4` animates back to the normal edit-view camera. Edit views draw a projected Blender-style world grid that animates with the camera view instead of snapping as a screen overlay: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`. In the camera edit views, wheel zoom and Shift-drag/MMB/RMB pan only move the temporary viewport, regular 3D object handles stay visible and selectable, and selecting a non-camera 3D object activates the same native scene gizmo used by the normal preview. The real timeline camera is drawn as a small projected camera wireframe with a direction/frustum indicator. The full viewport gizmo appears only when that camera clip is selected in the normal edit-view camera, and explicit gizmo drags still edit the camera clip through the normal transform/keyframe path. Camera clips do not show a viewport gizmo in the normal view. The 2D layer bounding-box editor is only active in Edit mode when no camera clip is active at the playhead.
+When Edit mode is enabled while the playhead is over a camera clip, the preview switches to a temporary edit-view camera with its own 35 mm default lens, independent from the timeline camera's lens. Orbiting, panning, and zooming this view does not write transform changes back to the real camera clip; entering and leaving Edit mode blends between the edit-view camera and the timeline camera. In that edit-view, shortcuts `1`, `2`, and `3` animate to orthographic Front, Side, and Top views, and `4` animates back to the normal edit-view camera. Edit views draw a projected Blender-style world grid that animates with the camera view instead of snapping as a screen overlay: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`. In the camera edit views, wheel zoom and Shift-drag/MMB/RMB pan only move the temporary viewport, regular 3D object handles stay visible and selectable, and selecting a non-camera 3D object activates the same native scene gizmo used by the normal preview. Double-clicking a non-camera 3D object handle in camera Edit mode retargets the temporary orbit pivot to that object, so subsequent free-camera orbiting rotates around it. Right-clicking a non-camera object handle or its selected gizmo opens a small menu with `Set Orbit Pivot` for the same retarget action. The real timeline camera is drawn as a small projected camera wireframe with a direction/frustum indicator. The full viewport gizmo appears only when that camera clip is selected in the normal edit-view camera, and explicit gizmo drags still edit the camera clip through the normal transform/keyframe path. Camera clips do not show a viewport gizmo in the normal view. The 2D layer bounding-box editor is only active in Edit mode when no camera clip is active at the playhead.
 
-Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera transform keyframes for pan, distance, zoom (`scale.all`), forward travel, and rotation render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, keeping FPS-look moves, zoom-outs, and vertical-look roll moves from drifting away between keyframes.
+Camera rotation keyframes interpolate through the shortest angular path so timeline flights do not spin the long way around when yaw, pitch, or roll crosses a 360-degree wrap. Camera Position X/Y/Z and rotation keyframes render through world-pose interpolation: the camera eye and target are interpolated between keyed world poses, while legacy camera scale keyframes are ignored by the camera pose.
 
 ## Gaussian Splats
 
@@ -159,7 +162,7 @@ If you see avatar-specific code paths in the renderer or AI tooling, treat them 
 | Clip type | Visible tabs |
 |---|---|
 | Regular 2D clip | Transform, Effects, Masks, Transcript, Analysis |
-| Camera clip | Transform, Camera |
+| Camera clip | Transform |
 | Gaussian splat clip | Transform, Gaussian, Effects, Masks, Transcript, Analysis |
 | Splat effector clip | Transform, Effector, Effects, Masks, Transcript, Analysis |
 | 3D text clip | 3D Text, Transform, Effects, Masks |
@@ -169,7 +172,7 @@ The Transform tab is context-sensitive:
 
 - For normal 3D layers, it shows position, scale, rotation, opacity, blend mode, and 3D toggles. Scale All is stored as `scale.all` and multiplies X/Y/Z at render time, so uniform scale and axis scale can be animated independently.
 - 3D object position fields use scene units. Regular 2D clips still display composition pixel units.
-- For camera clips, it becomes scene-navigation controls.
+- For camera clips, it becomes scene-navigation and lens controls.
 - For gaussian splats, it now behaves like a normal 3D object transform surface plus 3D effector toggle.
 - The `Speed` field is explicitly marked WIP in the UI.
 
@@ -202,7 +205,6 @@ The Transform tab is context-sensitive:
 | `src/engine/export/preloadGaussianSplats.ts` | Shared splat preload and export preparation |
 | `src/components/panels/properties/TransformTab.tsx` | Context-sensitive 3D transform and scene-navigation controls |
 | `src/components/panels/properties/GaussianSplatTab.tsx` | Gaussian splat render settings tab |
-| `src/components/panels/properties/CameraTab.tsx` | Scene camera settings tab |
 | `src/components/panels/properties/SplatEffectorTab.tsx` | Splat effector settings tab |
 
 ## Supported Formats

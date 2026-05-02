@@ -20,6 +20,9 @@ import type {
   RuntimeColorGrade,
   TextClipProperties,
   Text3DProperties,
+  MathSceneDefinition,
+  MathObject,
+  MathParameter,
   Layer,
   SerializableClip,
 } from '../../types';
@@ -49,6 +52,9 @@ export type {
   Composition,
   TextClipProperties,
   Text3DProperties,
+  MathSceneDefinition,
+  MathObject,
+  MathParameter,
   Layer,
   SerializableClip,
 };
@@ -219,6 +225,15 @@ export interface SolidClipActions {
   updateSolidColor: (clipId: string, color: string) => void;
 }
 
+export interface MathSceneClipActions {
+  addMathSceneClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
+  updateMathScene: (clipId: string, updater: (scene: MathSceneDefinition) => MathSceneDefinition) => void;
+  addMathObject: (clipId: string, object: MathObject) => void;
+  updateMathObject: (clipId: string, objectId: string, patch: Partial<MathObject>) => void;
+  removeMathObject: (clipId: string, objectId: string) => void;
+  updateMathParameter: (clipId: string, parameterId: string, patch: Partial<MathParameter>) => void;
+}
+
 // Mesh clip actions (extracted to meshClipSlice)
 export interface MeshClipActions {
   addMeshClip: (trackId: string, startTime: number, meshType: import('../mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
@@ -306,7 +321,7 @@ export interface CoreClipActions {
 }
 
 // Combined ClipActions = all sub-interfaces
-export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & ColorCorrectionActions & LinkedGroupActions & DownloadClipActions;
+export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MathSceneClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & ColorCorrectionActions & LinkedGroupActions & DownloadClipActions;
 
 // Playback actions interface
 export interface PlaybackActions {
@@ -396,15 +411,20 @@ export interface KeyframeActions {
   moveKeyframes: (keyframeIds: string[], newTime: number) => void;
   getClipKeyframes: (clipId: string) => Keyframe[];
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
+  getInterpolatedCameraSettings: (clipId: string, clipLocalTime: number) => import('../mediaStore/types').SceneCameraSettings;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];
   getInterpolatedColorCorrection: (clipId: string, clipLocalTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedVectorAnimationSettings: (clipId: string, clipLocalTime: number) => VectorAnimationClipSettings;
+  getInterpolatedMasks: (clipId: string, clipLocalTime: number) => ClipMask[] | undefined;
   getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
   getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
   toggleKeyframeRecording: (clipId: string, property: AnimatableProperty) => void;
   isRecording: (clipId: string, property: AnimatableProperty) => boolean;
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
+  addMaskPathKeyframe: (clipId: string, maskId: string, pathValue?: Keyframe['pathValue'], time?: number, easing?: string | null) => void;
+  recordMaskPathKeyframe: (clipId: string, maskId: string) => void;
+  disableMaskPathKeyframes: (clipId: string, maskId: string, pathValue?: Keyframe['pathValue']) => void;
   toggleTrackExpanded: (trackId: string) => void;
   isTrackExpanded: (trackId: string) => boolean;
   toggleTrackPropertyGroupExpanded: (trackId: string, groupName: string) => void;
@@ -471,6 +491,7 @@ export interface ClipboardClipData {
   textProperties?: import('../../types').TextClipProperties;
   text3DProperties?: import('../../types').Text3DProperties;
   solidColor?: string;
+  mathScene?: MathSceneDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: import('../mediaStore/types').SceneCameraSettings;
   meshType?: import('../mediaStore/types').MeshPrimitiveType;
@@ -492,7 +513,9 @@ export interface ClipboardKeyframeData {
   property: AnimatableProperty;
   time: number;        // relative time within the copied set (0 = earliest)
   value: number;
+  pathValue?: Keyframe['pathValue'];
   easing: EasingType;
+  rotationInterpolation?: Keyframe['rotationInterpolation'];
   handleIn?: BezierHandle;
   handleOut?: BezierHandle;
 }

@@ -45,6 +45,8 @@ interface SceneObjectOverlayProps {
   worldGridPlane?: WorldGridPlane;
   toolbarPortalTarget?: HTMLElement | null;
   enabled: boolean;
+  canSetObjectOrbitPivot?: boolean;
+  onSetObjectOrbitPivot?: (object: PreviewSceneObject) => boolean;
 }
 
 type SceneGizmoDragAxis = SceneGizmoAxis | 'all';
@@ -127,6 +129,12 @@ interface ProjectedRotateRing {
   handle: SceneAxisScreenHandle;
   path: string;
   points: ProjectedRotateRingPoint[];
+}
+
+interface ObjectContextMenuState {
+  x: number;
+  y: number;
+  object: PreviewSceneObject;
 }
 
 const AXES: SceneGizmoAxis[] = ['x', 'y', 'z'];
@@ -1231,6 +1239,8 @@ export function SceneObjectOverlay({
   worldGridPlane = 'xz',
   toolbarPortalTarget,
   enabled,
+  canSetObjectOrbitPivot = false,
+  onSetObjectOrbitPivot,
 }: SceneObjectOverlayProps) {
   const [mode, setMode] = useState<SceneGizmoMode>('move');
   const setSceneGizmoMode = useEngineStore((state) => state.setSceneGizmoMode);
@@ -1241,6 +1251,8 @@ export function SceneObjectOverlay({
   const endedDragRef = useRef(false);
   const hoveredAxisRef = useRef<SceneGizmoAxis | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const [objectContextMenu, setObjectContextMenu] = useState<ObjectContextMenuState | null>(null);
   const dragRuntimeRef = useRef<DragRuntime>({
     target: null,
     hasPointerLock: false,
@@ -1469,6 +1481,30 @@ export function SceneObjectOverlay({
   }, [enabled, selectedObject?.clipId, selectedObject?.screen.visible, updateHoveredAxis]);
 
   useEffect(() => {
+    if (!objectContextMenu) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && contextMenuRef.current?.contains(target)) {
+        return;
+      }
+      setObjectContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setObjectContextMenu(null);
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [objectContextMenu]);
+
+  useEffect(() => {
     if (!dragState) return;
 
     const handlePointerLockChange = () => {
@@ -1555,6 +1591,28 @@ export function SceneObjectOverlay({
     event.stopPropagation();
     selectClip(object.clipId, event.shiftKey);
   }, [selectClip]);
+
+  const openObjectContextMenu = useCallback((event: ReactMouseEvent<Element>, object: PreviewSceneObject) => {
+    if (!canSetObjectOrbitPivot || object.kind === 'camera') {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const overlayRect = overlayRef.current?.getBoundingClientRect();
+    setObjectContextMenu({
+      x: overlayRect ? event.clientX - overlayRect.left : event.clientX,
+      y: overlayRect ? event.clientY - overlayRect.top : event.clientY,
+      object,
+    });
+  }, [canSetObjectOrbitPivot]);
+
+  const setContextMenuObjectOrbitPivot = useCallback(() => {
+    if (!objectContextMenu) return;
+    onSetObjectOrbitPivot?.(objectContextMenu.object);
+    setObjectContextMenu(null);
+  }, [objectContextMenu, onSetObjectOrbitPivot]);
 
   const startGizmoDrag = useCallback((params: {
     clientX: number;
@@ -1651,7 +1709,10 @@ export function SceneObjectOverlay({
 
     event.preventDefault();
     event.stopPropagation();
-    if (event.detail > 1) return;
+    if (event.detail > 1) {
+      onSetObjectOrbitPivot?.(selectedObject);
+      return;
+    }
 
     startGizmoDrag({
       clientX: event.clientX,
@@ -1664,10 +1725,17 @@ export function SceneObjectOverlay({
       pixelsPerUnit: handle.pixelsPerUnit,
       freePixelsPerUnit: { x: handle.pixelsPerUnit, y: handle.pixelsPerUnit },
     });
-  }, [selectedObject, startGizmoDrag]);
+  }, [onSetObjectOrbitPivot, selectedObject, startGizmoDrag]);
 
   const handleAxisDoubleClick = useCallback((event: ReactMouseEvent<Element>, handle: SceneAxisScreenHandle) => {
     if (!selectedObject) return;
+
+    if (onSetObjectOrbitPivot?.(selectedObject)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     const clip = clips.find((candidate) => candidate.id === selectedObject.clipId);
     if (!clip) return;
 
@@ -1678,7 +1746,7 @@ export function SceneObjectOverlay({
       mode,
       buildAxisResetTransform(mode, handle.axis, selectedObject, getObjectTransform(selectedObject, clip)),
     );
-  }, [clips, getObjectTransform, mode, resetObjectTransform, selectedObject]);
+  }, [clips, getObjectTransform, mode, onSetObjectOrbitPivot, resetObjectTransform, selectedObject]);
 
   const resolveRotateRingFromEvent = useCallback((event: ReactMouseEvent<SVGSVGElement>) => (
     resolveNearestRotateRing(getRotateRingEventPoint(event), rotateRings)
@@ -1700,7 +1768,10 @@ export function SceneObjectOverlay({
 
     event.preventDefault();
     event.stopPropagation();
-    if (event.detail > 1) return;
+    if (event.detail > 1) {
+      onSetObjectOrbitPivot?.(selectedObject);
+      return;
+    }
 
     const point = getRotateRingEventPoint(event);
     const startAngle = getPointToRingAngle(point, ring);
@@ -1729,7 +1800,7 @@ export function SceneObjectOverlay({
           }
         : {}),
     });
-  }, [resolveRotateRingFromEvent, selectedObject, startGizmoDrag, updateHoveredAxis]);
+  }, [onSetObjectOrbitPivot, resolveRotateRingFromEvent, selectedObject, startGizmoDrag, updateHoveredAxis]);
 
   const handleRotateRingDoubleClick = useCallback((event: ReactMouseEvent<SVGSVGElement>) => {
     const ring = resolveRotateRingFromEvent(event);
@@ -1746,6 +1817,7 @@ export function SceneObjectOverlay({
     if (event.button !== 0) return;
 
     if (event.detail > 1) {
+      onSetObjectOrbitPivot?.(object);
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -1770,9 +1842,15 @@ export function SceneObjectOverlay({
       pixelsPerUnit: getAveragePixelsPerUnit(freePixelsPerUnit),
       freePixelsPerUnit,
     });
-  }, [axisHandles, handleObjectPointerDown, mode, selectedClipId, startGizmoDrag]);
+  }, [axisHandles, handleObjectPointerDown, mode, onSetObjectOrbitPivot, selectedClipId, startGizmoDrag]);
 
   const handleCenterDoubleClick = useCallback((event: ReactMouseEvent<HTMLButtonElement>, object: PreviewSceneObject) => {
+    if (onSetObjectOrbitPivot?.(object)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (object.clipId !== selectedClipId) return;
     const clip = clips.find((candidate) => candidate.id === object.clipId);
     if (!clip) return;
@@ -1784,7 +1862,7 @@ export function SceneObjectOverlay({
       mode,
       buildCenterResetTransform(mode, object, getObjectTransform(object, clip)),
     );
-  }, [clips, getObjectTransform, mode, resetObjectTransform, selectedClipId]);
+  }, [clips, getObjectTransform, mode, onSetObjectOrbitPivot, resetObjectTransform, selectedClipId]);
 
   if (!enabled || canvasSize.width <= 0 || canvasSize.height <= 0) {
     return null;
@@ -1869,6 +1947,7 @@ export function SceneObjectOverlay({
               onMouseMove={handleRotateRingMouseMove}
               onMouseDown={handleRotateRingMouseDown}
               onDoubleClick={handleRotateRingDoubleClick}
+              onContextMenu={(event) => selectedObject && openObjectContextMenu(event, selectedObject)}
               onMouseLeave={() => handleAxisHover(null)}
             >
               {rotateRings.map((ring) => (
@@ -1899,6 +1978,7 @@ export function SceneObjectOverlay({
                   onMouseLeave={() => handleAxisHover(null)}
                   onMouseDown={(event) => handleAxisMouseDown(event, handle)}
                   onDoubleClick={(event) => handleAxisDoubleClick(event, handle)}
+                  onContextMenu={(event) => selectedObject && openObjectContextMenu(event, selectedObject)}
                 >
                   <span className="preview-scene-gizmo-axis-line" />
                   <span className="preview-scene-gizmo-end" />
@@ -1937,11 +2017,36 @@ export function SceneObjectOverlay({
             aria-label={label}
             onPointerDown={(event) => handleCenterPointerDown(event, object)}
             onDoubleClick={(event) => handleCenterDoubleClick(event, object)}
+            onContextMenu={(event) => openObjectContextMenu(event, object)}
           >
             <span>{getObjectBadge(object.kind)}</span>
           </button>
         );
       })}
+      {objectContextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="preview-scene-object-context-menu"
+          style={{ left: objectContextMenu.x, top: objectContextMenu.y }}
+          role="menu"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setContextMenuObjectOrbitPivot();
+            }}
+          >
+            Set Orbit Pivot
+          </button>
+        </div>
+      )}
       {toolbarPortalTarget && toolbar ? createPortal(toolbar, toolbarPortalTarget) : null}
     </div>
   );

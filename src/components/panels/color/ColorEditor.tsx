@@ -5,6 +5,7 @@ import { useDockStore } from '../../../stores/dockStore';
 import {
   MAX_RUNTIME_PRIMARY_NODES,
   PRIMARY_COLOR_PARAM_DEFS,
+  WHEEL_COLOR_PARAM_DEFS,
   createColorProperty,
   ensureColorCorrectionState,
   getActiveColorVersion,
@@ -12,6 +13,7 @@ import {
   type ColorNode,
   type ColorParamDefinition,
   type ColorViewMode,
+  type RuntimePrimaryColorParams,
 } from '../../../types';
 import type { AnimatableProperty } from '../../../types';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
@@ -50,6 +52,84 @@ function getControlSections(defs: ColorParamDefinition[]) {
 }
 
 const PRIMARY_CONTROL_SECTIONS = getControlSections(PRIMARY_COLOR_PARAM_DEFS);
+
+type RuntimeColorParamKey = keyof RuntimePrimaryColorParams;
+
+interface WheelControlConfig {
+  id: 'lift' | 'gamma' | 'gain' | 'offset';
+  label: string;
+  rKey: RuntimeColorParamKey;
+  gKey: RuntimeColorParamKey;
+  bKey: RuntimeColorParamKey;
+  yKey: RuntimeColorParamKey;
+  chromaRange: number;
+}
+
+const WHEEL_PARAM_DEF_BY_KEY = new Map(
+  WHEEL_COLOR_PARAM_DEFS.map(def => [def.key, def])
+);
+
+const WHEEL_CONTROL_CONFIGS: WheelControlConfig[] = [
+  { id: 'lift', label: 'Lift', rKey: 'liftR', gKey: 'liftG', bKey: 'liftB', yKey: 'liftY', chromaRange: 0.35 },
+  { id: 'gamma', label: 'Gamma', rKey: 'gammaR', gKey: 'gammaG', bKey: 'gammaB', yKey: 'gammaY', chromaRange: 0.65 },
+  { id: 'gain', label: 'Gain', rKey: 'gainR', gKey: 'gainG', bKey: 'gainB', yKey: 'gainY', chromaRange: 0.65 },
+  { id: 'offset', label: 'Offset', rKey: 'offsetR', gKey: 'offsetG', bKey: 'offsetB', yKey: 'offsetY', chromaRange: 0.45 },
+];
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getWheelParamDef(key: RuntimeColorParamKey): ColorParamDefinition {
+  const def = WHEEL_PARAM_DEF_BY_KEY.get(key);
+  if (!def) {
+    throw new Error(`Missing wheel color parameter definition for ${String(key)}`);
+  }
+  return def;
+}
+
+function getWheelPuckPosition(
+  config: WheelControlConfig,
+  values: { r: number; g: number; b: number }
+): { x: number; y: number } {
+  const neutral = getWheelParamDef(config.rKey).defaultValue;
+  const rBias = values.r - neutral;
+  const gBias = values.g - neutral;
+  const bBias = values.b - neutral;
+  const x = (rBias - bBias) / (2 * config.chromaRange);
+  const y = (2 * gBias - rBias - bBias) / (3 * config.chromaRange);
+  return {
+    x: clampNumber(x, -1, 1),
+    y: clampNumber(y, -1, 1),
+  };
+}
+
+function getWheelValuesFromPoint(
+  config: WheelControlConfig,
+  x: number,
+  y: number
+): { r: number; g: number; b: number } {
+  const neutral = getWheelParamDef(config.rKey).defaultValue;
+  const rDef = getWheelParamDef(config.rKey);
+  const gDef = getWheelParamDef(config.gKey);
+  const bDef = getWheelParamDef(config.bKey);
+  return {
+    r: clampNumber(neutral + x * config.chromaRange - y * config.chromaRange * 0.5, rDef.min, rDef.max),
+    g: clampNumber(neutral + y * config.chromaRange, gDef.min, gDef.max),
+    b: clampNumber(neutral - x * config.chromaRange - y * config.chromaRange * 0.5, bDef.min, bDef.max),
+  };
+}
+
+function getWheelPoint(pad: HTMLDivElement, clientX: number, clientY: number): { x: number; y: number } {
+  const rect = pad.getBoundingClientRect();
+  const rawX = ((clientX - rect.left) / rect.width - 0.5) * 2;
+  const rawY = -(((clientY - rect.top) / rect.height - 0.5) * 2);
+  const radius = Math.hypot(rawX, rawY);
+  if (radius <= 1) {
+    return { x: rawX, y: rawY };
+  }
+  return { x: rawX / radius, y: rawY / radius };
+}
 
 function getEdgePath(
   x1: number,
@@ -194,6 +274,75 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
       createColorProperty(activeVersion.id, nodeId, paramName) as AnimatableProperty,
       value
     );
+  };
+
+  const getAnimatedParamValue = (node: ColorNode, key: RuntimeColorParamKey, defaultValue: number) => {
+    const baseValue = typeof node.params[key] === 'number'
+      ? node.params[key] as number
+      : defaultValue;
+    const property = createColorProperty(activeVersion.id, node.id, key) as AnimatableProperty;
+    return interpolateKeyframes(clipColorKeyframes, property, clipLocalTime, baseValue);
+  };
+
+  const setWheelChannelValues = (
+    nodeId: string,
+    config: WheelControlConfig,
+    values: { r: number; g: number; b: number }
+  ) => {
+    setParam(nodeId, config.rKey, values.r);
+    setParam(nodeId, config.gKey, values.g);
+    setParam(nodeId, config.bKey, values.b);
+  };
+
+  const resetWheel = (nodeId: string, config: WheelControlConfig) => {
+    handleBatchStart();
+    setParam(nodeId, config.rKey, getWheelParamDef(config.rKey).defaultValue);
+    setParam(nodeId, config.gKey, getWheelParamDef(config.gKey).defaultValue);
+    setParam(nodeId, config.bKey, getWheelParamDef(config.bKey).defaultValue);
+    setParam(nodeId, config.yKey, getWheelParamDef(config.yKey).defaultValue);
+    handleBatchEnd();
+  };
+
+  const applyWheelPadPoint = (
+    nodeId: string,
+    config: WheelControlConfig,
+    pad: HTMLDivElement,
+    clientX: number,
+    clientY: number
+  ) => {
+    const point = getWheelPoint(pad, clientX, clientY);
+    setWheelChannelValues(nodeId, config, getWheelValuesFromPoint(config, point.x, point.y));
+  };
+
+  const startWheelDrag = (
+    event: React.PointerEvent<HTMLDivElement>,
+    node: ColorNode,
+    config: WheelControlConfig
+  ) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const pad = event.currentTarget;
+    handleBatchStart();
+    applyWheelPadPoint(node.id, config, pad, event.clientX, event.clientY);
+
+    let finished = false;
+    const handleMove = (moveEvent: PointerEvent) => {
+      applyWheelPadPoint(node.id, config, pad, moveEvent.clientX, moveEvent.clientY);
+    };
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      handleBatchEnd();
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
   };
 
   const addNodeDisabled = editableNodes.length >= MAX_RUNTIME_PRIMARY_NODES;
@@ -379,6 +528,132 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     </div>
   );
 
+  const renderWheelControls = (node: ColorNode) => (
+    <div className="properties-section color-control-section color-wheel-section">
+      <div className="color-wheels-grid">
+        {WHEEL_CONTROL_CONFIGS.map(config => {
+          const rDef = getWheelParamDef(config.rKey);
+          const gDef = getWheelParamDef(config.gKey);
+          const bDef = getWheelParamDef(config.bKey);
+          const yDef = getWheelParamDef(config.yKey);
+          const values = {
+            r: getAnimatedParamValue(node, config.rKey, rDef.defaultValue),
+            g: getAnimatedParamValue(node, config.gKey, gDef.defaultValue),
+            b: getAnimatedParamValue(node, config.bKey, bDef.defaultValue),
+          };
+          const yProperty = createColorProperty(activeVersion.id, node.id, config.yKey) as AnimatableProperty;
+          const yValue = getAnimatedParamValue(node, config.yKey, yDef.defaultValue);
+          const puck = getWheelPuckPosition(config, values);
+          const padStyle = {
+            '--puck-x': `${50 + puck.x * 43}%`,
+            '--puck-y': `${50 - puck.y * 43}%`,
+          } as CSSProperties;
+          const channelControls = [
+            { label: 'R', key: config.rKey, def: rDef, value: values.r },
+            { label: 'G', key: config.gKey, def: gDef, value: values.g },
+            { label: 'B', key: config.bKey, def: bDef, value: values.b },
+          ];
+
+          return (
+            <div className="color-wheel-control" key={config.id}>
+              <div className="color-wheel-title">
+                <span>{config.label}</span>
+                <button
+                  type="button"
+                  className="color-wheel-reset"
+                  onClick={() => resetWheel(node.id, config)}
+                >
+                  Reset
+                </button>
+              </div>
+              <div
+                className={`color-wheel-pad color-wheel-pad-${config.id}`}
+                style={padStyle}
+                onPointerDown={(event) => startWheelDrag(event, node, config)}
+                role="presentation"
+              >
+                <span className="color-wheel-puck" />
+              </div>
+
+              <div className="color-wheel-luma-row">
+                <KeyframeToggle clipId={clipId} property={yProperty} value={yValue} />
+                <MIDIParameterLabel
+                  as="label"
+                  target={{
+                    clipId,
+                    property: yProperty,
+                    label: `Color ${config.label} Y`,
+                    currentValue: yValue,
+                    min: yDef.min,
+                    max: yDef.max,
+                  }}
+                >
+                  Y
+                </MIDIParameterLabel>
+                <input
+                  type="range"
+                  min={yDef.min}
+                  max={yDef.max}
+                  step={yDef.step}
+                  value={yValue}
+                  onChange={(rangeEvent) => setParam(node.id, config.yKey, Number(rangeEvent.target.value))}
+                />
+                <DraggableNumber
+                  value={yValue}
+                  onChange={(nextValue) => setParam(node.id, config.yKey, nextValue)}
+                  defaultValue={yDef.defaultValue}
+                  sensitivity={Math.max(0.5, (yDef.max - yDef.min) / 80)}
+                  decimals={yDef.decimals}
+                  min={yDef.min}
+                  max={yDef.max}
+                  persistenceKey={`color.${clipId}.${node.id}.${config.yKey}`}
+                  onDragStart={handleBatchStart}
+                  onDragEnd={handleBatchEnd}
+                />
+              </div>
+
+              <div className="color-wheel-channel-grid">
+                {channelControls.map(({ label, key, def, value }) => {
+                  const property = createColorProperty(activeVersion.id, node.id, key) as AnimatableProperty;
+                  return (
+                    <div className="color-wheel-channel-row" key={key}>
+                      <KeyframeToggle clipId={clipId} property={property} value={value} />
+                      <MIDIParameterLabel
+                        as="label"
+                        target={{
+                          clipId,
+                          property,
+                          label: `Color ${config.label} ${label}`,
+                          currentValue: value,
+                          min: def.min,
+                          max: def.max,
+                        }}
+                      >
+                        {label}
+                      </MIDIParameterLabel>
+                      <DraggableNumber
+                        value={value}
+                        onChange={(nextValue) => setParam(node.id, key, nextValue)}
+                        defaultValue={def.defaultValue}
+                        sensitivity={Math.max(0.5, (def.max - def.min) / 80)}
+                        decimals={def.decimals}
+                        min={def.min}
+                        max={def.max}
+                        persistenceKey={`color.${clipId}.${node.id}.${key}`}
+                        onDragStart={handleBatchStart}
+                        onDragEnd={handleBatchEnd}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const graphNodes = activeVersion.nodes;
   const graphWidth = Math.max(
     760,
@@ -451,9 +726,17 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
           type="button"
           onClick={() => addColorNode(clipId, 'primary')}
           disabled={addNodeDisabled}
-          title={addNodeDisabled ? `Realtime graph limit is ${MAX_RUNTIME_PRIMARY_NODES} primary nodes` : 'Add serial primary node'}
+          title={addNodeDisabled ? `Realtime graph limit is ${MAX_RUNTIME_PRIMARY_NODES} color nodes` : 'Add serial primary node'}
         >
-          Add Node
+          Add Primary
+        </button>
+        <button
+          type="button"
+          onClick={() => addColorNode(clipId, 'wheels')}
+          disabled={addNodeDisabled}
+          title={addNodeDisabled ? `Realtime graph limit is ${MAX_RUNTIME_PRIMARY_NODES} color nodes` : 'Add lift gamma gain wheels node'}
+        >
+          Add Wheels
         </button>
         <button type="button" onClick={() => resetColorCorrection(clipId)}>Reset</button>
         {selectedEdge && (
@@ -602,7 +885,7 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
                       )}
                       <span className="color-graph-node-type">{node.type}</span>
                       <span className="color-graph-node-name">{node.name}</span>
-                      {node.type === 'primary' && (
+                      {node.type !== 'input' && node.type !== 'output' && (
                         <input
                           type="checkbox"
                           checked={node.enabled !== false}
@@ -693,7 +976,9 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
                 </div>
               </div>
 
-              {renderPrimaryControls(selectedNode)}
+              {selectedNode.type === 'wheels'
+                ? renderWheelControls(selectedNode)
+                : renderPrimaryControls(selectedNode)}
             </>
           ) : (
             <>

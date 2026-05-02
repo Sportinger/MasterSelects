@@ -244,7 +244,7 @@ export class FrameExporter {
         }
 
         engine.setRenderTimeOverride(time);
-        syncExportMaskTextures(layers, width, height);
+        syncExportMaskTextures(layers, width, height, time);
         await engine.ensureExportLayersReady(layers);
         engine.render(layers);
 

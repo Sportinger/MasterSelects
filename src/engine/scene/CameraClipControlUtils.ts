@@ -1,7 +1,5 @@
-import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
+import type { SceneCameraSettings } from '../../stores/mediaStore/types';
 import type { AnimatableProperty, ClipTransform, TimelineClip } from '../../types';
-import { resolveOrbitCameraTranslationForFixedEye } from '../gaussian/core/SplatCameraUtils';
-import { getSharedSceneDefaultCameraDistance } from './SceneCameraUtils';
 import type { SceneViewport } from './types';
 
 export type CameraLookRotationAxis = 'x' | 'y' | 'z';
@@ -17,10 +15,6 @@ export const CAMERA_POSE_TRANSFORM_PROPERTIES: AnimatableProperty[] = [
   'position.x',
   'position.y',
   'position.z',
-  'scale.all',
-  'scale.x',
-  'scale.y',
-  'scale.z',
   ...CAMERA_LOOK_ROTATION_PROPERTIES,
 ];
 
@@ -41,42 +35,21 @@ export function resolveCameraLookAtFixedEyeUpdates(
   transform: ClipTransform,
   rotationUpdate: Partial<Record<CameraLookRotationAxis, number>>,
   viewport: SceneViewport,
+  cameraSettingsOverride?: SceneCameraSettings,
 ): CameraTransformPropertyUpdate[] | null {
+  void viewport;
+  void cameraSettingsOverride;
+
   if (clip.source?.type !== 'camera') {
     return null;
   }
 
-  const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
   const nextRotation = {
     x: rotationUpdate.x ?? transform.rotation.x,
     y: rotationUpdate.y ?? transform.rotation.y,
     z: rotationUpdate.z ?? transform.rotation.z,
   };
-  const translation = resolveOrbitCameraTranslationForFixedEye(
-    {
-      position: transform.position,
-      scale: {
-        ...transform.scale,
-        all: transform.scale.all ?? 1,
-        z: transform.scale.z ?? 0,
-      },
-      rotation: transform.rotation,
-    },
-    nextRotation,
-    {
-      nearPlane: cameraSettings.near,
-      farPlane: cameraSettings.far,
-      fov: cameraSettings.fov,
-      minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
-    },
-    viewport,
-  );
-
-  const updates: CameraTransformPropertyUpdate[] = [
-    { property: 'position.x', value: translation.positionX },
-    { property: 'position.y', value: translation.positionY },
-    { property: 'scale.z', value: translation.forwardOffset },
-  ];
+  const updates: CameraTransformPropertyUpdate[] = [];
 
   if (rotationUpdate.x !== undefined) {
     updates.push({ property: 'rotation.x', value: nextRotation.x });

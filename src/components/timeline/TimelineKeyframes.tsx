@@ -4,7 +4,7 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { TimelineKeyframesProps } from './types';
-import type { EasingType, AnimatableProperty } from '../../types';
+import type { EasingType, AnimatableProperty, RotationInterpolationMode } from '../../types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { normalizeEasingType } from '../../utils/easing';
 import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
@@ -16,6 +16,8 @@ interface KeyframeData {
   property: AnimatableProperty;
   value: number;
   easing: string;
+  rotationInterpolation?: RotationInterpolationMode;
+  sourceType?: string;
 }
 
 interface KeyframeDisplay {
@@ -33,6 +35,22 @@ const EASING_OPTIONS: { value: EasingType; label: string }[] = [
   { value: 'ease-out', label: 'Ease Out' },
   { value: 'ease-in-out', label: 'Ease In-Out' },
 ];
+
+const ROTATION_INTERPOLATION_OPTIONS: { value: RotationInterpolationMode; label: string }[] = [
+  { value: 'shortest', label: 'Shortest Path' },
+  { value: 'continuous', label: 'Continuous / Orbit' },
+];
+
+function isRotationProperty(property: AnimatableProperty): boolean {
+  return property.startsWith('rotation.');
+}
+
+function getEffectiveRotationInterpolation(kf: KeyframeData): RotationInterpolationMode {
+  if (kf.rotationInterpolation) {
+    return kf.rotationInterpolation;
+  }
+  return kf.sourceType === 'camera' ? 'shortest' : 'continuous';
+}
 
 function TimelineKeyframesComponent({
   trackId,
@@ -91,6 +109,8 @@ function TimelineKeyframesComponent({
     y: number;
     targetKeyframeIds: string[];
     currentEasing: EasingType | null;
+    rotationTargetKeyframeIds: string[];
+    currentRotationInterpolation: RotationInterpolationMode | null;
   } | null>(null);
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(
     contextMenu ? { x: contextMenu.x, y: contextMenu.y } : null
@@ -126,13 +146,18 @@ function TimelineKeyframesComponent({
     const result = new Map<string, KeyframeData>();
 
     clipKeyframes.forEach((keyframes, clipId) => {
+      const clip = clips.find((candidate) => candidate.id === clipId);
       keyframes.forEach((kf) => {
-        result.set(kf.id, { ...kf, clipId });
+        result.set(kf.id, { ...kf, clipId, sourceType: clip?.source?.type });
       });
     });
 
     return result;
-  }, [clipKeyframes]);
+  }, [clipKeyframes, clips]);
+
+  const getClipSourceType = useCallback((clipId: string): string | undefined => {
+    return clips.find((clip) => clip.id === clipId)?.source?.type;
+  }, [clips]);
 
   const getEditableEasingTarget = useCallback((kf: KeyframeData): KeyframeData => {
     const propKeyframes = (clipKeyframes.get(kf.clipId) || [])
@@ -144,9 +169,24 @@ function TimelineKeyframesComponent({
       return kf;
     }
 
-    return keyframeIndex === propKeyframes.length - 1 && keyframeIndex > 0
-      ? { ...propKeyframes[keyframeIndex - 1], clipId: kf.clipId }
-      : { ...propKeyframes[keyframeIndex], clipId: kf.clipId };
+    const target = keyframeIndex === propKeyframes.length - 1 && keyframeIndex > 0
+      ? propKeyframes[keyframeIndex - 1]
+      : propKeyframes[keyframeIndex];
+
+    return {
+      ...target,
+      clipId: kf.clipId,
+      sourceType: getClipSourceType(kf.clipId),
+    };
+  }, [clipKeyframes, getClipSourceType]);
+
+  const hasOutgoingPropertySegment = useCallback((kf: KeyframeData): boolean => {
+    const propKeyframes = (clipKeyframes.get(kf.clipId) || [])
+      .filter(candidate => candidate.property === kf.property)
+      .sort((a, b) => a.time - b.time);
+    const keyframeIndex = propKeyframes.findIndex(candidate => candidate.id === kf.id);
+
+    return keyframeIndex >= 0 && keyframeIndex < propKeyframes.length - 1;
   }, [clipKeyframes]);
 
   const getContextMenuTargets = useCallback((clickedKeyframe: KeyframeData) => {
@@ -158,27 +198,39 @@ function TimelineKeyframesComponent({
       ? Array.from(selectedKeyframeIds)
       : [clickedKeyframe.id];
 
-    const targetKeyframeIds: string[] = [];
+    const sourceKeyframes: KeyframeData[] = [];
+    const seenSourceIds = new Set<string>();
+    const targetKeyframes: KeyframeData[] = [];
     const seenTargetIds = new Set<string>();
 
     for (const keyframeId of sourceIds) {
       const sourceKeyframe = keyframeLookup.get(keyframeId);
       if (!sourceKeyframe) continue;
 
+      if (!seenSourceIds.has(sourceKeyframe.id)) {
+        seenSourceIds.add(sourceKeyframe.id);
+        sourceKeyframes.push(sourceKeyframe);
+      }
+
       const targetKeyframe = getEditableEasingTarget(sourceKeyframe);
       if (seenTargetIds.has(targetKeyframe.id)) continue;
 
       seenTargetIds.add(targetKeyframe.id);
-      targetKeyframeIds.push(targetKeyframe.id);
+      targetKeyframes.push(targetKeyframe);
     }
 
-    if (targetKeyframeIds.length === 0) {
+    if (targetKeyframes.length === 0) {
       const fallbackTarget = getEditableEasingTarget(clickedKeyframe);
-      targetKeyframeIds.push(fallbackTarget.id);
+      targetKeyframes.push(fallbackTarget);
+    }
+    if (sourceKeyframes.length === 0) {
+      sourceKeyframes.push(clickedKeyframe);
     }
 
-    const easingValues = targetKeyframeIds
-      .map((keyframeId) => keyframeLookup.get(keyframeId)?.easing)
+    const targetKeyframeIds = targetKeyframes.map((targetKeyframe) => targetKeyframe.id);
+
+    const easingValues = targetKeyframes
+      .map((targetKeyframe) => targetKeyframe.easing)
       .filter((easing): easing is string => Boolean(easing))
       .map((easing) => normalizeEasingType(easing, 'linear'));
 
@@ -186,8 +238,42 @@ function TimelineKeyframesComponent({
       ? easingValues[0]
       : null;
 
-    return { targetKeyframeIds, currentEasing };
-  }, [getEditableEasingTarget, keyframeLookup, selectedKeyframeIds]);
+    const rotationTargetKeyframes = sourceKeyframes.filter((targetKeyframe) =>
+      isRotationProperty(targetKeyframe.property) && hasOutgoingPropertySegment(targetKeyframe),
+    );
+    const rotationValues = rotationTargetKeyframes.map(getEffectiveRotationInterpolation);
+    const currentRotationInterpolation =
+      rotationValues.length > 0 && rotationValues.every((mode) => mode === rotationValues[0])
+        ? rotationValues[0]
+        : null;
+
+    return {
+      targetKeyframeIds,
+      currentEasing,
+      rotationTargetKeyframeIds: rotationTargetKeyframes.map((targetKeyframe) => targetKeyframe.id),
+      currentRotationInterpolation,
+    };
+  }, [getEditableEasingTarget, hasOutgoingPropertySegment, keyframeLookup, selectedKeyframeIds]);
+
+  const getRotationPathDisplayMode = useCallback((
+    kf: KeyframeData,
+    clip: KeyframeDisplay['clip'],
+  ): RotationInterpolationMode | null => {
+    if (!isRotationProperty(kf.property)) {
+      return null;
+    }
+
+    const keyframe = {
+      ...kf,
+      clipId: clip.id,
+      sourceType: clip.source?.type,
+    };
+    if (!hasOutgoingPropertySegment(keyframe)) {
+      return null;
+    }
+
+    return getEffectiveRotationInterpolation(keyframe);
+  }, [hasOutgoingPropertySegment]);
 
   // Calculate effective start time for a clip (handles drag preview)
   // This is called during render to always use latest clipDrag state
@@ -325,13 +411,20 @@ function TimelineKeyframesComponent({
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    const { targetKeyframeIds, currentEasing } = getContextMenuTargets(kf);
+    const {
+      targetKeyframeIds,
+      currentEasing,
+      rotationTargetKeyframeIds,
+      currentRotationInterpolation,
+    } = getContextMenuTargets(kf);
 
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       targetKeyframeIds,
       currentEasing,
+      rotationTargetKeyframeIds,
+      currentRotationInterpolation,
     });
   }, [getContextMenuTargets]);
 
@@ -362,6 +455,15 @@ function TimelineKeyframesComponent({
     }
   }, [contextMenu, onUpdateKeyframe]);
 
+  const handleRotationInterpolationSelect = useCallback((rotationInterpolation: RotationInterpolationMode) => {
+    if (contextMenu) {
+      contextMenu.rotationTargetKeyframeIds.forEach((keyframeId) => {
+        onUpdateKeyframe(keyframeId, { rotationInterpolation });
+      });
+      setContextMenu(null);
+    }
+  }, [contextMenu, onUpdateKeyframe]);
+
   return (
     <>
       {allKeyframes.map(({ kf, clip }) => {
@@ -373,19 +475,34 @@ function TimelineKeyframesComponent({
         const isDragging = dragState?.keyframeId === kf.id;
         const easing = normalizeEasingType(kf.easing, 'linear');
         const isStateChange = Boolean(parseVectorAnimationStateProperty(kf.property));
+        const rotationPathDisplayMode = getRotationPathDisplayMode(kf, clip);
+        const rotationPathLabel = rotationPathDisplayMode === 'continuous'
+          ? 'C'
+          : rotationPathDisplayMode === 'shortest'
+            ? 'S'
+            : null;
+        const rotationTitle = rotationPathDisplayMode
+          ? `\nRotation path: ${rotationPathDisplayMode === 'shortest' ? 'Shortest Path' : 'Continuous / Orbit'}`
+          : '';
 
         return (
           <div
             key={kf.id}
-            className={`keyframe-diamond easing-${easing} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
+            className={`keyframe-diamond easing-${easing} ${rotationPathDisplayMode ? `rotation-path-${rotationPathDisplayMode}` : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
             style={{ left: `${xPos}px` }}
             onMouseDown={(e) => handleMouseDown(e, kf, clip)}
             onDoubleClick={handleDoubleClick}
             onMouseEnter={() => onKeyframeRowHover?.(trackId, property, true)}
             onMouseLeave={() => onKeyframeRowHover?.(trackId, property, false)}
             onContextMenu={(e) => handleContextMenu(e, kf)}
-            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}\nDrag to move (Shift snaps to clip keyframes)\nRight-click to change easing`}
-          />
+            title={`${property}: ${kf.value.toFixed(3)} @ ${absTime.toFixed(2)}s\nEasing: ${easing}${rotationTitle}\nDrag to move (Shift snaps to clip keyframes)\nRight-click to change segment options`}
+          >
+            {rotationPathLabel && (
+              <span className="keyframe-rotation-path-label" aria-hidden="true">
+                {rotationPathLabel}
+              </span>
+            )}
+          </div>
         );
       })}
 
@@ -424,9 +541,28 @@ function TimelineKeyframesComponent({
               onClick={() => handleEasingSelect(option.value)}
             >
               {option.label}
-              {contextMenu.currentEasing === option.value && <span className="checkmark">✓</span>}
+              {contextMenu.currentEasing === option.value && <span className="checkmark">&#10003;</span>}
             </div>
           ))}
+          {contextMenu.rotationTargetKeyframeIds.length > 0 && (
+            <>
+              <div className="context-menu-subtitle">Rotation Path</div>
+              {ROTATION_INTERPOLATION_OPTIONS.map((option) => (
+                <div
+                  key={option.value}
+                  className={`context-menu-item ${contextMenu.currentRotationInterpolation === option.value ? 'active' : ''}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={() => handleRotationInterpolationSelect(option.value)}
+                >
+                  {option.label}
+                  {contextMenu.currentRotationInterpolation === option.value && <span className="checkmark">&#10003;</span>}
+                </div>
+              ))}
+            </>
+          )}
         </div>,
         document.body
       )}

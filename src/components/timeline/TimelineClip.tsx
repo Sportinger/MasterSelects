@@ -293,6 +293,7 @@ function TimelineClipComponent({
 
   // Determine if this is a solid clip
   const isSolidClip = clip.source?.type === 'solid';
+  const isMathSceneClip = clip.source?.type === 'math-scene';
   const isLottieClip = clip.source?.type === 'lottie';
   const isCameraClip = clip.source?.type === 'camera';
   const isGaussianSplatClip = clip.source?.type === 'gaussian-splat';
@@ -328,7 +329,7 @@ function TimelineClipComponent({
     const deltaX = clipTrim.currentX - clipTrim.startX;
     const deltaTime = pixelToTime(deltaX);
     const sourceType = clip.source?.type;
-    const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera' || sourceType === 'splat-effector';
+    const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera' || sourceType === 'splat-effector' || sourceType === 'math-scene';
     const canLoopExtendRight = canLoopExtendVectorClip(clip);
     const maxDuration = isInfiniteClip
       ? Number.MAX_SAFE_INTEGER
@@ -516,7 +517,7 @@ function TimelineClipComponent({
   }
 
   // Determine clip type class (audio, video, text, or image)
-  const clipTypeClass = isSolidClip ? 'solid' : (isTextClip || isText3DClip) ? 'text' : isCameraClip ? 'camera' : isSplatEffectorClip ? 'splat-effector' : isAudioClip ? 'audio' : (clip.source?.type || 'video');
+  const clipTypeClass = isSolidClip ? 'solid' : isMathSceneClip ? 'math-scene' : (isTextClip || isText3DClip) ? 'text' : isCameraClip ? 'camera' : isSplatEffectorClip ? 'splat-effector' : isAudioClip ? 'audio' : (clip.source?.type || 'video');
 
   // Check if this clip is part of a multi-select drag
   const isInMultiSelectDrag = clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined;
@@ -952,6 +953,9 @@ function TimelineClipComponent({
             {isLottieClip && (
               <span className="clip-text-icon" title="Lottie Clip">L</span>
             )}
+            {isMathSceneClip && (
+              <span className="clip-text-icon" title="Math Scene Clip">ƒ</span>
+            )}
             {staticClipIconKind && (
               <StaticClipIcon
                 kind={staticClipIconKind}
@@ -964,6 +968,8 @@ function TimelineClipComponent({
             <span className="clip-name">
               {isTextClip && clip.textProperties
                 ? clip.textProperties.text.slice(0, 30) || 'Text'
+                : isMathSceneClip && clip.mathScene
+                  ? clip.mathScene.objects.find((object) => object.type === 'function')?.expression || 'Math Scene'
                 : isText3DClip && text3DProperties
                   ? text3DProperties.text.slice(0, 30) || '3D Text'
                   : clip.name}

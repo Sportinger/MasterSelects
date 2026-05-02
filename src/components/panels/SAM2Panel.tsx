@@ -7,6 +7,7 @@ import { getMatAnyoneService } from '../../services/matanyone/MatAnyoneService';
 import { useSAM2Store } from '../../stores/sam2Store';
 import { getSAM2Service } from '../../services/sam2/SAM2Service';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import { MatAnyoneSetupDialog } from '../common/MatAnyoneSetupDialog';
 import type { TimelineClip } from '../../types';
 import './SAM2Panel.css';
@@ -18,13 +19,20 @@ type MatAnyoneClipSource = NonNullable<TimelineClip['source']> & {
   filePath?: string;
   mediaFileId?: string;
 };
+type MatAnyoneResult = NonNullable<ReturnType<typeof useMatAnyoneStore.getState>['lastResult']>;
 type MatAnyoneFileClient = {
   getProjectRoot(timeoutMs?: number): Promise<string | null>;
   createDir(path: string, recursive?: boolean): Promise<boolean>;
 };
+type MatAnyoneImportFileClient = {
+  getDownloadedFile(path: string): Promise<ArrayBuffer | null>;
+};
 
 const VIDEO_EXTENSION_CANDIDATES = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v'];
 const INVALID_NATIVE_FILE_NAME_CHARS = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*']);
+const MATANYONE_PROJECT_OUTPUT_FOLDER = 'MatAnyone2';
+const MATANYONE_MEDIA_ROOT_FOLDER = 'AI Gen';
+const MATANYONE_MEDIA_SUBFOLDER = 'Matting';
 
 function isAbsolutePath(path: string | null | undefined): path is string {
   if (!path) return false;
@@ -37,6 +45,28 @@ function getBaseName(path: string | null | undefined): string {
   if (!trimmed) return '';
   const parts = trimmed.split(/[\\/]/);
   return parts[parts.length - 1] || '';
+}
+
+function guessMimeTypeFromPath(path: string): string {
+  const extension = getBaseName(path).toLowerCase().split('.').pop();
+  switch (extension) {
+    case 'mp4':
+    case 'm4v':
+      return 'video/mp4';
+    case 'mov':
+      return 'video/quicktime';
+    case 'webm':
+      return 'video/webm';
+    case 'mkv':
+      return 'video/x-matroska';
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    default:
+      return 'application/octet-stream';
+  }
 }
 
 function hasFileExtension(name: string): boolean {
@@ -63,6 +93,73 @@ function joinNativePath(root: string, ...parts: string[]): string {
   const base = root.replace(/[\\/]+$/, '');
   const cleanedParts = parts.map(part => part.replace(/^[\\/]+|[\\/]+$/g, ''));
   return [base || root, ...cleanedParts].filter(Boolean).join(separator);
+}
+
+function getOrCreateMattingMediaFolder(): string {
+  const mediaStore = useMediaStore.getState();
+  let rootFolder = mediaStore.folders.find(folder => folder.name === MATANYONE_MEDIA_ROOT_FOLDER && !folder.parentId);
+  if (!rootFolder) {
+    rootFolder = mediaStore.createFolder(MATANYONE_MEDIA_ROOT_FOLDER);
+  }
+
+  const latestMediaStore = useMediaStore.getState();
+  let mattingFolder = latestMediaStore.folders.find(folder =>
+    folder.name === MATANYONE_MEDIA_SUBFOLDER && folder.parentId === rootFolder.id
+  );
+  if (!mattingFolder) {
+    mattingFolder = latestMediaStore.createFolder(MATANYONE_MEDIA_SUBFOLDER, rootFolder.id);
+  }
+
+  return mattingFolder.id;
+}
+
+function buildMatAnyoneProjectFileName(result: MatAnyoneResult, filePath: string): string {
+  const safeClipId = sanitizeNativeFileName(result.sourceClipId || 'clip');
+  const fileName = sanitizeNativeFileName(getBaseName(filePath) || 'matanyone-result.mp4');
+  return `${MATANYONE_PROJECT_OUTPUT_FOLDER}/${safeClipId}/${fileName}`;
+}
+
+async function readNativeFileAsFile(nativeHelper: MatAnyoneImportFileClient, path: string): Promise<File> {
+  const buffer = await nativeHelper.getDownloadedFile(path);
+  if (!buffer) {
+    throw new Error(`Could not read MatAnyone2 output: ${path}`);
+  }
+
+  const fileName = getBaseName(path) || 'matanyone-result.mp4';
+  return new File([buffer], fileName, {
+    type: guessMimeTypeFromPath(path),
+    lastModified: Date.now(),
+  });
+}
+
+function getMatAnyoneFrameRange(clip: TimelineClip): { startFrame?: number; endFrame?: number } {
+  const source = clip.source as MatAnyoneClipSource | null;
+  if (!source || source.type !== 'video') return {};
+
+  const mediaFileId = source.mediaFileId ?? clip.mediaFileId;
+  const mediaFile = mediaFileId
+    ? useMediaStore.getState().files.find(file => file.id === mediaFileId)
+    : undefined;
+  const fps =
+    source.nativeDecoder?.fps ??
+    mediaFile?.fps ??
+    30;
+  const safeFps = Number.isFinite(fps) && fps > 0 ? fps : 30;
+  const naturalDuration = source.naturalDuration ?? mediaFile?.duration ?? clip.outPoint;
+  const frameToleranceSeconds = 0.5 / safeFps;
+
+  const hasTrimIn = clip.inPoint > frameToleranceSeconds;
+  const hasTrimOut = Number.isFinite(naturalDuration)
+    && naturalDuration > 0
+    && clip.outPoint < naturalDuration - frameToleranceSeconds;
+
+  if (!hasTrimIn && !hasTrimOut) {
+    return {};
+  }
+
+  const startFrame = Math.max(0, Math.floor(clip.inPoint * safeFps));
+  const endFrame = Math.max(startFrame + 1, Math.ceil(clip.outPoint * safeFps));
+  return { startFrame, endFrame };
 }
 
 async function resolveMatAnyoneVideoPath(selectedClip: TimelineClip): Promise<string | null> {
@@ -145,7 +242,7 @@ async function createMatAnyoneJobDir(nativeHelper: MatAnyoneFileClient, clipId: 
 
   const safeClipId = sanitizeNativeFileName(clipId || 'clip');
   const jobName = sanitizeNativeFileName(`job-${safeClipId}-${Date.now().toString(36)}`);
-  const jobDir = joinNativePath(projectRoot, 'matanyone-temp', jobName);
+  const jobDir = joinNativePath(projectRoot, MATANYONE_PROJECT_OUTPUT_FOLDER, jobName);
   const created = await nativeHelper.createDir(jobDir, true).catch(() => false);
   return created ? jobDir : null;
 }
@@ -158,6 +255,8 @@ export function SAM2Panel() {
   const [isEraser, setIsEraser] = useState(false);
   const paintCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hasPaintedMask, setHasPaintedMask] = useState(false);
+  const [isImportingMatte, setIsImportingMatte] = useState(false);
+  const [matImportError, setMatImportError] = useState<string | null>(null);
 
   // MatAnyone2 state
   const matStatus = useMatAnyoneStore(s => s.setupStatus);
@@ -214,6 +313,11 @@ export function SAM2Panel() {
       getSAM2Service().checkAndAutoLoad();
     }
   }, [sam2Status]);
+
+  useEffect(() => {
+    setMatImportError(null);
+    setIsImportingMatte(false);
+  }, [matResult?.foregroundPath, matResult?.alphaPath]);
 
   const isMatReady = matStatus === 'ready';
   const isMatInstalled = matStatus === 'installed' || matStatus === 'ready' || matStatus === 'starting';
@@ -466,7 +570,7 @@ export function SAM2Panel() {
       const { NativeHelperClient } = await import('../../services/nativeHelper/NativeHelperClient');
       const jobDir = await createMatAnyoneJobDir(NativeHelperClient, selectedClip.id);
       if (!jobDir) {
-        useMatAnyoneStore.getState().setError('Could not create a MatAnyone2 temporary output folder.');
+        useMatAnyoneStore.getState().setError('Could not create a MatAnyone2 output folder.');
         return;
       }
 
@@ -487,6 +591,7 @@ export function SAM2Panel() {
         videoPath,
         maskPath,
         outputDir: jobDir,
+        ...getMatAnyoneFrameRange(selectedClip),
         sourceClipId: selectedClip.id,
       });
     } catch (e) {
@@ -496,6 +601,97 @@ export function SAM2Panel() {
       );
     }
   }, [selectedClip, maskMode]);
+
+  const handleImportMattingResult = useCallback(async () => {
+    if (!matResult || isImportingMatte) return;
+
+    setIsImportingMatte(true);
+    setMatImportError(null);
+
+    try {
+      const { NativeHelperClient } = await import('../../services/nativeHelper/NativeHelperClient');
+      const folderId = getOrCreateMattingMediaFolder();
+
+      const foregroundFile = await readNativeFileAsFile(NativeHelperClient, matResult.foregroundPath);
+      const foregroundMedia = await useMediaStore.getState().importFile(foregroundFile, folderId, {
+        forceCopyToProject: true,
+        projectFileName: buildMatAnyoneProjectFileName(matResult, matResult.foregroundPath),
+      });
+      useMediaStore.getState().moveToFolder([foregroundMedia.id], folderId);
+
+      let alphaMediaId: string | null = null;
+      try {
+        const alphaFile = await readNativeFileAsFile(NativeHelperClient, matResult.alphaPath);
+        const alphaMedia = await useMediaStore.getState().importFile(alphaFile, folderId, {
+          forceCopyToProject: true,
+          projectFileName: buildMatAnyoneProjectFileName(matResult, matResult.alphaPath),
+        });
+        useMediaStore.getState().moveToFolder([alphaMedia.id], folderId);
+        alphaMediaId = alphaMedia.id;
+      } catch (alphaError) {
+        console.warn('MatAnyone2 alpha sidecar import failed:', alphaError);
+      }
+
+      if (!foregroundMedia.file) {
+        throw new Error(`Imported media is not ready: ${foregroundMedia.name}`);
+      }
+
+      const timelineBefore = useTimelineStore.getState();
+      const sourceClip = timelineBefore.clips.find(clip => clip.id === matResult.sourceClipId) ?? selectedClip;
+      if (!sourceClip) {
+        throw new Error('Source clip is no longer available.');
+      }
+
+      const targetTrackId = timelineBefore.addTrack('video');
+      const beforeClipIds = new Set(useTimelineStore.getState().clips.map(clip => clip.id));
+      await useTimelineStore.getState().addClip(
+        targetTrackId,
+        foregroundMedia.file,
+        sourceClip.startTime,
+        sourceClip.duration,
+        foregroundMedia.id,
+      );
+
+      const timelineAfterAdd = useTimelineStore.getState();
+      const addedVideoClip = timelineAfterAdd.clips.find(clip =>
+        !beforeClipIds.has(clip.id) &&
+        clip.source?.type === 'video' &&
+        clip.source.mediaFileId === foregroundMedia.id
+      );
+
+      if (addedVideoClip) {
+        const timeline = useTimelineStore.getState();
+        timeline.updateClipTransform(addedVideoClip.id, structuredClone(sourceClip.transform));
+
+        const latestClip = useTimelineStore.getState().clips.find(clip => clip.id === addedVideoClip.id);
+        const matteDuration = Math.max(0.01, Math.min(
+          sourceClip.duration,
+          latestClip?.source?.naturalDuration ?? latestClip?.duration ?? sourceClip.duration,
+        ));
+        timeline.trimClip(addedVideoClip.id, 0, matteDuration);
+
+        if (latestClip?.linkedClipId) {
+          useTimelineStore.getState().removeClip(latestClip.linkedClipId);
+        }
+
+        useTimelineStore.getState().updateClip(addedVideoClip.id, {
+          name: `Matte - ${sourceClip.name}`,
+        });
+        useTimelineStore.getState().selectClip(addedVideoClip.id);
+      }
+
+      console.info('Imported MatAnyone2 result', {
+        foregroundMediaId: foregroundMedia.id,
+        alphaMediaId,
+        folderId,
+      });
+    } catch (e) {
+      console.error('Importing MatAnyone2 result failed:', e);
+      setMatImportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsImportingMatte(false);
+    }
+  }, [isImportingMatte, matResult, selectedClip]);
 
   const handleStartServer = useCallback(() => {
     getMatAnyoneService().startServer().catch(() => {});
@@ -750,7 +946,7 @@ export function SAM2Panel() {
                 ) : (
                   <>
                     <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                      Extracts the masked subject with alpha for the entire clip.
+                      Extracts the masked subject with alpha for the selected clip segment.
                       {matCuda && matGpu && <> Using {matGpu}.</>}
                     </p>
 
@@ -810,11 +1006,27 @@ export function SAM2Panel() {
                           <div>{matResult.foregroundPath.split(/[/\\]/).pop()}</div>
                           <div>{matResult.alphaPath.split(/[/\\]/).pop()}</div>
                         </div>
-                        <button className="sam2-btn" onClick={() => {
-                          console.log('Import matting result:', matResult);
-                        }} style={{ marginTop: 2, fontSize: 11 }}>
-                          Import to Timeline
+                        <button
+                          className="sam2-btn"
+                          onClick={handleImportMattingResult}
+                          disabled={isImportingMatte}
+                          style={{ marginTop: 2, fontSize: 11 }}
+                        >
+                          {isImportingMatte ? 'Importing...' : 'Import to Timeline'}
                         </button>
+                        {matImportError && (
+                          <div style={{
+                            padding: '6px 8px',
+                            marginTop: 2,
+                            background: 'rgba(231, 76, 60, 0.1)',
+                            border: '1px solid var(--danger)',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            color: 'var(--danger)',
+                          }}>
+                            {matImportError}
+                          </div>
+                        )}
                       </div>
                     )}
                   </>

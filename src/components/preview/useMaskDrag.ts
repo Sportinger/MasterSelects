@@ -1,8 +1,8 @@
-// Whole-mask dragging (move all vertices together)
+// Whole-mask dragging (move the mask transform so X/Y fields stay live)
 
 import { useRef, useCallback } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
-import type { ClipMask, TimelineClip } from '../../types';
+import { createMaskNumericProperty, type ClipMask, type TimelineClip } from '../../types';
 import { startBatch, endBatch } from '../../stores/historyStore';
 
 export function useMaskDrag(
@@ -21,14 +21,16 @@ export function useMaskDrag(
     startY: number;
     startLocalX: number;
     startLocalY: number;
-    startVertices: Array<{ id: string; x: number; y: number }>;
+    startPositionX: number;
+    startPositionY: number;
   }>({
     isDragging: false,
     startX: 0,
     startY: 0,
     startLocalX: 0,
     startLocalY: 0,
-    startVertices: [],
+    startPositionX: 0,
+    startPositionY: 0,
   });
 
   const handleMaskDragStart = useCallback((e: React.MouseEvent) => {
@@ -45,7 +47,8 @@ export function useMaskDrag(
       startY: e.clientY,
       startLocalX: startLocalPoint?.x ?? 0,
       startLocalY: startLocalPoint?.y ?? 0,
-      startVertices: activeMask.vertices.map(v => ({ id: v.id, x: v.x, y: v.y })),
+      startPositionX: activeMask.position?.x ?? 0,
+      startPositionY: activeMask.position?.y ?? 0,
     };
 
     setMaskDragging(true);
@@ -74,17 +77,16 @@ export function useMaskDrag(
         ? localPoint.y - maskDragState.current.startLocalY
         : ((moveEvent.clientY - maskDragState.current.startY) * scaleY) / canvasHeight;
 
-      useTimelineStore.getState().updateVertices(
+      const store = useTimelineStore.getState();
+      store.setPropertyValue(
         selectedClip.id,
-        activeMask.id,
-        maskDragState.current.startVertices.map(startVertex => ({
-          id: startVertex.id,
-          updates: {
-            x: Math.max(0, Math.min(1, startVertex.x + normalizedDx)),
-            y: Math.max(0, Math.min(1, startVertex.y + normalizedDy)),
-          },
-        })),
-        true
+        createMaskNumericProperty(activeMask.id, 'position.x'),
+        maskDragState.current.startPositionX + normalizedDx,
+      );
+      store.setPropertyValue(
+        selectedClip.id,
+        createMaskNumericProperty(activeMask.id, 'position.y'),
+        maskDragState.current.startPositionY + normalizedDy,
       );
     };
 
@@ -99,7 +101,8 @@ export function useMaskDrag(
         startY: 0,
         startLocalX: 0,
         startLocalY: 0,
-        startVertices: [],
+        startPositionX: 0,
+        startPositionY: 0,
       };
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);

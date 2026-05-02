@@ -2,7 +2,7 @@ import { MAX_RUNTIME_PRIMARY_NODES, type RuntimeColorGrade } from '../../types';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ColorPipeline');
-const COLOR_NODE_VEC4_ROWS = 4;
+const COLOR_NODE_VEC4_ROWS = 8;
 const COLOR_UNIFORM_FLOATS = 4 + MAX_RUNTIME_PRIMARY_NODES * COLOR_NODE_VEC4_ROWS * 4;
 
 const COLOR_SHADER = `
@@ -65,11 +65,15 @@ fn hueRotate(rgb: vec3f, degrees: f32) -> vec3f {
 }
 
 fn applyPrimary(rgbIn: vec3f, nodeIndex: u32) -> vec3f {
-  let baseIndex = nodeIndex * 4u;
+  let baseIndex = nodeIndex * 8u;
   let p0 = color.data[baseIndex + 0u];
   let p1 = color.data[baseIndex + 1u];
   let p2 = color.data[baseIndex + 2u];
   let p3 = color.data[baseIndex + 3u];
+  let p4 = color.data[baseIndex + 4u];
+  let p5 = color.data[baseIndex + 5u];
+  let p6 = color.data[baseIndex + 6u];
+  let p7 = color.data[baseIndex + 7u];
 
   let exposure = p0.x;
   let contrast = p0.y;
@@ -87,12 +91,16 @@ fn applyPrimary(rgbIn: vec3f, nodeIndex: u32) -> vec3f {
   let offset = p3.y;
   let shadows = p3.z;
   let highlights = p3.w;
+  let liftRgb = vec3f(p4.x, p4.y, p4.z) + vec3f(p4.w);
+  let gammaRgb = vec3f(gamma) * vec3f(p5.x, p5.y, p5.z) * vec3f(p5.w);
+  let gainRgb = vec3f(gain) * vec3f(p6.x, p6.y, p6.z) * vec3f(p6.w);
+  let offsetRgb = vec3f(p7.x, p7.y, p7.z) + vec3f(p7.w);
 
   var rgb = rgbIn;
   let range = max(whitePoint - blackPoint, 0.001);
   rgb = clamp((rgb - vec3f(blackPoint)) / range, vec3f(0.0), vec3f(1.0));
 
-  rgb += vec3f(lift + offset);
+  rgb += vec3f(lift + offset) + liftRgb + offsetRgb;
   rgb *= exp2(exposure);
 
   let toneY = luma(rgb);
@@ -100,8 +108,8 @@ fn applyPrimary(rgbIn: vec3f, nodeIndex: u32) -> vec3f {
   let highlightMask = clamp(toneY * 2.0 - 1.0, 0.0, 1.0);
   rgb += vec3f(shadows * 0.35 * shadowMask + highlights * 0.35 * highlightMask);
 
-  rgb = pow(max(rgb, vec3f(0.0)), vec3f(1.0 / max(gamma, 0.001)));
-  rgb *= gain;
+  rgb = pow(max(rgb, vec3f(0.0)), vec3f(1.0) / max(gammaRgb, vec3f(0.001)));
+  rgb *= gainRgb;
   rgb = (rgb - vec3f(pivot)) * contrast + vec3f(pivot);
 
   let y = luma(rgb);
@@ -211,6 +219,22 @@ export class ColorPipeline {
       uniforms[offset + 13] = params.offset;
       uniforms[offset + 14] = params.shadows;
       uniforms[offset + 15] = params.highlights;
+      uniforms[offset + 16] = params.liftR;
+      uniforms[offset + 17] = params.liftG;
+      uniforms[offset + 18] = params.liftB;
+      uniforms[offset + 19] = params.liftY;
+      uniforms[offset + 20] = params.gammaR;
+      uniforms[offset + 21] = params.gammaG;
+      uniforms[offset + 22] = params.gammaB;
+      uniforms[offset + 23] = params.gammaY;
+      uniforms[offset + 24] = params.gainR;
+      uniforms[offset + 25] = params.gainG;
+      uniforms[offset + 26] = params.gainB;
+      uniforms[offset + 27] = params.gainY;
+      uniforms[offset + 28] = params.offsetR;
+      uniforms[offset + 29] = params.offsetG;
+      uniforms[offset + 30] = params.offsetB;
+      uniforms[offset + 31] = params.offsetY;
     });
     this.device.queue.writeBuffer(uniformBuffer, 0, uniforms);
 

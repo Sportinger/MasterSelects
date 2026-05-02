@@ -40,6 +40,7 @@ import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/cons
 import { prewarmGaussianSplatRuntime } from '../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { resolveSharedSplatUseNativeRenderer } from '../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
+import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 
 const log = Logger.create('LayerBuilder');
 
@@ -251,6 +252,7 @@ export class LayerBuilderService {
     // Create frame context (single store read)
     const ctx = createFrameContext();
     this.syncActiveLottieClips(ctx);
+    this.syncActiveMathSceneClips(ctx);
     const { activeLayerSlots = {}, activeCompositionId } = useMediaStore.getState();
     const slotGridActive = useTimelineStore.getState().slotGridProgress > 0.5;
     const hasActiveLayerSlots = Object.keys(activeLayerSlots).length > 0;
@@ -348,6 +350,14 @@ export class LayerBuilderService {
     }
 
     lottieRuntimeManager.pruneClipRuntimes(this.collectKnownClipIds(ctx.clips));
+  }
+
+  private syncActiveMathSceneClips(ctx: FrameContext): void {
+    for (const clip of ctx.clipsAtTime) {
+      if (clip.source?.type !== 'math-scene') continue;
+      const timeInfo = getClipTimeInfo(ctx, clip);
+      mathSceneRenderer.renderClip(clip, timeInfo.clipLocalTime);
+    }
   }
 
   /**
@@ -522,6 +532,14 @@ export class LayerBuilderService {
         ctx.playheadPosition,
         ctx.getInterpolatedVectorAnimationSettings(clip.id, ctx.playheadPosition - clip.startTime),
       );
+      if (clip.source?.textCanvas) {
+        layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
+      }
+    }
+    // Math Scene canvas-backed clip
+    else if (clip.source?.type === 'math-scene') {
+      const timeInfo = getClipTimeInfo(ctx, clip);
+      mathSceneRenderer.renderClip(clip, timeInfo.clipLocalTime);
       if (clip.source?.textCanvas) {
         layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
       }
@@ -1449,6 +1467,14 @@ export class LayerBuilderService {
         ...baseLayer,
         source: { type: 'image', imageElement: nestedClip.source.imageElement },
       } as Layer;
+    } else if (nestedClip.source?.type === 'math-scene') {
+      mathSceneRenderer.renderClip(nestedClip, nestedClipLocalTime);
+      if (nestedClip.source?.textCanvas) {
+        return {
+          ...baseLayer,
+          source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
+        } as Layer;
+      }
     } else if (nestedClip.source?.type === 'lottie') {
       lottieRuntimeManager.renderClipAtTime(
         nestedClip,

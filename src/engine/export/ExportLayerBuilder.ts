@@ -22,6 +22,7 @@ import {
   resolveGaussianSplatSequenceData,
 } from '../../utils/gaussianSplatSequence';
 import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/modelSequence';
+import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 
 // Cache video tracks and solo state at export start (don't change during export)
 let cachedVideoTracks: TimelineTrack[] | null = null;
@@ -250,14 +251,16 @@ export function buildLayersAtTime(
         is3D: true,
       });
     }
-    // Handle text, solid, and Lottie clips
-    else if ((clip.source?.type === 'text' || clip.source?.type === 'solid' || clip.source?.type === 'lottie') && clip.source.textCanvas) {
+    // Handle text, solid, Lottie, and Math Scene clips
+    else if ((clip.source?.type === 'text' || clip.source?.type === 'solid' || clip.source?.type === 'lottie' || clip.source?.type === 'math-scene') && clip.source.textCanvas) {
       if (clip.source.type === 'lottie') {
         lottieRuntimeManager.renderClipAtTime(
           clip,
           time,
           getVectorAnimationSettingsForExport(clip, clipLocalTime, ctx),
         );
+      } else if (clip.source.type === 'math-scene') {
+        mathSceneRenderer.renderClip(clip, clipLocalTime);
       }
       layers.push({
         ...baseLayerProps,
@@ -616,13 +619,15 @@ function buildNestedLayerForExport(
     } as Layer;
   }
 
-  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid' || nestedClip.source?.type === 'lottie') && nestedClip.source.textCanvas) {
+  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid' || nestedClip.source?.type === 'lottie' || nestedClip.source?.type === 'math-scene') && nestedClip.source.textCanvas) {
     if (nestedClip.source.type === 'lottie') {
       lottieRuntimeManager.renderClipAtTime(
         nestedClip,
         nestedClip.startTime + nestedClipLocalTime,
         getVectorAnimationSettingsForExport(nestedClip, nestedClipLocalTime),
       );
+    } else if (nestedClip.source.type === 'math-scene') {
+      mathSceneRenderer.renderClip(nestedClip, nestedClipLocalTime);
     }
     return {
       ...baseLayer,

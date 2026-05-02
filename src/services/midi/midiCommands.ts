@@ -1,7 +1,6 @@
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useEngineStore } from '../../stores/engineStore';
-import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore/types';
 import { engine } from '../../engine/WebGPUEngine';
 import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../../engine/gaussian/types';
@@ -280,24 +279,18 @@ function applyCameraParameter(clipId: string, property: string, value: number): 
   }
 
   const key = property.slice('camera.'.length);
-  if (key !== 'fov' && key !== 'near' && key !== 'far') {
+  if (key !== 'fov' && key !== 'near' && key !== 'far' && key !== 'resolutionWidth' && key !== 'resolutionHeight') {
     return false;
   }
 
-  return updateClipSource(clipId, (source) => {
-    if (source.type !== 'camera') {
-      return null;
-    }
+  const timelineStore = useTimelineStore.getState();
+  const clip = timelineStore.clips.find((candidate) => candidate.id === clipId);
+  if (clip?.source?.type !== 'camera') {
+    return false;
+  }
 
-    return {
-      ...source,
-      cameraSettings: {
-        ...DEFAULT_SCENE_CAMERA_SETTINGS,
-        ...source.cameraSettings,
-        [key]: value,
-      },
-    };
-  });
+  timelineStore.setPropertyValue(clipId, property as AnimatableProperty, value);
+  return true;
 }
 
 function applyCameraLookTransformParameter(clip: TimelineClip, property: string, value: number): boolean {
@@ -699,8 +692,12 @@ function resolveCustomMIDIParameterValue(clip: TimelineClip, property: string): 
 
   if (property.startsWith('camera.') && clip.source?.type === 'camera') {
     const key = property.slice('camera.'.length);
-    if (key === 'fov' || key === 'near' || key === 'far') {
-      return getFiniteNumber(clip.source.cameraSettings?.[key]);
+    if (key === 'fov' || key === 'near' || key === 'far' || key === 'resolutionWidth' || key === 'resolutionHeight') {
+      const timelineStore = useTimelineStore.getState();
+      return getFiniteNumber(timelineStore.getInterpolatedCameraSettings(
+        clip.id,
+        timelineStore.playheadPosition - (clip.startTime ?? 0),
+      )[key]);
     }
   }
 

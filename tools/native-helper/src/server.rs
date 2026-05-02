@@ -171,7 +171,12 @@ async fn run_http_server(port: u16, state: Arc<AppState>, allowed_origins: Arc<V
     let cors_headers: Vec<String> = cors_origins.iter().map(|o| o.to_string()).collect();
 
     let cors = warp::cors()
-        .allow_origins(cors_headers.iter().map(|s| s.as_str()).collect::<Vec<&str>>())
+        .allow_origins(
+            cors_headers
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<&str>>(),
+        )
         .allow_methods(vec!["GET", "POST", "OPTIONS"])
         .allow_headers(vec!["Content-Type", "Authorization"]);
 
@@ -179,13 +184,15 @@ async fn run_http_server(port: u16, state: Arc<AppState>, allowed_origins: Arc<V
     let state_for_auth = state.clone();
     let require_auth = warp::header::optional::<String>("authorization")
         .and(with_state(state_for_auth))
-        .and_then(|auth_header: Option<String>, state: Arc<AppState>| async move {
-            if check_http_auth(auth_header, &state.auth_token) {
-                Ok(())
-            } else {
-                Err(warp::reject::custom(AuthRequired))
-            }
-        })
+        .and_then(
+            |auth_header: Option<String>, state: Arc<AppState>| async move {
+                if check_http_auth(auth_header, &state.auth_token) {
+                    Ok(())
+                } else {
+                    Err(warp::reject::custom(AuthRequired))
+                }
+            },
+        )
         .untuple_one();
 
     // GET /file?path=... — serve a file (AUTH REQUIRED)
@@ -447,7 +454,11 @@ async fn serve_file(
 
     match tokio::fs::read(&path).await {
         Ok(data) => {
-            info!("HTTP: Serving file: {} ({} bytes)", path.display(), data.len());
+            info!(
+                "HTTP: Serving file: {} ({} bytes)",
+                path.display(),
+                data.len()
+            );
             Ok(warp::reply::with_header(data, "Content-Type", content_type))
         }
         Err(_) => Err(warp::reject::not_found()),
@@ -543,7 +554,10 @@ async fn handle_connection(
                     || is_cloudflare_pages_origin(origin_str)
                     || allowed_origins.iter().any(|o| o == origin_str);
                 if !allowed {
-                    warn!("Rejected WebSocket connection from disallowed origin: {}", origin_str);
+                    warn!(
+                        "Rejected WebSocket connection from disallowed origin: {}",
+                        origin_str
+                    );
                     return Err(http::Response::builder()
                         .status(http::StatusCode::FORBIDDEN)
                         .body(None)
@@ -712,7 +726,11 @@ async fn handle_websocket(
                         let mut w = write.lock().await;
                         w.send(Message::Text(json)).await?;
                     }
-                    Command::AiToolResult { id, request_id, result } => {
+                    Command::AiToolResult {
+                        id,
+                        request_id,
+                        result,
+                    } => {
                         let accepted = state.resolve_ai_request(&request_id, result).await;
                         let response = Response::ok(
                             &id,
@@ -726,15 +744,25 @@ async fn handle_websocket(
                         w.send(Message::Text(json)).await?;
                     }
                     Command::DownloadYoutube {
-                        id, url, format_id, output_dir,
+                        id,
+                        url,
+                        format_id,
+                        output_dir,
                     }
                     | Command::Download {
-                        id, url, format_id, output_dir,
+                        id,
+                        url,
+                        format_id,
+                        output_dir,
                     } => {
                         let response = download::handle_download(
-                            &id, &url, format_id.as_deref(), output_dir.as_deref(),
+                            &id,
+                            &url,
+                            format_id.as_deref(),
+                            output_dir.as_deref(),
                             Some(write.clone()),
-                        ).await;
+                        )
+                        .await;
                         let json = serde_json::to_string(&response)?;
                         let mut w = write.lock().await;
                         w.send(Message::Text(json)).await?;
@@ -747,7 +775,6 @@ async fn handle_websocket(
                     }
 
                     // ── MatAnyone2 streaming commands ──
-
                     Command::MatAnyoneSetup { id, python_path: _ } => {
                         let ws_sender = write.clone();
                         let id_clone = id.clone();
@@ -755,23 +782,24 @@ async fn handle_websocket(
                             let ws = ws_sender.clone();
                             let id_ref = id_clone.clone();
 
-                            let result = matanyone::setup_environment(move |step, percent, message| {
-                                let response = Response::setup_progress(
-                                    &id_ref,
-                                    &step.to_string(),
-                                    percent,
-                                    message,
-                                );
-                                if let Ok(json) = serde_json::to_string(&response) {
-                                    let ws_inner = ws.clone();
-                                    // Fire-and-forget progress message; tokio::spawn to avoid blocking the sync callback
-                                    tokio::spawn(async move {
-                                        let mut w = ws_inner.lock().await;
-                                        let _ = w.send(Message::Text(json)).await;
-                                    });
-                                }
-                            })
-                            .await;
+                            let result =
+                                matanyone::setup_environment(move |step, percent, message| {
+                                    let response = Response::setup_progress(
+                                        &id_ref,
+                                        &step.to_string(),
+                                        percent,
+                                        message,
+                                    );
+                                    if let Ok(json) = serde_json::to_string(&response) {
+                                        let ws_inner = ws.clone();
+                                        // Fire-and-forget progress message; tokio::spawn to avoid blocking the sync callback
+                                        tokio::spawn(async move {
+                                            let mut w = ws_inner.lock().await;
+                                            let _ = w.send(Message::Text(json)).await;
+                                        });
+                                    }
+                                })
+                                .await;
 
                             let response = match result {
                                 Ok(env_info) => Response::ok(
@@ -803,7 +831,10 @@ async fn handle_websocket(
                             let id_ref = id_clone.clone();
 
                             let result = matanyone::download_model(move |progress| {
-                                let speed_str = format!("{:.1} MB/s", progress.speed_bytes_per_sec / 1_048_576.0);
+                                let speed_str = format!(
+                                    "{:.1} MB/s",
+                                    progress.speed_bytes_per_sec / 1_048_576.0
+                                );
                                 let eta_str = progress.eta_seconds.map(|s| format!("{:.0}s", s));
                                 let response = Response::download_progress(
                                     &id_ref,
@@ -881,7 +912,8 @@ async fn handle_websocket(
                             };
 
                             let mut proc = state_clone.matanyone_process.lock().await;
-                            let result = proc.start(&python_path, &server_script, &models_dir).await;
+                            let result =
+                                proc.start(&python_path, &server_script, &models_dir).await;
 
                             let response = match result {
                                 Ok(port) => Response::ok(
@@ -907,7 +939,12 @@ async fn handle_websocket(
                     }
 
                     Command::MatAnyoneMatte {
-                        id, video_path, mask_path, output_dir, start_frame, end_frame,
+                        id,
+                        video_path,
+                        mask_path,
+                        output_dir,
+                        start_frame,
+                        end_frame,
                     } => {
                         let ws_sender = write.clone();
                         let state_clone = state.clone();
@@ -1002,28 +1039,32 @@ async fn handle_websocket(
                                 let proc = state_clone.matanyone_process.lock().await;
                                 proc.port()
                             };
-
-                            if port == 0 {
-                                let response = Response::error(
-                                    &id_clone,
-                                    error_codes::MATANYONE_NOT_RUNNING,
-                                    "MatAnyone2 server is not running",
-                                );
-                                if let Ok(json) = serde_json::to_string(&response) {
-                                    let mut w = ws_sender.lock().await;
-                                    let _ = w.send(Message::Text(json)).await;
-                                }
-                                return;
+                            if port != 0 {
+                                let _ = tokio::time::timeout(
+                                    Duration::from_millis(750),
+                                    crate::matanyone::inference::cancel_job(port, &job_id),
+                                )
+                                .await;
                             }
 
-                            let result = crate::matanyone::inference::cancel_job(port, &job_id).await;
+                            // Hard-cancel the sidecar process so GPU work,
+                            // worker threads, and any subprocesses are stopped.
+                            let result = {
+                                let mut proc = state_clone.matanyone_process.lock().await;
+                                if proc.port() == 0 {
+                                    Ok(false)
+                                } else {
+                                    proc.stop().await.map(|_| true)
+                                }
+                            };
 
                             let response = match result {
-                                Ok(()) => Response::ok(
+                                Ok(server_stopped) => Response::ok(
                                     &id_clone,
                                     serde_json::json!({
                                         "cancelled": true,
                                         "job_id": job_id,
+                                        "server_stopped": server_stopped,
                                     }),
                                 ),
                                 Err(e) => Response::error(

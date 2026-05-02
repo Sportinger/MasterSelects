@@ -29,7 +29,7 @@ interface ResolvedImportEntry extends ModelSequenceImportEntry {
 }
 
 export interface FileImportActions {
-  importFile: (file: File, parentId?: string | null, options?: { forceCopyToProject?: boolean }) => Promise<MediaFile>;
+  importFile: (file: File, parentId?: string | null, options?: ImportFileOptions) => Promise<MediaFile>;
   importFiles: (files: FileList | File[], parentId?: string | null) => Promise<MediaFile[]>;
   importFilesWithPicker: () => Promise<MediaFile[]>;
   importFilesWithHandles: (filesWithHandles: Array<{
@@ -39,6 +39,11 @@ export interface FileImportActions {
   }>, parentId?: string | null) => Promise<MediaFile[]>;
   importGaussianAvatar: (file: File, parentId?: string | null) => Promise<MediaFile>;
   importGaussianSplat: (file: File, parentId?: string | null) => Promise<MediaFile>;
+}
+
+export interface ImportFileOptions {
+  forceCopyToProject?: boolean;
+  projectFileName?: string;
 }
 
 async function resolveImportType(file: File): Promise<ImportableMediaType> {
@@ -179,7 +184,7 @@ function splitModelSequenceEntries(entries: ResolvedImportEntry[]): {
 }
 
 export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set, get) => ({
-  importFile: async (file: File, parentId?: string | null, options?: { forceCopyToProject?: boolean }) => {
+  importFile: async (file: File, parentId?: string | null, options?: ImportFileOptions) => {
     const existing = get().files.find((f) =>
       f.name === file.name && f.fileSize === file.size && !f.isImporting
     );
@@ -203,6 +208,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
         id,
         parentId,
         forceCopyToProject: options?.forceCopyToProject === true,
+        projectFileName: options?.projectFileName,
         typeOverride: type,
       });
       set((state) => finalizePlaceholder(state, id, result.mediaFile));

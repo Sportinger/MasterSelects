@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
 import {
   buildCameraPreviewSceneObject,
+  buildCameraWireframeLines,
   collectPreviewSceneObjects,
   projectWorldToCanvas,
   resolveAxisScreenHandle,
@@ -109,6 +110,51 @@ describe('sceneObjectOverlayMath', () => {
     expect(object?.transformSpace).toBe('world');
     expect(Number.isFinite(object?.screen.x)).toBe(true);
     expect(Number.isFinite(object?.screen.y)).toBe(true);
+  });
+
+  it('draws the camera edit-view frame from lens FOV and camera resolution aspect', () => {
+    const viewport = { width: 1920, height: 1080 };
+    const canvasSize = { width: 960, height: 540 };
+    const renderCamera = resolveRenderableSharedSceneCamera(viewport, 0);
+
+    const getFrustumBounds = (cameraSettings: {
+      fov: number;
+      near: number;
+      far: number;
+      resolutionWidth: number;
+      resolutionHeight: number;
+    }) => {
+      const object = {
+        clipId: `camera-${cameraSettings.fov}`,
+        name: 'Camera',
+        kind: 'camera' as const,
+        transformSpace: 'world' as const,
+        worldPosition: { x: 0, y: 0, z: 0 },
+        axisBasis: {
+          x: { x: 1, y: 0, z: 0 },
+          y: { x: 0, y: 1, z: 0 },
+          z: { x: 0, y: 0, z: -1 },
+        },
+        cameraSettings,
+        screen: projectWorldToCanvas({ x: 0, y: 0, z: 0 }, renderCamera, canvasSize),
+      };
+      const points = buildCameraWireframeLines(object, renderCamera, canvasSize)
+        .filter((line) => line.role === 'frustum')
+        .flatMap((line) => [line.from, line.to]);
+      return {
+        width: Math.max(...points.map((point) => point.x)) - Math.min(...points.map((point) => point.x)),
+        height: Math.max(...points.map((point) => point.y)) - Math.min(...points.map((point) => point.y)),
+      };
+    };
+
+    const teleBounds = getFrustumBounds({ fov: 30, near: 0.1, far: 1000, resolutionWidth: 1920, resolutionHeight: 1080 });
+    const wideBounds = getFrustumBounds({ fov: 90, near: 0.1, far: 1000, resolutionWidth: 1920, resolutionHeight: 1080 });
+    const squareBounds = getFrustumBounds({ fov: 90, near: 0.1, far: 1000, resolutionWidth: 1080, resolutionHeight: 1080 });
+
+    expect(wideBounds.width).toBeGreaterThan(teleBounds.width);
+    expect(wideBounds.height).toBeGreaterThan(teleBounds.height);
+    expect(squareBounds.width).toBeLessThan(wideBounds.width);
+    expect(squareBounds.height).toBeCloseTo(wideBounds.height, 3);
   });
 
   it('keeps axis hitboxes aligned with the GPU gizmo length while leaving the center grip free', () => {

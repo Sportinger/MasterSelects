@@ -244,8 +244,12 @@ After creating a mask on the current frame, SAM 2 can propagate it forward:
 MatAnyone2 is the second step in the workflow:
 - Requires the Native Helper to be connected
 - Uses either the painted mask or the SAM 2 live mask
-- Writes a mask PNG next to the selected video file, then launches the native-helper matting job
-- Produces the alpha matte output and exposes progress, job state, and cancellation
+- Renders only the selected source clip segment when the timeline clip is trimmed
+- Writes the job mask and native-helper output into a project-local `MatAnyone2/` folder
+- Imports completed foreground and alpha outputs into Media Pool `AI Gen / Matting`
+- Copies imported outputs into project `Raw/MatAnyone2/...` so generated mattes survive reloads and project moves
+- Places the foreground result on a new video track aligned to the source clip when using `Import to Timeline`
+- Exposes progress, job state, and hard cancellation; cancel stops the MatAnyone2 sidecar process tree and returns the stage to installed/not-running
 - Shows a helper-unavailable state when the Native Helper is not connected
 
 ### Workflow
