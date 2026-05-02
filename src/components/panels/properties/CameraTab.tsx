@@ -2,9 +2,15 @@ import { useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useHistoryStore } from '../../../stores/historyStore';
 import { DraggableNumber } from './shared';
-import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../../stores/mediaStore';
-import type { SceneCameraSettings } from '../../../stores/mediaStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../../stores/mediaStore/types';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
+import {
+  MAX_CAMERA_FOV_DEGREES,
+  MIN_CAMERA_FOV_DEGREES,
+  clampCameraFov,
+  fovToFullFrameFocalLengthMm,
+  fullFrameFocalLengthMmToFov,
+} from '../../../utils/cameraLens';
 
 interface CameraTabProps {
   clipId: string;
@@ -13,6 +19,9 @@ interface CameraTabProps {
 export function CameraTab({ clipId }: CameraTabProps) {
   const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
   const cameraSettings: SceneCameraSettings = clip?.source?.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const focalLengthMm = fovToFullFrameFocalLengthMm(cameraSettings.fov);
+  const minFocalLengthMm = fovToFullFrameFocalLengthMm(MAX_CAMERA_FOV_DEGREES);
+  const maxFocalLengthMm = fovToFullFrameFocalLengthMm(MIN_CAMERA_FOV_DEGREES);
 
   const updateCameraSetting = useCallback(<K extends keyof SceneCameraSettings>(key: K, value: SceneCameraSettings[K]) => {
     const { clips } = useTimelineStore.getState();
@@ -32,6 +41,14 @@ export function CameraTab({ clipId }: CameraTabProps) {
       ),
     });
   }, [clipId]);
+
+  const updateFov = useCallback((value: number) => {
+    updateCameraSetting('fov', clampCameraFov(value));
+  }, [updateCameraSetting]);
+
+  const updateFocalLength = useCallback((value: number) => {
+    updateCameraSetting('fov', fullFrameFocalLengthMmToFov(value));
+  }, [updateCameraSetting]);
 
   const handleDragStart = useCallback(() => {
     useHistoryStore.getState().startBatch('Camera setting');
@@ -84,7 +101,7 @@ export function CameraTab({ clipId }: CameraTabProps) {
         </MIDIParameterLabel>
         <DraggableNumber
           value={cameraSettings.fov}
-          onChange={(v) => updateCameraSetting('fov', Math.max(10, Math.min(140, v)))}
+          onChange={updateFov}
           defaultValue={DEFAULT_SCENE_CAMERA_SETTINGS.fov}
           persistenceKey="camera.fov"
           onDragStart={handleDragStart}
@@ -93,7 +110,21 @@ export function CameraTab({ clipId }: CameraTabProps) {
           max={140}
           sensitivity={0.5}
           decimals={1}
-          suffix="°"
+          suffix="deg"
+        />
+        <span style={{ color: '#666', fontSize: '10px', flexShrink: 0 }}>=</span>
+        <DraggableNumber
+          value={focalLengthMm}
+          onChange={updateFocalLength}
+          defaultValue={fovToFullFrameFocalLengthMm(DEFAULT_SCENE_CAMERA_SETTINGS.fov)}
+          persistenceKey="camera.focalLength"
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          min={minFocalLengthMm}
+          max={maxFocalLengthMm}
+          sensitivity={0.5}
+          decimals={1}
+          suffix="mm"
         />
       </div>
 

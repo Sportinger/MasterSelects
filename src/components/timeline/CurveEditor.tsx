@@ -1,7 +1,7 @@
 // Curve Editor component for keyframe animation curves with bezier handles
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import type { AnimatableProperty, Keyframe, BezierHandle, EasingType, TimelineClip } from '../../types';
+import { parseCameraProperty, parseMaskProperty, type AnimatableProperty, type Keyframe, type BezierHandle, type EasingType, type TimelineClip } from '../../types';
 import { PRESET_BEZIER } from '../../utils/keyframeInterpolation';
 import {
   formatVectorAnimationStateLabel,
@@ -49,6 +49,29 @@ export interface CurveEditorProps {
 
 // Get default range for a property type (used as fallback when no keyframes exist)
 function getPropertyDefaults(property: AnimatableProperty): { min: number; max: number; fallbackPad: number } {
+  const maskProperty = parseMaskProperty(property);
+  if (maskProperty?.property === 'path') {
+    return { min: 0, max: 1, fallbackPad: 0.05 };
+  }
+  if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') {
+    return { min: -1, max: 1, fallbackPad: 0.05 };
+  }
+  if (maskProperty?.property === 'feather') {
+    return { min: 0, max: 500, fallbackPad: 5 };
+  }
+  if (maskProperty?.property === 'featherQuality') {
+    return { min: 1, max: 100, fallbackPad: 5 };
+  }
+  const cameraProperty = parseCameraProperty(property);
+  if (cameraProperty === 'fov') {
+    return { min: 10, max: 140, fallbackPad: 2 };
+  }
+  if (cameraProperty === 'near') {
+    return { min: 0.001, max: 10, fallbackPad: 0.1 };
+  }
+  if (cameraProperty === 'far') {
+    return { min: 1, max: 1000, fallbackPad: 10 };
+  }
   if (parseVectorAnimationStateProperty(property)) {
     return { min: 0, max: 1, fallbackPad: 0 };
   }
@@ -547,6 +570,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
             >
               {line.label ? line.label :
                property === 'opacity' ? `${(line.value * 100).toFixed(0)}%` :
+               parseCameraProperty(property) === 'fov' ? `${line.value.toFixed(0)}Â°` :
                property.startsWith('scale.') ? `${(line.value * 100).toFixed(0)}%` :
                property.startsWith('rotation.') ? `${line.value.toFixed(0)}°` :
                Number.isInteger(line.value) ? line.value.toFixed(0) :

@@ -187,6 +187,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       }),
     });
 
+    get().recordMaskPathKeyframe(clipId, maskId);
     invalidateCache();
     return vertexId;
   },
@@ -213,6 +214,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       ),
     });
 
+    get().recordMaskPathKeyframe(clipId, maskId);
     invalidateCache();
   },
 
@@ -240,6 +242,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     // Skip cache invalidation during drag operations for performance
     // The caller should call invalidateCache() manually after drag ends
     if (!skipCacheInvalidation) {
+      get().recordMaskPathKeyframe(clipId, maskId);
       invalidateCache();
     }
   },
@@ -268,6 +271,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
     });
 
     if (!skipCacheInvalidation) {
+      get().recordMaskPathKeyframe(clipId, maskId);
       invalidateCache();
     }
   },
@@ -287,6 +291,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
   closeMask: (clipId, maskId) => {
     const { updateMask } = get();
     updateMask(clipId, maskId, { closed: true });
+    get().recordMaskPathKeyframe(clipId, maskId);
   },
 
   // Preset shapes

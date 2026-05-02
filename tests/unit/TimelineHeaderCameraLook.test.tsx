@@ -4,7 +4,7 @@ import { TimelineHeader } from '../../src/components/timeline/TimelineHeader';
 import type { ClipTransform, TimelineClip, TimelineTrack } from '../../src/types';
 
 describe('TimelineHeader camera look controls', () => {
-  it('scrubs camera yaw as fixed-eye look keyframes instead of raw orbit rotation', () => {
+  it('scrubs camera yaw as a look keyframe without moving the camera position', () => {
     const transform: ClipTransform = {
       opacity: 1,
       blendMode: 'normal',
@@ -78,10 +78,8 @@ describe('TimelineHeader camera look controls', () => {
     fireEvent.mouseUp(window);
 
     expect(setPropertyValue).not.toHaveBeenCalled();
-    expect(addKeyframe).toHaveBeenCalledWith('camera-clip', 'position.x', expect.any(Number));
-    expect(addKeyframe).toHaveBeenCalledWith('camera-clip', 'position.y', expect.any(Number));
-    expect(addKeyframe).toHaveBeenCalledWith('camera-clip', 'scale.z', expect.any(Number));
     expect(addKeyframe).toHaveBeenCalledWith('camera-clip', 'rotation.y', 10);
+    expect(addKeyframe).toHaveBeenCalledTimes(1);
   });
 
   it('reports property row hover for matching keyframe row highlights', () => {

@@ -1,7 +1,7 @@
 // Curve Editor Header component for Y-axis labels
 
 import React, { useMemo } from 'react';
-import type { AnimatableProperty, Keyframe, TimelineClip } from '../../types';
+import { parseCameraProperty, type AnimatableProperty, type Keyframe, type TimelineClip } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
@@ -38,6 +38,16 @@ function getPropertyDefaults(property: AnimatableProperty): { min: number; max: 
   }
   if (property === 'opacity') {
     return { min: 0, max: 1, fallbackPad: 0.05 };
+  }
+  const cameraProperty = parseCameraProperty(property);
+  if (cameraProperty === 'fov') {
+    return { min: 10, max: 140, fallbackPad: 2 };
+  }
+  if (cameraProperty === 'near') {
+    return { min: 0.001, max: 10, fallbackPad: 0.1 };
+  }
+  if (cameraProperty === 'far') {
+    return { min: 1, max: 1000, fallbackPad: 10 };
   }
   if (property.startsWith('scale.')) {
     return { min: 0, max: 2, fallbackPad: 0.05 };
@@ -107,6 +117,16 @@ function formatValue(value: number, property: AnimatableProperty, stateNames: re
   }
   if (property === 'opacity') {
     return `${(value * 100).toFixed(0)}%`;
+  }
+  const cameraProperty = parseCameraProperty(property);
+  if (cameraProperty === 'fov') {
+    return `${value.toFixed(0)}Â°`;
+  }
+  if (cameraProperty === 'near') {
+    return value.toFixed(3);
+  }
+  if (cameraProperty === 'far') {
+    return value.toFixed(1);
   }
   if (property.startsWith('scale.')) {
     return `${(value * 100).toFixed(0)}%`;

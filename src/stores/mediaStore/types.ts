@@ -157,13 +157,28 @@ export interface SceneCameraSettings {
   fov: number;
   near: number;
   far: number;
+  resolutionWidth?: number;
+  resolutionHeight?: number;
 }
 
 export const DEFAULT_SCENE_CAMERA_SETTINGS: SceneCameraSettings = {
   fov: 60,
   near: 0.1,
   far: 1000,
+  resolutionWidth: 1920,
+  resolutionHeight: 1080,
 };
+
+export function getSceneCameraResolution(settings?: SceneCameraSettings): { width: number; height: number } {
+  const width = Math.max(1, Math.round(settings?.resolutionWidth ?? DEFAULT_SCENE_CAMERA_SETTINGS.resolutionWidth ?? 1920));
+  const height = Math.max(1, Math.round(settings?.resolutionHeight ?? DEFAULT_SCENE_CAMERA_SETTINGS.resolutionHeight ?? 1080));
+  return { width, height };
+}
+
+export function getSceneCameraAspect(settings?: SceneCameraSettings): number {
+  const resolution = getSceneCameraResolution(settings);
+  return resolution.width / Math.max(1, resolution.height);
+}
 
 export interface CameraItem extends MediaItem {
   type: 'camera';

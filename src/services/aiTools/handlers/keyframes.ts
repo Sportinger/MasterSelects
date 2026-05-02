@@ -32,6 +32,7 @@ export async function handleGetKeyframes(
         value: kf.value,
         time: kf.time,
         easing: normalizeEasingType(kf.easing, 'linear'),
+        rotationInterpolation: kf.rotationInterpolation,
       })),
     },
   };

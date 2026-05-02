@@ -378,6 +378,7 @@ class ThumbnailRendererService {
         c.sourceType === 'image' ||
         c.sourceType === 'text' ||
         c.sourceType === 'solid' ||
+        c.sourceType === 'math-scene' ||
         c.sourceType === 'lottie';
       return isOnVideoTrack && isVisualType;
     });

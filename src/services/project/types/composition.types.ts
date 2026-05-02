@@ -9,6 +9,7 @@ import type {
   ColorCorrectionState,
   GaussianSplatSequenceData,
   ModelSequenceData,
+  MathSceneDefinition,
   SceneSegment,
   Text3DProperties,
   TextClipProperties,
@@ -71,7 +72,7 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'lottie' | 'rive';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'lottie' | 'rive';
   naturalDuration?: number;
   linkedClipId?: string;
   linkedGroupId?: string;
@@ -93,6 +94,9 @@ export interface ProjectClip {
 
   // Solid clip support
   solidColor?: string;
+
+  // Math scene clip support
+  mathScene?: MathSceneDefinition;
 
   vectorAnimationSettings?: VectorAnimationClipSettings;
 

@@ -4,7 +4,8 @@ import type { TimelineClip } from '../../types';
 import type { CameraClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { generateCameraClipId } from './helpers/idGenerator';
-import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore';
+import { useMediaStore } from '../mediaStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore/types';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('CameraClipSlice');

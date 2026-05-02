@@ -21,6 +21,7 @@ export type TimelineSourceType =
   | 'gaussian-avatar'
   | 'gaussian-splat'
   | 'splat-effector'
+  | 'math-scene'
   | VectorAnimationProvider;
 
 export type ModelSequencePlaybackMode = 'clamp' | 'loop';
@@ -258,6 +259,109 @@ export interface Text3DProperties {
   bevelThickness: number;
   bevelSize: number;
   bevelSegments: number;
+}
+
+// Math Scene clip support
+export interface MathSceneViewport {
+  xMin: number;
+  xMax: number;
+  yMin: number;
+  yMax: number;
+  showGrid: boolean;
+  showAxes: boolean;
+}
+
+export interface MathSceneStyle {
+  backgroundColor: string;
+  axisColor: string;
+  gridColor: string;
+  labelColor: string;
+}
+
+export interface MathParameterAnimation {
+  enabled: boolean;
+  from: number;
+  to: number;
+  startTime: number;
+  endTime: number;
+  easing: EasingType;
+}
+
+export interface MathParameter {
+  id: string;
+  name: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  animation?: MathParameterAnimation;
+}
+
+export interface MathObjectAnimation {
+  reveal?: {
+    enabled: boolean;
+    startTime: number;
+    endTime: number;
+  };
+}
+
+export interface MathBaseObject {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  animation?: MathObjectAnimation;
+}
+
+export interface MathFunctionObject extends MathBaseObject {
+  type: 'function';
+  expression: string;
+  domain?: [number, number];
+  samples: number;
+  stroke: string;
+  strokeWidth: number;
+}
+
+export interface MathPointObject extends MathBaseObject {
+  type: 'point';
+  xExpression: string;
+  yExpression: string;
+  radius: number;
+  fill: string;
+  stroke: string;
+  labelVisible: boolean;
+}
+
+export interface MathTangentObject extends MathBaseObject {
+  type: 'tangent';
+  functionId: string;
+  atExpression: string;
+  length: number;
+  stroke: string;
+  strokeWidth: number;
+}
+
+export interface MathLabelObject extends MathBaseObject {
+  type: 'label';
+  text: string;
+  xExpression: string;
+  yExpression: string;
+  fontSize: number;
+  color: string;
+}
+
+export type MathObject =
+  | MathFunctionObject
+  | MathPointObject
+  | MathTangentObject
+  | MathLabelObject;
+
+export interface MathSceneDefinition {
+  version: 1;
+  viewport: MathSceneViewport;
+  style: MathSceneStyle;
+  parameters: MathParameter[];
+  objects: MathObject[];
 }
 
 export interface Effect {
@@ -547,6 +651,7 @@ export interface TimelineClip {
     runtimeSourceId?: string;
     runtimeSessionKey?: string;
   } | null;
+  mathScene?: MathSceneDefinition;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
   mediaFileId?: string;   // Reference to MediaFile for audio/proxy lookup (top-level for YouTube downloads)
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
@@ -680,6 +785,7 @@ export interface SerializableClip {
   // Solid clip support
   solidColor?: string;
   vectorAnimationSettings?: VectorAnimationClipSettings;
+  mathScene?: MathSceneDefinition;
   // Transition support
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;
@@ -724,6 +830,7 @@ export interface CompositionTimelineData {
 
 // Keyframe animation types
 export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'bezier';
+export type RotationInterpolationMode = 'shortest' | 'continuous';
 
 // Bezier control handle for custom curves
 export interface BezierHandle {
@@ -739,6 +846,9 @@ export type TransformProperty =
   | 'scale.all' | 'scale.x' | 'scale.y' | 'scale.z'
   | 'rotation.x' | 'rotation.y' | 'rotation.z';
 
+export type CameraPropertyName = 'fov' | 'near' | 'far' | 'resolutionWidth' | 'resolutionHeight';
+export type CameraProperty = `camera.${CameraPropertyName}`;
+
 // Effect property format: effect.{effectId}.{paramName}
 // Example: effect.effect_123456.shift, effect.effect_123456.amount
 export type EffectProperty = `effect.${string}.${string}`;
@@ -746,8 +856,24 @@ export type EffectProperty = `effect.${string}.${string}`;
 // Color correction property format: color.{versionId}.{nodeId}.{paramName}
 export type ColorProperty = `color.${string}.${string}.${string}`;
 
+// Mask property formats:
+// - mask.{maskId}.path stores the whole bezier path as one keyframe value
+// - mask.{maskId}.position.x/y and edge values remain numeric keyframes
+export type MaskPathProperty = `mask.${string}.path`;
+export type MaskNumericPropertyName = 'position.x' | 'position.y' | 'feather' | 'featherQuality';
+export type MaskNumericProperty = `mask.${string}.${MaskNumericPropertyName}`;
+export type MaskProperty = MaskPathProperty | MaskNumericProperty;
+
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | EffectProperty | ColorProperty | VectorAnimationInputProperty | VectorAnimationStateProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | ColorProperty | MaskProperty | VectorAnimationInputProperty | VectorAnimationStateProperty;
+
+export function isCameraProperty(property: string): property is CameraProperty {
+  return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);
+}
+
+export function parseCameraProperty(property: string): CameraPropertyName | null {
+  return isCameraProperty(property) ? property.slice('camera.'.length) as CameraPropertyName : null;
+}
 
 // Helper to check if a property is an effect property
 export function isEffectProperty(property: string): property is EffectProperty {
@@ -770,6 +896,39 @@ export function createEffectProperty(effectId: string, paramName: string): Effec
 
 export function isColorProperty(property: string): property is ColorProperty {
   return property.startsWith('color.');
+}
+
+export function createMaskPathProperty(maskId: string): MaskPathProperty {
+  return `mask.${maskId}.path` as MaskPathProperty;
+}
+
+export function createMaskNumericProperty(maskId: string, property: MaskNumericPropertyName): MaskNumericProperty {
+  return `mask.${maskId}.${property}` as MaskNumericProperty;
+}
+
+export function isMaskPathProperty(property: string): property is MaskPathProperty {
+  return /^mask\.[^.]+\.path$/.test(property);
+}
+
+export function isMaskNumericProperty(property: string): property is MaskNumericProperty {
+  return /^mask\.[^.]+\.(position\.(x|y)|feather|featherQuality)$/.test(property);
+}
+
+export function parseMaskProperty(property: string): { maskId: string; property: 'path' | MaskNumericPropertyName } | null {
+  const match = /^mask\.([^.]+)\.(.+)$/.exec(property);
+  if (!match) return null;
+
+  const [, maskId, maskProperty] = match;
+  if (
+    maskProperty === 'path' ||
+    maskProperty === 'position.x' ||
+    maskProperty === 'position.y' ||
+    maskProperty === 'feather' ||
+    maskProperty === 'featherQuality'
+  ) {
+    return { maskId, property: maskProperty };
+  }
+  return null;
 }
 
 // Mask types for After Effects-style clip masking
@@ -802,13 +961,20 @@ export interface ClipMask {
   visible: boolean;       // Toggle outline visibility
 }
 
+export interface MaskPathKeyframeValue {
+  vertices: MaskVertex[];
+  closed: boolean;
+}
+
 export interface Keyframe {
   id: string;
   clipId: string;
   time: number;           // Time relative to clip start (seconds)
   property: AnimatableProperty;
   value: number;
+  pathValue?: MaskPathKeyframeValue; // Used by mask.{id}.path keyframes
   easing: EasingType;     // Easing for interpolation TO the next keyframe
+  rotationInterpolation?: RotationInterpolationMode; // Rotation path for the segment TO the next keyframe
   handleIn?: BezierHandle;   // Bezier control point for curve entering this keyframe
   handleOut?: BezierHandle;  // Bezier control point for curve leaving this keyframe
 }

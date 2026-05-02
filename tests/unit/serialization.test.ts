@@ -272,6 +272,7 @@ describe('keyframe Map to Record conversion', () => {
       property: 'scale.x',
       value: 2.0,
       easing: 'bezier',
+      rotationInterpolation: 'continuous',
       handleIn: { x: -0.3, y: 0.1 },
       handleOut: { x: 0.3, y: -0.1 },
     };
@@ -280,6 +281,7 @@ describe('keyframe Map to Record conversion', () => {
     const restored: Keyframe = JSON.parse(json);
 
     expect(restored.easing).toBe('bezier');
+    expect(restored.rotationInterpolation).toBe('continuous');
     expect(restored.handleIn).toEqual({ x: -0.3, y: 0.1 });
     expect(restored.handleOut).toEqual({ x: 0.3, y: -0.1 });
   });

@@ -18,7 +18,8 @@ import {
 } from '../../stores/engineStore';
 import type { SceneCameraLiveOverride } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
+import { useMediaStore } from '../../stores/mediaStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../stores/mediaStore/types';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
@@ -36,6 +37,7 @@ import { useSAM2Store } from '../../stores/sam2Store';
 import { renderScheduler } from '../../services/renderScheduler';
 import { engine } from '../../engine/WebGPUEngine';
 import {
+  resolveOrbitCameraFrame,
   resolveOrbitCameraPose,
   resolveOrbitCameraTranslationForFixedEye,
 } from '../../engine/gaussian/core/SplatCameraUtils';
@@ -48,20 +50,14 @@ import {
   getPreviewSourceLabel,
   resolvePreviewSourceCompositionId,
 } from '../../utils/previewPanelSource';
-import { getScaleAll } from '../../utils/transformScale';
+import {
+  fullFrameFocalLengthMmToFov,
+} from '../../utils/cameraLens';
 
 const CAMERA_NAV_MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
 
 function isCameraNavMoveCode(code: string): code is 'KeyW' | 'KeyA' | 'KeyS' | 'KeyD' | 'KeyQ' | 'KeyE' {
   return CAMERA_NAV_MOVE_CODES.has(code);
-}
-
-function getCameraNavForwardOffset(scaleZ: number | undefined): number {
-  return typeof scaleZ === 'number' && Number.isFinite(scaleZ) ? scaleZ : 0;
-}
-
-function getCameraZoomFromScale(scale: ClipTransform['scale']): number {
-  return Math.max(0.01, (scale.x || 1) * getScaleAll(scale));
 }
 
 function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
@@ -75,6 +71,11 @@ const EDIT_CAMERA_BLEND_MS = 320;
 const TIMELINE_TIME_EPSILON = 1e-4;
 const EDIT_CAMERA_ORTHO_MIN_SCALE = 0.05;
 const EDIT_CAMERA_ORTHO_MAX_SCALE = 10000;
+const DEFAULT_EDIT_CAMERA_FOCAL_LENGTH_MM = 35;
+const DEFAULT_EDIT_CAMERA_SETTINGS: SceneCameraSettings = {
+  ...DEFAULT_SCENE_CAMERA_SETTINGS,
+  fov: fullFrameFocalLengthMmToFov(DEFAULT_EDIT_CAMERA_FOCAL_LENGTH_MM),
+};
 
 type EditCameraViewMode = 'camera' | 'front' | 'side' | 'top';
 type EditCameraOrthoViewMode = Exclude<EditCameraViewMode, 'camera'>;
@@ -94,6 +95,12 @@ const EDIT_CAMERA_VIEW_LABELS: Record<EditCameraViewMode, string> = {
   top: 'Top',
 };
 const PREVIEW_CONTAINER_SELECTOR = '.preview-container[data-preview-panel-id]';
+const SCENE_OBJECT_INTERACTION_SELECTOR = [
+  '.preview-scene-object-handle',
+  '.preview-scene-gizmo-axis',
+  '.preview-scene-gizmo-rotate',
+  '.preview-scene-gizmo-toolbar',
+].join(',');
 
 function getPreviewPanelIdFromElement(element: Element | null): string | null {
   return element?.closest<HTMLElement>(PREVIEW_CONTAINER_SELECTOR)?.dataset.previewPanelId ?? null;
@@ -177,6 +184,15 @@ function scaleSceneVector(vector: SceneVector3, scale: number): SceneVector3 {
   return { x: vector.x * scale, y: vector.y * scale, z: vector.z * scale };
 }
 
+function getSceneBoundsCenter(bounds: { min: [number, number, number]; max: [number, number, number] } | undefined): SceneVector3 {
+  if (!bounds) return { x: 0, y: 0, z: 0 };
+  return {
+    x: (bounds.min[0] + bounds.max[0]) * 0.5,
+    y: (bounds.min[1] + bounds.max[1]) * 0.5,
+    z: (bounds.min[2] + bounds.max[2]) * 0.5,
+  };
+}
+
 function clampEditCameraOrthoScale(scale: number): number {
   if (!Number.isFinite(scale)) return 2;
   return Math.max(EDIT_CAMERA_ORTHO_MIN_SCALE, Math.min(EDIT_CAMERA_ORTHO_MAX_SCALE, scale));
@@ -198,6 +214,10 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
     target instanceof HTMLSelectElement ||
     target.isContentEditable
   );
+}
+
+function isSceneObjectInteractionTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(SCENE_OBJECT_INTERACTION_SELECTOR));
 }
 
 function getEditCameraOrthoBasis(mode: EditCameraOrthoViewMode): {
@@ -312,6 +332,17 @@ function lerpSceneCameraConfig(from: SceneCameraConfig, to: SceneCameraConfig, t
   };
 }
 
+function buildEditCameraOrbitSceneBounds(center: SceneVector3 | null): {
+  min: [number, number, number];
+  max: [number, number, number];
+} | undefined {
+  if (!center) return undefined;
+  return {
+    min: [center.x, center.y, center.z],
+    max: [center.x, center.y, center.z],
+  };
+}
+
 function findActiveCameraClipAtTime(
   clips: TimelineClip[],
   tracks: TimelineTrack[],
@@ -341,10 +372,16 @@ function buildPreviewCameraConfigFromTransform(
   clip: TimelineClip,
   transform: ClipTransform,
   viewport: SceneViewport,
+  orbitCenter: SceneVector3 | null = null,
+  cameraSettingsOverride?: SceneCameraSettings,
 ): SceneCameraConfig | null {
   if (clip.source?.type !== 'camera') return null;
 
-  const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const timelineState = cameraSettingsOverride ? null : useTimelineStore.getState();
+  const cameraSettings = cameraSettingsOverride ?? timelineState?.getInterpolatedCameraSettings(
+    clip.id,
+    timelineState.playheadPosition - clip.startTime,
+  ) ?? DEFAULT_EDIT_CAMERA_SETTINGS;
   const pose = resolveOrbitCameraPose(
     {
       position: transform.position,
@@ -358,6 +395,7 @@ function buildPreviewCameraConfigFromTransform(
       minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
     },
     viewport,
+    buildEditCameraOrbitSceneBounds(orbitCenter),
   );
 
   return {
@@ -680,6 +718,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     pitch: 0,
     yaw: 0,
     roll: 0,
+    startPosX: 0,
+    startPosY: 0,
+    startPosZ: 0,
+    pivotX: 0,
+    pivotY: 0,
+    pivotZ: 0,
+    radius: 0,
   });
   const gaussianPanStart = useRef({
     clipId: null as string | null,
@@ -688,7 +733,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     panX: 0,
     panY: 0,
     panZ: 0,
-    zoom: 1,
   });
   const gaussianFpsLookStart = useRef({
     clipId: null as string | null,
@@ -710,6 +754,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sceneNavHistoryBatchActiveRef = useRef(false);
   const editCameraTransformRef = useRef<ClipTransform | null>(null);
   const editCameraClipIdRef = useRef<string | null>(null);
+  const editCameraSettingsRef = useRef<SceneCameraSettings>({ ...DEFAULT_EDIT_CAMERA_SETTINGS });
+  const editCameraOrbitCenterRef = useRef<SceneVector3 | null>(null);
   const editCameraAnimationRef = useRef<number | null>(null);
   const editCameraViewTransitionRef = useRef(false);
   const editCameraModeActiveRef = useRef(false);
@@ -812,6 +858,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   const activeEditCameraClipId = editCameraModeActive ? activeCameraClipAtPlayhead?.id ?? null : null;
   useEffect(() => {
+    editCameraSettingsRef.current = { ...DEFAULT_EDIT_CAMERA_SETTINGS };
+    editCameraOrbitCenterRef.current = null;
     setEditCameraViewMode('camera');
     setEditCameraOrthoFrame(null);
     setIsEditCameraOrthoPanning(false);
@@ -863,8 +911,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const applySceneCameraValues = useCallback((clipId: string, values: {
     positionX?: number;
     positionY?: number;
-    scale?: number;
-    forwardOffset?: number;
+    positionZ?: number;
     rotationX?: number;
     rotationY?: number;
   }) => {
@@ -874,27 +921,14 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (engineState.sceneNavNoKeyframes && clip?.source?.type === 'camera') {
       const clipLocalTime = timelineState.playheadPosition - clip.startTime;
       const baseTransform = timelineState.getInterpolatedTransform(clipId, clipLocalTime);
-      const baseScaleX = Math.max(0.01, baseTransform.scale.x || 1);
       engineState.setSceneCameraLiveOverride(clipId, {
         ...(values.positionX !== undefined || values.positionY !== undefined
+          || values.positionZ !== undefined
           ? {
               position: {
                 ...(values.positionX !== undefined ? { x: values.positionX - baseTransform.position.x } : {}),
                 ...(values.positionY !== undefined ? { y: values.positionY - baseTransform.position.y } : {}),
-              },
-            }
-          : {}),
-        ...(values.scale !== undefined || values.forwardOffset !== undefined
-          ? {
-              scale: {
-                ...(values.scale !== undefined
-                  ? {
-                      all: values.scale / baseScaleX - getScaleAll(baseTransform.scale),
-                    }
-                  : {}),
-                ...(values.forwardOffset !== undefined
-                  ? { z: values.forwardOffset - getCameraNavForwardOffset(baseTransform.scale.z) }
-                  : {}),
+                ...(values.positionZ !== undefined ? { z: values.positionZ - baseTransform.position.z } : {}),
               },
             }
           : {}),
@@ -911,7 +945,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       return;
     }
 
-    const propertyUpdates: Array<readonly [property: 'position.x' | 'position.y' | 'scale.all' | 'scale.z' | 'rotation.x' | 'rotation.y', value: number]> = [];
+    const propertyUpdates: Array<readonly [property: 'position.x' | 'position.y' | 'position.z' | 'rotation.x' | 'rotation.y', value: number]> = [];
 
     if (values.positionX !== undefined) {
       propertyUpdates.push(['position.x', values.positionX]);
@@ -919,16 +953,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (values.positionY !== undefined) {
       propertyUpdates.push(['position.y', values.positionY]);
     }
-    if (values.scale !== undefined) {
-      const clipLocalTime = timelineState.playheadPosition - (clip?.startTime ?? 0);
-      const currentTransform = clip
-        ? timelineState.getInterpolatedTransform(clipId, clipLocalTime)
-        : undefined;
-      const scaleX = Math.max(0.01, currentTransform?.scale.x ?? 1);
-      propertyUpdates.push(['scale.all', values.scale / scaleX]);
-    }
-    if (values.forwardOffset !== undefined) {
-      propertyUpdates.push(['scale.z', values.forwardOffset]);
+    if (values.positionZ !== undefined) {
+      propertyUpdates.push(['position.z', values.positionZ]);
     }
     if (values.rotationX !== undefined) {
       propertyUpdates.push(['rotation.x', values.rotationX]);
@@ -948,30 +974,16 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     } else {
       const currentClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
       const currentTransform = currentClip?.transform;
-      const nextScaleAll = values.scale !== undefined
-        ? values.scale / Math.max(0.01, currentTransform?.scale.x ?? 1)
-        : undefined;
-      const nextScale = values.scale !== undefined || values.forwardOffset !== undefined
-        ? {
-            all: nextScaleAll ?? currentTransform?.scale.all ?? 1,
-            x: currentTransform?.scale.x ?? 1,
-            y: currentTransform?.scale.y ?? 1,
-            ...(values.forwardOffset !== undefined || currentTransform?.scale.z !== undefined
-              ? { z: values.forwardOffset ?? currentTransform?.scale.z ?? 0 }
-              : {}),
-          }
-        : undefined;
       updateClipTransform(clipId, {
-        ...(values.positionX !== undefined || values.positionY !== undefined
+        ...(values.positionX !== undefined || values.positionY !== undefined || values.positionZ !== undefined
           ? {
               position: {
                 x: values.positionX ?? currentTransform?.position.x ?? 0,
                 y: values.positionY ?? currentTransform?.position.y ?? 0,
-                z: currentTransform?.position.z ?? 0,
+                z: values.positionZ ?? currentTransform?.position.z ?? 0,
               },
             }
           : {}),
-        ...(nextScale ? { scale: nextScale } : {}),
         ...(values.rotationX !== undefined || values.rotationY !== undefined
           ? {
               rotation: {
@@ -1013,6 +1025,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       clip,
       editCameraTransformRef.current,
       { width: effectiveResolution.width, height: effectiveResolution.height },
+      editCameraOrbitCenterRef.current,
+      editCameraSettingsRef.current,
     );
     if (!cameraConfig) return null;
     if (
@@ -1076,6 +1090,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       activeCameraClipAtPlayhead,
       editCameraTransformRef.current,
       { width: effectiveResolution.width, height: effectiveResolution.height },
+      editCameraOrbitCenterRef.current,
+      editCameraSettingsRef.current,
     );
     if (!cameraConfig) return;
 
@@ -1111,8 +1127,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const applyNavigationCameraValues = useCallback((clip: TimelineClip, values: {
     positionX?: number;
     positionY?: number;
-    scale?: number;
-    forwardOffset?: number;
+    positionZ?: number;
     rotationX?: number;
     rotationY?: number;
   }) => {
@@ -1128,17 +1143,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       position: {
         x: values.positionX ?? current.position.x,
         y: values.positionY ?? current.position.y,
-        z: current.position.z,
+        z: values.positionZ ?? current.position.z,
       },
       scale: {
-        all: values.scale !== undefined
-          ? values.scale / Math.max(0.01, current.scale.x || 1)
-          : current.scale.all ?? 1,
+        all: current.scale.all ?? 1,
         x: current.scale.x,
         y: current.scale.y,
-        ...(values.forwardOffset !== undefined || current.scale.z !== undefined
-          ? { z: values.forwardOffset ?? current.scale.z ?? 0 }
-          : {}),
+        ...(current.scale.z !== undefined ? { z: current.scale.z } : {}),
       },
       rotation: {
         x: values.rotationX ?? current.rotation.x,
@@ -1152,6 +1163,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       clip,
       next,
       { width: effectiveResolution.width, height: effectiveResolution.height },
+      editCameraOrbitCenterRef.current,
+      editCameraSettingsRef.current,
     );
     if (nextCameraConfig) {
       setPreviewCameraOverride(nextCameraConfig);
@@ -1215,7 +1228,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   const scheduleGaussianWheelBatchEnd = useCallback(() => {
     if (gaussianWheelBatchTimerRef.current === null) {
-      startSceneNavHistoryBatch('Scene zoom');
+      startSceneNavHistoryBatch('Camera position');
     } else {
       window.clearTimeout(gaussianWheelBatchTimerRef.current);
     }
@@ -1228,7 +1241,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const getSceneNavSolveSettings = useCallback((clip: TimelineClip | null) => {
     if (clip?.source?.type !== 'camera') return null;
 
-    const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+    const timelineState = useTimelineStore.getState();
+    const cameraSettings = editCameraModeActiveRef.current && clip.id === editCameraClipIdRef.current
+      ? editCameraSettingsRef.current
+      : timelineState.getInterpolatedCameraSettings(
+          clip.id,
+          timelineState.playheadPosition - clip.startTime,
+        );
     return {
       settings: {
         nearPlane: cameraSettings.near,
@@ -1236,7 +1255,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         fov: cameraSettings.fov,
         minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
       },
-      sceneBounds: undefined,
+      sceneBounds: editCameraModeActiveRef.current && clip.id === editCameraClipIdRef.current
+        ? buildEditCameraOrbitSceneBounds(editCameraOrbitCenterRef.current)
+        : undefined,
     };
   }, []);
 
@@ -1279,6 +1300,98 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
   }, [endSceneNavHistoryBatch, getSceneNavPointerLockTarget]);
 
+  const focusEditCameraOnSceneObject = useCallback((object: {
+    clipId: string;
+    kind: string;
+    worldPosition: SceneVector3;
+  }): boolean => {
+    if (
+      !editCameraModeActive ||
+      !activeCameraClipAtPlayhead ||
+      !editCameraTransformRef.current ||
+      object.kind === 'camera' ||
+      object.clipId === activeCameraClipAtPlayhead.id
+    ) {
+      return false;
+    }
+
+    const viewport = { width: effectiveResolution.width, height: effectiveResolution.height };
+    const currentTransform = editCameraTransformRef.current;
+    const fromConfig = useEngineStore.getState().previewCameraOverride
+      ?? getEditSceneCameraConfig(activeCameraClipAtPlayhead);
+    const nextOrbitCenter = cloneSceneVector(object.worldPosition);
+    const nextTransform: ClipTransform = {
+      ...currentTransform,
+      position: {
+        ...currentTransform.position,
+        x: 0,
+        y: 0,
+      },
+      scale: {
+        ...currentTransform.scale,
+        z: 0,
+      },
+    };
+    const nextCameraConfig = buildPreviewCameraConfigFromTransform(
+      activeCameraClipAtPlayhead,
+      nextTransform,
+      viewport,
+      nextOrbitCenter,
+      editCameraSettingsRef.current,
+    );
+    if (!fromConfig || !nextCameraConfig) return false;
+
+    stopGaussianFpsLook();
+    stopGaussianKeyboardMovement();
+    endGaussianWheelBatch();
+    if (gaussianOrbitStart.current.clipId) {
+      gaussianOrbitStart.current.clipId = null;
+      setIsGaussianOrbiting(false);
+      endSceneNavHistoryBatch();
+    }
+    if (gaussianPanStart.current.clipId) {
+      gaussianPanStart.current.clipId = null;
+      setIsGaussianPanning(false);
+      endSceneNavHistoryBatch();
+    }
+    setIsEditCameraOrthoPanning(false);
+    containerRef.current?.focus({ preventScroll: true });
+
+    editCameraOrbitCenterRef.current = nextOrbitCenter;
+    editCameraTransformRef.current = nextTransform;
+    let toConfig: SceneCameraConfig = nextCameraConfig;
+    if (editCameraOrthoMode) {
+      const baseFrame = activeEditCameraOrthoFrame
+        ?? createDefaultEditCameraOrthoFrame(editCameraOrthoMode, activeCameraClipAtPlayhead.id, nextCameraConfig);
+      const nextFrame: EditCameraOrthoFrame = {
+        ...baseFrame,
+        clipId: activeCameraClipAtPlayhead.id,
+        mode: editCameraOrthoMode,
+        center: cloneSceneVector(nextOrbitCenter),
+      };
+      editCameraViewTransitionRef.current = true;
+      setEditCameraOrthoFrame(nextFrame);
+      toConfig = buildEditCameraOrthographicConfig(editCameraOrthoMode, nextFrame, nextCameraConfig);
+    }
+
+    animatePreviewCameraOverride(fromConfig, toConfig, false);
+    engine.requestRender();
+    return true;
+  }, [
+    activeCameraClipAtPlayhead,
+    activeEditCameraOrthoFrame,
+    animatePreviewCameraOverride,
+    editCameraModeActive,
+    editCameraOrthoMode,
+    effectiveResolution.height,
+    effectiveResolution.width,
+    endGaussianWheelBatch,
+    endSceneNavHistoryBatch,
+    getEditSceneCameraConfig,
+    stopGaussianFpsLook,
+    stopGaussianKeyboardMovement,
+  ]);
+
   const tickGaussianKeyboardMovement = useCallback((timestamp: number) => {
     gaussianKeyboardFrameRef.current = null;
 
@@ -1315,27 +1428,43 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       return;
     }
 
-    const zoom = getCameraZoomFromScale(freshTransform.scale);
-    const zoomDamping = 1 / Math.sqrt(Math.max(0.35, zoom));
     const clipSource = navigationSceneNavClip.source;
     if (!clipSource || clipSource.type !== 'camera') {
       stopGaussianKeyboardMovement();
       return;
     }
-    const fovDegrees = clipSource.cameraSettings?.fov ?? DEFAULT_SCENE_CAMERA_SETTINGS.fov;
-    const minimumDistance = getSharedSceneDefaultCameraDistance(fovDegrees);
-    const baseDistance = freshTransform.position.z !== 0 ? Math.abs(freshTransform.position.z) : minimumDistance;
-    const currentDistance = baseDistance / zoom;
+    const timelineState = useTimelineStore.getState();
+    const cameraSettings = editCameraModeActiveRef.current && navigationSceneNavClip.id === editCameraClipIdRef.current
+      ? editCameraSettingsRef.current
+      : timelineState.getInterpolatedCameraSettings(
+          navigationSceneNavClip.id,
+          timelineState.playheadPosition - navigationSceneNavClip.startTime,
+        );
+    const frame = resolveOrbitCameraFrame(
+      freshTransform,
+      {
+        nearPlane: cameraSettings.near,
+        farPlane: cameraSettings.far,
+        fov: cameraSettings.fov,
+        minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
+      },
+      { width: effectiveResolution.width, height: effectiveResolution.height },
+    );
     const keyboardMoveSpeed = effectiveSceneNavFpsMode ? sceneNavFpsMoveSpeed : 1;
-    const panStep = 0.9 * zoomDamping * dt * keyboardMoveSpeed;
-    const forwardStep = Math.max(0.15, currentDistance * 0.85) * dt * keyboardMoveSpeed;
+    const panStep = 0.9 * dt * keyboardMoveSpeed;
+    const forwardStep = Math.max(0.15, frame.distance * 0.85) * dt * keyboardMoveSpeed;
+    const positionDelta = addSceneVectors(
+      addSceneVectors(
+        scaleSceneVector(frame.right, rightInput * panStep),
+        scaleSceneVector(frame.cameraUp, upInput * panStep),
+      ),
+      scaleSceneVector(frame.forward, forwardInput * forwardStep),
+    );
 
     applyNavigationCameraValues(navigationSceneNavClip, {
-      ...(rightInput !== 0 ? { positionX: freshTransform.position.x + rightInput * panStep } : {}),
-      ...(upInput !== 0 ? { positionY: freshTransform.position.y + upInput * panStep } : {}),
-      ...(forwardInput !== 0
-        ? { forwardOffset: getCameraNavForwardOffset(freshTransform.scale.z) + forwardInput * forwardStep }
-        : {}),
+      positionX: freshTransform.position.x + positionDelta.x,
+      positionY: freshTransform.position.y + positionDelta.y,
+      positionZ: freshTransform.position.z + positionDelta.z,
     });
 
     gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
@@ -1345,6 +1474,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     sceneNavEnabled,
     effectiveSceneNavFpsMode,
     sceneNavFpsMoveSpeed,
+    effectiveResolution.height,
+    effectiveResolution.width,
     getFreshSceneNavTransform,
     navigationSceneNavClip,
     stopGaussianKeyboardLoop,
@@ -1474,7 +1605,21 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (!isGaussianOrbiting) return;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
-      const { clipId, x, y, pitch, yaw } = gaussianOrbitStart.current;
+      const {
+        clipId,
+        x,
+        y,
+        pitch,
+        yaw,
+        roll,
+        startPosX,
+        startPosY,
+        startPosZ,
+        pivotX,
+        pivotY,
+        pivotZ,
+        radius,
+      } = gaussianOrbitStart.current;
       if (!clipId) return;
       if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
 
@@ -1482,8 +1627,31 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       const dy = e.clientY - y;
       const nextPitch = pitch + dy * 0.25;
       const nextYaw = yaw - dx * 0.25;
+      const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
+
+      let nextPosition = { x: startPosX, y: startPosY, z: startPosZ };
+      if (solveSettings && radius > 1e-6) {
+        const frame = resolveOrbitCameraFrame(
+          {
+            position: { x: startPosX, y: startPosY, z: startPosZ },
+            scale: { all: 1, x: 1, y: 1 },
+            rotation: { x: nextPitch, y: nextYaw, z: roll },
+          },
+          solveSettings.settings,
+          { width: effectiveResolution.width, height: effectiveResolution.height },
+          solveSettings.sceneBounds,
+        );
+        nextPosition = {
+          x: pivotX - frame.forward.x * radius,
+          y: pivotY - frame.forward.y * radius,
+          z: pivotZ - frame.forward.z * radius,
+        };
+      }
 
       applyNavigationCameraValues(navigationSceneNavClip, {
+        positionX: nextPosition.x,
+        positionY: nextPosition.y,
+        positionZ: nextPosition.z,
         rotationX: nextPitch,
         rotationY: nextYaw,
       });
@@ -1502,7 +1670,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', finishGaussianOrbit);
     };
-  }, [applyNavigationCameraValues, endSceneNavHistoryBatch, isGaussianOrbiting, navigationSceneNavClip]);
+  }, [
+    applyNavigationCameraValues,
+    effectiveResolution.height,
+    effectiveResolution.width,
+    endSceneNavHistoryBatch,
+    getSceneNavSolveSettings,
+    isGaussianOrbiting,
+    navigationSceneNavClip,
+  ]);
 
   useEffect(() => {
     if (!isGaussianFpsLooking || !navigationSceneNavClip) return;
@@ -1544,7 +1720,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       applyNavigationCameraValues(navigationSceneNavClip, {
         positionX: nextTranslation.positionX,
         positionY: nextTranslation.positionY,
-        forwardOffset: nextTranslation.forwardOffset,
+        positionZ: nextTranslation.positionZ,
         rotationX: nextPitch,
         rotationY: nextYaw,
       });
@@ -1587,21 +1763,36 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     if (!isGaussianPanning) return;
 
     const handleWindowMouseMove = (e: MouseEvent) => {
-      const { clipId, x, y, panX, panY, zoom } = gaussianPanStart.current;
+      const { clipId, x, y, panX, panY, panZ } = gaussianPanStart.current;
       if (!clipId) return;
       if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
 
       const dx = e.clientX - x;
       const dy = e.clientY - y;
-      const zoomDamping = 1 / Math.sqrt(Math.max(0.35, zoom));
-      const panScaleX = (2 / Math.max(1, effectiveResolution.width)) * zoomDamping;
-      const panScaleY = (2 / Math.max(1, effectiveResolution.height)) * zoomDamping;
-      const nextPanX = panX - dx * panScaleX;
-      const nextPanY = panY + dy * panScaleY;
+      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
+      const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
+      if (!freshTransform || !solveSettings) return;
+
+      const frame = resolveOrbitCameraFrame(
+        {
+          ...freshTransform,
+          position: { x: panX, y: panY, z: panZ },
+        },
+        solveSettings.settings,
+        { width: effectiveResolution.width, height: effectiveResolution.height },
+        solveSettings.sceneBounds,
+      );
+      const worldPerPixel = (2 * frame.distance * Math.tan(((frame.fovDegrees * Math.PI) / 180) * 0.5)) /
+        Math.max(1, effectiveResolution.height);
+      const positionDelta = addSceneVectors(
+        scaleSceneVector(frame.right, -dx * worldPerPixel),
+        scaleSceneVector(frame.cameraUp, dy * worldPerPixel),
+      );
 
       applyNavigationCameraValues(navigationSceneNavClip, {
-        positionX: nextPanX,
-        positionY: nextPanY,
+        positionX: panX + positionDelta.x,
+        positionY: panY + positionDelta.y,
+        positionZ: panZ + positionDelta.z,
       });
     };
 
@@ -1623,6 +1814,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     endSceneNavHistoryBatch,
     effectiveResolution.height,
     effectiveResolution.width,
+    getFreshSceneNavTransform,
+    getSceneNavSolveSettings,
     isGaussianPanning,
     navigationSceneNavClip,
   ]);
@@ -1763,7 +1956,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     };
   }, [canvasSize.height, isEditCameraOrthoPanning]);
 
-  // Handle zoom with scroll wheel in edit mode
+  // Handle scene navigation and canvas zoom with the scroll wheel.
   const handleWheel = useCallback((e: PreviewWheelEvent) => {
     if (zoomEditCameraOrthoView(e)) {
       return;
@@ -1786,19 +1979,40 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         return;
       }
 
-      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
-      if (!freshTransform) return;
-
       e.preventDefault();
       scheduleGaussianWheelBatchEnd();
 
-      const currentZoom = Math.max(0.05, getCameraZoomFromScale(freshTransform.scale));
-      const zoomFactor = Math.exp(-e.deltaY * 0.0025);
-      const nextZoom = Math.max(0.05, Math.min(40, currentZoom * zoomFactor));
+      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
+      if (!freshTransform) return;
 
-      applyNavigationCameraValues(navigationSceneNavClip, {
-        scale: nextZoom,
-      });
+      const direction = e.deltaY < 0 ? 1 : e.deltaY > 0 ? -1 : 0;
+      if (direction !== 0) {
+        const timelineState = useTimelineStore.getState();
+        const cameraSettings = editCameraModeActive && navigationSceneNavClip.id === editCameraClipIdRef.current
+          ? editCameraSettingsRef.current
+          : timelineState.getInterpolatedCameraSettings(
+              navigationSceneNavClip.id,
+              timelineState.playheadPosition - navigationSceneNavClip.startTime,
+            );
+        const frame = resolveOrbitCameraFrame(
+          freshTransform,
+          {
+            nearPlane: cameraSettings.near,
+            farPlane: cameraSettings.far,
+            fov: cameraSettings.fov,
+            minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
+          },
+          { width: effectiveResolution.width, height: effectiveResolution.height },
+        );
+        const wheelAmount = Math.abs(e.deltaY);
+        const dollyStep = Math.max(0.02, frame.distance * (Math.exp(wheelAmount * 0.0025) - 1));
+        const positionDelta = scaleSceneVector(frame.forward, direction * dollyStep);
+        applyNavigationCameraValues(navigationSceneNavClip, {
+          positionX: freshTransform.position.x + positionDelta.x,
+          positionY: freshTransform.position.y + positionDelta.y,
+          positionZ: freshTransform.position.z + positionDelta.z,
+        });
+      }
       return;
     }
 
@@ -1842,6 +2056,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     applyNavigationCameraValues,
     setSceneNavFpsMoveSpeed,
     navigationSceneNavClip,
+    editCameraModeActive,
+    effectiveResolution.height,
+    effectiveResolution.width,
     viewPan,
     viewZoom,
     zoomEditCameraOrthoView,
@@ -1872,6 +2089,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (isCanvasInteractionTarget(e.target)) {
       containerRef.current?.focus({ preventScroll: true });
+    }
+
+    if (isSceneObjectInteractionTarget(e.target)) {
+      return;
     }
 
     if (
@@ -1911,7 +2132,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             panX: freshTransform.position.x,
             panY: freshTransform.position.y,
             panZ: freshTransform.position.z,
-            zoom: getCameraZoomFromScale(freshTransform.scale),
           };
           setIsGaussianPanning(true);
           return;
@@ -1929,6 +2149,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           setIsGaussianFpsLooking(true);
         } else {
           startSceneNavHistoryBatch('Scene orbit');
+          const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
+          const pivot = getSceneBoundsCenter(solveSettings?.sceneBounds);
+          const radius = Math.hypot(
+            freshTransform.position.x - pivot.x,
+            freshTransform.position.y - pivot.y,
+            freshTransform.position.z - pivot.z,
+          );
           gaussianOrbitStart.current = {
             clipId: navigationSceneNavClip.id,
             x: e.clientX,
@@ -1936,6 +2163,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             pitch: freshTransform.rotation.x,
             yaw: freshTransform.rotation.y,
             roll: freshTransform.rotation.z,
+            startPosX: freshTransform.position.x,
+            startPosY: freshTransform.position.y,
+            startPosZ: freshTransform.position.z,
+            pivotX: pivot.x,
+            pivotY: pivot.y,
+            pivotZ: pivot.z,
+            radius,
           };
           setIsGaussianOrbiting(true);
         }
@@ -1953,7 +2187,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           panX: freshTransform.position.x,
           panY: freshTransform.position.y,
           panZ: freshTransform.position.z,
-            zoom: getCameraZoomFromScale(freshTransform.scale),
         };
         setIsGaussianPanning(true);
         return;
@@ -1981,6 +2214,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     sceneNavEnabled,
     effectiveSceneNavFpsMode,
     getFreshSceneNavTransform,
+    getSceneNavSolveSettings,
     getSceneNavPointerLockTarget,
     isCanvasInteractionTarget,
     navigationSceneNavClip,
@@ -2233,6 +2467,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
                   }
                   toolbarPortalTarget={sceneGizmoToolbarTarget}
                   enabled
+                  canSetObjectOrbitPivot={editCameraModeActive}
+                  onSetObjectOrbitPivot={focusEditCameraOnSceneObject}
                 />
               )}
             </>
@@ -2304,8 +2540,8 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         {sceneNavEnabled && (
           <div className="preview-edit-hint">
             {effectiveSceneNavFpsMode
-              ? 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan'
-              : 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel zoom'}
+              ? 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel moves camera'
+              : 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel moves camera'}
           </div>
         )}
 

@@ -2,6 +2,41 @@
   {
     "date": "2026-05-02",
     "type": "improve",
+    "title": "World-Space Camera Controls",
+    "description": "Camera Position X/Y/Z now represents the real camera eye in world space, while FOV/mm, near/far planes, and resolution remain independent keyframable camera settings.",
+    "section": "3D / Cameras"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "improve",
+    "title": "Camera Navigation and Keyframe Cleanup",
+    "description": "Scene navigation now moves camera position along the current view direction without touching lens settings, and legacy camera scale values no longer act as a hidden second zoom surface.",
+    "section": "Preview / Keyframes"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "improve",
+    "title": "Timeline, Mask, and Curve Editor Polish",
+    "description": "Mask editing, keyframe rows, curve controls, and timeline property handling were tightened for cleaner selection, editing, serialization, preview, and export behavior.",
+    "section": "Timeline / Editing"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "new",
+    "title": "Math Scene Clip Foundation",
+    "description": "Math scene clips now have initial timeline, property-panel, serialization, and documentation support for procedural scene workflows.",
+    "section": "3D / Math Scenes"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "improve",
+    "title": "Native Helper and MatAnyone Hardening",
+    "description": "Native helper download, session, updater, and MatAnyone processing paths received reliability and protocol updates.",
+    "section": "Native Helper"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "improve",
     "title": "Directional Composition Tab Switching",
     "description": "Timeline composition switches now follow tab order with directional clip, playhead, marker, and in/out marker motion, faster enter/exit timing, and non-fading transitions.",
     "section": "Timeline / Composition Tabs"

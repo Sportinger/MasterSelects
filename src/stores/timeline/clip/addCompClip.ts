@@ -15,6 +15,7 @@ import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
 import { thumbnailRenderer } from '../../../services/thumbnailRenderer';
 import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
+import { mathSceneRenderer } from '../../../services/mathScene/MathSceneRenderer';
 // Note: compositionRenderer is used elsewhere for cache invalidation
 
 const log = Logger.create('AddCompClip');
@@ -342,6 +343,38 @@ async function loadSubNestedClips(
       continue;
     }
 
+    if (sc.sourceType === 'math-scene' && sc.mathScene) {
+      const clipId = generateNestedClipId(parentClipId, sc.id);
+      const canvas = mathSceneRenderer.createCanvas();
+      const clip: TimelineClip = {
+        id: clipId,
+        trackId: sc.trackId,
+        name: sc.name,
+        file: new File([JSON.stringify(sc.mathScene)], 'math-scene.json', { type: 'application/json' }),
+        startTime: sc.startTime,
+        duration: sc.duration,
+        inPoint: sc.inPoint,
+        outPoint: sc.outPoint,
+        source: {
+          type: 'math-scene',
+          textCanvas: canvas,
+          naturalDuration: sc.duration,
+        },
+        mathScene: structuredClone(sc.mathScene),
+        thumbnails: sc.thumbnails,
+        transform: sc.transform,
+        effects: sc.effects || [],
+        masks: sc.masks || [],
+        reversed: sc.reversed,
+        speed: sc.speed,
+        preservesPitch: sc.preservesPitch,
+        isLoading: false,
+      };
+      mathSceneRenderer.renderClip(clip, 0);
+      result.push(clip);
+      continue;
+    }
+
     // Regular media clip
     const mediaFile = mediaStore.files.find(f => f.id === sc.mediaFileId);
     if (!mediaFile?.file) continue;
@@ -539,6 +572,50 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
         subNestedClipCount: subNestedClips.length,
         depth: depth + 1,
       });
+      continue;
+    }
+
+    if (serializedClip.sourceType === 'math-scene' && serializedClip.mathScene) {
+      const nestedClipId = generateNestedClipId(compClipId, serializedClip.id);
+      const canvas = mathSceneRenderer.createCanvas();
+      const nestedClip: TimelineClip = {
+        id: nestedClipId,
+        trackId: serializedClip.trackId,
+        name: serializedClip.name,
+        file: new File([JSON.stringify(serializedClip.mathScene)], 'math-scene.json', { type: 'application/json' }),
+        startTime: serializedClip.startTime,
+        duration: serializedClip.duration,
+        inPoint: serializedClip.inPoint,
+        outPoint: serializedClip.outPoint,
+        source: {
+          type: 'math-scene',
+          textCanvas: canvas,
+          naturalDuration: serializedClip.duration,
+        },
+        mathScene: structuredClone(serializedClip.mathScene),
+        thumbnails: serializedClip.thumbnails,
+        linkedClipId: serializedClip.linkedClipId,
+        waveform: serializedClip.waveform,
+        transform: serializedClip.transform,
+        effects: serializedClip.effects || [],
+        colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+        masks: serializedClip.masks || [],
+        isLoading: false,
+        reversed: serializedClip.reversed,
+        speed: serializedClip.speed,
+        preservesPitch: serializedClip.preservesPitch,
+      };
+      mathSceneRenderer.renderClip(nestedClip, 0);
+      nestedClips.push(nestedClip);
+
+      if (serializedClip.keyframes && serializedClip.keyframes.length > 0) {
+        const updatedKeyframes = serializedClip.keyframes.map((kf: Keyframe) => ({
+          ...kf,
+          clipId: nestedClipId,
+        }));
+        nestedKeyframes.set(nestedClipId, updatedKeyframes);
+      }
+
       continue;
     }
 

@@ -1,6 +1,14 @@
 // Timeline-specific types for component props
 
-import type { TimelineClip, TimelineTrack, AnimatableProperty, ClipTransform, BezierHandle, EasingType } from '../../types';
+import type {
+  TimelineClip,
+  TimelineTrack,
+  AnimatableProperty,
+  ClipTransform,
+  BezierHandle,
+  EasingType,
+  RotationInterpolationMode,
+} from '../../types';
 
 // Clip drag state (Premiere-style)
 export interface ClipDragState {
@@ -302,13 +310,17 @@ export interface TimelineKeyframesProps {
     property: AnimatableProperty;
     value: number;
     easing: string;
+    rotationInterpolation?: RotationInterpolationMode;
   }>>;
   clipDrag: ClipDragState | null;
   scrollX: number;
   timelineRef: React.RefObject<HTMLDivElement | null>;
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
-  onUpdateKeyframe: (keyframeId: string, updates: { easing?: EasingType }) => void;
+  onUpdateKeyframe: (
+    keyframeId: string,
+    updates: { easing?: EasingType; rotationInterpolation?: RotationInterpolationMode },
+  ) => void;
   onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;

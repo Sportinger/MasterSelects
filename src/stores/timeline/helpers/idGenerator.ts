@@ -57,6 +57,13 @@ export function generateSolidClipId(): string {
 }
 
 /**
+ * Generate a unique ID for math scene clips.
+ */
+export function generateMathSceneClipId(): string {
+  return generateClipId('clip-math');
+}
+
+/**
  * Generate a unique ID for mesh clips.
  */
 export function generateMeshClipId(): string {

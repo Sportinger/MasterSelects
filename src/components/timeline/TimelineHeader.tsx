@@ -2,13 +2,15 @@
 
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { TimelineHeaderProps } from './types';
-import type { AnimatableProperty, ClipTransform, ColorCorrectionState, Keyframe, TimelineClip } from '../../types';
+import type { AnimatableProperty, ClipMask, ClipTransform, ColorCorrectionState, Keyframe, TimelineClip } from '../../types';
 import {
   PRIMARY_COLOR_PARAM_DEFS,
   ensureColorCorrectionState,
   getActiveColorVersion,
   getColorNodeParamValue,
+  parseCameraProperty,
   parseColorProperty,
+  parseMaskProperty,
 } from '../../types';
 import {
   mergeVectorAnimationSettings,
@@ -21,6 +23,8 @@ import {
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { CurveEditorHeader } from './CurveEditorHeader';
 import { useMediaStore } from '../../stores/mediaStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore/types';
+import { useTimelineStore } from '../../stores/timeline';
 import {
   getCameraLookRotationAxis,
   resolveCameraLookAtFixedEyeUpdates,
@@ -34,9 +38,11 @@ type KeyframeTrackClip = {
   mediaFileId?: string;
   effects?: Array<{ id: string; name: string; params: Record<string, unknown> }>;
   colorCorrection?: ColorCorrectionState;
+  masks?: ClipMask[];
   source?: {
     type?: string;
     mediaFileId?: string;
+    cameraSettings?: import('../../stores/mediaStore/types').SceneCameraSettings;
     vectorAnimationSettings?: import('../../types/vectorAnimation').VectorAnimationClipSettings;
     gaussianSplatSettings?: {
       render?: {
@@ -57,7 +63,7 @@ const shouldHide3DOnlyProperties = (clip: KeyframeTrackClip | null | undefined):
 
 const getTransformPropertyOrder = (clip: KeyframeTrackClip | null | undefined): string[] => (
   usesCameraPropertyModel(clip)
-    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+    ? ['camera.fov', 'camera.near', 'camera.far', 'camera.resolutionWidth', 'camera.resolutionHeight', 'opacity', 'position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z']
     : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
 );
 
@@ -91,6 +97,19 @@ function getColorPropertyMeta(prop: string, clip?: KeyframeTrackClip | null) {
 
 // Get friendly names for properties
 const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string => {
+  const maskProperty = parseMaskProperty(prop);
+  if (maskProperty) {
+    const maskName = clip?.masks?.find(mask => mask.id === maskProperty.maskId)?.name ?? 'Mask';
+    const labels: Record<string, string> = {
+      path: 'Path',
+      'position.x': 'X',
+      'position.y': 'Y',
+      feather: 'Feather',
+      featherQuality: 'Quality',
+    };
+    return `${maskName} ${labels[maskProperty.property] ?? maskProperty.property}`;
+  }
+
   const colorMeta = getColorPropertyMeta(prop, clip);
   if (colorMeta) {
     const nodeName = colorMeta.nodeName?.trim();
@@ -106,11 +125,17 @@ const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string
   }
 
   if (usesCameraPropertyModel(clip)) {
-    if (prop === 'position.z') return 'Dist';
+    const cameraProperty = parseCameraProperty(prop);
+    if (cameraProperty === 'fov') return 'FOV';
+    if (cameraProperty === 'near') return 'Near';
+    if (cameraProperty === 'far') return 'Far';
+    if (cameraProperty === 'resolutionWidth') return 'Res X';
+    if (cameraProperty === 'resolutionHeight') return 'Res Y';
+    if (prop === 'position.x') return 'Pos X';
+    if (prop === 'position.y') return 'Pos Y';
+    if (prop === 'position.z') return 'Pos Z';
     if (prop === 'rotation.x') return 'Pitch';
     if (prop === 'rotation.y') return 'Yaw';
-    if (prop === 'scale.z') return 'Move Z';
-    if (prop === 'scale.all') return 'Zoom';
   }
 
   const labels: Record<string, string> = {
@@ -148,6 +173,17 @@ const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string
   }
   return prop;
 };
+
+function getMaskPathValue(mask: ClipMask): NonNullable<Keyframe['pathValue']> {
+  return {
+    closed: mask.closed,
+    vertices: mask.vertices.map(vertex => ({
+      ...vertex,
+      handleIn: { ...vertex.handleIn },
+      handleOut: { ...vertex.handleOut },
+    })),
+  };
+}
 
 // Get value from transform based on property path
 const getValueFromTransform = (transform: ClipTransform, prop: string): number => {
@@ -192,10 +228,74 @@ const getValueFromColorCorrection = (
   );
 };
 
+const getValueFromMaskProperty = (
+  clip: KeyframeTrackClip,
+  prop: string,
+  keyframes: Array<{ id: string; time: number; property: string; value: number; easing: string }>,
+  clipLocalTime: number,
+): number | null => {
+  const maskProperty = parseMaskProperty(prop);
+  if (!maskProperty) return null;
+  if (maskProperty.property === 'path') return 0;
+
+  const mask = clip.masks?.find(candidate => candidate.id === maskProperty.maskId);
+  if (!mask) return 0;
+
+  const baseValue = maskProperty.property === 'position.x'
+    ? mask.position.x
+    : maskProperty.property === 'position.y'
+      ? mask.position.y
+      : maskProperty.property === 'feather'
+        ? mask.feather
+        : mask.featherQuality ?? 50;
+
+  return interpolateKeyframes(
+    keyframes as Keyframe[],
+    prop as AnimatableProperty,
+    clipLocalTime,
+    baseValue,
+  );
+};
+
+const getValueFromCameraProperty = (
+  clip: KeyframeTrackClip,
+  prop: string,
+  keyframes: Array<{ id: string; time: number; property: string; value: number; easing: string }>,
+  clipLocalTime: number,
+): number | null => {
+  const cameraProperty = parseCameraProperty(prop);
+  if (!cameraProperty || clip.source?.type !== 'camera') return null;
+
+  const baseSettings = {
+    ...DEFAULT_SCENE_CAMERA_SETTINGS,
+    ...clip.source.cameraSettings,
+  };
+  const baseValue = baseSettings[cameraProperty] ??
+    (cameraProperty === 'resolutionWidth' ? 1920 : cameraProperty === 'resolutionHeight' ? 1080 : 0);
+
+  return interpolateKeyframes(
+    keyframes as Keyframe[],
+    prop as AnimatableProperty,
+    clipLocalTime,
+    baseValue,
+  );
+};
+
 // Format value for display
 const formatValue = (value: number, prop: string, clip?: KeyframeTrackClip | null): string => {
+  const maskProperty = parseMaskProperty(prop);
+  if (maskProperty?.property === 'path') return 'Path';
+  if (maskProperty?.property === 'feather') return `${value.toFixed(1)}px`;
+  if (maskProperty?.property === 'featherQuality') return value.toFixed(0);
+  if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') return value.toFixed(3);
+
   const colorMeta = getColorPropertyMeta(prop, clip);
   if (colorMeta) return value.toFixed(colorMeta.decimals);
+  const cameraProperty = parseCameraProperty(prop);
+  if (cameraProperty === 'fov') return `${value.toFixed(1)}°`;
+  if (cameraProperty === 'near') return value.toFixed(3);
+  if (cameraProperty === 'far') return value.toFixed(1);
+  if (cameraProperty === 'resolutionWidth' || cameraProperty === 'resolutionHeight') return Math.round(value).toString();
   if (prop === 'opacity') return (value * 100).toFixed(0) + '%';
   if (prop.startsWith('rotation')) return value.toFixed(1) + '°';
   if (prop.startsWith('scale')) return (value * 100).toFixed(0) + '%';
@@ -368,6 +468,14 @@ function PropertyRow({
     if (lottieStateValue !== null) {
       return lottieStateValue;
     }
+    const maskValue = getValueFromMaskProperty(clip, prop, keyframes, clipLocalTime);
+    if (maskValue !== null) {
+      return maskValue;
+    }
+    const cameraValue = getValueFromCameraProperty(clip, prop, keyframes, clipLocalTime);
+    if (cameraValue !== null) {
+      return cameraValue;
+    }
     // Transform properties use getInterpolatedTransform
     const transform = getInterpolatedTransform(clipId, clipLocalTime);
     return getValueFromTransform(transform, prop);
@@ -393,10 +501,19 @@ function PropertyRow({
 
   // Get base sensitivity based on property type
   const getBaseSensitivity = () => {
+    const maskProperty = parseMaskProperty(prop);
+    if (maskProperty?.property === 'path') return 0;
+    if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') return 0.001;
+    if (maskProperty?.property === 'feather') return 0.5;
+    if (maskProperty?.property === 'featherQuality') return 1;
+    const cameraProperty = parseCameraProperty(prop);
+    if (cameraProperty === 'fov') return 0.5;
+    if (cameraProperty === 'near') return 0.01;
+    if (cameraProperty === 'far') return 10;
+    if (cameraProperty === 'resolutionWidth' || cameraProperty === 'resolutionHeight') return 16;
     if (prop === 'opacity') return 0.005; // 0-1 range
     if (usesCameraPropertyModel(clip) && (prop === 'position.x' || prop === 'position.y')) return 0.01;
     if (usesCameraPropertyModel(clip) && prop === 'position.z') return 0.05;
-    if (usesCameraPropertyModel(clip) && prop === 'scale.z') return 0.1;
     if (prop.startsWith('scale')) return 0.005; // typically 0-2 range
     if (prop.startsWith('rotation')) return 0.5; // degrees
     if (prop.startsWith('position')) return 1; // pixels
@@ -412,6 +529,16 @@ function PropertyRow({
 
   // Get default value for property
   const getDefaultValue = () => {
+    const maskProperty = parseMaskProperty(prop);
+    if (maskProperty?.property === 'path') return 0;
+    if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') return 0;
+    if (maskProperty?.property === 'feather') return 0;
+    if (maskProperty?.property === 'featherQuality') return 50;
+    const cameraProperty = parseCameraProperty(prop);
+    if (cameraProperty) {
+      return DEFAULT_SCENE_CAMERA_SETTINGS[cameraProperty] ??
+        (cameraProperty === 'resolutionWidth' ? 1920 : cameraProperty === 'resolutionHeight' ? 1080 : 0);
+    }
     if (prop === 'opacity') return 1;
     if (usesCameraPropertyModel(clip) && prop === 'scale.z') return 0;
     if (prop.startsWith('scale')) return 1;
@@ -429,6 +556,8 @@ function PropertyRow({
 
   const applyPropertyValue = (value: number) => {
     if (!isWithinClip) return;
+    const maskProperty = parseMaskProperty(prop);
+    if (maskProperty?.property === 'path') return;
 
     const cameraLookAxis = usesCameraPropertyModel(clip)
       ? getCameraLookRotationAxis(prop)
@@ -464,12 +593,14 @@ function PropertyRow({
   const handleRightClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!isWithinClip) return;
+    if (parseMaskProperty(prop)?.property === 'path') return;
     applyPropertyValue(getDefaultValue());
   };
 
   // Handle value scrubbing (left-click drag)
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return; // Left click only
+    if (parseMaskProperty(prop)?.property === 'path') return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(true);
@@ -512,8 +643,18 @@ function PropertyRow({
   // Add/toggle keyframe at current position
   const toggleKeyframe = useCallback(() => {
     if (!isWithinClip) return;
+    const maskProperty = parseMaskProperty(prop);
+    if (maskProperty?.property === 'path') {
+      const store = useTimelineStore.getState();
+      const runtimeMask = store
+        .getInterpolatedMasks(clipId, clipLocalTime)
+        ?.find(mask => mask.id === maskProperty.maskId);
+      const pathValue = runtimeMask ? getMaskPathValue(runtimeMask) : undefined;
+      store.addMaskPathKeyframe(clipId, maskProperty.maskId, pathValue, clipLocalTime);
+      return;
+    }
     addKeyframe(clipId, prop as AnimatableProperty, currentValue);
-  }, [addKeyframe, clipId, currentValue, isWithinClip, prop]);
+  }, [addKeyframe, clipId, clipLocalTime, currentValue, isWithinClip, prop]);
 
   const applyKeyframeButtonForDrag = useCallback(() => {
     const session = propertyKeyframeDragSession;
@@ -616,7 +757,7 @@ function PropertyRow({
         >
           {isWithinClip
             ? (
-                usesCameraPropertyModel(clip) && (prop === 'position.x' || prop === 'position.y' || prop === 'position.z' || prop === 'scale.z')
+                usesCameraPropertyModel(clip) && (prop === 'position.x' || prop === 'position.y' || prop === 'position.z')
                   ? currentValue.toFixed(3)
                   : formatValue(currentValue, prop, clip)
               )

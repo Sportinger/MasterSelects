@@ -48,6 +48,7 @@ import {
 } from './relinkMedia';
 import { fromProjectTransform } from './transformSerialization';
 import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
+import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import type {
   GaussianSplatSequenceData,
   GaussianSplatSequenceFrame,
@@ -684,7 +685,18 @@ function convertProjectCompositionToStore(
           property: keyframe.property as Keyframe['property'],
           time: keyframe.time,
           value: keyframe.value,
+          pathValue: keyframe.pathValue
+            ? {
+                closed: keyframe.pathValue.closed,
+                vertices: keyframe.pathValue.vertices.map(vertex => ({
+                  ...vertex,
+                  handleIn: { ...vertex.handleIn },
+                  handleOut: { ...vertex.handleOut },
+                })),
+              }
+            : undefined,
           easing: keyframe.easing as Keyframe['easing'],
+          rotationInterpolation: keyframe.rotationInterpolation as Keyframe['rotationInterpolation'],
           handleIn: keyframe.bezierHandles
             ? { x: keyframe.bezierHandles.x1, y: keyframe.bezierHandles.y1 }
             : undefined,
@@ -706,6 +718,8 @@ function convertProjectCompositionToStore(
         text3DProperties: c.text3DProperties,
         // Solid clip support
         solidColor: c.solidColor,
+        // Math scene clip support
+        mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
         vectorAnimationSettings: c.vectorAnimationSettings,
         // 3D layer support
         is3D: c.is3D,
@@ -1571,6 +1585,37 @@ async function reloadNestedCompositionClips(): Promise<void> {
     const nestedTracks = composition.timelineData.tracks;
 
     for (const nestedSerializedClip of composition.timelineData.clips) {
+      if (nestedSerializedClip.sourceType === 'math-scene' && nestedSerializedClip.mathScene) {
+        const canvas = mathSceneRenderer.createCanvas();
+        const nestedClip: TimelineClip = {
+          id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
+          trackId: nestedSerializedClip.trackId,
+          name: nestedSerializedClip.name,
+          file: new File([JSON.stringify(nestedSerializedClip.mathScene)], 'math-scene.json', { type: 'application/json' }),
+          startTime: nestedSerializedClip.startTime,
+          duration: nestedSerializedClip.duration,
+          inPoint: nestedSerializedClip.inPoint,
+          outPoint: nestedSerializedClip.outPoint,
+          source: {
+            type: 'math-scene',
+            textCanvas: canvas,
+            naturalDuration: nestedSerializedClip.duration,
+          },
+          mathScene: structuredClone(nestedSerializedClip.mathScene),
+          thumbnails: nestedSerializedClip.thumbnails,
+          transform: nestedSerializedClip.transform,
+          effects: nestedSerializedClip.effects || [],
+          masks: nestedSerializedClip.masks || [],
+          reversed: nestedSerializedClip.reversed,
+          speed: nestedSerializedClip.speed,
+          preservesPitch: nestedSerializedClip.preservesPitch,
+          isLoading: false,
+        };
+        mathSceneRenderer.renderClip(nestedClip, 0);
+        nestedClips.push(nestedClip);
+        continue;
+      }
+
       const nestedMediaFile = mediaStore.files.find(f => f.id === nestedSerializedClip.mediaFileId);
       if (!nestedMediaFile?.file) continue;
 

@@ -141,7 +141,17 @@ Edit mode is a canvas overlay for layer transforms.
 - Uses a full-container overlay canvas so pasteboard space outside the composition remains interactive.
 - Multiple preview panels can mix edit and non-edit views at the same time.
 - 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
+- In camera Edit mode, double-clicking a non-camera 3D object handle moves the temporary free-camera orbit pivot onto that object. The same action is available from the object's right-click `Set Orbit Pivot` menu item.
+- Camera Edit mode uses a separate free-camera lens with a 35 mm default. Timeline camera lens settings and keyframes do not change that edit-view lens.
+- The projected timeline-camera frame in camera Edit mode is drawn from the camera's FOV/mm and Resolution X/Y, so wide lenses draw a larger front frame, tele lenses draw a smaller one, and the frame aspect follows the camera resolution.
 - Edit views can render a projected world grid that follows camera-view animation instead of snapping as a screen overlay. The grid plane matches the edit view: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`.
+
+### Scene Camera Navigation
+
+- When Scene Nav is active on a camera clip, the preview wheel moves the real camera position along the current view direction, updating Position X/Y/Z as needed. It does not change FOV or millimeters.
+- The Transform tab shows the same lens value as both FOV degrees and full-frame-equivalent mm; those lens fields are independent from camera position.
+- Resolution X/Y controls the camera gate aspect used by the edit-view camera frame.
+- In FPS navigation, wheel still changes movement speed while the camera is actively moving or looking; otherwise it moves the camera position forward/backward.
 
 ### Limitation
 

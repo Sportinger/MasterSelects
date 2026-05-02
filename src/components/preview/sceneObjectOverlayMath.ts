@@ -1,5 +1,10 @@
 import type { Keyframe, TimelineClip, TimelineTrack } from '../../types';
-import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
+import {
+  DEFAULT_SCENE_CAMERA_SETTINGS,
+  getSceneCameraAspect,
+  type SceneCameraSettings,
+} from '../../stores/mediaStore/types';
+import { useTimelineStore } from '../../stores/timeline';
 import type {
   SceneCamera,
   SceneCameraConfig,
@@ -33,6 +38,7 @@ export interface PreviewSceneObject {
   transformSpace: SceneObjectTransformSpace;
   worldPosition: SceneVector3;
   axisBasis: Record<SceneGizmoAxis, SceneVector3>;
+  cameraSettings?: SceneCameraSettings;
   screen: {
     x: number;
     y: number;
@@ -277,7 +283,17 @@ export function buildCameraPreviewSceneObject(
 ): PreviewSceneObject | null {
   if (clip.source?.type !== 'camera') return null;
 
-  const cameraSettings = clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const timelineState = useTimelineStore.getState();
+  const cameraSettings = timelineState.clips.some(candidate => candidate.id === clip.id)
+    ? timelineState.getInterpolatedCameraSettings(
+        clip.id,
+        timelineState.playheadPosition - clip.startTime,
+      )
+    : (clip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS);
+  const resolvedCameraSettings: SceneCameraSettings = {
+    ...DEFAULT_SCENE_CAMERA_SETTINGS,
+    ...cameraSettings,
+  };
   const frame = resolveOrbitCameraFrame(
     {
       position: transform.position,
@@ -285,10 +301,10 @@ export function buildCameraPreviewSceneObject(
       rotation: transform.rotation,
     },
     {
-      nearPlane: cameraSettings.near,
-      farPlane: cameraSettings.far,
-      fov: cameraSettings.fov,
-      minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
+      nearPlane: resolvedCameraSettings.near,
+      farPlane: resolvedCameraSettings.far,
+      fov: resolvedCameraSettings.fov,
+      minimumDistance: getSharedSceneDefaultCameraDistance(resolvedCameraSettings.fov),
     },
     viewport,
   );
@@ -304,6 +320,7 @@ export function buildCameraPreviewSceneObject(
       y: frame.cameraUp,
       z: frame.forward,
     },
+    cameraSettings: resolvedCameraSettings,
     screen: projectWorldToCanvas(frame.eye, camera, canvasSize),
   };
 }
@@ -335,8 +352,10 @@ export function buildCameraWireframeLines(
   const bodyHeight = worldPerPixel * 24;
   const bodyDepth = worldPerPixel * 22;
   const frustumDistance = worldPerPixel * 82;
-  const frustumWidth = worldPerPixel * 92;
-  const frustumHeight = worldPerPixel * 56;
+  const cameraSettings = object.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const frameFovRadians = (cameraSettings.fov * Math.PI) / 180;
+  const frustumHeight = 2 * Math.tan(frameFovRadians * 0.5) * frustumDistance;
+  const frustumWidth = frustumHeight * getSceneCameraAspect(cameraSettings);
 
   const buildCorner = (
     center: SceneVector3,

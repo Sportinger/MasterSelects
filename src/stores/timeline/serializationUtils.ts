@@ -27,6 +27,7 @@ import {
 } from '../../engine/gaussian/types';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
+import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { resolveGaussianSplatSequenceData } from '../../utils/gaussianSplatSequence';
 import { resolveModelSequenceData } from '../../utils/modelSequence';
 
@@ -143,6 +144,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         // Solid clip support
         solidColor: clip.source?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
         vectorAnimationSettings: clip.source?.vectorAnimationSettings,
+        mathScene: clip.source?.type === 'math-scene' && clip.mathScene
+          ? structuredClone(clip.mathScene)
+          : undefined,
         // Clip label color
         // 3D layer support
         is3D: clip.is3D || undefined,
@@ -551,6 +555,39 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   continue;
                 }
 
+                if (nsc.sourceType === 'math-scene' && nsc.mathScene) {
+                  const clipId = `nested-${parentClipId}-${nsc.id}`;
+                  const canvas = mathSceneRenderer.createCanvas();
+                  const nc: TimelineClip = {
+                    id: clipId,
+                    trackId: nsc.trackId,
+                    name: nsc.name,
+                    file: new File([JSON.stringify(nsc.mathScene)], 'math-scene.json', { type: 'application/json' }),
+                    startTime: nsc.startTime,
+                    duration: nsc.duration,
+                    inPoint: nsc.inPoint,
+                    outPoint: nsc.outPoint,
+                    source: {
+                      type: 'math-scene',
+                      textCanvas: canvas,
+                      naturalDuration: nsc.duration,
+                    },
+                    mathScene: structuredClone(nsc.mathScene),
+                    thumbnails: nsc.thumbnails,
+                    transform: nsc.transform,
+                    effects: nsc.effects || [],
+                    masks: nsc.masks || [],
+                    is3D: nsc.is3D,
+                    meshType: nsc.meshType,
+                    text3DProperties: nsc.text3DProperties ? { ...nsc.text3DProperties } : undefined,
+                    isLoading: false,
+                    needsReload: false,
+                  };
+                  mathSceneRenderer.renderClip(nc, 0);
+                  result.push(nc);
+                  continue;
+                }
+
                 const mf = mediaStore.files.find(f => f.id === nsc.mediaFileId);
                 if (!mf) continue;
                 const hasBrowserFile = !!mf.file;
@@ -692,6 +729,38 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                     `nested-${compClip.id}-${nestedSerializedClip.id}`,
                   ),
                 );
+                continue;
+              }
+
+              if (nestedSerializedClip.sourceType === 'math-scene' && nestedSerializedClip.mathScene) {
+                const canvas = mathSceneRenderer.createCanvas();
+                const nestedClip: TimelineClip = {
+                  id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
+                  trackId: nestedSerializedClip.trackId,
+                  name: nestedSerializedClip.name,
+                  file: new File([JSON.stringify(nestedSerializedClip.mathScene)], 'math-scene.json', { type: 'application/json' }),
+                  startTime: nestedSerializedClip.startTime,
+                  duration: nestedSerializedClip.duration,
+                  inPoint: nestedSerializedClip.inPoint,
+                  outPoint: nestedSerializedClip.outPoint,
+                  source: {
+                    type: 'math-scene',
+                    textCanvas: canvas,
+                    naturalDuration: nestedSerializedClip.duration,
+                  },
+                  mathScene: structuredClone(nestedSerializedClip.mathScene),
+                  thumbnails: nestedSerializedClip.thumbnails,
+                  transform: nestedSerializedClip.transform,
+                  effects: nestedSerializedClip.effects || [],
+                  masks: nestedSerializedClip.masks || [],
+                  is3D: nestedSerializedClip.is3D,
+                  meshType: nestedSerializedClip.meshType,
+                  text3DProperties: nestedSerializedClip.text3DProperties ? { ...nestedSerializedClip.text3DProperties } : undefined,
+                  isLoading: false,
+                  needsReload: false,
+                };
+                mathSceneRenderer.renderClip(nestedClip, 0);
+                nestedClips.push(nestedClip);
                 continue;
               }
 
@@ -1011,6 +1080,50 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         continue;
       }
 
+      // Math Scene clips - restore from serializable scene definition
+      if (serializedClip.sourceType === 'math-scene' && serializedClip.mathScene) {
+        const { mathSceneRenderer } = await import('../../services/mathScene/MathSceneRenderer');
+
+        const activeComp = mediaStore.getActiveComposition?.();
+        const compWidth = activeComp?.width || 1920;
+        const compHeight = activeComp?.height || 1080;
+        const canvas = mathSceneRenderer.createCanvas(compWidth, compHeight);
+        mathSceneRenderer.render(serializedClip.mathScene, canvas, 0, serializedClip.duration);
+
+        const mathClip: TimelineClip = {
+          id: serializedClip.id,
+          trackId: serializedClip.trackId,
+          name: serializedClip.name || 'Math Scene',
+          file: new File([JSON.stringify(serializedClip.mathScene)], 'math-scene.json', { type: 'application/json' }),
+          mediaFileId: serializedClip.mediaFileId || undefined,
+          startTime: serializedClip.startTime,
+          duration: serializedClip.duration,
+          inPoint: serializedClip.inPoint,
+          outPoint: serializedClip.outPoint,
+          source: {
+            type: 'math-scene',
+            textCanvas: canvas,
+            mediaFileId: serializedClip.mediaFileId || undefined,
+            naturalDuration: serializedClip.duration,
+          },
+          mathScene: serializedClip.mathScene,
+          transform: serializedClip.transform,
+          effects: serializedClip.effects || [],
+          colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+          masks: serializedClip.masks,
+          speed: serializedClip.speed,
+          preservesPitch: serializedClip.preservesPitch,
+          isLoading: false,
+        };
+
+        set(state => ({
+          clips: [...state.clips, mathClip],
+        }));
+
+        log.debug('Restored math scene clip', { clip: serializedClip.name });
+        continue;
+      }
+
       // Text clips - restore from textProperties
       if (serializedClip.sourceType === 'text' && serializedClip.textProperties) {
         const { textRenderer } = await import('../../services/textRenderer');
@@ -1110,7 +1223,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
       // Camera clips - restore shared scene camera controls
       if (serializedClip.sourceType === 'camera') {
-        const { DEFAULT_SCENE_CAMERA_SETTINGS } = await import('../mediaStore');
+        const { DEFAULT_SCENE_CAMERA_SETTINGS } = await import('../mediaStore/types');
 
         const cameraClip: TimelineClip = {
           id: serializedClip.id,

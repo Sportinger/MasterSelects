@@ -1,4 +1,4 @@
-import { useMediaStore, DEFAULT_SCENE_CAMERA_SETTINGS } from '../../stores/mediaStore';
+import { useMediaStore } from '../../stores/mediaStore';
 import { selectSceneNavClipId, useEngineStore } from '../../stores/engineStore';
 import type { SceneCameraLiveOverride } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -7,7 +7,7 @@ import { resolveOrbitCameraFrame, resolveOrbitCameraPose } from '../gaussian/cor
 import { normalizeEasingType } from '../../utils/easing';
 import { easingFunctions } from '../../utils/keyframeInterpolation';
 import type { SceneCamera, SceneCameraConfig, SceneViewport } from './types';
-import { resolveSceneClipTransform, type SceneTimelineContext } from './SceneTimelineUtils';
+import { resolveSceneClipCameraSettings, resolveSceneClipTransform, type SceneTimelineContext } from './SceneTimelineUtils';
 
 export type SceneCameraResolutionContext = Partial<SceneTimelineContext> & {
   sceneNavNoKeyframes?: boolean;
@@ -47,12 +47,9 @@ const CAMERA_POSE_PROPERTIES = new Set([
   'position.x',
   'position.y',
   'position.z',
-  'scale.all',
-  'scale.x',
-  'scale.y',
-  'scale.z',
   ...CAMERA_ROTATION_PROPERTIES,
 ]);
+const CAMERA_POSE_TIME_EPSILON = 1e-6;
 
 function lerpNumber(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -267,6 +264,32 @@ function getCameraPoseSegment(
   return null;
 }
 
+function cameraPoseSegmentUsesContinuousRotation(
+  keyframes: Keyframe[],
+  startTime: number,
+  endTime: number,
+): boolean {
+  for (const property of CAMERA_ROTATION_PROPERTIES) {
+    const rotationKeyframes = keyframes
+      .filter((keyframe) => keyframe.property === property)
+      .toSorted((a, b) => a.time - b.time);
+
+    for (let i = 0; i < rotationKeyframes.length - 1; i += 1) {
+      const prevKey = rotationKeyframes[i];
+      const nextKey = rotationKeyframes[i + 1];
+      const spansPoseSegment =
+        prevKey.time <= startTime + CAMERA_POSE_TIME_EPSILON &&
+        nextKey.time >= endTime - CAMERA_POSE_TIME_EPSILON;
+
+      if (spansPoseSegment && prevKey.rotationInterpolation === 'continuous') {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function getCameraPoseInterpolationT(
   keyframes: Keyframe[],
   startTime: number,
@@ -396,8 +419,11 @@ function buildPoseInterpolatedCameraConfigFromClip(
   if (!segment) {
     return null;
   }
+  if (cameraPoseSegmentUsesContinuousRotation(keyframes, segment.startTime, segment.endTime)) {
+    return null;
+  }
 
-  const cameraSettings = cameraClip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
   const defaultDistance = getSharedSceneDefaultCameraDistance(cameraSettings.fov);
   const settings = {
     nearPlane: cameraSettings.near,
@@ -484,7 +510,7 @@ function buildCameraConfigFromClip(
   }
 
   const transform = resolveSceneClipTransform(cameraClip, clipLocalTime, timelineTime, context);
-  const cameraSettings = cameraClip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
   const defaultDistance = getSharedSceneDefaultCameraDistance(cameraSettings.fov);
   const pose = resolveOrbitCameraPose(
     {
@@ -521,7 +547,7 @@ function hasLiveOverrideVector(vector: SceneCameraLiveOverride[keyof SceneCamera
 function applySceneCameraLiveOverride(
   config: SceneCameraConfig,
   override: SceneCameraLiveOverride | null | undefined,
-  viewport: SceneViewport,
+  _viewport: SceneViewport,
 ): SceneCameraConfig {
   if (
     !override ||
@@ -540,18 +566,16 @@ function applySceneCameraLiveOverride(
   let right = normalizeVector(crossVector(forward, up), { x: 1, y: 0, z: 0 });
   up = normalizeVector(crossVector(right, forward), { x: 0, y: 1, z: 0 });
 
-  const fovRadians = (Math.max(config.fov, 1) * Math.PI) / 180;
-  const halfHeight = Math.tan(fovRadians * 0.5) * distance;
-  const halfWidth = halfHeight * (viewport.width / Math.max(1, viewport.height));
   const panX = override.position?.x ?? 0;
   const panY = override.position?.y ?? 0;
+  const panZ = override.position?.z ?? 0;
   const forwardOffset = override.scale?.z ?? 0;
   const shift = addVector(
-    addVector(scaleVector(right, panX * halfWidth), scaleVector(up, panY * halfHeight)),
+    { x: panX, y: panY, z: panZ },
     scaleVector(forward, forwardOffset),
   );
 
-  if (hasLiveOverrideVector({ x: panX, y: panY }) || Math.abs(forwardOffset) > 1e-8) {
+  if (hasLiveOverrideVector({ x: panX, y: panY, z: panZ }) || Math.abs(forwardOffset) > 1e-8) {
     position = addVector(position, shift);
     target = addVector(target, shift);
   }

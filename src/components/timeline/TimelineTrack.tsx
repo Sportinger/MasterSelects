@@ -2,7 +2,7 @@
 
 import React, { memo, useMemo, useRef, useEffect, useState } from 'react';
 import type { TimelineTrackProps } from './types';
-import type { AnimatableProperty, BezierHandle, Keyframe } from '../../types';
+import type { AnimatableProperty, BezierHandle, ClipMask, Keyframe } from '../../types';
 import { CurveEditor } from './CurveEditor';
 import { parseVectorAnimationInputProperty, parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 
@@ -11,6 +11,7 @@ type KeyframeTrackClip = {
   startTime: number;
   duration: number;
   is3D?: boolean;
+  masks?: ClipMask[];
   effects?: Array<{ id: string; name: string; params: Record<string, unknown> }>;
   source?: {
     type?: string;
@@ -33,7 +34,7 @@ const shouldHide3DOnlyProperties = (clip: KeyframeTrackClip | null | undefined):
 
 const getTransformPropertyOrder = (clip: KeyframeTrackClip | null | undefined): string[] => (
   usesCameraPropertyModel(clip)
-    ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+    ? ['camera.fov', 'camera.near', 'camera.far', 'camera.resolutionWidth', 'camera.resolutionHeight', 'opacity', 'position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z']
     : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
 );
 

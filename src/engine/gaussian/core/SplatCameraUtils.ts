@@ -44,19 +44,15 @@ export interface OrbitCameraFrame extends OrbitCameraPose {
   halfWidth: number;
   halfHeight: number;
   distance: number;
-  zoom: number;
-  forwardOffset: number;
 }
 
 /**
  * Build view + projection matrices from a layer's transform properties.
  *
  * Mapping:
- *  - position.z  -> camera orbit distance from its look target (default 5)
- *  - position.x/y -> pan in camera screen space (-1..1 roughly equals full viewport)
- *  - scale.z     -> forward travel in view direction for camera-nav clips
- *  - rotation    -> orbit angles in degrees (x = pitch, y = yaw). Accepts number (yaw only) or {x,y,z}.
- *  - scale.all * scale.x -> zoom multiplier (dollies camera distance)
+ *  - position.x/y/z -> camera eye position in scene units
+ *  - rotation    -> camera orientation in degrees (x = pitch, y = yaw, z = roll)
+ *  - scale.*     -> ignored by the camera pose; lens changes live in camera settings
  *  - settings.nearPlane / farPlane  -> clipping planes
  */
 export function buildSplatCamera(
@@ -136,17 +132,17 @@ export function resolveOrbitCameraFrame(
     Math.sqrt(extentX * extentX + extentY * extentY + extentZ * extentZ) * 0.5,
   );
 
-  // Default camera distance frames the scene bounds when available.
+  // Default distance is used as a stable look target length and navigation scale.
   const minimumDistance = settings.minimumDistance ?? 5;
   const defaultDistance = Math.max(sceneRadius * 2.5, minimumDistance);
-  const baseDistance = layer.position.z !== 0 ? Math.abs(layer.position.z) : defaultDistance;
 
-  // Zoom from scale.x (default 1). Higher zoom moves the camera closer,
-  // lower zoom moves it farther away without introducing extreme fisheye FOV.
-  const zoom = Math.max(0.01, (layer.scale.x || 1) * (layer.scale.all ?? 1));
-  const distance = baseDistance / zoom;
+  const eyeX = finiteNumber(layer.position.x, 0);
+  const eyeY = finiteNumber(layer.position.y, 0);
+  const eyeZ = finiteNumber(layer.position.z, 0);
+  const distanceToCenter = Math.hypot(eyeX - centerX, eyeY - centerY, eyeZ - centerZ);
+  const distance = Math.max(defaultDistance, distanceToCenter);
 
-  // Keep a stable field of view; "zoom" is handled as a dolly.
+  // Keep a stable field of view; lens/mm changes are handled through camera settings.
   const fovDegrees = settings.fov ?? 60;
   const fov = fovDegrees * DEG_TO_RAD;
 
@@ -155,37 +151,18 @@ export function resolveOrbitCameraFrame(
   const halfHeight = Math.tan(fov * 0.5) * distance;
   const halfWidth = halfHeight * (viewport.width / Math.max(1, viewport.height));
 
-  const eyeOffset = rotateOrbitVector(0, 0, distance, pitch, yaw, roll);
+  const backwardVector = normalize(rotateOrbitVector(0, 0, 1, pitch, yaw, roll));
   const upVector = normalize(rotateOrbitVector(0, 1, 0, pitch, yaw, roll));
-  const forwardVector = normalize(eyeOffset);
-  const rightVector = normalize(cross(upVector, forwardVector));
-  const cameraUpVector = normalize(cross(forwardVector, rightVector));
+  const rightVector = normalize(cross(upVector, backwardVector));
+  const cameraUpVector = normalize(cross(backwardVector, rightVector));
   const cameraForwardVector: [number, number, number] = [
-    -forwardVector[0],
-    -forwardVector[1],
-    -forwardVector[2],
+    -backwardVector[0],
+    -backwardVector[1],
+    -backwardVector[2],
   ];
-  const panWorldX = layer.position.x * halfWidth;
-  const panWorldY = layer.position.y * halfHeight;
-  const forwardOffset = Number.isFinite(layer.scale.z) ? layer.scale.z! : 0;
-  const targetX =
-    centerX +
-    rightVector[0] * panWorldX +
-    cameraUpVector[0] * panWorldY +
-    cameraForwardVector[0] * forwardOffset;
-  const targetY =
-    centerY +
-    rightVector[1] * panWorldX +
-    cameraUpVector[1] * panWorldY +
-    cameraForwardVector[1] * forwardOffset;
-  const targetZ =
-    centerZ +
-    rightVector[2] * panWorldX +
-    cameraUpVector[2] * panWorldY +
-    cameraForwardVector[2] * forwardOffset;
-  const eyeX = targetX + eyeOffset[0];
-  const eyeY = targetY + eyeOffset[1];
-  const eyeZ = targetZ + eyeOffset[2];
+  const targetX = eyeX + cameraForwardVector[0] * distance;
+  const targetY = eyeY + cameraForwardVector[1] * distance;
+  const targetZ = eyeZ + cameraForwardVector[2] * distance;
 
   return {
     eye: { x: eyeX, y: eyeY, z: eyeZ },
@@ -195,12 +172,10 @@ export function resolveOrbitCameraFrame(
     right: { x: rightVector[0], y: rightVector[1], z: rightVector[2] },
     cameraUp: { x: cameraUpVector[0], y: cameraUpVector[1], z: cameraUpVector[2] },
     forward: { x: cameraForwardVector[0], y: cameraForwardVector[1], z: cameraForwardVector[2] },
-    orbitOffset: { x: eyeOffset[0], y: eyeOffset[1], z: eyeOffset[2] },
+    orbitOffset: { x: eyeX - centerX, y: eyeY - centerY, z: eyeZ - centerZ },
     halfWidth,
     halfHeight,
     distance,
-    zoom,
-    forwardOffset,
     fovDegrees,
     near,
     far,
@@ -213,46 +188,16 @@ export function resolveOrbitCameraTranslationForFixedEye(
   settings: OrbitCameraSettingsInput,
   viewport: OrbitCameraViewportInput,
   sceneBounds?: OrbitCameraSceneBounds,
-): { positionX: number; positionY: number; forwardOffset: number } {
-  const currentFrame = resolveOrbitCameraFrame(layer, settings, viewport, sceneBounds);
-  const nextFrame = resolveOrbitCameraFrame(
-    {
-      ...layer,
-      rotation: nextRotation,
-    },
-    settings,
-    viewport,
-    sceneBounds,
-  );
-
-  const desiredTargetX = currentFrame.eye.x - nextFrame.orbitOffset.x;
-  const desiredTargetY = currentFrame.eye.y - nextFrame.orbitOffset.y;
-  const desiredTargetZ = currentFrame.eye.z - nextFrame.orbitOffset.z;
-  const offsetFromCenter: [number, number, number] = [
-    desiredTargetX - nextFrame.center.x,
-    desiredTargetY - nextFrame.center.y,
-    desiredTargetZ - nextFrame.center.z,
-  ];
-  const panWorldX = dot(offsetFromCenter, [
-    nextFrame.right.x,
-    nextFrame.right.y,
-    nextFrame.right.z,
-  ]);
-  const panWorldY = dot(offsetFromCenter, [
-    nextFrame.cameraUp.x,
-    nextFrame.cameraUp.y,
-    nextFrame.cameraUp.z,
-  ]);
-  const forwardOffset = dot(offsetFromCenter, [
-    nextFrame.forward.x,
-    nextFrame.forward.y,
-    nextFrame.forward.z,
-  ]);
+): { positionX: number; positionY: number; positionZ: number } {
+  void nextRotation;
+  void settings;
+  void viewport;
+  void sceneBounds;
 
   return {
-    positionX: Math.abs(nextFrame.halfWidth) > 1e-8 ? panWorldX / nextFrame.halfWidth : 0,
-    positionY: Math.abs(nextFrame.halfHeight) > 1e-8 ? panWorldY / nextFrame.halfHeight : 0,
-    forwardOffset,
+    positionX: finiteNumber(layer.position.x, 0),
+    positionY: finiteNumber(layer.position.y, 0),
+    positionZ: finiteNumber(layer.position.z, 0),
   };
 }
 
@@ -300,17 +245,14 @@ function cross(
   ];
 }
 
-function dot(
-  a: [number, number, number],
-  b: [number, number, number],
-): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
 function normalize(v: [number, number, number]): [number, number, number] {
   const len = Math.hypot(v[0], v[1], v[2]);
   if (len <= 1e-8) return [0, 0, 0];
   return [v[0] / len, v[1] / len, v[2] / len];
+}
+
+function finiteNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 /**

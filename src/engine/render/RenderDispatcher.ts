@@ -30,7 +30,7 @@ import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
 import { collectScene3DLayers } from '../scene/SceneLayerCollector';
 import { getSharedSceneDefaultCameraDistance, resolveRenderableSharedSceneCamera } from '../scene/SceneCameraUtils';
-import { resolveSceneClipTransform, type SceneTimelineContext } from '../scene/SceneTimelineUtils';
+import { resolveSceneClipCameraSettings, resolveSceneClipTransform, type SceneTimelineContext } from '../scene/SceneTimelineUtils';
 import type {
   SceneGizmoRenderOptions,
   SceneSplatEffectorRuntimeData,
@@ -39,7 +39,7 @@ import type {
   SceneViewport,
   SceneWorldTransform,
 } from '../scene/types';
-import { DEFAULT_SCENE_CAMERA_SETTINGS, useMediaStore } from '../../stores/mediaStore';
+import { useMediaStore } from '../../stores/mediaStore';
 import { useEngineStore, type GaussianSplatLoadPhase } from '../../stores/engineStore';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
 import { resolveOrbitCameraFrame } from '../gaussian/core/SplatCameraUtils';
@@ -121,13 +121,14 @@ function buildCameraGizmoTransform(
     return null;
   }
 
+  const clipLocalTime = timelineTime - cameraClip.startTime;
   const transform = resolveSceneClipTransform(
     cameraClip,
-    timelineTime - cameraClip.startTime,
+    clipLocalTime,
     timelineTime,
     context,
   );
-  const cameraSettings = cameraClip.source.cameraSettings ?? DEFAULT_SCENE_CAMERA_SETTINGS;
+  const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
   const frame = resolveOrbitCameraFrame(
     {
       position: transform.position,

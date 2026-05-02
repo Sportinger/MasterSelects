@@ -14,6 +14,8 @@ import {
   resetDampedMIDIParameterBindings,
 } from '../../src/services/midi/midiCommands';
 
+const actualSetPropertyValue = useTimelineStore.getState().setPropertyValue;
+
 describe('midiCommands', () => {
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -379,6 +381,7 @@ describe('midiCommands', () => {
           },
         },
       ],
+      setPropertyValue: actualSetPropertyValue,
       updateDuration: vi.fn(),
       invalidateCache: vi.fn(),
     } as Partial<ReturnType<typeof useTimelineStore.getState>>);
@@ -460,7 +463,7 @@ describe('midiCommands', () => {
     expect(afterFrame.forward.x).not.toBeCloseTo(beforeFrame.forward.x, 2);
   });
 
-  it('writes camera look compensation as keyframes when editing an animated camera', async () => {
+  it('writes camera look rotation keyframes without moving the camera position', async () => {
     const cameraSettings = { fov: 60, near: 0.1, far: 1000 };
     const transform = {
       position: { x: 0.2, y: 0.1, z: 4 },
@@ -514,9 +517,9 @@ describe('midiCommands', () => {
 
     const keyframes = useTimelineStore.getState().clipKeyframes.get('clip-midi-animated-camera-look') ?? [];
     expect(keyframes.some((keyframe) => keyframe.property === 'rotation.y' && keyframe.time === 1 && keyframe.value === 90)).toBe(true);
-    expect(keyframes.some((keyframe) => keyframe.property === 'position.x' && keyframe.time === 1)).toBe(true);
-    expect(keyframes.some((keyframe) => keyframe.property === 'position.y' && keyframe.time === 1)).toBe(true);
-    expect(keyframes.some((keyframe) => keyframe.property === 'scale.z' && keyframe.time === 1)).toBe(true);
+    expect(keyframes.some((keyframe) => keyframe.property === 'position.x' && keyframe.time === 1)).toBe(false);
+    expect(keyframes.some((keyframe) => keyframe.property === 'position.y' && keyframe.time === 1)).toBe(false);
+    expect(keyframes.some((keyframe) => keyframe.property === 'scale.z' && keyframe.time === 1)).toBe(false);
     expect(useTimelineStore.getState().clips[0]?.transform.position).toEqual(transform.position);
   });
 

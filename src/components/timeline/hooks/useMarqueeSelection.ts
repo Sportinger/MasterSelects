@@ -150,7 +150,7 @@ export function useMarqueeSelection({
         const showsCamera3DProps =
           selectedTrackClip.source?.type === 'camera';
         const propertyOrder = showsCamera3DProps
-          ? ['opacity', 'position.x', 'position.y', 'scale.z', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'rotation.x', 'rotation.y', 'rotation.z']
+          ? ['camera.fov', 'camera.near', 'camera.far', 'camera.resolutionWidth', 'camera.resolutionHeight', 'opacity', 'position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z']
           : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z'];
 
         // Get unique properties with keyframes in sorted order

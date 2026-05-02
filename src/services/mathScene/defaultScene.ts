@@ -1,0 +1,96 @@
+import type { MathSceneDefinition } from '../../types';
+
+export function createDefaultMathScene(): MathSceneDefinition {
+  return {
+    version: 1,
+    viewport: {
+      xMin: -7,
+      xMax: 7,
+      yMin: -4,
+      yMax: 4,
+      showGrid: true,
+      showAxes: true,
+    },
+    style: {
+      backgroundColor: '#101114',
+      axisColor: '#d8dee9',
+      gridColor: '#2f3542',
+      labelColor: '#d8dee9',
+    },
+    parameters: [
+      {
+        id: 'param-a',
+        name: 'a',
+        value: 0,
+        min: -6.28,
+        max: 6.28,
+        step: 0.01,
+        animation: {
+          enabled: true,
+          from: -6.28,
+          to: 6.28,
+          startTime: 0.8,
+          endTime: 4.2,
+          easing: 'ease-in-out',
+        },
+      },
+    ],
+    objects: [
+      {
+        id: 'function-1',
+        type: 'function',
+        name: 'f(x)',
+        expression: 'sin(x)',
+        samples: 480,
+        stroke: '#5eead4',
+        strokeWidth: 4,
+        visible: true,
+        opacity: 1,
+        animation: {
+          reveal: {
+            enabled: true,
+            startTime: 0.2,
+            endTime: 1.4,
+          },
+        },
+      },
+      {
+        id: 'point-1',
+        type: 'point',
+        name: 'P',
+        xExpression: 'a',
+        yExpression: 'sin(a)',
+        radius: 10,
+        fill: '#f97316',
+        stroke: '#ffffff',
+        labelVisible: true,
+        visible: true,
+        opacity: 1,
+      },
+      {
+        id: 'tangent-1',
+        type: 'tangent',
+        name: 'Tangent',
+        functionId: 'function-1',
+        atExpression: 'a',
+        length: 2.4,
+        stroke: '#facc15',
+        strokeWidth: 3,
+        visible: true,
+        opacity: 0.9,
+      },
+      {
+        id: 'label-1',
+        type: 'label',
+        name: 'Formula',
+        text: 'f(x) = sin(x)',
+        xExpression: '-6.4',
+        yExpression: '3.35',
+        fontSize: 44,
+        color: '#d8dee9',
+        visible: true,
+        opacity: 1,
+      },
+    ],
+  };
+}

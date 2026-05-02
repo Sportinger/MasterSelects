@@ -352,16 +352,16 @@ export function PositionKeyframeToggle({ clipId, x, y, z }: { clipId: string; x:
   );
 }
 
-// Master keyframe toggle for camera move X, Y and forward Z (stored in scale.z)
+// Master keyframe toggle for camera Position X/Y/Z.
 export function CameraPositionKeyframeToggle({ clipId, x, y, z }: { clipId: string; x: number; y: number; z: number }) {
   const { isRecording, hasKeyframes } = useTimelineStore.getState();
 
   const xRec = isRecording(clipId, 'position.x');
   const yRec = isRecording(clipId, 'position.y');
-  const zRec = isRecording(clipId, 'scale.z');
+  const zRec = isRecording(clipId, 'position.z');
   const xKfs = hasKeyframes(clipId, 'position.x');
   const yKfs = hasKeyframes(clipId, 'position.y');
-  const zKfs = hasKeyframes(clipId, 'scale.z');
+  const zKfs = hasKeyframes(clipId, 'position.z');
 
   const anyRecording = xRec || yRec || zRec;
   const anyHasKfs = xKfs || yKfs || zKfs;
@@ -370,7 +370,7 @@ export function CameraPositionKeyframeToggle({ clipId, x, y, z }: { clipId: stri
     applyKeyframeToggleEntries(mode, clipId, [
       { property: 'position.x', value: x },
       { property: 'position.y', value: y },
-      { property: 'scale.z', value: z },
+      { property: 'position.z', value: z },
     ]);
   }, [clipId, x, y, z]);
 
@@ -379,7 +379,7 @@ export function CameraPositionKeyframeToggle({ clipId, x, y, z }: { clipId: stri
       dragId={`${clipId}:camera-position`}
       mode="enable"
       className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
-      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, ['position.x', 'position.y', 'scale.z'])}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, ['position.x', 'position.y', 'position.z'])}
       feedbackValues={[x, y, z]}
       playbackFeedbackEnabled={anyRecording || anyHasKfs}
       title={anyRecording || anyHasKfs ? 'Add camera position keyframes (right-click to disable)' : 'Add camera position keyframes'}

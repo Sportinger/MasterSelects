@@ -317,8 +317,9 @@ export class MatAnyoneService {
         options.maskPath,
         options.outputDir,
         { startFrame: options.startFrame, endFrame: options.endFrame },
-        (currentFrame, totalFrames, percent) => {
+        (currentFrame, totalFrames, percent, jobId) => {
           useMatAnyoneStore.getState().setJobState({
+            ...(jobId ? { jobId } : {}),
             jobProgress: percent,
             currentFrame,
             totalFrames,
@@ -348,7 +349,11 @@ export class MatAnyoneService {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       log.error('Matting failed', e);
-      useMatAnyoneStore.getState().setError(msg);
+      const wasCancelled = /cancel/i.test(msg);
+      useMatAnyoneStore.getState().setError(wasCancelled ? null : msg);
+      if (wasCancelled) {
+        useMatAnyoneStore.getState().setSetupStatus('installed');
+      }
       useMatAnyoneStore.getState().setJobState({
         isProcessing: false,
         jobId: null,
@@ -372,6 +377,7 @@ export class MatAnyoneService {
         jobId: null,
         jobProgress: 0,
       });
+      useMatAnyoneStore.getState().setSetupStatus('installed');
       log.info('Job cancelled');
     } catch (e) {
       log.error('Failed to cancel job', e);

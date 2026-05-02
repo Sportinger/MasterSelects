@@ -104,7 +104,7 @@ export function useClipTrim({
 
         // Generated clips can be extended infinitely (no natural duration limit)
         const sourceType = clipToTrim.source?.type;
-        const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera';
+        const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera' || sourceType === 'math-scene';
         const canLoopExtendRight = canLoopExtendVectorClip(clipToTrim);
         const maxDuration = isInfiniteClip
           ? Number.MAX_SAFE_INTEGER

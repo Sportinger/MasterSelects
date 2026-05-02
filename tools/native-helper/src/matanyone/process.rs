@@ -84,9 +84,7 @@ impl MatAnyoneProcess {
 
         // Find a free port.
         let port = find_free_port().ok_or_else(|| {
-            let msg = format!(
-                "No free port found in range {PORT_RANGE_START}-{PORT_RANGE_END}"
-            );
+            let msg = format!("No free port found in range {PORT_RANGE_START}-{PORT_RANGE_END}");
             self.status = ProcessStatus::Error(msg.clone());
             msg
         })?;
@@ -111,14 +109,12 @@ impl MatAnyoneProcess {
             .kill_on_drop(true);
         hide_console_window(&mut command);
 
-        let child = command
-            .spawn()
-            .map_err(|e| {
-                let msg = format!("Failed to spawn Python process: {e}");
-                error!("{}", msg);
-                self.status = ProcessStatus::Error(msg.clone());
-                msg
-            })?;
+        let child = command.spawn().map_err(|e| {
+            let msg = format!("Failed to spawn Python process: {e}");
+            error!("{}", msg);
+            self.status = ProcessStatus::Error(msg.clone());
+            msg
+        })?;
 
         self.child = Some(child);
         self.port = port;
@@ -356,9 +352,8 @@ fn http_health_check(port: u16) -> bool {
         return false;
     }
 
-    let request = format!(
-        "GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
-    );
+    let request =
+        format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
     }
@@ -397,8 +392,7 @@ async fn stop_child(mut child: Child) -> Result<(), String> {
                 debug!(pid, "Sent SIGTERM to MatAnyone2 process");
 
                 // Wait up to GRACEFUL_STOP_TIMEOUT_SECS for exit.
-                let deadline =
-                    Instant::now() + Duration::from_secs(GRACEFUL_STOP_TIMEOUT_SECS);
+                let deadline = Instant::now() + Duration::from_secs(GRACEFUL_STOP_TIMEOUT_SECS);
                 loop {
                     match child.try_wait() {
                         Ok(Some(status)) => {
@@ -419,20 +413,65 @@ async fn stop_child(mut child: Child) -> Result<(), String> {
             }
         }
 
-        child.kill().await.map_err(|e| {
-            format!("Failed to kill MatAnyone2 process: {e}")
-        })?;
+        child
+            .kill()
+            .await
+            .map_err(|e| format!("Failed to kill MatAnyone2 process: {e}"))?;
         let _ = child.wait().await;
         info!("MatAnyone2 process terminated (SIGKILL)");
         return Ok(());
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        // Windows (and other platforms) have no SIGTERM; kill directly.
-        child.kill().await.map_err(|e| {
-            format!("Failed to kill MatAnyone2 process: {e}")
-        })?;
+        if let Some(pid) = child.id() {
+            let pid_string = pid.to_string();
+            let mut taskkill = Command::new("taskkill");
+            taskkill
+                .args(["/PID", pid_string.as_str(), "/T", "/F"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            hide_console_window(&mut taskkill);
+
+            match taskkill.status().await {
+                Ok(status) if status.success() => {
+                    let _ = child.wait().await;
+                    info!(pid, "MatAnyone2 process tree terminated");
+                    return Ok(());
+                }
+                Ok(status) => {
+                    warn!(
+                        pid,
+                        "taskkill did not terminate MatAnyone2 process tree: {}", status
+                    );
+                }
+                Err(e) => {
+                    warn!(pid, "taskkill failed for MatAnyone2 process tree: {}", e);
+                }
+            }
+        }
+
+        if let Ok(Some(status)) = child.try_wait() {
+            info!("MatAnyone2 process already exited: {}", status);
+            return Ok(());
+        }
+
+        child
+            .kill()
+            .await
+            .map_err(|e| format!("Failed to kill MatAnyone2 process: {e}"))?;
+        let _ = child.wait().await;
+        info!("MatAnyone2 process terminated");
+        return Ok(());
+    }
+
+    #[cfg(all(not(unix), not(windows)))]
+    {
+        // Other platforms with no SIGTERM path; kill directly.
+        child
+            .kill()
+            .await
+            .map_err(|e| format!("Failed to kill MatAnyone2 process: {e}"))?;
         let _ = child.wait().await;
         info!("MatAnyone2 process terminated");
         Ok(())

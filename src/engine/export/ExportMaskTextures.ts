@@ -42,7 +42,32 @@ function collectMaskClipIds(layers: Layer[], ids: Set<string>): void {
   }
 }
 
-export function syncExportMaskTextures(layers: Layer[], width: number, height: number): void {
+function collectMaskClipLocalTimes(
+  layers: Layer[],
+  clipMap: Map<string, TimelineClip>,
+  timelineTime: number,
+  localTimes: Map<string, number>,
+  compositionTime?: number,
+): void {
+  for (const layer of layers) {
+    if (layer.maskClipId) {
+      const clip = clipMap.get(layer.maskClipId);
+      localTimes.set(layer.maskClipId, (compositionTime ?? timelineTime) - (clip?.startTime ?? 0));
+    }
+    const nestedComposition = layer.source?.nestedComposition;
+    if (nestedComposition?.layers?.length) {
+      collectMaskClipLocalTimes(
+        nestedComposition.layers,
+        clipMap,
+        timelineTime,
+        localTimes,
+        nestedComposition.currentTime,
+      );
+    }
+  }
+}
+
+export function syncExportMaskTextures(layers: Layer[], width: number, height: number, timelineTime?: number): void {
   if (layers.length === 0) return;
 
   const maskClipIds = new Set<string>();
@@ -50,11 +75,21 @@ export function syncExportMaskTextures(layers: Layer[], width: number, height: n
   if (maskClipIds.size === 0) return;
 
   const clipMap = new Map<string, TimelineClip>();
-  collectClips(useTimelineStore.getState().clips, clipMap);
+  const timelineState = useTimelineStore.getState();
+  collectClips(timelineState.clips, clipMap);
+  const maskClipLocalTimes = new Map<string, number>();
+  collectMaskClipLocalTimes(
+    layers,
+    clipMap,
+    timelineTime ?? timelineState.playheadPosition,
+    maskClipLocalTimes,
+  );
 
   for (const clipId of maskClipIds) {
     const clip = clipMap.get(clipId);
-    const masks = clip?.masks;
+    const masks = clip
+      ? timelineState.getInterpolatedMasks(clipId, maskClipLocalTimes.get(clipId) ?? 0)
+      : undefined;
     if (!masks?.some(mask => mask.enabled !== false)) {
       exportMaskVersions.delete(clipId);
       engine.removeMaskTexture(clipId);

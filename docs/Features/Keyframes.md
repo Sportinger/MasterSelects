@@ -2,7 +2,7 @@
 
 [<- Back to Index](./README.md)
 
-The keyframe system animates clip properties over time using per-clip keyframe maps, curve editors, and Bezier handles. It supports transform properties, speed, numeric effect parameters, and vector-animation state/input properties.
+The keyframe system animates clip properties over time using per-clip keyframe maps, curve editors, and Bezier handles. It supports transform properties, speed, numeric effect parameters, mask properties, and vector-animation state/input properties.
 
 ---
 
@@ -15,15 +15,30 @@ The keyframe system animates clip properties over time using per-clip keyframe m
 | `opacity` | 0-1 value, shown as percent in the UI. |
 | `position.x` | Horizontal position. |
 | `position.y` | Vertical position. |
-| `position.z` | Depth / camera distance when the clip exposes it. |
-| `scale.all` | Independent uniform multiplier applied on top of the axis scale values. Camera clips label this as Zoom. |
+| `position.z` | World-space Z position when the clip exposes it. For camera clips this is the real camera eye Z. |
+| `scale.all` | Independent uniform multiplier applied on top of the axis scale values. Camera clips keep the legacy value for project compatibility, but it is no longer part of the camera pose or exposed as a visible Zoom control. |
 | `scale.x` | Horizontal scale. |
 | `scale.y` | Vertical scale. |
-| `scale.z` | Forward offset / camera zoom style depth control when visible. |
+| `scale.z` | Z scale for 3D objects when visible. Camera clips keep legacy values for compatibility, but `scale.z` is no longer a camera movement control. |
 | `rotation.x` | Pitch-style rotation on 3D and camera-style clips. |
 | `rotation.y` | Yaw-style rotation on 3D and camera-style clips. |
 | `rotation.z` | Roll / 2D rotation. |
 | `speed` | Playback rate; supports variable-rate integration and reverse playback. |
+
+### Camera Lens Properties
+
+Camera clips add keyframable lens settings:
+
+| Property | Notes |
+|----------|-------|
+| `camera.fov` | Vertical field of view in degrees. The mm lens field edits this same property through full-frame-equivalent conversion. |
+| `camera.near` | Near clipping plane. |
+| `camera.far` | Far clipping plane. |
+| `camera.resolutionWidth` | Camera gate width, shown as Resolution X. |
+| `camera.resolutionHeight` | Camera gate height, shown as Resolution Y. |
+
+The FOV and mm fields are two views of the same lens value. They are not independent properties, so keyframes, MIDI, lens-field edits, and curve editing all resolve through `camera.fov`.
+Resolution X/Y controls the camera gate aspect used by the edit-view camera frame.
 
 ### Effect Properties
 
@@ -39,6 +54,22 @@ Examples:
 - `effect.effect_123.band1k`
 
 Audio fades are built from `audio-volume.volume` keyframes, and EQ lanes use the same effect-property naming pattern.
+
+### Mask Properties
+
+Masks use flat keyframe property names scoped by mask id:
+
+```text
+mask.{maskId}.path
+mask.{maskId}.position.x
+mask.{maskId}.position.y
+mask.{maskId}.feather
+mask.{maskId}.featherQuality
+```
+
+`mask.*.path` stores the whole path as one keyframe value: all vertices, bezier handles, handle modes, and the closed/open state.
+It interpolates between compatible neighboring paths and holds when the topology does not match.
+The numeric mask properties use the same curve and easing behavior as transform and effect values.
 
 ### Vector Animation Properties
 
@@ -77,6 +108,8 @@ The diamond button writes a keyframe at the playhead. If a keyframe already exis
 - Right-click on the value field resets the property to its default value.
 - Transform panel stopwatch buttons are per value, including Position X/Y/Z, Scale All/X/Y/Z, and Rotation X/Y/Z. Group stopwatches are not used for these rows.
 - `scale.all` does not overwrite `scale.x`, `scale.y`, or `scale.z`; render, export, and scene-gizmo paths multiply it into the final visible scale only at evaluation time.
+- Camera stopwatch buttons are per camera value. FOV and mm both write `camera.fov`; Near, Far, Resolution X, and Resolution Y write their own camera properties.
+- Mask panel stopwatch buttons are available for Feather, Feather Quality, Position X/Y, and the whole Mask Path.
 
 ### Recording Mode
 
@@ -111,6 +144,7 @@ When recording is enabled:
 - `Shift+drag` on a keyframe constrains movement to one axis in the curve editor.
 - Right-clicking a handle resets it to the default 1/3-distance handle for that segment.
 - Lottie state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
+- Mask path rows expose timing and easing in the timeline; their value is a whole shape snapshot rather than a numeric scalar.
 
 ### Delete and Copy/Paste
 
@@ -138,6 +172,17 @@ The UI exposes four preset easing choices in the context menu:
 - Ease In-Out
 
 The data model also supports `bezier` easing. A keyframe becomes Bezier-driven once its in/out handles are edited.
+
+### Rotation Path
+
+Rotation keyframes also expose a segment path option in the right-click context menu:
+
+- Shortest Path: rotate through the smallest angular difference. Camera clips use this by default.
+- Continuous / Orbit: preserve the raw angle delta, so values like `1x + 0deg` produce a full 360-degree turn.
+
+Like easing, the rotation path is stored on the keyframe that starts the segment leading into the next keyframe. This lets one camera move use shortest-path aiming while the next segment performs a deliberate orbit.
+
+Rotation keyframes that start a segment show the active path next to the keyframe: `S` for Shortest Path and `C` for Continuous / Orbit.
 
 ### Practical Notes
 

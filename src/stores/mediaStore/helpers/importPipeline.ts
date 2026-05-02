@@ -24,6 +24,7 @@ export interface ImportParams {
   absolutePath?: string;
   parentId?: string | null;
   forceCopyToProject?: boolean;
+  projectFileName?: string;
   /** Force a specific media type instead of auto-detecting (e.g. 'gaussian-avatar' for .zip files) */
   typeOverride?: MediaFile['type'];
 }
@@ -45,7 +46,7 @@ export function generateId(): string {
  * Replaces duplicate logic in importFile, importFilesWithPicker, importFilesWithHandles.
  */
 export async function processImport(params: ImportParams): Promise<ImportResult> {
-  const { file, id, handle, absolutePath, parentId, forceCopyToProject, typeOverride } = params;
+  const { file, id, handle, absolutePath, parentId, forceCopyToProject, projectFileName, typeOverride } = params;
 
   // Store handle if provided (for original file location)
   if (handle) {
@@ -100,7 +101,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   );
 
   // Copy to Raw folder if enabled (unified - was 3x duplicate)
-  const copyResult = await copyToRawIfEnabled(file, id, forceCopyToProject === true);
+  const copyResult = await copyToRawIfEnabled(file, id, forceCopyToProject === true, projectFileName);
 
   if (copyResult) {
     // The project-local RAW copy is the canonical media source. Promote it to the
@@ -216,7 +217,8 @@ async function checkExistingProxy(
 async function copyToRawIfEnabled(
   file: File,
   mediaId: string,
-  forceCopyToProject = false
+  forceCopyToProject = false,
+  projectFileName?: string
 ): Promise<{ relativePath: string; handle?: FileSystemFileHandle } | null> {
   const { copyMediaToProject } = useSettingsStore.getState();
 
@@ -224,7 +226,7 @@ async function copyToRawIfEnabled(
     return null;
   }
 
-  const result = await projectFileService.copyToRawFolder(file);
+  const result = await projectFileService.copyToRawFolder(file, projectFileName);
   if (result) {
     // Store the project file handle for the RAW copy
     if (result.handle) {

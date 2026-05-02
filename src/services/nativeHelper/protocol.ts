@@ -504,6 +504,7 @@ export interface MatAnyoneDownloadProgress {
 export interface MatAnyoneMatteProgress {
   type: 'progress';
   step: 'matting';
+  job_id?: string;
   current_frame: number;
   total_frames: number;
   percent: number;

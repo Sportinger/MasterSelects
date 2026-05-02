@@ -5,9 +5,10 @@ import type { TimelineClip, EasingType } from '../../types';
 import { flags } from '../../engine/featureFlags';
 import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
-import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 
 const log = Logger.create('Clipboard');
 
@@ -74,7 +75,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           ...m,
           vertices: m.vertices.map(v => ({ ...v })),
         })),
-        keyframes: keyframes.length > 0 ? keyframes.map(k => ({ ...k })) : undefined,
+        keyframes: keyframes.length > 0 ? keyframes.map(k => structuredClone(k)) : undefined,
         linkedClipId: clip.linkedClipId,
         reversed: clip.reversed,
         speed: clip.speed,
@@ -86,6 +87,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
             ? { ...clip.source.text3DProperties }
             : undefined,
         solidColor: clip.source?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+        mathScene: clip.source?.type === 'math-scene' && clip.mathScene
+          ? structuredClone(clip.mathScene)
+          : undefined,
         // Visual data - reuse existing thumbnails and waveforms
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
         waveform: clip.waveform ? [...clip.waveform] : undefined,
@@ -138,6 +142,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         !clipData.isComposition &&
         clipData.sourceType !== 'text' &&
         clipData.sourceType !== 'solid' &&
+        clipData.sourceType !== 'math-scene' &&
         !isPrimitiveMeshClip &&
         !isCameraClip &&
         !isSplatEffectorClip;
@@ -201,6 +206,15 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           type: 'text' as const,
           mediaFileId: clipData.mediaFileId,
           naturalDuration: clipData.naturalDuration ?? clipData.duration,
+        } : clipData.sourceType === 'math-scene' && clipData.mathScene ? {
+          type: 'math-scene' as const,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.naturalDuration ?? clipData.duration,
+          textCanvas: (() => {
+            const canvas = mathSceneRenderer.createCanvas();
+            mathSceneRenderer.render(clipData.mathScene!, canvas, 0, clipData.duration);
+            return canvas;
+          })(),
         } : clipData.sourceType === 'lottie' && clipData.mediaFileId ? {
           type: 'lottie' as const,
           mediaFileId: clipData.mediaFileId,
@@ -239,6 +253,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         textProperties: clipData.textProperties ? { ...clipData.textProperties } : undefined,
         text3DProperties,
         solidColor: clipData.solidColor,
+        mathScene: clipData.mathScene ? structuredClone(clipData.mathScene) : undefined,
         // Reuse existing thumbnails and waveforms from copied clip
         thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
         waveform: clipData.waveform ? [...clipData.waveform] : undefined,
@@ -601,7 +616,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
       property: kf.property,
       time: kf.time - earliestTime,
       value: kf.value,
+      pathValue: kf.pathValue ? structuredClone(kf.pathValue) : undefined,
       easing: kf.easing as EasingType,
+      rotationInterpolation: kf.rotationInterpolation,
       handleIn: kf.handleIn ? { ...kf.handleIn } : undefined,
       handleOut: kf.handleOut ? { ...kf.handleOut } : undefined,
     }));
@@ -648,11 +665,13 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         clipId: targetClipId,
         time: newTime,
         property: kfData.property,
-        value: kfData.value,
-        easing: kfData.easing,
-        handleIn: kfData.handleIn ? { ...kfData.handleIn } : undefined,
-        handleOut: kfData.handleOut ? { ...kfData.handleOut } : undefined,
-      };
+          value: kfData.value,
+          pathValue: kfData.pathValue ? structuredClone(kfData.pathValue) : undefined,
+          easing: kfData.easing,
+          rotationInterpolation: kfData.rotationInterpolation,
+          handleIn: kfData.handleIn ? { ...kfData.handleIn } : undefined,
+          handleOut: kfData.handleOut ? { ...kfData.handleOut } : undefined,
+        };
 
       newKeyframes.push(newKf);
     }

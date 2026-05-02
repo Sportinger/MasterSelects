@@ -9,7 +9,7 @@ import {
   getNextMaskVertexHandleMode,
   inferMaskVertexHandleMode,
 } from '../../utils/maskVertexHandles';
-import type { ClipMask, Layer, MaskVertex, MaskVertexHandleMode } from '../../types';
+import { createMaskPathProperty, type ClipMask, type Layer, type MaskPathKeyframeValue, type MaskVertex, type MaskVertexHandleMode } from '../../types';
 import { useMaskVertexDrag } from './useMaskVertexDrag';
 import { useMaskDrag } from './useMaskDrag';
 import { useMaskEdgeDrag } from './useMaskEdgeDrag';
@@ -172,6 +172,25 @@ function splitMaskSegment(mask: ClipMask, preview: PenEdgeInsertPreview): SplitS
     },
     prevHandleOut: { x: p01.x - p0.x, y: p01.y - p0.y },
     nextHandleIn: { x: p23.x - p3.x, y: p23.y - p3.y },
+  };
+}
+
+function buildMaskPathValueWithVertexUpdates(
+  mask: ClipMask,
+  vertexUpdates: Array<{ id: string; updates: Partial<MaskVertex> }>,
+): MaskPathKeyframeValue {
+  const updatesById = new Map(vertexUpdates.map(({ id, updates }) => [id, updates]));
+  return {
+    closed: mask.closed,
+    vertices: mask.vertices.map(vertex => {
+      const updates = updatesById.get(vertex.id);
+      const nextVertex = updates ? { ...vertex, ...updates } : vertex;
+      return {
+        ...nextVertex,
+        handleIn: updates?.handleIn ? { ...updates.handleIn } : { ...vertex.handleIn },
+        handleOut: updates?.handleOut ? { ...updates.handleOut } : { ...vertex.handleOut },
+      };
+    }),
   };
 }
 
@@ -340,6 +359,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
     clips,
     layers,
     selectedClipIds,
+    playheadPosition,
     maskEditMode,
     activeMaskId,
     selectedVertexIds,
@@ -355,12 +375,16 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
     updateVertices,
     setVertexHandleMode,
     setActiveMask,
+    getInterpolatedMasks,
   } = useTimelineStore();
 
   // Get first selected clip for mask editing
   const selectedClipId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
   const selectedClip = clips.find(c => c.id === selectedClipId);
-  const activeMask = selectedClip?.masks?.find(m => m.id === activeMaskId) ?? selectedClip?.masks?.[0];
+  const selectedClipMasks = selectedClip
+    ? getInterpolatedMasks(selectedClip.id, playheadPosition - selectedClip.startTime) ?? selectedClip.masks
+    : undefined;
+  const activeMask = selectedClipMasks?.find(m => m.id === activeMaskId) ?? selectedClipMasks?.[0];
   const activeLayer = useMemo(() => {
     if (!selectedClip) return undefined;
     return layers.find(layer => layer?.sourceClipId === selectedClip.id)
@@ -739,7 +763,18 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
     if (vertexUpdates.length === 0) return;
 
     startBatch('Nudge mask vertices');
-    updateVertices(selectedClip.id, activeMask.id, vertexUpdates);
+    updateVertices(selectedClip.id, activeMask.id, vertexUpdates, true);
+    const store = useTimelineStore.getState();
+    const pathProperty = createMaskPathProperty(activeMask.id);
+    if (store.isRecording(selectedClip.id, pathProperty) || store.hasKeyframes(selectedClip.id, pathProperty)) {
+      store.addMaskPathKeyframe(
+        selectedClip.id,
+        activeMask.id,
+        buildMaskPathValueWithVertexUpdates(activeMask, vertexUpdates),
+      );
+    } else {
+      store.invalidateCache();
+    }
     endBatch();
   }, [activeMask, canvasHeight, canvasWidth, projectMaskPoint, projectionParams, selectedClip, selectedVertexIds, updateVertices]);
 

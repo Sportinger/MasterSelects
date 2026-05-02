@@ -7,8 +7,16 @@ import {
   getNextMaskVertexHandleMode,
   inferMaskVertexHandleMode,
 } from '../../../utils/maskVertexHandles';
-import type { MaskMode, ClipMask, MaskVertexHandleMode } from '../../../types';
-import { DraggableNumber } from './shared';
+import {
+  createMaskNumericProperty,
+  createMaskPathProperty,
+  type Keyframe,
+  type MaskMode,
+  type ClipMask,
+  type MaskPathKeyframeValue,
+  type MaskVertexHandleMode,
+} from '../../../types';
+import { DraggableNumber, KeyframeToggle } from './shared';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 const MASK_MODES: { value: MaskMode; label: string }[] = [
@@ -16,6 +24,7 @@ const MASK_MODES: { value: MaskMode; label: string }[] = [
   { value: 'subtract', label: 'Subtract' },
   { value: 'intersect', label: 'Intersect' },
 ];
+const EMPTY_KEYFRAMES: Keyframe[] = [];
 
 function isTypingTarget(target: EventTarget | null): boolean {
   return (
@@ -141,6 +150,62 @@ function IconButton({
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
         <MaskIcon name={icon} />
       </svg>
+    </button>
+  );
+}
+
+function StopwatchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="13" r="7" />
+      <line x1="12" y1="13" x2="12" y2="9" />
+      <line x1="12" y1="2" x2="12" y2="5" />
+      <line x1="9" y1="3" x2="15" y2="3" />
+    </svg>
+  );
+}
+
+function getMaskPathValue(mask: ClipMask): MaskPathKeyframeValue {
+  return {
+    closed: mask.closed,
+    vertices: mask.vertices.map(vertex => ({
+      ...vertex,
+      handleIn: { ...vertex.handleIn },
+      handleOut: { ...vertex.handleOut },
+    })),
+  };
+}
+
+function MaskPathKeyframeToggle({ clipId, mask }: { clipId: string; mask: ClipMask }) {
+  const property = createMaskPathProperty(mask.id);
+  const clipKeyframes = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYFRAMES);
+  const recordingEnabled = useTimelineStore(state => state.keyframeRecordingEnabled.has(`${clipId}:${property}`));
+  const hasPathKeyframes = clipKeyframes.some(keyframe => keyframe.property === property);
+  const { addMaskPathKeyframe, toggleKeyframeRecording, disableMaskPathKeyframes } = useTimelineStore.getState();
+
+  const addPathKeyframe = useCallback(() => {
+    addMaskPathKeyframe(clipId, mask.id, getMaskPathValue(mask));
+    if (!recordingEnabled && !hasPathKeyframes) {
+      toggleKeyframeRecording(clipId, property);
+    }
+  }, [addMaskPathKeyframe, clipId, hasPathKeyframes, mask, property, recordingEnabled, toggleKeyframeRecording]);
+
+  return (
+    <button
+      type="button"
+      className={`keyframe-toggle ${recordingEnabled ? 'recording' : ''} ${hasPathKeyframes ? 'has-keyframes' : ''}`}
+      title={recordingEnabled || hasPathKeyframes ? 'Add mask path keyframe (right-click to disable)' : 'Add mask path keyframe'}
+      onClick={(event) => {
+        event.stopPropagation();
+        addPathKeyframe();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        disableMaskPathKeyframes(clipId, mask.id, getMaskPathValue(mask));
+      }}
+    >
+      <StopwatchIcon />
     </button>
   );
 }
@@ -286,6 +351,10 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
   const activeMaskId = useTimelineStore(state => state.activeMaskId);
   const selectedVertexIds = useTimelineStore(state => state.selectedVertexIds);
   const maskEditMode = useTimelineStore(state => state.maskEditMode);
+  const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  const selectedClip = useTimelineStore(state => state.clips.find(clip => clip.id === clipId));
+  const clipKeyframesForMaskList = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYFRAMES);
+  const getInterpolatedMasks = useTimelineStore(state => state.getInterpolatedMasks);
   const {
     addRectangleMask,
     addEllipseMask,
@@ -297,10 +366,15 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
     closeMask,
     selectVertices,
     setVertexHandleMode,
+    setPropertyValue,
   } = useTimelineStore.getState();
   const registry = getShortcutRegistry();
 
-  const maskList = useMemo(() => masks || [], [masks]);
+  const maskList = useMemo(() => {
+    const hasMaskKeyframes = clipKeyframesForMaskList.some(keyframe => keyframe.property.startsWith('mask.'));
+    if (!selectedClip || !hasMaskKeyframes) return masks || [];
+    return getInterpolatedMasks(clipId, playheadPosition - selectedClip.startTime) || masks || [];
+  }, [clipId, clipKeyframesForMaskList, getInterpolatedMasks, masks, playheadPosition, selectedClip]);
   const activeMask = useMemo(
     () => maskList.find(mask => mask.id === activeMaskId) || maskList[0] || null,
     [activeMaskId, maskList],
@@ -444,6 +518,11 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
     cycleSelectedHandles,
   ]);
 
+  const activeMaskFeatherProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'feather') : null;
+  const activeMaskFeatherQualityProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'featherQuality') : null;
+  const activeMaskPositionXProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'position.x') : null;
+  const activeMaskPositionYProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'position.y') : null;
+
   return (
     <div className="properties-tab-content masks-tab">
       <div className="mask-toolbar">
@@ -491,7 +570,10 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
         <div className="mask-active-card">
           <div className="mask-active-header">
             <div>
-              <strong>{activeMask.name}</strong>
+              <strong>
+                {activeMask.name}
+                <MaskPathKeyframeToggle clipId={clipId} mask={activeMask} />
+              </strong>
               <span>{activeMask.closed ? 'Closed path' : 'Open path'} / {activeMask.vertices.length} vertices / {selectedVertexIds.size} selected</span>
             </div>
             <div className="mask-active-actions">
@@ -589,9 +671,14 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
                 >
                   Feather
                 </MIDIParameterLabel>
+                {activeMaskFeatherProperty && (
+                  <KeyframeToggle clipId={clipId} property={activeMaskFeatherProperty} value={activeMask.feather} />
+                )}
                 <DraggableNumber
                   value={activeMask.feather}
-                  onChange={(v) => updateMask(clipId, activeMask.id, { feather: Math.max(0, v) })}
+                  onChange={(v) => activeMaskFeatherProperty
+                    ? setPropertyValue(clipId, activeMaskFeatherProperty, Math.max(0, v))
+                    : updateMask(clipId, activeMask.id, { feather: Math.max(0, v) })}
                   defaultValue={0}
                   min={0}
                   max={500}
@@ -616,9 +703,14 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
                 >
                   Quality
                 </MIDIParameterLabel>
+                {activeMaskFeatherQualityProperty && (
+                  <KeyframeToggle clipId={clipId} property={activeMaskFeatherQualityProperty} value={activeMask.featherQuality ?? 50} />
+                )}
                 <DraggableNumber
                   value={activeMask.featherQuality ?? 50}
-                  onChange={(v) => updateMask(clipId, activeMask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(v))) })}
+                  onChange={(v) => activeMaskFeatherQualityProperty
+                    ? setPropertyValue(clipId, activeMaskFeatherQualityProperty, Math.min(100, Math.max(1, Math.round(v))))
+                    : updateMask(clipId, activeMask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(v))) })}
                   defaultValue={50}
                   min={1}
                   max={100}
@@ -646,9 +738,14 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
                 >
                   X
                 </MIDIParameterLabel>
+                {activeMaskPositionXProperty && (
+                  <KeyframeToggle clipId={clipId} property={activeMaskPositionXProperty} value={activeMask.position.x} />
+                )}
                 <DraggableNumber
                   value={activeMask.position.x}
-                  onChange={(v) => updateMask(clipId, activeMask.id, { position: { ...activeMask.position, x: v } })}
+                  onChange={(v) => activeMaskPositionXProperty
+                    ? setPropertyValue(clipId, activeMaskPositionXProperty, v)
+                    : updateMask(clipId, activeMask.id, { position: { ...activeMask.position, x: v } })}
                   defaultValue={0}
                   sensitivity={100}
                   decimals={3}
@@ -670,9 +767,14 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
                 >
                   Y
                 </MIDIParameterLabel>
+                {activeMaskPositionYProperty && (
+                  <KeyframeToggle clipId={clipId} property={activeMaskPositionYProperty} value={activeMask.position.y} />
+                )}
                 <DraggableNumber
                   value={activeMask.position.y}
-                  onChange={(v) => updateMask(clipId, activeMask.id, { position: { ...activeMask.position, y: v } })}
+                  onChange={(v) => activeMaskPositionYProperty
+                    ? setPropertyValue(clipId, activeMaskPositionYProperty, v)
+                    : updateMask(clipId, activeMask.id, { position: { ...activeMask.position, y: v } })}
                   defaultValue={0}
                   sensitivity={100}
                   decimals={3}

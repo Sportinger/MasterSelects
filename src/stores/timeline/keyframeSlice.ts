@@ -1,19 +1,25 @@
 // Keyframe-related actions slice
 
 import type { KeyframeActions, SliceCreator, Keyframe, AnimatableProperty, ClipTransform } from './types';
-import type { TimelineClip } from '../../types';
+import type { TimelineClip, ClipMask, MaskPathKeyframeValue } from '../../types';
+import { parseCameraProperty } from '../../types';
 import { useMediaStore } from '../mediaStore';
+import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../mediaStore/types';
 import { DEFAULT_TRANSFORM, PROPERTY_ROW_HEIGHT, MIN_CURVE_EDITOR_HEIGHT, MAX_CURVE_EDITOR_HEIGHT } from './constants';
 import {
   compileRuntimeColorGrade,
+  createMaskPathProperty,
   ensureColorCorrectionState,
   parseColorProperty,
+  parseMaskProperty,
   setColorNodeParamValue,
 } from '../../types';
 import {
   getInterpolatedClipTransform,
+  getInterpolatedClipCameraSettings,
   getKeyframeAtTime,
   hasKeyframesForProperty,
+  interpolateKeyframeProgress,
   interpolateKeyframes
 } from '../../utils/keyframeInterpolation';
 import {
@@ -45,6 +51,44 @@ function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | und
     }
   }
   return undefined;
+}
+
+function normalizeCameraSettingValue(
+  key: keyof SceneCameraSettings,
+  value: number,
+  currentSettings: SceneCameraSettings,
+): number {
+  if (key === 'fov') {
+    return Math.max(10, Math.min(140, value));
+  }
+  if (key === 'near') {
+    return Math.max(0.001, value);
+  }
+  if (key === 'far') {
+    return Math.max(currentSettings.near + 0.1, value);
+  }
+  return Math.max(1, Math.round(value));
+}
+
+function buildCameraSettingsPatch(
+  currentSettings: SceneCameraSettings | undefined,
+  key: keyof SceneCameraSettings,
+  value: number,
+): SceneCameraSettings {
+  const base = {
+    ...DEFAULT_SCENE_CAMERA_SETTINGS,
+    ...currentSettings,
+  };
+  const next = {
+    ...base,
+    [key]: normalizeCameraSettingValue(key, value, base),
+  };
+
+  if (key === 'near' && next.far <= next.near) {
+    next.far = next.near + 0.1;
+  }
+
+  return next;
 }
 
 function getVectorAnimationInputBaseValue(
@@ -137,6 +181,121 @@ function getSteppedKeyframeValue(
   return currentValue;
 }
 
+function cloneMaskPathValue(value: MaskPathKeyframeValue): MaskPathKeyframeValue {
+  return {
+    closed: value.closed,
+    vertices: value.vertices.map(vertex => ({
+      ...vertex,
+      handleIn: { ...vertex.handleIn },
+      handleOut: { ...vertex.handleOut },
+    })),
+  };
+}
+
+function getMaskPathValue(mask: ClipMask): MaskPathKeyframeValue {
+  return {
+    closed: mask.closed,
+    vertices: mask.vertices.map(vertex => ({
+      ...vertex,
+      handleIn: { ...vertex.handleIn },
+      handleOut: { ...vertex.handleOut },
+    })),
+  };
+}
+
+function applyMaskPathValue(mask: ClipMask, value: MaskPathKeyframeValue): ClipMask {
+  return {
+    ...mask,
+    closed: value.closed,
+    vertices: value.vertices.map(vertex => ({
+      ...vertex,
+      handleIn: { ...vertex.handleIn },
+      handleOut: { ...vertex.handleOut },
+    })),
+  };
+}
+
+function maskPathsHaveMatchingTopology(
+  from: MaskPathKeyframeValue,
+  to: MaskPathKeyframeValue,
+): boolean {
+  if (from.vertices.length !== to.vertices.length) return false;
+  return from.vertices.every((vertex, index) => vertex.id === to.vertices[index]?.id);
+}
+
+function lerpValue(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+
+function interpolateMaskPathValue(
+  from: MaskPathKeyframeValue,
+  to: MaskPathKeyframeValue,
+  t: number,
+): MaskPathKeyframeValue {
+  return {
+    closed: t < 1 ? from.closed : to.closed,
+    vertices: from.vertices.map((vertex, index) => {
+      const nextVertex = to.vertices[index] ?? vertex;
+      return {
+        ...vertex,
+        x: lerpValue(vertex.x, nextVertex.x, t),
+        y: lerpValue(vertex.y, nextVertex.y, t),
+        handleIn: {
+          x: lerpValue(vertex.handleIn.x, nextVertex.handleIn.x, t),
+          y: lerpValue(vertex.handleIn.y, nextVertex.handleIn.y, t),
+        },
+        handleOut: {
+          x: lerpValue(vertex.handleOut.x, nextVertex.handleOut.x, t),
+          y: lerpValue(vertex.handleOut.y, nextVertex.handleOut.y, t),
+        },
+        handleMode: t < 1 ? vertex.handleMode : nextVertex.handleMode,
+      };
+    }),
+  };
+}
+
+function getInterpolatedMaskPathValue(
+  keyframes: Keyframe[],
+  property: AnimatableProperty,
+  time: number,
+  defaultValue: MaskPathKeyframeValue,
+): MaskPathKeyframeValue {
+  const pathKeyframes = keyframes
+    .filter(keyframe => keyframe.property === property && keyframe.pathValue)
+    .sort((a, b) => a.time - b.time);
+
+  if (pathKeyframes.length === 0) return defaultValue;
+  if (pathKeyframes.length === 1) return cloneMaskPathValue(pathKeyframes[0].pathValue!);
+  if (time <= pathKeyframes[0].time) return cloneMaskPathValue(pathKeyframes[0].pathValue!);
+
+  const lastKeyframe = pathKeyframes[pathKeyframes.length - 1];
+  if (time >= lastKeyframe.time) return cloneMaskPathValue(lastKeyframe.pathValue!);
+
+  let prevKey = pathKeyframes[0];
+  let nextKey = pathKeyframes[1];
+  for (let i = 1; i < pathKeyframes.length; i += 1) {
+    if (pathKeyframes[i].time >= time) {
+      prevKey = pathKeyframes[i - 1];
+      nextKey = pathKeyframes[i];
+      break;
+    }
+  }
+
+  const prevPath = prevKey.pathValue;
+  const nextPath = nextKey.pathValue;
+  if (!prevPath || !nextPath) return defaultValue;
+
+  if (!maskPathsHaveMatchingTopology(prevPath, nextPath)) {
+    return cloneMaskPathValue(prevPath);
+  }
+
+  const range = nextKey.time - prevKey.time;
+  const localTime = time - prevKey.time;
+  const t = range > 0 ? localTime / range : 0;
+  const easedT = Math.max(0, Math.min(1, interpolateKeyframeProgress(prevKey, nextKey, t)));
+  return interpolateMaskPathValue(prevPath, nextPath, easedT);
+}
+
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   addKeyframe: (clipId, property, value, time, easing = 'linear') => {
     const { clips, playheadPosition, clipKeyframes, invalidateCache } = get();
@@ -186,6 +345,84 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     set({ clipKeyframes: newMap });
 
     // Invalidate cache since animation changed
+    invalidateCache();
+  },
+
+  addMaskPathKeyframe: (clipId, maskId, providedPathValue, time, easing = 'linear') => {
+    const { clips, playheadPosition, clipKeyframes, invalidateCache } = get();
+    const clip = findClipById(clips, clipId);
+    const mask = clip?.masks?.find(candidate => candidate.id === maskId);
+    if (!clip || !mask) return;
+
+    const property = createMaskPathProperty(maskId);
+    const normalizedEasing = normalizeEasingType(easing, 'linear');
+    const clipLocalTime = time ?? (playheadPosition - clip.startTime);
+    const clampedTime = Math.max(0, Math.min(clipLocalTime, clip.duration));
+    const existingKeyframes = clipKeyframes.get(clipId) || [];
+    const existingAtTime = getKeyframeAtTime(existingKeyframes, property, clampedTime);
+    const pathValue = providedPathValue ? cloneMaskPathValue(providedPathValue) : getMaskPathValue(mask);
+
+    const newKeyframes = existingAtTime
+      ? existingKeyframes.map(keyframe =>
+          keyframe.id === existingAtTime.id
+            ? { ...keyframe, value: 0, pathValue, easing: normalizedEasing }
+            : keyframe
+        )
+      : [
+          ...existingKeyframes,
+          {
+            id: `kf_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            clipId,
+            time: clampedTime,
+            property,
+            value: 0,
+            pathValue,
+            easing: normalizedEasing,
+          },
+        ].sort((a, b) => a.time - b.time);
+
+    const newMap = new Map(clipKeyframes);
+    newMap.set(clipId, newKeyframes);
+    set({ clipKeyframes: newMap });
+    invalidateCache();
+  },
+
+  recordMaskPathKeyframe: (clipId, maskId) => {
+    const property = createMaskPathProperty(maskId);
+    const { isRecording, hasKeyframes, addMaskPathKeyframe } = get();
+    if (!isRecording(clipId, property) && !hasKeyframes(clipId, property)) return;
+    addMaskPathKeyframe(clipId, maskId);
+  },
+
+  disableMaskPathKeyframes: (clipId, maskId, pathValue) => {
+    const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache } = get();
+    const property = createMaskPathProperty(maskId);
+    if (pathValue) {
+      set({
+        clips: clips.map(clip => {
+          if (clip.id !== clipId) return clip;
+          return {
+            ...clip,
+            masks: (clip.masks || []).map(mask =>
+              mask.id === maskId ? applyMaskPathValue(mask, pathValue) : mask
+            ),
+          };
+        }),
+      });
+    }
+
+    const existingKeyframes = clipKeyframes.get(clipId) || [];
+    const filtered = existingKeyframes.filter(keyframe => keyframe.property !== property);
+    const newMap = new Map(clipKeyframes);
+    if (filtered.length > 0) {
+      newMap.set(clipId, filtered);
+    } else {
+      newMap.delete(clipId);
+    }
+
+    const newRecording = new Set(keyframeRecordingEnabled);
+    newRecording.delete(`${clipId}:${property}`);
+    set({ clipKeyframes: newMap, keyframeRecordingEnabled: newRecording });
     invalidateCache();
   },
 
@@ -353,6 +590,21 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     return ownTransform;
   },
 
+  getInterpolatedCameraSettings: (clipId, clipLocalTime) => {
+    const { clips, clipKeyframes } = get();
+    const clip = findClipById(clips, clipId);
+    if (clip?.source?.type !== 'camera') {
+      return { ...DEFAULT_SCENE_CAMERA_SETTINGS };
+    }
+
+    const baseSettings: SceneCameraSettings = {
+      ...DEFAULT_SCENE_CAMERA_SETTINGS,
+      ...clip.source.cameraSettings,
+    };
+    const keyframes = clipKeyframes.get(clipId) || [];
+    return getInterpolatedClipCameraSettings(keyframes, clipLocalTime, baseSettings);
+  },
+
   getInterpolatedEffects: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
@@ -510,6 +762,66 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     };
   },
 
+  getInterpolatedMasks: (clipId, clipLocalTime) => {
+    const { clips, clipKeyframes } = get();
+    const clip = findClipById(clips, clipId);
+    if (!clip?.masks || clip.masks.length === 0) {
+      return clip?.masks;
+    }
+
+    const keyframes = clipKeyframes.get(clipId) || [];
+    if (keyframes.length === 0) {
+      return clip.masks;
+    }
+
+    const maskKeyframes = keyframes.filter(keyframe => keyframe.property.startsWith('mask.'));
+    if (maskKeyframes.length === 0) {
+      return clip.masks;
+    }
+
+    return clip.masks.map(mask => {
+      let nextMask: ClipMask = {
+        ...mask,
+        position: { ...mask.position },
+        vertices: mask.vertices.map(vertex => ({
+          ...vertex,
+          handleIn: { ...vertex.handleIn },
+          handleOut: { ...vertex.handleOut },
+        })),
+      };
+
+      const pathProperty = createMaskPathProperty(mask.id);
+      if (maskKeyframes.some(keyframe => keyframe.property === pathProperty && keyframe.pathValue)) {
+        nextMask = applyMaskPathValue(
+          nextMask,
+          getInterpolatedMaskPathValue(maskKeyframes, pathProperty, clipLocalTime, getMaskPathValue(mask)),
+        );
+      }
+
+      const positionXProperty = `mask.${mask.id}.position.x` as AnimatableProperty;
+      const positionYProperty = `mask.${mask.id}.position.y` as AnimatableProperty;
+      const featherProperty = `mask.${mask.id}.feather` as AnimatableProperty;
+      const featherQualityProperty = `mask.${mask.id}.featherQuality` as AnimatableProperty;
+
+      if (maskKeyframes.some(keyframe => keyframe.property === positionXProperty)) {
+        nextMask.position.x = interpolateKeyframes(maskKeyframes, positionXProperty, clipLocalTime, mask.position.x);
+      }
+      if (maskKeyframes.some(keyframe => keyframe.property === positionYProperty)) {
+        nextMask.position.y = interpolateKeyframes(maskKeyframes, positionYProperty, clipLocalTime, mask.position.y);
+      }
+      if (maskKeyframes.some(keyframe => keyframe.property === featherProperty)) {
+        nextMask.feather = Math.max(0, interpolateKeyframes(maskKeyframes, featherProperty, clipLocalTime, mask.feather));
+      }
+      if (maskKeyframes.some(keyframe => keyframe.property === featherQualityProperty)) {
+        nextMask.featherQuality = Math.min(100, Math.max(1, Math.round(
+          interpolateKeyframes(maskKeyframes, featherQualityProperty, clipLocalTime, mask.featherQuality ?? 50),
+        )));
+      }
+
+      return nextMask;
+    });
+  },
+
   getInterpolatedSpeed: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
@@ -571,14 +883,23 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   },
 
   setPropertyValue: (clipId, property, value) => {
-    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateColorNodeParam, clips, hasKeyframes, isPlaying } = get();
+    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateColorNodeParam, updateMask, clips, hasKeyframes, isPlaying } = get();
+    const currentClip = clips.find(c => c.id === clipId);
+    const cameraPropertyForValue = parseCameraProperty(property);
+    const valueForStorage = cameraPropertyForValue && currentClip?.source?.type === 'camera'
+      ? normalizeCameraSettingValue(
+          cameraPropertyForValue,
+          value,
+          { ...DEFAULT_SCENE_CAMERA_SETTINGS, ...currentClip.source.cameraSettings },
+        )
+      : value;
 
     // Check if this property has keyframes (whether recording or not)
     const propertyHasKeyframes = hasKeyframes(clipId, property);
 
     if (isRecording(clipId, property) || propertyHasKeyframes) {
       // Recording mode OR property already has keyframes - create/update keyframe
-      addKeyframe(clipId, property, value);
+      addKeyframe(clipId, property, valueForStorage);
       if (isPlaying && clips.some(c => c.id === clipId)) {
         dispatchKeyframeRecordingFeedback(clipId, property);
       }
@@ -651,6 +972,38 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
                 stateMachineName: currentSettings.stateMachineName ?? vectorAnimationInput.stateMachineName,
                 stateMachineInputValues: inputValues,
               },
+            } : c.source,
+          } : c),
+        });
+        get().invalidateCache();
+        return;
+      }
+
+      const maskProperty = parseMaskProperty(property);
+      if (maskProperty && maskProperty.property !== 'path') {
+        const mask = clip.masks?.find(candidate => candidate.id === maskProperty.maskId);
+        if (!mask) return;
+
+        if (maskProperty.property === 'position.x') {
+          updateMask(clipId, mask.id, { position: { ...mask.position, x: value } });
+        } else if (maskProperty.property === 'position.y') {
+          updateMask(clipId, mask.id, { position: { ...mask.position, y: value } });
+        } else if (maskProperty.property === 'feather') {
+          updateMask(clipId, mask.id, { feather: Math.max(0, value) });
+        } else if (maskProperty.property === 'featherQuality') {
+          updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(value))) });
+        }
+        return;
+      }
+
+      const cameraProperty = parseCameraProperty(property);
+      if (cameraProperty && clip.source?.type === 'camera') {
+        set({
+          clips: clips.map(c => c.id === clipId ? {
+            ...c,
+            source: c.source ? {
+              ...c.source,
+              cameraSettings: buildCameraSettingsPatch(c.source.cameraSettings, cameraProperty, valueForStorage),
             } : c.source,
           } : c),
         });
@@ -846,7 +1199,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
 
   // Disable keyframes for a property: save current value as static, remove all keyframes, disable recording
   disablePropertyKeyframes: (clipId, property, currentValue) => {
-    const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache, updateClipTransform, updateClipEffect, updateColorNodeParam } = get();
+    const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache, updateClipTransform, updateClipEffect, updateColorNodeParam, updateMask } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
 
@@ -891,12 +1244,37 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           } : c.source,
         } : c),
       });
+      } else if (parseCameraProperty(property) && clip.source?.type === 'camera') {
+      const cameraProperty = parseCameraProperty(property)!;
+      set({
+        clips: get().clips.map(c => c.id === clipId ? {
+          ...c,
+          source: c.source ? {
+            ...c.source,
+            cameraSettings: buildCameraSettingsPatch(c.source.cameraSettings, cameraProperty, currentValue),
+          } : c.source,
+        } : c),
+      });
       } else if (property.startsWith('effect.')) {
       const parts = property.split('.');
       if (parts.length === 3) {
         const effectId = parts[1];
         const paramName = parts[2];
         updateClipEffect(clipId, effectId, { [paramName]: currentValue });
+      }
+    } else if (parseMaskProperty(property)) {
+      const maskProperty = parseMaskProperty(property)!;
+      const mask = clip.masks?.find(candidate => candidate.id === maskProperty.maskId);
+      if (mask && maskProperty.property !== 'path') {
+        if (maskProperty.property === 'position.x') {
+          updateMask(clipId, mask.id, { position: { ...mask.position, x: currentValue } });
+        } else if (maskProperty.property === 'position.y') {
+          updateMask(clipId, mask.id, { position: { ...mask.position, y: currentValue } });
+        } else if (maskProperty.property === 'feather') {
+          updateMask(clipId, mask.id, { feather: Math.max(0, currentValue) });
+        } else if (maskProperty.property === 'featherQuality') {
+          updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(currentValue))) });
+        }
       }
     } else if (parseColorProperty(property)) {
       const colorProperty = parseColorProperty(property)!;

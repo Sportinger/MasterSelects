@@ -30,6 +30,7 @@ const SOURCE_LABELS: Partial<Record<TimelineSourceType, string>> = {
   'gaussian-avatar': 'Avatar',
   'gaussian-splat': 'Splat',
   'splat-effector': 'Effector',
+  'math-scene': 'Math',
   lottie: 'Lottie',
 };
 
