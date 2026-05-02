@@ -7,6 +7,7 @@ import type { TimelineKeyframesProps } from './types';
 import type { EasingType, AnimatableProperty } from '../../types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { normalizeEasingType } from '../../utils/easing';
+import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 
 interface KeyframeData {
   id: string;
@@ -371,11 +372,12 @@ function TimelineKeyframesComponent({
         const isSelected = selectedKeyframeIds.has(kf.id);
         const isDragging = dragState?.keyframeId === kf.id;
         const easing = normalizeEasingType(kf.easing, 'linear');
+        const isStateChange = Boolean(parseVectorAnimationStateProperty(kf.property));
 
         return (
           <div
             key={kf.id}
-            className={`keyframe-diamond easing-${easing} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
+            className={`keyframe-diamond easing-${easing} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
             style={{ left: `${xPos}px` }}
             onMouseDown={(e) => handleMouseDown(e, kf, clip)}
             onDoubleClick={handleDoubleClick}

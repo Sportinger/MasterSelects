@@ -131,8 +131,19 @@ describe('SerializableClip structure', () => {
       vectorAnimationSettings: {
         loop: true,
         endBehavior: 'loop',
+        playbackMode: 'bounce',
         fit: 'cover',
+        renderWidth: 1920,
+        renderHeight: 1080,
         animationName: 'intro',
+        stateMachineName: 'button-machine',
+        stateMachineState: 'idle',
+        stateMachineStateCues: [
+          { id: 'cue-1', time: 1.25, stateName: 'hover', immediate: true },
+        ],
+        stateMachineInputValues: {
+          OnOffSwitch: 1,
+        },
         backgroundColor: '#123456',
       },
     });
@@ -151,8 +162,19 @@ describe('SerializableClip structure', () => {
     expect(restored.vectorAnimationSettings).toEqual({
       loop: true,
       endBehavior: 'loop',
+      playbackMode: 'bounce',
       fit: 'cover',
+      renderWidth: 1920,
+      renderHeight: 1080,
       animationName: 'intro',
+      stateMachineName: 'button-machine',
+      stateMachineState: 'idle',
+      stateMachineStateCues: [
+        { id: 'cue-1', time: 1.25, stateName: 'hover', immediate: true },
+      ],
+      stateMachineInputValues: {
+        OnOffSwitch: 1,
+      },
       backgroundColor: '#123456',
     });
   });

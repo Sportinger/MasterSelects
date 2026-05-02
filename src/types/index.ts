@@ -2,7 +2,9 @@
 
 import type {
   VectorAnimationClipSettings,
+  VectorAnimationInputProperty,
   VectorAnimationProvider,
+  VectorAnimationStateProperty,
 } from './vectorAnimation';
 import type { ColorCorrectionState, RuntimeColorGrade } from './colorCorrection';
 
@@ -745,7 +747,7 @@ export type EffectProperty = `effect.${string}.${string}`;
 export type ColorProperty = `color.${string}.${string}.${string}`;
 
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | EffectProperty | ColorProperty;
+export type AnimatableProperty = TransformProperty | EffectProperty | ColorProperty | VectorAnimationInputProperty | VectorAnimationStateProperty;
 
 // Helper to check if a property is an effect property
 export function isEffectProperty(property: string): property is EffectProperty {
@@ -826,6 +828,7 @@ export type {
 
 export type {
   VectorAnimationClipSettings,
+  VectorAnimationInputProperty,
   VectorAnimationMetadata,
   VectorAnimationProvider,
 } from './vectorAnimation';

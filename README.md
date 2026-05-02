@@ -19,7 +19,7 @@
 </p>
 
 <p>
-  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.7.0-blue.svg" alt="Version"></a>
+  <a href="https://github.com/Sportinger/MasterSelects/releases"><img src="https://img.shields.io/badge/version-1.7.2-blue.svg" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
   <a href="https://app.fossa.com/projects/custom%2b61097%2fmasterselects"><img src="https://app.fossa.com/api/projects/custom%2b61097%2fmasterselects.svg?type=shield" alt="FOSSA Status"></a>
 </p>
@@ -146,7 +146,7 @@ This requires the Native Helper to be running, a MasterSelects editor tab to be 
 | [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast/Precise, FFmpeg intermediates, image/audio-only export, FCPXML, and project-persistent presets |
 | [**Live EQ & Audio**](docs/Features/Audio.md) | 10-band parametric EQ with real-time Web Audio preview |
 | [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
-| [**Vector Animation**](docs/Features/Vector-Animation.md) | `.lottie` and Lottie JSON clips with loop controls, fit, and deterministic preview/export |
+| [**Vector Animation**](docs/Features/Vector-Animation.md) | `.lottie` and Lottie JSON clips with bounce playback, render resolution overrides, keyframed state machines, and deterministic preview/export |
 | [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, and solid color clips |
 | [**Proxy System**](docs/Features/Proxy-System.md) | GPU-accelerated proxies with resume and cache indicator |
 | [**Output Manager**](docs/Features/Preview.md) | Multi-window outputs, source routing, corner pin warping, slice masks |

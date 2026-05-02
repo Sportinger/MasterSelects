@@ -177,6 +177,7 @@ export const selectClipActions = (state: TimelineStore) => ({
 export const selectTransformGetters = (state: TimelineStore) => ({
   getInterpolatedTransform: state.getInterpolatedTransform,
   getInterpolatedEffects: state.getInterpolatedEffects,
+  getInterpolatedVectorAnimationSettings: state.getInterpolatedVectorAnimationSettings,
   getInterpolatedSpeed: state.getInterpolatedSpeed,
   getSourceTimeForClip: state.getSourceTimeForClip,
   getSnappedPosition: state.getSnappedPosition,

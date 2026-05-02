@@ -55,7 +55,9 @@ getTrackChildren()  // Query child tracks
 ### Lottie
 - Imported from `.lottie` packages or Lottie JSON files from the Media Panel.
 - Uses the same canvas-backed render path as text and solids, so preview, nested comps, and export stay deterministic.
-- Exposes per-clip loop, end behavior, fit, animation selection, and background controls in the Properties panel.
+- Exposes per-clip loop, end behavior, playback mode, fit, render resolution, animation selection, and background controls in the Properties panel.
+- `.lottie` state machines can be selected in the Lottie tab, with state changes stored as blue stepped keyframes.
+- Boolean and numeric `.lottie` state-machine inputs appear as normal stopwatch-keyframed properties.
 - When loop is enabled, the clip can be extended beyond its source duration on the right trim edge without freezing on the first pass.
 
 ### Solid
@@ -129,6 +131,7 @@ getTrackChildren()  // Query child tracks
 - The UI hides `rotation.x`, `rotation.y`, `position.z`, and `scale.z` for 2D clips.
 - Camera clips and native-render gaussian splats keep the camera-style property model visible.
 - Numeric effect parameters appear as `effect.{effectId}.{paramName}` lanes.
+- Lottie state changes appear as `lottieState.{stateMachine}` lanes; state-machine inputs appear as `lottieInput.{stateMachine}.{input}` lanes.
 - Audio EQ lanes sort `volume` and the band parameters first.
 
 ### Curve Editor

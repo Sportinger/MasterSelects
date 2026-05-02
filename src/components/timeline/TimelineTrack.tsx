@@ -4,6 +4,7 @@ import React, { memo, useMemo, useRef, useEffect, useState } from 'react';
 import type { TimelineTrackProps } from './types';
 import type { AnimatableProperty, BezierHandle, Keyframe } from '../../types';
 import { CurveEditor } from './CurveEditor';
+import { parseVectorAnimationInputProperty, parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 
 type KeyframeTrackClip = {
   id: string;
@@ -109,6 +110,16 @@ function TrackPropertyTracks({
     if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
     if (aIdx !== -1) return -1;
     if (bIdx !== -1) return 1;
+    const aLottieState = parseVectorAnimationStateProperty(a);
+    const bLottieState = parseVectorAnimationStateProperty(b);
+    if (aLottieState && bLottieState) return 0;
+    if (aLottieState) return -1;
+    if (bLottieState) return 1;
+    const aLottieInput = parseVectorAnimationInputProperty(a);
+    const bLottieInput = parseVectorAnimationInputProperty(b);
+    if (aLottieInput && bLottieInput) return aLottieInput.inputName.localeCompare(bLottieInput.inputName);
+    if (aLottieInput) return -1;
+    if (bLottieInput) return 1;
     return a.localeCompare(b);
   });
 

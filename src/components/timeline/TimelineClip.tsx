@@ -8,7 +8,9 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { getLabelHex } from '../panels/media/labelColors';
 // PickWhip disabled
 import { Logger } from '../../services/logger';
-import { shouldLoopVectorAnimation } from '../../types/vectorAnimation';
+import {
+  shouldLoopVectorAnimation,
+} from '../../types/vectorAnimation';
 import { ClipWaveform } from './components/ClipWaveform';
 import { ClipAnalysisOverlay } from './components/ClipAnalysisOverlay';
 import { FadeCurve } from './components/FadeCurve';
@@ -1046,7 +1048,7 @@ function TimelineClipComponent({
               <button
                 type="button"
                 key={`${group.time}:${group.keyframeIds.join('|') || i}`}
-                className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}`}
+                className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}${group.hasStateChange ? ' state-change' : ''}`}
                 style={{ left: `${xPercent}%` }}
                 onMouseDown={(e) => handleKeyframeTickMouseDown(e, group)}
                 onClick={(e) => e.stopPropagation()}

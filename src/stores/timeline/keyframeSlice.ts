@@ -1,6 +1,8 @@
 // Keyframe-related actions slice
 
 import type { KeyframeActions, SliceCreator, Keyframe, AnimatableProperty, ClipTransform } from './types';
+import type { TimelineClip } from '../../types';
+import { useMediaStore } from '../mediaStore';
 import { DEFAULT_TRANSFORM, PROPERTY_ROW_HEIGHT, MIN_CURVE_EDITOR_HEIGHT, MAX_CURVE_EDITOR_HEIGHT } from './constants';
 import {
   compileRuntimeColorGrade,
@@ -14,10 +16,126 @@ import {
   hasKeyframesForProperty,
   interpolateKeyframes
 } from '../../utils/keyframeInterpolation';
+import {
+  DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
+  getVectorAnimationInputDefaultValue,
+  getVectorAnimationStateIndex,
+  getVectorAnimationStateNameAtIndex,
+  mergeVectorAnimationSettings,
+  parseVectorAnimationInputProperty,
+  parseVectorAnimationStateProperty,
+  vectorAnimationInputValueToNumber,
+  type VectorAnimationClipSettings,
+} from '../../types/vectorAnimation';
 import { normalizeEasingType } from '../../utils/easing';
 import { composeTransforms } from '../../utils/transformComposition';
 import { calculateSourceTime, getSpeedAtTime, calculateTimelineDuration } from '../../utils/speedIntegration';
 import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
+
+function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | undefined {
+  for (const clip of clips) {
+    if (clip.id === clipId) {
+      return clip;
+    }
+    if (clip.nestedClips?.length) {
+      const nestedClip = findClipById(clip.nestedClips, clipId);
+      if (nestedClip) {
+        return nestedClip;
+      }
+    }
+  }
+  return undefined;
+}
+
+function getVectorAnimationInputBaseValue(
+  clip: TimelineClip,
+  settings: VectorAnimationClipSettings,
+  stateMachineName: string,
+  inputName: string,
+): number {
+  const explicitValue = settings.stateMachineInputValues?.[inputName];
+  if (explicitValue !== undefined) {
+    return vectorAnimationInputValueToNumber(explicitValue);
+  }
+
+  const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+  const input = mediaFileId
+    ? useMediaStore
+        .getState()
+        .files
+        .find((file) => file.id === mediaFileId)
+        ?.vectorAnimation
+        ?.stateMachineInputs
+        ?.[stateMachineName]
+        ?.find((candidate) => candidate.name === inputName)
+    : undefined;
+
+  return input
+    ? vectorAnimationInputValueToNumber(getVectorAnimationInputDefaultValue(input))
+    : 0;
+}
+
+function getVectorAnimationStateNames(
+  clip: TimelineClip,
+  stateMachineName: string,
+): string[] {
+  const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+  if (!mediaFileId) {
+    return [];
+  }
+
+  return useMediaStore
+    .getState()
+    .files
+    .find((file) => file.id === mediaFileId)
+    ?.vectorAnimation
+    ?.stateMachineStates
+    ?.[stateMachineName] ?? [];
+}
+
+function getVectorAnimationStateBaseValue(
+  clip: TimelineClip,
+  settings: VectorAnimationClipSettings,
+  stateMachineName: string,
+): number {
+  return getVectorAnimationStateIndex(
+    getVectorAnimationStateNames(clip, stateMachineName),
+    settings.stateMachineState,
+  );
+}
+
+function normalizeVectorAnimationStateKeyframeValue(
+  clip: TimelineClip,
+  stateMachineName: string,
+  value: number,
+): number {
+  const stateNames = getVectorAnimationStateNames(clip, stateMachineName);
+  if (stateNames.length === 0) {
+    return Math.max(0, Math.round(value));
+  }
+  return Math.max(0, Math.min(stateNames.length - 1, Math.round(value)));
+}
+
+function getSteppedKeyframeValue(
+  keyframes: Keyframe[],
+  property: AnimatableProperty,
+  clipLocalTime: number,
+  baseValue: number,
+): number {
+  const sorted = keyframes
+    .filter((keyframe) => keyframe.property === property)
+    .sort((a, b) => a.time - b.time);
+  let currentValue = baseValue;
+
+  for (const keyframe of sorted) {
+    if (keyframe.time > clipLocalTime + 1e-6) {
+      break;
+    }
+    currentValue = keyframe.value;
+  }
+
+  return currentValue;
+}
 
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   addKeyframe: (clipId, property, value, time, easing = 'linear') => {
@@ -25,6 +143,10 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
     const normalizedEasing = normalizeEasingType(easing, 'linear');
+    const vectorAnimationState = parseVectorAnimationStateProperty(property);
+    const keyframeValue = vectorAnimationState && clip.source?.type === 'lottie'
+      ? normalizeVectorAnimationStateKeyframeValue(clip, vectorAnimationState.stateMachineName, value)
+      : value;
 
     // Calculate time relative to clip start
     const clipLocalTime = time ?? (playheadPosition - clip.startTime);
@@ -43,7 +165,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (existingAtTime) {
       // Update existing keyframe
       newKeyframes = existingKeyframes.map(k =>
-        k.id === existingAtTime.id ? { ...k, value, easing: normalizedEasing } : k
+        k.id === existingAtTime.id ? { ...k, value: keyframeValue, easing: normalizedEasing } : k
       );
     } else {
       // Create new keyframe
@@ -52,7 +174,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         clipId,
         time: clampedTime,
         property,
-        value,
+        value: keyframeValue,
         easing: normalizedEasing,
       };
       newKeyframes = [...existingKeyframes, newKeyframe].sort((a, b) => a.time - b.time);
@@ -87,17 +209,33 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   },
 
   updateKeyframe: (keyframeId, updates) => {
-    const { clipKeyframes, invalidateCache } = get();
+    const { clipKeyframes, clips, invalidateCache } = get();
     const newMap = new Map<string, Keyframe[]>();
     const { easing, ...restUpdates } = updates;
-    const normalizedUpdates = easing !== undefined
+    const baseNormalizedUpdates = easing !== undefined
       ? { ...restUpdates, easing: normalizeEasingType(easing, 'linear') }
       : restUpdates;
 
     clipKeyframes.forEach((keyframes, clipId) => {
-      newMap.set(clipId, keyframes.map(k =>
-        k.id === keyframeId ? { ...k, ...normalizedUpdates } : k
-      ));
+      const clip = findClipById(clips, clipId);
+      newMap.set(clipId, keyframes.map(k => {
+        if (k.id !== keyframeId) {
+          return k;
+        }
+
+        const vectorAnimationState = parseVectorAnimationStateProperty(k.property);
+        const normalizedUpdates = vectorAnimationState && clip?.source?.type === 'lottie' && baseNormalizedUpdates.value !== undefined
+          ? {
+              ...baseNormalizedUpdates,
+              value: normalizeVectorAnimationStateKeyframeValue(
+                clip,
+                vectorAnimationState.stateMachineName,
+                baseNormalizedUpdates.value,
+              ),
+            }
+          : baseNormalizedUpdates;
+        return { ...k, ...normalizedUpdates };
+      }));
     });
 
     set({ clipKeyframes: newMap });
@@ -288,6 +426,90 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     return compileRuntimeColorGrade(colorState);
   },
 
+  getInterpolatedVectorAnimationSettings: (clipId, clipLocalTime) => {
+    const { clips, clipKeyframes } = get();
+    const clip = findClipById(clips, clipId);
+    const baseSettings = mergeVectorAnimationSettings(clip?.source?.vectorAnimationSettings);
+    if (!clip || clip.source?.type !== 'lottie') {
+      return baseSettings;
+    }
+
+    const activeStateMachineName = baseSettings.stateMachineName;
+    if (!activeStateMachineName) {
+      return baseSettings;
+    }
+
+    const keyframes = clipKeyframes.get(clipId) || [];
+    const statePropertyKey = keyframes
+      .map((keyframe) => keyframe.property)
+      .find((property) => parseVectorAnimationStateProperty(property)?.stateMachineName === activeStateMachineName);
+    let stateMachineState = baseSettings.stateMachineState;
+    let stateMachineStateCues = baseSettings.stateMachineStateCues;
+
+    if (statePropertyKey) {
+      const stateNames = getVectorAnimationStateNames(clip, activeStateMachineName);
+      const stateValue = getSteppedKeyframeValue(
+        keyframes,
+        statePropertyKey,
+        clipLocalTime,
+        getVectorAnimationStateBaseValue(clip, baseSettings, activeStateMachineName),
+      );
+      stateMachineState = getVectorAnimationStateNameAtIndex(stateNames, stateValue) ?? stateMachineState;
+      stateMachineStateCues = undefined;
+    }
+
+    const inputKeyframes = keyframes.filter((keyframe) => {
+      const parsed = parseVectorAnimationInputProperty(keyframe.property);
+      return parsed?.stateMachineName === activeStateMachineName;
+    });
+
+    if (inputKeyframes.length === 0) {
+      return {
+        ...baseSettings,
+        stateMachineState,
+        stateMachineStateCues,
+      };
+    }
+
+    const inputValues = { ...(baseSettings.stateMachineInputValues ?? {}) };
+    const inputNames = new Set<string>();
+    inputKeyframes.forEach((keyframe) => {
+      const parsed = parseVectorAnimationInputProperty(keyframe.property);
+      if (parsed) {
+        inputNames.add(parsed.inputName);
+      }
+    });
+
+    inputNames.forEach((inputName) => {
+      const property = [...inputKeyframes]
+        .map((keyframe) => keyframe.property)
+        .find((candidate) => parseVectorAnimationInputProperty(candidate)?.inputName === inputName);
+      if (!property) {
+        return;
+      }
+
+      const baseValue = getVectorAnimationInputBaseValue(
+        clip,
+        baseSettings,
+        activeStateMachineName,
+        inputName,
+      );
+      inputValues[inputName] = interpolateKeyframes(
+        keyframes,
+        property,
+        clipLocalTime,
+        baseValue,
+      );
+    });
+
+    return {
+      ...baseSettings,
+      stateMachineState,
+      stateMachineStateCues,
+      stateMachineInputValues: inputValues,
+    };
+  },
+
   getInterpolatedSpeed: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
@@ -379,6 +601,62 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       // Not recording and no keyframes - update static value
       const clip = clips.find(c => c.id === clipId);
       if (!clip) return;
+
+      const vectorAnimationState = parseVectorAnimationStateProperty(property);
+      if (vectorAnimationState && clip.source?.type === 'lottie') {
+        const currentSettings = mergeVectorAnimationSettings(clip.source.vectorAnimationSettings);
+        const normalizedValue = normalizeVectorAnimationStateKeyframeValue(
+          clip,
+          vectorAnimationState.stateMachineName,
+          value,
+        );
+        const stateName = getVectorAnimationStateNameAtIndex(
+          getVectorAnimationStateNames(clip, vectorAnimationState.stateMachineName),
+          normalizedValue,
+        );
+        set({
+          clips: clips.map(c => c.id === clipId ? {
+            ...c,
+            source: c.source ? {
+              ...c.source,
+              vectorAnimationSettings: {
+                ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
+                ...c.source.vectorAnimationSettings,
+                stateMachineName: currentSettings.stateMachineName ?? vectorAnimationState.stateMachineName,
+                stateMachineState: stateName ?? currentSettings.stateMachineState,
+                stateMachineStateCues: undefined,
+              },
+            } : c.source,
+          } : c),
+        });
+        get().invalidateCache();
+        return;
+      }
+
+      const vectorAnimationInput = parseVectorAnimationInputProperty(property);
+      if (vectorAnimationInput && clip.source?.type === 'lottie') {
+        const currentSettings = mergeVectorAnimationSettings(clip.source.vectorAnimationSettings);
+        const inputValues = {
+          ...(currentSettings.stateMachineInputValues ?? {}),
+          [vectorAnimationInput.inputName]: value,
+        };
+        set({
+          clips: clips.map(c => c.id === clipId ? {
+            ...c,
+            source: c.source ? {
+              ...c.source,
+              vectorAnimationSettings: {
+                ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
+                ...c.source.vectorAnimationSettings,
+                stateMachineName: currentSettings.stateMachineName ?? vectorAnimationInput.stateMachineName,
+                stateMachineInputValues: inputValues,
+              },
+            } : c.source,
+          } : c),
+        });
+        get().invalidateCache();
+        return;
+      }
 
       // Handle effect properties (format: effect.{effectId}.{paramName})
       if (property.startsWith('effect.')) {
@@ -573,7 +851,47 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (!clip) return;
 
     // 1. Write current value to base clip value (same logic as setPropertyValue static path)
-    if (property.startsWith('effect.')) {
+    const vectorAnimationState = parseVectorAnimationStateProperty(property);
+    if (vectorAnimationState && clip.source?.type === 'lottie') {
+      const stateName = getVectorAnimationStateNameAtIndex(
+        getVectorAnimationStateNames(clip, vectorAnimationState.stateMachineName),
+        currentValue,
+      );
+      set({
+        clips: get().clips.map(c => c.id === clipId ? {
+          ...c,
+          source: c.source ? {
+            ...c.source,
+            vectorAnimationSettings: {
+              ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
+              ...c.source.vectorAnimationSettings,
+              stateMachineName: c.source.vectorAnimationSettings?.stateMachineName ?? vectorAnimationState.stateMachineName,
+              stateMachineState: stateName ?? c.source.vectorAnimationSettings?.stateMachineState,
+              stateMachineStateCues: undefined,
+            },
+          } : c.source,
+        } : c),
+      });
+    } else {
+      const vectorAnimationInput = parseVectorAnimationInputProperty(property);
+      if (vectorAnimationInput && clip.source?.type === 'lottie') {
+      set({
+        clips: get().clips.map(c => c.id === clipId ? {
+          ...c,
+          source: c.source ? {
+            ...c.source,
+            vectorAnimationSettings: {
+              ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
+              ...c.source.vectorAnimationSettings,
+              stateMachineInputValues: {
+                ...(c.source.vectorAnimationSettings?.stateMachineInputValues ?? {}),
+                [vectorAnimationInput.inputName]: currentValue,
+              },
+            },
+          } : c.source,
+        } : c),
+      });
+      } else if (property.startsWith('effect.')) {
       const parts = property.split('.');
       if (parts.length === 3) {
         const effectId = parts[1];
@@ -609,6 +927,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     } else if (property.startsWith('rotation.')) {
       const axis = property.split('.')[1] as 'x' | 'y' | 'z';
       updateClipTransform(clipId, { rotation: { ...clip.transform.rotation, [axis]: currentValue } });
+      }
     }
 
     // 2. Remove all keyframes for this property

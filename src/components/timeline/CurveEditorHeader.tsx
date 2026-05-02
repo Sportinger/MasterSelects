@@ -1,8 +1,14 @@
 // Curve Editor Header component for Y-axis labels
 
 import React, { useMemo } from 'react';
-import type { AnimatableProperty, Keyframe } from '../../types';
+import type { AnimatableProperty, Keyframe, TimelineClip } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
+import {
+  getVectorAnimationStateLabelAtIndex,
+  parseVectorAnimationInputProperty,
+  parseVectorAnimationStateProperty,
+} from '../../types/vectorAnimation';
 
 export interface CurveEditorHeaderProps {
   property: AnimatableProperty;
@@ -10,8 +16,26 @@ export interface CurveEditorHeaderProps {
   onClose: () => void;
 }
 
+function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | undefined {
+  for (const clip of clips) {
+    if (clip.id === clipId) {
+      return clip;
+    }
+    if (clip.nestedClips?.length) {
+      const nestedClip = findClipById(clip.nestedClips, clipId);
+      if (nestedClip) {
+        return nestedClip;
+      }
+    }
+  }
+  return undefined;
+}
+
 // Get default range for a property type (used as fallback when no keyframes exist)
 function getPropertyDefaults(property: AnimatableProperty): { min: number; max: number; fallbackPad: number } {
+  if (parseVectorAnimationStateProperty(property)) {
+    return { min: 0, max: 1, fallbackPad: 0 };
+  }
   if (property === 'opacity') {
     return { min: 0, max: 1, fallbackPad: 0.05 };
   }
@@ -23,6 +47,9 @@ function getPropertyDefaults(property: AnimatableProperty): { min: number; max: 
   }
   if (property.startsWith('position.')) {
     return { min: -1000, max: 1000, fallbackPad: 10 };
+  }
+  if (parseVectorAnimationInputProperty(property)) {
+    return { min: 0, max: 1, fallbackPad: 0.05 };
   }
   // Effect properties
   return { min: -100, max: 100, fallbackPad: 5 };
@@ -74,7 +101,10 @@ function computeAutoRange(keyframes: Keyframe[], property: AnimatableProperty): 
 }
 
 // Format value for display
-function formatValue(value: number, property: AnimatableProperty): string {
+function formatValue(value: number, property: AnimatableProperty, stateNames: readonly string[]): string {
+  if (parseVectorAnimationStateProperty(property)) {
+    return getVectorAnimationStateLabelAtIndex(stateNames, value) ?? `State ${Math.round(value)}`;
+  }
   if (property === 'opacity') {
     return `${(value * 100).toFixed(0)}%`;
   }
@@ -83,6 +113,9 @@ function formatValue(value: number, property: AnimatableProperty): string {
   }
   if (property.startsWith('rotation.')) {
     return `${value.toFixed(0)}°`;
+  }
+  if (parseVectorAnimationInputProperty(property)) {
+    return value === 0 || value === 1 ? String(value) : value.toFixed(2);
   }
   return value.toFixed(0);
 }
@@ -93,13 +126,38 @@ export const CurveEditorHeader: React.FC<CurveEditorHeaderProps> = ({
   onClose,
 }) => {
   const height = useTimelineStore(s => s.curveEditorHeight);
+  const timelineClips = useTimelineStore(s => s.clips);
+  const mediaFiles = useMediaStore(s => s.files);
   const padding = { top: 20, bottom: 20 };
+  const stateProperty = parseVectorAnimationStateProperty(property);
+  const stateMachineName = stateProperty?.stateMachineName;
+  const stateNames = useMemo(() => {
+    if (!stateMachineName) {
+      return [];
+    }
+    const clipId = keyframes[0]?.clipId;
+    if (!clipId) {
+      return [];
+    }
+    const clip = findClipById(timelineClips, clipId);
+    const mediaFileId = clip?.mediaFileId ?? clip?.source?.mediaFileId;
+    if (!mediaFileId) {
+      return [];
+    }
+    return mediaFiles.find((file) => file.id === mediaFileId)
+      ?.vectorAnimation
+      ?.stateMachineStates
+      ?.[stateMachineName] ?? [];
+  }, [keyframes, mediaFiles, stateMachineName, timelineClips]);
+  const isDiscreteStateProperty = Boolean(stateMachineName && stateNames.length > 0);
 
   // Compute value range
-  const valueRange = useMemo(() =>
-    computeAutoRange(keyframes, property),
-    [keyframes, property]
-  );
+  const valueRange = useMemo(() => {
+    if (isDiscreteStateProperty) {
+      return { min: 0, max: Math.max(1, stateNames.length - 1) };
+    }
+    return computeAutoRange(keyframes, property);
+  }, [isDiscreteStateProperty, keyframes, property, stateNames.length]);
 
   // Convert value to Y position
   const valueToY = (value: number): number => {
@@ -110,6 +168,10 @@ export const CurveEditorHeader: React.FC<CurveEditorHeaderProps> = ({
 
   // Generate tick values with adaptive step size
   const ticks = useMemo(() => {
+    if (isDiscreteStateProperty) {
+      return stateNames.map((_, index) => index);
+    }
+
     const tickValues: number[] = [];
     const range = valueRange.max - valueRange.min;
     const step = niceStep(range);
@@ -119,7 +181,7 @@ export const CurveEditorHeader: React.FC<CurveEditorHeaderProps> = ({
     }
 
     return tickValues;
-  }, [valueRange]);
+  }, [isDiscreteStateProperty, stateNames, valueRange]);
 
   return (
     <div className="curve-editor-header" style={{ height }}>
@@ -138,7 +200,7 @@ export const CurveEditorHeader: React.FC<CurveEditorHeaderProps> = ({
             style={{ top: valueToY(value) }}
           >
             <span className="curve-editor-tick-label">
-              {formatValue(value, property)}
+              {formatValue(value, property, stateNames)}
             </span>
           </div>
         ))}

@@ -2,7 +2,7 @@
 
 [<- Back to Index](./README.md)
 
-The keyframe system animates clip properties over time using per-clip keyframe maps, curve editors, and Bezier handles. It supports transform properties, speed, and numeric effect parameters.
+The keyframe system animates clip properties over time using per-clip keyframe maps, curve editors, and Bezier handles. It supports transform properties, speed, numeric effect parameters, and vector-animation state/input properties.
 
 ---
 
@@ -39,6 +39,17 @@ Examples:
 - `effect.effect_123.band1k`
 
 Audio fades are built from `audio-volume.volume` keyframes, and EQ lanes use the same effect-property naming pattern.
+
+### Vector Animation Properties
+
+Lottie state machines use the same keyframe store as transform and effect properties:
+
+```text
+lottieState.{stateMachine}
+lottieInput.{stateMachine}.{input}
+```
+
+`lottieState.*` keyframes are discrete named states. They render as blue diamonds and stepped curves because a state change should hold until the next state keyframe, not ease between values. Boolean and numeric `lottieInput.*` properties use the normal stopwatch/keyframe workflow.
 
 ### Visibility Rules
 
@@ -99,6 +110,7 @@ When recording is enabled:
 - Dragging a handle updates the stored handle position and switches the keyframe to Bezier mode.
 - `Shift+drag` on a keyframe constrains movement to one axis in the curve editor.
 - Right-clicking a handle resets it to the default 1/3-distance handle for that segment.
+- Lottie state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
 
 ### Delete and Copy/Paste
 

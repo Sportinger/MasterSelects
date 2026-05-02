@@ -6,6 +6,7 @@ import type { TimelineClip, TimelineTrack, Layer, NestedCompositionData, BlendMo
 import { engine } from '../engine/WebGPUEngine';
 import type { Composition, SlotClipEndBehavior } from '../stores/mediaStore/types';
 import { useMediaStore } from '../stores/mediaStore';
+import { useTimelineStore } from '../stores/timeline';
 import { DEFAULT_TRANSFORM } from '../stores/timeline/constants';
 import { bindSourceRuntimeForOwner } from './mediaRuntime/clipBindings';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
@@ -542,7 +543,11 @@ class LayerPlaybackManager {
       // Build transform
       const transform = clip.transform || DEFAULT_TRANSFORM;
       if (clip.source?.type === 'lottie') {
-        lottieRuntimeManager.renderClipAtTime(clip, time);
+        lottieRuntimeManager.renderClipAtTime(
+          clip,
+          time,
+          useTimelineStore.getState().getInterpolatedVectorAnimationSettings(clip.id, clipLocalTime),
+        );
       }
       const clipTime = clip.reversed
         ? clip.outPoint - clipLocalTime
