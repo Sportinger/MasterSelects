@@ -52,6 +52,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
 | [Effects](./Effects.md) | Current effect registry, categories, quality controls, and inline effect behavior |
 | [Color Correction](./Color-Correction.md) | Planned node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
+| [Professional Color Correction Plan](./Color-Correction-Professional-Plan.md) | Tactical roadmap for wheels, curves, LUTs, secondaries, float precision, scopes, compare, and presets |
 | [Masks](./Masks.md) | Overlay mask editing, feathering, stored modes, and current limitations |
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |

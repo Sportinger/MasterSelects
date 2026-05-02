@@ -4,6 +4,7 @@ import { getSharedSceneDefaultCameraDistance } from '../../src/engine/scene/Scen
 import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { DEFAULT_PRIMARY_COLOR_PARAMS } from '../../src/types';
 import type { RenderDeps } from '../../src/engine/render/RenderDispatcher';
 import type { Layer, LayerRenderData } from '../../src/engine/core/types';
 
@@ -118,6 +119,7 @@ function createRuntimeColorGrade(): NonNullable<Layer['colorCorrection']> {
     graphHash: 'grade-1',
     nodeIds: ['node_primary'],
     primary: {
+      ...DEFAULT_PRIMARY_COLOR_PARAMS,
       exposure: 0.25,
       contrast: 1.1,
       pivot: 0.5,
@@ -133,7 +135,6 @@ function createRuntimeColorGrade(): NonNullable<Layer['colorCorrection']> {
       offset: 0,
       shadows: 0,
       highlights: 0,
-      hue: 0,
     },
     primaryNodes: [],
     diagnostics: [],

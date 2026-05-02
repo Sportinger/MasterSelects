@@ -4,7 +4,7 @@
 
 Professional color correction for MasterSelects should become a dedicated clip tab that feels close to DaVinci Resolve's node page, while still offering a dense list/inspector mode for fast slider-based work. The important product decision is that node view and list view are not separate systems. They are two views over the same color-grade state.
 
-This document started as the implementation plan and now also records the first production slice. The current implementation ships the canonical clip color state, the Properties Color tab, the dockable Color workspace, two-mode List/Nodes switching where Nodes opens the right-side workspace, left-button node-canvas panning, a collapsible workspace inspector, keyframable/MIDI-ready primary controls, project persistence, preview/export layer wiring, and a realtime WebGPU primary-grade pass that can apply serial primary nodes in one shader pass.
+This document started as the implementation plan and now also records the first production slices. The current implementation ships the canonical clip color state, the Properties Color tab, the dockable Color workspace, two-mode List/Nodes switching where Nodes opens the right-side workspace, left-button node-canvas panning, a collapsible workspace inspector, keyframable/MIDI-ready primary controls, a dedicated Wheels node with RGB chroma wheels plus luma sliders, project persistence, preview/export layer wiring, and a realtime WebGPU fused primary/wheels pass that can apply serial Primary and Wheels nodes in one shader pass.
 
 Remaining professional work includes advanced graph branches/mixers, qualifiers/windows, LUT management, still/reference workflows, selected-node scope routing, and higher precision intermediate textures.
 
@@ -410,7 +410,8 @@ Examples:
 
 ```ts
 color.version_main.node_primary.exposure
-color.version_main.node_wheels.lift.r
+color.version_main.node_wheels.liftR
+color.version_main.node_wheels.gainY
 color.version_main.node_curves.luma.points.0.y
 ```
 
@@ -595,11 +596,11 @@ Avoid silently changing the render output of old projects.
 
 ### Phase 2: GPU Primary Grade
 
-- Add `ColorPipeline` and a fused primary/wheels shader.
-- Add `Layer.colorCorrection`.
-- Wire `LayerBuilderService` and export `ExportLayerBuilder` to pass interpolated grades.
-- Integrate `ColorPipeline` before `EffectsPipeline`.
-- Use persistent uniform buffers and cached bind groups for primary controls.
+- Add `ColorPipeline` and a fused primary/wheels shader. Shipped for Primary and Wheels nodes.
+- Add `Layer.colorCorrection`. Shipped.
+- Wire `LayerBuilderService` and export `ExportLayerBuilder` to pass interpolated grades. Shipped.
+- Integrate `ColorPipeline` before `EffectsPipeline`. Shipped.
+- Use persistent uniform buffers and cached bind groups for primary controls. Persistent uniform buffers are shipped; bind-group caching remains open.
 - Keep phase 1 primary grading on current `rgba8unorm` temps unless `rgba16float` scratch textures are ready.
 - Add render tests for neutral grade, exposure, contrast/pivot, saturation, and bypass.
 
@@ -615,7 +616,7 @@ Avoid silently changing the render output of old projects.
 ### Phase 4: Pro Controls
 
 - Add `ColorScratchPool`.
-- Add color wheels, curves, HSL qualifier, power windows, LUT node, and output transform.
+- Add color wheels, curves, HSL qualifier, power windows, LUT node, and output transform. Color wheels are shipped for Lift, Gamma, Gain, and Offset; the other node types remain open.
 - Add matte view and before/after compare.
 - Add selected-node debug texture source for scopes.
 

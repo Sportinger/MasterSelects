@@ -1,6 +1,6 @@
 export type ColorViewMode = 'nodes' | 'list';
 
-export type ColorNodeType = 'input' | 'primary' | 'output';
+export type ColorNodeType = 'input' | 'primary' | 'wheels' | 'output';
 
 export type ColorParamValue = number | boolean | string;
 
@@ -67,6 +67,22 @@ export interface RuntimePrimaryColorParams {
   shadows: number;
   highlights: number;
   hue: number;
+  liftR: number;
+  liftG: number;
+  liftB: number;
+  liftY: number;
+  gammaR: number;
+  gammaG: number;
+  gammaB: number;
+  gammaY: number;
+  gainR: number;
+  gainG: number;
+  gainB: number;
+  gainY: number;
+  offsetR: number;
+  offsetG: number;
+  offsetB: number;
+  offsetY: number;
 }
 
 export interface RuntimeColorGrade {
@@ -80,7 +96,7 @@ export interface RuntimeColorGrade {
 
 export interface ColorParamDefinition {
   key: keyof RuntimePrimaryColorParams;
-  section: 'Balance' | 'Tone' | 'Levels' | 'Creative';
+  section: 'Balance' | 'Tone' | 'Levels' | 'Creative' | 'Wheels';
   label: string;
   min: number;
   max: number;
@@ -106,6 +122,22 @@ export const DEFAULT_PRIMARY_COLOR_PARAMS: RuntimePrimaryColorParams = {
   shadows: 0,
   highlights: 0,
   hue: 0,
+  liftR: 0,
+  liftG: 0,
+  liftB: 0,
+  liftY: 0,
+  gammaR: 1,
+  gammaG: 1,
+  gammaB: 1,
+  gammaY: 1,
+  gainR: 1,
+  gainG: 1,
+  gainB: 1,
+  gainY: 1,
+  offsetR: 0,
+  offsetG: 0,
+  offsetB: 0,
+  offsetY: 0,
 };
 
 export const PRIMARY_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
@@ -127,6 +159,36 @@ export const PRIMARY_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
   { key: 'tint', section: 'Balance', label: 'Tint', min: -1, max: 1, step: 0.01, defaultValue: 0, decimals: 2 },
 ];
 
+export const WHEEL_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
+  { key: 'liftR', section: 'Wheels', label: 'Lift R', min: -0.5, max: 0.5, step: 0.001, defaultValue: 0, decimals: 3 },
+  { key: 'liftG', section: 'Wheels', label: 'Lift G', min: -0.5, max: 0.5, step: 0.001, defaultValue: 0, decimals: 3 },
+  { key: 'liftB', section: 'Wheels', label: 'Lift B', min: -0.5, max: 0.5, step: 0.001, defaultValue: 0, decimals: 3 },
+  { key: 'liftY', section: 'Wheels', label: 'Lift Y', min: -0.5, max: 0.5, step: 0.001, defaultValue: 0, decimals: 3 },
+  { key: 'gammaR', section: 'Wheels', label: 'Gamma R', min: 0.1, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gammaG', section: 'Wheels', label: 'Gamma G', min: 0.1, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gammaB', section: 'Wheels', label: 'Gamma B', min: 0.1, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gammaY', section: 'Wheels', label: 'Gamma Y', min: 0.1, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainR', section: 'Wheels', label: 'Gain R', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainG', section: 'Wheels', label: 'Gain G', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainB', section: 'Wheels', label: 'Gain B', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'gainY', section: 'Wheels', label: 'Gain Y', min: 0, max: 4, step: 0.01, defaultValue: 1, decimals: 2 },
+  { key: 'offsetR', section: 'Wheels', label: 'Offset R', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
+  { key: 'offsetG', section: 'Wheels', label: 'Offset G', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
+  { key: 'offsetB', section: 'Wheels', label: 'Offset B', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
+  { key: 'offsetY', section: 'Wheels', label: 'Offset Y', min: -1, max: 1, step: 0.001, defaultValue: 0, decimals: 3 },
+];
+
+export const RUNTIME_COLOR_PARAM_DEFS: ColorParamDefinition[] = [
+  ...PRIMARY_COLOR_PARAM_DEFS,
+  ...WHEEL_COLOR_PARAM_DEFS,
+];
+
+const RUNTIME_COLOR_PARAM_KEYS = Object.keys(DEFAULT_PRIMARY_COLOR_PARAMS) as (keyof RuntimePrimaryColorParams)[];
+
+function createParamsFromDefs(defs: ColorParamDefinition[]): Record<string, ColorParamValue> {
+  return Object.fromEntries(defs.map(def => [def.key, def.defaultValue]));
+}
+
 export function createColorNodeId(prefix: string = 'node'): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -137,9 +199,27 @@ export function createPrimaryColorNode(id = 'node_primary', name = 'Primary'): C
     type: 'primary',
     name,
     enabled: true,
-    params: { ...DEFAULT_PRIMARY_COLOR_PARAMS },
+    params: createParamsFromDefs(PRIMARY_COLOR_PARAM_DEFS),
     position: { x: 160, y: 80 },
   };
+}
+
+export function createWheelsColorNode(id = 'node_wheels', name = 'Wheels'): ColorNode {
+  return {
+    id,
+    type: 'wheels',
+    name,
+    enabled: true,
+    params: createParamsFromDefs(WHEEL_COLOR_PARAM_DEFS),
+    position: { x: 280, y: 80 },
+  };
+}
+
+export function createColorNode(type: ColorNodeType, id?: string, name?: string): ColorNode {
+  if (type === 'wheels') {
+    return createWheelsColorNode(id, name ?? 'Wheels');
+  }
+  return createPrimaryColorNode(id, name ?? 'Primary');
 }
 
 export function createDefaultColorCorrectionState(): ColorCorrectionState {
@@ -267,28 +347,20 @@ export function setColorNodeParamValue(
 }
 
 export function getPrimaryRuntimeParams(node: ColorNode): RuntimePrimaryColorParams {
-  return {
-    exposure: typeof node.params.exposure === 'number' ? node.params.exposure : DEFAULT_PRIMARY_COLOR_PARAMS.exposure,
-    contrast: typeof node.params.contrast === 'number' ? node.params.contrast : DEFAULT_PRIMARY_COLOR_PARAMS.contrast,
-    pivot: typeof node.params.pivot === 'number' ? node.params.pivot : DEFAULT_PRIMARY_COLOR_PARAMS.pivot,
-    saturation: typeof node.params.saturation === 'number' ? node.params.saturation : DEFAULT_PRIMARY_COLOR_PARAMS.saturation,
-    vibrance: typeof node.params.vibrance === 'number' ? node.params.vibrance : DEFAULT_PRIMARY_COLOR_PARAMS.vibrance,
-    temperature: typeof node.params.temperature === 'number' ? node.params.temperature : DEFAULT_PRIMARY_COLOR_PARAMS.temperature,
-    tint: typeof node.params.tint === 'number' ? node.params.tint : DEFAULT_PRIMARY_COLOR_PARAMS.tint,
-    blackPoint: typeof node.params.blackPoint === 'number' ? node.params.blackPoint : DEFAULT_PRIMARY_COLOR_PARAMS.blackPoint,
-    whitePoint: typeof node.params.whitePoint === 'number' ? node.params.whitePoint : DEFAULT_PRIMARY_COLOR_PARAMS.whitePoint,
-    lift: typeof node.params.lift === 'number' ? node.params.lift : DEFAULT_PRIMARY_COLOR_PARAMS.lift,
-    gamma: typeof node.params.gamma === 'number' ? node.params.gamma : DEFAULT_PRIMARY_COLOR_PARAMS.gamma,
-    gain: typeof node.params.gain === 'number' ? node.params.gain : DEFAULT_PRIMARY_COLOR_PARAMS.gain,
-    offset: typeof node.params.offset === 'number' ? node.params.offset : DEFAULT_PRIMARY_COLOR_PARAMS.offset,
-    shadows: typeof node.params.shadows === 'number' ? node.params.shadows : DEFAULT_PRIMARY_COLOR_PARAMS.shadows,
-    highlights: typeof node.params.highlights === 'number' ? node.params.highlights : DEFAULT_PRIMARY_COLOR_PARAMS.highlights,
-    hue: typeof node.params.hue === 'number' ? node.params.hue : DEFAULT_PRIMARY_COLOR_PARAMS.hue,
-  };
+  const params = { ...DEFAULT_PRIMARY_COLOR_PARAMS };
+  for (const key of RUNTIME_COLOR_PARAM_KEYS) {
+    const value = node.params[key];
+    if (typeof value === 'number') {
+      params[key] = value;
+    }
+  }
+  return params;
 }
 
 export function isNeutralPrimaryParams(params: RuntimePrimaryColorParams): boolean {
-  return PRIMARY_COLOR_PARAM_DEFS.every(def => Math.abs(params[def.key] - def.defaultValue) < 1e-6);
+  return RUNTIME_COLOR_PARAM_KEYS.every(key =>
+    Math.abs(params[key] - DEFAULT_PRIMARY_COLOR_PARAMS[key]) < 1e-6
+  );
 }
 
 function combinePrimaryRuntimeParams(primaryNodes: RuntimePrimaryColorParams[]): RuntimePrimaryColorParams {
@@ -310,6 +382,22 @@ function combinePrimaryRuntimeParams(primaryNodes: RuntimePrimaryColorParams[]):
     primary.shadows += params.shadows;
     primary.highlights += params.highlights;
     primary.hue += params.hue;
+    primary.liftR += params.liftR;
+    primary.liftG += params.liftG;
+    primary.liftB += params.liftB;
+    primary.liftY += params.liftY;
+    primary.gammaR *= params.gammaR;
+    primary.gammaG *= params.gammaG;
+    primary.gammaB *= params.gammaB;
+    primary.gammaY *= params.gammaY;
+    primary.gainR *= params.gainR;
+    primary.gainG *= params.gainG;
+    primary.gainB *= params.gainB;
+    primary.gainY *= params.gainY;
+    primary.offsetR += params.offsetR;
+    primary.offsetG += params.offsetG;
+    primary.offsetB += params.offsetB;
+    primary.offsetY += params.offsetY;
   }
   return primary;
 }
@@ -389,12 +477,12 @@ export function compileRuntimeColorGrade(state?: ColorCorrectionState): RuntimeC
     if (!node.enabled) {
       continue;
     }
-    if (node.type !== 'primary') {
+    if (node.type !== 'primary' && node.type !== 'wheels') {
       diagnostics.push(`Unsupported color node type "${node.type}" skipped.`);
       continue;
     }
     if (primaryNodes.length >= MAX_RUNTIME_PRIMARY_NODES) {
-      diagnostics.push(`Only the first ${MAX_RUNTIME_PRIMARY_NODES} primary color nodes are compiled in realtime.`);
+      diagnostics.push(`Only the first ${MAX_RUNTIME_PRIMARY_NODES} realtime color nodes are compiled.`);
       break;
     }
 
