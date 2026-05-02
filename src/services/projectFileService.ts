@@ -16,4 +16,7 @@ export {
   type ProjectKeyframe,
   type ProjectMarker,
   type ProjectFolder,
+  RECENT_PROJECTS_CHANGED_EVENT,
+  type RecentProjectEntry,
+  type RecentProjectBackend,
 } from './project';

@@ -1114,6 +1114,45 @@ input, textarea {
   min-width: 240px;
 }
 
+.menu-nested-submenu-recent {
+  min-width: 300px;
+  max-width: 420px;
+}
+
+.menu-option-recent {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.menu-recent-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-recent-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-recent-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-recent-kind {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  line-height: 18px;
+}
+
 .menu-layout-row {
   display: flex;
   align-items: stretch;
@@ -6093,9 +6132,12 @@ input[type="checkbox"] {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.phase-exiting > .track-header,
-.phase-exiting > .track-lane {
+.phase-exiting > .track-header {
   animation: track-exit 200ms ease-in forwards;
+}
+
+.phase-exiting > .track-lane {
+  animation: none;
 }
 
 .phase-entering > .track-header,
@@ -6596,15 +6638,15 @@ input[type="checkbox"] {
   }
 }
 
-/* Clip exit animation - slides out to the right */
+/* Clip exit animation - flies out to the left without fading */
 @keyframes clip-exit {
   from {
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
   to {
-    opacity: 0;
-    transform: translate3d(25px, 0, 0);
+    opacity: 1;
+    transform: translate3d(calc(-140vw - 100%), 0, 0);
   }
 }
 
@@ -6613,7 +6655,7 @@ input[type="checkbox"] {
 }
 
 .timeline-clip.exit-animate {
-  animation: clip-exit 0.35s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+  animation: clip-exit 0.35s cubic-bezier(0.7, 0, 0.84, 0) forwards;
 }
 
 .clip-loading-spinner {

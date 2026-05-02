@@ -10,6 +10,7 @@ Local project folder storage with continuous save by default, optional interval 
 
 - [Welcome Overlay](#welcome-overlay)
 - [Storage Backends](#storage-backends)
+- [Recent Projects](#recent-projects)
 - [Project Folder Structure](#project-folder-structure)
 - [Auto-Save](#auto-save)
 - [Backup System](#backup-system)
@@ -87,6 +88,24 @@ The `ProjectFileService` facade routes all calls to the active backend:
 - `projectFileService.activateFsaBackend()` -- switches back to FSA
 
 *Source: `src/services/project/ProjectFileService.ts`*
+
+---
+
+## Recent Projects
+
+Recent projects are tracked in browser storage and exposed through **File -> Open Recent**.
+
+- Opening, creating, or renaming a project updates the recent-project list.
+- FSA projects store browser `FileSystemDirectoryHandle` references in IndexedDB and keep lightweight metadata in `localStorage`.
+- Native Helper projects store normalized project paths in `localStorage`.
+- Selecting an FSA recent project re-requests read/write permission if the browser has dropped it.
+- Missing or unreadable recent entries are removed when opening them fails.
+- The list is capped at 12 entries and can be cleared from the Open Recent flyout.
+
+Implementation:
+- `src/services/project/recentProjects.ts` stores and normalizes recent metadata.
+- `ProjectFileService.openRecentProject()` routes a selected entry to the FSA or Native backend.
+- `Toolbar.tsx` renders the File menu flyout and listens for recent-project updates.
 
 ---
 
@@ -396,6 +415,13 @@ Temporary camera `NO KF` live offsets are intentionally not saved. They only aff
 - Or File menu -> Open Project (`Ctrl+O`)
 - Select folder containing `project.json`
 
+### Open Recent
+- File menu -> Open Recent
+- Shows projects remembered by the browser from previous create/open/rename actions
+- FSA entries reuse stored IndexedDB handles and may ask for folder permission again
+- Native Helper entries reopen by stored path
+- The flyout includes "Clear Recent Projects" for clearing the browser-side list
+
 ### Rename Project
 - Double-click the project name in the toolbar
 - Validates name (no special characters `<>:"/\|?*`)
@@ -484,8 +510,8 @@ If IndexedDB storage becomes corrupted, an error dialog appears automatically:
 | Storage | Used For | Limits |
 |---------|----------|--------|
 | **Project Folder** | Project data, proxies, analysis, transcripts, cache, renders | Disk space |
-| **IndexedDB** | File handles, media metadata, proxy frames (legacy), analysis cache, thumbnails | ~50MB |
-| **localStorage** | App settings, autosave config, named/default dock layouts, dock layout fallback, Native Helper last project path | ~5MB |
+| **IndexedDB** | File handles, recent FSA project handles, media metadata, proxy frames (legacy), analysis cache, thumbnails | ~50MB |
+| **localStorage** | App settings, autosave config, named/default dock layouts, dock layout fallback, recent project metadata, Native Helper project paths | ~5MB |
 
 ---
 
@@ -495,6 +521,7 @@ If IndexedDB storage becomes corrupted, an error dialog appears automatically:
 ```
 src/services/project/
 +-- ProjectFileService.ts      # Facade -- routes to FSA or Native backend
++-- recentProjects.ts         # Browser-side recent project registry
 +-- projectSave.ts             # Store -> project format conversion + save
 +-- projectLoad.ts             # Project format -> store conversion + load
 +-- projectLifecycle.ts        # Create/open/close + auto-sync subscriptions
@@ -523,6 +550,7 @@ src/services/project/
 | Service | File | Purpose |
 |---------|------|---------|
 | ProjectDB | `src/services/projectDB.ts` | IndexedDB for handles, media, proxies, analysis, thumbnails |
+| RecentProjects | `src/services/project/recentProjects.ts` | Recent project metadata plus FSA handle keys |
 | FileSystemService | `src/services/fileSystemService.ts` | File picker, handle cache, permission management |
 | NativeHelperClient | `src/services/nativeHelper/NativeHelperClient.ts` | WebSocket + HTTP client for Native Helper |
 

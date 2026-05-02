@@ -17,7 +17,11 @@ import { InfoDialog } from './InfoDialog';
 import { LegalDialog } from './LegalDialog';
 import type { LegalPage } from './LegalDialog';
 import { NativeHelperStatus } from './NativeHelperStatus';
-import { projectFileService } from '../../services/projectFileService';
+import {
+  RECENT_PROJECTS_CHANGED_EVENT,
+  projectFileService,
+  type RecentProjectEntry,
+} from '../../services/projectFileService';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
@@ -46,6 +50,19 @@ const VIEW_WIP_ONLY_PANEL_TYPES = WIP_PANEL_TYPES.filter((type) => !AI_PANEL_TYP
 interface ToolbarProps {
   onOpenChangelog?: () => void;
   onOpenSplash?: () => void;
+}
+
+function formatRecentProjectDate(timestamp: number): string {
+  if (!Number.isFinite(timestamp)) {
+    return '';
+  }
+
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
@@ -112,6 +129,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const [showInfoDialog, setShowInfoDialog] = useState(false);
   const [showLegalDialog, setShowLegalDialog] = useState<LegalPage | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>([]);
   const menuBarRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isRenamingRef = useRef(false);
@@ -136,6 +154,20 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     // Reduced from 500ms to minimize unnecessary re-renders
     const interval = setInterval(updateProjectState, 2000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const refreshRecentProjects = () => {
+      setRecentProjects(projectFileService.getRecentProjects());
+    };
+
+    refreshRecentProjects();
+    window.addEventListener(RECENT_PROJECTS_CHANGED_EVENT, refreshRecentProjects);
+    window.addEventListener('storage', refreshRecentProjects);
+    return () => {
+      window.removeEventListener(RECENT_PROJECTS_CHANGED_EVENT, refreshRecentProjects);
+      window.removeEventListener('storage', refreshRecentProjects);
+    };
   }, []);
 
   // Try to restore last project on mount
@@ -282,6 +314,54 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       }
     }
     setIsLoading(false);
+    setOpenMenu(null);
+  }, []);
+
+  const handleOpenRecent = useCallback(async (projectId: string) => {
+    if (projectFileService.hasUnsavedChanges()) {
+      if (!confirm('You have unsaved changes. Open a different project?')) {
+        return;
+      }
+    }
+
+    setIsLoading(true);
+    setProjectLoadProgress({
+      phase: 'opening',
+      percent: 3,
+      message: 'Opening recent project',
+      blocking: true,
+    });
+
+    try {
+      const success = await projectFileService.openRecentProject(projectId);
+      if (!success) {
+        setProjectLoadProgress(null);
+        window.alert('Could not open that recent project. It may have moved, or the browser may need permission again.');
+        return;
+      }
+
+      await loadProjectToStores();
+      const data = projectFileService.getProjectData();
+      if (data) {
+        setProjectName(data.name);
+        setIsProjectOpen(true);
+        setNeedsPermission(false);
+        setPendingProjectName(null);
+      }
+    } catch (error) {
+      log.error('Failed to open recent project', error);
+      setProjectLoadProgress(null);
+      window.alert('Could not open that recent project.');
+    } finally {
+      setRecentProjects(projectFileService.getRecentProjects());
+      setIsLoading(false);
+      setOpenMenu(null);
+    }
+  }, []);
+
+  const handleClearRecentProjects = useCallback(async () => {
+    await projectFileService.clearRecentProjects();
+    setRecentProjects([]);
     setOpenMenu(null);
   }, []);
 
@@ -559,6 +639,44 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
                 <span>Open Project...</span>
                 <span className="shortcut">{shortcutLabels.open}</span>
               </button>
+              <div className="menu-item-with-submenu">
+                <button className="menu-option" disabled={isLoading}>
+                  <span>Open Recent</span>
+                </button>
+                <div className="menu-nested-submenu menu-nested-submenu-recent">
+                  {recentProjects.length === 0 ? (
+                    <span className="menu-empty">No recent projects</span>
+                  ) : (
+                    <>
+                      {recentProjects.map((project) => {
+                        const meta = formatRecentProjectDate(project.lastOpenedAt);
+                        const title = project.path || project.name;
+                        return (
+                          <button
+                            key={project.id}
+                            className="menu-option menu-option-recent"
+                            onClick={() => handleOpenRecent(project.id)}
+                            disabled={isLoading}
+                            title={title}
+                          >
+                            <span className="menu-recent-text">
+                              <span className="menu-recent-name">{project.name}</span>
+                              <span className="menu-recent-meta">{meta}</span>
+                            </span>
+                            <span className="menu-recent-kind">
+                              {project.backend === 'native' ? 'Native' : 'Browser'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      <div className="menu-separator" />
+                      <button className="menu-option" onClick={handleClearRecentProjects}>
+                        <span>Clear Recent Projects</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
               <div className="menu-separator" />
               <button className="menu-option" onClick={() => handleSave()} disabled={isLoading || !isProjectOpen}>
                 <span>Save</span>
