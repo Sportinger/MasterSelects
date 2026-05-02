@@ -206,6 +206,12 @@ export const useTimelineStore = create<TimelineStore>()(
       // Clip animation phase for enter/exit transitions
       clipAnimationPhase: 'idle' as const,
 
+      // Composition switch direction derived from tab positions
+      compositionSwitchDirection: 'forward' as const,
+
+      // Target track layout shown during composition switch exit
+      compositionSwitchTargetTracks: null,
+
       // Slot grid view progress (0 = full timeline, 1 = full grid view)
       slotGridProgress: 0,
 

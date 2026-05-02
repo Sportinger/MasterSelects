@@ -715,6 +715,21 @@ function calculateSyncedPlayhead(
   return null;
 }
 
+function getCompositionSwitchDirection(
+  currentActiveId: string | null,
+  newId: string | null,
+  openCompositionIds: string[]
+): 'forward' | 'backward' {
+  const currentIndex = currentActiveId ? openCompositionIds.indexOf(currentActiveId) : -1;
+  const nextIndex = newId ? openCompositionIds.indexOf(newId) : -1;
+
+  if (currentIndex !== -1 && nextIndex !== -1 && nextIndex > currentIndex) {
+    return 'backward';
+  }
+
+  return 'forward';
+}
+
 /**
  * Internal helper to set active composition (avoids calling get().setActiveComposition).
  * Handles exit/enter animations for smooth transitions.
@@ -756,22 +771,31 @@ function doSetActiveComposition(
 
   if (skipAnimation) {
     // Skip exit/enter animations entirely
+    timelineStore.setCompositionSwitchTargetTracks(null);
     finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
     return;
   }
 
+  timelineStore.setCompositionSwitchDirection(
+    getCompositionSwitchDirection(currentActiveId, newId, get().openCompositionIds)
+  );
+
   // Trigger exit animation for current clips
   const hasExistingClips = timelineStore.clips.length > 0;
   if (hasExistingClips && newId !== currentActiveId) {
+    const targetComp = newId ? compositions.find((c) => c.id === newId) : null;
+    timelineStore.setCompositionSwitchTargetTracks(targetComp?.timelineData?.tracks ?? null);
+
     // Set exit animation phase
     timelineStore.setClipAnimationPhase('exiting');
 
     // Wait for exit animation, then load new composition
     setTimeout(async () => {
       await finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
-    }, 350); // Exit animation duration
+    }, 175); // Exit animation duration
   } else {
     // No existing clips or same comp, load immediately
+    timelineStore.setCompositionSwitchTargetTracks(null);
     finishCompositionSwitch(set, get, newId, savedCompId, syncedPlayhead, options);
   }
 }
@@ -825,10 +849,12 @@ async function finishCompositionSwitch(
       // Reset to idle after entrance animation completes
       setTimeout(() => {
         timelineStore.setClipAnimationPhase('idle');
-      }, 700); // Entrance animation duration (0.6s + buffer)
+        timelineStore.setCompositionSwitchTargetTracks(null);
+      }, 350); // Entrance animation duration (0.3s + buffer)
     }
   } else {
     timelineStore.clearTimeline();
+    timelineStore.setCompositionSwitchTargetTracks(null);
     timelineStore.setClipAnimationPhase('idle');
   }
 }

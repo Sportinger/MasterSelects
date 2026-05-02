@@ -14,6 +14,7 @@ interface TimelineOverlaysProps {
   duration: number;
   markerDrag: { type: 'in' | 'out' } | null;
   onMarkerMouseDown: (e: React.MouseEvent, type: 'in' | 'out') => void;
+  switchMotionClass?: string;
 
   // Clip drag
   clipDrag: ClipDragState | null;
@@ -41,6 +42,7 @@ export function TimelineOverlays({
   duration,
   markerDrag,
   onMarkerMouseDown,
+  switchMotionClass = '',
   clipDrag,
   isRamPreviewing,
   ramPreviewProgress,
@@ -157,7 +159,7 @@ export function TimelineOverlays({
       {/* In marker */}
       {inPoint !== null && (
         <div
-          className={`in-out-marker in-marker ${markerDrag?.type === 'in' ? 'dragging' : ''}`}
+          className={`in-out-marker in-marker ${switchMotionClass} ${markerDrag?.type === 'in' ? 'dragging' : ''}`}
           style={{ left: timeToPixel(inPoint) }}
           title={`In: ${formatTime(inPoint)} (drag to move)`}
         >
@@ -174,7 +176,7 @@ export function TimelineOverlays({
       {/* Out marker */}
       {outPoint !== null && (
         <div
-          className={`in-out-marker out-marker ${markerDrag?.type === 'out' ? 'dragging' : ''}`}
+          className={`in-out-marker out-marker ${switchMotionClass} ${markerDrag?.type === 'out' ? 'dragging' : ''}`}
           style={{ left: timeToPixel(outPoint) }}
           title={`Out: ${formatTime(outPoint)} (drag to move)`}
         >

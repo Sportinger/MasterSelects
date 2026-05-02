@@ -6107,11 +6107,11 @@ input[type="checkbox"] {
   overflow: hidden;
   height: 30px;
   border-bottom: 1px solid var(--border-color);
-  transition: opacity 200ms ease;
+  transition: none;
 }
 
 .time-ruler-wrapper.comp-switching {
-  opacity: 0;
+  opacity: 1;
 }
 
 .timeline-scroll-wrapper {
@@ -6120,42 +6120,14 @@ input[type="checkbox"] {
   position: relative;
 }
 
-/* Composition switch: track exit animation (slide up + fade out) */
-@keyframes track-exit {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-12px); }
-}
-
-/* Composition switch: track enter animation (slide down + fade in) */
-@keyframes track-enter {
-  from { opacity: 0; transform: translateY(-12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.phase-exiting > .track-header {
-  animation: track-exit 200ms ease-in forwards;
-}
-
-.phase-exiting > .track-lane {
-  animation: none;
-}
-
+/* Composition switch: track rows stay visible while their labels/heights update. */
+.phase-exiting > .track-header,
+.phase-exiting > .track-lane,
 .phase-entering > .track-header,
 .phase-entering > .track-lane {
-  animation: track-enter 200ms ease-out;
+  animation: none;
+  transition-duration: var(--composition-switch-layout-duration, 475ms), 160ms, 160ms;
 }
-
-/* Stagger tracks by index */
-.phase-exiting > :nth-child(1),
-.phase-entering > :nth-child(1) { animation-delay: 0ms; }
-.phase-exiting > :nth-child(2),
-.phase-entering > :nth-child(2) { animation-delay: 30ms; }
-.phase-exiting > :nth-child(3),
-.phase-entering > :nth-child(3) { animation-delay: 60ms; }
-.phase-exiting > :nth-child(4),
-.phase-entering > :nth-child(4) { animation-delay: 90ms; }
-.phase-exiting > :nth-child(5),
-.phase-entering > :nth-child(5) { animation-delay: 120ms; }
 
 /* Content row - track headers and lanes side by side */
 .timeline-content-row {
@@ -6192,6 +6164,8 @@ input[type="checkbox"] {
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-tertiary);
   position: relative;
+  overflow: hidden;
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
 }
 
 .track-header.video {
@@ -6456,6 +6430,7 @@ input[type="checkbox"] {
   background: var(--bg-secondary);
   min-width: 100%;
   overflow: hidden;
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
 }
 
 .track-lane.video {
@@ -6476,6 +6451,22 @@ input[type="checkbox"] {
     var(--timeline-grid-audio) calc(var(--grid-size, 50px) - 1px),
     var(--timeline-grid-audio) var(--grid-size, 50px)
   );
+}
+
+.composition-exit-clips-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: inherit;
+  width: 100%;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.composition-exit-track-row {
+  position: relative;
+  width: 100%;
+  overflow: visible;
 }
 
 /* Timeline clips */
@@ -6565,9 +6556,12 @@ input[type="checkbox"] {
   background: rgba(40, 60, 90, 0.85) !important;
   border: 2px dashed var(--accent) !important;
   box-shadow: none !important;
-  /* Override global .loading class which sets transform/display for centered spinners */
-  transform: none !important;
   display: block;
+}
+
+.timeline-clip.loading:not(.entrance-animate):not(.exit-animate) {
+  /* Override global .loading class which sets transform for centered spinners. */
+  transform: none !important;
 }
 
 .timeline-clip.loading.audio {
@@ -6627,10 +6621,10 @@ input[type="checkbox"] {
 }
 
 /* Clip entrance animation on composition switch - GPU accelerated */
-@keyframes clip-entrance {
+@keyframes clip-entrance-from-left {
   from {
-    opacity: 0;
-    transform: translate3d(-25px, 0, 0);
+    opacity: 1;
+    transform: translate3d(-72px, 0, 0);
   }
   to {
     opacity: 1;
@@ -6638,8 +6632,30 @@ input[type="checkbox"] {
   }
 }
 
-/* Clip exit animation - flies out to the left without fading */
-@keyframes clip-exit {
+@keyframes clip-entrance-from-right {
+  from {
+    opacity: 1;
+    transform: translate3d(72px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Clip exit animation - flies out without fading */
+@keyframes clip-exit-right {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(calc(140vw + 100%), 0, 0);
+  }
+}
+
+@keyframes clip-exit-left {
   from {
     opacity: 1;
     transform: translate3d(0, 0, 0);
@@ -6650,12 +6666,20 @@ input[type="checkbox"] {
   }
 }
 
-.timeline-clip.entrance-animate {
-  animation: clip-entrance 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.timeline-clip.entrance-animate-left {
+  animation: clip-entrance-from-left 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.timeline-clip.exit-animate {
-  animation: clip-exit 0.35s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+.timeline-clip.entrance-animate-right {
+  animation: clip-entrance-from-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.timeline-clip.exit-animate-right {
+  animation: clip-exit-right 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.timeline-clip.exit-animate-left {
+  animation: clip-exit-left 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
 }
 
 .clip-loading-spinner {
@@ -8184,6 +8208,7 @@ input[type="checkbox"] {
   z-index: 30;
   pointer-events: none;
   transform: translateX(-1px);
+  --timeline-switch-base-x: -1px;
 }
 
 .playhead-head {
@@ -8436,6 +8461,7 @@ input[type="checkbox"] {
   bottom: 0;
   z-index: 95;
   pointer-events: none;
+  --timeline-switch-base-x: 0px;
 }
 
 .in-out-marker .marker-flag {
@@ -8507,6 +8533,7 @@ input[type="checkbox"] {
   z-index: 29;
   pointer-events: none;
   transform: translateX(-1px);
+  --timeline-switch-base-x: -1px;
   --marker-color: var(--accent-timeline);
 }
 
@@ -8571,6 +8598,50 @@ input[type="checkbox"] {
 .timeline-marker.dragging .timeline-marker-line {
   opacity: 1;
   box-shadow: 0 0 4px var(--marker-color);
+}
+
+@keyframes timeline-switch-enter-left {
+  from { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) - 72px), 0, 0); }
+  to { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+}
+
+@keyframes timeline-switch-enter-right {
+  from { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) + 72px), 0, 0); }
+  to { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+}
+
+@keyframes timeline-switch-exit-right {
+  from { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+  to { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) + 140vw + 100%), 0, 0); }
+}
+
+@keyframes timeline-switch-exit-left {
+  from { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+  to { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) - 140vw - 100%), 0, 0); }
+}
+
+.playhead.timeline-switch-enter-left,
+.timeline-marker.timeline-switch-enter-left,
+.in-out-marker.timeline-switch-enter-left {
+  animation: timeline-switch-enter-left 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.playhead.timeline-switch-enter-right,
+.timeline-marker.timeline-switch-enter-right,
+.in-out-marker.timeline-switch-enter-right {
+  animation: timeline-switch-enter-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.playhead.timeline-switch-exit-right,
+.timeline-marker.timeline-switch-exit-right,
+.in-out-marker.timeline-switch-exit-right {
+  animation: timeline-switch-exit-right 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.playhead.timeline-switch-exit-left,
+.timeline-marker.timeline-switch-exit-left,
+.in-out-marker.timeline-switch-exit-left {
+  animation: timeline-switch-exit-left 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
 }
 
 /* Ghost marker for drag-to-create */
@@ -8930,7 +9001,7 @@ input[type="checkbox"] {
 /* Track header resize cursor on shift hover */
 .track-header {
   cursor: default;
-  transition: background 0.15s;
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
 }
 
 .track-header:hover {

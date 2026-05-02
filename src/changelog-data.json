@@ -1,6 +1,27 @@
 [
   {
     "date": "2026-05-02",
+    "type": "improve",
+    "title": "Directional Composition Tab Switching",
+    "description": "Timeline composition switches now follow tab order with directional clip, playhead, marker, and in/out marker motion, faster enter/exit timing, and non-fading transitions.",
+    "section": "Timeline / Composition Tabs"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "improve",
+    "title": "Layer Layout Morphs During Composition Switches",
+    "description": "Track rows start morphing to the destination composition's layer count and heights while outgoing clips leave, keeping loading placeholders and incoming clips on the same motion path.",
+    "section": "Timeline / Layers"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "new",
+    "title": "Recent Projects Menu",
+    "description": "The File menu now lists recent browser and native projects for quicker reopening.",
+    "section": "Project Persistence"
+  },
+  {
+    "date": "2026-05-02",
     "type": "new",
     "title": "Timeline-Native Lottie State Machines",
     "description": ".lottie state changes now live in the normal keyframe system as blue stepped keyframes, with state labels shown in the curve editor instead of numeric ramps.",

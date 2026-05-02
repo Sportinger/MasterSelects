@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.2';
+export const APP_VERSION = '1.7.3';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Lottie state keyframes are live',
-  message: 'Lottie clips now support bounce playback, render resolution overrides, and timeline-native state machine keyframes.',
+  title: 'Composition tab switching upgraded',
+  message: 'Timeline comps now switch with directional clip motion, matching playhead and marker motion, and animated layer-height changes.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Vector animation upgraded',
-  message: 'State changes show as blue stepped keyframes, while boolean and numeric state-machine inputs use the normal keyframe lanes.',
+  title: 'Recent projects are easier to reopen',
+  message: 'The File menu now shows recent browser and native projects for quicker access.',
   animated: true,
 };
 

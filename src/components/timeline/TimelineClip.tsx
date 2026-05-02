@@ -201,6 +201,7 @@ function TimelineClipComponent({
 
   // Animation phase for enter/exit transitions
   const clipAnimationPhase = useTimelineStore(s => s.clipAnimationPhase);
+  const compositionSwitchDirection = useTimelineStore(s => s.compositionSwitchDirection);
   const clipEntranceKey = useTimelineStore(s => s.clipEntranceAnimationKey);
   const [mountEntranceKey] = useState(clipEntranceKey);
 
@@ -224,10 +225,16 @@ function TimelineClipComponent({
   // - 'entering' + new clips: apply entrance animation (only during composition switch)
   // - Otherwise: no animation
   const isNewClip = mountEntranceKey === clipEntranceKey && clipEntranceKey > 0;
+  const exitAnimationClass = compositionSwitchDirection === 'backward'
+    ? 'exit-animate exit-animate-left'
+    : 'exit-animate exit-animate-right';
+  const entranceAnimationClass = compositionSwitchDirection === 'backward'
+    ? 'entrance-animate entrance-animate-right'
+    : 'entrance-animate entrance-animate-left';
   const animationClass = clipAnimationPhase === 'exiting'
-    ? 'exit-animate'
+    ? exitAnimationClass
     : (clipAnimationPhase === 'entering' && isNewClip)
-      ? 'entrance-animate'
+      ? entranceAnimationClass
       : '';
 
   // AI move animation (FLIP technique)
