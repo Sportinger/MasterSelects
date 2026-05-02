@@ -4015,6 +4015,365 @@ input, textarea {
   padding: var(--sp-2);
 }
 
+.lottie-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+
+.lottie-tab .properties-section {
+  margin-bottom: 0;
+  border-radius: var(--radius-md);
+  padding: 8px;
+}
+
+.lottie-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.lottie-summary-text {
+  min-width: 0;
+}
+
+.lottie-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: var(--font-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lottie-meta {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.lottie-loop-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.lottie-loop-toggle input {
+  accent-color: var(--accent);
+}
+
+.lottie-controls-section,
+.lottie-state-section {
+  display: grid;
+  gap: 7px;
+}
+
+.lottie-field-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lottie-field-label {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lottie-select,
+.lottie-input {
+  width: 100%;
+  max-width: 360px;
+  min-width: 0;
+  height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.lottie-select {
+  cursor: pointer;
+}
+
+.lottie-select:focus,
+.lottie-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border-color));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.lottie-segmented-control,
+.lottie-boolean-control {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  width: 100%;
+  max-width: 360px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--bg-primary);
+}
+
+.lottie-playback-mode {
+  max-width: 440px;
+  grid-auto-columns: minmax(72px, 1fr);
+}
+
+.lottie-segmented-control button,
+.lottie-boolean-control button {
+  height: 24px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.lottie-segmented-control button:last-child,
+.lottie-boolean-control button:last-child {
+  border-right: 0;
+}
+
+.lottie-segmented-control button:hover,
+.lottie-boolean-control button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.lottie-segmented-control button.active,
+.lottie-boolean-control button.active {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-primary));
+  color: var(--text-primary);
+}
+
+.lottie-input-list,
+.lottie-cue-panel,
+.lottie-cue-list {
+  display: grid;
+  gap: 6px;
+}
+
+.lottie-subsection-title {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lottie-input-row {
+  display: grid;
+  grid-template-columns: minmax(94px, 1fr) 18px minmax(80px, 112px);
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+}
+
+.lottie-input-row.has-keyframes {
+  border-color: color-mix(in srgb, var(--warning) 36%, transparent);
+}
+
+.lottie-input-label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lottie-input-label span:first-child {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lottie-input-label span:last-child {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.lottie-input-row .draggable-number-anchor {
+  justify-self: end;
+}
+
+.lottie-input-row .draggable-number {
+  min-width: 54px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #7aabe0;
+  text-align: right;
+}
+
+.lottie-input-row .draggable-number:hover {
+  border-color: rgba(45, 140, 235, 0.28);
+  background: rgba(45, 140, 235, 0.08);
+  color: #9cc4f0;
+}
+
+.lottie-input-static,
+.lottie-input-note {
+  grid-column: 2 / 4;
+}
+
+.lottie-input-note {
+  justify-self: start;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.lottie-cue-add-btn {
+  justify-self: start;
+}
+
+.lottie-cue-row {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+  max-width: 360px;
+}
+
+.lottie-cue-row .lottie-select {
+  max-width: none;
+}
+
+.lottie-time-input {
+  text-align: right;
+}
+
+.lottie-cue-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.lottie-cue-remove:hover {
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--border-color));
+  color: var(--danger-light);
+}
+
+.lottie-resolution-row {
+  display: grid;
+  grid-template-columns: minmax(64px, 88px) auto minmax(64px, 88px) 38px auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 360px;
+  min-width: 0;
+}
+
+.lottie-resolution-row span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.lottie-resolution-input {
+  text-align: right;
+}
+
+.lottie-link-toggle {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.lottie-link-toggle.active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-color));
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-primary));
+  color: var(--text-primary);
+}
+
+.lottie-state-control {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  max-width: 360px;
+  min-width: 0;
+}
+
+.lottie-state-control .lottie-select {
+  max-width: none;
+}
+
+.lottie-color-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  max-width: 360px;
+  min-width: 0;
+}
+
+.lottie-color-swatch {
+  position: relative;
+  width: 26px;
+  height: 22px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background:
+    linear-gradient(45deg, #555 25%, transparent 25%),
+    linear-gradient(-45deg, #555 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #555 75%),
+    linear-gradient(-45deg, transparent 75%, #555 75%);
+  background-color: #222;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+}
+
+.lottie-color-swatch input {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  padding: 0;
+  border: 0;
+  opacity: 0.85;
+  cursor: pointer;
+}
+
 .slot-clip-tab {
   display: flex;
   flex-direction: column;
@@ -7733,6 +8092,10 @@ input[type="checkbox"] {
   transition: opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
+.keyframe-tick.state-change::after {
+  background: var(--cyan-500);
+}
+
 .keyframe-tick:hover::after,
 .keyframe-tick:focus-visible::after,
 .keyframe-tick.dragging::after {
@@ -10176,6 +10539,17 @@ input[type="checkbox"] {
   box-shadow: 0 0 8px var(--red-500);
 }
 
+.keyframe-diamond.state-change {
+  background: var(--cyan-500);
+  box-shadow: 0 0 5px rgba(6, 182, 212, 0.45);
+}
+
+.keyframe-diamond.state-change:hover,
+.keyframe-diamond.state-change.selected {
+  background: #36b8ff;
+  box-shadow: 0 0 8px rgba(54, 184, 255, 0.75);
+}
+
 .keyframe-diamond.dragging {
   background: var(--cyan-500);
   box-shadow: 0 0 10px var(--cyan-500);
@@ -10233,6 +10607,19 @@ input[type="checkbox"] {
 
 .keyframe-diamond.easing-ease-in-out.selected {
   background: linear-gradient(135deg, var(--red-500) 0%, var(--danger-light) 100%);
+}
+
+.keyframe-diamond.state-change,
+.keyframe-diamond.state-change.easing-linear,
+.keyframe-diamond.state-change.easing-ease-in,
+.keyframe-diamond.state-change.easing-ease-out,
+.keyframe-diamond.state-change.easing-ease-in-out {
+  background: var(--cyan-500);
+}
+
+.keyframe-diamond.state-change:hover,
+.keyframe-diamond.state-change.selected {
+  background: #36b8ff;
 }
 
 /* Keyframe context menu */
@@ -10651,6 +11038,11 @@ input[type="checkbox"] {
   stroke-width: 2;
 }
 
+.curve-editor-curve.step {
+  stroke: var(--cyan-500);
+  stroke-linejoin: miter;
+}
+
 .curve-editor-keyframe {
   fill: var(--amber-600);
   stroke: var(--bg-primary);
@@ -10666,6 +11058,14 @@ input[type="checkbox"] {
 .curve-editor-keyframe.selected {
   fill: var(--red-500);
   stroke: var(--gray-0);
+}
+
+.curve-editor-keyframe.state-change {
+  fill: var(--cyan-500);
+}
+
+.curve-editor-keyframe.state-change.selected {
+  fill: #36b8ff;
 }
 
 .curve-editor-handle {

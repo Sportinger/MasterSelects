@@ -8,6 +8,7 @@ import type {
   AnimatableProperty,
   ClipTransform,
 } from '../../types';
+import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 
 /**
@@ -40,6 +41,7 @@ export interface FrameContext {
   getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
+  getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;

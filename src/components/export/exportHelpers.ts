@@ -154,6 +154,7 @@ export class FFmpegFrameRenderer {
       getInterpolatedTransform: state.getInterpolatedTransform,
       getInterpolatedEffects: state.getInterpolatedEffects,
       getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,
+      getInterpolatedVectorAnimationSettings: state.getInterpolatedVectorAnimationSettings,
       getSourceTimeForClip: state.getSourceTimeForClip,
       getInterpolatedSpeed: state.getInterpolatedSpeed,
     };

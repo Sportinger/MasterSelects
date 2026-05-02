@@ -419,6 +419,15 @@ describe('project media persistence', () => {
         totalFrames: 120,
         animationNames: ['intro', 'loop'],
         defaultAnimationName: 'intro',
+        stateMachineNames: ['button-machine'],
+        stateMachineStates: {
+          'button-machine': ['idle', 'hover'],
+        },
+        stateMachineInputs: {
+          'button-machine': [
+            { name: 'OnOffSwitch', type: 'boolean', defaultValue: false },
+          ],
+        },
       },
     }];
     mocks.mediaState.compositions = [{
@@ -458,8 +467,19 @@ describe('project media persistence', () => {
         vectorAnimationSettings: {
           loop: true,
           endBehavior: 'loop',
+          playbackMode: 'bounce',
           fit: 'cover',
+          renderWidth: 1920,
+          renderHeight: 1080,
           animationName: 'loop',
+          stateMachineName: 'button-machine',
+          stateMachineState: 'idle',
+          stateMachineStateCues: [
+            { id: 'cue-1', time: 1.25, stateName: 'hover', immediate: true },
+          ],
+          stateMachineInputValues: {
+            OnOffSwitch: 1,
+          },
           backgroundColor: '#112233',
         },
       }],
@@ -493,6 +513,15 @@ describe('project media persistence', () => {
             sourceType: 'lottie',
             vectorAnimationSettings: expect.objectContaining({
               animationName: 'loop',
+              stateMachineName: 'button-machine',
+              playbackMode: 'bounce',
+              renderWidth: 1920,
+              stateMachineStateCues: [
+                { id: 'cue-1', time: 1.25, stateName: 'hover', immediate: true },
+              ],
+              stateMachineInputValues: {
+                OnOffSwitch: 1,
+              },
               backgroundColor: '#112233',
             }),
           }),

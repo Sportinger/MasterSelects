@@ -390,6 +390,7 @@ export interface KeyframeActions {
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];
   getInterpolatedColorCorrection: (clipId: string, clipLocalTime: number) => RuntimeColorGrade | undefined;
+  getInterpolatedVectorAnimationSettings: (clipId: string, clipLocalTime: number) => VectorAnimationClipSettings;
   getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
   getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;

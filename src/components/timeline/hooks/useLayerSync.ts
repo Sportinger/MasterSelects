@@ -3,6 +3,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, AnimatableProperty, ClipTransform } from '../../../types';
+import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { ClipDragState } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -53,6 +54,7 @@ interface UseLayerSyncProps {
   getClipsAtTime: (time: number) => TimelineClip[];
   getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
+  getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   isVideoTrackVisible: (track: TimelineTrack) => boolean;
@@ -78,6 +80,7 @@ export function useLayerSync({
   getClipsAtTime,
   getInterpolatedTransform,
   getInterpolatedEffects,
+  getInterpolatedVectorAnimationSettings,
   getInterpolatedSpeed,
   getSourceTimeForClip,
   isVideoTrackVisible,
@@ -267,7 +270,11 @@ export function useLayerSync({
           });
         } else if (nestedClip.source?.textCanvas) {
           if (nestedClip.source.type === 'lottie') {
-            lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime + nestedLocalTime);
+            lottieRuntimeManager.renderClipAtTime(
+              nestedClip,
+              nestedClip.startTime + nestedLocalTime,
+              getInterpolatedVectorAnimationSettings(nestedClip.id, nestedLocalTime),
+            );
           }
 
           layers.push({
@@ -299,7 +306,7 @@ export function useLayerSync({
 
       return layers;
     },
-    []
+    [getInterpolatedVectorAnimationSettings]
   );
 
   // Cleanup pending RAF on unmount
@@ -799,13 +806,17 @@ export function useLayerSync({
           layersChanged = true;
         }
       } else if (clip?.source?.textCanvas) {
+        const textClipLocalTime = playheadPosition - clip.startTime;
         if (clip.source.type === 'lottie') {
-          lottieRuntimeManager.renderClipAtTime(clip, playheadPosition);
+          lottieRuntimeManager.renderClipAtTime(
+            clip,
+            playheadPosition,
+            getInterpolatedVectorAnimationSettings(clip.id, textClipLocalTime),
+          );
         }
 
         // Text/Solid/Lottie clip handling (all use canvas)
         const textCanvas = clip.source.textCanvas;
-        const textClipLocalTime = playheadPosition - clip.startTime;
         const transform = getInterpolatedTransform(clip.id, textClipLocalTime);
         const textInterpolatedEffects = getInterpolatedEffects(
           clip.id,
@@ -1048,6 +1059,7 @@ export function useLayerSync({
     getClipsAtTime,
     getInterpolatedTransform,
     getInterpolatedEffects,
+    getInterpolatedVectorAnimationSettings,
     getInterpolatedSpeed,
     getSourceTimeForClip,
     videoTracks,

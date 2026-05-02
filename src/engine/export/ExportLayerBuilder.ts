@@ -134,6 +134,15 @@ function getExportVideoElement(
   return clipStates.get(clip.id)?.preciseVideoElement ?? clip.source?.videoElement ?? null;
 }
 
+function getVectorAnimationSettingsForExport(
+  clip: TimelineClip,
+  clipLocalTime: number,
+  ctx?: FrameContext,
+) {
+  return ctx?.getInterpolatedVectorAnimationSettings?.(clip.id, clipLocalTime)
+    ?? useTimelineStore.getState().getInterpolatedVectorAnimationSettings(clip.id, clipLocalTime);
+}
+
 /**
  * Build layers for rendering at a specific time.
  * Uses FrameContext for O(1) lookups - no getState() calls per frame.
@@ -244,7 +253,11 @@ export function buildLayersAtTime(
     // Handle text, solid, and Lottie clips
     else if ((clip.source?.type === 'text' || clip.source?.type === 'solid' || clip.source?.type === 'lottie') && clip.source.textCanvas) {
       if (clip.source.type === 'lottie') {
-        lottieRuntimeManager.renderClipAtTime(clip, time);
+        lottieRuntimeManager.renderClipAtTime(
+          clip,
+          time,
+          getVectorAnimationSettingsForExport(clip, clipLocalTime, ctx),
+        );
       }
       layers.push({
         ...baseLayerProps,
@@ -605,7 +618,11 @@ function buildNestedLayerForExport(
 
   if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid' || nestedClip.source?.type === 'lottie') && nestedClip.source.textCanvas) {
     if (nestedClip.source.type === 'lottie') {
-      lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime + nestedClipLocalTime);
+      lottieRuntimeManager.renderClipAtTime(
+        nestedClip,
+        nestedClip.startTime + nestedClipLocalTime,
+        getVectorAnimationSettingsForExport(nestedClip, nestedClipLocalTime),
+      );
     }
     return {
       ...baseLayer,

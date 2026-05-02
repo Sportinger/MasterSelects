@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.1';
+export const APP_VERSION = '1.7.2';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,20 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MatAnyone2 is ready',
-  message: 'AI video matting is finished in this build, backed by the updated Native Helper runtime.',
-  link: {
-    label: 'Native Helper v0.3.14',
-    href: 'https://github.com/Sportinger/MasterSelects/releases/tag/native-helper-v0.3.14',
-    suffix: 'release',
-  },
+  title: 'Lottie state keyframes are live',
+  message: 'Lottie clips now support bounce playback, render resolution overrides, and timeline-native state machine keyframes.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Native Helper updated',
-  message: 'Install v0.3.14 for the latest downloads, Firefox projects, local AI bridge, and MatAnyone2 support.',
+  title: 'Vector animation upgraded',
+  message: 'State changes show as blue stepped keyframes, while boolean and numeric state-machine inputs use the normal keyframe lanes.',
   animated: true,
 };
 

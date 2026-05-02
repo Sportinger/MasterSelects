@@ -1,13 +1,35 @@
 // Curve Editor component for keyframe animation curves with bezier handles
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import type { AnimatableProperty, Keyframe, BezierHandle, EasingType } from '../../types';
+import type { AnimatableProperty, Keyframe, BezierHandle, EasingType, TimelineClip } from '../../types';
 import { PRESET_BEZIER } from '../../utils/keyframeInterpolation';
+import {
+  formatVectorAnimationStateLabel,
+  getVectorAnimationStateLabelAtIndex,
+  parseVectorAnimationInputProperty,
+  parseVectorAnimationStateProperty,
+} from '../../types/vectorAnimation';
 import { BEZIER_HANDLE_SIZE } from '../../stores/timeline/constants';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 
 const CURVE_KEYFRAME_SNAP_THRESHOLD_PX = 10;
 const EMPTY_CLIP_KEYFRAMES: Keyframe[] = [];
+
+function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | undefined {
+  for (const clip of clips) {
+    if (clip.id === clipId) {
+      return clip;
+    }
+    if (clip.nestedClips?.length) {
+      const nestedClip = findClipById(clip.nestedClips, clipId);
+      if (nestedClip) {
+        return nestedClip;
+      }
+    }
+  }
+  return undefined;
+}
 
 export interface CurveEditorProps {
   trackId: string;
@@ -27,6 +49,9 @@ export interface CurveEditorProps {
 
 // Get default range for a property type (used as fallback when no keyframes exist)
 function getPropertyDefaults(property: AnimatableProperty): { min: number; max: number; fallbackPad: number } {
+  if (parseVectorAnimationStateProperty(property)) {
+    return { min: 0, max: 1, fallbackPad: 0 };
+  }
   if (property === 'opacity') {
     return { min: 0, max: 1, fallbackPad: 0.05 };
   }
@@ -38,6 +63,9 @@ function getPropertyDefaults(property: AnimatableProperty): { min: number; max: 
   }
   if (property.startsWith('position.')) {
     return { min: -1000, max: 1000, fallbackPad: 10 };
+  }
+  if (parseVectorAnimationInputProperty(property)) {
+    return { min: 0, max: 1, fallbackPad: 0.05 };
   }
   // Effect properties
   return { min: -100, max: 100, fallbackPad: 5 };
@@ -128,6 +156,19 @@ function generateBezierPath(
   return `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
 }
 
+function generateStepPath(
+  prevKf: Keyframe,
+  nextKf: Keyframe,
+  timeToX: (time: number) => number,
+  valueToY: (value: number) => number,
+): string {
+  const x1 = timeToX(prevKf.time);
+  const y1 = valueToY(prevKf.value);
+  const x2 = timeToX(nextKf.time);
+  const y2 = valueToY(nextKf.value);
+  return `M ${x1} ${y1} L ${x2} ${y1} L ${x2} ${y2}`;
+}
+
 export const CurveEditor: React.FC<CurveEditorProps> = ({
   trackId: _trackId,
   clipId,
@@ -158,7 +199,26 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
   const height = useTimelineStore(s => s.curveEditorHeight);
   const setCurveEditorHeight = useTimelineStore(s => s.setCurveEditorHeight);
   const allClipKeyframes = useTimelineStore(s => s.clipKeyframes.get(clipId) ?? EMPTY_CLIP_KEYFRAMES);
+  const timelineClips = useTimelineStore(s => s.clips);
+  const mediaFiles = useMediaStore(s => s.files);
   const padding = useMemo(() => ({ top: 20, right: 10, bottom: 20, left: 10 }), []);
+  const stateProperty = parseVectorAnimationStateProperty(property);
+  const stateMachineName = stateProperty?.stateMachineName;
+  const stateNames = useMemo(() => {
+    if (!stateMachineName) {
+      return [];
+    }
+    const clip = findClipById(timelineClips, clipId);
+    const mediaFileId = clip?.mediaFileId ?? clip?.source?.mediaFileId;
+    if (!mediaFileId) {
+      return [];
+    }
+    return mediaFiles.find((file) => file.id === mediaFileId)
+      ?.vectorAnimation
+      ?.stateMachineStates
+      ?.[stateMachineName] ?? [];
+  }, [clipId, mediaFiles, stateMachineName, timelineClips]);
+  const isDiscreteStateProperty = Boolean(stateMachineName && stateNames.length > 0);
 
   const getClampedSvgPoint = useCallback((clientX: number, clientY: number) => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -180,10 +240,12 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
   );
 
   // Compute value range
-  const valueRange = useMemo(() =>
-    computeAutoRange(sortedKeyframes, property),
-    [sortedKeyframes, property]
-  );
+  const valueRange = useMemo(() => {
+    if (isDiscreteStateProperty) {
+      return { min: 0, max: Math.max(1, stateNames.length - 1) };
+    }
+    return computeAutoRange(sortedKeyframes, property);
+  }, [isDiscreteStateProperty, sortedKeyframes, property, stateNames.length]);
 
   // Convert time to X position (absolute coords — parent handles scrolling via translateX)
   const timeToX = useCallback((time: number) => {
@@ -230,7 +292,19 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
 
   // Generate grid lines with adaptive step size
   const gridLines = useMemo(() => {
-    const lines: { y: number; value: number; major: boolean }[] = [];
+    const lines: { y: number; value: number; major: boolean; label?: string }[] = [];
+    if (isDiscreteStateProperty) {
+      stateNames.forEach((stateName, index) => {
+        lines.push({
+          y: valueToY(index),
+          value: index,
+          major: true,
+          label: formatVectorAnimationStateLabel(stateName),
+        });
+      });
+      return lines;
+    }
+
     const range = valueRange.max - valueRange.min;
     const step = niceStep(range);
 
@@ -243,7 +317,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     }
 
     return lines;
-  }, [valueRange, valueToY]);
+  }, [isDiscreteStateProperty, stateNames, valueRange, valueToY]);
 
   // Handle mouse down on keyframe
   const handleKeyframeMouseDown = useCallback((e: React.MouseEvent, kf: Keyframe) => {
@@ -356,6 +430,9 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       if (shiftKey) {
         newTime = snapTimeToClipKeyframe(newTime, dragState.keyframeId);
       }
+      if (isDiscreteStateProperty) {
+        newValue = Math.max(0, Math.min(stateNames.length - 1, Math.round(newValue)));
+      }
 
       onMoveKeyframe(dragState.keyframeId, newTime, newValue);
     } else {
@@ -382,7 +459,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
         y: handleValue,
       });
     }
-  }, [dragState, getClampedSvgPoint, xToTime, yToValue, clipDuration, onMoveKeyframe, onUpdateBezierHandle, sortedKeyframes, snapTimeToClipKeyframe]);
+  }, [dragState, getClampedSvgPoint, xToTime, yToValue, clipDuration, onMoveKeyframe, onUpdateBezierHandle, sortedKeyframes, snapTimeToClipKeyframe, isDiscreteStateProperty, stateNames.length]);
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {
@@ -468,7 +545,8 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
               fontSize={9}
               fill="var(--text-secondary)"
             >
-              {property === 'opacity' ? `${(line.value * 100).toFixed(0)}%` :
+              {line.label ? line.label :
+               property === 'opacity' ? `${(line.value * 100).toFixed(0)}%` :
                property.startsWith('scale.') ? `${(line.value * 100).toFixed(0)}%` :
                property.startsWith('rotation.') ? `${line.value.toFixed(0)}°` :
                Number.isInteger(line.value) ? line.value.toFixed(0) :
@@ -495,12 +573,14 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       {sortedKeyframes.map((kf, i) => {
         if (i === 0) return null;
         const prevKf = sortedKeyframes[i - 1];
-        const path = generateBezierPath(prevKf, kf, timeToX, valueToY);
+        const path = isDiscreteStateProperty
+          ? generateStepPath(prevKf, kf, timeToX, valueToY)
+          : generateBezierPath(prevKf, kf, timeToX, valueToY);
         return (
           <path
             key={`curve-${prevKf.id}-${kf.id}`}
             d={path}
-            className="curve-editor-curve"
+            className={`curve-editor-curve${isDiscreteStateProperty ? ' step' : ''}`}
           />
         );
       })}
@@ -518,7 +598,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
         let handleInX = 0, handleInY = 0, handleOutX = 0, handleOutY = 0;
         let showHandleIn = false, showHandleOut = false;
 
-        if (isSelected) {
+        if (isSelected && !isDiscreteStateProperty) {
           if (prevKf) {
             const defaultInX = -(kf.time - prevKf.time) / 3;
             const defaultInY = -(kf.value - prevKf.value) / 3;
@@ -587,8 +667,9 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
               cx={x}
               cy={y}
               r={5}
-              className={`curve-editor-keyframe ${isSelected ? 'selected' : ''}`}
+              className={`curve-editor-keyframe ${isSelected ? 'selected' : ''}${isDiscreteStateProperty ? ' state-change' : ''}`}
               onMouseDown={(e) => handleKeyframeMouseDown(e, kf)}
+              aria-label={isDiscreteStateProperty ? getVectorAnimationStateLabelAtIndex(stateNames, kf.value) : undefined}
             />
           </g>
         );

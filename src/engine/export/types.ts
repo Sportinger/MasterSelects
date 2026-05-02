@@ -2,6 +2,7 @@
 
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
 import type { BlendMode, ClipTransform, Effect, RuntimeColorGrade } from '../../types';
+import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
 
 // ============ VIDEO CODECS ============
@@ -131,6 +132,7 @@ export interface FrameContext {
   getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
+  getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
 }

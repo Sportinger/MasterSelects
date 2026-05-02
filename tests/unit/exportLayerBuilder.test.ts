@@ -155,6 +155,12 @@ describe('ExportLayerBuilder', () => {
         blendMode: 'normal',
       }),
       getInterpolatedEffects: () => [],
+      getInterpolatedVectorAnimationSettings: () => ({
+        loop: false,
+        endBehavior: 'hold',
+        playbackMode: 'forward',
+        fit: 'contain',
+      }),
       getSourceTimeForClip: () => 1,
       getInterpolatedSpeed: () => 1,
     };
@@ -773,7 +779,11 @@ describe('ExportLayerBuilder', () => {
 
     const layers = buildLayersAtTime(ctx, new Map(), null, false);
 
-    expect(renderSpy).toHaveBeenCalledWith(clip, 1);
+    expect(renderSpy).toHaveBeenCalledWith(
+      clip,
+      1,
+      expect.objectContaining({ playbackMode: 'forward' }),
+    );
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.type).toBe('text');
     expect(layers[0]?.source?.textCanvas).toBe(canvas);

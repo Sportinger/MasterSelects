@@ -55,12 +55,13 @@ import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
 import type { ClipKeyframeTimeGroup, ContextMenuState } from './types';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
+import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 
 const KEYFRAME_TIME_GROUP_PRECISION = 1000;
 const RAM_PREVIEW_FEATURE_ENABLED = false;
 
 function getClipKeyframeTimeGroups(
-  keyframes: Array<Pick<Keyframe, 'id' | 'time'>>
+  keyframes: Array<Pick<Keyframe, 'id' | 'time' | 'property'>>
 ): ClipKeyframeTimeGroup[] {
   const groups = new Map<number, ClipKeyframeTimeGroup>();
 
@@ -69,8 +70,15 @@ function getClipKeyframeTimeGroups(
     const group = groups.get(bucket);
     if (group) {
       group.keyframeIds.push(keyframe.id);
+      group.properties = [...(group.properties ?? []), keyframe.property];
+      group.hasStateChange = group.hasStateChange || Boolean(parseVectorAnimationStateProperty(keyframe.property));
     } else {
-      groups.set(bucket, { time: keyframe.time, keyframeIds: [keyframe.id] });
+      groups.set(bucket, {
+        time: keyframe.time,
+        keyframeIds: [keyframe.id],
+        properties: [keyframe.property],
+        hasStateChange: Boolean(parseVectorAnimationStateProperty(keyframe.property)),
+      });
     }
   });
 
@@ -142,6 +150,7 @@ export function Timeline() {
   // Transform getters
   const {
     getInterpolatedTransform, getInterpolatedEffects, getInterpolatedSpeed,
+    getInterpolatedVectorAnimationSettings,
     getSourceTimeForClip, getSnappedPosition, getPositionWithResistance,
   } = store;
 
@@ -636,6 +645,7 @@ export function Timeline() {
     getClipsAtTime,
     getInterpolatedTransform,
     getInterpolatedEffects,
+    getInterpolatedVectorAnimationSettings,
     getInterpolatedSpeed,
     getSourceTimeForClip,
     isVideoTrackVisible,

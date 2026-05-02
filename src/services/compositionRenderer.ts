@@ -661,7 +661,15 @@ class CompositionRendererService {
             ? timelineClip
             : source.lottieClip;
         if (runtimeClip) {
-          lottieRuntimeManager.renderClipAtTime(runtimeClip, time);
+          const runtimeClipLocalTime = Math.max(0, time - runtimeClip.startTime);
+          lottieRuntimeManager.renderClipAtTime(
+            runtimeClip,
+            time,
+            useTimelineStore.getState().getInterpolatedVectorAnimationSettings(
+              runtimeClip.id,
+              runtimeClipLocalTime,
+            ),
+          );
           layerSource = {
             type: 'text',
             textCanvas: runtimeClip.source?.textCanvas ?? source.textCanvas,
@@ -824,7 +832,14 @@ class CompositionRendererService {
         } as Layer);
       } else if (nestedClip.source?.textCanvas) {
         if (nestedClip.source.type === 'lottie') {
-          lottieRuntimeManager.renderClipAtTime(nestedClip, nestedTime);
+          lottieRuntimeManager.renderClipAtTime(
+            nestedClip,
+            nestedTime,
+            useTimelineStore.getState().getInterpolatedVectorAnimationSettings(
+              nestedClip.id,
+              nestedLocalTime,
+            ),
+          );
         }
         nestedLayers.push({
           ...baseLayer,

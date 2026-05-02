@@ -2,9 +2,17 @@ import { DotLottie } from '@lottiefiles/dotlottie-web';
 
 import type { TimelineClip } from '../../types';
 import {
+  coerceVectorAnimationInputValue,
+  getVectorAnimationInputDefaultValue,
+  isVectorAnimationBounceMode,
+  isVectorAnimationReverseStartMode,
   mergeVectorAnimationSettings,
+  normalizeVectorAnimationRenderDimension,
+  normalizeVectorAnimationStateName,
+  resolveVectorAnimationStateName,
   shouldLoopVectorAnimation,
   type VectorAnimationClipSettings,
+  type VectorAnimationStateMachineInput,
 } from '../../types/vectorAnimation';
 import { Logger } from '../logger';
 import { prepareLottieAsset } from './lottieMetadata';
@@ -24,6 +32,9 @@ interface LottieRuntimeEntry {
   isReady: boolean;
   player: DotLottie;
   settingsKey: string;
+  activeStateMachineName?: string;
+  lastInputValuesKey?: string;
+  lastStateOverride?: string;
 }
 
 function createCanvas(width?: number, height?: number): HTMLCanvasElement {
@@ -67,7 +78,24 @@ function getSettingsKey(settings: VectorAnimationClipSettings): string {
     fit: settings.fit,
     loop: settings.loop,
     endBehavior: settings.endBehavior,
+    playbackMode: settings.playbackMode,
+    renderWidth: settings.renderWidth ?? null,
+    renderHeight: settings.renderHeight ?? null,
+    stateMachineName: settings.stateMachineName ?? null,
   });
+}
+
+function getRenderSize(
+  entry: LottieRuntimeEntry,
+  settings: VectorAnimationClipSettings,
+): { width: number; height: number } {
+  const width = normalizeVectorAnimationRenderDimension(settings.renderWidth)
+    ?? entry.asset.metadata.width
+    ?? DEFAULT_CANVAS_SIZE;
+  const height = normalizeVectorAnimationRenderDimension(settings.renderHeight)
+    ?? entry.asset.metadata.height
+    ?? DEFAULT_CANVAS_SIZE;
+  return { width, height };
 }
 
 function clearCanvas(canvas: HTMLCanvasElement): void {
@@ -113,18 +141,27 @@ function resolveAnimationTime(
   );
   const sourceWindowDuration = Math.max(sourceOutPoint - sourceInPoint, FRAME_EPSILON);
   const shouldLoop = shouldLoopVectorAnimation(settings);
+  const isBounceMode = isVectorAnimationBounceMode(settings.playbackMode);
+  const cycleDuration = isBounceMode
+    ? sourceWindowDuration * 2
+    : sourceWindowDuration;
 
-  if (!shouldLoop && settings.endBehavior === 'clear' && clipLocalTime >= sourceWindowDuration) {
+  if (!shouldLoop && settings.endBehavior === 'clear' && clipLocalTime >= cycleDuration) {
     return null;
   }
 
   const wrappedLocalTime = shouldLoop
-    ? normalizeModulo(clipLocalTime, sourceWindowDuration)
-    : Math.max(0, Math.min(clipLocalTime, Math.max(0, sourceWindowDuration - FRAME_EPSILON)));
+    ? normalizeModulo(clipLocalTime, cycleDuration)
+    : Math.max(0, Math.min(clipLocalTime, Math.max(0, cycleDuration - FRAME_EPSILON)));
+  const sourceWindowLocalTime = isBounceMode && wrappedLocalTime > sourceWindowDuration
+    ? cycleDuration - wrappedLocalTime
+    : Math.min(wrappedLocalTime, sourceWindowDuration - FRAME_EPSILON);
+  const startsReverse = isVectorAnimationReverseStartMode(settings.playbackMode);
+  const reversePlayback = Boolean(clip.reversed) !== startsReverse;
 
-  const sourceTime = clip.reversed
-    ? sourceOutPoint - wrappedLocalTime
-    : sourceInPoint + wrappedLocalTime;
+  const sourceTime = reversePlayback
+    ? sourceOutPoint - sourceWindowLocalTime
+    : sourceInPoint + sourceWindowLocalTime;
 
   const maxTime = Math.max(0, animationDuration - FRAME_EPSILON);
   return Math.max(0, Math.min(sourceTime, maxTime));
@@ -137,6 +174,10 @@ function getFrameForTime(duration: number, totalFrames: number, time: number): n
 
   const frame = (time / duration) * totalFrames;
   return Math.max(0, Math.min(frame, totalFrames - FRAME_EPSILON));
+}
+
+function getClipLocalTime(clip: TimelineClip, timelineTime: number): number {
+  return Math.max(0, timelineTime - clip.startTime);
 }
 
 export class LottieRuntimeManager {
@@ -224,8 +265,12 @@ export class LottieRuntimeManager {
     };
   }
 
-  private applySettings(entry: LottieRuntimeEntry, clip: TimelineClip): void {
-    const settings = mergeVectorAnimationSettings(clip.source?.vectorAnimationSettings);
+  private applySettings(
+    entry: LottieRuntimeEntry,
+    clip: TimelineClip,
+    settingsOverride?: VectorAnimationClipSettings,
+  ): void {
+    const settings = mergeVectorAnimationSettings(settingsOverride ?? clip.source?.vectorAnimationSettings);
     const settingsKey = getSettingsKey(settings);
     if (settingsKey === entry.settingsKey) {
       return;
@@ -247,6 +292,12 @@ export class LottieRuntimeManager {
       }
     }
 
+    const renderSize = getRenderSize(entry, settings);
+    if (entry.canvas.width !== renderSize.width || entry.canvas.height !== renderSize.height) {
+      entry.canvas.width = renderSize.width;
+      entry.canvas.height = renderSize.height;
+    }
+
     entry.player.setLoop(shouldLoopVectorAnimation(settings));
     entry.player.setBackgroundColor(settings.backgroundColor ?? 'transparent');
     entry.player.setLayout({
@@ -254,10 +305,209 @@ export class LottieRuntimeManager {
       fit: settings.fit,
     });
     entry.player.resize();
+    this.applyStateMachineSelection(entry, clip.id, settings);
     entry.settingsKey = settingsKey;
   }
 
-  renderClipAtTime(clip: TimelineClip, timelineTime: number): HTMLCanvasElement | null {
+  private applyStateMachineSelection(
+    entry: LottieRuntimeEntry,
+    clipId: string,
+    settings: VectorAnimationClipSettings,
+  ): void {
+    const stateMachineName = normalizeVectorAnimationStateName(settings.stateMachineName);
+    if (stateMachineName === entry.activeStateMachineName) {
+      return;
+    }
+
+    if (entry.activeStateMachineName) {
+      try {
+        entry.player.stateMachineStop();
+      } catch (error) {
+        log.warn('Failed to stop Lottie state machine', {
+          clipId,
+          stateMachineName: entry.activeStateMachineName,
+          error,
+        });
+      }
+    }
+
+    entry.activeStateMachineName = undefined;
+    entry.lastInputValuesKey = undefined;
+    entry.lastStateOverride = undefined;
+
+    if (!stateMachineName) {
+      return;
+    }
+
+    try {
+      entry.player.stateMachineSetConfig({ openUrlPolicy: { whitelist: [] } });
+      const loaded = entry.player.stateMachineLoad(stateMachineName);
+      if (!loaded) {
+        log.warn('Failed to load Lottie state machine', { clipId, stateMachineName });
+        return;
+      }
+
+      const started = entry.player.stateMachineStart();
+      if (!started) {
+        log.warn('Failed to start Lottie state machine', { clipId, stateMachineName });
+        return;
+      }
+
+      entry.activeStateMachineName = stateMachineName;
+    } catch (error) {
+      log.warn('Failed to configure Lottie state machine', { clipId, stateMachineName, error });
+    }
+  }
+
+  private resetStateMachine(entry: LottieRuntimeEntry, clipId: string): void {
+    const stateMachineName = entry.activeStateMachineName;
+    if (!stateMachineName) {
+      return;
+    }
+
+    try {
+      entry.player.stateMachineStop();
+      const loaded = entry.player.stateMachineLoad(stateMachineName);
+      const started = loaded ? entry.player.stateMachineStart() : false;
+      if (!loaded || !started) {
+        log.warn('Failed to reset Lottie state machine', { clipId, stateMachineName });
+        entry.activeStateMachineName = undefined;
+      }
+    } catch (error) {
+      log.warn('Failed to reset Lottie state machine', { clipId, stateMachineName, error });
+      entry.activeStateMachineName = undefined;
+    } finally {
+      entry.lastInputValuesKey = undefined;
+      entry.lastStateOverride = undefined;
+    }
+  }
+
+  private getActiveStateMachineInputs(
+    entry: LottieRuntimeEntry,
+  ): VectorAnimationStateMachineInput[] {
+    const stateMachineName = entry.activeStateMachineName;
+    if (!stateMachineName) {
+      return [];
+    }
+    return entry.asset.metadata.stateMachineInputs?.[stateMachineName] ?? [];
+  }
+
+  private applyStateMachineInputs(
+    entry: LottieRuntimeEntry,
+    clipId: string,
+    settings: VectorAnimationClipSettings,
+  ): void {
+    if (!entry.activeStateMachineName) {
+      return;
+    }
+
+    const inputs = this.getActiveStateMachineInputs(entry);
+    if (inputs.length === 0) {
+      return;
+    }
+
+    const values = inputs.map((input) => ({
+      input,
+      value: coerceVectorAnimationInputValue(
+        input,
+        settings.stateMachineInputValues?.[input.name] ?? getVectorAnimationInputDefaultValue(input),
+      ),
+    }));
+    const inputValuesKey = JSON.stringify(values.map(({ input, value }) => [
+      entry.activeStateMachineName,
+      input.name,
+      input.type,
+      value,
+    ]));
+
+    if (entry.lastInputValuesKey === inputValuesKey) {
+      return;
+    }
+
+    for (const { input, value } of values) {
+      try {
+        let applied = true;
+        if (input.type === 'boolean') {
+          applied = entry.player.stateMachineSetBooleanInput(input.name, Boolean(value));
+        } else if (input.type === 'number') {
+          const numericValue = typeof value === 'number' ? value : Number(value);
+          applied = Number.isFinite(numericValue)
+            ? entry.player.stateMachineSetNumericInput(input.name, numericValue)
+            : false;
+        } else if (input.type === 'string') {
+          applied = entry.player.stateMachineSetStringInput(input.name, String(value));
+        }
+
+        if (!applied) {
+          log.debug('Lottie state machine input was not applied', {
+            clipId,
+            stateMachineName: entry.activeStateMachineName,
+            inputName: input.name,
+            inputType: input.type,
+          });
+        }
+      } catch (error) {
+        log.warn('Failed to apply Lottie state machine input', {
+          clipId,
+          stateMachineName: entry.activeStateMachineName,
+          inputName: input.name,
+          error,
+        });
+      }
+    }
+
+    entry.lastInputValuesKey = inputValuesKey;
+  }
+
+  private applyStateOverride(
+    entry: LottieRuntimeEntry,
+    clip: TimelineClip,
+    settings: VectorAnimationClipSettings,
+    timelineTime: number,
+  ): void {
+    if (!entry.activeStateMachineName) {
+      return;
+    }
+
+    const stateName = resolveVectorAnimationStateName(settings, getClipLocalTime(clip, timelineTime));
+    if (!stateName) {
+      if (entry.lastStateOverride) {
+        this.resetStateMachine(entry, clip.id);
+      }
+      return;
+    }
+
+    const overrideKey = `${entry.activeStateMachineName}:${stateName}`;
+    if (entry.lastStateOverride === overrideKey) {
+      return;
+    }
+
+    try {
+      const applied = entry.player.stateMachineOverrideState(stateName, true);
+      if (!applied) {
+        log.warn('Failed to override Lottie state machine state', {
+          clipId: clip.id,
+          stateMachineName: entry.activeStateMachineName,
+          stateName,
+        });
+      }
+      entry.lastStateOverride = overrideKey;
+    } catch (error) {
+      log.warn('Failed to override Lottie state machine state', {
+        clipId: clip.id,
+        stateMachineName: entry.activeStateMachineName,
+        stateName,
+        error,
+      });
+      entry.lastStateOverride = overrideKey;
+    }
+  }
+
+  renderClipAtTime(
+    clip: TimelineClip,
+    timelineTime: number,
+    settingsOverride?: VectorAnimationClipSettings,
+  ): HTMLCanvasElement | null {
     if (clip.source?.type !== 'lottie') {
       return clip.source?.textCanvas ?? null;
     }
@@ -272,8 +522,10 @@ export class LottieRuntimeManager {
       return clip.source?.textCanvas ?? null;
     }
 
-    this.applySettings(entry, clip);
-    const settings = mergeVectorAnimationSettings(clip.source?.vectorAnimationSettings);
+    this.applySettings(entry, clip, settingsOverride);
+    const settings = mergeVectorAnimationSettings(settingsOverride ?? clip.source?.vectorAnimationSettings);
+    this.applyStateMachineInputs(entry, clip.id, settings);
+    this.applyStateOverride(entry, clip, settings, timelineTime);
     const animationDuration =
       entry.asset.metadata.duration ??
       clip.source?.naturalDuration ??

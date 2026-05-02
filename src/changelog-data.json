@@ -2,6 +2,20 @@
   {
     "date": "2026-05-02",
     "type": "new",
+    "title": "Timeline-Native Lottie State Machines",
+    "description": ".lottie state changes now live in the normal keyframe system as blue stepped keyframes, with state labels shown in the curve editor instead of numeric ramps.",
+    "section": "Vector Animation / Timeline"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "improve",
+    "title": "Professional Lottie Clip Controls",
+    "description": "The Lottie tab now exposes bounce and reverse-bounce playback, linked render-resolution overrides, compact controls, state-machine input keyframes, and deterministic preview/export playback.",
+    "section": "Vector Animation"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "new",
     "title": "Professional Color Correction Workspace",
     "description": "The Color tab now has a shared list and node graph workflow with grade versions, keyframable primary controls, MIDI-ready labels, rewireable yellow node connections, node canvas panning, a collapsible workspace inspector, and realtime preview/export rendering including single 3D video layers.",
     "section": "Color"

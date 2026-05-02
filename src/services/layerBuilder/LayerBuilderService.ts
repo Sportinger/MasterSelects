@@ -339,7 +339,11 @@ export class LayerBuilderService {
   private syncActiveLottieClips(ctx: FrameContext): void {
     for (const clip of ctx.clipsAtTime) {
       if (clip.source?.type === 'lottie') {
-        lottieRuntimeManager.renderClipAtTime(clip, ctx.playheadPosition);
+        lottieRuntimeManager.renderClipAtTime(
+          clip,
+          ctx.playheadPosition,
+          ctx.getInterpolatedVectorAnimationSettings(clip.id, ctx.playheadPosition - clip.startTime),
+        );
       }
     }
 
@@ -513,7 +517,11 @@ export class LayerBuilderService {
     }
     // Lottie/vector canvas-backed clip
     else if (clip.source?.type === 'lottie') {
-      lottieRuntimeManager.renderClipAtTime(clip, ctx.playheadPosition);
+      lottieRuntimeManager.renderClipAtTime(
+        clip,
+        ctx.playheadPosition,
+        ctx.getInterpolatedVectorAnimationSettings(clip.id, ctx.playheadPosition - clip.startTime),
+      );
       if (clip.source?.textCanvas) {
         layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
       }
@@ -1442,7 +1450,11 @@ export class LayerBuilderService {
         source: { type: 'image', imageElement: nestedClip.source.imageElement },
       } as Layer;
     } else if (nestedClip.source?.type === 'lottie') {
-      lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime + nestedClipLocalTime);
+      lottieRuntimeManager.renderClipAtTime(
+        nestedClip,
+        nestedClip.startTime + nestedClipLocalTime,
+        ctx.getInterpolatedVectorAnimationSettings(nestedClip.id, nestedClipLocalTime),
+      );
       if (nestedClip.source?.textCanvas) {
         return {
           ...baseLayer,

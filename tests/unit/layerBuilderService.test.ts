@@ -262,7 +262,11 @@ describe('LayerBuilderService paused visual provider selection', () => {
 
     const layers = service.buildLayersFromStore();
 
-    expect(renderSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'clip-lottie-1' }), 1);
+    expect(renderSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'clip-lottie-1' }),
+      1,
+      expect.objectContaining({ playbackMode: 'forward' }),
+    );
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.type).toBe('text');
     expect(layers[0]?.source?.textCanvas).toBe(canvas);

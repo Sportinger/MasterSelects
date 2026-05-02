@@ -35,8 +35,13 @@ Current controls:
 
 - Loop toggle
 - End behavior: `hold`, `clear`, or `loop`
+- Playback mode: `forward`, `reverse`, `bounce`, or `reverse-bounce`
 - Fit: `contain`, `cover`, or `fill`
+- Render resolution override with fallback to the imported animation size
 - Animation picker when a `.lottie` package exposes multiple animations
+- State Machine picker when a `.lottie` package exposes state machines
+- State override plus stepped state keyframes for discrete timeline-driven state changes
+- Boolean and numeric state-machine inputs as normal stopwatch keyframe properties
 - Background color override
 
 The tab also shows the clip name plus imported width, height, and frame rate metadata when available.
@@ -48,7 +53,11 @@ The tab also shows the clip name plus imported width, height, and frame rate met
 Lottie playback is driven by `src/services/vectorAnimation/LottieRuntimeManager.ts`.
 
 - Each clip gets a dedicated runtime canvas.
+- The runtime canvas can use the imported animation size or the clip-level render resolution override.
 - Timeline time is converted into a deterministic target frame rather than relying on autoplay.
+- Bounce modes are resolved in the timeline-time mapping, so preview and export render the same ping-pong frames.
+- If a state machine is selected, `lottieState.{stateMachine}` keyframes resolve the active state at the current timeline time before the frame is rendered.
+- If state-machine inputs are keyframed, the interpolated input values are applied before the frame is rendered.
 - The runtime canvas is marked as dynamic, so `TextureManager` re-uploads it every frame instead of caching only the first frame.
 - The same canvas-backed source flows through preview, nested comps, slot/background playback, thumbnails, and export.
 
@@ -62,6 +71,7 @@ Saved data includes:
 
 - media-level vector metadata
 - clip-level `vectorAnimationSettings`
+- Lottie playback mode, render resolution, state machine selection, static state override, state keyframes, and state-machine input values
 - serialized timeline clip type `lottie`
 - clipboard payloads and nested-composition clip data
 
@@ -86,5 +96,8 @@ This keeps Lottie clips deterministic in fast preview, precise export, and image
 ## Current Limits
 
 - Only Lottie is implemented today. Rive is not.
+- State machine support currently targets `.lottie` packages through `@lottiefiles/dotlottie-web`; Rive state machines are still not wired.
+- Boolean and numeric state-machine inputs are exposed as keyframe controls. String inputs are static for now, and trigger/event inputs are not deterministic timeline controls yet.
+- State selection uses stepped `lottieState.{stateMachine}` keyframes rather than bezier curves because named states are discrete strings.
 - Export output is rasterized; there is no vector-native export target.
 - If no `Raw/` copy or file handle is available after reload, the clip still needs the normal relink flow.

@@ -228,6 +228,8 @@ export interface PickWhipDragState {
 export interface ClipKeyframeTimeGroup {
   time: number;
   keyframeIds: string[];
+  properties?: AnimatableProperty[];
+  hasStateChange?: boolean;
 }
 
 // Props for TimelineClip component
