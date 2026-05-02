@@ -6,7 +6,7 @@ import type { CompositorPipeline } from '../../src/engine/pipeline/CompositorPip
 import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
 import type { TextureManager } from '../../src/engine/texture/TextureManager';
 import type { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
-import type { TimelineClip, TimelineTrack } from '../../src/types';
+import type { Layer, TimelineClip, TimelineTrack } from '../../src/types';
 import {
   getSharedSceneDefaultCameraDistance,
   resolveRenderableSharedSceneCamera,
@@ -65,6 +65,34 @@ function createRenderer() {
     } as unknown as MaskTextureManager,
     null,
   ) as unknown as NestedCompRendererTestAccess;
+}
+
+function createRuntimeColorGrade(): NonNullable<Layer['colorCorrection']> {
+  return {
+    enabled: true,
+    graphHash: 'nested-grade-1',
+    nodeIds: ['node_primary'],
+    primary: {
+      exposure: 0.2,
+      contrast: 1.15,
+      pivot: 0.5,
+      saturation: 0.85,
+      vibrance: 0,
+      temperature: 0,
+      tint: 0,
+      blackPoint: 0,
+      whitePoint: 1,
+      lift: 0,
+      gamma: 1,
+      gain: 1,
+      offset: 0,
+      shadows: 0,
+      highlights: 0,
+      hue: 0,
+    },
+    primaryNodes: [],
+    diagnostics: [],
+  };
 }
 
 describe('NestedCompRenderer shared-scene integration', () => {
@@ -188,6 +216,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
         },
       },
     }];
+    const colorCorrection = createRuntimeColorGrade();
     const layerData: LayerRenderData[] = [{
       layer: {
         id: 'nested-splat-layer',
@@ -197,6 +226,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
         opacity: 0.8,
         blendMode: 'screen',
         effects: [{ id: 'fx-1' } as unknown as LayerRenderData['layer']['effects'][number]],
+        colorCorrection,
         position: { x: 0.25, y: -0.5, z: 2 },
         scale: { x: 1.5, y: 1.25, z: 0.75 },
         rotation: { x: 0, y: 0, z: 0 },
@@ -278,6 +308,7 @@ describe('NestedCompRenderer shared-scene integration', () => {
       opacity: 0.8,
       blendMode: 'screen',
     });
+    expect(layerData[0]?.layer.colorCorrection).toBe(colorCorrection);
   });
 
   it('uses a renderable default camera for nested 3D video planes without a scene camera', () => {

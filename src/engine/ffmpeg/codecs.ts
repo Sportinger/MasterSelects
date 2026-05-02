@@ -40,6 +40,16 @@ export const FFMPEG_CODECS: CodecInfo[] = [
     supports10bit: false,
     defaultPixelFormat: 'yuv422p',
   },
+  {
+    id: 'gif',
+    name: 'Animated GIF',
+    description: 'Palette-optimized animated GIF for short looping web previews',
+    category: 'delivery',
+    containers: ['gif'],
+    supportsAlpha: true,
+    supports10bit: false,
+    defaultPixelFormat: 'pal8',
+  },
 
   // === Lossless ===
   {
@@ -98,6 +108,7 @@ export const CONTAINER_FORMATS = [
   { id: 'mkv', name: 'Matroska (.mkv)', description: 'Open format - FFV1, MJPEG, UTVideo' },
   { id: 'avi', name: 'AVI (.avi)', description: 'Legacy - MJPEG, UTVideo, FFV1' },
   { id: 'mxf', name: 'MXF (.mxf)', description: 'Broadcast - DNxHR' },
+  { id: 'gif', name: 'Animated GIF (.gif)', description: 'Palette-based looping animation, no audio' },
 ] as const;
 
 // Platform and workflow presets
@@ -192,6 +203,12 @@ export const PLATFORM_PRESETS: Record<string, PlatformPreset> = {
     quality: 5,
     audioCodec: 'aac',
     audioBitrate: 128000,
+  },
+  gif_preview: {
+    name: 'GIF Preview',
+    codec: 'gif',
+    container: 'gif',
+    audioCodec: 'none',
   },
 };
 

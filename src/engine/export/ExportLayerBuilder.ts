@@ -1,7 +1,8 @@
 // Layer building for export rendering
 
 import { Logger } from '../../services/logger';
-import type { Layer, NestedCompositionData, BlendMode, ClipTransform, Effect } from '../../types';
+import type { Layer, NestedCompositionData, BlendMode, ClipTransform, Effect, RuntimeColorGrade } from '../../types';
+import { compileRuntimeColorGrade } from '../../types';
 
 const log = Logger.create('ExportLayerBuilder');
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
@@ -290,7 +291,7 @@ function buildBaseLayerProps(
   trackIndex: number,
   ctx: FrameContext,
 ): BaseLayerProps {
-  const { getInterpolatedTransform, getInterpolatedEffects } = ctx;
+  const { getInterpolatedTransform, getInterpolatedEffects, getInterpolatedColorCorrection } = ctx;
 
   // Get transform safely with defaults
   let transform;
@@ -315,6 +316,15 @@ function buildBaseLayerProps(
     log.warn(`Effects interpolation failed for clip ${clip.id}`, e);
   }
 
+  let colorCorrection: RuntimeColorGrade | undefined;
+  try {
+    colorCorrection = typeof getInterpolatedColorCorrection === 'function'
+      ? getInterpolatedColorCorrection(clip.id, clipLocalTime)
+      : undefined;
+  } catch (e) {
+    log.warn(`Color interpolation failed for clip ${clip.id}`, e);
+  }
+
   const renderScale = getEffectiveScale(transform.scale);
 
   return {
@@ -325,6 +335,7 @@ function buildBaseLayerProps(
     opacity: transform.opacity ?? 1,
     blendMode: (transform.blendMode || 'normal') as BlendMode,
     effects,
+    colorCorrection,
     position: {
       x: transform.position?.x ?? 0,
       y: transform.position?.y ?? 0,
@@ -683,6 +694,7 @@ function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: num
     opacity: transform.opacity ?? 1,
     blendMode: (transform.blendMode || 'normal') as BlendMode,
     effects,
+    colorCorrection: compileRuntimeColorGrade(nestedClip.colorCorrection),
     position: {
       x: transform.position?.x || 0,
       y: transform.position?.y || 0,

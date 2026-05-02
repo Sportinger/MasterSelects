@@ -12,7 +12,7 @@ import {
 import { preloadGaussianSplatsForExport, preload3DAssetsForExport } from '../../engine/export/preloadGaussianSplats';
 import { seekAllClipsToTime, waitForAllVideosReady } from '../../engine/export/VideoSeeker';
 import { getFrameTolerance } from '../../engine/export/types';
-import type { ExportClipState, ExportSettings, FrameContext } from '../../engine/export/types';
+import type { ExportClipState, ExportMode, ExportSettings, FrameContext } from '../../engine/export/types';
 import type { ParallelDecodeManager } from '../../engine/ParallelDecodeManager';
 
 const log = Logger.create('ExportHelpers');
@@ -23,6 +23,7 @@ interface FFmpegFrameRendererOptions {
   fps: number;
   startTime: number;
   endTime: number;
+  exportMode?: ExportMode;
 }
 
 const PRECISE_FFMPEG_EXPORT_DEFAULTS: Pick<ExportSettings, 'codec' | 'container' | 'bitrate'> = {
@@ -60,7 +61,7 @@ export class FFmpegFrameRenderer {
         startTime: this.options.startTime,
         endTime: this.options.endTime,
       },
-      'precise'
+      this.options.exportMode ?? 'precise'
     );
 
     this.clipStates = preparation.clipStates;
@@ -152,6 +153,7 @@ export class FFmpegFrameRenderer {
       clipsByTrack: new Map(clipsAtTime.map(clip => [clip.trackId, clip])),
       getInterpolatedTransform: state.getInterpolatedTransform,
       getInterpolatedEffects: state.getInterpolatedEffects,
+      getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,
       getSourceTimeForClip: state.getSourceTimeForClip,
       getInterpolatedSpeed: state.getInterpolatedSpeed,
     };

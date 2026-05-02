@@ -19,6 +19,7 @@ export interface SerializedClipState {
   mediaFileId?: string;
   transform: TimelineClip['transform'];
   effects: TimelineClip['effects'];
+  colorCorrection?: TimelineClip['colorCorrection'];
   speed?: number;
   preservesPitch?: boolean;
   reversed?: boolean;

@@ -7,10 +7,12 @@ import type {
   FFmpegVideoCodec,
   ProResProfile,
 } from '../engine/ffmpeg';
+import type { GifDither, GifLoopMode, GifPaletteMode } from '../engine/gif/gifOptions';
 
 export type ExportEncoderType = 'webcodecs' | 'htmlvideo' | 'ffmpeg';
-export type ExportVisualMode = 'video' | 'image';
+export type ExportVisualMode = 'video' | 'image' | 'gif';
 export type ExportImageFormat = 'png' | 'jpg' | 'webp' | 'bmp';
+export type ExportImageMode = 'frame' | 'sequence';
 export type ExportSpecialContainer = 'none' | 'xml';
 
 export interface ExportSettings {
@@ -37,6 +39,12 @@ export interface ExportSettings {
   ffmpegQuality: number;
   ffmpegBitrate: number;
   ffmpegRateControl: 'crf' | 'cbr' | 'vbr';
+  gifColors: number;
+  gifDither: GifDither;
+  gifLoop: GifLoopMode;
+  gifPaletteMode: GifPaletteMode;
+  gifOptimize: boolean;
+  gifAlphaThreshold: number;
   stackedAlpha: boolean;
   includeAudio: boolean;
   audioSampleRate: 44100 | 48000;
@@ -45,6 +53,7 @@ export interface ExportSettings {
   videoEnabled: boolean;
   visualMode: ExportVisualMode;
   imageFormat: ExportImageFormat;
+  imageExportMode: ExportImageMode;
   imageQuality: number;
   specialContainer: ExportSpecialContainer;
 }
@@ -83,13 +92,17 @@ interface ExportStoreState extends ExportStoreData {
 const ENCODERS: ExportEncoderType[] = ['webcodecs', 'htmlvideo', 'ffmpeg'];
 const VIDEO_CODECS: VideoCodec[] = ['h264', 'h265', 'vp9', 'av1'];
 const WEB_CONTAINERS: ContainerFormat[] = ['mp4', 'webm'];
-const FFMPEG_CONTAINERS: FFmpegContainer[] = ['mov', 'mkv', 'avi', 'mxf'];
-const FFMPEG_CODECS: FFmpegVideoCodec[] = ['prores', 'dnxhd', 'ffv1', 'utvideo', 'mjpeg'];
+const FFMPEG_CONTAINERS: FFmpegContainer[] = ['mov', 'mkv', 'avi', 'mxf', 'gif'];
+const FFMPEG_CODECS: FFmpegVideoCodec[] = ['prores', 'dnxhd', 'ffv1', 'utvideo', 'mjpeg', 'gif'];
 const PRORES_PROFILES: ProResProfile[] = ['proxy', 'lt', 'standard', 'hq', '4444', '4444xq'];
 const DNXHR_PROFILES: DnxhrProfile[] = ['dnxhr_lb', 'dnxhr_sq', 'dnxhr_hq', 'dnxhr_hqx', 'dnxhr_444'];
 const IMAGE_FORMATS: ExportImageFormat[] = ['png', 'jpg', 'webp', 'bmp'];
-const VISUAL_MODES: ExportVisualMode[] = ['video', 'image'];
+const IMAGE_EXPORT_MODES: ExportImageMode[] = ['frame', 'sequence'];
+const VISUAL_MODES: ExportVisualMode[] = ['video', 'image', 'gif'];
 const SPECIAL_CONTAINERS: ExportSpecialContainer[] = ['none', 'xml'];
+const GIF_DITHERS: GifDither[] = ['sierra2_4a', 'floyd_steinberg', 'bayer', 'none'];
+const GIF_LOOPS: GifLoopMode[] = ['forever', 'once'];
+const GIF_PALETTE_MODES: GifPaletteMode[] = ['global', 'per-frame'];
 
 function createPresetId(): string {
   return `export-preset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -120,6 +133,12 @@ export function createDefaultExportSettings(): ExportSettings {
     ffmpegQuality: 18,
     ffmpegBitrate: 20_000_000,
     ffmpegRateControl: 'crf',
+    gifColors: 256,
+    gifDither: 'sierra2_4a',
+    gifLoop: 'forever',
+    gifPaletteMode: 'global',
+    gifOptimize: true,
+    gifAlphaThreshold: 128,
     stackedAlpha: false,
     includeAudio: true,
     audioSampleRate: 48000,
@@ -128,6 +147,7 @@ export function createDefaultExportSettings(): ExportSettings {
     videoEnabled: true,
     visualMode: 'video',
     imageFormat: 'png',
+    imageExportMode: 'frame',
     imageQuality: 0.92,
     specialContainer: 'none',
   };
@@ -177,6 +197,11 @@ function sanitizeSettings(input?: Partial<ExportSettings> | null): ExportSetting
     return defaults;
   }
 
+  const ffmpegContainer = pickEnumValue(input.ffmpegContainer, FFMPEG_CONTAINERS, defaults.ffmpegContainer);
+  const ffmpegCodec = pickEnumValue(input.ffmpegCodec, FFMPEG_CODECS, defaults.ffmpegCodec);
+  const visualMode = pickEnumValue(input.visualMode, VISUAL_MODES, defaults.visualMode);
+  const isGifOutput = visualMode === 'gif';
+
   return {
     encoder: pickEnumValue(input.encoder, ENCODERS, defaults.encoder),
     width: Math.round(pickNumber(input.width, defaults.width, { min: 1, max: 7680 })),
@@ -193,24 +218,31 @@ function sanitizeSettings(input?: Partial<ExportSettings> | null): ExportSetting
     containerFormat: pickEnumValue(input.containerFormat, WEB_CONTAINERS, defaults.containerFormat),
     videoCodec: pickEnumValue(input.videoCodec, VIDEO_CODECS, defaults.videoCodec),
     rateControl: pickEnumValue(input.rateControl, ['vbr', 'cbr'] as const, defaults.rateControl),
-    ffmpegCodec: pickEnumValue(input.ffmpegCodec, FFMPEG_CODECS, defaults.ffmpegCodec),
-    ffmpegContainer: pickEnumValue(input.ffmpegContainer, FFMPEG_CONTAINERS, defaults.ffmpegContainer),
+    ffmpegCodec: isGifOutput ? 'gif' : ffmpegCodec === 'gif' ? defaults.ffmpegCodec : ffmpegCodec,
+    ffmpegContainer: isGifOutput ? 'gif' : ffmpegContainer === 'gif' ? defaults.ffmpegContainer : ffmpegContainer,
     ffmpegPreset: typeof input.ffmpegPreset === 'string' ? input.ffmpegPreset : defaults.ffmpegPreset,
     proresProfile: pickEnumValue(input.proresProfile, PRORES_PROFILES, defaults.proresProfile),
     dnxhrProfile: pickEnumValue(input.dnxhrProfile, DNXHR_PROFILES, defaults.dnxhrProfile),
     ffmpegQuality: Math.round(pickNumber(input.ffmpegQuality, defaults.ffmpegQuality, { min: 1, max: 31 })),
     ffmpegBitrate: Math.round(pickNumber(input.ffmpegBitrate, defaults.ffmpegBitrate, { min: 1_000_000, max: 100_000_000 })),
     ffmpegRateControl: pickEnumValue(input.ffmpegRateControl, ['crf', 'cbr', 'vbr'] as const, defaults.ffmpegRateControl),
+    gifColors: Math.round(pickNumber(input.gifColors, defaults.gifColors, { min: 2, max: 256 })),
+    gifDither: pickEnumValue(input.gifDither, GIF_DITHERS, defaults.gifDither),
+    gifLoop: pickEnumValue(input.gifLoop, GIF_LOOPS, defaults.gifLoop),
+    gifPaletteMode: pickEnumValue(input.gifPaletteMode, GIF_PALETTE_MODES, defaults.gifPaletteMode),
+    gifOptimize: typeof input.gifOptimize === 'boolean' ? input.gifOptimize : defaults.gifOptimize,
+    gifAlphaThreshold: Math.round(pickNumber(input.gifAlphaThreshold, defaults.gifAlphaThreshold, { min: 0, max: 255 })),
     stackedAlpha: typeof input.stackedAlpha === 'boolean' ? input.stackedAlpha : defaults.stackedAlpha,
-    includeAudio: typeof input.includeAudio === 'boolean' ? input.includeAudio : defaults.includeAudio,
+    includeAudio: isGifOutput ? false : typeof input.includeAudio === 'boolean' ? input.includeAudio : defaults.includeAudio,
     audioSampleRate: input.audioSampleRate === 44100 || input.audioSampleRate === 48000
       ? input.audioSampleRate
       : defaults.audioSampleRate,
     audioBitrate: Math.round(pickNumber(input.audioBitrate, defaults.audioBitrate, { min: 64_000, max: 512_000 })),
     normalizeAudio: typeof input.normalizeAudio === 'boolean' ? input.normalizeAudio : defaults.normalizeAudio,
     videoEnabled: typeof input.videoEnabled === 'boolean' ? input.videoEnabled : defaults.videoEnabled,
-    visualMode: pickEnumValue(input.visualMode, VISUAL_MODES, defaults.visualMode),
+    visualMode: isGifOutput ? 'gif' : visualMode,
     imageFormat: pickEnumValue(input.imageFormat, IMAGE_FORMATS, defaults.imageFormat),
+    imageExportMode: pickEnumValue(input.imageExportMode, IMAGE_EXPORT_MODES, defaults.imageExportMode),
     imageQuality: pickNumber(input.imageQuality, defaults.imageQuality, { min: 0.4, max: 1 }),
     specialContainer: pickEnumValue(input.specialContainer, SPECIAL_CONTAINERS, defaults.specialContainer),
   };

@@ -37,6 +37,8 @@ export type {
   SceneCameraSettings,
   SlotClipEndBehavior,
   SlotClipSettings,
+  ProjectLoadPhase,
+  ProjectLoadProgress,
   ProjectItem,
 } from './types';
 export { DEFAULT_SCENE_CAMERA_SETTINGS } from './types';
@@ -111,6 +113,13 @@ export const useMediaStore = create<MediaStoreState>()(
     currentProjectId: null,
     currentProjectName: 'Untitled Project',
     isLoading: false,
+    projectLoadProgress: {
+      active: false,
+      phase: 'idle',
+      percent: 0,
+      message: '',
+      blocking: false,
+    },
     // proxyEnabled is defined in proxySlice
     proxyGenerationQueue: [],
     currentlyGeneratingProxyId: null,

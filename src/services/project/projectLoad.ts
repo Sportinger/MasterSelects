@@ -2,10 +2,11 @@
 
 import { Logger } from '../logger';
 import { engine } from '../../engine/WebGPUEngine';
-import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
+import { useMediaStore, type MediaFile, type Composition, type MediaFolder, type ProjectLoadProgress } from '../../stores/mediaStore';
 import { getMediaInfo } from '../../stores/mediaStore/helpers/mediaInfoHelpers';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
 import {
+  getExpectedProxyFrameCount,
   getExpectedProxyFps,
   getProxyProgressFromFrameIndices,
   isProxyFrameIndexSetComplete,
@@ -27,6 +28,7 @@ import type {
 } from '../../stores/flashboardStore/types';
 import {
   projectFileService,
+  type ProjectFile,
   type ProjectMediaFile,
   type ProjectComposition,
   type ProjectFolder,
@@ -63,6 +65,88 @@ import type {
 
 const log = Logger.create('ProjectSync');
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
+
+type ProjectLoadProgressUpdate = Partial<Omit<ProjectLoadProgress, 'active'>> & {
+  message: string;
+};
+
+type MediaStoreSnapshot = ReturnType<typeof useMediaStore.getState>;
+type MediaStoreUpdate =
+  | Partial<MediaStoreSnapshot>
+  | ((state: MediaStoreSnapshot) => Partial<MediaStoreSnapshot>);
+
+type ConvertProjectMediaOptions = {
+  hydrateFiles?: boolean;
+  deferCacheChecks?: boolean;
+  onProgress?: (done: number, total: number, name: string) => void;
+};
+
+const DEFAULT_PROJECT_LOAD_PROGRESS: ProjectLoadProgress = {
+  active: false,
+  phase: 'idle',
+  percent: 0,
+  message: '',
+  blocking: false,
+};
+
+let projectLoadCompletionTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clampPercent(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+export function setProjectLoadProgress(update: ProjectLoadProgressUpdate | null): void {
+  if (projectLoadCompletionTimer) {
+    clearTimeout(projectLoadCompletionTimer);
+    projectLoadCompletionTimer = null;
+  }
+
+  if (!update) {
+    useMediaStore.setState({ projectLoadProgress: DEFAULT_PROJECT_LOAD_PROGRESS });
+    return;
+  }
+
+  useMediaStore.setState((state) => ({
+    projectLoadProgress: {
+      ...state.projectLoadProgress,
+      active: true,
+      phase: update.phase ?? state.projectLoadProgress.phase,
+      percent: clampPercent(update.percent ?? state.projectLoadProgress.percent),
+      message: update.message,
+      detail: update.detail,
+      itemsDone: update.itemsDone,
+      itemsTotal: update.itemsTotal,
+      blocking: update.blocking ?? state.projectLoadProgress.blocking,
+    },
+  }));
+}
+
+function completeProjectLoadProgress(message = 'Project ready'): void {
+  setProjectLoadProgress({
+    phase: 'ready',
+    percent: 100,
+    message,
+    blocking: false,
+  });
+  projectLoadCompletionTimer = setTimeout(() => {
+    setProjectLoadProgress(null);
+  }, 900);
+}
+
+function failProjectLoadProgress(error: unknown): void {
+  setProjectLoadProgress({
+    phase: 'error',
+    percent: 100,
+    message: 'Project load failed',
+    detail: error instanceof Error ? error.message : String(error),
+    blocking: false,
+  });
+}
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 function removeLocalStorageKey(key: string): void {
   const storage = localStorage as Storage & { removeItem?: (name: string) => void };
@@ -173,19 +257,14 @@ async function restoreSequenceFrameFromHandle(
 // REVERSE CONVERTERS (project format → store)
 // ============================================
 
-/**
- * Convert ProjectMediaFile to MediaFile format
- */
-type ConvertProjectMediaOptions = {
-  hydrateFiles?: boolean;
-};
-
 async function convertProjectMediaToStore(
   projectMedia: ProjectMediaFile[],
   options: ConvertProjectMediaOptions = {},
 ): Promise<MediaFile[]> {
   const hydrateFiles = options.hydrateFiles !== false;
+  const deferCacheChecks = options.deferCacheChecks === true;
   const files: MediaFile[] = [];
+  const total = projectMedia.length;
 
   for (const pm of projectMedia) {
     let resolvedProjectPath = pm.projectPath;
@@ -403,7 +482,7 @@ async function convertProjectMediaToStore(
     let transcript: import('../../types').TranscriptWord[] | undefined;
     let transcriptCoverage = 0;
     let transcribedRanges: [number, number][] | undefined;
-    if (projectFileService.isProjectOpen()) {
+    if (!deferCacheChecks && projectFileService.isProjectOpen()) {
       try {
         const saved = await projectFileService.getTranscript(pm.id);
         if (saved) {
@@ -427,7 +506,7 @@ async function convertProjectMediaToStore(
     // Check for existing analysis on disk + calculate coverage
     let analysisStatus: import('../../types').AnalysisStatus = 'none';
     let analysisCoverage = 0;
-    if (projectFileService.isProjectOpen()) {
+    if (!deferCacheChecks && projectFileService.isProjectOpen()) {
       try {
         const ranges = await projectFileService.getAnalysisRanges(pm.id);
         if (ranges.length > 0) {
@@ -448,13 +527,19 @@ async function convertProjectMediaToStore(
     let proxyProgress = 0;
     let proxyFps: number | undefined;
     if (pm.type === 'video' && pm.hasProxy && projectFileService.isProjectOpen()) {
-      const proxyStorageKey = pm.fileHash || pm.id;
-      const frameIndices = await projectFileService.getProxyFrameIndices(proxyStorageKey);
-      if (frameIndices.size > 0) {
-        proxyFps = getExpectedProxyFps(pm.frameRate);
-        proxyStatus = isProxyFrameIndexSetComplete(frameIndices, pm.duration, proxyFps) ? 'ready' : 'none';
-        proxyFrameCount = frameIndices.size;
-        proxyProgress = getProxyProgressFromFrameIndices(frameIndices, pm.duration, proxyFps);
+      proxyFps = getExpectedProxyFps(pm.frameRate);
+      if (deferCacheChecks) {
+        proxyStatus = 'ready';
+        proxyFrameCount = getExpectedProxyFrameCount(pm.duration, proxyFps) ?? undefined;
+        proxyProgress = 100;
+      } else {
+        const proxyStorageKey = pm.fileHash || pm.id;
+        const frameIndices = await projectFileService.getProxyFrameIndices(proxyStorageKey);
+        if (frameIndices.size > 0) {
+          proxyStatus = isProxyFrameIndexSetComplete(frameIndices, pm.duration, proxyFps) ? 'ready' : 'none';
+          proxyFrameCount = frameIndices.size;
+          proxyProgress = getProxyProgressFromFrameIndices(frameIndices, pm.duration, proxyFps);
+        }
       }
     }
 
@@ -500,6 +585,11 @@ async function convertProjectMediaToStore(
       analysisStatus,
       analysisCoverage,
     });
+
+    options.onProgress?.(files.length, total, pm.name);
+    if (files.length % 3 === 0) {
+      await yieldToBrowser();
+    }
   }
 
   return files;
@@ -565,6 +655,7 @@ function convertProjectCompositionToStore(
           enabled: effect.enabled,
           params: effect.params,
         })),
+        colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
         masks: c.masks.map((mask): ClipMask => ({
           id: mask.id,
           name: mask.name,
@@ -737,22 +828,64 @@ function hydrateFlashBoardFromProject(data: ProjectFlashBoardState): void {
  * Load project data from projectFileService into stores
  */
 export async function loadProjectToStores(): Promise<void> {
-  await withProjectStoreSyncGuard(async () => {
+  let backgroundProjectData: ProjectFile | null = null;
+  let backgroundHydrateFiles = true;
+
+  setProjectLoadProgress({
+    phase: 'opening',
+    percent: 5,
+    message: 'Opening project',
+    blocking: true,
+  });
+
+  try {
+    await withProjectStoreSyncGuard(async () => {
     const projectData = projectFileService.getProjectData();
     if (!projectData) {
       log.error(' No project data to load');
       return;
     }
+    backgroundProjectData = projectData;
 
     // Firefox/native helper must not synchronously download every RAW file or
     // 3D sequence frame before the project appears in the UI.
     const hydrateFiles = projectFileService.activeBackend !== 'native';
+    backgroundHydrateFiles = hydrateFiles;
     if (!hydrateFiles) {
       log.info('Native backend detected; deferring media file hydration until after project metadata is loaded');
     }
 
     // Convert and load data
-    const files = await convertProjectMediaToStore(projectData.media, { hydrateFiles });
+    setProjectLoadProgress({
+      phase: 'media',
+      percent: 12,
+      message: 'Loading media references',
+      itemsDone: 0,
+      itemsTotal: projectData.media.length,
+      blocking: true,
+    });
+    const files = await convertProjectMediaToStore(projectData.media, {
+      hydrateFiles,
+      deferCacheChecks: true,
+      onProgress: (done, total, name) => {
+        const mediaPercent = total > 0 ? done / total : 1;
+        setProjectLoadProgress({
+          phase: 'media',
+          percent: 12 + mediaPercent * 24,
+          message: 'Loading media references',
+          detail: name,
+          itemsDone: done,
+          itemsTotal: total,
+          blocking: true,
+        });
+      },
+    });
+    setProjectLoadProgress({
+      phase: 'timeline',
+      percent: 40,
+      message: 'Restoring timeline',
+      blocking: true,
+    });
     const compositions = convertProjectCompositionToStore(
       projectData.compositions,
       projectData.uiState?.compositionViewState
@@ -809,6 +942,13 @@ export async function loadProjectToStores(): Promise<void> {
       syncStatusFromClipsToMedia();
     }
   }
+
+  setProjectLoadProgress({
+    phase: 'ui',
+    percent: 58,
+    message: 'Restoring workspace',
+    blocking: true,
+  });
 
   // Load YouTube panel state
   if (projectData.youtube) {
@@ -917,30 +1057,129 @@ export async function loadProjectToStores(): Promise<void> {
   // Reload API keys (may have been restored from .keys.enc during loadProject)
   await useSettingsStore.getState().loadApiKeys();
 
-  log.info(' Loaded project to stores:', projectData.name);
-
-    if (hydrateFiles) {
-      // Auto-relink missing files from Raw folder
-      await autoRelinkFromRawFolder();
-    } else {
-      log.info('Skipping eager auto-relink for native backend during initial project load');
-    }
-
-    // Restore thumbnails and refresh metadata in the background
-    restoreMediaThumbnails();
-    refreshMediaMetadata();
+  setProjectLoadProgress({
+    phase: 'ready',
+    percent: 70,
+    message: 'Project visible',
+    detail: projectData.name,
+    blocking: false,
   });
+
+  log.info(' Loaded project to stores:', projectData.name);
+    });
+
+    if (backgroundProjectData) {
+      void runPostLoadRestoration(backgroundProjectData, backgroundHydrateFiles);
+    } else {
+      completeProjectLoadProgress();
+    }
+  } catch (error) {
+    failProjectLoadProgress(error);
+    throw error;
+  }
 }
 
 // ============================================
 // BACKGROUND RESTORATION HELPERS
 // ============================================
 
+async function applyProjectRestoreMediaUpdate(
+  update: MediaStoreUpdate,
+): Promise<void> {
+  await withProjectStoreSyncGuard(async () => {
+    useMediaStore.setState(update);
+  });
+}
+
+async function runPostLoadRestoration(projectData: ProjectFile, hydrateFiles: boolean): Promise<void> {
+  try {
+    if (hydrateFiles) {
+      setProjectLoadProgress({
+        phase: 'relink',
+        percent: 72,
+        message: 'Checking missing media',
+        blocking: false,
+      });
+      await autoRelinkFromRawFolder();
+    } else {
+      log.info('Skipping eager auto-relink for native backend during initial project load');
+    }
+
+    await yieldToBrowser();
+
+    setProjectLoadProgress({
+      phase: 'thumbnails',
+      percent: 78,
+      message: 'Restoring thumbnails',
+      blocking: false,
+    });
+    await restoreMediaThumbnails((done, total, name) => {
+      const ratio = total > 0 ? done / total : 1;
+      setProjectLoadProgress({
+        phase: 'thumbnails',
+        percent: 78 + ratio * 8,
+        message: 'Restoring thumbnails',
+        detail: name,
+        itemsDone: done,
+        itemsTotal: total,
+        blocking: false,
+      });
+    });
+
+    setProjectLoadProgress({
+      phase: 'metadata',
+      percent: 86,
+      message: 'Refreshing media metadata',
+      blocking: false,
+    });
+    await refreshMediaMetadata((done, total, name) => {
+      const ratio = total > 0 ? done / total : 1;
+      setProjectLoadProgress({
+        phase: 'metadata',
+        percent: 86 + ratio * 6,
+        message: 'Refreshing media metadata',
+        detail: name,
+        itemsDone: done,
+        itemsTotal: total,
+        blocking: false,
+      });
+    });
+
+    setProjectLoadProgress({
+      phase: 'caches',
+      percent: 92,
+      message: 'Checking project caches',
+      itemsDone: 0,
+      itemsTotal: projectData.media.length,
+      blocking: false,
+    });
+    await restoreDeferredMediaCacheState(projectData.media, (done, total, name, itemProgress) => {
+      const ratio = total > 0 ? (done + (itemProgress ?? 0)) / total : 1;
+      setProjectLoadProgress({
+        phase: 'caches',
+        percent: 92 + ratio * 7,
+        message: 'Checking project caches',
+        detail: name,
+        itemsDone: done,
+        itemsTotal: total,
+        blocking: false,
+      });
+    });
+
+    completeProjectLoadProgress('Project ready');
+  } catch (error) {
+    log.warn('Post-load project restoration finished with warnings', error);
+    completeProjectLoadProgress('Project ready with warnings');
+  }
+}
+
 /**
  * Refresh media metadata (codec, bitrate, hasAudio) for all loaded files.
  * This runs in the background after project load to populate metadata fields.
  */
-async function refreshMediaMetadata(): Promise<void> {
+async function refreshMediaMetadata(
+  onProgress?: (done: number, total: number, name: string) => void,
+): Promise<void> {
   const mediaState = useMediaStore.getState();
   // Refresh files that have a file object but are missing important metadata
   const filesToRefresh = mediaState.files.filter(f =>
@@ -962,17 +1201,22 @@ async function refreshMediaMetadata(): Promise<void> {
 
   // Process files in parallel but with a limit to avoid overwhelming the browser
   const batchSize = 3;
+  let completed = 0;
   for (let i = 0; i < filesToRefresh.length; i += batchSize) {
     const batch = filesToRefresh.slice(i, i + batchSize);
 
     await Promise.all(batch.map(async (mediaFile) => {
-      if (!mediaFile.file) return;
+      if (!mediaFile.file) {
+        completed++;
+        onProgress?.(completed, filesToRefresh.length, mediaFile.name);
+        return;
+      }
 
       try {
         const info = await getMediaInfo(mediaFile.file, mediaFile.type as 'video' | 'audio' | 'image');
 
         // Update the file in the store
-        useMediaStore.setState((state) => ({
+        await applyProjectRestoreMediaUpdate((state) => ({
           files: state.files.map((f) =>
             f.id === mediaFile.id
               ? {
@@ -996,8 +1240,12 @@ async function refreshMediaMetadata(): Promise<void> {
         });
       } catch (e) {
         log.warn(`Failed to refresh metadata for: ${mediaFile.name}`, e);
+      } finally {
+        completed++;
+        onProgress?.(completed, filesToRefresh.length, mediaFile.name);
       }
     }));
+    await yieldToBrowser();
   }
 
   log.info('Media metadata refresh complete');
@@ -1007,7 +1255,9 @@ async function refreshMediaMetadata(): Promise<void> {
  * Restore thumbnails for media files after project load.
  * Checks project folder first, then regenerates from file if needed.
  */
-async function restoreMediaThumbnails(): Promise<void> {
+async function restoreMediaThumbnails(
+  onProgress?: (done: number, total: number, name: string) => void,
+): Promise<void> {
   const mediaState = useMediaStore.getState();
   // Find files that need thumbnails (video/image files without thumbnailUrl)
   const filesToRestore = mediaState.files.filter(f =>
@@ -1023,11 +1273,16 @@ async function restoreMediaThumbnails(): Promise<void> {
 
   // Process in batches to avoid overwhelming browser
   const batchSize = 5;
+  let completed = 0;
   for (let i = 0; i < filesToRestore.length; i += batchSize) {
     const batch = filesToRestore.slice(i, i + batchSize);
 
     await Promise.all(batch.map(async (mediaFile) => {
-      if (!mediaFile.file) return;
+      if (!mediaFile.file) {
+        completed++;
+        onProgress?.(completed, filesToRestore.length, mediaFile.name);
+        return;
+      }
 
       try {
         let thumbnailUrl: string | undefined;
@@ -1048,7 +1303,7 @@ async function restoreMediaThumbnails(): Promise<void> {
         }
 
         if (thumbnailUrl) {
-          useMediaStore.setState((state) => ({
+          await applyProjectRestoreMediaUpdate((state) => ({
             files: state.files.map((f) =>
               f.id === mediaFile.id ? { ...f, thumbnailUrl } : f
             ),
@@ -1056,11 +1311,115 @@ async function restoreMediaThumbnails(): Promise<void> {
         }
       } catch (e) {
         log.warn(`Failed to restore thumbnail for: ${mediaFile.name}`, e);
+      } finally {
+        completed++;
+        onProgress?.(completed, filesToRestore.length, mediaFile.name);
       }
     }));
+    await yieldToBrowser();
   }
 
   log.info('Thumbnail restoration complete');
+}
+
+async function restoreDeferredMediaCacheState(
+  projectMedia: ProjectMediaFile[],
+  onProgress?: (done: number, total: number, name: string, itemProgress?: number) => void,
+): Promise<void> {
+  if (!projectFileService.isProjectOpen() || projectMedia.length === 0) {
+    return;
+  }
+
+  let completed = 0;
+  for (const pm of projectMedia) {
+    onProgress?.(completed, projectMedia.length, pm.name, 0);
+    const updates: Partial<MediaFile> = {};
+
+    try {
+      const saved = await projectFileService.getTranscript(pm.id);
+      if (saved) {
+        const words = Array.isArray(saved)
+          ? saved as import('../../types').TranscriptWord[]
+          : saved.words as import('../../types').TranscriptWord[];
+        if (words && words.length > 0) {
+          updates.transcriptStatus = 'ready';
+          updates.transcript = words;
+          const transcribedRanges = Array.isArray(saved)
+            ? undefined
+            : saved.transcribedRanges;
+          updates.transcribedRanges = transcribedRanges;
+          updates.transcriptCoverage = pm.duration && pm.duration > 0
+            ? (
+                transcribedRanges?.length
+                  ? calcRangeCoverage(transcribedRanges, pm.duration)
+                  : calcRangeCoverage(words.map(w => [w.start, w.end]), pm.duration)
+              )
+            : 0;
+        }
+      }
+    } catch { /* no transcript file */ }
+
+    try {
+      const ranges = await projectFileService.getAnalysisRanges(pm.id);
+      if (ranges.length > 0) {
+        updates.analysisStatus = 'ready';
+        if (pm.duration && pm.duration > 0) {
+          const parsed: [number, number][] = ranges.map(key => {
+            const [s, e] = key.split('-').map(Number);
+            return [s, e];
+          });
+          updates.analysisCoverage = calcRangeCoverage(parsed, pm.duration);
+        }
+      }
+    } catch { /* no analysis file */ }
+
+    if (pm.type === 'video' && pm.hasProxy) {
+      try {
+        const proxyFps = getExpectedProxyFps(pm.frameRate);
+        const expectedFrames = getExpectedProxyFrameCount(pm.duration, proxyFps);
+        const frameIndices = await projectFileService.getProxyFrameIndices(
+          pm.fileHash || pm.id,
+          (scan) => {
+            const scanRatio = expectedFrames
+              ? Math.min(0.98, scan.matched / expectedFrames)
+              : 0;
+            const label = expectedFrames
+              ? `${pm.name} - proxy ${scan.matched}/${expectedFrames}`
+              : `${pm.name} - proxy ${scan.matched} frames`;
+            onProgress?.(completed, projectMedia.length, label, scan.done ? 0.98 : scanRatio);
+          },
+        );
+        if (frameIndices.size > 0) {
+          updates.proxyStatus = isProxyFrameIndexSetComplete(frameIndices, pm.duration, proxyFps) ? 'ready' : 'none';
+          updates.proxyFrameCount = frameIndices.size;
+          updates.proxyFps = updates.proxyStatus === 'ready' ? proxyFps : undefined;
+          updates.proxyProgress = getProxyProgressFromFrameIndices(frameIndices, pm.duration, proxyFps);
+        } else {
+          updates.proxyStatus = 'none';
+          updates.proxyFrameCount = undefined;
+          updates.proxyFps = undefined;
+          updates.proxyProgress = 0;
+        }
+      } catch {
+        updates.proxyStatus = 'none';
+        updates.proxyFrameCount = undefined;
+        updates.proxyFps = undefined;
+        updates.proxyProgress = 0;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await applyProjectRestoreMediaUpdate((state) => ({
+        files: state.files.map((file) => (
+          file.id === pm.id ? { ...file, ...updates } : file
+        )),
+      }));
+    }
+
+    completed++;
+    onProgress?.(completed, projectMedia.length, pm.name);
+    await yieldToBrowser();
+  }
 }
 
 /**

@@ -2,7 +2,15 @@
 
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { TimelineHeaderProps } from './types';
-import type { AnimatableProperty, ClipTransform, Keyframe, TimelineClip } from '../../types';
+import type { AnimatableProperty, ClipTransform, ColorCorrectionState, Keyframe, TimelineClip } from '../../types';
+import {
+  PRIMARY_COLOR_PARAM_DEFS,
+  ensureColorCorrectionState,
+  getActiveColorVersion,
+  getColorNodeParamValue,
+  parseColorProperty,
+} from '../../types';
+import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { CurveEditorHeader } from './CurveEditorHeader';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
@@ -16,6 +24,7 @@ type KeyframeTrackClip = {
   duration: number;
   is3D?: boolean;
   effects?: Array<{ id: string; name: string; params: Record<string, unknown> }>;
+  colorCorrection?: ColorCorrectionState;
   source?: {
     type?: string;
     gaussianSplatSettings?: {
@@ -41,8 +50,42 @@ const getTransformPropertyOrder = (clip: KeyframeTrackClip | null | undefined): 
     : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z']
 );
 
+const colorParamDefsByKey = new Map(PRIMARY_COLOR_PARAM_DEFS.map((def) => [def.key, def]));
+
+function prettifyParamName(paramName: string): string {
+  return paramName
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
+function getColorPropertyMeta(prop: string, clip?: KeyframeTrackClip | null) {
+  const parsed = parseColorProperty(prop);
+  if (!parsed) return null;
+
+  const colorState = clip?.colorCorrection ? ensureColorCorrectionState(clip.colorCorrection) : null;
+  const version = colorState?.versions.find((entry) => entry.id === parsed.versionId)
+    ?? (colorState ? getActiveColorVersion(colorState) : undefined);
+  const node = version?.nodes.find((entry) => entry.id === parsed.nodeId);
+  const def = colorParamDefsByKey.get(parsed.paramName as (typeof PRIMARY_COLOR_PARAM_DEFS)[number]['key']);
+
+  return {
+    ...parsed,
+    nodeName: node?.name,
+    label: def?.label ?? prettifyParamName(parsed.paramName),
+    defaultValue: def?.defaultValue ?? 0,
+    decimals: def?.decimals ?? 2,
+    step: def?.step ?? 0.01,
+  };
+}
+
 // Get friendly names for properties
 const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string => {
+  const colorMeta = getColorPropertyMeta(prop, clip);
+  if (colorMeta) {
+    const nodeName = colorMeta.nodeName?.trim();
+    return nodeName && nodeName !== 'Primary' ? `${nodeName} ${colorMeta.label}` : colorMeta.label;
+  }
+
   if (usesCameraPropertyModel(clip)) {
     if (prop === 'position.z') return 'Dist';
     if (prop === 'rotation.x') return 'Pitch';
@@ -105,8 +148,35 @@ const getValueFromTransform = (transform: ClipTransform, prop: string): number =
   }
 };
 
+const getValueFromColorCorrection = (
+  clip: KeyframeTrackClip,
+  prop: string,
+  keyframes: Array<{ id: string; time: number; property: string; value: number; easing: string }>,
+  clipLocalTime: number,
+): number | null => {
+  const colorMeta = getColorPropertyMeta(prop, clip);
+  if (!colorMeta || !clip.colorCorrection) return null;
+
+  const colorState = ensureColorCorrectionState(clip.colorCorrection);
+  const baseValue = getColorNodeParamValue(
+    colorState,
+    colorMeta.nodeId,
+    colorMeta.paramName,
+    colorMeta.defaultValue,
+  );
+
+  return interpolateKeyframes(
+    keyframes as Keyframe[],
+    prop as AnimatableProperty,
+    clipLocalTime,
+    baseValue,
+  );
+};
+
 // Format value for display
-const formatValue = (value: number, prop: string): string => {
+const formatValue = (value: number, prop: string, clip?: KeyframeTrackClip | null): string => {
+  const colorMeta = getColorPropertyMeta(prop, clip);
+  if (colorMeta) return value.toFixed(colorMeta.decimals);
   if (prop === 'opacity') return (value * 100).toFixed(0) + '%';
   if (prop.startsWith('rotation')) return value.toFixed(1) + '°';
   if (prop.startsWith('scale')) return (value * 100).toFixed(0) + '%';
@@ -206,10 +276,14 @@ function PropertyRow({
       const effects = getInterpolatedEffects(clipId, clipLocalTime);
       return getValueFromEffects(effects, prop);
     }
+    const colorValue = getValueFromColorCorrection(clip, prop, keyframes, clipLocalTime);
+    if (colorValue !== null) {
+      return colorValue;
+    }
     // Transform properties use getInterpolatedTransform
     const transform = getInterpolatedTransform(clipId, clipLocalTime);
     return getValueFromTransform(transform, prop);
-  }, [clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, getInterpolatedEffects, prop]);
+  }, [clip, clipId, clipLocalTime, isWithinClip, getInterpolatedTransform, getInterpolatedEffects, keyframes, prop]);
 
   // Find prev/next keyframes relative to playhead
   const prevKeyframe = useMemo(() => {
@@ -238,6 +312,8 @@ function PropertyRow({
     if (prop.startsWith('scale')) return 0.005; // typically 0-2 range
     if (prop.startsWith('rotation')) return 0.5; // degrees
     if (prop.startsWith('position')) return 1; // pixels
+    const colorMeta = getColorPropertyMeta(prop, clip);
+    if (colorMeta) return colorMeta.step * 8;
     // Audio effect properties
     if (prop.includes('.volume')) return 0.005; // 0-1 range
     if (prop.includes('.band')) return 0.1; // dB range (-12 to 12)
@@ -251,6 +327,8 @@ function PropertyRow({
     if (prop.startsWith('scale')) return 1;
     if (prop.startsWith('rotation')) return 0;
     if (prop.startsWith('position')) return 0;
+    const colorMeta = getColorPropertyMeta(prop, clip);
+    if (colorMeta) return colorMeta.defaultValue;
     // Audio effect properties
     if (prop.includes('.volume')) return 1; // 100%
     if (prop.includes('.band')) return 0; // 0 dB (no boost/cut)
@@ -448,7 +526,7 @@ function PropertyRow({
             ? (
                 usesCameraPropertyModel(clip) && (prop === 'position.x' || prop === 'position.y' || prop === 'position.z' || prop === 'scale.z')
                   ? currentValue.toFixed(3)
-                  : formatValue(currentValue, prop)
+                  : formatValue(currentValue, prop, clip)
               )
             : '—'}
         </span>

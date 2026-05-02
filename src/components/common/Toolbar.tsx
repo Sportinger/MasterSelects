@@ -25,6 +25,7 @@ import {
   openExistingProject,
   saveCurrentProject,
   loadProjectToStores,
+  setProjectLoadProgress,
   setupAutoSync,
   syncStoresToProject,
 } from '../../services/projectSync';
@@ -141,6 +142,12 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   useEffect(() => {
     const restoreProject = async () => {
       setIsLoading(true);
+      setProjectLoadProgress({
+        phase: 'opening',
+        percent: 3,
+        message: 'Restoring last project',
+        blocking: true,
+      });
       const restored = await projectFileService.restoreLastProject();
       if (restored) {
         // Load project data into stores
@@ -154,6 +161,9 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
         // Permission needed - show button instead of auto-popup
         setNeedsPermission(true);
         setPendingProjectName(projectFileService.getPendingProjectName());
+        setProjectLoadProgress(null);
+      } else {
+        setProjectLoadProgress(null);
       }
       setIsLoading(false);
 
@@ -254,7 +264,16 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       }
     }
     setIsLoading(true);
+    setProjectLoadProgress({
+      phase: 'opening',
+      percent: 3,
+      message: 'Opening project',
+      blocking: true,
+    });
     const success = await openExistingProject();
+    if (!success) {
+      setProjectLoadProgress(null);
+    }
     if (success) {
       const data = projectFileService.getProjectData();
       if (data) {
@@ -391,6 +410,12 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   // Handle restoring permission for pending project
   const handleRestorePermission = useCallback(async () => {
     setIsLoading(true);
+    setProjectLoadProgress({
+      phase: 'opening',
+      percent: 3,
+      message: 'Restoring project permission',
+      blocking: true,
+    });
     const success = await projectFileService.requestPendingPermission();
     if (success) {
       await loadProjectToStores();
@@ -401,6 +426,8 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
       }
       setNeedsPermission(false);
       setPendingProjectName(null);
+    } else {
+      setProjectLoadProgress(null);
     }
     setIsLoading(false);
   }, []);

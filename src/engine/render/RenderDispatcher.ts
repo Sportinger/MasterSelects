@@ -1312,6 +1312,7 @@ export class RenderDispatcher {
       blendMode: isSingle3D ? firstLayer.blendMode : 'normal',
       source: { type: 'image' },
       effects: isSingle3D ? firstLayer.effects : [],
+      colorCorrection: isSingle3D ? firstLayer.colorCorrection : undefined,
       position: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1 },
       rotation: { x: 0, y: 0, z: 0 },

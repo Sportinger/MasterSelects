@@ -2,5 +2,5 @@
 // Synchronizes mediaStore and timelineStore with projectFileService
 
 export { syncStoresToProject, saveCurrentProject } from './project/projectSave';
-export { loadProjectToStores } from './project/projectLoad';
+export { loadProjectToStores, setProjectLoadProgress } from './project/projectLoad';
 export { createNewProject, openExistingProject, closeCurrentProject, setupAutoSync } from './project/projectLifecycle';

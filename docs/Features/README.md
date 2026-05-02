@@ -51,12 +51,13 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [GPU Engine](./GPU-Engine.md) | WebGPU engine, render loop, fallback paths, caches, and export boundary |
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
 | [Effects](./Effects.md) | Current effect registry, categories, quality controls, and inline effect behavior |
+| [Color Correction](./Color-Correction.md) | Planned node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
 | [Masks](./Masks.md) | Overlay mask editing, feathering, stored modes, and current limitations |
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Vector Animation](./Vector-Animation.md) | Lottie import, runtime playback, looping, and export behavior |
 | [Audio](./Audio.md) | Playback sync, EQ, waveform extraction, audio clip behavior, and export |
-| [Export](./Export.md) | WebCodecs fast/precise export, FFmpeg intermediates, image/audio-only export, FCPXML, and project-persistent presets |
+| [Export](./Export.md) | WebCodecs fast/precise export, animated GIF, FFmpeg intermediates, image frame/sequence export, audio-only export, FCPXML, and project-persistent presets |
 | [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
 | [Media Panel](./Media-Panel.md) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
 | [Project Persistence](./Project-Persistence.md) | Save/load model, IndexedDB handle cache, continuous save, interval save mode, relink, and project roots |

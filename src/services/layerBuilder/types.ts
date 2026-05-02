@@ -4,6 +4,7 @@ import type {
   TimelineClip,
   TimelineTrack,
   Effect,
+  RuntimeColorGrade,
   AnimatableProperty,
   ClipTransform,
 } from '../../types';
@@ -38,6 +39,7 @@ export interface FrameContext {
   // Store functions
   getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
+  getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;

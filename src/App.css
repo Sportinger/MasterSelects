@@ -702,6 +702,64 @@ input, textarea {
   overflow: auto;
 }
 
+.project-load-progress {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: var(--z-overlay);
+  width: min(420px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+
+.project-load-progress-head,
+.project-load-progress-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.project-load-progress-head {
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: var(--font-semibold);
+}
+
+.project-load-progress-head span:first-child,
+.project-load-progress-detail span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-load-progress-bar {
+  height: 4px;
+  margin: 8px 0 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--bg-input);
+}
+
+.project-load-progress-bar > div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width var(--transition-normal);
+}
+
+.project-load-progress-detail {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
 /* Toolbar */
 .toolbar {
   display: flex;

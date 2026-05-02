@@ -204,6 +204,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         enabled: e.enabled !== false,
         params: e.params || {},
       })),
+      colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
       masks: (c.masks || []).map((m) => ({
         id: m.id,
         name: m.name || 'Mask',

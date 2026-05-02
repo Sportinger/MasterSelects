@@ -6,6 +6,7 @@ import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
 import type { SplatEffectorSettings } from '../../../types/splatEffector';
 import type {
   ClipAnalysis,
+  ColorCorrectionState,
   GaussianSplatSequenceData,
   ModelSequenceData,
   SceneSegment,
@@ -45,6 +46,7 @@ export interface ProjectClip {
 
   // Effects
   effects: ProjectEffect[];
+  colorCorrection?: ColorCorrectionState;
 
   // Masks
   masks: ProjectMask[];

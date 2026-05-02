@@ -16,6 +16,15 @@ export interface ProxyFrameWriter {
   saveFrame: (frameIndex: number, blob: Blob) => Promise<boolean>;
 }
 
+export interface ProxyFrameScanProgress {
+  mediaId: string;
+  scanned: number;
+  matched: number;
+  done: boolean;
+}
+
+export type ProxyFrameScanProgressCallback = (progress: ProxyFrameScanProgress) => void;
+
 function getProxyFrameFileName(frameIndex: number, extension = PROXY_FRAME_EXTENSION): string {
   return `frame_${frameIndex.toString().padStart(6, '0')}.${extension}`;
 }
@@ -168,23 +177,40 @@ export class ProxyStorageService {
    */
   async getProxyFrameIndices(
     projectHandle: FileSystemDirectoryHandle,
-    mediaId: string
+    mediaId: string,
+    onProgress?: ProxyFrameScanProgressCallback
   ): Promise<Set<number>> {
     const indices = new Set<number>();
+    let scanned = 0;
+
+    const emit = (done = false) => {
+      onProgress?.({
+        mediaId,
+        scanned,
+        matched: indices.size,
+        done,
+      });
+    };
+
     try {
       const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, false);
 
       for await (const entry of (mediaFolder as IterableDirectoryHandle).values()) {
+        scanned++;
         if (entry.kind === 'file') {
           const match = entry.name.match(PROXY_FRAME_MATCH);
           if (match) {
             indices.add(parseInt(match[1], 10));
           }
         }
+        if (scanned % 100 === 0) {
+          emit();
+        }
       }
     } catch {
       // No proxy folder exists
     }
+    emit(true);
     return indices;
   }
 

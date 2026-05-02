@@ -1,6 +1,8 @@
 // src/engine/ffmpeg/types.ts
 // Type definitions for FFmpeg WASM integration
 
+import type { GifDither, GifExportOptions, GifLoopMode, GifPaletteMode } from '../gif/gifOptions';
+
 // ProRes profiles (Apple intermediate codec)
 export type ProResProfile = 'proxy' | 'lt' | 'standard' | 'hq' | '4444' | '4444xq';
 
@@ -18,7 +20,8 @@ export type FFmpegVideoCodec =
   | 'dnxhd'       // Avid DNxHR (broadcast)
   | 'ffv1'        // FFV1 (lossless archival)
   | 'utvideo'     // Ut Video (fast lossless)
-  | 'mjpeg';      // Motion JPEG
+  | 'mjpeg'       // Motion JPEG
+  | 'gif';        // Animated GIF
 
 // Audio codecs available in ASYNCIFY build
 // NOTE: libopus and libmp3lame require pkg-config
@@ -38,7 +41,8 @@ export type FFmpegContainer =
   | 'mov'   // QuickTime (Apple/Pro)
   | 'mkv'   // Matroska (open)
   | 'avi'   // AVI (legacy)
-  | 'mxf';  // MXF (broadcast)
+  | 'mxf'   // MXF (broadcast)
+  | 'gif';  // Animated GIF
 
 // Image sequence formats
 export type FFmpegImageFormat =
@@ -63,13 +67,14 @@ export type PixelFormat =
   | 'rgba'          // 8-bit RGBA (HAP/UtVideo)
   | 'rgb48le'       // 16-bit RGB
   | 'gbrp10le'      // 10-bit planar RGB
-  | 'gbrpf32le';    // 32-bit float RGB (EXR)
+  | 'gbrpf32le'     // 32-bit float RGB (EXR)
+  | 'pal8';         // GIF indexed color
 
 // Color space
 export type ColorSpace = 'bt709' | 'bt2020' | 'srgb';
 
 // Main export settings interface
-export interface FFmpegExportSettings {
+export interface FFmpegExportSettings extends GifExportOptions {
   // Video basics
   codec: FFmpegVideoCodec;
   container: FFmpegContainer;
@@ -95,6 +100,14 @@ export interface FFmpegExportSettings {
 
   // DNxHR-specific
   dnxhrProfile?: DnxhrProfile;
+
+  // GIF-specific
+  gifColors?: number;
+  gifDither?: GifDither;
+  gifLoop?: GifLoopMode;
+  gifPaletteMode?: GifPaletteMode;
+  gifOptimize?: boolean;
+  gifAlphaThreshold?: number;
 
   // Audio settings
   audioCodec?: FFmpegAudioCodec;

@@ -130,6 +130,8 @@ export function FFmpegExportSection({
       // Switch to a compatible codec
       if (newContainer === 'mxf') {
         setCodec('dnxhd');
+      } else if (newContainer === 'gif') {
+        setCodec('gif');
       } else {
         // Default to ProRes for other containers
         setCodec('prores');

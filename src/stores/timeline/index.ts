@@ -14,6 +14,7 @@ import { createMeshClipSlice } from './meshClipSlice';
 import { createCameraClipSlice } from './cameraClipSlice';
 import { createSplatEffectorClipSlice } from './splatEffectorClipSlice';
 import { createClipEffectSlice } from './clipEffectSlice';
+import { createColorCorrectionSlice } from './colorCorrectionSlice';
 import { createLinkedGroupSlice } from './linkedGroupSlice';
 import { createDownloadClipSlice } from './downloadClipSlice';
 import { createPlaybackSlice } from './playbackSlice';
@@ -51,6 +52,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const cameraClipActions = createCameraClipSlice(set, get);
     const splatEffectorClipActions = createSplatEffectorClipSlice(set, get);
     const clipEffectActions = createClipEffectSlice(set, get);
+    const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
     const playbackActions = createPlaybackSlice(set, get);
@@ -258,6 +260,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...cameraClipActions,
       ...splatEffectorClipActions,
       ...clipEffectActions,
+      ...colorCorrectionActions,
       ...linkedGroupActions,
       ...downloadClipActions,
       ...playbackActions,

@@ -389,6 +389,7 @@ export class FrameExporter {
       clipsByTrack,
       getInterpolatedTransform: state.getInterpolatedTransform,
       getInterpolatedEffects: state.getInterpolatedEffects,
+      getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,
       getSourceTimeForClip: state.getSourceTimeForClip,
       getInterpolatedSpeed: state.getInterpolatedSpeed,
     };

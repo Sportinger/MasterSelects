@@ -2,7 +2,7 @@
 
 [Back to Index](./README.md)
 
-Video export, image export, audio-only export, transparent stacked-alpha export, FFmpeg WASM intermediates, named export presets, and FCPXML interchange.
+Video export, animated GIF export, image export, audio-only export, transparent stacked-alpha export, FFmpeg WASM intermediates, named export presets, and FCPXML interchange.
 
 ---
 
@@ -23,8 +23,8 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 - A compact command row above `Basic` contains a project-persistent preset list plus `Load`, `Update`, and `Save`.
 - The workflow picker (`WebCodecs`, `HTMLVideo`, `FFmpeg`) is its own section above `Basic`.
 - `Basic` contains output naming and container selection. The container row is grouped by `Video`, `Image`, `Audio`, and `XML`, and switches output mode by selecting a deliverable directly.
-- The `Video` group contains codec selection, resolution, frame rate, bitrate/rate controls, stacked-alpha, and range toggles.
-- In `Image` mode the same middle group becomes an `Image` panel with format-aware resolution and quality controls, and it exports only the current playhead frame.
+- The `Video` group contains codec selection, resolution, frame rate, bitrate/rate controls, animated GIF palette controls, stacked-alpha, and range toggles.
+- In `Image` mode the same middle group becomes an `Image` panel with format-aware resolution and quality controls, and it can export either the current playhead frame or a numbered image sequence folder.
 - The `Audio` group contains sample rate, bitrate, normalization, and audio-only range controls.
 - Lower in the panel, legacy `Advanced Video`, `Advanced Audio`, and `Range & Summary` sections still exist for raw-value access.
 - Export settings and preset selection now live in a shared store, so changes inside the Export tab participate in global undo/redo and are restored with the project.
@@ -117,6 +117,33 @@ Supported codecs are checked at runtime:
 
 ---
 
+## Animated GIF Export
+
+Animated GIF is exposed as `.gif` in the video container group.
+
+### Browser GIF Mode
+
+- Available from the WebCodecs / HTMLVideo workflow selector, but GIF is not a WebCodecs codec.
+- Uses the same frame-accurate browser render path, then encodes indexed GIF frames with the `gifenc` JavaScript encoder.
+- Supports palette size, global vs per-frame palette mode, loop mode, and binary alpha threshold.
+- Does not support audio.
+- Uses the GIF size estimator instead of video bitrate math.
+
+### FFmpeg GIF Mode
+
+- Available from the FFmpeg workflow selector.
+- Uses FFmpeg `palettegen` and `paletteuse` for palette-quality output.
+- Supports palette size, global/per-frame palette behavior, dithering, loop mode, transparency threshold, and frame-difference optimization.
+- Does not extract or mux audio.
+
+### Size Estimation
+
+- GIF estimates are based on output pixels, frame count, palette size, dither mode, palette mode, and optimization settings.
+- The panel shows a single estimate and a content-dependent range because GIF LZW compression varies heavily with motion, noise, and transparency.
+- MP4/WebM estimates continue to use bitrate targets.
+
+---
+
 ## Audio Export
 
 Audio export is handled separately from the video encoder.
@@ -141,7 +168,7 @@ Audio export is handled separately from the video encoder.
 
 ## Image Export
 
-Image export renders a single composited frame at the current playhead position.
+Image export can render a single composited frame at the current playhead position or a numbered still-image sequence over the selected range.
 
 ### Supported Formats
 
@@ -152,7 +179,9 @@ Image export renders a single composited frame at the current playhead position.
 
 ### Current Behavior
 
-- The export does not use the In/Out range. It always renders only the current playhead frame.
+- `Frame` mode does not use the In/Out range. It renders only the current playhead frame.
+- `Sequence` mode uses the normal export range, respects `Use In/Out`, renders at the selected frame rate, and writes numbered image files into a user-selected folder when the browser supports File System Access.
+- Browsers without folder write access fall back to a ZIP download.
 - Custom resolution still applies before the image is written.
 - PNG and BMP are exported losslessly.
 - JPG and WebP expose a quality control in the panel.
@@ -178,6 +207,7 @@ The FFmpeg path is a separate CPU-based export pipeline.
 - FFV1
 - UTVideo
 - MJPEG
+- Animated GIF
 
 ### Supported Containers
 
@@ -185,10 +215,12 @@ The FFmpeg path is a separate CPU-based export pipeline.
 - MKV
 - AVI
 - MXF
+- GIF
 
 ### Current Limitations
 
 - HAP is not available in this build.
+- GIF export is silent.
 - This build does not expose a shared decoder pool.
 - Multi-threaded mode is only reported as a capability check; the exported core path is still synchronous.
 - `callMain()` blocks while encoding, so it is not the same runtime profile as the WebCodecs path.
@@ -249,7 +281,7 @@ The PNG frame export action reads the current composited frame from the GPU.
 1. Render each frame through the GPU engine.
 2. Read pixels from the GPU.
 3. Collect frames in memory.
-4. Extract audio if enabled.
+4. Extract audio if enabled and the selected output supports audio.
 5. Run FFmpeg encoding.
 
 ### Limitation

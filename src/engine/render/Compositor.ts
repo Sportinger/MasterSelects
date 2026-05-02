@@ -3,6 +3,7 @@
 import type { LayerRenderData, CompositeResult } from '../core/types';
 import type { CompositorPipeline } from '../pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../effects/EffectsPipeline';
+import type { ColorPipeline } from '../color/ColorPipeline';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { splitLayerEffects } from './layerEffectStack';
 
@@ -24,17 +25,20 @@ export interface CompositorState {
 export class Compositor {
   private compositorPipeline: CompositorPipeline;
   private effectsPipeline: EffectsPipeline;
+  private colorPipeline: ColorPipeline | null;
   private maskTextureManager: MaskTextureManager;
   private lastRenderWasPing = false;
 
   constructor(
     compositorPipeline: CompositorPipeline,
     effectsPipeline: EffectsPipeline,
-    maskTextureManager: MaskTextureManager
+    maskTextureManager: MaskTextureManager,
+    colorPipeline: ColorPipeline | null = null
   ) {
     this.compositorPipeline = compositorPipeline;
     this.effectsPipeline = effectsPipeline;
     this.maskTextureManager = maskTextureManager;
+    this.colorPipeline = colorPipeline;
   }
 
   composite(
@@ -90,91 +94,83 @@ export class Compositor {
       let sourceExternalTexture = data.externalTexture;
       let useExternalTexture = data.isVideo && !!data.externalTexture;
 
-      // Apply complex effects to the SOURCE layer BEFORE compositing (skip if only inline effects)
-      // Inline effects (brightness, contrast, saturation, invert) are handled in the composite shader
-      if (complexEffects && complexEffects.length > 0 && state.effectTempView && state.effectTempView2) {
-        // First, we need to copy/render the source into a temp texture so we can apply effects to it
-        // For video (external texture), render it to temp texture first
-        if (useExternalTexture && sourceExternalTexture) {
-          // Render external texture to effectTempView using a simple copy pass
-          const copyPipeline = this.compositorPipeline.getExternalCopyPipeline?.();
-          if (copyPipeline) {
-            const copyBindGroup = this.compositorPipeline.createExternalCopyBindGroup?.(
-              state.sampler,
-              sourceExternalTexture,
-              layer.id
-            );
-            if (copyBindGroup) {
-              const copyPass = commandEncoder.beginRenderPass({
-                colorAttachments: [{
-                  view: state.effectTempView,
-                  loadOp: 'clear',
-                  storeOp: 'store',
-                }],
-              });
-              copyPass.setPipeline(copyPipeline);
-              copyPass.setBindGroup(0, copyBindGroup);
-              copyPass.draw(6);
-              copyPass.end();
+      const hasColorCorrection = !!this.colorPipeline && !state.skipEffects && !!layer.colorCorrection?.enabled;
+      const needsSourcePreprocess =
+        (hasColorCorrection || !!(complexEffects && complexEffects.length > 0)) &&
+        !!state.effectTempView &&
+        !!state.effectTempView2;
 
-              // Now apply complex effects to the copied texture
+      if (needsSourcePreprocess && state.effectTempView && state.effectTempView2) {
+        let copied = false;
+        let copiedToTempView = false;
+
+        if (useExternalTexture && sourceExternalTexture) {
+          const copyPipeline = this.compositorPipeline.getExternalCopyPipeline?.();
+          const copyBindGroup = copyPipeline
+            ? this.compositorPipeline.createExternalCopyBindGroup?.(
+                state.sampler,
+                sourceExternalTexture,
+                layer.id
+              )
+            : null;
+
+          if (copyPipeline && copyBindGroup) {
+            const copyPass = commandEncoder.beginRenderPass({
+              colorAttachments: [{
+                view: state.effectTempView,
+                loadOp: 'clear',
+                storeOp: 'store',
+              }],
+            });
+            copyPass.setPipeline(copyPipeline);
+            copyPass.setBindGroup(0, copyBindGroup);
+            copyPass.draw(6);
+            copyPass.end();
+            copied = true;
+            copiedToTempView = true;
+          }
+        } else if (sourceTextureView) {
+          copied = true;
+        }
+
+        if (copied) {
+          if (copiedToTempView) {
+            sourceTextureView = state.effectTempView;
+          }
+          if (sourceTextureView) {
+            useExternalTexture = false;
+            sourceExternalTexture = null;
+
+            if (hasColorCorrection) {
+              const colorResult = this.colorPipeline!.applyGrade(
+                commandEncoder,
+                layer.colorCorrection,
+                state.sampler,
+                sourceTextureView,
+                state.effectTempView2,
+                layer.id
+              );
+              sourceTextureView = colorResult.finalView;
+            }
+
+            if (complexEffects && complexEffects.length > 0) {
+              const effectOutput = sourceTextureView === state.effectTempView
+                ? state.effectTempView2
+                : state.effectTempView;
               const effectResult = this.effectsPipeline.applyEffects(
                 commandEncoder,
                 complexEffects,
                 state.sampler,
-                state.effectTempView,
-                state.effectTempView2,
+                sourceTextureView,
+                effectOutput,
                 state.effectTempView,
                 state.effectTempView2,
                 state.outputWidth,
                 state.outputHeight
               );
-
-              // Use the effected texture for compositing (as regular texture, not external)
               sourceTextureView = effectResult.finalView;
-              useExternalTexture = false;
-              sourceExternalTexture = null;
             }
           }
-        } else if (sourceTextureView) {
-          // For regular textures, apply effects directly
-          // First copy to temp
-          const copyPass = commandEncoder.beginRenderPass({
-            colorAttachments: [{
-              view: state.effectTempView,
-              loadOp: 'clear',
-              storeOp: 'store',
-            }],
-          });
-          const copyPipeline = this.compositorPipeline.getCopyPipeline?.();
-          if (copyPipeline) {
-            const copyBindGroup = this.compositorPipeline.createCopyBindGroup?.(
-              state.sampler,
-              sourceTextureView,
-              layer.id
-            );
-            if (copyBindGroup) {
-              copyPass.setPipeline(copyPipeline);
-              copyPass.setBindGroup(0, copyBindGroup);
-              copyPass.draw(6);
-            }
-          }
-          copyPass.end();
-
-          // Apply complex effects
-          const effectResult = this.effectsPipeline.applyEffects(
-            commandEncoder,
-            complexEffects,
-            state.sampler,
-            state.effectTempView,
-            state.effectTempView2,
-            state.effectTempView,
-            state.effectTempView2,
-            state.outputWidth,
-            state.outputHeight
-          );
-
-          sourceTextureView = effectResult.finalView;
         }
       }
 
@@ -208,6 +204,7 @@ export class Compositor {
         const canCacheBindGroup =
           isStaticTextureSource &&
           !complexEffects &&
+          !hasColorCorrection &&
           !data.isDynamic;
         const cacheLayerId = canCacheBindGroup ? layer.id : undefined;
         if (!canCacheBindGroup) {

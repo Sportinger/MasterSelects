@@ -188,6 +188,7 @@ export class SnapshotManager {
         enabled: e.enabled,
         params: { ...e.params },
       })) ?? [],
+      colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
       speed: clip.speed,
       preservesPitch: clip.preservesPitch,
       reversed: clip.reversed,

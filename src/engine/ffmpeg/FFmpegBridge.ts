@@ -9,6 +9,7 @@ import type {
   FFmpegVideoCodec,
 } from './types';
 import { Logger } from '../../services/logger';
+import { clampGifAlphaThreshold, clampGifColors } from '../gif/gifOptions';
 
 const log = Logger.create('FFmpegBridge');
 
@@ -286,8 +287,9 @@ export class FFmpegBridge {
       log.debug(`Wrote /input/frames.raw: ${allFrames.byteLength} bytes`);
 
       // Write audio if provided
+      const supportsAudio = settings.container !== 'gif' && settings.codec !== 'gif';
       let hasAudio = false;
-      if (audioBuffer && audioBuffer.length > 0) {
+      if (supportsAudio && audioBuffer && audioBuffer.length > 0) {
         const audioData = this.audioBufferToPCM(audioBuffer);
         fs.writeFile('/input/audio.raw', new Uint8Array(audioData.buffer));
         hasAudio = true;
@@ -347,7 +349,7 @@ export class FFmpegBridge {
     ];
 
     // Add audio input if available
-    if (audioBuffer) {
+    if (audioBuffer && settings.container !== 'gif' && settings.codec !== 'gif') {
       args.push(
         '-f', 'f32le',                 // Raw PCM float32 little-endian
         '-ar', String(audioBuffer.sampleRate),
@@ -360,7 +362,7 @@ export class FFmpegBridge {
     args.push(...this.buildVideoArgs(settings));
 
     // Audio codec settings
-    if (audioBuffer) {
+    if (audioBuffer && settings.container !== 'gif' && settings.codec !== 'gif') {
       args.push(...this.buildAudioArgs(settings));
     } else {
       args.push('-an'); // No audio
@@ -489,6 +491,15 @@ export class FFmpegBridge {
         args.push('-pix_fmt', 'yuvj422p');
         break;
 
+      case 'gif':
+        args.push('-filter_complex', this.buildGifFilter(settings));
+        args.push('-c:v', 'gif');
+        args.push('-loop', settings.gifLoop === 'once' ? '-1' : '0');
+        if (settings.gifOptimize !== false) {
+          args.push('-gifflags', '+transdiff');
+        }
+        break;
+
       default:
         // Fallback to mjpeg as it's most widely compatible
         log.warn(`Unknown codec "${settings.codec}", falling back to mjpeg`);
@@ -498,6 +509,24 @@ export class FFmpegBridge {
     }
 
     return args;
+  }
+
+  private buildGifFilter(settings: FFmpegExportSettings): string {
+    const colors = clampGifColors(settings.gifColors);
+    const alphaThreshold = clampGifAlphaThreshold(settings.gifAlphaThreshold);
+    const dither = settings.gifDither ?? 'sierra2_4a';
+    const paletteMode = settings.gifPaletteMode ?? 'global';
+    const statsMode = paletteMode === 'per-frame'
+      ? 'single'
+      : settings.gifOptimize === false
+        ? 'full'
+        : 'diff';
+    const reserveTransparent = alphaThreshold < 255 ? 1 : 0;
+    const bayerScale = dither === 'bayer' ? ':bayer_scale=3' : '';
+    const palettegen = `palettegen=max_colors=${colors}:stats_mode=${statsMode}:reserve_transparent=${reserveTransparent}`;
+    const paletteuse = `paletteuse=dither=${dither}:alpha_threshold=${alphaThreshold}${bayerScale}${settings.gifOptimize === false ? '' : ':diff_mode=rectangle'}`;
+
+    return `[0:v]split[gif_palette_src][gif_pixels];[gif_palette_src]${palettegen}[gif_palette];[gif_pixels][gif_palette]${paletteuse}`;
   }
 
   /**
@@ -526,6 +555,7 @@ export class FFmpegBridge {
       webm: 'video/webm',
       avi: 'video/x-msvideo',
       mxf: 'application/mxf',
+      gif: 'image/gif',
     };
     return types[container] || 'video/mp4';
   }
@@ -686,6 +716,7 @@ export class FFmpegBridge {
       'ffv1',      // FFV1 lossless
       'utvideo',   // UTVideo lossless
       'mjpeg',     // Motion JPEG
+      'gif',       // Animated GIF
     ];
   }
 }

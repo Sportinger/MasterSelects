@@ -12,6 +12,7 @@ import { normalizePreviewPanelSource } from '../../utils/previewPanelSource';
 // This keeps the initial bundle small by deferring export pipeline,
 // AI services, YouTube API, and multicam analysis code
 const ExportPanel = lazy(() => import('../export/ExportPanel').then(m => ({ default: m.ExportPanel })));
+const ColorWorkspacePanel = lazy(() => import('../panels/color-workspace/ColorWorkspacePanel').then(m => ({ default: m.ColorWorkspacePanel })));
 const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
 const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
 const AIVideoPanel = lazy(() => import('../panels/AIVideoPanel').then(m => ({ default: m.AIVideoPanel })));
@@ -59,6 +60,8 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><ExportPanel /></Suspense>;
     case 'clip-properties':
       return <PropertiesPanel />;
+    case 'color-workspace':
+      return <Suspense fallback={<PanelLoading />}><ColorWorkspacePanel /></Suspense>;
     case 'timeline':
       return <Timeline />;
     case 'media':

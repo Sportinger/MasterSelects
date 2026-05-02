@@ -13,7 +13,7 @@ import { ProjectCoreService } from './core/ProjectCoreService';
 import { AnalysisService } from './domains/AnalysisService';
 import { TranscriptService } from './domains/TranscriptService';
 import { CacheService } from './domains/CacheService';
-import { ProxyStorageService, type ProxyFrameWriter } from './domains/ProxyStorageService';
+import { ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFrameWriter } from './domains/ProxyStorageService';
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS, type ProjectFolderKey } from './core/constants';
 import {
@@ -842,10 +842,10 @@ class ProjectFileService {
     return this.proxyStorageService.getProxyFrameCount(handle, mediaId);
   }
 
-  async getProxyFrameIndices(mediaId: string): Promise<Set<number>> {
+  async getProxyFrameIndices(mediaId: string, onProgress?: ProxyFrameScanProgressCallback): Promise<Set<number>> {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return new Set();
-    return this.proxyStorageService.getProxyFrameIndices(handle, mediaId);
+    return this.proxyStorageService.getProxyFrameIndices(handle, mediaId, onProgress);
   }
 
   async saveProxyVideo(mediaId: string, blob: Blob): Promise<boolean> {

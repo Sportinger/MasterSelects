@@ -24,6 +24,7 @@ import {
   useExportStore,
   type ExportEncoderType,
   type ExportImageFormat,
+  type ExportImageMode,
   type ExportSpecialContainer,
   type ExportVisualMode,
 } from '../../stores/exportStore';
@@ -65,6 +66,12 @@ export function useExportState(_composition: Composition | undefined) {
     ffmpegQuality,
     ffmpegBitrate,
     ffmpegRateControl,
+    gifColors,
+    gifDither,
+    gifLoop,
+    gifPaletteMode,
+    gifOptimize,
+    gifAlphaThreshold,
     stackedAlpha,
     includeAudio,
     audioSampleRate,
@@ -73,6 +80,7 @@ export function useExportState(_composition: Composition | undefined) {
     videoEnabled,
     visualMode,
     imageFormat,
+    imageExportMode,
     imageQuality,
     specialContainer,
   } = settings;
@@ -206,6 +214,14 @@ export function useExportState(_composition: Composition | undefined) {
       ffmpegPreset: '',
     };
 
+    if (newContainer === 'gif') {
+      patch.ffmpegCodec = 'gif';
+      patch.visualMode = 'gif';
+      patch.includeAudio = false;
+      setSettings(patch);
+      return;
+    }
+
     const codecInfo = getCodecInfo(ffmpegCodec);
     if (codecInfo && !codecInfo.containers.includes(newContainer)) {
       if (newContainer === 'mxf') {
@@ -217,8 +233,15 @@ export function useExportState(_composition: Composition | undefined) {
       }
     }
 
+    if (ffmpegCodec === 'gif') {
+      patch.ffmpegCodec = newContainer === 'mxf' ? 'dnxhd' : newContainer === 'mov' ? 'prores' : 'mjpeg';
+    }
+    if (visualMode === 'gif') {
+      patch.visualMode = 'video';
+    }
+
     setSettings(patch);
-  }, [ffmpegCodec, setSettings]);
+  }, [ffmpegCodec, setSettings, visualMode]);
 
   const handleFFmpegCodecChange = useCallback((newCodec: FFmpegVideoCodec) => {
     const patch: Partial<typeof settings> = {
@@ -226,13 +249,24 @@ export function useExportState(_composition: Composition | undefined) {
       ffmpegPreset: '',
     };
 
+    if (newCodec === 'gif') {
+      patch.ffmpegContainer = 'gif';
+      patch.visualMode = 'gif';
+      patch.includeAudio = false;
+      setSettings(patch);
+      return;
+    }
+
     const codecInfo = getCodecInfo(newCodec);
     if (codecInfo && !codecInfo.containers.includes(ffmpegContainer)) {
       patch.ffmpegContainer = codecInfo.containers[0];
     }
+    if (visualMode === 'gif') {
+      patch.visualMode = 'video';
+    }
 
     setSettings(patch);
-  }, [ffmpegContainer, setSettings]);
+  }, [ffmpegContainer, setSettings, visualMode]);
 
   return {
     encoder,
@@ -281,6 +315,18 @@ export function useExportState(_composition: Composition | undefined) {
     setFfmpegBitrate: (value: number) => setSettings({ ffmpegBitrate: value }),
     ffmpegRateControl,
     setFfmpegRateControl: (value: 'crf' | 'cbr' | 'vbr') => setSettings({ ffmpegRateControl: value }),
+    gifColors,
+    setGifColors: (value: number) => setSettings({ gifColors: value }),
+    gifDither,
+    setGifDither: (value: typeof gifDither) => setSettings({ gifDither: value }),
+    gifLoop,
+    setGifLoop: (value: typeof gifLoop) => setSettings({ gifLoop: value }),
+    gifPaletteMode,
+    setGifPaletteMode: (value: typeof gifPaletteMode) => setSettings({ gifPaletteMode: value }),
+    gifOptimize,
+    setGifOptimize: (value: boolean) => setSettings({ gifOptimize: value }),
+    gifAlphaThreshold,
+    setGifAlphaThreshold: (value: number) => setSettings({ gifAlphaThreshold: value }),
     isFFmpegLoading,
     isFFmpegReady,
     ffmpegLoadError,
@@ -300,6 +346,8 @@ export function useExportState(_composition: Composition | undefined) {
     setVisualMode: (value: ExportVisualMode) => setSettings({ visualMode: value }),
     imageFormat,
     setImageFormat: (value: ExportImageFormat) => setSettings({ imageFormat: value }),
+    imageExportMode,
+    setImageExportMode: (value: ExportImageMode) => setSettings({ imageExportMode: value }),
     imageQuality,
     setImageQuality: (value: number) => setSettings({ imageQuality: value }),
     specialContainer,

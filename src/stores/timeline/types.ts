@@ -13,6 +13,11 @@ import type {
   MaskVertex,
   MaskVertexHandleMode,
   Effect,
+  ColorCorrectionState,
+  ColorNodeType,
+  ColorParamValue,
+  ColorViewMode,
+  RuntimeColorGrade,
   TextClipProperties,
   Text3DProperties,
   Layer,
@@ -36,6 +41,11 @@ export type {
   MaskVertex,
   MaskVertexHandleMode,
   Effect,
+  ColorCorrectionState,
+  ColorNodeType,
+  ColorParamValue,
+  ColorViewMode,
+  RuntimeColorGrade,
   Composition,
   TextClipProperties,
   Text3DProperties,
@@ -227,6 +237,28 @@ export interface ClipEffectActions {
   reorderClipEffect: (clipId: string, effectId: string, newIndex: number) => void;
 }
 
+export interface ColorCorrectionActions {
+  ensureColorCorrection: (clipId: string) => void;
+  updateColorCorrection: (clipId: string, updater: (current: ColorCorrectionState) => ColorCorrectionState) => void;
+  setColorCorrectionEnabled: (clipId: string, enabled: boolean) => void;
+  setColorViewMode: (clipId: string, viewMode: ColorViewMode) => void;
+  setColorWorkspaceViewport: (clipId: string, viewport: NonNullable<ColorCorrectionState['ui']['workspaceViewport']>) => void;
+  selectColorNode: (clipId: string, nodeId: string | undefined) => void;
+  addColorNode: (clipId: string, type?: ColorNodeType) => string;
+  removeColorNode: (clipId: string, nodeId: string) => void;
+  moveColorNode: (clipId: string, nodeId: string, position: { x: number; y: number }) => void;
+  connectColorNodes: (clipId: string, fromNodeId: string, toNodeId: string) => void;
+  removeColorEdge: (clipId: string, edgeId: string) => void;
+  updateColorNodeParam: (clipId: string, versionId: string, nodeId: string, paramName: string, value: ColorParamValue) => void;
+  setColorNodeEnabled: (clipId: string, nodeId: string, enabled: boolean) => void;
+  renameColorNode: (clipId: string, nodeId: string, name: string) => void;
+  resetColorNode: (clipId: string, nodeId: string) => void;
+  resetColorCorrection: (clipId: string) => void;
+  duplicateColorVersion: (clipId: string) => string;
+  deleteColorVersion: (clipId: string, versionId: string) => void;
+  setActiveColorVersion: (clipId: string, versionId: string) => void;
+}
+
 // Multicam linked group actions (extracted to linkedGroupSlice)
 export interface LinkedGroupActions {
   createLinkedGroup: (clipIds: string[], offsets: Map<string, number>) => void;
@@ -268,7 +300,7 @@ export interface CoreClipActions {
 }
 
 // Combined ClipActions = all sub-interfaces
-export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & LinkedGroupActions & DownloadClipActions;
+export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & ColorCorrectionActions & LinkedGroupActions & DownloadClipActions;
 
 // Playback actions interface
 export interface PlaybackActions {
@@ -357,6 +389,7 @@ export interface KeyframeActions {
   getClipKeyframes: (clipId: string) => Keyframe[];
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];
+  getInterpolatedColorCorrection: (clipId: string, clipLocalTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
   getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
@@ -419,6 +452,7 @@ export interface ClipboardClipData {
   naturalDuration?: number;
   transform: ClipTransform;
   effects: Effect[];
+  colorCorrection?: ColorCorrectionState;
   masks?: ClipMask[];
   keyframes?: Keyframe[];
   linkedClipId?: string;

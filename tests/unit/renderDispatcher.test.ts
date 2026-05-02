@@ -112,6 +112,34 @@ function createDispatcher(isPlaying = true) {
   };
 }
 
+function createRuntimeColorGrade(): NonNullable<Layer['colorCorrection']> {
+  return {
+    enabled: true,
+    graphHash: 'grade-1',
+    nodeIds: ['node_primary'],
+    primary: {
+      exposure: 0.25,
+      contrast: 1.1,
+      pivot: 0.5,
+      saturation: 0.9,
+      vibrance: 0,
+      temperature: 0,
+      tint: 0,
+      blackPoint: 0,
+      whitePoint: 1,
+      lift: 0,
+      gamma: 1,
+      gain: 1,
+      offset: 0,
+      shadows: 0,
+      highlights: 0,
+      hue: 0,
+    },
+    primaryNodes: [],
+    diagnostics: [],
+  };
+}
+
 describe('RenderDispatcher empty playback hold', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -376,6 +404,7 @@ describe('RenderDispatcher empty playback hold', () => {
       isInitialized: true,
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
     };
+    const colorCorrection = createRuntimeColorGrade();
 
     const layerData = [
       {
@@ -387,6 +416,7 @@ describe('RenderDispatcher empty playback hold', () => {
           opacity: 0.75,
           blendMode: 'screen',
           effects: [{ id: 'fx-1' }],
+          colorCorrection,
           is3D: true,
           position: { x: 0.5, y: -0.25, z: 2 },
           scale: { x: 1, y: 1, z: 1 },
@@ -427,6 +457,7 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(layerData[0]?.layer.id).toBe('__scene_3d__');
     expect(layerData[0]?.layer.opacity).toBeCloseTo(0.75);
     expect(layerData[0]?.layer.blendMode).toBe('screen');
+    expect(layerData[0]?.layer.colorCorrection).toBe(colorCorrection);
   });
 
   it('does not substitute a nearby loaded gaussian-splat sequence frame while the playhead is dragged', () => {

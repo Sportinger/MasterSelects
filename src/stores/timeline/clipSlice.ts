@@ -19,6 +19,7 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
   return {
     transform: structuredClone(clip.transform),
     effects: clip.effects.map(e => structuredClone(e)),
+    ...(clip.colorCorrection ? { colorCorrection: structuredClone(clip.colorCorrection) } : {}),
     ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
     ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),

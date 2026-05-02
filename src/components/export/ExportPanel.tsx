@@ -15,6 +15,17 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
 import { syncExportMaskTextures } from '../../engine/export/ExportMaskTextures';
 import {
+  blobToUint8Array,
+  createImageSequenceZip,
+  getImageSequenceFolderName,
+  getImageSequenceFrameName,
+  isImageSequenceFolderExportSupported,
+  isImageSequenceFolderSelectionAbort,
+  pickImageSequenceOutputDirectory,
+  writeImageSequenceFrame,
+} from '../../engine/export/ImageSequenceExporter';
+import type { ImageSequenceDirectoryHandle, ImageSequenceEntry } from '../../engine/export/ImageSequenceExporter';
+import {
   getFFmpegBridge,
   PRORES_PROFILES,
   DNXHR_PROFILES,
@@ -23,6 +34,16 @@ import {
   getCodecsForContainer,
 } from '../../engine/ffmpeg';
 import { CodecSelector } from './CodecSelector';
+import { encodeBrowserGif } from '../../engine/export/BrowserGifExporter';
+import {
+  GIF_COLOR_PRESETS,
+  GIF_DITHER_OPTIONS,
+  GIF_PALETTE_MODES,
+  estimateGifSize,
+  formatByteSize,
+  getGifDitherLabel,
+  getGifPaletteModeLabel,
+} from '../../engine/gif/gifOptions';
 import type {
   FFmpegExportSettings,
   FFmpegProgress,
@@ -50,9 +71,13 @@ type ExportSummaryTarget =
   | 'video-rate'
   | 'video-codec'
   | 'video-alpha'
+  | 'gif-palette'
   | 'image-section'
+  | 'image-mode'
   | 'image-resolution'
+  | 'image-fps'
   | 'image-quality'
+  | 'image-range'
   | 'audio-section'
   | 'audio-format'
   | 'audio-quality'
@@ -83,6 +108,8 @@ const IMAGE_QUALITY_PRESETS = [
   { id: 'high', label: 'High', value: 0.92 },
   { id: 'max', label: 'Max', value: 1 },
 ] as const;
+
+type ImageFormatOption = typeof IMAGE_FORMATS[number];
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -133,6 +160,31 @@ function encodeBmp(imageData: ImageData): Blob {
   return new Blob([buffer], { type: 'image/bmp' });
 }
 
+async function encodeImageDataToBlob(
+  imageData: ImageData,
+  format: ImageFormatOption,
+  quality: number,
+): Promise<Blob> {
+  if (format.id === 'bmp') {
+    return encodeBmp(imageData);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = imageData.width;
+  canvas.height = imageData.height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Failed to create canvas context');
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvasToBlob(
+    canvas,
+    format.mimeType,
+    format.lossless ? undefined : quality,
+  );
+}
+
 export function ExportPanel() {
   const ffmpegFrameRendererRef = useRef<FFmpegFrameRenderer | null>(null);
   const ffmpegAudioPipelineRef = useRef<AudioExportPipeline | null>(null);
@@ -180,6 +232,12 @@ export function ExportPanel() {
     ffmpegCodec, ffmpegContainer,
     proresProfile, setProresProfile, dnxhrProfile, setDnxhrProfile,
     ffmpegQuality, setFfmpegQuality, ffmpegBitrate, ffmpegRateControl,
+    gifColors, setGifColors,
+    gifDither, setGifDither,
+    gifLoop, setGifLoop,
+    gifPaletteMode, setGifPaletteMode,
+    gifOptimize, setGifOptimize,
+    gifAlphaThreshold, setGifAlphaThreshold,
     isFFmpegLoading, isFFmpegReady, ffmpegLoadError,
     stackedAlpha, setStackedAlpha,
     includeAudio, setIncludeAudio, audioSampleRate, setAudioSampleRate,
@@ -187,6 +245,7 @@ export function ExportPanel() {
     videoEnabled, setVideoEnabled,
     visualMode, setVisualMode,
     imageFormat, setImageFormat,
+    imageExportMode, setImageExportMode,
     imageQuality, setImageQuality,
     specialContainer, setSpecialContainer,
     isExporting, setIsExporting, progress, setProgress,
@@ -308,7 +367,11 @@ export function ExportPanel() {
 
   // Handle cancel
   const handleCancel = useCallback(() => {
-    if (encoder === 'webcodecs' || encoder === 'htmlvideo') {
+    if (visualMode === 'gif' || visualMode === 'image') {
+      ffmpegFrameRendererRef.current?.cancel();
+      const ffmpeg = getFFmpegBridge();
+      ffmpeg.cancel();
+    } else if (encoder === 'webcodecs' || encoder === 'htmlvideo') {
       if (exporter) {
         exporter.cancel();
       }
@@ -323,7 +386,151 @@ export function ExportPanel() {
     setExportPhase('idle');
     // End export progress in timeline
     endExport();
-  }, [exporter, encoder, endExport, setExporter, setExportPhase, setIsExporting]);
+  }, [exporter, encoder, endExport, setExporter, setExportPhase, setIsExporting, visualMode]);
+
+  // Handle browser-side GIF export. This is not a WebCodecs codec, but it shares
+  // the browser render path so GIF is available without loading FFmpeg.
+  const handleBrowserGifExport = useCallback(async () => {
+    if (isExporting) return;
+
+    setIsExporting(true);
+    setError(null);
+    setProgress(null);
+
+    const { startTime, endTime } = getCurrentExportRange();
+    const actualWidth = useCustomResolution ? customWidth : width;
+    const actualHeight = useCustomResolution ? customHeight : height;
+    const exportFps = useCustomFps ? customFps : fps;
+    const originalDimensions = engine.getOutputDimensions();
+    const frameRenderer = new FFmpegFrameRenderer({
+      width: actualWidth,
+      height: actualHeight,
+      fps: exportFps,
+      startTime,
+      endTime,
+      exportMode: encoder === 'webcodecs' ? 'fast' : 'precise',
+    });
+    ffmpegFrameRendererRef.current = frameRenderer;
+
+    startExport(startTime, endTime);
+
+    try {
+      await frameRenderer.initialize();
+
+      const frames: Uint8Array[] = [];
+      const totalFrames = Math.ceil((endTime - startTime) * exportFps);
+      const frameDuration = 1 / exportFps;
+
+      engine.setExporting(true);
+      engine.setResolution(actualWidth, actualHeight);
+
+      for (let i = 0; i < totalFrames; i++) {
+        if (frameRenderer.isCancelled()) {
+          return;
+        }
+
+        const time = startTime + i * frameDuration;
+        const layers = await frameRenderer.buildLayersAtTime(time);
+
+        engine.setRenderTimeOverride(time);
+        syncExportMaskTextures(layers, actualWidth, actualHeight);
+        await engine.ensureExportLayersReady(layers);
+        engine.render(layers);
+
+        const pixels = await engine.readPixels();
+        if (!pixels) {
+          throw new Error('Failed to read frame from GPU');
+        }
+
+        const frameCopy = new Uint8Array(pixels.length);
+        frameCopy.set(pixels);
+        frames.push(frameCopy);
+
+        const percent = ((i + 1) / totalFrames) * 60;
+        setProgress({
+          phase: 'video',
+          currentFrame: i + 1,
+          totalFrames,
+          percent,
+          estimatedTimeRemaining: 0,
+          currentTime: time,
+        });
+        setExportProgress(percent, time);
+      }
+
+      engine.setExporting(false);
+      engine.setResolution(originalDimensions.width, originalDimensions.height);
+
+      if (frames.length === 0) {
+        throw new Error('No frames rendered');
+      }
+
+      const blob = encodeBrowserGif(frames, {
+        width: actualWidth,
+        height: actualHeight,
+        fps: exportFps,
+        gifColors,
+        gifDither,
+        gifLoop,
+        gifPaletteMode,
+        gifOptimize,
+        gifAlphaThreshold,
+      }, (gifProgress) => {
+        const percent = 60 + (gifProgress.percent / 100) * 40;
+        setProgress({
+          phase: 'video',
+          currentFrame: gifProgress.frame,
+          totalFrames,
+          percent,
+          estimatedTimeRemaining: 0,
+          currentTime: endTime,
+        });
+        setExportProgress(percent, endTime);
+      });
+
+      downloadBlob(blob, `${filename}.gif`);
+    } catch (e) {
+      if (frameRenderer.isCancelled()) {
+        log.info('Browser GIF export cancelled');
+        return;
+      }
+      log.error('Browser GIF export failed', e);
+      setError(e instanceof Error ? e.message : 'GIF export failed');
+    } finally {
+      frameRenderer.cleanup();
+      ffmpegFrameRendererRef.current = null;
+      engine.setRenderTimeOverride(null);
+      engine.setExporting(false);
+      engine.setResolution(originalDimensions.width, originalDimensions.height);
+      setIsExporting(false);
+      endExport();
+    }
+  }, [
+    customFps,
+    customHeight,
+    customWidth,
+    encoder,
+    endExport,
+    filename,
+    fps,
+    getCurrentExportRange,
+    gifAlphaThreshold,
+    gifColors,
+    gifDither,
+    gifLoop,
+    gifOptimize,
+    gifPaletteMode,
+    height,
+    isExporting,
+    setError,
+    setExportProgress,
+    setIsExporting,
+    setProgress,
+    startExport,
+    useCustomFps,
+    useCustomResolution,
+    width,
+  ]);
 
   // Handle FFmpeg export
   const handleFFmpegExport = useCallback(async () => {
@@ -347,6 +554,7 @@ export function ExportPanel() {
     const actualWidth = useCustomResolution ? customWidth : width;
     const actualHeight = useCustomResolution ? customHeight : height;
     const exportFps = useCustomFps ? customFps : fps;
+    const exportAsGif = visualMode === 'gif';
     const originalDimensions = engine.getOutputDimensions();
     const ffmpegFrameRenderer = new FFmpegFrameRenderer({
       width: actualWidth,
@@ -364,17 +572,23 @@ export function ExportPanel() {
       await ffmpegFrameRenderer.initialize();
 
       const settings: FFmpegExportSettings = {
-        codec: ffmpegCodec,
-        container: ffmpegContainer,
+        codec: exportAsGif ? 'gif' : ffmpegCodec,
+        container: exportAsGif ? 'gif' : ffmpegContainer,
         width: actualWidth,
         height: actualHeight,
         fps: exportFps,
         startTime,
         endTime,
-        quality: ffmpegCodec === 'mjpeg' ? ffmpegQuality : undefined,
+        quality: !exportAsGif && ffmpegCodec === 'mjpeg' ? ffmpegQuality : undefined,
         bitrate: undefined, // Bitrate not used for available codecs
-        proresProfile: ffmpegCodec === 'prores' ? proresProfile : undefined,
-        dnxhrProfile: ffmpegCodec === 'dnxhd' ? dnxhrProfile : undefined,
+        proresProfile: !exportAsGif && ffmpegCodec === 'prores' ? proresProfile : undefined,
+        dnxhrProfile: !exportAsGif && ffmpegCodec === 'dnxhd' ? dnxhrProfile : undefined,
+        gifColors,
+        gifDither,
+        gifLoop,
+        gifPaletteMode,
+        gifOptimize,
+        gifAlphaThreshold,
         // HAP not available in ASYNCIFY build
       };
 
@@ -474,7 +688,7 @@ export function ExportPanel() {
       // Extract audio from timeline (if enabled)
       let audioBuffer: AudioBuffer | null = null;
 
-      if (includeAudio) {
+      if (includeAudio && !exportAsGif) {
         setExportPhase('audio');
         log.info('Extracting audio for FFmpeg...');
 
@@ -561,7 +775,7 @@ export function ExportPanel() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${filename}.${ffmpegContainer}`;
+      a.download = `${filename}.${exportAsGif ? 'gif' : ffmpegContainer}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -593,6 +807,7 @@ export function ExportPanel() {
     isExporting, isFFmpegReady, loadFFmpeg, useCustomResolution, customWidth, customHeight,
     width, height, fps, customFps, useCustomFps, getCurrentExportRange, ffmpegCodec, ffmpegContainer,
     ffmpegQuality, proresProfile, dnxhrProfile, filename,
+    gifAlphaThreshold, gifColors, gifDither, gifLoop, gifOptimize, gifPaletteMode, visualMode,
     includeAudio, audioSampleRate, audioBitrate, normalizeAudio,
     startExport, setExportProgress, endExport,
     setError, setExportPhase, setFfmpegProgress, setIsExporting,
@@ -716,23 +931,7 @@ export function ExportPanel() {
       }
 
       const imageData = new ImageData(new Uint8ClampedArray(pixels), actualWidth, actualHeight);
-      const canvas = document.createElement('canvas');
-      canvas.width = actualWidth;
-      canvas.height = actualHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        setError('Failed to create canvas context');
-        return;
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      const blob = imageFormat === 'bmp'
-        ? encodeBmp(imageData)
-        : await canvasToBlob(
-            canvas,
-            selectedImageFormat.mimeType,
-            selectedImageFormat.lossless ? undefined : imageQuality,
-          );
+      const blob = await encodeImageDataToBlob(imageData, selectedImageFormat, imageQuality);
       const frameName = `${filename}_frame_${Math.floor(playheadPosition * 1000)}.${imageFormat}`;
       downloadBlob(blob, frameName);
     } catch (e) {
@@ -751,6 +950,172 @@ export function ExportPanel() {
     setError,
   ]);
 
+  const handleRenderImageSequence = useCallback(async () => {
+    if (isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+    setError(null);
+    setProgress(null);
+    setExportPhase('rendering');
+
+    const { startTime, endTime } = getCurrentExportRange();
+    const actualWidth = useCustomResolution ? customWidth : width;
+    const actualHeight = useCustomResolution ? customHeight : height;
+    const exportFps = useCustomFps ? customFps : fps;
+    const frameDuration = 1 / Math.max(exportFps, 1);
+    const totalFrames = Math.max(1, Math.ceil(Math.max(0, endTime - startTime) * exportFps));
+    const selectedImageFormat = IMAGE_FORMATS.find(({ id }) => id === imageFormat) ?? IMAGE_FORMATS[0];
+    const originalDimensions = engine.getOutputDimensions();
+    const folderExportSupported = isImageSequenceFolderExportSupported();
+    const sequenceFolderName = getImageSequenceFolderName(filename, imageFormat);
+    const frameRenderer = new FFmpegFrameRenderer({
+      width: actualWidth,
+      height: actualHeight,
+      fps: exportFps,
+      startTime,
+      endTime: Math.max(endTime, startTime + frameDuration),
+      exportMode: encoder === 'webcodecs' ? 'fast' : 'precise',
+    });
+    ffmpegFrameRendererRef.current = frameRenderer;
+    let timelineExportStarted = false;
+
+    try {
+      const outputDirectory: ImageSequenceDirectoryHandle | null = folderExportSupported
+        ? await pickImageSequenceOutputDirectory(sequenceFolderName)
+        : null;
+
+      startExport(startTime, endTime);
+      timelineExportStarted = true;
+      await frameRenderer.initialize();
+
+      const sequenceEntries: ImageSequenceEntry[] = [];
+      const startedAt = performance.now();
+      engine.setExporting(true);
+      engine.setResolution(actualWidth, actualHeight);
+
+      for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+        if (frameRenderer.isCancelled()) {
+          return;
+        }
+
+        const frameTime = startTime + frameIndex * frameDuration;
+        const layers = await frameRenderer.buildLayersAtTime(frameTime);
+
+        engine.setRenderTimeOverride(frameTime);
+        syncExportMaskTextures(layers, actualWidth, actualHeight);
+        await engine.ensureExportLayersReady(layers);
+        engine.render(layers);
+
+        const pixels = await engine.readPixels();
+        if (!pixels) {
+          throw new Error('Failed to read frame from GPU');
+        }
+
+        const imageData = new ImageData(new Uint8ClampedArray(pixels), actualWidth, actualHeight);
+        const blob = await encodeImageDataToBlob(imageData, selectedImageFormat, imageQuality);
+        const filenameForFrame = getImageSequenceFrameName(filename, frameIndex, totalFrames, imageFormat);
+        if (outputDirectory) {
+          await writeImageSequenceFrame(outputDirectory, filenameForFrame, blob);
+        } else {
+          sequenceEntries.push({
+            filename: filenameForFrame,
+            data: await blobToUint8Array(blob),
+          });
+        }
+
+        const completedFrames = frameIndex + 1;
+        const renderPercent = (completedFrames / totalFrames) * 92;
+        const elapsedMs = performance.now() - startedAt;
+        const avgFrameMs = elapsedMs / completedFrames;
+        const remainingFrames = totalFrames - completedFrames;
+        setProgress({
+          phase: 'video',
+          currentFrame: completedFrames,
+          totalFrames,
+          percent: renderPercent,
+          estimatedTimeRemaining: (remainingFrames * avgFrameMs) / 1000,
+          currentTime: frameTime,
+        });
+        setExportProgress(renderPercent, frameTime);
+      }
+
+      if (frameRenderer.isCancelled()) {
+        return;
+      }
+
+      if (!outputDirectory) {
+        setProgress({
+          phase: 'muxing',
+          currentFrame: totalFrames,
+          totalFrames,
+          percent: 96,
+          estimatedTimeRemaining: 0,
+          currentTime: endTime,
+        });
+        setExportProgress(96, endTime);
+
+        const zipBlob = createImageSequenceZip(sequenceEntries);
+        downloadBlob(zipBlob, `${sequenceFolderName}.zip`);
+      }
+
+      setProgress({
+        phase: 'muxing',
+        currentFrame: totalFrames,
+        totalFrames,
+        percent: 100,
+        estimatedTimeRemaining: 0,
+        currentTime: endTime,
+      });
+      setExportProgress(100, endTime);
+    } catch (e) {
+      if (isImageSequenceFolderSelectionAbort(e)) {
+        log.info('Image sequence folder export cancelled');
+        return;
+      }
+      if (frameRenderer.isCancelled()) {
+        log.info('Image sequence export cancelled');
+        return;
+      }
+      log.error('Image sequence export failed', e);
+      setError(e instanceof Error ? e.message : 'Image sequence export failed');
+    } finally {
+      frameRenderer.cleanup();
+      ffmpegFrameRendererRef.current = null;
+      engine.setRenderTimeOverride(null);
+      engine.setExporting(false);
+      engine.setResolution(originalDimensions.width, originalDimensions.height);
+      setExportPhase('idle');
+      setIsExporting(false);
+      if (timelineExportStarted) {
+        endExport();
+      }
+    }
+  }, [
+    customFps,
+    customHeight,
+    customWidth,
+    encoder,
+    endExport,
+    filename,
+    fps,
+    getCurrentExportRange,
+    height,
+    imageFormat,
+    imageQuality,
+    isExporting,
+    setError,
+    setExportPhase,
+    setExportProgress,
+    setIsExporting,
+    setProgress,
+    startExport,
+    useCustomFps,
+    useCustomResolution,
+    width,
+  ]);
+
   // Format time as MM:SS.ff
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -762,10 +1127,30 @@ export function ExportPanel() {
   const actualWidth = useCustomResolution ? customWidth : width;
   const actualHeight = useCustomResolution ? customHeight : height;
   const actualFps = useCustomFps ? customFps : fps;
+  const imageSequenceFrameCount = Math.max(1, Math.ceil(Math.max(0, endTime - startTime) * actualFps));
+  const gifSizeEstimate = estimateGifSize({
+    width: actualWidth,
+    height: actualHeight,
+    fps: actualFps,
+    durationSeconds: endTime - startTime,
+    gifColors,
+    gifDither,
+    gifLoop,
+    gifPaletteMode,
+    gifOptimize,
+    gifAlphaThreshold,
+  });
+  const gifSizeRangeLabel = `${formatByteSize(gifSizeEstimate.minBytes)}-${formatByteSize(gifSizeEstimate.maxBytes)}`;
 
   // Format file size estimate - works for both encoders
   const estimatedSize = () => {
     const durationSec = endTime - startTime;
+    if (durationSec <= 0) {
+      return '-';
+    }
+    if (visualMode === 'gif') {
+      return `~${formatByteSize(gifSizeEstimate.bytes)}`;
+    }
     if (durationSec <= 0) return '—';
 
     let estimatedBitrate: number;
@@ -799,21 +1184,43 @@ export function ExportPanel() {
   const ffmpegAvailable = isFFmpegSupported;
 
   // Get codec info for FFmpeg display
-  const ffmpegCodecInfo = getCodecInfo(ffmpegCodec);
+  const ffmpegCodecInfo = getCodecInfo(visualMode === 'gif' ? 'gif' : ffmpegCodec);
   // Only MJPEG has quality slider (q:v), professional codecs use profiles
-  const showFFmpegQualityControl = ffmpegCodec === 'mjpeg';
+  const showFFmpegQualityControl = visualMode !== 'gif' && ffmpegCodec === 'mjpeg';
   const isWebCodecsEncoder = encoder === 'webcodecs' || encoder === 'htmlvideo';
   const isXmlMode = specialContainer === 'xml';
-  const currentContainerId = isXmlMode ? 'fcpxml' : (isWebCodecsEncoder ? containerFormat : ffmpegContainer);
+  const isImageMode = !isXmlMode && videoEnabled && visualMode === 'image';
+  const isImageSequenceMode = isImageMode && imageExportMode === 'sequence';
+  const imageSequenceFolderSupported = isImageSequenceMode && isImageSequenceFolderExportSupported();
+  const imageSequenceOutputLabel = imageSequenceFolderSupported ? 'Folder' : 'ZIP';
+  const imageSequenceOutputName = imageSequenceFolderSupported
+    ? `${getImageSequenceFolderName(filename || 'export', imageFormat)}/`
+    : `${getImageSequenceFolderName(filename || 'export', imageFormat)}.zip`;
+  const isGifMode = !isXmlMode && videoEnabled && visualMode === 'gif';
+  const isVideoMode = !isXmlMode && videoEnabled && (visualMode === 'video' || isGifMode);
+  const isAudioOnlyMode = !isXmlMode && !videoEnabled;
+  const currentContainerId = isXmlMode ? 'fcpxml' : isGifMode ? 'gif' : (isWebCodecsEncoder ? containerFormat : ffmpegContainer);
   const currentContainerLabel = isXmlMode
     ? 'FCPXML'
+    : isGifMode
+      ? 'Animated GIF'
     : isWebCodecsEncoder
       ? FrameExporter.getContainerFormats().find(({ id }) => id === containerFormat)?.label ?? containerFormat.toUpperCase()
       : CONTAINER_FORMATS.find(({ id }) => id === ffmpegContainer)?.name ?? ffmpegContainer.toUpperCase();
-  const currentCodecLabel = isWebCodecsEncoder
+  const currentCodecLabel = isGifMode
+    ? (encoder === 'ffmpeg' ? 'FFmpeg GIF' : 'Browser GIF')
+    : isWebCodecsEncoder
     ? FrameExporter.getVideoCodecs(containerFormat).find(({ id }) => id === videoCodec)?.label ?? videoCodec.toUpperCase()
     : ffmpegCodecInfo?.name ?? ffmpegCodec.toUpperCase();
-  const methodMeta = encoder === 'webcodecs'
+  const methodMeta = isGifMode
+    ? {
+        title: encoder === 'ffmpeg' ? 'FFmpeg GIF' : 'Browser GIF',
+        badge: encoder === 'ffmpeg' ? 'Palette' : 'Browser',
+        description: encoder === 'ffmpeg'
+          ? 'Palette and dither controlled animated GIF output.'
+          : 'Browser-side animated GIF output without loading FFmpeg.',
+      }
+    : encoder === 'webcodecs'
     ? {
         title: 'WebCodecs Fast',
         badge: 'Fast',
@@ -830,7 +1237,9 @@ export function ExportPanel() {
           badge: isFFmpegMultiThreaded ? 'Intermediate' : 'CPU',
           description: 'Professional intermediates and edit-friendly interchange formats.',
         };
-  const ffmpegAudioCodecLabel = ffmpegContainer === 'mov'
+  const ffmpegAudioCodecLabel = isGifMode
+    ? 'None'
+    : ffmpegContainer === 'mov'
     ? 'AAC'
     : ffmpegContainer === 'mkv'
       ? 'FLAC'
@@ -839,38 +1248,41 @@ export function ExportPanel() {
         : ffmpegContainer === 'mxf'
           ? 'PCM'
           : 'AAC';
-  const isImageMode = !isXmlMode && videoEnabled && visualMode === 'image';
-  const isVideoMode = !isXmlMode && videoEnabled && visualMode === 'video';
-  const isAudioOnlyMode = !isXmlMode && !videoEnabled;
-  const effectiveIncludeAudio = (isVideoMode || isXmlMode) && includeAudio;
+  const effectiveIncludeAudio = (isVideoMode || isXmlMode) && includeAudio && !isGifMode;
   const selectedImageFormat = IMAGE_FORMATS.find(({ id }) => id === imageFormat) ?? IMAGE_FORMATS[0];
   const audioExtension = audioCodec === 'opus' ? 'ogg' : 'aac';
   const audioCodecLabel = audioCodec?.toUpperCase() ?? 'AAC';
   const currentAudioCodecLabel = isVideoMode && encoder === 'ffmpeg'
     ? ffmpegAudioCodecLabel
     : audioCodecLabel;
-  const outputHeight = stackedAlpha && isVideoMode ? actualHeight * 2 : actualHeight;
-  const frameCount = isVideoMode ? Math.ceil((endTime - startTime) * actualFps) : 1;
-  const displayExtension = isXmlMode ? 'fcpxml' : isAudioOnlyMode ? audioExtension : isImageMode ? imageFormat : currentContainerId;
-  const estimatedSizeLabel = isXmlMode ? 'Metadata only' : isImageMode ? 'Current frame' : (!videoEnabled && !includeAudio) ? '-' : estimatedSize();
-  const sizeLabelPrefix = isVideoMode && isWebCodecsEncoder ? 'Target' : 'Size';
-  const sizeStatLabel = isVideoMode && isWebCodecsEncoder ? 'Target Size' : 'Est. Size';
+  const outputHeight = stackedAlpha && isVideoMode && !isGifMode ? actualHeight * 2 : actualHeight;
+  const frameCount = isImageSequenceMode ? imageSequenceFrameCount : isVideoMode ? Math.ceil((endTime - startTime) * actualFps) : 1;
+  const displayExtension = isXmlMode ? 'fcpxml' : isAudioOnlyMode ? audioExtension : isImageMode ? (isImageSequenceMode ? imageSequenceOutputLabel.toLowerCase() : imageFormat) : isGifMode ? 'gif' : currentContainerId;
+  const displayOutputName = isImageSequenceMode ? imageSequenceOutputName : `${filename || 'export'}.${displayExtension}`;
+  const displayContainerLabel = isImageSequenceMode ? imageSequenceOutputLabel : `.${displayExtension}`;
+  const estimatedSizeLabel = isXmlMode ? 'Metadata only' : isImageMode ? (isImageSequenceMode ? `${imageSequenceFrameCount} frames ${imageSequenceOutputLabel}` : 'Current frame') : (!videoEnabled && !includeAudio && !isGifMode) ? '-' : estimatedSize();
+  const sizeLabelPrefix = isVideoMode && isWebCodecsEncoder && !isGifMode ? 'Target' : 'Size';
+  const sizeStatLabel = isVideoMode && isWebCodecsEncoder && !isGifMode ? 'Target Size' : 'Est. Size';
   const webCodecsRateNote = rateControl === 'vbr'
     ? 'VBR is only a bitrate target. Simple shots can encode much smaller than the selected Mbps.'
     : 'CBR tries to stay closer, but browser encoders can still drift from the requested bitrate.';
   const exportModeLabel = isXmlMode
     ? 'Timeline XML'
     : isImageMode
-    ? 'Image'
+    ? (isImageSequenceMode ? 'Image Sequence' : 'Image Frame')
+    : isGifMode
+      ? 'Animated GIF'
     : isVideoMode
       ? (effectiveIncludeAudio ? 'Video + Audio' : 'Video Only')
       : (includeAudio ? 'Audio Only' : 'Nothing Selected');
   const exportDisabled =
     isExporting ||
+    (isImageSequenceMode && endTime <= startTime) ||
     (!isImageMode && !isXmlMode && endTime <= startTime) ||
     isAudioOnlyMode && (!includeAudio || !isAudioSupported) ||
     (isVideoMode && encoder === 'ffmpeg' && isFFmpegLoading);
   const primaryExportLabel = 'Export';
+  const usesBrowserProgress = isImageSequenceMode || encoder === 'webcodecs' || encoder === 'htmlvideo';
   const audioSummaryBadges = (effectiveIncludeAudio || isAudioOnlyMode && includeAudio)
     ? [
         { label: currentAudioCodecLabel, target: 'audio-format' as const },
@@ -890,9 +1302,19 @@ export function ExportPanel() {
     : isImageMode
     ? [
         { label: exportModeLabel, target: 'image-section' },
+        { label: isImageSequenceMode ? `Sequence ${imageSequenceOutputLabel}` : 'Single frame', target: 'image-mode' },
         { label: selectedImageFormat.label, target: 'basic-container' },
         { label: `${actualWidth}x${actualHeight}`, target: 'image-resolution' },
-        { label: `Frame ${formatTime(playheadPosition)}`, target: 'image-section' },
+        {
+          label: isImageSequenceMode
+            ? `${imageSequenceFrameCount} frames`
+            : `Frame ${formatTime(playheadPosition)}`,
+          target: isImageSequenceMode ? 'image-range' : 'image-section',
+        },
+        ...(isImageSequenceMode ? [{
+          label: `${actualFps} fps`,
+          target: 'image-fps' as const,
+        }] : []),
         {
           label: selectedImageFormat.lossless ? 'Lossless' : `${Math.round(imageQuality * 100)}% quality`,
           target: 'image-quality',
@@ -918,22 +1340,26 @@ export function ExportPanel() {
           { label: `${actualWidth}x${outputHeight}`, target: 'video-resolution' as const },
           { label: `${actualFps} fps`, target: 'video-fps' as const },
           {
-            label: encoder === 'ffmpeg'
+            label: isGifMode
+              ? `${gifColors} colors`
+              : encoder === 'ffmpeg'
               ? (showFFmpegQualityControl ? `MJPEG Q${ffmpegQuality}` : currentCodecLabel)
               : `${(bitrate / 1_000_000).toFixed(1)} Mbps`,
-            target: encoder === 'ffmpeg' && !showFFmpegQualityControl ? 'video-codec' as const : 'video-rate' as const,
+            target: isGifMode
+              ? 'gif-palette' as const
+              : encoder === 'ffmpeg' && !showFFmpegQualityControl ? 'video-codec' as const : 'video-rate' as const,
           },
         ] : []),
         ...audioSummaryBadges,
         {
           label: `Range ${formatTime(startTime)} - ${formatTime(endTime)}`,
-          target: isVideoMode ? 'video-alpha' : 'audio-processing',
+          target: isVideoMode ? (isGifMode ? 'gif-palette' : 'video-alpha') : 'audio-processing',
         },
         {
           label: `Duration ${formatTime(endTime - startTime)}`,
-          target: isVideoMode ? 'video-alpha' : 'audio-processing',
+          target: isVideoMode ? (isGifMode ? 'gif-palette' : 'video-alpha') : 'audio-processing',
         },
-        ...(stackedAlpha && isVideoMode ? [{
+        ...(stackedAlpha && isVideoMode && !isGifMode ? [{
           label: 'Stacked alpha',
           target: 'video-alpha' as const,
           warning: true,
@@ -941,7 +1367,7 @@ export function ExportPanel() {
         {
           label: `${sizeLabelPrefix} ${estimatedSizeLabel}`,
           target: isVideoMode
-            ? (isWebCodecsEncoder || showFFmpegQualityControl ? 'video-rate' : 'video-codec')
+            ? (isGifMode ? 'gif-palette' : isWebCodecsEncoder || showFFmpegQualityControl ? 'video-rate' : 'video-codec')
             : 'audio-quality',
           warning: true,
         },
@@ -950,6 +1376,10 @@ export function ExportPanel() {
   const showRangeInAudio = isAudioOnlyMode && includeAudio;
   const quickResolutionPresets = FrameExporter.getPresetResolutions();
   const quickFrameRatePresets = [24, 30, 60];
+  const gifContainerFormat = CONTAINER_FORMATS.find(({ id }) => id === 'gif');
+  const videoContainerFormats = isWebCodecsEncoder && gifContainerFormat
+    ? [...FrameExporter.getContainerFormats(), gifContainerFormat]
+    : CONTAINER_FORMATS;
   const webQualityPresets = [
     { id: 'review', label: 'Review', detail: '8 Mbps', value: 8_000_000 },
     { id: 'standard', label: 'Standard', detail: '15 Mbps', value: 15_000_000 },
@@ -1081,7 +1511,20 @@ export function ExportPanel() {
     }
 
     if (isImageMode) {
-      void handleRenderFrame();
+      if (isImageSequenceMode) {
+        void handleRenderImageSequence();
+      } else {
+        void handleRenderFrame();
+      }
+      return;
+    }
+
+    if (isGifMode) {
+      if (encoder === 'ffmpeg') {
+        void handleFFmpegExport();
+      } else {
+        void handleBrowserGifExport();
+      }
       return;
     }
 
@@ -1098,7 +1541,7 @@ export function ExportPanel() {
     }
 
     void handleFFmpegExport();
-  }, [handleExport, handleExportAudioOnly, handleExportFCPXML, handleFFmpegExport, handleRenderFrame, includeAudio, isImageMode, isWebCodecsEncoder, isXmlMode, videoEnabled]);
+  }, [encoder, handleBrowserGifExport, handleExport, handleExportAudioOnly, handleExportFCPXML, handleFFmpegExport, handleRenderFrame, handleRenderImageSequence, includeAudio, isGifMode, isImageMode, isImageSequenceMode, isWebCodecsEncoder, isXmlMode, videoEnabled]);
 
   // If neither encoder is supported, show error
   if (!webCodecsAvailable && !ffmpegAvailable) {
@@ -1273,14 +1716,14 @@ export function ExportPanel() {
                 <div className="export-channel-head">
                   <div className="export-channel-title">
                     <span>Basic</span>
-                    <strong>.{displayExtension}</strong>
+                    <strong>{displayContainerLabel}</strong>
                   </div>
                 </div>
 
                 <div className="export-field-card export-subcard" data-export-target="basic-output">
                   <div className="export-field-head">
                     <span>Output</span>
-                    <strong>{`${filename || 'export'}.${displayExtension}`}</strong>
+                    <strong>{displayOutputName}</strong>
                   </div>
                   <div className="control-row">
                     <label>Name</label>
@@ -1298,13 +1741,13 @@ export function ExportPanel() {
                 <div className="export-field-card export-subcard" data-export-target="basic-container">
                   <div className="export-field-head">
                     <span>Container</span>
-                    <strong>.{displayExtension}</strong>
+                    <strong>{displayContainerLabel}</strong>
                   </div>
                   <div className="export-container-groups">
                     <div className="export-container-group">
                       <span className="export-container-group-label">Video</span>
                       <div className="export-chip-row">
-                        {(isWebCodecsEncoder ? FrameExporter.getContainerFormats() : CONTAINER_FORMATS).map((format) => (
+                        {videoContainerFormats.map((format) => (
                           <button
                             key={`video-${format.id}`}
                             type="button"
@@ -1312,6 +1755,14 @@ export function ExportPanel() {
                             onClick={() => {
                               setSpecialContainer('none');
                               setVideoEnabled(true);
+                              if (format.id === 'gif') {
+                                setVisualMode('gif');
+                                setIncludeAudio(false);
+                                if (encoder === 'ffmpeg') {
+                                  handleFFmpegContainerChange('gif');
+                                }
+                                return;
+                              }
                               setVisualMode('video');
                               if (isWebCodecsEncoder) {
                                 setContainerFormat(format.id as ContainerFormat);
@@ -1450,7 +1901,11 @@ export function ExportPanel() {
                   </div>
                 ) : isImageMode ? (
                   <div className="export-inline-note">
-                    Image export renders exactly one frame at the current playhead position.
+                    {isImageSequenceMode
+                      ? imageSequenceFolderSupported
+                        ? 'Image sequence export writes numbered frames into a selected folder.'
+                        : 'Image sequence export uses a ZIP fallback because folder writes are not available in this browser.'
+                      : 'Image export renders exactly one frame at the current playhead position.'}
                   </div>
                 ) : isAudioOnlyMode ? (
                   <div className="export-inline-note">
@@ -1493,6 +1948,29 @@ export function ExportPanel() {
                 ) : isImageMode ? (
                   <>
                     <div className="export-quick-grid export-quick-grid-stack">
+                      <div className="export-field-card export-subcard" data-export-target="image-mode">
+                        <div className="export-field-head">
+                          <span>Mode</span>
+                          <strong>{isImageSequenceMode ? `Sequence ${imageSequenceOutputLabel}` : 'Single frame'}</strong>
+                        </div>
+                        <div className="export-chip-row">
+                          <button
+                            type="button"
+                            className={`export-chip${imageExportMode === 'frame' ? ' is-active' : ''}`}
+                            onClick={() => setImageExportMode('frame')}
+                          >
+                            Frame
+                          </button>
+                          <button
+                            type="button"
+                            className={`export-chip${imageExportMode === 'sequence' ? ' is-active' : ''}`}
+                            onClick={() => setImageExportMode('sequence')}
+                          >
+                            Sequence
+                          </button>
+                        </div>
+                      </div>
+
                       <div className="export-field-card export-subcard" data-export-target="image-resolution">
                         <div className="export-field-head">
                           <span>Resolution</span>
@@ -1580,15 +2058,81 @@ export function ExportPanel() {
                       </div>
                     </div>
 
-                    <div className="export-field-card export-subcard">
-                      <div className="export-field-head">
-                        <span>Frame</span>
-                        <strong>{formatTime(playheadPosition)}</strong>
+                    {isImageSequenceMode ? (
+                      <>
+                        <div className="export-field-card export-subcard" data-export-target="image-fps">
+                          <div className="export-field-head">
+                            <span>Frame Rate</span>
+                            <strong>{actualFps} fps</strong>
+                          </div>
+                          <div className="export-chip-row">
+                            {[24, 25, 30, 60].map((presetFps) => (
+                              <button
+                                key={`image-sequence-fps-${presetFps}`}
+                                type="button"
+                                className={`export-chip${!useCustomFps && fps === presetFps ? ' is-active' : ''}`}
+                                onClick={() => {
+                                  setUseCustomFps(false);
+                                  setFps(presetFps);
+                                }}
+                              >
+                                {presetFps}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              className={`export-chip${useCustomFps ? ' is-active' : ''}`}
+                              onClick={() => setUseCustomFps(true)}
+                            >
+                              Custom
+                            </button>
+                          </div>
+                          {useCustomFps && (
+                            <div className="export-inline-inputs">
+                              <input
+                                type="number"
+                                value={customFps}
+                                onChange={(e) => setCustomFps(Math.max(1, Math.min(240, parseFloat(e.target.value) || 30)))}
+                                min={1}
+                                max={240}
+                                step={0.001}
+                              />
+                              <span>fps</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="export-field-card export-subcard" data-export-target="image-range">
+                          <div className="export-field-head">
+                            <span>Sequence</span>
+                            <strong>{imageSequenceFrameCount} frames</strong>
+                          </div>
+                          <div className="export-chip-row">
+                            <button
+                              type="button"
+                              className={`export-chip${useInOut ? ' is-active' : ''}`}
+                              onClick={() => setUseInOut(!useInOut)}
+                            >
+                              Use In/Out
+                            </button>
+                            <span className="export-chip export-chip-static">{imageSequenceOutputLabel}</span>
+                          </div>
+                          <div className="export-inline-note">
+                            Range {formatTime(startTime)} - {formatTime(endTime)} saved as numbered .{imageFormat} files.
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="export-field-card export-subcard">
+                        <div className="export-field-head">
+                          <span>Frame</span>
+                          <strong>{formatTime(playheadPosition)}</strong>
+                        </div>
+                        <div className="export-inline-note">
+                          Exports the exact composited frame currently under the playhead.
+                        </div>
                       </div>
-                      <div className="export-inline-note">
-                        Exports the exact composited frame currently under the playhead.
-                      </div>
-                    </div>
+                    )}
                   </>
                 ) : videoEnabled ? (
                   <>
@@ -1679,17 +2223,94 @@ export function ExportPanel() {
                       </div>
                     </div>
 
-                    {(isWebCodecsEncoder || showFFmpegQualityControl) && (
-                    <div className="export-field-card export-subcard" data-export-target="video-rate">
+                    {(isGifMode || isWebCodecsEncoder || showFFmpegQualityControl) && (
+                    <div className="export-field-card export-subcard" data-export-target={isGifMode ? 'gif-palette' : 'video-rate'}>
                       <div className="export-field-head">
-                        <span>{isWebCodecsEncoder ? 'Rate' : 'Quality'}</span>
+                        <span>{isGifMode ? 'Palette' : isWebCodecsEncoder ? 'Rate' : 'Quality'}</span>
                         <strong>
-                          {isWebCodecsEncoder
+                          {isGifMode
+                            ? `${gifColors} colors / ${getGifPaletteModeLabel(gifPaletteMode)}`
+                            : isWebCodecsEncoder
                             ? `${rateControl.toUpperCase()} / ${(bitrate / 1_000_000).toFixed(1)} Mbps`
                             : `MJPEG / Q${ffmpegQuality}`}
                         </strong>
                       </div>
-                      {isWebCodecsEncoder ? (
+                      {isGifMode ? (
+                        <>
+                          <div className="export-chip-row">
+                            {GIF_COLOR_PRESETS.map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                className={`export-chip${gifColors === value ? ' is-active' : ''}`}
+                                onClick={() => setGifColors(value)}
+                              >
+                                {value}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="export-chip-row">
+                            {GIF_PALETTE_MODES.map((mode) => (
+                              <button
+                                key={mode.id}
+                                type="button"
+                                className={`export-chip${gifPaletteMode === mode.id ? ' is-active' : ''}`}
+                                onClick={() => setGifPaletteMode(mode.id)}
+                              >
+                                {mode.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="export-chip-row">
+                            {GIF_DITHER_OPTIONS.map((dither) => (
+                              <button
+                                key={dither.id}
+                                type="button"
+                                className={`export-chip${gifDither === dither.id ? ' is-active' : ''}`}
+                                onClick={() => setGifDither(dither.id)}
+                                disabled={isWebCodecsEncoder}
+                              >
+                                {dither.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="export-chip-row">
+                            <button
+                              type="button"
+                              className={`export-toggle${gifLoop === 'forever' ? ' is-active' : ''}`}
+                              onClick={() => setGifLoop(gifLoop === 'forever' ? 'once' : 'forever')}
+                            >
+                              {gifLoop === 'forever' ? 'Loop Forever' : 'Play Once'}
+                            </button>
+                            <button
+                              type="button"
+                              className={`export-toggle${gifOptimize ? ' is-active' : ''}`}
+                              onClick={() => setGifOptimize(!gifOptimize)}
+                              disabled={isWebCodecsEncoder}
+                            >
+                              Optimize
+                            </button>
+                          </div>
+                          <div className="export-slider-control">
+                            <div className="export-slider-head">
+                              <label>Alpha Threshold</label>
+                              <span className="export-slider-value">{gifAlphaThreshold}</span>
+                            </div>
+                            <input
+                              className="export-slider-input"
+                              type="range"
+                              min={0}
+                              max={255}
+                              step={1}
+                              value={gifAlphaThreshold}
+                              onChange={(e) => setGifAlphaThreshold(Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="export-inline-note">
+                            Estimated range: {gifSizeRangeLabel}. {isWebCodecsEncoder ? 'Browser GIF uses fast quantization without dithering.' : `Dither: ${getGifDitherLabel(gifDither)}.`}
+                          </div>
+                        </>
+                      ) : isWebCodecsEncoder ? (
                         <>
                           <div className="export-chip-row">
                             <button
@@ -1765,7 +2386,11 @@ export function ExportPanel() {
                         <strong>{currentCodecLabel}</strong>
                       </div>
                       <div className="export-chip-row">
-                        {isWebCodecsEncoder
+                        {isGifMode ? (
+                          <span className="export-chip export-chip-static">
+                            {encoder === 'ffmpeg' ? 'FFmpeg palette' : 'Browser encoder'}
+                          </span>
+                        ) : isWebCodecsEncoder
                           ? FrameExporter.getVideoCodecs(containerFormat).map(({ id, label }) => (
                               <button
                                 key={id}
@@ -1789,7 +2414,7 @@ export function ExportPanel() {
                             ))}
                       </div>
 
-                      {encoder === 'ffmpeg' && ffmpegCodecInfo && (
+                      {(encoder === 'ffmpeg' || isGifMode) && ffmpegCodecInfo && (
                         <div className="export-inline-note">
                           {ffmpegCodecInfo.description}
                           {ffmpegCodecInfo.supportsAlpha && ' | Alpha'}
@@ -1797,7 +2422,7 @@ export function ExportPanel() {
                         </div>
                       )}
 
-                      {encoder === 'ffmpeg' && ffmpegCodec === 'prores' && (
+                      {encoder === 'ffmpeg' && !isGifMode && ffmpegCodec === 'prores' && (
                         <div className="export-chip-row">
                           {PRORES_PROFILES.map((profile) => (
                             <button
@@ -1812,7 +2437,7 @@ export function ExportPanel() {
                         </div>
                       )}
 
-                      {encoder === 'ffmpeg' && ffmpegCodec === 'dnxhd' && (
+                      {encoder === 'ffmpeg' && !isGifMode && ffmpegCodec === 'dnxhd' && (
                         <div className="export-chip-row">
                           {DNXHR_PROFILES.map((profile) => (
                             <button
@@ -1830,15 +2455,15 @@ export function ExportPanel() {
 
                     <div className="export-field-card export-subcard" data-export-target="video-alpha">
                       <div className="export-field-head">
-                        <span>Alpha</span>
-                        <strong>{stackedAlpha ? 'Stacked' : 'Off'}</strong>
+                        <span>{isGifMode ? 'Transparency' : 'Alpha'}</span>
+                        <strong>{isGifMode ? `Threshold ${gifAlphaThreshold}` : stackedAlpha ? 'Stacked' : 'Off'}</strong>
                       </div>
                       <div className="export-chip-row">
                         <button
                           type="button"
                           className={`export-toggle${stackedAlpha ? ' is-active' : ''}`}
                           onClick={() => setStackedAlpha(!stackedAlpha)}
-                          disabled={!isWebCodecsEncoder}
+                          disabled={!isWebCodecsEncoder || isGifMode}
                         >
                           Stacked Alpha
                         </button>
@@ -1852,7 +2477,7 @@ export function ExportPanel() {
                           </button>
                         )}
                       </div>
-                      {stackedAlpha && (
+                      {stackedAlpha && !isGifMode && (
                         <div className="export-inline-note export-inline-note-warning">
                           Output becomes {actualWidth}x{actualHeight * 2}. Top half is RGB, bottom half is alpha as grayscale.
                         </div>
@@ -1882,25 +2507,29 @@ export function ExportPanel() {
                 )}
               </div>
 
-              <div className={`export-channel-card${isImageMode || (!includeAudio && !isXmlMode) ? ' is-disabled' : ''}`} data-export-target="audio-section">
+              <div className={`export-channel-card${isImageMode || isGifMode || (!includeAudio && !isXmlMode) ? ' is-disabled' : ''}`} data-export-target="audio-section">
                 <div className="export-channel-head">
                   <div className="export-channel-title">
                     <span>Audio</span>
-                    <strong>{isXmlMode ? (includeAudio ? 'Track references included' : 'No audio references') : !isImageMode && includeAudio ? `${currentAudioCodecLabel} / ${audioSampleRate / 1000} kHz` : 'Disabled'}</strong>
+                    <strong>{isGifMode ? 'Not supported' : isXmlMode ? (includeAudio ? 'Track references included' : 'No audio references') : !isImageMode && includeAudio ? `${currentAudioCodecLabel} / ${audioSampleRate / 1000} kHz` : 'Disabled'}</strong>
                   </div>
                   <button
                     type="button"
-                    className={`export-toggle${(isXmlMode ? includeAudio : !isImageMode && includeAudio) ? ' is-active' : ''}`}
+                    className={`export-toggle${!isGifMode && (isXmlMode ? includeAudio : !isImageMode && includeAudio) ? ' is-active' : ''}`}
                     onClick={() => setIncludeAudio(!includeAudio)}
-                    disabled={isImageMode || (!isXmlMode && isWebCodecsEncoder && !isAudioSupported)}
+                    disabled={isImageMode || isGifMode || (!isXmlMode && isWebCodecsEncoder && !isAudioSupported)}
                   >
-                    {(isXmlMode ? includeAudio : !isImageMode && includeAudio) ? 'On' : 'Off'}
+                    {!isGifMode && (isXmlMode ? includeAudio : !isImageMode && includeAudio) ? 'On' : 'Off'}
                   </button>
                 </div>
 
                 {isImageMode ? (
                   <div className="export-inline-note">
                     Image export ignores audio and renders only the current playhead frame.
+                  </div>
+                ) : isGifMode ? (
+                  <div className="export-inline-note">
+                    GIF export is silent.
                   </div>
                 ) : isXmlMode ? (
                   <div className="export-inline-note">
@@ -2025,23 +2654,25 @@ export function ExportPanel() {
                   className="export-extension-select"
                   value={currentContainerId}
                   onChange={(e) => {
-                    if (isWebCodecsEncoder) {
-                      setContainerFormat(e.target.value as ContainerFormat);
+                    const nextContainer = e.target.value;
+                    if (nextContainer === 'gif') {
+                      setSpecialContainer('none');
+                      setVideoEnabled(true);
+                      setVisualMode('gif');
+                      setIncludeAudio(false);
+                    } else if (isWebCodecsEncoder) {
+                      setVisualMode('video');
+                      setContainerFormat(nextContainer as ContainerFormat);
                     } else {
-                      handleFFmpegContainerChange(e.target.value as FFmpegContainer);
+                      setVisualMode('video');
+                      handleFFmpegContainerChange(nextContainer as FFmpegContainer);
                     }
                   }}
                   title="Click to change container format"
                 >
-                  {(encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
-                    FrameExporter.getContainerFormats().map(({ id }) => (
-                      <option key={id} value={id}>.{id}</option>
-                    ))
-                  ) : (
-                    CONTAINER_FORMATS.map(({ id }) => (
-                      <option key={id} value={id}>.{id}</option>
-                    ))
-                  )}
+                  {videoContainerFormats.map(({ id }) => (
+                    <option key={id} value={id}>.{id}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -2049,7 +2680,11 @@ export function ExportPanel() {
             {/* Video Codec */}
             <div className="control-row">
               <label>Codec</label>
-              {(encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
+              {isGifMode ? (
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  {currentCodecLabel}
+                </span>
+              ) : (encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
                 <select
                   value={videoCodec}
                   onChange={(e) => setVideoCodec(e.target.value as VideoCodec)}
@@ -2070,7 +2705,7 @@ export function ExportPanel() {
             </div>
 
             {/* FFmpeg Codec description */}
-            {encoder === 'ffmpeg' && ffmpegCodecInfo && (
+            {(encoder === 'ffmpeg' || isGifMode) && ffmpegCodecInfo && (
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '-4px', marginBottom: '8px', paddingLeft: '4px' }}>
                 {ffmpegCodecInfo.description}
                 {ffmpegCodecInfo.supportsAlpha && ' | Alpha'}
@@ -2079,7 +2714,7 @@ export function ExportPanel() {
             )}
 
             {/* FFmpeg ProRes Profile */}
-            {encoder === 'ffmpeg' && ffmpegCodec === 'prores' && (
+            {encoder === 'ffmpeg' && !isGifMode && ffmpegCodec === 'prores' && (
               <div className="control-row">
                 <label>Profile</label>
                 <select
@@ -2096,7 +2731,7 @@ export function ExportPanel() {
             )}
 
             {/* FFmpeg DNxHR Profile */}
-            {encoder === 'ffmpeg' && ffmpegCodec === 'dnxhd' && (
+            {encoder === 'ffmpeg' && !isGifMode && ffmpegCodec === 'dnxhd' && (
               <div className="control-row">
                 <label>Profile</label>
                 <select
@@ -2221,7 +2856,14 @@ export function ExportPanel() {
             </div>
 
             {/* Quality - different controls for each encoder */}
-            {(encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
+            {isGifMode ? (
+              <div className="control-row">
+                <label>GIF Palette</label>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  {gifColors} colors, {getGifPaletteModeLabel(gifPaletteMode)}, {estimatedSizeLabel}
+                </span>
+              </div>
+            ) : (encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
               <>
                 {/* Rate Control */}
                 <div className="control-row">
@@ -2298,14 +2940,19 @@ export function ExportPanel() {
 
             <div className="control-row">
               <label>
-                <input
-                  type="checkbox"
-                  checked={includeAudio}
-                  onChange={(e) => setIncludeAudio(e.target.checked)}
-                  disabled={(encoder === 'webcodecs' || encoder === 'htmlvideo') && !isAudioSupported}
-                />
-                Include Audio
-              </label>
+                  <input
+                    type="checkbox"
+                    checked={includeAudio}
+                    onChange={(e) => setIncludeAudio(e.target.checked)}
+                    disabled={isGifMode || ((encoder === 'webcodecs' || encoder === 'htmlvideo') && !isAudioSupported)}
+                  />
+                  Include Audio
+                </label>
+              {isGifMode && (
+                <span style={{ color: 'var(--text-secondary)', fontSize: '11px', marginLeft: '8px' }}>
+                  GIF is silent
+                </span>
+              )}
               {(encoder === 'webcodecs' || encoder === 'htmlvideo') && !isAudioSupported && (
                 <span style={{ color: 'var(--warning)', fontSize: '11px', marginLeft: '8px' }}>
                   Not supported
@@ -2313,7 +2960,7 @@ export function ExportPanel() {
               )}
             </div>
 
-            {includeAudio && (
+            {includeAudio && !isGifMode && (
               <>
                 <div className="control-row">
                   <label>Sample Rate</label>
@@ -2366,7 +3013,7 @@ export function ExportPanel() {
           </div>
 
           {/* Alpha Settings */}
-          {(encoder === 'webcodecs' || encoder === 'htmlvideo') && (
+          {(encoder === 'webcodecs' || encoder === 'htmlvideo') && !isGifMode && (
             <div className="export-section export-advanced-section">
               <div className="export-section-header">Advanced Alpha</div>
 
@@ -2414,11 +3061,11 @@ export function ExportPanel() {
             </div>
 
             <div className="export-summary">
-              <div>Output: {actualWidth}x{stackedAlpha ? actualHeight * 2 : actualHeight}{stackedAlpha ? ' (stacked alpha)' : ''}</div>
+              <div>Output: {actualWidth}x{outputHeight}{stackedAlpha && !isGifMode ? ' (stacked alpha)' : ''}</div>
               <div>Range: {formatTime(startTime)} - {formatTime(endTime)}</div>
               <div>Duration: {formatTime(endTime - startTime)}</div>
-              <div>Frames: {Math.ceil((endTime - startTime) * actualFps)}</div>
-              <div>Est. Size: {estimatedSize()}</div>
+              <div>Frames: {frameCount}</div>
+              <div>Est. Size: {estimatedSizeLabel}</div>
             </div>
           </div>
 
@@ -2428,19 +3075,25 @@ export function ExportPanel() {
         <div className="export-progress-container">
           {/* Phase indicator */}
           <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>
-            {(encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
+            {usesBrowserProgress ? (
               <>
-                {progress?.phase === 'video' && 'Encoding video frames...'}
+                {progress?.phase === 'video' && (
+                  isImageSequenceMode
+                    ? 'Rendering image sequence...'
+                    : isGifMode
+                      ? 'Encoding GIF frames...'
+                      : 'Encoding video frames...'
+                )}
                 {progress?.phase === 'audio' && (
                   <>Processing audio: {progress.audioPhase} ({progress.audioPercent}%)</>
                 )}
-                {progress?.phase === 'muxing' && 'Finalizing...'}
+                {progress?.phase === 'muxing' && (isImageSequenceMode ? 'Finalizing sequence...' : 'Finalizing...')}
               </>
             ) : (
               <>
                 {exportPhase === 'rendering' && 'Rendering frames...'}
                 {exportPhase === 'audio' && 'Processing audio...'}
-                {exportPhase === 'encoding' && 'Encoding video (please wait)...'}
+                {exportPhase === 'encoding' && (isGifMode ? 'Encoding GIF (please wait)...' : 'Encoding video (please wait)...')}
               </>
             )}
           </div>
@@ -2456,10 +3109,12 @@ export function ExportPanel() {
             />
           </div>
           <div className="export-progress-info">
-            {(encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
+            {usesBrowserProgress ? (
               <>
                 {progress?.phase === 'video' ? (
                   <span>Frame {progress?.currentFrame ?? 0} / {progress?.totalFrames ?? 0}</span>
+                ) : progress?.phase === 'muxing' ? (
+                  <span>{isImageSequenceMode ? 'Packaging sequence' : 'Finalizing'}</span>
                 ) : (
                   <span>Audio processing</span>
                 )}
@@ -2472,7 +3127,7 @@ export function ExportPanel() {
               </>
             )}
           </div>
-          {(encoder === 'webcodecs' || encoder === 'htmlvideo') && progress && progress.phase === 'video' && progress.estimatedTimeRemaining > 0 && (
+          {usesBrowserProgress && progress && progress.phase === 'video' && progress.estimatedTimeRemaining > 0 && (
             <div className="export-eta">
               ETA: {formatTime(progress.estimatedTimeRemaining)}
             </div>

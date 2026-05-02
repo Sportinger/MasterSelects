@@ -4,6 +4,9 @@ import type {
   VectorAnimationClipSettings,
   VectorAnimationProvider,
 } from './vectorAnimation';
+import type { ColorCorrectionState, RuntimeColorGrade } from './colorCorrection';
+
+export * from './colorCorrection';
 
 export type TimelineSourceType =
   | 'video'
@@ -79,6 +82,7 @@ export interface Layer {
   blendMode: BlendMode;
   source: LayerSource | null;
   effects: Effect[];
+  colorCorrection?: RuntimeColorGrade;
   position: { x: number; y: number; z: number };
   scale: { x: number; y: number; z?: number };
   rotation: number | { x: number; y: number; z: number };  // Single value (z only) or full 3D rotation
@@ -551,6 +555,7 @@ export interface TimelineClip {
   waveformProgress?: number;     // 0-100 progress of waveform generation
   transform: ClipTransform;  // Visual transform properties
   effects: Effect[];      // Effects applied to this clip
+  colorCorrection?: ColorCorrectionState;  // Professional node/list color correction state
   isLoading?: boolean;    // True while media is being loaded
   needsReload?: boolean;  // True if file handle needs re-authorization after page refresh
   reversed?: boolean;     // True if clip plays in reverse
@@ -647,6 +652,7 @@ export interface SerializableClip {
   waveform?: number[];
   transform: ClipTransform;
   effects: Effect[];         // Effects applied to this clip
+  colorCorrection?: ColorCorrectionState;
   keyframes?: Keyframe[];    // Animation keyframes for this clip
   // Nested composition support
   isComposition?: boolean;
@@ -735,8 +741,11 @@ export type TransformProperty =
 // Example: effect.effect_123456.shift, effect.effect_123456.amount
 export type EffectProperty = `effect.${string}.${string}`;
 
+// Color correction property format: color.{versionId}.{nodeId}.{paramName}
+export type ColorProperty = `color.${string}.${string}.${string}`;
+
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | EffectProperty;
+export type AnimatableProperty = TransformProperty | EffectProperty | ColorProperty;
 
 // Helper to check if a property is an effect property
 export function isEffectProperty(property: string): property is EffectProperty {
@@ -755,6 +764,10 @@ export function parseEffectProperty(property: EffectProperty): { effectId: strin
 // Helper to create effect property string
 export function createEffectProperty(effectId: string, paramName: string): EffectProperty {
   return `effect.${effectId}.${paramName}` as EffectProperty;
+}
+
+export function isColorProperty(property: string): property is ColorProperty {
+  return property.startsWith('color.');
 }
 
 // Mask types for After Effects-style clip masking

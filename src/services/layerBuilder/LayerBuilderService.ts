@@ -2,6 +2,7 @@
 // Delegates video sync to VideoSyncManager and audio sync to AudioTrackSyncManager
 
 import type { TimelineClip, Layer, NestedCompositionData, BlendMode, ClipTransform } from '../../types';
+import { compileRuntimeColorGrade } from '../../types';
 import type { FrameContext } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip, isVideoTrackVisible } from './FrameContext';
@@ -560,6 +561,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipTime);
 
     const composition = ctx.compositionById.get(clip.compositionId || '');
     const compWidth = composition?.width || 1920;
@@ -589,6 +591,7 @@ export class LayerBuilderService {
       blendMode: transform.blendMode as BlendMode,
       source: { type: 'image', nestedComposition: nestedCompData },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -613,6 +616,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
 
     // Apply transition opacity override if provided
     const finalOpacity = opacityOverride !== undefined
@@ -632,6 +636,7 @@ export class LayerBuilderService {
         ...sourceMetadata,
       },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -664,6 +669,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
 
     // Apply transition opacity override if provided
     const finalOpacity = opacityOverride !== undefined
@@ -728,6 +734,7 @@ export class LayerBuilderService {
         ...sourceMetadata,
       },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -847,6 +854,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
 
     // Apply transition opacity override if provided
     const finalOpacity = opacityOverride !== undefined
@@ -862,6 +870,7 @@ export class LayerBuilderService {
       blendMode: transform.blendMode as BlendMode,
       source: { type: 'image', imageElement: clip.source!.imageElement },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -898,6 +907,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, localTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, localTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, localTime);
 
     // Apply transition opacity override if provided
     const finalOpacity = opacityOverride !== undefined
@@ -921,6 +931,7 @@ export class LayerBuilderService {
         proxyFrameIndex: timing?.proxyFrameIndex,
       },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -940,6 +951,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
 
     // Apply transition opacity override if provided
     const finalOpacity = opacityOverride !== undefined
@@ -955,6 +967,7 @@ export class LayerBuilderService {
       blendMode: transform.blendMode as BlendMode,
       source: { type: 'text', textCanvas: clip.source!.textCanvas },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -974,6 +987,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
     const meshType = clip.meshType ?? clip.source?.meshType;
     const text3DProperties = meshType === 'text3d'
       ? (clip.text3DProperties ?? clip.source?.text3DProperties ?? DEFAULT_TEXT_3D_PROPERTIES)
@@ -1004,6 +1018,7 @@ export class LayerBuilderService {
         text3DProperties,
       },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -1025,6 +1040,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
 
     const finalOpacity = opacityOverride !== undefined
       ? transform.opacity * opacityOverride
@@ -1043,6 +1059,7 @@ export class LayerBuilderService {
         gaussianBlendshapes: clip.source?.gaussianBlendshapes,
       },
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -1109,6 +1126,7 @@ export class LayerBuilderService {
       ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime),
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
 
     const finalOpacity = opacityOverride !== undefined
       ? transform.opacity * opacityOverride
@@ -1123,6 +1141,7 @@ export class LayerBuilderService {
       blendMode: transform.blendMode as BlendMode,
       source,
       effects,
+      colorCorrection,
       position: transform.position,
       scale: transform.scale,
       rotation: transform.rotation,
@@ -1318,6 +1337,7 @@ export class LayerBuilderService {
       opacity: transform.opacity ?? 1,
       blendMode: (transform.blendMode || 'normal') as BlendMode,
       effects,
+      colorCorrection: compileRuntimeColorGrade(nestedClip.colorCorrection),
       position: {
         x: transform.position?.x || 0,
         y: transform.position?.y || 0,

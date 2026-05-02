@@ -17,6 +17,7 @@ import { WhatsNewDialog } from './components/common/WhatsNewDialog';
 import { SplashScreen } from './components/common/SplashScreen';
 import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
 import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
+import { ProjectLoadProgressOverlay } from './components/common/ProjectLoadProgressOverlay';
 import { PricingDialog } from './components/common/PricingDialog';
 import { TutorialOverlay } from './components/common/TutorialOverlay';
 import { TutorialCampaignDialog } from './components/common/TutorialCampaignDialog';
@@ -333,6 +334,7 @@ function App() {
       <LinuxVulkanWarning />
       <Toolbar onOpenChangelog={() => setShowChangelog(true)} onOpenSplash={() => setShowSplash(true)} />
       <DockContainer />
+      <ProjectLoadProgressOverlay />
       {showWelcome && (
         <WelcomeOverlay onComplete={handleWelcomeComplete} noFadeOnClose />
       )}

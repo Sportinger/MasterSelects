@@ -1,5 +1,26 @@
 [
   {
+    "date": "2026-05-02",
+    "type": "new",
+    "title": "Professional Color Correction Workspace",
+    "description": "The Color tab now has a shared list and node graph workflow with grade versions, keyframable primary controls, MIDI-ready labels, rewireable yellow node connections, node canvas panning, a collapsible workspace inspector, and realtime preview/export rendering including single 3D video layers.",
+    "section": "Color"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "improve",
+    "title": "Project Restore Shows Progressive Loading",
+    "description": "Project restore now surfaces load progress, cache-checking progress, and staged feedback so refreshes and small project loads no longer feel like a blank blocking operation.",
+    "section": "Project Persistence"
+  },
+  {
+    "date": "2026-05-02",
+    "type": "new",
+    "title": "Expanded Export Deliverables",
+    "description": "Export now includes animated GIF and image sequence helper paths, stronger export mode state, safer sequence filename sanitizing, and updated documentation for the consolidated export panel.",
+    "section": "Export"
+  },
+  {
     "date": "2026-05-01",
     "type": "improve",
     "title": "Professional Mask Path Editing",

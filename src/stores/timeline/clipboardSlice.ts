@@ -69,6 +69,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           : undefined,
         transform: { ...clip.transform },
         effects: clip.effects.map(e => ({ ...e, params: { ...e.params } })),
+        colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
         masks: clip.masks?.map(m => ({
           ...m,
           vertices: m.vertices.map(v => ({ ...v })),
@@ -222,6 +223,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           id: `effect-${timestamp}-${randomSuffix()}`, // New effect IDs
           params: { ...e.params },
         })),
+        colorCorrection: clipData.colorCorrection ? structuredClone(clipData.colorCorrection) : undefined,
         masks: clipData.masks?.map(m => ({
           ...m,
           id: `mask-${timestamp}-${randomSuffix()}`, // New mask IDs

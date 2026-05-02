@@ -86,6 +86,7 @@ export function createFrameContext(): FrameContext {
     playbackSpeed,
     getInterpolatedTransform,
     getInterpolatedEffects,
+    getInterpolatedColorCorrection,
     getInterpolatedSpeed,
     getSourceTimeForClip,
     hasKeyframes,
@@ -125,6 +126,7 @@ export function createFrameContext(): FrameContext {
     // Store functions
     getInterpolatedTransform,
     getInterpolatedEffects,
+    getInterpolatedColorCorrection,
     getInterpolatedSpeed,
     getSourceTimeForClip,
     hasKeyframes,

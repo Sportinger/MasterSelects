@@ -3,6 +3,12 @@
 import type { KeyframeActions, SliceCreator, Keyframe, AnimatableProperty, ClipTransform } from './types';
 import { DEFAULT_TRANSFORM, PROPERTY_ROW_HEIGHT, MIN_CURVE_EDITOR_HEIGHT, MAX_CURVE_EDITOR_HEIGHT } from './constants';
 import {
+  compileRuntimeColorGrade,
+  ensureColorCorrectionState,
+  parseColorProperty,
+  setColorNodeParamValue,
+} from '../../types';
+import {
   getInterpolatedClipTransform,
   getKeyframeAtTime,
   hasKeyframesForProperty,
@@ -254,6 +260,34 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     });
   },
 
+  getInterpolatedColorCorrection: (clipId, clipLocalTime) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip?.colorCorrection) {
+      return undefined;
+    }
+
+    let colorState = ensureColorCorrectionState(clip.colorCorrection);
+    const keyframes = clipKeyframes.get(clipId) || [];
+    const colorKeyframes = keyframes.filter(k => k.property.startsWith('color.'));
+
+    if (colorKeyframes.length > 0) {
+      for (const version of colorState.versions) {
+        for (const node of version.nodes) {
+          for (const [paramName, baseValue] of Object.entries(node.params)) {
+            if (typeof baseValue !== 'number') continue;
+            const propertyKey = `color.${version.id}.${node.id}.${paramName}` as AnimatableProperty;
+            if (!colorKeyframes.some(k => k.property === propertyKey)) continue;
+            const value = interpolateKeyframes(keyframes, propertyKey, clipLocalTime, baseValue);
+            colorState = setColorNodeParamValue(colorState, version.id, node.id, paramName, value);
+          }
+        }
+      }
+    }
+
+    return compileRuntimeColorGrade(colorState);
+  },
+
   getInterpolatedSpeed: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
@@ -315,7 +349,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   },
 
   setPropertyValue: (clipId, property, value) => {
-    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, clips, hasKeyframes, isPlaying } = get();
+    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateColorNodeParam, clips, hasKeyframes, isPlaying } = get();
 
     // Check if this property has keyframes (whether recording or not)
     const propertyHasKeyframes = hasKeyframes(clipId, property);
@@ -354,6 +388,18 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           const paramName = parts[2];
           updateClipEffect(clipId, effectId, { [paramName]: value });
         }
+        return;
+      }
+
+      const colorProperty = parseColorProperty(property);
+      if (colorProperty) {
+        updateColorNodeParam(
+          clipId,
+          colorProperty.versionId,
+          colorProperty.nodeId,
+          colorProperty.paramName,
+          value
+        );
         return;
       }
 
@@ -522,7 +568,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
 
   // Disable keyframes for a property: save current value as static, remove all keyframes, disable recording
   disablePropertyKeyframes: (clipId, property, currentValue) => {
-    const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache, updateClipTransform, updateClipEffect } = get();
+    const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache, updateClipTransform, updateClipEffect, updateColorNodeParam } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
 
@@ -534,6 +580,15 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         const paramName = parts[2];
         updateClipEffect(clipId, effectId, { [paramName]: currentValue });
       }
+    } else if (parseColorProperty(property)) {
+      const colorProperty = parseColorProperty(property)!;
+      updateColorNodeParam(
+        clipId,
+        colorProperty.versionId,
+        colorProperty.nodeId,
+        colorProperty.paramName,
+        currentValue
+      );
     } else if (property === 'speed') {
       const { updateDuration } = get();
       const sourceDuration = clip.outPoint - clip.inPoint;

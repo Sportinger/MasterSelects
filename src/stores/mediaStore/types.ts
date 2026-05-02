@@ -218,6 +218,30 @@ export interface MediaFolder {
   labelColor?: LabelColor;
 }
 
+export type ProjectLoadPhase =
+  | 'idle'
+  | 'opening'
+  | 'media'
+  | 'timeline'
+  | 'ui'
+  | 'relink'
+  | 'thumbnails'
+  | 'metadata'
+  | 'caches'
+  | 'ready'
+  | 'error';
+
+export interface ProjectLoadProgress {
+  active: boolean;
+  phase: ProjectLoadPhase;
+  percent: number;
+  message: string;
+  detail?: string;
+  itemsDone?: number;
+  itemsTotal?: number;
+  blocking?: boolean;
+}
+
 // Union type for all items
 export type ProjectItem = MediaFile | Composition | MediaFolder | TextItem | SolidItem | MeshItem | CameraItem | SplatEffectorItem;
 
@@ -264,6 +288,7 @@ export interface MediaState {
   currentProjectId: string | null;
   currentProjectName: string;
   isLoading: boolean;
+  projectLoadProgress: ProjectLoadProgress;
 
   // Proxy system
   proxyEnabled: boolean;

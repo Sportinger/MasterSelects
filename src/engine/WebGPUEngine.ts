@@ -12,6 +12,7 @@ import { CacheManager } from './managers/CacheManager';
 import { ExportCanvasManager } from './managers/ExportCanvasManager';
 import { CompositorPipeline } from './pipeline/CompositorPipeline';
 import { EffectsPipeline } from '../effects/EffectsPipeline';
+import { ColorPipeline } from './color/ColorPipeline';
 import { OutputPipeline } from './pipeline/OutputPipeline';
 import { SlicePipeline } from './pipeline/SlicePipeline';
 import { VideoFrameManager } from './video/VideoFrameManager';
@@ -56,6 +57,7 @@ export class WebGPUEngine {
   // Pipelines
   private compositorPipeline: CompositorPipeline | null = null;
   private effectsPipeline: EffectsPipeline | null = null;
+  private colorPipeline: ColorPipeline | null = null;
   private outputPipeline: OutputPipeline | null = null;
   private slicePipeline: SlicePipeline | null = null;
 
@@ -138,10 +140,12 @@ export class WebGPUEngine {
     // Create pipelines
     this.compositorPipeline = new CompositorPipeline(device);
     this.effectsPipeline = new EffectsPipeline(device);
+    this.colorPipeline = new ColorPipeline(device);
     this.outputPipeline = new OutputPipeline(device);
     this.slicePipeline = new SlicePipeline(device);
     await this.compositorPipeline.createPipelines();
     await this.effectsPipeline.createPipelines();
+    await this.colorPipeline.createPipeline();
     await this.outputPipeline.createPipeline();
     await this.slicePipeline.createPipeline();
 
@@ -153,7 +157,8 @@ export class WebGPUEngine {
     this.compositor = new Compositor(
       this.compositorPipeline,
       this.effectsPipeline,
-      this.maskTextureManager
+      this.maskTextureManager,
+      this.colorPipeline
     );
 
     this.nestedCompRenderer = new NestedCompRenderer(
@@ -162,7 +167,8 @@ export class WebGPUEngine {
       this.effectsPipeline,
       this.textureManager,
       this.maskTextureManager,
-      this.cacheManager.getScrubbingCache()
+      this.cacheManager.getScrubbingCache(),
+      this.colorPipeline
     );
 
     this.renderLoop = new RenderLoop(this.performanceStats, {
@@ -215,6 +221,7 @@ export class WebGPUEngine {
     this.maskTextureManager = null;
     this.compositorPipeline = null;
     this.effectsPipeline = null;
+    this.colorPipeline = null;
     this.outputPipeline = null;
     this.slicePipeline = null;
 
@@ -1033,6 +1040,7 @@ export class WebGPUEngine {
     this.videoFrameManager.destroy();
     this.compositorPipeline?.destroy();
     this.effectsPipeline?.destroy();
+    this.colorPipeline?.destroy();
     this.outputPipeline?.destroy();
     this.slicePipeline?.destroy();
     this.destroyReadbackBuffer();

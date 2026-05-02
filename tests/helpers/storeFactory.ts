@@ -20,6 +20,7 @@ import { createClipSlice } from '../../src/stores/timeline/clipSlice';
 import { createTextClipSlice } from '../../src/stores/timeline/textClipSlice';
 import { createSolidClipSlice } from '../../src/stores/timeline/solidClipSlice';
 import { createClipEffectSlice } from '../../src/stores/timeline/clipEffectSlice';
+import { createColorCorrectionSlice } from '../../src/stores/timeline/colorCorrectionSlice';
 import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSlice';
 import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipSlice';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
@@ -101,6 +102,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const textClipActions = createTextClipSlice(set, get);
     const solidClipActions = createSolidClipSlice(set, get);
     const clipEffectActions = createClipEffectSlice(set, get);
+    const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
     const positioningUtils = createPositioningUtils(set, get);
@@ -264,6 +266,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...textClipActions,
       ...solidClipActions,
       ...clipEffectActions,
+      ...colorCorrectionActions,
       ...linkedGroupActions,
       ...downloadClipActions,
       ...positioningUtils,

@@ -4,6 +4,7 @@ import type { TimelineClip, TimelineTrack } from '../../types';
 import type { Layer, LayerRenderData } from '../core/types';
 import type { CompositorPipeline } from '../pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../effects/EffectsPipeline';
+import type { ColorPipeline } from '../color/ColorPipeline';
 import type { TextureManager } from '../texture/TextureManager';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import type { ScrubbingCache } from '../texture/ScrubbingCache';
@@ -48,6 +49,7 @@ export class NestedCompRenderer {
   private device: GPUDevice;
   private compositorPipeline: CompositorPipeline;
   private effectsPipeline: EffectsPipeline;
+  private colorPipeline: ColorPipeline | null;
   private textureManager: TextureManager;
   private maskTextureManager: MaskTextureManager;
   private scrubbingCache: ScrubbingCache | null;
@@ -219,7 +221,8 @@ export class NestedCompRenderer {
     effectsPipeline: EffectsPipeline,
     textureManager: TextureManager,
     maskTextureManager: MaskTextureManager,
-    scrubbingCache: ScrubbingCache | null = null
+    scrubbingCache: ScrubbingCache | null = null,
+    colorPipeline: ColorPipeline | null = null
   ) {
     this.device = device;
     this.compositorPipeline = compositorPipeline;
@@ -227,6 +230,7 @@ export class NestedCompRenderer {
     this.textureManager = textureManager;
     this.maskTextureManager = maskTextureManager;
     this.scrubbingCache = scrubbingCache;
+    this.colorPipeline = colorPipeline;
   }
 
   // Acquire a ping-pong texture pair from pool or create new
@@ -408,7 +412,12 @@ export class NestedCompRenderer {
         let sourceExternalTexture = data.externalTexture;
         let useExternalTexture = data.isVideo && !!data.externalTexture;
 
-        if (complexEffects && complexEffects.length > 0) {
+        const hasColorCorrection = !!this.colorPipeline && !skipEffects && !!layer.colorCorrection?.enabled;
+        const needsSourcePreprocess = hasColorCorrection || !!(complexEffects && complexEffects.length > 0);
+
+        if (needsSourcePreprocess) {
+          let copied = false;
+          let copiedToTempView = false;
           if (useExternalTexture && sourceExternalTexture) {
             const copyPipeline = this.compositorPipeline.getExternalCopyPipeline?.();
             const copyBindGroup = copyPipeline
@@ -431,59 +440,50 @@ export class NestedCompRenderer {
               copyPass.setBindGroup(0, copyBindGroup);
               copyPass.draw(6);
               copyPass.end();
-
-              const effectResult = this.effectsPipeline.applyEffects(
-                commandEncoder,
-                complexEffects,
-                sampler,
-                effectTempView,
-                effectTempView2,
-                effectTempView,
-                effectTempView2,
-                width,
-                height
-              );
-
-              sourceTextureView = effectResult.finalView;
-              sourceExternalTexture = null;
-              useExternalTexture = false;
+              copied = true;
+              copiedToTempView = true;
             }
           } else if (sourceTextureView) {
-            const copyPipeline = this.compositorPipeline.getCopyPipeline?.();
-            const copyBindGroup = copyPipeline
-              ? this.compositorPipeline.createCopyBindGroup?.(
-                sampler,
-                sourceTextureView,
-                layer.id
-              )
-              : null;
+            copied = true;
+          }
 
-            if (copyPipeline && copyBindGroup) {
-              const copyPass = commandEncoder.beginRenderPass({
-                colorAttachments: [{
-                  view: effectTempView,
-                  loadOp: 'clear',
-                  storeOp: 'store',
-                }],
-              });
-              copyPass.setPipeline(copyPipeline);
-              copyPass.setBindGroup(0, copyBindGroup);
-              copyPass.draw(6);
-              copyPass.end();
+          if (copied) {
+            if (copiedToTempView) {
+              sourceTextureView = effectTempView;
+            }
+            if (sourceTextureView) {
+              sourceExternalTexture = null;
+              useExternalTexture = false;
 
-              const effectResult = this.effectsPipeline.applyEffects(
-                commandEncoder,
-                complexEffects,
-                sampler,
-                effectTempView,
-                effectTempView2,
-                effectTempView,
-                effectTempView2,
-                width,
-                height
-              );
+              if (hasColorCorrection) {
+                const colorResult = this.colorPipeline!.applyGrade(
+                  commandEncoder,
+                  layer.colorCorrection,
+                  sampler,
+                  sourceTextureView,
+                  effectTempView2,
+                  `nested-${compositionId}-${layer.id}`
+                );
+                sourceTextureView = colorResult.finalView;
+              }
 
-              sourceTextureView = effectResult.finalView;
+              if (complexEffects && complexEffects.length > 0) {
+                const effectOutput = sourceTextureView === effectTempView
+                  ? effectTempView2
+                  : effectTempView;
+                const effectResult = this.effectsPipeline.applyEffects(
+                  commandEncoder,
+                  complexEffects,
+                  sampler,
+                  sourceTextureView,
+                  effectOutput,
+                  effectTempView,
+                  effectTempView2,
+                  width,
+                  height
+                );
+                sourceTextureView = effectResult.finalView;
+              }
             }
           }
         }
@@ -644,6 +644,7 @@ export class NestedCompRenderer {
       blendMode: isSingle ? firstLayer.blendMode : 'normal',
       source: { type: 'image' },
       effects: isSingle ? firstLayer.effects : [],
+      colorCorrection: isSingle ? firstLayer.colorCorrection : undefined,
       position: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1 },
       rotation: { x: 0, y: 0, z: 0 },

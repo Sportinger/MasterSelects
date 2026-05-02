@@ -7,10 +7,11 @@ import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
 import { TextTab } from '../TextTab';
 
 // Tab type
-type PropertiesTab = 'transform' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip';
+type PropertiesTab = 'transform' | 'color' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
+const ColorTab = lazy(() => import('./ColorTab').then(m => ({ default: m.ColorTab })));
 const EffectsTab = lazy(() => import('./EffectsTab').then(m => ({ default: m.EffectsTab })));
 const MasksTab = lazy(() => import('./MasksTab').then(m => ({ default: m.MasksTab })));
 const TranscriptTab = lazy(() => import('./TranscriptTab').then(m => ({ default: m.TranscriptTab })));
@@ -144,7 +145,7 @@ export function PropertiesPanel() {
         setActiveTab('3d-text');
       } else if (isTextClip) {
         setActiveTab('text');
-      } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'masks' || activeTab === 'text' || activeTab === '3d-text' || activeTab === 'blendshapes')) {
+      } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'color' || activeTab === 'masks' || activeTab === 'text' || activeTab === '3d-text' || activeTab === 'blendshapes')) {
         setActiveTab('effects');
       } else if (
         !isAudioClip &&
@@ -270,6 +271,7 @@ export function PropertiesPanel() {
           <>
             <button className={`tab-btn ${activeTab === 'text' ? 'active' : ''}`} onClick={() => setActiveTab('text')}>Text</button>
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
@@ -281,6 +283,7 @@ export function PropertiesPanel() {
           <>
             <button className={`tab-btn ${activeTab === '3d-text' ? 'active' : ''}`} onClick={() => setActiveTab('3d-text')}>3D Text</button>
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
             </button>
@@ -296,6 +299,9 @@ export function PropertiesPanel() {
               </button>
             )}
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
+            {!isSplatEffectorClip && (
+              <button className={`tab-btn ${activeTab === 'color' ? 'active' : ''}`} onClick={() => setActiveTab('color')}>Color</button>
+            )}
             {isGaussianAvatar && (
               <button className={`tab-btn ${activeTab === 'blendshapes' ? 'active' : ''}`} onClick={() => setActiveTab('blendshapes')}>
                 Blendshapes
@@ -343,6 +349,7 @@ export function PropertiesPanel() {
             <LottieTab clipId={selectedClip.id} />
           )}
           {activeTab === 'transform' && !isAudioClip && <TransformTab clipId={selectedClip.id} transform={transform} speed={interpolatedSpeed} is3D={selectedClip.is3D} hasKeyframes={hasKeyframes} />}
+          {activeTab === 'color' && !isAudioClip && !isCameraClip && !isSplatEffectorClip && <ColorTab clipId={selectedClip.id} />}
           {activeTab === 'camera' && isCameraClip && <CameraTab clipId={selectedClip.id} />}
           {activeTab === 'blendshapes' && isGaussianAvatar && <BlendshapesTab clipId={selectedClip.id} />}
           {activeTab === 'gaussian-splat' && isGaussianSplat && <GaussianSplatTab clipId={selectedClip.id} />}
