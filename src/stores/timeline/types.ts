@@ -26,6 +26,7 @@ import type {
   Layer,
   SerializableClip,
 } from '../../types';
+import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
 import type { Composition } from '../mediaStore';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { MarkerMIDIBinding } from '../../types/midi';
@@ -234,6 +235,22 @@ export interface MathSceneClipActions {
   updateMathParameter: (clipId: string, parameterId: string, patch: Partial<MathParameter>) => void;
 }
 
+export interface MotionShapeClipOptions {
+  primitive?: ShapePrimitive;
+  size?: { w: number; h: number };
+  fillColor?: MotionColor;
+  duration?: number;
+  name?: string;
+}
+
+export interface MotionClipActions {
+  addMotionShapeClip: (trackId: string, startTime: number, options?: MotionShapeClipOptions) => string | null;
+  addMotionNullClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  addMotionAdjustmentClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  convertSolidToMotionShape: (clipId: string) => string | null;
+  updateMotionLayer: (clipId: string, updater: (motion: MotionLayerDefinition) => MotionLayerDefinition) => void;
+}
+
 // Mesh clip actions (extracted to meshClipSlice)
 export interface MeshClipActions {
   addMeshClip: (trackId: string, startTime: number, meshType: import('../mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
@@ -321,7 +338,7 @@ export interface CoreClipActions {
 }
 
 // Combined ClipActions = all sub-interfaces
-export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MathSceneClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & ColorCorrectionActions & LinkedGroupActions & DownloadClipActions;
+export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MathSceneClipActions & MotionClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & ColorCorrectionActions & LinkedGroupActions & DownloadClipActions;
 
 // Playback actions interface
 export interface PlaybackActions {
@@ -492,6 +509,7 @@ export interface ClipboardClipData {
   text3DProperties?: import('../../types').Text3DProperties;
   solidColor?: string;
   mathScene?: MathSceneDefinition;
+  motion?: MotionLayerDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: import('../mediaStore/types').SceneCameraSettings;
   meshType?: import('../mediaStore/types').MeshPrimitiveType;

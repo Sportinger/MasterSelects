@@ -14,12 +14,15 @@ import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
 import { scrubSettleState } from '../../services/scrubSettleState';
 import { useTimelineStore } from '../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
+import type { MotionRenderer } from '../motion/MotionRenderer';
+import { getMotionRenderSize } from '../motion/MotionTypes';
 
 const log = Logger.create('LayerCollector');
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
 
 export interface LayerCollectorDeps {
   textureManager: TextureManager;
+  motionRenderer?: MotionRenderer | null;
   scrubbingCache: ScrubbingCache | null;
   getLastVideoTime: (key: string) => number | undefined;
   setLastVideoTime: (key: string, time: number) => void;
@@ -269,6 +272,18 @@ export class LayerCollector {
         return this.tryTextCanvas(layer, source.textCanvas, deps);
       }
       return null;
+    }
+
+    if (sourceType === 'motion') {
+      const size = getMotionRenderSize(source.motion);
+      return {
+        layer,
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: size.width,
+        sourceHeight: size.height,
+      };
     }
 
     // Video sources - check decoders in priority order

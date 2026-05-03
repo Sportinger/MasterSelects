@@ -12,6 +12,7 @@ import {
 } from '../../src/services/mediaRuntime/runtimePlayback';
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
 import { scrubSettleState } from '../../src/services/scrubSettleState';
+import { proxyFrameCache } from '../../src/services/proxyFrameCache';
 import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
 import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
 import type { TimelineClip } from '../../src/types';
@@ -1234,5 +1235,132 @@ describe('LayerBuilderService paused visual provider selection', () => {
     });
     expect(nestedLayers[0]?.source?.gaussianSplatRuntimeKey).toBeTruthy();
     expect(nestedLayers[0]?.source?.gaussianSplatSettings?.render?.useNativeRenderer).toBe(true);
+  });
+
+  it('uses proxy frames for video clips inside nested composition clips while scrubbing', () => {
+    const service = new LayerBuilderService();
+    const file = new File(['video'], 'nested.mp4', { type: 'video/mp4' });
+    const video = document.createElement('video');
+    const proxyImage = new Image();
+    Object.defineProperty(proxyImage, 'naturalWidth', { configurable: true, value: 640 });
+    Object.defineProperty(proxyImage, 'naturalHeight', { configurable: true, value: 360 });
+    const mockedProxyFrameCache = proxyFrameCache as typeof proxyFrameCache & {
+      getCachedFrame: ReturnType<typeof vi.fn>;
+      getNearestCachedFrameEntry: ReturnType<typeof vi.fn>;
+      getFrame: ReturnType<typeof vi.fn>;
+    };
+    mockedProxyFrameCache.getCachedFrame = vi.fn().mockReturnValue(proxyImage);
+    mockedProxyFrameCache.getNearestCachedFrameEntry = vi.fn().mockReturnValue(null);
+    mockedProxyFrameCache.getFrame = vi.fn().mockResolvedValue(proxyImage);
+
+    const getMediaStateSpy = vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+      ...initialMediaState,
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      proxyEnabled: true,
+      files: [{
+        id: 'media-video-1',
+        name: 'nested.mp4',
+        type: 'video',
+        createdAt: 1,
+        file,
+        duration: 10,
+        proxyStatus: 'ready',
+        proxyFps: 24,
+      }],
+      compositions: [],
+    });
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'comp-clip-1',
+          trackId: 'track-v1',
+          name: 'Comp 1',
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          isComposition: true,
+          compositionId: 'comp-1',
+          nestedTracks: [
+            {
+              id: 'nested-track-v1',
+              name: 'Nested Video',
+              type: 'video',
+              visible: true,
+              muted: false,
+              solo: false,
+            },
+          ],
+          nestedClips: [
+            {
+              id: 'nested-video-1',
+              trackId: 'nested-track-v1',
+              mediaFileId: 'media-video-1',
+              name: 'nested.mp4',
+              file,
+              startTime: 0,
+              duration: 10,
+              inPoint: 0,
+              outPoint: 10,
+              effects: [],
+              transform: { ...DEFAULT_TRANSFORM },
+              source: {
+                type: 'video',
+                mediaFileId: 'media-video-1',
+                videoElement: video,
+                naturalDuration: 10,
+              },
+              isLoading: false,
+            },
+          ],
+          isLoading: false,
+        },
+      ],
+      playheadPosition: 1,
+      isPlaying: false,
+      isDraggingPlayhead: true,
+      playbackSpeed: 1,
+    });
+
+    const layers = service.buildLayersFromStore();
+    const nestedLayers = (layers[0]?.source as NestedCompositionSource | undefined)?.nestedComposition?.layers as Array<{
+      source?: {
+        type?: string;
+        imageElement?: HTMLImageElement;
+        proxyFrameIndex?: number;
+        previewPath?: string;
+        mediaFileId?: string;
+      };
+    }> | undefined;
+
+    expect(mockedProxyFrameCache.getCachedFrame).toHaveBeenCalledWith('media-video-1', 24, 24);
+    expect(nestedLayers).toHaveLength(1);
+    expect(nestedLayers?.[0]?.source).toMatchObject({
+      type: 'image',
+      imageElement: proxyImage,
+      proxyFrameIndex: 24,
+      previewPath: 'nested-proxy-frame',
+      mediaFileId: 'media-video-1',
+    });
+
+    delete mockedProxyFrameCache.getCachedFrame;
+    delete mockedProxyFrameCache.getNearestCachedFrameEntry;
+    delete mockedProxyFrameCache.getFrame;
+    getMediaStateSpy.mockRestore();
   });
 });

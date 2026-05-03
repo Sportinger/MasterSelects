@@ -10,6 +10,7 @@ import type {
   GaussianSplatSequenceData,
   ModelSequenceData,
   MathSceneDefinition,
+  MotionLayerDefinition,
   SceneSegment,
   Text3DProperties,
   TextClipProperties,
@@ -72,7 +73,7 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'lottie' | 'rive';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive';
   naturalDuration?: number;
   linkedClipId?: string;
   linkedGroupId?: string;
@@ -97,6 +98,9 @@ export interface ProjectClip {
 
   // Math scene clip support
   mathScene?: MathSceneDefinition;
+
+  // Motion design clip support
+  motion?: MotionLayerDefinition;
 
   vectorAnimationSettings?: VectorAnimationClipSettings;
 

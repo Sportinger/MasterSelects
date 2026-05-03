@@ -55,6 +55,12 @@ The engine currently supports:
 - Images and canvases are copied into `rgba8unorm` GPU textures.
 - Cached image views are reused when possible.
 
+### Motion Shapes
+
+- `motion-shape` clips render through `src/engine/motion/MotionRenderer.ts`.
+- Rectangle and ellipse primitives are drawn with analytic WGSL SDFs into transparent `rgba8unorm` textures.
+- The resulting texture view is composited through the normal `CompositorPipeline`, so masks, effects, blend mode, nested comps, preview targets, and export share the same downstream path.
+
 ### Masks
 
 - Mask textures are uploaded per layer.
@@ -155,6 +161,7 @@ Runtime flags are exposed on `window.__ENGINE_FLAGS__`.
 - `useLiveSlotTrigger` swaps slot-grid clicks from editor-open behavior to direct live triggering.
 - `useWarmSlotDecks` prepares reusable slot-owned live decks for faster layer adoption.
 - `use3DLayers` and `useGaussianSplat` are enabled in this branch.
+- `useMotionDesignSystem` exists for the motion-design rollout; current rectangle/ellipse render plumbing is additive for `motion-shape` clips.
 
 ---
 
@@ -192,6 +199,8 @@ Key implementation files:
 - `src/engine/render/RenderDispatcher.ts`
 - `src/engine/render/RenderLoop.ts`
 - `src/engine/render/htmlVideoPreviewFallback.ts`
+- `src/engine/motion/MotionRenderer.ts`
+- `src/engine/motion/shaders/motionShapes.wgsl`
 - `src/engine/pipeline/OutputPipeline.ts`
 - `src/engine/managers/ExportCanvasManager.ts`
 - `src/engine/texture/ScrubbingCache.ts`

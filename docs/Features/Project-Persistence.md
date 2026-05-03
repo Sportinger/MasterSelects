@@ -342,6 +342,7 @@ interface ProjectFile {
 - Text clip properties
 - Solid clip color
 - Vector animation settings (loop, end behavior, fit, animation selection, background)
+- Motion design definitions for shape/null/adjustment clips
 - Transcript and analysis data per clip
 - Scene description data
 

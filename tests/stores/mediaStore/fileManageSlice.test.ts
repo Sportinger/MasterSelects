@@ -8,6 +8,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { create } from 'zustand';
 import type { MediaState, MediaFile, MediaFolder, TextItem, SolidItem, Composition } from '../../../src/stores/mediaStore/types';
+
+const thumbnailMocks = vi.hoisted(() => ({
+  createThumbnail: vi.fn(async () => 'blob:http://localhost/refreshed-thumb'),
+}));
+
+vi.mock('../../../src/stores/mediaStore/helpers/thumbnailHelpers', () => ({
+  createThumbnail: thumbnailMocks.createThumbnail,
+}));
+
 import { createFileManageSlice, type FileManageActions } from '../../../src/stores/mediaStore/slices/fileManageSlice';
 import { createFolderSlice, type FolderActions } from '../../../src/stores/mediaStore/slices/folderSlice';
 import { createSelectionSlice, type SelectionActions } from '../../../src/stores/mediaStore/slices/selectionSlice';
@@ -215,6 +224,8 @@ describe('MediaStore - File Management', () => {
 
   beforeEach(() => {
     store = createTestStore();
+    thumbnailMocks.createThumbnail.mockClear();
+    thumbnailMocks.createThumbnail.mockResolvedValue('blob:http://localhost/refreshed-thumb');
   });
 
   // --- Adding media files ---
@@ -871,8 +882,7 @@ describe('MediaStore - File Management', () => {
   describe('refreshFileUrls', () => {
     it('should recreate image blob urls from the current file object', async () => {
       const createObjectURL = vi.spyOn(URL, 'createObjectURL')
-        .mockReturnValueOnce('blob:http://localhost/refreshed-file')
-        .mockReturnValueOnce('blob:http://localhost/refreshed-thumb');
+        .mockReturnValueOnce('blob:http://localhost/refreshed-file');
       const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
       const file = makeMediaFile({
         id: 'img-1',
@@ -891,6 +901,7 @@ describe('MediaStore - File Management', () => {
       expect(result).toBe(true);
       expect(updated.url).toBe('blob:http://localhost/refreshed-file');
       expect(updated.thumbnailUrl).toBe('blob:http://localhost/refreshed-thumb');
+      expect(thumbnailMocks.createThumbnail).toHaveBeenCalledWith(file.file, 'image');
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/original-file');
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/original-thumb');
 

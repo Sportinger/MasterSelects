@@ -82,6 +82,7 @@ Create mesh clips from the Media Panel via `+ Add > Mesh` or the context menu:
 ### Preview Scene Gizmo
 
 - Selected scene objects expose a viewport transform gizmo for Move, Rotate, and Scale.
+- The Preview scene-handle toggle hides both the React hit handles and the native WebGPU gizmo pass, so disabling it removes the visible axis gizmo from the preview.
 - Move, Rotate, and Scale visuals are drawn by the native WebGPU scene gizmo pass from the selected object's local transform basis. The React overlay only supplies hit targets and the mode toolbar.
   - Move and Scale use larger Unreal-style colored local-axis handles with dark outlines and a white center hub. Hovering an axis brightens and thickens that native gizmo handle. Dragging the center hub moves freely in the preview plane for Move and applies proportional uniform scale for Scale.
 - Rotate mode draws larger screen-space stable colored rings from the X, Y, and Z local rotation planes, so the ring orientation changes with object rotation and the scene view without the rings visually growing or shrinking. The invisible SVG hit targets are generated from the same projected 3D ring points, and hover/drag chooses the nearest ring instead of whichever SVG stroke is visually on top.

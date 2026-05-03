@@ -32,6 +32,7 @@ import { LayerCollector } from './render/LayerCollector';
 import { Compositor } from './render/Compositor';
 import { NestedCompRenderer } from './render/NestedCompRenderer';
 import { RenderDispatcher, type RenderDeps, type RenderDispatcherDebugSnapshot } from './render/RenderDispatcher';
+import { MotionRenderer } from './motion/MotionRenderer';
 
 export class WebGPUEngine {
   // Core context
@@ -46,6 +47,7 @@ export class WebGPUEngine {
   private compositor: Compositor | null = null;
   private nestedCompRenderer: NestedCompRenderer | null = null;
   private renderDispatcher: RenderDispatcher | null = null;
+  private motionRenderer: MotionRenderer | null = null;
 
   // Existing managers (unchanged)
   private textureManager: TextureManager | null = null;
@@ -153,6 +155,7 @@ export class WebGPUEngine {
     this.outputWindowManager = new OutputWindowManager(width, height);
 
     this.layerCollector = new LayerCollector();
+    this.motionRenderer = new MotionRenderer(device);
 
     this.compositor = new Compositor(
       this.compositorPipeline,
@@ -168,7 +171,8 @@ export class WebGPUEngine {
       this.textureManager,
       this.maskTextureManager,
       this.cacheManager.getScrubbingCache(),
-      this.colorPipeline
+      this.colorPipeline,
+      this.motionRenderer
     );
 
     this.renderLoop = new RenderLoop(this.performanceStats, {
@@ -195,6 +199,7 @@ export class WebGPUEngine {
       layerCollector: { get: () => this.layerCollector },
       compositor: { get: () => this.compositor },
       nestedCompRenderer: { get: () => this.nestedCompRenderer },
+      motionRenderer: { get: () => this.motionRenderer },
       cacheManager: { get: () => this.cacheManager },
       exportCanvasManager: { get: () => this.exportCanvasManager },
       performanceStats: { get: () => this.performanceStats },
@@ -219,6 +224,8 @@ export class WebGPUEngine {
     // Clear managers
     this.textureManager = null;
     this.maskTextureManager = null;
+    this.motionRenderer?.destroy();
+    this.motionRenderer = null;
     this.compositorPipeline = null;
     this.effectsPipeline = null;
     this.colorPipeline = null;
@@ -1033,6 +1040,7 @@ export class WebGPUEngine {
     this.outputWindowManager?.destroy();
     this.renderTargetManager?.destroy();
     this.nestedCompRenderer?.destroy();
+    this.motionRenderer?.destroy();
     this.textureManager?.destroy();
     this.maskTextureManager?.destroy();
     this.cacheManager.destroy();

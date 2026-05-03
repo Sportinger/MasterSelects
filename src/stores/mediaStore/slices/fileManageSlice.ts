@@ -60,7 +60,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
 
     if (refreshThumbnail) {
       if (mediaFile.type === 'image') {
-        thumbnailUrl = URL.createObjectURL(mediaFile.file);
+        thumbnailUrl = await createThumbnail(mediaFile.file, 'image');
       } else if (mediaFile.type === 'video') {
         thumbnailUrl = await createThumbnail(mediaFile.file, 'video');
       }

@@ -149,6 +149,9 @@ describe('RenderDispatcher empty playback hold', () => {
     useEngineStore.setState({
       sceneNavClipId: null,
       sceneNavFpsMode: false,
+      sceneGizmoVisible: true,
+      sceneGizmoClipIdOverride: null,
+      sceneGizmoHoveredAxis: null,
     });
     useMediaStore.setState({
       files: [],
@@ -397,6 +400,76 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(layerData[0]?.layer.position).toEqual({ x: 0, y: 0, z: 0 });
     expect(layerData[0]?.layer.scale).toEqual({ x: 1, y: 1 });
     expect(layerData[0]?.layer.rotation).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('uses the preview scene-handle toggle for the native scene gizmo pass', () => {
+    const { dispatcher, deps } = createDispatcher(false);
+    deps.sceneRenderer = {
+      isInitialized: true,
+      renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
+    };
+
+    useTimelineStore.setState({
+      selectedClipIds: new Set(['native-splat-clip']),
+      primarySelectedClipId: 'native-splat-clip',
+      clips: [{
+        id: 'native-splat-clip',
+        trackId: 'track-1',
+        startTime: 0,
+        duration: 1,
+        transform: {
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          opacity: 1,
+          blendMode: 'normal',
+        },
+        source: { type: 'gaussian-splat' },
+      }],
+    });
+
+    const createLayerData = () => [
+      {
+        layer: {
+          id: 'native-splat-layer',
+          sourceClipId: 'native-splat-clip',
+          name: 'Native Splat',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          is3D: true,
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1, z: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          source: {
+            type: 'gaussian-splat',
+            gaussianSplatUrl: 'blob:native-splat',
+            gaussianSplatFileName: 'native.ply',
+            gaussianSplatSettings: {
+              render: {
+                useNativeRenderer: true,
+              },
+            },
+          },
+        },
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ] as unknown as LayerRenderData[];
+
+    useEngineStore.getState().setSceneGizmoVisible(true);
+    dispatcher.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
+    expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toMatchObject({
+      clipId: 'native-splat-clip',
+    });
+
+    deps.sceneRenderer.renderScene.mockClear();
+    useEngineStore.getState().setSceneGizmoVisible(false);
+    dispatcher.process3DLayers(createLayerData(), {} as GPUDevice, 1920, 1080);
+    expect(deps.sceneRenderer.renderScene.mock.calls[0][5]).toBeNull();
   });
 
   it('routes pure native gaussian-splat scenes through the shared scene renderer', () => {

@@ -720,6 +720,8 @@ function convertProjectCompositionToStore(
         solidColor: c.solidColor,
         // Math scene clip support
         mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
+        // Motion design clip support
+        motion: c.motion ? structuredClone(c.motion) : undefined,
         vectorAnimationSettings: c.vectorAnimationSettings,
         // 3D layer support
         is3D: c.is3D,
@@ -1585,6 +1587,37 @@ async function reloadNestedCompositionClips(): Promise<void> {
     const nestedTracks = composition.timelineData.tracks;
 
     for (const nestedSerializedClip of composition.timelineData.clips) {
+      if (
+        (
+          nestedSerializedClip.sourceType === 'motion-shape' ||
+          nestedSerializedClip.sourceType === 'motion-null' ||
+          nestedSerializedClip.sourceType === 'motion-adjustment'
+        ) &&
+        nestedSerializedClip.motion
+      ) {
+        nestedClips.push({
+          id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
+          trackId: nestedSerializedClip.trackId,
+          name: nestedSerializedClip.name || 'Motion',
+          file: new File([JSON.stringify(nestedSerializedClip.motion)], `${nestedSerializedClip.sourceType}.msmotion`, { type: 'application/json' }),
+          startTime: nestedSerializedClip.startTime,
+          duration: nestedSerializedClip.duration,
+          inPoint: nestedSerializedClip.inPoint,
+          outPoint: nestedSerializedClip.outPoint,
+          source: {
+            type: nestedSerializedClip.sourceType,
+            naturalDuration: nestedSerializedClip.duration,
+          },
+          motion: structuredClone(nestedSerializedClip.motion),
+          thumbnails: nestedSerializedClip.thumbnails,
+          transform: nestedSerializedClip.transform,
+          effects: nestedSerializedClip.effects || [],
+          masks: nestedSerializedClip.masks || [],
+          isLoading: false,
+        });
+        continue;
+      }
+
       if (nestedSerializedClip.sourceType === 'math-scene' && nestedSerializedClip.mathScene) {
         const canvas = mathSceneRenderer.createCanvas();
         const nestedClip: TimelineClip = {

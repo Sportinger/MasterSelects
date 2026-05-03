@@ -150,4 +150,16 @@ describe('MediaPanel source monitor opening', () => {
 
     expect(mediaState.setSourceMonitorFile).toHaveBeenCalledWith('file-1');
   });
+
+  it('does not mount board assets far outside the viewport', () => {
+    localStorage.setItem('media-panel-board-viewport', JSON.stringify({
+      zoom: 1,
+      panX: -20000,
+      panY: -20000,
+    }));
+
+    const { container } = render(<MediaPanel />);
+
+    expect(container.querySelectorAll('.media-board-node')).toHaveLength(0);
+  });
 });

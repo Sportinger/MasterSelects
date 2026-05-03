@@ -64,6 +64,13 @@ export function generateMathSceneClipId(): string {
 }
 
 /**
+ * Generate a unique ID for motion design clips.
+ */
+export function generateMotionClipId(kind: 'shape' | 'null' | 'adjustment' | 'group' = 'shape'): string {
+  return generateClipId(`clip-motion-${kind}`);
+}
+
+/**
  * Generate a unique ID for mesh clips.
  */
 export function generateMeshClipId(): string {

@@ -33,6 +33,8 @@ import {
   vectorAnimationInputValueToNumber,
   type VectorAnimationClipSettings,
 } from '../../types/vectorAnimation';
+import { isMotionProperty } from '../../types/motionDesign';
+import { propertyRegistry } from '../../services/properties';
 import { normalizeEasingType } from '../../utils/easing';
 import { composeTransforms } from '../../utils/transformComposition';
 import { calculateSourceTime, getSpeedAtTime, calculateTimelineDuration } from '../../utils/speedIntegration';
@@ -1034,6 +1036,18 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         return;
       }
 
+      if (isMotionProperty(property)) {
+        const descriptor = propertyRegistry.getDescriptor(property, clip);
+        if (descriptor?.write) {
+          const nextClip = propertyRegistry.writeValue(clip, property, value);
+          set({
+            clips: clips.map(c => c.id === clipId ? nextClip : c),
+          });
+          get().invalidateCache();
+        }
+        return;
+      }
+
       // Handle speed property (directly on clip, not transform)
       if (property === 'speed') {
         const { invalidateCache, updateDuration } = get();
@@ -1285,6 +1299,14 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         colorProperty.paramName,
         currentValue
       );
+    } else if (isMotionProperty(property)) {
+      const descriptor = propertyRegistry.getDescriptor(property, clip);
+      if (descriptor?.write) {
+        const nextClip = propertyRegistry.writeValue(clip, property, currentValue);
+        set({
+          clips: get().clips.map(c => c.id === clipId ? nextClip : c),
+        });
+      }
     } else if (property === 'speed') {
       const { updateDuration } = get();
       const sourceDuration = clip.outPoint - clip.inPoint;
