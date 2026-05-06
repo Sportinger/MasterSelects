@@ -65,7 +65,10 @@ getTrackChildren()  // Query child tracks
 
 ### Motion Shape
 - Rectangle and ellipse shape clips are timeline clips with JSON motion definitions.
+- Video track-header context menus can add Motion Rectangle or Motion Ellipse clips at the current playhead position.
+- Solid clip context menus expose Convert Solid to Motion Shape.
 - The Motion tab exposes primitive, size, radius, fill, and stroke controls.
+- Motion shape replicator controls can enable a grid, edit X/Y counts, edit X/Y spacing, and keyframe the per-instance fade.
 - Solid clips can be converted in the store to motion rectangle clips while preserving timeline identity, timing, transform, effects, and keyframes.
 - Motion shape rendering uses WebGPU SDF textures, then the normal compositor stack.
 
@@ -188,6 +191,7 @@ Soloing multiple tracks is supported. Non-solo tracks dim visually when any solo
 
 ### Track Header Context Menu
 
+- Video tracks can create Motion Rectangle, Motion Ellipse, or Math Scene clips at the playhead.
 - `Duplicate Track` currently creates a new empty track of the same type.
 - `Delete` is blocked for the last remaining track of that type.
 - Deleting a populated track shows the affected clip count in the menu label/tooltip.

@@ -4,7 +4,7 @@ import {
   createDefaultMotionLayerDefinition,
   createStrokeAppearance,
 } from '../../src/types/motionDesign';
-import { createMotionUniformArray } from '../../src/engine/motion/MotionBuffers';
+import { createMotionInstanceArray, createMotionUniformArray } from '../../src/engine/motion/MotionBuffers';
 import { getMotionRenderSize } from '../../src/engine/motion/MotionTypes';
 import { getInterpolatedMotionLayer } from '../../src/utils/motionInterpolation';
 import { createTestTimelineStore } from '../helpers/storeFactory';
@@ -49,7 +49,7 @@ describe('motion design rendering helpers', () => {
       alignment: 'outside',
     });
 
-    expect(getMotionRenderSize(motion)).toEqual({
+    expect(getMotionRenderSize(motion)).toMatchObject({
       width: 124,
       height: 74,
       strokePadding: 12,
@@ -74,6 +74,42 @@ describe('motion design rendering helpers', () => {
     expect(Array.from(uniforms.slice(0, 6))).toEqual([100, 50, 108, 58, 0, 1]);
     expect(Array.from(uniforms.slice(8, 12))).toEqual([0.25, 0.5, 0.75, 1]);
     expect(Array.from(uniforms.slice(16, 19))).toEqual([8, 1, 0]);
+  });
+
+  it('sizes and packs grid replicator instances for motion shapes', () => {
+    const motion = createDefaultMotionLayerDefinition('shape', {
+      size: { w: 100, h: 50 },
+    });
+    if (motion.replicator?.layout.mode === 'grid') {
+      motion.replicator.enabled = true;
+      motion.replicator.layout.count = { x: 3, y: 2 };
+      motion.replicator.layout.spacing = { x: 50, y: 80 };
+      motion.replicator.offset.opacity = 0.75;
+    }
+
+    const size = getMotionRenderSize(motion);
+    const instances = createMotionInstanceArray(size);
+
+    expect(size).toMatchObject({
+      width: 200,
+      height: 130,
+      replicator: {
+        enabled: true,
+        countX: 3,
+        countY: 2,
+        spacingX: 50,
+        spacingY: 80,
+        instanceCount: 6,
+      },
+    });
+    expect(Array.from(instances)).toEqual([
+      -50, -40, 1, 0,
+      0, -40, 0.75, 0,
+      50, -40, 0.5625, 0,
+      -50, 40, 0.421875, 0,
+      0, 40, 0.31640625, 0,
+      50, 40, 0.2373046875, 0,
+    ]);
   });
 
   it('interpolates numeric motion properties through the property registry', () => {
@@ -125,5 +161,38 @@ describe('motion design rendering helpers', () => {
       expect(fill.color.g).toBeCloseTo(0.4, 3);
       expect(fill.color.b).toBeCloseTo(0.6, 3);
     }
+  });
+
+  it('adds rectangle and ellipse motion shape clips only on video tracks', () => {
+    const store = createTestTimelineStore();
+    const rectangleId = store.getState().addMotionShapeClip('video-1', 1, {
+      primitive: 'rectangle',
+      duration: 3,
+      size: { w: 320, h: 180 },
+      name: 'Motion Rectangle',
+    });
+    const ellipseId = store.getState().addMotionShapeClip('video-1', 4, {
+      primitive: 'ellipse',
+      duration: 2,
+      name: 'Motion Ellipse',
+    });
+    const invalidId = store.getState().addMotionShapeClip('audio-1', 0, {
+      primitive: 'rectangle',
+    });
+
+    const rectangle = store.getState().clips.find((clip) => clip.id === rectangleId);
+    const ellipse = store.getState().clips.find((clip) => clip.id === ellipseId);
+
+    expect(rectangleId).toBeTruthy();
+    expect(ellipseId).toBeTruthy();
+    expect(invalidId).toBeNull();
+    expect(rectangle?.source?.type).toBe('motion-shape');
+    expect(rectangle?.motion?.shape?.primitive).toBe('rectangle');
+    expect(rectangle?.motion?.shape?.size).toEqual({ w: 320, h: 180 });
+    expect(rectangle?.startTime).toBe(1);
+    expect(rectangle?.duration).toBe(3);
+    expect(ellipse?.name).toBe('Motion Ellipse');
+    expect(ellipse?.motion?.shape?.primitive).toBe('ellipse');
+    expect(store.getState().clips).toHaveLength(2);
   });
 });

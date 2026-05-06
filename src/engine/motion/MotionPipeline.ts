@@ -16,7 +16,7 @@ export class MotionPipeline {
         label: 'motion-shape-bind-group-layout',
         entries: [{
           binding: 0,
-          visibility: GPUShaderStage.FRAGMENT,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' },
         }],
       });
@@ -42,11 +42,34 @@ export class MotionPipeline {
         vertex: {
           module,
           entryPoint: 'vertexMain',
+          buffers: [{
+            arrayStride: 4 * 4,
+            stepMode: 'instance',
+            attributes: [{
+              shaderLocation: 0,
+              offset: 0,
+              format: 'float32x4',
+            }],
+          }],
         },
         fragment: {
           module,
           entryPoint: 'fragmentMain',
-          targets: [{ format: MOTION_RENDER_TEXTURE_FORMAT }],
+          targets: [{
+            format: MOTION_RENDER_TEXTURE_FORMAT,
+            blend: {
+              color: {
+                operation: 'add',
+                srcFactor: 'src-alpha',
+                dstFactor: 'one-minus-src-alpha',
+              },
+              alpha: {
+                operation: 'add',
+                srcFactor: 'one',
+                dstFactor: 'one-minus-src-alpha',
+              },
+            },
+          }],
         },
         primitive: {
           topology: 'triangle-list',

@@ -30,6 +30,7 @@ interface TimelineContextMenuProps {
   toggleClipReverse: (clipId: string) => void;
   unlinkGroup: (clipId: string) => void;
   generateWaveformForClip: (clipId: string) => void;
+  convertSolidToMotionShape: (clipId: string) => string | null;
   setMulticamDialogOpen: (open: boolean) => void;
 
   // File explorer
@@ -47,6 +48,7 @@ export function TimelineContextMenu({
   toggleClipReverse,
   unlinkGroup,
   generateWaveformForClip,
+  convertSolidToMotionShape,
   setMulticamDialogOpen,
   showInExplorer,
 }: TimelineContextMenuProps) {
@@ -158,6 +160,7 @@ export function TimelineContextMenu({
   const mediaFile = getMediaFileForClip(contextMenu.clipId);
   const clip = clipMap.get(contextMenu.clipId);
   const isVideo = clip?.source?.type === 'video';
+  const isSolid = clip?.source?.type === 'solid';
   const isGenerating = mediaFile?.proxyStatus === 'generating';
   const hasProxy = mediaFile?.proxyStatus === 'ready';
 
@@ -286,6 +289,23 @@ export function TimelineContextMenu({
       >
         Split at Playhead (C)
       </div>
+
+      {isSolid && (
+        <>
+          <div className="context-menu-separator" />
+          <div
+            className="context-menu-item"
+            onClick={() => {
+              if (contextMenu.clipId) {
+                convertSolidToMotionShape(contextMenu.clipId);
+              }
+              setContextMenu(null);
+            }}
+          >
+            Convert Solid to Motion Shape
+          </div>
+        </>
+      )}
 
       {/* Multicam options */}
       {selectedClipIds.size > 1 && (

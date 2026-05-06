@@ -1,6 +1,6 @@
 import type { Layer } from '../core/types';
 import type { MotionLayerDefinition } from '../../types/motionDesign';
-import { createMotionUniformArray } from './MotionBuffers';
+import { createMotionInstanceArray, createMotionUniformArray } from './MotionBuffers';
 import {
   getMotionRenderSize,
   MOTION_RENDER_TEXTURE_FORMAT,
@@ -33,7 +33,9 @@ export class MotionRenderer {
     const size = getMotionRenderSize(motion);
     const cache = this.getOrCreateCache(layer, size.width, size.height);
     const uniforms = createMotionUniformArray(motion, size);
+    const instances = createMotionInstanceArray(size);
     this.device.queue.writeBuffer(cache.uniformBuffer, 0, uniforms as GPUAllowSharedBufferSource);
+    this.device.queue.writeBuffer(cache.instanceBuffer, 0, instances as GPUAllowSharedBufferSource);
 
     const pass = commandEncoder.beginRenderPass({
       label: 'motion-shape-render-pass',
@@ -46,7 +48,8 @@ export class MotionRenderer {
     });
     pass.setPipeline(this.pipeline.getPipeline());
     pass.setBindGroup(0, cache.bindGroup);
-    pass.draw(6);
+    pass.setVertexBuffer(0, cache.instanceBuffer);
+    pass.draw(6, size.replicator.instanceCount);
     pass.end();
 
     return {
@@ -59,6 +62,7 @@ export class MotionRenderer {
     for (const cache of this.caches.values()) {
       cache.texture.destroy();
       cache.uniformBuffer.destroy();
+      cache.instanceBuffer.destroy();
     }
     this.caches.clear();
   }
@@ -77,6 +81,7 @@ export class MotionRenderer {
     if (existing) {
       existing.texture.destroy();
       existing.uniformBuffer.destroy();
+      existing.instanceBuffer.destroy();
       this.caches.delete(key);
     }
 
@@ -92,6 +97,11 @@ export class MotionRenderer {
       size: 20 * 4,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    const instanceBuffer = this.device.createBuffer({
+      label: `motion-shape-instances-${key}`,
+      size: 4 * 4 * 100,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
     const bindGroup = this.device.createBindGroup({
       label: `motion-shape-bind-group-${key}`,
       layout: this.pipeline.getBindGroupLayout(),
@@ -101,7 +111,7 @@ export class MotionRenderer {
       }],
     });
 
-    const cache = { texture, view, uniformBuffer, bindGroup, width, height };
+    const cache = { texture, view, uniformBuffer, instanceBuffer, bindGroup, width, height };
     this.caches.set(key, cache);
     return cache;
   }

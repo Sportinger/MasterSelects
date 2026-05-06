@@ -1,7 +1,8 @@
 // Project Lifecycle — create, open, close, auto-sync
 
 import { Logger } from '../logger';
-import { useMediaStore } from '../../stores/mediaStore';
+import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
+import type { MediaState } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -24,6 +25,80 @@ let autoSyncDisposers: Array<() => void> = [];
 let beforeUnloadHandler: (() => void) | null = null;
 
 const DEFAULT_CONTINUOUS_SAVE_DELAY_MS = 1000;
+
+type MediaAutoSyncSelection = Pick<
+  MediaState,
+  'files' | 'compositions' | 'folders' | 'slotAssignments' | 'slotClipSettings'
+>;
+
+function shallowTupleEqual<T extends readonly unknown[]>(a: T, b: T): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => Object.is(value, b[index]));
+}
+
+function isPersistedMediaFileEqual(a: MediaFile, b: MediaFile): boolean {
+  return a.id === b.id
+    && a.name === b.name
+    && a.type === b.type
+    && a.parentId === b.parentId
+    && a.createdAt === b.createdAt
+    && a.filePath === b.filePath
+    && a.projectPath === b.projectPath
+    && a.fileHash === b.fileHash
+    && a.duration === b.duration
+    && a.width === b.width
+    && a.height === b.height
+    && a.fps === b.fps
+    && a.codec === b.codec
+    && a.audioCodec === b.audioCodec
+    && a.container === b.container
+    && a.bitrate === b.bitrate
+    && a.fileSize === b.fileSize
+    && a.hasAudio === b.hasAudio
+    && a.splatCount === b.splatCount
+    && a.totalSplatCount === b.totalSplatCount
+    && a.splatFrameCount === b.splatFrameCount
+    && a.proxyStatus === b.proxyStatus
+    && a.proxyFrameCount === b.proxyFrameCount
+    && a.proxyFps === b.proxyFps
+    && a.labelColor === b.labelColor
+    && a.vectorAnimation === b.vectorAnimation
+    && a.modelSequence === b.modelSequence
+    && a.gaussianSplatSequence === b.gaussianSplatSequence;
+}
+
+function arePersistedMediaFilesEqual(a: MediaFile[], b: MediaFile[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((file, index) => isPersistedMediaFileEqual(file, b[index]!));
+}
+
+function areCompositionsEqual(a: Composition[], b: Composition[]): boolean {
+  return a === b;
+}
+
+function areFoldersEqual(a: MediaFolder[], b: MediaFolder[]): boolean {
+  return a === b;
+}
+
+function selectMediaAutoSyncState(state: MediaState): MediaAutoSyncSelection {
+  return {
+    files: state.files,
+    compositions: state.compositions,
+    folders: state.folders,
+    slotAssignments: state.slotAssignments,
+    slotClipSettings: state.slotClipSettings,
+  };
+}
+
+function isMediaAutoSyncSelectionEqual(a: MediaAutoSyncSelection, b: MediaAutoSyncSelection): boolean {
+  return arePersistedMediaFilesEqual(a.files, b.files)
+    && areCompositionsEqual(a.compositions, b.compositions)
+    && areFoldersEqual(a.folders, b.folders)
+    && a.slotAssignments === b.slotAssignments
+    && a.slotClipSettings === b.slotClipSettings;
+}
 
 function registerAutoSyncDisposer(disposer: unknown): void {
   if (typeof disposer === 'function') {
@@ -192,10 +267,11 @@ export function setupAutoSync(): void {
 
   // Subscribe to store changes and mark project dirty
   registerAutoSyncDisposer(useMediaStore.subscribe(
-    (state) => [state.files, state.compositions, state.folders, state.slotAssignments, state.slotClipSettings],
+    selectMediaAutoSyncState,
     () => {
       markProjectDirtyAndMaybeSave();
-    }
+    },
+    { equalityFn: isMediaAutoSyncSelectionEqual },
   ));
 
   registerAutoSyncDisposer(useTimelineStore.subscribe(
@@ -207,10 +283,11 @@ export function setupAutoSync(): void {
       state.outPoint,
       state.loopPlayback,
       state.durationLocked,
-    ],
+    ] as const,
     () => {
       markProjectDirtyAndMaybeSave();
-    }
+    },
+    { equalityFn: shallowTupleEqual },
   ));
 
   registerAutoSyncDisposer(useTimelineStore.subscribe(
@@ -230,17 +307,19 @@ export function setupAutoSync(): void {
   registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.parameterBindings, handleMIDIProjectStateChange));
 
   registerAutoSyncDisposer(useFlashBoardStore.subscribe(
-    (state) => [state.boards, state.activeBoardId],
+    (state) => [state.boards, state.activeBoardId] as const,
     () => {
       markProjectDirtyAndMaybeSave();
-    }
+    },
+    { equalityFn: shallowTupleEqual },
   ));
 
   registerAutoSyncDisposer(useExportStore.subscribe(
-    (state) => [state.settings, state.presets, state.selectedPresetId],
+    (state) => [state.settings, state.presets, state.selectedPresetId] as const,
     () => {
       markProjectDirtyAndMaybeSave();
-    }
+    },
+    { equalityFn: shallowTupleEqual },
   ));
 
   // Subscribe to YouTube store changes

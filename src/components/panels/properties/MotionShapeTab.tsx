@@ -5,10 +5,11 @@ import type {
   AppearanceItem,
   ColorFillAppearance,
   MotionColor,
+  ReplicatorLayout,
   ShapePrimitive,
   StrokeAppearance,
 } from '../../../types/motionDesign';
-import { createColorFillAppearance, createStrokeAppearance } from '../../../types/motionDesign';
+import { createColorFillAppearance, createDefaultReplicatorDefinition, createStrokeAppearance } from '../../../types/motionDesign';
 import { DraggableNumber, KeyframeToggle } from './shared';
 
 interface MotionShapeTabProps {
@@ -87,6 +88,11 @@ function updateAppearanceItem<T extends AppearanceItem>(
   return items.map((item) => item.id === itemId ? updater(item as T) : item);
 }
 
+function getGridLayout(layout: ReplicatorLayout | undefined): Extract<ReplicatorLayout, { mode: 'grid' }> {
+  if (layout?.mode === 'grid') return layout;
+  return createDefaultReplicatorDefinition().layout as Extract<ReplicatorLayout, { mode: 'grid' }>;
+}
+
 export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
   const clip = useTimelineStore(state => state.clips.find(candidate => candidate.id === clipId));
   const updateMotionLayer = useTimelineStore(state => state.updateMotionLayer);
@@ -97,6 +103,8 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
   const appearanceItems = motion?.appearance?.items ?? [];
   const fill = appearanceItems.find((item): item is ColorFillAppearance => item.kind === 'color-fill');
   const stroke = appearanceItems.find((item): item is StrokeAppearance => item.kind === 'stroke');
+  const replicator = motion?.replicator ?? createDefaultReplicatorDefinition();
+  const gridLayout = getGridLayout(replicator.layout);
 
   const updatePrimitive = useCallback((primitive: ShapePrimitive) => {
     updateMotionLayer(clipId, (current) => ({
@@ -190,6 +198,20 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
         }
       : current);
   }, [clipId, stroke, updateMotionLayer]);
+
+  const setReplicatorEnabled = useCallback((enabled: boolean) => {
+    updateMotionLayer(clipId, (current) => {
+      const currentReplicator = current.replicator ?? createDefaultReplicatorDefinition();
+      return {
+        ...current,
+        replicator: {
+          ...currentReplicator,
+          enabled,
+          layout: getGridLayout(currentReplicator.layout),
+        },
+      };
+    });
+  }, [clipId, updateMotionLayer]);
 
   if (!clip || !motion || !shape) {
     return <div className="properties-tab-content"><div className="panel-empty"><p>Select a motion shape clip</p></div></div>;
@@ -306,6 +328,74 @@ export function MotionShapeTab({ clipId }: MotionShapeTabProps) {
             suffix="px"
             defaultValue={4}
           />
+        )}
+      </div>
+
+      <div className="properties-section">
+        <div className="control-row">
+          <label className="prop-label">Replicator</label>
+          <input
+            type="checkbox"
+            checked={replicator.enabled}
+            onChange={(event) => setReplicatorEnabled(event.target.checked)}
+          />
+          <select value="grid" onChange={() => undefined} disabled={!replicator.enabled}>
+            <option value="grid">Grid</option>
+          </select>
+        </div>
+        {replicator.enabled && (
+          <>
+            <NumberRow
+              clipId={clipId}
+              label="Count X"
+              property="replicator.count.x"
+              value={gridLayout.count.x}
+              min={1}
+              max={10}
+              defaultValue={3}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Count Y"
+              property="replicator.count.y"
+              value={gridLayout.count.y}
+              min={1}
+              max={10}
+              defaultValue={3}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Spacing X"
+              property="replicator.spacing.x"
+              value={gridLayout.spacing.x}
+              suffix="px"
+              defaultValue={120}
+            />
+            <NumberRow
+              clipId={clipId}
+              label="Spacing Y"
+              property="replicator.spacing.y"
+              value={gridLayout.spacing.y}
+              suffix="px"
+              defaultValue={120}
+            />
+            <div className="labeled-value with-keyframe-toggle">
+              <KeyframeToggle
+                clipId={clipId}
+                property="replicator.offset.opacity"
+                value={replicator.offset.opacity}
+              />
+              <span className="labeled-value-label">Fade</span>
+              <DraggableNumber
+                value={Math.round(replicator.offset.opacity * 100)}
+                onChange={(value) => setPropertyValue(clipId, 'replicator.offset.opacity', clamp01(value / 100))}
+                min={0}
+                max={100}
+                suffix="%"
+                defaultValue={100}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

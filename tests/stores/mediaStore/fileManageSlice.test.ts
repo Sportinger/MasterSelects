@@ -11,10 +11,12 @@ import type { MediaState, MediaFile, MediaFolder, TextItem, SolidItem, Compositi
 
 const thumbnailMocks = vi.hoisted(() => ({
   createThumbnail: vi.fn(async () => 'blob:http://localhost/refreshed-thumb'),
+  handleThumbnailDedup: vi.fn(async (_fileHash: string | undefined, thumbnailUrl: string | undefined) => thumbnailUrl),
 }));
 
 vi.mock('../../../src/stores/mediaStore/helpers/thumbnailHelpers', () => ({
   createThumbnail: thumbnailMocks.createThumbnail,
+  handleThumbnailDedup: thumbnailMocks.handleThumbnailDedup,
 }));
 
 import { createFileManageSlice, type FileManageActions } from '../../../src/stores/mediaStore/slices/fileManageSlice';
@@ -226,6 +228,8 @@ describe('MediaStore - File Management', () => {
     store = createTestStore();
     thumbnailMocks.createThumbnail.mockClear();
     thumbnailMocks.createThumbnail.mockResolvedValue('blob:http://localhost/refreshed-thumb');
+    thumbnailMocks.handleThumbnailDedup.mockClear();
+    thumbnailMocks.handleThumbnailDedup.mockImplementation(async (_fileHash: string | undefined, thumbnailUrl: string | undefined) => thumbnailUrl);
   });
 
   // --- Adding media files ---

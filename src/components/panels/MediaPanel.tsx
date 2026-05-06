@@ -32,6 +32,14 @@ type ColumnId = 'label' | 'name' | 'duration' | 'resolution' | 'fps' | 'containe
 type MediaPanelViewMode = 'classic' | 'icons' | 'board';
 type MediaBoardItem = Exclude<ProjectItem, MediaFolder>;
 
+const CLASSIC_ROW_HEIGHT = 20;
+const CLASSIC_OVERSCAN_ROWS = 12;
+
+interface ClassicListRow {
+  item: ProjectItem;
+  depth: number;
+}
+
 interface MediaBoardViewport {
   zoom: number;
   panX: number;
@@ -539,6 +547,7 @@ export function MediaPanel() {
   const proxyFolderName = useMediaStore(state => state.proxyFolderName);
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const refreshFileUrls = useMediaStore(state => state.refreshFileUrls);
+  const ensureFileThumbnail = useMediaStore(state => state.ensureFileThumbnail);
 
   // Actions from getState() - stable, no subscription needed
   const {
@@ -555,7 +564,6 @@ export function MediaPanel() {
     toggleFolderExpanded,
     setSelection,
     addToSelection,
-    getItemsByFolder,
     openCompositionTab,
     updateComposition,
     generateProxy,
@@ -607,6 +615,7 @@ export function MediaPanel() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [internalDragId, setInternalDragId] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
+  const [classicListViewport, setClassicListViewport] = useState({ scrollTop: 0, height: 0 });
   const [labelPickerItemId, setLabelPickerItemId] = useState<string | null>(null);
   const [labelPickerPos, setLabelPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [viewMode, setViewMode] = useState<MediaPanelViewMode>(loadMediaPanelViewMode);
@@ -680,6 +689,34 @@ export function MediaPanel() {
 
     const resizeObserver = new ResizeObserver(updateCanvasSize);
     resizeObserver.observe(canvas);
+    return () => resizeObserver.disconnect();
+  }, [viewMode]);
+
+  useLayoutEffect(() => {
+    if (viewMode !== 'classic') return;
+
+    const list = itemListRef.current;
+    if (!list) return;
+
+    const updateViewport = () => {
+      setClassicListViewport((current) => {
+        const next = {
+          scrollTop: list.scrollTop,
+          height: list.clientHeight,
+        };
+        return current.scrollTop === next.scrollTop && current.height === next.height ? current : next;
+      });
+    };
+
+    updateViewport();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateViewport);
+      return () => window.removeEventListener('resize', updateViewport);
+    }
+
+    const resizeObserver = new ResizeObserver(updateViewport);
+    resizeObserver.observe(list);
     return () => resizeObserver.disconnect();
   }, [viewMode]);
 
@@ -1085,6 +1122,17 @@ export function MediaPanel() {
     nonFolderItems.sort(compare);
     return [...folderItems, ...nonFolderItems];
   }, [sortColumn, sortDirection, getSortValue]);
+
+  const handleClassicListScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    setClassicListViewport((current) => {
+      const next = {
+        scrollTop: target.scrollTop,
+        height: target.clientHeight,
+      };
+      return current.scrollTop === next.scrollTop && current.height === next.height ? current : next;
+    });
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -2063,8 +2111,8 @@ export function MediaPanel() {
     }
   };
 
-  // Render a single item
-  const renderItem = (item: ProjectItem, depth: number = 0) => {
+  // Render a single classic-list row. Tree traversal is virtualized separately.
+  const renderClassicRow = (item: ProjectItem, depth: number = 0) => {
     const isFolder = 'isExpanded' in item;
     const isSelected = selectedIds.includes(item.id);
     const isRenaming = renamingId === item.id;
@@ -2097,11 +2145,6 @@ export function MediaPanel() {
             </React.Fragment>
           ))}
         </div>
-        {isFolder && isExpanded && (
-          <div className="media-folder-children">
-            {sortItems(getItemsByFolder(item.id)).map(child => renderItem(child, depth + 1))}
-          </div>
-        )}
       </div>
     );
   };
@@ -2111,7 +2154,7 @@ export function MediaPanel() {
     const parts: string[] = [item.name];
 
     if (isFolder) {
-      const children = getItemsByFolder(item.id);
+      const children = getItemsForParent(item.id);
       parts.push(`${children.length} item${children.length !== 1 ? 's' : ''}`);
     } else if (isComp) {
       const comp = item as Composition;
@@ -2156,7 +2199,7 @@ export function MediaPanel() {
     const duration = mediaFile?.duration || comp?.duration;
 
     // Folder item count
-    const folderCount = isFolder ? getItemsByFolder(item.id).length : 0;
+    const folderCount = isFolder ? getItemsForParent(item.id).length : 0;
 
     return (
       <div key={item.id} data-item-id={item.id}>
@@ -2203,8 +2246,6 @@ export function MediaPanel() {
     );
   };
 
-  // Get root items (with sorting applied)
-  const rootItems = sortItems(getItemsByFolder(null));
   const totalItems = (
     files.length +
     compositions.length +
@@ -2215,6 +2256,71 @@ export function MediaPanel() {
     cameraItems.length +
     splatEffectorItems.length
   );
+
+  const projectItemsByParentId = useMemo(() => {
+    const itemsByParentId = new Map<string | null, ProjectItem[]>();
+    const append = (item: ProjectItem) => {
+      const parentId = item.parentId ?? null;
+      const items = itemsByParentId.get(parentId);
+      if (items) {
+        items.push(item);
+      } else {
+        itemsByParentId.set(parentId, [item]);
+      }
+    };
+
+    folders.forEach(append);
+    compositions.forEach(append);
+    textItems.forEach(append);
+    solidItems.forEach(append);
+    meshItems.forEach(append);
+    cameraItems.forEach(append);
+    splatEffectorItems.forEach(append);
+    files.forEach(append);
+
+    return itemsByParentId;
+  }, [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems]);
+
+  const getItemsForParent = useCallback(
+    (parentId: string | null) => projectItemsByParentId.get(parentId) ?? [],
+    [projectItemsByParentId],
+  );
+
+  const classicExpandedFolderIdSet = useMemo(() => new Set(expandedFolderIds), [expandedFolderIds]);
+  const classicRows = useMemo<ClassicListRow[]>(() => {
+    const rows: ClassicListRow[] = [];
+    const appendRows = (items: ProjectItem[], depth: number) => {
+      for (const item of sortItems(items)) {
+        rows.push({ item, depth });
+        if ('isExpanded' in item && classicExpandedFolderIdSet.has(item.id)) {
+          appendRows(getItemsForParent(item.id), depth + 1);
+        }
+      }
+    };
+
+    appendRows(getItemsForParent(null), 0);
+    return rows;
+  }, [
+    sortItems,
+    getItemsForParent,
+    classicExpandedFolderIdSet,
+  ]);
+
+  const classicVisibleRange = useMemo(() => {
+    const height = Math.max(classicListViewport.height, CLASSIC_ROW_HEIGHT);
+    const start = Math.max(0, Math.floor(classicListViewport.scrollTop / CLASSIC_ROW_HEIGHT) - CLASSIC_OVERSCAN_ROWS);
+    const visibleCount = Math.ceil(height / CLASSIC_ROW_HEIGHT) + CLASSIC_OVERSCAN_ROWS * 2;
+    const end = Math.min(classicRows.length, start + visibleCount);
+    return { start, end };
+  }, [classicListViewport.height, classicListViewport.scrollTop, classicRows.length]);
+
+  const classicVisibleRows = useMemo(
+    () => classicRows.slice(classicVisibleRange.start, classicVisibleRange.end),
+    [classicRows, classicVisibleRange.end, classicVisibleRange.start],
+  );
+
+  const classicTopSpacerHeight = classicVisibleRange.start * CLASSIC_ROW_HEIGHT;
+  const classicBottomSpacerHeight = Math.max(0, (classicRows.length - classicVisibleRange.end) * CLASSIC_ROW_HEIGHT);
 
   const mediaBoardItems = useMemo<MediaBoardItem[]>(() => ([
     ...files,
@@ -2657,6 +2763,47 @@ export function MediaPanel() {
       || mediaBoardNodeIntersectsVisibleRect(placement.layout, mediaBoardVisibleRect)
     ))
   ), [mediaBoardLayout.placements, mediaBoardVisibleRect, selectedIdSet]);
+
+  const visibleMediaBoardThumbnailKey = useMemo(() => {
+    if (!mediaBoardRenderLod.showImages) return '';
+    return visibleMediaBoardPlacements
+      .map((placement) => placement.item)
+      .filter((item): item is MediaFile => (
+        isImportedMediaFileItem(item)
+        && !item.thumbnailUrl
+        && !item.isImporting
+        && (item.type === 'image' || item.type === 'video')
+      ))
+      .slice(0, 48)
+      .map((item) => item.id)
+      .join('\n');
+  }, [mediaBoardRenderLod.showImages, visibleMediaBoardPlacements]);
+
+  useEffect(() => {
+    if (viewMode !== 'board' || !visibleMediaBoardThumbnailKey) return;
+
+    const thumbnailIds = visibleMediaBoardThumbnailKey.split('\n').filter(Boolean);
+    let cancelled = false;
+    let nextIndex = 0;
+    const workerCount = Math.min(3, thumbnailIds.length);
+
+    const runWorker = async () => {
+      while (!cancelled) {
+        const id = thumbnailIds[nextIndex];
+        nextIndex += 1;
+        if (!id) return;
+        await ensureFileThumbnail(id);
+      }
+    };
+
+    for (let index = 0; index < workerCount; index += 1) {
+      void runWorker();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureFileThumbnail, viewMode, visibleMediaBoardThumbnailKey]);
 
   const screenToMediaBoard = useCallback((clientX: number, clientY: number) => {
     const rect = boardCanvasRef.current?.getBoundingClientRect();
@@ -3918,7 +4065,7 @@ export function MediaPanel() {
   );
 
   // Grid view: items for current folder + breadcrumb path
-  const gridItems = sortItems(getItemsByFolder(gridFolderId));
+  const gridItems = sortItems(getItemsForParent(gridFolderId));
   const gridBreadcrumb: Array<{ id: string | null; name: string }> = [];
   if (gridFolderId) {
     // Build path from root to current folder
@@ -4118,6 +4265,7 @@ export function MediaPanel() {
             <div
               className="media-item-list"
               ref={itemListRef}
+              onScroll={handleClassicListScroll}
               onMouseDown={handleMarqueeMouseDown}
               onContextMenu={(e) => {
                 const target = e.target as HTMLElement;
@@ -4125,7 +4273,13 @@ export function MediaPanel() {
               }}
               style={{ position: 'relative' }}
             >
-              {rootItems.map(item => renderItem(item))}
+              {classicTopSpacerHeight > 0 && (
+                <div className="media-classic-virtual-spacer" style={{ height: classicTopSpacerHeight }} />
+              )}
+              {classicVisibleRows.map(({ item, depth }) => renderClassicRow(item, depth))}
+              {classicBottomSpacerHeight > 0 && (
+                <div className="media-classic-virtual-spacer" style={{ height: classicBottomSpacerHeight }} />
+              )}
               {/* Marquee selection rectangle */}
               {marquee && (() => {
                 const left = Math.min(marquee.startX, marquee.currentX);

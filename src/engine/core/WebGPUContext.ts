@@ -4,6 +4,11 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('WebGPUContext');
 
+const ADAPTER_WITH_PREFERENCE_TIMEOUT_MS = 2000;
+const ADAPTER_FALLBACK_TIMEOUT_MS = 5000;
+const DEVICE_WITH_LIMITS_TIMEOUT_MS = 2000;
+const DEVICE_FALLBACK_TIMEOUT_MS = 5000;
+
 export type DeviceLostCallback = (reason: string) => void;
 export type DeviceRestoredCallback = () => void;
 export type GPUPowerPreference = 'high-performance' | 'low-power';
@@ -83,7 +88,7 @@ export class WebGPUContext {
       log.info(`Requesting adapter with powerPreference: ${this.currentPowerPreference}`);
       this.adapter = await this.withTimeout(
         navigator.gpu.requestAdapter({ powerPreference: this.currentPowerPreference }),
-        5000,
+        ADAPTER_WITH_PREFERENCE_TIMEOUT_MS,
         'requestAdapter (with powerPreference)',
       );
 
@@ -92,7 +97,7 @@ export class WebGPUContext {
         log.warn('First adapter request failed, retrying without powerPreference...');
         this.adapter = await this.withTimeout(
           navigator.gpu.requestAdapter(),
-          5000,
+          ADAPTER_FALLBACK_TIMEOUT_MS,
           'requestAdapter (no preference)',
         );
       }
@@ -117,7 +122,7 @@ export class WebGPUContext {
             requiredFeatures: [],
             requiredLimits,
           }),
-          5000,
+          DEVICE_WITH_LIMITS_TIMEOUT_MS,
           'requestDevice (with limits)',
         );
       } catch (e) {
@@ -130,7 +135,7 @@ export class WebGPUContext {
         log.warn('Retrying device request without requiredLimits...');
         this.device = await this.withTimeout(
           this.adapter.requestDevice(),
-          5000,
+          DEVICE_FALLBACK_TIMEOUT_MS,
           'requestDevice (no limits)',
         );
       }

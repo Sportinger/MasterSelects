@@ -96,6 +96,11 @@ appearance.{appearanceId}.color.g
 appearance.{appearanceId}.color.b
 appearance.{appearanceId}.color.a
 appearance.{appearanceId}.stroke.width
+replicator.count.x
+replicator.count.y
+replicator.spacing.x
+replicator.spacing.y
+replicator.offset.opacity
 ```
 
 Numeric motion properties are interpolated before `MotionRenderer` draws the shape texture, so preview, nested compositions, and export evaluate the same frame state. Enum-like fields such as primitive and stroke alignment are currently static controls.

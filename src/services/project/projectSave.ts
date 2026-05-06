@@ -19,6 +19,7 @@ import type {
 } from '../../stores/flashboardStore/types';
 import {
   projectFileService,
+  type ProjectFile,
   type ProjectMediaFile,
   type ProjectComposition,
   type ProjectTrack,
@@ -363,6 +364,35 @@ function readMediaPanelViewMode(): 'classic' | 'icons' | 'board' | undefined {
   return undefined;
 }
 
+type MediaStoreSnapshot = ReturnType<typeof useMediaStore.getState>;
+
+function countParentedProjectMedia(media: ProjectMediaFile[]): number {
+  return media.reduce((count, file) => count + (file.folderId ? 1 : 0), 0);
+}
+
+function countParentedStoreMedia(files: MediaFile[]): number {
+  return files.reduce((count, file) => count + (file.parentId ? 1 : 0), 0);
+}
+
+function looksLikeDefaultStoreComposition(state: MediaStoreSnapshot): boolean {
+  if (state.compositions.length !== 1) return false;
+  const [composition] = state.compositions;
+  return composition?.id === 'comp-1' && composition.name === 'Comp 1';
+}
+
+function shouldBlockDestructiveStoreSync(projectData: ProjectFile, state: MediaStoreSnapshot): boolean {
+  const projectMediaCount = projectData.media.length;
+  if (projectMediaCount < 50 || state.files.length !== projectMediaCount) return false;
+
+  const projectParentedMedia = countParentedProjectMedia(projectData.media);
+  const storeParentedMedia = countParentedStoreMedia(state.files);
+  const lostMediaParents = projectParentedMedia >= 20 && storeParentedMedia <= Math.max(1, Math.floor(projectParentedMedia * 0.05));
+  const lostMostFolders = projectData.folders.length >= 5 && state.folders.length <= Math.max(1, Math.floor(projectData.folders.length * 0.1));
+  const collapsedCompositions = projectData.compositions.length > 1 && looksLikeDefaultStoreComposition(state);
+
+  return lostMediaParents && lostMostFolders && collapsedCompositions;
+}
+
 // ============================================
 // SYNC & SAVE
 // ============================================
@@ -387,6 +417,19 @@ export async function syncStoresToProject(): Promise<void> {
 
     // Get fresh state after update
     const freshState = useMediaStore.getState();
+    const projectData = projectFileService.getProjectData();
+
+    if (projectData && shouldBlockDestructiveStoreSync(projectData, freshState)) {
+      log.warn('Skipped destructive project sync from stale store state', {
+        projectMediaCount: projectData.media.length,
+        storeMediaCount: freshState.files.length,
+        projectFolderCount: projectData.folders.length,
+        storeFolderCount: freshState.folders.length,
+        projectCompositionCount: projectData.compositions.length,
+        storeCompositionCount: freshState.compositions.length,
+      });
+      return;
+    }
 
     // Update project file data
     projectFileService.updateMedia(convertMediaFiles(freshState.files));
@@ -394,7 +437,6 @@ export async function syncStoresToProject(): Promise<void> {
     projectFileService.updateFolders(convertFolders(freshState.folders));
 
     // Update active state
-    const projectData = projectFileService.getProjectData();
     if (projectData) {
       projectData.activeCompositionId = freshState.activeCompositionId;
       projectData.openCompositionIds = freshState.openCompositionIds;

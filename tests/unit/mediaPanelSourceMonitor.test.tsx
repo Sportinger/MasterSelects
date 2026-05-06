@@ -111,6 +111,7 @@ function createMediaState(): MockMediaState {
     setLabelColor: vi.fn(),
     importGaussianSplat: vi.fn(),
     refreshFileUrls: vi.fn(),
+    ensureFileThumbnail: vi.fn(async () => false),
     setSourceMonitorFile: vi.fn((id: string | null) => {
       state.sourceMonitorFileId = id;
       if (id !== null) {

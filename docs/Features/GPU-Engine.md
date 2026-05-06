@@ -59,6 +59,7 @@ The engine currently supports:
 
 - `motion-shape` clips render through `src/engine/motion/MotionRenderer.ts`.
 - Rectangle and ellipse primitives are drawn with analytic WGSL SDFs into transparent `rgba8unorm` textures.
+- Grid-replicated motion shapes use a per-shape instance buffer and instanced draws in the same shader path, capped at 100 instances for the current MVP.
 - The resulting texture view is composited through the normal `CompositorPipeline`, so masks, effects, blend mode, nested comps, preview targets, and export share the same downstream path.
 
 ### Masks
