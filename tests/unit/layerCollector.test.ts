@@ -1341,7 +1341,7 @@ describe('LayerCollector', () => {
     expect(collector.hasActiveVideo()).toBe(true);
   });
 
-  it('keeps the last same-clip frame during hard scrubs instead of dropping to black', () => {
+  it('keeps the last near same-clip frame during hard scrubs instead of dropping to black', () => {
     flags.useFullWebCodecsPlayback = false;
     useTimelineStore.setState({ isDraggingPlayhead: true });
 
@@ -1359,7 +1359,7 @@ describe('LayerCollector', () => {
       view: { label: 'held-same-clip-frame' },
       width: 1920,
       height: 1080,
-      mediaTime: 2.5,
+      mediaTime: 18,
     };
     const textureManager = {
       importVideoTexture: vi.fn(() => null),
@@ -1413,7 +1413,7 @@ describe('LayerCollector', () => {
       sourceHeight: heldFrame.height,
       displayedMediaTime: heldFrame.mediaTime,
       targetMediaTime: 18,
-      previewPath: 'same-clip-hold',
+      previewPath: 'emergency-hold',
     });
   });
 
@@ -1570,7 +1570,7 @@ describe('LayerCollector', () => {
     });
   });
 
-  it('uses a same-clip hold as the last fallback when a seeked HTML frame cannot import', () => {
+  it('uses a near seeking cache fallback when a seeked HTML frame cannot import', () => {
     flags.useFullWebCodecsPlayback = false;
     useTimelineStore.setState({ isDraggingPlayhead: true });
 
@@ -1588,7 +1588,7 @@ describe('LayerCollector', () => {
       view: { label: 'held-seeking-frame' },
       width: 1920,
       height: 1080,
-      mediaTime: 7.25,
+      mediaTime: 25,
     };
     const textureManager = {
       importVideoTexture: vi.fn(() => null),
@@ -1643,7 +1643,7 @@ describe('LayerCollector', () => {
       sourceHeight: heldFrame.height,
       displayedMediaTime: heldFrame.mediaTime,
       targetMediaTime: 25,
-      previewPath: 'same-clip-hold',
+      previewPath: 'seeking-cache',
     });
   });
 

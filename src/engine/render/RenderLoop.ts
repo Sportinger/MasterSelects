@@ -45,8 +45,8 @@ export class RenderLoop {
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
   private readonly IDLE_SUPPRESSION_TIMEOUT = 3000; // bounded reload warmup
-  private readonly VIDEO_FRAME_TIME = 16.67; // ~60fps target
-  private readonly SCRUB_FRAME_TIME = 33; // ~30fps during scrubbing (avoids wasted renders while video seeks)
+  private readonly VIDEO_FRAME_TIME = 15; // ~60fps target with tolerance for 16.6ms display ticks
+  private readonly SCRUB_FRAME_TIME = 15; // ~60fps during scrubbing with tolerance for 16.6ms display ticks
   private readonly WATCHDOG_INTERVAL = 2000; // Check every 2s
   private readonly WATCHDOG_STALL_THRESHOLD = 3000; // 3s without render = stalled
 

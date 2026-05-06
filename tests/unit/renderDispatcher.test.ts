@@ -191,7 +191,11 @@ describe('RenderDispatcher empty playback hold', () => {
     } as unknown as Layer]);
 
     expect(renderEmptyFrame).not.toHaveBeenCalled();
-    expect(recordMainPreviewFrame).not.toHaveBeenCalled();
+    expect(recordMainPreviewFrame).toHaveBeenCalledWith('playback-stall-hold', undefined, {
+      clipId: 'clip-1',
+      targetTimeMs: 17_750,
+      displayedTimeMs: undefined,
+    });
     expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
     expect(dispatcher.lastRenderHadContent).toBe(true);
   });

@@ -1042,6 +1042,23 @@ export class VideoSyncManager {
     this.seekedFlushArmed.add(clipId);
     video.addEventListener('seeked', () => {
       this.seekedFlushArmed.delete(clipId);
+      const presentedTime = video.currentTime;
+      engine.markVideoFramePresented(video, presentedTime, clipId);
+      engine.captureVideoFrameAtTime(video, presentedTime, clipId);
+      engine.cacheFrameAtTime(video, presentedTime);
+      engine.requestNewFrameRender();
+
+      const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      if (isDragging && this.queuedSeekTargets[clipId] !== undefined) {
+        const flush = () => this.flushQueuedSeekTarget(clipId, video, 'seeked');
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(flush);
+        } else {
+          setTimeout(flush, 16);
+        }
+        return;
+      }
+
       this.flushQueuedSeekTarget(clipId, video, 'seeked');
     }, { once: true });
   }
@@ -2016,15 +2033,20 @@ export class VideoSyncManager {
       return;
     }
 
-    // Skip sync during GPU surface warmup â€” the video is playing briefly
-    // to activate Chrome's GPU decoder. Don't pause or seek it.
+    // Skip sync during GPU surface warmup - the video is playing briefly
+    // to activate Chrome's GPU decoder. During drag, the active scrub target
+    // must keep seeking instead of waiting on/retargeting warmup.
     if (this.warmingUpVideos.has(video)) {
-      this.maybeRetargetActiveWarmup(clip.id, video, timeInfo.clipTime, ctx.now, {
-        isPlaying: ctx.isPlaying,
-        isDragging: ctx.isDraggingPlayhead,
-        requestRender: true,
-      });
-      return;
+      if (ctx.isDraggingPlayhead) {
+        this.clearWarmupState(video);
+      } else {
+        this.maybeRetargetActiveWarmup(clip.id, video, timeInfo.clipTime, ctx.now, {
+          isPlaying: ctx.isPlaying,
+          isDragging: ctx.isDraggingPlayhead,
+          requestRender: true,
+        });
+        return;
+      }
     }
 
     // Warmup: after page reload, video GPU surfaces are empty.
@@ -2035,7 +2057,7 @@ export class VideoSyncManager {
     const hasSrc = !!(video.src || video.currentSrc);
     const warmupCooldown = this.warmupRetryCooldown.get(video);
     const cooldownOk = !warmupCooldown || performance.now() - warmupCooldown > 2000;
-    if (!ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
+    if (!ctx.isDraggingPlayhead && !ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
         (video.played?.length ?? 0) === 0 && !this.warmingUpVideos.has(video)) {
       vfPipelineMonitor.record('vf_gpu_cold', { clipId: clip.id });
       this.startTargetedWarmup(clip.id, video, timeInfo.clipTime, {
@@ -2344,6 +2366,32 @@ export class VideoSyncManager {
     if ((video.seeking || this.rvfcHandles[clipId] !== undefined) && this.pendingSeekTargets[clipId] !== undefined) {
       const allowInFlightRetarget = ctx.isDraggingPlayhead && supportsFastSeek;
       if (ctx.isDraggingPlayhead && !allowInFlightRetarget) {
+        const pendingTarget = this.pendingSeekTargets[clipId];
+        const pendingAge = ctx.now - (this.pendingSeekStartedAt[clipId] ?? ctx.now);
+        const pendingTargetDrift =
+          typeof pendingTarget === 'number'
+            ? Math.abs(pendingTarget - time)
+            : 0;
+        if (
+          displayedDriftSeconds >= 1 &&
+          pendingAge >= 45 &&
+          pendingTargetDrift >= 0.35
+        ) {
+          this.pendingSeekTargets[clipId] = time;
+          this.pendingSeekStartedAt[clipId] = ctx.now;
+          this.latestSeekTargets[clipId] = time;
+          video.currentTime = this.safeSeekTime(video, time);
+          this.armSeekedFlush(clipId, video);
+          vfPipelineMonitor.record('vf_seek_precise', {
+            clipId,
+            target: Math.round(time * 1000) / 1000,
+            retarget: 'true',
+            followup: 'drag-force-retarget',
+          });
+          this.registerRVFC(clipId, video);
+          this.lastSeekRef[clipId] = ctx.now;
+          return;
+        }
         this.queuedSeekTargets[clipId] = time;
         this.latestSeekTargets[clipId] = time;
         this.armSeekedFlush(clipId, video);
@@ -2499,13 +2547,18 @@ export class VideoSyncManager {
       if (prevHandle !== undefined) {
         video.cancelVideoFrameCallback(prevHandle);
       }
-      this.rvfcHandles[clipId] = video.requestVideoFrameCallback(() => {
-        const presentedTime = video.currentTime;
+      this.rvfcHandles[clipId] = video.requestVideoFrameCallback((_now, metadata) => {
+        const metadataTime = metadata?.mediaTime;
+        const presentedTime =
+          typeof metadataTime === 'number' && Number.isFinite(metadataTime)
+            ? metadataTime
+            : video.currentTime;
         delete this.rvfcHandles[clipId];
         delete this.pendingSeekTargets[clipId];
         delete this.pendingSeekStartedAt[clipId];
         engine.markVideoFramePresented(video, presentedTime, clipId);
         engine.captureVideoFrameAtTime(video, presentedTime, clipId);
+        engine.cacheFrameAtTime(video, presentedTime);
         scrubSettleState.resolve(clipId);
         vfPipelineMonitor.record('vf_seek_done', { clipId });
         this.flushQueuedSeekTarget(clipId, video, 'rvfc');

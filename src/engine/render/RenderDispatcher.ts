@@ -220,8 +220,9 @@ export class RenderDispatcher {
   private renderTimeOverride: number | null = null;
   private lastPreviewSignature = '';
   private lastPreviewTargetTimeMs?: number;
-  private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
-  private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
+  private lastPreviewDisplayedTimeMs?: number;
+  private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 0.35;
+  private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.35;
   private sceneRendererInitializing = false;
   // Native Gaussian Splat rendering state (new WebGPU path)
   private splatLoadingClips = new Set<string>();
@@ -827,6 +828,7 @@ export class RenderDispatcher {
 
     this.lastPreviewSignature = signature;
     this.lastPreviewTargetTimeMs = targetTimeMs;
+    this.lastPreviewDisplayedTimeMs = displayedTimeMs;
   }
 
   // === MAIN RENDER ===
@@ -911,10 +913,32 @@ export class RenderDispatcher {
       // instead of flashing black. This handles transient decoder stalls on
       // Windows/Linux where readyState drops briefly.
       const isPlaying = d.renderLoop?.getIsPlaying() ?? false;
-      if (isPlaying && this.shouldHoldLastFrameOnEmptyPlayback(previewFallback.targetTimeMs)) {
+      const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      const emptyScrubHoldDriftMs =
+        typeof previewFallback.targetTimeMs === 'number' &&
+        typeof this.lastPreviewDisplayedTimeMs === 'number'
+          ? Math.abs(previewFallback.targetTimeMs - this.lastPreviewDisplayedTimeMs)
+          : undefined;
+      const shouldHoldEmptyFrame =
+        (isPlaying && this.shouldHoldLastFrameOnEmptyPlayback(previewFallback.targetTimeMs)) ||
+        (isDragging && this.lastRenderHadContent);
+
+      if (shouldHoldEmptyFrame) {
         // Don't render anything — canvas retains previous frame automatically.
         // Log once so the stall is visible in telemetry.
-        log.debug('Holding last frame during playback stall (empty layerData)');
+        log.debug('Holding last frame during empty preview frame', {
+          isPlaying,
+          isDragging,
+          driftMs: emptyScrubHoldDriftMs,
+        });
+        this.recordMainPreviewFrame(
+          isDragging ? 'empty-hold' : 'playback-stall-hold',
+          undefined,
+          {
+            ...previewFallback,
+            displayedTimeMs: this.lastPreviewDisplayedTimeMs,
+          }
+        );
         d.performanceStats.setLayerCount(0);
         return;
       }
@@ -2019,13 +2043,14 @@ export class RenderDispatcher {
         const presentedDriftSeconds = hasConfirmedPresentedFrame
           ? Math.abs(lastPresentedTime - targetTime)
           : undefined;
+        const currentTimeDriftSeconds = Math.abs(video.currentTime - targetTime);
         const awaitingPausedTargetFrame =
           hasPresentedOwnerMismatch ||
           !(d.renderLoop?.getIsPlaying() ?? false) &&
           !isDragging &&
           (!isSettling &&
             (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
-        const cacheSearchDistanceFrames = isDragging ? 12 : 6;
+        const cacheSearchDistanceFrames = isDragging ? 10 : 6;
         const lastSameClipFrame = layer.sourceClipId
           ? scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null
           : null;
@@ -2044,15 +2069,21 @@ export class RenderDispatcher {
         const sameClipHoldFrame =
           !(d.renderLoop?.getIsPlaying() ?? false) &&
           (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
-            ? lastSameClipFrame
+            ? this.isFrameNearTarget(
+              lastSameClipFrame,
+              targetTime,
+              isDragging
+                ? RenderDispatcher.MAX_DRAG_FALLBACK_DRIFT_SECONDS
+                : 0.35
+            )
+              ? lastSameClipFrame
+              : null
             : null;
         const safeFallback = this.getSafePreviewFallback(layer, video) ?? dragHoldFrame;
         const allowDragLiveVideoImport =
           !video.seeking &&
-          (
-            !hasConfirmedPresentedFrame ||
-            (presentedDriftSeconds ?? 0) <= RenderDispatcher.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS
-          );
+          (presentedDriftSeconds ?? currentTimeDriftSeconds) <=
+            RenderDispatcher.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS;
         const allowLiveVideoImport = !hasPresentedOwnerMismatch && (isPausedSettle
           ? hasFreshPresentedFrame
           : !awaitingPausedTargetFrame &&

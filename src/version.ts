@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.4';
+export const APP_VERSION = '1.7.5';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'World-space camera controls',
-  message: 'Camera Position X/Y/Z now represents the real camera eye, with lens FOV/mm and resolution kept as independent keyframable camera settings.',
+  title: 'Playback diagnostics and scrub polish',
+  message: 'The preview overlay now reports effective FPS across the render, preview, and decoder path, with HTML-video playback and scrubbing tuned for smoother feedback.',
   animated: true,
 };
 

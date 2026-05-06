@@ -1,5 +1,26 @@
 [
   {
+    "date": "2026-05-06",
+    "type": "improve",
+    "title": "Effective Playback FPS Diagnostics",
+    "description": "The stats overlay now reports effective FPS from the weakest active playback link, alongside render, preview, and decoder inputs so bottlenecks are visible during playback and scrubbing.",
+    "section": "Playback / Diagnostics"
+  },
+  {
+    "date": "2026-05-06",
+    "type": "improve",
+    "title": "HTML Video Playback and Scrub Feedback",
+    "description": "HTML-video playback and no-proxy scrubbing now use faster render cadence, tighter drag fallback drift, improved seeked-frame caching, and empty-frame hold behavior to reduce black flashes while keeping WebCodecs disabled.",
+    "section": "Playback / Scrubbing"
+  },
+  {
+    "date": "2026-05-06",
+    "type": "improve",
+    "title": "Scripted Scrub Diagnostics",
+    "description": "The AI playback tools can reset and return per-run diagnostics for scripted scrub runs, making long mixed-speed scrub tests easier to compare.",
+    "section": "Developer Tools"
+  },
+  {
     "date": "2026-05-02",
     "type": "improve",
     "title": "World-Space Camera Controls",
