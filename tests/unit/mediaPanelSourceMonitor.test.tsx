@@ -111,6 +111,7 @@ function createMediaState(): MockMediaState {
     setLabelColor: vi.fn(),
     importGaussianSplat: vi.fn(),
     refreshFileUrls: vi.fn(),
+    ensureFileThumbnail: vi.fn(async () => false),
     setSourceMonitorFile: vi.fn((id: string | null) => {
       state.sourceMonitorFileId = id;
       if (id !== null) {
@@ -149,5 +150,17 @@ describe('MediaPanel source monitor opening', () => {
     fireEvent.doubleClick(node!, { button: 0, detail: 2 });
 
     expect(mediaState.setSourceMonitorFile).toHaveBeenCalledWith('file-1');
+  });
+
+  it('does not mount board assets far outside the viewport', () => {
+    localStorage.setItem('media-panel-board-viewport', JSON.stringify({
+      zoom: 1,
+      panX: -20000,
+      panY: -20000,
+    }));
+
+    const { container } = render(<MediaPanel />);
+
+    expect(container.querySelectorAll('.media-board-node')).toHaveLength(0);
   });
 });

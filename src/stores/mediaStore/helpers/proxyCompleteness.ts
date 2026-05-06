@@ -1,6 +1,15 @@
 import { PROXY_FPS } from '../constants';
 
 const PROXY_COMPLETE_THRESHOLD = 0.98;
+const FRAME_COUNT_EPSILON = 1e-3;
+
+function ceilFrameCount(value: number): number {
+  const rounded = Math.round(value);
+  if (Math.abs(value - rounded) <= FRAME_COUNT_EPSILON) {
+    return rounded;
+  }
+  return Math.ceil(value);
+}
 
 export function getExpectedProxyFps(fps?: number): number {
   if (!fps || !Number.isFinite(fps) || fps <= 0) return PROXY_FPS;
@@ -9,7 +18,7 @@ export function getExpectedProxyFps(fps?: number): number {
 
 export function getExpectedProxyFrameCount(duration?: number, fps?: number): number | null {
   if (!duration || !Number.isFinite(duration) || duration <= 0) return null;
-  return Math.ceil(duration * getExpectedProxyFps(fps));
+  return ceilFrameCount(duration * getExpectedProxyFps(fps));
 }
 
 export function isProxyFrameCountComplete(

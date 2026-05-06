@@ -150,6 +150,7 @@ vi.mock('../../src/stores/mediaStore/helpers/mediaInfoHelpers', () => ({
 
 vi.mock('../../src/stores/mediaStore/helpers/thumbnailHelpers', () => ({
   createThumbnail: vi.fn(async () => undefined),
+  handleThumbnailDedup: vi.fn(async (_fileHash: string | undefined, thumbnailUrl: string | undefined) => thumbnailUrl),
 }));
 
 vi.mock('../../src/engine/WebGPUEngine', () => ({
@@ -1002,6 +1003,181 @@ describe('project media persistence', () => {
         }),
       ],
     }));
+  });
+
+  it('moves media panel items with missing folder parents back to root on load', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-orphan',
+        name: 'orphan.png',
+        type: 'image',
+        sourcePath: 'E:/project/Raw/orphan.png',
+        projectPath: 'Raw/orphan.png',
+        duration: 0,
+        width: 1024,
+        height: 768,
+        hasProxy: false,
+        folderId: 'missing-folder',
+        importedAt: new Date(1).toISOString(),
+      }],
+      compositions: [{
+        id: 'comp-orphan',
+        name: 'Comp Orphan',
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        duration: 60,
+        backgroundColor: '#000000',
+        folderId: 'missing-folder',
+        tracks: [],
+        clips: [],
+        markers: [],
+      }],
+      folders: [{
+        id: 'folder-cycle',
+        name: 'Broken Folder',
+        parentId: 'folder-cycle',
+      }],
+      textItems: [{
+        id: 'text-orphan',
+        name: 'Text Orphan',
+        type: 'text',
+        parentId: 'missing-folder',
+        createdAt: 1,
+        text: 'hello',
+        fontFamily: 'Arial',
+        fontSize: 64,
+        color: '#ffffff',
+        duration: 5,
+      }],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.mediaSetState).toHaveBeenCalledWith(expect.objectContaining({
+      files: [
+        expect.objectContaining({
+          id: 'media-orphan',
+          parentId: null,
+        }),
+      ],
+      compositions: [
+        expect.objectContaining({
+          id: 'comp-orphan',
+          parentId: null,
+        }),
+      ],
+      folders: [
+        expect.objectContaining({
+          id: 'folder-cycle',
+          parentId: null,
+        }),
+      ],
+      textItems: [
+        expect.objectContaining({
+          id: 'text-orphan',
+          parentId: null,
+        }),
+      ],
+    }));
+  });
+
+  it('skips destructive project sync from a stale default store after loading a large project', async () => {
+    const persistedMedia = Array.from({ length: 60 }, (_, index) => ({
+      id: `media-${index}`,
+      name: `media-${index}.png`,
+      type: 'image' as const,
+      sourcePath: `E:/project/Raw/media-${index}.png`,
+      projectPath: `Raw/media-${index}.png`,
+      width: 1024,
+      height: 768,
+      hasProxy: false,
+      folderId: `folder-${index % 10}`,
+      importedAt: new Date(index + 1).toISOString(),
+    }));
+
+    mocks.mediaState.files = persistedMedia.map((file) => ({
+      id: file.id,
+      name: file.name,
+      type: 'image',
+      parentId: null,
+      createdAt: 1,
+      url: '',
+      projectPath: file.projectPath,
+    }));
+    mocks.mediaState.folders = [];
+    mocks.mediaState.compositions = [{
+      id: 'comp-1',
+      name: 'Comp 1',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [] },
+    }];
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.openCompositionIds = ['comp-1'];
+
+    mocks.getProjectData.mockReturnValue({
+      media: persistedMedia,
+      compositions: [
+        {
+          id: 'comp-old-1',
+          name: 'Comp 1',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 60,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [],
+          clips: [],
+          markers: [],
+        },
+        {
+          id: 'comp-old-2',
+          name: 'Comp 2',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 60,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [],
+          clips: [],
+          markers: [],
+        },
+      ],
+      folders: Array.from({ length: 10 }, (_, index) => ({
+        id: `folder-${index}`,
+        name: `Folder ${index}`,
+        parentId: null,
+      })),
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: 'comp-old-1',
+      openCompositionIds: ['comp-old-1', 'comp-old-2'],
+      expandedFolderIds: Array.from({ length: 10 }, (_, index) => `folder-${index}`),
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateMedia).not.toHaveBeenCalled();
+    expect(mocks.updateCompositions).not.toHaveBeenCalled();
+    expect(mocks.updateFolders).not.toHaveBeenCalled();
   });
 
   it('restores transport MIDI bindings from project uiState', async () => {

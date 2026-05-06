@@ -43,7 +43,7 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 
 `FrameExporter` is used for both the WebCodecs and HTMLVideo export buttons.
 
-Canvas-backed sources such as text, solids, and Lottie are re-rendered for every export frame before capture, so the exported frame matches the current timeline time instead of reusing a stale first-frame texture.
+Canvas-backed sources such as text, solids, and Lottie are re-rendered for every export frame before capture, so the exported frame matches the current timeline time instead of reusing a stale first-frame texture. Motion shape clips are built as `motion` layer sources and rendered by the WebGPU motion renderer at export frame time before compositing.
 
 ### Fast Mode
 
@@ -272,7 +272,7 @@ The PNG frame export action reads the current composited frame from the GPU.
 1. Prepare clips and runtimes for the selected export mode.
 2. Seek all clips to each export time.
 3. Build layers for that frame.
-4. Render through the GPU engine.
+4. Render procedural motion shape textures and nested compositions, then composite through the GPU engine.
 5. Capture a `VideoFrame` from the export canvas when possible, otherwise fall back to pixel readback.
 6. Encode and mux the file.
 

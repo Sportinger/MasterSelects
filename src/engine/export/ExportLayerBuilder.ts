@@ -12,6 +12,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { getEffectiveScale } from '../../utils/transformScale';
+import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS, type GaussianSplatSettings } from '../gaussian/types';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
@@ -128,6 +129,18 @@ function buildGaussianSplatSource(clip: TimelineClip, clipLocalTime: number): La
   };
 }
 
+function buildMotionSource(clip: TimelineClip, clipLocalTime: number): Layer['source'] | null {
+  if (clip.source?.type !== 'motion-shape' || clip.motion?.kind !== 'shape') {
+    return null;
+  }
+
+  const keyframes = useTimelineStore.getState().clipKeyframes.get(clip.id) ?? [];
+  return {
+    type: 'motion',
+    motion: getInterpolatedMotionLayer(clip, keyframes, clipLocalTime) ?? clip.motion,
+  };
+}
+
 function getExportVideoElement(
   clip: TimelineClip,
   clipStates: Map<string, ExportClipState>
@@ -233,6 +246,16 @@ export function buildLayersAtTime(
         ...baseLayerProps,
         source: { type: 'image', imageElement: clip.source.imageElement },
       });
+    }
+    // Handle motion shape clips
+    else if (clip.source?.type === 'motion-shape') {
+      const source = buildMotionSource(clip, clipLocalTime);
+      if (source) {
+        layers.push({
+          ...baseLayerProps,
+          source,
+        });
+      }
     }
     // Handle 3D model clips
     else if (clip.source?.type === 'model') {
@@ -598,6 +621,23 @@ function buildNestedLayerForExport(
       ...baseLayer,
       source: { type: 'image', imageElement: nestedClip.source.imageElement },
     } as Layer;
+  }
+
+  if (nestedClip.source?.type === 'motion-shape') {
+    const source = buildMotionSource(nestedClip, nestedClipLocalTime);
+    return source
+      ? {
+          ...baseLayer,
+          source,
+        } as Layer
+      : null;
+  }
+
+  if (
+    nestedClip.source?.type === 'motion-null' ||
+    nestedClip.source?.type === 'motion-adjustment'
+  ) {
+    return null;
   }
 
   if (nestedClip.source?.type === 'model') {

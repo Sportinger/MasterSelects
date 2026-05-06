@@ -50,6 +50,8 @@ import {
   buildSharedSplatRuntimeRequest,
   resolveSharedSplatSceneKey,
 } from '../scene/runtime/SharedSplatRuntimeUtils';
+import type { MotionRenderer } from '../motion/MotionRenderer';
+import { getMotionRenderSize } from '../motion/MotionTypes';
 
 const log = Logger.create('RenderDispatcher');
 const GAUSSIAN_PLAYBACK_SORT_FREQUENCY = 6;
@@ -183,6 +185,7 @@ export interface RenderDeps {
   layerCollector: LayerCollector | null;
   compositor: Compositor | null;
   nestedCompRenderer: NestedCompRenderer | null;
+  motionRenderer: MotionRenderer | null;
   cacheManager: CacheManager;
   exportCanvasManager: ExportCanvasManager;
   performanceStats: PerformanceStats;
@@ -217,8 +220,9 @@ export class RenderDispatcher {
   private renderTimeOverride: number | null = null;
   private lastPreviewSignature = '';
   private lastPreviewTargetTimeMs?: number;
-  private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
-  private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
+  private lastPreviewDisplayedTimeMs?: number;
+  private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 0.35;
+  private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.35;
   private sceneRendererInitializing = false;
   // Native Gaussian Splat rendering state (new WebGPU path)
   private splatLoadingClips = new Set<string>();
@@ -824,6 +828,7 @@ export class RenderDispatcher {
 
     this.lastPreviewSignature = signature;
     this.lastPreviewTargetTimeMs = targetTimeMs;
+    this.lastPreviewDisplayedTimeMs = displayedTimeMs;
   }
 
   // === MAIN RENDER ===
@@ -852,6 +857,7 @@ export class RenderDispatcher {
     const layerData = d.layerCollector.collect(layers, {
       textureManager: d.textureManager!,
       scrubbingCache: d.cacheManager.getScrubbingCache(),
+      motionRenderer: d.motionRenderer,
       getLastVideoTime: (key) => d.cacheManager.getLastVideoTime(key),
       setLastVideoTime: (key, time) => d.cacheManager.setLastVideoTime(key, time),
       isExporting: d.exportCanvasManager.getIsExporting(),
@@ -907,10 +913,32 @@ export class RenderDispatcher {
       // instead of flashing black. This handles transient decoder stalls on
       // Windows/Linux where readyState drops briefly.
       const isPlaying = d.renderLoop?.getIsPlaying() ?? false;
-      if (isPlaying && this.shouldHoldLastFrameOnEmptyPlayback(previewFallback.targetTimeMs)) {
+      const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      const emptyScrubHoldDriftMs =
+        typeof previewFallback.targetTimeMs === 'number' &&
+        typeof this.lastPreviewDisplayedTimeMs === 'number'
+          ? Math.abs(previewFallback.targetTimeMs - this.lastPreviewDisplayedTimeMs)
+          : undefined;
+      const shouldHoldEmptyFrame =
+        (isPlaying && this.shouldHoldLastFrameOnEmptyPlayback(previewFallback.targetTimeMs)) ||
+        (isDragging && this.lastRenderHadContent);
+
+      if (shouldHoldEmptyFrame) {
         // Don't render anything — canvas retains previous frame automatically.
         // Log once so the stall is visible in telemetry.
-        log.debug('Holding last frame during playback stall (empty layerData)');
+        log.debug('Holding last frame during empty preview frame', {
+          isPlaying,
+          isDragging,
+          driftMs: emptyScrubHoldDriftMs,
+        });
+        this.recordMainPreviewFrame(
+          isDragging ? 'empty-hold' : 'playback-stall-hold',
+          undefined,
+          {
+            ...previewFallback,
+            displayedTimeMs: this.lastPreviewDisplayedTimeMs,
+          }
+        );
         d.performanceStats.setLayerCount(0);
         return;
       }
@@ -933,9 +961,19 @@ export class RenderDispatcher {
 
     // Pre-render nested compositions (batched with main composite)
     let hasNestedComps = false;
+    let hasMotionLayers = false;
 
     const preRenderEncoder = device.createCommandEncoder();
     for (const data of layerData) {
+      if (data.layer.source?.type === 'motion') {
+        hasMotionLayers = true;
+        const rendered = d.motionRenderer?.renderLayer(data.layer, preRenderEncoder);
+        const size = rendered ?? getMotionRenderSize(data.layer.source.motion);
+        data.textureView = rendered?.textureView ?? null;
+        data.sourceWidth = size.width;
+        data.sourceHeight = size.height;
+      }
+
       if (data.layer.source?.nestedComposition) {
         hasNestedComps = true;
         const nc = data.layer.source.nestedComposition;
@@ -955,7 +993,7 @@ export class RenderDispatcher {
         if (view) data.textureView = view;
       }
     }
-    if (hasNestedComps) {
+    if (hasNestedComps || hasMotionLayers) {
       commandBuffers.push(preRenderEncoder.finish());
     }
 
@@ -1149,8 +1187,10 @@ export class RenderDispatcher {
     const primarySelectedClipId = timelineState.primarySelectedClipId && timelineState.selectedClipIds.has(timelineState.primarySelectedClipId)
       ? timelineState.primarySelectedClipId
       : timelineState.selectedClipIds.values().next().value as string | undefined;
-    const sceneGizmoClipId = engineState.sceneGizmoClipIdOverride ??
-      (engineState.previewCameraOverride ? null : primarySelectedClipId ?? null);
+    const sceneGizmoVisible = engineState.sceneGizmoVisible !== false;
+    const sceneGizmoClipId = sceneGizmoVisible
+      ? engineState.sceneGizmoClipIdOverride ?? (engineState.previewCameraOverride ? null : primarySelectedClipId ?? null)
+      : null;
     const sceneGizmoClip = sceneGizmoClipId
       ? timelineState.clips.find((clip) => clip.id === sceneGizmoClipId) ?? null
       : null;
@@ -2003,13 +2043,14 @@ export class RenderDispatcher {
         const presentedDriftSeconds = hasConfirmedPresentedFrame
           ? Math.abs(lastPresentedTime - targetTime)
           : undefined;
+        const currentTimeDriftSeconds = Math.abs(video.currentTime - targetTime);
         const awaitingPausedTargetFrame =
           hasPresentedOwnerMismatch ||
           !(d.renderLoop?.getIsPlaying() ?? false) &&
           !isDragging &&
           (!isSettling &&
             (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
-        const cacheSearchDistanceFrames = isDragging ? 12 : 6;
+        const cacheSearchDistanceFrames = isDragging ? 10 : 6;
         const lastSameClipFrame = layer.sourceClipId
           ? scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null
           : null;
@@ -2028,15 +2069,21 @@ export class RenderDispatcher {
         const sameClipHoldFrame =
           !(d.renderLoop?.getIsPlaying() ?? false) &&
           (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
-            ? lastSameClipFrame
+            ? this.isFrameNearTarget(
+              lastSameClipFrame,
+              targetTime,
+              isDragging
+                ? RenderDispatcher.MAX_DRAG_FALLBACK_DRIFT_SECONDS
+                : 0.35
+            )
+              ? lastSameClipFrame
+              : null
             : null;
         const safeFallback = this.getSafePreviewFallback(layer, video) ?? dragHoldFrame;
         const allowDragLiveVideoImport =
           !video.seeking &&
-          (
-            !hasConfirmedPresentedFrame ||
-            (presentedDriftSeconds ?? 0) <= RenderDispatcher.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS
-          );
+          (presentedDriftSeconds ?? currentTimeDriftSeconds) <=
+            RenderDispatcher.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS;
         const allowLiveVideoImport = !hasPresentedOwnerMismatch && (isPausedSettle
           ? hasFreshPresentedFrame
           : !awaitingPausedTargetFrame &&
@@ -2249,6 +2296,17 @@ export class RenderDispatcher {
           layerData.push({ layer, isVideo: false, externalTexture: null, textureView: d.textureManager!.getImageView(texture), sourceWidth: canvas.width, sourceHeight: canvas.height });
         }
       }
+      if (layer.source.type === 'motion') {
+        const size = getMotionRenderSize(layer.source.motion);
+        layerData.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: null,
+          sourceWidth: size.width,
+          sourceHeight: size.height,
+        });
+      }
     }
 
     const { width, height } = d.renderTargetManager!.getResolution();
@@ -2274,6 +2332,14 @@ export class RenderDispatcher {
     }
 
     const commandEncoder = device.createCommandEncoder();
+    for (const data of layerData) {
+      if (data.layer.source?.type !== 'motion') continue;
+      const rendered = d.motionRenderer?.renderLayer(data.layer, commandEncoder);
+      const size = rendered ?? getMotionRenderSize(data.layer.source.motion);
+      data.textureView = rendered?.textureView ?? null;
+      data.sourceWidth = size.width;
+      data.sourceHeight = size.height;
+    }
 
     // Ping-pong compositing using independent buffers
     let readView = indPingView;

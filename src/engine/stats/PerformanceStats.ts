@@ -137,6 +137,7 @@ export class PerformanceStats {
     const avgFrameTime = this.frameTimeCount > 0 ? sum / this.frameTimeCount : 0;
     const cadenceFps = this.getCadenceFps();
     const displayFps = isIdle ? 0 : cadenceFps || this.fps;
+    const dropsLastSecond = isIdle ? 0 : this.detailedStats.dropsLastSecond;
 
     return {
       fps: displayFps,
@@ -151,8 +152,8 @@ export class PerformanceStats {
       },
       drops: {
         count: this.detailedStats.dropsTotal,
-        lastSecond: this.detailedStats.dropsLastSecond,
-        reason: this.detailedStats.lastDropReason,
+        lastSecond: dropsLastSecond,
+        reason: dropsLastSecond > 0 ? this.detailedStats.lastDropReason : 'none',
       },
       layerCount: this.lastLayerCount,
       targetFps: 60,

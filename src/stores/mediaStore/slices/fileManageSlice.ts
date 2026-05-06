@@ -12,15 +12,17 @@ import { engine } from '../../../engine/WebGPUEngine';
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
 import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
 import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMetadata';
-import { createThumbnail } from '../helpers/thumbnailHelpers';
+import { createThumbnail, handleThumbnailDedup } from '../helpers/thumbnailHelpers';
 import { resolveGaussianSplatSequenceData } from '../../../utils/gaussianSplatSequence';
 
 const log = Logger.create('Reload');
 const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
+const activeThumbnailRequests = new Map<string, Promise<boolean>>();
 
 export interface FileManageActions {
   removeFile: (id: string) => void;
   renameFile: (id: string, name: string) => void;
+  ensureFileThumbnail: (id: string) => Promise<boolean>;
   refreshFileUrls: (id: string, options?: { refreshThumbnail?: boolean }) => Promise<boolean>;
   reloadFile: (id: string) => Promise<boolean>;
   reloadAllFiles: () => Promise<number>;
@@ -44,6 +46,78 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
     }));
   },
 
+  ensureFileThumbnail: async (id: string) => {
+    const existingRequest = activeThumbnailRequests.get(id);
+    if (existingRequest) return existingRequest;
+
+    const request = (async () => {
+      const mediaFile = get().files.find((f) => f.id === id);
+      if (!mediaFile?.id || mediaFile.thumbnailUrl || mediaFile.isImporting) {
+        return Boolean(mediaFile?.thumbnailUrl);
+      }
+      if (mediaFile.type !== 'image' && mediaFile.type !== 'video') {
+        return false;
+      }
+
+      let thumbnailUrl: string | undefined;
+
+      try {
+        if (mediaFile.fileHash && projectFileService.isProjectOpen()) {
+          const existingBlob = await projectFileService.getThumbnail(mediaFile.fileHash);
+          if (existingBlob && existingBlob.size > 0) {
+            thumbnailUrl = URL.createObjectURL(existingBlob);
+          }
+        }
+
+        let sourceFile = mediaFile.file;
+        if (!thumbnailUrl && !sourceFile && mediaFile.projectPath && projectFileService.isProjectOpen()) {
+          const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
+          sourceFile = result?.file;
+        }
+
+        if (!thumbnailUrl && sourceFile) {
+          const generatedThumbnail = await createThumbnail(sourceFile, mediaFile.type);
+          thumbnailUrl = await handleThumbnailDedup(mediaFile.fileHash, generatedThumbnail);
+        }
+
+        if (!thumbnailUrl) {
+          return false;
+        }
+
+        let applied = false;
+        set((state) => ({
+          files: state.files.map((file) => {
+            if (file.id !== id) return file;
+            if (file.thumbnailUrl) return file;
+            applied = true;
+            return { ...file, thumbnailUrl };
+          }),
+        }));
+
+        if (!applied && isBlobUrl(thumbnailUrl)) {
+          URL.revokeObjectURL(thumbnailUrl);
+        }
+
+        return applied || Boolean(get().files.find((file) => file.id === id)?.thumbnailUrl);
+      } catch (error) {
+        log.warn('Failed to ensure media thumbnail', {
+          id,
+          name: mediaFile.name,
+          error,
+        });
+        if (thumbnailUrl && isBlobUrl(thumbnailUrl)) {
+          URL.revokeObjectURL(thumbnailUrl);
+        }
+        return false;
+      }
+    })().finally(() => {
+      activeThumbnailRequests.delete(id);
+    });
+
+    activeThumbnailRequests.set(id, request);
+    return request;
+  },
+
   refreshFileUrls: async (id: string, options) => {
     const mediaFile = get().files.find((f) => f.id === id);
     if (!mediaFile) return false;
@@ -60,7 +134,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
 
     if (refreshThumbnail) {
       if (mediaFile.type === 'image') {
-        thumbnailUrl = URL.createObjectURL(mediaFile.file);
+        thumbnailUrl = await createThumbnail(mediaFile.file, 'image');
       } else if (mediaFile.type === 'video') {
         thumbnailUrl = await createThumbnail(mediaFile.file, 'video');
       }

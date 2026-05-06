@@ -11,11 +11,81 @@ interface StatsOverlayProps {
   onToggle: () => void;
 }
 
+type EffectiveFpsCandidate = {
+  label: string;
+  value: number;
+};
+
+function normalizeFps(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+  return Math.max(0, Math.round(value));
+}
+
+function getFpsColor(fps: number, targetFps: number): string {
+  const target = Math.max(1, targetFps);
+  if (fps >= target * 0.9) return '#4f4';
+  if (fps >= target * 0.5) return '#ff4';
+  return '#f44';
+}
+
+function getEffectiveFps(stats: EngineStats): {
+  value: number;
+  weakestLink: string;
+  candidates: EffectiveFpsCandidate[];
+} {
+  if (stats.isIdle) {
+    return { value: 0, weakestLink: 'Idle', candidates: [] };
+  }
+
+  const targetFps = normalizeFps(stats.targetFps) ?? 60;
+  const candidates: EffectiveFpsCandidate[] = [
+    { label: 'Target', value: targetFps },
+  ];
+
+  const renderFps = normalizeFps(stats.fps);
+  if (renderFps !== null) {
+    candidates.push({ label: 'Render', value: renderFps });
+  }
+
+  const playback = stats.playback;
+  if (playback && playback.previewFrames > 0) {
+    const previewRenderFps = normalizeFps(playback.previewRenderFps);
+    const previewUpdateFps = normalizeFps(playback.previewUpdateFps);
+    if (previewRenderFps !== null) {
+      candidates.push({ label: 'Preview render', value: previewRenderFps });
+    }
+    if (previewUpdateFps !== null) {
+      candidates.push({ label: 'Preview update', value: previewUpdateFps });
+    }
+  }
+
+  if (playback && playback.frameEvents > 0) {
+    const decoderFps = normalizeFps(playback.cadenceFps);
+    if (decoderFps !== null) {
+      candidates.push({ label: 'Decoder', value: decoderFps });
+    }
+  }
+
+  const weakest = candidates.reduce((lowest, candidate) => (
+    candidate.value < lowest.value ? candidate : lowest
+  ));
+
+  return {
+    value: weakest.value,
+    weakestLink: weakest.label,
+    candidates,
+  };
+}
+
 export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOverlayProps) {
   const gpuInfo = useEngineStore(s => s.gpuInfo);
   const splatSequence = stats.renderDispatcher?.splatSequence;
   const splatVisualFps = splatSequence?.visualFrameChangesLastSecond;
-  const fpsColor = stats.fps >= 55 ? '#4f4' : stats.fps >= 30 ? '#ff4' : '#f44';
+  const effectiveFps = useMemo(() => getEffectiveFps(stats), [stats]);
+  const effectiveFpsColor = getFpsColor(effectiveFps.value, stats.targetFps);
+  const fpsColor = getFpsColor(stats.fps, stats.targetFps);
   const splatFpsColor =
     splatVisualFps === undefined
       ? '#888'
@@ -71,8 +141,14 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
       >
         {!stats.isIdle && (
           <>
-            <span style={{ color: fpsColor, fontWeight: 'bold' }}>{stats.fps}</span>
-            <span style={{ opacity: 0.7 }}> FPS</span>
+            <span style={{ color: effectiveFpsColor, fontWeight: 'bold' }}>{effectiveFps.value}</span>
+            <span style={{ opacity: 0.7 }}> Eff</span>
+            <span
+              style={{ color: fpsColor, marginLeft: 6, fontSize: 10 }}
+              title={`Render FPS. Weakest link: ${effectiveFps.weakestLink}`}
+            >
+              R {stats.fps}
+            </span>
           </>
         )}
         {stats.isIdle && (
@@ -120,8 +196,13 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
   return (
     <div className="preview-stats preview-stats-expanded" onClick={onToggle}>
       <div className="stats-header">
-        <span style={{ color: fpsColor, fontWeight: 'bold', fontSize: 18 }}>{stats.fps}</span>
-        <span style={{ opacity: 0.7 }}> / {stats.targetFps} FPS</span>
+        <span style={{ color: effectiveFpsColor, fontWeight: 'bold', fontSize: 18 }}>{effectiveFps.value}</span>
+        <span style={{ opacity: 0.7 }}> effective FPS</span>
+        {!stats.isIdle && (
+          <span style={{ color: fpsColor, marginLeft: 8, fontSize: 12 }}>
+            Render {stats.fps} / {stats.targetFps}
+          </span>
+        )}
         {splatSequence && (
           <span style={{ color: splatFpsColor, marginLeft: 8, fontSize: 12, fontWeight: 'bold' }}>
             Splat {splatVisualFps} FPS
@@ -136,6 +217,38 @@ export function StatsOverlay({ stats, resolution, expanded, onToggle }: StatsOve
       </div>
 
       <div className="stats-section">
+        <div className="stats-row">
+          <span>Effective FPS</span>
+          <span style={{ color: effectiveFpsColor }}>
+            {effectiveFps.value}
+          </span>
+        </div>
+        <div className="stats-row">
+          <span>Weakest Link</span>
+          <span style={{ color: effectiveFpsColor }}>
+            {effectiveFps.weakestLink}
+          </span>
+        </div>
+        <div className="stats-row">
+          <span>Render FPS</span>
+          <span style={{ color: fpsColor }}>{stats.fps}</span>
+        </div>
+        {stats.playback && stats.playback.previewFrames > 0 && (
+          <div className="stats-row">
+            <span>Preview FPS</span>
+            <span style={{ color: getFpsColor(stats.playback.previewUpdateFps, stats.targetFps) }}>
+              update {stats.playback.previewUpdateFps} / render {stats.playback.previewRenderFps}
+            </span>
+          </div>
+        )}
+        {effectiveFps.candidates.length > 0 && (
+          <div className="stats-row" style={{ fontSize: 10, opacity: 0.6 }}>
+            <span>FPS Inputs</span>
+            <span>
+              {effectiveFps.candidates.map((candidate) => `${candidate.label} ${candidate.value}`).join(' | ')}
+            </span>
+          </div>
+        )}
         <div className="stats-row">
           <span>Frame Gap</span>
           <span style={{ color: stats.timing.rafGap > 20 ? '#ff4' : '#aaa' }}>

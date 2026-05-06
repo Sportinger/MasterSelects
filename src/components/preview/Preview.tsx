@@ -457,6 +457,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const sceneNavNoKeyframes = useEngineStore(selectSceneNavNoKeyframes);
   const previewCameraOverride = useEngineStore((s) => s.previewCameraOverride);
   const setPreviewCameraOverride = useEngineStore((s) => s.setPreviewCameraOverride);
+  const setSceneGizmoVisible = useEngineStore((s) => s.setSceneGizmoVisible);
   const setSceneGizmoClipIdOverride = useEngineStore((s) => s.setSceneGizmoClipIdOverride);
   const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
@@ -759,6 +760,25 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const editCameraAnimationRef = useRef<number | null>(null);
   const editCameraViewTransitionRef = useRef(false);
   const editCameraModeActiveRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      setSceneGizmoVisible(true);
+    };
+  }, [setSceneGizmoVisible]);
+
+  useEffect(() => {
+    setSceneGizmoVisible(sceneObjectOverlayEnabled && isEditableSource && !sourceMonitorActive);
+    if (isEngineReady) {
+      engine.requestRender();
+    }
+  }, [
+    isEditableSource,
+    isEngineReady,
+    sceneObjectOverlayEnabled,
+    setSceneGizmoVisible,
+    sourceMonitorActive,
+  ]);
 
   useEffect(() => {
     if (!isEditableSource) {

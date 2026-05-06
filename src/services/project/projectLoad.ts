@@ -4,7 +4,6 @@ import { Logger } from '../logger';
 import { engine } from '../../engine/WebGPUEngine';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder, type ProjectLoadProgress } from '../../stores/mediaStore';
 import { getMediaInfo } from '../../stores/mediaStore/helpers/mediaInfoHelpers';
-import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
 import {
   getExpectedProxyFrameCount,
   getExpectedProxyFps,
@@ -720,6 +719,8 @@ function convertProjectCompositionToStore(
         solidColor: c.solidColor,
         // Math scene clip support
         mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
+        // Motion design clip support
+        motion: c.motion ? structuredClone(c.motion) : undefined,
         vectorAnimationSettings: c.vectorAnimationSettings,
         // 3D layer support
         is3D: c.is3D,
@@ -781,6 +782,76 @@ function convertProjectFolderToStore(projectFolders: ProjectFolder[]): MediaFold
     isExpanded: true,
     createdAt: Date.now(),
   }));
+}
+
+type StoreItemWithParent = {
+  id: string;
+  name?: string;
+  parentId: string | null;
+};
+
+function normalizeFolderParents(folders: MediaFolder[]): MediaFolder[] {
+  if (folders.length === 0) return folders;
+
+  const foldersById = new Map(folders.map((folder) => [folder.id, folder]));
+  let repairedCount = 0;
+
+  const hasBrokenParent = (folder: MediaFolder): boolean => {
+    if (!folder.parentId) return false;
+    if (folder.parentId === folder.id || !foldersById.has(folder.parentId)) return true;
+
+    const seen = new Set<string>([folder.id]);
+    let nextParentId: string | null = folder.parentId;
+    while (nextParentId) {
+      if (seen.has(nextParentId)) return true;
+      seen.add(nextParentId);
+      nextParentId = foldersById.get(nextParentId)?.parentId ?? null;
+    }
+    return false;
+  };
+
+  const normalized = folders.map((folder) => {
+    if (!hasBrokenParent(folder)) return folder;
+    repairedCount += 1;
+    return { ...folder, parentId: null };
+  });
+
+  if (repairedCount > 0) {
+    log.warn('Recovered folders with invalid parent references', {
+      repairedCount,
+      total: folders.length,
+    });
+  }
+
+  return repairedCount > 0 ? normalized : folders;
+}
+
+function normalizeItemFolderParents<T extends StoreItemWithParent>(
+  items: T[],
+  validFolderIds: ReadonlySet<string>,
+  itemKind: string,
+): T[] {
+  if (items.length === 0 || validFolderIds.size === 0) {
+    const needsRootRepair = items.some((item) => Boolean(item.parentId));
+    if (!needsRootRepair) return items;
+  }
+
+  let repairedCount = 0;
+  const normalized = items.map((item) => {
+    if (!item.parentId || validFolderIds.has(item.parentId)) return item;
+    repairedCount += 1;
+    return { ...item, parentId: null };
+  });
+
+  if (repairedCount > 0) {
+    log.warn('Recovered media panel items with missing folder parents', {
+      itemKind,
+      repairedCount,
+      total: items.length,
+    });
+  }
+
+  return repairedCount > 0 ? normalized : items;
 }
 
 function hydrateFlashBoardFromProject(data: ProjectFlashBoardState): void {
@@ -878,7 +949,7 @@ export async function loadProjectToStores(): Promise<void> {
       itemsTotal: projectData.media.length,
       blocking: true,
     });
-    const files = await convertProjectMediaToStore(projectData.media, {
+    const loadedFiles = await convertProjectMediaToStore(projectData.media, {
       hydrateFiles,
       deferCacheChecks: true,
       onProgress: (done, total, name) => {
@@ -894,28 +965,34 @@ export async function loadProjectToStores(): Promise<void> {
         });
       },
     });
+    const folders = normalizeFolderParents(convertProjectFolderToStore(projectData.folders));
+    const validFolderIds = new Set(folders.map((folder) => folder.id));
+    const files = normalizeItemFolderParents(loadedFiles, validFolderIds, 'files');
     setProjectLoadProgress({
       phase: 'timeline',
       percent: 40,
       message: 'Restoring timeline',
       blocking: true,
     });
-    const compositions = convertProjectCompositionToStore(
-      projectData.compositions,
-      projectData.uiState?.compositionViewState
+    const compositions = normalizeItemFolderParents(
+      convertProjectCompositionToStore(
+        projectData.compositions,
+        projectData.uiState?.compositionViewState
+      ),
+      validFolderIds,
+      'compositions',
     );
-    const folders = convertProjectFolderToStore(projectData.folders);
 
   // Clear timeline first
   const timelineStore = useTimelineStore.getState();
   timelineStore.clearTimeline();
 
   // Restore generated media items
-  const textItems = projectData.textItems || [];
-  const solidItems = projectData.solidItems || [];
-  const meshItems = projectData.meshItems || [];
-  const cameraItems = projectData.cameraItems || [];
-  const splatEffectorItems = projectData.splatEffectorItems || [];
+  const textItems = normalizeItemFolderParents(projectData.textItems || [], validFolderIds, 'text items');
+  const solidItems = normalizeItemFolderParents(projectData.solidItems || [], validFolderIds, 'solid items');
+  const meshItems = normalizeItemFolderParents(projectData.meshItems || [], validFolderIds, 'mesh items');
+  const cameraItems = normalizeItemFolderParents(projectData.cameraItems || [], validFolderIds, 'camera items');
+  const splatEffectorItems = normalizeItemFolderParents(projectData.splatEffectorItems || [], validFolderIds, 'splat effector items');
 
   // Update media store
   useMediaStore.setState({
@@ -1107,6 +1184,12 @@ async function applyProjectRestoreMediaUpdate(
 
 async function runPostLoadRestoration(projectData: ProjectFile, hydrateFiles: boolean): Promise<void> {
   try {
+    if (!hydrateFiles) {
+      log.info('Skipping eager post-load restoration for native backend; media details are restored lazily');
+      completeProjectLoadProgress('Project ready');
+      return;
+    }
+
     if (hydrateFiles) {
       setProjectLoadProgress({
         phase: 'relink',
@@ -1115,70 +1198,58 @@ async function runPostLoadRestoration(projectData: ProjectFile, hydrateFiles: bo
         blocking: false,
       });
       await autoRelinkFromRawFolder();
-    } else {
-      log.info('Skipping eager auto-relink for native backend during initial project load');
     }
 
     await yieldToBrowser();
 
-    setProjectLoadProgress({
-      phase: 'thumbnails',
-      percent: 78,
-      message: 'Restoring thumbnails',
-      blocking: false,
-    });
-    await restoreMediaThumbnails((done, total, name) => {
-      const ratio = total > 0 ? done / total : 1;
-      setProjectLoadProgress({
-        phase: 'thumbnails',
-        percent: 78 + ratio * 8,
-        message: 'Restoring thumbnails',
-        detail: name,
-        itemsDone: done,
-        itemsTotal: total,
-        blocking: false,
-      });
-    });
+    log.info('Skipping eager thumbnail restoration; media panel restores visible thumbnails lazily');
 
-    setProjectLoadProgress({
-      phase: 'metadata',
-      percent: 86,
-      message: 'Refreshing media metadata',
-      blocking: false,
-    });
-    await refreshMediaMetadata((done, total, name) => {
-      const ratio = total > 0 ? done / total : 1;
+    const eagerMetadataLimit = 120;
+    if (projectData.media.length <= eagerMetadataLimit) {
       setProjectLoadProgress({
         phase: 'metadata',
-        percent: 86 + ratio * 6,
+        percent: 86,
         message: 'Refreshing media metadata',
-        detail: name,
-        itemsDone: done,
-        itemsTotal: total,
         blocking: false,
       });
-    });
+      await refreshMediaMetadata((done, total, name) => {
+        const ratio = total > 0 ? done / total : 1;
+        setProjectLoadProgress({
+          phase: 'metadata',
+          percent: 86 + ratio * 6,
+          message: 'Refreshing media metadata',
+          detail: name,
+          itemsDone: done,
+          itemsTotal: total,
+          blocking: false,
+        });
+      });
 
-    setProjectLoadProgress({
-      phase: 'caches',
-      percent: 92,
-      message: 'Checking project caches',
-      itemsDone: 0,
-      itemsTotal: projectData.media.length,
-      blocking: false,
-    });
-    await restoreDeferredMediaCacheState(projectData.media, (done, total, name, itemProgress) => {
-      const ratio = total > 0 ? (done + (itemProgress ?? 0)) / total : 1;
       setProjectLoadProgress({
         phase: 'caches',
-        percent: 92 + ratio * 7,
+        percent: 92,
         message: 'Checking project caches',
-        detail: name,
-        itemsDone: done,
-        itemsTotal: total,
+        itemsDone: 0,
+        itemsTotal: projectData.media.length,
         blocking: false,
       });
-    });
+      await restoreDeferredMediaCacheState(projectData.media, (done, total, name, itemProgress) => {
+        const ratio = total > 0 ? (done + (itemProgress ?? 0)) / total : 1;
+        setProjectLoadProgress({
+          phase: 'caches',
+          percent: 92 + ratio * 7,
+          message: 'Checking project caches',
+          detail: name,
+          itemsDone: done,
+          itemsTotal: total,
+          blocking: false,
+        });
+      });
+    } else {
+      log.info('Skipping eager metadata/cache restoration for large project', {
+        mediaCount: projectData.media.length,
+      });
+    }
 
     completeProjectLoadProgress('Project ready');
   } catch (error) {
@@ -1263,77 +1334,6 @@ async function refreshMediaMetadata(
   }
 
   log.info('Media metadata refresh complete');
-}
-
-/**
- * Restore thumbnails for media files after project load.
- * Checks project folder first, then regenerates from file if needed.
- */
-async function restoreMediaThumbnails(
-  onProgress?: (done: number, total: number, name: string) => void,
-): Promise<void> {
-  const mediaState = useMediaStore.getState();
-  // Find files that need thumbnails (video/image files without thumbnailUrl)
-  const filesToRestore = mediaState.files.filter(f =>
-    f.file && !f.thumbnailUrl && (f.type === 'video' || f.type === 'image')
-  );
-
-  if (filesToRestore.length === 0) {
-    log.debug('No thumbnails need restoration');
-    return;
-  }
-
-  log.info(`Restoring thumbnails for ${filesToRestore.length} files...`);
-
-  // Process in batches to avoid overwhelming browser
-  const batchSize = 5;
-  let completed = 0;
-  for (let i = 0; i < filesToRestore.length; i += batchSize) {
-    const batch = filesToRestore.slice(i, i + batchSize);
-
-    await Promise.all(batch.map(async (mediaFile) => {
-      if (!mediaFile.file) {
-        completed++;
-        onProgress?.(completed, filesToRestore.length, mediaFile.name);
-        return;
-      }
-
-      try {
-        let thumbnailUrl: string | undefined;
-
-        // First try to get from project folder if we have a hash
-        if (mediaFile.fileHash && projectFileService.isProjectOpen()) {
-          const existingBlob = await projectFileService.getThumbnail(mediaFile.fileHash);
-          if (existingBlob && existingBlob.size > 0) {
-            thumbnailUrl = URL.createObjectURL(existingBlob);
-            log.debug(`Restored thumbnail from project: ${mediaFile.name}`);
-          }
-        }
-
-        // If not found in project, regenerate from file
-        if (!thumbnailUrl) {
-          thumbnailUrl = await createThumbnail(mediaFile.file, mediaFile.type as 'video' | 'image');
-          log.debug(`Regenerated thumbnail: ${mediaFile.name}`);
-        }
-
-        if (thumbnailUrl) {
-          await applyProjectRestoreMediaUpdate((state) => ({
-            files: state.files.map((f) =>
-              f.id === mediaFile.id ? { ...f, thumbnailUrl } : f
-            ),
-          }));
-        }
-      } catch (e) {
-        log.warn(`Failed to restore thumbnail for: ${mediaFile.name}`, e);
-      } finally {
-        completed++;
-        onProgress?.(completed, filesToRestore.length, mediaFile.name);
-      }
-    }));
-    await yieldToBrowser();
-  }
-
-  log.info('Thumbnail restoration complete');
 }
 
 async function restoreDeferredMediaCacheState(
@@ -1585,6 +1585,37 @@ async function reloadNestedCompositionClips(): Promise<void> {
     const nestedTracks = composition.timelineData.tracks;
 
     for (const nestedSerializedClip of composition.timelineData.clips) {
+      if (
+        (
+          nestedSerializedClip.sourceType === 'motion-shape' ||
+          nestedSerializedClip.sourceType === 'motion-null' ||
+          nestedSerializedClip.sourceType === 'motion-adjustment'
+        ) &&
+        nestedSerializedClip.motion
+      ) {
+        nestedClips.push({
+          id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
+          trackId: nestedSerializedClip.trackId,
+          name: nestedSerializedClip.name || 'Motion',
+          file: new File([JSON.stringify(nestedSerializedClip.motion)], `${nestedSerializedClip.sourceType}.msmotion`, { type: 'application/json' }),
+          startTime: nestedSerializedClip.startTime,
+          duration: nestedSerializedClip.duration,
+          inPoint: nestedSerializedClip.inPoint,
+          outPoint: nestedSerializedClip.outPoint,
+          source: {
+            type: nestedSerializedClip.sourceType,
+            naturalDuration: nestedSerializedClip.duration,
+          },
+          motion: structuredClone(nestedSerializedClip.motion),
+          thumbnails: nestedSerializedClip.thumbnails,
+          transform: nestedSerializedClip.transform,
+          effects: nestedSerializedClip.effects || [],
+          masks: nestedSerializedClip.masks || [],
+          isLoading: false,
+        });
+        continue;
+      }
+
       if (nestedSerializedClip.sourceType === 'math-scene' && nestedSerializedClip.mathScene) {
         const canvas = mathSceneRenderer.createCanvas();
         const nestedClip: TimelineClip = {

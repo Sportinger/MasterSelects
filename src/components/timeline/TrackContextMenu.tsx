@@ -69,6 +69,19 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
     onClose();
   };
 
+  const handleAddMotionShape = (primitive: 'rectangle' | 'ellipse') => {
+    if (menu.trackType !== 'video') return;
+    const { playheadPosition, addMotionShapeClip, selectClip } = useTimelineStore.getState();
+    const clipId = addMotionShapeClip(menu.trackId, playheadPosition, {
+      primitive,
+      name: primitive === 'ellipse' ? 'Motion Ellipse' : 'Motion Rectangle',
+    });
+    if (clipId) {
+      selectClip(clipId);
+    }
+    onClose();
+  };
+
   const handleDeleteTrack = () => {
     useTimelineStore.getState().removeTrack(menu.trackId);
     onClose();
@@ -103,6 +116,12 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
           <div className="context-menu-separator" />
           <div className="context-menu-item" onClick={handleAddMathScene}>
             + Add Math Scene
+          </div>
+          <div className="context-menu-item" onClick={() => handleAddMotionShape('rectangle')}>
+            + Add Motion Rectangle
+          </div>
+          <div className="context-menu-item" onClick={() => handleAddMotionShape('ellipse')}>
+            + Add Motion Ellipse
           </div>
         </>
       )}

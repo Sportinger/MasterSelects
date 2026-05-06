@@ -20,4 +20,18 @@ describe('PerformanceStats', () => {
     const snapshot = stats.getStats(true);
     expect(snapshot.fps).toBe(0);
   });
+
+  it('does not report stale per-second drops while idle', () => {
+    const stats = new PerformanceStats();
+    stats.recordRafGap(100);
+    stats.resetPerSecondCounters();
+
+    const activeSnapshot = stats.getStats(false);
+    expect(activeSnapshot.drops.lastSecond).toBeGreaterThan(0);
+
+    const idleSnapshot = stats.getStats(true);
+    expect(idleSnapshot.drops.count).toBeGreaterThan(0);
+    expect(idleSnapshot.drops.lastSecond).toBe(0);
+    expect(idleSnapshot.drops.reason).toBe('none');
+  });
 });

@@ -29,6 +29,7 @@ export class RenderLoop {
   // engine goes idle after 1s and scrubbing produces black frames.
   // Cleared when setIsPlaying(true) is called (first play warms up videos).
   private idleSuppressed = false;
+  private idleSuppressedSince = 0;
 
   // Frame rate limiting
   private hasActiveVideo = false;
@@ -43,8 +44,9 @@ export class RenderLoop {
   private renderCount = 0;
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
-  private readonly VIDEO_FRAME_TIME = 16.67; // ~60fps target
-  private readonly SCRUB_FRAME_TIME = 33; // ~30fps during scrubbing (avoids wasted renders while video seeks)
+  private readonly IDLE_SUPPRESSION_TIMEOUT = 3000; // bounded reload warmup
+  private readonly VIDEO_FRAME_TIME = 15; // ~60fps target with tolerance for 16.6ms display ticks
+  private readonly SCRUB_FRAME_TIME = 15; // ~60fps during scrubbing with tolerance for 16.6ms display ticks
   private readonly WATCHDOG_INTERVAL = 2000; // Check every 2s
   private readonly WATCHDOG_STALL_THRESHOLD = 3000; // 3s without render = stalled
 
@@ -75,7 +77,15 @@ export class RenderLoop {
       const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
       lastTimestamp = timestamp;
 
-      // Idle detection (suppressed until first play to allow video GPU warmup)
+      if (
+        this.idleSuppressed
+        && timestamp - this.idleSuppressedSince > this.IDLE_SUPPRESSION_TIMEOUT
+      ) {
+        this.idleSuppressed = false;
+        log.info('Idle suppression lifted (warmup timeout)');
+      }
+
+      // Idle detection (briefly suppressed after reload to allow video GPU warmup)
       if (!this.idleSuppressed) {
         const timeSinceActivity = timestamp - this.lastActivityTime;
         if (!this.isIdle && !this.renderRequested && timeSinceActivity > this.IDLE_TIMEOUT) {
@@ -268,6 +278,7 @@ export class RenderLoop {
    */
   suppressIdle(): void {
     this.idleSuppressed = true;
+    this.idleSuppressedSince = performance.now();
     this.isIdle = false;
     log.info('Idle suppressed (waiting for first play)');
   }

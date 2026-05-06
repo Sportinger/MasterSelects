@@ -25,6 +25,7 @@ import { Logger } from '../logger';
 import { flags } from '../../engine/featureFlags';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { getEffectiveScale } from '../../utils/transformScale';
+import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import {
   getGaussianSplatSequenceFrame,
   getGaussianSplatSequenceFrameRuntimeKey,
@@ -36,6 +37,7 @@ import { resolveSceneEffectorsEnabled } from '../../engine/scene/SceneEffectorUt
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import type { MediaFile } from '../../stores/mediaStore/types';
+import { getExpectedProxyFrameCount } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { prewarmGaussianSplatRuntime } from '../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { resolveSharedSplatUseNativeRenderer } from '../../engine/scene/runtime/SharedSplatRuntimeUtils';
@@ -548,6 +550,14 @@ export class LayerBuilderService {
     else if (clip.source?.textCanvas) {
       layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
     }
+    // Motion shape clip
+    else if (clip.source?.type === 'motion-shape') {
+      layer = this.buildMotionShapeLayer(clip, layerIndex, ctx, opacityOverride);
+    }
+    // Motion null and adjustment clips are timeline/controller data for now.
+    else if (clip.source?.type === 'motion-null' || clip.source?.type === 'motion-adjustment') {
+      layer = null;
+    }
     // Camera clip (non-rendering scene controller)
     else if (clip.source?.type === 'camera') {
       layer = null;
@@ -570,6 +580,46 @@ export class LayerBuilderService {
       layer.is3D = true;
     }
 
+    return layer;
+  }
+
+  private buildMotionShapeLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer | null {
+    if (!clip.motion || clip.motion.kind !== 'shape') {
+      return null;
+    }
+
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const transform = this.transformCache.getTransform(
+      `${ctx.activeCompId}_${layerIndex}_${clip.id}`,
+      ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime)
+    );
+    const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
+    const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
+    const keyframes = useTimelineStore.getState().clipKeyframes.get(clip.id) ?? [];
+    const motion = getInterpolatedMotionLayer(clip, keyframes, timeInfo.clipLocalTime) ?? clip.motion;
+    const finalOpacity = opacityOverride !== undefined
+      ? transform.opacity * opacityOverride
+      : transform.opacity;
+
+    const layer: Layer = {
+      id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}`,
+      name: clip.name,
+      sourceClipId: clip.id,
+      visible: true,
+      opacity: finalOpacity,
+      blendMode: transform.blendMode as BlendMode,
+      source: {
+        type: 'motion',
+        motion,
+      },
+      effects,
+      colorCorrection,
+      position: transform.position,
+      scale: transform.scale,
+      rotation: transform.rotation,
+    };
+
+    this.addMaskProperties(layer, clip);
     return layer;
   }
 
@@ -784,17 +834,7 @@ export class LayerBuilderService {
     const proxyFps = mediaFile.proxyFps || 30;
     const frameIndex = Math.floor(clipTime * proxyFps);
 
-    // Check proxy availability
-    let useProxy = false;
-    if (mediaFile.proxyStatus === 'ready') {
-      useProxy = true;
-    } else if (mediaFile.proxyStatus === 'generating' && (mediaFile.proxyProgress || 0) > 0) {
-      const totalFrames = Math.ceil((mediaFile.duration || 10) * proxyFps);
-      const maxGeneratedFrame = Math.floor(totalFrames * ((mediaFile.proxyProgress || 0) / 100));
-      useProxy = frameIndex < maxGeneratedFrame;
-    }
-
-    if (!useProxy) return null;
+    if (!this.canUseProxyFrame(mediaFile, frameIndex, proxyFps)) return null;
 
     // Try to get cached frame
     const cacheKey = `${mediaFile.id}_${clip.id}`;
@@ -844,6 +884,23 @@ export class LayerBuilderService {
 
     // No proxy frame available - return null to fall back to video
     return null;
+  }
+
+  private canUseProxyFrame(mediaFile: MediaFile, frameIndex: number, proxyFps: number): boolean {
+    if (mediaFile.proxyStatus === 'ready') {
+      return true;
+    }
+
+    if (mediaFile.proxyStatus !== 'generating' || (mediaFile.proxyProgress || 0) <= 0) {
+      return false;
+    }
+
+    const fallbackDuration = mediaFile.duration || 10;
+    const totalFrames =
+      getExpectedProxyFrameCount(fallbackDuration, proxyFps) ??
+      Math.ceil(fallbackDuration * proxyFps);
+    const maxGeneratedFrame = Math.floor(totalFrames * ((mediaFile.proxyProgress || 0) / 100));
+    return frameIndex < maxGeneratedFrame;
   }
 
   private ensureProxyFrameLoaded(
@@ -1417,6 +1474,21 @@ export class LayerBuilderService {
     }
 
     if (this.hasRenderableVideoSource(nestedClip.source)) {
+      const nestedClipTime = this.getNestedClipSourceTime(nestedClip, nestedClipLocalTime);
+
+      if (ctx.proxyEnabled) {
+        const mediaFile = getMediaFileForClip(ctx, nestedClip);
+        if (mediaFile?.proxyFps) {
+          const proxyLayer = this.tryBuildNestedProxyLayer(
+            nestedClip,
+            nestedClipTime,
+            mediaFile,
+            baseLayer,
+          );
+          if (proxyLayer) return proxyLayer;
+        }
+      }
+
       const keepScrubRuntimeActive =
         ctx.isDraggingPlayhead || scrubSettleState.isPending(nestedClip.id);
       const useScrubRuntime = keepScrubRuntimeActive;
@@ -1442,9 +1514,6 @@ export class LayerBuilderService {
         runtimeProvider?.isFullMode()
           ? runtimeProvider
           : previewRuntimeSource?.webCodecsPlayer ?? nestedClip.source!.webCodecsPlayer;
-      const nestedClipTime = nestedClip.reversed
-        ? nestedClip.outPoint - nestedClipLocalTime
-        : nestedClipLocalTime + nestedClip.inPoint;
       return {
         ...baseLayer,
         source: {
@@ -1487,6 +1556,19 @@ export class LayerBuilderService {
           source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
         } as Layer;
       }
+    } else if (nestedClip.source?.type === 'motion-shape' && nestedClip.motion?.kind === 'shape') {
+      return {
+        ...baseLayer,
+        source: {
+          type: 'motion',
+          motion: getInterpolatedMotionLayer(nestedClip, keyframes, nestedClipLocalTime) ?? nestedClip.motion,
+        },
+      } as Layer;
+    } else if (
+      nestedClip.source?.type === 'motion-null' ||
+      nestedClip.source?.type === 'motion-adjustment'
+    ) {
+      return null;
     } else if (nestedClip.source?.type === 'model') {
       const nestedSourceTime = nestedClip.reversed
         ? nestedClip.outPoint - nestedClipLocalTime
@@ -1524,6 +1606,85 @@ export class LayerBuilderService {
     }
 
     return null;
+  }
+
+  private getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {
+    const inPoint = nestedClip.inPoint ?? 0;
+    const outPoint = nestedClip.outPoint ?? nestedClip.duration;
+    return nestedClip.reversed
+      ? outPoint - nestedClipLocalTime
+      : nestedClipLocalTime + inPoint;
+  }
+
+  private tryBuildNestedProxyLayer(
+    nestedClip: TimelineClip,
+    nestedClipTime: number,
+    mediaFile: MediaFile,
+    baseLayer: Omit<Layer, 'source'>,
+  ): Layer | null {
+    const proxyFps = mediaFile.proxyFps || 30;
+    const frameIndex = Math.floor(nestedClipTime * proxyFps);
+    if (!this.canUseProxyFrame(mediaFile, frameIndex, proxyFps)) return null;
+
+    const cacheKey = `${mediaFile.id}_${nestedClip.id}`;
+    const exactFrame = proxyFrameCache.getCachedFrame(mediaFile.id, frameIndex, proxyFps);
+    if (exactFrame) {
+      this.proxyFramesRef.set(cacheKey, { frameIndex, image: exactFrame });
+      return this.buildNestedProxyImageLayer(baseLayer, exactFrame, mediaFile, frameIndex, nestedClipTime, 'nested-proxy-frame');
+    }
+
+    this.ensureProxyFrameLoaded(mediaFile.id, frameIndex, nestedClipTime, proxyFps, cacheKey);
+
+    const nearestFrame = proxyFrameCache.getNearestCachedFrameEntry(mediaFile.id, frameIndex, 30);
+    if (nearestFrame) {
+      return this.buildNestedProxyImageLayer(
+        baseLayer,
+        nearestFrame.image,
+        mediaFile,
+        nearestFrame.frameIndex,
+        nestedClipTime,
+        'nested-proxy-frame-nearest',
+      );
+    }
+
+    const heldFrame = this.proxyFramesRef.get(cacheKey);
+    if (heldFrame?.image) {
+      return this.buildNestedProxyImageLayer(
+        baseLayer,
+        heldFrame.image,
+        mediaFile,
+        heldFrame.frameIndex,
+        nestedClipTime,
+        'nested-proxy-frame-hold',
+      );
+    }
+
+    return null;
+  }
+
+  private buildNestedProxyImageLayer(
+    baseLayer: Omit<Layer, 'source'>,
+    imageElement: HTMLImageElement,
+    mediaFile: MediaFile,
+    frameIndex: number,
+    targetMediaTime: number,
+    previewPath: string,
+  ): Layer {
+    const proxyFps = mediaFile.proxyFps || 30;
+    return {
+      ...baseLayer,
+      source: {
+        type: 'image',
+        imageElement,
+        mediaFileId: mediaFile.id,
+        intrinsicWidth: imageElement.naturalWidth || imageElement.width,
+        intrinsicHeight: imageElement.naturalHeight || imageElement.height,
+        mediaTime: frameIndex / proxyFps,
+        targetMediaTime,
+        previewPath,
+        proxyFrameIndex: frameIndex,
+      },
+    };
   }
 
   /**

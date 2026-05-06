@@ -72,6 +72,10 @@ export const playbackToolDefinitions: ToolDefinition[] = [
             type: 'number',
             description: 'Optional deterministic seed for random scrubs.',
           },
+          resetDiagnostics: {
+            type: 'boolean',
+            description: 'Reset playback diagnostics before the scrub run. Defaults to true.',
+          },
         },
         required: [],
       },

@@ -57,6 +57,11 @@ const CAMERA_RESET_KEYFRAME_PROPERTIES: AnimatableProperty[] = [
   'scale.z',
 ];
 
+const CLIP_SPEED_MIN_PERCENT = -10000;
+const CLIP_SPEED_MAX_PERCENT = 10000;
+const CLIP_SPEED_MIN_MULTIPLIER = CLIP_SPEED_MIN_PERCENT / 100;
+const CLIP_SPEED_MAX_MULTIPLIER = CLIP_SPEED_MAX_PERCENT / 100;
+
 interface TransformTabProps {
   clipId: string;
   transform: {
@@ -604,7 +609,13 @@ export function TransformTab({
             <MIDIParameterLabel
               as="label"
               className="prop-label"
-              target={createMIDIParameterTarget('speed', 'Speed', speed, -4, 4)}
+              target={createMIDIParameterTarget(
+                'speed',
+                'Speed',
+                speed,
+                CLIP_SPEED_MIN_MULTIPLIER,
+                CLIP_SPEED_MAX_MULTIPLIER,
+              )}
             >
               Speed <span className="menu-wip-badge">WIP</span>
             </MIDIParameterLabel>
@@ -614,8 +625,8 @@ export function TransformTab({
               defaultValue={100}
               decimals={0}
               suffix="%"
-              min={-400}
-              max={400}
+              min={CLIP_SPEED_MIN_PERCENT}
+              max={CLIP_SPEED_MAX_PERCENT}
               sensitivity={1}
               onDragStart={handleBatchStart}
               onDragEnd={handleBatchEnd}

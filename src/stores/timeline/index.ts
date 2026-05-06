@@ -11,6 +11,7 @@ import { createClipSlice } from './clipSlice';
 import { createTextClipSlice } from './textClipSlice';
 import { createSolidClipSlice } from './solidClipSlice';
 import { createMathSceneClipSlice } from './mathSceneClipSlice';
+import { createMotionClipSlice } from './motionClipSlice';
 import { createMeshClipSlice } from './meshClipSlice';
 import { createCameraClipSlice } from './cameraClipSlice';
 import { createSplatEffectorClipSlice } from './splatEffectorClipSlice';
@@ -50,6 +51,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const textClipActions = createTextClipSlice(set, get);
     const solidClipActions = createSolidClipSlice(set, get);
     const mathSceneClipActions = createMathSceneClipSlice(set, get);
+    const motionClipActions = createMotionClipSlice(set, get);
     const meshClipActions = createMeshClipSlice(set, get);
     const cameraClipActions = createCameraClipSlice(set, get);
     const splatEffectorClipActions = createSplatEffectorClipSlice(set, get);
@@ -265,6 +267,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...textClipActions,
       ...solidClipActions,
       ...mathSceneClipActions,
+      ...motionClipActions,
       ...meshClipActions,
       ...cameraClipActions,
       ...splatEffectorClipActions,

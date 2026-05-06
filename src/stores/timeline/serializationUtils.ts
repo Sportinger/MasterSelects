@@ -147,6 +147,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         mathScene: clip.source?.type === 'math-scene' && clip.mathScene
           ? structuredClone(clip.mathScene)
           : undefined,
+        motion: clip.motion ? structuredClone(clip.motion) : undefined,
         // Clip label color
         // 3D layer support
         is3D: clip.is3D || undefined,
@@ -358,6 +359,44 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         isLoading: false,
       };
     };
+    const isMotionSourceType = (sourceType: SerializableClip['sourceType']): sourceType is 'motion-shape' | 'motion-null' | 'motion-adjustment' => (
+      sourceType === 'motion-shape' ||
+      sourceType === 'motion-null' ||
+      sourceType === 'motion-adjustment'
+    );
+    const createMotionClip = (serializedClip: SerializableClip, clipId = serializedClip.id): TimelineClip | null => {
+      if (!isMotionSourceType(serializedClip.sourceType) || !serializedClip.motion) {
+        return null;
+      }
+
+      return {
+        id: clipId,
+        trackId: serializedClip.trackId,
+        name: serializedClip.name || 'Motion',
+        file: new File([JSON.stringify(serializedClip.motion)], `${serializedClip.sourceType}.msmotion`, { type: 'application/json' }),
+        mediaFileId: serializedClip.mediaFileId || undefined,
+        startTime: serializedClip.startTime,
+        duration: serializedClip.duration,
+        inPoint: serializedClip.inPoint,
+        outPoint: serializedClip.outPoint,
+        source: {
+          type: serializedClip.sourceType,
+          mediaFileId: serializedClip.mediaFileId || undefined,
+          naturalDuration: serializedClip.duration,
+        },
+        motion: structuredClone(serializedClip.motion),
+        thumbnails: serializedClip.thumbnails,
+        linkedClipId: serializedClip.linkedClipId,
+        linkedGroupId: serializedClip.linkedGroupId,
+        transform: serializedClip.transform,
+        effects: serializedClip.effects || [],
+        colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+        masks: serializedClip.masks,
+        speed: serializedClip.speed,
+        preservesPitch: serializedClip.preservesPitch,
+        isLoading: false,
+      };
+    };
 
     for (const serializedClip of data.clips) {
       // Handle composition clips specially
@@ -550,6 +589,12 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                   continue;
                 }
                 // Regular media clip at this sub-level
+                const motionClip = createMotionClip(nsc, `nested-${parentClipId}-${nsc.id}`);
+                if (motionClip) {
+                  result.push(motionClip);
+                  continue;
+                }
+
                 if (nsc.sourceType === 'model' && nsc.meshType) {
                   result.push(createPrimitiveMeshClip(nsc, `nested-${parentClipId}-${nsc.id}`));
                   continue;
@@ -1077,6 +1122,16 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         } else {
           log.warn('Could not find composition for clip', { clip: serializedClip.name });
         }
+        continue;
+      }
+
+      const motionClip = createMotionClip(serializedClip);
+      if (motionClip) {
+        set(state => ({
+          clips: [...state.clips, motionClip],
+        }));
+
+        log.debug('Restored motion clip', { clip: serializedClip.name, sourceType: serializedClip.sourceType });
         continue;
       }
 

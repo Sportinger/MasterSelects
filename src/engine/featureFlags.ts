@@ -11,6 +11,8 @@ export const flags = {
   useWarmSlotDecks: false,  // Prepare reusable slot-owned live decks for low-latency triggering
   use3DLayers: true,  // Shared 3D scene support
   useGaussianSplat: true,  // Gaussian Splat avatar rendering (old WebGL path)
+  useMotionDesignSystem: false,  // Motion shape/null/adjustment system foundation
+  useMotionReplicators: false,  // GPU-instanced motion replicators
 };
 
 // Expose for runtime toggling from devtools

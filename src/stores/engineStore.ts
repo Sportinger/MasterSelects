@@ -54,6 +54,7 @@ interface EngineState {
   sceneNavNoKeyframes: boolean;
   sceneCameraLiveOverrides: Record<string, SceneCameraLiveOverride>;
   previewCameraOverride: SceneCameraConfig | null;
+  sceneGizmoVisible: boolean;
   sceneGizmoMode: SceneGizmoMode;
   sceneGizmoHoveredAxis: SceneGizmoAxis | null;
   sceneGizmoClipIdOverride: string | null;
@@ -74,6 +75,7 @@ interface EngineState {
   clearSceneCameraLiveOverride: (clipId: string) => void;
   clearSceneCameraLiveOverrides: () => void;
   setPreviewCameraOverride: (camera: SceneCameraConfig | null) => void;
+  setSceneGizmoVisible: (visible: boolean) => void;
   setSceneGizmoMode: (mode: SceneGizmoMode) => void;
   setSceneGizmoHoveredAxis: (axis: SceneGizmoAxis | null) => void;
   setSceneGizmoClipIdOverride: (clipId: string | null) => void;
@@ -175,6 +177,7 @@ export const useEngineStore = create<EngineState>()(
     sceneNavNoKeyframes: false,
     sceneCameraLiveOverrides: {},
     previewCameraOverride: null,
+    sceneGizmoVisible: true,
     sceneGizmoMode: 'move',
     sceneGizmoHoveredAxis: null,
     sceneGizmoClipIdOverride: null,
@@ -281,6 +284,13 @@ export const useEngineStore = create<EngineState>()(
 
     setPreviewCameraOverride: (camera: SceneCameraConfig | null) => {
       set({ previewCameraOverride: camera });
+    },
+
+    setSceneGizmoVisible: (visible: boolean) => {
+      set({
+        sceneGizmoVisible: visible,
+        ...(!visible ? { sceneGizmoHoveredAxis: null } : {}),
+      });
     },
 
     setSceneGizmoMode: (mode: SceneGizmoMode) => {

@@ -173,6 +173,26 @@ describe('TransformTab position units', () => {
     expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'position.x', 1);
   });
 
+  it('accepts clip speed values up to 10000 percent', () => {
+    mockState.sourceType = 'video';
+    const { container } = render(
+      <TransformTab
+        clipId="clip-1"
+        transform={makeTransform({ x: 0, y: 0, z: 0 })}
+        speed={1}
+      />,
+    );
+
+    const speedControl = Array.from(container.querySelectorAll('.draggable-number'))
+      .find((element) => element.textContent === '100%') as HTMLElement;
+    fireEvent.doubleClick(speedControl);
+    const input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '10000' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(mockState.setPropertyValue).toHaveBeenCalledWith('clip-1', 'speed', 100);
+  });
+
   it('edits 3D video plane positions in scene units', () => {
     mockState.sourceType = 'video';
     const { container } = render(

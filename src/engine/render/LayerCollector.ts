@@ -14,12 +14,15 @@ import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
 import { scrubSettleState } from '../../services/scrubSettleState';
 import { useTimelineStore } from '../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
+import type { MotionRenderer } from '../motion/MotionRenderer';
+import { getMotionRenderSize } from '../motion/MotionTypes';
 
 const log = Logger.create('LayerCollector');
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
 
 export interface LayerCollectorDeps {
   textureManager: TextureManager;
+  motionRenderer?: MotionRenderer | null;
   scrubbingCache: ScrubbingCache | null;
   getLastVideoTime: (key: string) => number | undefined;
   setLastVideoTime: (key: string, time: number) => void;
@@ -46,9 +49,9 @@ export class LayerCollector {
   // to the WebCodecs path (which may not have the correct frame yet).
   private scrubGraceUntil = 0;
   private static readonly SCRUB_GRACE_MS = 150; // ~9 frames at 60fps
-  private static readonly HTML_HOLD_RECOVERY_MS = 120;
-  private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
-  private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
+  private static readonly HTML_HOLD_RECOVERY_MS = 80;
+  private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 0.35;
+  private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.35;
 
   private isPendingWebCodecsFrameStable(
     provider: NonNullable<Layer['source']>['webCodecsPlayer'] | undefined
@@ -269,6 +272,18 @@ export class LayerCollector {
         return this.tryTextCanvas(layer, source.textCanvas, deps);
       }
       return null;
+    }
+
+    if (sourceType === 'motion') {
+      const size = getMotionRenderSize(source.motion);
+      return {
+        layer,
+        isVideo: false,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: size.width,
+        sourceHeight: size.height,
+      };
     }
 
     // Video sources - check decoders in priority order
@@ -846,13 +861,14 @@ export class LayerCollector {
       const presentedDriftSeconds = hasConfirmedPresentedFrame
         ? Math.abs(lastPresentedTime - targetTime)
         : undefined;
+      const currentTimeDriftSeconds = Math.abs(currentTime - targetTime);
       const awaitingPausedTargetFrame =
         hasPresentedOwnerMismatch ||
         !deps.isPlaying &&
         !isDragging &&
         (!isSettling &&
           (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
-      const cacheSearchDistanceFrames = isDragging ? 12 : 6;
+      const cacheSearchDistanceFrames = isDragging ? 10 : 6;
       const lastSameClipFrame = this.getDragHoldFrame(layer, video, deps);
       const dragHoldFrame = isDragging
         ? this.isFrameNearTarget(
@@ -868,7 +884,15 @@ export class LayerCollector {
       const emergencyHoldFrame = dragHoldFrame;
       const sameClipHoldFrame =
         (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
-          ? lastSameClipFrame
+          ? this.isFrameNearTarget(
+            lastSameClipFrame,
+            targetTime,
+            isDragging
+              ? LayerCollector.MAX_DRAG_FALLBACK_DRIFT_SECONDS
+              : 0.35
+          )
+            ? lastSameClipFrame
+            : null
         : null;
       const safeFallback = this.getSafeLastFrameFallback(layer, video, deps, targetTime) ?? dragHoldFrame;
       const shouldPreferStableHold = this.shouldPreferHtmlHold(layerReuseKey, {
@@ -881,10 +905,8 @@ export class LayerCollector {
       const allowDragLiveVideoImport =
         !shouldPreferStableHold &&
         !video.seeking &&
-        (
-          !hasConfirmedPresentedFrame ||
-          (presentedDriftSeconds ?? 0) <= LayerCollector.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS
-        );
+        (presentedDriftSeconds ?? currentTimeDriftSeconds) <=
+          LayerCollector.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS;
       const allowLiveVideoImport =
         !shouldPreferStableHold &&
         !hasPresentedOwnerMismatch &&
@@ -1104,6 +1126,28 @@ export class LayerCollector {
         };
       }
 
+      if (isDragging && !allowLiveVideoImport) {
+        const cachedFrame =
+          deps.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
+          deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
+        if (cachedFrame) {
+          this.armHtmlHold(layerReuseKey);
+          this.traceScrubPath(layer, 'scrub-cache', video, targetTime, lastPresentedTime);
+          this.currentDecoder = 'HTMLVideo(scrub-cache)';
+          return {
+            layer,
+            isVideo: false,
+            externalTexture: null,
+            textureView: cachedFrame.view,
+            sourceWidth: video.videoWidth,
+            sourceHeight: video.videoHeight,
+            displayedMediaTime: cachedFrame.mediaTime,
+            targetMediaTime: targetTime,
+            previewPath: 'scrub-cache',
+          };
+        }
+      }
+
       // Fallback to cache
       if (safeFallback) {
         this.armHtmlHold(layerReuseKey);
@@ -1178,7 +1222,7 @@ export class LayerCollector {
       // Video not ready - try cache
       const targetTime = this.getTargetVideoTime(layer, video);
       const isDragging = useTimelineStore.getState().isDraggingPlayhead;
-      const cacheSearchDistanceFrames = isDragging ? 12 : 6;
+      const cacheSearchDistanceFrames = isDragging ? 10 : 6;
       const isSettling = scrubSettleState.isPending(layer.sourceClipId);
       const lastSameClipFrame = this.getDragHoldFrame(layer, video, deps);
       const dragHoldFrame = isSettling
@@ -1207,7 +1251,15 @@ export class LayerCollector {
         : dragHoldFrame;
       const sameClipHoldFrame =
         (isDragging || isSettling || video.seeking || video.readyState < 2)
-          ? lastSameClipFrame
+          ? this.isFrameNearTarget(
+            lastSameClipFrame,
+            targetTime,
+            isDragging
+              ? LayerCollector.MAX_DRAG_FALLBACK_DRIFT_SECONDS
+              : 0.35
+          )
+            ? lastSameClipFrame
+            : null
           : null;
       const safeFallback = this.getSafeLastFrameFallback(layer, video, deps, targetTime) ?? dragHoldFrame;
       const cachedFrame =

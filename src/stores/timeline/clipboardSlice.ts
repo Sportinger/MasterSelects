@@ -90,6 +90,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         mathScene: clip.source?.type === 'math-scene' && clip.mathScene
           ? structuredClone(clip.mathScene)
           : undefined,
+        motion: clip.motion ? structuredClone(clip.motion) : undefined,
         // Visual data - reuse existing thumbnails and waveforms
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
         waveform: clip.waveform ? [...clip.waveform] : undefined,
@@ -138,6 +139,10 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
       const isPrimitiveMeshClip = clipData.sourceType === 'model' && !!clipData.meshType;
       const isCameraClip = clipData.sourceType === 'camera';
       const isSplatEffectorClip = clipData.sourceType === 'splat-effector';
+      const isMotionClip =
+        clipData.sourceType === 'motion-shape' ||
+        clipData.sourceType === 'motion-null' ||
+        clipData.sourceType === 'motion-adjustment';
       const requiresAsyncMediaLoad =
         !clipData.isComposition &&
         clipData.sourceType !== 'text' &&
@@ -145,7 +150,8 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         clipData.sourceType !== 'math-scene' &&
         !isPrimitiveMeshClip &&
         !isCameraClip &&
-        !isSplatEffectorClip;
+        !isSplatEffectorClip &&
+        !isMotionClip;
 
       // Find a track of the same type as the original
       let targetTrackId = clipData.trackId;
@@ -215,6 +221,10 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
             mathSceneRenderer.render(clipData.mathScene!, canvas, 0, clipData.duration);
             return canvas;
           })(),
+        } : isMotionClip && clipData.motion ? {
+          type: clipData.sourceType,
+          mediaFileId: clipData.mediaFileId,
+          naturalDuration: clipData.naturalDuration ?? clipData.duration,
         } : clipData.sourceType === 'lottie' && clipData.mediaFileId ? {
           type: 'lottie' as const,
           mediaFileId: clipData.mediaFileId,
@@ -254,6 +264,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         text3DProperties,
         solidColor: clipData.solidColor,
         mathScene: clipData.mathScene ? structuredClone(clipData.mathScene) : undefined,
+        motion: clipData.motion ? structuredClone(clipData.motion) : undefined,
         // Reuse existing thumbnails and waveforms from copied clip
         thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
         waveform: clipData.waveform ? [...clipData.waveform] : undefined,
@@ -343,6 +354,14 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         }
 
         if (newClip.source?.type === 'splat-effector') {
+          continue;
+        }
+
+        if (
+          newClip.source?.type === 'motion-shape' ||
+          newClip.source?.type === 'motion-null' ||
+          newClip.source?.type === 'motion-adjustment'
+        ) {
           continue;
         }
 

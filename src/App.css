@@ -9170,6 +9170,7 @@ input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
 }
 
 /* Column headers */
@@ -9412,6 +9413,13 @@ input[type="checkbox"] {
   user-select: none;
   flex: 1;
   min-height: 0;
+  overflow: auto;
+  contain: layout paint;
+}
+
+.media-classic-virtual-spacer {
+  flex: 0 0 auto;
+  pointer-events: none;
 }
 
 /* View mode toggle buttons */
@@ -9674,11 +9682,17 @@ input[type="checkbox"] {
 }
 
 .media-board-wrapper.board-interacting .media-board-node {
-  will-change: left, top, transform;
+  will-change: transform;
 }
 
 .media-board-wrapper.board-interacting .media-board-group {
-  will-change: left, top, width, height, transform;
+  will-change: transform;
+}
+
+.media-board-wrapper.board-interacting .media-board-node,
+.media-board-wrapper.board-interacting .media-board-group,
+.media-board-wrapper.board-interacting .media-board-insert-gap {
+  transition: none;
 }
 
 .media-board-wrapper.board-interacting .media-board-node-thumb img {
@@ -9696,6 +9710,7 @@ input[type="checkbox"] {
 
 .media-board-group {
   position: absolute;
+  contain: layout paint style;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.035);
@@ -9788,6 +9803,7 @@ input[type="checkbox"] {
 
 .media-board-insert-gap {
   position: absolute;
+  contain: layout paint style;
   border: 1px dashed rgba(45, 140, 235, 0.68);
   border-radius: 6px;
   background: rgba(45, 140, 235, 0.12);
@@ -9800,6 +9816,7 @@ input[type="checkbox"] {
 .media-board-node {
   position: absolute;
   display: block;
+  contain: layout paint style;
   overflow: hidden;
   border: 1px solid var(--border-color);
   border-top: 3px solid var(--border-color);
@@ -9833,6 +9850,18 @@ input[type="checkbox"] {
 
 .media-board-node.no-file {
   opacity: 0.55;
+}
+
+.media-board-node.lod-compact {
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+}
+
+.media-board-node.lod-compact .media-board-node-timeline-drag {
+  display: none;
+}
+
+.media-board-node.lod-thumbnail-paused .media-board-node-placeholder {
+  opacity: 0.54;
 }
 
 .media-board-node-thumb {

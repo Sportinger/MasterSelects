@@ -31,6 +31,7 @@ const BACKPRESSURE_POLL_MS = 5;
 const MIN_FLUSH_TIMEOUT_MS = 30000;
 const MAX_FLUSH_TIMEOUT_MS = 180000;
 const FLUSH_TIMEOUT_PER_SAMPLE_MS = 120;
+const FRAME_COUNT_EPSILON = 1e-3;
 
 interface EncodeQueueItem {
   frameIndex: number;
@@ -71,6 +72,29 @@ function createMetrics(): ProxyGenerationMetrics {
 
 function formatMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms.toFixed(0)}ms`;
+}
+
+function ceilFrameCount(value: number): number {
+  const rounded = Math.round(value);
+  if (Math.abs(value - rounded) <= FRAME_COUNT_EPSILON) {
+    return rounded;
+  }
+  return Math.ceil(value);
+}
+
+export function getFirstPresentationCts(samples: Sample[]): number {
+  let firstPresentationCts = Number.POSITIVE_INFINITY;
+  for (const sample of samples) {
+    if (Number.isFinite(sample.cts) && sample.cts < firstPresentationCts) {
+      firstPresentationCts = sample.cts;
+    }
+  }
+  return Number.isFinite(firstPresentationCts) ? firstPresentationCts : 0;
+}
+
+export function getNormalizedSampleTimestampUs(sample: Sample, firstPresentationCts: number): number {
+  const normalizedCts = Math.max(0, sample.cts - firstPresentationCts);
+  return (normalizedCts / sample.timescale) * 1_000_000;
 }
 
 interface AVCConfigurationBox {
@@ -323,7 +347,7 @@ class ProxyGeneratorWebCodecs {
         this.proxyFps = Number.isFinite(sourceFps) && sourceFps > 0
           ? Math.min(PROXY_FPS, Math.round(sourceFps * 100) / 100)
           : PROXY_FPS;
-        this.totalFrames = Math.ceil(this.duration * this.proxyFps);
+        this.totalFrames = ceilFrameCount(this.duration * this.proxyFps);
 
         log.info(`Duration: ${this.duration.toFixed(3)}s, totalFrames: ${this.totalFrames}, samples: ${expectedSamples}, proxyFps: ${this.proxyFps.toFixed(2)}`);
 
@@ -708,9 +732,16 @@ class ProxyGeneratorWebCodecs {
     const decoder = this.decoder;
 
     const sortedSamples = [...this.samples].sort((a, b) => a.dts - b.dts);
+    const firstPresentationCts = getFirstPresentationCts(sortedSamples);
 
     const keyframeCount = sortedSamples.filter(s => s.is_sync).length;
     log.info(`Decoding ${sortedSamples.length} samples (${keyframeCount} keyframes)...`);
+    if (firstPresentationCts > 0) {
+      log.debug('Normalizing proxy sample timestamps', {
+        firstPresentationCts,
+        firstPresentationSeconds: firstPresentationCts / sortedSamples[0].timescale,
+      });
+    }
 
     const firstKeyframeIdx = sortedSamples.findIndex(s => s.is_sync);
     if (firstKeyframeIdx === -1) throw new Error('No keyframes found');
@@ -745,7 +776,7 @@ class ProxyGeneratorWebCodecs {
 
           const chunk = new EncodedVideoChunk({
             type: sample.is_sync ? 'key' : 'delta',
-            timestamp: (sample.cts / sample.timescale) * 1_000_000,
+            timestamp: getNormalizedSampleTimestampUs(sample, firstPresentationCts),
             duration: (sample.duration / sample.timescale) * 1_000_000,
             data: sample.data,
           });

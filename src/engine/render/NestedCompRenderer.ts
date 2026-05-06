@@ -24,6 +24,8 @@ import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
 import { collectScene3DLayers } from '../scene/SceneLayerCollector';
 import { resolveRenderableSharedSceneCamera } from '../scene/SceneCameraUtils';
 import { getNativeSceneRenderer } from '../native3d/NativeSceneRenderer';
+import type { MotionRenderer } from '../motion/MotionRenderer';
+import { getMotionRenderSize } from '../motion/MotionTypes';
 
 const log = Logger.create('NestedCompRenderer');
 const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
@@ -53,6 +55,7 @@ export class NestedCompRenderer {
   private textureManager: TextureManager;
   private maskTextureManager: MaskTextureManager;
   private scrubbingCache: ScrubbingCache | null;
+  private motionRenderer: MotionRenderer | null;
   private nestedCompTextures: Map<string, NestedCompTexture> = new Map();
 
   // Texture pool for ping-pong buffers, keyed by "widthxheight"
@@ -222,7 +225,8 @@ export class NestedCompRenderer {
     textureManager: TextureManager,
     maskTextureManager: MaskTextureManager,
     scrubbingCache: ScrubbingCache | null = null,
-    colorPipeline: ColorPipeline | null = null
+    colorPipeline: ColorPipeline | null = null,
+    motionRenderer: MotionRenderer | null = null
   ) {
     this.device = device;
     this.compositorPipeline = compositorPipeline;
@@ -231,6 +235,7 @@ export class NestedCompRenderer {
     this.maskTextureManager = maskTextureManager;
     this.scrubbingCache = scrubbingCache;
     this.colorPipeline = colorPipeline;
+    this.motionRenderer = motionRenderer;
   }
 
   // Acquire a ping-pong texture pair from pool or create new
@@ -700,6 +705,22 @@ export class NestedCompRenderer {
             sourceHeight: nc.height,
           });
         }
+        continue;
+      }
+
+      if (layer.source.type === 'motion') {
+        const rendered = commandEncoder && this.motionRenderer
+          ? this.motionRenderer.renderLayer(layer, commandEncoder)
+          : null;
+        const size = rendered ?? getMotionRenderSize(layer.source.motion);
+        result.push({
+          layer,
+          isVideo: false,
+          externalTexture: null,
+          textureView: rendered?.textureView ?? null,
+          sourceWidth: size.width,
+          sourceHeight: size.height,
+        });
         continue;
       }
 

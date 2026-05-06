@@ -2,7 +2,7 @@
 
 [<- Back to Index](./README.md)
 
-The keyframe system animates clip properties over time using per-clip keyframe maps, curve editors, and Bezier handles. It supports transform properties, speed, numeric effect parameters, mask properties, and vector-animation state/input properties.
+The keyframe system animates clip properties over time using per-clip keyframe maps, curve editors, and Bezier handles. It supports transform properties, speed, numeric effect parameters, mask properties, vector-animation state/input properties, and numeric motion-shape properties.
 
 ---
 
@@ -82,6 +82,29 @@ lottieInput.{stateMachine}.{input}
 
 `lottieState.*` keyframes are discrete named states. They render as blue diamonds and stepped curves because a state change should hold until the next state keyframe, not ease between values. Boolean and numeric `lottieInput.*` properties use the normal stopwatch/keyframe workflow.
 
+### Motion Shape Properties
+
+Motion shape clips use flat property paths from the property registry:
+
+```text
+shape.size.w
+shape.size.h
+shape.cornerRadius
+appearance.{appearanceId}.opacity
+appearance.{appearanceId}.color.r
+appearance.{appearanceId}.color.g
+appearance.{appearanceId}.color.b
+appearance.{appearanceId}.color.a
+appearance.{appearanceId}.stroke.width
+replicator.count.x
+replicator.count.y
+replicator.spacing.x
+replicator.spacing.y
+replicator.offset.opacity
+```
+
+Numeric motion properties are interpolated before `MotionRenderer` draws the shape texture, so preview, nested compositions, and export evaluate the same frame state. Enum-like fields such as primitive and stroke alignment are currently static controls.
+
 ### Visibility Rules
 
 - 2D clips hide `rotation.x`, `rotation.y`, `position.z`, and `scale.z` in the timeline UI.
@@ -110,6 +133,7 @@ The diamond button writes a keyframe at the playhead. If a keyframe already exis
 - `scale.all` does not overwrite `scale.x`, `scale.y`, or `scale.z`; render, export, and scene-gizmo paths multiply it into the final visible scale only at evaluation time.
 - Camera stopwatch buttons are per camera value. FOV and mm both write `camera.fov`; Near, Far, Resolution X, and Resolution Y write their own camera properties.
 - Mask panel stopwatch buttons are available for Feather, Feather Quality, Position X/Y, and the whole Mask Path.
+- Motion shape stopwatch buttons are available for size, corner radius, fill opacity, and stroke width in the Motion tab.
 
 ### Recording Mode
 

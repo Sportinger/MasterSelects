@@ -522,17 +522,26 @@ export async function handleSimulateScrub(
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const wasPlaying = timelineStore.isPlaying;
+  const resetDiagnostics = args.resetDiagnostics !== false;
   if (wasPlaying) {
     timelineStore.pause();
   }
 
   const plan = createScrubPlan(args, timelineStore.playheadPosition, timelineStore.duration);
+  if (resetDiagnostics) {
+    wcPipelineMonitor.reset();
+    vfPipelineMonitor.reset();
+    playbackHealthMonitor.reset();
+  }
+  const startedAt = performance.now();
   const scrubResult = await runScrubMotion(
     timelineStore,
     plan.totalDurationMs,
     (elapsedMs) => sampleScrubPlan(plan, elapsedMs),
     false
   );
+  const endedAt = performance.now();
+  const runDiagnostics = collectPlaybackRunDiagnostics(startedAt, endedAt);
 
   return {
     success: true,
@@ -561,6 +570,8 @@ export async function handleSimulateScrub(
       pixelDistance: scrubResult.pixelDistance,
       released: true,
       seed: plan.seed,
+      resetDiagnostics,
+      runDiagnostics,
     },
   };
 }

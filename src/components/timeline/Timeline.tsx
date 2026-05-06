@@ -200,7 +200,7 @@ export function Timeline() {
     addClip, addCompClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, moveClip, trimClip,
     removeClip, selectClip, unlinkGroup, splitClip, splitClipAtPlayhead,
     toggleClipReverse, updateClipTransform, setClipParent, generateWaveformForClip,
-    addClipEffect,
+    addClipEffect, convertSolidToMotionShape,
   } = store;
 
   // Transform getters
@@ -1582,6 +1582,7 @@ export function Timeline() {
         toggleClipReverse={toggleClipReverse}
         unlinkGroup={unlinkGroup}
         generateWaveformForClip={generateWaveformForClip}
+        convertSolidToMotionShape={convertSolidToMotionShape}
         setMulticamDialogOpen={setMulticamDialogOpen}
         showInExplorer={showInExplorer}
       />

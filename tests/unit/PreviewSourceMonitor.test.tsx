@@ -57,6 +57,7 @@ const engineState = {
   previewCameraOverride: null,
   activeGaussianSplatLoadProgress: null,
   setPreviewCameraOverride: vi.fn(),
+  setSceneGizmoVisible: vi.fn(),
   setSceneGizmoClipIdOverride: vi.fn(),
   setSceneNavFpsMoveSpeed: vi.fn(),
 };

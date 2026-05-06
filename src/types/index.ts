@@ -7,8 +7,10 @@ import type {
   VectorAnimationStateProperty,
 } from './vectorAnimation';
 import type { ColorCorrectionState, RuntimeColorGrade } from './colorCorrection';
+import type { MotionLayerDefinition, MotionProperty } from './motionDesign';
 
 export * from './colorCorrection';
+export * from './motionDesign';
 
 export type TimelineSourceType =
   | 'video'
@@ -22,6 +24,9 @@ export type TimelineSourceType =
   | 'gaussian-splat'
   | 'splat-effector'
   | 'math-scene'
+  | 'motion-shape'
+  | 'motion-null'
+  | 'motion-adjustment'
   | VectorAnimationProvider;
 
 export type ModelSequencePlaybackMode = 'clamp' | 'loop';
@@ -145,7 +150,7 @@ export type BlendMode =
   | 'alpha-add';
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat';
+  type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion';
   modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
   modelFileName?: string;
   modelSequence?: ModelSequenceData;
@@ -192,6 +197,8 @@ export interface LayerSource {
   textCanvas?: HTMLCanvasElement;
   textProperties?: TextClipProperties;
   text3DProperties?: Text3DProperties;
+  // Motion design support
+  motion?: MotionLayerDefinition;
 }
 
 // Data for pre-rendering nested compositions
@@ -652,6 +659,7 @@ export interface TimelineClip {
     runtimeSessionKey?: string;
   } | null;
   mathScene?: MathSceneDefinition;
+  motion?: MotionLayerDefinition;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
   mediaFileId?: string;   // Reference to MediaFile for audio/proxy lookup (top-level for YouTube downloads)
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
@@ -786,6 +794,7 @@ export interface SerializableClip {
   solidColor?: string;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   mathScene?: MathSceneDefinition;
+  motion?: MotionLayerDefinition;
   // Transition support
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;
@@ -865,7 +874,7 @@ export type MaskNumericProperty = `mask.${string}.${MaskNumericPropertyName}`;
 export type MaskProperty = MaskPathProperty | MaskNumericProperty;
 
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | ColorProperty | MaskProperty | VectorAnimationInputProperty | VectorAnimationStateProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | ColorProperty | MaskProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | MotionProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);

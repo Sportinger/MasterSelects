@@ -2,14 +2,14 @@
 
 [<- Back to Index](./README.md)
 
-The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, text, solid, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
+The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
 
 ---
 
 ## Track Types
 
 ### Video Tracks
-- Hold video, image, Lottie, text, solid, mesh, composition, camera, and splat-effector clips.
+- Hold video, image, Lottie, text, solid, motion shape, mesh, composition, camera, and splat-effector clips.
 - Higher tracks render on top of lower tracks.
 - Expanded tracks can show keyframe property rows and curve editors.
 - Default layout starts with `Video 2` above `Video 1`.
@@ -63,6 +63,15 @@ getTrackChildren()  // Query child tracks
 ### Solid
 - Flat color clips used for mattes and backgrounds.
 
+### Motion Shape
+- Rectangle and ellipse shape clips are timeline clips with JSON motion definitions.
+- Video track-header context menus can add Motion Rectangle or Motion Ellipse clips at the current playhead position.
+- Solid clip context menus expose Convert Solid to Motion Shape.
+- The Motion tab exposes primitive, size, radius, fill, and stroke controls.
+- Motion shape replicator controls can enable a grid, edit X/Y counts, edit X/Y spacing, and keyframe the per-instance fade.
+- Solid clips can be converted in the store to motion rectangle clips while preserving timeline identity, timing, transform, effects, and keyframes.
+- Motion shape rendering uses WebGPU SDF textures, then the normal compositor stack.
+
 ### Mesh
 - Primitive 3D meshes such as cube, sphere, plane, cylinder, torus, and cone.
 - Rendered as 3D clips with full transform and keyframe support.
@@ -97,6 +106,7 @@ getTrackChildren()  // Query child tracks
 ### Copy and Paste
 - Copying clips includes linked audio automatically when the video clip is selected.
 - Copy/paste preserves Lottie clip type and vector animation settings.
+- Copy/paste preserves motion shape definitions.
 - Copying keyframes stores them relative to the earliest copied keyframe.
 - Pasting keyframes targets the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the clipboard data.
 
@@ -132,6 +142,7 @@ getTrackChildren()  // Query child tracks
 - Camera clips and native-render gaussian splats keep the camera-style property model visible.
 - Numeric effect parameters appear as `effect.{effectId}.{paramName}` lanes.
 - Lottie state changes appear as `lottieState.{stateMachine}` lanes; state-machine inputs appear as `lottieInput.{stateMachine}.{input}` lanes.
+- Motion shape numeric lanes use registry paths such as `shape.size.w` and `appearance.{id}.stroke.width`.
 - Audio EQ lanes sort `volume` and the band parameters first.
 
 ### Curve Editor
@@ -180,6 +191,7 @@ Soloing multiple tracks is supported. Non-solo tracks dim visually when any solo
 
 ### Track Header Context Menu
 
+- Video tracks can create Motion Rectangle, Motion Ellipse, or Math Scene clips at the playhead.
 - `Duplicate Track` currently creates a new empty track of the same type.
 - `Delete` is blocked for the last remaining track of that type.
 - Deleting a populated track shows the affected clip count in the menu label/tooltip.
@@ -228,6 +240,7 @@ The timeline store in `src/stores/timeline/index.ts` combines 20 slices plus 2 u
 - `clipSlice`
 - `textClipSlice`
 - `solidClipSlice`
+- `motionClipSlice`
 - `meshClipSlice`
 - `cameraClipSlice`
 - `splatEffectorClipSlice`

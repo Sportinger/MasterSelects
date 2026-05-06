@@ -55,6 +55,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Professional Color Correction Plan](./Color-Correction-Professional-Plan.md) | Tactical roadmap for wheels, curves, LUTs, secondaries, float precision, scopes, compare, and presets |
 | [Masks](./Masks.md) | Overlay mask editing, whole-path keyframes, feathering, and stored modes |
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
+| [Motion Design](./Motion-Design.md) | Motion layer schema, property registry, rectangle/ellipse shape editing, GPU renderer, and persistence/export plumbing |
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Vector Animation](./Vector-Animation.md) | Lottie import, runtime playback, bounce modes, state-machine keyframes, and export behavior |
 | [Audio](./Audio.md) | Playback sync, EQ, waveform extraction, audio clip behavior, and export |
