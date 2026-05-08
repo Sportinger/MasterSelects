@@ -95,12 +95,19 @@ export interface MarqueeState {
 }
 
 // Props for TimelineRuler component
+export interface TimelineRulerCacheRange {
+  start: number;
+  end: number;
+  type: 'proxy' | 'cache';
+}
+
 export interface TimelineRulerProps {
   duration: number;
   zoom: number;
   scrollX: number;
   onRulerMouseDown: (e: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;
+  cacheRanges?: TimelineRulerCacheRange[];
 }
 
 // Props for TimelineControls component

@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-
-const SETTINGS_STORAGE_PREFIX = 'editable-draggable-number-settings:';
-const LEGACY_BOUNDS_STORAGE_PREFIX = 'editable-draggable-number-bounds:';
-
-interface PersistedSettings {
-  min?: number;
-  max?: number;
-  defaultValue?: number;
-}
+import {
+  clearEditableDraggableNumberSettings,
+  dispatchEditableDraggableNumberSettingsUpdated,
+  getEditableDraggableNumberSettings,
+  saveEditableDraggableNumberSettings,
+  type EditableDraggableNumberSettings,
+  useEditableDraggableNumberSettingsRevision,
+} from './EditableDraggableNumberSettings';
 
 interface PopoverPlacement {
   top: number;
@@ -82,32 +81,6 @@ function parseOptionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function loadPersistedSettings(persistenceKey?: string): PersistedSettings | null {
-  if (!persistenceKey) return null;
-  try {
-    const raw = localStorage.getItem(`${SETTINGS_STORAGE_PREFIX}${persistenceKey}`);
-    const legacyRaw = localStorage.getItem(`${LEGACY_BOUNDS_STORAGE_PREFIX}${persistenceKey}`);
-    const source = raw ?? legacyRaw;
-    if (!source) return null;
-    const parsed = JSON.parse(source) as PersistedSettings;
-    return {
-      min: Number.isFinite(parsed.min) ? parsed.min : undefined,
-      max: Number.isFinite(parsed.max) ? parsed.max : undefined,
-      defaultValue: Number.isFinite(parsed.defaultValue) ? parsed.defaultValue : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function savePersistedSettings(persistenceKey: string, settings: PersistedSettings): void {
-  localStorage.setItem(`${SETTINGS_STORAGE_PREFIX}${persistenceKey}`, JSON.stringify(settings));
-}
-
-function clearPersistedSettings(persistenceKey: string): void {
-  localStorage.removeItem(`${SETTINGS_STORAGE_PREFIX}${persistenceKey}`);
-}
-
 export function EditableDraggableNumber({
   value,
   onChange,
@@ -136,7 +109,8 @@ export function EditableDraggableNumber({
   const [showBoundsPopover, setShowBoundsPopover] = useState(false);
   const [draftMin, setDraftMin] = useState('');
   const [draftMax, setDraftMax] = useState('');
-  const [persistedSettings, setPersistedSettings] = useState<PersistedSettings | null>(() => loadPersistedSettings(persistenceKey));
+  const [transientSettings, setTransientSettings] = useState<EditableDraggableNumberSettings | null>(null);
+  useEditableDraggableNumberSettingsRevision(persistenceKey);
   const [popoverPlacement, setPopoverPlacement] = useState<PopoverPlacement>({
     top: 0,
     left: 0,
@@ -144,9 +118,8 @@ export function EditableDraggableNumber({
     visibility: 'hidden',
   });
 
-  useEffect(() => {
-    setPersistedSettings(loadPersistedSettings(persistenceKey));
-  }, [persistenceKey]);
+  const storedSettings = getEditableDraggableNumberSettings(persistenceKey);
+  const persistedSettings = persistenceKey ? storedSettings : transientSettings;
 
   const effectiveMin = persistedSettings?.min ?? min;
   const effectiveMax = persistedSettings?.max ?? max;
@@ -370,15 +343,17 @@ export function EditableDraggableNumber({
       ? clampValue(nextDefaultValueInput, nextMin, nextMax)
       : undefined;
 
-    const nextSettings: PersistedSettings = {
+    const nextSettings: EditableDraggableNumberSettings = {
       min: nextMin,
       max: nextMax,
       defaultValue: nextDefaultValue,
     };
 
-    setPersistedSettings(nextSettings);
     if (persistenceKey) {
-      savePersistedSettings(persistenceKey, nextSettings);
+      saveEditableDraggableNumberSettings(persistenceKey, nextSettings);
+      dispatchEditableDraggableNumberSettingsUpdated(persistenceKey);
+    } else {
+      setTransientSettings(nextSettings);
     }
 
     const clampedCurrent = clampValue(value, nextSettings.min, nextSettings.max);
@@ -391,7 +366,6 @@ export function EditableDraggableNumber({
   }, [decimals, draftDefaultValue, draftMax, draftMin, onChange, persistenceKey, value]);
 
   const resetBounds = useCallback(() => {
-    setPersistedSettings(null);
     setDraftDefaultValue(
       defaultValue !== undefined
         ? formatEditableValue(defaultValue, decimals)
@@ -400,7 +374,10 @@ export function EditableDraggableNumber({
     setDraftMin(min !== undefined ? String(min) : '');
     setDraftMax(max !== undefined ? String(max) : '');
     if (persistenceKey) {
-      clearPersistedSettings(persistenceKey);
+      clearEditableDraggableNumberSettings(persistenceKey);
+      dispatchEditableDraggableNumberSettingsUpdated(persistenceKey);
+    } else {
+      setTransientSettings(null);
     }
   }, [decimals, defaultValue, max, min, persistenceKey]);
 

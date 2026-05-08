@@ -5,7 +5,14 @@ import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { AnimatableProperty, EffectType } from '../../../types';
 import { createEffectProperty, isAudioEffect } from '../../../types';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
-import { EffectKeyframeToggle, DraggableNumber } from './shared';
+import {
+  EffectKeyframeToggle,
+  DraggableNumber,
+} from './shared';
+import {
+  getEffectiveEditableDraggableNumberSettings,
+  useEditableDraggableNumberSettingsRevision,
+} from '../../common/EditableDraggableNumberSettings';
 import { VolumeTab } from './VolumeTab';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 
@@ -40,6 +47,15 @@ function renderParamControl(
       const max = noMaxLimit ? (paramDef.max ?? 1) * 10 : (paramDef.max ?? 1);
       const range = max - min;
       const decimals = paramDef.step && paramDef.step >= 1 ? 0 : paramDef.step && paramDef.step >= 0.1 ? 1 : 2;
+      const persistenceKey = `effect.${clipId ?? 'global'}.${effect.id}.${paramName}`;
+      const sliderSettings = getEffectiveEditableDraggableNumberSettings({
+        persistenceKey,
+        min,
+        max: noMaxLimit ? undefined : max,
+        defaultValue: typeof paramDef.default === 'number' ? paramDef.default : undefined,
+      });
+      const sliderMin = sliderSettings.min ?? min;
+      const sliderMax = sliderSettings.max ?? max;
       const midiTarget = clipId ? {
         clipId,
         property: createEffectProperty(effect.id, paramName),
@@ -56,10 +72,10 @@ function renderParamControl(
           </MIDIParameterLabel>
           <input
             type="range"
-            min={min}
-            max={max}
+            min={sliderMin}
+            max={sliderMax}
             step={paramDef.step ?? 0.01}
-            value={value as number}
+            value={Math.max(sliderMin, Math.min(sliderMax, value as number))}
             onChange={(e) => onChange({ ...effect.params, [paramName]: parseFloat(e.target.value) })}
           />
           <DraggableNumber
@@ -69,6 +85,8 @@ function renderParamControl(
             sensitivity={Math.max(0.5, range / 100)}
             decimals={decimals}
             min={min}
+            max={noMaxLimit ? undefined : max}
+            persistenceKey={persistenceKey}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
           />
@@ -121,6 +139,8 @@ interface EffectParamsProps {
 
 function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd }: EffectParamsProps) {
   const [qualityExpanded, setQualityExpanded] = useState(false);
+  const rangeSettingsRevision = useEditableDraggableNumberSettingsRevision();
+  void rangeSettingsRevision;
 
   const effectDef = EFFECT_REGISTRY.get(effect.type);
   if (!effectDef) {

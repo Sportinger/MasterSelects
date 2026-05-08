@@ -9,12 +9,20 @@ function TimelineRulerComponent({
   scrollX,
   onRulerMouseDown,
   formatTime,
+  cacheRanges = [],
 }: TimelineRulerProps) {
   // Time to pixel conversion
   const timeToPixel = (time: number) => time * zoom;
 
   const width = timeToPixel(duration);
   const markers: React.ReactElement[] = [];
+  const visibleCacheRanges = cacheRanges
+    .map((range) => {
+      const start = Math.max(0, Math.min(duration, range.start));
+      const end = Math.max(start, Math.min(duration, range.end));
+      return { ...range, start, end };
+    })
+    .filter((range) => range.end > range.start);
 
   // Calculate marker interval based on zoom level
   // Lower zoom = more zoomed out = need larger intervals
@@ -68,6 +76,17 @@ function TimelineRulerComponent({
       onMouseDown={onRulerMouseDown}
     >
       {markers}
+      {visibleCacheRanges.map((range, index) => (
+        <div
+          key={`${range.type}-${index}-${range.start.toFixed(3)}`}
+          className={`timeline-ruler-cache-indicator ${range.type}`}
+          style={{
+            left: timeToPixel(range.start),
+            width: Math.max(2, timeToPixel(range.end - range.start)),
+          }}
+          title={`${range.type === 'proxy' ? 'Proxy' : 'Cache'}: ${formatTime(range.start)} - ${formatTime(range.end)}`}
+        />
+      ))}
     </div>
   );
 }

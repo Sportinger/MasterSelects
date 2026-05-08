@@ -87,20 +87,19 @@ Interpretation:
 | `staging` | Entwicklung - hierhin committen |
 | `master` | Production - nur via PR |
 
-### Commit-Regeln
+### Test- und Commit-Regeln
 ```bash
 # VOR jedem Commit: ALLE Checks durchführen!
 npm run build          # 1. Build muss fehlerfrei sein
-npx eslint .           # 2. Lint: 0 Errors (Warnings OK)
+npm run lint           # 2. Lint: 0 Errors (Warnings OK)
 npm run test           # 3. ALLE Tests müssen grün sein
-
-# Nach JEDER Änderung sofort committen (NICHT pushen!):
-git add . && git commit -m "description"
 ```
+
+Während laufender Arbeit gezielt prüfen: passende Unit-/Smoke-Tests, Build oder Lint nach Risiko und Änderungsumfang auswählen. Die volle Suite ist kein Pflichtschritt nach jedem kleinen Zwischenstand.
 
 **IMMER vor Commit:**
 - `npm run build` ausführen — muss fehlerfrei sein
-- `npx eslint .` ausführen — 0 Errors (Warnings sind OK)
+- `npm run lint` ausführen — 0 Errors (Warnings sind OK)
 - `npm run test` ausführen — ALLE Tests müssen grün sein
 - Erst dann committen
 
@@ -108,8 +107,7 @@ git add . && git commit -m "description"
 - Direkt auf `master` committen
 - Selbstständig zu `master` mergen
 - Selbstständig pushen (nur wenn User es explizit verlangt)
-- Mehrere Änderungen sammeln
-- Committen ohne vorherigen Build-Check
+- Committen, wenn Build, Lint oder Tests fehlschlagen
 
 ### Merge zu Master (nur wenn User es verlangt!)
 ```bash

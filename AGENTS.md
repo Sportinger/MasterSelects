@@ -111,9 +111,11 @@ Interpretation:
 | `staging` | Entwicklung, Standardziel fuer laufende Arbeit |
 | `master` | Production, nur via PR |
 
-### Commit- und Push-Regeln
+### Test-, Commit- und Push-Regeln
 
-Vor jedem Commit alle Checks ausfuehren:
+Waehrend laufender Arbeit gezielt pruefen: passende Unit-/Smoke-Tests, Build oder Lint nach Risiko und Aenderungsumfang auswaehlen. Die volle Suite ist kein Pflichtschritt nach jedem kleinen Zwischenstand.
+
+Vor jedem Commit bleiben alle Checks Pflicht:
 
 ```bash
 npm run build

@@ -2,7 +2,13 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { ARKIT_BLENDSHAPE_NAMES, BLENDSHAPE_GROUPS, EMOTION_PRESETS } from '../../../engine/gaussian/types';
-import { DraggableNumber } from './shared';
+import {
+  DraggableNumber,
+} from './shared';
+import {
+  getEffectiveEditableDraggableNumberSettings,
+  useEditableDraggableNumberSettingsRevision,
+} from '../../common/EditableDraggableNumberSettings';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 
@@ -25,6 +31,8 @@ export function BlendshapesTab({ clipId }: BlendshapesTabProps) {
   const { updateClip } = useTimelineStore.getState();
   const source = useTimelineStore(s => s.clips.find(c => c.id === clipId)?.source);
   const blendshapes = useMemo(() => source?.gaussianBlendshapes ?? {}, [source]);
+  const rangeSettingsRevision = useEditableDraggableNumberSettingsRevision();
+  void rangeSettingsRevision;
 
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -116,6 +124,15 @@ export function BlendshapesTab({ clipId }: BlendshapesTabProps) {
               <div className="blendshape-sliders">
                 {groupShapes.map(name => {
                   const value = blendshapes[name] ?? 0;
+                  const persistenceKey = `blendshape.${name}`;
+                  const sliderSettings = getEffectiveEditableDraggableNumberSettings({
+                    persistenceKey,
+                    min: 0,
+                    max: 1,
+                    defaultValue: 0,
+                  });
+                  const sliderMin = sliderSettings.min ?? 0;
+                  const sliderMax = sliderSettings.max ?? 1;
                   return (
                     <div key={name} className="control-row blendshape-row">
                       <MIDIParameterLabel
@@ -135,10 +152,10 @@ export function BlendshapesTab({ clipId }: BlendshapesTabProps) {
                       </MIDIParameterLabel>
                       <input
                         type="range"
-                        min={0}
-                        max={1}
+                        min={sliderMin}
+                        max={sliderMax}
                         step={0.01}
-                        value={value}
+                        value={Math.max(sliderMin, Math.min(sliderMax, value))}
                         onChange={(e) => handleBlendshapeChange(name, parseFloat(e.target.value))}
                         className="blendshape-slider"
                       />
@@ -149,6 +166,7 @@ export function BlendshapesTab({ clipId }: BlendshapesTabProps) {
                         decimals={2}
                         min={0}
                         max={1}
+                        persistenceKey={persistenceKey}
                         sensitivity={100}
                         onDragStart={handleBatchStart}
                         onDragEnd={handleBatchEnd}

@@ -31,8 +31,6 @@ interface TimelineOverlaysProps {
 
   // Cache
   getCachedRanges: () => { start: number; end: number }[];
-  getProxyCachedRanges: () => { start: number; end: number }[];
-  getScrubCachedRanges: () => { start: number; end: number }[];
 }
 
 export function TimelineOverlays({
@@ -52,8 +50,6 @@ export function TimelineOverlays({
   exportProgress,
   exportRange,
   getCachedRanges,
-  getProxyCachedRanges,
-  getScrubCachedRanges,
 }: TimelineOverlaysProps) {
   return (
     <>
@@ -142,32 +138,6 @@ export function TimelineOverlays({
             width: Math.max(2, timeToPixel(range.end - range.start)),
           }}
           title={`Cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
-        />
-      ))}
-
-      {/* Proxy frame cache indicator (yellow) */}
-      {getProxyCachedRanges().map((range, i) => (
-        <div
-          key={`proxy-${i}`}
-          className="proxy-cache-indicator"
-          style={{
-            left: timeToPixel(range.start),
-            width: Math.max(2, timeToPixel(range.end - range.start)),
-          }}
-          title={`Proxy cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
-        />
-      ))}
-
-      {/* Non-proxy scrub cache indicator (yellow) */}
-      {getScrubCachedRanges().map((range, i) => (
-        <div
-          key={`scrub-${i}`}
-          className="scrub-cache-indicator"
-          style={{
-            left: timeToPixel(range.start),
-            width: Math.max(2, timeToPixel(range.end - range.start)),
-          }}
-          title={`Scrub cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
         />
       ))}
 

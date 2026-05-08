@@ -53,7 +53,7 @@ import { useTimelineHelpers } from './hooks/useTimelineHelpers';
 import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
-import type { ClipKeyframeTimeGroup, ContextMenuState } from './types';
+import type { ClipKeyframeTimeGroup, ContextMenuState, TimelineRulerCacheRange } from './types';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 
@@ -266,7 +266,7 @@ export function Timeline() {
     };
   }, []);
 
-  const getScrubCachedRangesForOverlay = useCallback(() => {
+  const getScrubCachedRangesForRuler = useCallback(() => {
     void scrubCacheRevision;
     return getScrubCachedRanges();
   }, [getScrubCachedRanges, scrubCacheRevision]);
@@ -1041,6 +1041,9 @@ export function Timeline() {
   }
 
   // anyVideoSolo and anyAudioSolo are already memoized at the top of the component
+  const timelineRulerCacheRanges: TimelineRulerCacheRange[] = proxyEnabled
+    ? getProxyCachedRanges().map((range) => ({ ...range, type: 'proxy' as const }))
+    : getScrubCachedRangesForRuler().map((range) => ({ ...range, type: 'cache' as const }));
 
   return (
     <div
@@ -1149,6 +1152,7 @@ export function Timeline() {
                 scrollX={scrollX}
                 onRulerMouseDown={handleRulerMouseDown}
                 formatTime={formatTime}
+                cacheRanges={timelineRulerCacheRanges}
               />
             </div>
           </div>
@@ -1473,8 +1477,6 @@ export function Timeline() {
             exportProgress={exportProgress}
             exportRange={exportRange}
             getCachedRanges={getCachedRanges}
-            getProxyCachedRanges={getProxyCachedRanges}
-            getScrubCachedRanges={getScrubCachedRangesForOverlay}
           />
 
               {/* Marquee selection rectangle */}

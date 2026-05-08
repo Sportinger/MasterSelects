@@ -6443,6 +6443,24 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 
+.timeline-ruler-cache-indicator {
+  position: absolute;
+  bottom: 1px;
+  height: 3px;
+  background: var(--amber-300);
+  opacity: 0.82;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.timeline-ruler-cache-indicator.cache {
+  box-shadow: 0 0 5px rgba(251, 191, 36, 0.32);
+}
+
+.timeline-ruler-cache-indicator.proxy {
+  box-shadow: 0 0 5px rgba(251, 191, 36, 0.32);
+}
+
 /* Track lanes */
 .track-lane {
   position: relative;
@@ -8903,28 +8921,6 @@ input[type="checkbox"] {
   opacity: 0.6;
   pointer-events: none;
   z-index: 89;
-}
-
-/* Proxy frame cache indicator (yellow line for proxy frames loaded in memory) */
-.proxy-cache-indicator {
-  position: absolute;
-  top: 3px;
-  height: 3px;
-  background: var(--amber-300);
-  opacity: 0.7;
-  pointer-events: none;
-  z-index: 88;
-}
-
-/* Non-proxy scrub cache indicator (yellow line for background-filled source frames) */
-.scrub-cache-indicator {
-  position: absolute;
-  top: 6px;
-  height: 3px;
-  background: var(--amber-300);
-  opacity: 0.5;
-  pointer-events: none;
-  z-index: 87;
 }
 
 /* Timeline export progress overlay */

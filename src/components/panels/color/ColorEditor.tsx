@@ -18,6 +18,10 @@ import {
 import type { AnimatableProperty } from '../../../types';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import { DraggableNumber, KeyframeToggle } from '../properties/shared';
+import {
+  getEffectiveEditableDraggableNumberSettings,
+  useEditableDraggableNumberSettingsRevision,
+} from '../../common/EditableDraggableNumberSettings';
 import { MIDIParameterLabel } from '../properties/MIDIParameterLabel';
 import './colorTab.css';
 
@@ -182,6 +186,7 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDragState | null>(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const rangeSettingsRevision = useEditableDraggableNumberSettingsRevision();
   const clip = useTimelineStore(state => state.clips.find(c => c.id === clipId));
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
   const {
@@ -205,6 +210,7 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     setPropertyValue,
   } = useTimelineStore.getState();
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  void rangeSettingsRevision;
 
   useEffect(() => {
     ensureColorCorrection(clipId);
@@ -495,6 +501,15 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
               min: def.min,
               max: def.max,
             };
+            const persistenceKey = `color.${clipId}.${node.id}.${def.key}`;
+            const sliderSettings = getEffectiveEditableDraggableNumberSettings({
+              persistenceKey,
+              min: def.min,
+              max: def.max,
+              defaultValue: def.defaultValue,
+            });
+            const sliderMin = sliderSettings.min ?? def.min;
+            const sliderMax = sliderSettings.max ?? def.max;
 
             return (
               <div className="control-row color-control-row" key={def.key}>
@@ -502,10 +517,10 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
                 <MIDIParameterLabel as="label" target={midiTarget}>{def.label}</MIDIParameterLabel>
                 <input
                   type="range"
-                  min={def.min}
-                  max={def.max}
+                  min={sliderMin}
+                  max={sliderMax}
                   step={def.step}
-                  value={value}
+                  value={clampNumber(value, sliderMin, sliderMax)}
                   onChange={(rangeEvent) => setParam(node.id, def.key, Number(rangeEvent.target.value))}
                 />
                 <DraggableNumber
@@ -516,7 +531,7 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
                   decimals={def.decimals}
                   min={def.min}
                   max={def.max}
-                  persistenceKey={`color.${clipId}.${node.id}.${def.key}`}
+                  persistenceKey={persistenceKey}
                   onDragStart={handleBatchStart}
                   onDragEnd={handleBatchEnd}
                 />
@@ -543,6 +558,15 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
           };
           const yProperty = createColorProperty(activeVersion.id, node.id, config.yKey) as AnimatableProperty;
           const yValue = getAnimatedParamValue(node, config.yKey, yDef.defaultValue);
+          const yPersistenceKey = `color.${clipId}.${node.id}.${config.yKey}`;
+          const ySliderSettings = getEffectiveEditableDraggableNumberSettings({
+            persistenceKey: yPersistenceKey,
+            min: yDef.min,
+            max: yDef.max,
+            defaultValue: yDef.defaultValue,
+          });
+          const ySliderMin = ySliderSettings.min ?? yDef.min;
+          const ySliderMax = ySliderSettings.max ?? yDef.max;
           const puck = getWheelPuckPosition(config, values);
           const padStyle = {
             '--puck-x': `${50 + puck.x * 43}%`,
@@ -592,10 +616,10 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
                 </MIDIParameterLabel>
                 <input
                   type="range"
-                  min={yDef.min}
-                  max={yDef.max}
+                  min={ySliderMin}
+                  max={ySliderMax}
                   step={yDef.step}
-                  value={yValue}
+                  value={clampNumber(yValue, ySliderMin, ySliderMax)}
                   onChange={(rangeEvent) => setParam(node.id, config.yKey, Number(rangeEvent.target.value))}
                 />
                 <DraggableNumber
@@ -606,7 +630,7 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
                   decimals={yDef.decimals}
                   min={yDef.min}
                   max={yDef.max}
-                  persistenceKey={`color.${clipId}.${node.id}.${config.yKey}`}
+                  persistenceKey={yPersistenceKey}
                   onDragStart={handleBatchStart}
                   onDragEnd={handleBatchEnd}
                 />
