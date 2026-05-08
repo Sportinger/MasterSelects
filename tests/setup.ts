@@ -26,6 +26,7 @@ vi.mock('../src/engine/WebGPUEngine', () => ({
     cleanupVideo: vi.fn(),
     clearVideoCache: vi.fn(),
     clearCaches: vi.fn(),
+    getScrubbingCachedRanges: vi.fn().mockReturnValue([]),
     getTextureManager: vi.fn().mockReturnValue({
       updateCanvasTexture: vi.fn().mockReturnValue(true),
     }),

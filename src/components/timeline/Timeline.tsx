@@ -226,7 +226,7 @@ export function Timeline() {
   // Preview actions
   const {
     toggleLoopPlayback, toggleRamPreviewEnabled, startRamPreview,
-    cancelRamPreview, clearRamPreview, getCachedRanges, getProxyCachedRanges,
+    cancelRamPreview, clearRamPreview, getCachedRanges, getProxyCachedRanges, getScrubCachedRanges,
   } = store;
 
   // Tool actions
@@ -253,6 +253,23 @@ export function Timeline() {
   const trackLanesRef = useRef<HTMLDivElement>(null);
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [scrubCacheRevision, setScrubCacheRevision] = useState(0);
+
+  useEffect(() => {
+    const handleScrubCacheUpdated = () => {
+      setScrubCacheRevision((revision) => (revision + 1) % 1000000);
+    };
+
+    window.addEventListener('masterselects:scrub-cache-updated', handleScrubCacheUpdated);
+    return () => {
+      window.removeEventListener('masterselects:scrub-cache-updated', handleScrubCacheUpdated);
+    };
+  }, []);
+
+  const getScrubCachedRangesForOverlay = useCallback(() => {
+    void scrubCacheRevision;
+    return getScrubCachedRanges();
+  }, [getScrubCachedRanges, scrubCacheRevision]);
 
   // Composition switch animation phase for tracks/ruler
   const clipAnimationPhase = useTimelineStore(s => s.clipAnimationPhase);
@@ -1457,6 +1474,7 @@ export function Timeline() {
             exportRange={exportRange}
             getCachedRanges={getCachedRanges}
             getProxyCachedRanges={getProxyCachedRanges}
+            getScrubCachedRanges={getScrubCachedRangesForOverlay}
           />
 
               {/* Marquee selection rectangle */}

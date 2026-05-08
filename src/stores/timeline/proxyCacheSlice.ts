@@ -120,6 +120,89 @@ export const createProxyCacheSlice: SliceCreator<ProxyCacheActions> = (set, get)
     return merged;
   },
 
+  // Get non-proxy HTMLVideo scrub-cache ranges (for the yellow timeline indicator).
+  // Returns ranges in timeline time coordinates.
+  getScrubCachedRanges: () => {
+    const { clips } = get();
+    const allRanges: Array<{ start: number; end: number }> = [];
+
+    const addClipRanges = (
+      clip: typeof clips[number],
+      addTimelineRange: (start: number, end: number) => void
+    ) => {
+      const videoSrc = clip.source?.videoElement?.src;
+      if (!videoSrc) return;
+
+      const mediaCachedRanges = engine.getScrubbingCachedRanges(videoSrc);
+      if (mediaCachedRanges.length === 0) return;
+
+      const playbackRate = Math.max(Math.abs(clip.speed || 1), 0.001);
+      const mediaStart = Math.min(clip.inPoint, clip.outPoint);
+      const mediaEnd = Math.max(clip.inPoint, clip.outPoint);
+      const reverse = clip.reversed || (clip.speed ?? 1) < 0;
+
+      for (const range of mediaCachedRanges) {
+        if (range.end < mediaStart || range.start > mediaEnd) continue;
+
+        const visibleMediaStart = Math.max(range.start, mediaStart);
+        const visibleMediaEnd = Math.min(range.end, mediaEnd);
+        if (visibleMediaEnd <= visibleMediaStart) continue;
+
+        const timelineStart = reverse
+          ? clip.startTime + (mediaEnd - visibleMediaEnd) / playbackRate
+          : clip.startTime + (visibleMediaStart - mediaStart) / playbackRate;
+        const timelineEnd = reverse
+          ? clip.startTime + (mediaEnd - visibleMediaStart) / playbackRate
+          : clip.startTime + (visibleMediaEnd - mediaStart) / playbackRate;
+
+        addTimelineRange(Math.min(timelineStart, timelineEnd), Math.max(timelineStart, timelineEnd));
+      }
+    };
+
+    for (const clip of clips) {
+      if (clip.source?.type === 'video') {
+        addClipRanges(clip, (start, end) => allRanges.push({ start, end }));
+      }
+
+      if (clip.isComposition && clip.nestedClips) {
+        for (const nestedClip of clip.nestedClips) {
+          if (nestedClip.source?.type !== 'video') continue;
+
+          addClipRanges(nestedClip, (nestedStart, nestedEnd) => {
+            const compStart = clip.inPoint;
+            const compEnd = clip.inPoint + clip.duration;
+            if (nestedEnd < compStart || nestedStart > compEnd) return;
+
+            const visibleNestedStart = Math.max(nestedStart, compStart);
+            const visibleNestedEnd = Math.min(nestedEnd, compEnd);
+            allRanges.push({
+              start: clip.startTime + (visibleNestedStart - compStart),
+              end: clip.startTime + (visibleNestedEnd - compStart),
+            });
+          });
+        }
+      }
+    }
+
+    if (allRanges.length === 0) return [];
+
+    allRanges.sort((a, b) => a.start - b.start);
+    const merged: Array<{ start: number; end: number }> = [allRanges[0]];
+
+    for (let i = 1; i < allRanges.length; i++) {
+      const last = merged[merged.length - 1];
+      const current = allRanges[i];
+
+      if (current.start <= last.end + 0.05) {
+        last.end = Math.max(last.end, current.end);
+      } else {
+        merged.push(current);
+      }
+    }
+
+    return merged;
+  },
+
   // Invalidate cache when content changes (clip moved, trimmed, etc.)
   invalidateCache: () => {
     // Cancel any ongoing RAM preview

@@ -683,6 +683,19 @@ export class LayerCollector {
     return layer.source?.mediaTime ?? video.currentTime;
   }
 
+  private scheduleBackgroundScrubPreload(
+    video: HTMLVideoElement,
+    targetTime: number,
+    deps: LayerCollectorDeps,
+    isDragging: boolean
+  ): void {
+    if (deps.isExporting) return;
+    deps.scrubbingCache?.preloadAroundTime?.(video, targetTime, {
+      isDragging,
+      isPlaying: deps.isPlaying,
+    });
+  }
+
   private getFrameTimestampSeconds(timestamp: unknown, fallback?: number): number | undefined {
     return typeof timestamp === 'number' && Number.isFinite(timestamp)
       ? timestamp / 1_000_000
@@ -831,6 +844,7 @@ export class LayerCollector {
       }
 
       const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      this.scheduleBackgroundScrubPreload(video, targetTime, deps, isDragging);
       const isSettling = scrubSettleState.isPending(layer.sourceClipId);
       const isPausedSettle = !deps.isPlaying && !isDragging && isSettling;
       const lastPresentedTime = deps.scrubbingCache?.getLastPresentedTime(video);
@@ -1222,6 +1236,7 @@ export class LayerCollector {
       // Video not ready - try cache
       const targetTime = this.getTargetVideoTime(layer, video);
       const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      this.scheduleBackgroundScrubPreload(video, targetTime, deps, isDragging);
       const cacheSearchDistanceFrames = isDragging ? 10 : 6;
       const isSettling = scrubSettleState.isPending(layer.sourceClipId);
       const lastSameClipFrame = this.getDragHoldFrame(layer, video, deps);

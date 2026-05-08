@@ -33,6 +33,7 @@ import { Compositor } from './render/Compositor';
 import { NestedCompRenderer } from './render/NestedCompRenderer';
 import { RenderDispatcher, type RenderDeps, type RenderDispatcherDebugSnapshot } from './render/RenderDispatcher';
 import { MotionRenderer } from './motion/MotionRenderer';
+import type { ScrubbingCacheStats } from './texture/ScrubbingCache';
 
 export class WebGPUEngine {
   // Core context
@@ -123,7 +124,12 @@ export class WebGPUEngine {
     // Initialize managers
     this.textureManager = new TextureManager(device);
     this.maskTextureManager = new MaskTextureManager(device);
-    this.cacheManager.initialize(device);
+    this.cacheManager.initialize(device, () => {
+      this.requestRender();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('masterselects:scrub-cache-updated'));
+      }
+    });
 
     // Create sampler
     this.sampler = this.context.createSampler();
@@ -499,14 +505,11 @@ export class WebGPUEngine {
     return this.cacheManager.getCachedFrame(videoSrc, time);
   }
 
-  getScrubbingCacheStats(): {
-    count: number;
-    maxCount: number;
-    fillPct: number;
-    approxMemoryMB: number;
-    evictions: number;
-    budgetMode: 'static';
-  } {
+  getScrubbingCachedRanges(videoSrc: string): Array<{ start: number; end: number }> {
+    return this.cacheManager.getScrubbingCachedRanges(videoSrc);
+  }
+
+  getScrubbingCacheStats(): ScrubbingCacheStats {
     return this.cacheManager.getScrubbingCacheStats();
   }
 
