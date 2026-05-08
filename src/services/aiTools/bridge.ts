@@ -20,13 +20,13 @@ const tabId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'fun
   ? crypto.randomUUID()
   : `tab-${Math.random().toString(36).slice(2, 10)}`;
 
-function getTabPriorityDelayMs(): number {
+function getTabPriorityDelayMs(isTargetedRequest = false): number {
   if (typeof document === 'undefined') return 0;
 
   const isVisible = document.visibilityState === 'visible';
   const hasFocus = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
 
-  if (!isVisible) return -1;
+  if (!isVisible) return isTargetedRequest ? 500 : -1;
   if (hasFocus) return 0;
   return 150;
 }
@@ -274,7 +274,7 @@ if (import.meta.hot) {
     }
 
     try {
-      const delayMs = getTabPriorityDelayMs();
+      const delayMs = getTabPriorityDelayMs(data.targetTabId === tabId);
       if (delayMs < 0) {
         return;
       }
@@ -313,7 +313,7 @@ if (import.meta.hot) {
     }
 
     try {
-      const delayMs = getTabPriorityDelayMs();
+      const delayMs = getTabPriorityDelayMs(data.targetTabId === tabId);
       if (delayMs < 0) {
         return;
       }
@@ -344,7 +344,7 @@ if (import.meta.hot) {
     }
 
     try {
-      const delayMs = getTabPriorityDelayMs();
+      const delayMs = getTabPriorityDelayMs(data.targetTabId === tabId);
       if (delayMs < 0) {
         return;
       }

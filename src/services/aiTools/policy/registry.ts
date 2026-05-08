@@ -113,6 +113,12 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getLogs', bridgeTelemetry()],
   ['getPlaybackTrace', bridgeTelemetry()],
   ['reloadApp', bridgeTelemetry()],
+  ['debugExport', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'medium',
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  }],
 
   // ── LOCAL FILE ACCESS ─────────────────────────────────────────────────
   ['listLocalFiles', { ...localFileAccess(), readOnly: true }],

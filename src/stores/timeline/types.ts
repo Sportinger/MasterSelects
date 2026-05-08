@@ -393,6 +393,7 @@ export interface RamPreviewActions {
 // Proxy cache actions interface
 export interface ProxyCacheActions {
   getProxyCachedRanges: () => Array<{ start: number; end: number }>;
+  getScrubCachedRanges: () => Array<{ start: number; end: number }>;
   invalidateCache: () => void;
   startProxyCachePreload: () => Promise<void>;
   cancelProxyCachePreload: () => void;

@@ -7,18 +7,81 @@ import type { GpuFrameCacheEntry } from '../core/types';
 
 const log = Logger.create('ScrubbingCache');
 
+type ScrubbingTextureEntry = {
+  texture: GPUTexture;
+  view: GPUTextureView;
+  bytes: number;
+};
+
+type ScrubDirection = -1 | 0 | 1;
+
+interface BackgroundPreloadSession {
+  videoSrc: string;
+  video: HTMLVideoElement;
+  queue: number[];
+  queuedFrames: Set<number>;
+  processing: boolean;
+  disposed: boolean;
+  direction: ScrubDirection;
+  lastRequestedFrame: number;
+  lastScheduleAt: number;
+  duration: number;
+}
+
+export interface BackgroundScrubCacheStats {
+  activeSessions: number;
+  queuedFrames: number;
+  activePreloads: number;
+  filledFrames: number;
+  skippedFrames: number;
+  failedFrames: number;
+  lastFillLatencyMs: number;
+}
+
+export interface ScrubbingCacheStats {
+  count: number;
+  maxCount: number;
+  fillPct: number;
+  approxMemoryMB: number;
+  evictions: number;
+  budgetMode: 'static';
+  background: BackgroundScrubCacheStats;
+}
+
 export class ScrubbingCache {
   private device: GPUDevice;
+  private onBackgroundFrameCached?: () => void;
 
   // Scrubbing frame cache - pre-decoded frames for instant access
   // Key: "videoSrc:quantizedFrameTime" -> { texture, view }
   // Time is quantized to frame boundaries (1/30s) for better cache hit rate
   // Uses Map insertion order for O(1) LRU operations
-  private scrubbingCache: Map<string, { texture: GPUTexture; view: GPUTextureView; bytes: number }> = new Map();
+  private scrubbingCache: Map<string, ScrubbingTextureEntry> = new Map();
   private maxScrubbingCacheFrames = 300; // ~10 seconds at 30fps, ~2.4GB VRAM at 1080p
+  private readonly maxScrubbingCacheBytes = 1024 * 1024 * 1024; // Cap scrub textures at 1GB VRAM
   private readonly SCRUB_CACHE_FPS = 30; // Quantization granularity for scrubbing cache keys
   private scrubbingCacheBytes = 0;
   private scrubbingCacheEvictions = 0;
+  private backgroundPreloadSessions: Map<string, BackgroundPreloadSession> = new Map();
+  private backgroundPreloadFilled = 0;
+  private backgroundPreloadSkipped = 0;
+  private backgroundPreloadFailed = 0;
+  private backgroundLastFillLatencyMs = 0;
+  private lastBackgroundRenderRequestAt = 0;
+  private activeBackgroundPreloadSession: BackgroundPreloadSession | null = null;
+  private backgroundPreloadPaused = false;
+  private readonly BACKGROUND_SCRUB_AHEAD_FRAMES = 48;
+  private readonly BACKGROUND_SCRUB_BEHIND_FRAMES = 24;
+  private readonly BACKGROUND_IDLE_AHEAD_FRAMES = 24;
+  private readonly BACKGROUND_IDLE_BEHIND_FRAMES = 12;
+  private readonly BACKGROUND_MAX_QUEUE_FRAMES = 72;
+  private readonly BACKGROUND_STALE_DISTANCE_FRAMES = 180;
+  private readonly BACKGROUND_JUMP_RESET_FRAMES = 180;
+  private readonly BACKGROUND_RESCHEDULE_INTERVAL_MS = 80;
+  private readonly BACKGROUND_SEEK_TIMEOUT_MS = 900;
+  private readonly BACKGROUND_METADATA_TIMEOUT_MS = 1200;
+  private readonly BACKGROUND_RENDER_REQUEST_INTERVAL_MS = 33;
+  private readonly BACKGROUND_MAX_SESSIONS = 4;
 
   // Last valid frame cache - keeps last frame visible during seeks
   private lastFrameTextures: Map<HTMLVideoElement, GPUTexture> = new Map();
@@ -46,8 +109,9 @@ export class ScrubbingCache {
   private gpuFrameCache: Map<number, GpuFrameCacheEntry> = new Map();
   private maxGpuCacheFrames = 60; // ~500MB at 1080p
 
-  constructor(device: GPUDevice) {
+  constructor(device: GPUDevice, onBackgroundFrameCached?: () => void) {
     this.device = device;
+    this.onBackgroundFrameCached = onBackgroundFrameCached;
   }
 
   // === SCRUBBING FRAME CACHE ===
@@ -67,6 +131,10 @@ export class ScrubbingCache {
     return `${videoSrc}:${this.quantizeToFrame(time)}`;
   }
 
+  private getScrubbingKeyForFrame(videoSrc: string, frameIndex: number): string {
+    return this.getScrubbingKey(videoSrc, frameIndex / this.SCRUB_CACHE_FPS);
+  }
+
   private getScrubbingKeyTime(key: string): number {
     const index = key.lastIndexOf(':');
     if (index === -1) {
@@ -78,7 +146,7 @@ export class ScrubbingCache {
 
   private touchScrubbingEntry(
     key: string,
-    entry: { texture: GPUTexture; view: GPUTextureView; bytes: number }
+    entry: ScrubbingTextureEntry
   ): { view: GPUTextureView; mediaTime: number } {
     this.scrubbingCache.delete(key);
     this.scrubbingCache.set(key, entry);
@@ -88,17 +156,18 @@ export class ScrubbingCache {
     };
   }
 
-  // Cache a frame at a specific time for instant scrubbing access
-  cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
-    if (video.videoWidth === 0 || video.readyState < 2) return;
+  private addScrubbingFrameFromSource(
+    source: HTMLVideoElement | ImageBitmap,
+    videoSrc: string,
+    time: number,
+    width: number,
+    height: number
+  ): boolean {
+    if (!videoSrc || width <= 0 || height <= 0) return false;
 
-    const key = this.getScrubbingKey(video.src, time);
-    if (this.scrubbingCache.has(key)) return; // Already cached
+    const key = this.getScrubbingKey(videoSrc, time);
+    if (this.scrubbingCache.has(key)) return false;
 
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-
-    // Create texture for this frame
     const texture = this.device.createTexture({
       size: [width, height],
       format: 'rgba8unorm',
@@ -107,35 +176,484 @@ export class ScrubbingCache {
 
     try {
       this.device.queue.copyExternalImageToTexture(
-        { source: video },
+        { source },
         { texture },
         [width, height]
       );
 
-      // Add to cache (Map maintains insertion order)
       const bytes = width * height * 4;
       this.scrubbingCache.set(key, { texture, view: texture.createView(), bytes });
       this.scrubbingCacheBytes += bytes;
-
-      // LRU eviction - evict oldest (first) entries
-      // Explicitly destroy evicted GPU textures to free VRAM immediately.
-      // On Windows/Linux with discrete GPUs, relying on GC causes VRAM
-      // accumulation and progressive playback degradation.
-      while (this.scrubbingCache.size > this.maxScrubbingCacheFrames) {
-        const oldestKey = this.scrubbingCache.keys().next().value;
-        if (oldestKey) {
-          const oldest = this.scrubbingCache.get(oldestKey);
-          if (oldest) {
-            this.scrubbingCacheBytes -= oldest.bytes;
-            this.scrubbingCacheEvictions++;
-            oldest.texture.destroy();
-          }
-          this.scrubbingCache.delete(oldestKey);
-        }
-      }
+      this.evictScrubbingCacheIfNeeded();
+      return true;
     } catch {
       texture.destroy();
+      return false;
     }
+  }
+
+  private evictScrubbingCacheIfNeeded(): void {
+    while (
+      this.scrubbingCache.size > this.maxScrubbingCacheFrames ||
+      this.scrubbingCacheBytes > this.maxScrubbingCacheBytes
+    ) {
+      const oldestKey = this.scrubbingCache.keys().next().value;
+      if (!oldestKey) break;
+
+      const oldest = this.scrubbingCache.get(oldestKey);
+      if (oldest) {
+        this.scrubbingCacheBytes -= oldest.bytes;
+        this.scrubbingCacheEvictions++;
+        oldest.texture.destroy();
+      }
+      this.scrubbingCache.delete(oldestKey);
+    }
+  }
+
+  // Cache a frame at a specific time for instant scrubbing access
+  cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
+    if (video.videoWidth === 0 || video.readyState < 2) return;
+
+    this.addScrubbingFrameFromSource(
+      video,
+      video.src,
+      time,
+      video.videoWidth,
+      video.videoHeight
+    );
+  }
+
+  preloadAroundTime(
+    video: HTMLVideoElement,
+    targetTime: number,
+    options: {
+      isDragging?: boolean;
+      isPlaying?: boolean;
+    } = {}
+  ): void {
+    if (
+      typeof document === 'undefined' ||
+      !video.src ||
+      !Number.isFinite(targetTime) ||
+      targetTime < 0
+    ) {
+      return;
+    }
+
+    if (options.isPlaying) {
+      this.backgroundPreloadPaused = true;
+      this.clearBackgroundQueues();
+      return;
+    }
+
+    this.backgroundPreloadPaused = false;
+
+    const targetFrame = this.frameIndexForTime(targetTime);
+    const now = performance.now();
+    const session = this.getOrCreateBackgroundSession(video);
+    if (!session) return;
+
+    const duration = this.getFiniteDuration(video.duration) ?? this.getFiniteDuration(session.video.duration);
+    if (duration !== undefined) {
+      session.duration = duration;
+    }
+
+    if (
+      session.lastRequestedFrame === targetFrame &&
+      now - session.lastScheduleAt < this.BACKGROUND_RESCHEDULE_INTERVAL_MS
+    ) {
+      return;
+    }
+
+    const previousFrame = session.lastRequestedFrame;
+    if (previousFrame >= 0) {
+      const delta = targetFrame - previousFrame;
+      if (delta !== 0 && Math.abs(delta) < this.BACKGROUND_JUMP_RESET_FRAMES) {
+        session.direction = delta > 0 ? 1 : -1;
+      } else if (Math.abs(delta) >= this.BACKGROUND_JUMP_RESET_FRAMES) {
+        this.resetBackgroundQueue(session);
+        session.direction = delta > 0 ? 1 : -1;
+      }
+    }
+
+    session.lastRequestedFrame = targetFrame;
+    session.lastScheduleAt = now;
+    this.pruneBackgroundQueue(session, targetFrame);
+
+    const ahead = options.isDragging
+      ? this.BACKGROUND_SCRUB_AHEAD_FRAMES
+      : this.BACKGROUND_IDLE_AHEAD_FRAMES;
+    const behind = options.isDragging
+      ? this.BACKGROUND_SCRUB_BEHIND_FRAMES
+      : this.BACKGROUND_IDLE_BEHIND_FRAMES;
+
+    this.enqueueBackgroundFrame(session, targetFrame, true);
+
+    if (session.direction < 0) {
+      for (let i = 1; i <= behind; i++) {
+        this.enqueueBackgroundFrame(session, targetFrame - i, i <= 6);
+      }
+      for (let i = 1; i <= ahead; i++) {
+        this.enqueueBackgroundFrame(session, targetFrame + i, false);
+      }
+    } else {
+      for (let i = 1; i <= ahead; i++) {
+        this.enqueueBackgroundFrame(session, targetFrame + i, i <= 6);
+      }
+      for (let i = 1; i <= behind; i++) {
+        this.enqueueBackgroundFrame(session, targetFrame - i, false);
+      }
+    }
+
+    this.trimBackgroundQueue(session);
+    this.processBackgroundQueue(session);
+  }
+
+  private getFiniteDuration(duration: number): number | undefined {
+    return Number.isFinite(duration) && duration > 0 ? duration : undefined;
+  }
+
+  private getOrCreateBackgroundSession(video: HTMLVideoElement): BackgroundPreloadSession | null {
+    const videoSrc = video.src;
+    const existing = this.backgroundPreloadSessions.get(videoSrc);
+    if (existing && !existing.disposed) {
+      return existing;
+    }
+
+    const backgroundVideo = document.createElement('video');
+    backgroundVideo.muted = true;
+    backgroundVideo.preload = 'auto';
+    backgroundVideo.playsInline = true;
+    if (video.crossOrigin) {
+      backgroundVideo.crossOrigin = video.crossOrigin;
+    }
+    backgroundVideo.src = video.currentSrc || video.src;
+    backgroundVideo.load();
+
+    const session: BackgroundPreloadSession = {
+      videoSrc,
+      video: backgroundVideo,
+      queue: [],
+      queuedFrames: new Set(),
+      processing: false,
+      disposed: false,
+      direction: 0,
+      lastRequestedFrame: -1,
+      lastScheduleAt: 0,
+      duration: this.getFiniteDuration(video.duration) ?? 0,
+    };
+
+    this.backgroundPreloadSessions.set(videoSrc, session);
+    this.pruneBackgroundSessions(videoSrc);
+    return session;
+  }
+
+  private pruneBackgroundSessions(currentVideoSrc: string): void {
+    if (this.backgroundPreloadSessions.size <= this.BACKGROUND_MAX_SESSIONS) {
+      return;
+    }
+
+    const candidates = [...this.backgroundPreloadSessions.entries()]
+      .filter(([videoSrc, session]) =>
+        videoSrc !== currentVideoSrc &&
+        session !== this.activeBackgroundPreloadSession &&
+        !session.processing
+      )
+      .sort((a, b) => a[1].lastScheduleAt - b[1].lastScheduleAt);
+
+    for (const [videoSrc, session] of candidates) {
+      if (this.backgroundPreloadSessions.size <= this.BACKGROUND_MAX_SESSIONS) {
+        break;
+      }
+      this.destroyBackgroundSession(session);
+      this.backgroundPreloadSessions.delete(videoSrc);
+    }
+  }
+
+  private enqueueBackgroundFrame(
+    session: BackgroundPreloadSession,
+    frameIndex: number,
+    priority: boolean
+  ): void {
+    if (frameIndex < 0) return;
+    if (
+      session.duration > 0 &&
+      frameIndex / this.SCRUB_CACHE_FPS > session.duration
+    ) {
+      return;
+    }
+    if (this.scrubbingCache.has(this.getScrubbingKeyForFrame(session.videoSrc, frameIndex))) {
+      this.backgroundPreloadSkipped++;
+      return;
+    }
+    if (session.queuedFrames.has(frameIndex)) return;
+
+    session.queuedFrames.add(frameIndex);
+    if (priority) {
+      session.queue.unshift(frameIndex);
+    } else {
+      session.queue.push(frameIndex);
+    }
+  }
+
+  private pruneBackgroundQueue(session: BackgroundPreloadSession, centerFrame: number): void {
+    if (session.queue.length === 0) return;
+
+    session.queue = session.queue.filter((frameIndex) => {
+      const keep = Math.abs(frameIndex - centerFrame) <= this.BACKGROUND_STALE_DISTANCE_FRAMES;
+      if (!keep) {
+        session.queuedFrames.delete(frameIndex);
+      }
+      return keep;
+    });
+  }
+
+  private trimBackgroundQueue(session: BackgroundPreloadSession): void {
+    while (session.queue.length > this.BACKGROUND_MAX_QUEUE_FRAMES) {
+      const frameIndex = session.queue.pop();
+      if (frameIndex !== undefined) {
+        session.queuedFrames.delete(frameIndex);
+      }
+    }
+  }
+
+  private resetBackgroundQueue(session: BackgroundPreloadSession): void {
+    session.queue = [];
+    session.queuedFrames.clear();
+  }
+
+  private clearBackgroundQueues(): void {
+    for (const session of this.backgroundPreloadSessions.values()) {
+      this.resetBackgroundQueue(session);
+    }
+  }
+
+  private processBackgroundQueue(session: BackgroundPreloadSession): void {
+    if (session.processing || session.disposed || this.backgroundPreloadPaused) return;
+    if (
+      this.activeBackgroundPreloadSession &&
+      this.activeBackgroundPreloadSession !== session
+    ) {
+      return;
+    }
+    this.activeBackgroundPreloadSession = session;
+    session.processing = true;
+    void this.processBackgroundQueueAsync(session);
+  }
+
+  private async processBackgroundQueueAsync(session: BackgroundPreloadSession): Promise<void> {
+    try {
+      while (!session.disposed && !this.backgroundPreloadPaused && session.queue.length > 0) {
+        const frameIndex = session.queue.shift();
+        if (frameIndex === undefined) break;
+        session.queuedFrames.delete(frameIndex);
+
+        if (
+          session.lastRequestedFrame >= 0 &&
+          Math.abs(frameIndex - session.lastRequestedFrame) > this.BACKGROUND_STALE_DISTANCE_FRAMES
+        ) {
+          this.backgroundPreloadSkipped++;
+          continue;
+        }
+
+        if (this.scrubbingCache.has(this.getScrubbingKeyForFrame(session.videoSrc, frameIndex))) {
+          this.backgroundPreloadSkipped++;
+          continue;
+        }
+
+        const time = frameIndex / this.SCRUB_CACHE_FPS;
+        const startedAt = performance.now();
+        const ready = await this.seekBackgroundVideo(session, time);
+        if (this.backgroundPreloadPaused) {
+          break;
+        }
+        if (!ready || session.disposed) {
+          this.backgroundPreloadFailed++;
+          continue;
+        }
+
+        const cached = await this.cacheBackgroundVideoFrame(session, time);
+        if (cached) {
+          this.backgroundPreloadFilled++;
+          this.backgroundLastFillLatencyMs = Math.round(performance.now() - startedAt);
+          this.requestRenderForBackgroundFill();
+        } else {
+          this.backgroundPreloadFailed++;
+        }
+
+        await this.yieldBackgroundPreload();
+      }
+    } finally {
+      session.processing = false;
+      if (this.activeBackgroundPreloadSession === session) {
+        this.activeBackgroundPreloadSession = null;
+      }
+      if (!session.disposed && !this.backgroundPreloadPaused && session.queue.length > 0) {
+        this.processBackgroundQueue(session);
+      } else {
+        this.processNextBackgroundQueue();
+      }
+    }
+  }
+
+  private processNextBackgroundQueue(): void {
+    if (this.backgroundPreloadPaused || this.activeBackgroundPreloadSession) return;
+
+    for (const session of this.backgroundPreloadSessions.values()) {
+      if (!session.disposed && !session.processing && session.queue.length > 0) {
+        this.processBackgroundQueue(session);
+        break;
+      }
+    }
+  }
+
+  private async seekBackgroundVideo(
+    session: BackgroundPreloadSession,
+    targetTime: number
+  ): Promise<boolean> {
+    const video = session.video;
+    if (video.readyState < 1) {
+      const hasMetadata = await this.waitForVideoEvent(
+        video,
+        ['loadedmetadata', 'loadeddata', 'canplay'],
+        this.BACKGROUND_METADATA_TIMEOUT_MS
+      );
+      if (!hasMetadata && video.readyState < 1) {
+        return false;
+      }
+    }
+
+    const duration = this.getFiniteDuration(video.duration) ?? session.duration;
+    const safeTargetTime =
+      duration > 0
+        ? Math.max(0, Math.min(targetTime, Math.max(0, duration - 0.001)))
+        : Math.max(0, targetTime);
+
+    if (Math.abs(video.currentTime - safeTargetTime) > 0.012 || video.readyState < 2) {
+      try {
+        video.currentTime = safeTargetTime;
+      } catch {
+        return false;
+      }
+
+      const seeked = await this.waitForVideoEvent(
+        video,
+        ['seeked', 'loadeddata', 'canplay', 'timeupdate'],
+        this.BACKGROUND_SEEK_TIMEOUT_MS
+      );
+      if (!seeked && video.readyState < 2) {
+        return false;
+      }
+    }
+
+    if (video.readyState < 2) {
+      await this.waitForVideoEvent(
+        video,
+        ['loadeddata', 'canplay'],
+        this.BACKGROUND_SEEK_TIMEOUT_MS
+      );
+    }
+
+    if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+      return false;
+    }
+
+    return Math.abs(video.currentTime - safeTargetTime) <= 0.5;
+  }
+
+  private async cacheBackgroundVideoFrame(
+    session: BackgroundPreloadSession,
+    targetTime: number
+  ): Promise<boolean> {
+    const video = session.video;
+    if (video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) {
+      return false;
+    }
+
+    if (typeof createImageBitmap === 'function') {
+      let bitmap: ImageBitmap | null = null;
+      try {
+        bitmap = await createImageBitmap(video);
+        return this.addScrubbingFrameFromSource(
+          bitmap,
+          session.videoSrc,
+          targetTime,
+          bitmap.width,
+          bitmap.height
+        );
+      } catch {
+        return false;
+      } finally {
+        bitmap?.close();
+      }
+    }
+
+    return this.addScrubbingFrameFromSource(
+      video,
+      session.videoSrc,
+      targetTime,
+      video.videoWidth,
+      video.videoHeight
+    );
+  }
+
+  private waitForVideoEvent(
+    video: HTMLVideoElement,
+    events: string[],
+    timeoutMs: number
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      let done = false;
+      const cleanup = () => {
+        events.forEach((eventName) => video.removeEventListener(eventName, onDone));
+        clearTimeout(timeout);
+      };
+      const finish = (result: boolean) => {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve(result);
+      };
+      const onDone = () => finish(true);
+      events.forEach((eventName) => video.addEventListener(eventName, onDone, { once: true }));
+      const timeout = window.setTimeout(() => finish(false), timeoutMs);
+    });
+  }
+
+  private yieldBackgroundPreload(): Promise<void> {
+    return new Promise((resolve) => window.setTimeout(resolve, 0));
+  }
+
+  private requestRenderForBackgroundFill(): void {
+    if (!this.onBackgroundFrameCached) return;
+
+    const now = performance.now();
+    if (now - this.lastBackgroundRenderRequestAt < this.BACKGROUND_RENDER_REQUEST_INTERVAL_MS) {
+      return;
+    }
+    this.lastBackgroundRenderRequestAt = now;
+    this.onBackgroundFrameCached();
+  }
+
+  private getBackgroundStats(): BackgroundScrubCacheStats {
+    let queuedFrames = 0;
+    let activePreloads = 0;
+    for (const session of this.backgroundPreloadSessions.values()) {
+      queuedFrames += session.queue.length;
+      if (session.processing) {
+        activePreloads++;
+      }
+    }
+
+    return {
+      activeSessions: this.backgroundPreloadSessions.size,
+      queuedFrames,
+      activePreloads,
+      filledFrames: this.backgroundPreloadFilled,
+      skippedFrames: this.backgroundPreloadSkipped,
+      failedFrames: this.backgroundPreloadFailed,
+      lastFillLatencyMs: this.backgroundLastFillLatencyMs,
+    };
   }
 
   // Get cached frame for scrubbing (uses quantized time for better hit rate)
@@ -202,34 +720,102 @@ export class ScrubbingCache {
     return null;
   }
 
+  getCachedRanges(videoSrc: string): Array<{ start: number; end: number }> {
+    if (!videoSrc) return [];
+
+    const prefix = `${videoSrc}:`;
+    const frameIndices = new Set<number>();
+    for (const key of this.scrubbingCache.keys()) {
+      if (!key.startsWith(prefix)) continue;
+      frameIndices.add(this.frameIndexForTime(this.getScrubbingKeyTime(key)));
+    }
+
+    if (frameIndices.size === 0) return [];
+
+    const sorted = [...frameIndices].sort((a, b) => a - b);
+    const ranges: Array<{ startFrame: number; endFrame: number }> = [
+      { startFrame: sorted[0], endFrame: sorted[0] },
+    ];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const frameIndex = sorted[i];
+      const current = ranges[ranges.length - 1];
+      if (frameIndex <= current.endFrame + 1) {
+        current.endFrame = frameIndex;
+      } else {
+        ranges.push({ startFrame: frameIndex, endFrame: frameIndex });
+      }
+    }
+
+    return ranges.map((range) => ({
+      start: range.startFrame / this.SCRUB_CACHE_FPS,
+      end: (range.endFrame + 1) / this.SCRUB_CACHE_FPS,
+    }));
+  }
+
   // Get scrubbing cache stats
-  getScrubbingCacheStats(): {
-    count: number;
-    maxCount: number;
-    fillPct: number;
-    approxMemoryMB: number;
-    evictions: number;
-    budgetMode: 'static';
-  } {
+  getScrubbingCacheStats(): ScrubbingCacheStats {
+    const frameFillPct =
+      this.maxScrubbingCacheFrames > 0
+        ? (this.scrubbingCache.size / this.maxScrubbingCacheFrames) * 100
+        : 0;
+    const byteFillPct =
+      this.maxScrubbingCacheBytes > 0
+        ? (this.scrubbingCacheBytes / this.maxScrubbingCacheBytes) * 100
+        : 0;
+
     return {
       count: this.scrubbingCache.size,
       maxCount: this.maxScrubbingCacheFrames,
-      fillPct:
-        this.maxScrubbingCacheFrames > 0
-          ? Math.round((this.scrubbingCache.size / this.maxScrubbingCacheFrames) * 1000) / 10
-          : 0,
+      fillPct: Math.round(Math.max(frameFillPct, byteFillPct) * 10) / 10,
       approxMemoryMB: Math.round((this.scrubbingCacheBytes / (1024 * 1024)) * 100) / 100,
       evictions: this.scrubbingCacheEvictions,
       budgetMode: 'static',
+      background: this.getBackgroundStats(),
     };
+  }
+
+  private destroyBackgroundSession(session: BackgroundPreloadSession): void {
+    session.disposed = true;
+    session.queue = [];
+    session.queuedFrames.clear();
+    if (this.activeBackgroundPreloadSession === session) {
+      this.activeBackgroundPreloadSession = null;
+    }
+    try {
+      session.video.pause();
+      session.video.removeAttribute('src');
+      session.video.load();
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+
+  private clearBackgroundPreload(videoSrc?: string): void {
+    if (videoSrc) {
+      const session = this.backgroundPreloadSessions.get(videoSrc);
+      if (session) {
+        this.destroyBackgroundSession(session);
+        this.backgroundPreloadSessions.delete(videoSrc);
+      }
+      return;
+    }
+
+    for (const session of this.backgroundPreloadSessions.values()) {
+      this.destroyBackgroundSession(session);
+    }
+    this.backgroundPreloadSessions.clear();
   }
 
   // Clear scrubbing cache for a specific video
   clearScrubbingCache(videoSrc?: string): void {
+    this.clearBackgroundPreload(videoSrc);
+
     if (videoSrc) {
+      const prefix = `${videoSrc}:`;
       // Clear only frames from this video
       for (const key of [...this.scrubbingCache.keys()]) {
-        if (key.startsWith(videoSrc)) {
+        if (key.startsWith(prefix)) {
           const entry = this.scrubbingCache.get(key);
           if (entry) {
             this.scrubbingCacheBytes -= entry.bytes;
@@ -629,6 +1215,7 @@ export class ScrubbingCache {
     this.lastFrameOwners = new WeakMap();
     this.lastCaptureTime.clear();
     this.lastPresentedFrameTimes = new WeakMap();
+    this.lastPresentedFrameOwners = new WeakMap();
 
     log.debug('All caches cleared');
   }

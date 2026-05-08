@@ -2017,6 +2017,12 @@ export class RenderDispatcher {
         const scrubbingCache = d.cacheManager.getScrubbingCache();
         const targetTime = this.getTargetVideoTime(layer, video);
         const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+        if (!d.exportCanvasManager.getIsExporting()) {
+          scrubbingCache?.preloadAroundTime?.(video, targetTime, {
+            isDragging,
+            isPlaying: d.renderLoop?.getIsPlaying() ?? false,
+          });
+        }
         const isSettling = scrubSettleState.isPending(layer.sourceClipId);
         const isPausedSettle = !(d.renderLoop?.getIsPlaying() ?? false) && !isDragging && isSettling;
         const lastPresentedTime = scrubbingCache?.getLastPresentedTime(video);

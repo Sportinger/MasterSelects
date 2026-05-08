@@ -8,6 +8,7 @@ import { playbackHealthMonitor } from '../../playbackHealthMonitor';
 import { vfPipelineMonitor } from '../../vfPipelineMonitor';
 import { wcPipelineMonitor } from '../../wcPipelineMonitor';
 import { slotDeckManager } from '../../slotDeckManager';
+import { exportDiagnostics } from '../../export/exportDiagnostics';
 import type { ToolResult } from '../types';
 
 const DEFAULT_PLAYBACK_WINDOW_MS = 5000;
@@ -148,6 +149,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
       watchdogActive: renderLoop.watchdogTimer != null,
     } : null,
     renderDispatcher: engine.getRenderDispatcherDebugSnapshot(),
+    export: exportDiagnostics.snapshot(),
   };
 
   snapshot.playback = serializePlayback(playback);

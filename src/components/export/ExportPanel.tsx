@@ -555,6 +555,13 @@ export function ExportPanel() {
     const actualHeight = useCustomResolution ? customHeight : height;
     const exportFps = useCustomFps ? customFps : fps;
     const exportAsGif = visualMode === 'gif';
+    const timelineState = useTimelineStore.getState();
+    const shouldIncludeAudio = includeAudio && !exportAsGif && AudioExportPipeline.hasAudioInRange(
+      Array.isArray(timelineState.clips) ? timelineState.clips : [],
+      Array.isArray(timelineState.tracks) ? timelineState.tracks : [],
+      startTime,
+      endTime,
+    );
     const originalDimensions = engine.getOutputDimensions();
     const ffmpegFrameRenderer = new FFmpegFrameRenderer({
       width: actualWidth,
@@ -688,7 +695,11 @@ export function ExportPanel() {
       // Extract audio from timeline (if enabled)
       let audioBuffer: AudioBuffer | null = null;
 
-      if (includeAudio && !exportAsGif) {
+      if (includeAudio && !exportAsGif && !shouldIncludeAudio) {
+        log.info('FFmpeg audio export skipped: no unmuted audio clips or mixdowns in export range');
+      }
+
+      if (shouldIncludeAudio) {
         setExportPhase('audio');
         log.info('Extracting audio for FFmpeg...');
 

@@ -227,6 +227,7 @@ export const selectPreviewActions = (state: TimelineStore) => ({
   cancelRamPreview: state.cancelRamPreview,
   getCachedRanges: state.getCachedRanges,
   getProxyCachedRanges: state.getProxyCachedRanges,
+  getScrubCachedRanges: state.getScrubCachedRanges,
   startProxyCachePreload: state.startProxyCachePreload,
   cancelProxyCachePreload: state.cancelProxyCachePreload,
 });

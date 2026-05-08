@@ -793,6 +793,10 @@ export class NestedCompRenderer {
         const layerReuseKey = this.getLayerReuseKey(layer);
         const targetTime = this.getTargetVideoTime(layer, video);
         const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+        this.scrubbingCache?.preloadAroundTime?.(video, targetTime, {
+          isDragging,
+          isPlaying: useTimelineStore.getState().isPlaying,
+        });
         const isSettling = scrubSettleState.isPending(layer.sourceClipId);
         const isPausedSettle = !useTimelineStore.getState().isPlaying && !isDragging && isSettling;
         const lastPresentedTime = this.scrubbingCache?.getLastPresentedTime(video);

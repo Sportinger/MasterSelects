@@ -30,29 +30,62 @@ export interface ClipPreparationResult {
 }
 
 type ParallelClipInfo = Parameters<ParallelDecodeManager['initialize']>[0][number];
+type ClipFileDataCache = Map<string, Promise<ArrayBuffer | null>>;
 
 function getExportRuntimeOwnerId(clipId: string): string {
   return `export:${clipId}`;
 }
 
+function getClipMediaFileId(clip: TimelineClip): string | undefined {
+  return clip.mediaFileId || clip.source?.mediaFileId;
+}
+
+function getClipSourceCacheKey(clip: TimelineClip, mediaFile?: MediaFile | null): string {
+  const mediaFileId = getClipMediaFileId(clip);
+  if (mediaFileId) {
+    return `media:${mediaFileId}`;
+  }
+
+  const filePath = mediaFile?.filePath || mediaFile?.projectPath || clip.source?.filePath;
+  if (filePath) {
+    return `path:${filePath}`;
+  }
+
+  const url = mediaFile?.url || clip.source?.videoElement?.currentSrc || clip.source?.videoElement?.src;
+  if (url) {
+    return `url:${url}`;
+  }
+
+  if (clip.file) {
+    return `file:${clip.file.name}:${clip.file.size}:${clip.file.lastModified}`;
+  }
+
+  return `clip:${clip.id}`;
+}
+
 function getFastModeFileSizeStats(
   videoClips: TimelineClip[],
-  mediaFiles: Array<{ id: string; fileSize?: number }>
-): { totalBytes: number; largestBytes: number; largestClipName: string | null } {
+  mediaFiles: MediaFile[]
+): { totalBytes: number; largestBytes: number; largestClipName: string | null; uniqueSourceCount: number } {
   let totalBytes = 0;
   let largestBytes = 0;
   let largestClipName: string | null = null;
+  const countedSources = new Set<string>();
 
   for (const clip of videoClips) {
     if (clip.source?.type !== 'video') {
       continue;
     }
 
-    const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
+    const mediaFileId = getClipMediaFileId(clip);
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+    const sourceKey = getClipSourceCacheKey(clip, mediaFile);
     const fileSize = mediaFile?.fileSize ?? clip.file?.size ?? 0;
 
-    totalBytes += fileSize;
+    if (!countedSources.has(sourceKey)) {
+      countedSources.add(sourceKey);
+      totalBytes += fileSize;
+    }
 
     if (fileSize > largestBytes) {
       largestBytes = fileSize;
@@ -60,7 +93,7 @@ function getFastModeFileSizeStats(
     }
   }
 
-  return { totalBytes, largestBytes, largestClipName };
+  return { totalBytes, largestBytes, largestClipName, uniqueSourceCount: countedSources.size };
 }
 
 function shouldAutoFallbackToPrecise(error: unknown): boolean {
@@ -126,7 +159,10 @@ function waitForVideoCondition(
   });
 }
 
-async function primePreciseExportVideoElement(video: HTMLVideoElement): Promise<void> {
+async function primePreciseExportVideoElement(
+  video: HTMLVideoElement,
+  warmupTime: number
+): Promise<void> {
   const metadataReady = await waitForVideoCondition(
     video,
     ['loadedmetadata', 'error'],
@@ -134,17 +170,22 @@ async function primePreciseExportVideoElement(video: HTMLVideoElement): Promise<
     () => video.readyState >= 1
   );
 
-  if (!metadataReady || video.readyState >= 2) {
+  if (!metadataReady) {
     return;
   }
 
   const duration = Number.isFinite(video.duration) ? video.duration : 0;
-  const warmupTarget = duration > 0 ? Math.min(0.001, Math.max(0, duration - 0.001)) : 0;
+  const maxSeekTime = duration > 0 ? Math.max(0, duration - 0.001) : 0;
+  const warmupTarget = duration > 0
+    ? Math.max(0, Math.min(warmupTime, maxSeekTime))
+    : Math.max(0, warmupTime);
 
-  try {
-    video.currentTime = warmupTarget;
-  } catch {
-    // Ignore warmup seek failures - export seeking has its own recovery path.
+  if (Math.abs(video.currentTime - warmupTarget) > 0.01 || video.readyState < 2) {
+    try {
+      video.currentTime = warmupTarget;
+    } catch {
+      // Ignore warmup seek failures - export seeking has its own recovery path.
+    }
   }
 
   await waitForVideoCondition(
@@ -153,14 +194,6 @@ async function primePreciseExportVideoElement(video: HTMLVideoElement): Promise<
     2500,
     () => !video.seeking && video.readyState >= 2
   );
-
-  if (warmupTarget > 0 && Math.abs(video.currentTime) > 0.0005) {
-    try {
-      video.currentTime = 0;
-    } catch {
-      // Ignore rewind failures here.
-    }
-  }
 }
 
 async function resolveClipExportFile(clip: TimelineClip, mediaFile?: MediaFile | null): Promise<File | null> {
@@ -216,7 +249,8 @@ async function resolveClipExportFile(clip: TimelineClip, mediaFile?: MediaFile |
 
 async function createPreciseExportVideoElement(
   clip: TimelineClip,
-  mediaFile?: MediaFile | null
+  mediaFile?: MediaFile | null,
+  warmupTime = 0
 ): Promise<{ videoElement: HTMLVideoElement; objectUrl?: string } | null> {
   const resolvedFile = await resolveClipExportFile(clip, mediaFile);
   const fallbackSrc =
@@ -234,7 +268,7 @@ async function createPreciseExportVideoElement(
   const videoElement = createDetachedExportVideoElement(src);
 
   try {
-    await primePreciseExportVideoElement(videoElement);
+    await primePreciseExportVideoElement(videoElement, warmupTime);
     if (videoElement.readyState < 1) {
       throw new Error('Export video metadata did not become available');
     }
@@ -253,6 +287,21 @@ async function createPreciseExportVideoElement(
     log.warn(`Failed to create dedicated PRECISE export video for ${clip.name}:`, e);
     return null;
   }
+}
+
+function getClipWarmupSourceTime(clip: TimelineClip, exportStartTime: number): number {
+  const firstTimelineTime = Math.max(exportStartTime, clip.startTime);
+  const clipLocalTime = Math.max(0, Math.min(clip.duration, firstTimelineTime - clip.startTime));
+  const clipSpeed = clip.speed ?? 1;
+  const speedAdjusted = clipLocalTime * Math.abs(clipSpeed);
+  const sourceTime = (clip.reversed !== (clipSpeed < 0))
+    ? clip.outPoint - speedAdjusted
+    : clip.inPoint + speedAdjusted;
+  const minSourceTime = Math.min(clip.inPoint, clip.outPoint);
+  const maxSourceTime = Math.max(clip.inPoint, clip.outPoint);
+  const safeMaxSourceTime = Math.max(minSourceTime, maxSourceTime - 0.001);
+
+  return Math.max(minSourceTime, Math.min(sourceTime, safeMaxSourceTime));
 }
 
 function createExportRuntimeSource(
@@ -278,6 +327,20 @@ function createExportRuntimeSource(
     ...runtimeSource,
     webCodecsPlayer: overridePlayer ?? undefined,
   };
+}
+
+async function loadClipFileDataCached(
+  clip: TimelineClip,
+  mediaFile: MediaFile | null | undefined,
+  cache: ClipFileDataCache
+): Promise<ArrayBuffer | null> {
+  const sourceKey = getClipSourceCacheKey(clip, mediaFile);
+  let promise = cache.get(sourceKey);
+  if (!promise) {
+    promise = loadClipFileData(clip, mediaFile);
+    cache.set(sourceKey, promise);
+  }
+  return promise;
 }
 
 /**
@@ -331,30 +394,30 @@ export async function prepareClipsForExport(
   log.info(`Preparing ${videoClips.length} video clips for ${exportMode.toUpperCase()} export...`);
 
   if (exportMode === 'precise') {
-    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles);
+    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime);
     endPrepare();
     return result;
   }
 
-  const { totalBytes, largestBytes, largestClipName } = getFastModeFileSizeStats(videoClips, mediaFiles);
+  const { totalBytes, largestBytes, largestClipName, uniqueSourceCount } = getFastModeFileSizeStats(videoClips, mediaFiles);
   if (largestBytes >= FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES || totalBytes >= FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES) {
     log.warn(
-      `FAST export bypassed for large source media (largest=${(largestBytes / 1024 / 1024).toFixed(0)}MB, total=${(totalBytes / 1024 / 1024).toFixed(0)}MB). Using PRECISE mode instead.`,
+      `FAST export bypassed for large source media (largest=${(largestBytes / 1024 / 1024).toFixed(0)}MB, uniqueTotal=${(totalBytes / 1024 / 1024).toFixed(0)}MB, uniqueSources=${uniqueSourceCount}/${videoClips.length}). Using PRECISE mode instead.`,
       { largestClipName }
     );
-    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles);
+    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime);
     endPrepare();
     return result;
   }
 
   // FAST MODE: WebCodecs with MP4Box parsing
   try {
-    return await initializeFastMode(videoClips, mediaFiles, startTime, clipStates, settings.fps, endPrepare);
+    return await initializeFastMode(videoClips, mediaFiles, startTime, endTime, clipStates, settings.fps, endPrepare);
   } catch (e) {
     if (shouldAutoFallbackToPrecise(e)) {
       log.warn('FAST export failed, auto-falling back to PRECISE mode', e);
       clipStates.clear();
-      const result = await initializePreciseMode(videoClips, clipStates, mediaFiles);
+      const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime);
       endPrepare();
       return result;
     }
@@ -365,14 +428,15 @@ export async function prepareClipsForExport(
 async function initializePreciseMode(
   videoClips: TimelineClip[],
   clipStates: Map<string, ExportClipState>,
-  mediaFiles: MediaFile[]
+  mediaFiles: MediaFile[],
+  exportStartTime: number
 ): Promise<ClipPreparationResult> {
-  const registerPreciseClip = async (clip: TimelineClip) => {
+  const registerPreciseClip = async (clip: TimelineClip, warmupTime: number) => {
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
     const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
     const preparedVideo = clip.source?.type === 'video'
-      ? await createPreciseExportVideoElement(clip, mediaFile)
+      ? await createPreciseExportVideoElement(clip, mediaFile, warmupTime)
       : null;
 
     clipStates.set(clip.id, {
@@ -398,7 +462,7 @@ async function initializePreciseMode(
     if (clip.isComposition && clip.nestedClips) {
       for (const nestedClip of clip.nestedClips) {
         if (nestedClip.source?.type !== 'video') continue;
-        if (await registerPreciseClip(nestedClip)) {
+        if (await registerPreciseClip(nestedClip, getClipWarmupSourceTime(nestedClip, nestedClip.startTime))) {
           dedicatedPreciseVideoCount += 1;
         }
         preciseNestedClipCount += 1;
@@ -406,7 +470,7 @@ async function initializePreciseMode(
     }
 
     if (clip.source?.type !== 'video') continue;
-    if (await registerPreciseClip(clip)) {
+    if (await registerPreciseClip(clip, getClipWarmupSourceTime(clip, exportStartTime))) {
       dedicatedPreciseVideoCount += 1;
     }
     preciseClipCount += 1;
@@ -432,11 +496,13 @@ async function initializeFastMode(
   videoClips: TimelineClip[],
   mediaFiles: MediaFile[],
   startTime: number,
+  endTime: number,
   clipStates: Map<string, ExportClipState>,
   fps: number,
   endPrepare: () => void
 ): Promise<ClipPreparationResult> {
   const { WebCodecsPlayer } = await import('../WebCodecsPlayer');
+  const fileDataCache: ClipFileDataCache = new Map();
 
   // Separate composition clips from regular video clips
   const regularVideoClips: TimelineClip[] = [];
@@ -471,16 +537,16 @@ async function initializeFastMode(
   const totalVideoClips = regularVideoClips.length + nestedVideoClips.length;
   if (totalVideoClips >= 2) {
     log.info(`Using PARALLEL decoding for ${regularVideoClips.length} regular + ${nestedVideoClips.length} nested = ${totalVideoClips} video clips`);
-    return initializeParallelDecoding(regularVideoClips, mediaFiles, startTime, nestedVideoClips, clipStates, fps, endPrepare);
+    return initializeParallelDecoding(regularVideoClips, mediaFiles, startTime, endTime, nestedVideoClips, clipStates, fps, endPrepare, fileDataCache);
   }
 
   // Single clip: use sequential approach
   for (const clip of regularVideoClips) {
-    const mediaFileId = clip.source!.mediaFileId;
+    const mediaFileId = getClipMediaFileId(clip);
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
 
     const endLoad = log.time(`loadClipFileData "${clip.name}"`);
-    const fileData = await loadClipFileData(clip, mediaFile);
+    const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
     endLoad();
 
     if (!fileData) {
@@ -548,19 +614,21 @@ async function initializeParallelDecoding(
   clips: TimelineClip[],
   mediaFiles: MediaFile[],
   _startTime: number,
+  endTime: number,
   nestedClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }>,
   clipStates: Map<string, ExportClipState>,
   fps: number,
-  endPrepare: () => void
+  endPrepare: () => void,
+  fileDataCache: ClipFileDataCache
 ): Promise<ClipPreparationResult> {
   const parallelDecoder = new ParallelDecodeManager();
 
   // Load all clip file data in parallel
   const endLoadAll = log.time('loadAllClipFileData');
   const loadPromises: Promise<ParallelClipInfo>[] = clips.map(async (clip) => {
-    const mediaFileId = clip.source!.mediaFileId;
+    const mediaFileId = getClipMediaFileId(clip);
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-    const fileData = await loadClipFileData(clip, mediaFile);
+    const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
 
     if (!fileData) {
       throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}". Try PRECISE mode instead.`);
@@ -581,9 +649,9 @@ async function initializeParallelDecoding(
 
   // Load nested clips
   const nestedLoadPromises: Promise<ParallelClipInfo | null>[] = nestedClips.map(async ({ clip, parentClip }) => {
-    const mediaFileId = clip.source!.mediaFileId;
+    const mediaFileId = getClipMediaFileId(clip);
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-    const fileData = await loadClipFileData(clip, mediaFile);
+    const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
 
     if (!fileData) {
       log.warn(`Could not load nested clip "${clip.name}", will use HTMLVideoElement`);
@@ -670,6 +738,11 @@ async function initializeParallelDecoding(
     if (!frame) {
       throw new Error(`Failed to decode first frame for clip "${clipInfo.clipName}" after ${MAX_RETRIES} attempts. The video file may be corrupted or use an unsupported codec.`);
     }
+  }
+
+  const prewarmedClipStarts = await parallelDecoder.prewarmClipStarts(_startTime, endTime);
+  if (prewarmedClipStarts > 0) {
+    log.info(`Prewarmed ${prewarmedClipStarts} clip start frames for smoother cuts`);
   }
   endPrefetch();
 

@@ -8916,6 +8916,17 @@ input[type="checkbox"] {
   z-index: 88;
 }
 
+/* Non-proxy scrub cache indicator (yellow line for background-filled source frames) */
+.scrub-cache-indicator {
+  position: absolute;
+  top: 6px;
+  height: 3px;
+  background: var(--amber-300);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 87;
+}
+
 /* Timeline export progress overlay */
 .timeline-export-overlay {
   position: absolute;

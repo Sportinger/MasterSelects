@@ -122,6 +122,7 @@ import {
   handleGetPlaybackTrace,
   handleGetStatsHistory,
 } from './stats';
+import { handleDebugExport } from './export';
 
 // Handler registry - maps tool names to handler functions
 const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
@@ -226,6 +227,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   getStatsHistory: handleGetStatsHistory,
   getLogs: handleGetLogs,
   getPlaybackTrace: handleGetPlaybackTrace,
+  debugExport: handleDebugExport,
 };
 
 // YouTube handlers - self-contained, fetch their own stores
@@ -365,4 +367,5 @@ export {
   handleGetLogs,
   handleGetPlaybackTrace,
   handleGetStatsHistory,
+  handleDebugExport,
 };

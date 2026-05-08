@@ -1,7 +1,7 @@
 // CacheManager - Extracted from WebGPUEngine
 // Owns ScrubbingCache lifecycle, video time tracking, and RAM preview canvas state
 
-import { ScrubbingCache } from '../texture/ScrubbingCache';
+import { ScrubbingCache, type ScrubbingCacheStats } from '../texture/ScrubbingCache';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('CacheManager');
@@ -14,8 +14,8 @@ export class CacheManager {
 
   // --- Lifecycle ---
 
-  initialize(device: GPUDevice): void {
-    this.scrubbingCache = new ScrubbingCache(device);
+  initialize(device: GPUDevice, onBackgroundFrameCached?: () => void): void {
+    this.scrubbingCache = new ScrubbingCache(device, onBackgroundFrameCached);
   }
 
   handleDeviceLost(): void {
@@ -41,14 +41,11 @@ export class CacheManager {
     return this.scrubbingCache?.getCachedFrame(videoSrc, time) ?? null;
   }
 
-  getScrubbingCacheStats(): {
-    count: number;
-    maxCount: number;
-    fillPct: number;
-    approxMemoryMB: number;
-    evictions: number;
-    budgetMode: 'static';
-  } {
+  getScrubbingCachedRanges(videoSrc: string): Array<{ start: number; end: number }> {
+    return this.scrubbingCache?.getCachedRanges(videoSrc) ?? [];
+  }
+
+  getScrubbingCacheStats(): ScrubbingCacheStats {
     return this.scrubbingCache?.getScrubbingCacheStats() ?? {
       count: 0,
       maxCount: 0,
@@ -56,6 +53,15 @@ export class CacheManager {
       approxMemoryMB: 0,
       evictions: 0,
       budgetMode: 'static',
+      background: {
+        activeSessions: 0,
+        queuedFrames: 0,
+        activePreloads: 0,
+        filledFrames: 0,
+        skippedFrames: 0,
+        failedFrames: 0,
+        lastFillLatencyMs: 0,
+      },
     };
   }
 
