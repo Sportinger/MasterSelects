@@ -1,5 +1,21 @@
 [
   {
+    "date": "2026-05-08",
+    "type": "fix",
+    "title": "Browser Export Diagnostics and Audio Skip",
+    "description": "Browser exports now expose dev-bridge diagnostics with per-frame phase timing, cancelable runtime limits, cut-boundary stats, and correct audio skipping for video-only timelines.",
+    "section": "Export / Diagnostics",
+    "commits": ["cd439044"]
+  },
+  {
+    "date": "2026-05-08",
+    "type": "improve",
+    "title": "Scrub Cache Preloading Improvements",
+    "description": "Scrubbing and preview cache handling now preload nearby frames, report cached ranges, and coordinate cache updates with the render loop for smoother timeline feedback.",
+    "section": "Playback / Scrubbing",
+    "commits": ["b0826aaa"]
+  },
+  {
     "date": "2026-05-06",
     "type": "improve",
     "title": "Effective Playback FPS Diagnostics",

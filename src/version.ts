@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.5';
+export const APP_VERSION = '1.7.6';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Playback diagnostics and scrub polish',
-  message: 'The preview overlay now reports effective FPS across the render, preview, and decoder path, with HTML-video playback and scrubbing tuned for smoother feedback.',
+  title: 'Export diagnostics and scrub polish',
+  message: 'Browser export now reports detailed timing diagnostics, skips empty audio ranges, and uses improved scrub cache preloading for smoother editing feedback.',
   animated: true,
 };
 
