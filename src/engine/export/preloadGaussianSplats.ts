@@ -177,6 +177,7 @@ export async function preloadGaussianSplatsForExport(options: PreloadOptions): P
 export async function preload3DAssetsForExport(options: Preload3DOptions): Promise<void> {
   const clips = collectRenderableExportClipsInRange(options.startTime, options.endTime).filter((clip) =>
     clip.is3D === true &&
+    clip.source?.type !== 'video' &&
     clip.source?.type !== 'gaussian-splat' &&
     clip.source?.type !== 'camera' &&
     clip.source?.type !== 'splat-effector'

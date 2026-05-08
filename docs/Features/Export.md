@@ -288,6 +288,25 @@ The PNG frame export action reads the current composited frame from the GPU.
 
 - Neither path is background rendering. Both depend on the current browser session.
 
+### Browser Export Debugging
+
+When export fails in the UI, reproduce the same browser-side path through the dev bridge before changing exporter code:
+
+```powershell
+$token = Get-Content -Path .ai-bridge-token -Raw
+$headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
+$body = @{ tool = 'debugExport'; args = @{ includeAudio = $true; exportMode = 'fast'; download = $false; maxRuntimeMs = 25000 } } | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
+```
+
+`debugExport` calls `FrameExporter` in the active browser tab and returns blob metadata, sampled progress, engine readiness before/after, and recent Export/WebGPU logs. It intentionally does not download unless `download = $true`. Use `maxRuntimeMs` to cancel cleanly before a long bridge request appears hung.
+
+Interpret the result as follows:
+
+- Blob `size > 0`: browser export works; debug UI download/progress/preset handling next.
+- `WebGPU device lost during export` plus broken `getStats` fields such as `renderLoop.isRunning=false`, `renderDispatcher=null`, or `targetCanvasCount=0`: hard-reload the browser tab or call `reloadApp`, then retest.
+- Video-only timelines should skip audio work even if `includeAudio = $true`; a long "Rendering audio" phase usually points at audio-range detection.
+
 ---
 
 ## Current Limitations

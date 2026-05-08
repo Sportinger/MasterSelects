@@ -451,7 +451,13 @@ function aiToolsBridge(): Plugin {
   const pendingRequests = new Map<string, { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
   const pendingDebugRequests = new Map<string, { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
   const pendingDebugActionRequests = new Map<string, { resolve: (value: unknown) => void; timer: ReturnType<typeof setTimeout> }>();
-  const clients = new Map<string, { tabId: string; visibilityState: string; hasFocus: boolean; lastSeenAt: number }>();
+  const clients = new Map<string, {
+    tabId: string;
+    visibilityState: string;
+    hasFocus: boolean;
+    lastSeenAt: number;
+    unresponsiveUntil?: number;
+  }>();
   let requestCounter = 0;
 
   const pruneClients = () => {
@@ -465,7 +471,10 @@ function aiToolsBridge(): Plugin {
 
   const pickTargetTabId = (): string | null => {
     pruneClients();
-    const liveClients = [...clients.values()];
+    const now = Date.now();
+    const liveClients = [...clients.values()].filter((client) =>
+      !client.unresponsiveUntil || client.unresponsiveUntil <= now
+    );
     if (liveClients.length === 0) {
       return null;
     }
@@ -478,7 +487,17 @@ function aiToolsBridge(): Plugin {
     const visible = liveClients.find((client) => client.visibilityState === 'visible');
     if (visible) return visible.tabId;
 
-    return liveClients[0].tabId;
+      return liveClients[0].tabId;
+    };
+
+  const markClientUnresponsive = (tabId: string | null, durationMs = 60000) => {
+    if (!tabId) return;
+    const client = clients.get(tabId);
+    if (!client) return;
+    clients.set(tabId, {
+      ...client,
+      unresponsiveUntil: Date.now() + durationMs,
+    });
   };
 
   return {
@@ -527,11 +546,13 @@ function aiToolsBridge(): Plugin {
 
       server.hot.on('ai-tools:presence', (data: { tabId: string; visibilityState?: string; hasFocus?: boolean }) => {
         if (!data?.tabId) return;
+        const previous = clients.get(data.tabId);
         clients.set(data.tabId, {
           tabId: data.tabId,
           visibilityState: data.visibilityState ?? 'hidden',
           hasFocus: Boolean(data.hasFocus),
           lastSeenAt: Date.now(),
+          unresponsiveUntil: previous?.unresponsiveUntil,
         });
       });
 
@@ -572,6 +593,7 @@ function aiToolsBridge(): Plugin {
             const resultPromise = new Promise((resolve) => {
               const timer = setTimeout(() => {
                 pendingRequests.delete(requestId);
+                markClientUnresponsive(targetTabId);
                 resolve({ success: false, error: 'Timeout: no browser tab responded within 30s' });
               }, 30000);
 
@@ -615,6 +637,7 @@ function aiToolsBridge(): Plugin {
         const resultPromise = new Promise((resolve) => {
           const timer = setTimeout(() => {
             pendingDebugRequests.delete(requestId);
+            markClientUnresponsive(targetTabId);
             resolve({ success: false, error: 'Timeout: no browser tab responded within 30s' });
           }, 30000);
 
@@ -673,6 +696,7 @@ function aiToolsBridge(): Plugin {
             const resultPromise = new Promise((resolve) => {
               const timer = setTimeout(() => {
                 pendingDebugActionRequests.delete(requestId);
+                markClientUnresponsive(targetTabId);
                 resolve({ success: false, error: 'Timeout: no browser tab responded within 30s' });
               }, 30000);
 

@@ -17,7 +17,7 @@ Anweisungen für AI-Assistenten (Claude, GPT, etc.) bei der Arbeit an diesem Pro
 
 ## 0.1 AI Debug Tools (kein Browser-Plugin nötig!)
 
-Die `/masterselects` Skill stellt 4 Debug-Tools bereit, die über den HTTP Bridge laufen (`POST http://localhost:5173/api/ai-tools`). Voraussetzung: Dev-Server läuft + App in Browser-Tab geöffnet.
+Die `/masterselects` Skill stellt Debug-Tools bereit, die über den HTTP Bridge laufen (`POST http://localhost:5173/api/ai-tools`). Voraussetzung: Dev-Server läuft + App in Browser-Tab geöffnet.
 
 | Tool | Parameters | Beschreibung |
 |------|-----------|-------------|
@@ -25,8 +25,57 @@ Die `/masterselects` Skill stellt 4 Debug-Tools bereit, die über den HTTP Bridg
 | `getStatsHistory` | `samples?`, `intervalMs?` | N Snapshots über Zeit sammeln mit min/max/avg Summary |
 | `getLogs` | `limit?`, `level?`, `module?`, `search?` | Browser-Logs filtern nach Level (DEBUG/INFO/WARN/ERROR), Modul, Suchtext |
 | `getPlaybackTrace` | `windowMs?`, `limit?` | WebCodecs/VF Pipeline-Events + Health-State für Playback-Debugging |
+| `debugExport` | `startTime?`, `endTime?`, `durationSeconds?`, `width?`, `height?`, `fps?`, `includeAudio?`, `exportMode?`, `download?`, `maxRuntimeMs?` | Dev-Bridge-only Exportprobe im echten Browser. Ruft `FrameExporter` auf und liefert Blob-Groesse, Progress, Engine-Status und Export-/GPU-Logs zurueck. |
 
 **Nutzung:** `/masterselects getLogs module=PlaybackHealth level=WARN` oder `/masterselects getPlaybackTrace windowMs=10000`
+
+### Export-Debug ueber Bridge
+
+Wenn Export im UI haengt oder fehlschlaegt, zuerst ueber die Bridge im echten Browser reproduzieren. Der lokale Dev-Bridge-POST braucht den Bearer-Token aus `.ai-bridge-token`:
+
+```powershell
+$token = Get-Content -Path .ai-bridge-token -Raw
+$headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
+
+$body = @{ tool = 'getStats'; args = @{} } | ConvertTo-Json -Depth 4
+Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
+```
+
+Smoke-Test ohne Download:
+
+```powershell
+$body = @{
+  tool = 'debugExport'
+  args = @{
+    startTime = 0
+    durationSeconds = 1.0
+    width = 640
+    height = 360
+    fps = 15
+    includeAudio = $false
+    exportMode = 'fast'
+    download = $false
+    maxRuntimeMs = 25000
+  }
+} | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
+```
+
+Full-Timeline-Test mit aktuellen Exportdefaults:
+
+```powershell
+$body = @{ tool = 'debugExport'; args = @{ includeAudio = $true; exportMode = 'fast'; download = $false } } | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
+```
+
+Interpretation:
+
+- `debugExport` ist absichtlich kein Chat/Public-Tool, sondern ein selbstregistrierter Dev-Bridge-Handler mit Policy-Zugriff fuer `devBridge`, `console` und `internal`.
+- `maxRuntimeMs` bricht den Browser-Export sauber ab, bevor der Dev-Bridge-Request haengt; fuer lange Exporte gezielt hoeher setzen.
+- Blob `size > 0` bedeutet: der Browser-Exportpfad funktioniert grundsaetzlich; danach UI-Download, `ExportPanel`, Preset-State oder Progress-State pruefen.
+- Bei `WebGPU device lost during export` plus `getStats` mit `renderLoop.isRunning=false`, `renderDispatcher=null` oder `targetCanvasCount=0`: Hard Reload/`reloadApp`, danach erneut exportieren.
+- Windows-`requestAdapter(powerPreference)`-Warnungen und NativeHelper-WebSocket-Fehler sind nicht automatisch Exportblocker.
+- Bei Video-only-Timeline muss `FrameExporter` Audio ueberspringen; langer Start bei "Rendering audio" weist auf Audio-Range-Erkennung hin.
 
 ---
 

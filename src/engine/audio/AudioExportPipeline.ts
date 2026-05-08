@@ -20,6 +20,7 @@ import { AudioMixer, type AudioTrackData } from './AudioMixer';
 import { TimeStretchProcessor, timeStretchProcessor } from './TimeStretchProcessor';
 import { AudioEffectRenderer, audioEffectRenderer } from './AudioEffectRenderer';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
 import type { TimelineClip, TimelineTrack, Keyframe } from '../../types';
 
 export interface AudioExportSettings {
@@ -82,7 +83,7 @@ export class AudioExportPipeline {
     log.info(`Starting export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s (${duration.toFixed(2)}s)`);
 
     // 1. Find all clips with audio in the export range
-    const audioClips = this.getClipsWithAudio(clips, tracks, startTime, endTime);
+    const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime);
 
     if (audioClips.length === 0) {
       log.info('No audio clips found in export range');
@@ -166,7 +167,7 @@ export class AudioExportPipeline {
     log.info(`Starting raw audio export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
 
     // 1. Find all clips with audio in the export range
-    const audioClips = this.getClipsWithAudio(clips, tracks, startTime, endTime);
+    const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime);
 
     if (audioClips.length === 0) {
       log.info('No audio clips found in export range');
@@ -235,12 +236,27 @@ export class AudioExportPipeline {
   /**
    * Get clips that have audio in the export range
    */
-  private getClipsWithAudio(
+  static hasAudioInRange(
+    clips: TimelineClip[],
+    tracks: TimelineTrack[],
+    startTime: number,
+    endTime: number
+  ): boolean {
+    return AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime).length > 0;
+  }
+
+  /**
+   * Get clips that have audio in the export range
+   */
+  static getClipsWithAudio(
     clips: TimelineClip[],
     tracks: TimelineTrack[],
     startTime: number,
     endTime: number
   ): TimelineClip[] {
+    const hasSoloAudioTrack = tracks.some(t => t.type === 'audio' && t.solo);
+    const mediaFiles = useMediaStore.getState().files;
+
     return clips.filter(clip => {
       // Check if clip is in range
       const clipEnd = clip.startTime + clip.duration;
@@ -257,16 +273,27 @@ export class AudioExportPipeline {
       }
 
       // Check if clip has audio source
-      if (!clip.source?.audioElement && !clip.source?.videoElement) {
+      if (!clip.source?.audioElement && !clip.source?.videoElement && !clip.file) {
         return false;
       }
 
       // For video clips, we need the linked audio clip
       // For audio clips, we use them directly
-      if (clip.source.type === 'audio') {
+      if (clip.source?.type === 'audio') {
+        const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
+        const mediaFile = mediaFileId ? mediaFiles.find(file => file.id === mediaFileId) : null;
+        if (mediaFile?.hasAudio === false) {
+          log.debug('Skipping audio clip for media marked without audio', {
+            clip: clip.name,
+            mediaFile: mediaFile.name,
+          });
+          return false;
+        }
+
         // Check track is not muted
         const track = tracks.find(t => t.id === clip.trackId);
         if (track?.muted) return false;
+        if (hasSoloAudioTrack && !track?.solo) return false;
         return true;
       }
 

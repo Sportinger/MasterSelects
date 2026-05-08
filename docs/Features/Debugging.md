@@ -107,6 +107,43 @@ POST /api/ai-tools
 
 It also supports the `_list` and `_status` meta-commands, plus targeted execution against the active browser tab through the HMR bridge.
 
+### Export Debug Via Bridge
+
+Use `debugExport` when the UI export fails or appears stuck and the dev server plus browser tab are already running. It is a dev-bridge-only handler, not a public chat tool.
+
+```powershell
+$token = Get-Content -Path .ai-bridge-token -Raw
+$headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
+
+$body = @{
+  tool = 'debugExport'
+  args = @{
+    startTime = 0
+    durationSeconds = 1.0
+    width = 640
+    height = 360
+    fps = 15
+    includeAudio = $false
+    exportMode = 'fast'
+    download = $false
+    maxRuntimeMs = 25000
+  }
+} | ConvertTo-Json -Depth 6
+
+Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
+```
+
+For the current timeline and export defaults:
+
+```powershell
+$body = @{ tool = 'debugExport'; args = @{ includeAudio = $true; exportMode = 'fast'; download = $false } } | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
+```
+
+The result includes blob size/type, progress samples, settings, engine state before/after export, and recent export/GPU warnings or errors. `maxRuntimeMs` cancels the export cleanly before the dev-bridge request appears hung. A blob with `size > 0` proves the browser `FrameExporter` path can render and encode. If the UI still fails afterward, inspect `ExportPanel`, preset state, progress state, and download handling.
+
+If logs show `WebGPU device lost during export` and `getStats` reports `renderLoop.isRunning=false`, `renderDispatcher=null`, or `targetCanvasCount=0`, the browser engine is in a stale device state. Use `reloadApp` or hard-reload the tab before retesting. Windows `powerPreference` warnings and NativeHelper WebSocket failures are not automatically export blockers.
+
 ---
 
 ## Monitoring Surfaces
