@@ -108,6 +108,31 @@ interface MediaBoardSlotPlacement {
   isEmptySlot?: boolean;
 }
 
+interface MediaBoardLayoutResult {
+  groups: MediaBoardGroupLayout[];
+  placements: MediaBoardNodePlacement[];
+  insertGaps: MediaBoardInsertGapPlacement[];
+  slots: MediaBoardSlotPlacement[];
+}
+
+interface MediaBoardNodePlacementSnapshot {
+  itemId: string;
+  layout: MediaBoardNodeLayout;
+  defaultLayout: MediaBoardNodeLayout;
+  groupId: string | null;
+  slotIndex: number;
+  isDraggingPreview?: boolean;
+}
+
+interface MediaBoardLayoutSnapshot {
+  version: number;
+  signature: string;
+  groups: MediaBoardGroupLayout[];
+  placements: MediaBoardNodePlacementSnapshot[];
+  insertGaps: MediaBoardInsertGapPlacement[];
+  slots: MediaBoardSlotPlacement[];
+}
+
 interface MediaBoardMarquee {
   startX: number;
   startY: number;
@@ -149,6 +174,8 @@ const BOARD_VIEWPORT_STORAGE_KEY = 'media-panel-board-viewport';
 const BOARD_ORDER_STORAGE_KEY = 'media-panel-board-order';
 const BOARD_GROUP_OFFSETS_STORAGE_KEY = 'media-panel-board-group-offsets';
 const BOARD_LAYOUTS_STORAGE_KEY = 'media-panel-board-layouts';
+const BOARD_LAYOUT_SNAPSHOT_STORAGE_KEY = 'media-panel-board-layout-snapshot';
+const BOARD_LAYOUT_SNAPSHOT_VERSION = 1;
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
 const MEDIA_BOARD_ROOT_ORDER_KEY = '__root__';
 const MEDIA_BOARD_EMPTY_SLOT_ID = '__media_board_empty_slot__';
@@ -353,6 +380,77 @@ function formatCompactCount(value: number | undefined): string | null {
   if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}K`;
   if (value < 1_000_000_000) return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0)}M`;
   return `${(value / 1_000_000_000).toFixed(1)}B`;
+}
+
+interface MediaSearchToken {
+  value: string;
+  glob?: RegExp;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+}
+
+function globToRegExp(pattern: string): RegExp {
+  let source = '^';
+  for (const char of pattern) {
+    if (char === '*') {
+      source += '.*';
+    } else if (char === '?') {
+      source += '.';
+    } else {
+      source += escapeRegExp(char);
+    }
+  }
+  source += '$';
+  return new RegExp(source, 'i');
+}
+
+function createMediaSearchTokens(query: string): MediaSearchToken[] {
+  return query
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => ({
+      value: token.toLowerCase(),
+      glob: /[*?]/.test(token) ? globToRegExp(token) : undefined,
+    }));
+}
+
+function getProjectItemSearchValues(item: ProjectItem): string[] {
+  const values = [item.name, 'isExpanded' in item ? 'folder' : ''];
+  if ('type' in item) {
+    values.push(item.type);
+  }
+
+  if (isImportedMediaFileItem(item)) {
+    values.push(
+      item.file?.name ?? '',
+      item.file?.type ?? '',
+      item.codec ?? '',
+      item.audioCodec ?? '',
+      item.container ?? '',
+      item.filePath ?? '',
+      item.absolutePath ?? '',
+      item.projectPath ?? '',
+    );
+  }
+
+  return values.filter(Boolean);
+}
+
+function projectItemMatchesMediaSearch(item: ProjectItem, tokens: MediaSearchToken[]): boolean {
+  if (tokens.length === 0) return true;
+
+  const values = getProjectItemSearchValues(item);
+  const searchableText = values.join(' ').toLowerCase();
+
+  return tokens.every((token) => {
+    if (token.glob) {
+      return values.some((value) => token.glob!.test(value));
+    }
+    return searchableText.includes(token.value);
+  });
 }
 
 function getGaussianSplatFrameCount(mediaFile: MediaFile): number | undefined {
@@ -571,6 +669,133 @@ function getMediaBoardVisibleRect(
   };
 }
 
+function hashMediaBoardSignature(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function createMediaBoardLayoutSignature(
+  items: MediaBoardItem[],
+  layouts: Record<string, MediaBoardGroupOffset>,
+): string {
+  const itemPayload = items.map((item) => [
+    item.id,
+    item.parentId ?? '',
+    isMediaBoardFolder(item) ? 'folder' : item.type,
+    'width' in item ? item.width ?? 0 : 0,
+    'height' in item ? item.height ?? 0 : 0,
+  ]);
+  const layoutPayload = Object.keys(layouts)
+    .sort()
+    .map((id) => [
+      id,
+      Math.round((layouts[id]?.x ?? 0) * 100) / 100,
+      Math.round((layouts[id]?.y ?? 0) * 100) / 100,
+    ]);
+
+  return `${BOARD_LAYOUT_SNAPSHOT_VERSION}:${hashMediaBoardSignature(JSON.stringify([itemPayload, layoutPayload]))}`;
+}
+
+function restoreMediaBoardLayoutItems(
+  layout: MediaBoardLayoutResult,
+  itemsById: Map<string, MediaBoardItem>,
+  folders: MediaFolder[],
+): MediaBoardLayoutResult {
+  const placements = layout.placements
+    .map((placement) => {
+      const item = itemsById.get(placement.item.id);
+      return item ? { ...placement, item } : null;
+    })
+    .filter((placement): placement is MediaBoardNodePlacement => placement !== null);
+
+  return {
+    groups: layout.groups.map((group) => ({
+      ...group,
+      name: getMediaBoardGroupName(group.id, folders),
+    })),
+    placements,
+    insertGaps: layout.insertGaps,
+    slots: layout.slots,
+  };
+}
+
+function loadMediaBoardLayoutSnapshot(
+  signature: string,
+  itemsById: Map<string, MediaBoardItem>,
+  folders: MediaFolder[],
+): MediaBoardLayoutResult | null {
+  try {
+    const stored = localStorage.getItem(BOARD_LAYOUT_SNAPSHOT_STORAGE_KEY);
+    if (!stored) return null;
+
+    const snapshot = JSON.parse(stored) as Partial<MediaBoardLayoutSnapshot>;
+    if (
+      snapshot.version !== BOARD_LAYOUT_SNAPSHOT_VERSION
+      || snapshot.signature !== signature
+      || !Array.isArray(snapshot.groups)
+      || !Array.isArray(snapshot.placements)
+      || !Array.isArray(snapshot.insertGaps)
+      || !Array.isArray(snapshot.slots)
+    ) {
+      return null;
+    }
+
+    const placements = snapshot.placements
+      .map((placement): MediaBoardNodePlacement | null => {
+        if (!placement || typeof placement.itemId !== 'string') return null;
+        const item = itemsById.get(placement.itemId);
+        if (!item || !placement.layout || !placement.defaultLayout) return null;
+        return {
+          item,
+          layout: placement.layout,
+          defaultLayout: placement.defaultLayout,
+          groupId: placement.groupId ?? null,
+          slotIndex: Number(placement.slotIndex) || 0,
+          isDraggingPreview: placement.isDraggingPreview,
+        };
+      })
+      .filter((placement): placement is MediaBoardNodePlacement => placement !== null);
+
+    if (placements.length !== snapshot.placements.length) return null;
+
+    return restoreMediaBoardLayoutItems({
+      groups: snapshot.groups,
+      placements,
+      insertGaps: snapshot.insertGaps,
+      slots: snapshot.slots,
+    }, itemsById, folders);
+  } catch {
+    return null;
+  }
+}
+
+function saveMediaBoardLayoutSnapshot(signature: string, layout: MediaBoardLayoutResult) {
+  try {
+    const snapshot: MediaBoardLayoutSnapshot = {
+      version: BOARD_LAYOUT_SNAPSHOT_VERSION,
+      signature,
+      groups: layout.groups.map((group) => ({ ...group, isDraggingPreview: undefined })),
+      placements: layout.placements.map((placement) => ({
+        itemId: placement.item.id,
+        layout: placement.layout,
+        defaultLayout: placement.defaultLayout,
+        groupId: placement.groupId,
+        slotIndex: placement.slotIndex,
+        isDraggingPreview: undefined,
+      })),
+      insertGaps: layout.insertGaps,
+      slots: layout.slots,
+    };
+    localStorage.setItem(BOARD_LAYOUT_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Snapshot cache is an optimization only.
+  }
+}
+
 function waitForMediaBoardThumbnailTurn(): Promise<void> {
   return new Promise((resolve) => {
     const requestIdle = typeof window === 'undefined' ? undefined : window.requestIdleCallback;
@@ -670,11 +895,17 @@ function drawMediaBoardOverviewItem(
   placement: MediaBoardNodePlacement,
   image: HTMLImageElement | null,
   zoom: number,
+  isDimmed = false,
 ) {
   const { item, layout } = placement;
   const screenWidth = layout.width * zoom;
   const screenHeight = layout.height * zoom;
   if (screenWidth < 1.2 || screenHeight < 1.2) return;
+
+  ctx.save();
+  if (isDimmed) {
+    ctx.globalAlpha = 0.24;
+  }
 
   const radius = Math.min(6, Math.max(1.5 / zoom, Math.min(layout.width, layout.height) * 0.06));
   drawMediaBoardOverviewRoundedRect(ctx, layout.x, layout.y, layout.width, layout.height, radius);
@@ -715,6 +946,7 @@ function drawMediaBoardOverviewItem(
     radius,
   );
   ctx.stroke();
+  ctx.restore();
 }
 
 function rectToTransitionBox(rect: DOMRect): MediaPanelTransitionBox {
@@ -830,6 +1062,7 @@ export function MediaPanel() {
   const [labelPickerItemId, setLabelPickerItemId] = useState<string | null>(null);
   const [labelPickerPos, setLabelPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [viewMode, setViewMode] = useState<MediaPanelViewMode>(loadMediaPanelViewMode);
+  const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   // Grid view: current open folder (null = root)
   const [gridFolderId, setGridFolderId] = useState<string | null>(null);
   const [mediaBoardViewport, setMediaBoardViewport] = useState<MediaBoardViewport>(loadMediaBoardViewport);
@@ -2477,20 +2710,58 @@ export function MediaPanel() {
     );
   };
 
-  const totalItems = (
-    files.length +
-    compositions.length +
-    folders.length +
-    textItems.length +
-    solidItems.length +
-    meshItems.length +
-    cameraItems.length +
-    splatEffectorItems.length
-  );
+  const allProjectItems = useMemo<ProjectItem[]>(() => ([
+    ...files,
+    ...compositions,
+    ...folders,
+    ...textItems,
+    ...solidItems,
+    ...meshItems,
+    ...cameraItems,
+    ...splatEffectorItems,
+  ]), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems]);
+
+  const projectListItems = useMemo<ProjectItem[]>(() => ([
+    ...folders,
+    ...compositions,
+    ...textItems,
+    ...solidItems,
+    ...meshItems,
+    ...cameraItems,
+    ...splatEffectorItems,
+    ...files,
+  ]), [folders, compositions, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, files]);
+
+  const allProjectItemsById = useMemo(() => new Map(allProjectItems.map((item) => [item.id, item])), [allProjectItems]);
+  const totalItems = allProjectItems.length;
+  const mediaSearchTokens = useMemo(() => createMediaSearchTokens(mediaSearchQuery), [mediaSearchQuery]);
+  const isMediaSearchActive = mediaSearchTokens.length > 0;
+  const mediaSearchDirectMatches = useMemo(() => (
+    isMediaSearchActive
+      ? projectListItems.filter((item) => projectItemMatchesMediaSearch(item, mediaSearchTokens))
+      : projectListItems
+  ), [isMediaSearchActive, mediaSearchTokens, projectListItems]);
+  const mediaSearchDirectMatchIds = useMemo(() => new Set(mediaSearchDirectMatches.map((item) => item.id)), [mediaSearchDirectMatches]);
+  const mediaSearchVisibleItemIds = useMemo(() => {
+    if (!isMediaSearchActive) return null;
+
+    const visibleIds = new Set(mediaSearchDirectMatchIds);
+    mediaSearchDirectMatches.forEach((item) => {
+      let parentId = item.parentId ?? null;
+      while (parentId) {
+        visibleIds.add(parentId);
+        parentId = allProjectItemsById.get(parentId)?.parentId ?? null;
+      }
+    });
+    return visibleIds;
+  }, [allProjectItemsById, isMediaSearchActive, mediaSearchDirectMatchIds, mediaSearchDirectMatches]);
+  const mediaSearchResultCount = isMediaSearchActive ? mediaSearchDirectMatches.length : totalItems;
 
   const projectItemsByParentId = useMemo(() => {
     const itemsByParentId = new Map<string | null, ProjectItem[]>();
     const append = (item: ProjectItem) => {
+      if (mediaSearchVisibleItemIds && !mediaSearchVisibleItemIds.has(item.id)) return;
+
       const parentId = item.parentId ?? null;
       const items = itemsByParentId.get(parentId);
       if (items) {
@@ -2500,17 +2771,10 @@ export function MediaPanel() {
       }
     };
 
-    folders.forEach(append);
-    compositions.forEach(append);
-    textItems.forEach(append);
-    solidItems.forEach(append);
-    meshItems.forEach(append);
-    cameraItems.forEach(append);
-    splatEffectorItems.forEach(append);
-    files.forEach(append);
+    projectListItems.forEach(append);
 
     return itemsByParentId;
-  }, [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems]);
+  }, [mediaSearchVisibleItemIds, projectListItems]);
 
   const getItemsForParent = useCallback(
     (parentId: string | null) => projectItemsByParentId.get(parentId) ?? [],
@@ -2523,7 +2787,7 @@ export function MediaPanel() {
     const appendRows = (items: ProjectItem[], depth: number) => {
       for (const item of sortItems(items)) {
         rows.push({ item, depth });
-        if ('isExpanded' in item && classicExpandedFolderIdSet.has(item.id)) {
+        if ('isExpanded' in item && (classicExpandedFolderIdSet.has(item.id) || isMediaSearchActive)) {
           appendRows(getItemsForParent(item.id), depth + 1);
         }
       }
@@ -2535,6 +2799,7 @@ export function MediaPanel() {
     sortItems,
     getItemsForParent,
     classicExpandedFolderIdSet,
+    isMediaSearchActive,
   ]);
 
   const classicVisibleRange = useMemo(() => {
@@ -2553,21 +2818,37 @@ export function MediaPanel() {
   const classicTopSpacerHeight = classicVisibleRange.start * CLASSIC_ROW_HEIGHT;
   const classicBottomSpacerHeight = Math.max(0, (classicRows.length - classicVisibleRange.end) * CLASSIC_ROW_HEIGHT);
 
-  const mediaBoardItems = useMemo<MediaBoardItem[]>(() => ([
-    ...files,
-    ...compositions,
-    ...folders,
-    ...textItems,
-    ...solidItems,
-    ...meshItems,
-    ...cameraItems,
-    ...splatEffectorItems,
-  ]), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems]);
+  const mediaBoardItems = allProjectItems;
 
   const mediaBoardItemIds = useMemo(() => new Set(mediaBoardItems.map((item) => item.id)), [mediaBoardItems]);
   const mediaBoardItemsById = useMemo(() => new Map(mediaBoardItems.map((item) => [item.id, item])), [mediaBoardItems]);
   const mediaBoardFoldersById = useMemo(() => new Map(folders.map((folder) => [folder.id, folder])), [folders]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const mediaBoardLayoutSignature = useMemo(
+    () => createMediaBoardLayoutSignature(mediaBoardItems, mediaBoardLayouts),
+    [mediaBoardItems, mediaBoardLayouts],
+  );
+  const mediaBoardInsertionPreviewKey = useMemo(() => {
+    if (!mediaBoardInsertionPreview) return '';
+    return JSON.stringify([
+      mediaBoardInsertionPreview.movingIds,
+      mediaBoardInsertionPreview.targetGroupId,
+      mediaBoardInsertionPreview.targetPosition.x,
+      mediaBoardInsertionPreview.targetPosition.y,
+    ]);
+  }, [mediaBoardInsertionPreview]);
+  const mediaBoardGeometryInputRef = useRef({
+    mediaBoardItems,
+    folders,
+    mediaBoardLayouts,
+    mediaBoardInsertionPreview,
+  });
+  mediaBoardGeometryInputRef.current = {
+    mediaBoardItems,
+    folders,
+    mediaBoardLayouts,
+    mediaBoardInsertionPreview,
+  };
 
   const getMediaBoardTopLevelMoveIds = useCallback((itemIds: string[]) => {
     const requestedIds = new Set(itemIds.filter((id) => mediaBoardItemIds.has(id)));
@@ -2638,6 +2919,8 @@ export function MediaPanel() {
 
   useEffect(() => {
     setMediaBoardLayouts((current) => {
+      const { mediaBoardItems } = mediaBoardGeometryInputRef.current;
+      const currentMediaBoardItemIds = new Set(mediaBoardItems.map((item) => item.id));
       const columnPitch = MEDIA_BOARD_SLOT_CELL_WIDTH;
       const rowPitch = MEDIA_BOARD_SLOT_CELL_HEIGHT;
       let changed = false;
@@ -2771,7 +3054,7 @@ export function MediaPanel() {
       });
 
       Object.keys(current).forEach((itemId) => {
-        if (!mediaBoardItemIds.has(itemId)) {
+        if (!currentMediaBoardItemIds.has(itemId)) {
           changed = true;
         }
       });
@@ -2805,9 +3088,21 @@ export function MediaPanel() {
 
       return changed ? next : current;
     });
-  }, [mediaBoardItemIds, mediaBoardItems, sortItems]);
+  }, [mediaBoardLayoutSignature, sortItems]);
 
-  const mediaBoardLayout = useMemo(() => {
+  const mediaBoardLayoutGeometry = useMemo<MediaBoardLayoutResult>(() => {
+    const {
+      mediaBoardItems,
+      folders,
+      mediaBoardLayouts,
+      mediaBoardInsertionPreview,
+    } = mediaBoardGeometryInputRef.current;
+    const itemsById = new Map(mediaBoardItems.map((item) => [item.id, item]));
+    if (!mediaBoardInsertionPreviewKey) {
+      const snapshot = loadMediaBoardLayoutSnapshot(mediaBoardLayoutSignature, itemsById, folders);
+      if (snapshot) return snapshot;
+    }
+
     const groupsByParent = new Map<string | null, MediaBoardItem[]>();
     groupsByParent.set(null, []);
     folders.forEach((folder) => groupsByParent.set(folder.id, []));
@@ -2820,7 +3115,6 @@ export function MediaPanel() {
       }
       foldersByParent.get(parentId)!.push(folder);
     });
-    const itemsById = new Map(mediaBoardItems.map((item) => [item.id, item]));
     const movingIdSet = new Set(mediaBoardInsertionPreview?.movingIds ?? []);
 
     mediaBoardItems.forEach((item) => {
@@ -3162,7 +3456,27 @@ export function MediaPanel() {
     }
 
     return { groups, placements, insertGaps, slots };
-  }, [folders, mediaBoardInsertionPreview, mediaBoardItems, mediaBoardLayouts]);
+  }, [mediaBoardInsertionPreviewKey, mediaBoardLayoutSignature]);
+
+  const mediaBoardLayout = useMemo(() => (
+    restoreMediaBoardLayoutItems(mediaBoardLayoutGeometry, mediaBoardItemsById, folders)
+  ), [folders, mediaBoardItemsById, mediaBoardLayoutGeometry]);
+
+  useEffect(() => {
+    if (viewMode !== 'board' || mediaBoardInsertionPreviewKey) return;
+
+    const saveSnapshot = () => {
+      saveMediaBoardLayoutSnapshot(mediaBoardLayoutSignature, mediaBoardLayoutGeometry);
+    };
+    const requestIdle = window.requestIdleCallback;
+    if (typeof requestIdle === 'function') {
+      const idleId = requestIdle(saveSnapshot, { timeout: 1200 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timeoutId = window.setTimeout(saveSnapshot, 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [mediaBoardInsertionPreviewKey, mediaBoardLayoutGeometry, mediaBoardLayoutSignature, viewMode]);
 
   const mediaBoardPlacementsById = useMemo(() => {
     return new Map(mediaBoardLayout.placements.map((placement) => [placement.item.id, placement]));
@@ -3342,6 +3656,7 @@ export function MediaPanel() {
         placement,
         getLoadedOverviewImage(placement.item),
         zoom,
+        Boolean(mediaSearchVisibleItemIds && !mediaSearchVisibleItemIds.has(placement.item.id)),
       );
     });
 
@@ -3353,6 +3668,7 @@ export function MediaPanel() {
     mediaBoardRenderLod.overviewCanvas,
     mediaBoardViewport.zoom,
     mediaBoardVisibleRect,
+    mediaSearchVisibleItemIds,
     scheduleMediaBoardOverviewRedraw,
     selectedIdSet,
     viewMode,
@@ -4542,6 +4858,7 @@ export function MediaPanel() {
           placement.isDraggingPreview ? 'drag-source-preview' : '',
           isCompactNode ? 'lod-compact' : '',
           thumbUrl && !shouldRenderThumb ? 'lod-thumbnail-paused' : '',
+          mediaSearchVisibleItemIds && !mediaSearchVisibleItemIds.has(item.id) ? 'search-dimmed' : '',
         ].filter(Boolean).join(' ')}
         style={{
           left: layout.x,
@@ -4623,7 +4940,11 @@ export function MediaPanel() {
       <div className="media-board-toolbar">
         <div className="media-board-toolbar-title">
           <span>Board</span>
-          <span>{mediaBoardItems.length} items in {mediaBoardLayout.groups.filter((group) => group.id !== null).length} folders</span>
+          <span>
+            {isMediaSearchActive
+              ? `${mediaSearchResultCount} of ${totalItems} items`
+              : `${mediaBoardItems.length} items in ${mediaBoardLayout.groups.filter((group) => group.id !== null).length} folders`}
+          </span>
         </div>
         <div className="media-board-toolbar-actions">
           <button
@@ -4688,6 +5009,7 @@ export function MediaPanel() {
                   `depth-${Math.min(group.depth, 3)}`,
                   selectedIdSet.has(folder.id) ? 'selected' : '',
                   group.isDraggingPreview ? 'drag-source-preview' : '',
+                  mediaSearchVisibleItemIds && !mediaSearchVisibleItemIds.has(folder.id) ? 'search-dimmed' : '',
                 ].filter(Boolean).join(' ')}
                 data-item-id={folder.id}
                 data-board-group-key={getMediaBoardOrderKey(group.id)}
@@ -4781,10 +5103,12 @@ export function MediaPanel() {
     </div>
   );
 
-  // Grid view: items for current folder + breadcrumb path
-  const gridItems = sortItems(getItemsForParent(gridFolderId));
+  // Grid view: items for current folder, or flattened matches while searching.
+  const gridItems = isMediaSearchActive
+    ? sortItems(mediaSearchDirectMatches)
+    : sortItems(getItemsForParent(gridFolderId));
   const gridBreadcrumb: Array<{ id: string | null; name: string }> = [];
-  if (gridFolderId) {
+  if (!isMediaSearchActive && gridFolderId) {
     // Build path from root to current folder
     const path: Array<{ id: string; name: string }> = [];
     let current = folders.find(f => f.id === gridFolderId);
@@ -4816,7 +5140,35 @@ export function MediaPanel() {
       {/* Header */}
       <div className="media-panel-header">
         <span className="media-panel-title">Project</span>
-        <span className="media-panel-count">{totalItems} items</span>
+        <span className="media-panel-count">
+          {isMediaSearchActive ? `${mediaSearchResultCount} of ${totalItems} items` : `${totalItems} items`}
+        </span>
+        <div className="media-panel-search">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.4" />
+            <path d="M10.3 10.3 14 14" />
+          </svg>
+          <input
+            value={mediaSearchQuery}
+            onChange={(e) => setMediaSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setMediaSearchQuery('');
+            }}
+            placeholder="Search or *.mp4"
+            aria-label="Search project items"
+          />
+          {mediaSearchQuery ? (
+            <button
+              type="button"
+              className="media-panel-search-clear"
+              onClick={() => setMediaSearchQuery('')}
+              title="Clear search"
+              aria-label="Clear search"
+            >
+              x
+            </button>
+          ) : null}
+        </div>
         <div className="media-panel-actions">
           <div className="media-view-segment" role="tablist" aria-label="Media view mode">
             <button
@@ -4947,6 +5299,11 @@ export function MediaPanel() {
             <p>No media imported</p>
             <p className="hint">Drag & drop files or folders here or click Import</p>
           </div>
+        ) : isMediaSearchActive && mediaSearchResultCount === 0 ? (
+          <div className="media-panel-empty" onContextMenu={(e) => handleContextMenu(e)}>
+            <p>No matching items</p>
+            <p className="hint">{mediaSearchQuery}</p>
+          </div>
         ) : viewMode === 'classic' ? (
           <div className="media-panel-table-wrapper">
             {/* Column headers */}
@@ -5026,7 +5383,7 @@ export function MediaPanel() {
             style={{ position: 'relative' }}
           >
             {/* Breadcrumb for folder navigation */}
-            {gridFolderId && (
+            {!isMediaSearchActive && gridFolderId && (
               <div className="media-grid-breadcrumb">
                 {gridBreadcrumb.map((crumb, i) => (
                   <React.Fragment key={crumb.id ?? 'root'}>
