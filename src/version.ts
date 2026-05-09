@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.6';
+export const APP_VERSION = '1.7.7';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Export diagnostics and scrub polish',
-  message: 'Browser export now reports detailed timing diagnostics, skips empty audio ranges, and uses improved scrub cache preloading for smoother editing feedback.',
+  title: 'Timeline cache and slider polish',
+  message: 'Proxy and scrub cache ranges now live in the timeline ruler, and custom slider ranges stay in sync across color, effect, and blendshape controls.',
   animated: true,
 };
 
