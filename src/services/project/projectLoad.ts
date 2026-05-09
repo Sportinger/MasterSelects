@@ -666,6 +666,7 @@ function convertProjectCompositionToStore(
           featherQuality: mask.featherQuality ?? 50,
           enabled: mask.enabled !== false,
           visible: mask.visible !== false,
+          outlineColor: mask.outlineColor,
           closed: mask.closed,
           expanded: false,
           position: mask.position,

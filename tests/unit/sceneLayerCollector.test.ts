@@ -203,4 +203,53 @@ describe('SceneLayerCollector', () => {
     expect(nativeSplat.worldTransform?.rotationDegrees).toEqual({ x: 0, y: 0, z: 0 });
     expect(nativeSplat.worldTransform?.scale).toEqual({ x: 1, y: 1, z: 1 });
   });
+
+  it('forwards VideoFrame sources to native 3D video planes for export', () => {
+    const videoElement = document.createElement('video');
+    const videoFrame = {
+      displayWidth: 1920,
+      displayHeight: 1080,
+    } as VideoFrame;
+    const layerData: LayerRenderData[] = [
+      {
+        layer: {
+          id: 'video-plane',
+          name: '3D Video',
+          sourceClipId: 'clip-video',
+          visible: true,
+          opacity: 1,
+          blendMode: 'normal',
+          source: {
+            type: 'video',
+            videoElement,
+            videoFrame,
+          },
+          effects: [],
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+          is3D: true,
+        },
+        isVideo: true,
+        externalTexture: null,
+        textureView: null,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      },
+    ];
+
+    const collected = collectScene3DLayers(layerData, {
+      width: 1920,
+      height: 1080,
+    });
+
+    expect(collected).toHaveLength(1);
+    expect(collected[0]).toMatchObject({
+      kind: 'plane',
+      alphaMode: 'opaque',
+      castsDepth: true,
+      videoElement,
+      videoFrame,
+    });
+  });
 });

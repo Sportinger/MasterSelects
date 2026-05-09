@@ -15,6 +15,8 @@ import { useMaskDrag } from './useMaskDrag';
 import { useMaskEdgeDrag } from './useMaskEdgeDrag';
 import { useMaskShapeDraw } from './useMaskShapeDraw';
 
+const DEFAULT_MASK_OUTLINE_COLOR = '#2997E5';
+
 interface MaskOverlayProps {
   canvasWidth: number;
   canvasHeight: number;
@@ -348,6 +350,10 @@ function buildProjectedMaskPath(
   return d;
 }
 
+function getMaskOutlineColor(mask: ClipMask): string {
+  return mask.outlineColor || DEFAULT_MASK_OUTLINE_COLOR;
+}
+
 export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHeight }: MaskOverlayProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const suppressNextSvgClickRef = useRef(false);
@@ -614,6 +620,18 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
     if (!activeMask) return '';
     return buildProjectedMaskPath(activeMask, projectMaskPoint);
   }, [activeMask, projectMaskPoint]);
+  const visibleMaskPaths = useMemo(
+    () => (selectedClipMasks || [])
+      .filter(mask => mask.visible && mask.vertices.length >= 2)
+      .map(mask => ({
+        id: mask.id,
+        d: buildProjectedMaskPath(mask, projectMaskPoint),
+        closed: mask.closed,
+        color: getMaskOutlineColor(mask),
+      }))
+      .filter(path => path.d.length > 0),
+    [projectMaskPoint, selectedClipMasks],
+  );
 
   // Generate individual edge path segments for hit testing
   const edgeSegments = useMemo(() => {
@@ -1048,17 +1066,18 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
         />
       )}
 
-      {/* Mask path stroke - only when visible */}
-      {activeMask && activeMask.visible && pathData && (
+      {/* Mask path strokes - show every visible mask outline */}
+      {visibleMaskPaths.map(maskPath => (
         <path
-          d={pathData}
+          key={`mask-outline-${maskPath.id}`}
+          d={maskPath.d}
           fill="none"
-          stroke="#2997E5"
+          stroke={maskPath.color}
           strokeWidth="2"
-          strokeDasharray={activeMask.closed ? 'none' : '5,5'}
+          strokeDasharray={maskPath.closed ? 'none' : '5,5'}
           pointerEvents="none"
         />
-      )}
+      ))}
 
       {maskEditMode === 'drawingPen' && penInsertPreview && (
         <g className="mask-edge-insert-preview" pointerEvents="none">

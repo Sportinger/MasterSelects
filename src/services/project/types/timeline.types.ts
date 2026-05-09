@@ -43,6 +43,7 @@ export interface ProjectMask {
   featherQuality: number;
   enabled: boolean;
   visible: boolean;
+  outlineColor?: string;
   closed: boolean;
   vertices: ProjectMaskVertex[];
   position: { x: number; y: number };

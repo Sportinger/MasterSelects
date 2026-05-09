@@ -166,6 +166,7 @@ export function collectScene3DLayers(
         ...base,
         kind: 'plane',
         alphaMode: source?.videoElement
+          || source?.videoFrame
           ? 'opaque'
           : source?.imageElement
             ? 'straight'
@@ -173,9 +174,10 @@ export function collectScene3DLayers(
               ? 'premultiplied'
               : undefined,
         doubleSided: true,
-        castsDepth: !!source?.videoElement,
+        castsDepth: !!(source?.videoElement || source?.videoFrame),
         receivesDepth: true,
         videoElement: source?.videoElement ?? undefined,
+        videoFrame: source?.videoFrame ?? undefined,
         preciseVideoSampling: options.preciseVideoSampling,
         imageElement: source?.imageElement ?? undefined,
         canvas: source?.textCanvas ?? undefined,

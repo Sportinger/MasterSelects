@@ -68,8 +68,8 @@ mask.{maskId}.featherQuality
 ```
 
 `mask.*.path` stores the whole path as one keyframe value: all vertices, bezier handles, handle modes, and the closed/open state.
-It interpolates between compatible neighboring paths and holds when the topology does not match.
-The numeric mask properties use the same curve and easing behavior as transform and effect values.
+It interpolates between neighboring paths and handles added or removed vertices by tweening them from or into a collapsed neighbor point.
+The numeric mask properties use the same curve and easing behavior as transform and effect values, but the Mask tab presents `mask.*.path` as the primary stopwatch for shape animation.
 
 ### Vector Animation Properties
 
@@ -132,7 +132,7 @@ The diamond button writes a keyframe at the playhead. If a keyframe already exis
 - Transform panel stopwatch buttons are per value, including Position X/Y/Z, Scale All/X/Y/Z, and Rotation X/Y/Z. Group stopwatches are not used for these rows.
 - `scale.all` does not overwrite `scale.x`, `scale.y`, or `scale.z`; render, export, and scene-gizmo paths multiply it into the final visible scale only at evaluation time.
 - Camera stopwatch buttons are per camera value. FOV and mm both write `camera.fov`; Near, Far, Resolution X, and Resolution Y write their own camera properties.
-- Mask panel stopwatch buttons are available for Feather, Feather Quality, Position X/Y, and the whole Mask Path.
+- Mask panel stopwatch buttons are available for the whole Mask Path, Feather, and Feather Quality. Position X/Y remain animatable for compatibility and automation, but the visible mask-shape workflow uses the Mask Path stopwatch.
 - Motion shape stopwatch buttons are available for size, corner radius, fill opacity, and stroke width in the Motion tab.
 
 ### Recording Mode

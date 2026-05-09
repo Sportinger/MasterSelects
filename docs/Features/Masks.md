@@ -9,11 +9,11 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - Masks are stored on timeline clips as `ClipMask[]`.
 - The properties panel exposes rectangle, ellipse, and pen creation.
 - The preview overlay supports vertex selection, handle mode toggles, edge insertion, edge dragging, and whole-mask dragging.
-- Whole-mask dragging updates the mask `position.x` / `position.y` offset, so the Mask tab values stay in sync while dragging.
+- Whole-mask dragging uses an internal mask offset; visible shape animation is driven by the `Mask Path` stopwatch.
 - Mask outlines are projected through the active layer transform, so 2D and 3D movement, scale, and rotation keep the editable overlay aligned with the rendered mask.
 - When the mask tab is active, the normal preview Edit Mode toggle becomes navigation-only: wheel zoom and Alt/MMB pan stay available, but layer transform handles are disabled.
 - Mask outlines are only shown while the mask tab is open. Opening the tab activates the current mask for editing; leaving the tab hides the overlay again.
-- Mask paths can be keyframed as a single whole-path property.
+- Mask path animation is exposed as one `Mask Path` stopwatch, not separate vertex X/Y stopwatches.
 - Mask changes are serialized with the project.
 
 ## Data Model
@@ -32,10 +32,12 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - `position`
 - `enabled`
 - `visible`
+- `outlineColor`
 
 `MaskMode` is currently `add`, `subtract`, or `intersect`.
 `enabled` controls whether a mask contributes to the rendered mask texture.
 `visible` controls only the preview overlay outline and edit handles.
+`outlineColor` controls the SVG stroke color used for that mask in the preview overlay.
 Each `MaskVertex` can store `handleMode` as `none`, `mirrored`, or `split`.
 Per-mask inversion is baked into the generated mask texture before GPU compositing, so mixed normal/inverted masks on the same clip do not rely on a clip-wide inversion flag.
 
@@ -66,12 +68,12 @@ Clicking the first point closes the path once at least three vertices exist.
 
 The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 
-- Active masks render as SVG paths over the preview.
+- Every visible mask renders its SVG outline over the preview.
 - The SVG overlay is sized to the displayed canvas, not the full preview wrapper, so pointer coordinates stay aligned when the preview is letterboxed.
 - Visible masks show vertex squares, selected-vertex highlights, bezier handle circles, and edge hit areas.
 - Selected bezier vertices always show their handles, including when the outline is hidden or a handle is currently zero-length.
 - Mask geometry is edited in layer-local UV space and projected to the preview with the current layer transform.
-- Whole-mask dragging moves `position.x` and `position.y`, leaving the stored vertex topology unchanged.
+- Whole-mask dragging moves the internal `position.x` and `position.y` offset, leaving the stored vertex topology unchanged.
 - Dragging an edge moves the two adjacent vertices together.
 - Clicking an edge with the pen tool inserts a new vertex.
 - Dragging a vertex moves that vertex.
@@ -95,31 +97,37 @@ The overlay uses normalized layer-local coordinates internally. Pointer input is
 The properties panel exposes the following controls per mask:
 
 - Name
+- Outline color
+- Mask Path stopwatch
 - Visibility toggle
 - Mode dropdown
 - Render enabled toggle
 - Feather
 - Feather quality
-- Position X / Y
 - Inverted
 - Selected vertex handle mode
 
 `featherQuality` is stored as a 1-100 value in the UI and defaults to `50` for new masks.
 Lower values use a lower-resolution CPU blur path for faster previews; higher values preserve more edge detail.
 Feather is applied per mask before mask-mode compositing, so a later subtract mask can still cut into an earlier feathered add mask.
+Right-clicking a mask row, or clicking its color swatch, opens the outline color palette for that mask.
 Mask opacity is intentionally not exposed in the mask panel. Layer opacity is handled by the normal transform controls.
 
 ## Mask Keyframes
 
-Mask feather, feather quality, and Position X / Y use the normal numeric keyframe workflow.
-The active mask name also exposes a stopwatch for `mask.{maskId}.path`.
+The active mask exposes a dedicated `Mask Path` stopwatch for `mask.{maskId}.path`.
 That path keyframe stores the whole mask shape at once: all vertices, bezier handles, handle modes, and the closed/open state.
+This is the primary animation workflow for changing individual mask vertices over time.
+
+Mask feather and feather quality use the normal numeric keyframe workflow.
+The underlying `mask.{maskId}.position.x` and `mask.{maskId}.position.y` properties stay supported for older projects and automation paths, but they are not exposed in the Mask tab.
 
 Editing a vertex, handle, edge, or keyboard-nudging selected vertices records a new path keyframe when the path stopwatch is active or path keyframes already exist.
 This matches the After Effects-style workflow where the mask path is one animatable property instead of one property per vertex.
 
-Path interpolation expects matching topology between neighboring path keyframes.
-When the vertex count or open/closed state differs, playback holds the previous path until the next compatible path keyframe.
+Path interpolation can morph between different vertex counts.
+When a vertex exists on only one side of a keyframe segment, playback creates a temporary collapsed vertex on the nearest surviving neighbor and tweens it into, or out of, that point.
+The open/closed state remains discrete and switches at the destination keyframe.
 
 ## Shortcuts
 
@@ -167,6 +175,6 @@ Relevant files:
 ## Limitations
 
 - Mask tracking is not implemented.
-- Mask path interpolation requires matching topology between neighboring keyframes.
+- Mask path interpolation morphs added and removed vertices through collapsed neighbor points.
 - Mask mode is applied while generating the combined CPU mask texture.
 

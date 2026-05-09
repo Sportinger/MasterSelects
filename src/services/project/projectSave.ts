@@ -216,6 +216,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         featherQuality: m.featherQuality ?? 50,
         enabled: m.enabled !== false,
         visible: m.visible !== false,
+        outlineColor: m.outlineColor,
         closed: m.closed !== false,
         vertices: (m.vertices || []).map((vertex) => ({
           x: vertex.x,

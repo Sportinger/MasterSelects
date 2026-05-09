@@ -12668,15 +12668,20 @@ input[type="checkbox"] {
 }
 
 .mask-item {
+  position: relative;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .mask-item.active {
   border-color: rgba(45, 140, 235, 0.85);
   box-shadow: inset 3px 0 0 rgba(45, 140, 235, 0.9);
+}
+
+.mask-item.color-menu-open {
+  z-index: 25;
 }
 
 .mask-item.disabled {
@@ -12694,6 +12699,64 @@ input[type="checkbox"] {
 
 .mask-item-header:hover {
   background: var(--bg-hover);
+}
+
+.mask-outline-swatch {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.38);
+  cursor: pointer;
+}
+
+.mask-outline-swatch:hover,
+.mask-outline-swatch[aria-expanded="true"] {
+  border-color: rgba(255, 255, 255, 0.82);
+}
+
+.mask-outline-color-menu {
+  position: absolute;
+  top: 34px;
+  left: 40px;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(6, 18px) 26px;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: var(--shadow-lg);
+}
+
+.mask-outline-color-option {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mask-outline-color-option:hover,
+.mask-outline-color-option.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(45, 140, 235, 0.45);
+}
+
+.mask-outline-color-input {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
 }
 
 .mask-name {
@@ -12760,13 +12823,27 @@ input[type="checkbox"] {
   margin-bottom: 2px;
 }
 
-.mask-active-header strong .keyframe-toggle {
-  flex: 0 0 auto;
-}
-
 .mask-active-header span {
   color: var(--text-secondary);
   font-size: 10px;
+}
+
+.mask-path-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.mask-path-row label {
+  min-width: 70px;
+}
+
+.mask-path-row span {
+  margin-left: auto;
+  min-width: auto;
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .mask-vertex-tools {

@@ -43,6 +43,7 @@ export interface SceneLayerBase {
 export interface ScenePlaneLayer extends SceneLayerBase {
   kind: 'plane';
   videoElement?: HTMLVideoElement;
+  videoFrame?: VideoFrame;
   preciseVideoSampling?: boolean;
   imageElement?: HTMLImageElement;
   canvas?: HTMLCanvasElement;
