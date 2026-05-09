@@ -9635,6 +9635,10 @@ input[type="checkbox"] {
     0 0;
 }
 
+.media-board-wrapper.board-interacting {
+  background: var(--bg-primary);
+}
+
 .media-board-toolbar {
   display: flex;
   align-items: center;
@@ -9695,6 +9699,12 @@ input[type="checkbox"] {
 .media-board-wrapper.board-interacting .media-board-node,
 .media-board-wrapper.board-interacting .media-board-group,
 .media-board-wrapper.board-interacting .media-board-insert-gap {
+  box-shadow: none;
+  transition: none;
+}
+
+.media-board-wrapper.board-interacting .media-board-node-body,
+.media-board-wrapper.board-interacting .media-board-node-timeline-drag {
   transition: none;
 }
 

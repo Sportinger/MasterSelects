@@ -65,6 +65,7 @@ import type {
 
 const log = Logger.create('ProjectSync');
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
+const CACHED_THUMBNAIL_RESTORE_BATCH_SIZE = 48;
 
 type ProjectLoadProgressUpdate = Partial<Omit<ProjectLoadProgress, 'active'>> & {
   message: string;
@@ -1188,14 +1189,92 @@ async function applyProjectRestoreMediaUpdate(
   });
 }
 
-async function runPostLoadRestoration(projectData: ProjectFile, hydrateFiles: boolean): Promise<void> {
-  try {
-    if (!hydrateFiles) {
-      log.info('Skipping eager post-load restoration for native backend; media details are restored lazily');
-      completeProjectLoadProgress('Project ready');
-      return;
+function isProjectMediaThumbnailCandidate(media: ProjectMediaFile): boolean {
+  return Boolean(media.fileHash) && (media.type === 'image' || media.type === 'video');
+}
+
+async function applyCachedThumbnailBatch(thumbnailsById: Map<string, string>): Promise<number> {
+  if (thumbnailsById.size === 0) return 0;
+
+  const thumbnailEntries = [...thumbnailsById.entries()];
+  const appliedUrls = new Set<string>();
+  await applyProjectRestoreMediaUpdate((state) => ({
+    files: state.files.map((file) => {
+      const thumbnailUrl = thumbnailsById.get(file.id);
+      if (!thumbnailUrl || file.thumbnailUrl) return file;
+      appliedUrls.add(thumbnailUrl);
+      return { ...file, thumbnailUrl };
+    }),
+  }));
+
+  thumbnailEntries.forEach(([, thumbnailUrl]) => {
+    if (!appliedUrls.has(thumbnailUrl) && thumbnailUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(thumbnailUrl);
+    }
+  });
+  thumbnailsById.clear();
+  return appliedUrls.size;
+}
+
+async function restoreCachedMediaThumbnails(
+  projectMedia: ProjectMediaFile[],
+  onProgress?: (done: number, total: number, name: string) => void,
+): Promise<number> {
+  const candidates = projectMedia.filter(isProjectMediaThumbnailCandidate);
+  const thumbnailsById = new Map<string, string>();
+  let restoredCount = 0;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const media = candidates[index];
+    onProgress?.(index, candidates.length, media.name);
+
+    const currentFile = useMediaStore.getState().files.find((file) => file.id === media.id);
+    if (currentFile?.thumbnailUrl || !media.fileHash) {
+      continue;
     }
 
+    try {
+      const storedThumbnail = await projectDB.getThumbnail(media.fileHash);
+      let thumbnailBlob = storedThumbnail?.blob ?? null;
+
+      if ((!thumbnailBlob || thumbnailBlob.size <= 0) && projectFileService.isProjectOpen()) {
+        thumbnailBlob = await projectFileService.getThumbnail(media.fileHash);
+        if (thumbnailBlob && thumbnailBlob.size > 0) {
+          void projectDB.saveThumbnail({
+            fileHash: media.fileHash,
+            blob: thumbnailBlob,
+            createdAt: Date.now(),
+          });
+        }
+      }
+
+      if (thumbnailBlob && thumbnailBlob.size > 0) {
+        thumbnailsById.set(media.id, URL.createObjectURL(thumbnailBlob));
+      }
+
+      if (thumbnailsById.size >= CACHED_THUMBNAIL_RESTORE_BATCH_SIZE) {
+        restoredCount += await applyCachedThumbnailBatch(thumbnailsById);
+      }
+    } catch (error) {
+      log.debug('Cached thumbnail restore skipped', {
+        id: media.id,
+        name: media.name,
+        error,
+      });
+    }
+
+    if (index % 12 === 0) {
+      await yieldToBrowser();
+    }
+  }
+
+  restoredCount += await applyCachedThumbnailBatch(thumbnailsById);
+  onProgress?.(candidates.length, candidates.length, '');
+  return restoredCount;
+}
+
+async function runPostLoadRestoration(projectData: ProjectFile, hydrateFiles: boolean): Promise<void> {
+  try {
     if (hydrateFiles) {
       setProjectLoadProgress({
         phase: 'relink',
@@ -1204,11 +1283,44 @@ async function runPostLoadRestoration(projectData: ProjectFile, hydrateFiles: bo
         blocking: false,
       });
       await autoRelinkFromRawFolder();
+    } else {
+      log.info('Skipping eager file restoration for native backend; media details are restored lazily');
     }
 
     await yieldToBrowser();
 
-    log.info('Skipping eager thumbnail restoration; media panel restores visible thumbnails lazily');
+    const cachedThumbnailCandidates = projectData.media.filter(isProjectMediaThumbnailCandidate).length;
+    if (cachedThumbnailCandidates > 0) {
+      setProjectLoadProgress({
+        phase: 'thumbnails',
+        percent: 78,
+        message: 'Restoring cached thumbnails',
+        itemsDone: 0,
+        itemsTotal: cachedThumbnailCandidates,
+        blocking: false,
+      });
+      const restoredCount = await restoreCachedMediaThumbnails(projectData.media, (done, total, name) => {
+        const ratio = total > 0 ? done / total : 1;
+        setProjectLoadProgress({
+          phase: 'thumbnails',
+          percent: 78 + ratio * 8,
+          message: 'Restoring cached thumbnails',
+          detail: name,
+          itemsDone: done,
+          itemsTotal: total,
+          blocking: false,
+        });
+      });
+      log.info('Restored cached media thumbnails', {
+        restoredCount,
+        candidateCount: cachedThumbnailCandidates,
+      });
+    }
+
+    if (!hydrateFiles) {
+      completeProjectLoadProgress('Project ready');
+      return;
+    }
 
     const eagerMetadataLimit = 120;
     if (projectData.media.length <= eagerMetadataLimit) {

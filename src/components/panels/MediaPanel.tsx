@@ -717,6 +717,8 @@ export function MediaPanel() {
   // Grid view: current open folder (null = root)
   const [gridFolderId, setGridFolderId] = useState<string | null>(null);
   const [mediaBoardViewport, setMediaBoardViewport] = useState<MediaBoardViewport>(loadMediaBoardViewport);
+  const mediaBoardViewportRef = useRef<MediaBoardViewport>(mediaBoardViewport);
+  const boardWheelCommitTimerRef = useRef<number | null>(null);
   const [mediaBoardOrder, setMediaBoardOrder] = useState<Record<string, string[]>>(loadMediaBoardOrder);
   const [mediaBoardGroupOffsets, setMediaBoardGroupOffsets] = useState<Record<string, MediaBoardGroupOffset>>(loadMediaBoardGroupOffsets);
   const [mediaBoardLayouts, setMediaBoardLayouts] = useState<Record<string, MediaBoardGroupOffset>>(loadMediaBoardLayouts);
@@ -748,8 +750,16 @@ export function MediaPanel() {
   }, [viewMode]);
 
   useEffect(() => {
+    mediaBoardViewportRef.current = mediaBoardViewport;
     localStorage.setItem(BOARD_VIEWPORT_STORAGE_KEY, JSON.stringify(mediaBoardViewport));
   }, [mediaBoardViewport]);
+
+  useEffect(() => () => {
+    if (boardWheelCommitTimerRef.current !== null) {
+      window.clearTimeout(boardWheelCommitTimerRef.current);
+      boardWheelCommitTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(BOARD_ORDER_STORAGE_KEY, JSON.stringify(mediaBoardOrder));
@@ -3128,11 +3138,12 @@ export function MediaPanel() {
   const screenToMediaBoard = useCallback((clientX: number, clientY: number) => {
     const rect = boardCanvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
+    const viewport = mediaBoardViewportRef.current;
     return {
-      x: (clientX - rect.left - mediaBoardViewport.panX) / mediaBoardViewport.zoom,
-      y: (clientY - rect.top - mediaBoardViewport.panY) / mediaBoardViewport.zoom,
+      x: (clientX - rect.left - viewport.panX) / viewport.zoom,
+      y: (clientY - rect.top - viewport.panY) / viewport.zoom,
     };
-  }, [mediaBoardViewport.panX, mediaBoardViewport.panY, mediaBoardViewport.zoom]);
+  }, []);
 
   const openBoardAI = useCallback(() => {
     useDockStore.getState().activatePanelType('ai-video');
@@ -3143,6 +3154,12 @@ export function MediaPanel() {
     boardWrapperRef.current?.classList.toggle('board-interacting', enabled);
   }, []);
 
+  const applyMediaBoardViewportPreview = useCallback((viewport: MediaBoardViewport) => {
+    const inner = boardCanvasInnerRef.current;
+    if (!inner) return;
+    inner.style.transform = `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`;
+  }, []);
+
   const startMediaBoardPanGesture = useCallback((e: React.MouseEvent, options?: { clearSelectionOnTap?: boolean }) => {
     if (e.button === 1) {
       e.preventDefault();
@@ -3151,7 +3168,7 @@ export function MediaPanel() {
 
     const startX = e.clientX;
     const startY = e.clientY;
-    const startViewport = { ...mediaBoardViewport };
+    const startViewport = { ...mediaBoardViewportRef.current };
     let pendingViewport = startViewport;
     let didPan = false;
 
@@ -3159,11 +3176,7 @@ export function MediaPanel() {
       if (boardInteractionFrameRef.current !== null) return;
       boardInteractionFrameRef.current = window.requestAnimationFrame(() => {
         boardInteractionFrameRef.current = null;
-        const inner = boardCanvasInnerRef.current;
-        if (!inner) return;
-        inner.style.transform = `translate(${pendingViewport.panX}px, ${pendingViewport.panY}px) scale(${pendingViewport.zoom})`;
-        boardWrapperRef.current?.style.setProperty('--media-board-grid-x', `${pendingViewport.panX * MEDIA_BOARD_GRID_PARALLAX}px`);
-        boardWrapperRef.current?.style.setProperty('--media-board-grid-y', `${pendingViewport.panY * MEDIA_BOARD_GRID_PARALLAX}px`);
+        applyMediaBoardViewportPreview(pendingViewport);
       });
     };
 
@@ -3196,6 +3209,7 @@ export function MediaPanel() {
       setMediaBoardPerformanceMode(false);
 
       if (didPan) {
+        mediaBoardViewportRef.current = pendingViewport;
         setMediaBoardViewport(pendingViewport);
       } else if (options?.clearSelectionOnTap) {
         setSelection([]);
@@ -3209,7 +3223,7 @@ export function MediaPanel() {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('blur', handleMouseUp);
-  }, [closeContextMenu, mediaBoardViewport, setMediaBoardPerformanceMode, setSelection]);
+  }, [applyMediaBoardViewportPreview, closeContextMenu, setMediaBoardPerformanceMode, setSelection]);
 
   const startMediaBoardMarqueeGesture = useCallback((e: React.MouseEvent) => {
     const startPoint = screenToMediaBoard(e.clientX, e.clientY);
@@ -3684,8 +3698,8 @@ export function MediaPanel() {
     };
     const startX = e.clientX;
     const startY = e.clientY;
-    const startViewport = { ...mediaBoardViewport };
-    let liveViewport = { ...mediaBoardViewport };
+    const startViewport = { ...mediaBoardViewportRef.current };
+    let liveViewport = { ...startViewport };
     let didDrag = false;
     let previewDx = 0;
     let previewDy = 0;
@@ -3707,11 +3721,7 @@ export function MediaPanel() {
     };
 
     const applyLiveViewportPreview = () => {
-      const inner = boardCanvasInnerRef.current;
-      if (!inner) return;
-      inner.style.transform = `translate(${liveViewport.panX}px, ${liveViewport.panY}px) scale(${liveViewport.zoom})`;
-      boardWrapperRef.current?.style.setProperty('--media-board-grid-x', `${liveViewport.panX * MEDIA_BOARD_GRID_PARALLAX}px`);
-      boardWrapperRef.current?.style.setProperty('--media-board-grid-y', `${liveViewport.panY * MEDIA_BOARD_GRID_PARALLAX}px`);
+      applyMediaBoardViewportPreview(liveViewport);
     };
 
     const isTimelineHandoffTarget = () => {
@@ -3909,6 +3919,7 @@ export function MediaPanel() {
 
       if (didDrag) {
         suppressNextMediaBoardContextMenu();
+        mediaBoardViewportRef.current = liveViewport;
         setMediaBoardViewport(liveViewport);
 
         if (latestTimelineHandoffActive && timelineDragPayload) {
@@ -3965,10 +3976,10 @@ export function MediaPanel() {
     getMediaBoardExternalDragPayload,
     getMediaBoardInsertTarget,
     getMediaBoardTopLevelMoveIds,
+    applyMediaBoardViewportPreview,
     mediaBoardItemIds,
     mediaBoardLayout.placements,
     mediaBoardPlacementsById,
-    mediaBoardViewport,
     selectedIds,
     setMediaBoardPerformanceMode,
     suppressNextMediaBoardContextMenu,
@@ -3981,20 +3992,41 @@ export function MediaPanel() {
     if (!rect) return;
 
     const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
-    setMediaBoardViewport((current) => {
-      const nextZoom = Math.min(
-        MEDIA_BOARD_PAN_ZOOM_MAX,
-        Math.max(MEDIA_BOARD_PAN_ZOOM_MIN, current.zoom * zoomDelta),
-      );
-      const cursorX = e.clientX - rect.left;
-      const cursorY = e.clientY - rect.top;
-      return {
-        zoom: nextZoom,
-        panX: cursorX - ((cursorX - current.panX) * (nextZoom / current.zoom)),
-        panY: cursorY - ((cursorY - current.panY) * (nextZoom / current.zoom)),
-      };
-    });
-  }, []);
+    const current = mediaBoardViewportRef.current;
+    const nextZoom = Math.min(
+      MEDIA_BOARD_PAN_ZOOM_MAX,
+      Math.max(MEDIA_BOARD_PAN_ZOOM_MIN, current.zoom * zoomDelta),
+    );
+    const cursorX = e.clientX - rect.left;
+    const cursorY = e.clientY - rect.top;
+    const nextViewport = {
+      zoom: nextZoom,
+      panX: cursorX - ((cursorX - current.panX) * (nextZoom / current.zoom)),
+      panY: cursorY - ((cursorY - current.panY) * (nextZoom / current.zoom)),
+    };
+
+    mediaBoardViewportRef.current = nextViewport;
+    setMediaBoardPerformanceMode(true);
+
+    if (boardInteractionFrameRef.current === null) {
+      boardInteractionFrameRef.current = window.requestAnimationFrame(() => {
+        boardInteractionFrameRef.current = null;
+        applyMediaBoardViewportPreview(mediaBoardViewportRef.current);
+      });
+    }
+
+    if (boardWheelCommitTimerRef.current !== null) {
+      window.clearTimeout(boardWheelCommitTimerRef.current);
+    }
+    boardWheelCommitTimerRef.current = window.setTimeout(() => {
+      boardWheelCommitTimerRef.current = null;
+      const committedViewport = mediaBoardViewportRef.current;
+      setMediaBoardViewport(committedViewport);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => setMediaBoardPerformanceMode(false));
+      });
+    }, 90);
+  }, [applyMediaBoardViewportPreview, setMediaBoardPerformanceMode]);
 
   const handleMediaBoardMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
