@@ -2,6 +2,13 @@
   {
     "date": "2026-05-09",
     "type": "improve",
+    "title": "Large Media Board Search and Loading",
+    "description": "Project search now supports text and glob-style filters like *.mp4, board search dims non-matching items instead of hiding layout context, and large board layouts restore from cached placement snapshots for faster startup.",
+    "section": "Project Board"
+  },
+  {
+    "date": "2026-05-09",
+    "type": "improve",
     "title": "Timeline Cache Indicators and Slider Ranges",
     "description": "Proxy and scrub cache range indicators now render directly in the timeline ruler, while persisted custom ranges update matching color, effect, and blendshape sliders immediately.",
     "section": "Timeline / Controls",

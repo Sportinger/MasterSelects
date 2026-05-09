@@ -4,6 +4,65 @@ import { TimelineHeader } from '../../src/components/timeline/TimelineHeader';
 import type { ClipTransform, TimelineClip, TimelineTrack } from '../../src/types';
 
 describe('TimelineHeader camera look controls', () => {
+  it('edits the track name instead of expanding when the name is clicked', () => {
+    const track = {
+      id: 'video-1',
+      name: 'Video 1',
+      type: 'video',
+      height: 48,
+      visible: true,
+      muted: false,
+      solo: false,
+    } as TimelineTrack;
+    const onToggleExpand = vi.fn();
+
+    const { container } = render(
+      <TimelineHeader
+        track={track}
+        tracks={[track]}
+        isDimmed={false}
+        isExpanded={false}
+        dynamicHeight={48}
+        hasKeyframes={false}
+        selectedClipIds={new Set()}
+        clips={[]}
+        playheadPosition={0}
+        onToggleExpand={onToggleExpand}
+        onToggleSolo={vi.fn()}
+        onToggleMuted={vi.fn()}
+        onToggleVisible={vi.fn()}
+        onRenameTrack={vi.fn()}
+        onContextMenu={vi.fn()}
+        onWheel={vi.fn()}
+        clipKeyframes={new Map()}
+        getClipKeyframes={() => []}
+        getInterpolatedTransform={() => ({
+          opacity: 1,
+          blendMode: 'normal',
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+        })}
+        getInterpolatedEffects={() => []}
+        addKeyframe={vi.fn()}
+        setPlayheadPosition={vi.fn()}
+        setPropertyValue={vi.fn()}
+        expandedCurveProperties={new Map()}
+        onToggleCurveExpanded={vi.fn()}
+        onSetTrackParent={vi.fn()}
+        onTrackPickWhipDragStart={vi.fn()}
+        onTrackPickWhipDragEnd={vi.fn()}
+      />,
+    );
+
+    expect(container.textContent).toContain('(id:1)');
+
+    fireEvent.click(container.querySelector('.track-name') as HTMLElement);
+
+    expect(onToggleExpand).not.toHaveBeenCalled();
+    expect(container.querySelector('.track-name-input')).not.toBeNull();
+  });
+
   it('scrubs camera yaw as a look keyframe without moving the camera position', () => {
     const transform: ClipTransform = {
       opacity: 1,

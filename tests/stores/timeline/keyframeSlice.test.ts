@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip } from '../../helpers/mockData';
 import { KEYFRAME_RECORDING_FEEDBACK_EVENT } from '../../../src/utils/keyframeRecordingFeedback';
-import { createMaskPathProperty, createMaskNumericProperty, type ClipMask } from '../../../src/types';
+import { createMaskPathProperty, createMaskNumericProperty, type ClipMask, type MaskPathKeyframeValue } from '../../../src/types';
 
 describe('keyframeSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -160,6 +160,103 @@ describe('keyframeSlice', () => {
     expect(interpolatedMask?.vertices[0].x).toBeCloseTo(0.25);
     expect(interpolatedMask?.vertices[0].y).toBeCloseTo(0.25);
     expect(interpolatedMask?.position.x).toBeCloseTo(0.5);
+  });
+
+  it('getInterpolatedMasks: tweens an added mask vertex from a collapsed neighbor point', () => {
+    const fromPath: MaskPathKeyframeValue = {
+      closed: true,
+      vertices: [
+        { id: 'v1', x: 0, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v2', x: 1, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v3', x: 1, y: 1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      ],
+    };
+    const toPath: MaskPathKeyframeValue = {
+      closed: true,
+      vertices: [
+        { id: 'v1', x: 0, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v-new', x: 0.5, y: 0.5, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v2', x: 1, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v3', x: 1, y: 1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      ],
+    };
+    const mask: ClipMask = {
+      id: 'mask-1',
+      name: 'Mask 1',
+      vertices: fromPath.vertices,
+      closed: true,
+      opacity: 1,
+      feather: 0,
+      featherQuality: 50,
+      inverted: false,
+      mode: 'add',
+      expanded: true,
+      position: { x: 0, y: 0 },
+      enabled: true,
+      visible: true,
+    };
+    store = createTestTimelineStore({
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 10, masks: [mask] })],
+    });
+
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', fromPath, 0, 'linear');
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', toPath, 10, 'linear');
+
+    const interpolatedMask = store.getState().getInterpolatedMasks('clip-1', 5)?.[0];
+    expect(interpolatedMask?.vertices.map(vertex => vertex.id)).toEqual(['v1', 'v-new', 'v2', 'v3']);
+    const newVertex = interpolatedMask?.vertices.find(vertex => vertex.id === 'v-new');
+    expect(newVertex?.x).toBeCloseTo(0.5);
+    expect(newVertex?.y).toBeCloseTo(0.25);
+  });
+
+  it('getInterpolatedMasks: tweens a removed mask vertex into a collapsed neighbor point', () => {
+    const fromPath: MaskPathKeyframeValue = {
+      closed: true,
+      vertices: [
+        { id: 'v1', x: 0, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v-remove', x: 0.5, y: 0.5, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v2', x: 1, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v3', x: 1, y: 1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      ],
+    };
+    const toPath: MaskPathKeyframeValue = {
+      closed: true,
+      vertices: [
+        { id: 'v1', x: 0, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v2', x: 1, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'v3', x: 1, y: 1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      ],
+    };
+    const mask: ClipMask = {
+      id: 'mask-1',
+      name: 'Mask 1',
+      vertices: fromPath.vertices,
+      closed: true,
+      opacity: 1,
+      feather: 0,
+      featherQuality: 50,
+      inverted: false,
+      mode: 'add',
+      expanded: true,
+      position: { x: 0, y: 0 },
+      enabled: true,
+      visible: true,
+    };
+    store = createTestTimelineStore({
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 10, masks: [mask] })],
+    });
+
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', fromPath, 0, 'linear');
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', toPath, 10, 'linear');
+
+    const midwayMask = store.getState().getInterpolatedMasks('clip-1', 5)?.[0];
+    expect(midwayMask?.vertices.map(vertex => vertex.id)).toEqual(['v1', 'v-remove', 'v2', 'v3']);
+    const removedVertex = midwayMask?.vertices.find(vertex => vertex.id === 'v-remove');
+    expect(removedVertex?.x).toBeCloseTo(0.5);
+    expect(removedVertex?.y).toBeCloseTo(0.25);
+
+    const finalMask = store.getState().getInterpolatedMasks('clip-1', 10)?.[0];
+    expect(finalMask?.vertices.map(vertex => vertex.id)).toEqual(['v1', 'v2', 'v3']);
   });
 
   it('addKeyframe: defaults easing to linear', () => {

@@ -907,6 +907,7 @@ function TrackPropertyLabels({
 
 function TimelineHeaderComponent({
   track,
+  tracks,
   isDimmed,
   isExpanded,
   dynamicHeight,
@@ -935,6 +936,8 @@ function TimelineHeaderComponent({
   // Get the first selected clip in this track
   const trackClips = clips.filter((c) => c.trackId === track.id);
   const selectedTrackClip = trackClips.find((c) => selectedClipIds.has(c.id));
+  const videoLayerIndex = tracks.filter((timelineTrack) => timelineTrack.type === 'video').findIndex((timelineTrack) => timelineTrack.id === track.id);
+  const layerDisplayId = videoLayerIndex >= 0 ? videoLayerIndex + 1 : null;
 
   // Editing state for track name
   const [isEditing, setIsEditing] = useState(false);
@@ -949,11 +952,20 @@ function TimelineHeaderComponent({
     }
   }, [isEditing]);
 
-  // Handle double-click on name to edit
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const startNameEdit = () => {
     setEditValue(track.name);
     setIsEditing(true);
+  };
+
+  // Handle click on name to edit without toggling track expansion
+  const handleNameClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startNameEdit();
+  };
+
+  const handleNameDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    startNameEdit();
   };
 
   // Handle finishing edit
@@ -1024,13 +1036,26 @@ function TimelineHeaderComponent({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <span
-              className="track-name"
-              onDoubleClick={handleDoubleClick}
-              title="Double-click to rename"
-            >
-              {track.name}
-            </span>
+            <>
+              <span
+                className="track-name"
+                onClick={handleNameClick}
+                onDoubleClick={handleNameDoubleClick}
+                title="Click to rename"
+              >
+                {track.name}
+              </span>
+              {layerDisplayId !== null && (
+                <span
+                  className="track-layer-id"
+                  title={`Layer ${layerDisplayId}`}
+                  onClick={handleNameClick}
+                  onDoubleClick={handleNameDoubleClick}
+                >
+                  {`(id:${layerDisplayId})`}
+                </span>
+              )}
+            </>
           )}
         </div>
         <div className="track-controls">

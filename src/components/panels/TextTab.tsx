@@ -20,31 +20,116 @@ interface CompactNumberProps {
   title: string;
 }
 
+interface CompactNumberDragState {
+  startValue: number;
+  lastClientX: number;
+  accumulatedDelta: number;
+  pointerLockRequested: boolean;
+  pointerLockActive: boolean;
+  element: HTMLElement;
+}
+
 function CompactNumber({ value, onChange, min = 0, max = 999, step = 1, unit = 'px', icon, title }: CompactNumberProps) {
-  const dragStartRef = useRef<{ x: number; value: number } | null>(null);
+  const dragStateRef = useRef<CompactNumberDragState | null>(null);
+
+  const readDragDeltaX = useCallback((event: MouseEvent) => {
+    const state = dragStateRef.current;
+    if (!state) return 0;
+
+    const isPointerLocked = state.pointerLockActive || document.pointerLockElement === state.element;
+    const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
+    if (isPointerLocked) return movementX;
+
+    const clientDx = event.clientX - state.lastClientX;
+    state.lastClientX = event.clientX;
+
+    if (
+      state.pointerLockRequested &&
+      movementX !== 0 &&
+      Math.abs(clientDx) > Math.abs(movementX) * 4 + 8
+    ) {
+      return movementX;
+    }
+
+    return clientDx;
+  }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
     if ((e.target as HTMLElement).tagName === 'INPUT') return;
     e.preventDefault();
-    dragStartRef.current = { x: e.clientX, value };
+    const element = e.currentTarget as HTMLElement;
+    dragStateRef.current = {
+      startValue: value,
+      lastClientX: e.clientX,
+      accumulatedDelta: 0,
+      pointerLockRequested: false,
+      pointerLockActive: false,
+      element,
+    };
+
+    const handlePointerLockChange = () => {
+      const state = dragStateRef.current;
+      if (state) {
+        state.pointerLockActive = document.pointerLockElement === state.element;
+      }
+    };
+
+    document.addEventListener('pointerlockchange', handlePointerLockChange);
+
+    if (element.requestPointerLock) {
+      dragStateRef.current.pointerLockRequested = true;
+      try {
+        const result = element.requestPointerLock();
+        if (result && typeof result.then === 'function') {
+          void result.then(
+            () => {
+              const state = dragStateRef.current;
+              if (state) state.pointerLockActive = document.pointerLockElement === state.element;
+            },
+            () => {
+              const state = dragStateRef.current;
+              if (state) {
+                state.pointerLockRequested = false;
+                state.pointerLockActive = false;
+              }
+            },
+          );
+        }
+      } catch {
+        dragStateRef.current.pointerLockRequested = false;
+        dragStateRef.current.pointerLockActive = false;
+      }
+    }
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!dragStartRef.current) return;
-      const delta = moveEvent.clientX - dragStartRef.current.x;
+      const state = dragStateRef.current;
+      if (!state) return;
+      if ((moveEvent.buttons & 1) !== 1) {
+        handleMouseUp();
+        return;
+      }
+
+      state.accumulatedDelta += readDragDeltaX(moveEvent);
       const sensitivity = step < 1 ? 0.5 : (step >= 10 ? 5 : 1);
-      const newValue = dragStartRef.current.value + Math.round(delta / sensitivity) * step;
+      const newValue = state.startValue + Math.round(state.accumulatedDelta / sensitivity) * step;
       onChange(Math.max(min, Math.min(max, newValue)));
     };
 
     const handleMouseUp = () => {
-      dragStartRef.current = null;
+      const state = dragStateRef.current;
+      if (state && document.pointerLockElement === state.element) {
+        document.exitPointerLock?.();
+      }
+      document.removeEventListener('pointerlockchange', handlePointerLockChange);
+      dragStateRef.current = null;
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [value, onChange, min, max, step]);
+  }, [value, readDragDeltaX, onChange, min, max, step]);
 
   return (
     <div className="tt-compact-num" title={title} onMouseDown={handleMouseDown}>

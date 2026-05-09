@@ -29,6 +29,7 @@ describe('maskSlice', () => {
     expect(mask.mode).toBe('add');
     expect(mask.enabled).toBe(true);
     expect(mask.visible).toBe(true);
+    expect(mask.outlineColor).toBe('#2997E5');
   });
 
   it('addMask: uses provided partial mask data', () => {
@@ -38,6 +39,7 @@ describe('maskSlice', () => {
       feather: 10,
       inverted: true,
       mode: 'subtract',
+      outlineColor: '#abcdef',
     });
     const mask = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0];
     expect(mask.name).toBe('Custom Mask');
@@ -45,6 +47,7 @@ describe('maskSlice', () => {
     expect(mask.feather).toBe(10);
     expect(mask.inverted).toBe(true);
     expect(mask.mode).toBe('subtract');
+    expect(mask.outlineColor).toBe('#abcdef');
   });
 
   it('addMask: increments mask name based on existing count', () => {
@@ -53,6 +56,7 @@ describe('maskSlice', () => {
     const masks = store.getState().clips.find(c => c.id === 'clip-1')!.masks!;
     expect(masks[0].name).toBe('Mask 1');
     expect(masks[1].name).toBe('Mask 2');
+    expect(masks.map(m => m.outlineColor)).toEqual(['#2997E5', '#ff9900']);
   });
 
   it('addMask: sets all default properties including expanded, position, featherQuality', () => {
@@ -212,6 +216,13 @@ describe('maskSlice', () => {
     store.getState().updateMask('clip-1', maskId, { featherQuality: 90 });
     const mask = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0];
     expect(mask.featherQuality).toBe(90);
+  });
+
+  it('updateMask: updates outline color', () => {
+    const maskId = store.getState().addMask('clip-1');
+    store.getState().updateMask('clip-1', maskId, { outlineColor: '#d16bff' });
+    const mask = store.getState().clips.find(c => c.id === 'clip-1')!.masks![0];
+    expect(mask.outlineColor).toBe('#d16bff');
   });
 
   it('updateMask: only updates the targeted mask, not others', () => {

@@ -35,7 +35,7 @@ const MODEL_SEQUENCE_GPU_RETAIN_AHEAD = 8;
 const MODEL_SEQUENCE_GPU_RETAIN_BEHIND = 3;
 
 interface CachedPlaneTexture {
-  source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+  source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | VideoFrame;
   texture: GPUTexture;
   view: GPUTextureView;
   width: number;
@@ -726,18 +726,19 @@ export class NativeSceneRenderer {
     const current = this.planeTextures.get(layer.layerId);
     const sourceState = this.resolvePlaneTextureSource(layer, current);
     if (!sourceState) {
-      return layer.videoElement ? current?.view ?? null : null;
+      return layer.videoElement || layer.videoFrame ? current?.view ?? null : null;
     }
+    const sameSource = sourceState.transient === true || current?.source === sourceState.source;
     const canReuseCurrent =
       !!current &&
-      current.source === sourceState.source &&
+      sameSource &&
       current.width === sourceState.width &&
       current.height === sourceState.height;
 
     let cached = current;
     if (
       !cached ||
-      cached.source !== sourceState.source ||
+      (sourceState.transient !== true && cached.source !== sourceState.source) ||
       cached.width !== sourceState.width ||
       cached.height !== sourceState.height
     ) {
@@ -758,6 +759,8 @@ export class NativeSceneRenderer {
       this.planeTextures.set(layer.layerId, cached);
     } else if (sourceState.videoCanvas) {
       cached.videoCanvas = sourceState.videoCanvas;
+      cached.source = sourceState.source;
+    } else if (sourceState.transient) {
       cached.source = sourceState.source;
     }
 
@@ -973,11 +976,29 @@ export class NativeSceneRenderer {
     layer: ScenePlaneLayer,
     cached?: CachedPlaneTexture,
   ): {
-    source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+    source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | VideoFrame;
     width: number;
     height: number;
+    transient?: boolean;
     videoCanvas?: HTMLCanvasElement;
   } | null {
+    if (layer.videoFrame) {
+      const width = Math.max(
+        1,
+        Math.floor(layer.videoFrame.displayWidth || layer.videoFrame.codedWidth || layer.sourceWidth || 1),
+      );
+      const height = Math.max(
+        1,
+        Math.floor(layer.videoFrame.displayHeight || layer.videoFrame.codedHeight || layer.sourceHeight || 1),
+      );
+      return {
+        source: layer.videoFrame,
+        width,
+        height,
+        transient: true,
+      };
+    }
+
     if (layer.videoElement) {
       const width = Math.max(
         1,
@@ -1126,7 +1147,7 @@ export class NativeSceneRenderer {
     if (layer.alphaMode === 'opaque') {
       return true;
     }
-    return !!layer.videoElement;
+    return !!(layer.videoElement || layer.videoFrame);
   }
 
   private prunePlaneTextureCache(activeLayerIds: Set<string>): void {

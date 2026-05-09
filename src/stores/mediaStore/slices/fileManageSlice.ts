@@ -66,6 +66,21 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
           const existingBlob = await projectFileService.getThumbnail(mediaFile.fileHash);
           if (existingBlob && existingBlob.size > 0) {
             thumbnailUrl = URL.createObjectURL(existingBlob);
+            void projectDB.saveThumbnail({
+              fileHash: mediaFile.fileHash,
+              blob: existingBlob,
+              createdAt: Date.now(),
+            });
+          }
+        }
+
+        if (!thumbnailUrl && mediaFile.fileHash) {
+          const storedThumbnail = await projectDB.getThumbnail(mediaFile.fileHash);
+          if (storedThumbnail?.blob && storedThumbnail.blob.size > 0) {
+            thumbnailUrl = URL.createObjectURL(storedThumbnail.blob);
+            if (projectFileService.isProjectOpen()) {
+              void projectFileService.saveThumbnail(mediaFile.fileHash, storedThumbnail.blob);
+            }
           }
         }
 

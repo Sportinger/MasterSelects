@@ -44,6 +44,7 @@ Prepared splat runtime metadata, native splat rasterization, preview, nested com
 - Any video or image clip can be toggled to 3D from the Transform panel.
 - 3D layers become textured planes in the common 3D scene.
 - Video and image clips that still use the default `position.z = 0` start slightly behind the scene target when first toggled to 3D, so a full-frame plane does not depth-mask splats or meshes.
+- During export, 3D video planes sample the per-frame `VideoFrame` produced by the export decoder instead of relying on the preview `HTMLVideoElement`, so animated video planes advance correctly in fast and precise exports.
 - While scrubbing, 3D video planes keep their last uploaded texture if the browser video element is briefly between decoded frames, avoiding full shared-scene flicker.
 - Turning 3D off resets the 3D-specific transform state back to 2D defaults.
 
@@ -182,6 +183,7 @@ The Transform tab is context-sensitive:
 3D layers are included in export.
 
 - Scene camera resolution, scene-layer collection, splat runtime preparation, preload, and readiness now share the same scene contract across preview, nested, and export.
+- Exported 3D video planes use decoder-provided `VideoFrame` textures when available, matching the 2D export compositor frame timing.
 - Gaussian splats can export through prepared or direct native scene modes while keeping identical scene-camera semantics.
 - Export waits for shared 3D and splat readiness before capture so preview and export stay aligned.
 

@@ -430,6 +430,38 @@ describe('NativeSceneRenderer shared depth contract', () => {
     expect(depthMaskOptions.depthAlphaCutoff).toBeGreaterThan(0.05);
   });
 
+  it('uploads VideoFrame sources for exported 3D video planes', async () => {
+    const renderer = await createInitializedRenderer();
+
+    const { device } = createFakeDevice();
+    const videoFrame = {
+      displayWidth: 640,
+      displayHeight: 360,
+      codedWidth: 640,
+      codedHeight: 360,
+    } as VideoFrame;
+    const result = renderer.renderScene(
+      device,
+      [{
+        ...makePlaneLayer('video-frame-plane', 1),
+        sourceWidth: 640,
+        sourceHeight: 360,
+        videoElement: undefined,
+        videoFrame,
+      }],
+      makeCamera(),
+      [],
+      false,
+    );
+
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledWith(
+      { source: videoFrame },
+      expect.anything(),
+      { width: 640, height: 360 },
+    );
+  });
+
   it('keeps source alpha for non-opaque video planes', async () => {
     const renderer = await createInitializedRenderer();
 

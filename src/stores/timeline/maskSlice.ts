@@ -3,6 +3,8 @@
 import type { MaskActions, SliceCreator, ClipMask, MaskVertex, MaskEditMode } from './types';
 import { getMaskVerticesHandleModeUpdates, inferMaskVertexHandleMode } from '../../utils/maskVertexHandles';
 
+const DEFAULT_MASK_OUTLINE_COLORS = ['#2997E5', '#ff9900', '#7ddc7a', '#d16bff', '#ff5f6d', '#f8d34f'];
+
 export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
   setMaskEditMode: (mode: MaskEditMode) => {
     set({ maskEditMode: mode, maskDrawStart: null });
@@ -75,6 +77,7 @@ export const createMaskSlice: SliceCreator<MaskActions> = (set, get) => ({
       position: maskData?.position ?? { x: 0, y: 0 },
       enabled: maskData?.enabled ?? true,
       visible: maskData?.visible ?? true,
+      outlineColor: maskData?.outlineColor ?? DEFAULT_MASK_OUTLINE_COLORS[(maskCount - 1) % DEFAULT_MASK_OUTLINE_COLORS.length],
     };
 
     set({

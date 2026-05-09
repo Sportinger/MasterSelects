@@ -1,5 +1,5 @@
 // Masks Tab - focused clip mask creation and editing controls
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
@@ -16,7 +16,7 @@ import {
   type MaskPathKeyframeValue,
   type MaskVertexHandleMode,
 } from '../../../types';
-import { DraggableNumber, KeyframeToggle } from './shared';
+import { DraggableNumber, KeyframeToggle, PrecisionSlider } from './shared';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 
 const MASK_MODES: { value: MaskMode; label: string }[] = [
@@ -24,7 +24,13 @@ const MASK_MODES: { value: MaskMode; label: string }[] = [
   { value: 'subtract', label: 'Subtract' },
   { value: 'intersect', label: 'Intersect' },
 ];
+const DEFAULT_MASK_OUTLINE_COLOR = '#2997E5';
+const MASK_OUTLINE_COLORS = ['#2997E5', '#ff9900', '#7ddc7a', '#d16bff', '#ff5f6d', '#f8d34f'];
 const EMPTY_KEYFRAMES: Keyframe[] = [];
+
+function getColorInputValue(color: string | undefined): string {
+  return /^#[0-9a-f]{6}$/i.test(color || '') ? color! : DEFAULT_MASK_OUTLINE_COLOR;
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   return (
@@ -194,7 +200,7 @@ function MaskPathKeyframeToggle({ clipId, mask }: { clipId: string; mask: ClipMa
     <button
       type="button"
       className={`keyframe-toggle ${recordingEnabled ? 'recording' : ''} ${hasPathKeyframes ? 'has-keyframes' : ''}`}
-      title={recordingEnabled || hasPathKeyframes ? 'Add mask path keyframe (right-click to disable)' : 'Add mask path keyframe'}
+      title={recordingEnabled || hasPathKeyframes ? 'Add Mask Path keyframe (right-click to disable)' : 'Add Mask Path keyframe'}
       onClick={(event) => {
         event.stopPropagation();
         addPathKeyframe();
@@ -221,8 +227,36 @@ interface MaskItemProps {
 
 function MaskItem({ clipId, mask, index, count, isActive, onSelect }: MaskItemProps) {
   const { updateMask, removeMask, reorderMasks, setActiveMask, setMaskEditMode } = useTimelineStore.getState();
+  const itemRef = useRef<HTMLDivElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(mask.name);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const outlineColor = getColorInputValue(mask.outlineColor);
+
+  useEffect(() => {
+    if (!colorMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (itemRef.current?.contains(event.target as Node)) return;
+      setColorMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setColorMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [colorMenuOpen]);
+
+  useEffect(() => {
+    setColorMenuOpen(false);
+  }, [mask.id]);
 
   const commitName = () => {
     const nextName = editName.trim();
@@ -236,9 +270,28 @@ function MaskItem({ clipId, mask, index, count, isActive, onSelect }: MaskItemPr
     setMaskEditMode('editing');
   };
 
+  const openColorMenu = (event: React.MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelect();
+    setActiveMask(clipId, mask.id);
+    setColorMenuOpen(true);
+  };
+
+  const setOutlineColor = (color: string) => {
+    updateMask(clipId, mask.id, { outlineColor: color });
+  };
+
   return (
-    <div className={`mask-item ${isActive ? 'active' : ''} ${mask.expanded ? 'expanded' : ''} ${mask.enabled === false ? 'disabled' : ''}`}>
-      <div className="mask-item-header" onClick={onSelect}>
+    <div
+      ref={itemRef}
+      className={`mask-item ${isActive ? 'active' : ''} ${mask.expanded ? 'expanded' : ''} ${mask.enabled === false ? 'disabled' : ''} ${colorMenuOpen ? 'color-menu-open' : ''}`}
+    >
+      <div
+        className="mask-item-header"
+        onClick={onSelect}
+        onContextMenu={openColorMenu}
+      >
         <IconButton
           icon="chevron"
           title={mask.expanded ? 'Collapse mask' : 'Expand mask'}
@@ -247,6 +300,22 @@ function MaskItem({ clipId, mask, index, count, isActive, onSelect }: MaskItemPr
             e.stopPropagation();
             updateMask(clipId, mask.id, { expanded: !mask.expanded });
           }}
+        />
+
+        <button
+          type="button"
+          className="mask-outline-swatch"
+          title="Mask outline color"
+          aria-haspopup="menu"
+          aria-expanded={colorMenuOpen}
+          style={{ backgroundColor: outlineColor }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+            setActiveMask(clipId, mask.id);
+            setColorMenuOpen(open => !open);
+          }}
+          onContextMenu={openColorMenu}
         />
 
         {isEditing ? (
@@ -338,6 +407,42 @@ function MaskItem({ clipId, mask, index, count, isActive, onSelect }: MaskItemPr
           />
         </div>
       </div>
+      {colorMenuOpen && (
+        <div
+          className="mask-outline-color-menu"
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          {MASK_OUTLINE_COLORS.map(color => (
+            <button
+              type="button"
+              key={color}
+              className={`mask-outline-color-option ${color.toLowerCase() === outlineColor.toLowerCase() ? 'active' : ''}`}
+              style={{ backgroundColor: color }}
+              title={`Outline ${color}`}
+              aria-label={`Set outline color ${color}`}
+              role="menuitem"
+              onClick={() => {
+                setOutlineColor(color);
+                setColorMenuOpen(false);
+              }}
+            />
+          ))}
+          <input
+            className="mask-outline-color-input"
+            type="color"
+            title="Custom outline color"
+            aria-label="Custom outline color"
+            value={outlineColor}
+            onChange={(e) => setOutlineColor(e.target.value)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -520,8 +625,6 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
 
   const activeMaskFeatherProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'feather') : null;
   const activeMaskFeatherQualityProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'featherQuality') : null;
-  const activeMaskPositionXProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'position.x') : null;
-  const activeMaskPositionYProperty = activeMask ? createMaskNumericProperty(activeMask.id, 'position.y') : null;
 
   return (
     <div className="properties-tab-content masks-tab">
@@ -572,7 +675,6 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
             <div>
               <strong>
                 {activeMask.name}
-                <MaskPathKeyframeToggle clipId={clipId} mask={activeMask} />
               </strong>
               <span>{activeMask.closed ? 'Closed path' : 'Open path'} / {activeMask.vertices.length} vertices / {selectedVertexIds.size} selected</span>
             </div>
@@ -657,6 +759,11 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
           <div className="mask-property-groups">
             <div className="mask-property-group">
               <h5>Edge</h5>
+              <div className="control-row mask-path-row">
+                <label>Mask Path</label>
+                <MaskPathKeyframeToggle clipId={clipId} mask={activeMask} />
+                <span>{activeMask.vertices.length} vertices</span>
+              </div>
               <div className="control-row">
                 <MIDIParameterLabel
                   as="label"
@@ -674,6 +781,18 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
                 {activeMaskFeatherProperty && (
                   <KeyframeToggle clipId={clipId} property={activeMaskFeatherProperty} value={activeMask.feather} />
                 )}
+                <PrecisionSlider
+                  value={activeMask.feather}
+                  onChange={(v) => activeMaskFeatherProperty
+                    ? setPropertyValue(clipId, activeMaskFeatherProperty, Math.max(0, v))
+                    : updateMask(clipId, activeMask.id, { feather: Math.max(0, v) })}
+                  defaultValue={0}
+                  min={0}
+                  max={500}
+                  step={1}
+                  onDragStart={handleBatchStart}
+                  onDragEnd={handleBatchEnd}
+                />
                 <DraggableNumber
                   value={activeMask.feather}
                   onChange={(v) => activeMaskFeatherProperty
@@ -716,68 +835,6 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
                   max={100}
                   sensitivity={1}
                   decimals={0}
-                  onDragStart={handleBatchStart}
-                  onDragEnd={handleBatchEnd}
-                />
-              </div>
-            </div>
-
-            <div className="mask-property-group">
-              <h5>Transform</h5>
-              <div className="control-row">
-                <MIDIParameterLabel
-                  as="label"
-                  target={{
-                    clipId,
-                    property: `mask.${activeMask.id}.position.x`,
-                    label: `${activeMask.name} / Position X`,
-                    currentValue: activeMask.position.x,
-                    min: -1,
-                    max: 1,
-                  }}
-                >
-                  X
-                </MIDIParameterLabel>
-                {activeMaskPositionXProperty && (
-                  <KeyframeToggle clipId={clipId} property={activeMaskPositionXProperty} value={activeMask.position.x} />
-                )}
-                <DraggableNumber
-                  value={activeMask.position.x}
-                  onChange={(v) => activeMaskPositionXProperty
-                    ? setPropertyValue(clipId, activeMaskPositionXProperty, v)
-                    : updateMask(clipId, activeMask.id, { position: { ...activeMask.position, x: v } })}
-                  defaultValue={0}
-                  sensitivity={100}
-                  decimals={3}
-                  onDragStart={handleBatchStart}
-                  onDragEnd={handleBatchEnd}
-                />
-              </div>
-              <div className="control-row">
-                <MIDIParameterLabel
-                  as="label"
-                  target={{
-                    clipId,
-                    property: `mask.${activeMask.id}.position.y`,
-                    label: `${activeMask.name} / Position Y`,
-                    currentValue: activeMask.position.y,
-                    min: -1,
-                    max: 1,
-                  }}
-                >
-                  Y
-                </MIDIParameterLabel>
-                {activeMaskPositionYProperty && (
-                  <KeyframeToggle clipId={clipId} property={activeMaskPositionYProperty} value={activeMask.position.y} />
-                )}
-                <DraggableNumber
-                  value={activeMask.position.y}
-                  onChange={(v) => activeMaskPositionYProperty
-                    ? setPropertyValue(clipId, activeMaskPositionYProperty, v)
-                    : updateMask(clipId, activeMask.id, { position: { ...activeMask.position, y: v } })}
-                  defaultValue={0}
-                  sensitivity={100}
-                  decimals={3}
                   onDragStart={handleBatchStart}
                   onDragEnd={handleBatchEnd}
                 />

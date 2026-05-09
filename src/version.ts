@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.7';
+export const APP_VERSION = '1.7.8';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Timeline cache and slider polish',
-  message: 'Proxy and scrub cache ranges now live in the timeline ruler, and custom slider ranges stay in sync across color, effect, and blendshape controls.',
+  title: 'Board search and fast large projects',
+  message: 'Project search now supports filters like *.mp4, while the board keeps layouts stable and restores cached placement data for faster large-project loading.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Timeline and mask editing polish',
-  message: 'Keyframe rows, camera tracks, mask editing, and native-helper workflows received another round of production hardening.',
+  title: 'Large media board polish',
+  message: 'Board folders, loose items, search dimming, and overview rendering received another round of interaction and performance hardening.',
   animated: true,
 };
 

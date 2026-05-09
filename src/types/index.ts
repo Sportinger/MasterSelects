@@ -968,6 +968,7 @@ export interface ClipMask {
   position: { x: number; y: number };  // Offset in normalized coords (0-1)
   enabled: boolean;       // Whether the mask affects rendering
   visible: boolean;       // Toggle outline visibility
+  outlineColor?: string;  // Preview overlay stroke color
 }
 
 export interface MaskPathKeyframeValue {
