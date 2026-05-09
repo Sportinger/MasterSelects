@@ -1,5 +1,13 @@
 [
   {
+    "date": "2026-05-09",
+    "type": "improve",
+    "title": "Timeline Cache Indicators and Slider Ranges",
+    "description": "Proxy and scrub cache range indicators now render directly in the timeline ruler, while persisted custom ranges update matching color, effect, and blendshape sliders immediately.",
+    "section": "Timeline / Controls",
+    "commits": ["103c205e"]
+  },
+  {
     "date": "2026-05-08",
     "type": "fix",
     "title": "Browser Export Diagnostics and Audio Skip",
