@@ -103,10 +103,17 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
             }
           }
 
-          // Restore thumbnail from project folder
-          if (stored.fileHash && projectFileService.isProjectOpen()) {
-            const thumbBlob = await projectFileService.getThumbnail(stored.fileHash);
-            if (thumbBlob) {
+          // Restore thumbnail from project folder or IndexedDB cache.
+          if (stored.fileHash) {
+            let thumbBlob: Blob | null = null;
+            if (projectFileService.isProjectOpen()) {
+              thumbBlob = await projectFileService.getThumbnail(stored.fileHash);
+            }
+            if (!thumbBlob || thumbBlob.size <= 0) {
+              const storedThumbnail = await projectDB.getThumbnail(stored.fileHash);
+              thumbBlob = storedThumbnail?.blob ?? null;
+            }
+            if (thumbBlob && thumbBlob.size > 0) {
               thumbnailUrl = URL.createObjectURL(thumbBlob);
             }
           }

@@ -2,13 +2,15 @@
 
 import { THUMBNAIL_TIMEOUT } from '../constants';
 import { projectFileService } from '../../../services/projectFileService';
+import { projectDB } from '../../../services/projectDB';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('Thumbnail');
 
-const THUMBNAIL_MAX_WIDTH = 320;
-const THUMBNAIL_MAX_HEIGHT = 240;
-const THUMBNAIL_QUALITY = 0.72;
+const THUMBNAIL_MAX_WIDTH = 256;
+const THUMBNAIL_MAX_HEIGHT = 192;
+const THUMBNAIL_QUALITY = 0.68;
+const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
 
 /**
  * Create thumbnail for video or image.
@@ -55,18 +57,9 @@ export async function createThumbnail(
       };
 
       video.onseeked = () => {
-        const canvas = document.createElement('canvas');
-        const size = getThumbnailCanvasSize(video.videoWidth || 16, video.videoHeight || 9);
-        canvas.width = size.width;
-        canvas.height = size.height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          resolve(canvasToThumbnailDataUrl(canvas));
-        } else {
-          resolve(undefined);
-        }
-        cleanup();
+        void drawThumbnailFromSource(video, video.videoWidth || 16, video.videoHeight || 9)
+          .then(resolve)
+          .finally(cleanup);
       };
 
       video.onerror = () => {
@@ -82,6 +75,19 @@ export async function createThumbnail(
 }
 
 async function createImageThumbnail(file: File): Promise<string | undefined> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(file);
+      try {
+        return await drawThumbnailFromSource(bitmap, bitmap.width, bitmap.height);
+      } finally {
+        bitmap.close();
+      }
+    } catch {
+      // Fall back to HTMLImageElement decoding for formats createImageBitmap cannot decode.
+    }
+  }
+
   return new Promise((resolve) => {
     const image = new Image();
     const url = URL.createObjectURL(file);
@@ -108,22 +114,9 @@ async function createImageThumbnail(file: File): Promise<string | undefined> {
         return;
       }
 
-      const size = getThumbnailCanvasSize(width, height);
-      const canvas = document.createElement('canvas');
-      canvas.width = size.width;
-      canvas.height = size.height;
-      const ctx = canvas.getContext('2d');
-
-      if (!ctx) {
-        cleanup();
-        resolve(undefined);
-        return;
-      }
-
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      const thumbnail = canvasToThumbnailDataUrl(canvas);
-      cleanup();
-      resolve(thumbnail);
+      void drawThumbnailFromSource(image, width, height)
+        .then(resolve)
+        .finally(cleanup);
     };
 
     image.onerror = () => {
@@ -134,6 +127,25 @@ async function createImageThumbnail(file: File): Promise<string | undefined> {
     image.decoding = 'async';
     image.src = url;
   });
+}
+
+async function drawThumbnailFromSource(
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+): Promise<string | undefined> {
+  const size = getThumbnailCanvasSize(sourceWidth, sourceHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) return undefined;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'medium';
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvasToThumbnailUrl(canvas);
 }
 
 function getThumbnailCanvasSize(sourceWidth: number, sourceHeight: number): { width: number; height: number } {
@@ -153,12 +165,24 @@ function getThumbnailCanvasSize(sourceWidth: number, sourceHeight: number): { wi
   };
 }
 
-function canvasToThumbnailDataUrl(canvas: HTMLCanvasElement): string {
-  const webp = canvas.toDataURL('image/webp', THUMBNAIL_QUALITY);
-  if (webp.startsWith('data:image/webp')) {
-    return webp;
+async function canvasToThumbnailUrl(canvas: HTMLCanvasElement): Promise<string> {
+  const webp = await canvasToBlob(canvas, 'image/webp', THUMBNAIL_QUALITY);
+  if (webp?.type === 'image/webp' && webp.size > 0) {
+    return URL.createObjectURL(webp);
   }
+
+  const jpeg = await canvasToBlob(canvas, 'image/jpeg', THUMBNAIL_QUALITY);
+  if (jpeg && jpeg.size > 0) {
+    return URL.createObjectURL(jpeg);
+  }
+
   return canvas.toDataURL('image/jpeg', THUMBNAIL_QUALITY);
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, type, quality);
+  });
 }
 
 /**
@@ -169,15 +193,30 @@ export async function handleThumbnailDedup(
   fileHash: string | undefined,
   thumbnailUrl: string | undefined
 ): Promise<string | undefined> {
-  if (!fileHash || !projectFileService.isProjectOpen()) {
+  if (!fileHash) {
     return thumbnailUrl;
   }
 
   try {
-    // Check for existing thumbnail
-    const existingBlob = await projectFileService.getThumbnail(fileHash);
+    let existingBlob: Blob | null = null;
+
+    if (projectFileService.isProjectOpen()) {
+      existingBlob = await projectFileService.getThumbnail(fileHash);
+    }
+
+    if (!existingBlob || existingBlob.size <= 0) {
+      const storedThumbnail = await projectDB.getThumbnail(fileHash);
+      existingBlob = storedThumbnail?.blob ?? null;
+    }
+
     if (existingBlob && existingBlob.size > 0) {
       log.debug('Reusing existing for hash:', fileHash.slice(0, 8));
+      if (isBlobUrl(thumbnailUrl)) {
+        URL.revokeObjectURL(thumbnailUrl);
+      }
+      if (projectFileService.isProjectOpen()) {
+        void projectFileService.saveThumbnail(fileHash, existingBlob);
+      }
       return URL.createObjectURL(existingBlob);
     }
 
@@ -185,8 +224,15 @@ export async function handleThumbnailDedup(
     if (thumbnailUrl) {
       const blob = await fetchThumbnailBlob(thumbnailUrl);
       if (blob && blob.size > 0) {
-        await projectFileService.saveThumbnail(fileHash, blob);
-        log.debug('Saved to project folder:', fileHash.slice(0, 8));
+        await projectDB.saveThumbnail({
+          fileHash,
+          blob,
+          createdAt: Date.now(),
+        });
+        if (projectFileService.isProjectOpen()) {
+          await projectFileService.saveThumbnail(fileHash, blob);
+        }
+        log.debug('Saved thumbnail cache:', fileHash.slice(0, 8));
       }
     }
   } catch (e) {

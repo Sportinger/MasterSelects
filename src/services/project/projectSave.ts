@@ -35,6 +35,7 @@ import type {
 } from '../../types';
 import type {
   ProjectMediaBoardGroupOffsets,
+  ProjectMediaBoardNodeLayout,
   ProjectMediaBoardOrder,
   ProjectMediaBoardViewport,
 } from './types/project.types';
@@ -493,6 +494,7 @@ export async function syncStoresToProject(): Promise<void> {
       const mediaPanelBoardViewport = parseLocalStorageJson<ProjectMediaBoardViewport>('media-panel-board-viewport');
       const mediaPanelBoardOrder = parseLocalStorageJson<ProjectMediaBoardOrder>('media-panel-board-order');
       const mediaPanelBoardGroupOffsets = parseLocalStorageJson<ProjectMediaBoardGroupOffsets>('media-panel-board-group-offsets');
+      const mediaPanelBoardLayouts = parseLocalStorageJson<Record<string, ProjectMediaBoardNodeLayout>>('media-panel-board-layouts');
       const transcriptLanguage = localStorage.getItem('transcriptLanguage');
       const settingsState = useSettingsStore.getState();
       const midiState = useMIDIStore.getState();
@@ -506,6 +508,7 @@ export async function syncStoresToProject(): Promise<void> {
         mediaPanelBoardViewport,
         mediaPanelBoardOrder,
         mediaPanelBoardGroupOffsets,
+        mediaPanelBoardLayouts,
         transcriptLanguage: transcriptLanguage || undefined,
         thumbnailsEnabled: timelineState.thumbnailsEnabled,
         waveformsEnabled: timelineState.waveformsEnabled,

@@ -9688,11 +9688,7 @@ input[type="checkbox"] {
   cursor: grabbing;
 }
 
-.media-board-wrapper.board-interacting .media-board-node {
-  will-change: transform;
-}
-
-.media-board-wrapper.board-interacting .media-board-group {
+.media-board-wrapper.board-interacting .media-board-canvas-inner {
   will-change: transform;
 }
 
@@ -9754,6 +9750,18 @@ input[type="checkbox"] {
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 12px 26px rgba(0, 0, 0, 0.24);
   z-index: 15;
+}
+
+.media-board-group.folder-group.selected {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 2px rgba(45, 140, 235, 0.24),
+    0 10px 22px rgba(0, 0, 0, 0.24);
+}
+
+.media-board-group.folder-group.drag-source-preview {
+  z-index: 14;
 }
 
 .media-board-group-header {

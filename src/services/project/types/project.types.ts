@@ -56,8 +56,8 @@ export interface ProjectMediaBoardViewport {
 export interface ProjectMediaBoardNodeLayout {
   x: number;
   y: number;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
 }
 
 export type ProjectMediaBoardOrder = Record<string, string[]>;
@@ -82,7 +82,6 @@ export interface ProjectUIState {
   mediaPanelBoardViewport?: ProjectMediaBoardViewport;
   mediaPanelBoardOrder?: ProjectMediaBoardOrder;
   mediaPanelBoardGroupOffsets?: ProjectMediaBoardGroupOffsets;
-  /** @deprecated Board nodes now snap to folder slot grids; retained only to ignore older project files safely. */
   mediaPanelBoardLayouts?: Record<string, ProjectMediaBoardNodeLayout>;
   // Transcript settings
   transcriptLanguage?: string;

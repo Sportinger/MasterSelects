@@ -1101,6 +1101,11 @@ export async function loadProjectToStores(): Promise<void> {
   } else {
     removeLocalStorageKey('media-panel-board-group-offsets');
   }
+  if (projectData.uiState?.mediaPanelBoardLayouts) {
+    localStorage.setItem('media-panel-board-layouts', JSON.stringify(projectData.uiState.mediaPanelBoardLayouts));
+  } else {
+    removeLocalStorageKey('media-panel-board-layouts');
+  }
   removeLocalStorageKey('media-panel-board-layout');
   window.dispatchEvent(new CustomEvent(MEDIA_PANEL_PROJECT_UI_LOADED_EVENT));
   if (projectData.uiState?.transcriptLanguage) {
