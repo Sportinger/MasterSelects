@@ -103,6 +103,8 @@ export function EditableDraggableNumber({
   const startValue = useRef(0);
   const lastClientX = useRef(0);
   const dragStarted = useRef(false);
+  const pointerLockRequested = useRef(false);
+  const pointerLockActive = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftValue, setDraftValue] = useState(() => formatEditableValue(value, decimals));
   const [draftDefaultValue, setDraftDefaultValue] = useState('');
@@ -248,9 +250,28 @@ export function EditableDraggableNumber({
   }, [showBoundsPopover, updatePopoverPlacement]);
 
   const readDragDeltaX = useCallback((event: MouseEvent) => {
-    const dx = event.clientX - lastClientX.current;
+    const element = spanRef.current;
+    const isPointerLocked =
+      pointerLockActive.current ||
+      (element !== null && document.pointerLockElement === element);
+    const movementX = Number.isFinite(event.movementX) ? event.movementX : 0;
+
+    if (isPointerLocked) {
+      return movementX;
+    }
+
+    const clientDx = event.clientX - lastClientX.current;
     lastClientX.current = event.clientX;
-    return dx;
+
+    if (
+      pointerLockRequested.current &&
+      movementX !== 0 &&
+      Math.abs(clientDx) > Math.abs(movementX) * 4 + 8
+    ) {
+      return movementX;
+    }
+
+    return clientDx;
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -269,6 +290,37 @@ export function EditableDraggableNumber({
     startValue.current = value;
     lastClientX.current = e.clientX;
     dragStarted.current = false;
+    pointerLockRequested.current = false;
+    pointerLockActive.current = false;
+
+    const element = spanRef.current;
+
+    const handlePointerLockChange = () => {
+      pointerLockActive.current = element !== null && document.pointerLockElement === element;
+    };
+
+    document.addEventListener('pointerlockchange', handlePointerLockChange);
+
+    if (element?.requestPointerLock) {
+      pointerLockRequested.current = true;
+      try {
+        const result = element.requestPointerLock();
+        if (result && typeof result.then === 'function') {
+          void result.then(
+            () => {
+              pointerLockActive.current = document.pointerLockElement === element;
+            },
+            () => {
+              pointerLockRequested.current = false;
+              pointerLockActive.current = false;
+            },
+          );
+        }
+      } catch {
+        pointerLockRequested.current = false;
+        pointerLockActive.current = false;
+      }
+    }
 
     const handleMouseMove = (event: MouseEvent) => {
       if ((event.buttons & 1) !== 1) {
@@ -305,12 +357,19 @@ export function EditableDraggableNumber({
     };
 
     const handleMouseUp = () => {
+      const lockedElement = document.pointerLockElement;
+      if (element !== null && lockedElement === element) {
+        document.exitPointerLock?.();
+      }
+      document.removeEventListener('pointerlockchange', handlePointerLockChange);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       if (dragStarted.current) {
         onDragEnd?.();
       }
       dragStarted.current = false;
+      pointerLockRequested.current = false;
+      pointerLockActive.current = false;
     };
 
     window.addEventListener('mousemove', handleMouseMove);

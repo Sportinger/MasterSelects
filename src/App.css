@@ -6252,6 +6252,18 @@ input[type="checkbox"] {
   font-weight: 500;
   color: var(--text-primary);
   cursor: text;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 62px;
+}
+
+.track-layer-id {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1;
 }
 
 .track-name-input {
@@ -9721,6 +9733,13 @@ input[type="checkbox"] {
   transform-origin: 0 0;
 }
 
+.media-board-overview-canvas {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  z-index: 4;
+}
+
 .media-board-group {
   position: absolute;
   contain: layout paint style;
@@ -11044,6 +11063,7 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
 }
 
 .track-expand-arrow {

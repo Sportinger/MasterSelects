@@ -179,6 +179,7 @@ export function Timeline() {
   // Keyframe state
   const { selectedKeyframeIds, clipKeyframes, expandedCurveProperties } =
     useTimelineStore(useShallow(selectKeyframeState));
+  const expandedTracks = useTimelineStore(state => state.expandedTracks);
 
   // ===========================================
   // STABLE ACTION REFERENCES
@@ -193,7 +194,7 @@ export function Timeline() {
   const { play, pause, stop, playForward, playReverse, setPlayheadPosition, setDraggingPlayhead } = store;
 
   // Track actions
-  const { addTrack, isTrackExpanded, toggleTrackExpanded, getExpandedTrackHeight, trackHasKeyframes, setTrackParent } = store;
+  const { addTrack, toggleTrackExpanded, getExpandedTrackHeight, trackHasKeyframes, setTrackParent } = store;
 
   // Clip actions
   const {
@@ -277,6 +278,14 @@ export function Timeline() {
   const compositionSwitchTargetTracks = useTimelineStore(s => s.compositionSwitchTargetTracks);
   const compositionSwitchSourceTracksRef = useRef<TimelineTrackType[] | null>(null);
   const isCompositionTrackMorphing = clipAnimationPhase !== 'idle' && compositionSwitchTargetTracks !== null;
+  const isTrackExpandedFromState = useCallback(
+    (trackId: string) => expandedTracks.has(trackId),
+    [expandedTracks],
+  );
+  const isTrackExpandedForRender = useCallback(
+    (trackId: string) => !isCompositionTrackMorphing && expandedTracks.has(trackId),
+    [expandedTracks, isCompositionTrackMorphing],
+  );
   const timelineViewTracks = useMemo(
     () => isCompositionTrackMorphing
       ? buildCompositionSwitchTracks(
@@ -568,7 +577,7 @@ export function Timeline() {
     selectKeyframe,
     deselectAllKeyframes,
     pixelToTime,
-    isTrackExpanded,
+    isTrackExpanded: isTrackExpandedForRender,
     getExpandedTrackHeight,
   });
 
@@ -621,17 +630,26 @@ export function Timeline() {
 
   // Calculate total content height and track snap positions for vertical scrollbar
   // Dependencies: tracks, expansion state, curve editor state, selected clips (affects property rows)
-  const { contentHeight, trackSnapPositions } = useMemo(() => {
+  const { contentHeight, trackSnapPositions, renderedTrackHeights } = useMemo(() => {
     let totalHeight = 0;
     const snapPositions: number[] = [0];
+    const trackHeights = new Map<string, number>();
     for (const track of timelineViewTracks) {
-      const isExpanded = !isCompositionTrackMorphing && isTrackExpanded(track.id);
-      totalHeight += isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
+      const isExpanded = isTrackExpandedForRender(track.id);
+      const trackHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
+      trackHeights.set(track.id, trackHeight);
+      totalHeight += trackHeight;
       snapPositions.push(totalHeight);
     }
-    return { contentHeight: totalHeight, trackSnapPositions: snapPositions };
+    return { contentHeight: totalHeight, trackSnapPositions: snapPositions, renderedTrackHeights: trackHeights };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineViewTracks, isCompositionTrackMorphing, isTrackExpanded, getExpandedTrackHeight, expandedCurveProperties, curveEditorHeight, selectedClipIds, clipKeyframes]);
+  }, [timelineViewTracks, isTrackExpandedForRender, getExpandedTrackHeight, expandedCurveProperties, curveEditorHeight, selectedClipIds, clipKeyframes]);
+  const getRenderedTrackHeight = useCallback(
+    (trackId: string, baseHeight: number) =>
+      renderedTrackHeights.get(trackId) ??
+        (isTrackExpandedForRender(trackId) ? getExpandedTrackHeight(trackId, baseHeight) : baseHeight),
+    [renderedTrackHeights, isTrackExpandedForRender, getExpandedTrackHeight],
+  );
 
   // Track viewport height for scrollbar
   const [viewportHeight, setViewportHeight] = useState(300);
@@ -1172,8 +1190,8 @@ export function Timeline() {
               const isDimmed =
                 (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
                 (track.type === 'audio' && anyViewAudioSolo && !track.solo);
-              const isExpanded = !isCompositionTrackMorphing && isTrackExpanded(track.id);
-              const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
+              const isExpanded = isTrackExpandedForRender(track.id);
+              const dynamicHeight = getRenderedTrackHeight(track.id, track.height);
 
               return (
                   <TimelineHeader
@@ -1296,8 +1314,8 @@ export function Timeline() {
                 const isDimmed =
                   (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
                   (track.type === 'audio' && anyViewAudioSolo && !track.solo);
-                const isExpanded = !isCompositionTrackMorphing && isTrackExpanded(track.id);
-                const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
+                const isExpanded = isTrackExpandedForRender(track.id);
+                const dynamicHeight = getRenderedTrackHeight(track.id, track.height);
 
                 return (
                   <TimelineTrack
@@ -1344,7 +1362,7 @@ export function Timeline() {
           {isCompositionTrackMorphing && (
             <div className="composition-exit-clips-overlay">
               {tracks.map((track) => {
-                const isExpanded = isTrackExpanded(track.id);
+                const isExpanded = isTrackExpandedFromState(track.id);
                 const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
                 const trackClips = clips.filter((clip) => clip.trackId === track.id);
 
@@ -1369,8 +1387,8 @@ export function Timeline() {
               clips={clips}
               tracks={tracks}
               timeToPixel={timeToPixel}
-              isTrackExpanded={isTrackExpanded}
-              getExpandedTrackHeight={getExpandedTrackHeight}
+              isTrackExpanded={isTrackExpandedForRender}
+              getExpandedTrackHeight={getRenderedTrackHeight}
             />
           )}
 
@@ -1378,8 +1396,8 @@ export function Timeline() {
             <AIActionOverlays
               tracks={tracks}
               timeToPixel={timeToPixel}
-              isTrackExpanded={isTrackExpanded}
-              getExpandedTrackHeight={getExpandedTrackHeight}
+              isTrackExpanded={isTrackExpandedForRender}
+              getExpandedTrackHeight={getRenderedTrackHeight}
             />
           )}
 
@@ -1500,7 +1518,7 @@ export function Timeline() {
                   timelineRef={timelineRef}
                   scrollX={scrollX}
                   zoom={zoom}
-                  getExpandedTrackHeight={getExpandedTrackHeight}
+                  getExpandedTrackHeight={getRenderedTrackHeight}
                 />
               )}
 

@@ -184,8 +184,11 @@ const MEDIA_BOARD_TIMELINE_HANDOFF_DISTANCE_PX = 96;
 const MEDIA_BOARD_RENDER_BUFFER_PX = 420;
 const MEDIA_BOARD_COMPACT_RENDER_BUFFER_PX = 220;
 const MEDIA_BOARD_COMPACT_LOD_ZOOM = 0.22;
-const MEDIA_BOARD_THUMBNAIL_LOD_MIN_ZOOM = 0;
+const MEDIA_BOARD_OVERVIEW_CANVAS_ZOOM = 0.34;
+const MEDIA_BOARD_THUMBNAIL_LOD_MIN_ZOOM = MEDIA_BOARD_OVERVIEW_CANVAS_ZOOM;
+const MEDIA_BOARD_THUMBNAIL_REQUEST_MIN_ZOOM = MEDIA_BOARD_PAN_ZOOM_MIN;
 const MEDIA_BOARD_THUMBNAIL_REQUEST_LIMIT = 180;
+const MEDIA_BOARD_OVERVIEW_THUMBNAIL_REQUEST_LIMIT = 64;
 const MEDIA_BOARD_THUMBNAIL_WORKER_COUNT = 2;
 const MEDIA_PANEL_VIEW_TRANSITION_MS = 500;
 
@@ -604,6 +607,116 @@ function mediaBoardGroupIntersectsVisibleRect(
   );
 }
 
+function drawMediaBoardOverviewRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) {
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawMediaBoardOverviewImageCover(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  if (sourceWidth <= 0 || sourceHeight <= 0) return;
+
+  const scale = Math.max(width / sourceWidth, height / sourceHeight);
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  ctx.drawImage(
+    image,
+    x + (width - drawWidth) / 2,
+    y + (height - drawHeight) / 2,
+    drawWidth,
+    drawHeight,
+  );
+}
+
+function getMediaBoardOverviewFill(item: MediaBoardItem): string {
+  if (!('type' in item)) return 'rgba(32, 34, 38, 0.9)';
+  if (item.type === 'solid' && 'color' in item) return item.color;
+  if (item.type === 'composition') return 'rgba(100, 58, 138, 0.82)';
+  if (item.type === 'text') return 'rgba(46, 59, 78, 0.92)';
+  if (item.type === 'camera') return 'rgba(139, 108, 45, 0.86)';
+  if (item.type === 'image') return 'rgba(38, 64, 84, 0.88)';
+  if (item.type === 'video') return 'rgba(45, 43, 64, 0.9)';
+  if (item.type === 'audio') return 'rgba(52, 71, 55, 0.88)';
+  return 'rgba(23, 24, 28, 0.94)';
+}
+
+function drawMediaBoardOverviewItem(
+  ctx: CanvasRenderingContext2D,
+  placement: MediaBoardNodePlacement,
+  image: HTMLImageElement | null,
+  zoom: number,
+) {
+  const { item, layout } = placement;
+  const screenWidth = layout.width * zoom;
+  const screenHeight = layout.height * zoom;
+  if (screenWidth < 1.2 || screenHeight < 1.2) return;
+
+  const radius = Math.min(6, Math.max(1.5 / zoom, Math.min(layout.width, layout.height) * 0.06));
+  drawMediaBoardOverviewRoundedRect(ctx, layout.x, layout.y, layout.width, layout.height, radius);
+  ctx.fillStyle = getMediaBoardOverviewFill(item);
+  ctx.fill();
+
+  if (image) {
+    ctx.save();
+    drawMediaBoardOverviewRoundedRect(ctx, layout.x, layout.y, layout.width, layout.height, radius);
+    ctx.clip();
+    drawMediaBoardOverviewImageCover(ctx, image, layout.x, layout.y, layout.width, layout.height);
+    ctx.restore();
+  } else if (screenWidth >= 8 && screenHeight >= 8) {
+    const markWidth = Math.max(8 / zoom, layout.width * 0.28);
+    const markHeight = Math.max(5 / zoom, layout.height * 0.18);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+    drawMediaBoardOverviewRoundedRect(
+      ctx,
+      layout.x + (layout.width - markWidth) / 2,
+      layout.y + (layout.height - markHeight) / 2,
+      markWidth,
+      markHeight,
+      Math.min(3 / zoom, markHeight / 2),
+    );
+    ctx.fill();
+  }
+
+  const labelHex = 'labelColor' in item ? getLabelHex(item.labelColor) : 'transparent';
+  const borderWidth = Math.max(0.75 / zoom, 1);
+  ctx.lineWidth = borderWidth;
+  ctx.strokeStyle = labelHex === 'transparent' ? 'rgba(255, 255, 255, 0.1)' : labelHex;
+  drawMediaBoardOverviewRoundedRect(
+    ctx,
+    layout.x + borderWidth / 2,
+    layout.y + borderWidth / 2,
+    Math.max(0, layout.width - borderWidth),
+    Math.max(0, layout.height - borderWidth),
+    radius,
+  );
+  ctx.stroke();
+}
+
 function rectToTransitionBox(rect: DOMRect): MediaPanelTransitionBox {
   return {
     left: rect.left,
@@ -691,8 +804,11 @@ export function MediaPanel() {
   const boardWrapperRef = useRef<HTMLDivElement>(null);
   const boardCanvasRef = useRef<HTMLDivElement>(null);
   const boardCanvasInnerRef = useRef<HTMLDivElement>(null);
+  const boardOverviewCanvasRef = useRef<HTMLCanvasElement>(null);
   const boardInteractionFrameRef = useRef<number | null>(null);
   const boardAutoPanFrameRef = useRef<number | null>(null);
+  const boardOverviewRedrawFrameRef = useRef<number | null>(null);
+  const boardOverviewImageCacheRef = useRef(new Map<string, { src: string; image: HTMLImageElement; status: 'loading' | 'loaded' | 'error' }>());
   const pendingViewTransitionRef = useRef<PendingMediaPanelViewTransition | null>(null);
   const activeViewTransitionRef = useRef<ActiveMediaPanelViewTransition | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -726,6 +842,7 @@ export function MediaPanel() {
     width: typeof window === 'undefined' ? 1280 : Math.max(1, window.innerWidth),
     height: typeof window === 'undefined' ? 720 : Math.max(1, window.innerHeight),
   }));
+  const [mediaBoardOverviewImageVersion, setMediaBoardOverviewImageVersion] = useState(0);
   const [mediaBoardMarquee, setMediaBoardMarquee] = useState<MediaBoardMarquee | null>(null);
   const [mediaBoardInsertionPreview, setMediaBoardInsertionPreview] = useState<MediaBoardInsertionPreview | null>(null);
   const suppressMediaBoardContextMenuRef = useRef(false);
@@ -836,6 +953,9 @@ export function MediaPanel() {
     }
     if (boardAutoPanFrameRef.current !== null) {
       window.cancelAnimationFrame(boardAutoPanFrameRef.current);
+    }
+    if (boardOverviewRedrawFrameRef.current !== null) {
+      window.cancelAnimationFrame(boardOverviewRedrawFrameRef.current);
     }
     if (suppressMediaBoardContextMenuTimerRef.current !== null) {
       window.clearTimeout(suppressMediaBoardContextMenuTimerRef.current);
@@ -3054,8 +3174,10 @@ export function MediaPanel() {
   ), [mediaBoardCanvasSize, mediaBoardViewport]);
 
   const mediaBoardRenderLod = useMemo(() => ({
+    overviewCanvas: mediaBoardViewport.zoom <= MEDIA_BOARD_OVERVIEW_CANVAS_ZOOM,
     compact: mediaBoardViewport.zoom <= MEDIA_BOARD_COMPACT_LOD_ZOOM,
-    showImages: mediaBoardViewport.zoom >= MEDIA_BOARD_THUMBNAIL_LOD_MIN_ZOOM,
+    showImages: mediaBoardViewport.zoom > MEDIA_BOARD_THUMBNAIL_LOD_MIN_ZOOM,
+    requestThumbnails: mediaBoardViewport.zoom >= MEDIA_BOARD_THUMBNAIL_REQUEST_MIN_ZOOM,
   }), [mediaBoardViewport.zoom]);
 
   const visibleMediaBoardGroups = useMemo(() => (
@@ -3074,11 +3196,30 @@ export function MediaPanel() {
     ))
   ), [mediaBoardLayout.placements, mediaBoardVisibleRect, selectedIdSet]);
 
+  const getMediaBoardPlacementAtPoint = useCallback((point: { x: number; y: number }) => {
+    for (let index = mediaBoardLayout.placements.length - 1; index >= 0; index -= 1) {
+      const placement = mediaBoardLayout.placements[index];
+      const { layout } = placement;
+      if (
+        point.x >= layout.x
+        && point.x <= layout.x + layout.width
+        && point.y >= layout.y
+        && point.y <= layout.y + layout.height
+      ) {
+        return placement;
+      }
+    }
+    return null;
+  }, [mediaBoardLayout.placements]);
+
   const visibleMediaBoardThumbnailKey = useMemo(() => {
-    if (!mediaBoardRenderLod.showImages) return '';
+    if (!mediaBoardRenderLod.requestThumbnails) return '';
 
     const centerX = (mediaBoardVisibleRect.left + mediaBoardVisibleRect.right) / 2;
     const centerY = (mediaBoardVisibleRect.top + mediaBoardVisibleRect.bottom) / 2;
+    const requestLimit = mediaBoardRenderLod.overviewCanvas
+      ? MEDIA_BOARD_OVERVIEW_THUMBNAIL_REQUEST_LIMIT
+      : MEDIA_BOARD_THUMBNAIL_REQUEST_LIMIT;
 
     return visibleMediaBoardPlacements
       .map((placement) => {
@@ -3102,10 +3243,10 @@ export function MediaPanel() {
       })
       .filter((entry): entry is { id: string; area: number; distance: number } => entry !== null)
       .toSorted((a, b) => (b.area - a.area) || (a.distance - b.distance))
-      .slice(0, MEDIA_BOARD_THUMBNAIL_REQUEST_LIMIT)
+      .slice(0, requestLimit)
       .map((entry) => entry.id)
       .join('\n');
-  }, [mediaBoardRenderLod.showImages, mediaBoardVisibleRect, visibleMediaBoardPlacements]);
+  }, [mediaBoardRenderLod.overviewCanvas, mediaBoardRenderLod.requestThumbnails, mediaBoardVisibleRect, visibleMediaBoardPlacements]);
 
   useEffect(() => {
     if (viewMode !== 'board' || !visibleMediaBoardThumbnailKey) return;
@@ -3134,6 +3275,89 @@ export function MediaPanel() {
       cancelled = true;
     };
   }, [ensureFileThumbnail, viewMode, visibleMediaBoardThumbnailKey]);
+
+  const scheduleMediaBoardOverviewRedraw = useCallback(() => {
+    if (boardOverviewRedrawFrameRef.current !== null) return;
+    boardOverviewRedrawFrameRef.current = window.requestAnimationFrame(() => {
+      boardOverviewRedrawFrameRef.current = null;
+      setMediaBoardOverviewImageVersion((version) => (version + 1) % 100000);
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (viewMode !== 'board' || !mediaBoardRenderLod.overviewCanvas) return;
+    const canvas = boardOverviewCanvasRef.current;
+    if (!canvas) return;
+
+    const zoom = Math.max(mediaBoardViewport.zoom, MEDIA_BOARD_PAN_ZOOM_MIN);
+    const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    const rect = mediaBoardVisibleRect;
+    const boardWidth = Math.max(1, rect.right - rect.left);
+    const boardHeight = Math.max(1, rect.bottom - rect.top);
+    const pixelWidth = Math.max(1, Math.ceil(boardWidth * zoom * dpr));
+    const pixelHeight = Math.max(1, Math.ceil(boardHeight * zoom * dpr));
+
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) return;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, pixelWidth, pixelHeight);
+    ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, -rect.left * zoom * dpr, -rect.top * zoom * dpr);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'low';
+
+    const cache = boardOverviewImageCacheRef.current;
+    const visibleItemIds = new Set<string>();
+    const getLoadedOverviewImage = (item: MediaBoardItem): HTMLImageElement | null => {
+      if (!isImportedMediaFileItem(item) || !item.thumbnailUrl) return null;
+
+      visibleItemIds.add(item.id);
+      const cached = cache.get(item.id);
+      if (cached?.src === item.thumbnailUrl) {
+        return cached.status === 'loaded' ? cached.image : null;
+      }
+
+      const image = new Image();
+      const record = { src: item.thumbnailUrl, image, status: 'loading' as const };
+      cache.set(item.id, record);
+      image.onload = () => {
+        cache.set(item.id, { ...record, status: 'loaded' });
+        scheduleMediaBoardOverviewRedraw();
+      };
+      image.onerror = () => {
+        cache.set(item.id, { ...record, status: 'error' });
+      };
+      image.decoding = 'async';
+      image.src = item.thumbnailUrl;
+      return null;
+    };
+
+    visibleMediaBoardPlacements.forEach((placement) => {
+      if (placement.isDraggingPreview || selectedIdSet.has(placement.item.id)) return;
+      drawMediaBoardOverviewItem(
+        ctx,
+        placement,
+        getLoadedOverviewImage(placement.item),
+        zoom,
+      );
+    });
+
+    cache.forEach((_, itemId) => {
+      if (!visibleItemIds.has(itemId)) cache.delete(itemId);
+    });
+  }, [
+    mediaBoardOverviewImageVersion,
+    mediaBoardRenderLod.overviewCanvas,
+    mediaBoardViewport.zoom,
+    mediaBoardVisibleRect,
+    scheduleMediaBoardOverviewRedraw,
+    selectedIdSet,
+    viewMode,
+    visibleMediaBoardPlacements,
+  ]);
 
   const screenToMediaBoard = useCallback((clientX: number, clientY: number) => {
     const rect = boardCanvasRef.current?.getBoundingClientRect();
@@ -4032,6 +4256,32 @@ export function MediaPanel() {
     const target = e.target as HTMLElement;
     if (target.closest('.media-board-node, .media-board-group.folder-group, button, input, .context-menu')) return;
 
+    if (mediaBoardRenderLod.overviewCanvas) {
+      const hitPlacement = getMediaBoardPlacementAtPoint(screenToMediaBoard(e.clientX, e.clientY));
+      if (hitPlacement && !isMediaBoardFolder(hitPlacement.item)) {
+        if (e.button === 2) {
+          e.stopPropagation();
+          if (e.ctrlKey || e.metaKey) {
+            startMediaBoardMarqueeGesture(e);
+            return;
+          }
+          if (!selectedIds.includes(hitPlacement.item.id)) {
+            setSelection([hitPlacement.item.id]);
+          }
+          startMediaBoardNodeMoveGesture(e, hitPlacement.item);
+          return;
+        }
+
+        if (e.button === 0) {
+          e.stopPropagation();
+          if (e.detail >= 2) return;
+          handleItemClick(hitPlacement.item.id, e);
+          startMediaBoardPanGesture(e);
+          return;
+        }
+      }
+    }
+
     if (e.button === 2) {
       startMediaBoardMarqueeGesture(e);
       return;
@@ -4039,7 +4289,59 @@ export function MediaPanel() {
 
     if (e.button !== 0 && e.button !== 1) return;
     startMediaBoardPanGesture(e, { clearSelectionOnTap: e.button === 0 && !e.ctrlKey && !e.metaKey });
-  }, [startMediaBoardMarqueeGesture, startMediaBoardPanGesture]);
+  }, [
+    getMediaBoardPlacementAtPoint,
+    handleItemClick,
+    mediaBoardRenderLod.overviewCanvas,
+    screenToMediaBoard,
+    selectedIds,
+    setSelection,
+    startMediaBoardMarqueeGesture,
+    startMediaBoardNodeMoveGesture,
+    startMediaBoardPanGesture,
+  ]);
+
+  const handleMediaBoardDoubleClick = useCallback((e: React.MouseEvent) => {
+    if (!mediaBoardRenderLod.overviewCanvas) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.media-board-node, .media-board-group.folder-group, button, input, .context-menu')) return;
+    const hitPlacement = getMediaBoardPlacementAtPoint(screenToMediaBoard(e.clientX, e.clientY));
+    if (!hitPlacement || isMediaBoardFolder(hitPlacement.item)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void handleItemDoubleClick(hitPlacement.item);
+  }, [
+    getMediaBoardPlacementAtPoint,
+    handleItemDoubleClick,
+    mediaBoardRenderLod.overviewCanvas,
+    screenToMediaBoard,
+  ]);
+
+  const handleMediaBoardContextMenu = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('.media-board-node, .media-board-group.folder-group, button, input, .context-menu')) return;
+
+    if (mediaBoardRenderLod.overviewCanvas) {
+      const hitPlacement = getMediaBoardPlacementAtPoint(screenToMediaBoard(e.clientX, e.clientY));
+      if (hitPlacement && !isMediaBoardFolder(hitPlacement.item)) {
+        if (consumeSuppressedMediaBoardContextMenu()) {
+          e.preventDefault();
+          return;
+        }
+        handleContextMenu(e, hitPlacement.item.id);
+        return;
+      }
+    }
+
+    handleMediaBoardWorkspaceContextMenu(e);
+  }, [
+    consumeSuppressedMediaBoardContextMenu,
+    getMediaBoardPlacementAtPoint,
+    handleContextMenu,
+    handleMediaBoardWorkspaceContextMenu,
+    mediaBoardRenderLod.overviewCanvas,
+    screenToMediaBoard,
+  ]);
 
   const handleMediaBoardNodeMouseDown = useCallback((e: React.MouseEvent, item: MediaBoardItem) => {
     const target = e.target as HTMLElement;
@@ -4184,6 +4486,13 @@ export function MediaPanel() {
     setMediaBoardViewport(DEFAULT_BOARD_VIEWPORT);
   }, []);
 
+  const mediaBoardOverviewCanvasStyle = useMemo<React.CSSProperties>(() => ({
+    left: mediaBoardVisibleRect.left,
+    top: mediaBoardVisibleRect.top,
+    width: Math.max(1, mediaBoardVisibleRect.right - mediaBoardVisibleRect.left),
+    height: Math.max(1, mediaBoardVisibleRect.bottom - mediaBoardVisibleRect.top),
+  }), [mediaBoardVisibleRect]);
+
   const renderMediaBoardNode = (placement: MediaBoardNodePlacement) => {
     const { item, layout } = placement;
     if (isMediaBoardFolder(item)) return null;
@@ -4216,6 +4525,7 @@ export function MediaPanel() {
       : getMediaFileCodecLabel(mediaFile);
     const isCompactNode = mediaBoardRenderLod.compact;
     const shouldRenderThumb = Boolean(thumbUrl && mediaBoardRenderLod.showImages);
+    if (mediaBoardRenderLod.overviewCanvas && !isSelected && !placement.isDraggingPreview) return null;
 
     return (
       <div
@@ -4333,10 +4643,8 @@ export function MediaPanel() {
         className="media-board-canvas"
         onWheel={handleMediaBoardWheel}
         onMouseDown={handleMediaBoardMouseDown}
-        onContextMenu={(e) => {
-          const target = e.target as HTMLElement;
-          if (!target.closest('.media-board-node')) handleMediaBoardWorkspaceContextMenu(e);
-        }}
+        onDoubleClick={handleMediaBoardDoubleClick}
+        onContextMenu={handleMediaBoardContextMenu}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes('Files')) {
             setIsExternalDragOver(true);
@@ -4359,6 +4667,14 @@ export function MediaPanel() {
             transform: `translate(${mediaBoardViewport.panX}px, ${mediaBoardViewport.panY}px) scale(${mediaBoardViewport.zoom})`,
           }}
         >
+          {mediaBoardRenderLod.overviewCanvas ? (
+            <canvas
+              ref={boardOverviewCanvasRef}
+              className="media-board-overview-canvas"
+              style={mediaBoardOverviewCanvasStyle}
+              aria-hidden="true"
+            />
+          ) : null}
           {visibleMediaBoardGroups.filter((group) => group.id !== null).map((group) => {
             const folder = group.id ? folders.find((candidate) => candidate.id === group.id) : null;
             if (!folder) return null;
