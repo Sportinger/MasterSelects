@@ -222,6 +222,8 @@ export const useTimelineStore = create<TimelineStore>()(
       // Clipboard state for copy/paste
       clipboardData: null as import('./types').ClipboardClipData[] | null,
       clipboardKeyframes: null as import('./types').ClipboardKeyframeData[] | null,
+      clipboardEffects: null as import('./types').ClipboardClipEffectsData | null,
+      clipboardColor: null as import('./types').ClipboardClipColorData | null,
 
       // AI action visual feedback (transient, not serialized)
       aiActionOverlays: [] as import('./types').AIActionOverlay[],

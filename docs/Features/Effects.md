@@ -85,6 +85,8 @@ effect.{effectId}.{paramName}
 
 `EffectsTab` reads interpolated values from the timeline store and writes animated numbers back through `setPropertyValue`.
 
+The clip context menu supports Copy Effects and Paste Effects. This copies the full effect stack plus matching `effect.*` keyframes and pastes them onto the selected clip set.
+
 ## Current Notes
 
 - `color` and `point` parameter types exist in the effect type system, but the current registered effects do not use them.

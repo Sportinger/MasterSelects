@@ -124,6 +124,26 @@
   flex: 0 0 auto;
 }
 
+.color-toolbar .color-keyframe-all-button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.color-keyframe-all-icon {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .color-segmented {
   display: inline-flex;
   border: 1px solid var(--border-color);

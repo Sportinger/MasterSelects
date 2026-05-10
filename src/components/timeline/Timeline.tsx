@@ -237,7 +237,18 @@ export function Timeline() {
   const { addMarker, moveMarker, removeMarker, updateMarker } = store;
 
   // Clipboard actions
-  const { copyClips, pasteClips, copyKeyframes, pasteKeyframes } = store;
+  const {
+    copyClips,
+    pasteClips,
+    copyKeyframes,
+    pasteKeyframes,
+    copyClipEffects,
+    pasteClipEffects,
+    hasClipboardEffects,
+    copyClipColor,
+    pasteClipColor,
+    hasClipboardColor,
+  } = store;
 
   const getActiveComposition = useMediaStore(state => state.getActiveComposition);
   const getOpenCompositions = useMediaStore(state => state.getOpenCompositions);
@@ -1621,6 +1632,12 @@ export function Timeline() {
         unlinkGroup={unlinkGroup}
         generateWaveformForClip={generateWaveformForClip}
         convertSolidToMotionShape={convertSolidToMotionShape}
+        copyClipEffects={copyClipEffects}
+        pasteClipEffects={pasteClipEffects}
+        hasClipboardEffects={hasClipboardEffects}
+        copyClipColor={copyClipColor}
+        pasteClipColor={pasteClipColor}
+        hasClipboardColor={hasClipboardColor}
         setMulticamDialogOpen={setMulticamDialogOpen}
         showInExplorer={showInExplorer}
       />

@@ -1,7 +1,12 @@
 // Clipboard-related actions slice for copy/paste functionality
 
 import type { ClipboardActions, SliceCreator, ClipboardClipData, ClipboardKeyframeData, Keyframe } from './types';
-import type { TimelineClip, EasingType } from '../../types';
+import type { TimelineClip, EasingType, Effect, AnimatableProperty, EffectProperty } from '../../types';
+import {
+  createEffectProperty,
+  ensureColorCorrectionState,
+  parseEffectProperty,
+} from '../../types';
 import { flags } from '../../engine/featureFlags';
 import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
@@ -9,8 +14,45 @@ import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
+import { generateEffectId } from './helpers/idGenerator';
 
 const log = Logger.create('Clipboard');
+
+function randomSuffix(): string {
+  return Math.random().toString(36).substr(2, 5);
+}
+
+function generateKeyframeId(): string {
+  return `kf_${Date.now()}_${randomSuffix()}`;
+}
+
+function cloneEffect(effect: Effect): Effect {
+  return {
+    ...effect,
+    params: structuredClone(effect.params),
+  };
+}
+
+function cloneKeyframe(keyframe: Keyframe): Keyframe {
+  return structuredClone(keyframe);
+}
+
+function clampKeyframeTime(time: number, duration: number): number {
+  return Math.max(0, Math.min(duration, time));
+}
+
+function parseEffectKeyframeProperty(property: AnimatableProperty) {
+  return property.startsWith('effect.')
+    ? parseEffectProperty(property as EffectProperty)
+    : null;
+}
+
+function getTargetClipIds(explicitTargets: string[] | undefined, selectedClipIds: Set<string>): string[] {
+  const ids = explicitTargets && explicitTargets.length > 0
+    ? explicitTargets
+    : [...selectedClipIds];
+  return [...new Set(ids)];
+}
 
 export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) => ({
   copyClips: () => {
@@ -702,5 +744,276 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
     set({ clipKeyframes: newMap });
     invalidateCache();
     log.info('Pasted keyframes', { count: clipboardKeyframes.length, targetClipId });
+  },
+
+  copyClipEffects: (clipId) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+
+    if (!clip) {
+      log.warn('No source clip found for effects copy', { clipId });
+      return;
+    }
+
+    const effectIds = new Set((clip.effects || []).map(effect => effect.id));
+    const keyframes = (clipKeyframes.get(clipId) || [])
+      .filter(keyframe => {
+        const parsed = parseEffectKeyframeProperty(keyframe.property);
+        return !!parsed && effectIds.has(parsed.effectId);
+      })
+      .map(cloneKeyframe);
+
+    set({
+      clipboardEffects: {
+        sourceClipId: clipId,
+        effects: (clip.effects || []).map(cloneEffect),
+        keyframes,
+      },
+    });
+
+    log.info('Copied clip effects', {
+      clipId,
+      effectCount: clip.effects?.length ?? 0,
+      keyframeCount: keyframes.length,
+    });
+  },
+
+  pasteClipEffects: (targetClipIds) => {
+    const {
+      clipboardEffects,
+      selectedClipIds,
+      clips,
+      clipKeyframes,
+      keyframeRecordingEnabled,
+      selectedKeyframeIds,
+      invalidateCache,
+    } = get();
+
+    if (!clipboardEffects) {
+      log.debug('No copied effects to paste');
+      return;
+    }
+
+    const targetIds = getTargetClipIds(targetClipIds, selectedClipIds);
+    const targetIdSet = new Set(targetIds);
+    const targetClips = clips.filter(clip => targetIdSet.has(clip.id));
+
+    if (targetClips.length === 0) {
+      log.warn('No target clips found for effects paste', { targetClipIds: targetIds });
+      return;
+    }
+
+    captureSnapshot(targetClips.length === 1 ? 'Paste effects' : 'Paste effects to clips');
+
+    const nextKeyframes = new Map(clipKeyframes);
+    let nextSelectedKeyframeIds = selectedKeyframeIds;
+    let nextRecordingEnabled = keyframeRecordingEnabled;
+
+    const updatedClips = clips.map(clip => {
+      if (!targetIdSet.has(clip.id)) return clip;
+
+      const effectIdMap = new Map<string, string>();
+      const pastedEffects = clipboardEffects.effects.map(effect => {
+        const nextEffectId = generateEffectId();
+        effectIdMap.set(effect.id, nextEffectId);
+        return {
+          ...cloneEffect(effect),
+          id: nextEffectId,
+        };
+      });
+
+      const existingKeyframes = nextKeyframes.get(clip.id) || [];
+      const removedEffectKeyframeIds = new Set<string>();
+      const retainedKeyframes = existingKeyframes.filter(keyframe => {
+        if (!keyframe.property.startsWith('effect.')) return true;
+        removedEffectKeyframeIds.add(keyframe.id);
+        return false;
+      });
+
+      const pastedKeyframes: Keyframe[] = clipboardEffects.keyframes
+        .map(keyframe => {
+          const parsed = parseEffectKeyframeProperty(keyframe.property);
+          if (!parsed) return null;
+
+          const mappedEffectId = effectIdMap.get(parsed.effectId);
+          if (!mappedEffectId) return null;
+
+          return {
+            ...cloneKeyframe(keyframe),
+            id: generateKeyframeId(),
+            clipId: clip.id,
+            time: clampKeyframeTime(keyframe.time, clip.duration),
+            property: createEffectProperty(mappedEffectId, parsed.paramName) as AnimatableProperty,
+          };
+        })
+        .filter((keyframe): keyframe is Keyframe => keyframe !== null);
+
+      const clipKeyframesAfterPaste = [...retainedKeyframes, ...pastedKeyframes]
+        .toSorted((a, b) => a.time - b.time);
+
+      if (clipKeyframesAfterPaste.length > 0) {
+        nextKeyframes.set(clip.id, clipKeyframesAfterPaste);
+      } else {
+        nextKeyframes.delete(clip.id);
+      }
+
+      if (removedEffectKeyframeIds.size > 0) {
+        nextSelectedKeyframeIds = new Set(
+          [...nextSelectedKeyframeIds].filter(keyframeId => !removedEffectKeyframeIds.has(keyframeId))
+        );
+      }
+
+      const recordingPrefix = `${clip.id}:effect.`;
+      if ([...nextRecordingEnabled].some(recordingKey => recordingKey.startsWith(recordingPrefix))) {
+        nextRecordingEnabled = new Set(
+          [...nextRecordingEnabled].filter(recordingKey => !recordingKey.startsWith(recordingPrefix))
+        );
+      }
+
+      return {
+        ...clip,
+        effects: pastedEffects,
+      };
+    });
+
+    set({
+      clips: updatedClips,
+      clipKeyframes: nextKeyframes,
+      keyframeRecordingEnabled: nextRecordingEnabled,
+      selectedKeyframeIds: nextSelectedKeyframeIds,
+    });
+    invalidateCache();
+
+    log.info('Pasted clip effects', {
+      targetClipCount: targetClips.length,
+      effectCount: clipboardEffects.effects.length,
+      keyframeCount: clipboardEffects.keyframes.length,
+    });
+  },
+
+  hasClipboardEffects: () => {
+    return get().clipboardEffects !== null;
+  },
+
+  copyClipColor: (clipId) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+
+    if (!clip) {
+      log.warn('No source clip found for color copy', { clipId });
+      return;
+    }
+
+    const keyframes = (clipKeyframes.get(clipId) || [])
+      .filter(keyframe => keyframe.property.startsWith('color.'))
+      .map(cloneKeyframe);
+
+    set({
+      clipboardColor: {
+        sourceClipId: clipId,
+        colorCorrection: ensureColorCorrectionState(clip.colorCorrection),
+        keyframes,
+      },
+    });
+
+    log.info('Copied clip color', {
+      clipId,
+      keyframeCount: keyframes.length,
+    });
+  },
+
+  pasteClipColor: (targetClipIds) => {
+    const {
+      clipboardColor,
+      selectedClipIds,
+      clips,
+      clipKeyframes,
+      keyframeRecordingEnabled,
+      selectedKeyframeIds,
+      invalidateCache,
+    } = get();
+
+    if (!clipboardColor) {
+      log.debug('No copied color to paste');
+      return;
+    }
+
+    const targetIds = getTargetClipIds(targetClipIds, selectedClipIds);
+    const targetIdSet = new Set(targetIds);
+    const targetClips = clips.filter(clip => targetIdSet.has(clip.id));
+
+    if (targetClips.length === 0) {
+      log.warn('No target clips found for color paste', { targetClipIds: targetIds });
+      return;
+    }
+
+    captureSnapshot(targetClips.length === 1 ? 'Paste color' : 'Paste color to clips');
+
+    const nextKeyframes = new Map(clipKeyframes);
+    let nextSelectedKeyframeIds = selectedKeyframeIds;
+    let nextRecordingEnabled = keyframeRecordingEnabled;
+
+    const updatedClips = clips.map(clip => {
+      if (!targetIdSet.has(clip.id)) return clip;
+
+      const existingKeyframes = nextKeyframes.get(clip.id) || [];
+      const removedColorKeyframeIds = new Set<string>();
+      const retainedKeyframes = existingKeyframes.filter(keyframe => {
+        if (!keyframe.property.startsWith('color.')) return true;
+        removedColorKeyframeIds.add(keyframe.id);
+        return false;
+      });
+
+      const pastedKeyframes = clipboardColor.keyframes.map(keyframe => ({
+        ...cloneKeyframe(keyframe),
+        id: generateKeyframeId(),
+        clipId: clip.id,
+        time: clampKeyframeTime(keyframe.time, clip.duration),
+      }));
+
+      const clipKeyframesAfterPaste = [...retainedKeyframes, ...pastedKeyframes]
+        .toSorted((a, b) => a.time - b.time);
+
+      if (clipKeyframesAfterPaste.length > 0) {
+        nextKeyframes.set(clip.id, clipKeyframesAfterPaste);
+      } else {
+        nextKeyframes.delete(clip.id);
+      }
+
+      if (removedColorKeyframeIds.size > 0) {
+        nextSelectedKeyframeIds = new Set(
+          [...nextSelectedKeyframeIds].filter(keyframeId => !removedColorKeyframeIds.has(keyframeId))
+        );
+      }
+
+      const recordingPrefix = `${clip.id}:color.`;
+      if ([...nextRecordingEnabled].some(recordingKey => recordingKey.startsWith(recordingPrefix))) {
+        nextRecordingEnabled = new Set(
+          [...nextRecordingEnabled].filter(recordingKey => !recordingKey.startsWith(recordingPrefix))
+        );
+      }
+
+      return {
+        ...clip,
+        colorCorrection: structuredClone(clipboardColor.colorCorrection),
+      };
+    });
+
+    set({
+      clips: updatedClips,
+      clipKeyframes: nextKeyframes,
+      keyframeRecordingEnabled: nextRecordingEnabled,
+      selectedKeyframeIds: nextSelectedKeyframeIds,
+    });
+    invalidateCache();
+
+    log.info('Pasted clip color', {
+      targetClipCount: targetClips.length,
+      keyframeCount: clipboardColor.keyframes.length,
+    });
+  },
+
+  hasClipboardColor: () => {
+    return get().clipboardColor !== null;
   },
 });

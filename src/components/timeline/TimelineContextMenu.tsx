@@ -31,6 +31,12 @@ interface TimelineContextMenuProps {
   unlinkGroup: (clipId: string) => void;
   generateWaveformForClip: (clipId: string) => void;
   convertSolidToMotionShape: (clipId: string) => string | null;
+  copyClipEffects: (clipId: string) => void;
+  pasteClipEffects: (targetClipIds?: string[]) => void;
+  hasClipboardEffects: () => boolean;
+  copyClipColor: (clipId: string) => void;
+  pasteClipColor: (targetClipIds?: string[]) => void;
+  hasClipboardColor: () => boolean;
   setMulticamDialogOpen: (open: boolean) => void;
 
   // File explorer
@@ -49,6 +55,12 @@ export function TimelineContextMenu({
   unlinkGroup,
   generateWaveformForClip,
   convertSolidToMotionShape,
+  copyClipEffects,
+  pasteClipEffects,
+  hasClipboardEffects,
+  copyClipColor,
+  pasteClipColor,
+  hasClipboardColor,
   setMulticamDialogOpen,
   showInExplorer,
 }: TimelineContextMenuProps) {
@@ -163,6 +175,14 @@ export function TimelineContextMenu({
   const isSolid = clip?.source?.type === 'solid';
   const isGenerating = mediaFile?.proxyStatus === 'generating';
   const hasProxy = mediaFile?.proxyStatus === 'ready';
+  const canPasteEffects = hasClipboardEffects();
+  const canPasteColor = hasClipboardColor();
+  const getPasteTargetClipIds = (): string[] => {
+    if (!contextMenu?.clipId) return [];
+    return selectedClipIds.has(contextMenu.clipId)
+      ? [...selectedClipIds]
+      : [contextMenu.clipId];
+  };
 
   // Resolve the media item ID and current label color for the clip
   const resolveMediaItemColor = (): { mediaItemId: string | null; currentColor: LabelColor } => {
@@ -278,6 +298,50 @@ export function TimelineContextMenu({
           )}
         </>
       )}
+
+      <div className="context-menu-separator" />
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          if (contextMenu.clipId) {
+            copyClipEffects(contextMenu.clipId);
+          }
+          setContextMenu(null);
+        }}
+      >
+        Copy Effects
+      </div>
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          if (contextMenu.clipId) {
+            copyClipColor(contextMenu.clipId);
+          }
+          setContextMenu(null);
+        }}
+      >
+        Copy Color
+      </div>
+      <div
+        className={`context-menu-item ${!canPasteEffects ? 'disabled' : ''}`}
+        onClick={() => {
+          if (!canPasteEffects) return;
+          pasteClipEffects(getPasteTargetClipIds());
+          setContextMenu(null);
+        }}
+      >
+        Paste Effects
+      </div>
+      <div
+        className={`context-menu-item ${!canPasteColor ? 'disabled' : ''}`}
+        onClick={() => {
+          if (!canPasteColor) return;
+          pasteClipColor(getPasteTargetClipIds());
+          setContextMenu(null);
+        }}
+      >
+        Paste Color
+      </div>
 
       <div className="context-menu-separator" />
       <div
