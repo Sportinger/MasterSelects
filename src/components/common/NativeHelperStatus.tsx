@@ -5,6 +5,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import './WelcomeOverlay.css';
+import './NativeHelperStatus.css';
 import { NativeHelperClient, isNativeHelperAvailable } from '../../services/nativeHelper';
 import type { SystemInfo, ConnectionStatus } from '../../services/nativeHelper';
 import {

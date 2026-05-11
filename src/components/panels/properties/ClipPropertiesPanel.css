@@ -1,0 +1,34 @@
+@layer features {
+
+/* Clip Properties Panel */
+.clip-properties-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.clip-properties-panel .panel-header {
+  padding: var(--sp-3);
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.clip-properties-panel .panel-header h3 {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.properties-actions {
+  padding: var(--sp-2);
+  text-align: center;
+}
+
+.properties-actions .btn {
+  width: 100%;
+}
+
+}

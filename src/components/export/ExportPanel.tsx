@@ -1,6 +1,7 @@
 // Export Panel - embedded panel for frame-by-frame video export
 
 import { useCallback, useRef, useState } from 'react';
+import './ExportPanel.css';
 import { Logger } from '../../services/logger';
 import { downloadFCPXML } from '../../services/export/fcpxmlExport';
 import { projectFileService } from '../../services/projectFileService';

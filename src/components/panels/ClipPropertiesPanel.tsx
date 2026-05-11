@@ -8,6 +8,8 @@ import type { BlendMode, AnimatableProperty, MaskMode, ClipMask } from '../../ty
 import { KeyframeToggle } from './properties/shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from './properties/sharedConstants';
 import { EditableDraggableNumber as DraggableNumber } from '../common/EditableDraggableNumber';
+import './properties/PropertiesPanel.css';
+import './properties/ClipPropertiesPanel.css';
 
 // Precision slider with modifier key support
 // Shift = half speed, Ctrl = super slow (10x slower)

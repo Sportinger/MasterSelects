@@ -1,0 +1,716 @@
+@layer features {
+
+/* ========== KEYFRAME DIAMONDS (Timeline) ========== */
+.keyframe-diamond {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--amber-600);
+  color: var(--amber-600);
+  /* Center diamond horizontally on keyframe time position */
+  transform: translateX(calc(-50% - 3px)) rotate(45deg) translateY(-50%);
+  top: 50%;
+  cursor: pointer;
+  z-index: 5;
+  /* Only transition visual properties, not position (left) - for smooth clip dragging */
+  transition: background 0.1s ease, box-shadow 0.1s ease, filter 700ms ease, transform 0.1s ease;
+}
+
+.keyframe-diamond:hover {
+  background: var(--warning-light);
+  color: var(--warning-light);
+  box-shadow: 0 0 6px var(--amber-600);
+  transform: translateX(calc(-50% - 3px)) rotate(45deg) translateY(-50%) scale(1.2);
+}
+
+.keyframe-diamond.selected {
+  background: var(--red-500);
+  color: var(--red-500);
+  box-shadow: 0 0 8px var(--red-500);
+}
+
+.keyframe-diamond.state-change {
+  background: var(--cyan-500);
+  color: var(--cyan-500);
+  box-shadow: 0 0 5px rgba(6, 182, 212, 0.45);
+}
+
+.keyframe-diamond.state-change:hover,
+.keyframe-diamond.state-change.selected {
+  background: #36b8ff;
+  box-shadow: 0 0 8px rgba(54, 184, 255, 0.75);
+}
+
+.keyframe-diamond.dragging {
+  background: var(--cyan-500);
+  color: var(--cyan-500);
+  box-shadow: 0 0 10px var(--cyan-500);
+  transform: translateX(calc(-50% - 3px)) rotate(45deg) translateY(-50%) scale(1.3);
+}
+
+.keyframe-diamond.row-highlighted {
+  filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.85)) brightness(1.35) saturate(1.15);
+  transition: background 0.1s ease, box-shadow 0.1s ease, filter 120ms ease, transform 0.1s ease;
+}
+
+/* Keyframe easing type visual styles */
+/* Linear: Diamond shape (default) */
+.keyframe-diamond.easing-linear {
+  border-radius: 0;
+}
+
+/* Ease-in: Left half rounded (slow start) */
+.keyframe-diamond.easing-ease-in {
+  border-radius: 50% 0 0 50%;
+  background: linear-gradient(135deg, var(--purple-light) 0%, var(--amber-600) 100%);
+}
+
+.keyframe-diamond.easing-ease-in:hover {
+  background: linear-gradient(135deg, var(--purple-300) 0%, var(--warning-light) 100%);
+  color: var(--warning-light);
+}
+
+.keyframe-diamond.easing-ease-in.selected {
+  background: linear-gradient(135deg, var(--red-500) 0%, var(--danger-light) 100%);
+  color: var(--red-500);
+}
+
+/* Ease-out: Right half rounded (slow end) */
+.keyframe-diamond.easing-ease-out {
+  border-radius: 0 50% 50% 0;
+  background: linear-gradient(135deg, var(--amber-600) 0%, var(--cyan-500) 100%);
+}
+
+.keyframe-diamond.easing-ease-out:hover {
+  background: linear-gradient(135deg, var(--warning-light) 0%, var(--cyan-400) 100%);
+  color: var(--warning-light);
+}
+
+.keyframe-diamond.easing-ease-out.selected {
+  background: linear-gradient(135deg, var(--danger-light) 0%, var(--red-500) 100%);
+  color: var(--red-500);
+}
+
+/* Ease-in-out: Fully rounded (circle/pill) */
+.keyframe-diamond.easing-ease-in-out {
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple-light) 0%, var(--cyan-500) 100%);
+}
+
+.keyframe-diamond.easing-ease-in-out:hover {
+  background: linear-gradient(135deg, var(--purple-300) 0%, var(--cyan-400) 100%);
+  color: var(--cyan-400);
+}
+
+.keyframe-diamond.easing-ease-in-out.selected {
+  background: linear-gradient(135deg, var(--red-500) 0%, var(--danger-light) 100%);
+  color: var(--red-500);
+}
+
+.keyframe-diamond.state-change,
+.keyframe-diamond.state-change.easing-linear,
+.keyframe-diamond.state-change.easing-ease-in,
+.keyframe-diamond.state-change.easing-ease-out,
+.keyframe-diamond.state-change.easing-ease-in-out {
+  background: var(--cyan-500);
+}
+
+.keyframe-diamond.state-change:hover,
+.keyframe-diamond.state-change.selected {
+  background: #36b8ff;
+  color: #36b8ff;
+}
+
+.keyframe-rotation-path-label {
+  position: absolute;
+  left: 10px;
+  top: -5px;
+  display: block;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  color: currentColor;
+  font-size: 6px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  opacity: 0.78;
+  pointer-events: none;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+  transition: opacity 0.1s ease;
+}
+
+.keyframe-diamond:hover .keyframe-rotation-path-label {
+  opacity: 1;
+}
+
+/* Keyframe context menu */
+.keyframe-context-menu {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--gray-450);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.keyframe-context-menu .context-menu-title {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--gray-200);
+  border-bottom: 1px solid var(--gray-450);
+  margin-bottom: 4px;
+}
+
+.keyframe-context-menu .context-menu-subtitle {
+  padding: 7px 12px 4px;
+  margin-top: 4px;
+  border-top: 1px solid var(--gray-450);
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.keyframe-context-menu .context-menu-item {
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.keyframe-context-menu .context-menu-item:hover {
+  background: var(--bg-active);
+}
+
+.keyframe-context-menu .context-menu-item.active {
+  color: var(--amber-600);
+}
+
+.keyframe-context-menu .context-menu-item .checkmark {
+  color: var(--success);
+  font-size: 14px;
+}
+
+/* ========== EXPANDABLE CLIP PROPERTIES (Timeline) ========== */
+.clip-expand-arrow {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  color: var(--text-secondary);
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+.clip-expand-arrow:hover {
+  color: var(--text-primary);
+}
+
+.clip-expand-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.clip-expand-arrow.has-keyframes {
+  color: var(--amber-600);
+}
+
+.timeline-clip.has-keyframes .clip-content {
+  border-left: 2px solid var(--amber-600);
+}
+
+.timeline-clip.expanded {
+  overflow: visible;
+  z-index: 10;
+}
+
+.clip-property-rows {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  z-index: 3;
+  overflow: hidden;
+}
+
+.property-group {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.property-group:last-child {
+  border-bottom: none;
+}
+
+.property-group-header {
+  display: flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  margin: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  background: var(--bg-tertiary);
+  font-size: 10px;
+  color: var(--text-secondary);
+  user-select: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.property-group-header:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.property-group-arrow {
+  margin-right: 4px;
+  transition: transform 0.15s ease;
+}
+
+.property-group-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.property-row {
+  display: flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px 0 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.property-row:last-child {
+  border-bottom: none;
+}
+
+.property-label {
+  width: 50px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.keyframe-track {
+  flex: 1;
+  height: 100%;
+  position: relative;
+}
+
+/* In track-level keyframe rows, keyframe-track should fill the full width */
+.keyframe-track-row .keyframe-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+
+.keyframe-track-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ========== TRACK-BASED KEYFRAME EXPANSION ========== */
+.track-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 8px;
+  padding-right: 30px;
+  margin: 0;
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+}
+
+.track-header-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.track-expand-arrow {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  color: var(--text-secondary);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.track-expand-arrow:hover {
+  color: var(--text-primary);
+}
+
+.track-expand-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.track-expand-arrow.has-keyframes {
+  color: var(--amber-600);
+}
+
+.track-header.expanded {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+}
+
+.track-header.expanded .track-header-top {
+  flex-shrink: 0;
+}
+
+.track-clip-row {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Property labels in track header (left column) */
+.track-property-labels {
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.property-label-row {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  box-sizing: border-box;
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.property-label-row.sub {
+  padding-left: 20px;
+}
+
+.property-label-row.flat {
+  padding-left: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.property-label-row.flat .property-label {
+  flex-shrink: 0;
+  min-width: 45px;
+}
+
+.property-label-row.flat.dragging {
+  background: rgba(45, 140, 235, 0.1);
+}
+
+.property-label-row.flat.keyframe-row-highlighted {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--text-primary);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.property-label-row.flat:not(.keyframe-row-highlighted) {
+  transition: background 700ms ease, color 700ms ease;
+}
+
+.property-keyframe-controls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+}
+
+.kf-nav-btn, .kf-add-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 8px;
+  padding: 2px 3px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+
+.kf-nav-btn:hover, .kf-add-btn:hover {
+  opacity: 1;
+  color: var(--accent-timeline);
+}
+
+.kf-nav-btn.disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.kf-add-btn {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.kf-add-btn.has-keyframe {
+  color: var(--accent-timeline);
+  opacity: 1;
+}
+
+.property-value {
+  font-size: 9px;
+  color: var(--accent-timeline);
+  font-family: monospace;
+  min-width: 40px;
+  text-align: right;
+  cursor: ns-resize;
+  padding: 0 4px;
+  border-radius: 2px;
+  user-select: none;
+}
+
+.property-value:hover {
+  background: rgba(45, 140, 235, 0.1);
+}
+
+.property-label-group {
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.property-label-group:last-child {
+  border-bottom: none;
+}
+
+/* Keyframe tracks in timeline area (right column) */
+.track-property-tracks {
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid var(--border-color);
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  /* Align with left column */
+  margin-top: 1px;
+  padding: 0;
+}
+
+.keyframe-track-row {
+  height: 18px;
+  position: relative;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  /* Ensure track row starts at left edge */
+  margin: 0;
+  padding: 0;
+}
+
+.keyframe-track-row.group-header {
+  background: var(--bg-tertiary);
+}
+
+.keyframe-track-row.flat {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.keyframe-track-group {
+  border-bottom: 1px solid var(--border-color);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.keyframe-track-group:last-child {
+  border-bottom: none;
+}
+
+.track-lane.expanded {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: visible;
+}
+
+/* ========== CURVE EDITOR ========== */
+.curve-editor-svg {
+  display: block;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid var(--border-color);
+}
+
+.curve-editor-grid {
+  stroke: var(--border-color);
+  stroke-width: 0.5;
+  opacity: 0.3;
+}
+
+.curve-editor-grid-major {
+  stroke: var(--border-color);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.curve-editor-curve {
+  fill: none;
+  stroke: var(--amber-600);
+  stroke-width: 2;
+}
+
+.curve-editor-curve.step {
+  stroke: var(--cyan-500);
+  stroke-linejoin: miter;
+}
+
+.curve-editor-keyframe {
+  fill: var(--amber-600);
+  stroke: var(--bg-primary);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: r 0.1s ease;
+}
+
+.curve-editor-keyframe:hover {
+  r: 6;
+}
+
+.curve-editor-keyframe.selected {
+  fill: var(--red-500);
+  stroke: var(--gray-0);
+}
+
+.curve-editor-keyframe.state-change {
+  fill: var(--cyan-500);
+}
+
+.curve-editor-keyframe.state-change.selected {
+  fill: #36b8ff;
+}
+
+.curve-editor-handle {
+  fill: var(--cyan-500);
+  stroke: var(--bg-primary);
+  stroke-width: 1;
+  cursor: pointer;
+}
+
+.curve-editor-handle:hover {
+  fill: var(--cyan-400);
+}
+
+.curve-editor-handle-line {
+  stroke: var(--cyan-500);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+
+.curve-editor-value-label {
+  font-size: 9px;
+  fill: var(--text-secondary);
+}
+
+/* Curve editor header (left side Y-axis) */
+.curve-editor-header {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid var(--border-color);
+}
+
+.curve-editor-close-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+
+.curve-editor-close-btn:hover {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.curve-editor-y-axis {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.curve-editor-tick {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+}
+
+.curve-editor-tick-label {
+  font-size: 9px;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+/* Property row when curve is expanded */
+.property-label-row.flat.curve-expanded {
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 2px solid var(--amber-600);
+}
+
+/* Keyframe track row when curve is expanded */
+.keyframe-track-row.flat.curve-expanded {
+  height: auto;
+  flex-direction: column;
+}
+
+.keyframe-track-row.flat.curve-expanded .keyframe-track {
+  position: relative;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   AI Keyframe Animations
+   ============================================ */
+
+/* Keyframe diamond pop animation */
+@keyframes ai-keyframe-pop {
+  0% {
+    transform: scale(0) rotate(45deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.4) rotate(45deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(45deg);
+    opacity: 1;
+  }
+}
+
+.keyframe-diamond.ai-keyframe-added {
+  animation: ai-keyframe-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+}

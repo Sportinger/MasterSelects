@@ -1,0 +1,1359 @@
+@layer features {
+/* Timeline clips */
+.timeline-clip {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 2px;
+  cursor: grab;
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+  /* Fallback background in case type class is missing */
+  background: #3a4050;
+  border: 1px solid #4a5060;
+}
+
+.timeline-clip.video {
+  background: #3d5a80;
+  border: 1px solid #4a6a90;
+}
+
+.timeline-clip.audio {
+  background: #2d6b4a;
+  border: 1px solid #3a7a58;
+}
+
+.timeline-clip.text {
+  background: #5c3d7a;
+  border: 1px solid #6d4e8a;
+}
+
+.timeline-clip.text .clip-content {
+  background: rgba(92, 61, 122, 0.9);
+}
+
+.timeline-clip.math-scene {
+  background: #1f6f68;
+  border: 1px solid #31a89b;
+}
+
+.timeline-clip.math-scene .clip-content {
+  background: rgba(18, 79, 75, 0.9);
+}
+
+.timeline-clip.camera,
+.timeline-clip.gaussian-splat,
+.timeline-clip.model {
+  background: linear-gradient(180deg, #444b53, #31363d);
+  border: 1px solid #5f6771;
+}
+
+.timeline-clip.camera .clip-content,
+.timeline-clip.gaussian-splat .clip-content,
+.timeline-clip.model .clip-content {
+  background: linear-gradient(to bottom, rgba(8, 10, 12, 0.72) 0%, rgba(8, 10, 12, 0.28) 52%, transparent 100%);
+}
+
+.clip-text-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: bold;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.timeline-clip.solid {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.timeline-clip.solid .clip-content {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.timeline-clip.solid .clip-name,
+.timeline-clip.solid .clip-duration {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+.timeline-clip.loading.solid {
+  opacity: 0.5;
+}
+
+.timeline-clip.loading.text {
+  background: rgba(147, 51, 234, 0.3) !important;
+  border-color: rgba(168, 85, 247, 0.8) !important;
+}
+
+/* Loading state for clips - dashed style like drag preview */
+.timeline-clip.loading {
+  background: rgba(40, 60, 90, 0.85) !important;
+  border: 2px dashed var(--accent) !important;
+  box-shadow: none !important;
+  display: block;
+}
+
+.timeline-clip.loading:not(.entrance-animate):not(.exit-animate) {
+  /* Override global .loading class which sets transform for centered spinners. */
+  transform: none !important;
+}
+
+.timeline-clip.loading.audio {
+  display: none;
+}
+
+.timeline-clip.loading .clip-thumbnails,
+.timeline-clip.loading .clip-waveform {
+  display: none;
+}
+
+.timeline-clip.loading .clip-content {
+  background: transparent !important;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+  flex-direction: row;
+  gap: 6px;
+}
+
+.timeline-clip.loading .clip-name-row {
+  justify-content: center;
+}
+
+.timeline-clip.loading .clip-meta {
+  align-items: center;
+  max-width: none;
+}
+
+.timeline-clip.loading .clip-name {
+  opacity: 0.8;
+}
+
+.timeline-clip.loading .clip-duration {
+  display: none;
+}
+
+.timeline-clip.loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08),
+    transparent
+  );
+  animation: clip-loading-shimmer 1.5s infinite;
+}
+
+@keyframes clip-loading-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Clip entrance animation on composition switch - GPU accelerated */
+@keyframes clip-entrance-from-left {
+  from {
+    opacity: 1;
+    transform: translate3d(-72px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes clip-entrance-from-right {
+  from {
+    opacity: 1;
+    transform: translate3d(72px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Clip exit animation - flies out without fading */
+@keyframes clip-exit-right {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(calc(140vw + 100%), 0, 0);
+  }
+}
+
+@keyframes clip-exit-left {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(calc(-140vw - 100%), 0, 0);
+  }
+}
+
+.timeline-clip.entrance-animate-left {
+  animation: clip-entrance-from-left 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.timeline-clip.entrance-animate-right {
+  animation: clip-entrance-from-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.timeline-clip.exit-animate-right {
+  animation: clip-exit-right 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.timeline-clip.exit-animate-left {
+  animation: clip-exit-left 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.clip-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--text-on-accent);
+  border-radius: 50%;
+  animation: clip-spinner 0.8s linear infinite;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+/* Pending download state for YouTube clips */
+.timeline-clip.pending-download {
+  background: linear-gradient(180deg, rgba(255, 0, 0, 0.2), rgba(180, 0, 0, 0.15)) !important;
+  border: 2px dashed #ff0000 !important;
+  box-shadow: none !important;
+}
+
+.timeline-clip.pending-download .clip-thumbnails,
+.timeline-clip.pending-download .clip-waveform {
+  display: none;
+}
+
+.timeline-clip.pending-download .clip-content {
+  background: transparent !important;
+}
+
+.timeline-clip.pending-download .clip-name {
+  opacity: 0.9;
+}
+
+/* YouTube thumbnail preview in pending clip */
+.clip-youtube-preview {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.5;
+  z-index: 1;
+}
+
+/* Download progress bar at bottom */
+.clip-download-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 15;
+}
+
+.clip-download-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #ff0000, #ff4444);
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 4px rgba(255, 0, 0, 0.6);
+}
+
+/* Download status text */
+.clip-download-status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--text-on-accent);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.clip-download-status .download-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ff0000;
+  border-radius: 50%;
+  animation: clip-spinner 0.8s linear infinite;
+}
+
+/* Download error state */
+.timeline-clip.download-error {
+  background: rgba(239, 68, 68, 0.2) !important;
+  border: 2px dashed var(--danger) !important;
+}
+
+.clip-download-error-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: var(--danger);
+  color: var(--text-on-accent);
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 2px;
+  z-index: 20;
+  cursor: help;
+}
+
+/* Proxy progress bar in timeline clips */
+.clip-proxy-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+.clip-proxy-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), var(--success-light));
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.6);
+}
+
+.clip-proxy-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--success);
+  color: var(--text-inverse);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.clip-proxy-error {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: var(--danger);
+  color: var(--text-inverse);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+/* Proxy generating indicator with fill animation */
+.clip-proxy-generating {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 10;
+}
+
+.clip-proxy-generating .proxy-percent {
+  font-size: 8px;
+  color: var(--warning-light);
+  font-weight: bold;
+}
+
+/* Proxy fill badge - shared styles */
+.proxy-fill-badge {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 14px;
+  text-align: center;
+}
+
+.proxy-fill-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(251, 191, 36, 0.2);
+  color: rgba(251, 191, 36, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.proxy-fill-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--warning-light);
+  color: var(--text-inverse);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  transition: height 0.3s ease-out;
+}
+
+.timeline-clip.has-proxy {
+  border-color: var(--success) !important;
+}
+
+.timeline-clip.generating-proxy {
+  border-color: var(--warning-light) !important;
+}
+
+.timeline-clip.proxy-error {
+  border-color: var(--danger) !important;
+}
+
+/* Loading state takes visual priority over proxy states */
+.timeline-clip.loading.has-proxy,
+.timeline-clip.loading.generating-proxy {
+  border-color: var(--accent) !important;
+}
+
+.timeline-clip.loading .clip-proxy-generating,
+.timeline-clip.loading .clip-proxy-badge {
+  display: none;
+}
+
+/* Reversed clip styles */
+.clip-reversed-badge {
+  position: absolute;
+  top: 2px;
+  right: 20px;
+  background: #f97316;
+  color: var(--text-inverse);
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.timeline-clip.reversed {
+  border-color: #f97316 !important;
+}
+
+.timeline-clip.reversed .clip-thumbnails {
+  transform: scaleX(-1);
+}
+
+/* Needs reload indicator - file permission required after refresh */
+.clip-reload-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: var(--danger);
+  color: var(--text-on-accent);
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 2px;
+  z-index: 10;
+  cursor: help;
+}
+
+.timeline-clip.needs-reload {
+  opacity: 0.6;
+  border-color: var(--danger) !important;
+}
+
+.timeline-clip.needs-reload .clip-thumbnails {
+  filter: grayscale(1);
+}
+
+/* Linked group (multicam) styles */
+.clip-linked-group-badge {
+  position: absolute;
+  top: 2px;
+  right: 38px;
+  background: var(--purple);
+  color: var(--text-on-accent);
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.timeline-clip.linked-group {
+  border-color: var(--purple) !important;
+  box-shadow: 0 0 6px rgba(139, 92, 246, 0.4);
+}
+
+/* Transcript badge on timeline clip */
+.clip-transcript-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 20px;
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 8px;
+  font-weight: bold;
+  padding: 0px 3px;
+  border-radius: 2px;
+  z-index: 10;
+  pointer-events: none;
+  line-height: 13px;
+}
+
+/* Analysis badge on timeline clip */
+.clip-analysis-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: #e88a1a;
+  color: var(--text-inverse);
+  font-size: 8px;
+  font-weight: bold;
+  padding: 0px 3px;
+  border-radius: 2px;
+  z-index: 10;
+  pointer-events: none;
+  line-height: 13px;
+}
+
+/* Clip badge fill effect (partial coverage) */
+.clip-badge-fill {
+  background: transparent;
+  overflow: hidden;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+}
+
+.clip-badge-fill .clip-badge-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 8px;
+  font-weight: bold;
+}
+
+.clip-badge-fill .clip-badge-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--text-inverse);
+  font-size: 8px;
+  font-weight: bold;
+}
+
+.clip-badge-fill .clip-badge-transcript-fill {
+  background: var(--accent);
+}
+
+.clip-badge-fill .clip-badge-analysis-fill {
+  background: #e88a1a;
+}
+
+/* Pick Whip (Layer Parenting) styles */
+.pick-whip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  cursor: grab;
+  opacity: 0.8;
+  transition: opacity 0.15s, transform 0.15s;
+  flex-shrink: 0;
+  pointer-events: auto; /* Override parent's pointer-events: none */
+  color: var(--expr-color); /* Yellow/gold color */
+}
+
+.pick-whip:hover {
+  opacity: 1;
+  transform: scale(1.15);
+  color: var(--expr-color-light);
+}
+
+.pick-whip.dragging {
+  cursor: grabbing;
+  opacity: 1;
+}
+
+.pick-whip.has-parent {
+  opacity: 1;
+  color: var(--expr-connected); /* Green when connected */
+}
+
+.pick-whip.has-parent:hover {
+  color: var(--danger);
+}
+
+.pick-whip-icon {
+  color: inherit;
+}
+
+/* Parent-child link connection lines */
+/* Cable shadow for 3D depth effect */
+.parent-child-link-shadow {
+  stroke: rgba(0, 0, 0, 0.4);
+  stroke-width: 5;
+  stroke-linecap: round;
+  filter: blur(2px);
+  transform: translate(1px, 2px);
+}
+
+/* Main cable - thick yellow like audio cables */
+.parent-child-link {
+  stroke: var(--expr-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+  fill: none;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.3));
+}
+
+/* Cable connectors */
+.parent-child-link-endpoint {
+  fill: var(--expr-color-dark);
+  stroke: var(--expr-color-stroke);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+}
+
+.parent-child-link-start {
+  fill: var(--expr-color-dark);
+  stroke: var(--expr-color-stroke);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+}
+
+/* Hover effects */
+.parent-child-link-group:hover .parent-child-link {
+  stroke: var(--expr-color-light);
+  stroke-width: 3.5;
+}
+
+.parent-child-link-group:hover .parent-child-link-shadow {
+  stroke-width: 6;
+}
+
+.parent-child-link-group:hover .parent-child-link-endpoint,
+.parent-child-link-group:hover .parent-child-link-start {
+  fill: var(--expr-color-light);
+  stroke: var(--expr-color-dark);
+  r: 6;
+}
+
+/* Clip with parent indicator */
+.timeline-clip.has-parent {
+  border-color: var(--expr-color) !important;
+  box-shadow: 0 0 6px rgba(229, 192, 123, 0.3);
+}
+
+.timeline-clip.has-parent::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--expr-color);
+  opacity: 0.6;
+}
+
+@keyframes clip-spinner {
+  to { transform: rotate(360deg); }
+}
+
+/* Transcript word markers */
+.clip-transcript-markers {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.transcript-marker {
+  position: absolute;
+  bottom: 0;
+  height: 4px;
+  background: var(--warning-light);
+  border-radius: 1px 1px 0 0;
+  opacity: 0.9;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: opacity 0.1s, height 0.1s;
+}
+
+.transcript-marker:hover {
+  opacity: 1;
+  height: 6px;
+  background: var(--warning);
+}
+
+/* Transcribing progress indicator */
+.clip-transcribing-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 6;
+}
+
+.transcribing-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--purple-light), #d946ef);
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 4px rgba(168, 85, 247, 0.6);
+}
+
+/* Analysis overlay - full height graph covering entire clip */
+.clip-analysis-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.analysis-overlay-canvas {
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+/* Real-time position indicator on analysis overlay */
+.analysis-position-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.analysis-indicator-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.analysis-indicator-values {
+  position: absolute;
+  top: -16px;
+  left: 4px;
+  display: flex;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.analysis-indicator-values .focus-value {
+  color: var(--success-light);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.analysis-indicator-values .motion-value {
+  color: #60a5fa;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Analysis legend labels on clip */
+.analysis-legend-labels {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  display: flex;
+  gap: 8px;
+  font-size: 8px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.analysis-legend-labels .legend-focus {
+  color: var(--success-light);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+.analysis-legend-labels .legend-motion {
+  color: #60a5fa;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+.analysis-legend-labels .legend-progress {
+  color: var(--warning-light);
+  font-weight: bold;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+/* Analyzing progress indicator */
+.clip-analyzing-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 6;
+}
+
+.analyzing-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--success), var(--success-light));
+  transition: width 0.2s ease-out;
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.6);
+}
+
+/* Waveform generation progress indicator */
+.clip-waveform-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 6;
+}
+
+.waveform-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--danger), var(--danger-light), var(--danger));
+  background-size: 200% 100%;
+  animation: waveform-progress-pulse 1s ease-in-out infinite;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes waveform-progress-pulse {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Audio clip generating waveform */
+.timeline-clip.audio.generating-waveform {
+  border-color: var(--danger) !important;
+}
+
+/* Clip with transcript indicator */
+.timeline-clip.has-transcript::before {
+  content: 'T';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: var(--purple-light);
+  color: var(--text-on-accent);
+  font-size: 8px;
+  font-weight: bold;
+  padding: 1px 3px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.timeline-clip.image {
+  background: #5c3d7a;
+  border: 1px solid #6d4e8a;
+}
+
+.timeline-clip:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-clip.selected {
+  box-shadow: 0 0 0 2px var(--accent-timeline);
+}
+
+/* Nested composition clips always have orange outline */
+.timeline-clip.composition {
+  box-shadow: 0 0 0 2px #f97316;
+}
+
+.timeline-clip.composition.selected {
+  box-shadow: 0 0 0 2px #f97316, 0 0 0 4px var(--accent-timeline);
+}
+
+.timeline-clip.dragging {
+  opacity: 0.9;
+  cursor: grabbing;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.timeline-clip.linked-dragging {
+  opacity: 0.9;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 99;
+}
+
+/* Visual feedback when forcing overlap - red glow to indicate clip will be trimmed */
+.timeline-clip.forcing-overlap {
+  box-shadow: 0 0 0 2px var(--danger), 0 4px 12px rgba(239, 68, 68, 0.5);
+}
+
+/* Cut tool mode */
+.timeline-clip.cut-mode {
+  cursor: crosshair !important;
+}
+
+.timeline-clip.cut-mode:hover {
+  box-shadow: 0 0 0 1px #f97316;
+}
+
+/* Cut indicator line */
+.cut-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #f97316;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 0 4px rgba(249, 115, 22, 0.8);
+}
+
+.cut-indicator::before,
+.cut-indicator::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+
+.cut-indicator::before {
+  top: 0;
+  border-top: 6px solid #f97316;
+}
+
+.cut-indicator::after {
+  bottom: 0;
+  border-bottom: 6px solid #f97316;
+}
+
+
+.clip-content {
+  position: relative;
+  z-index: 5;
+  padding: 2px 6px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.2) 50%, transparent 100%);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.clip-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: max-content;
+  max-width: calc(100% - 12px);
+  min-width: 0;
+  will-change: transform;
+}
+
+.clip-name-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+}
+
+.clip-name {
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--text-on-accent);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.clip-duration {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.clip-type-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: rgba(235, 239, 244, 0.9);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+}
+
+.clip-static-artwork {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.clip-static-artwork-icon {
+  width: 42px;
+  height: 42px;
+  max-width: calc(100% - 18px);
+  max-height: calc(100% - 18px);
+  color: rgba(205, 211, 217, 0.5);
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.28));
+}
+
+/* Clip thumbnails filmstrip */
+.clip-thumbnails {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  overflow: hidden;
+  opacity: 0.85;
+}
+
+.clip-thumb {
+  height: 100%;
+  width: auto;
+  object-fit: cover;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.clip-thumb-placeholder {
+  height: 100%;
+  width: 71px;
+  flex-shrink: 0;
+  background: #1a1a1a;
+}
+
+.timeline-clip.video .clip-thumbnails,
+.timeline-clip.image .clip-thumbnails {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.timeline-clip.audio .clip-thumbnails {
+  background: linear-gradient(180deg, #16a34a, #15803d);
+}
+
+/* Trim handles */
+.trim-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  background: rgba(255, 255, 255, 0.2);
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  z-index: 10;
+}
+
+.trim-handle:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.trim-handle.left {
+  left: 0;
+  border-radius: 4px 0 0 4px;
+}
+
+.trim-handle.right {
+  right: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Trimming state */
+.timeline-clip.trimming,
+.timeline-clip.linked-trimming {
+  z-index: 100;
+  box-shadow: 0 0 0 2px var(--warning);
+}
+
+.timeline-clip.trimming .trim-handle,
+.timeline-clip.linked-trimming .trim-handle {
+  opacity: 1;
+  background: var(--warning);
+}
+
+.timeline-clip:hover .trim-handle {
+  opacity: 1;
+}
+
+/* Fade handles - corner handles for fade-in/out */
+.fade-handle {
+  position: absolute;
+  top: 0;
+  width: 12px;
+  height: 12px;
+  cursor: ew-resize;
+  background: rgba(251, 191, 36, 0.8);
+  border-radius: 0 0 4px 0;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, transform 0.15s;
+  z-index: 15;
+}
+
+.fade-handle:hover {
+  background: rgba(251, 191, 36, 1);
+  transform: scale(1.1);
+}
+
+.fade-handle.left {
+  left: 0;
+  border-radius: 0 0 4px 0;
+}
+
+.fade-handle.right {
+  right: 0;
+  left: auto;
+  border-radius: 0 0 0 4px;
+}
+
+/* When fade is active, position handle at end of fade region */
+.fade-handle.left.active {
+  border-radius: 2px;
+}
+
+.fade-handle.right.active {
+  border-radius: 2px;
+}
+
+.timeline-clip:hover .fade-handle {
+  opacity: 1;
+}
+
+.timeline-clip.fading .fade-handle {
+  opacity: 1;
+  background: var(--warning);
+}
+
+/* Fade curve container - SVG bezier curve showing opacity animation */
+
+.fade-curve-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.fade-curve-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Audio Waveform */
+.clip-waveform {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+}
+
+.waveform-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.waveform-bar {
+  position: absolute;
+  bottom: 50%;
+  transform: translateY(50%);
+  background: rgba(34, 197, 94, 0.8);
+  border-radius: 1px;
+}
+
+.timeline-clip.audio .waveform-bar {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.waveform-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* Nested composition mixdown waveform - shown at bottom of clip */
+.clip-mixdown-waveform {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  height: 30px;
+  overflow: hidden;
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.clip-mixdown-waveform .waveform-canvas {
+  filter: hue-rotate(180deg); /* Different color from regular waveforms */
+}
+
+/* Nested composition mixdown generating indicator */
+.clip-mixdown-indicator {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 6px;
+  border-radius: 3px;
+  z-index: 6;
+}
+
+/* Nested composition clip boundary markers */
+.nested-clip-boundaries {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.nested-boundary-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 60, 60, 0.8);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Keyframe tick marks on clip bar */
+.clip-keyframe-ticks {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.keyframe-tick {
+  position: absolute;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  cursor: grab;
+  z-index: 1;
+}
+
+.keyframe-tick::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 4px;
+  height: 4px;
+  background: var(--warning);
+  transform: translateX(-50%) rotate(45deg);
+  opacity: 0.7;
+  transition: opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.keyframe-tick.state-change::after {
+  background: var(--cyan-500);
+}
+
+.keyframe-tick:hover::after,
+.keyframe-tick:focus-visible::after,
+.keyframe-tick.dragging::after {
+  transform: translateX(-50%) rotate(45deg) scale(2.15);
+  opacity: 1;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.keyframe-tick:active,
+.keyframe-tick.dragging {
+  cursor: grabbing;
+}
+
+.timeline-clip.selected .keyframe-tick::after {
+  opacity: 1;
+}
+}

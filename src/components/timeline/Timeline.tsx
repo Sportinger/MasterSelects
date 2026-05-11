@@ -2,6 +2,8 @@
 // Composes TimelineRuler, TimelineControls, TimelineHeader, TimelineTrack, TimelineClip, TimelineKeyframes
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import './Timeline.css';
+import './TimelineTracks.css';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import {
