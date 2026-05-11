@@ -2,6 +2,8 @@
 // Same style as WelcomeOverlay
 
 import { useState, useEffect, useCallback } from 'react';
+import './WelcomeOverlay.css';
+import './InfoDialog.css';
 import { APP_VERSION } from '../../version';
 import { NativeHelperStatus } from './NativeHelperStatus';
 

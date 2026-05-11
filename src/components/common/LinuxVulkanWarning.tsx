@@ -1,6 +1,7 @@
 // LinuxVulkanWarning - Warning banner for Linux users about Vulkan
 // Shows when Linux is detected, can be dismissed and won't show again
 
+import './LinuxVulkanWarning.css';
 import { useEngineStore } from '../../stores/engineStore';
 
 export function LinuxVulkanWarning() {

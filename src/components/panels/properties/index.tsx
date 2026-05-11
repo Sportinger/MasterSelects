@@ -5,6 +5,11 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { useEngineStore } from '../../../stores/engineStore';
 import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
 import { TextTab } from '../TextTab';
+import './PropertiesPanel.css';
+import './EffectsTab.css';
+import './AnalysisTranscriptTabs.css';
+import './TextTab.css';
+import './VolumeBlendshapeTabs.css';
 
 // Tab type
 type PropertiesTab = 'transform' | 'color' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip';

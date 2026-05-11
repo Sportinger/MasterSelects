@@ -1,4 +1,6 @@
 import { useCallback } from 'react';
+import './TutorialOverlay.css';
+import './TutorialCampaignDialog.css';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
   TUTORIAL_CAMPAIGNS,

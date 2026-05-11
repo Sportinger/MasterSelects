@@ -1,6 +1,7 @@
 // TimelineControls component - Playback controls and toolbar
 
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
+import './TimelineControls.css';
 import type { TimelineControlsProps } from './types';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { engine } from '../../engine/WebGPUEngine';

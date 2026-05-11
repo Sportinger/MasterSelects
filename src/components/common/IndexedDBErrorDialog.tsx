@@ -2,6 +2,9 @@
 // Provides instructions for clearing site data to fix the issue
 
 import { useState, useEffect, useCallback } from 'react';
+import './WelcomeOverlay.css';
+import './WhatsNewDialog.css';
+import './IndexedDBErrorDialog.css';
 
 interface IndexedDBErrorDialogProps {
   onClose: () => void;

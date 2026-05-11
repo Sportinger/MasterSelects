@@ -1,5 +1,6 @@
 // TimelineClip component - Clip rendering within tracks
 
+import './TimelineClip.css';
 import { memo, useRef, useState, useEffect } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';

@@ -3,6 +3,7 @@
 // Supports FSA (Chrome) and Native Helper (Firefox) backends
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import './WelcomeOverlay.css';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('WelcomeOverlay');

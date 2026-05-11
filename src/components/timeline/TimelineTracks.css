@@ -1,0 +1,244 @@
+@layer features {
+/* Composition switch: track rows stay visible while their labels/heights update. */
+.phase-exiting > .track-header,
+.phase-exiting > .track-lane,
+.phase-entering > .track-header,
+.phase-entering > .track-lane {
+  animation: none;
+  transition-duration: var(--composition-switch-layout-duration, 475ms), 160ms, 160ms;
+}
+
+/* Track headers */
+.track-headers {
+  width: 150px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+}
+
+.track-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  position: relative;
+  overflow: hidden;
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
+}
+
+.track-header.video {
+  background: linear-gradient(90deg, rgba(61, 90, 128, 0.15), transparent);
+}
+
+.track-header.audio {
+  background: linear-gradient(90deg, rgba(45, 107, 74, 0.15), transparent);
+}
+
+/* Green separator line between video and audio track sections */
+.track-header.video + .track-header.audio,
+.track-lane.video + .track-lane.audio {
+  border-top: 2px solid var(--success);
+}
+
+/* Preview header shown when dragging media to create new track */
+.track-header-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  margin: 4px 4px 0 4px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: all 0.15s ease;
+}
+
+.track-header-preview.video {
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.track-header-preview.video.active {
+  border-color: rgba(37, 99, 235, 0.8);
+  background: rgba(37, 99, 235, 0.15);
+}
+
+.track-header-preview.audio {
+  border-color: rgba(22, 163, 74, 0.4);
+}
+
+.track-header-preview.audio.active {
+  border-color: rgba(22, 163, 74, 0.8);
+  background: rgba(22, 163, 74, 0.15);
+}
+
+.track-header-preview-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+
+.track-header-preview.active .track-header-preview-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.track-header.dimmed,
+.track-lane.dimmed {
+  opacity: 0.4;
+}
+
+.track-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: text;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 62px;
+}
+
+.track-layer-id {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.track-name-input {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-timeline);
+  border-radius: 2px;
+  padding: 0 4px;
+  width: 80px;
+  outline: none;
+}
+
+.track-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Track pick whip for layer parenting */
+.track-pick-whip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  cursor: grab;
+  opacity: 0.5;
+  transition: opacity 0.15s, transform 0.15s;
+  color: var(--expr-color);
+}
+
+.track-pick-whip:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.track-pick-whip.dragging {
+  cursor: grabbing;
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+.track-pick-whip.has-parent {
+  opacity: 1;
+  color: var(--expr-color);
+}
+
+.track-pick-whip.has-children {
+  opacity: 0.8;
+  color: var(--expr-connected);
+}
+
+.track-pick-whip.has-parent.has-children {
+  opacity: 1;
+  color: var(--expr-color);
+}
+
+.track-pick-whip-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Timeline tracks area */
+.timeline-tracks {
+  flex: 1;
+  position: relative;
+  overflow-x: hidden; /* Hidden - using TimelineNavigator instead */
+  overflow-y: visible;
+}
+
+.track-lanes-scroll {
+  position: relative;
+}
+
+/* Track lanes */
+.track-lane {
+  position: relative;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  min-width: 100%;
+  overflow: hidden;
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
+}
+
+.track-lane.video {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--bg-secondary),
+    var(--bg-secondary) calc(var(--grid-size, 50px) - 1px),
+    var(--timeline-grid-video) calc(var(--grid-size, 50px) - 1px),
+    var(--timeline-grid-video) var(--grid-size, 50px)
+  );
+}
+
+.track-lane.audio {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--bg-secondary),
+    var(--bg-secondary) calc(var(--grid-size, 50px) - 1px),
+    var(--timeline-grid-audio) calc(var(--grid-size, 50px) - 1px),
+    var(--timeline-grid-audio) var(--grid-size, 50px)
+  );
+}
+
+.composition-exit-clips-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: inherit;
+  width: 100%;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.composition-exit-track-row {
+  position: relative;
+  width: 100%;
+  overflow: visible;
+}
+
+/* Track header resize cursor on shift hover */
+.track-header {
+  cursor: default;
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
+}
+
+.track-header:hover {
+  background: var(--bg-hover);
+}
+}

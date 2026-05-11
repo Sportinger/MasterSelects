@@ -2,6 +2,7 @@
 // Matches the horizontal TimelineNavigator style
 
 import { useRef, useState, useCallback, useEffect } from 'react';
+import './TimelineNavigator.css';
 
 interface VerticalScrollbarProps {
   scrollY: number;

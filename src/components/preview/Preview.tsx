@@ -1,5 +1,7 @@
 // Preview canvas component with After Effects-style editing overlay
 
+import './Preview.css';
+import './PreviewEditMode.css';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Logger } from '../../services/logger';

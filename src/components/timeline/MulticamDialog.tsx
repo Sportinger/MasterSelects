@@ -5,6 +5,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineClip, TranscriptWord } from '../../types';
 import { Logger } from '../../services/logger';
+import './MulticamDialog.css';
 
 const log = Logger.create('MulticamDialog');
 

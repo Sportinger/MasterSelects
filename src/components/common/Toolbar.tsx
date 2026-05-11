@@ -1,6 +1,7 @@
 // Toolbar component - After Effects style menu bar
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import './Toolbar.css';
 import { useShallow } from 'zustand/react/shallow';
 import { Logger } from '../../services/logger';
 

@@ -2,6 +2,7 @@
 // Shows the visible range and allows dragging/resizing
 
 import { useRef, useState, useCallback, useEffect } from 'react';
+import './TimelineNavigator.css';
 
 // Padding in pixels to show beyond the end of the composition (must match useTimelineZoom)
 const END_PADDING = 100;

@@ -17,6 +17,7 @@ import { animateSlotGrid } from './slotGridAnimation';
 import { MiniTimeline } from './MiniTimeline';
 import type { Composition } from '../../stores/mediaStore';
 import type { SlotDeckState } from '../../stores/mediaStore/types';
+import './SlotGrid.css';
 
 interface SlotGridProps {
   opacity: number;

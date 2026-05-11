@@ -1,0 +1,267 @@
+@layer features {
+/* Slot Grid Toolbar */
+.slot-grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  min-height: 30px;
+}
+
+.slot-grid-toolbar-back {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.slot-grid-toolbar-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* ============================
+   Slot Grid View (Resolume-style)
+   ============================ */
+
+.slot-grid-container {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  overflow: auto;
+  padding: 8px;
+  background: var(--gray-850);
+  pointer-events: auto;
+}
+
+.slot-grid-resolume {
+  display: inline-grid;
+  gap: 6px;
+}
+
+.slot-grid-corner {
+  /* Empty top-left corner cell */
+}
+
+.slot-grid-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-200);
+  background: var(--bg-input);
+  border-radius: 3px;
+}
+
+.slot-grid-col-header-clickable {
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.slot-grid-col-header-clickable:hover {
+  background: var(--bg-active);
+  color: var(--gray-75);
+}
+
+.slot-grid-row-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 40px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-200);
+  background: var(--bg-input);
+  border-radius: 3px;
+}
+
+.slot-grid-row-letter {
+  line-height: 1;
+}
+
+.slot-grid-opacity-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 14px;
+  height: 60px;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+}
+
+.slot-grid-opacity-slider::-webkit-slider-runnable-track {
+  width: 4px;
+  height: 100%;
+  background: var(--gray-500);
+  border-radius: 2px;
+}
+
+.slot-grid-opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gray-100);
+  margin-left: -3px;
+  cursor: pointer;
+}
+
+.slot-grid-opacity-slider::-webkit-slider-thumb:hover {
+  background: var(--gray-0);
+}
+
+.slot-grid-opacity-slider::-moz-range-track {
+  width: 4px;
+  height: 100%;
+  background: var(--gray-500);
+  border-radius: 2px;
+}
+
+.slot-grid-opacity-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gray-100);
+  border: none;
+  cursor: pointer;
+}
+
+.slot-grid-opacity-slider::-moz-range-thumb:hover {
+  background: var(--gray-0);
+}
+
+.slot-grid-item {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: var(--bg-input);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.slot-grid-item:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.1);
+}
+
+.slot-grid-item.active {
+  border-color: #4a9eff;
+  box-shadow: 0 0 12px rgba(74, 158, 255, 0.3);
+}
+
+.slot-grid-item.layer-active {
+  border-color: #4aff6e;
+  box-shadow: 0 0 12px rgba(74, 255, 110, 0.3);
+}
+
+.slot-grid-item.selected:not(.active) {
+  border-color: #f0c45a;
+  box-shadow: 0 0 12px rgba(240, 196, 90, 0.28);
+}
+
+.slot-grid-item.drag-over {
+  border-color: #ff9800;
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
+}
+
+.slot-grid-item.empty {
+  background: var(--gray-850);
+  border: 1px dashed rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.slot-grid-item.empty:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--bg-input);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.05);
+}
+
+.slot-grid-item.empty.drag-over {
+  border: 2px solid #ff9800;
+  box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
+}
+
+/* Slot composition name */
+.slot-grid-name {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  right: 4px;
+  font-size: 10px;
+  color: var(--gray-25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
+}
+
+/* Slot time display (elapsed / duration) */
+.slot-grid-time {
+  position: absolute;
+  bottom: 2px;
+  left: 4px;
+  text-align: left;
+  font-size: 10px;
+  white-space: nowrap;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  color: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
+  z-index: 2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.7);
+}
+
+/* Slot playhead line */
+.slot-grid-playhead {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  width: 1.5px;
+  background: #ff3b3b;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.slot-grid-context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-active);
+  border: 1px solid var(--gray-400);
+  border-radius: 4px;
+  padding: 2px 0;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.slot-grid-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  color: var(--gray-75);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.slot-grid-context-menu button:hover {
+  background: var(--gray-450);
+  color: var(--gray-0);
+}
+
+}
