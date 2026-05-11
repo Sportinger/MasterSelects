@@ -1,5 +1,13 @@
 [
   {
+    "date": "2026-05-12",
+    "type": "refactor",
+    "title": "Modular Editor CSS",
+    "description": "The former App.css monolith has been split into owner-focused CSS files for the timeline, media panel, properties panel, preview, export, common dialogs, and shared app foundations while preserving the final bundled CSS output.",
+    "section": "Architecture / CSS",
+    "commits": ["6edc4570"]
+  },
+  {
     "date": "2026-05-09",
     "type": "improve",
     "title": "Large Media Board Search and Loading",

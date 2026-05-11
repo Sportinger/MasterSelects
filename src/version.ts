@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.8';
+export const APP_VERSION = '1.7.9';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Board search and fast large projects',
-  message: 'Project search now supports filters like *.mp4, while the board keeps layouts stable and restores cached placement data for faster large-project loading.',
+  title: 'Modular editor styles',
+  message: 'The former App.css monolith has been split into owner-focused style files for timeline, panels, preview, export, dialogs, and shared editor foundations.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Large media board polish',
-  message: 'Board folders, loose items, search dimming, and overview rendering received another round of interaction and performance hardening.',
+  title: 'CSS ownership cleanup',
+  message: 'Styles now live beside their owning components while Vite still merges the final CSS bundle for production.',
   animated: true,
 };
 
