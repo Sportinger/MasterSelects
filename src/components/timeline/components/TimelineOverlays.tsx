@@ -1,5 +1,6 @@
 // Timeline overlay elements (markers, work area, cache indicators, etc.)
 
+import '../TimelineInteractions.css';
 import React from 'react';
 import type { ClipDragState } from '../types';
 

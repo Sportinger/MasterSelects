@@ -36,7 +36,8 @@ import { useSettingsStore } from './stores/settingsStore';
 import { projectDB } from './services/projectDB';
 import { projectFileService } from './services/projectFileService';
 import { APP_VERSION, shouldAutoShowChangelog } from './version';
-import './App.css';
+import './styles/app-shell.css';
+import './styles/shared-controls.css';
 
 // Dev test pages - lazy loaded to avoid bloating main bundle
 // Access via ?test=parallel-decode

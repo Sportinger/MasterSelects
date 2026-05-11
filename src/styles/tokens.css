@@ -1,0 +1,439 @@
+﻿@layer tokens, base, shell, shared, components, features, overlays;
+
+@layer tokens {
+/* WebVJ Mixer - Dark Theme Styles */
+
+:root {
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     PRIMITIVE COLORS (raw palette)
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+  /* Gray scale */
+  --gray-950: #0a0a0a;
+  --gray-900: #0f0f0f;
+  --gray-850: #141414;
+  --gray-800: #161616;
+  --gray-750: #1a1a1a;
+  --gray-700: #1e1e1e;
+  --gray-650: #222222;
+  --gray-600: #282828;
+  --gray-550: #2a2a2a;
+  --gray-500: #333333;
+  --gray-450: #3a3a3a;
+  --gray-400: #444444;
+  --gray-350: #4a4a4a;
+  --gray-300: #555555;
+  --gray-250: #666666;
+  --gray-200: #888888;
+  --gray-150: #999999;
+  --gray-100: #aaaaaa;
+  --gray-75: #cccccc;
+  --gray-50: #d4d4d4;
+  --gray-25: #e0e0e0;
+  --gray-0: #ffffff;
+
+  /* Blue (accent) */
+  --blue-700: #1a5fb0;
+  --blue-600: #2080CC;
+  --blue-500: #2D8CEB;
+  --blue-400: #4DA3F0;
+  --blue-300: #60a5fa;
+  --blue-200: #93c5fd;
+
+  /* Red (danger) */
+  --red-700: #c53030;
+  --red-600: #E74C3C;
+  --red-500: #ef4444;
+  --red-400: #f87171;
+  --red-300: #ff6b6b;
+
+  /* Green (success) */
+  --green-700: #15803d;
+  --green-600: #22c55e;
+  --green-500: #27AE60;
+  --green-400: #4ade80;
+  --green-300: #51cf66;
+
+  /* Yellow/Amber (warning) */
+  --amber-700: #b45309;
+  --amber-600: #f59e0b;
+  --amber-500: #F39C12;
+  --amber-400: #fbbf24;
+  --amber-300: #fcd34d;
+
+  /* Purple */
+  --purple-600: #7c3aed;
+  --purple-500: #8b5cf6;
+  --purple-400: #a855f7;
+  --purple-300: #c084fc;
+
+  /* Cyan */
+  --cyan-500: #22d3ee;
+  --cyan-400: #67e8f9;
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     SEMANTIC TOKENS (meaning-based)
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+  /* Backgrounds */
+  --bg-primary: var(--gray-900);
+  --bg-secondary: var(--gray-800);
+  --bg-tertiary: var(--gray-700);
+  --bg-hover: var(--gray-600);
+  --bg-active: var(--gray-550);
+  --bg-elevated: var(--gray-650);
+  --bg-input: var(--gray-750);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+  --bg-overlay-light: rgba(0, 0, 0, 0.4);
+  --bg-canvas: #000000;
+
+  /* Borders */
+  --border-color: var(--gray-950);
+  --border-subtle: var(--gray-500);
+  --border-strong: var(--gray-400);
+  --border-focus: var(--blue-500);
+
+  /* Text */
+  --text-primary: var(--gray-50);
+  --text-secondary: var(--gray-150);
+  --text-muted: var(--gray-250);
+  --text-disabled: var(--gray-300);
+  --text-inverse: #000000;
+  --text-on-accent: #ffffff;
+
+  /* Accent (primary action color) */
+  --accent: var(--blue-500);
+  --accent-hover: var(--blue-400);
+  --accent-dim: rgba(45, 140, 235, 0.15);
+  --accent-subtle: rgba(45, 140, 235, 0.1);
+
+  /* Timeline accent (slightly different blue for timeline elements) */
+  --accent-timeline: #2997E5;
+  --accent-timeline-hover: var(--blue-600);
+
+  /* Status colors */
+  --danger: var(--red-600);
+  --danger-light: var(--red-400);
+  --danger-dim: rgba(239, 68, 68, 0.15);
+  --danger-subtle: rgba(239, 68, 68, 0.1);
+  --danger-border: rgba(239, 68, 68, 0.3);
+
+  --success: var(--green-600);
+  --success-light: var(--green-400);
+  --success-dim: rgba(34, 197, 94, 0.15);
+  --success-subtle: rgba(34, 197, 94, 0.1);
+
+  --warning: var(--amber-500);
+  --warning-light: var(--amber-400);
+  --warning-dim: rgba(245, 158, 11, 0.15);
+
+  --info: var(--blue-300);
+  --info-dim: rgba(96, 165, 250, 0.15);
+
+  /* Purple (expressions, AI, special) */
+  --purple: var(--purple-500);
+  --purple-light: var(--purple-400);
+  --purple-dim: rgba(139, 92, 246, 0.15);
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     SPACING SCALE (4px base grid)
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+  --sp-0: 0px;
+  --sp-0-5: 2px;
+  --sp-1: 4px;
+  --sp-1-5: 6px;
+  --sp-2: 8px;
+  --sp-2-5: 10px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     TYPOGRAPHY
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+
+  --font-2xs: 9px;
+  --font-xs: 10px;
+  --font-sm: 11px;
+  --font-md: 12px;
+  --font-lg: 13px;
+  --font-xl: 14px;
+  --font-2xl: 16px;
+  --font-3xl: 18px;
+
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.4;
+  --leading-relaxed: 1.5;
+
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.5px;
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     BORDER RADIUS
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+  --radius-2xl: 12px;
+  --radius-full: 9999px;
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     SHADOWS
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.5);
+  --shadow-dialog: 0 20px 50px rgba(0, 0, 0, 0.5);
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     TRANSITIONS
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+  --transition-fast: 0.1s ease;
+  --transition-normal: 0.15s ease;
+  --transition-slow: 0.2s ease;
+  --transition-slower: 0.3s ease;
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     Z-INDEX SCALE
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+  --z-base: 1;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 1000;
+  --z-modal: 10000;
+  --z-tooltip: 10001;
+
+  /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+     COMPONENT TOKENS
+     â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+  /* Toolbar */
+  --toolbar-height: 28px;
+  --toolbar-bg: var(--bg-tertiary);
+  --toolbar-font-size: var(--font-sm);
+
+  /* Tab bar */
+  --tab-height: 26px;
+  --tab-font-size: var(--font-sm);
+  --tab-active-bg: var(--gray-550);
+
+  /* Panel headers */
+  --panel-header-bg: var(--bg-tertiary);
+  --panel-header-font-size: var(--font-xl);
+  --panel-header-weight: var(--font-semibold);
+  --panel-header-padding: var(--sp-3) var(--sp-4);
+
+  /* Inputs */
+  --input-bg: var(--bg-tertiary);
+  --input-border: var(--border-color);
+  --input-border-focus: var(--accent);
+  --input-radius: var(--radius-md);
+  --input-padding: var(--sp-1-5) var(--sp-2);
+  --input-font-size: var(--font-md);
+
+  /* Buttons */
+  --btn-radius: var(--radius-md);
+  --btn-padding: var(--sp-2) var(--sp-4);
+  --btn-font-size: var(--font-md);
+  --btn-font-weight: var(--font-medium);
+
+  /* Scrollbar */
+  --scrollbar-width: 6px;
+  --scrollbar-track: var(--bg-secondary);
+  --scrollbar-thumb: var(--border-strong);
+  --scrollbar-thumb-hover: var(--text-muted);
+
+  /* Slot/group colors (fixed palette) */
+  --group-0: #ff6b6b;
+  --group-1: #4ecdc4;
+  --group-2: #ffe66d;
+  --group-3: #95e1d3;
+  --group-4: #dda0dd;
+  --group-5: #87ceeb;
+
+  /* Pick whip / expression colors */
+  --expr-color: #e5c07b;
+  --expr-color-light: #f0d090;
+  --expr-color-dark: #d4a84b;
+  --expr-color-stroke: #b8922f;
+  --expr-connected: #98c379;
+
+  /* Marker type colors */
+  --marker-green: var(--success);
+  --marker-amber: var(--amber-600);
+  --marker-red: var(--danger);
+  --marker-purple: var(--purple);
+  --marker-cyan: var(--cyan-500);
+
+  /* Timeline grid lines (subtle tinted vertical lines) */
+  --timeline-grid-video: #282830;
+  --timeline-grid-audio: #283028;
+
+  /* Preview overlay buttons (over dark canvas) */
+  --preview-overlay-bg: rgba(0, 0, 0, 0.6);
+  --preview-overlay-bg-hover: rgba(0, 0, 0, 0.8);
+
+  /* Chat bubble (user message) */
+  --chat-user-bg: var(--gray-500);
+  --chat-user-border: var(--gray-450);
+
+  /* Backward compat aliases for panels that used different names */
+  --accent-primary: var(--accent);
+  --accent-success: var(--success);
+  --accent-danger: var(--red-300);
+  --warning-color: var(--warning);
+  --accent-color: var(--accent);
+}
+
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   THEME: LIGHT
+   Overrides semantic + component tokens only.
+   Primitives stay fixed, --bg-canvas stays #000.
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+[data-theme="light"] {
+  /* Backgrounds */
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #e8e8e8;
+  --bg-tertiary: #dedede;
+  --bg-hover: #d0d0d0;
+  --bg-active: #c8c8c8;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --bg-overlay: rgba(0, 0, 0, 0.4);
+  --bg-overlay-light: rgba(0, 0, 0, 0.2);
+
+  /* Borders */
+  --border-color: #c0c0c0;
+  --border-subtle: #d0d0d0;
+  --border-strong: #a0a0a0;
+
+  /* Text */
+  --text-primary: #1a1a1a;
+  --text-secondary: #4a4a4a;
+  --text-muted: #777777;
+  --text-disabled: #aaaaaa;
+  --text-inverse: #ffffff;
+
+  /* Accent */
+  --accent: #1a73e8;
+  --accent-hover: #1565c0;
+  --accent-dim: rgba(26, 115, 232, 0.12);
+  --accent-subtle: rgba(26, 115, 232, 0.08);
+  --accent-timeline: #1a73e8;
+  --accent-timeline-hover: #1565c0;
+
+  /* Status colors */
+  --danger: #d32f2f;
+  --danger-light: #ef5350;
+  --danger-dim: rgba(211, 47, 47, 0.1);
+  --danger-subtle: rgba(211, 47, 47, 0.06);
+  --danger-border: rgba(211, 47, 47, 0.25);
+  --success: #2e7d32;
+  --success-light: #43a047;
+  --success-dim: rgba(46, 125, 50, 0.1);
+  --success-subtle: rgba(46, 125, 50, 0.06);
+  --warning: #ed6c02;
+  --warning-light: #ff9800;
+  --warning-dim: rgba(237, 108, 2, 0.1);
+  --info: #0288d1;
+  --info-dim: rgba(2, 136, 209, 0.1);
+  --purple: #7b1fa2;
+  --purple-light: #9c27b0;
+  --purple-dim: rgba(123, 31, 162, 0.1);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.14);
+  --shadow-dialog: 0 12px 40px rgba(0, 0, 0, 0.18);
+
+  /* Component tokens */
+  --tab-active-bg: #d0d0d0;
+  --scrollbar-track: #e8e8e8;
+  --scrollbar-thumb: #bbb;
+  --scrollbar-thumb-hover: #999;
+
+  /* Timeline grid - light tinted lines */
+  --timeline-grid-video: #d0d0d8;
+  --timeline-grid-audio: #c8d8c8;
+
+  /* Preview overlay - frosted glass on dark canvas */
+  --preview-overlay-bg: rgba(255, 255, 255, 0.2);
+  --preview-overlay-bg-hover: rgba(255, 255, 255, 0.35);
+
+  /* Chat bubble */
+  --chat-user-bg: #d0d8e8;
+  --chat-user-border: #b8c4d8;
+
+  /* Compat aliases */
+  --accent-primary: var(--accent);
+  --accent-danger: #ef5350;
+}
+
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   THEME: MIDNIGHT (OLED)
+   True black backgrounds, slightly brighter text.
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+[data-theme="midnight"] {
+  /* True black backgrounds */
+  --bg-primary: #000000;
+  --bg-secondary: #080808;
+  --bg-tertiary: #111111;
+  --bg-hover: #1a1a1a;
+  --bg-active: #1e1e1e;
+  --bg-elevated: #141414;
+  --bg-input: #0a0a0a;
+  --bg-overlay: rgba(0, 0, 0, 0.85);
+  --bg-overlay-light: rgba(0, 0, 0, 0.6);
+
+  /* Borders */
+  --border-color: #1a1a1a;
+  --border-subtle: #2a2a2a;
+  --border-strong: #3a3a3a;
+
+  /* Text */
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+
+  /* Accent */
+  --accent: #3d9df5;
+  --accent-hover: #5bb0ff;
+  --accent-dim: rgba(61, 157, 245, 0.15);
+  --accent-subtle: rgba(61, 157, 245, 0.1);
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.7);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.8);
+  --shadow-dialog: 0 20px 50px rgba(0, 0, 0, 0.8);
+
+  /* Component tokens */
+  --tab-active-bg: #1e1e1e;
+  --scrollbar-track: #080808;
+  --scrollbar-thumb: #2a2a2a;
+  --scrollbar-thumb-hover: #3a3a3a;
+
+  /* Timeline grid - deeper black tinted lines */
+  --timeline-grid-video: #101018;
+  --timeline-grid-audio: #081008;
+}
+
+}

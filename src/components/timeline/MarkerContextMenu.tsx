@@ -1,3 +1,4 @@
+import './TimelineMarkers.css';
 import { useEffect } from 'react';
 import type { TimelineMarker } from '../../stores/timeline/types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';

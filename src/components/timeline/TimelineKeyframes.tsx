@@ -8,6 +8,7 @@ import type { EasingType, AnimatableProperty, RotationInterpolationMode } from '
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { normalizeEasingType } from '../../utils/easing';
 import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
+import './TimelineKeyframes.css';
 
 interface KeyframeData {
   id: string;

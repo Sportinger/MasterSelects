@@ -539,9 +539,23 @@ export interface ClipboardKeyframeData {
   handleOut?: BezierHandle;
 }
 
+export interface ClipboardClipEffectsData {
+  sourceClipId: string;
+  effects: Effect[];
+  keyframes: Keyframe[];
+}
+
+export interface ClipboardClipColorData {
+  sourceClipId: string;
+  colorCorrection: ColorCorrectionState;
+  keyframes: Keyframe[];
+}
+
 export interface ClipboardState {
   clipboardData: ClipboardClipData[] | null;
   clipboardKeyframes: ClipboardKeyframeData[] | null;
+  clipboardEffects: ClipboardClipEffectsData | null;
+  clipboardColor: ClipboardClipColorData | null;
 }
 
 // Clipboard actions interface
@@ -551,6 +565,12 @@ export interface ClipboardActions {
   hasClipboardData: () => boolean;
   copyKeyframes: () => void;
   pasteKeyframes: () => void;
+  copyClipEffects: (clipId: string) => void;
+  pasteClipEffects: (targetClipIds?: string[]) => void;
+  hasClipboardEffects: () => boolean;
+  copyClipColor: (clipId: string) => void;
+  pasteClipColor: (targetClipIds?: string[]) => void;
+  hasClipboardColor: () => boolean;
 }
 
 // Mask actions interface

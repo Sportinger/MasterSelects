@@ -1,0 +1,483 @@
+@layer features {
+/* ============================================
+   AI Action Visual Feedback Animations
+   ============================================ */
+
+/* Split Glow - vertical blue glow line at cut position */
+@keyframes ai-split-glow-fade {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.8);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  5% {
+    opacity: 1;
+    transform: scaleY(1);
+    box-shadow: 0 0 16px 6px rgba(59, 130, 246, 0.95), 0 0 32px 12px rgba(59, 130, 246, 0.5);
+  }
+  30% {
+    opacity: 1;
+    transform: scaleY(1);
+    box-shadow: 0 0 20px 8px rgba(59, 130, 246, 0.8), 0 0 40px 16px rgba(59, 130, 246, 0.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(0.95);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.ai-split-glow {
+  position: absolute;
+  width: 3px;
+  margin-left: -1.5px;
+  background: #60a5fa;
+  pointer-events: none;
+  z-index: 200;
+  opacity: 0;
+  animation: ai-split-glow-fade 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  box-shadow: 0 0 16px 6px rgba(59, 130, 246, 0.95), 0 0 32px 12px rgba(59, 130, 246, 0.5);
+}
+
+.ai-split-glow::before,
+.ai-split-glow::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+
+.ai-split-glow::before {
+  top: 0;
+  border-top: 6px solid #3b82f6;
+}
+
+.ai-split-glow::after {
+  bottom: 0;
+  border-bottom: 6px solid #3b82f6;
+}
+
+/* Delete Ghost - fading red outline at old clip position */
+@keyframes ai-delete-fade {
+  0% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.97) translateY(3px);
+  }
+}
+
+.ai-delete-ghost {
+  position: absolute;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.25);
+  border: 2px dashed rgba(239, 68, 68, 0.7);
+  pointer-events: none;
+  z-index: 199;
+  animation: ai-delete-fade 0.6s cubic-bezier(0.55, 0, 1, 0.45) both;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+
+.ai-delete-ghost .ghost-name {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: line-through;
+}
+
+/* Trim Highlight - green edge glow at trimmed side */
+@keyframes ai-trim-pulse {
+  0% {
+    opacity: 1;
+    box-shadow: 0 0 10px 3px rgba(34, 197, 94, 0.8);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.ai-trim-highlight {
+  position: absolute;
+  width: 4px;
+  margin-left: -2px;
+  background: #22c55e;
+  pointer-events: none;
+  z-index: 200;
+  animation: ai-trim-pulse 0.8s ease-out both;
+  box-shadow: 0 0 14px 4px rgba(34, 197, 94, 0.85);
+  border-radius: 1px;
+}
+
+/* Silent Zone - yellow/amber highlight for detected silent sections */
+@keyframes ai-silent-zone-fade {
+  0% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.ai-silent-zone {
+  position: absolute;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(251, 191, 36, 0.2),
+    rgba(251, 191, 36, 0.2) 4px,
+    rgba(251, 191, 36, 0.1) 4px,
+    rgba(251, 191, 36, 0.1) 8px
+  );
+  border: 1.5px dashed rgba(251, 191, 36, 0.6);
+  pointer-events: none;
+  z-index: 198;
+  animation: ai-silent-zone-fade 2s ease-out both;
+  box-shadow: inset 0 0 8px rgba(251, 191, 36, 0.3);
+}
+
+/* Low Quality Zone - red/orange highlight for detected low quality sections */
+@keyframes ai-low-quality-zone-fade {
+  0% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.ai-low-quality-zone {
+  position: absolute;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.2),
+    rgba(239, 68, 68, 0.2) 4px,
+    rgba(239, 68, 68, 0.1) 4px,
+    rgba(239, 68, 68, 0.1) 8px
+  );
+  border: 1.5px dashed rgba(239, 68, 68, 0.6);
+  pointer-events: none;
+  z-index: 198;
+  animation: ai-low-quality-zone-fade 2s ease-out both;
+  box-shadow: inset 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+/* AI Move Animation - blue shadow during FLIP transition */
+.timeline-clip.ai-moving {
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.4), 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+/* ============================================
+   AI Preview Canvas Flash Overlays
+   ============================================ */
+
+/* Base flash overlay */
+.ai-preview-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 500;
+  border-radius: inherit;
+}
+
+/* Capture frame shutter effect - white flash */
+@keyframes ai-shutter-flash {
+  0% {
+    opacity: 0.9;
+    background: white;
+  }
+  40% {
+    opacity: 0.3;
+    background: white;
+  }
+  100% {
+    opacity: 0;
+    background: transparent;
+  }
+}
+
+.ai-preview-flash-shutter {
+  animation: ai-shutter-flash 0.4s ease-out both;
+}
+
+/* Undo flash - brief orange border pulse */
+@keyframes ai-undo-flash {
+  0% {
+    box-shadow: inset 0 0 0 3px rgba(251, 146, 60, 0.8);
+    background: rgba(251, 146, 60, 0.1);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+    background: transparent;
+  }
+}
+
+.ai-preview-flash-undo {
+  animation: ai-undo-flash 0.6s ease-out both;
+}
+
+/* Redo flash - brief green border pulse */
+@keyframes ai-redo-flash {
+  0% {
+    box-shadow: inset 0 0 0 3px rgba(34, 197, 94, 0.8);
+    background: rgba(34, 197, 94, 0.1);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+    background: transparent;
+  }
+}
+
+.ai-preview-flash-redo {
+  animation: ai-redo-flash 0.6s ease-out both;
+}
+
+/* Import flash - brief blue border pulse */
+@keyframes ai-import-flash {
+  0% {
+    box-shadow: inset 0 0 0 3px rgba(59, 130, 246, 0.8);
+    background: rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+    background: transparent;
+  }
+}
+
+.ai-preview-flash-import {
+  animation: ai-import-flash 0.6s ease-out both;
+}
+
+/* Premiere-style drag feedback */
+.timeline-tracks.dragging-clip {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Marquee selection */
+.timeline-tracks.marquee-selecting {
+  cursor: crosshair;
+}
+
+.marquee-selection {
+  position: absolute;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Disable all text selection in timeline */
+.timeline-container,
+.timeline-container * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.track-lane.drag-target {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.track-lane.external-drag-target {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+/* External file drag preview */
+.timeline-clip-preview {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 2px;
+  background: rgba(34, 197, 94, 0.5);
+  border: 2px dashed var(--success);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-clip-preview .clip-content {
+  padding: 4px 8px;
+}
+
+.timeline-clip-preview .clip-name {
+  color: var(--text-on-accent);
+  font-size: 11px;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.timeline-clip-preview.audio {
+  background: rgba(59, 130, 246, 0.5);
+  border-color: rgba(59, 130, 246, 0.8);
+}
+
+.track-lane.new-track-preview {
+  background: rgba(59, 130, 246, 0.1);
+  border: 2px dashed rgba(59, 130, 246, 0.5);
+  border-radius: 2px;
+  margin-top: 4px;
+  position: relative;
+}
+
+/* New track drop zones - appear when dragging media */
+.new-track-drop-zone {
+  height: 36px;
+  margin-top: 4px;
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.new-track-drop-zone .drop-zone-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.new-track-drop-zone.video {
+  height: 60px; /* Match default video track height */
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.new-track-drop-zone.audio {
+  height: 40px; /* Match default audio track height */
+  border-color: rgba(22, 163, 74, 0.4);
+}
+
+.new-track-drop-zone.active,
+.new-track-drop-zone:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.new-track-drop-zone.video.active,
+.new-track-drop-zone.video:hover {
+  border-color: rgba(37, 99, 235, 0.8);
+  background: rgba(37, 99, 235, 0.15);
+}
+
+.new-track-drop-zone.audio.active,
+.new-track-drop-zone.audio:hover {
+  border-color: rgba(22, 163, 74, 0.8);
+  background: rgba(22, 163, 74, 0.15);
+}
+
+.new-track-drop-zone.active .drop-zone-label,
+.new-track-drop-zone:hover .drop-zone-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.new-track-drop-zone .timeline-clip-preview {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* Snap indicator line */
+.snap-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--success, #4ade80);
+  z-index: 99;
+  pointer-events: none;
+  box-shadow: 0 0 8px var(--success, #4ade80);
+}
+
+.snap-line-guide {
+  opacity: 0.35;
+  box-shadow: none;
+}
+
+
+/* Timeline export progress overlay */
+.timeline-export-overlay {
+  position: absolute;
+  top: 0;
+  height: 500px;
+  background: rgba(250, 204, 21, 0.4);
+  border-right: 3px solid rgba(250, 204, 21, 1);
+  pointer-events: none;
+  z-index: 200;
+}
+
+/* Timeline export percentage */
+.timeline-export-text {
+  position: absolute;
+  top: 50px;
+  font-size: 24px;
+  font-weight: bold;
+  color: rgba(250, 204, 21, 0.9);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 201;
+  white-space: nowrap;
+}
+
+/* RAM Preview cached range indicator (green = fully cached) */
+.ram-preview-indicator {
+  position: absolute;
+  top: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--success), var(--success-light));
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 90;
+}
+
+/* RAM Preview progress text (during rendering) */
+.ram-preview-progress-text {
+  position: absolute;
+  top: 6px;
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--success);
+  background: var(--bg-overlay);
+  padding: 2px 6px;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 95;
+  white-space: nowrap;
+}
+
+/* Playback cache indicator (green line for frames cached during playback) */
+.playback-cache-indicator {
+  position: absolute;
+  top: 0;
+  height: 3px;
+  background: var(--success);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 89;
+}
+}

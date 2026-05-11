@@ -1,0 +1,239 @@
+@layer features {
+
+/* Transcript Tab (embedded in PropertiesPanel) */
+.properties-tab-content.transcript-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.transcript-tab-actions {
+  display: flex;
+  gap: var(--sp-1-5);
+  margin-top: var(--sp-1-5);
+}
+
+.transcript-progress-bar {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.transcript-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.transcript-progress-text {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.transcript-search-input {
+  width: 100%;
+  padding: var(--sp-1-5) var(--sp-2-5);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.transcript-content-embedded {
+  flex: 1;
+  min-height: 100px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: var(--sp-2);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+}
+
+.transcript-empty-state {
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  text-align: center;
+  padding: var(--sp-5);
+}
+
+.transcript-words-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  line-height: 1.6;
+}
+
+.transcript-word-inline {
+  cursor: pointer;
+  padding: 1px 2px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-md);
+  transition: background var(--transition-normal);
+}
+
+.transcript-word-inline:hover {
+  background: var(--bg-hover);
+}
+
+.transcript-word-inline.active {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.transcript-word-inline.highlighted {
+  background: rgba(255, 200, 0, 0.3);
+}
+
+.transcript-status-bar {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+/* Analysis Tab (embedded in PropertiesPanel) */
+.properties-tab-content.analysis-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysis-tab-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Coverage bar for analysis/transcript tabs */
+.coverage-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coverage-bar-bg {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.coverage-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.coverage-bar-fill.analysis-fill {
+  background: #e88a1a;
+}
+
+.coverage-bar-fill.transcript-fill {
+  background: var(--accent);
+}
+
+.coverage-bar-text {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Accent button for Continue actions */
+.btn-accent {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+
+.btn-accent:hover {
+  filter: brightness(1.15);
+}
+
+.analysis-progress-bar {
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.analysis-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.analysis-progress-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.analysis-realtime-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analysis-metric {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.analysis-metric .metric-label {
+  width: 60px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.analysis-metric .metric-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.analysis-metric .metric-fill {
+  height: 100%;
+  transition: width 0.15s ease;
+}
+
+.analysis-metric .metric-fill.focus {
+  background: var(--success-light);
+}
+
+.analysis-metric .metric-fill.motion {
+  background: #60a5fa;
+}
+
+.analysis-metric .metric-value {
+  width: 40px;
+  font-size: 11px;
+  text-align: right;
+}
+
+.analysis-stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysis-stats-grid .stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.analysis-stats-grid .stat-row span:first-child {
+  color: var(--text-secondary);
+}
+
+.analysis-empty-state {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+  padding: 20px;
+}
+
+}

@@ -1,0 +1,433 @@
+@layer features {
+/* ============================================
+   AI Marker Animations
+   ============================================ */
+
+/* Marker pop-in animation */
+@keyframes ai-marker-pop {
+  0% {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scaleY(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.timeline-marker.ai-marker-added {
+  animation: ai-marker-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: bottom center;
+}
+
+/* Marker fade-out animation */
+@keyframes ai-marker-fade {
+  0% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+}
+
+.timeline-marker.ai-marker-removed {
+  animation: ai-marker-fade 0.3s ease-in both;
+  transform-origin: bottom center;
+}
+
+/* Ruler Marker Button (M) */
+.ruler-marker-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: bold;
+  cursor: grab;
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.ruler-marker-btn:hover {
+  background: var(--accent-timeline);
+  border-color: var(--accent-timeline);
+  color: var(--text-on-accent);
+  box-shadow: 0 0 8px var(--accent-timeline);
+}
+
+.ruler-marker-btn.dragging {
+  background: var(--accent-timeline);
+  border-color: var(--accent-timeline);
+  color: var(--text-on-accent);
+  cursor: grabbing;
+  transform: translateY(-50%) scale(1.15);
+  box-shadow: 0 0 12px var(--accent-timeline);
+}
+
+/* Playhead */
+.playhead {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  min-height: 100%;
+  height: max-content;
+  z-index: 30;
+  pointer-events: none;
+  transform: translateX(-1px);
+  --timeline-switch-base-x: -1px;
+}
+
+.playhead-head {
+  width: 14px;
+  height: 14px;
+  background: var(--accent-timeline);
+  border-radius: 2px;
+  transform: translateX(-6px);
+  cursor: grab;
+  pointer-events: auto;
+  position: sticky;
+  top: 4px;
+  z-index: 35;
+}
+
+.playhead-head:hover {
+  background: var(--accent-hover);
+}
+
+.playhead-head:active {
+  cursor: grabbing;
+}
+
+.playhead-line {
+  width: 2px;
+  min-height: calc(100vh - 50px);
+  height: 100%;
+  background: var(--accent-timeline);
+  margin-top: -2px;
+}
+
+
+/* In/Out Work Area Markers */
+.work-area-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.work-area-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(0, 0, 0, 0.1) 10px,
+    rgba(0, 0, 0, 0.1) 20px
+  );
+}
+
+.in-out-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 95;
+  pointer-events: none;
+  --timeline-switch-base-x: 0px;
+}
+
+.in-out-marker .marker-flag {
+  position: absolute;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--text-on-accent);
+  border-radius: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.in-marker .marker-flag {
+  background: var(--amber-600);
+  left: 0;
+  border-radius: 0 2px 2px 0;
+}
+
+.out-marker .marker-flag {
+  background: var(--amber-600);
+  right: 0;
+  border-radius: 2px 0 0 2px;
+}
+
+.in-out-marker .marker-line {
+  position: absolute;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: var(--amber-600);
+}
+
+.in-marker .marker-line {
+  left: 0;
+}
+
+.out-marker .marker-line {
+  right: 0;
+}
+
+.in-out-marker .marker-flag:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+.in-out-marker.dragging .marker-flag {
+  transform: scale(1.2);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+}
+
+.in-out-marker.dragging .marker-line {
+  width: 3px;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+}
+
+/* Timeline Markers - like playhead, spans from ruler through all tracks */
+.timeline-marker {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  min-height: 100%;
+  height: max-content;
+  z-index: 29;
+  pointer-events: none;
+  transform: translateX(-1px);
+  --timeline-switch-base-x: -1px;
+  --marker-color: var(--accent-timeline);
+}
+
+.timeline-marker-head {
+  width: 14px;
+  height: 14px;
+  background: var(--marker-color);
+  border-radius: 3px;
+  transform: translateX(-6px);
+  cursor: grab;
+  pointer-events: auto;
+  position: sticky;
+  top: 4px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: bold;
+  color: var(--text-on-accent);
+  transition: transform 0.1s, filter 0.1s, box-shadow 0.1s;
+}
+
+.timeline-marker-head:hover {
+  transform: translateX(-6px) scale(1.15);
+  filter: brightness(1.2);
+  box-shadow: 0 0 6px var(--marker-color);
+}
+
+.timeline-marker.dragging .timeline-marker-head {
+  cursor: grabbing;
+  transform: translateX(-6px) scale(1.2);
+  filter: brightness(1.3);
+  box-shadow: 0 0 8px var(--marker-color);
+}
+
+.timeline-marker.is-stop-marker .timeline-marker-head {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--warning-light) 45%, transparent),
+    0 0 10px color-mix(in srgb, var(--warning-light) 20%, transparent);
+}
+
+.timeline-marker .timeline-marker-line {
+  width: 2px;
+  min-height: calc(100vh - 50px);
+  height: 100%;
+  background: var(--marker-color);
+  margin-top: -2px;
+  opacity: 0.7;
+}
+
+.timeline-marker.is-stop-marker .timeline-marker-line {
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      var(--marker-color) 0 10px,
+      color-mix(in srgb, var(--warning-light) 42%, var(--marker-color)) 10px 16px
+    );
+}
+
+.timeline-marker:hover .timeline-marker-line,
+.timeline-marker.dragging .timeline-marker-line {
+  opacity: 1;
+  box-shadow: 0 0 4px var(--marker-color);
+}
+
+@keyframes timeline-switch-enter-left {
+  from { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) - 72px), 0, 0); }
+  to { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+}
+
+@keyframes timeline-switch-enter-right {
+  from { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) + 72px), 0, 0); }
+  to { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+}
+
+@keyframes timeline-switch-exit-right {
+  from { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+  to { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) + 140vw + 100%), 0, 0); }
+}
+
+@keyframes timeline-switch-exit-left {
+  from { transform: translate3d(var(--timeline-switch-base-x, 0px), 0, 0); }
+  to { transform: translate3d(calc(var(--timeline-switch-base-x, 0px) - 140vw - 100%), 0, 0); }
+}
+
+.playhead.timeline-switch-enter-left,
+.timeline-marker.timeline-switch-enter-left,
+.in-out-marker.timeline-switch-enter-left {
+  animation: timeline-switch-enter-left 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.playhead.timeline-switch-enter-right,
+.timeline-marker.timeline-switch-enter-right,
+.in-out-marker.timeline-switch-enter-right {
+  animation: timeline-switch-enter-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.playhead.timeline-switch-exit-right,
+.timeline-marker.timeline-switch-exit-right,
+.in-out-marker.timeline-switch-exit-right {
+  animation: timeline-switch-exit-right 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.playhead.timeline-switch-exit-left,
+.timeline-marker.timeline-switch-exit-left,
+.in-out-marker.timeline-switch-exit-left {
+  animation: timeline-switch-exit-left 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+/* Ghost marker for drag-to-create */
+.timeline-marker.ghost {
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.timeline-marker.ghost .timeline-marker-head {
+  animation: ghost-pulse 0.5s ease-in-out infinite;
+}
+
+.timeline-marker.ghost .timeline-marker-line {
+  opacity: 0.5;
+  background: linear-gradient(180deg, var(--marker-color) 0%, transparent 100%);
+}
+
+@keyframes ghost-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.2); filter: brightness(1.3); }
+}
+
+/* Drop animation */
+.timeline-marker.drop-animation {
+  opacity: 1;
+  animation: marker-drop 0.3s ease-out forwards;
+}
+
+.timeline-marker.drop-animation .timeline-marker-head {
+  animation: marker-drop-icon 0.3s ease-out forwards;
+}
+
+.timeline-marker.drop-animation .timeline-marker-line {
+  animation: marker-drop-line 0.3s ease-out forwards;
+}
+
+@keyframes marker-drop {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes marker-drop-icon {
+  0% { transform: scale(1.2); filter: brightness(1.5); }
+  50% { transform: scale(1.4); filter: brightness(2); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes marker-drop-line {
+  0% {
+    opacity: 0.5;
+    box-shadow: 0 0 8px var(--marker-color);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 16px var(--marker-color), 0 0 32px var(--marker-color);
+  }
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0px var(--marker-color);
+  }
+}
+
+
+.add-marker-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  cursor: grab;
+  transition: all 0.15s ease;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.add-marker-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  color: var(--accent-timeline);
+}
+
+.add-marker-btn.dragging {
+  background: var(--accent-timeline);
+  border-color: var(--accent-timeline);
+  color: var(--text-on-accent);
+  cursor: grabbing;
+  transform: scale(1.1);
+  box-shadow: 0 0 12px var(--accent-timeline);
+}
+}

@@ -1,6 +1,7 @@
 // Media Panel - Project browser like After Effects
 
 import React, { useCallback, useMemo, useRef, useState, useEffect, useLayoutEffect } from 'react';
+import './MediaPanel.css';
 import { Logger } from '../../services/logger';
 import { FileTypeIcon } from './media/FileTypeIcon';
 import { LABEL_COLORS, getLabelHex } from './media/labelColors';

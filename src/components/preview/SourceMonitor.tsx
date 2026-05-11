@@ -1,6 +1,7 @@
 // Source Monitor - displays raw media files (video/image) in the Preview panel
 // Always uses HTML video backend for simplicity and reliability
 
+import './SourceMonitor.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import type { MediaFile } from '../../stores/mediaStore';

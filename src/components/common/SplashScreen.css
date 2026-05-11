@@ -1,0 +1,156 @@
+@layer overlays {
+/* ========================================
+   Splash Screen Dialog
+   ======================================== */
+
+.splash-dialog {
+  width: 680px;
+  max-height: 85vh;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow-y: auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  isolation: isolate;
+}
+
+.splash-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  z-index: 20;
+  background: linear-gradient(to bottom, rgba(22, 22, 22, 0.97) 0%, rgba(22, 22, 22, 0.92) 40%, rgba(22, 22, 22, 0.6) 70%, transparent 100%);
+  flex-shrink: 0;
+}
+
+.splash-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.splash-header-right {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.splash-content {
+  position: relative;
+  z-index: 0;
+  padding: 0 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: rgba(22, 22, 22, 0.95);
+}
+
+.splash-video {
+  width: 100%;
+}
+
+.splash-video .changelog-video-container {
+  border-radius: 10px;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.32);
+}
+
+.splash-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.splash-footer {
+  position: sticky;
+  bottom: 0;
+  padding: 16px 24px 18px;
+  border-top: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 20;
+  background: linear-gradient(to top, rgba(22, 22, 22, 0.97) 0%, rgba(22, 22, 22, 0.92) 30%, rgba(22, 22, 22, 0.6) 60%, transparent 100%);
+  flex-shrink: 0;
+}
+
+.splash-footer-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.splash-changelog-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.splash-changelog-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+[data-theme="light"] .splash-header {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.92) 40%, rgba(255, 255, 255, 0.6) 70%, transparent 100%);
+}
+
+[data-theme="light"] .splash-content {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+[data-theme="light"] .splash-footer {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.92) 30%, rgba(255, 255, 255, 0.6) 60%, transparent 100%);
+}
+
+[data-theme="light"] .splash-changelog-button {
+  border-color: rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .splash-changelog-button:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.18);
+  color: rgba(0, 0, 0, 0.7);
+}
+
+@media (max-width: 760px) {
+  .splash-dialog {
+    width: 95vw;
+  }
+
+  .splash-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .splash-footer {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .splash-footer-buttons {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+}

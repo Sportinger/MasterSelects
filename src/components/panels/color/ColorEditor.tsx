@@ -166,6 +166,17 @@ function NodeViewIcon() {
   );
 }
 
+function SetAllKeyframesIcon() {
+  return (
+    <svg className="color-keyframe-all-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M4 2.5 6.4 5 4 7.5 1.6 5 4 2.5Z" />
+      <path d="M4 8.5 6.4 11 4 13.5 1.6 11 4 8.5Z" />
+      <path d="M10 2.5 12.4 5 10 7.5 7.6 5 10 2.5Z" />
+      <path d="M12 9.2v5.2M9.4 11.8h5.2" />
+    </svg>
+  );
+}
+
 function InspectorToggleIcon({ collapsed }: { collapsed: boolean }) {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -208,6 +219,9 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
     duplicateColorVersion,
     setActiveColorVersion,
     setPropertyValue,
+    addKeyframe,
+    toggleKeyframeRecording,
+    isRecording,
   } = useTimelineStore.getState();
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   void rangeSettingsRevision;
@@ -288,6 +302,33 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
       : defaultValue;
     const property = createColorProperty(activeVersion.id, node.id, key) as AnimatableProperty;
     return interpolateKeyframes(clipColorKeyframes, property, clipLocalTime, baseValue);
+  };
+
+  const handleSetAllColorKeyframes = () => {
+    const entries = editableNodes.flatMap(node => {
+      const defs = node.type === 'wheels'
+        ? WHEEL_COLOR_PARAM_DEFS
+        : PRIMARY_COLOR_PARAM_DEFS;
+
+      return defs.map(def => ({
+        property: createColorProperty(activeVersion.id, node.id, def.key) as AnimatableProperty,
+        value: getAnimatedParamValue(node, def.key, def.defaultValue),
+      }));
+    });
+
+    if (entries.length === 0) return;
+
+    startBatch('Set color keyframes');
+    try {
+      entries.forEach(({ property, value }) => {
+        if (!isRecording(clipId, property)) {
+          toggleKeyframeRecording(clipId, property);
+        }
+        addKeyframe(clipId, property, value);
+      });
+    } finally {
+      endBatch();
+    }
   };
 
   const setWheelChannelValues = (
@@ -744,6 +785,16 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
           title={colorState.enabled ? 'Bypass color correction' : 'Enable color correction'}
         >
           {colorState.enabled ? 'Bypass' : 'Bypassed'}
+        </button>
+
+        <button
+          type="button"
+          className="color-keyframe-all-button"
+          onClick={handleSetAllColorKeyframes}
+          title="Enable all color stopwatches and set keyframes at the playhead"
+          aria-label="Enable all color stopwatches and set keyframes at the playhead"
+        >
+          <SetAllKeyframesIcon />
         </button>
 
         <button

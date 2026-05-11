@@ -55,6 +55,16 @@ Examples:
 
 Audio fades are built from `audio-volume.volume` keyframes, and EQ lanes use the same effect-property naming pattern.
 
+### Color Properties
+
+Color correction parameters use the color graph namespace:
+
+```text
+color.{versionId}.{nodeId}.{paramName}
+```
+
+The Color panel can enable every color stopwatch for the active grade version at the current playhead. Timeline Copy Color and Paste Color copy the grade state together with its `color.*` keyframes.
+
 ### Mask Properties
 
 Masks use flat keyframe property names scoped by mask id:

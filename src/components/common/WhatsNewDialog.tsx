@@ -3,6 +3,8 @@
 // for use by SplashScreen.
 
 import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import './WelcomeOverlay.css';
+import './WhatsNewDialog.css';
 import {
   APP_VERSION,
   getChangelogCalendar,

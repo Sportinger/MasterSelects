@@ -2,6 +2,8 @@
 // Shows list of missing files, allows searching folders, updates status
 
 import { useState, useCallback, useEffect } from 'react';
+import './WelcomeOverlay.css';
+import './RelinkDialog.css';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('RelinkDialog');

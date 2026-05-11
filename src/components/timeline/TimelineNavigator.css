@@ -1,0 +1,174 @@
+@layer features {
+/* Timeline Navigator - Horizontal scrollbar with zoom handles */
+.timeline-navigator {
+  height: 16px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+  padding: 3px 14px 3px 150px; /* Left: track headers width, Right: vertical scrollbar width */
+  flex-shrink: 0;
+}
+
+.timeline-navigator-track {
+  height: 100%;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+}
+
+.timeline-navigator-thumb {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: var(--scrollbar-thumb);
+  border: none;
+  border-radius: 3px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background 0.1s;
+}
+
+.timeline-navigator-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.timeline-navigator-thumb.dragging {
+  cursor: grabbing;
+  background: var(--scrollbar-thumb-hover);
+}
+
+.timeline-navigator-handle {
+  width: 14px;
+  height: 100%;
+  cursor: ew-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+
+.timeline-navigator-handle:hover::before {
+  background: var(--text-muted);
+}
+
+.timeline-navigator-handle-left {
+  border-radius: 3px 0 0 3px;
+}
+
+.timeline-navigator-handle-right {
+  border-radius: 0 3px 3px 0;
+}
+
+.timeline-navigator-handle::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--bg-active);
+  border-radius: 50%;
+}
+
+.timeline-navigator-grip {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timeline-navigator-grip::before,
+.timeline-navigator-grip::after {
+  display: none;
+}
+
+/* Vertical Scrollbar - matches horizontal TimelineNavigator style */
+.vertical-scrollbar {
+  width: 10px;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+  flex-shrink: 0;
+  padding: 1px;
+}
+
+.vertical-scrollbar-track {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+}
+
+.vertical-scrollbar-thumb {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: background 0.1s;
+}
+
+.vertical-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.vertical-scrollbar-thumb.dragging {
+  cursor: grabbing;
+  background: var(--scrollbar-thumb-hover);
+}
+
+.vertical-scrollbar-handle {
+  width: 100%;
+  height: 10px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.vertical-scrollbar-handle:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.vertical-scrollbar-handle-top {
+  border-radius: 3px 3px 0 0;
+}
+
+.vertical-scrollbar-handle-bottom {
+  border-radius: 0 0 3px 3px;
+}
+
+.vertical-scrollbar-handle::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--bg-canvas);
+  border-radius: 50%;
+}
+
+.vertical-scrollbar-grip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.vertical-scrollbar-grip::before,
+.vertical-scrollbar-grip::after {
+  content: '';
+  width: 6px;
+  height: 2px;
+  background: var(--text-secondary);
+  border-radius: 1px;
+  opacity: 0.5;
+}
+}

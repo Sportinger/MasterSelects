@@ -251,4 +251,8 @@ export const selectMarkerActions = (state: TimelineStore) => ({
 export const selectClipboardActions = (state: TimelineStore) => ({
   copyClips: state.copyClips,
   pasteClips: state.pasteClips,
+  copyClipEffects: state.copyClipEffects,
+  pasteClipEffects: state.pasteClipEffects,
+  copyClipColor: state.copyClipColor,
+  pasteClipColor: state.pasteClipColor,
 });

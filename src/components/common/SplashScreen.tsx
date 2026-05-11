@@ -1,6 +1,9 @@
 // SplashScreen - Welcome dialog shown on startup with featured video and notices
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import './WelcomeOverlay.css';
+import './WhatsNewDialog.css';
+import './SplashScreen.css';
 import {
   APP_VERSION,
   FEATURED_VIDEO,

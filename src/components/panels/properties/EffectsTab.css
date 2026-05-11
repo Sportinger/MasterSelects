@@ -1,0 +1,62 @@
+@layer features {
+
+.properties-tab-content.effects-tab .effect-add-row {
+  display: flex;
+  gap: var(--sp-1-5);
+  align-items: center;
+  margin-bottom: var(--sp-2);
+}
+
+.properties-tab-content.effects-tab .effect-add-row select {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-1-5) var(--sp-2-5);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.effect-mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.effect-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-1-5) var(--sp-2);
+  background: var(--bg-tertiary);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.effect-mode-btn:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.effect-mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.effect-mode-btn.active {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.effect-mode-label {
+  flex: 1;
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+}

@@ -2,6 +2,7 @@
 // Shows a brief "Saved" message in yellow when project is saved
 
 import { useEffect, useRef } from 'react';
+import './SavedToast.css';
 
 interface SavedToastProps {
   visible: boolean;
