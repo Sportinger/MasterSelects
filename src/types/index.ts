@@ -391,6 +391,8 @@ export type EffectType =
   | 'invert'
   | 'rgb-split'
   | 'levels'
+  | 'acuarela'
+  | 'rom1'
   // Audio effects
   | 'audio-eq'
   | 'audio-volume';

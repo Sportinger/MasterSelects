@@ -166,7 +166,9 @@ export class Compositor {
                 state.effectTempView,
                 state.effectTempView2,
                 state.outputWidth,
-                state.outputHeight
+                state.outputHeight,
+                state.effectTempTexture,
+                state.effectTempTexture2
               );
               sourceTextureView = effectResult.finalView;
             }

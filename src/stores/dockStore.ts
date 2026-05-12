@@ -230,11 +230,12 @@ const DEFAULT_LAYOUT: DockLayout = {
                 panels: [
                   { id: 'export', type: 'export', title: 'Export' },
                   { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
+                  { id: 'node-workspace', type: 'node-workspace', title: 'Nodes' },
                   { id: 'scope-waveform', type: 'scope-waveform', title: 'Waveform' },
                   { id: 'scope-histogram', type: 'scope-histogram', title: 'Histogram' },
                   { id: 'scope-vectorscope', type: 'scope-vectorscope', title: 'Vectorscope' },
                 ],
-                activeIndex: 2, // Waveform active
+                activeIndex: 3, // Waveform active
               },
             ],
           },

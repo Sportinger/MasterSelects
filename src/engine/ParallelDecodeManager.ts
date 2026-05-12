@@ -697,9 +697,7 @@ export class ParallelDecodeManager {
         }
       }
 
-      // Final check - warn but don't crash if frame is missing.
-      // getFrameForClip() will return the closest available frame,
-      // so a slightly off frame is better than aborting the entire export.
+      // Final check - strict export should fail instead of using a nearby frame.
       const finalTolerance = this.frameTolerance * 3; // 3x tolerance for final check
       const finalCheck = this.hasUsableBufferedFrame(clipDecoder, targetTimestamp, finalTolerance);
       if (!finalCheck) {
@@ -709,8 +707,7 @@ export class ParallelDecodeManager {
           .slice(0, 10)
           .join(', ');
 
-        log.warn(`"${clipDecoder.clipName}": Frame at ${(targetTimestamp/1_000_000).toFixed(3)}s not exact match after all attempts (buffer: ${clipDecoder.frameBuffer.size} frames, decoderState: ${clipDecoder.decoder.state}, nearby: [${availableFrames}...]). Using closest available frame.`);
-        // Don't throw — getFrameForClip will return closest match
+        throw new Error(`FAST export failed: "${clipDecoder.clipName}" has no decoded frame at ${(targetTimestamp/1_000_000).toFixed(3)}s after all attempts (buffer: ${clipDecoder.frameBuffer.size} frames, decoderState: ${clipDecoder.decoder.state}, nearby: [${availableFrames}...]).`);
       }
     }
   }
@@ -1061,27 +1058,17 @@ export class ParallelDecodeManager {
 
     const useLastFrame = targetTimestamp > clipDecoder.newestTimestamp + this.frameTolerance;
     if (useLastFrame) {
-      // Return last frame for targets beyond video end
       const lastTimestamp = clipDecoder.sortedTimestamps[clipDecoder.sortedTimestamps.length - 1];
       const lastFrame = clipDecoder.frameBuffer.get(lastTimestamp);
-      if (lastFrame) {
-        log.debug(`${clipDecoder.clipName}: using last frame for target ${(targetTimestamp/1_000_000).toFixed(3)}s (video ends at ${(lastTimestamp/1_000_000).toFixed(3)}s)`);
-        return lastFrame.frame;
-      }
-      log.warn(`${clipDecoder.clipName}: No last frame available`);
+      log.warn(`${clipDecoder.clipName}: target ${(targetTimestamp/1_000_000).toFixed(3)}s is outside buffered range (last=${lastFrame ? (lastTimestamp/1_000_000).toFixed(3) : 'none'}s)`);
       return null;
     }
 
-    // If target is before first frame, use first frame (common for clips starting at 0)
     const useFirstFrame = targetTimestamp < clipDecoder.oldestTimestamp - this.frameTolerance;
     if (useFirstFrame) {
       const firstTimestamp = clipDecoder.sortedTimestamps[0];
       const firstFrame = clipDecoder.frameBuffer.get(firstTimestamp);
-      if (firstFrame) {
-        log.debug(`${clipDecoder.clipName}: using first frame for target ${(targetTimestamp/1_000_000).toFixed(3)}s (video starts at ${(firstTimestamp/1_000_000).toFixed(3)}s)`);
-        return firstFrame.frame;
-      }
-      log.warn(`${clipDecoder.clipName}: No first frame available`);
+      log.warn(`${clipDecoder.clipName}: target ${(targetTimestamp/1_000_000).toFixed(3)}s is outside buffered range (first=${firstFrame ? (firstTimestamp/1_000_000).toFixed(3) : 'none'}s)`);
       return null;
     }
 
@@ -1115,10 +1102,9 @@ export class ParallelDecodeManager {
 
     const decodedFrame = clipDecoder.frameBuffer.get(frameTimestamp);
     if (decodedFrame) {
-      // Log warning if outside tolerance but still return the closest frame
-      // Better to have a slightly off frame than fail the export
       if (frameDiff >= this.frameTolerance) {
-        log.debug(`${clipDecoder.clipName}: Using nearest frame at ${(targetTimestamp/1_000_000).toFixed(3)}s - diff=${(frameDiff/1000).toFixed(1)}ms exceeds tolerance=${(this.frameTolerance/1000).toFixed(1)}ms`);
+        log.warn(`${clipDecoder.clipName}: nearest frame at ${(frameTimestamp/1_000_000).toFixed(3)}s is outside tolerance for target ${(targetTimestamp/1_000_000).toFixed(3)}s (diff=${(frameDiff/1000).toFixed(1)}ms, tolerance=${(this.frameTolerance/1000).toFixed(1)}ms)`);
+        return null;
       }
       return decodedFrame.frame;
     }

@@ -7,7 +7,7 @@ MasterSelects has a modular GPU effect system built around registered effect mod
 ## At A Glance
 
 - 37 blend modes are implemented in `src/shaders/composite.wgsl`.
-- 30 GPU effects are registered in `src/effects/`.
+- 32 GPU effects are registered in `src/effects/`.
 - Registered effect categories are `color`, `blur`, `distort`, `stylize`, `keying`, `generate`, `time`, and `transition`.
 - `generate`, `time`, and `transition` currently have no registered effects and are hidden from the add-effect UI.
 
@@ -31,7 +31,7 @@ The production editor UI is `src/components/panels/properties/EffectsTab.tsx`.
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
 - `distort` (7): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge
-- `stylize` (8): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold
+- `stylize` (10): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1
 - `keying` (1): Chroma Key
 
 ## Parameter Editing
@@ -74,6 +74,10 @@ The pipeline creates one GPU render pipeline per registered effect and filters o
 
 Effects with `uniformSize` 0 use no uniform buffer.
 Most effects use a 16-byte-aligned uniform block; a few multi-parameter effects use larger blocks.
+
+Effects can opt into temporal feedback through `usesFeedback`. Feedback effects sample their own previous output frame on binding 3 and the pipeline maintains a per-effect-instance feedback texture. Acuarela and the frozen Rom1 snapshot use this path to build a watery smoke trail from animated fractal UV offsets.
+
+Wall-clock animated effects can also set `requiresContinuousRender`. The engine keeps rendering live frames for active continuous effects while the playhead is parked, and it bypasses RAM Preview frame reuse so the animated output does not freeze.
 
 ## Keyframing
 

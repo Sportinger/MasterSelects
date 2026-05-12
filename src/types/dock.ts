@@ -8,7 +8,7 @@ import type {
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'color-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'scene-description' | 'youtube' | 'download' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'color-workspace' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'scene-description' | 'youtube' | 'download' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 
 // Scope panel types for filtering in View menu
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
@@ -163,6 +163,13 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
   'color-workspace': {
     type: 'color-workspace',
     title: 'Color',
+    minWidth: 520,
+    minHeight: 360,
+    closable: false,
+  },
+  'node-workspace': {
+    type: 'node-workspace',
+    title: 'Nodes',
     minWidth: 520,
     minHeight: 360,
     closable: false,

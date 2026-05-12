@@ -35,6 +35,7 @@ export class RenderLoop {
   private hasActiveVideo = false;
   private isPlaying = false;
   private isScrubbing = false;
+  private continuousRender = false;
   private newFrameReady = false; // Set by RVFC to bypass scrub limiter
   private lastRenderTime = 0;
 
@@ -85,8 +86,11 @@ export class RenderLoop {
         log.info('Idle suppression lifted (warmup timeout)');
       }
 
-      // Idle detection (briefly suppressed after reload to allow video GPU warmup)
-      if (!this.idleSuppressed) {
+      if (this.continuousRender) {
+        this.isIdle = false;
+        this.lastActivityTime = timestamp;
+      } else if (!this.idleSuppressed) {
+        // Idle detection (briefly suppressed after reload to allow video GPU warmup)
         const timeSinceActivity = timestamp - this.lastActivityTime;
         if (!this.isIdle && !this.renderRequested && timeSinceActivity > this.IDLE_TIMEOUT) {
           this.isIdle = true;
@@ -118,9 +122,9 @@ export class RenderLoop {
       // Without this, a 30fps video on a 120Hz display causes hasActiveVideo
       // to oscillate (75% cache-hits → false), disabling the limiter and
       // rendering at 120fps — double the GPU work for zero visual benefit.
-      if (this.hasActiveVideo || this.isPlaying) {
+      if (this.hasActiveVideo || this.isPlaying || this.continuousRender) {
         const timeSinceLastRender = timestamp - this.lastRenderTime;
-        if (this.isPlaying) {
+        if (this.isPlaying || this.continuousRender) {
           // Playback: ~60fps target
           if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
             this.animationId = requestAnimationFrame(loop);
@@ -299,6 +303,20 @@ export class RenderLoop {
       this.lastRenderTime = 0;
       this.requestRender();
     }
+  }
+
+  setContinuousRender(enabled: boolean): void {
+    if (this.continuousRender === enabled) return;
+
+    this.continuousRender = enabled;
+    if (enabled) {
+      this.lastRenderTime = 0;
+      this.requestRender();
+    }
+  }
+
+  getContinuousRender(): boolean {
+    return this.continuousRender;
   }
 
   setIsScrubbing(scrubbing: boolean): void {

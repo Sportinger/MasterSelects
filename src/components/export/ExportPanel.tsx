@@ -1242,7 +1242,7 @@ export function ExportPanel() {
       ? {
           title: 'HTMLVideo Precise',
           badge: 'Precise',
-          description: 'Safer for difficult seeking cases and frame-accurate timing.',
+          description: 'Explicit HTMLVideo seeking for difficult timing cases.',
         }
       : {
           title: 'FFmpeg CPU',
@@ -1658,7 +1658,7 @@ export function ExportPanel() {
                 >
                   <span className="export-method-chip">Precise</span>
                   <strong>HTMLVideo</strong>
-                  <span>Safer fallback when seek accuracy matters more than speed.</span>
+                  <span>Explicit HTMLVideo seeking when accuracy matters more than speed.</span>
                 </button>
               )}
               {ffmpegAvailable && (

@@ -392,8 +392,9 @@ function buildBaseLayerProps(
 }
 
 /**
- * Build video layer with appropriate source (parallel > webcodecs > HTMLVideoElement).
- * Falls back to HTMLVideoElement if other methods fail.
+ * Build video layer with the selected export source.
+ * FAST export is strict: if the decoder frame is missing, the export fails
+ * instead of silently switching to HTMLVideoElement.
  */
 function buildVideoLayer(
   clip: TimelineClip,
@@ -410,7 +411,10 @@ function buildVideoLayer(
   }
 
   // PARALLEL DECODE MODE - try parallel decode first
-  if (useParallelDecode && parallelDecoder) {
+  if (useParallelDecode) {
+    if (!parallelDecoder) {
+      throw new Error(`FAST export failed: parallel decoder is not initialized for clip "${clip.name}".`);
+    }
     if (parallelDecoder.hasClip(clip.id)) {
       const videoFrame = parallelDecoder.getFrameForClip(clip.id, time);
       if (videoFrame) {
@@ -423,11 +427,9 @@ function buildVideoLayer(
           },
         };
       }
-      // Frame not available - log and fall through to HTMLVideoElement fallback
-      log.warn(`Parallel decode frame not available for clip "${clip.name}" at ${time.toFixed(3)}s, using HTMLVideoElement fallback`);
-    } else {
-      log.warn(`Clip "${clip.name}" not in parallel decoder, using HTMLVideoElement fallback`);
+      throw new Error(`FAST export failed: parallel decode frame not available for clip "${clip.name}" at ${time.toFixed(3)}s.`);
     }
+    throw new Error(`FAST export failed: clip "${clip.name}" is not registered in the parallel decoder.`);
   }
 
   // SEQUENTIAL MODE (single clip) - use WebCodecs player
@@ -444,12 +446,12 @@ function buildVideoLayer(
         },
       };
     }
-    log.warn(`Sequential decode frame not available for clip "${clip.name}" at ${time.toFixed(3)}s, using HTMLVideoElement fallback`);
+    throw new Error(`FAST export failed: sequential decode frame not available for clip "${clip.name}" at ${time.toFixed(3)}s.`);
   }
 
-  // FALLBACK: Use HTMLVideoElement directly (less accurate but doesn't fail)
+  // PRECISE MODE: explicit HTMLVideoElement seeking.
   if (video.readyState >= 2) {
-    log.debug(`Using HTMLVideoElement fallback for clip "${clip.name}" at ${time.toFixed(3)}s`);
+    log.debug(`Using HTMLVideoElement export source for clip "${clip.name}" at ${time.toFixed(3)}s`);
     return {
       ...baseLayerProps,
       source: {
@@ -567,7 +569,10 @@ function buildNestedLayerForExport(
   const exportVideo = getExportVideoElement(nestedClip, clipStates);
   if (exportVideo) {
     const nestedClipState = clipStates.get(nestedClip.id);
-    if (useParallelDecode && parallelDecoder) {
+    if (useParallelDecode) {
+      if (!parallelDecoder) {
+        throw new Error(`FAST export failed: parallel decoder is not initialized for nested clip "${nestedClip.name}".`);
+      }
       if (parallelDecoder.hasClip(nestedClip.id)) {
         const videoFrame = parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime);
         if (videoFrame) {
@@ -580,10 +585,9 @@ function buildNestedLayerForExport(
             },
           } as Layer;
         }
-        log.warn(`Parallel decode frame not available for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s, using HTMLVideoElement fallback`);
-      } else {
-        log.warn(`Nested clip "${nestedClip.name}" not in parallel decoder, using HTMLVideoElement fallback`);
+        throw new Error(`FAST export failed: parallel decode frame not available for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s.`);
       }
+      throw new Error(`FAST export failed: nested clip "${nestedClip.name}" is not registered in the parallel decoder.`);
     }
 
     if (nestedClipState?.isSequential && nestedClipState.webCodecsPlayer) {
@@ -599,6 +603,7 @@ function buildNestedLayerForExport(
           },
         } as Layer;
       }
+      throw new Error(`FAST export failed: sequential decode frame not available for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s.`);
     }
 
     if (exportVideo.readyState >= 2) {

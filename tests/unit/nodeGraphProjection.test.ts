@@ -1,0 +1,233 @@
+import { describe, expect, it } from 'vitest';
+import { buildClipNodeGraph } from '../../src/services/nodeGraph';
+import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
+import { createDefaultColorCorrectionState, type ClipMask, type Effect, type TimelineClip, type TimelineTrack } from '../../src/types';
+
+function createClip(overrides: Partial<TimelineClip> = {}): TimelineClip {
+  return {
+    id: 'clip-1',
+    trackId: 'video-1',
+    name: 'Clip',
+    file: new File([], 'clip.mp4', { type: 'video/mp4' }),
+    startTime: 0,
+    duration: 5,
+    inPoint: 0,
+    outPoint: 5,
+    source: { type: 'video' },
+    transform: structuredClone(DEFAULT_TRANSFORM),
+    effects: [],
+    ...overrides,
+  };
+}
+
+function createTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
+  return {
+    id: 'video-1',
+    name: 'Video 1',
+    type: 'video',
+    height: 60,
+    muted: false,
+    visible: true,
+    solo: false,
+    ...overrides,
+  };
+}
+
+function createMask(overrides: Partial<ClipMask> = {}): ClipMask {
+  return {
+    id: 'mask-1',
+    name: 'Mask 1',
+    vertices: [
+      { id: 'v1', x: 0.2, y: 0.2, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+      { id: 'v2', x: 0.8, y: 0.2, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+      { id: 'v3', x: 0.8, y: 0.8, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } },
+    ],
+    closed: true,
+    opacity: 1,
+    feather: 0,
+    featherQuality: 1,
+    inverted: false,
+    mode: 'add',
+    expanded: false,
+    position: { x: 0, y: 0 },
+    enabled: true,
+    visible: true,
+    ...overrides,
+  };
+}
+
+describe('buildClipNodeGraph', () => {
+  it('projects a basic video clip as Source into Clip Output', () => {
+    const graph = buildClipNodeGraph(createClip(), createTrack());
+
+    expect(graph.id).toBe('clip-graph:clip-1');
+    expect(graph.owner).toEqual({ kind: 'clip', id: 'clip-1', name: 'Clip' });
+    expect(graph.nodes.map((node) => [node.id, node.kind, node.label])).toEqual([
+      ['source', 'source', 'video Source'],
+      ['output', 'output', 'Clip Output'],
+    ]);
+    expect(graph.nodes.find((node) => node.id === 'source')?.outputs.map((port) => port.id)).toEqual([
+      'texture',
+      'time',
+      'metadata',
+      'audio',
+    ]);
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fromNodeId: 'source',
+        fromPortId: 'texture',
+        toNodeId: 'output',
+        toPortId: 'input',
+        type: 'texture',
+      }),
+      expect.objectContaining({
+        fromNodeId: 'source',
+        fromPortId: 'time',
+        toNodeId: 'output',
+        toPortId: 'time',
+        type: 'time',
+      }),
+      expect.objectContaining({
+        fromNodeId: 'source',
+        fromPortId: 'metadata',
+        toNodeId: 'output',
+        toPortId: 'metadata',
+        type: 'metadata',
+      }),
+    ]));
+    expect(graph.nodes.find((node) => node.id === 'audio-output')).toBeUndefined();
+  });
+
+  it('inserts Transform for non-default transforms', () => {
+    const transform = structuredClone(DEFAULT_TRANSFORM);
+    transform.position.x = 24;
+    transform.scale.y = 0.75;
+    const graph = buildClipNodeGraph(createClip({ transform }), createTrack());
+
+    expect(graph.nodes.map((node) => node.id)).toEqual(['source', 'transform', 'output']);
+    expect(graph.nodes.find((node) => node.id === 'transform')).toMatchObject({
+      kind: 'transform',
+      label: 'Transform',
+      params: {
+        x: 24,
+        y: 0,
+        scaleX: 1,
+        scaleY: 0.75,
+        speed: 1,
+        reversed: false,
+      },
+    });
+    expect(graph.edges.filter((edge) => edge.type === 'texture' && edge.toPortId === 'input').map((edge) => [
+      edge.fromNodeId,
+      edge.fromPortId,
+      edge.toNodeId,
+      edge.toPortId,
+    ])).toEqual([
+      ['source', 'texture', 'transform', 'input'],
+      ['transform', 'output', 'output', 'input'],
+    ]);
+  });
+
+  it('projects masks, color, and visual effects in order', () => {
+    const blur: Effect = {
+      id: 'blur',
+      name: 'Blur',
+      type: 'blur',
+      enabled: true,
+      params: { radius: 12 },
+    };
+    const contrast: Effect = {
+      id: 'contrast',
+      name: 'Contrast',
+      type: 'contrast',
+      enabled: false,
+      params: {},
+    };
+    const colorCorrection = createDefaultColorCorrectionState();
+    const graph = buildClipNodeGraph(createClip({
+      masks: [
+        createMask({ id: 'active-mask' }),
+        createMask({ id: 'disabled-mask', enabled: false }),
+      ],
+      colorCorrection,
+      effects: [blur, contrast],
+    }), createTrack());
+
+    expect(graph.nodes.map((node) => node.id)).toEqual([
+      'source',
+      'mask',
+      'color',
+      'effect-blur',
+      'effect-contrast',
+      'output',
+    ]);
+    expect(graph.nodes.map((node) => node.kind)).toEqual([
+      'source',
+      'mask',
+      'color',
+      'effect',
+      'effect',
+      'output',
+    ]);
+    expect(graph.nodes.find((node) => node.id === 'mask')?.params).toEqual({ masks: 1 });
+    expect(graph.nodes.find((node) => node.id === 'color')?.params).toEqual({ nodes: 3, version: 'A' });
+    expect(graph.nodes.find((node) => node.id === 'effect-blur')?.params).toEqual({ enabled: true, params: 1 });
+    expect(graph.nodes.find((node) => node.id === 'effect-contrast')?.params).toEqual({ enabled: false, params: 0 });
+    expect(graph.edges.filter((edge) => edge.type === 'texture' && edge.toPortId === 'input').map((edge) => [
+      edge.fromNodeId,
+      edge.toNodeId,
+    ])).toEqual([
+      ['source', 'mask'],
+      ['mask', 'color'],
+      ['color', 'effect-blur'],
+      ['effect-blur', 'effect-contrast'],
+      ['effect-contrast', 'output'],
+    ]);
+  });
+
+  it('projects audio effects into a separate audio lane and output', () => {
+    const audioVolume: Effect = {
+      id: 'volume',
+      name: 'Volume',
+      type: 'audio-volume',
+      enabled: true,
+      params: { gain: 0.8 },
+    };
+    const audioEq: Effect = {
+      id: 'eq',
+      name: 'EQ',
+      type: 'audio-eq',
+      enabled: true,
+      params: { low: -2, high: 3 },
+    };
+    const graph = buildClipNodeGraph(createClip({ effects: [audioVolume, audioEq] }), createTrack());
+    const visualOutput = graph.nodes.find((node) => node.id === 'output');
+    const audioOutput = graph.nodes.find((node) => node.id === 'audio-output');
+    const audioEffectNodes = graph.nodes.filter((node) => node.id === 'effect-volume' || node.id === 'effect-eq');
+
+    expect(graph.nodes.map((node) => node.id)).toEqual([
+      'source',
+      'output',
+      'effect-volume',
+      'effect-eq',
+      'audio-output',
+    ]);
+    expect(audioOutput).toMatchObject({
+      kind: 'output',
+      label: 'Audio Output',
+      inputs: expect.arrayContaining([expect.objectContaining({ id: 'input', type: 'audio' })]),
+    });
+    expect(audioEffectNodes.map((node) => node.layout.y)).toEqual([audioOutput?.layout.y, audioOutput?.layout.y]);
+    expect(audioOutput?.layout.y).not.toBe(visualOutput?.layout.y);
+    expect(graph.edges.filter((edge) => edge.type === 'audio' && edge.toPortId === 'input').map((edge) => [
+      edge.fromNodeId,
+      edge.fromPortId,
+      edge.toNodeId,
+      edge.toPortId,
+    ])).toEqual([
+      ['source', 'audio', 'effect-volume', 'input'],
+      ['effect-volume', 'output', 'effect-eq', 'input'],
+      ['effect-eq', 'output', 'audio-output', 'input'],
+    ]);
+  });
+});

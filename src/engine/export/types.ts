@@ -29,7 +29,7 @@ export interface ExportSettings {
   audioBitrate?: number;  // 128000 - 320000
   normalizeAudio?: boolean;
   // Export mode
-  exportMode?: ExportMode;  // 'fast' = WebCodecs sequential, 'precise' = HTMLVideoElement
+  exportMode?: ExportMode;  // 'fast' = strict WebCodecs, 'precise' = explicit HTMLVideoElement
   // Alpha channel
   stackedAlpha?: boolean;  // Export as double-height video with RGB top / alpha-as-luma bottom
 }

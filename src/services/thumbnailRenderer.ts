@@ -597,7 +597,9 @@ class ThumbnailRendererService {
               this.effectTempView!,
               this.effectTempView2!,
               width,
-              height
+              height,
+              this.effectTempTexture!,
+              this.effectTempTexture2!
             );
 
             sourceTextureView = effectResult.finalView;
@@ -632,7 +634,9 @@ class ThumbnailRendererService {
               this.effectTempView!,
               this.effectTempView2!,
               width,
-              height
+              height,
+              this.effectTempTexture!,
+              this.effectTempTexture2!
             );
 
             sourceTextureView = effectResult.finalView;
@@ -1059,7 +1063,9 @@ class ThumbnailRendererService {
               this.effectTempView!,
               this.effectTempView2!,
               width,
-              height
+              height,
+              this.effectTempTexture!,
+              this.effectTempTexture2!
             );
 
             sourceTextureView = effectResult.finalView;
@@ -1094,7 +1100,9 @@ class ThumbnailRendererService {
               this.effectTempView!,
               this.effectTempView2!,
               width,
-              height
+              height,
+              this.effectTempTexture!,
+              this.effectTempTexture2!
             );
 
             sourceTextureView = effectResult.finalView;
