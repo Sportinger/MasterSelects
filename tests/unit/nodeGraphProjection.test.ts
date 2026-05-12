@@ -6,6 +6,7 @@ import {
   createClipAICustomNodeDefinition,
   createClipNodeGraphState,
   remapClipNodeGraphEffectIds,
+  showClipBuiltInNode,
   updateClipCustomNodeDefinition,
   updateClipNodeGraphLayout,
 } from '../../src/services/nodeGraph';
@@ -367,5 +368,17 @@ describe('buildClipNodeGraph', () => {
     expect(cloned).not.toBe(updated);
     expect(cloned?.customNodes?.[0]).not.toBe(updated.customNodes?.[0]);
     expect(cloned?.customNodes?.[0]?.ai).toEqual(updated.customNodes?.[0]?.ai);
+  });
+
+  it('can force field-backed built-in nodes to stay visible from graph authoring', () => {
+    const clip = createClip();
+    const track = createTrack();
+    const withTransform = showClipBuiltInNode(clip, 'transform', track);
+    const withColor = showClipBuiltInNode({ ...clip, nodeGraph: withTransform }, 'color', track);
+    const graph = buildClipNodeGraph({ ...clip, nodeGraph: withColor }, track);
+
+    expect(graph.nodes.map((node) => node.id)).toEqual(['source', 'transform', 'color', 'output']);
+    expect(withColor.forcedBuiltIns).toEqual(['transform', 'color']);
+    expect(cloneClipNodeGraph(withColor)?.forcedBuiltIns).toEqual(['transform', 'color']);
   });
 });

@@ -16,6 +16,7 @@ interface NodeGraphCanvasProps {
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   onMoveNode?: (nodeId: string, layout: NodeGraphLayout) => void;
+  onOpenAddMenu?: (position: { x: number; y: number }) => void;
 }
 
 interface Viewport {
@@ -111,7 +112,7 @@ function renderPort(port: NodeGraphPort) {
   );
 }
 
-export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode, onMoveNode }: NodeGraphCanvasProps) {
+export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode, onMoveNode, onOpenAddMenu }: NodeGraphCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const panGestureRef = useRef<PanGesture | null>(null);
   const nodeDragGestureRef = useRef<NodeDragGesture | null>(null);
@@ -280,6 +281,10 @@ export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode, onMoveNod
         onPointerMove={handlePointerMove}
         onPointerUp={finishPanGesture}
         onPointerCancel={finishPanGesture}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onOpenAddMenu?.({ x: event.clientX, y: event.clientY });
+        }}
       >
         <div
           className="node-workspace-canvas-inner"

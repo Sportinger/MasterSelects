@@ -5,6 +5,7 @@ export type {
   ClipCustomNodeAIAuthoring,
   ClipCustomNodeAuthoringStatus,
   ClipCustomNodeDefinition,
+  ClipNodeGraphForcedBuiltIn,
   NodeGraph,
   NodeGraphEdge,
   NodeGraphLayout,

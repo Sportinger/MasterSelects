@@ -123,9 +123,12 @@ export interface ClipCustomNodeDefinition {
   ai: ClipCustomNodeAIAuthoring;
 }
 
+export type ClipNodeGraphForcedBuiltIn = 'transform' | 'mask' | 'color';
+
 export interface ClipNodeGraph {
   version: 1;
   nodes: ClipNodeGraphNodeState[];
   customNodes?: ClipCustomNodeDefinition[];
+  forcedBuiltIns?: ClipNodeGraphForcedBuiltIn[];
   updatedAt?: number;
 }

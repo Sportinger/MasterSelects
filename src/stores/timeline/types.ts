@@ -493,6 +493,7 @@ export interface NodeGraphActions {
     status?: import('../../types').ClipCustomNodeAuthoringStatus;
     ai?: Partial<import('../../types').ClipCustomNodeAIAuthoring>;
   }) => void;
+  showClipNodeGraphBuiltIn: (clipId: string, node: import('../../types').ClipNodeGraphForcedBuiltIn) => void;
   moveClipNodeGraphNode: (clipId: string, nodeId: string, layout: NodeGraphLayout) => void;
 }
 

@@ -18,6 +18,8 @@ Source -> Transform -> Masks -> Color Graph -> Effects -> Clip Output
 
 Audio effects are shown in a separate audio lane when the source exposes audio. The canvas uses the Media Panel board interaction model: pan, wheel zoom, node dragging, fit/reset view, compact node cards, typed ports, edges, and an inspector for the selected node.
 
+Right-clicking the canvas opens an Add Node menu. It can add AI Nodes, force field-backed built-ins such as Transform, Mask, and Color into the graph, and add existing effect types from an Effect Nodes submenu.
+
 The Transform node is the first write-through node. Its inspector edits opacity, position, scale, rotation, speed, blend mode, and reverse state through the same timeline store actions used by the Properties panel, so preview, export, history, and project persistence continue to see one clip model.
 
 Effect nodes also expose write-through inspector controls. Numeric effect params use the keyframe-aware property path, while boolean/select params use the normal effect update action. The graph still does not execute effects itself; it edits the same effect stack consumed by the existing renderer.

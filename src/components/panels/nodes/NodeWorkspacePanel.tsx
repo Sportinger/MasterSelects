@@ -9,6 +9,7 @@ import { createEffectProperty } from '../../../types';
 import type { AnimatableProperty, BlendMode, Effect, TimelineClip } from '../../../types';
 import { EditableDraggableNumber as DraggableNumber } from '../../common/EditableDraggableNumber';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../properties/sharedConstants';
+import { handleSubmenuHover, handleSubmenuLeave } from '../media/submenuPosition';
 import { NodeGraphCanvas } from './NodeGraphCanvas';
 import { useNodeGraphSubject } from './useNodeGraphSubject';
 import './NodeWorkspacePanel.css';
@@ -530,6 +531,11 @@ function ClipNodeActions({ clip, onSelectNode }: { clip: TimelineClip; onSelectN
 export function NodeWorkspacePanel() {
   const subject = useNodeGraphSubject();
   const moveClipNodeGraphNode = useTimelineStore((state) => state.moveClipNodeGraphNode);
+  const showClipNodeGraphBuiltIn = useTimelineStore((state) => state.showClipNodeGraphBuiltIn);
+  const addClipEffect = useTimelineStore((state) => state.addClipEffect);
+  const addClipAICustomNode = useTimelineStore((state) => state.addClipAICustomNode);
+  const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [selection, setSelection] = useState<{ graphId: string | null; nodeId: string | null }>({
     graphId: null,
     nodeId: null,
@@ -553,6 +559,45 @@ export function NodeWorkspacePanel() {
   const openProperties = useCallback(() => {
     useDockStore.getState().activatePanelType('clip-properties');
   }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const addBuiltInNode = useCallback((node: 'transform' | 'mask' | 'color') => {
+    if (!subject || subject.kind !== 'clip') return;
+    startBatch('Add built-in node');
+    try {
+      showClipNodeGraphBuiltIn(subject.id, node);
+      selectNode(node);
+    } finally {
+      endBatch();
+      closeContextMenu();
+    }
+  }, [closeContextMenu, selectNode, showClipNodeGraphBuiltIn, subject]);
+
+  const addEffectNode = useCallback((effectType: string) => {
+    if (!subject || subject.kind !== 'clip') return;
+    startBatch('Add effect node');
+    try {
+      addClipEffect(subject.id, effectType);
+    } finally {
+      endBatch();
+      closeContextMenu();
+    }
+  }, [addClipEffect, closeContextMenu, subject]);
+
+  const addAICustomNode = useCallback(() => {
+    if (!subject || subject.kind !== 'clip') return;
+    startBatch('Add AI node');
+    try {
+      const nodeId = addClipAICustomNode(subject.id);
+      if (nodeId) selectNode(nodeId);
+    } finally {
+      endBatch();
+      closeContextMenu();
+    }
+  }, [addClipAICustomNode, closeContextMenu, selectNode, subject]);
 
   const moveNode = useCallback((nodeId: string, layout: NodeGraphLayout) => {
     if (!subject || subject.kind !== 'clip') return;
@@ -578,6 +623,7 @@ export function NodeWorkspacePanel() {
           selectedNodeId={selectedNode?.id ?? null}
           onSelectNode={selectNode}
           onMoveNode={moveNode}
+          onOpenAddMenu={setContextMenu}
         />
       </div>
       <NodeInspector
@@ -586,6 +632,86 @@ export function NodeWorkspacePanel() {
         onSelectNode={selectNode}
         onOpenProperties={openProperties}
       />
+      {contextMenu && subject && (
+        <NodeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          canAddVisualBuiltIns={subject.clip.source?.type !== 'audio'}
+          effectCategories={effectCategories}
+          onClose={closeContextMenu}
+          onAddAI={addAICustomNode}
+          onAddBuiltIn={addBuiltInNode}
+          onAddEffect={addEffectNode}
+        />
+      )}
+    </div>
+  );
+}
+
+function NodeContextMenu({
+  x,
+  y,
+  canAddVisualBuiltIns,
+  effectCategories,
+  onClose,
+  onAddAI,
+  onAddBuiltIn,
+  onAddEffect,
+}: {
+  x: number;
+  y: number;
+  canAddVisualBuiltIns: boolean;
+  effectCategories: ReturnType<typeof getCategoriesWithEffects>;
+  onClose: () => void;
+  onAddAI: () => void;
+  onAddBuiltIn: (node: 'transform' | 'mask' | 'color') => void;
+  onAddEffect: (effectType: string) => void;
+}) {
+  const left = typeof window === 'undefined' ? x : Math.min(x, window.innerWidth - 188);
+  const top = typeof window === 'undefined' ? y : Math.min(y, window.innerHeight - 220);
+
+  return (
+    <div
+      className="node-workspace-context-backdrop"
+      onClick={onClose}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <div
+        className="node-workspace-context-menu"
+        style={{ left: Math.max(8, left), top: Math.max(8, top) }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button type="button" onClick={onAddAI}>AI Node</button>
+        <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('transform')}>Transform</button>
+        <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('mask')}>Mask</button>
+        <button type="button" disabled={!canAddVisualBuiltIns} onClick={() => onAddBuiltIn('color')}>Color</button>
+        <div
+          className="node-workspace-context-submenu"
+          onMouseEnter={handleSubmenuHover}
+          onMouseLeave={handleSubmenuLeave}
+        >
+          <button type="button">Effect Nodes</button>
+          <div className="node-workspace-context-submenu-list context-submenu">
+            {effectCategories.map(({ category, effects }) => (
+              <div key={category} className="node-workspace-context-submenu-group">
+                <span>{category}</span>
+                {effects.map((effect) => (
+                  <button
+                    key={effect.id}
+                    type="button"
+                    onClick={() => onAddEffect(effect.id)}
+                  >
+                    {effect.name}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

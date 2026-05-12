@@ -4,6 +4,7 @@ import type {
   ClipNodeGraph,
   ClipNodeGraphBacking,
   ClipCustomNodeDefinition,
+  ClipNodeGraphForcedBuiltIn,
   ClipNodeGraphNodeState,
   NodeGraph,
   NodeGraphEdge,
@@ -100,6 +101,10 @@ function hasActiveMasks(clip: TimelineClip): boolean {
 
 function hasColorGraph(clip: TimelineClip): boolean {
   return clip.colorCorrection?.enabled === true;
+}
+
+function hasForcedBuiltInNode(clip: TimelineClip, node: ClipNodeGraphForcedBuiltIn): boolean {
+  return clip.nodeGraph?.forcedBuiltIns?.includes(node) ?? false;
 }
 
 function isAudioEffect(effect: Effect): boolean {
@@ -348,6 +353,7 @@ function buildProjectedClipNodeGraphState(clip: TimelineClip, track?: TimelineTr
     version: 1,
     nodes: graph.nodes.map(createNodeState),
     customNodes: cloneCustomNodeDefinitions(clip.nodeGraph?.customNodes),
+    forcedBuiltIns: clip.nodeGraph?.forcedBuiltIns ? [...clip.nodeGraph.forcedBuiltIns] : undefined,
   };
 }
 
@@ -369,6 +375,7 @@ export function reconcileClipNodeGraphState(
       layout: cloneLayout(existingNodesById.get(node.id)?.layout ?? node.layout),
     })),
     customNodes: cloneCustomNodeDefinitions(existingState.customNodes),
+    forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
     updatedAt: existingState.updatedAt,
   };
 }
@@ -445,6 +452,38 @@ export function addClipCustomNodeDefinition(
   return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
 }
 
+export function showClipBuiltInNode(
+  clip: TimelineClip,
+  node: ClipNodeGraphForcedBuiltIn,
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const forcedBuiltIns = Array.from(new Set([...(baseState.forcedBuiltIns ?? []), node]));
+  const nextState: ClipNodeGraph = {
+    ...baseState,
+    forcedBuiltIns,
+    updatedAt: Date.now(),
+  };
+
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+}
+
+export function hideClipBuiltInNode(
+  clip: TimelineClip,
+  node: ClipNodeGraphForcedBuiltIn,
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const forcedBuiltIns = (baseState.forcedBuiltIns ?? []).filter((candidate) => candidate !== node);
+  const nextState: ClipNodeGraph = {
+    ...baseState,
+    forcedBuiltIns: forcedBuiltIns.length > 0 ? forcedBuiltIns : undefined,
+    updatedAt: Date.now(),
+  };
+
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+}
+
 export function updateClipCustomNodeDefinition(
   clip: TimelineClip,
   nodeId: string,
@@ -490,6 +529,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
       layout: cloneLayout(node.layout),
     })),
     customNodes: cloneCustomNodeDefinitions(graph.customNodes),
+    forcedBuiltIns: graph.forcedBuiltIns ? [...graph.forcedBuiltIns] : undefined,
     updatedAt: graph.updatedAt,
   };
 }
@@ -533,7 +573,7 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
   let depth = 1;
   let chain: NodeGraphConnection = { nodeId: sourceNode.id, portId: primarySignal };
 
-  if (isVisualSource(clip) && !transformIsDefault(clip)) {
+  if (isVisualSource(clip) && (!transformIsDefault(clip) || hasForcedBuiltInNode(clip, 'transform'))) {
     chain = appendProcessingNode(
       nodes,
       edges,
@@ -545,7 +585,7 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
     depth += 1;
   }
 
-  if (isVisualSource(clip) && hasActiveMasks(clip)) {
+  if (isVisualSource(clip) && (hasActiveMasks(clip) || hasForcedBuiltInNode(clip, 'mask'))) {
     chain = appendProcessingNode(
       nodes,
       edges,
@@ -557,7 +597,7 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
     depth += 1;
   }
 
-  if (isVisualSource(clip) && hasColorGraph(clip)) {
+  if (isVisualSource(clip) && (hasColorGraph(clip) || hasForcedBuiltInNode(clip, 'color'))) {
     chain = appendProcessingNode(
       nodes,
       edges,

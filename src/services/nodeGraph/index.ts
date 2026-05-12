@@ -4,8 +4,10 @@ export {
   cloneClipNodeGraph,
   createClipAICustomNodeDefinition,
   createClipNodeGraphState,
+  hideClipBuiltInNode,
   reconcileClipNodeGraphState,
   remapClipNodeGraphEffectIds,
+  showClipBuiltInNode,
   updateClipCustomNodeDefinition,
   updateClipNodeGraphLayout,
 } from './clipGraphProjection';
@@ -16,6 +18,7 @@ export type {
   ClipCustomNodeAIAuthoring,
   ClipCustomNodeAuthoringStatus,
   ClipCustomNodeDefinition,
+  ClipNodeGraphForcedBuiltIn,
   NodeGraph,
   NodeGraphEdge,
   NodeGraphLayout,

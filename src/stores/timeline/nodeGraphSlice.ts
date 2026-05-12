@@ -3,6 +3,7 @@ import {
   addClipCustomNodeDefinition,
   createClipAICustomNodeDefinition,
   createClipNodeGraphState,
+  showClipBuiltInNode,
   updateClipCustomNodeDefinition,
   updateClipNodeGraphLayout,
 } from '../../services/nodeGraph';
@@ -55,6 +56,22 @@ export const createNodeGraphSlice: SliceCreator<NodeGraphActions> = (set, get) =
 
     const track = tracks.find((candidate) => candidate.id === clip.trackId);
     const nodeGraph = updateClipCustomNodeDefinition(clip, nodeId, updates, track);
+    set({
+      clips: clips.map((candidate: TimelineClip) => (
+        candidate.id === clipId
+          ? { ...candidate, nodeGraph }
+          : candidate
+      )),
+    });
+  },
+
+  showClipNodeGraphBuiltIn: (clipId, node) => {
+    const { clips, tracks } = get();
+    const clip = clips.find((candidate) => candidate.id === clipId);
+    if (!clip) return;
+
+    const track = tracks.find((candidate) => candidate.id === clip.trackId);
+    const nodeGraph = showClipBuiltInNode(clip, node, track);
     set({
       clips: clips.map((candidate: TimelineClip) => (
         candidate.id === clipId
