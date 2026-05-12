@@ -150,6 +150,7 @@ export const selectTrackActions = (state: TimelineStore) => ({
   toggleTrackExpanded: state.toggleTrackExpanded,
   getExpandedTrackHeight: state.getExpandedTrackHeight,
   trackHasKeyframes: state.trackHasKeyframes,
+  setTrackLocked: state.setTrackLocked,
   setTrackParent: state.setTrackParent,
 });
 
@@ -179,6 +180,7 @@ export const selectTransformGetters = (state: TimelineStore) => ({
   getInterpolatedTransform: state.getInterpolatedTransform,
   getInterpolatedCameraSettings: state.getInterpolatedCameraSettings,
   getInterpolatedEffects: state.getInterpolatedEffects,
+  getInterpolatedNodeGraphParams: state.getInterpolatedNodeGraphParams,
   getInterpolatedVectorAnimationSettings: state.getInterpolatedVectorAnimationSettings,
   getInterpolatedSpeed: state.getInterpolatedSpeed,
   getSourceTimeForClip: state.getSourceTimeForClip,

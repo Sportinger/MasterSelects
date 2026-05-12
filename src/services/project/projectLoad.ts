@@ -658,7 +658,7 @@ function convertProjectCompositionToStore(
           params: effect.params,
         })),
         colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
-        nodeGraph: c.nodeGraph ? structuredClone(c.nodeGraph) : undefined,
+        nodeGraph: cloneClipNodeGraph(c.nodeGraph),
         masks: c.masks.map((mask): ClipMask => ({
           id: mask.id,
           name: mask.name,

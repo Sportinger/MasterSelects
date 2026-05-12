@@ -33,6 +33,7 @@ import { StatsOverlay } from './StatsOverlay';
 import { PreviewControls } from './PreviewControls';
 import { PreviewBottomControls } from './PreviewBottomControls';
 import { SceneObjectOverlay } from './SceneObjectOverlay';
+import { TextPreviewEditor } from './TextPreviewEditor';
 import { useEditModeOverlay } from './useEditModeOverlay';
 import { useLayerDrag } from './useLayerDrag';
 import { useSAM2Store } from '../../stores/sam2Store';
@@ -370,6 +371,34 @@ function findActiveCameraClipAtTime(
   );
 }
 
+function isSharedSceneOverlayClip(clip: TimelineClip): boolean {
+  const sourceType = clip.source?.type;
+  return (
+    sourceType === 'camera' ||
+    sourceType === 'model' ||
+    sourceType === 'gaussian-splat' ||
+    sourceType === 'splat-effector' ||
+    Boolean(clip.is3D && sourceType !== 'audio')
+  );
+}
+
+function hasActiveSharedSceneOverlayContent(
+  clips: TimelineClip[],
+  tracks: TimelineTrack[],
+  timelineTime: number,
+): boolean {
+  const trackById = new Map(tracks.map((track) => [track.id, track]));
+  return clips.some((clip) => {
+    const track = trackById.get(clip.trackId);
+    if (!track || track.type === 'audio' || track.visible === false) return false;
+    if (!isSharedSceneOverlayClip(clip)) return false;
+    return (
+      timelineTime >= clip.startTime - TIMELINE_TIME_EPSILON &&
+      timelineTime < clip.startTime + clip.duration + TIMELINE_TIME_EPSILON
+    );
+  });
+}
+
 function buildPreviewCameraConfigFromTransform(
   clip: TimelineClip,
   transform: ClipTransform,
@@ -463,12 +492,17 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const setSceneGizmoClipIdOverride = useEngineStore((s) => s.setSceneGizmoClipIdOverride);
   const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
-  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, maskEditMode, maskPanelActive, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying, playheadPosition } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, updateTextProperties, updateTextBoundsVertex, updateTextBoundsVertices, setPropertyValue, getInterpolatedTextBounds, maskEditMode, maskPanelActive, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying, playheadPosition } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     primarySelectedClipId: s.primarySelectedClipId,
     selectClip: s.selectClip,
     updateClipTransform: s.updateClipTransform,
+    updateTextProperties: s.updateTextProperties,
+    updateTextBoundsVertex: s.updateTextBoundsVertex,
+    updateTextBoundsVertices: s.updateTextBoundsVertices,
+    setPropertyValue: s.setPropertyValue,
+    getInterpolatedTextBounds: s.getInterpolatedTextBounds,
     maskEditMode: s.maskEditMode,
     maskPanelActive: s.maskPanelActive,
     layers: s.layers,
@@ -762,6 +796,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const editCameraAnimationRef = useRef<number | null>(null);
   const editCameraViewTransitionRef = useRef(false);
   const editCameraModeActiveRef = useRef(false);
+  const activeSharedSceneOverlayContent = useMemo(
+    () => hasActiveSharedSceneOverlayContent(clips, tracks, playheadPosition),
+    [clips, playheadPosition, tracks],
+  );
 
   useEffect(() => {
     return () => {
@@ -770,11 +808,12 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   }, [setSceneGizmoVisible]);
 
   useEffect(() => {
-    setSceneGizmoVisible(sceneObjectOverlayEnabled && isEditableSource && !sourceMonitorActive);
+    setSceneGizmoVisible(sceneObjectOverlayEnabled && activeSharedSceneOverlayContent && isEditableSource && !sourceMonitorActive);
     if (isEngineReady) {
       engine.requestRender();
     }
   }, [
+    activeSharedSceneOverlayContent,
     isEditableSource,
     isEngineReady,
     sceneObjectOverlayEnabled,
@@ -791,6 +830,22 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const selectedClip = useMemo(
     () => (selectedClipId ? clips.find((clip) => clip.id === selectedClipId) ?? null : null),
     [clips, selectedClipId],
+  );
+  const selectedTextLayer = useMemo(
+    () => (
+      selectedClip?.source?.type === 'text'
+        ? layers.find((layer) => layer?.sourceClipId === selectedClip.id && layer.source?.textCanvas) ?? null
+        : null
+    ),
+    [layers, selectedClip],
+  );
+  const selectedTextBounds = useMemo(
+    () => (
+      selectedClip?.textProperties
+        ? getInterpolatedTextBounds(selectedClip.id, playheadPosition - selectedClip.startTime)
+        : undefined
+    ),
+    [getInterpolatedTextBounds, playheadPosition, selectedClip],
   );
 
   const selectedSceneNavClip = useMemo(
@@ -843,8 +898,9 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const layerEditMode = editMode && !editCameraModeActive;
   const maskTabActive = isEditableSource && maskPanelActive;
   const maskNavigationMode = layerEditMode && maskTabActive;
-  const layerTransformMode = layerEditMode && !maskNavigationMode;
-  const freeCanvasNavigationMode = layerTransformMode || maskNavigationMode;
+  const textClipEditMode = Boolean(layerEditMode && !maskTabActive && selectedClip?.textProperties && selectedTextLayer);
+  const layerTransformMode = layerEditMode && !maskNavigationMode && !textClipEditMode;
+  const freeCanvasNavigationMode = layerTransformMode || maskNavigationMode || textClipEditMode;
   const effectiveSceneNavFpsMode = sceneNavFpsMode && !editCameraModeActive;
   const editCameraClipSelected = Boolean(
     editCameraModeActive &&
@@ -2324,7 +2380,16 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const splatLoadPhaseLabel = activeSplatLoadProgress
     ? getSplatLoadPhaseLabel(activeSplatLoadProgress.phase)
     : '';
-  const showSceneObjectOverlay = sceneObjectOverlayEnabled && isEditableSource && !isPlaying;
+  const showSceneObjectOverlay = sceneObjectOverlayEnabled && activeSharedSceneOverlayContent && isEditableSource && !isPlaying;
+  const textPreviewEditorEnabled = Boolean(
+    isEditableSource &&
+    !sourceMonitorActive &&
+    !isPlaying &&
+    textClipEditMode &&
+    !sceneNavEnabled &&
+    selectedClip?.textProperties &&
+    selectedTextLayer,
+  );
   const sceneObjectOverlaySelectedClipId =
     editCameraModeActive &&
     editCameraOrthoViewActive &&
@@ -2479,7 +2544,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
                   editCameraClip={editCameraModeActive ? activeCameraClipAtPlayhead : null}
                   editCameraTransform={editCameraModeActive ? editCameraGizmoTransform : null}
                   showOnlyEditCamera={false}
-                  showWorldGrid={editMode}
+                  showWorldGrid={editMode && activeSharedSceneOverlayContent}
                   worldGridPlane={
                     editCameraModeActive && editCameraViewMode === 'front'
                       ? 'xy'
@@ -2496,6 +2561,23 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             </>
           )}
         </div>
+
+        {textPreviewEditorEnabled && selectedClip?.textProperties && selectedTextLayer && (
+          <TextPreviewEditor
+            clip={selectedClip}
+            layer={selectedTextLayer}
+            effectiveResolution={effectiveResolution}
+            canvasSize={canvasSize}
+            canvasInContainer={canvasInContainer}
+            viewZoom={viewZoom}
+            enabled={textPreviewEditorEnabled}
+            activeTextBounds={selectedTextBounds}
+            updateTextProperties={updateTextProperties}
+            updateTextBoundsVertex={updateTextBoundsVertex}
+            updateTextBoundsVertices={updateTextBoundsVertices}
+            setPropertyValue={setPropertyValue}
+          />
+        )}
 
         {activeSplatLoadProgress && (
           <div
@@ -2547,6 +2629,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         {layerTransformMode && isEditableSource && (
           <div className="preview-edit-hint">
             Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
+          </div>
+        )}
+        {textClipEditMode && isEditableSource && (
+          <div className="preview-edit-hint">
+            Text Edit: Type in bounds | Drag edges: Area | Shift+Drag edge: Rectify | Double-click edge: Straighten | Ctrl+Drag: Move
           </div>
         )}
         {maskNavigationMode && isEditableSource && (

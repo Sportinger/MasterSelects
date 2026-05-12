@@ -12,6 +12,7 @@ import { Toolbar } from './components';
 import { DockContainer } from './components/dock';
 import { AccountDialog } from './components/common/AccountDialog';
 import { AuthDialog } from './components/common/AuthDialog';
+import { BillingSuccessCelebration } from './components/common/BillingSuccessCelebration';
 import { WelcomeOverlay } from './components/common/WelcomeOverlay';
 import { WhatsNewDialog } from './components/common/WhatsNewDialog';
 import { SplashScreen } from './components/common/SplashScreen';
@@ -104,10 +105,18 @@ function App() {
   }, [loadApiKeys]);
 
   const accountDialog = useAccountStore((s) => s.dialog);
+  const accountCreditBalance = useAccountStore((s) => s.creditBalance);
   const closeAccountDialog = useAccountStore((s) => s.closeDialog);
   const isAccountInitialized = useAccountStore((s) => s.isInitialized);
   const loadAccountState = useAccountStore((s) => s.loadAccountState);
   const openAccountDialog = useAccountStore((s) => s.openAccountDialog);
+  const [billingSuccessCelebration, setBillingSuccessCelebration] = useState<{
+    planId: string | null;
+    token: number;
+  } | null>(null);
+  const closeBillingSuccessCelebration = useCallback(() => {
+    setBillingSuccessCelebration(null);
+  }, []);
   useEffect(() => {
     void loadAccountState();
   }, [loadAccountState]);
@@ -120,18 +129,29 @@ function App() {
     const currentUrl = new URL(window.location.href);
     const authStatus = currentUrl.searchParams.get('auth');
     const billingStatus = currentUrl.searchParams.get('billing');
+    const billingPlanId = currentUrl.searchParams.get('plan');
+    const showBillingSuccessPreview = currentUrl.searchParams.get('showBillingSuccess') === '1';
 
-    if (authStatus !== 'success' && billingStatus !== 'success') {
+    if (authStatus !== 'success' && billingStatus !== 'success' && !showBillingSuccessPreview) {
       return;
     }
 
     const finalize = async () => {
       await loadAccountState();
-      openAccountDialog();
+      if (!showBillingSuccessPreview) {
+        openAccountDialog();
+      }
+      if (billingStatus === 'success' || showBillingSuccessPreview) {
+        setBillingSuccessCelebration({
+          planId: billingPlanId,
+          token: Date.now(),
+        });
+      }
 
       currentUrl.searchParams.delete('auth');
       currentUrl.searchParams.delete('billing');
       currentUrl.searchParams.delete('plan');
+      currentUrl.searchParams.delete('showBillingSuccess');
       window.history.replaceState({}, document.title, `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
     };
 
@@ -376,6 +396,14 @@ function App() {
       {accountDialog === 'auth' && <AuthDialog onClose={closeAccountDialog} />}
       {accountDialog === 'pricing' && <PricingDialog onClose={closeAccountDialog} />}
       {accountDialog === 'account' && <AccountDialog onClose={closeAccountDialog} />}
+      {billingSuccessCelebration && (
+        <BillingSuccessCelebration
+          creditBalance={accountCreditBalance}
+          onClose={closeBillingSuccessCelebration}
+          planId={billingSuccessCelebration.planId}
+          key={billingSuccessCelebration.token}
+        />
+      )}
     </div>
   );
 }

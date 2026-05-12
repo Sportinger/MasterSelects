@@ -60,7 +60,7 @@ export interface NodeGraphNode {
   sourceType?: TimelineSourceType;
   inputs: NodeGraphPort[];
   outputs: NodeGraphPort[];
-  params?: Record<string, string | number | boolean>;
+  params?: Record<string, ClipCustomNodeParamValue>;
   layout: NodeGraphLayout;
 }
 
@@ -71,6 +71,13 @@ export interface NodeGraphEdge {
   toNodeId: string;
   toPortId: string;
   type: NodeGraphSignalType;
+}
+
+export interface NodeGraphConnectionRequest {
+  fromNodeId: string;
+  fromPortId: string;
+  toNodeId: string;
+  toPortId: string;
 }
 
 export interface NodeGraphOwner {
@@ -104,9 +111,42 @@ export interface ClipNodeGraphNodeState {
 
 export type ClipCustomNodeAuthoringStatus = 'draft' | 'ready';
 
+export type ClipCustomNodeConversationRole = 'user' | 'assistant';
+export type ClipCustomNodeConversationKind = 'plan' | 'code' | 'message';
+
+export type ClipCustomNodeParamValue = string | number | boolean;
+export type ClipCustomNodeParamType = 'number' | 'boolean' | 'string' | 'select' | 'color';
+
+export interface ClipCustomNodeParamOption {
+  label: string;
+  value: ClipCustomNodeParamValue;
+}
+
+export interface ClipCustomNodeParamDefinition {
+  id: string;
+  label: string;
+  type: ClipCustomNodeParamType;
+  default: ClipCustomNodeParamValue;
+  min?: number;
+  max?: number;
+  step?: number;
+  options?: ClipCustomNodeParamOption[];
+}
+
+export interface ClipCustomNodeConversationMessage {
+  id: string;
+  role: ClipCustomNodeConversationRole;
+  kind: ClipCustomNodeConversationKind;
+  content: string;
+  createdAt: number;
+}
+
 export interface ClipCustomNodeAIAuthoring {
   prompt: string;
+  plan?: string;
   generatedCode?: string;
+  conversation?: ClipCustomNodeConversationMessage[];
+  conversationSummary?: string;
   updatedAt?: number;
   acceptedAt?: number;
 }
@@ -115,11 +155,13 @@ export interface ClipCustomNodeDefinition {
   id: string;
   label: string;
   description?: string;
+  bypassed?: boolean;
   runtime: Exclude<NodeGraphRuntimeKind, 'builtin'>;
   status: ClipCustomNodeAuthoringStatus;
   inputs: NodeGraphPort[];
   outputs: NodeGraphPort[];
-  params?: Record<string, string | number | boolean>;
+  params?: Record<string, ClipCustomNodeParamValue>;
+  parameterSchema?: ClipCustomNodeParamDefinition[];
   ai: ClipCustomNodeAIAuthoring;
 }
 
@@ -130,5 +172,6 @@ export interface ClipNodeGraph {
   nodes: ClipNodeGraphNodeState[];
   customNodes?: ClipCustomNodeDefinition[];
   forcedBuiltIns?: ClipNodeGraphForcedBuiltIn[];
+  manualEdges?: NodeGraphEdge[];
   updatedAt?: number;
 }

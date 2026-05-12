@@ -917,6 +917,7 @@ function TimelineHeaderComponent({
   playheadPosition,
   onToggleExpand,
   onToggleSolo,
+  onToggleLocked,
   onToggleMuted,
   onToggleVisible,
   onRenameTrack,
@@ -1002,7 +1003,7 @@ function TimelineHeaderComponent({
     <div
       className={`track-header ${track.type} ${isDimmed ? 'dimmed' : ''} ${
         isExpanded ? 'expanded' : ''
-      }`}
+      } ${track.locked ? 'locked' : ''}`}
       style={{ height: dynamicHeight }}
       onWheel={onWheel}
       onContextMenu={onContextMenu}
@@ -1066,6 +1067,13 @@ function TimelineHeaderComponent({
             title={track.solo ? 'Solo On' : 'Solo Off'}
           >
             S
+          </button>
+          <button
+            className={`btn-icon ${track.locked ? 'locked-active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); onToggleLocked?.(); }}
+            title={track.locked ? 'Unlock Track' : 'Lock Track'}
+          >
+            {track.locked ? '\uD83D\uDD12' : '\uD83D\uDD13'}
           </button>
           {track.type === 'audio' && (
             <button

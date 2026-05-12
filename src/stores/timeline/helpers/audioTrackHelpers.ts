@@ -24,7 +24,7 @@ export function findOrCreateAudioTrack(
 
   // Try to use preferred track if provided (only if no overlap)
   if (preferredId) {
-    const preferred = tracks.find(t => t.id === preferredId && t.type === 'audio');
+    const preferred = tracks.find(t => t.id === preferredId && t.type === 'audio' && !t.locked);
     if (preferred) {
       const trackClips = clips.filter(c => c.trackId === preferred.id);
       const hasOverlap = trackClips.some(c => {
@@ -38,7 +38,7 @@ export function findOrCreateAudioTrack(
   }
 
   // Find first audio track without overlap
-  const audioTracks = tracks.filter(t => t.type === 'audio');
+  const audioTracks = tracks.filter(t => t.type === 'audio' && !t.locked);
   for (const track of audioTracks) {
     const trackClips = clips.filter(c => c.trackId === track.id);
     const hasOverlap = trackClips.some(c => {

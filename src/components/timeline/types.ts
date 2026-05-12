@@ -74,6 +74,7 @@ export interface ExternalDragState {
   hasAudio?: boolean;     // Does the video file have audio tracks?
   duration?: number;      // Actual duration of dragged file
   newTrackType?: 'video' | 'audio' | null;  // If hovering over "new track" drop zone
+  showVideoNewTrackZone?: boolean; // True after dragging upward against the timeline top edge
 }
 
 // Context menu state for clip right-click
@@ -162,6 +163,7 @@ export interface TimelineHeaderProps {
   playheadPosition: number;
   onToggleExpand: () => void;
   onToggleSolo: () => void;
+  onToggleLocked?: () => void;
   onToggleMuted: () => void;
   onToggleVisible: () => void;
   onRenameTrack: (name: string) => void;

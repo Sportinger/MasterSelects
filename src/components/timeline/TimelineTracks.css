@@ -36,6 +36,10 @@
   background: linear-gradient(90deg, rgba(45, 107, 74, 0.15), transparent);
 }
 
+.track-header.locked {
+  border-left: 2px solid var(--warning);
+}
+
 /* Green separator line between video and audio track sections */
 .track-header.video + .track-header.audio,
 .track-lane.video + .track-lane.audio {
@@ -214,6 +218,10 @@
     var(--timeline-grid-audio) calc(var(--grid-size, 50px) - 1px),
     var(--timeline-grid-audio) var(--grid-size, 50px)
   );
+}
+
+.track-lane.locked {
+  background-color: color-mix(in srgb, var(--bg-secondary) 88%, var(--warning) 12%);
 }
 
 .composition-exit-clips-overlay {

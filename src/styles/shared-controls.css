@@ -169,6 +169,11 @@
   font-weight: bold;
 }
 
+.btn-icon.locked-active {
+  color: var(--warning);
+  opacity: 1;
+}
+
 .btn-danger {
   background: var(--danger);
   color: var(--text-on-accent);

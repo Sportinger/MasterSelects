@@ -2,7 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip } from '../../helpers/mockData';
 import { KEYFRAME_RECORDING_FEEDBACK_EVENT } from '../../../src/utils/keyframeRecordingFeedback';
-import { createMaskPathProperty, createMaskNumericProperty, type ClipMask, type MaskPathKeyframeValue } from '../../../src/types';
+import {
+  createMaskPathProperty,
+  createMaskNumericProperty,
+  createNodeGraphParamProperty,
+  type ClipMask,
+  type MaskPathKeyframeValue,
+} from '../../../src/types';
 
 describe('keyframeSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -908,6 +914,81 @@ describe('keyframeSlice', () => {
     expect(effects[0].params.brightness).toBeCloseTo(1.25, 1);
   });
 
+  it('getInterpolatedNodeGraphParams: interpolates exposed numeric AI node params', () => {
+    const aiClip = createMockClip({
+      id: 'clip-ai',
+      startTime: 0,
+      duration: 10,
+      nodeGraph: {
+        version: 1,
+        nodes: [],
+        customNodes: [
+          {
+            id: 'custom-ai',
+            label: 'AI Node',
+            runtime: 'typescript',
+            status: 'ready',
+            inputs: [],
+            outputs: [],
+            parameterSchema: [
+              { id: 'amount', label: 'Amount', type: 'number', default: 0 },
+              { id: 'mode', label: 'Mode', type: 'string', default: 'soft' },
+            ],
+            params: { amount: 0, mode: 'hard' },
+            ai: { prompt: '', generatedCode: 'defineNode({ process(input) { return { output: input.input }; } })' },
+          },
+        ],
+      },
+    });
+    const property = createNodeGraphParamProperty('custom-ai', 'amount');
+    store = createTestTimelineStore({ clips: [aiClip] });
+
+    store.getState().addKeyframe('clip-ai', property, 0, 0);
+    store.getState().addKeyframe('clip-ai', property, 1, 10);
+
+    expect(store.getState().getInterpolatedNodeGraphParams('clip-ai', 'custom-ai', 5)).toEqual({
+      amount: 0.5,
+      mode: 'hard',
+    });
+  });
+
+  it('getInterpolatedNodeGraphParams: interpolates exposed AI color params through RGB channels', () => {
+    const aiClip = createMockClip({
+      id: 'clip-ai',
+      startTime: 0,
+      duration: 10,
+      nodeGraph: {
+        version: 1,
+        nodes: [],
+        customNodes: [
+          {
+            id: 'custom-ai',
+            label: 'AI Node',
+            runtime: 'typescript',
+            status: 'ready',
+            inputs: [],
+            outputs: [],
+            parameterSchema: [
+              { id: 'tintColor', label: 'Tint Color', type: 'color', default: '#0000ff' },
+            ],
+            params: { tintColor: '#0000ff' },
+            ai: { prompt: '', generatedCode: 'defineNode({ process(input) { return { output: input.input }; } })' },
+          },
+        ],
+      },
+    });
+    store = createTestTimelineStore({ clips: [aiClip] });
+
+    store.getState().addKeyframe('clip-ai', createNodeGraphParamProperty('custom-ai', 'tintColor.r'), 0, 0);
+    store.getState().addKeyframe('clip-ai', createNodeGraphParamProperty('custom-ai', 'tintColor.r'), 255, 10);
+    store.getState().addKeyframe('clip-ai', createNodeGraphParamProperty('custom-ai', 'tintColor.g'), 0, 0);
+    store.getState().addKeyframe('clip-ai', createNodeGraphParamProperty('custom-ai', 'tintColor.g'), 128, 10);
+
+    expect(store.getState().getInterpolatedNodeGraphParams('clip-ai', 'custom-ai', 5)).toEqual({
+      tintColor: '#8040ff',
+    });
+  });
+
   // ─── getInterpolatedSpeed ──────────────────────────────────────────
 
   it('getInterpolatedSpeed: returns 1 for unknown clip', () => {
@@ -973,6 +1054,63 @@ describe('keyframeSlice', () => {
     expect(updatedClip.transform.opacity).toBe(0.5);
     // No keyframes should be created
     expect(store.getState().clipKeyframes.get('clip-1')).toBeUndefined();
+  });
+
+  it('setPropertyValue: updates static AI node param when not recording and no keyframes', () => {
+    const aiClip = createMockClip({
+      id: 'clip-ai',
+      nodeGraph: {
+        version: 1,
+        nodes: [],
+        customNodes: [
+          {
+            id: 'custom-ai',
+            label: 'AI Node',
+            runtime: 'typescript',
+            status: 'ready',
+            inputs: [],
+            outputs: [],
+            parameterSchema: [{ id: 'amount', label: 'Amount', type: 'number', default: 0.5 }],
+            params: { amount: 0.5 },
+            ai: { prompt: '' },
+          },
+        ],
+      },
+    });
+    store = createTestTimelineStore({ clips: [aiClip] });
+
+    store.getState().setPropertyValue('clip-ai', createNodeGraphParamProperty('custom-ai', 'amount'), 0.85);
+
+    expect(store.getState().clips[0].nodeGraph?.customNodes?.[0].params?.amount).toBe(0.85);
+  });
+
+  it('setPropertyValue: updates static AI color channels through the color param', () => {
+    const aiClip = createMockClip({
+      id: 'clip-ai',
+      nodeGraph: {
+        version: 1,
+        nodes: [],
+        customNodes: [
+          {
+            id: 'custom-ai',
+            label: 'AI Node',
+            runtime: 'typescript',
+            status: 'ready',
+            inputs: [],
+            outputs: [],
+            parameterSchema: [{ id: 'tintColor', label: 'Tint Color', type: 'color', default: '#000000' }],
+            params: { tintColor: '#000000' },
+            ai: { prompt: '' },
+          },
+        ],
+      },
+    });
+    store = createTestTimelineStore({ clips: [aiClip] });
+
+    store.getState().setPropertyValue('clip-ai', createNodeGraphParamProperty('custom-ai', 'tintColor.r'), 255);
+    store.getState().setPropertyValue('clip-ai', createNodeGraphParamProperty('custom-ai', 'tintColor.b'), 128);
+
+    expect(store.getState().clips[0].nodeGraph?.customNodes?.[0].params?.tintColor).toBe('#ff0080');
   });
 
   it('setPropertyValue: creates keyframe when property already has keyframes (even if not recording)', () => {

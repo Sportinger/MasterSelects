@@ -236,6 +236,14 @@ export interface TextClipProperties {
   lineHeight: number;           // multiplier (1.2 = 120%)
   letterSpacing: number;        // pixels
 
+  // Area text box (paragraph text)
+  boxEnabled?: boolean;          // When true, wraps and clips text inside the box
+  boxX?: number;                 // Box origin in text canvas pixels
+  boxY?: number;
+  boxWidth?: number;
+  boxHeight?: number;
+  textBounds?: TextBoundsPath;    // AE-style editable paragraph bounds/path
+
   // Stroke (outline)
   strokeEnabled: boolean;
   strokeColor: string;
@@ -740,6 +748,7 @@ export interface TimelineTrack {
   muted: boolean;
   visible: boolean;
   solo: boolean;
+  locked?: boolean;
   parentTrackId?: string;  // ID of parent track for layer parenting (like AE parenting)
 }
 
@@ -868,6 +877,9 @@ export type CameraProperty = `camera.${CameraPropertyName}`;
 // Example: effect.effect_123456.shift, effect.effect_123456.amount
 export type EffectProperty = `effect.${string}.${string}`;
 
+// AI/custom node exposed parameter format: node.{nodeId}.{paramName}
+export type NodeGraphParamProperty = `node.${string}.${string}`;
+
 // Color correction property format: color.{versionId}.{nodeId}.{paramName}
 export type ColorProperty = `color.${string}.${string}.${string}`;
 
@@ -879,8 +891,16 @@ export type MaskNumericPropertyName = 'position.x' | 'position.y' | 'feather' | 
 export type MaskNumericProperty = `mask.${string}.${MaskNumericPropertyName}`;
 export type MaskProperty = MaskPathProperty | MaskNumericProperty;
 
+// Text boundary property formats:
+// - textBounds.path stores the paragraph bounds bezier path as one keyframe value
+// - textBounds.position.x/y offset the whole text bounds path
+export type TextBoundsPathProperty = 'textBounds.path';
+export type TextBoundsNumericPropertyName = 'position.x' | 'position.y';
+export type TextBoundsNumericProperty = `textBounds.${TextBoundsNumericPropertyName}`;
+export type TextBoundsProperty = TextBoundsPathProperty | TextBoundsNumericProperty;
+
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | ColorProperty | MaskProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | MotionProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | MotionProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);
@@ -907,6 +927,22 @@ export function parseEffectProperty(property: EffectProperty): { effectId: strin
 // Helper to create effect property string
 export function createEffectProperty(effectId: string, paramName: string): EffectProperty {
   return `effect.${effectId}.${paramName}` as EffectProperty;
+}
+
+export function isNodeGraphParamProperty(property: string): property is NodeGraphParamProperty {
+  return property.startsWith('node.');
+}
+
+export function parseNodeGraphParamProperty(property: string): { nodeId: string; paramName: string } | null {
+  const match = /^node\.([^.]+)\.(.+)$/.exec(property);
+  if (match) {
+    return { nodeId: match[1], paramName: match[2] };
+  }
+  return null;
+}
+
+export function createNodeGraphParamProperty(nodeId: string, paramName: string): NodeGraphParamProperty {
+  return `node.${nodeId}.${paramName}` as NodeGraphParamProperty;
 }
 
 export function isColorProperty(property: string): property is ColorProperty {
@@ -946,6 +982,29 @@ export function parseMaskProperty(property: string): { maskId: string; property:
   return null;
 }
 
+export function createTextBoundsPathProperty(): TextBoundsPathProperty {
+  return 'textBounds.path';
+}
+
+export function createTextBoundsNumericProperty(property: TextBoundsNumericPropertyName): TextBoundsNumericProperty {
+  return `textBounds.${property}` as TextBoundsNumericProperty;
+}
+
+export function isTextBoundsPathProperty(property: string): property is TextBoundsPathProperty {
+  return property === 'textBounds.path';
+}
+
+export function isTextBoundsNumericProperty(property: string): property is TextBoundsNumericProperty {
+  return /^textBounds\.position\.(x|y)$/.test(property);
+}
+
+export function parseTextBoundsProperty(property: string): 'path' | TextBoundsNumericPropertyName | null {
+  if (property === 'textBounds.path') return 'path';
+  if (property === 'textBounds.position.x') return 'position.x';
+  if (property === 'textBounds.position.y') return 'position.y';
+  return null;
+}
+
 // Mask types for After Effects-style clip masking
 export type MaskVertexHandleMode = 'none' | 'mirrored' | 'split';
 
@@ -975,6 +1034,15 @@ export interface ClipMask {
   enabled: boolean;       // Whether the mask affects rendering
   visible: boolean;       // Toggle outline visibility
   outlineColor?: string;  // Preview overlay stroke color
+}
+
+export interface TextBoundsPath {
+  id: string;
+  vertices: MaskVertex[];
+  closed: boolean;
+  position: { x: number; y: number };  // Offset in normalized text-canvas coords
+  visible?: boolean;
+  outlineColor?: string;
 }
 
 export interface MaskPathKeyframeValue {

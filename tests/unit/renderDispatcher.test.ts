@@ -173,7 +173,7 @@ describe('RenderDispatcher empty playback hold', () => {
     });
   });
 
-  it('keeps the last frame on small playback stalls with an empty layer set', () => {
+  it('keeps the last frame on small playback stalls with an active input layer', () => {
     const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(true);
 
     dispatcher.lastRenderHadContent = true;
@@ -198,6 +198,20 @@ describe('RenderDispatcher empty playback hold', () => {
     });
     expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
     expect(dispatcher.lastRenderHadContent).toBe(true);
+  });
+
+  it('clears the stale preview canvas during playback gaps with no input layers', () => {
+    const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(true);
+
+    dispatcher.lastRenderHadContent = true;
+    dispatcher.lastPreviewTargetTimeMs = 17_667;
+
+    dispatcher.render([]);
+
+    expect(renderEmptyFrame).toHaveBeenCalledTimes(1);
+    expect(recordMainPreviewFrame).toHaveBeenCalledWith('empty', undefined, {});
+    expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
+    expect(dispatcher.lastRenderHadContent).toBe(false);
   });
 
   it('clears the stale preview canvas on large target jumps with empty layer data', () => {

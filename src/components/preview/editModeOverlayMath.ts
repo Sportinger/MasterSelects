@@ -40,6 +40,8 @@ export interface LayerUvProjectionParams {
   scale: { x: number; y: number };
   rotation: number | { x?: number; y?: number; z?: number };
   perspective?: number;
+  uvClampMin?: number;
+  uvClampMax?: number;
 }
 
 function finiteNumber(value: number | undefined, fallback: number): number {
@@ -207,9 +209,11 @@ export function unprojectCanvasToLayerUv(
 
     const deltaX = (errorX * j22 - j12 * errorY) / determinant;
     const deltaY = (j11 * errorY - errorX * j21) / determinant;
+    const clampMin = finiteNumber(params.uvClampMin, -4);
+    const clampMax = finiteNumber(params.uvClampMax, 5);
     guess = {
-      x: Math.max(-4, Math.min(5, guess.x - deltaX)),
-      y: Math.max(-4, Math.min(5, guess.y - deltaY)),
+      x: Math.max(clampMin, Math.min(clampMax, guess.x - deltaX)),
+      y: Math.max(clampMin, Math.min(clampMax, guess.y - deltaY)),
     };
   }
 

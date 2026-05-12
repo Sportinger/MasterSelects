@@ -122,6 +122,7 @@ export const DEFAULT_TEXT_PROPERTIES: TextClipProperties = {
   verticalAlign: 'middle',
   lineHeight: 1.2,
   letterSpacing: 0,
+  boxEnabled: true,
   strokeEnabled: false,
   strokeColor: '#000000',
   strokeWidth: 2,

@@ -22,6 +22,7 @@ interface TimelineContextMenuProps {
   // Clip data
   clipMap: Map<string, TimelineClip>;
   selectedClipIds: Set<string>;
+  isClipLocked: (clipId: string) => boolean;
 
   // Actions
   selectClip: (clipId: string) => void;
@@ -31,6 +32,7 @@ interface TimelineContextMenuProps {
   unlinkGroup: (clipId: string) => void;
   generateWaveformForClip: (clipId: string) => void;
   convertSolidToMotionShape: (clipId: string) => string | null;
+  createSubcompositionFromSelection: (clipId: string) => void;
   copyClipEffects: (clipId: string) => void;
   pasteClipEffects: (targetClipIds?: string[]) => void;
   hasClipboardEffects: () => boolean;
@@ -48,6 +50,7 @@ export function TimelineContextMenu({
   setContextMenu,
   clipMap,
   selectedClipIds,
+  isClipLocked,
   selectClip: _selectClip,
   removeClip,
   splitClipAtPlayhead,
@@ -55,6 +58,7 @@ export function TimelineContextMenu({
   unlinkGroup,
   generateWaveformForClip,
   convertSolidToMotionShape,
+  createSubcompositionFromSelection,
   copyClipEffects,
   pasteClipEffects,
   hasClipboardEffects,
@@ -183,6 +187,9 @@ export function TimelineContextMenu({
       ? [...selectedClipIds]
       : [contextMenu.clipId];
   };
+  const targetClipIds = getPasteTargetClipIds();
+  const hasLockedTarget = targetClipIds.some(isClipLocked);
+  const canModifyTargets = !hasLockedTarget;
 
   // Resolve the media item ID and current label color for the clip
   const resolveMediaItemColor = (): { mediaItemId: string | null; currentColor: LabelColor } => {
@@ -323,20 +330,20 @@ export function TimelineContextMenu({
         Copy Color
       </div>
       <div
-        className={`context-menu-item ${!canPasteEffects ? 'disabled' : ''}`}
+        className={`context-menu-item ${!canPasteEffects || !canModifyTargets ? 'disabled' : ''}`}
         onClick={() => {
-          if (!canPasteEffects) return;
-          pasteClipEffects(getPasteTargetClipIds());
+          if (!canPasteEffects || !canModifyTargets) return;
+          pasteClipEffects(targetClipIds);
           setContextMenu(null);
         }}
       >
         Paste Effects
       </div>
       <div
-        className={`context-menu-item ${!canPasteColor ? 'disabled' : ''}`}
+        className={`context-menu-item ${!canPasteColor || !canModifyTargets ? 'disabled' : ''}`}
         onClick={() => {
-          if (!canPasteColor) return;
-          pasteClipColor(getPasteTargetClipIds());
+          if (!canPasteColor || !canModifyTargets) return;
+          pasteClipColor(targetClipIds);
           setContextMenu(null);
         }}
       >
@@ -345,8 +352,9 @@ export function TimelineContextMenu({
 
       <div className="context-menu-separator" />
       <div
-        className="context-menu-item"
+        className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
         onClick={() => {
+          if (!canModifyTargets) return;
           splitClipAtPlayhead();
           setContextMenu(null);
         }}
@@ -358,8 +366,9 @@ export function TimelineContextMenu({
         <>
           <div className="context-menu-separator" />
           <div
-            className="context-menu-item"
+            className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
             onClick={() => {
+              if (!canModifyTargets) return;
               if (contextMenu.clipId) {
                 convertSolidToMotionShape(contextMenu.clipId);
               }
@@ -374,8 +383,9 @@ export function TimelineContextMenu({
       {/* Multicam options */}
       {selectedClipIds.size > 1 && (
         <div
-          className="context-menu-item"
+          className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
           onClick={() => {
+            if (!canModifyTargets) return;
             setMulticamDialogOpen(true);
             setContextMenu(null);
           }}
@@ -385,8 +395,9 @@ export function TimelineContextMenu({
       )}
       {clip?.linkedGroupId && (
         <div
-          className="context-menu-item"
+          className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
           onClick={() => {
+            if (!canModifyTargets) return;
             if (contextMenu.clipId) {
               unlinkGroup(contextMenu.clipId);
             }
@@ -399,8 +410,9 @@ export function TimelineContextMenu({
 
       {isVideo && (
         <div
-          className={`context-menu-item ${clip?.reversed ? 'checked' : ''}`}
+          className={`context-menu-item ${clip?.reversed ? 'checked' : ''} ${!canModifyTargets ? 'disabled' : ''}`}
           onClick={() => {
+            if (!canModifyTargets) return;
             if (contextMenu.clipId) {
               toggleClipReverse(contextMenu.clipId);
             }
@@ -410,6 +422,17 @@ export function TimelineContextMenu({
           {clip?.reversed ? '\u2713 ' : ''}Reverse Playback
         </div>
       )}
+
+      <div
+        className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
+        onClick={() => {
+          if (!canModifyTargets || !contextMenu.clipId) return;
+          createSubcompositionFromSelection(contextMenu.clipId);
+          setContextMenu(null);
+        }}
+      >
+        Create Subcomposition
+      </div>
 
       {/* Generate Waveform option for audio clips */}
       {clip?.source?.type === 'audio' && (
@@ -497,8 +520,9 @@ export function TimelineContextMenu({
 
       <div className="context-menu-separator" />
       <div
-        className="context-menu-item danger"
+        className={`context-menu-item danger ${!canModifyTargets ? 'disabled' : ''}`}
         onClick={() => {
+          if (!canModifyTargets) return;
           if (contextMenu.clipId) {
             removeClip(contextMenu.clipId);
           }

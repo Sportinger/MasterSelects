@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   addClipCustomNodeDefinition,
+  buildAINodeAuthoringContext,
   buildClipNodeGraph,
   cloneClipNodeGraph,
+  connectClipNodeGraphPorts,
   createClipAICustomNodeDefinition,
   createClipNodeGraphState,
+  disconnectClipNodeGraphEdge,
   remapClipNodeGraphEffectIds,
   showClipBuiltInNode,
   updateClipCustomNodeDefinition,
   updateClipNodeGraphLayout,
 } from '../../src/services/nodeGraph';
-import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
+import { DEFAULT_TEXT_PROPERTIES, DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
 import { createDefaultColorCorrectionState, type ClipMask, type Effect, type TimelineClip, type TimelineTrack } from '../../src/types';
 
 function createClip(overrides: Partial<TimelineClip> = {}): TimelineClip {
@@ -321,7 +324,7 @@ describe('buildClipNodeGraph', () => {
     ]);
     expect(graph.nodes.find((node) => node.id === 'custom-ai')).toMatchObject({
       label: 'AI Node',
-      params: { status: 'draft', prompt: 'empty' },
+      params: { status: 'draft', prompt: 'empty', bypassed: false },
     });
     expect(nodeGraph.nodes.find((node) => node.id === 'custom-ai')?.backing).toEqual({
       kind: 'clip-custom-node',
@@ -336,6 +339,92 @@ describe('buildClipNodeGraph', () => {
     ]);
   });
 
+  it('persists manual node graph links and disconnections', () => {
+    const clip = createClip();
+    const track = createTrack();
+    const definition = createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node');
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+    const bypassed = connectClipNodeGraphPorts(
+      { ...clip, nodeGraph },
+      {
+        fromNodeId: 'source',
+        fromPortId: 'texture',
+        toNodeId: 'output',
+        toPortId: 'input',
+      },
+      track,
+    );
+    const disconnected = disconnectClipNodeGraphEdge(
+      { ...clip, nodeGraph: bypassed },
+      'source:texture->custom-ai:input',
+      track,
+    );
+    const graph = buildClipNodeGraph({ ...clip, nodeGraph: disconnected }, track);
+
+    expect(graph.edges.filter((edge) => edge.type === 'texture').map((edge) => [
+      edge.fromNodeId,
+      edge.fromPortId,
+      edge.toNodeId,
+      edge.toPortId,
+    ])).toEqual([
+      ['source', 'texture', 'output', 'input'],
+    ]);
+    expect(disconnected.manualEdges).toEqual(graph.edges);
+    expect(cloneClipNodeGraph(disconnected)?.manualEdges).toEqual(graph.edges);
+  });
+
+  it('builds AI node authoring context with graph and timeline signals', () => {
+    const clip = createClip();
+    const track = createTrack();
+    const definition = createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node');
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+    const context = buildAINodeAuthoringContext(
+      { ...clip, nodeGraph },
+      definition,
+      { clips: [{ ...clip, nodeGraph }], tracks: [track] },
+    );
+
+    expect(context).toContain('MASTERSELECTS AI NODE AUTHORING CONTEXT');
+    expect(context).toContain('Current node:');
+    expect(context).toContain('source.texture -> custom-ai.input (texture)');
+    expect(context).toContain('custom-ai.output -> output.input (texture)');
+    expect(context).toContain('Timeline clips:');
+  });
+
+  it('includes text clip details in AI node authoring context', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1920;
+    canvas.height = 1080;
+    const clip = createClip({
+      source: { type: 'text', textCanvas: canvas },
+      textProperties: {
+        ...structuredClone(DEFAULT_TEXT_PROPERTIES),
+        text: 'Animate this sentence like it writes itself.',
+        fontFamily: 'Inter',
+        fontSize: 96,
+        fontWeight: 700,
+      },
+    });
+    const track = createTrack();
+    const definition = createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node');
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+    const context = buildAINodeAuthoringContext(
+      { ...clip, nodeGraph },
+      definition,
+      { clips: [{ ...clip, nodeGraph }], tracks: [track] },
+    );
+
+    expect(context).toContain('Text source:');
+    expect(context).toContain('text="Animate this sentence like it writes itself."');
+    expect(context).toContain('canvas=1920x1080');
+    expect(context).toContain('fontFamily=Inter');
+    expect(context).toContain('fontSize=96');
+    expect(context).toContain('layout:');
+    expect(context).toContain('contentBounds=');
+    expect(context).toContain('chars=');
+    expect(context).toContain('layout.characters');
+  });
+
   it('updates and clones AI custom node authoring state', () => {
     const clip = createClip();
     const track = createTrack();
@@ -346,10 +435,26 @@ describe('buildClipNodeGraph', () => {
       'custom-ai',
       {
         label: 'Motion Curve Builder',
+        bypassed: true,
         status: 'ready',
+        parameterSchema: [
+          { id: 'amount', label: 'Amount', type: 'number', default: 0.5, min: 0, max: 1 },
+        ],
+        params: { amount: 0.75 },
         ai: {
           prompt: 'Create a motion curve from the incoming video.',
+          plan: 'Read the incoming texture and remap pixels into a motion curve texture.',
           generatedCode: 'defineNode({ /* generated */ })',
+          conversation: [
+            {
+              id: 'message-1',
+              role: 'assistant',
+              kind: 'plan',
+              content: 'Read the incoming texture and remap pixels into a motion curve texture.',
+              createdAt: 10,
+            },
+          ],
+          conversationSummary: 'plan: remap texture into motion curve',
         },
       },
       track,
@@ -359,15 +464,85 @@ describe('buildClipNodeGraph', () => {
     expect(updated.customNodes?.[0]).toMatchObject({
       id: 'custom-ai',
       label: 'Motion Curve Builder',
+      bypassed: true,
       status: 'ready',
+      parameterSchema: [
+        { id: 'amount', label: 'Amount', type: 'number', default: 0.5, min: 0, max: 1 },
+      ],
+      params: { amount: 0.75 },
       ai: {
         prompt: 'Create a motion curve from the incoming video.',
+        plan: 'Read the incoming texture and remap pixels into a motion curve texture.',
         generatedCode: 'defineNode({ /* generated */ })',
+        conversation: [
+          {
+            id: 'message-1',
+            role: 'assistant',
+            kind: 'plan',
+            content: 'Read the incoming texture and remap pixels into a motion curve texture.',
+            createdAt: 10,
+          },
+        ],
+        conversationSummary: 'plan: remap texture into motion curve',
       },
     });
     expect(cloned).not.toBe(updated);
     expect(cloned?.customNodes?.[0]).not.toBe(updated.customNodes?.[0]);
     expect(cloned?.customNodes?.[0]?.ai).toEqual(updated.customNodes?.[0]?.ai);
+    expect(cloned?.customNodes?.[0]?.ai.conversation).not.toBe(updated.customNodes?.[0]?.ai.conversation);
+    expect(cloned?.customNodes?.[0]?.parameterSchema).toEqual(updated.customNodes?.[0]?.parameterSchema);
+    expect(cloned?.customNodes?.[0]?.parameterSchema).not.toBe(updated.customNodes?.[0]?.parameterSchema);
+  });
+
+  it('repairs missing generated code from the last stored code conversation while cloning', () => {
+    const clip = createClip();
+    const track = createTrack();
+    const definition = {
+      ...createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node'),
+      ai: {
+        prompt: 'make it brighter',
+        conversation: [
+          {
+            id: 'message-1',
+            role: 'assistant' as const,
+            kind: 'code' as const,
+            content: '```js\ndefineNode({ process(input) { return { output: input.input }; } })\n```',
+            createdAt: 10,
+          },
+        ],
+      },
+    };
+
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+
+    expect(nodeGraph.customNodes?.[0].ai.generatedCode).toBe(
+      'defineNode({ process(input) { return { output: input.input }; } })',
+    );
+  });
+
+  it('does not repair generated code when the user explicitly cleared it', () => {
+    const clip = createClip();
+    const track = createTrack();
+    const definition = {
+      ...createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node'),
+      ai: {
+        prompt: 'make it brighter',
+        generatedCode: '',
+        conversation: [
+          {
+            id: 'message-1',
+            role: 'assistant' as const,
+            kind: 'code' as const,
+            content: 'defineNode({ process(input) { return { output: input.input }; } })',
+            createdAt: 10,
+          },
+        ],
+      },
+    };
+
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+
+    expect(nodeGraph.customNodes?.[0].ai.generatedCode).toBe('');
   });
 
   it('can force field-backed built-in nodes to stay visible from graph authoring', () => {

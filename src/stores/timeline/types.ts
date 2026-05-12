@@ -20,11 +20,15 @@ import type {
   RuntimeColorGrade,
   TextClipProperties,
   Text3DProperties,
+  TextBoundsPath,
   MathSceneDefinition,
   MathObject,
   MathParameter,
   Layer,
+  NodeGraphConnectionRequest,
   NodeGraphLayout,
+  ClipCustomNodeParamDefinition,
+  ClipCustomNodeParamValue,
   SerializableClip,
 } from '../../types';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
@@ -54,6 +58,7 @@ export type {
   Composition,
   TextClipProperties,
   Text3DProperties,
+  TextBoundsPath,
   MathSceneDefinition,
   MathObject,
   MathParameter,
@@ -207,6 +212,7 @@ export interface TrackActions {
   setTrackMuted: (id: string, muted: boolean) => void;
   setTrackVisible: (id: string, visible: boolean) => void;
   setTrackSolo: (id: string, solo: boolean) => void;
+  setTrackLocked: (id: string, locked: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;
   scaleTracksOfType: (type: 'video' | 'audio', delta: number) => void;
   // Track parenting (layer linking)
@@ -219,6 +225,9 @@ export interface TrackActions {
 export interface TextClipActions {
   addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
   updateTextProperties: (clipId: string, props: Partial<TextClipProperties>) => void;
+  updateTextBounds: (clipId: string, updates: Partial<TextBoundsPath>) => void;
+  updateTextBoundsVertex: (clipId: string, vertexId: string, updates: Partial<MaskVertex>, recordKeyframe?: boolean) => void;
+  updateTextBoundsVertices: (clipId: string, vertexUpdates: Array<{ vertexId: string; updates: Partial<MaskVertex> }>, recordKeyframe?: boolean) => void;
 }
 
 // Solid clip actions (extracted to solidClipSlice)
@@ -321,7 +330,7 @@ export type ClipTransformUpdate = Omit<Partial<ClipTransform>, 'position' | 'sca
 // Core clip actions (remain in clipSlice)
 export interface CoreClipActions {
   addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string, mediaTypeOverride?: string) => Promise<void>;
-  addCompClip: (trackId: string, composition: Composition, startTime: number) => void;
+  addCompClip: (trackId: string, composition: Composition, startTime: number) => Promise<void>;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   removeClip: (id: string) => void;
   moveClip: (id: string, newStartTime: number, newTrackId?: string, skipLinked?: boolean, skipGroup?: boolean, skipTrim?: boolean, excludeClipIds?: string[]) => void;
@@ -432,9 +441,11 @@ export interface KeyframeActions {
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
   getInterpolatedCameraSettings: (clipId: string, clipLocalTime: number) => import('../mediaStore/types').SceneCameraSettings;
   getInterpolatedEffects: (clipId: string, clipLocalTime: number) => Effect[];
+  getInterpolatedNodeGraphParams: (clipId: string, nodeId: string, clipLocalTime: number) => Record<string, ClipCustomNodeParamValue>;
   getInterpolatedColorCorrection: (clipId: string, clipLocalTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedVectorAnimationSettings: (clipId: string, clipLocalTime: number) => VectorAnimationClipSettings;
   getInterpolatedMasks: (clipId: string, clipLocalTime: number) => ClipMask[] | undefined;
+  getInterpolatedTextBounds: (clipId: string, clipLocalTime: number) => TextBoundsPath | undefined;
   getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
   getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
@@ -444,6 +455,9 @@ export interface KeyframeActions {
   addMaskPathKeyframe: (clipId: string, maskId: string, pathValue?: Keyframe['pathValue'], time?: number, easing?: string | null) => void;
   recordMaskPathKeyframe: (clipId: string, maskId: string) => void;
   disableMaskPathKeyframes: (clipId: string, maskId: string, pathValue?: Keyframe['pathValue']) => void;
+  addTextBoundsPathKeyframe: (clipId: string, pathValue?: Keyframe['pathValue'], time?: number, easing?: string | null) => void;
+  recordTextBoundsPathKeyframe: (clipId: string) => void;
+  disableTextBoundsPathKeyframes: (clipId: string, pathValue?: Keyframe['pathValue']) => void;
   toggleTrackExpanded: (trackId: string) => void;
   isTrackExpanded: (trackId: string) => boolean;
   toggleTrackPropertyGroupExpanded: (trackId: string, groupName: string) => void;
@@ -490,10 +504,16 @@ export interface NodeGraphActions {
   updateClipAICustomNode: (clipId: string, nodeId: string, updates: {
     label?: string;
     description?: string;
+    bypassed?: boolean;
+    params?: Record<string, ClipCustomNodeParamValue>;
+    parameterSchema?: ClipCustomNodeParamDefinition[];
     status?: import('../../types').ClipCustomNodeAuthoringStatus;
     ai?: Partial<import('../../types').ClipCustomNodeAIAuthoring>;
   }) => void;
+  removeClipNodeGraphNode: (clipId: string, nodeId: string) => void;
   showClipNodeGraphBuiltIn: (clipId: string, node: import('../../types').ClipNodeGraphForcedBuiltIn) => void;
+  connectClipNodeGraphPorts: (clipId: string, connection: NodeGraphConnectionRequest) => void;
+  disconnectClipNodeGraphEdge: (clipId: string, edgeId: string) => void;
   moveClipNodeGraphNode: (clipId: string, nodeId: string, layout: NodeGraphLayout) => void;
 }
 

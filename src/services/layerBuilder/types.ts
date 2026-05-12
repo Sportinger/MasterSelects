@@ -6,7 +6,9 @@ import type {
   Effect,
   RuntimeColorGrade,
   AnimatableProperty,
+  ClipCustomNodeParamValue,
   ClipTransform,
+  TextBoundsPath,
 } from '../../types';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
@@ -40,8 +42,10 @@ export interface FrameContext {
   // Store functions
   getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
+  getInterpolatedNodeGraphParams: (clipId: string, nodeId: string, localTime: number) => Record<string, ClipCustomNodeParamValue>;
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
+  getInterpolatedTextBounds: (clipId: string, localTime: number) => TextBoundsPath | undefined;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;

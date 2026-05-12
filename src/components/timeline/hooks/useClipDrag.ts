@@ -85,6 +85,11 @@ export function useClipDrag({
       const currentClipMap = clipMapRef.current;
       const clip = currentClipMap.get(clipId);
       if (!clip) return;
+      const isClipLocked = (id: string): boolean => {
+        const candidate = currentClipMap.get(id);
+        return !!candidate && tracks.find(track => track.id === candidate.trackId)?.locked === true;
+      };
+      if (isClipLocked(clipId)) return;
 
       // Shift+Click: Toggle selection (add/remove from multi-selection)
       if (e.shiftKey) {
@@ -108,6 +113,7 @@ export function useClipDrag({
       const otherSelectedIds = finalSelectedIds.size > 1 && finalSelectedIds.has(clipId)
         ? [...finalSelectedIds].filter(id => id !== clipId)
         : [];
+      if ([clipId, ...otherSelectedIds].some(isClipLocked)) return;
 
       const clipElement = e.currentTarget as HTMLElement;
       const clipRect = clipElement.getBoundingClientRect();
@@ -165,7 +171,7 @@ export function useClipDrag({
             // Only change to a different track if both delay and distance thresholds are met
             // AND the track type matches (video clips can't go on audio tracks and vice versa)
             const trackTypeMatches = !requiredTrackType || track.type === requiredTrackType;
-            if ((trackChangeAllowed || track.id === drag.originalTrackId) && trackTypeMatches) {
+            if ((trackChangeAllowed || track.id === drag.originalTrackId) && trackTypeMatches && !track.locked) {
               newTrackId = track.id;
             }
             break;
@@ -278,7 +284,7 @@ export function useClipDrag({
           const targetTrack = tracks.find(t => t.id === newTrackId);
           if (targetTrack) {
             const altTracks = tracks.filter(t =>
-              t.type === targetTrack.type && t.id !== newTrackId && t.id !== drag.originalTrackId
+              t.type === targetTrack.type && t.id !== newTrackId && t.id !== drag.originalTrackId && !t.locked
             );
             for (const alt of altTracks) {
               const altResult = getPositionWithResistance(

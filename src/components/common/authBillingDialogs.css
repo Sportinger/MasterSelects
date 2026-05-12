@@ -1386,3 +1386,195 @@
     width: 100%;
   }
 }
+
+/* Billing success celebration */
+
+.billing-success-celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 13000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  pointer-events: none;
+}
+
+.billing-success-confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.billing-success-confetti-piece {
+  position: absolute;
+  top: -24px;
+  left: var(--billing-confetti-x);
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--billing-confetti-color);
+  opacity: 0;
+  transform: translate3d(-50%, -20px, 0) rotate(var(--billing-confetti-rotate));
+  animation: billing-confetti-fall var(--billing-confetti-duration) ease-in var(--billing-confetti-delay) 2;
+}
+
+.billing-success-card {
+  position: relative;
+  width: min(430px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(52, 211, 153, 0.24), transparent 36%),
+    radial-gradient(circle at 12% 22%, rgba(96, 165, 250, 0.20), transparent 34%),
+    rgba(16, 18, 24, 0.96);
+  box-shadow:
+    0 22px 80px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  color: var(--text-primary, #f2f5ff);
+  pointer-events: auto;
+  text-align: center;
+  animation: billing-success-pop 260ms ease-out;
+}
+
+.billing-success-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.58);
+  cursor: pointer;
+}
+
+.billing-success-close:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.billing-success-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(52, 211, 153, 0.95), rgba(96, 165, 250, 0.95));
+  color: #051018;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0;
+  box-shadow: 0 12px 34px rgba(52, 211, 153, 0.22);
+}
+
+.billing-success-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.billing-success-kicker {
+  color: rgba(167, 243, 208, 0.86);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.billing-success-copy h2 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.97);
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.billing-success-copy p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.billing-success-balance {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  border-radius: 14px;
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.billing-success-balance span {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.billing-success-balance strong {
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 780;
+}
+
+.billing-success-plan {
+  color: rgba(255, 255, 255, 0.50);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.billing-success-action {
+  min-width: 140px;
+  margin-top: 0;
+}
+
+@keyframes billing-confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, -20px, 0) rotate(var(--billing-confetti-rotate));
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(-50% + 70px), 110vh, 0) rotate(calc(var(--billing-confetti-rotate) + 520deg));
+  }
+}
+
+@keyframes billing-success-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .billing-success-confetti-piece,
+  .billing-success-card {
+    animation: none;
+  }
+
+  .billing-success-confetti-piece {
+    display: none;
+  }
+}

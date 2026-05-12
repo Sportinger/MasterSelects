@@ -29,6 +29,7 @@ import {
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
+import { markDynamicCanvasUpdated } from '../../services/canvasVersion';
 import { resolveGaussianSplatSequenceData } from '../../utils/gaussianSplatSequence';
 import { resolveModelSequenceData } from '../../utils/modelSequence';
 
@@ -1194,15 +1195,33 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       if (serializedClip.sourceType === 'text' && serializedClip.textProperties) {
         const { textRenderer } = await import('../../services/textRenderer');
         const { googleFontsService } = await import('../../services/googleFontsService');
+        const { createTextBoundsFromRect, resolveTextBoxRect } = await import('../../services/textLayout');
+        const activeComp = mediaStore.getActiveComposition?.();
+        const compWidth = activeComp?.width || 1920;
+        const compHeight = activeComp?.height || 1080;
+        const textProperties = structuredClone(serializedClip.textProperties);
+        if (textProperties.textBounds?.vertices?.length) {
+          textProperties.boxEnabled = true;
+        } else if (textProperties.boxEnabled) {
+          const box = resolveTextBoxRect(textProperties, compWidth, compHeight);
+          textProperties.textBounds = createTextBoundsFromRect(
+            box,
+            compWidth,
+            compHeight,
+            undefined,
+            { clampToCanvas: false },
+          );
+        }
 
         // Load the font first
         await googleFontsService.loadFont(
-          serializedClip.textProperties.fontFamily,
-          serializedClip.textProperties.fontWeight
+          textProperties.fontFamily,
+          textProperties.fontWeight
         );
 
-        // Render text to canvas
-        const textCanvas = textRenderer.render(serializedClip.textProperties);
+        // Render text to a per-clip canvas matching the active composition.
+        const textCanvas = textRenderer.createCanvas(compWidth, compHeight);
+        textRenderer.render(textProperties, textCanvas);
 
         const textClip: TimelineClip = {
           id: serializedClip.id,
@@ -1225,7 +1244,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
           nodeGraph: restoreClipNodeGraph(serializedClip),
           masks: serializedClip.masks,
-          textProperties: serializedClip.textProperties,
+          textProperties,
           speed: serializedClip.speed,
           preservesPitch: serializedClip.preservesPitch,
           isLoading: false,
@@ -1253,6 +1272,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         const ctx = canvas.getContext('2d')!;
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, compWidth, compHeight);
+        markDynamicCanvasUpdated(canvas, 'solid');
 
         const solidClip: TimelineClip = {
           id: serializedClip.id,

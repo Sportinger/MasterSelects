@@ -10,6 +10,7 @@ import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
+import { cloneClipNodeGraph } from '../nodeGraph';
 import type {
   FlashBoardGenerationMetadata,
   FlashBoardStoreState,
@@ -207,7 +208,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         params: e.params || {},
       })),
       colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
-      nodeGraph: c.nodeGraph ? structuredClone(c.nodeGraph) : undefined,
+      nodeGraph: cloneClipNodeGraph(c.nodeGraph),
       masks: (c.masks || []).map((m) => ({
         id: m.id,
         name: m.name || 'Mask',

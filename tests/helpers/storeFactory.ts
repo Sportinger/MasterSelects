@@ -24,6 +24,7 @@ import { createClipEffectSlice } from '../../src/stores/timeline/clipEffectSlice
 import { createColorCorrectionSlice } from '../../src/stores/timeline/colorCorrectionSlice';
 import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSlice';
 import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipSlice';
+import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
 import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
 
@@ -107,6 +108,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
+    const nodeGraphActions = createNodeGraphSlice(set, get);
     const positioningUtils = createPositioningUtils(set, get);
 
     // Simple playback actions (inlined to avoid importing playbackSlice which pulls in engine)
@@ -272,6 +274,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...colorCorrectionActions,
       ...linkedGroupActions,
       ...downloadClipActions,
+      ...nodeGraphActions,
       ...positioningUtils,
       ...playbackActions,
       ...stubActions,

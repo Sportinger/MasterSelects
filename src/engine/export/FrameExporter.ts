@@ -482,6 +482,7 @@ export class FrameExporter {
       getInterpolatedEffects: state.getInterpolatedEffects,
       getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,
       getInterpolatedVectorAnimationSettings: state.getInterpolatedVectorAnimationSettings,
+      getInterpolatedTextBounds: state.getInterpolatedTextBounds,
       getSourceTimeForClip: state.getSourceTimeForClip,
       getInterpolatedSpeed: state.getInterpolatedSpeed,
     };

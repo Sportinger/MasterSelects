@@ -16,6 +16,11 @@ import {
   findFirstTrackWithoutOverlap,
 } from '../utils/externalDragPlacement';
 import {
+  getNextVideoNewTrackGestureState,
+  initialVideoNewTrackGestureState,
+  type VideoNewTrackGestureState,
+} from '../utils/externalDragNewTrackGesture';
+import {
   EXTERNAL_DRAG_BRIDGE_EVENT,
   getExternalDragPayload,
   type ExternalDragBridgeEventDetail,
@@ -151,7 +156,7 @@ interface UseExternalDropProps {
   pixelToTime: (pixel: number) => number;
   addTrack: (type: 'video' | 'audio') => string | undefined;
   addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string, mediaTypeOverride?: string) => void;
-  addCompClip: (trackId: string, comp: Composition, startTime: number) => void;
+  addCompClip: (trackId: string, comp: Composition, startTime: number) => void | Promise<void>;
   addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
   addMeshClip: (trackId: string, startTime: number, meshType: import('../../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
@@ -302,6 +307,37 @@ export function useExternalDrop({
   const dragCounterRef = useRef(0);
   const dragMetadataCacheRef = useRef<{ url: string; duration: number; hasAudio: boolean } | null>(null);
   const dragMetadataPendingRef = useRef<string | null>(null);
+  const videoNewTrackGestureRef = useRef<VideoNewTrackGestureState>({ ...initialVideoNewTrackGestureState });
+
+  const resetVideoNewTrackGesture = useCallback(() => {
+    videoNewTrackGestureRef.current = { ...initialVideoNewTrackGestureState };
+  }, []);
+
+  const clearExternalDragState = useCallback(() => {
+    resetVideoNewTrackGesture();
+    setExternalDrag(null);
+  }, [resetVideoNewTrackGesture]);
+
+  const updateVideoNewTrackGesture = useCallback((clientY: number, isAudio: boolean) => {
+    const rect = timelineRef.current?.getBoundingClientRect();
+    if (!rect) {
+      videoNewTrackGestureRef.current = { lastClientY: clientY, isOffered: false };
+      return false;
+    }
+
+    const next = getNextVideoNewTrackGestureState(videoNewTrackGestureRef.current, {
+      clientY,
+      timelineTop: rect.top,
+      isAudio,
+    });
+    videoNewTrackGestureRef.current = next;
+    return next.isOffered;
+  }, [timelineRef]);
+
+  const applyVideoNewTrackOffer = useCallback((state: ExternalDragState): ExternalDragState => ({
+    ...state,
+    showVideoNewTrackZone: updateVideoNewTrackGesture(state.y, !!state.isAudio),
+  }), [updateVideoNewTrackGesture]);
 
   const getDesiredStartTime = useCallback((clientX: number) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -372,8 +408,9 @@ export function useExternalDrop({
       isAudio,
       hasAudio: previewHasAudio,
       duration: previewDuration,
+      showVideoNewTrackZone: updateVideoNewTrackGesture(y, isAudio),
     };
-  }, [tracks, clips, resolveTrackStartTime]);
+  }, [tracks, clips, resolveTrackStartTime, updateVideoNewTrackGesture]);
 
   const updateResolvedDragMetadata = useCallback((cacheKey: string, duration: number, hasAudio: boolean) => {
     dragMetadataCacheRef.current = { url: cacheKey, duration, hasAudio };
@@ -673,7 +710,7 @@ export function useExternalDrop({
 
         // Compositions only on video tracks
         if (isAudioTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -682,7 +719,7 @@ export function useExternalDrop({
             hasAudio: true,
             isVideo: true,
             isAudio: false,
-          });
+          }));
           return;
         }
         setExternalDrag(buildTrackPreviewState({
@@ -734,7 +771,7 @@ export function useExternalDrop({
 
         // Audio-only files can only go on audio tracks
         if (isAudioDrag && isVideoTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -743,7 +780,7 @@ export function useExternalDrop({
             hasAudio,
             isVideo: false,
             isAudio: true,
-          });
+          }));
           return;
         }
 
@@ -777,7 +814,7 @@ export function useExternalDrop({
           : textItem?.duration ?? 5;
 
         if (isAudioTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -786,7 +823,7 @@ export function useExternalDrop({
             hasAudio: false,
             isVideo: true,
             isAudio: false,
-          });
+          }));
           return;
         }
         setExternalDrag(buildTrackPreviewState({
@@ -814,7 +851,7 @@ export function useExternalDrop({
           : solidItem?.duration ?? 5;
 
         if (isAudioTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -823,7 +860,7 @@ export function useExternalDrop({
             hasAudio: false,
             isVideo: true,
             isAudio: false,
-          });
+          }));
           return;
         }
         setExternalDrag(buildTrackPreviewState({
@@ -851,7 +888,7 @@ export function useExternalDrop({
           : meshItem?.duration ?? 10;
 
         if (isAudioTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -860,7 +897,7 @@ export function useExternalDrop({
             hasAudio: false,
             isVideo: true,
             isAudio: false,
-          });
+          }));
           return;
         }
         setExternalDrag(buildTrackPreviewState({
@@ -888,7 +925,7 @@ export function useExternalDrop({
           : cameraItem?.duration ?? 10;
 
         if (isAudioTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -897,7 +934,7 @@ export function useExternalDrop({
             hasAudio: false,
             isVideo: true,
             isAudio: false,
-          });
+          }));
           return;
         }
         setExternalDrag(buildTrackPreviewState({
@@ -925,7 +962,7 @@ export function useExternalDrop({
           : effectorItem?.duration ?? 10;
 
         if (isAudioTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -934,7 +971,7 @@ export function useExternalDrop({
             hasAudio: false,
             isVideo: true,
             isAudio: false,
-          });
+          }));
           return;
         }
         setExternalDrag(buildTrackPreviewState({
@@ -988,7 +1025,7 @@ export function useExternalDrop({
 
         // Audio files on video tracks: keep externalDrag alive but don't assign this track
         if (fileIsAudio && isVideoTrack) {
-          setExternalDrag({
+          setExternalDrag(applyVideoNewTrackOffer({
             trackId: '',
             startTime,
             x: e.clientX,
@@ -997,7 +1034,7 @@ export function useExternalDrop({
             hasAudio: true,
             isAudio: true,
             isVideo: false,
-          });
+          }));
           return;
         }
 
@@ -1013,7 +1050,7 @@ export function useExternalDrop({
         }));
       }
     },
-    [tracks, getDesiredStartTime, buildTrackPreviewState, requestVideoDragMetadata, updateResolvedDragMetadata]
+    [tracks, getDesiredStartTime, buildTrackPreviewState, requestVideoDragMetadata, updateResolvedDragMetadata, applyVideoNewTrackOffer]
   );
 
   // Handle external file drag over track
@@ -1052,6 +1089,7 @@ export function useExternalDrop({
             audioTrackId: undefined,
             videoTrackId: undefined,
             newTrackType: null,
+            showVideoNewTrackZone: updateVideoNewTrackGesture(e.clientY, isAudioDrag),
           } : null);
           return;
         }
@@ -1068,6 +1106,7 @@ export function useExternalDrop({
             audioTrackId: undefined,
             videoTrackId: undefined,
             newTrackType: null,
+            showVideoNewTrackZone: updateVideoNewTrackGesture(e.clientY, false),
           } : null);
           return;
         }
@@ -1135,7 +1174,7 @@ export function useExternalDrop({
         */
       }
     },
-    [tracks, getDesiredStartTime, buildTrackPreviewState, resolveImmediateDragPreview]
+    [tracks, getDesiredStartTime, buildTrackPreviewState, resolveImmediateDragPreview, updateVideoNewTrackGesture]
   );
 
   // Handle external file drag leave
@@ -1167,11 +1206,27 @@ export function useExternalDrop({
 
       // Audio files can only create audio tracks
       if (preview.isAudio && trackType === 'video') {
+        updateVideoNewTrackGesture(e.clientY, true);
         e.dataTransfer.dropEffect = 'none';
         return;
       }
       if (!preview.isAudio && trackType === 'audio') {
         e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+
+      const showVideoNewTrackZone = trackType === 'video'
+        ? updateVideoNewTrackGesture(e.clientY, preview.isAudio)
+        : videoNewTrackGestureRef.current.isOffered;
+      if (trackType === 'video' && !showVideoNewTrackZone) {
+        e.dataTransfer.dropEffect = 'none';
+        setExternalDrag((prev) => prev ? {
+          ...prev,
+          x: e.clientX,
+          y: e.clientY,
+          newTrackType: null,
+          showVideoNewTrackZone: false,
+        } : null);
         return;
       }
 
@@ -1192,10 +1247,11 @@ export function useExternalDrop({
           newTrackType: trackType,
           isVideo: preview.isVideo,
           isAudio: preview.isAudio,
+          showVideoNewTrackZone,
         }));
       }
     },
-    [timelineRef, getDesiredStartTime, resolveImmediateDragPreview]
+    [timelineRef, getDesiredStartTime, resolveImmediateDragPreview, updateVideoNewTrackGesture]
   );
 
   // Handle drop on "new track" zone - creates new track and adds clip
@@ -1204,11 +1260,16 @@ export function useExternalDrop({
       e.preventDefault();
       e.stopPropagation();
 
+      if (trackType === 'video' && !updateVideoNewTrackGesture(e.clientY, false)) {
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
+
       const cachedDuration =
         externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
 
       dragCounterRef.current = 0;
-      setExternalDrag(null);
+      clearExternalDragState();
 
       // Validate file type matches track type BEFORE creating track
       const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
@@ -1384,7 +1445,7 @@ export function useExternalDrop({
         }
       }
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, externalDrag, timelineRef]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture]
   );
 
   // Handle external file drop on track
@@ -1400,7 +1461,7 @@ export function useExternalDrop({
         externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
 
       dragCounterRef.current = 0;
-      setExternalDrag(null);
+      clearExternalDragState();
 
       // Get track type for validation
       const targetTrack = tracks.find((t) => t.id === trackId);
@@ -1569,7 +1630,7 @@ export function useExternalDrop({
         }
       }
     },
-    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime]
+    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime, clearExternalDragState]
   );
 
   useEffect(() => {
@@ -1579,14 +1640,14 @@ export function useExternalDrop({
 
       if (detail.phase === 'cancel') {
         dragCounterRef.current = 0;
-        setExternalDrag(null);
+        clearExternalDragState();
         return;
       }
 
       const payload = getExternalDragPayload();
       if (!payload) {
         dragCounterRef.current = 0;
-        setExternalDrag(null);
+        clearExternalDragState();
         return;
       }
 
@@ -1594,7 +1655,7 @@ export function useExternalDrop({
       if (!target) {
         if (detail.phase === 'drop') {
           dragCounterRef.current = 0;
-          setExternalDrag(null);
+          clearExternalDragState();
         } else {
           setExternalDrag((prev) => prev ? {
             ...prev,
@@ -1604,6 +1665,7 @@ export function useExternalDrop({
             audioTrackId: undefined,
             videoTrackId: undefined,
             newTrackType: null,
+            showVideoNewTrackZone: updateVideoNewTrackGesture(detail.clientY, payload.isAudio),
           } : null);
         }
         return;
@@ -1635,6 +1697,8 @@ export function useExternalDrop({
     handleNewTrackDrop,
     handleTrackDragOver,
     handleTrackDrop,
+    clearExternalDragState,
+    updateVideoNewTrackGesture,
   ]);
 
   // Container-level drag leave: fully clear externalDrag when cursor leaves the timeline area
@@ -1644,9 +1708,9 @@ export function useExternalDrop({
     // Only clear when cursor truly leaves the container (not entering a child)
     if (!related || !container.contains(related)) {
       dragCounterRef.current = 0;
-      setExternalDrag(null);
+      clearExternalDragState();
     }
-  }, []);
+  }, [clearExternalDragState]);
 
   return {
     externalDrag,

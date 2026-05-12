@@ -22,6 +22,135 @@
   pointer-events: none;
 }
 
+.preview-text-editor-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  pointer-events: none;
+}
+
+.preview-text-area-capture {
+  position: absolute;
+  inset: 0;
+  cursor: text;
+  pointer-events: auto;
+}
+
+.preview-text-draft-box {
+  position: absolute;
+  border: 1px solid #ff3b30;
+  background: rgba(255, 59, 48, 0.08);
+  box-shadow: 0 0 0 1px rgba(5, 10, 18, 0.7);
+  pointer-events: none;
+}
+
+.preview-text-editor-input {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  resize: none;
+  transform-origin: 0 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.preview-text-editor-input:hover,
+.preview-text-editor-input:focus,
+.preview-text-editor-input.editing {
+  border-color: transparent;
+}
+
+.preview-text-editor-input.editing {
+  background: transparent;
+  box-shadow: none;
+}
+
+.preview-text-editor-input::selection {
+  color: transparent;
+  background: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.preview-text-editor-input::-moz-selection {
+  color: transparent;
+  background: transparent;
+}
+
+.preview-text-selection-highlight {
+  fill: rgba(0, 112, 255, 0.66);
+  pointer-events: none;
+}
+
+.preview-text-bounds-svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.preview-text-bounds-outline {
+  fill: none;
+  stroke: #ff3b30;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: crispEdges;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.85));
+  pointer-events: none;
+}
+
+.preview-text-bounds-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  stroke-linecap: square;
+  pointer-events: stroke;
+  cursor: grab;
+}
+
+.preview-text-bounds-edge-hit:active {
+  cursor: grabbing;
+}
+
+.preview-text-bounds-edge-handle {
+  fill: rgba(12, 15, 20, 0.92);
+  stroke: #ff3b30;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+  pointer-events: auto;
+  shape-rendering: crispEdges;
+}
+
+.preview-text-bounds-edge-handle:active {
+  cursor: grabbing;
+}
+
+.preview-text-bounds-vertex {
+  fill: rgba(12, 15, 20, 0.92);
+  stroke: #ff3b30;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  cursor: move;
+  pointer-events: auto;
+  shape-rendering: crispEdges;
+}
+
+.preview-overlay-fullscreen {
+  z-index: 18;
+}
+
 .preview-scene-object-overlay {
   position: absolute;
   left: 50%;

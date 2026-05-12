@@ -119,6 +119,9 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
     riskLevel: 'medium',
     allowedCallers: ['devBridge', 'console', 'internal'],
   }],
+  ['getNodeWorkspaceDebugState', {
+    ...bridgeTelemetry(),
+  }],
 
   // ── LOCAL FILE ACCESS ─────────────────────────────────────────────────
   ['listLocalFiles', { ...localFileAccess(), readOnly: true }],
@@ -158,6 +161,10 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['removeVertex', mutatingMedium()],
   ['updateVertex', mutatingMedium()],
   ['addClipSegment', mutatingMedium()],
+  ['sendAINodePrompt', {
+    ...mutatingMedium(),
+    sensitiveDataAccess: true,
+  }],
 
   // ── MUTATING LOW ──────────────────────────────────────────────────────
   ['createTrack', mutatingLow()],

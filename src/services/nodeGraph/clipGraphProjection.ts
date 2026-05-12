@@ -4,21 +4,24 @@ import type {
   ClipNodeGraph,
   ClipNodeGraphBacking,
   ClipCustomNodeDefinition,
+  ClipCustomNodeAIAuthoring,
   ClipNodeGraphForcedBuiltIn,
   ClipNodeGraphNodeState,
   NodeGraph,
+  NodeGraphConnectionRequest,
   NodeGraphEdge,
   NodeGraphLayout,
   NodeGraphNode,
   NodeGraphPort,
   NodeGraphSignalType,
 } from './types';
+import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 
 const NODE_SPACING_X = 230;
 const MAIN_LANE_Y = 88;
 const AUDIO_LANE_Y = 252;
 
-interface NodeGraphConnection {
+interface NodeGraphChainHead {
   nodeId: string;
   portId: string;
 }
@@ -50,6 +53,72 @@ function edge(
     toPortId,
     type,
   };
+}
+
+function cloneEdge(candidate: NodeGraphEdge): NodeGraphEdge {
+  return { ...candidate };
+}
+
+function cloneManualEdges(edges?: NodeGraphEdge[]): NodeGraphEdge[] | undefined {
+  if (edges === undefined) {
+    return undefined;
+  }
+  return edges.map(cloneEdge);
+}
+
+function getNodePort(
+  node: NodeGraphNode | undefined,
+  portId: string,
+  direction: 'input' | 'output',
+): NodeGraphPort | undefined {
+  if (!node) return undefined;
+  const ports = direction === 'input' ? node.inputs : node.outputs;
+  return ports.find((port) => port.id === portId);
+}
+
+function createValidatedManualEdge(
+  graph: Pick<NodeGraph, 'nodes'>,
+  connection: NodeGraphConnectionRequest,
+): NodeGraphEdge | null {
+  if (connection.fromNodeId === connection.toNodeId) {
+    return null;
+  }
+
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const fromNode = nodesById.get(connection.fromNodeId);
+  const toNode = nodesById.get(connection.toNodeId);
+  const fromPort = getNodePort(fromNode, connection.fromPortId, 'output');
+  const toPort = getNodePort(toNode, connection.toPortId, 'input');
+
+  if (!fromPort || !toPort || fromPort.type !== toPort.type) {
+    return null;
+  }
+
+  return edge(connection.fromNodeId, connection.fromPortId, connection.toNodeId, connection.toPortId, fromPort.type);
+}
+
+function validateManualEdges(graph: Pick<NodeGraph, 'nodes'>, manualEdges: NodeGraphEdge[]): NodeGraphEdge[] {
+  const nextEdges: NodeGraphEdge[] = [];
+  const connectedInputs = new Set<string>();
+  const edgeIds = new Set<string>();
+
+  for (const candidate of manualEdges) {
+    const nextEdge = createValidatedManualEdge(graph, candidate);
+    if (!nextEdge || edgeIds.has(nextEdge.id)) {
+      continue;
+    }
+
+    const inputKey = `${nextEdge.toNodeId}:${nextEdge.toPortId}`;
+    if (connectedInputs.has(inputKey)) {
+      continue;
+    }
+
+    connectedInputs.add(inputKey);
+    edgeIds.add(nextEdge.id);
+    nextEdges.push(nextEdge);
+  }
+
+  return nextEdges;
 }
 
 function isVisualSource(clip: TimelineClip): boolean {
@@ -236,6 +305,7 @@ function createCustomNode(definition: ClipCustomNodeDefinition, depth: number): 
     params: {
       status: definition.status,
       prompt: promptState,
+      bypassed: definition.bypassed === true,
       ...(definition.params ?? {}),
     },
     layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
@@ -270,7 +340,7 @@ function appendProcessingNode(
   previousPortId: string,
   node: NodeGraphNode,
   signalType: NodeGraphSignalType,
-): NodeGraphConnection {
+): NodeGraphChainHead {
   nodes.push(node);
   edges.push(edge(previousNodeId, previousPortId, node.id, 'input', signalType));
   return { nodeId: node.id, portId: 'output' };
@@ -311,7 +381,26 @@ function cloneCustomNodeDefinition(definition: ClipCustomNodeDefinition): ClipCu
     inputs: definition.inputs.map(clonePort),
     outputs: definition.outputs.map(clonePort),
     params: definition.params ? { ...definition.params } : undefined,
-    ai: { ...definition.ai },
+    parameterSchema: definition.parameterSchema?.map((param) => ({
+      ...param,
+      options: param.options?.map((option) => ({ ...option })),
+    })),
+    ai: cloneCustomNodeAIAuthoring(definition.ai),
+  };
+}
+
+function cloneCustomNodeAIAuthoring(ai: ClipCustomNodeAIAuthoring): ClipCustomNodeAIAuthoring {
+  const generatedCode = ai.generatedCode !== undefined
+    ? ai.generatedCode
+    : [...(ai.conversation ?? [])]
+        .reverse()
+        .map((message) => message.kind === 'code' ? extractAINodeGeneratedCode(message.content) : null)
+        .find((code): code is string => !!code);
+
+  return {
+    ...ai,
+    ...(generatedCode ? { generatedCode } : {}),
+    conversation: ai.conversation?.map((message) => ({ ...message })),
   };
 }
 
@@ -336,7 +425,7 @@ function applyClipNodeGraphState(graph: NodeGraph, state?: ClipNodeGraph): NodeG
   }
 
   const layoutsByNodeId = new Map(state.nodes.map((node) => [node.id, node.layout]));
-  return {
+  const graphWithLayouts = {
     ...graph,
     nodes: graph.nodes.map((node) => {
       const storedLayout = layoutsByNodeId.get(node.id);
@@ -345,15 +434,29 @@ function applyClipNodeGraphState(graph: NodeGraph, state?: ClipNodeGraph): NodeG
         : node;
     }),
   };
+
+  if (state.manualEdges === undefined) {
+    return graphWithLayouts;
+  }
+
+  return {
+    ...graphWithLayouts,
+    edges: validateManualEdges(graphWithLayouts, state.manualEdges),
+  };
 }
 
 function buildProjectedClipNodeGraphState(clip: TimelineClip, track?: TimelineTrack): ClipNodeGraph {
   const graph = buildClipNodeGraphView(clip, track);
+  const manualEdges = clip.nodeGraph?.manualEdges === undefined
+    ? undefined
+    : validateManualEdges(graph, clip.nodeGraph.manualEdges);
+
   return {
     version: 1,
     nodes: graph.nodes.map(createNodeState),
     customNodes: cloneCustomNodeDefinitions(clip.nodeGraph?.customNodes),
     forcedBuiltIns: clip.nodeGraph?.forcedBuiltIns ? [...clip.nodeGraph.forcedBuiltIns] : undefined,
+    ...(manualEdges !== undefined ? { manualEdges } : {}),
   };
 }
 
@@ -368,6 +471,18 @@ export function reconcileClipNodeGraphState(
   }
 
   const existingNodesById = new Map(existingState.nodes.map((node) => [node.id, node]));
+  const graphForValidation = buildClipNodeGraphView({
+    ...clip,
+    nodeGraph: {
+      ...projectedState,
+      customNodes: cloneCustomNodeDefinitions(existingState.customNodes),
+      forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
+    },
+  }, track);
+  const manualEdges = existingState.manualEdges === undefined
+    ? undefined
+    : validateManualEdges(graphForValidation, existingState.manualEdges);
+
   return {
     version: 1,
     nodes: projectedState.nodes.map((node) => ({
@@ -376,6 +491,7 @@ export function reconcileClipNodeGraphState(
     })),
     customNodes: cloneCustomNodeDefinitions(existingState.customNodes),
     forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
+    ...(manualEdges !== undefined ? { manualEdges } : {}),
     updatedAt: existingState.updatedAt,
   };
 }
@@ -404,6 +520,55 @@ export function updateClipNodeGraphLayout(
   return {
     ...state,
     nodes,
+    updatedAt: Date.now(),
+  };
+}
+
+export function connectClipNodeGraphPorts(
+  clip: TimelineClip,
+  connection: NodeGraphConnectionRequest,
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const graph = buildClipNodeGraph({ ...clip, nodeGraph: state }, track);
+  const nextEdge = createValidatedManualEdge(graph, connection);
+
+  if (!nextEdge) {
+    return state;
+  }
+
+  const edges = graph.edges
+    .filter((candidate) => (
+      candidate.id !== nextEdge.id &&
+      !(candidate.toNodeId === nextEdge.toNodeId && candidate.toPortId === nextEdge.toPortId)
+    ))
+    .map(cloneEdge);
+
+  edges.push(nextEdge);
+
+  return {
+    ...state,
+    manualEdges: validateManualEdges(graph, edges),
+    updatedAt: Date.now(),
+  };
+}
+
+export function disconnectClipNodeGraphEdge(
+  clip: TimelineClip,
+  edgeId: string,
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const graph = buildClipNodeGraph({ ...clip, nodeGraph: state }, track);
+  const edges = graph.edges.filter((candidate) => candidate.id !== edgeId).map(cloneEdge);
+
+  if (edges.length === graph.edges.length) {
+    return state;
+  }
+
+  return {
+    ...state,
+    manualEdges: validateManualEdges(graph, edges),
     updatedAt: Date.now(),
   };
 }
@@ -446,6 +611,32 @@ export function addClipCustomNodeDefinition(
   const nextState: ClipNodeGraph = {
     ...baseState,
     customNodes,
+    updatedAt: Date.now(),
+  };
+
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+}
+
+export function removeClipCustomNodeDefinition(
+  clip: TimelineClip,
+  nodeId: string,
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const customNodes = (baseState.customNodes ?? []).filter((definition) => definition.id !== nodeId);
+
+  if (customNodes.length === (baseState.customNodes ?? []).length) {
+    return baseState;
+  }
+
+  const manualEdges = baseState.manualEdges?.filter((edgeToKeep) => (
+    edgeToKeep.fromNodeId !== nodeId &&
+    edgeToKeep.toNodeId !== nodeId
+  ));
+  const nextState: ClipNodeGraph = {
+    ...baseState,
+    customNodes: customNodes.length > 0 ? customNodes : undefined,
+    manualEdges: manualEdges && manualEdges.length > 0 ? manualEdges : undefined,
     updatedAt: Date.now(),
   };
 
@@ -530,7 +721,28 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
     })),
     customNodes: cloneCustomNodeDefinitions(graph.customNodes),
     forcedBuiltIns: graph.forcedBuiltIns ? [...graph.forcedBuiltIns] : undefined,
+    manualEdges: cloneManualEdges(graph.manualEdges),
     updatedAt: graph.updatedAt,
+  };
+}
+
+function remapEffectNodeId(nodeId: string, effectIdMap: Map<string, string>): string {
+  if (!nodeId.startsWith('effect-')) {
+    return nodeId;
+  }
+
+  const nextEffectId = effectIdMap.get(nodeId.slice('effect-'.length));
+  return nextEffectId ? `effect-${nextEffectId}` : nodeId;
+}
+
+function remapManualEdgeEffectIds(edgeToRemap: NodeGraphEdge, effectIdMap: Map<string, string>): NodeGraphEdge {
+  const fromNodeId = remapEffectNodeId(edgeToRemap.fromNodeId, effectIdMap);
+  const toNodeId = remapEffectNodeId(edgeToRemap.toNodeId, effectIdMap);
+  return {
+    ...edgeToRemap,
+    fromNodeId,
+    toNodeId,
+    id: `${fromNodeId}:${edgeToRemap.fromPortId}->${toNodeId}:${edgeToRemap.toPortId}`,
   };
 }
 
@@ -559,6 +771,7 @@ export function remapClipNodeGraphEffectIds(
         backing: { kind: 'clip-effect', effectId: nextEffectId },
       };
     }),
+    manualEdges: cloned.manualEdges?.map((candidate) => remapManualEdgeEffectIds(candidate, effectIdMap)),
     updatedAt: Date.now(),
   };
 }
@@ -571,7 +784,7 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
 
   const primarySignal = sourceOutputType(clip);
   let depth = 1;
-  let chain: NodeGraphConnection = { nodeId: sourceNode.id, portId: primarySignal };
+  let chain: NodeGraphChainHead = { nodeId: sourceNode.id, portId: primarySignal };
 
   if (isVisualSource(clip) && (!transformIsDefault(clip) || hasForcedBuiltInNode(clip, 'transform'))) {
     chain = appendProcessingNode(
@@ -643,7 +856,7 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
   const audioEffects = clip.effects.filter(isAudioEffect);
   if (audioSourceAvailable && audioEffects.length > 0) {
     let audioDepth = 1;
-    let audioChain: NodeGraphConnection = { nodeId: sourceNode.id, portId: 'audio' };
+    let audioChain: NodeGraphChainHead = { nodeId: sourceNode.id, portId: 'audio' };
     for (const effect of audioEffects) {
       audioChain = appendProcessingNode(
         nodes,

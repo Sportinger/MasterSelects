@@ -40,6 +40,11 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
 
   removeTrack: (id) => {
     const { tracks, clips } = get();
+    const track = tracks.find(t => t.id === id);
+    if (track?.locked) {
+      log.warn('Cannot remove locked track', { id });
+      return;
+    }
     set({
       tracks: tracks.filter(t => t.id !== id),
       clips: clips.filter(c => c.trackId !== id),
@@ -83,6 +88,13 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     if (track?.type === 'video') {
       invalidateCache();
     }
+  },
+
+  setTrackLocked: (id, locked) => {
+    const { tracks } = get();
+    set({
+      tracks: tracks.map(t => t.id === id ? { ...t, locked } : t),
+    });
   },
 
   setTrackHeight: (id, height) => {

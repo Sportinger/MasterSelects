@@ -265,6 +265,41 @@ export function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps)
   );
 }
 
+interface MultiKeyframeToggleProps {
+  clipId: string;
+  entries: KeyframeToggleEntry[];
+  dragId: string;
+  title?: string;
+}
+
+export function MultiKeyframeToggle({
+  clipId,
+  entries,
+  dragId,
+  title = 'Add keyframes',
+}: MultiKeyframeToggleProps) {
+  const { isRecording, hasKeyframes } = useTimelineStore.getState();
+  const anyRecording = entries.some(({ property }) => isRecording(clipId, property));
+  const anyHasKfs = entries.some(({ property }) => hasKeyframes(clipId, property));
+
+  const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
+    applyKeyframeToggleEntries(mode, clipId, entries);
+  }, [clipId, entries]);
+
+  return (
+    <KeyframeStopwatchButton
+      dragId={dragId}
+      mode="enable"
+      className={`keyframe-toggle ${anyRecording ? 'recording' : ''} ${anyHasKfs ? 'has-keyframes' : ''}`}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, entries.map(({ property }) => property))}
+      feedbackValues={entries.map(({ value }) => value)}
+      playbackFeedbackEnabled={anyRecording || anyHasKfs}
+      title={anyRecording || anyHasKfs ? `${title} (right-click to disable)` : title}
+      onApply={handleApply}
+    />
+  );
+}
+
 // Master keyframe toggle for Scale X/Y and optional Z together
 export function ScaleKeyframeToggle({
   clipId,

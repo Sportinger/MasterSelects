@@ -24,6 +24,7 @@ import {
 } from '../../utils/gaussianSplatSequence';
 import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/modelSequence';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
+import { textRenderer } from '../../services/textRenderer';
 
 // Cache video tracks and solo state at export start (don't change during export)
 let cachedVideoTracks: TimelineTrack[] | null = null;
@@ -65,6 +66,35 @@ function getClipSourceWindowTime(clip: TimelineClip, clipLocalTime: number, ctx:
   const initialSpeed = ctx.getInterpolatedSpeed(clip.id, 0);
   const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
   return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+}
+
+function getTextCanvasForExport(clip: TimelineClip, clipLocalTime: number, ctx: FrameContext): HTMLCanvasElement | undefined {
+  const sourceCanvas = clip.source?.textCanvas;
+  if (!sourceCanvas || !clip.textProperties) {
+    return sourceCanvas;
+  }
+
+  const state = useTimelineStore.getState();
+  const hasBoundsKeyframes =
+    state.hasKeyframes(clip.id, 'textBounds.path') ||
+    state.hasKeyframes(clip.id, 'textBounds.position.x') ||
+    state.hasKeyframes(clip.id, 'textBounds.position.y');
+  if (!hasBoundsKeyframes) {
+    return sourceCanvas;
+  }
+
+  const interpolatedTextBounds = ctx.getInterpolatedTextBounds(clip.id, clipLocalTime);
+  if (!interpolatedTextBounds) {
+    return sourceCanvas;
+  }
+
+  const runtimeCanvas = textRenderer.createCanvas(sourceCanvas.width, sourceCanvas.height);
+  textRenderer.render({
+    ...clip.textProperties,
+    boxEnabled: true,
+    textBounds: interpolatedTextBounds,
+  }, runtimeCanvas);
+  return runtimeCanvas;
 }
 
 function buildModelSource(clip: TimelineClip, sourceTime: number): Layer['source'] {
@@ -285,9 +315,12 @@ export function buildLayersAtTime(
       } else if (clip.source.type === 'math-scene') {
         mathSceneRenderer.renderClip(clip, clipLocalTime);
       }
+      const textCanvas = clip.source.type === 'text'
+        ? getTextCanvasForExport(clip, clipLocalTime, ctx)
+        : clip.source.textCanvas;
       layers.push({
         ...baseLayerProps,
-        source: { type: 'text', textCanvas: clip.source.textCanvas },
+        source: { type: 'text', textCanvas },
       });
     }
   }
