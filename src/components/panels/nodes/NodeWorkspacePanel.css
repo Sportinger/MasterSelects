@@ -522,6 +522,34 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.node-workspace-secondary-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.node-workspace-secondary-action:disabled:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.node-workspace-ai-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.node-workspace-ai-actions .node-workspace-secondary-action {
+  flex: 1;
+}
+
+.node-workspace-inline-error {
+  padding: 7px 8px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 5px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ffb4b4;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .node-workspace-add-node-select {
   width: 100%;
   height: 28px;

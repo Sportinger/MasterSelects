@@ -1,12 +1,21 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useAccountStore } from '../../../stores/accountStore';
 import type { NodeGraphLayout, NodeGraphNode, NodeGraphPort } from '../../../services/nodeGraph';
 import { EFFECT_REGISTRY, getCategoriesWithEffects } from '../../../effects';
 import type { EffectParam } from '../../../effects';
 import { useDockStore } from '../../../stores/dockStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { cloudAiService } from '../../../services/cloudAiService';
+import {
+  createLemonadeChatCompletionStream,
+  DEFAULT_LEMONADE_ENDPOINT,
+  DEFAULT_LEMONADE_MODEL,
+  type LemonadeMessage,
+} from '../../../services/lemonadeProvider';
 import { createEffectProperty } from '../../../types';
-import type { AnimatableProperty, BlendMode, Effect, TimelineClip } from '../../../types';
+import type { AnimatableProperty, BlendMode, ClipCustomNodeDefinition, Effect, TimelineClip } from '../../../types';
 import { EditableDraggableNumber as DraggableNumber } from '../../common/EditableDraggableNumber';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../properties/sharedConstants';
 import { handleSubmenuHover, handleSubmenuLeave } from '../media/submenuPosition';
@@ -16,6 +25,10 @@ import './NodeWorkspacePanel.css';
 
 const CLIP_SPEED_MIN_PERCENT = -10000;
 const CLIP_SPEED_MAX_PERCENT = 10000;
+const AI_NODE_OPENAI_MODEL = 'gpt-5.1';
+const AI_NODE_MAX_TOKENS = 2048;
+const AI_NODE_TIMEOUT_MS = 45_000;
+const AI_NODE_STREAM_IDLE_TIMEOUT_MS = 12_000;
 
 interface NodeWorkspaceContextMenuState {
   x: number;
@@ -23,11 +36,133 @@ interface NodeWorkspaceContextMenuState {
   layout: NodeGraphLayout;
 }
 
+type NodeAIGenerationAccess =
+  | {
+      kind: 'hosted';
+      label: 'Cloud';
+    }
+  | {
+      apiKey: string;
+      kind: 'openai';
+      label: 'OpenAI key';
+    }
+  | {
+      endpoint: string;
+      kind: 'lemonade';
+      label: 'Local';
+      model: string;
+    }
+  | {
+      kind: 'none';
+      label: 'No AI';
+    };
+
 function formatParamValue(value: string | number | boolean): string {
   if (typeof value === 'number') {
     return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/\.?0+$/, '');
   }
   return String(value);
+}
+
+function stripMarkdownCodeFence(value: string): string {
+  const trimmed = value.trim();
+  const fenceMatch = /^```(?:ts|tsx|typescript|js|javascript)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+  return (fenceMatch?.[1] ?? trimmed).trim();
+}
+
+function parseAICodePayload(data: unknown): string {
+  const payload = data as {
+    choices?: Array<{
+      message?: {
+        content?: string | null;
+      };
+    }>;
+  };
+  return stripMarkdownCodeFence(payload.choices?.[0]?.message?.content ?? '');
+}
+
+function buildAINodeMessages(
+  clip: TimelineClip,
+  definition: ClipCustomNodeDefinition,
+): LemonadeMessage[] {
+  const inputs = definition.inputs.map((port) => `${port.id}:${port.type}`).join(', ');
+  const outputs = definition.outputs.map((port) => `${port.id}:${port.type}`).join(', ');
+
+  return [
+    {
+      role: 'system',
+      content: [
+        'You generate deterministic TypeScript drafts for a MasterSelects custom node.',
+        'Return only code, with no prose and no markdown fence.',
+        'Use this shape: defineNode({ name, inputs, outputs, params, process(input, context) { ... } }).',
+        'The draft must be pure and deterministic: no network, no DOM, no randomness, no wall-clock time.',
+        'If the requested operation is not possible from the available signal, write a clear TODO comment inside the code and pass the input through.',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        `Clip source: ${clip.source?.type ?? 'unknown'}`,
+        `Clip duration: ${clip.duration}s`,
+        `Node name: ${definition.label}`,
+        `Inputs: ${inputs}`,
+        `Outputs: ${outputs}`,
+        '',
+        'User request:',
+        definition.ai.prompt.trim(),
+      ].join('\n'),
+    },
+  ];
+}
+
+async function generateAINodeCode(
+  clip: TimelineClip,
+  definition: ClipCustomNodeDefinition,
+  access: NodeAIGenerationAccess,
+): Promise<string> {
+  const messages = buildAINodeMessages(clip, definition);
+
+  if (access.kind === 'lemonade') {
+    const result = await createLemonadeChatCompletionStream({
+      endpoint: access.endpoint,
+      model: access.model,
+      messages,
+      maxTokens: AI_NODE_MAX_TOKENS,
+      streamIdleTimeoutMs: AI_NODE_STREAM_IDLE_TIMEOUT_MS,
+      timeoutMs: AI_NODE_TIMEOUT_MS,
+    });
+    return stripMarkdownCodeFence(result.content ?? '');
+  }
+
+  const requestBody: Record<string, unknown> = {
+    model: AI_NODE_OPENAI_MODEL,
+    messages,
+    max_completion_tokens: AI_NODE_MAX_TOKENS,
+  };
+
+  if (access.kind === 'hosted') {
+    return parseAICodePayload(await cloudAiService.createChatCompletion(requestBody));
+  }
+
+  if (access.kind === 'openai') {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${access.apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `AI request failed: ${response.status}`);
+    }
+
+    return parseAICodePayload(await response.json());
+  }
+
+  throw new Error('No AI provider is configured.');
 }
 
 interface NumericParamEditorProps {
@@ -424,11 +559,65 @@ function NodeInspector({
 
 function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
   const updateClipAICustomNode = useTimelineStore((state) => state.updateClipAICustomNode);
+  const apiKeys = useSettingsStore((state) => state.apiKeys);
+  const aiProvider = useSettingsStore((state) => state.aiProvider);
+  const lemonadeEndpoint = useSettingsStore((state) => state.lemonadeEndpoint);
+  const lemonadeModel = useSettingsStore((state) => state.lemonadeModel);
+  const openSettings = useSettingsStore((state) => state.openSettings);
+  const hostedAIEnabled = useAccountStore((state) => state.hostedAIEnabled);
+  const accountSession = useAccountStore((state) => state.session);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const definition = clip.nodeGraph?.customNodes?.find((candidate) => candidate.id === node.id);
 
   if (!definition) {
     return <div className="node-workspace-inspector-empty">Custom node not found</div>;
   }
+
+  const access: NodeAIGenerationAccess = aiProvider === 'lemonade'
+    ? {
+        endpoint: lemonadeEndpoint || DEFAULT_LEMONADE_ENDPOINT,
+        kind: 'lemonade',
+        label: 'Local',
+        model: lemonadeModel || DEFAULT_LEMONADE_MODEL,
+      }
+    : accountSession?.authenticated && hostedAIEnabled
+      ? { kind: 'hosted', label: 'Cloud' }
+      : apiKeys.openai
+        ? { apiKey: apiKeys.openai, kind: 'openai', label: 'OpenAI key' }
+        : { kind: 'none', label: 'No AI' };
+  const canSendPrompt = access.kind !== 'none' && definition.ai.prompt.trim().length > 0 && !isGenerating;
+
+  const sendPromptToAI = async () => {
+    if (access.kind === 'none') {
+      setGenerationError('No AI provider configured.');
+      return;
+    }
+
+    if (!definition.ai.prompt.trim() || isGenerating) {
+      return;
+    }
+
+    setGenerationError(null);
+    setIsGenerating(true);
+    try {
+      const generatedCode = await generateAINodeCode(clip, definition, access);
+      if (!generatedCode) {
+        throw new Error('AI returned an empty response.');
+      }
+      updateClipAICustomNode(clip.id, definition.id, {
+        status: 'ready',
+        ai: {
+          generatedCode,
+          updatedAt: Date.now(),
+        },
+      });
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : 'AI request failed.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div className="node-workspace-param-list">
@@ -463,11 +652,35 @@ function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGr
         <textarea
           value={definition.ai.prompt}
           rows={5}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+              event.preventDefault();
+              void sendPromptToAI();
+            }
+          }}
           onChange={(event) => updateClipAICustomNode(clip.id, definition.id, {
             ai: { prompt: event.target.value },
           })}
         />
       </label>
+      <div className="node-workspace-ai-actions">
+        <button
+          type="button"
+          className="node-workspace-secondary-action"
+          disabled={!canSendPrompt}
+          onClick={() => void sendPromptToAI()}
+        >
+          {isGenerating ? 'Sending...' : `Send to AI (${access.label})`}
+        </button>
+        {access.kind === 'none' && (
+          <button type="button" className="node-workspace-secondary-action" onClick={openSettings}>
+            Configure AI
+          </button>
+        )}
+      </div>
+      {generationError && (
+        <div className="node-workspace-inline-error">{generationError}</div>
+      )}
       <label className="node-workspace-field">
         <span>Generated Code</span>
         <textarea

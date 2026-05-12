@@ -26,6 +26,6 @@ Effect nodes also expose write-through inspector controls. Numeric effect params
 
 The inspector can add existing effect types as new Effect nodes. This appends to the clip's normal effect stack, after which the graph projection creates the corresponding node.
 
-The inspector can also add AI Nodes. These are project-local custom nodes stored in the clip graph with their prompt, generated-code draft, public ports, runtime kind, status, and layout. In this stage they are deterministic pass-through graph nodes for authoring and persistence; they do not run generated code in the renderer yet.
+The inspector can also add AI Nodes. These are project-local custom nodes stored in the clip graph with their prompt, generated-code draft, public ports, runtime kind, status, and layout. The AI Node inspector can send the prompt to the configured AI provider and stores the generated TypeScript draft on the node. In this stage they remain deterministic pass-through graph nodes for authoring and persistence; they do not run generated code in the renderer yet.
 
 The current graph projection is deterministic. Runtime preview and export still use the existing layer builders and renderer. Broader graph editing should continue to write through to the owning clip fields so Properties, timeline state, history, preview, and export remain one system.
