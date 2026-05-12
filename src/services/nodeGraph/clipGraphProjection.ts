@@ -3,6 +3,7 @@ import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type {
   ClipNodeGraph,
   ClipNodeGraphBacking,
+  ClipCustomNodeDefinition,
   ClipNodeGraphNodeState,
   NodeGraph,
   NodeGraphEdge,
@@ -27,6 +28,10 @@ function outputPort(id: string, label: string, type: NodeGraphSignalType): NodeG
 
 function inputPort(id: string, label: string, type: NodeGraphSignalType): NodeGraphPort {
   return { id, label, type, direction: 'input' };
+}
+
+function clonePort(port: NodeGraphPort): NodeGraphPort {
+  return { ...port };
 }
 
 function edge(
@@ -213,6 +218,25 @@ function createEffectNode(effect: Effect, depth: number, laneY: number, signalTy
   };
 }
 
+function createCustomNode(definition: ClipCustomNodeDefinition, depth: number): NodeGraphNode {
+  const promptState = definition.ai.prompt.trim().length > 0 ? 'configured' : 'empty';
+  return {
+    id: definition.id,
+    kind: 'custom',
+    runtime: definition.runtime,
+    label: definition.label,
+    description: definition.description ?? 'AI-authored custom node. Draft nodes are deterministic pass-through graph nodes.',
+    inputs: definition.inputs.map(clonePort),
+    outputs: definition.outputs.map(clonePort),
+    params: {
+      status: definition.status,
+      prompt: promptState,
+      ...(definition.params ?? {}),
+    },
+    layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
+  };
+}
+
 function createOutputNode(depth: number, clip: TimelineClip, signalType: NodeGraphSignalType, y = MAIN_LANE_Y): NodeGraphNode {
   return {
     id: y === AUDIO_LANE_Y ? 'audio-output' : 'output',
@@ -262,6 +286,9 @@ function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
     case 'audio-output':
       return { kind: 'clip-audio-output' };
     default:
+      if (node.id.startsWith('custom-')) {
+        return { kind: 'clip-custom-node', nodeId: node.id };
+      }
       if (node.id.startsWith('effect-')) {
         return { kind: 'clip-effect', effectId: node.id.slice('effect-'.length) };
       }
@@ -271,6 +298,23 @@ function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
 
 function cloneLayout(layout: NodeGraphLayout): NodeGraphLayout {
   return { x: layout.x, y: layout.y };
+}
+
+function cloneCustomNodeDefinition(definition: ClipCustomNodeDefinition): ClipCustomNodeDefinition {
+  return {
+    ...definition,
+    inputs: definition.inputs.map(clonePort),
+    outputs: definition.outputs.map(clonePort),
+    params: definition.params ? { ...definition.params } : undefined,
+    ai: { ...definition.ai },
+  };
+}
+
+function cloneCustomNodeDefinitions(definitions?: ClipCustomNodeDefinition[]): ClipCustomNodeDefinition[] | undefined {
+  if (!definitions || definitions.length === 0) {
+    return undefined;
+  }
+  return definitions.map(cloneCustomNodeDefinition);
 }
 
 function createNodeState(node: NodeGraphNode): ClipNodeGraphNodeState {
@@ -303,6 +347,7 @@ function buildProjectedClipNodeGraphState(clip: TimelineClip, track?: TimelineTr
   return {
     version: 1,
     nodes: graph.nodes.map(createNodeState),
+    customNodes: cloneCustomNodeDefinitions(clip.nodeGraph?.customNodes),
   };
 }
 
@@ -323,6 +368,7 @@ export function reconcileClipNodeGraphState(
       ...node,
       layout: cloneLayout(existingNodesById.get(node.id)?.layout ?? node.layout),
     })),
+    customNodes: cloneCustomNodeDefinitions(existingState.customNodes),
     updatedAt: existingState.updatedAt,
   };
 }
@@ -355,6 +401,82 @@ export function updateClipNodeGraphLayout(
   };
 }
 
+export function createClipAICustomNodeDefinition(
+  id: string,
+  clip: TimelineClip,
+  label = 'AI Node',
+): ClipCustomNodeDefinition {
+  const signalType = sourceOutputType(clip);
+  return {
+    id,
+    label,
+    runtime: 'typescript',
+    status: 'draft',
+    inputs: [
+      inputPort('input', signalType, signalType),
+      inputPort('time', 'time', 'time'),
+      inputPort('metadata', 'metadata', 'metadata'),
+    ],
+    outputs: [outputPort('output', signalType, signalType)],
+    params: {},
+    ai: {
+      prompt: '',
+      updatedAt: Date.now(),
+    },
+  };
+}
+
+export function addClipCustomNodeDefinition(
+  clip: TimelineClip,
+  definition: ClipCustomNodeDefinition,
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const customNodes = [
+    ...(baseState.customNodes ?? []),
+    cloneCustomNodeDefinition(definition),
+  ];
+  const nextState: ClipNodeGraph = {
+    ...baseState,
+    customNodes,
+    updatedAt: Date.now(),
+  };
+
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+}
+
+export function updateClipCustomNodeDefinition(
+  clip: TimelineClip,
+  nodeId: string,
+  updates: Partial<Omit<ClipCustomNodeDefinition, 'id' | 'inputs' | 'outputs' | 'ai'>> & {
+    ai?: Partial<ClipCustomNodeDefinition['ai']>;
+  },
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const customNodes = (baseState.customNodes ?? []).map((definition) => (
+    definition.id === nodeId
+      ? {
+          ...definition,
+          ...updates,
+          ai: {
+            ...definition.ai,
+            ...(updates.ai ?? {}),
+            updatedAt: Date.now(),
+          },
+        }
+      : definition
+  ));
+
+  const nextState: ClipNodeGraph = {
+    ...baseState,
+    customNodes,
+    updatedAt: Date.now(),
+  };
+
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+}
+
 export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undefined {
   if (!graph || graph.version !== 1) {
     return undefined;
@@ -367,6 +489,7 @@ export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undef
       backing: { ...node.backing },
       layout: cloneLayout(node.layout),
     })),
+    customNodes: cloneCustomNodeDefinitions(graph.customNodes),
     updatedAt: graph.updatedAt,
   };
 }
@@ -453,6 +576,18 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
       chain.nodeId,
       chain.portId,
       createEffectNode(effect, depth, MAIN_LANE_Y, primarySignal),
+      primarySignal,
+    );
+    depth += 1;
+  }
+
+  for (const customNode of clip.nodeGraph?.customNodes ?? []) {
+    chain = appendProcessingNode(
+      nodes,
+      edges,
+      chain.nodeId,
+      chain.portId,
+      createCustomNode(customNode, depth),
       primarySignal,
     );
     depth += 1;

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addClipCustomNodeDefinition,
   buildClipNodeGraph,
   cloneClipNodeGraph,
+  createClipAICustomNodeDefinition,
   createClipNodeGraphState,
   remapClipNodeGraphEffectIds,
+  updateClipCustomNodeDefinition,
   updateClipNodeGraphLayout,
 } from '../../src/services/nodeGraph';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
@@ -301,5 +304,68 @@ describe('buildClipNodeGraph', () => {
       backing: { kind: 'clip-effect', effectId: 'new-blur' },
       layout: { x: 500, y: 99 },
     });
+  });
+
+  it('projects AI custom nodes from clip graph state into the main signal chain', () => {
+    const clip = createClip();
+    const track = createTrack();
+    const definition = createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node');
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+    const graph = buildClipNodeGraph({ ...clip, nodeGraph }, track);
+
+    expect(graph.nodes.map((node) => [node.id, node.kind, node.runtime])).toEqual([
+      ['source', 'source', 'builtin'],
+      ['custom-ai', 'custom', 'typescript'],
+      ['output', 'output', 'builtin'],
+    ]);
+    expect(graph.nodes.find((node) => node.id === 'custom-ai')).toMatchObject({
+      label: 'AI Node',
+      params: { status: 'draft', prompt: 'empty' },
+    });
+    expect(nodeGraph.nodes.find((node) => node.id === 'custom-ai')?.backing).toEqual({
+      kind: 'clip-custom-node',
+      nodeId: 'custom-ai',
+    });
+    expect(graph.edges.filter((edge) => edge.type === 'texture' && edge.toPortId === 'input').map((edge) => [
+      edge.fromNodeId,
+      edge.toNodeId,
+    ])).toEqual([
+      ['source', 'custom-ai'],
+      ['custom-ai', 'output'],
+    ]);
+  });
+
+  it('updates and clones AI custom node authoring state', () => {
+    const clip = createClip();
+    const track = createTrack();
+    const definition = createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node');
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+    const updated = updateClipCustomNodeDefinition(
+      { ...clip, nodeGraph },
+      'custom-ai',
+      {
+        label: 'Motion Curve Builder',
+        status: 'ready',
+        ai: {
+          prompt: 'Create a motion curve from the incoming video.',
+          generatedCode: 'defineNode({ /* generated */ })',
+        },
+      },
+      track,
+    );
+    const cloned = cloneClipNodeGraph(updated);
+
+    expect(updated.customNodes?.[0]).toMatchObject({
+      id: 'custom-ai',
+      label: 'Motion Curve Builder',
+      status: 'ready',
+      ai: {
+        prompt: 'Create a motion curve from the incoming video.',
+        generatedCode: 'defineNode({ /* generated */ })',
+      },
+    });
+    expect(cloned).not.toBe(updated);
+    expect(cloned?.customNodes?.[0]).not.toBe(updated.customNodes?.[0]);
+    expect(cloned?.customNodes?.[0]?.ai).toEqual(updated.customNodes?.[0]?.ai);
   });
 });

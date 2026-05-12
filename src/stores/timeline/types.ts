@@ -486,6 +486,13 @@ export interface TransitionActions {
 
 export interface NodeGraphActions {
   ensureClipNodeGraph: (clipId: string) => void;
+  addClipAICustomNode: (clipId: string) => string | null;
+  updateClipAICustomNode: (clipId: string, nodeId: string, updates: {
+    label?: string;
+    description?: string;
+    status?: import('../../types').ClipCustomNodeAuthoringStatus;
+    ai?: Partial<import('../../types').ClipCustomNodeAIAuthoring>;
+  }) => void;
   moveClipNodeGraphNode: (clipId: string, nodeId: string, layout: NodeGraphLayout) => void;
 }
 

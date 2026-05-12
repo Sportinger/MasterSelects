@@ -339,15 +339,18 @@ function PortList({ title, ports }: { title: string; ports: NodeGraphPort[] }) {
 function NodeInspector({
   node,
   clip,
+  onSelectNode,
   onOpenProperties,
 }: {
   node: NodeGraphNode | null;
   clip: TimelineClip | null;
+  onSelectNode: (nodeId: string) => void;
   onOpenProperties: () => void;
 }) {
   const params = Object.entries(node?.params ?? {});
   const canEditTransform = !!clip && node?.id === 'transform';
   const canEditEffect = !!clip && node?.id.startsWith('effect-');
+  const canEditCustom = !!clip && node?.kind === 'custom';
 
   if (!node) {
     return (
@@ -387,6 +390,8 @@ function NodeInspector({
           <TransformNodeParameters clip={clip} />
         ) : canEditEffect ? (
           <EffectNodeParameters clip={clip} node={node} />
+        ) : canEditCustom ? (
+          <CustomNodeParameters clip={clip} node={node} />
         ) : params.length > 0 ? (
           <div className="node-workspace-param-list">
             {params.map(([key, value]) => (
@@ -401,7 +406,7 @@ function NodeInspector({
         )}
       </div>
 
-      {clip && <ClipNodeActions clip={clip} />}
+      {clip && <ClipNodeActions clip={clip} onSelectNode={onSelectNode} />}
 
       <button type="button" className="node-workspace-primary-action" onClick={onOpenProperties}>
         Open Properties
@@ -410,13 +415,90 @@ function NodeInspector({
   );
 }
 
-function ClipNodeActions({ clip }: { clip: TimelineClip }) {
+function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
+  const updateClipAICustomNode = useTimelineStore((state) => state.updateClipAICustomNode);
+  const definition = clip.nodeGraph?.customNodes?.find((candidate) => candidate.id === node.id);
+
+  if (!definition) {
+    return <div className="node-workspace-inspector-empty">Custom node not found</div>;
+  }
+
+  return (
+    <div className="node-workspace-param-list">
+      <label className="node-workspace-field">
+        <span>Name</span>
+        <input
+          value={definition.label}
+          onChange={(event) => updateClipAICustomNode(clip.id, definition.id, { label: event.target.value })}
+        />
+      </label>
+      <label className="node-workspace-field">
+        <span>Description</span>
+        <input
+          value={definition.description ?? ''}
+          onChange={(event) => updateClipAICustomNode(clip.id, definition.id, { description: event.target.value })}
+        />
+      </label>
+      <label className="node-workspace-field">
+        <span>Status</span>
+        <select
+          value={definition.status}
+          onChange={(event) => updateClipAICustomNode(clip.id, definition.id, {
+            status: event.target.value === 'ready' ? 'ready' : 'draft',
+          })}
+        >
+          <option value="draft">Draft</option>
+          <option value="ready">Ready</option>
+        </select>
+      </label>
+      <label className="node-workspace-field">
+        <span>Prompt</span>
+        <textarea
+          value={definition.ai.prompt}
+          rows={5}
+          onChange={(event) => updateClipAICustomNode(clip.id, definition.id, {
+            ai: { prompt: event.target.value },
+          })}
+        />
+      </label>
+      <label className="node-workspace-field">
+        <span>Generated Code</span>
+        <textarea
+          value={definition.ai.generatedCode ?? ''}
+          rows={7}
+          spellCheck={false}
+          onChange={(event) => updateClipAICustomNode(clip.id, definition.id, {
+            ai: { generatedCode: event.target.value },
+          })}
+        />
+      </label>
+    </div>
+  );
+}
+
+function ClipNodeActions({ clip, onSelectNode }: { clip: TimelineClip; onSelectNode: (nodeId: string) => void }) {
   const addClipEffect = useTimelineStore((state) => state.addClipEffect);
+  const addClipAICustomNode = useTimelineStore((state) => state.addClipAICustomNode);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
 
   return (
     <div className="node-workspace-inspector-section">
       <div className="node-workspace-inspector-section-title">Add Node</div>
+      <button
+        type="button"
+        className="node-workspace-secondary-action"
+        onClick={() => {
+          startBatch('Add AI node');
+          try {
+            const nodeId = addClipAICustomNode(clip.id);
+            if (nodeId) onSelectNode(nodeId);
+          } finally {
+            endBatch();
+          }
+        }}
+      >
+        AI Node
+      </button>
       <select
         className="node-workspace-add-node-select"
         defaultValue=""
@@ -498,7 +580,12 @@ export function NodeWorkspacePanel() {
           onMoveNode={moveNode}
         />
       </div>
-      <NodeInspector node={selectedNode} clip={subject.clip} onOpenProperties={openProperties} />
+      <NodeInspector
+        node={selectedNode}
+        clip={subject.clip}
+        onSelectNode={selectNode}
+        onOpenProperties={openProperties}
+      />
     </div>
   );
 }

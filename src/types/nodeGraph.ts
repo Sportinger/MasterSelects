@@ -92,6 +92,7 @@ export type ClipNodeGraphBacking =
   | { kind: 'clip-mask-stack' }
   | { kind: 'clip-color-correction' }
   | { kind: 'clip-effect'; effectId: string }
+  | { kind: 'clip-custom-node'; nodeId: string }
   | { kind: 'clip-output' }
   | { kind: 'clip-audio-output' };
 
@@ -101,8 +102,30 @@ export interface ClipNodeGraphNodeState {
   layout: NodeGraphLayout;
 }
 
+export type ClipCustomNodeAuthoringStatus = 'draft' | 'ready';
+
+export interface ClipCustomNodeAIAuthoring {
+  prompt: string;
+  generatedCode?: string;
+  updatedAt?: number;
+  acceptedAt?: number;
+}
+
+export interface ClipCustomNodeDefinition {
+  id: string;
+  label: string;
+  description?: string;
+  runtime: Exclude<NodeGraphRuntimeKind, 'builtin'>;
+  status: ClipCustomNodeAuthoringStatus;
+  inputs: NodeGraphPort[];
+  outputs: NodeGraphPort[];
+  params?: Record<string, string | number | boolean>;
+  ai: ClipCustomNodeAIAuthoring;
+}
+
 export interface ClipNodeGraph {
   version: 1;
   nodes: ClipNodeGraphNodeState[];
+  customNodes?: ClipCustomNodeDefinition[];
   updatedAt?: number;
 }

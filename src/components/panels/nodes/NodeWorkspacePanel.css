@@ -212,6 +212,10 @@
   border-top-color: rgba(222, 132, 82, 0.86);
 }
 
+.node-workspace-node-custom {
+  border-top-color: rgba(92, 190, 214, 0.86);
+}
+
 .node-workspace-node-output {
   border-top-color: rgba(151, 169, 190, 0.86);
 }
@@ -446,6 +450,43 @@
   height: 14px;
 }
 
+.node-workspace-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.node-workspace-field span {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.node-workspace-field input,
+.node-workspace-field select,
+.node-workspace-field textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.node-workspace-field input,
+.node-workspace-field select {
+  height: 26px;
+  padding: 0 7px;
+}
+
+.node-workspace-field textarea {
+  min-height: 72px;
+  padding: 7px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.35;
+}
+
 .node-workspace-inspector-empty {
   color: var(--text-muted);
   font-size: 11px;
@@ -464,6 +505,21 @@
 
 .node-workspace-primary-action:hover {
   background: rgba(45, 140, 235, 0.22);
+}
+
+.node-workspace-secondary-action {
+  width: 100%;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.node-workspace-secondary-action:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .node-workspace-add-node-select {
