@@ -17,6 +17,12 @@ import './NodeWorkspacePanel.css';
 const CLIP_SPEED_MIN_PERCENT = -10000;
 const CLIP_SPEED_MAX_PERCENT = 10000;
 
+interface NodeWorkspaceContextMenuState {
+  x: number;
+  y: number;
+  layout: NodeGraphLayout;
+}
+
 function formatParamValue(value: string | number | boolean): string {
   if (typeof value === 'number') {
     return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/\.?0+$/, '');
@@ -508,7 +514,8 @@ function ClipNodeActions({ clip, onSelectNode }: { clip: TimelineClip; onSelectN
           if (!effectType) return;
           startBatch('Add effect node');
           try {
-            addClipEffect(clip.id, effectType);
+            const effectId = addClipEffect(clip.id, effectType);
+            onSelectNode(`effect-${effectId}`);
           } finally {
             endBatch();
           }
@@ -535,7 +542,7 @@ export function NodeWorkspacePanel() {
   const addClipEffect = useTimelineStore((state) => state.addClipEffect);
   const addClipAICustomNode = useTimelineStore((state) => state.addClipAICustomNode);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<NodeWorkspaceContextMenuState | null>(null);
   const [selection, setSelection] = useState<{ graphId: string | null; nodeId: string | null }>({
     graphId: null,
     nodeId: null,
@@ -569,35 +576,48 @@ export function NodeWorkspacePanel() {
     startBatch('Add built-in node');
     try {
       showClipNodeGraphBuiltIn(subject.id, node);
+      if (contextMenu) {
+        moveClipNodeGraphNode(subject.id, node, contextMenu.layout);
+      }
       selectNode(node);
     } finally {
       endBatch();
       closeContextMenu();
     }
-  }, [closeContextMenu, selectNode, showClipNodeGraphBuiltIn, subject]);
+  }, [closeContextMenu, contextMenu, moveClipNodeGraphNode, selectNode, showClipNodeGraphBuiltIn, subject]);
 
   const addEffectNode = useCallback((effectType: string) => {
     if (!subject || subject.kind !== 'clip') return;
     startBatch('Add effect node');
     try {
-      addClipEffect(subject.id, effectType);
+      const effectId = addClipEffect(subject.id, effectType);
+      const nodeId = `effect-${effectId}`;
+      if (contextMenu) {
+        moveClipNodeGraphNode(subject.id, nodeId, contextMenu.layout);
+      }
+      selectNode(nodeId);
     } finally {
       endBatch();
       closeContextMenu();
     }
-  }, [addClipEffect, closeContextMenu, subject]);
+  }, [addClipEffect, closeContextMenu, contextMenu, moveClipNodeGraphNode, selectNode, subject]);
 
   const addAICustomNode = useCallback(() => {
     if (!subject || subject.kind !== 'clip') return;
     startBatch('Add AI node');
     try {
       const nodeId = addClipAICustomNode(subject.id);
-      if (nodeId) selectNode(nodeId);
+      if (nodeId) {
+        if (contextMenu) {
+          moveClipNodeGraphNode(subject.id, nodeId, contextMenu.layout);
+        }
+        selectNode(nodeId);
+      }
     } finally {
       endBatch();
       closeContextMenu();
     }
-  }, [addClipAICustomNode, closeContextMenu, selectNode, subject]);
+  }, [addClipAICustomNode, closeContextMenu, contextMenu, moveClipNodeGraphNode, selectNode, subject]);
 
   const moveNode = useCallback((nodeId: string, layout: NodeGraphLayout) => {
     if (!subject || subject.kind !== 'clip') return;

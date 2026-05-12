@@ -269,7 +269,7 @@ export interface SplatEffectorClipActions {
 
 // Clip effect actions (extracted to clipEffectSlice)
 export interface ClipEffectActions {
-  addClipEffect: (clipId: string, effectType: string) => void;
+  addClipEffect: (clipId: string, effectType: string) => string;
   removeClipEffect: (clipId: string, effectId: string) => void;
   updateClipEffect: (clipId: string, effectId: string, params: Partial<Effect['params']>) => void;
   setClipEffectEnabled: (clipId: string, effectId: string, enabled: boolean) => void;

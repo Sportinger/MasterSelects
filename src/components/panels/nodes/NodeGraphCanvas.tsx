@@ -16,7 +16,7 @@ interface NodeGraphCanvasProps {
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   onMoveNode?: (nodeId: string, layout: NodeGraphLayout) => void;
-  onOpenAddMenu?: (position: { x: number; y: number }) => void;
+  onOpenAddMenu?: (position: { x: number; y: number; layout: NodeGraphLayout }) => void;
 }
 
 interface Viewport {
@@ -283,7 +283,14 @@ export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode, onMoveNod
         onPointerCancel={finishPanGesture}
         onContextMenu={(event) => {
           event.preventDefault();
-          onOpenAddMenu?.({ x: event.clientX, y: event.clientY });
+          const rect = canvasRef.current?.getBoundingClientRect();
+          const layout = rect
+            ? {
+                x: Math.round((event.clientX - rect.left - viewport.panX) / viewport.zoom),
+                y: Math.round((event.clientY - rect.top - viewport.panY) / viewport.zoom),
+              }
+            : { x: 0, y: 0 };
+          onOpenAddMenu?.({ x: event.clientX, y: event.clientY, layout });
         }}
       >
         <div

@@ -17,6 +17,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
     };
     set({ clips: clips.map(c => c.id === clipId ? { ...c, effects: [...(c.effects || []), effect] } : c) });
     invalidateCache();
+    return effect.id;
   },
 
   removeClipEffect: (clipId, effectId) => {
