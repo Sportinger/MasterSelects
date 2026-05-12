@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { NodeGraphLayout, NodeGraphNode, NodeGraphPort } from '../../../services/nodeGraph';
+import { EFFECT_REGISTRY, getCategoriesWithEffects } from '../../../effects';
+import type { EffectParam } from '../../../effects';
 import { useDockStore } from '../../../stores/dockStore';
 import { startBatch, endBatch } from '../../../stores/historyStore';
 import { useTimelineStore } from '../../../stores/timeline';
-import type { AnimatableProperty, BlendMode, TimelineClip } from '../../../types';
+import { createEffectProperty } from '../../../types';
+import type { AnimatableProperty, BlendMode, Effect, TimelineClip } from '../../../types';
 import { EditableDraggableNumber as DraggableNumber } from '../../common/EditableDraggableNumber';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../properties/sharedConstants';
 import { NodeGraphCanvas } from './NodeGraphCanvas';
@@ -30,6 +33,8 @@ interface NumericParamEditorProps {
   min?: number;
   max?: number;
   sensitivity?: number;
+  persistenceKey?: string;
+  onContextMenu?: () => void;
 }
 
 function NumericParamEditor({
@@ -42,9 +47,18 @@ function NumericParamEditor({
   min,
   max,
   sensitivity = 1,
+  persistenceKey,
+  onContextMenu,
 }: NumericParamEditorProps) {
   return (
-    <div className="node-workspace-param node-workspace-param-editable">
+    <div
+      className="node-workspace-param node-workspace-param-editable"
+      onContextMenu={(event) => {
+        if (!onContextMenu) return;
+        event.preventDefault();
+        onContextMenu();
+      }}
+    >
       <span>{label}</span>
       <DraggableNumber
         value={value}
@@ -55,9 +69,138 @@ function NumericParamEditor({
         min={min}
         max={max}
         sensitivity={sensitivity}
+        persistenceKey={persistenceKey}
         onDragStart={() => startBatch('Adjust node parameter')}
         onDragEnd={() => endBatch()}
       />
+    </div>
+  );
+}
+
+function EffectParamEditor({
+  clip,
+  effect,
+  paramName,
+  paramDef,
+  value,
+}: {
+  clip: TimelineClip;
+  effect: Effect;
+  paramName: string;
+  paramDef: EffectParam;
+  value: number | boolean | string;
+}) {
+  const setPropertyValue = useTimelineStore((state) => state.setPropertyValue);
+  const updateClipEffect = useTimelineStore((state) => state.updateClipEffect);
+
+  if (paramDef.type === 'number') {
+    const min = paramDef.min ?? 0;
+    const max = paramDef.max ?? 1;
+    const range = max - min;
+    const decimals = paramDef.step && paramDef.step >= 1 ? 0 : paramDef.step && paramDef.step >= 0.1 ? 1 : 2;
+    const numericValue = typeof value === 'number' ? value : Number(paramDef.default);
+    const defaultValue = typeof paramDef.default === 'number' ? paramDef.default : 0;
+
+    return (
+      <NumericParamEditor
+        label={paramDef.label}
+        value={numericValue}
+        onChange={(nextValue) => {
+          setPropertyValue(clip.id, createEffectProperty(effect.id, paramName) as AnimatableProperty, Math.max(min, nextValue));
+        }}
+        onContextMenu={() => setPropertyValue(clip.id, createEffectProperty(effect.id, paramName) as AnimatableProperty, defaultValue)}
+        defaultValue={defaultValue}
+        decimals={decimals}
+        min={min}
+        max={paramDef.quality ? undefined : max}
+        sensitivity={Math.max(0.5, range / 100)}
+        persistenceKey={`node.effect.${clip.id}.${effect.id}.${paramName}`}
+      />
+    );
+  }
+
+  if (paramDef.type === 'boolean') {
+    const checked = typeof value === 'boolean' ? value : Boolean(paramDef.default);
+    return (
+      <label className="node-workspace-param node-workspace-param-editable node-workspace-param-checkbox">
+        <span>{paramDef.label}</span>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => updateClipEffect(clip.id, effect.id, { [paramName]: event.target.checked })}
+        />
+      </label>
+    );
+  }
+
+  if (paramDef.type === 'select') {
+    return (
+      <label className="node-workspace-param node-workspace-param-editable">
+        <span>{paramDef.label}</span>
+        <select
+          value={String(value ?? paramDef.default)}
+          onChange={(event) => updateClipEffect(clip.id, effect.id, { [paramName]: event.target.value })}
+        >
+          {paramDef.options?.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  return (
+    <div className="node-workspace-param">
+      <span>{paramDef.label}</span>
+      <strong>{formatParamValue(value)}</strong>
+    </div>
+  );
+}
+
+function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGraphNode }) {
+  const playheadPosition = useTimelineStore((state) => state.playheadPosition);
+  const getInterpolatedEffects = useTimelineStore((state) => state.getInterpolatedEffects);
+  const setClipEffectEnabled = useTimelineStore((state) => state.setClipEffectEnabled);
+  const effectId = node.id.startsWith('effect-') ? node.id.slice('effect-'.length) : '';
+  const effect = clip.effects.find((candidate) => candidate.id === effectId);
+
+  if (!effect) {
+    return <div className="node-workspace-inspector-empty">Effect not found</div>;
+  }
+
+  const clipLocalTime = playheadPosition - clip.startTime;
+  const interpolatedEffect = getInterpolatedEffects(clip.id, clipLocalTime).find((candidate) => candidate.id === effect.id) ?? effect;
+  const effectDef = EFFECT_REGISTRY.get(effect.type);
+  const params = Object.entries(effectDef?.params ?? {});
+
+  return (
+    <div className="node-workspace-param-list">
+      <label className="node-workspace-param node-workspace-param-editable node-workspace-param-checkbox">
+        <span>Enabled</span>
+        <input
+          type="checkbox"
+          checked={effect.enabled !== false}
+          onChange={(event) => setClipEffectEnabled(clip.id, effect.id, event.target.checked)}
+        />
+      </label>
+      {effectDef ? (
+        params.length > 0 ? (
+          params.map(([paramName, paramDef]) => (
+            <EffectParamEditor
+              key={paramName}
+              clip={clip}
+              effect={effect}
+              paramName={paramName}
+              paramDef={paramDef}
+              value={interpolatedEffect.params[paramName] ?? paramDef.default}
+            />
+          ))
+        ) : (
+          <div className="node-workspace-inspector-empty">No parameters</div>
+        )
+      ) : (
+        <div className="node-workspace-inspector-empty">Unknown effect type: {effect.type}</div>
+      )}
     </div>
   );
 }
@@ -204,6 +347,7 @@ function NodeInspector({
 }) {
   const params = Object.entries(node?.params ?? {});
   const canEditTransform = !!clip && node?.id === 'transform';
+  const canEditEffect = !!clip && node?.id.startsWith('effect-');
 
   if (!node) {
     return (
@@ -241,6 +385,8 @@ function NodeInspector({
         <div className="node-workspace-inspector-section-title">Parameters</div>
         {canEditTransform ? (
           <TransformNodeParameters clip={clip} />
+        ) : canEditEffect ? (
+          <EffectNodeParameters clip={clip} node={node} />
         ) : params.length > 0 ? (
           <div className="node-workspace-param-list">
             {params.map(([key, value]) => (
@@ -255,10 +401,47 @@ function NodeInspector({
         )}
       </div>
 
+      {clip && <ClipNodeActions clip={clip} />}
+
       <button type="button" className="node-workspace-primary-action" onClick={onOpenProperties}>
         Open Properties
       </button>
     </aside>
+  );
+}
+
+function ClipNodeActions({ clip }: { clip: TimelineClip }) {
+  const addClipEffect = useTimelineStore((state) => state.addClipEffect);
+  const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
+
+  return (
+    <div className="node-workspace-inspector-section">
+      <div className="node-workspace-inspector-section-title">Add Node</div>
+      <select
+        className="node-workspace-add-node-select"
+        defaultValue=""
+        onChange={(event) => {
+          const effectType = event.target.value;
+          if (!effectType) return;
+          startBatch('Add effect node');
+          try {
+            addClipEffect(clip.id, effectType);
+          } finally {
+            endBatch();
+          }
+          event.target.value = '';
+        }}
+      >
+        <option value="" disabled>Effect...</option>
+        {effectCategories.map(({ category, effects }) => (
+          <optgroup key={category} label={category.charAt(0).toUpperCase() + category.slice(1)}>
+            {effects.map((effect) => (
+              <option key={effect.id} value={effect.id}>{effect.name}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
   );
 }
 
