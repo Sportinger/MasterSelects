@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.7.9';
+export const APP_VERSION = '1.8.0';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Modular editor styles',
-  message: 'The former App.css monolith has been split into owner-focused style files for timeline, panels, preview, export, dialogs, and shared editor foundations.',
+  title: 'AI Node Workspace',
+  message: 'Custom AI nodes can now be authored, chatted with, connected in clip node graphs, expose keyframeable parameters, and run in preview/export.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'CSS ownership cleanup',
-  message: 'Styles now live beside their owning components while Vite still merges the final CSS bundle for production.',
+  title: 'Live node authoring',
+  message: 'The node workspace now supports manual graph editing, node debugging tools, text layout context, and live render invalidation while paused.',
   animated: true,
 };
 
