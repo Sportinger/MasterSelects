@@ -7,7 +7,7 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSAM2Store, maskToImageData } from '../stores/sam2Store';
-import type { ClipMask, MaskVertex } from '../types';
+import type { ClipMask, Layer, MaskVertex, TimelineClip, TimelineTrack } from '../types';
 import { generateMaskTexture } from '../utils/maskRenderer';
 import { layerBuilder, playheadState } from '../services/layerBuilder';
 import { layerPlaybackManager } from '../services/layerPlaybackManager';
@@ -16,6 +16,7 @@ import { getPlaybackDebugStats } from '../services/playbackDebugSnapshot';
 import { framePhaseMonitor } from '../services/framePhaseMonitor';
 import { playbackHealthMonitor } from '../services/playbackHealthMonitor';
 import { Logger } from '../services/logger';
+import { effectStackNeedsContinuousRender } from '../effects';
 
 const log = Logger.create('Engine');
 const MASK_TEXTURE_DRAG_THROTTLE_MS = 80;
@@ -37,6 +38,36 @@ function getMaskShapeHash(masks: ClipMask[]): string {
     `${m.position.x.toFixed(4)},${m.position.y.toFixed(4)}|` +
     `${(m.feather || 0).toFixed(2)}|${m.featherQuality ?? 50}`
   ).join('||');
+}
+
+function hasContinuousRenderLayers(layers: Layer[]): boolean {
+  return layers.some(layer =>
+    layer.visible !== false &&
+    effectStackNeedsContinuousRender(layer.effects)
+  );
+}
+
+function getVisibleVideoTrackIds(tracks: TimelineTrack[]): Set<string> {
+  const videoTracks = tracks.filter(track => track.type === 'video' && track.visible !== false);
+  const hasSolo = videoTracks.some(track => track.solo);
+
+  return new Set(
+    videoTracks
+      .filter(track => track.visible !== false && (!hasSolo || track.solo))
+      .map(track => track.id)
+  );
+}
+
+function hasActiveContinuousRenderClip(clips: TimelineClip[], tracks: TimelineTrack[], playhead: number): boolean {
+  const visibleVideoTrackIds = getVisibleVideoTrackIds(tracks);
+  const epsilon = 1e-6;
+
+  return clips.some(clip =>
+    visibleVideoTrackIds.has(clip.trackId) &&
+    playhead + epsilon >= clip.startTime &&
+    playhead < clip.startTime + clip.duration &&
+    effectStackNeedsContinuousRender(clip.effects)
+  );
 }
 
 export function useEngine() {
@@ -445,6 +476,13 @@ export function useEngine() {
         const currentPlayhead = playheadState.isUsingInternalPosition
           ? playheadState.position
           : useTimelineStore.getState().playheadPosition;
+        const timelineState = useTimelineStore.getState();
+        const hasActiveTemporalClip = hasActiveContinuousRenderClip(
+          timelineState.clips,
+          timelineState.tracks,
+          currentPlayhead
+        );
+        engine.setContinuousRender(hasActiveTemporalClip);
 
         // Track playhead changes for idle detection
         // During playback, playhead constantly changes -> keeps engine active
@@ -454,7 +492,7 @@ export function useEngine() {
           engine.requestRender();
         }
 
-        const hasMaskKeyframes = Array.from(useTimelineStore.getState().clipKeyframes.values())
+        const hasMaskKeyframes = Array.from(timelineState.clipKeyframes.values())
           .some(keyframes => keyframes.some(keyframe => keyframe.property.startsWith('mask.')));
         if (hasMaskKeyframes) {
           updateMaskTextures(false, currentPlayhead);
@@ -465,8 +503,9 @@ export function useEngine() {
           engine.requestRender();
         }
 
-        // Try cached RAM Preview frame first (instant scrubbing over pre-rendered frames)
-        if (engine.renderCachedFrame(currentPlayhead)) {
+        // Try cached RAM Preview frame first (instant scrubbing over pre-rendered frames).
+        // Wall-clock driven effects must render live even when the playhead is parked.
+        if (!hasActiveTemporalClip && engine.renderCachedFrame(currentPlayhead)) {
           const syncAudioStart = performance.now();
           layerBuilder.syncAudioElements();
           syncAudioMs += performance.now() - syncAudioStart;
@@ -490,6 +529,8 @@ export function useEngine() {
         const buildStart = performance.now();
         const layers = layerBuilder.buildLayersFromStore();
         buildMs += performance.now() - buildStart;
+        const needsContinuousRender = hasActiveTemporalClip || hasContinuousRenderLayers(layers);
+        engine.setContinuousRender(needsContinuousRender);
 
         // During playback: sync video elements FIRST so advanceToTime() prepares the
         // correct VideoFrame before rendering. This eliminates the systematic 1-frame lag
@@ -523,7 +564,7 @@ export function useEngine() {
         const cacheStart = performance.now();
         const { ramPreviewEnabled, addCachedFrame } = useTimelineStore.getState();
         const { isDraggingPlayhead } = useTimelineStore.getState();
-        if (ramPreviewEnabled && !isPlaying && !isDraggingPlayhead) {
+        if (ramPreviewEnabled && !isPlaying && !isDraggingPlayhead && !needsContinuousRender) {
           engine.cacheCompositeFrame(currentPlayhead).then(() => {
             addCachedFrame(currentPlayhead);
           });
@@ -532,7 +573,7 @@ export function useEngine() {
         // Cache active comp output for parent preview texture sharing
         // This allows parent compositions to show the active comp without video conflicts
         const activeCompId = useMediaStore.getState().activeCompositionId;
-        if (activeCompId && !isPlaying && !isDraggingPlayhead) {
+        if (activeCompId && !isPlaying && !isDraggingPlayhead && !needsContinuousRender) {
           engine.cacheActiveCompOutput(activeCompId);
         }
         cacheMs += performance.now() - cacheStart;
@@ -549,6 +590,7 @@ export function useEngine() {
     playbackHealthMonitor.start();
 
     return () => {
+      engine.setContinuousRender(false);
       clearInterval(statsInterval);
       engine.stop();
       playbackHealthMonitor.stop();

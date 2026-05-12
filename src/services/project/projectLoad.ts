@@ -19,6 +19,7 @@ import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
+import { cloneClipNodeGraph } from '../nodeGraph';
 import type {
   FlashBoard,
   FlashBoardJobState,
@@ -657,6 +658,7 @@ function convertProjectCompositionToStore(
           params: effect.params,
         })),
         colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
+        nodeGraph: cloneClipNodeGraph(c.nodeGraph),
         masks: c.masks.map((mask): ClipMask => ({
           id: mask.id,
           name: mask.name,
@@ -1728,6 +1730,7 @@ async function reloadNestedCompositionClips(): Promise<void> {
           thumbnails: nestedSerializedClip.thumbnails,
           transform: nestedSerializedClip.transform,
           effects: nestedSerializedClip.effects || [],
+          nodeGraph: cloneClipNodeGraph(nestedSerializedClip.nodeGraph),
           masks: nestedSerializedClip.masks || [],
           isLoading: false,
         });
@@ -1754,6 +1757,7 @@ async function reloadNestedCompositionClips(): Promise<void> {
           thumbnails: nestedSerializedClip.thumbnails,
           transform: nestedSerializedClip.transform,
           effects: nestedSerializedClip.effects || [],
+          nodeGraph: cloneClipNodeGraph(nestedSerializedClip.nodeGraph),
           masks: nestedSerializedClip.masks || [],
           reversed: nestedSerializedClip.reversed,
           speed: nestedSerializedClip.speed,
@@ -1782,6 +1786,7 @@ async function reloadNestedCompositionClips(): Promise<void> {
         thumbnails: nestedSerializedClip.thumbnails,
         transform: nestedSerializedClip.transform,
         effects: nestedSerializedClip.effects || [],
+        nodeGraph: cloneClipNodeGraph(nestedSerializedClip.nodeGraph),
         masks: nestedSerializedClip.masks || [],
         reversed: nestedSerializedClip.reversed,
         speed: nestedSerializedClip.speed,

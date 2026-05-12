@@ -762,6 +762,14 @@ export class RenderDispatcher {
     };
   }
 
+  private hasVisiblePreviewInputLayer(layers: Layer[]): boolean {
+    return layers.some((layer) =>
+      layer?.visible !== false &&
+      layer.opacity !== 0 &&
+      !!layer.source
+    );
+  }
+
   private shouldHoldLastFrameOnEmptyPlayback(targetTimeMs?: number): boolean {
     if (!this.lastRenderHadContent) {
       return false;
@@ -909,9 +917,13 @@ export class RenderDispatcher {
     // Handle empty layers
     if (layerData.length === 0) {
       const previewFallback = this.getPreviewFallbackFromLayers(layers);
+      const hasVisibleInputLayer = this.hasVisiblePreviewInputLayer(layers);
       // During playback, if we just had content, hold the last frame on screen
-      // instead of flashing black. This handles transient decoder stalls on
-      // Windows/Linux where readyState drops briefly.
+      // instead of flashing black. This only applies when an input layer exists
+      // for the current time but collection produced no texture/frame, which
+      // handles transient decoder stalls on Windows/Linux where readyState drops
+      // briefly. Real timeline gaps must render empty instead of retaining the
+      // previous clip's last frame.
       const isPlaying = d.renderLoop?.getIsPlaying() ?? false;
       const isDragging = useTimelineStore.getState().isDraggingPlayhead;
       const emptyScrubHoldDriftMs =
@@ -920,8 +932,11 @@ export class RenderDispatcher {
           ? Math.abs(previewFallback.targetTimeMs - this.lastPreviewDisplayedTimeMs)
           : undefined;
       const shouldHoldEmptyFrame =
-        (isPlaying && this.shouldHoldLastFrameOnEmptyPlayback(previewFallback.targetTimeMs)) ||
-        (isDragging && this.lastRenderHadContent);
+        hasVisibleInputLayer &&
+        (
+          (isPlaying && this.shouldHoldLastFrameOnEmptyPlayback(previewFallback.targetTimeMs)) ||
+          (isDragging && this.lastRenderHadContent)
+        );
 
       if (shouldHoldEmptyFrame) {
         // Don't render anything — canvas retains previous frame automatically.

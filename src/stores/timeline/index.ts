@@ -27,6 +27,7 @@ import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
 import { createMarkerSlice } from './markerSlice';
 import { createTransitionSlice } from './transitionSlice';
+import { createNodeGraphSlice } from './nodeGraphSlice';
 import { createClipboardSlice } from './clipboardSlice';
 import { createAIActionFeedbackSlice } from './aiActionFeedbackSlice';
 import { createPositioningUtils } from './positioningUtils';
@@ -67,6 +68,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const maskActions = createMaskSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
     const transitionActions = createTransitionSlice(set, get);
+    const nodeGraphActions = createNodeGraphSlice(set, get);
     const clipboardActions = createClipboardSlice(set, get);
     const aiActionFeedbackActions = createAIActionFeedbackSlice(set, get);
 
@@ -287,6 +289,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...maskActions,
       ...markerActions,
       ...transitionActions,
+      ...nodeGraphActions,
       ...clipboardActions,
       ...aiActionFeedbackActions,
       ...utils,

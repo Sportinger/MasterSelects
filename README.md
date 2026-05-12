@@ -13,7 +13,7 @@
 
 
 <p>
-  GPU-first editing with <b>30 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>native WebGPU 3D</b>, and only <b>15 runtime dependencies</b>.<br>
+  GPU-first editing with <b>32 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>native WebGPU 3D</b>, and only <b>15 runtime dependencies</b>.<br>
   Built from scratch in <b>2,700+ lines of WGSL</b> and <b>165k lines of TypeScript</b>.<br>
   Import <b>.lottie, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline.
 </p>
@@ -87,7 +87,7 @@ Most browser-based video editors share a pattern: Canvas 2D compositing, heavywe
 
 **3-tier scrubbing cache.** **300 GPU textures in VRAM** for instant scrub (Tier 1), per-video last-frame cache for seek transitions (Tier 2), and a **900-frame RAM Preview** with CPU/GPU promotion (Tier 3). When the cache is warm, **scrubbing doesn't decode at all**.
 
-**15 runtime dependencies.** React/React DOM, Zustand, MediaBunny, mp4box, PlayCanvas / splat-transform helpers, dotLottie, HuggingFace Transformers, ONNX Runtime, SoundTouch, WebGPU types, plus an **experimental FFmpeg WASM path**. **Everything else is custom-built from scratch**: the WebGPU compositor, all 30 effect shaders, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI, and the native shared 3D scene path. Zero runtime abstraction layers between your timeline and the GPU.
+**15 runtime dependencies.** React/React DOM, Zustand, MediaBunny, mp4box, PlayCanvas / splat-transform helpers, dotLottie, HuggingFace Transformers, ONNX Runtime, SoundTouch, WebGPU types, plus an **experimental FFmpeg WASM path**. **Everything else is custom-built from scratch**: the WebGPU compositor, all 32 effect shaders, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI, and the native shared 3D scene path. Zero runtime abstraction layers between your timeline and the GPU.
 
 **Nested composition rendering.** Compositions within compositions, each with their own resolution. Rendered to **pooled GPU textures** with frame-level caching, composited in the parent's ping-pong pass, all in a **single `device.queue.submit()`**.
 
@@ -134,7 +134,7 @@ This requires the Native Helper to be running, a MasterSelects editor tab to be 
 | Feature | Description |
 |---|---|
 | [**Multi-track Timeline**](docs/Features/Timeline.md) | Cut, copy, paste, multi-select, JKL shuttle, nested compositions |
-| [**30 GPU Effects**](docs/Features/Effects.md) | Color correction, blur, distort, stylize, keying - all real-time |
+| [**32 GPU Effects**](docs/Features/Effects.md) | Color correction, blur, distort, stylize, keying - all real-time |
 | [**Video Scopes**](docs/Features/UI-Panels.md#video-scopes-panels) | GPU-accelerated Histogram, Vectorscope, Waveform monitor |
 | [**Keyframe Animation**](docs/Features/Keyframes.md) | Bezier curves, copy/paste, tick marks, 5 easing modes |
 | [**Vector Masks**](docs/Features/Masks.md) | Pen tool, edge dragging, feathering, multiple masks per clip |
@@ -315,7 +315,7 @@ src/
 │   ├── video/           # VideoFrameManager
 │   ├── stats/           # PerformanceStats
 │   └── structuralSharing/ # SnapshotManager for undo/redo
-├── effects/             # 30 GPU effects (color/, blur/, distort/, stylize/, keying/)
+├── effects/             # 32 GPU effects (color/, blur/, distort/, stylize/, keying/)
 ├── transitions/         # Transition definitions (crossfade)
 ├── services/            # Audio, AI, Project, NativeHelper, Logger, LayerBuilder, MediaRuntime
 │   ├── aiTools/         # 79 exported AI tool definitions + handlers

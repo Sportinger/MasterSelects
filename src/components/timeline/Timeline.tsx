@@ -58,6 +58,7 @@ import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
 import type { ClipKeyframeTimeGroup, ContextMenuState, TimelineRulerCacheRange } from './types';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
+import { createSubcompositionFromSelection } from '../../services/timelineSubcomposition';
 
 const KEYFRAME_TIME_GROUP_PRECISION = 1000;
 const RAM_PREVIEW_FEATURE_ENABLED = false;
@@ -367,6 +368,10 @@ export function Timeline() {
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
   const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
+  const isClipLocked = useCallback((clipId: string) => {
+    const clip = clipMap.get(clipId);
+    return !!clip && trackMap.get(clip.trackId)?.locked === true;
+  }, [clipMap, trackMap]);
 
   // Time helpers - extracted to hook
   const {
@@ -400,6 +405,7 @@ export function Timeline() {
   // Clip trimming - extracted to hook
   const { clipTrim, handleTrimStart } = useClipTrim({
     clipMap,
+    tracks,
     selectClip,
     trimClip,
     moveClip,
@@ -474,6 +480,11 @@ export function Timeline() {
 
   // Combined drag handlers that check for transition drops first
   const handleCombinedDragOver = useCallback((e: React.DragEvent, trackId: string) => {
+    if (trackMap.get(trackId)?.locked) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
     if (isTransitionDrag(e)) {
       const rect = timelineRef.current?.getBoundingClientRect();
       if (rect) {
@@ -484,9 +495,14 @@ export function Timeline() {
     } else {
       handleTrackDragOver(e, trackId);
     }
-  }, [isTransitionDrag, handleTransitionDragOver, handleTrackDragOver, scrollX, pixelToTime]);
+  }, [trackMap, isTransitionDrag, handleTransitionDragOver, handleTrackDragOver, scrollX, pixelToTime]);
 
   const handleCombinedDrop = useCallback((e: React.DragEvent, trackId: string) => {
+    if (trackMap.get(trackId)?.locked) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
     if (isTransitionDrag(e)) {
       const rect = timelineRef.current?.getBoundingClientRect();
       if (rect) {
@@ -497,7 +513,7 @@ export function Timeline() {
     } else {
       handleTrackDrop(e, trackId);
     }
-  }, [isTransitionDrag, handleTransitionDrop, handleTrackDrop, scrollX, pixelToTime]);
+  }, [trackMap, isTransitionDrag, handleTransitionDrop, handleTrackDrop, scrollX, pixelToTime]);
 
   const handleCombinedDragLeave = useCallback((e: React.DragEvent) => {
     handleTransitionDragLeave();
@@ -1191,7 +1207,7 @@ export function Timeline() {
             <div className="timeline-content-row" ref={contentRef} style={{ transform: `translateY(-${scrollY}px)` }}>
           <div className={`track-headers ${clipAnimationPhase === 'exiting' ? 'phase-exiting' : clipAnimationPhase === 'entering' ? 'phase-entering' : ''}`}>
             {/* New video track preview header - appears when dragging over new track zone */}
-            {externalDrag && (
+            {externalDrag?.showVideoNewTrackZone && (
               <div
                 className={`track-header-preview video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
                 style={{ height: 60 }}
@@ -1221,6 +1237,9 @@ export function Timeline() {
                     onToggleExpand={() => toggleTrackExpanded(track.id)}
                     onToggleSolo={() =>
                       useTimelineStore.getState().setTrackSolo(track.id, !track.solo)
+                    }
+                    onToggleLocked={() =>
+                      useTimelineStore.getState().setTrackLocked(track.id, !track.locked)
                     }
                     onToggleMuted={() =>
                       useTimelineStore.getState().setTrackMuted(track.id, !track.muted)
@@ -1295,7 +1314,7 @@ export function Timeline() {
               ['--grid-size' as string]: `${gridSize}px`,
             }}>
               {/* New Video Track drop zone - at TOP above video tracks */}
-              {externalDrag && !externalDrag.isAudio && (
+              {externalDrag && !externalDrag.isAudio && externalDrag.showVideoNewTrackZone && (
                 <div
                   className={`new-track-drop-zone video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
                   onDragOver={(e) => handleNewTrackDragOver(e, 'video')}
@@ -1627,6 +1646,7 @@ export function Timeline() {
         setContextMenu={setContextMenu}
         clipMap={clipMap}
         selectedClipIds={selectedClipIds}
+        isClipLocked={isClipLocked}
         selectClip={selectClip}
         removeClip={removeClip}
         splitClipAtPlayhead={splitClipAtPlayhead}
@@ -1634,6 +1654,9 @@ export function Timeline() {
         unlinkGroup={unlinkGroup}
         generateWaveformForClip={generateWaveformForClip}
         convertSolidToMotionShape={convertSolidToMotionShape}
+        createSubcompositionFromSelection={(clipId) => {
+          void createSubcompositionFromSelection(clipId);
+        }}
         copyClipEffects={copyClipEffects}
         pasteClipEffects={pasteClipEffects}
         hasClipboardEffects={hasClipboardEffects}

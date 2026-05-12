@@ -4,7 +4,16 @@
  */
 
 import type { TextClipProperties } from '../types';
+import { markDynamicCanvasUpdated } from './canvasVersion';
 import { googleFontsService } from './googleFontsService';
+import {
+  isAreaTextEnabled,
+  measureTextWithLetterSpacing,
+  resolveTextBoundsPath,
+  resolveTextBoxRect,
+  traceTextBoundsPath,
+  wrapTextToShapeLines,
+} from './textLayout';
 
 class TextRenderer {
   private canvas: HTMLCanvasElement;
@@ -16,6 +25,7 @@ class TextRenderer {
     this.width = width;
     this.height = height;
     this.canvas = document.createElement('canvas');
+    this.canvas.dataset.masterselectsDynamic = 'text';
     this.canvas.width = width;
     this.canvas.height = height;
     this.ctx = this.canvas.getContext('2d', {
@@ -29,32 +39,49 @@ class TextRenderer {
    */
   render(props: TextClipProperties, targetCanvas?: HTMLCanvasElement): HTMLCanvasElement {
     const canvas = targetCanvas || this.canvas;
+    canvas.dataset.masterselectsDynamic = 'text';
     const ctx = targetCanvas ? targetCanvas.getContext('2d')! : this.ctx;
+    const previousWidth = this.width;
+    const previousHeight = this.height;
+    const renderWidth = targetCanvas ? Math.max(1, targetCanvas.width || this.width) : this.width;
+    const renderHeight = targetCanvas ? Math.max(1, targetCanvas.height || this.height) : this.height;
 
     // Ensure canvas dimensions match
-    if (canvas.width !== this.width || canvas.height !== this.height) {
-      canvas.width = this.width;
-      canvas.height = this.height;
+    if (canvas.width !== renderWidth || canvas.height !== renderHeight) {
+      canvas.width = renderWidth;
+      canvas.height = renderHeight;
     }
 
-    // Clear canvas with transparent background
-    ctx.clearRect(0, 0, this.width, this.height);
+    this.width = renderWidth;
+    this.height = renderHeight;
 
-    // Set font properties
-    const fontStyle = props.fontStyle === 'italic' ? 'italic' : 'normal';
-    ctx.font = `${fontStyle} ${props.fontWeight} ${props.fontSize}px "${props.fontFamily}"`;
-    ctx.textAlign = props.textAlign;
+    try {
+      // Clear canvas with transparent background
+      ctx.clearRect(0, 0, this.width, this.height);
 
-    // Ensure font is loaded
-    if (!googleFontsService.isFontLoaded(props.fontFamily, props.fontWeight)) {
-      // Load font in background - re-render will happen on property change
-      googleFontsService.loadFont(props.fontFamily, props.fontWeight);
-    }
+      // Set font properties
+      const fontStyle = props.fontStyle === 'italic' ? 'italic' : 'normal';
+      ctx.font = `${fontStyle} ${props.fontWeight} ${props.fontSize}px "${props.fontFamily}"`;
+      ctx.textAlign = props.textAlign;
+      ctx.textBaseline = 'alphabetic';
 
-    if (props.pathEnabled && props.pathPoints.length >= 2) {
-      this.renderTextOnPath(ctx, props);
-    } else {
-      this.renderNormalText(ctx, props);
+      // Ensure font is loaded
+      if (!googleFontsService.isFontLoaded(props.fontFamily, props.fontWeight)) {
+        // Load font in background - re-render will happen on property change
+        googleFontsService.loadFont(props.fontFamily, props.fontWeight);
+      }
+
+      if (props.pathEnabled && props.pathPoints.length >= 2) {
+        this.renderTextOnPath(ctx, props);
+      } else {
+        this.renderNormalText(ctx, props);
+      }
+      markDynamicCanvasUpdated(canvas, 'text');
+    } finally {
+      if (targetCanvas) {
+        this.width = previousWidth;
+        this.height = previousHeight;
+      }
     }
 
     return canvas;
@@ -64,6 +91,11 @@ class TextRenderer {
    * Render standard text (multi-line support)
    */
   private renderNormalText(ctx: CanvasRenderingContext2D, props: TextClipProperties): void {
+    if (isAreaTextEnabled(props)) {
+      this.renderAreaText(ctx, props);
+      return;
+    }
+
     const lines = props.text.split('\n');
     const lineHeightPx = props.fontSize * props.lineHeight;
     const totalHeight = lines.length * lineHeightPx;
@@ -107,6 +139,83 @@ class TextRenderer {
         this.renderLine(ctx, line, x, y, props);
       }
     }
+  }
+
+  /**
+   * Render paragraph text inside a selectable box with automatic wrapping.
+   */
+  private renderAreaText(ctx: CanvasRenderingContext2D, props: TextClipProperties): void {
+    const box = resolveTextBoxRect(props, this.width, this.height);
+    const bounds = resolveTextBoundsPath(props, this.width, this.height);
+    const lineHeightPx = props.fontSize * props.lineHeight;
+    const topBaseline = box.y + props.fontSize;
+    const firstPassLines = wrapTextToShapeLines(
+      ctx,
+      props.text,
+      bounds,
+      box,
+      this.width,
+      this.height,
+      props.fontSize,
+      props.lineHeight,
+      props.letterSpacing,
+      topBaseline,
+    );
+    const totalHeight = firstPassLines.length * lineHeightPx;
+
+    let startY: number;
+    switch (props.verticalAlign) {
+      case 'middle':
+        startY = box.y + Math.max(0, (box.height - totalHeight) / 2) + props.fontSize;
+        break;
+      case 'bottom':
+        startY = box.y + Math.max(0, box.height - totalHeight) + props.fontSize;
+        break;
+      case 'top':
+      default:
+        startY = box.y + props.fontSize;
+        break;
+    }
+
+    const useCharacterRendering = props.letterSpacing !== 0;
+    const lines = wrapTextToShapeLines(
+      ctx,
+      props.text,
+      bounds,
+      box,
+      this.width,
+      this.height,
+      props.fontSize,
+      props.lineHeight,
+      props.letterSpacing,
+      startY,
+    );
+
+    ctx.save();
+    traceTextBoundsPath(ctx, bounds, this.width, this.height);
+    ctx.clip();
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      const y = line.y;
+      const x = props.textAlign === 'center'
+        ? line.left + line.width / 2
+        : props.textAlign === 'right'
+          ? line.right
+          : line.left;
+
+      if (y < box.y - lineHeightPx || y > box.y + box.height + lineHeightPx) {
+        continue;
+      }
+
+      if (useCharacterRendering) {
+        this.renderLineWithLetterSpacing(ctx, line.text, x, y, props);
+      } else {
+        this.renderLine(ctx, line.text, x, y, props);
+      }
+    }
+
+    ctx.restore();
   }
 
   /**
@@ -163,7 +272,7 @@ class TextRenderer {
   ): void {
     const chars = text.split('');
     const charWidths = chars.map(c => ctx.measureText(c).width);
-    const totalWidth = charWidths.reduce((sum, w) => sum + w, 0) + (chars.length - 1) * props.letterSpacing;
+    const totalWidth = measureTextWithLetterSpacing(ctx, text, props.letterSpacing);
 
     // Calculate starting X based on alignment
     let currentX: number;
@@ -383,6 +492,7 @@ class TextRenderer {
    */
   createCanvas(width: number = 1920, height: number = 1080): HTMLCanvasElement {
     const canvas = document.createElement('canvas');
+    markDynamicCanvasUpdated(canvas, 'text');
     canvas.width = width;
     canvas.height = height;
     return canvas;

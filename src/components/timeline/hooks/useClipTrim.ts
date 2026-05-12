@@ -2,13 +2,14 @@
 // Extracted from Timeline.tsx for better maintainability
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { TimelineClip } from '../../../types';
+import type { TimelineClip, TimelineTrack } from '../../../types';
 import { shouldLoopVectorAnimation } from '../../../types/vectorAnimation';
 import type { ClipTrimState } from '../types';
 
 interface UseClipTrimProps {
   // Clip data
   clipMap: Map<string, TimelineClip>;
+  tracks: TimelineTrack[];
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean) => void;
@@ -32,6 +33,7 @@ function canLoopExtendVectorClip(clip: TimelineClip): boolean {
 
 export function useClipTrim({
   clipMap,
+  tracks,
   selectClip,
   trimClip,
   moveClip,
@@ -51,6 +53,13 @@ export function useClipTrim({
 
       const clip = clipMap.get(clipId);
       if (!clip) return;
+      const isClipLocked = (candidate: TimelineClip): boolean =>
+        tracks.find(track => track.id === candidate.trackId)?.locked === true;
+      if (isClipLocked(clip)) return;
+      if (!e.altKey && clip.linkedClipId) {
+        const linkedClip = clipMap.get(clip.linkedClipId);
+        if (linkedClip && isClipLocked(linkedClip)) return;
+      }
 
       selectClip(clipId);
 
@@ -178,7 +187,7 @@ export function useClipTrim({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clipMap, pixelToTime, selectClip, trimClip, moveClip]
+    [clipMap, tracks, pixelToTime, selectClip, trimClip, moveClip]
   );
 
   return {

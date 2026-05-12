@@ -910,6 +910,15 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+.timeline-clip.track-locked {
+  cursor: not-allowed;
+  filter: saturate(0.72);
+}
+
+.timeline-clip.track-locked:hover {
+  box-shadow: none;
+}
+
 .timeline-clip.selected {
   box-shadow: 0 0 0 2px var(--accent-timeline);
 }

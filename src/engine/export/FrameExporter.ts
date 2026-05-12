@@ -48,22 +48,6 @@ export class FrameExporter {
     this.exportMode = settings.exportMode ?? 'fast';
   }
 
-  private shouldRetryInPreciseMode(error: unknown): boolean {
-    const message = error instanceof Error
-      ? `${error.name}: ${error.message}`
-      : String(error);
-
-    return (
-      message.includes('FAST export failed') ||
-      message.includes('Decoder error') ||
-      message.includes('EncodingError') ||
-      message.includes('Decoding error') ||
-      message.includes('closed codec') ||
-      message.includes('FAST export decoder closed') ||
-      message.includes('Failed to execute \'reset\' on \'VideoDecoder\'')
-    );
-  }
-
   private resetAttemptState(): void {
     this.encoder = null;
     this.audioPipeline = null;
@@ -96,42 +80,20 @@ export class FrameExporter {
   async export(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
     const forcePreciseRendering = this.shouldForcePreciseRendering();
     const initialMode = forcePreciseRendering ? 'precise' : this.exportMode;
-    const attemptModes: ExportMode[] = initialMode === 'fast' ? ['fast', 'precise'] : [initialMode];
-    let fallbackAttempted = false;
 
     if (forcePreciseRendering && this.exportMode !== 'precise') {
       log.info('Forcing PRECISE export mode for 3D and gaussian splat content');
     }
 
-    for (const attemptMode of attemptModes) {
-      this.exportMode = attemptMode;
-      this.resetAttemptState();
+    this.exportMode = initialMode;
+    this.resetAttemptState();
 
-      try {
-        if (fallbackAttempted) {
-          log.warn('Retrying export in PRECISE mode after FAST export failure');
-        }
-
-        return await this.exportAttempt(onProgress);
-      } catch (error) {
-        log.error('Export error:', error);
-
-        if (
-          !this.isCancelled &&
-          !fallbackAttempted &&
-          initialMode === 'fast' &&
-          attemptMode === 'fast' &&
-          this.shouldRetryInPreciseMode(error)
-        ) {
-          fallbackAttempted = true;
-          continue;
-        }
-
-        return null;
-      }
+    try {
+      return await this.exportAttempt(onProgress);
+    } catch (error) {
+      log.error('Export error:', error);
+      throw error;
     }
-
-    return null;
   }
 
   private async exportAttempt(onProgress: (progress: ExportProgress) => void): Promise<Blob | null> {
@@ -520,6 +482,7 @@ export class FrameExporter {
       getInterpolatedEffects: state.getInterpolatedEffects,
       getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,
       getInterpolatedVectorAnimationSettings: state.getInterpolatedVectorAnimationSettings,
+      getInterpolatedTextBounds: state.getInterpolatedTextBounds,
       getSourceTimeForClip: state.getSourceTimeForClip,
       getInterpolatedSpeed: state.getInterpolatedSpeed,
     };

@@ -1,9 +1,15 @@
 // Text clip actions slice - extracted from clipSlice
 
-import type { TimelineClip, TextClipProperties } from '../../types';
+import type { MaskVertex, TextBoundsPath, TimelineClip, TextClipProperties } from '../../types';
 import type { TextClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM, DEFAULT_TEXT_PROPERTIES, DEFAULT_TEXT_DURATION } from './constants';
 import { textRenderer } from '../../services/textRenderer';
+import {
+  cloneTextBoundsPath,
+  createTextBoundsFromRect,
+  resolveTextBoundsPath,
+  resolveTextBoxRect,
+} from '../../services/textLayout';
 import { googleFontsService } from '../../services/googleFontsService';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
@@ -12,6 +18,126 @@ import { useMediaStore } from '../mediaStore';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('TextClipSlice');
+
+function getActiveCompositionResolution(): { width: number; height: number } {
+  const mediaState = useMediaStore.getState();
+  const activeComposition = mediaState.compositions.find(composition => composition.id === mediaState.activeCompositionId);
+  if (activeComposition?.width && activeComposition.height) {
+    return {
+      width: Math.max(1, Math.round(activeComposition.width)),
+      height: Math.max(1, Math.round(activeComposition.height)),
+    };
+  }
+
+  const engineResolution = engine.getOutputDimensions();
+  if (engineResolution.width > 0 && engineResolution.height > 0) {
+    return {
+      width: Math.max(1, Math.round(engineResolution.width)),
+      height: Math.max(1, Math.round(engineResolution.height)),
+    };
+  }
+
+  return {
+    width: 1920,
+    height: 1080,
+  };
+}
+
+function getInitialTextProperties(width: number, height: number): TextClipProperties {
+  const base = { ...DEFAULT_TEXT_PROPERTIES };
+  const box = resolveTextBoxRect(base, width, height);
+  return {
+    ...base,
+    boxX: Math.round(box.x),
+    boxY: Math.round(box.y),
+    boxWidth: Math.round(box.width),
+    boxHeight: Math.round(box.height),
+    textBounds: createTextBoundsFromRect(box, width, height),
+  };
+}
+
+function cloneTextBoundsWithUpdates(
+  bounds: TextBoundsPath,
+  updates: Partial<TextBoundsPath>,
+): TextBoundsPath {
+  return {
+    ...bounds,
+    ...updates,
+    position: updates.position ? { ...updates.position } : { ...bounds.position },
+    vertices: updates.vertices
+      ? updates.vertices.map(vertex => ({
+          ...vertex,
+          handleIn: { ...vertex.handleIn },
+          handleOut: { ...vertex.handleOut },
+        }))
+      : bounds.vertices.map(vertex => ({
+          ...vertex,
+          handleIn: { ...vertex.handleIn },
+          handleOut: { ...vertex.handleOut },
+        })),
+  };
+}
+
+function rescaleTextBoundsPath(
+  bounds: TextBoundsPath,
+  fromWidth: number,
+  fromHeight: number,
+  toWidth: number,
+  toHeight: number,
+): TextBoundsPath {
+  if (fromWidth === toWidth && fromHeight === toHeight) {
+    return cloneTextBoundsPath(bounds);
+  }
+
+  const scaleX = fromWidth / Math.max(1, toWidth);
+  const scaleY = fromHeight / Math.max(1, toHeight);
+
+  return {
+    ...bounds,
+    position: {
+      x: bounds.position.x * scaleX,
+      y: bounds.position.y * scaleY,
+    },
+    vertices: bounds.vertices.map(vertex => ({
+      ...vertex,
+      x: vertex.x * scaleX,
+      y: vertex.y * scaleY,
+      handleIn: {
+        x: vertex.handleIn.x * scaleX,
+        y: vertex.handleIn.y * scaleY,
+      },
+      handleOut: {
+        x: vertex.handleOut.x * scaleX,
+        y: vertex.handleOut.y * scaleY,
+      },
+    })),
+  };
+}
+
+function rescaleTextBoxFields(
+  props: TextClipProperties,
+  fromWidth: number,
+  fromHeight: number,
+  toWidth: number,
+  toHeight: number,
+): Partial<TextClipProperties> {
+  if (fromWidth === toWidth && fromHeight === toHeight) return {};
+  const scaleX = toWidth / Math.max(1, fromWidth);
+  const scaleY = toHeight / Math.max(1, fromHeight);
+  return {
+    boxX: typeof props.boxX === 'number' ? props.boxX * scaleX : props.boxX,
+    boxY: typeof props.boxY === 'number' ? props.boxY * scaleY : props.boxY,
+    boxWidth: typeof props.boxWidth === 'number' ? props.boxWidth * scaleX : props.boxWidth,
+    boxHeight: typeof props.boxHeight === 'number' ? props.boxHeight * scaleY : props.boxHeight,
+  };
+}
+
+function invalidateTextGpuBindings(): void {
+  const pipeline = (engine as unknown as {
+    compositorPipeline?: { invalidateBindGroupCache: (layerId?: string) => void };
+  }).compositorPipeline;
+  pipeline?.invalidateBindGroupCache();
+}
 
 export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => ({
   addTextClip: async (trackId, startTime, duration = DEFAULT_TEXT_DURATION, skipMediaItem = false) => {
@@ -26,8 +152,10 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
     const clipId = generateTextClipId();
     await googleFontsService.loadFont(DEFAULT_TEXT_PROPERTIES.fontFamily, DEFAULT_TEXT_PROPERTIES.fontWeight);
 
-    const canvas = textRenderer.createCanvas(1920, 1080);
-    textRenderer.render(DEFAULT_TEXT_PROPERTIES, canvas);
+    const resolution = getActiveCompositionResolution();
+    const textProperties = getInitialTextProperties(resolution.width, resolution.height);
+    const canvas = textRenderer.createCanvas(resolution.width, resolution.height);
+    textRenderer.render(textProperties, canvas);
 
     const textClip: TimelineClip = {
       id: clipId,
@@ -41,7 +169,7 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
       source: { type: 'text', textCanvas: canvas, naturalDuration: duration },
       transform: { ...DEFAULT_TRANSFORM },
       effects: [],
-      textProperties: { ...DEFAULT_TEXT_PROPERTIES },
+      textProperties,
       isLoading: false,
     };
 
@@ -66,9 +194,46 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
     const clip = clips.find(c => c.id === clipId);
     if (!clip?.textProperties) return;
 
-    const newProps: TextClipProperties = { ...clip.textProperties, ...props };
+    let newProps: TextClipProperties = { ...clip.textProperties, ...props };
 
-    const canvas = clip.source?.textCanvas || textRenderer.createCanvas(1920, 1080);
+    const fallbackResolution = getActiveCompositionResolution();
+    const currentCanvas = clip.source?.textCanvas;
+    const sourceWidth = currentCanvas?.width || fallbackResolution.width;
+    const sourceHeight = currentCanvas?.height || fallbackResolution.height;
+    const renderWidth = fallbackResolution.width;
+    const renderHeight = fallbackResolution.height;
+    const shouldResizeCanvas = sourceWidth !== renderWidth || sourceHeight !== renderHeight;
+    const propsBeforeCanvasResize = newProps;
+    if (shouldResizeCanvas) {
+      newProps = {
+        ...newProps,
+        ...rescaleTextBoxFields(newProps, sourceWidth, sourceHeight, renderWidth, renderHeight),
+        textBounds: newProps.textBounds?.vertices?.length
+          ? rescaleTextBoundsPath(newProps.textBounds, sourceWidth, sourceHeight, renderWidth, renderHeight)
+          : newProps.textBounds,
+      };
+    }
+
+    if (newProps.boxEnabled && !newProps.textBounds?.vertices?.length) {
+      const legacyBox = resolveTextBoxRect(propsBeforeCanvasResize, sourceWidth, sourceHeight);
+      const scaleX = renderWidth / Math.max(1, sourceWidth);
+      const scaleY = renderHeight / Math.max(1, sourceHeight);
+      const box = {
+        x: legacyBox.x * scaleX,
+        y: legacyBox.y * scaleY,
+        width: legacyBox.width * scaleX,
+        height: legacyBox.height * scaleY,
+      };
+      newProps = {
+        ...newProps,
+        textBounds: createTextBoundsFromRect(box, renderWidth, renderHeight),
+      };
+    }
+    const canvas = currentCanvas &&
+      currentCanvas.width === renderWidth &&
+      currentCanvas.height === renderHeight
+      ? currentCanvas
+      : textRenderer.createCanvas(renderWidth, renderHeight);
     textRenderer.render(newProps, canvas);
 
     const texMgr = engine.getTextureManager();
@@ -77,6 +242,7 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
         log.debug('Canvas texture not cached yet, will create on render');
       }
     }
+    invalidateTextGpuBindings();
 
     set({
       clips: clips.map(c => c.id !== clipId ? c : {
@@ -108,6 +274,7 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
         if (currentCanvas) {
           textRenderer.render(currentClip.textProperties, currentCanvas);
           engine.getTextureManager()?.updateCanvasTexture(currentCanvas);
+          invalidateTextGpuBindings();
         }
         inv();
 
@@ -119,6 +286,91 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
           log.debug('Direct render after font load failed', e);
         }
       });
+    }
+  },
+
+  updateTextBounds: (clipId, updates) => {
+    const clip = get().clips.find(candidate => candidate.id === clipId);
+    if (!clip?.textProperties) return;
+    const sourceCanvas = clip.source?.textCanvas;
+    const width = sourceCanvas?.width || getActiveCompositionResolution().width;
+    const height = sourceCanvas?.height || getActiveCompositionResolution().height;
+    const interpolatedBounds = get().getInterpolatedTextBounds(clip.id, get().playheadPosition - clip.startTime);
+    const currentBounds = interpolatedBounds
+      ? cloneTextBoundsPath(interpolatedBounds)
+      : clip.textProperties.textBounds
+      ? cloneTextBoundsPath(clip.textProperties.textBounds)
+      : resolveTextBoundsPath(clip.textProperties, width, height);
+    get().updateTextProperties(clipId, {
+      boxEnabled: true,
+      textBounds: cloneTextBoundsWithUpdates(currentBounds, updates),
+    });
+  },
+
+  updateTextBoundsVertex: (clipId, vertexId, updates, recordKeyframe = true) => {
+    const clip = get().clips.find(candidate => candidate.id === clipId);
+    if (!clip?.textProperties) return;
+    const sourceCanvas = clip.source?.textCanvas;
+    const width = sourceCanvas?.width || getActiveCompositionResolution().width;
+    const height = sourceCanvas?.height || getActiveCompositionResolution().height;
+    const interpolatedBounds = get().getInterpolatedTextBounds(clip.id, get().playheadPosition - clip.startTime);
+    const currentBounds = interpolatedBounds
+      ? cloneTextBoundsPath(interpolatedBounds)
+      : clip.textProperties.textBounds
+      ? cloneTextBoundsPath(clip.textProperties.textBounds)
+      : resolveTextBoundsPath(clip.textProperties, width, height);
+    const nextBounds = cloneTextBoundsWithUpdates(currentBounds, {
+      vertices: currentBounds.vertices.map(vertex => (
+        vertex.id === vertexId
+          ? {
+              ...vertex,
+              ...updates,
+              handleIn: updates.handleIn ? { ...updates.handleIn } : { ...vertex.handleIn },
+              handleOut: updates.handleOut ? { ...updates.handleOut } : { ...vertex.handleOut },
+            }
+          : vertex
+      )),
+    });
+    get().updateTextProperties(clipId, {
+      boxEnabled: true,
+      textBounds: nextBounds,
+    });
+    if (recordKeyframe) {
+      get().recordTextBoundsPathKeyframe(clipId);
+    }
+  },
+
+  updateTextBoundsVertices: (clipId, vertexUpdates, recordKeyframe = true) => {
+    const clip = get().clips.find(candidate => candidate.id === clipId);
+    if (!clip?.textProperties) return;
+    const sourceCanvas = clip.source?.textCanvas;
+    const width = sourceCanvas?.width || getActiveCompositionResolution().width;
+    const height = sourceCanvas?.height || getActiveCompositionResolution().height;
+    const interpolatedBounds = get().getInterpolatedTextBounds(clip.id, get().playheadPosition - clip.startTime);
+    const currentBounds = interpolatedBounds
+      ? cloneTextBoundsPath(interpolatedBounds)
+      : clip.textProperties.textBounds
+      ? cloneTextBoundsPath(clip.textProperties.textBounds)
+      : resolveTextBoundsPath(clip.textProperties, width, height);
+    const updatesById = new Map(vertexUpdates.map(entry => [entry.vertexId, entry.updates]));
+    const nextBounds = cloneTextBoundsWithUpdates(currentBounds, {
+      vertices: currentBounds.vertices.map(vertex => {
+        const updates = updatesById.get(vertex.id);
+        if (!updates) return vertex;
+        return {
+          ...vertex,
+          ...updates,
+          handleIn: updates.handleIn ? { ...updates.handleIn } : { ...vertex.handleIn },
+          handleOut: updates.handleOut ? { ...updates.handleOut } : { ...vertex.handleOut },
+        } as MaskVertex;
+      }),
+    });
+    get().updateTextProperties(clipId, {
+      boxEnabled: true,
+      textBounds: nextBounds,
+    });
+    if (recordKeyframe) {
+      get().recordTextBoundsPathKeyframe(clipId);
     }
   },
 });

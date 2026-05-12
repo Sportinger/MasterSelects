@@ -471,6 +471,10 @@ export class WebGPUEngine {
     this.renderLoop?.setIsScrubbing(scrubbing);
   }
 
+  setContinuousRender(enabled: boolean): void {
+    this.renderLoop?.setContinuousRender(enabled);
+  }
+
   // Called by RVFC when a new decoded frame is ready - bypasses scrub rate limiter
   requestNewFrameRender(): void {
     this.renderLoop?.requestNewFrameRender();

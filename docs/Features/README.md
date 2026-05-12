@@ -20,6 +20,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, shortcuts, and keyframes |
+| **Node Workspace** | Dockable selected-clip processing graph derived from live timeline state |
 | **AI Control** | OpenAI/Cloud or local Lemonade chat with 79 exported tools plus local/native bridge access for external agents |
 | **AI Video Workspace** | Classic AI Video plus FlashBoard board-mode generation and media import |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
@@ -42,6 +43,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Keyframes](./Keyframes.md) | Animated properties, effect params, masks, fades, easing, and visibility rules |
 | [Preview](./Preview.md) | Main preview, source monitor, output windows, RAM preview, and target routing |
 | [UI Panels](./UI-Panels.md) | Dock layout, panel catalog, properties tabs, mobile UI, and workspace surfaces |
+| [Node Workspace](./Node-Workspace.md) | Selected-clip graph view, Media Board canvas behavior, and current render boundary |
 | [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Current shortcut registry, playback controls, and preset behavior |
 
 ### Rendering And Media

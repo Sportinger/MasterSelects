@@ -36,6 +36,8 @@ import { getModelSequenceFrame, getModelSequenceFrameUrl, resolveModelSequenceDa
 import { resolveSceneEffectorsEnabled } from '../../engine/scene/SceneEffectorUtils';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { renderClipAINodesToCanvas } from '../nodeGraph';
+import { textRenderer } from '../textRenderer';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import { getExpectedProxyFrameCount } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
@@ -575,12 +577,47 @@ export class LayerBuilderService {
       layer = this.buildGaussianSplatLayer(clip, layerIndex, ctx, opacityOverride);
     }
 
+    if (layer?.source) {
+      layer = this.applyAINodesToLayer(clip, layer, ctx);
+    }
+
     // Pass through 3D flag from clip to layer
     if (layer && clip.is3D) {
       layer.is3D = true;
     }
 
     return layer;
+  }
+
+  private applyAINodesToLayer(clip: TimelineClip, layer: Layer, ctx: FrameContext): Layer {
+    if (!layer.source) {
+      return layer;
+    }
+
+    const timeInfo = getClipTimeInfo(ctx, clip);
+    const canvas = renderClipAINodesToCanvas(
+      clip,
+      layer.source,
+      layer.id,
+      timeInfo.clipLocalTime,
+      (nodeId) => ctx.getInterpolatedNodeGraphParams(clip.id, nodeId, timeInfo.clipLocalTime),
+    );
+    if (!canvas) {
+      return layer;
+    }
+
+    return {
+      ...layer,
+      source: {
+        type: 'text',
+        textCanvas: canvas,
+        intrinsicWidth: canvas.width,
+        intrinsicHeight: canvas.height,
+        mediaTime: layer.source.mediaTime,
+        targetMediaTime: layer.source.targetMediaTime,
+        previewPath: 'ai-node-runtime',
+      },
+    };
   }
 
   private buildMotionShapeLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer | null {
@@ -1035,6 +1072,25 @@ export class LayerBuilderService {
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
     const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
+    let textCanvas = clip.source!.textCanvas;
+    const interpolatedTextBounds = clip.textProperties
+      ? ctx.getInterpolatedTextBounds(clip.id, timeInfo.clipLocalTime)
+      : undefined;
+    if (clip.textProperties && interpolatedTextBounds && textCanvas) {
+      const hasBoundsKeyframes =
+        ctx.hasKeyframes(clip.id, 'textBounds.path') ||
+        ctx.hasKeyframes(clip.id, 'textBounds.position.x') ||
+        ctx.hasKeyframes(clip.id, 'textBounds.position.y');
+      if (hasBoundsKeyframes) {
+        const runtimeCanvas = textRenderer.createCanvas(textCanvas.width, textCanvas.height);
+        textRenderer.render({
+          ...clip.textProperties,
+          boxEnabled: true,
+          textBounds: interpolatedTextBounds,
+        }, runtimeCanvas);
+        textCanvas = runtimeCanvas;
+      }
+    }
 
     // Apply transition opacity override if provided
     const finalOpacity = opacityOverride !== undefined
@@ -1048,7 +1104,7 @@ export class LayerBuilderService {
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
-      source: { type: 'text', textCanvas: clip.source!.textCanvas },
+      source: { type: 'text', textCanvas },
       effects,
       colorCorrection,
       position: transform.position,

@@ -213,7 +213,7 @@ function TimelineTrackComponent({
         isExpanded ? 'expanded' : ''
       } ${isDragTarget ? 'drag-target' : ''} ${
         isExternalDragTarget ? 'external-drag-target' : ''
-      }`}
+      } ${track.locked ? 'locked' : ''}`}
       data-track-id={track.id}
       style={{ height: dynamicHeight }}
       onDrop={onDrop}

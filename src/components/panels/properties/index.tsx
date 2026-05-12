@@ -387,7 +387,14 @@ export function PropertiesPanel() {
       <div className="properties-content">
         <Suspense fallback={<TabLoading />}>
           {activeTab === 'text' && isTextClip && selectedClip.textProperties && (
-            <TextTab clipId={selectedClip.id} textProperties={selectedClip.textProperties} />
+            <TextTab
+              clipId={selectedClip.id}
+              textProperties={selectedClip.textProperties}
+              canvasSize={{
+                width: selectedClip.source?.textCanvas?.width ?? 1920,
+                height: selectedClip.source?.textCanvas?.height ?? 1080,
+              }}
+            />
           )}
           {activeTab === '3d-text' && is3DTextClip && selectedText3DProperties && (
             <ThreeDTextTab clipId={selectedClip.id} text3DProperties={selectedText3DProperties} />

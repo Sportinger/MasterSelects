@@ -166,7 +166,9 @@ export class Compositor {
                 state.effectTempView,
                 state.effectTempView2,
                 state.outputWidth,
-                state.outputHeight
+                state.outputHeight,
+                state.effectTempTexture,
+                state.effectTempTexture2
               );
               sourceTextureView = effectResult.finalView;
             }
@@ -176,9 +178,10 @@ export class Compositor {
 
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;
-      const isStaticTextureSource =
-        !!layer.source?.imageElement ||
-        !!layer.source?.textCanvas;
+      // Text canvases are edited in-place and can also be replaced when the
+      // composition resolution changes. Caching their bind group by layer ID
+      // can keep sampling the previous GPU texture until a full refresh.
+      const isStaticTextureSource = !!layer.source?.imageElement;
 
       if (useExternalTexture && sourceExternalTexture) {
         if (!isStaticTextureSource) {

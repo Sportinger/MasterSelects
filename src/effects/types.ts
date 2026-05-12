@@ -58,6 +58,12 @@ export interface EffectDefinition {
   // Optional: Multi-pass for complex effects (blur, glow, etc.)
   passes?: number;
 
+  // Optional: Effect samples its own previous output frame through binding 3.
+  usesFeedback?: boolean;
+
+  // Optional: Effect changes over wall-clock time and should keep paused preview rendering.
+  requiresContinuousRender?: boolean;
+
   // Optional: Custom UI component for special controls
   customControls?: ComponentType<EffectControlProps>;
 }

@@ -3,6 +3,8 @@ import {
   isEffectProperty,
   parseEffectProperty,
   createEffectProperty,
+  createNodeGraphParamProperty,
+  parseNodeGraphParamProperty,
   isAudioEffect,
 } from '../../src/types/index';
 import type { EffectProperty, EffectType } from '../../src/types/index';
@@ -202,6 +204,19 @@ describe('createEffectProperty', () => {
 });
 
 // ─── isAudioEffect ────────────────────────────────────────────────────────
+
+describe('node graph parameter properties', () => {
+  it('creates and parses AI node parameter properties', () => {
+    const property = createNodeGraphParamProperty('custom-ai', 'amount');
+    expect(property).toBe('node.custom-ai.amount');
+    expect(parseNodeGraphParamProperty(property)).toEqual({ nodeId: 'custom-ai', paramName: 'amount' });
+  });
+
+  it('rejects malformed AI node parameter properties', () => {
+    expect(parseNodeGraphParamProperty('node.custom-ai')).toBeNull();
+    expect(parseNodeGraphParamProperty('effect.custom-ai.amount')).toBeNull();
+  });
+});
 
 describe('isAudioEffect', () => {
   it('audio-eq → true', () => {

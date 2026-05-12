@@ -4,9 +4,17 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { TextClipProperties } from '../../types';
+import { createTextBoundsPathProperty, type Keyframe, type TextClipProperties } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
+import {
+  createTextBoundsFromRect,
+  getTextBoundsPathValue,
+  resolveTextBoundsPath,
+  resolveTextBoxRect,
+} from '../../services/textLayout';
+
+const EMPTY_KEYFRAMES: Keyframe[] = [];
 
 // Compact draggable number with icon label
 interface CompactNumberProps {
@@ -168,6 +176,27 @@ const IconLetterSpacing = () => (
   </svg>
 );
 
+const IconBoxSize = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.3" fill="none">
+    <rect x="2" y="2" width="10" height="10" rx="1" />
+    <path d="M4 5h6M4 7h5M4 9h4" />
+  </svg>
+);
+
+const IconBoxPosition = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.3" fill="none">
+    <path d="M7 1v12M1 7h12" />
+    <rect x="4" y="4" width="6" height="6" rx="1" />
+  </svg>
+);
+
+const IconStraightenBounds = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.3" fill="none">
+    <path d="M2 3h10v8H2z" />
+    <path d="M4 5h6M4 7h5M4 9h4" />
+  </svg>
+);
+
 const IconAlignLeft = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" strokeWidth="1.5" fill="none">
     <path d="M1 2h12M1 5h8M1 8h10M1 11h6"/>
@@ -204,12 +233,79 @@ const IconAlignBottom = () => (
   </svg>
 );
 
+function StopwatchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="13" r="7" />
+      <line x1="12" y1="13" x2="12" y2="9" />
+      <line x1="12" y1="2" x2="12" y2="5" />
+      <line x1="9" y1="3" x2="15" y2="3" />
+    </svg>
+  );
+}
+
+function TextBoundsPathKeyframeToggle({
+  clipId,
+  textProperties,
+  canvasSize,
+}: {
+  clipId: string;
+  textProperties: TextClipProperties;
+  canvasSize: { width: number; height: number };
+}) {
+  const property = createTextBoundsPathProperty();
+  const clipKeyframes = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYFRAMES);
+  const recordingEnabled = useTimelineStore(state => state.keyframeRecordingEnabled.has(`${clipId}:${property}`));
+  const hasPathKeyframes = clipKeyframes.some(keyframe => keyframe.property === property);
+  const { addTextBoundsPathKeyframe, toggleKeyframeRecording, disableTextBoundsPathKeyframes } = useTimelineStore.getState();
+
+  const addPathKeyframe = useCallback(() => {
+    const bounds = resolveTextBoundsPath(textProperties, canvasSize.width, canvasSize.height);
+    const pathValue = getTextBoundsPathValue(bounds);
+    addTextBoundsPathKeyframe(clipId, pathValue);
+    if (!recordingEnabled && !hasPathKeyframes) {
+      toggleKeyframeRecording(clipId, property);
+    }
+  }, [
+    addTextBoundsPathKeyframe,
+    canvasSize.height,
+    canvasSize.width,
+    clipId,
+    hasPathKeyframes,
+    property,
+    recordingEnabled,
+    textProperties,
+    toggleKeyframeRecording,
+  ]);
+
+  return (
+    <button
+      type="button"
+      className={`keyframe-toggle ${recordingEnabled ? 'recording' : ''} ${hasPathKeyframes ? 'has-keyframes' : ''}`}
+      title={recordingEnabled || hasPathKeyframes ? 'Add Text Bounds keyframe (right-click to disable)' : 'Add Text Bounds keyframe'}
+      onClick={(event) => {
+        event.stopPropagation();
+        addPathKeyframe();
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const bounds = resolveTextBoundsPath(textProperties, canvasSize.width, canvasSize.height);
+        disableTextBoundsPathKeyframes(clipId, getTextBoundsPathValue(bounds));
+      }}
+    >
+      <StopwatchIcon />
+    </button>
+  );
+}
+
 interface TextTabProps {
   clipId: string;
   textProperties: TextClipProperties;
+  canvasSize?: { width: number; height: number };
 }
 
-export function TextTab({ clipId, textProperties }: TextTabProps) {
+export function TextTab({ clipId, textProperties, canvasSize = { width: 1920, height: 1080 } }: TextTabProps) {
   const { updateTextProperties } = useTimelineStore();
   const [localText, setLocalText] = useState(textProperties.text);
 
@@ -246,6 +342,55 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
 
   // Get available weights for selected font
   const availableWeights = googleFontsService.getAvailableWeights(textProperties.fontFamily);
+  const canvasWidth = Math.max(1, Math.round(canvasSize.width));
+  const canvasHeight = Math.max(1, Math.round(canvasSize.height));
+  const textBox = resolveTextBoxRect(textProperties, canvasWidth, canvasHeight);
+  const boxEnabled = textProperties.boxEnabled === true;
+
+  const updateTextBoxEnabled = useCallback((enabled: boolean) => {
+    if (!enabled) {
+      updateTextProperties(clipId, { boxEnabled: false });
+      return;
+    }
+
+    const box = resolveTextBoxRect(textProperties, canvasWidth, canvasHeight);
+    updateTextProperties(clipId, {
+      boxEnabled: true,
+      boxX: Math.round(box.x),
+      boxY: Math.round(box.y),
+      boxWidth: Math.round(box.width),
+      boxHeight: Math.round(box.height),
+      textBounds: createTextBoundsFromRect(box, canvasWidth, canvasHeight, undefined, { clampToCanvas: false }),
+    });
+  }, [canvasHeight, canvasWidth, clipId, textProperties, updateTextProperties]);
+
+  const updateTextBoxRect = useCallback((patch: Partial<typeof textBox>) => {
+    const nextBox = {
+      ...textBox,
+      ...patch,
+    };
+    updateTextProperties(clipId, {
+      boxEnabled: true,
+      boxX: Math.round(nextBox.x),
+      boxY: Math.round(nextBox.y),
+      boxWidth: Math.round(nextBox.width),
+      boxHeight: Math.round(nextBox.height),
+      textBounds: createTextBoundsFromRect(nextBox, canvasWidth, canvasHeight, undefined, { clampToCanvas: false }),
+    });
+  }, [canvasHeight, canvasWidth, clipId, textBox, updateTextProperties]);
+
+  const straightenTextBounds = useCallback(() => {
+    const currentBox = resolveTextBoxRect(textProperties, canvasWidth, canvasHeight);
+    updateTextProperties(clipId, {
+      boxEnabled: true,
+      boxX: Math.round(currentBox.x),
+      boxY: Math.round(currentBox.y),
+      boxWidth: Math.round(currentBox.width),
+      boxHeight: Math.round(currentBox.height),
+      textBounds: createTextBoundsFromRect(currentBox, canvasWidth, canvasHeight, undefined, { clampToCanvas: false }),
+    });
+    useTimelineStore.getState().recordTextBoundsPathKeyframe(clipId);
+  }, [canvasHeight, canvasWidth, clipId, textProperties, updateTextProperties]);
 
   return (
     <div className="tt">
@@ -418,6 +563,80 @@ export function TextTab({ clipId, textProperties }: TextTabProps) {
           <button className={textProperties.verticalAlign === 'middle' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'middle')} title="Middle"><IconAlignMiddle /></button>
           <button className={textProperties.verticalAlign === 'bottom' ? 'active' : ''} onClick={() => updateProp('verticalAlign', 'bottom')} title="Bottom"><IconAlignBottom /></button>
         </div>
+      </div>
+
+      {/* Area Text */}
+      <div className="tt-section">
+        <div className="tt-section-header">
+          {boxEnabled && (
+            <TextBoundsPathKeyframeToggle
+              clipId={clipId}
+              textProperties={textProperties}
+              canvasSize={{ width: canvasWidth, height: canvasHeight }}
+            />
+          )}
+          <label className="tt-toggle-header">
+            <input
+              type="checkbox"
+              checked={boxEnabled}
+              onChange={(e) => updateTextBoxEnabled(e.target.checked)}
+            />
+            Area Text
+          </label>
+        </div>
+        {boxEnabled && (
+          <>
+            <div className="tt-row-2col">
+              <CompactNumber
+                icon={<IconBoxPosition />}
+                title="Box X"
+                value={Math.round(textBox.x)}
+                onChange={(v) => updateTextBoxRect({ x: Math.round(v) })}
+                min={-100000}
+                max={100000}
+                unit="px"
+              />
+              <CompactNumber
+                icon={<IconBoxPosition />}
+                title="Box Y"
+                value={Math.round(textBox.y)}
+                onChange={(v) => updateTextBoxRect({ y: Math.round(v) })}
+                min={-100000}
+                max={100000}
+                unit="px"
+              />
+            </div>
+            <div className="tt-row-2col">
+              <CompactNumber
+                icon={<IconBoxSize />}
+                title="Box Width"
+                value={Math.round(textBox.width)}
+                onChange={(v) => updateTextBoxRect({ width: Math.round(v) })}
+                min={24}
+                max={100000}
+                unit="px"
+              />
+              <CompactNumber
+                icon={<IconBoxSize />}
+                title="Box Height"
+                value={Math.round(textBox.height)}
+                onChange={(v) => updateTextBoxRect({ height: Math.round(v) })}
+                min={24}
+                max={100000}
+                unit="px"
+              />
+            </div>
+            <button
+              type="button"
+              className="tt-small-action"
+              title="Make text bounds rectangular"
+              onClick={straightenTextBounds}
+            >
+              <IconStraightenBounds />
+              <span>Rectangular Bounds</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Shadow */}

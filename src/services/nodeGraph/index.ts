@@ -1,0 +1,57 @@
+export {
+  buildClipNodeGraph,
+  addClipCustomNodeDefinition,
+  cloneClipNodeGraph,
+  connectClipNodeGraphPorts,
+  createClipAICustomNodeDefinition,
+  createClipNodeGraphState,
+  disconnectClipNodeGraphEdge,
+  hideClipBuiltInNode,
+  removeClipCustomNodeDefinition,
+  reconcileClipNodeGraphState,
+  remapClipNodeGraphEffectIds,
+  showClipBuiltInNode,
+  updateClipCustomNodeDefinition,
+  updateClipNodeGraphLayout,
+} from './clipGraphProjection';
+export {
+  hasRunnableAINodes,
+  renderClipAINodesToCanvas,
+  sortPixelsTexture,
+} from './aiNodeRuntime';
+export {
+  buildAINodeAuthoringContext,
+} from './aiNodeAuthoringContext';
+export {
+  extractAINodeGeneratedCode,
+  extractAINodeParameterSchemaFromCode,
+  mergeAINodeParamDefaults,
+  stripAINodeCodeFence,
+} from './aiNodeDefinition';
+export type {
+  ClipNodeGraph,
+  ClipNodeGraphBacking,
+  ClipNodeGraphNodeState,
+  ClipCustomNodeAIAuthoring,
+  ClipCustomNodeAuthoringStatus,
+  ClipCustomNodeConversationKind,
+  ClipCustomNodeConversationMessage,
+  ClipCustomNodeConversationRole,
+  ClipCustomNodeDefinition,
+  ClipCustomNodeParamDefinition,
+  ClipCustomNodeParamOption,
+  ClipCustomNodeParamType,
+  ClipCustomNodeParamValue,
+  ClipNodeGraphForcedBuiltIn,
+  NodeGraph,
+  NodeGraphConnectionRequest,
+  NodeGraphEdge,
+  NodeGraphLayout,
+  NodeGraphNode,
+  NodeGraphNodeKind,
+  NodeGraphOwner,
+  NodeGraphPort,
+  NodeGraphPortDirection,
+  NodeGraphRuntimeKind,
+  NodeGraphSignalType,
+} from './types';

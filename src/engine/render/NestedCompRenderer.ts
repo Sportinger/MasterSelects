@@ -485,7 +485,9 @@ export class NestedCompRenderer {
                   effectTempView,
                   effectTempView2,
                   width,
-                  height
+                  height,
+                  effectTexturePair.pingTexture,
+                  effectTexturePair.pongTexture
                 );
                 sourceTextureView = effectResult.finalView;
               }

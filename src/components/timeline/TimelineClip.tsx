@@ -522,6 +522,7 @@ function TimelineClipComponent({
 
   // Check if this clip is part of a multi-select drag
   const isInMultiSelectDrag = clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined;
+  const isTrackLocked = track.locked === true;
 
   const clipClass = [
     'timeline-clip',
@@ -549,6 +550,7 @@ function TimelineClipComponent({
     clip.downloadError ? 'download-error' : '',
     clip.isComposition ? 'composition' : '',
     aiMovePhase !== 'idle' ? 'ai-moving' : '',
+    isTrackLocked ? 'track-locked' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -632,7 +634,7 @@ function TimelineClipComponent({
       style={{
         left,
         width,
-        cursor: toolMode === 'cut' ? 'crosshair' : undefined,
+        cursor: isTrackLocked ? 'not-allowed' : toolMode === 'cut' ? 'crosshair' : undefined,
         animationDelay: `${animationDelay}s`,
         // FLIP move animation: initial phase applies offset transform, animating phase transitions to 0
         ...(aiMovePhase === 'initial' && aiMove ? {
@@ -650,12 +652,12 @@ function TimelineClipComponent({
         } : {}),
       }}
       data-clip-id={clip.id}
-      onMouseDown={toolMode === 'cut' ? undefined : onMouseDown}
+      onMouseDown={isTrackLocked || toolMode === 'cut' ? undefined : onMouseDown}
       onDoubleClick={toolMode === 'cut' ? undefined : onDoubleClick}
       onContextMenu={onContextMenu}
-      onMouseMove={handleMouseMove}
+      onMouseMove={isTrackLocked ? undefined : handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      onClick={handleClick}
+      onClick={isTrackLocked ? undefined : handleClick}
     >
       {/* Cut indicator line */}
       {shouldShowCutIndicator && cutIndicatorX !== null && cutIndicatorX >= 0 && cutIndicatorX <= width && (
@@ -1064,7 +1066,7 @@ function TimelineClipComponent({
                 key={`${group.time}:${group.keyframeIds.join('|') || i}`}
                 className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}${group.hasStateChange ? ' state-change' : ''}`}
                 style={{ left: `${xPercent}%` }}
-                onMouseDown={(e) => handleKeyframeTickMouseDown(e, group)}
+                onMouseDown={isTrackLocked ? undefined : (e) => handleKeyframeTickMouseDown(e, group)}
                 onClick={(e) => e.stopPropagation()}
                 aria-label={`Move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
                 title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)} (Shift snaps to clip keyframes)`}
@@ -1085,40 +1087,44 @@ function TimelineClipComponent({
           />
         </div>
       )}
-      {/* Fade handles - corner handles for adjusting fade-in/out */}
-      <div
-        className={`fade-handle left${fadeInDuration > 0 ? ' active' : ''}`}
-        style={fadeInDuration > 0 ? { left: timeToPixel(fadeInDuration) - 6 } : undefined}
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          onFadeStart(e, 'left');
-        }}
-        title={fadeInDuration > 0 ? `Fade In: ${fadeInDuration.toFixed(2)}s` : 'Drag to add fade in'}
-      />
-      <div
-        className={`fade-handle right${fadeOutDuration > 0 ? ' active' : ''}`}
-        style={fadeOutDuration > 0 ? { right: timeToPixel(fadeOutDuration) - 6 } : undefined}
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          onFadeStart(e, 'right');
-        }}
-        title={fadeOutDuration > 0 ? `Fade Out: ${fadeOutDuration.toFixed(2)}s` : 'Drag to add fade out'}
-      />
-      {/* Trim handles */}
-      <div
-        className="trim-handle left"
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          onTrimStart(e, 'left');
-        }}
-      />
-      <div
-        className="trim-handle right"
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          onTrimStart(e, 'right');
-        }}
-      />
+      {!isTrackLocked && (
+        <>
+          {/* Fade handles - corner handles for adjusting fade-in/out */}
+          <div
+            className={`fade-handle left${fadeInDuration > 0 ? ' active' : ''}`}
+            style={fadeInDuration > 0 ? { left: timeToPixel(fadeInDuration) - 6 } : undefined}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onFadeStart(e, 'left');
+            }}
+            title={fadeInDuration > 0 ? `Fade In: ${fadeInDuration.toFixed(2)}s` : 'Drag to add fade in'}
+          />
+          <div
+            className={`fade-handle right${fadeOutDuration > 0 ? ' active' : ''}`}
+            style={fadeOutDuration > 0 ? { right: timeToPixel(fadeOutDuration) - 6 } : undefined}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onFadeStart(e, 'right');
+            }}
+            title={fadeOutDuration > 0 ? `Fade Out: ${fadeOutDuration.toFixed(2)}s` : 'Drag to add fade out'}
+          />
+          {/* Trim handles */}
+          <div
+            className="trim-handle left"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onTrimStart(e, 'left');
+            }}
+          />
+          <div
+            className="trim-handle right"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              onTrimStart(e, 'right');
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }

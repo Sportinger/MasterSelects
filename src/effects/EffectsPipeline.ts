@@ -20,11 +20,22 @@ interface EffectInstance {
   params: Record<string, number | boolean | string>;
 }
 
+interface FeedbackState {
+  texture: GPUTexture;
+  view: GPUTextureView;
+  width: number;
+  height: number;
+  clearPending: boolean;
+  resetActive: boolean;
+}
+
 export class EffectsPipeline {
   private device: GPUDevice;
   private pipelines = new Map<string, GPURenderPipeline>();
   private bindGroupLayouts = new Map<string, GPUBindGroupLayout>();
   private shaderModules = new Map<string, GPUShaderModule>();
+  private pipelineSignatures = new Map<string, string>();
+  private feedbackStates = new Map<string, FeedbackState>();
   private initialized = false;
 
   constructor(device: GPUDevice) {
@@ -40,7 +51,7 @@ export class EffectsPipeline {
     for (const [id, effect] of EFFECT_REGISTRY) {
       // Skip effects handled inline in the composite shader
       if (INLINE_EFFECT_IDS.has(id)) continue;
-      await this.createEffectPipeline(id, effect);
+      this.createEffectPipeline(id, effect);
     }
 
     this.initialized = true;
@@ -50,7 +61,7 @@ export class EffectsPipeline {
   /**
    * Create GPU pipeline for a single effect
    */
-  private async createEffectPipeline(id: string, effect: EffectDefinition): Promise<void> {
+  private createEffectPipeline(id: string, effect: EffectDefinition): void {
     try {
       // Combine common shader with effect shader
       const shaderCode = `${commonShader}\n${effect.shader}`;
@@ -72,6 +83,14 @@ export class EffectsPipeline {
           binding: 2,
           visibility: GPUShaderStage.FRAGMENT,
           buffer: { type: 'uniform' },
+        });
+      }
+
+      if (effect.usesFeedback) {
+        entries.push({
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          texture: {},
         });
       }
 
@@ -100,9 +119,33 @@ export class EffectsPipeline {
       });
 
       this.pipelines.set(id, pipeline);
+      this.pipelineSignatures.set(id, this.getPipelineSignature(effect));
     } catch (error) {
       log.error(`Failed to create pipeline for ${id}`, error);
     }
+  }
+
+  private getPipelineSignature(effect: EffectDefinition): string {
+    return [
+      effect.entryPoint,
+      effect.uniformSize,
+      effect.usesFeedback === true ? 'feedback' : 'no-feedback',
+      effect.shader,
+    ].join('\u0000');
+  }
+
+  private ensureEffectPipeline(id: string, effect: EffectDefinition): boolean {
+    const signature = this.getPipelineSignature(effect);
+    if (this.pipelines.has(id) && this.pipelineSignatures.get(id) === signature) {
+      return false;
+    }
+
+    this.pipelines.delete(id);
+    this.bindGroupLayouts.delete(id);
+    this.shaderModules.delete(id);
+    this.pipelineSignatures.delete(id);
+    this.createEffectPipeline(id, effect);
+    return this.pipelines.has(id);
   }
 
   /**
@@ -140,7 +183,8 @@ export class EffectsPipeline {
     effectType: string,
     sampler: GPUSampler,
     inputView: GPUTextureView,
-    uniformBuffer?: GPUBuffer
+    uniformBuffer?: GPUBuffer,
+    feedbackView?: GPUTextureView
   ): GPUBindGroup | null {
     const layout = this.bindGroupLayouts.get(effectType);
     if (!layout) return null;
@@ -154,10 +198,75 @@ export class EffectsPipeline {
       entries.push({ binding: 2, resource: { buffer: uniformBuffer } });
     }
 
+    if (feedbackView) {
+      entries.push({ binding: 3, resource: feedbackView });
+    }
+
     return this.device.createBindGroup({
       layout,
       entries,
     });
+  }
+
+  private getFeedbackState(effect: EffectInstance, width: number, height: number): FeedbackState {
+    const key = effect.id;
+    const existing = this.feedbackStates.get(key);
+
+    if (existing && existing.width === width && existing.height === height) {
+      return existing;
+    }
+
+    existing?.texture.destroy();
+
+    const texture = this.device.createTexture({
+      label: `effect-feedback-${effect.type}-${effect.id}`,
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.COPY_DST |
+        GPUTextureUsage.COPY_SRC,
+    });
+
+    const state: FeedbackState = {
+      texture,
+      view: texture.createView(),
+      width,
+      height,
+      clearPending: true,
+      resetActive: false,
+    };
+    this.feedbackStates.set(key, state);
+    return state;
+  }
+
+  private clearFeedback(commandEncoder: GPUCommandEncoder, state: FeedbackState): void {
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: state.view,
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    pass.end();
+    state.clearPending = false;
+  }
+
+  private getOutputTexture(
+    outputView: GPUTextureView,
+    pingView: GPUTextureView,
+    pongView: GPUTextureView,
+    pingTexture?: GPUTexture,
+    pongTexture?: GPUTexture
+  ): GPUTexture | null {
+    if (outputView === pingView) return pingTexture ?? null;
+    if (outputView === pongView) return pongTexture ?? null;
+    return null;
+  }
+
+  private getNextOutputView(currentOutput: GPUTextureView, pingView: GPUTextureView, pongView: GPUTextureView): GPUTextureView {
+    return currentOutput === pingView ? pongView : pingView;
   }
 
   /**
@@ -169,10 +278,12 @@ export class EffectsPipeline {
     sampler: GPUSampler,
     inputView: GPUTextureView,
     outputView: GPUTextureView,
-    _pingView: GPUTextureView,
-    _pongView: GPUTextureView,
+    pingView: GPUTextureView,
+    pongView: GPUTextureView,
     outputWidth: number,
-    outputHeight: number
+    outputHeight: number,
+    pingTexture?: GPUTexture,
+    pongTexture?: GPUTexture
   ): { finalView: GPUTextureView; swapped: boolean } {
     // Filter out audio effects (handled by AudioRoutingManager) and disabled effects
     const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-'));
@@ -185,10 +296,14 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const effect of enabledEffects) {
+      const definition = getEffect(effect.type);
+      const rebuiltPipeline = definition
+        ? this.ensureEffectPipeline(effect.type, definition)
+        : false;
       const pipeline = this.pipelines.get(effect.type);
       const bindGroupLayout = this.bindGroupLayouts.get(effect.type);
 
-      if (!pipeline || !bindGroupLayout) {
+      if (!definition || !pipeline || !bindGroupLayout) {
         log.warn(`No pipeline for effect type: ${effect.type}`);
         continue;
       }
@@ -205,6 +320,23 @@ export class EffectsPipeline {
         this.device.queue.writeBuffer(effectUniformBuffer, 0, effectParams.buffer);
       }
 
+      const feedbackState = definition.usesFeedback
+        ? this.getFeedbackState(effect, outputWidth, outputHeight)
+        : null;
+
+      if (feedbackState) {
+        if (rebuiltPipeline) {
+          feedbackState.clearPending = true;
+          feedbackState.resetActive = false;
+        }
+
+        const resetRequested = effect.params.reset === true;
+        if (feedbackState.clearPending || (resetRequested && !feedbackState.resetActive)) {
+          this.clearFeedback(commandEncoder, feedbackState);
+        }
+        feedbackState.resetActive = resetRequested;
+      }
+
       // Create bind group
       const entries: GPUBindGroupEntry[] = [
         { binding: 0, resource: sampler },
@@ -213,6 +345,10 @@ export class EffectsPipeline {
 
       if (effectUniformBuffer) {
         entries.push({ binding: 2, resource: { buffer: effectUniformBuffer } });
+      }
+
+      if (feedbackState) {
+        entries.push({ binding: 3, resource: feedbackState.view });
       }
 
       const effectBindGroup = this.device.createBindGroup({
@@ -233,10 +369,20 @@ export class EffectsPipeline {
       effectPass.draw(6);
       effectPass.end();
 
+      if (feedbackState) {
+        const outputTexture = this.getOutputTexture(effectOutput, pingView, pongView, pingTexture, pongTexture);
+        if (outputTexture) {
+          commandEncoder.copyTextureToTexture(
+            { texture: outputTexture },
+            { texture: feedbackState.texture },
+            { width: outputWidth, height: outputHeight }
+          );
+        }
+      }
+
       // Swap buffers for next effect in chain
-      const tempView = effectInput;
       effectInput = effectOutput;
-      effectOutput = tempView;
+      effectOutput = this.getNextOutputView(effectOutput, pingView, pongView);
       swapped = !swapped;
     }
 
@@ -248,9 +394,14 @@ export class EffectsPipeline {
    * Clean up resources
    */
   destroy(): void {
+    for (const state of this.feedbackStates.values()) {
+      state.texture.destroy();
+    }
+    this.feedbackStates.clear();
     this.pipelines.clear();
     this.bindGroupLayouts.clear();
     this.shaderModules.clear();
+    this.pipelineSignatures.clear();
     this.initialized = false;
   }
 

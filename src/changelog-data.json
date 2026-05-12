@@ -1,6 +1,30 @@
 [
   {
     "date": "2026-05-12",
+    "type": "new",
+    "title": "AI Node Workspace",
+    "description": "Clip node graphs now support custom AI-authored nodes with chat memory, active code activation, manual connections, bypass controls, exposed keyframeable parameters, color params, and dev-bridge debugging tools.",
+    "section": "Node Workspace / AI",
+    "commits": ["597acd24"]
+  },
+  {
+    "date": "2026-05-12",
+    "type": "improve",
+    "title": "Text Runtime Context for AI Nodes",
+    "description": "Text clips now provide structured layout, typography, color, text box bounds, and per-character rectangles to AI node runtime code so generated text effects can target exact letters and lines.",
+    "section": "Text / Runtime",
+    "commits": ["597acd24"]
+  },
+  {
+    "date": "2026-05-12",
+    "type": "improve",
+    "title": "Timeline and Preview Editing Polish",
+    "description": "Timeline interaction, drag placement, subcomposition rendering, paused preview invalidation, text preview editing, and export layer handling were tightened to support the new node workspace flows.",
+    "section": "Timeline / Preview",
+    "commits": ["597acd24"]
+  },
+  {
+    "date": "2026-05-12",
     "type": "refactor",
     "title": "Modular Editor CSS",
     "description": "The former App.css monolith has been split into owner-focused CSS files for the timeline, media panel, properties panel, preview, export, common dialogs, and shared app foundations while preserving the final bundled CSS output.",

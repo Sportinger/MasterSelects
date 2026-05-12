@@ -5,6 +5,7 @@ import type { SolidClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { markDynamicCanvasUpdated } from '../../services/canvasVersion';
 import { generateSolidClipId } from './helpers/idGenerator';
 import { useMediaStore } from '../mediaStore';
 import { Logger } from '../../services/logger';
@@ -33,6 +34,7 @@ export const createSolidClipSlice: SliceCreator<SolidClipActions> = (set, get) =
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = color;
     ctx.fillRect(0, 0, compWidth, compHeight);
+    markDynamicCanvasUpdated(canvas, 'solid');
 
     const solidClip: TimelineClip = {
       id: clipId,
@@ -77,6 +79,7 @@ export const createSolidClipSlice: SliceCreator<SolidClipActions> = (set, get) =
       if (ctx) {
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        markDynamicCanvasUpdated(canvas, 'solid');
       }
 
       const texMgr = engine.getTextureManager();

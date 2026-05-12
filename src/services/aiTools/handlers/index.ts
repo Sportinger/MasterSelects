@@ -123,6 +123,10 @@ import {
   handleGetStatsHistory,
 } from './stats';
 import { handleDebugExport } from './export';
+import {
+  handleGetNodeWorkspaceDebugState,
+  handleSendAINodePrompt,
+} from './nodeWorkspace';
 
 // Handler registry - maps tool names to handler functions
 const timelineHandlers: Record<string, (args: Record<string, unknown>, store: ReturnType<typeof useTimelineStore.getState>, callerContext?: CallerContext) => Promise<ToolResult>> = {
@@ -228,6 +232,8 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   getLogs: handleGetLogs,
   getPlaybackTrace: handleGetPlaybackTrace,
   debugExport: handleDebugExport,
+  getNodeWorkspaceDebugState: handleGetNodeWorkspaceDebugState,
+  sendAINodePrompt: handleSendAINodePrompt,
 };
 
 // YouTube handlers - self-contained, fetch their own stores
@@ -368,4 +374,6 @@ export {
   handleGetPlaybackTrace,
   handleGetStatsHistory,
   handleDebugExport,
+  handleGetNodeWorkspaceDebugState,
+  handleSendAINodePrompt,
 };

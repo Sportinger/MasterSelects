@@ -9,6 +9,8 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 - Text clips are added through the timeline text action and require a video track.
 - New text clips currently default to a 5 second duration.
 - The default content is `Enter text`.
+- New 2D text clips default to area text, with a centered paragraph box that supports wrapping and hard line breaks.
+- New 2D text clips use the active composition resolution for their text canvas. Existing text canvases keep their current source resolution during edits so the layer does not rescale while typing.
 - Text clips use `src/services/textRenderer.ts` to generate their canvas content.
 
 ## Timeline Appearance
@@ -31,16 +33,30 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 - Stroke enable toggle, stroke color, and stroke width
 - Horizontal alignment
 - Vertical alignment
+- Area Text toggle with box X/Y and width/height controls
 - Shadow enable toggle, shadow color, shadow offsets, and shadow blur
 
 Text content updates are debounced briefly so typing stays responsive.
 Font changes trigger async font loading through `googleFontsService`.
+
+## Preview Editing
+
+When a 2D text clip is selected and the preview is in Edit mode, the preview shows an AE-style text bounds editor over the rendered text.
+
+- Click the active text bounds to type directly in the preview.
+- Drag in empty preview space to define a new paragraph bounds rectangle for the selected text clip.
+- Drag red vertices to reshape the text bounds.
+- Hold Ctrl or Command while dragging to move the whole text bounds path.
+- The bounds are stored as `textBounds` using mask-style vertices plus legacy `boxX`, `boxY`, `boxWidth`, and `boxHeight` fallback values.
+- Preview text editing is disabled during playback, source monitor, scene navigation, and mask navigation.
 
 ## Rendering
 
 `src/services/textRenderer.ts` renders text with Canvas2D and supports:
 
 - Multi-line text
+- Area text wrapping and clipping inside the paragraph bounds
+- Shape-aware line wrapping for slanted text bounds, using the available polygon width at each line's Y position
 - Left, center, and right alignment
 - Top, middle, and bottom vertical alignment
 - Letter spacing
@@ -72,7 +88,9 @@ Relevant files:
 - `src/stores/timeline/textClipSlice.ts`
 - `src/stores/timeline/constants.ts`
 - `src/services/textRenderer.ts`
+- `src/services/textLayout.ts`
 - `src/components/panels/TextTab.tsx`
+- `src/components/preview/TextPreviewEditor.tsx`
 - `src/types/index.ts`
 
 ## Current Limits

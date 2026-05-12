@@ -7,11 +7,21 @@ import type { CoreClipActions, SliceCreator, Composition } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { Logger } from '../../services/logger';
+import { cloneClipNodeGraph } from '../../services/nodeGraph';
 
 const log = Logger.create('ClipSlice');
 
 function isPlaneClip(clip: TimelineClip): boolean {
   return clip.source?.type === 'video' || clip.source?.type === 'image';
+}
+
+function isTrackLocked(tracks: TimelineTrack[], trackId: string | undefined): boolean {
+  return !!trackId && tracks.find(t => t.id === trackId)?.locked === true;
+}
+
+function isClipOnLockedTrack(clips: TimelineClip[], tracks: TimelineTrack[], clipId: string): boolean {
+  const clip = clips.find(c => c.id === clipId);
+  return isTrackLocked(tracks, clip?.trackId);
 }
 
 /** Deep clone properties that must not be shared between split clips */
@@ -20,6 +30,7 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
     transform: structuredClone(clip.transform),
     effects: clip.effects.map(e => structuredClone(e)),
     ...(clip.colorCorrection ? { colorCorrection: structuredClone(clip.colorCorrection) } : {}),
+    ...(clip.nodeGraph ? { nodeGraph: cloneClipNodeGraph(clip.nodeGraph) } : {}),
     ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
     ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),
@@ -65,6 +76,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const targetTrack = tracks.find(t => t.id === trackId);
     if (!targetTrack) {
       log.warn('Track not found', { trackId });
+      return;
+    }
+    if (targetTrack.locked) {
+      log.warn('Cannot add clip to locked track', { trackId });
       return;
     }
 
@@ -128,7 +143,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         const endTime = startTime + estimatedDuration;
 
         // Find an audio track without overlap
-        const audioTracks = state.tracks.filter(t => t.type === 'audio');
+        const audioTracks = state.tracks.filter(t => t.type === 'audio' && !t.locked);
         let audioTrackId: string | null = null;
 
         for (const track of audioTracks) {
@@ -338,7 +353,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
   // Add a composition as a clip (nested composition)
   addCompClip: async (trackId, composition: Composition, startTime) => {
-    const { clips, updateDuration, findNonOverlappingPosition, thumbnailsEnabled, invalidateCache } = get();
+    const { clips, tracks, updateDuration, findNonOverlappingPosition, thumbnailsEnabled, invalidateCache } = get();
+    if (isTrackLocked(tracks, trackId)) {
+      log.warn('Cannot add composition clip to locked track', { trackId, composition: composition.name });
+      return;
+    }
     const timelineSessionId = get().timelineSessionId;
     const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId;
 
@@ -414,7 +433,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   removeClip: (id) => {
-    const { clips, selectedClipIds, updateDuration, invalidateCache } = get();
+    const { clips, tracks, selectedClipIds, updateDuration, invalidateCache } = get();
     const clipToRemove = clips.find(c => c.id === id);
     if (!clipToRemove) return;
 
@@ -424,6 +443,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const removeLinked = !!(linkedId && selectedClipIds.has(linkedId));
     const idsToRemove = new Set([id]);
     if (removeLinked && linkedId) idsToRemove.add(linkedId);
+    if ([...idsToRemove].some(removeId => isClipOnLockedTrack(clips, tracks, removeId))) {
+      log.warn('Cannot remove clip from locked track', { id });
+      return;
+    }
 
     // Clean up resources for all clips being removed
     for (const removeId of idsToRemove) {
@@ -476,6 +499,22 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     if (!movingClip) return;
 
     const targetTrackId = newTrackId ?? movingClip.trackId;
+    if (isTrackLocked(tracks, movingClip.trackId) || isTrackLocked(tracks, targetTrackId)) {
+      log.warn('Cannot move clip on or into locked track', { id, targetTrackId });
+      return;
+    }
+    const linkedClip = clips.find(c => c.id === movingClip.linkedClipId || c.linkedClipId === id);
+    if (linkedClip && !skipLinked && isTrackLocked(tracks, linkedClip.trackId)) {
+      log.warn('Cannot move linked clip on locked track', { id, linkedClipId: linkedClip.id });
+      return;
+    }
+    const groupClips = !skipGroup && movingClip.linkedGroupId
+      ? clips.filter(c => c.linkedGroupId === movingClip.linkedGroupId && c.id !== id)
+      : [];
+    if (groupClips.some(groupClip => isTrackLocked(tracks, groupClip.trackId))) {
+      log.warn('Cannot move linked group with clips on locked tracks', { id });
+      return;
+    }
 
     // Validate track type if changing tracks
     if (newTrackId && newTrackId !== movingClip.trackId) {
@@ -499,7 +538,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       const targetTrack = tracks.find(t => t.id === targetTrackId);
       if (targetTrack) {
         const altTracks = tracks.filter(t =>
-          t.type === targetTrack.type && t.id !== targetTrackId && t.id !== movingClip.trackId
+          t.type === targetTrack.type && t.id !== targetTrackId && t.id !== movingClip.trackId && !t.locked
         );
         let found = false;
         for (const alt of altTracks) {
@@ -523,7 +562,6 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     const timeDelta = finalStartTime - movingClip.startTime;
 
-    const linkedClip = clips.find(c => c.id === movingClip.linkedClipId || c.linkedClipId === id);
     let linkedFinalTime = linkedClip ? linkedClip.startTime + timeDelta : 0;
     let linkedForcingOverlap = false;
     if (linkedClip && !skipLinked) {
@@ -531,10 +569,6 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       linkedFinalTime = linkedResult.startTime;
       linkedForcingOverlap = linkedResult.forcingOverlap;
     }
-
-    const groupClips = !skipGroup && movingClip.linkedGroupId
-      ? clips.filter(c => c.linkedGroupId === movingClip.linkedGroupId && c.id !== id)
-      : [];
 
     set({
       clips: clips.map(c => {
@@ -560,7 +594,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   trimClip: (id, inPoint, outPoint) => {
-    const { clips, updateDuration, invalidateCache } = get();
+    const { clips, tracks, updateDuration, invalidateCache } = get();
+    if (isClipOnLockedTrack(clips, tracks, id)) {
+      log.warn('Cannot trim clip on locked track', { id });
+      return;
+    }
     set({
       clips: clips.map(c => {
         if (c.id !== id) return c;
@@ -572,9 +610,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   splitClip: (clipId, splitTime) => {
-    const { clips, updateDuration, invalidateCache } = get();
+    const { clips, tracks, updateDuration, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
+    if (isClipOnLockedTrack(clips, tracks, clipId) || (clip.linkedClipId && isClipOnLockedTrack(clips, tracks, clip.linkedClipId))) {
+      log.warn('Cannot split clip on locked track', { clipId });
+      return;
+    }
 
     const clipEnd = clip.startTime + clip.duration;
     if (splitTime <= clip.startTime || splitTime >= clipEnd) {
@@ -726,13 +768,21 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   updateClip: (id, updates) => {
-    const { clips, updateDuration } = get();
+    const { clips, tracks, updateDuration } = get();
+    if (isClipOnLockedTrack(clips, tracks, id)) {
+      log.warn('Cannot update clip on locked track', { id });
+      return;
+    }
     set({ clips: clips.map(c => c.id === id ? { ...c, ...updates } : c) });
     updateDuration();
   },
 
   updateClipTransform: (id, transform) => {
-    const { clips, invalidateCache } = get();
+    const { clips, tracks, invalidateCache } = get();
+    if (isClipOnLockedTrack(clips, tracks, id)) {
+      log.warn('Cannot update clip transform on locked track', { id });
+      return;
+    }
     set({
       clips: clips.map(c => {
         if (c.id !== id) return c;
@@ -752,7 +802,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   toggleClipReverse: (id) => {
-    const { clips, invalidateCache } = get();
+    const { clips, tracks, invalidateCache } = get();
+    if (isClipOnLockedTrack(clips, tracks, id)) {
+      log.warn('Cannot reverse clip on locked track', { id });
+      return;
+    }
     set({
       clips: clips.map(c => {
         if (c.id !== id) return c;
@@ -818,7 +872,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   // ========== PARENTING (PICK WHIP) ==========
 
   setClipParent: (clipId: string, parentClipId: string | null) => {
-    const { clips } = get();
+    const { clips, tracks } = get();
+    if (isClipOnLockedTrack(clips, tracks, clipId)) {
+      log.warn('Cannot parent clip on locked track', { clipId });
+      return;
+    }
     if (parentClipId === clipId) {
       log.warn('Cannot parent clip to itself');
       return;
@@ -846,6 +904,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => {
+    const { clips, tracks } = get();
+    if (isClipOnLockedTrack(clips, tracks, clipId)) {
+      log.warn('Cannot update clip pitch on locked track', { clipId });
+      return;
+    }
     set({ clips: updateClipById(get().clips, clipId, { preservesPitch }) });
   },
 
@@ -983,9 +1046,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   toggle3D: (clipId: string) => {
-    const { clips, invalidateCache } = get();
+    const { clips, tracks, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
+    if (isClipOnLockedTrack(clips, tracks, clipId)) {
+      log.warn('Cannot toggle 3D on locked track', { clipId });
+      return;
+    }
     if (clip.source?.type === 'gaussian-splat') {
       return;
     }

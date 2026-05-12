@@ -27,6 +27,7 @@ removeTrack()       // Delete a track and its clips
 renameTrack()       // Rename on double-click
 setTrackHeight()    // Resize a single track
 scaleTracksOfType() // Resize all tracks of the same type together
+setTrackLocked()    // Lock or unlock timeline editing for a track
 setTrackParent()    // Parent tracks with cycle detection
 getTrackChildren()  // Query child tracks
 ```
@@ -101,6 +102,7 @@ getTrackChildren()  // Query child tracks
 | Paste | `Ctrl+V` pastes keyframes if the clipboard has them, otherwise pastes clips. |
 | Delete | `Delete` / `Backspace` removes selected keyframes first, then clips. |
 | Reverse | Available from the clip context menu and via clip state. |
+| Create Subcomposition | Clip context menu action that moves the selected timeline clips into a new composition and inserts that composition back into the current timeline. |
 | Blend mode | `+` / `-` cycles blend modes on selected clips. |
 
 ### Copy and Paste
@@ -158,6 +160,7 @@ getTrackChildren()  // Query child tracks
 ### Nested Compositions
 - Composition clips can be nested to a depth of 8.
 - Composition changes propagate into nested render data.
+- Selected clips can be converted into a new nested composition from the clip context menu.
 - Composition switches trigger clip entrance/exit animations in the timeline UI.
 - Lottie clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
 
@@ -183,6 +186,7 @@ Each track header exposes:
 - Visibility for video tracks.
 - Mute for audio tracks.
 - Solo for both track types.
+- Lock for both track types; locked tracks block timeline edits such as move, trim, split, delete, keyframe edits, and dropping new clips.
 - Track rename on double-click.
 - Track expansion to reveal keyframe lanes.
 - Right-click opens a track-header context menu with `Add Video Track`, `Add Audio Track`, `Duplicate Track`, and `Delete`.

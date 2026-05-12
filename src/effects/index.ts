@@ -128,6 +128,20 @@ export function hasEffect(id: string): boolean {
 }
 
 /**
+ * Check if an active effect stack needs wall-clock driven re-rendering.
+ */
+export function effectStackNeedsContinuousRender(
+  effects: Array<{ type: string; enabled?: boolean }> | undefined
+): boolean {
+  if (!effects || effects.length === 0) return false;
+
+  return effects.some(effect =>
+    effect.enabled !== false &&
+    EFFECT_REGISTRY.get(effect.type)?.requiresContinuousRender === true
+  );
+}
+
+/**
  * Get effect config for pipeline creation (compatibility layer)
  */
 export function getEffectConfig(id: string): { entryPoint: string; needsUniform: boolean; uniformSize: number } | undefined {

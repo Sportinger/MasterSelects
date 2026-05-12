@@ -16,6 +16,7 @@ import {
   getCategoriesWithEffects,
   hasEffect,
   getEffectConfig,
+  effectStackNeedsContinuousRender,
 } from '../../src/effects/index';
 import { CATEGORY_INFO } from '../../src/effects/types';
 import type { EffectCategory } from '../../src/effects/types';
@@ -155,7 +156,7 @@ describe('Expected effects per category', () => {
   ];
 
   const expectedStylizeEffects = [
-    'vignette', 'grain', 'sharpen', 'posterize', 'glow', 'edge-detect', 'scanlines', 'threshold',
+    'vignette', 'grain', 'sharpen', 'posterize', 'glow', 'edge-detect', 'scanlines', 'threshold', 'acuarela', 'rom1',
   ];
 
   it('should register all color effects', () => {
@@ -216,8 +217,8 @@ describe('Expected effects per category', () => {
     }
   });
 
-  it('should have at least 30 effects total', () => {
-    expect(getAllEffects().length).toBeGreaterThanOrEqual(30);
+  it('should have at least 32 effects total', () => {
+    expect(getAllEffects().length).toBeGreaterThanOrEqual(32);
   });
 
   it('expected effect counts per category should match', () => {
@@ -226,6 +227,16 @@ describe('Expected effects per category', () => {
     expect(getEffectsByCategory('distort').length).toBe(expectedDistortEffects.length);
     expect(getEffectsByCategory('stylize').length).toBe(expectedStylizeEffects.length);
     expect(getEffectsByCategory('keying').length).toBe(1);
+  });
+
+  it('marks Acuarela as feedback-driven and continuous', () => {
+    expect(getEffect('acuarela')?.usesFeedback).toBe(true);
+    expect(getEffect('acuarela')?.requiresContinuousRender).toBe(true);
+  });
+
+  it('marks Rom1 as feedback-driven and continuous', () => {
+    expect(getEffect('rom1')?.usesFeedback).toBe(true);
+    expect(getEffect('rom1')?.requiresContinuousRender).toBe(true);
   });
 });
 
@@ -633,6 +644,19 @@ describe('Registry helper functions', () => {
       expect(config!.entryPoint).toBe(effect.entryPoint);
       expect(config!.uniformSize).toBe(effect.uniformSize);
     }
+  });
+
+  it('effectStackNeedsContinuousRender returns true for enabled continuous render effects', () => {
+    expect(effectStackNeedsContinuousRender([
+      { type: 'acuarela', enabled: true },
+    ])).toBe(true);
+  });
+
+  it('effectStackNeedsContinuousRender ignores disabled and non-continuous effects', () => {
+    expect(effectStackNeedsContinuousRender([
+      { type: 'acuarela', enabled: false },
+      { type: 'gaussian-blur', enabled: true },
+    ])).toBe(false);
   });
 });
 

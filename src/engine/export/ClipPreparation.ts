@@ -345,8 +345,8 @@ async function loadClipFileDataCached(
 
 /**
  * Prepare all video clips for export based on export mode.
- * FAST mode: WebCodecs with MP4Box parsing - sequential decoding, very fast
- * PRECISE mode: HTMLVideoElement seeking - frame-accurate but slower
+ * FAST mode: WebCodecs with MP4Box parsing - strict decoder path, no HTML fallback
+ * PRECISE mode: explicit HTMLVideoElement seeking - frame-accurate but slower
  */
 export async function prepareClipsForExport(
   settings: ExportSettings,
@@ -401,13 +401,10 @@ export async function prepareClipsForExport(
 
   const { totalBytes, largestBytes, largestClipName, uniqueSourceCount } = getFastModeFileSizeStats(videoClips, mediaFiles);
   if (largestBytes >= FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES || totalBytes >= FAST_EXPORT_TOTAL_FILE_LIMIT_BYTES) {
-    log.warn(
-      `FAST export bypassed for large source media (largest=${(largestBytes / 1024 / 1024).toFixed(0)}MB, uniqueTotal=${(totalBytes / 1024 / 1024).toFixed(0)}MB, uniqueSources=${uniqueSourceCount}/${videoClips.length}). Using PRECISE mode instead.`,
-      { largestClipName }
-    );
-    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime);
     endPrepare();
-    return result;
+    throw new Error(
+      `FAST export refused large source media (largest=${(largestBytes / 1024 / 1024).toFixed(0)}MB, uniqueTotal=${(totalBytes / 1024 / 1024).toFixed(0)}MB, uniqueSources=${uniqueSourceCount}/${videoClips.length}, largestClip="${largestClipName ?? 'unknown'}"). Select HTMLVideo Precise explicitly if this export should use HTMLVideo decoding.`
+    );
   }
 
   // FAST MODE: WebCodecs with MP4Box parsing
@@ -415,12 +412,9 @@ export async function prepareClipsForExport(
     return await initializeFastMode(videoClips, mediaFiles, startTime, endTime, clipStates, settings.fps, endPrepare);
   } catch (e) {
     if (shouldAutoFallbackToPrecise(e)) {
-      log.warn('FAST export failed, auto-falling back to PRECISE mode', e);
-      clipStates.clear();
-      const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime);
-      endPrepare();
-      return result;
+      log.error('FAST export failed; strict export will not auto-switch to PRECISE mode', e);
     }
+    endPrepare();
     throw e;
   }
 }
@@ -654,8 +648,7 @@ async function initializeParallelDecoding(
     const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
 
     if (!fileData) {
-      log.warn(`Could not load nested clip "${clip.name}", will use HTMLVideoElement`);
-      return null;
+      throw new Error(`FAST export failed: Could not load file data for nested clip "${clip.name}". Select HTMLVideo Precise explicitly if this export should use HTMLVideo decoding.`);
     }
 
     return {
@@ -745,46 +738,6 @@ async function initializeParallelDecoding(
     log.info(`Prewarmed ${prewarmedClipStarts} clip start frames for smoother cuts`);
   }
   endPrefetch();
-
-  // Also seek all HTMLVideoElements to their correct start positions as fallback
-  // This ensures correct frame if parallel decoder fails and falls back to video element
-  const seekPromises: Promise<void>[] = [];
-  for (const clip of clips) {
-    if (clip.source?.videoElement) {
-      const video = clip.source.videoElement;
-      const clipLocalTime = Math.max(0, _startTime - clip.startTime);
-      const clipSpeed = clip.speed ?? 1;
-      const speedAdjusted = clipLocalTime * Math.abs(clipSpeed);
-      const sourceTime = (clip.reversed !== (clipSpeed < 0))
-        ? clip.outPoint - speedAdjusted
-        : clip.inPoint + speedAdjusted;
-
-      seekPromises.push(new Promise<void>((resolve) => {
-        const targetTime = Math.max(0, Math.min(sourceTime, video.duration || 0));
-        if (Math.abs(video.currentTime - targetTime) < 0.01) {
-          resolve();
-          return;
-        }
-        const onSeeked = () => {
-          video.removeEventListener('seeked', onSeeked);
-          resolve();
-        };
-        video.addEventListener('seeked', onSeeked);
-        video.currentTime = targetTime;
-        // Timeout fallback
-        setTimeout(() => {
-          video.removeEventListener('seeked', onSeeked);
-          resolve();
-        }, 500);
-      }));
-    }
-  }
-  if (seekPromises.length > 0) {
-    await Promise.all(seekPromises);
-    // Wait for frames to be ready after seek
-    await new Promise(r => setTimeout(r, 50));
-    log.info(`Seeked ${seekPromises.length} video elements to start positions as fallback`);
-  }
 
   // Mark clips as using parallel decoding
   for (const clip of clips) {

@@ -1,7 +1,8 @@
 // Keyframe-related actions slice
 
 import type { KeyframeActions, SliceCreator, Keyframe, AnimatableProperty, ClipTransform } from './types';
-import type { TimelineClip, ClipMask, MaskPathKeyframeValue } from '../../types';
+import type { TimelineClip, TimelineTrack, ClipMask, ClipCustomNodeParamValue, MaskPathKeyframeValue, TextBoundsPath } from '../../types';
+import { engine } from '../../engine/WebGPUEngine';
 import { parseCameraProperty } from '../../types';
 import { useMediaStore } from '../mediaStore';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../mediaStore/types';
@@ -9,11 +10,20 @@ import { DEFAULT_TRANSFORM, PROPERTY_ROW_HEIGHT, MIN_CURVE_EDITOR_HEIGHT, MAX_CU
 import {
   compileRuntimeColorGrade,
   createMaskPathProperty,
+  createTextBoundsPathProperty,
   ensureColorCorrectionState,
   parseColorProperty,
   parseMaskProperty,
+  parseNodeGraphParamProperty,
+  parseTextBoundsProperty,
   setColorNodeParamValue,
 } from '../../types';
+import {
+  applyTextBoundsPathValue,
+  cloneTextBoundsPath,
+  getTextBoundsPathValue,
+  resolveTextBoundsPath,
+} from '../../services/textLayout';
 import {
   getInterpolatedClipTransform,
   getInterpolatedClipCameraSettings,
@@ -39,6 +49,13 @@ import { normalizeEasingType } from '../../utils/easing';
 import { composeTransforms } from '../../utils/transformComposition';
 import { calculateSourceTime, getSpeedAtTime, calculateTimelineDuration } from '../../utils/speedIntegration';
 import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
+import {
+  getHexColorChannel,
+  normalizeHexColor,
+  parseColorChannelParamName,
+  rgbColorToHex,
+  setHexColorChannel,
+} from '../../utils/colorParam';
 
 type MaskPathVertex = MaskPathKeyframeValue['vertices'][number];
 
@@ -55,6 +72,107 @@ function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | und
     }
   }
   return undefined;
+}
+
+function isClipOnLockedTrack(clips: TimelineClip[], tracks: TimelineTrack[], clipId: string): boolean {
+  const clip = clips.find(c => c.id === clipId);
+  return !!clip && tracks.find(t => t.id === clip.trackId)?.locked === true;
+}
+
+function isAnyKeyframeOnLockedTrack(
+  clipKeyframes: Map<string, Keyframe[]>,
+  clips: TimelineClip[],
+  tracks: TimelineTrack[],
+  keyframeIds: Iterable<string>
+): boolean {
+  const targets = new Set(keyframeIds);
+  if (targets.size === 0) return false;
+
+  for (const [clipId, keyframes] of clipKeyframes) {
+    if (!keyframes.some(keyframe => targets.has(keyframe.id))) continue;
+    if (isClipOnLockedTrack(clips, tracks, clipId)) return true;
+  }
+  return false;
+}
+
+function isCustomNodeParamValue(value: unknown): value is ClipCustomNodeParamValue {
+  return ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function getCustomNodeParamDefaults(
+  clip: TimelineClip,
+  nodeId: string,
+): Record<string, ClipCustomNodeParamValue> {
+  const definition = clip.nodeGraph?.customNodes?.find((node) => node.id === nodeId);
+  if (!definition) {
+    return {};
+  }
+
+  const params: Record<string, ClipCustomNodeParamValue> = {};
+  const schemaById = new Map((definition.parameterSchema ?? []).map((param) => [param.id, param]));
+  for (const param of definition.parameterSchema ?? []) {
+    const value = definition.params?.[param.id] ?? param.default;
+    params[param.id] = param.type === 'color' ? normalizeHexColor(value, String(param.default)) : value;
+  }
+  for (const [key, value] of Object.entries(definition.params ?? {})) {
+    if (isCustomNodeParamValue(value)) {
+      const schema = schemaById.get(key);
+      params[key] = schema?.type === 'color' ? normalizeHexColor(value, String(schema.default)) : value;
+    }
+  }
+  return params;
+}
+
+function setCustomNodeParamValue(
+  clip: TimelineClip,
+  nodeId: string,
+  paramName: string,
+  value: ClipCustomNodeParamValue,
+): TimelineClip {
+  const nodeGraph = clip.nodeGraph;
+  if (!nodeGraph) {
+    return clip;
+  }
+  const definition = nodeGraph.customNodes?.find((node) => node.id === nodeId);
+  if (!definition) {
+    return clip;
+  }
+  const colorChannel = parseColorChannelParamName(paramName);
+  const colorParam = colorChannel
+    ? definition.parameterSchema?.find((param) => param.id === colorChannel.paramId && param.type === 'color')
+    : undefined;
+  const nextParamName = colorParam ? colorParam.id : paramName;
+  const nextValue = colorParam && typeof value === 'number'
+    ? setHexColorChannel(
+        definition.params?.[colorParam.id] ?? colorParam.default,
+        colorChannel!.channel,
+        value,
+        String(colorParam.default),
+      )
+    : value;
+
+  return {
+    ...clip,
+    nodeGraph: {
+      ...nodeGraph,
+      customNodes: nodeGraph.customNodes?.map((node) => (
+        node.id === nodeId
+          ? {
+              ...node,
+              params: {
+                ...(node.params ?? {}),
+                [nextParamName]: nextValue,
+              },
+            }
+          : node
+      )),
+      updatedAt: Date.now(),
+    },
+  };
+}
+
+function getCustomNodeDefinition(clip: TimelineClip, nodeId: string) {
+  return clip.nodeGraph?.customNodes?.find((node) => node.id === nodeId);
 }
 
 function normalizeCameraSettingValue(
@@ -217,6 +335,16 @@ function applyMaskPathValue(mask: ClipMask, value: MaskPathKeyframeValue): ClipM
       handleOut: { ...vertex.handleOut },
     })),
   };
+}
+
+function getClipTextBounds(clip: TimelineClip): TextBoundsPath | undefined {
+  if (!clip.textProperties) return undefined;
+  const canvas = clip.source?.textCanvas;
+  const width = canvas?.width || 1920;
+  const height = canvas?.height || 1080;
+  return clip.textProperties.textBounds
+    ? cloneTextBoundsPath(clip.textProperties.textBounds)
+    : resolveTextBoundsPath(clip.textProperties, width, height);
 }
 
 function cloneMaskVertex(vertex: MaskPathVertex): MaskPathVertex {
@@ -535,7 +663,8 @@ function getInterpolatedMaskPathValue(
 
 export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => ({
   addKeyframe: (clipId, property, value, time, easing = 'linear') => {
-    const { clips, playheadPosition, clipKeyframes, invalidateCache } = get();
+    const { clips, tracks, playheadPosition, clipKeyframes, invalidateCache } = get();
+    if (isClipOnLockedTrack(clips, tracks, clipId)) return;
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
     const normalizedEasing = normalizeEasingType(easing, 'linear');
@@ -583,6 +712,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
 
     // Invalidate cache since animation changed
     invalidateCache();
+    engine.requestRender();
   },
 
   addMaskPathKeyframe: (clipId, maskId, providedPathValue, time, easing = 'linear') => {
@@ -663,8 +793,91 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     invalidateCache();
   },
 
+  addTextBoundsPathKeyframe: (clipId, providedPathValue, time, easing = 'linear') => {
+    const { clips, playheadPosition, clipKeyframes, invalidateCache } = get();
+    const clip = findClipById(clips, clipId);
+    const textBounds = clip ? getClipTextBounds(clip) : undefined;
+    if (!clip || !textBounds) return;
+
+    const property = createTextBoundsPathProperty();
+    const normalizedEasing = normalizeEasingType(easing, 'linear');
+    const clipLocalTime = time ?? (playheadPosition - clip.startTime);
+    const clampedTime = Math.max(0, Math.min(clipLocalTime, clip.duration));
+    const existingKeyframes = clipKeyframes.get(clipId) || [];
+    const existingAtTime = getKeyframeAtTime(existingKeyframes, property, clampedTime);
+    const pathValue = providedPathValue ? cloneMaskPathValue(providedPathValue) : getTextBoundsPathValue(textBounds);
+
+    const newKeyframes = existingAtTime
+      ? existingKeyframes.map(keyframe =>
+          keyframe.id === existingAtTime.id
+            ? { ...keyframe, value: 0, pathValue, easing: normalizedEasing }
+            : keyframe
+        )
+      : [
+          ...existingKeyframes,
+          {
+            id: `kf_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+            clipId,
+            time: clampedTime,
+            property,
+            value: 0,
+            pathValue,
+            easing: normalizedEasing,
+          },
+        ].sort((a, b) => a.time - b.time);
+
+    const newMap = new Map(clipKeyframes);
+    newMap.set(clipId, newKeyframes);
+    set({ clipKeyframes: newMap });
+    invalidateCache();
+  },
+
+  recordTextBoundsPathKeyframe: (clipId) => {
+    const property = createTextBoundsPathProperty();
+    const { isRecording, hasKeyframes, addTextBoundsPathKeyframe } = get();
+    if (!isRecording(clipId, property) && !hasKeyframes(clipId, property)) return;
+    addTextBoundsPathKeyframe(clipId);
+  },
+
+  disableTextBoundsPathKeyframes: (clipId, pathValue) => {
+    const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache } = get();
+    const property = createTextBoundsPathProperty();
+    if (pathValue) {
+      set({
+        clips: clips.map(clip => {
+          if (clip.id !== clipId || !clip.textProperties) return clip;
+          const textBounds = getClipTextBounds(clip);
+          if (!textBounds) return clip;
+          return {
+            ...clip,
+            textProperties: {
+              ...clip.textProperties,
+              boxEnabled: true,
+              textBounds: applyTextBoundsPathValue(textBounds, pathValue),
+            },
+          };
+        }),
+      });
+    }
+
+    const existingKeyframes = clipKeyframes.get(clipId) || [];
+    const filtered = existingKeyframes.filter(keyframe => keyframe.property !== property);
+    const newMap = new Map(clipKeyframes);
+    if (filtered.length > 0) {
+      newMap.set(clipId, filtered);
+    } else {
+      newMap.delete(clipId);
+    }
+
+    const newRecording = new Set(keyframeRecordingEnabled);
+    newRecording.delete(`${clipId}:${property}`);
+    set({ clipKeyframes: newMap, keyframeRecordingEnabled: newRecording });
+    invalidateCache();
+  },
+
   removeKeyframe: (keyframeId) => {
-    const { clipKeyframes, invalidateCache, selectedKeyframeIds } = get();
+    const { clipKeyframes, clips, tracks, invalidateCache, selectedKeyframeIds } = get();
+    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, [keyframeId])) return;
     const newMap = new Map<string, Keyframe[]>();
 
     clipKeyframes.forEach((keyframes, clipId) => {
@@ -683,7 +896,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   },
 
   updateKeyframe: (keyframeId, updates) => {
-    const { clipKeyframes, clips, invalidateCache } = get();
+    const { clipKeyframes, clips, tracks, invalidateCache } = get();
+    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, [keyframeId])) return;
     const newMap = new Map<string, Keyframe[]>();
     const { easing, ...restUpdates } = updates;
     const baseNormalizedUpdates = easing !== undefined
@@ -717,7 +931,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   },
 
   moveKeyframe: (keyframeId, newTime) => {
-    const { clipKeyframes, clips, invalidateCache } = get();
+    const { clipKeyframes, clips, tracks, invalidateCache } = get();
+    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, [keyframeId])) return;
     const newMap = new Map<string, Keyframe[]>();
 
     clipKeyframes.forEach((keyframes, clipId) => {
@@ -737,7 +952,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   moveKeyframes: (keyframeIds, newTime) => {
     if (keyframeIds.length === 0) return;
 
-    const { clipKeyframes, clips, invalidateCache } = get();
+    const { clipKeyframes, clips, tracks, invalidateCache } = get();
+    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, keyframeIds)) return;
     const targetIds = new Set(keyframeIds);
     const newMap = new Map<string, Keyframe[]>();
     let changed = false;
@@ -885,6 +1101,60 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
 
       return { ...effect, params: newParams };
     });
+  },
+
+  getInterpolatedNodeGraphParams: (clipId, nodeId, clipLocalTime) => {
+    const { clips, clipKeyframes } = get();
+    const clip = findClipById(clips, clipId);
+    if (!clip) {
+      return {};
+    }
+
+    const params = getCustomNodeParamDefaults(clip, nodeId);
+    const definition = getCustomNodeDefinition(clip, nodeId);
+    const keyframes = clipKeyframes.get(clipId) || [];
+    if (keyframes.length === 0) {
+      return params;
+    }
+
+    for (const param of definition?.parameterSchema ?? []) {
+      if (param.type !== 'color') {
+        continue;
+      }
+
+      const fallback = String(param.default);
+      const baseColor = params[param.id] ?? fallback;
+      const channels = {
+        r: getHexColorChannel(baseColor, 'r', fallback),
+        g: getHexColorChannel(baseColor, 'g', fallback),
+        b: getHexColorChannel(baseColor, 'b', fallback),
+      };
+
+      (['r', 'g', 'b'] as const).forEach((channel) => {
+        const propertyKey = `node.${nodeId}.${param.id}.${channel}` as AnimatableProperty;
+        if (!keyframes.some((keyframe) => keyframe.property === propertyKey)) {
+          return;
+        }
+        channels[channel] = interpolateKeyframes(keyframes, propertyKey, clipLocalTime, channels[channel]);
+      });
+
+      params[param.id] = rgbColorToHex(channels);
+    }
+
+    for (const [paramName, baseValue] of Object.entries(params)) {
+      if (typeof baseValue !== 'number') {
+        continue;
+      }
+
+      const propertyKey = `node.${nodeId}.${paramName}` as AnimatableProperty;
+      if (!keyframes.some((keyframe) => keyframe.property === propertyKey)) {
+        continue;
+      }
+
+      params[paramName] = interpolateKeyframes(keyframes, propertyKey, clipLocalTime, baseValue);
+    }
+
+    return params;
   },
 
   getInterpolatedColorCorrection: (clipId, clipLocalTime) => {
@@ -1059,6 +1329,45 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     });
   },
 
+  getInterpolatedTextBounds: (clipId, clipLocalTime) => {
+    const { clips, clipKeyframes } = get();
+    const clip = findClipById(clips, clipId);
+    const textBounds = clip ? getClipTextBounds(clip) : undefined;
+    if (!clip || !textBounds) {
+      return undefined;
+    }
+
+    const keyframes = clipKeyframes.get(clipId) || [];
+    if (keyframes.length === 0) {
+      return textBounds;
+    }
+
+    const textBoundsKeyframes = keyframes.filter(keyframe => keyframe.property.startsWith('textBounds.'));
+    if (textBoundsKeyframes.length === 0) {
+      return textBounds;
+    }
+
+    let nextBounds = cloneTextBoundsPath(textBounds);
+    const pathProperty = createTextBoundsPathProperty();
+    if (textBoundsKeyframes.some(keyframe => keyframe.property === pathProperty && keyframe.pathValue)) {
+      nextBounds = applyTextBoundsPathValue(
+        nextBounds,
+        getInterpolatedMaskPathValue(textBoundsKeyframes, pathProperty, clipLocalTime, getTextBoundsPathValue(textBounds)),
+      );
+    }
+
+    const positionXProperty = 'textBounds.position.x' as AnimatableProperty;
+    const positionYProperty = 'textBounds.position.y' as AnimatableProperty;
+    if (textBoundsKeyframes.some(keyframe => keyframe.property === positionXProperty)) {
+      nextBounds.position.x = interpolateKeyframes(textBoundsKeyframes, positionXProperty, clipLocalTime, textBounds.position.x);
+    }
+    if (textBoundsKeyframes.some(keyframe => keyframe.property === positionYProperty)) {
+      nextBounds.position.y = interpolateKeyframes(textBoundsKeyframes, positionYProperty, clipLocalTime, textBounds.position.y);
+    }
+
+    return nextBounds;
+  },
+
   getInterpolatedSpeed: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
@@ -1120,7 +1429,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   },
 
   setPropertyValue: (clipId, property, value) => {
-    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateColorNodeParam, updateMask, clips, hasKeyframes, isPlaying } = get();
+    const { isRecording, addKeyframe, updateClipTransform, updateClipEffect, updateColorNodeParam, updateMask, updateTextProperties, clips, tracks, hasKeyframes, isPlaying } = get();
+    if (isClipOnLockedTrack(clips, tracks, clipId)) return;
     const currentClip = clips.find(c => c.id === clipId);
     const cameraPropertyForValue = parseCameraProperty(property);
     const valueForStorage = cameraPropertyForValue && currentClip?.source?.type === 'camera'
@@ -1137,6 +1447,10 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     if (isRecording(clipId, property) || propertyHasKeyframes) {
       // Recording mode OR property already has keyframes - create/update keyframe
       addKeyframe(clipId, property, valueForStorage);
+      if (parseNodeGraphParamProperty(property)) {
+        get().invalidateCache();
+        engine.requestRender();
+      }
       if (isPlaying && clips.some(c => c.id === clipId)) {
         dispatchKeyframeRecordingFeedback(clipId, property);
       }
@@ -1154,6 +1468,23 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           updateDuration(); // Update timeline duration
         }
         invalidateCache();
+      }
+      const textBoundsProperty = parseTextBoundsProperty(property);
+      if (textBoundsProperty && textBoundsProperty !== 'path') {
+        const clip = clips.find(c => c.id === clipId);
+        const textBounds = clip ? getClipTextBounds(clip) : undefined;
+        if (textBounds) {
+          updateTextProperties(clipId, {
+            boxEnabled: true,
+            textBounds: {
+              ...textBounds,
+              position: {
+                ...textBounds.position,
+                [textBoundsProperty === 'position.x' ? 'x' : 'y']: valueForStorage,
+              },
+            },
+          });
+        }
       }
     } else {
       // Not recording and no keyframes - update static value
@@ -1233,6 +1564,23 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         return;
       }
 
+      const textBoundsProperty = parseTextBoundsProperty(property);
+      if (textBoundsProperty && textBoundsProperty !== 'path' && clip.textProperties) {
+        const textBounds = getClipTextBounds(clip);
+        if (!textBounds) return;
+        updateTextProperties(clipId, {
+          boxEnabled: true,
+          textBounds: {
+            ...textBounds,
+            position: {
+              ...textBounds.position,
+              [textBoundsProperty === 'position.x' ? 'x' : 'y']: value,
+            },
+          },
+        });
+        return;
+      }
+
       const cameraProperty = parseCameraProperty(property);
       if (cameraProperty && clip.source?.type === 'camera') {
         set({
@@ -1245,6 +1593,18 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           } : c),
         });
         get().invalidateCache();
+        return;
+      }
+
+      const nodeGraphParamProperty = parseNodeGraphParamProperty(property);
+      if (nodeGraphParamProperty) {
+        set({
+          clips: clips.map(c => c.id === clipId
+            ? setCustomNodeParamValue(c, nodeGraphParamProperty.nodeId, nodeGraphParamProperty.paramName, value)
+            : c),
+        });
+        get().invalidateCache();
+        engine.requestRender();
         return;
       }
 
@@ -1504,6 +1864,13 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           } : c.source,
         } : c),
       });
+      } else if (parseNodeGraphParamProperty(property)) {
+      const nodeGraphParamProperty = parseNodeGraphParamProperty(property)!;
+      set({
+        clips: get().clips.map(c => c.id === clipId
+          ? setCustomNodeParamValue(c, nodeGraphParamProperty.nodeId, nodeGraphParamProperty.paramName, currentValue)
+          : c),
+      });
       } else if (property.startsWith('effect.')) {
       const parts = property.split('.');
       if (parts.length === 3) {
@@ -1524,6 +1891,21 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         } else if (maskProperty.property === 'featherQuality') {
           updateMask(clipId, mask.id, { featherQuality: Math.min(100, Math.max(1, Math.round(currentValue))) });
         }
+      }
+    } else if (parseTextBoundsProperty(property)) {
+      const textBoundsProperty = parseTextBoundsProperty(property)!;
+      const textBounds = getClipTextBounds(clip);
+      if (textBounds && textBoundsProperty !== 'path') {
+        get().updateTextProperties(clipId, {
+          boxEnabled: true,
+          textBounds: {
+            ...textBounds,
+            position: {
+              ...textBounds.position,
+              [textBoundsProperty === 'position.x' ? 'x' : 'y']: currentValue,
+            },
+          },
+        });
       }
     } else if (parseColorProperty(property)) {
       const colorProperty = parseColorProperty(property)!;

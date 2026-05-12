@@ -22,6 +22,8 @@ export const MODIFYING_TOOLS = new Set([
   'downloadAndImportVideo',
   // Transform & Effects
   'setTransform', 'addEffect', 'removeEffect', 'updateEffect',
+  // Node workspace
+  'sendAINodePrompt',
   // Keyframes
   'addKeyframe', 'removeKeyframe',
   // Speed & Playback

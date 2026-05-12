@@ -180,6 +180,7 @@ export function useClipFade({
 
       const clip = clipMap.get(clipId);
       if (!clip) return;
+      if (tracks.find(track => track.id === clip.trackId)?.locked) return;
 
       // For audio clips, ensure the volume effect exists
       const fadeProperty = isAudioClip(clipId)
@@ -336,7 +337,7 @@ export function useClipFade({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clipMap, getFadeInDuration, getFadeOutDuration, getClipKeyframes, pixelToTime, addKeyframe, moveKeyframe, removeKeyframe, isAudioClip, ensureAudioVolumeEffect]
+    [clipMap, tracks, getFadeInDuration, getFadeOutDuration, getClipKeyframes, pixelToTime, addKeyframe, moveKeyframe, removeKeyframe, isAudioClip, ensureAudioVolumeEffect]
   );
 
   return {

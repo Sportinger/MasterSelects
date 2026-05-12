@@ -1,7 +1,7 @@
 // Export-related types and interfaces
 
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
-import type { BlendMode, ClipTransform, Effect, RuntimeColorGrade } from '../../types';
+import type { BlendMode, ClipTransform, Effect, RuntimeColorGrade, TextBoundsPath } from '../../types';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
 
@@ -29,7 +29,7 @@ export interface ExportSettings {
   audioBitrate?: number;  // 128000 - 320000
   normalizeAudio?: boolean;
   // Export mode
-  exportMode?: ExportMode;  // 'fast' = WebCodecs sequential, 'precise' = HTMLVideoElement
+  exportMode?: ExportMode;  // 'fast' = strict WebCodecs, 'precise' = explicit HTMLVideoElement
   // Alpha channel
   stackedAlpha?: boolean;  // Export as double-height video with RGB top / alpha-as-luma bottom
 }
@@ -133,6 +133,7 @@ export interface FrameContext {
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;
   getInterpolatedVectorAnimationSettings: (clipId: string, localTime: number) => VectorAnimationClipSettings;
+  getInterpolatedTextBounds: (clipId: string, localTime: number) => TextBoundsPath | undefined;
   getSourceTimeForClip: (clipId: string, localTime: number) => number;
   getInterpolatedSpeed: (clipId: string, localTime: number) => number;
 }
