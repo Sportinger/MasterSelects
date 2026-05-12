@@ -16,6 +16,7 @@ import { Logger } from '../../../services/logger';
 import { thumbnailRenderer } from '../../../services/thumbnailRenderer';
 import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
 import { mathSceneRenderer } from '../../../services/mathScene/MathSceneRenderer';
+import { cloneClipNodeGraph } from '../../../services/nodeGraph';
 // Note: compositionRenderer is used elsewhere for cache invalidation
 
 const log = Logger.create('AddCompClip');
@@ -333,6 +334,7 @@ async function loadSubNestedClips(
         source: { type: 'video', naturalDuration: subDuration },
         transform: sc.transform,
         effects: sc.effects || [],
+        nodeGraph: cloneClipNodeGraph(sc.nodeGraph),
         masks: sc.masks || [],
         isComposition: true,
         compositionId: sc.compositionId,
@@ -364,6 +366,7 @@ async function loadSubNestedClips(
         thumbnails: sc.thumbnails,
         transform: sc.transform,
         effects: sc.effects || [],
+        nodeGraph: cloneClipNodeGraph(sc.nodeGraph),
         masks: sc.masks || [],
         reversed: sc.reversed,
         speed: sc.speed,
@@ -394,6 +397,7 @@ async function loadSubNestedClips(
       thumbnails: sc.thumbnails,
       transform: sc.transform,
       effects: sc.effects || [],
+      nodeGraph: cloneClipNodeGraph(sc.nodeGraph),
       masks: sc.masks || [],
       reversed: sc.reversed,
       speed: sc.speed,
@@ -549,6 +553,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
         transform: serializedClip.transform,
         effects: serializedClip.effects || [],
         colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+        nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
         masks: serializedClip.masks || [],
         isComposition: true,
         compositionId: serializedClip.compositionId,
@@ -599,6 +604,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
         transform: serializedClip.transform,
         effects: serializedClip.effects || [],
         colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+        nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
         masks: serializedClip.masks || [],
         isLoading: false,
         reversed: serializedClip.reversed,
@@ -648,6 +654,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       transform: serializedClip.transform,
       effects: serializedClip.effects || [],
       colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+      nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
       masks: serializedClip.masks || [],
       isLoading: true,
       is3D: serializedClip.is3D,

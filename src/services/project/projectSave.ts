@@ -207,6 +207,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         params: e.params || {},
       })),
       colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
+      nodeGraph: c.nodeGraph ? structuredClone(c.nodeGraph) : undefined,
       masks: (c.masks || []).map((m) => ({
         id: m.id,
         name: m.name || 'Mask',

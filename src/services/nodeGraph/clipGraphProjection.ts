@@ -1,8 +1,12 @@
 import type { Effect, TimelineClip, TimelineTrack } from '../../types';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type {
+  ClipNodeGraph,
+  ClipNodeGraphBacking,
+  ClipNodeGraphNodeState,
   NodeGraph,
   NodeGraphEdge,
+  NodeGraphLayout,
   NodeGraphNode,
   NodeGraphPort,
   NodeGraphSignalType,
@@ -243,7 +247,160 @@ function appendProcessingNode(
   return { nodeId: node.id, portId: 'output' };
 }
 
-export function buildClipNodeGraph(clip: TimelineClip, track?: TimelineTrack): NodeGraph {
+function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
+  switch (node.id) {
+    case 'source':
+      return { kind: 'clip-source' };
+    case 'transform':
+      return { kind: 'clip-transform' };
+    case 'mask':
+      return { kind: 'clip-mask-stack' };
+    case 'color':
+      return { kind: 'clip-color-correction' };
+    case 'output':
+      return { kind: 'clip-output' };
+    case 'audio-output':
+      return { kind: 'clip-audio-output' };
+    default:
+      if (node.id.startsWith('effect-')) {
+        return { kind: 'clip-effect', effectId: node.id.slice('effect-'.length) };
+      }
+      return { kind: 'clip-output' };
+  }
+}
+
+function cloneLayout(layout: NodeGraphLayout): NodeGraphLayout {
+  return { x: layout.x, y: layout.y };
+}
+
+function createNodeState(node: NodeGraphNode): ClipNodeGraphNodeState {
+  return {
+    id: node.id,
+    backing: getNodeBacking(node),
+    layout: cloneLayout(node.layout),
+  };
+}
+
+function applyClipNodeGraphState(graph: NodeGraph, state?: ClipNodeGraph): NodeGraph {
+  if (!state || state.version !== 1) {
+    return graph;
+  }
+
+  const layoutsByNodeId = new Map(state.nodes.map((node) => [node.id, node.layout]));
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      const storedLayout = layoutsByNodeId.get(node.id);
+      return storedLayout
+        ? { ...node, layout: cloneLayout(storedLayout) }
+        : node;
+    }),
+  };
+}
+
+function buildProjectedClipNodeGraphState(clip: TimelineClip, track?: TimelineTrack): ClipNodeGraph {
+  const graph = buildClipNodeGraphView(clip, track);
+  return {
+    version: 1,
+    nodes: graph.nodes.map(createNodeState),
+  };
+}
+
+export function reconcileClipNodeGraphState(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  existingState?: ClipNodeGraph,
+): ClipNodeGraph {
+  const projectedState = buildProjectedClipNodeGraphState(clip, track);
+  if (!existingState || existingState.version !== 1) {
+    return projectedState;
+  }
+
+  const existingNodesById = new Map(existingState.nodes.map((node) => [node.id, node]));
+  return {
+    version: 1,
+    nodes: projectedState.nodes.map((node) => ({
+      ...node,
+      layout: cloneLayout(existingNodesById.get(node.id)?.layout ?? node.layout),
+    })),
+    updatedAt: existingState.updatedAt,
+  };
+}
+
+export function createClipNodeGraphState(clip: TimelineClip, track?: TimelineTrack): ClipNodeGraph {
+  return reconcileClipNodeGraphState(clip, track);
+}
+
+export function updateClipNodeGraphLayout(
+  clip: TimelineClip,
+  nodeId: string,
+  layout: NodeGraphLayout,
+  track?: TimelineTrack,
+): ClipNodeGraph {
+  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const nodes = state.nodes.map((node) => (
+    node.id === nodeId
+      ? { ...node, layout: cloneLayout(layout) }
+      : node
+  ));
+
+  if (!nodes.some((node) => node.id === nodeId)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    nodes,
+    updatedAt: Date.now(),
+  };
+}
+
+export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undefined {
+  if (!graph || graph.version !== 1) {
+    return undefined;
+  }
+
+  return {
+    version: 1,
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      backing: { ...node.backing },
+      layout: cloneLayout(node.layout),
+    })),
+    updatedAt: graph.updatedAt,
+  };
+}
+
+export function remapClipNodeGraphEffectIds(
+  graph: ClipNodeGraph | undefined,
+  effectIdMap: Map<string, string>,
+): ClipNodeGraph | undefined {
+  const cloned = cloneClipNodeGraph(graph);
+  if (!cloned) return undefined;
+
+  return {
+    ...cloned,
+    nodes: cloned.nodes.map((node) => {
+      if (node.backing.kind !== 'clip-effect') {
+        return node;
+      }
+
+      const nextEffectId = effectIdMap.get(node.backing.effectId);
+      if (!nextEffectId) {
+        return node;
+      }
+
+      return {
+        ...node,
+        id: `effect-${nextEffectId}`,
+        backing: { kind: 'clip-effect', effectId: nextEffectId },
+      };
+    }),
+    updatedAt: Date.now(),
+  };
+}
+
+function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): NodeGraph {
   const nodes: NodeGraphNode[] = [];
   const edges: NodeGraphEdge[] = [];
   const sourceNode = createSourceNode(clip, track);
@@ -338,4 +495,8 @@ export function buildClipNodeGraph(clip: TimelineClip, track?: TimelineTrack): N
     nodes,
     edges,
   };
+}
+
+export function buildClipNodeGraph(clip: TimelineClip, track?: TimelineTrack): NodeGraph {
+  return applyClipNodeGraphState(buildClipNodeGraphView(clip, track), clip.nodeGraph);
 }

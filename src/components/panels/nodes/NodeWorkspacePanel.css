@@ -170,7 +170,7 @@
   border-radius: 6px;
   background: var(--bg-secondary);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
-  cursor: pointer;
+  cursor: grab;
   outline: none;
   transition: border-color 0.1s, box-shadow 0.1s, background 0.1s;
   pointer-events: auto;
@@ -180,6 +180,10 @@
 .node-workspace-node:hover {
   background: var(--bg-hover);
   border-color: rgba(255, 255, 255, 0.18);
+}
+
+.node-workspace-node:active {
+  cursor: grabbing;
 }
 
 .node-workspace-node.selected {
@@ -410,6 +414,36 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.028);
+}
+
+.node-workspace-param-editable {
+  min-height: 30px;
+}
+
+.node-workspace-param-editable select {
+  min-width: 110px;
+  max-width: 128px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.node-workspace-param-editable .draggable-number {
+  justify-self: end;
+  min-width: 56px;
+  text-align: right;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-workspace-param-checkbox input {
+  justify-self: end;
+  width: 14px;
+  height: 14px;
 }
 
 .node-workspace-inspector-empty {

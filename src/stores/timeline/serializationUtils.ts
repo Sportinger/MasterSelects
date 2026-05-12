@@ -20,6 +20,7 @@ import { layerBuilder } from '../../services/layerBuilder';
 import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClient';
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
+import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import {
   DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
@@ -76,6 +77,10 @@ function restoreSourceThumbnails(
   void thumbnailCacheService.generateForSource(mediaFileId, video, duration, fileHash);
 }
 
+function restoreClipNodeGraph(serializedClip: SerializableClip) {
+  return cloneClipNodeGraph(serializedClip.nodeGraph);
+}
+
 type SerializationUtils = Pick<TimelineUtils, 'getSerializableState' | 'loadState' | 'clearTimeline'>;
 
 export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, get) => ({
@@ -122,6 +127,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         transform: clip.transform,
         effects: clip.effects,
         colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
+        nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
         keyframes: keyframes.length > 0 ? keyframes : undefined,
         // Nested composition support
         isComposition: clip.isComposition,
@@ -348,6 +354,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         transform: serializedClip.transform,
         effects: serializedClip.effects || [],
         colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+        nodeGraph: restoreClipNodeGraph(serializedClip),
         masks: serializedClip.masks,
         reversed: serializedClip.reversed,
         speed: serializedClip.speed,
@@ -391,6 +398,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         transform: serializedClip.transform,
         effects: serializedClip.effects || [],
         colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+        nodeGraph: restoreClipNodeGraph(serializedClip),
         masks: serializedClip.masks,
         speed: serializedClip.speed,
         preservesPitch: serializedClip.preservesPitch,
@@ -425,6 +433,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
               transform: serializedClip.transform,
               effects: serializedClip.effects || [],
               colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+              nodeGraph: restoreClipNodeGraph(serializedClip),
               isLoading: false,
               isComposition: true,
               compositionId: serializedClip.compositionId,
@@ -503,6 +512,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             transform: serializedClip.transform,
             effects: serializedClip.effects || [],
             colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+            nodeGraph: restoreClipNodeGraph(serializedClip),
             masks: serializedClip.masks || [],  // Restore masks for composition clips
             isLoading: true,
             isComposition: true,
@@ -1165,6 +1175,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
           colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+          nodeGraph: restoreClipNodeGraph(serializedClip),
           masks: serializedClip.masks,
           speed: serializedClip.speed,
           preservesPitch: serializedClip.preservesPitch,
@@ -1212,6 +1223,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
           colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+          nodeGraph: restoreClipNodeGraph(serializedClip),
           masks: serializedClip.masks,
           textProperties: serializedClip.textProperties,
           speed: serializedClip.speed,
@@ -1261,6 +1273,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
           colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+          nodeGraph: restoreClipNodeGraph(serializedClip),
           masks: serializedClip.masks,
           solidColor: color,
           speed: serializedClip.speed,
@@ -1299,6 +1312,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
           colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+          nodeGraph: restoreClipNodeGraph(serializedClip),
           masks: serializedClip.masks,
           speed: serializedClip.speed,
           preservesPitch: serializedClip.preservesPitch,
@@ -1335,6 +1349,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
           colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+          nodeGraph: restoreClipNodeGraph(serializedClip),
           masks: serializedClip.masks,
           speed: serializedClip.speed,
           preservesPitch: serializedClip.preservesPitch,
@@ -1427,6 +1442,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         transform: serializedClip.transform,
         effects: serializedClip.effects || [],
         colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+        nodeGraph: restoreClipNodeGraph(serializedClip),
         isLoading: true,
         masks: serializedClip.masks,  // Restore masks
         // Restore transcript data

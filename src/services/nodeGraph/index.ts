@@ -1,7 +1,18 @@
-export { buildClipNodeGraph } from './clipGraphProjection';
+export {
+  buildClipNodeGraph,
+  cloneClipNodeGraph,
+  createClipNodeGraphState,
+  reconcileClipNodeGraphState,
+  remapClipNodeGraphEffectIds,
+  updateClipNodeGraphLayout,
+} from './clipGraphProjection';
 export type {
+  ClipNodeGraph,
+  ClipNodeGraphBacking,
+  ClipNodeGraphNodeState,
   NodeGraph,
   NodeGraphEdge,
+  NodeGraphLayout,
   NodeGraphNode,
   NodeGraphNodeKind,
   NodeGraphOwner,
@@ -10,4 +21,3 @@ export type {
   NodeGraphRuntimeKind,
   NodeGraphSignalType,
 } from './types';
-

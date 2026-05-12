@@ -15,6 +15,7 @@ import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { generateEffectId } from './helpers/idGenerator';
+import { cloneClipNodeGraph, remapClipNodeGraphEffectIds } from '../../services/nodeGraph';
 
 const log = Logger.create('Clipboard');
 
@@ -113,6 +114,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         transform: { ...clip.transform },
         effects: clip.effects.map(e => ({ ...e, params: { ...e.params } })),
         colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
+        nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
         masks: clip.masks?.map(m => ({
           ...m,
           vertices: m.vertices.map(v => ({ ...v })),
@@ -216,6 +218,17 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         newLinkedClipId = idMapping.get(clipData.linkedClipId);
       }
 
+      const effectIdMap = new Map<string, string>();
+      const effects = clipData.effects.map(e => {
+        const nextEffectId = `effect-${timestamp}-${randomSuffix()}`;
+        effectIdMap.set(e.id, nextEffectId);
+        return {
+          ...e,
+          id: nextEffectId,
+          params: { ...e.params },
+        };
+      });
+
       // Create the new clip
       const newClip: TimelineClip = {
         id: newId,
@@ -284,12 +297,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           scale: { ...clipData.transform.scale },
           rotation: { ...clipData.transform.rotation },
         },
-        effects: clipData.effects.map(e => ({
-          ...e,
-          id: `effect-${timestamp}-${randomSuffix()}`, // New effect IDs
-          params: { ...e.params },
-        })),
+        effects,
         colorCorrection: clipData.colorCorrection ? structuredClone(clipData.colorCorrection) : undefined,
+        nodeGraph: remapClipNodeGraphEffectIds(clipData.nodeGraph, effectIdMap),
         masks: clipData.masks?.map(m => ({
           ...m,
           id: `mask-${timestamp}-${randomSuffix()}`, // New mask IDs

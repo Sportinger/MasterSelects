@@ -24,6 +24,7 @@ import type {
   MathObject,
   MathParameter,
   Layer,
+  NodeGraphLayout,
   SerializableClip,
 } from '../../types';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
@@ -483,6 +484,11 @@ export interface TransitionActions {
   findClipJunction: (trackId: string, time: number, threshold?: number) => { clipA: TimelineClip; clipB: TimelineClip; junctionTime: number } | null;
 }
 
+export interface NodeGraphActions {
+  ensureClipNodeGraph: (clipId: string) => void;
+  moveClipNodeGraphNode: (clipId: string, nodeId: string, layout: NodeGraphLayout) => void;
+}
+
 // Clipboard data for copy/paste
 export interface ClipboardClipData {
   // Serializable clip data (without DOM elements)
@@ -500,6 +506,7 @@ export interface ClipboardClipData {
   transform: ClipTransform;
   effects: Effect[];
   colorCorrection?: ColorCorrectionState;
+  nodeGraph?: import('../../types').ClipNodeGraph;
   masks?: ClipMask[];
   keyframes?: Keyframe[];
   linkedClipId?: string;
@@ -647,6 +654,7 @@ export interface TimelineStore extends
   MaskActions,
   MarkerActions,
   TransitionActions,
+  NodeGraphActions,
   ClipboardActions,
   AIActionFeedbackActions,
   TimelineUtils {}

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent } from 'react';
-import type { NodeGraph, NodeGraphEdge, NodeGraphNode, NodeGraphPort } from '../../../services/nodeGraph';
+import type { NodeGraph, NodeGraphEdge, NodeGraphLayout, NodeGraphNode, NodeGraphPort } from '../../../services/nodeGraph';
 
 const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 const MIN_ZOOM = 0.18;
@@ -15,6 +15,7 @@ interface NodeGraphCanvasProps {
   graph: NodeGraph;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
+  onMoveNode?: (nodeId: string, layout: NodeGraphLayout) => void;
 }
 
 interface Viewport {
@@ -29,6 +30,15 @@ interface PanGesture {
   clientY: number;
   panX: number;
   panY: number;
+}
+
+interface NodeDragGesture {
+  pointerId: number;
+  nodeId: string;
+  clientX: number;
+  clientY: number;
+  startX: number;
+  startY: number;
 }
 
 interface NodeBounds {
@@ -101,14 +111,23 @@ function renderPort(port: NodeGraphPort) {
   );
 }
 
-export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode }: NodeGraphCanvasProps) {
+export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode, onMoveNode }: NodeGraphCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const panGestureRef = useRef<PanGesture | null>(null);
+  const nodeDragGestureRef = useRef<NodeDragGesture | null>(null);
   const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
+  const [draftLayouts, setDraftLayouts] = useState<Record<string, NodeGraphLayout>>({});
 
-  const nodesById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
-  const graphBounds = useMemo(() => getGraphBounds(graph), [graph]);
+  const displayNodes = useMemo(() => (
+    graph.nodes.map((node) => (
+      draftLayouts[node.id]
+        ? { ...node, layout: draftLayouts[node.id] }
+        : node
+    ))
+  ), [draftLayouts, graph.nodes]);
+  const nodesById = useMemo(() => new Map(displayNodes.map((node) => [node.id, node])), [displayNodes]);
+  const graphBounds = useMemo(() => getGraphBounds({ ...graph, nodes: displayNodes }), [displayNodes, graph]);
 
   const gridStyle = useMemo(() => ({
     '--node-workspace-grid-x': `${viewport.panX % 32}px`,
@@ -191,6 +210,51 @@ export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode }: NodeGra
     event.currentTarget.releasePointerCapture(event.pointerId);
   }, []);
 
+  const startNodeDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode) => {
+    event.stopPropagation();
+    onSelectNode(node.id);
+    nodeDragGestureRef.current = {
+      pointerId: event.pointerId,
+      nodeId: node.id,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      startX: node.layout.x,
+      startY: node.layout.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, [onSelectNode]);
+
+  const handleNodePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = nodeDragGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const nextLayout = {
+      x: Math.round(gesture.startX + ((event.clientX - gesture.clientX) / viewport.zoom)),
+      y: Math.round(gesture.startY + ((event.clientY - gesture.clientY) / viewport.zoom)),
+    };
+    setDraftLayouts((current) => ({
+      ...current,
+      [gesture.nodeId]: nextLayout,
+    }));
+  }, [viewport.zoom]);
+
+  const finishNodeDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = nodeDragGestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const finalLayout = draftLayouts[gesture.nodeId];
+    if (finalLayout) {
+      onMoveNode?.(gesture.nodeId, finalLayout);
+    }
+    nodeDragGestureRef.current = null;
+    setDraftLayouts((current) => {
+      const next = { ...current };
+      delete next[gesture.nodeId];
+      return next;
+    });
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }, [draftLayouts, onMoveNode]);
+
   return (
     <div
       className={`node-workspace-board${isPanning ? ' board-interacting' : ''}`}
@@ -247,7 +311,7 @@ export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode }: NodeGra
             })}
           </svg>
 
-          {graph.nodes.map((node) => {
+          {displayNodes.map((node) => {
             const nodeHeight = getNodeHeight(node);
             const isSelected = node.id === selectedNodeId;
             return (
@@ -266,6 +330,10 @@ export function NodeGraphCanvas({ graph, selectedNodeId, onSelectNode }: NodeGra
                   event.stopPropagation();
                   onSelectNode(node.id);
                 }}
+                onPointerDown={(event) => startNodeDrag(event, node)}
+                onPointerMove={handleNodePointerMove}
+                onPointerUp={finishNodeDrag}
+                onPointerCancel={finishNodeDrag}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();

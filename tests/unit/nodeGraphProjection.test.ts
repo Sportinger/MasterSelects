@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildClipNodeGraph } from '../../src/services/nodeGraph';
+import {
+  buildClipNodeGraph,
+  cloneClipNodeGraph,
+  createClipNodeGraphState,
+  remapClipNodeGraphEffectIds,
+  updateClipNodeGraphLayout,
+} from '../../src/services/nodeGraph';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
 import { createDefaultColorCorrectionState, type ClipMask, type Effect, type TimelineClip, type TimelineTrack } from '../../src/types';
 
@@ -229,5 +235,71 @@ describe('buildClipNodeGraph', () => {
       ['effect-volume', 'output', 'effect-eq', 'input'],
       ['effect-eq', 'output', 'audio-output', 'input'],
     ]);
+  });
+
+  it('applies persisted node layout from clip graph state', () => {
+    const clip = createClip();
+    const nodeGraph = updateClipNodeGraphLayout(clip, 'source', { x: 44, y: 55 }, createTrack());
+    const graph = buildClipNodeGraph({ ...clip, nodeGraph }, createTrack());
+
+    expect(graph.nodes.find((node) => node.id === 'source')?.layout).toEqual({ x: 44, y: 55 });
+    expect(graph.nodes.find((node) => node.id === 'output')?.layout).toEqual({ x: 230, y: 88 });
+  });
+
+  it('reconciles saved layout when graph shape changes', () => {
+    const clip = createClip();
+    const nodeGraph = updateClipNodeGraphLayout(clip, 'source', { x: 12, y: 34 }, createTrack());
+    const transform = structuredClone(DEFAULT_TRANSFORM);
+    transform.position.x = 10;
+    const graph = buildClipNodeGraph({ ...clip, transform, nodeGraph }, createTrack());
+
+    expect(graph.nodes.map((node) => node.id)).toEqual(['source', 'transform', 'output']);
+    expect(graph.nodes.find((node) => node.id === 'source')?.layout).toEqual({ x: 12, y: 34 });
+    expect(graph.nodes.find((node) => node.id === 'transform')?.layout).toEqual({ x: 230, y: 88 });
+  });
+
+  it('stores field-backed node states without duplicating clip params', () => {
+    const blur: Effect = {
+      id: 'blur',
+      name: 'Blur',
+      type: 'blur',
+      enabled: true,
+      params: { radius: 12 },
+    };
+    const state = createClipNodeGraphState(createClip({ effects: [blur] }), createTrack());
+
+    expect(state.nodes.map((node) => [node.id, node.backing.kind])).toEqual([
+      ['source', 'clip-source'],
+      ['effect-blur', 'clip-effect'],
+      ['output', 'clip-output'],
+    ]);
+    expect(state.nodes.find((node) => node.id === 'effect-blur')?.backing).toEqual({
+      kind: 'clip-effect',
+      effectId: 'blur',
+    });
+  });
+
+  it('clones and remaps persisted effect node ids for pasted clips', () => {
+    const blur: Effect = {
+      id: 'blur',
+      name: 'Blur',
+      type: 'blur',
+      enabled: true,
+      params: { radius: 12 },
+    };
+    const state = updateClipNodeGraphLayout(
+      createClip({ effects: [blur] }),
+      'effect-blur',
+      { x: 500, y: 99 },
+      createTrack(),
+    );
+    const cloned = cloneClipNodeGraph(state);
+    const remapped = remapClipNodeGraphEffectIds(cloned, new Map([['blur', 'new-blur']]));
+
+    expect(cloned).not.toBe(state);
+    expect(remapped?.nodes.find((node) => node.id === 'effect-new-blur')).toMatchObject({
+      backing: { kind: 'clip-effect', effectId: 'new-blur' },
+      layout: { x: 500, y: 99 },
+    });
   });
 });

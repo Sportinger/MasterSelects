@@ -7,6 +7,7 @@ import type { CoreClipActions, SliceCreator, Composition } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { Logger } from '../../services/logger';
+import { cloneClipNodeGraph } from '../../services/nodeGraph';
 
 const log = Logger.create('ClipSlice');
 
@@ -20,6 +21,7 @@ function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
     transform: structuredClone(clip.transform),
     effects: clip.effects.map(e => structuredClone(e)),
     ...(clip.colorCorrection ? { colorCorrection: structuredClone(clip.colorCorrection) } : {}),
+    ...(clip.nodeGraph ? { nodeGraph: cloneClipNodeGraph(clip.nodeGraph) } : {}),
     ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
     ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
     ...(clip.transitionIn ? { transitionIn: structuredClone(clip.transitionIn) } : {}),

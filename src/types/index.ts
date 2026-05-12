@@ -8,9 +8,11 @@ import type {
 } from './vectorAnimation';
 import type { ColorCorrectionState, RuntimeColorGrade } from './colorCorrection';
 import type { MotionLayerDefinition, MotionProperty } from './motionDesign';
+import type { ClipNodeGraph } from './nodeGraph';
 
 export * from './colorCorrection';
 export * from './motionDesign';
+export * from './nodeGraph';
 
 export type TimelineSourceType =
   | 'video'
@@ -673,6 +675,7 @@ export interface TimelineClip {
   transform: ClipTransform;  // Visual transform properties
   effects: Effect[];      // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;  // Professional node/list color correction state
+  nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state for this clip
   isLoading?: boolean;    // True while media is being loaded
   needsReload?: boolean;  // True if file handle needs re-authorization after page refresh
   reversed?: boolean;     // True if clip plays in reverse
@@ -770,6 +773,7 @@ export interface SerializableClip {
   transform: ClipTransform;
   effects: Effect[];         // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;
+  nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state
   keyframes?: Keyframe[];    // Animation keyframes for this clip
   // Nested composition support
   isComposition?: boolean;

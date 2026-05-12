@@ -4,7 +4,7 @@
 
 The Node Workspace is a dockable graph view for the currently selected timeline clip. It follows the same primary selection rule as Properties: the last clicked selected clip is used, with a fallback to the first selected clip.
 
-The graph is derived from existing clip state and does not introduce a second render model. A plain video clip appears as:
+The graph is derived from existing clip state and does not introduce a second render model. Node layout state is saved on the owning clip, while node parameters still read from the normal clip fields. A plain video clip appears as:
 
 ```text
 Video Source -> Clip Output
@@ -16,6 +16,8 @@ When clip state contains processing, the view inserts the corresponding built-in
 Source -> Transform -> Masks -> Color Graph -> Effects -> Clip Output
 ```
 
-Audio effects are shown in a separate audio lane when the source exposes audio. The canvas uses the Media Panel board interaction model: pan, wheel zoom, fit/reset view, compact node cards, typed ports, edges, and an inspector for the selected node.
+Audio effects are shown in a separate audio lane when the source exposes audio. The canvas uses the Media Panel board interaction model: pan, wheel zoom, node dragging, fit/reset view, compact node cards, typed ports, edges, and an inspector for the selected node.
 
-The current graph projection is deterministic and read-only. Runtime preview and export still use the existing layer builders and renderer. Future graph editing should write through to the owning clip fields so Properties, timeline state, history, preview, and export remain one system.
+The Transform node is the first write-through node. Its inspector edits opacity, position, scale, rotation, speed, blend mode, and reverse state through the same timeline store actions used by the Properties panel, so preview, export, history, and project persistence continue to see one clip model.
+
+The current graph projection is deterministic. Runtime preview and export still use the existing layer builders and renderer. Broader graph editing should continue to write through to the owning clip fields so Properties, timeline state, history, preview, and export remain one system.

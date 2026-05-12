@@ -11,6 +11,7 @@ import type {
   ModelSequenceData,
   MathSceneDefinition,
   MotionLayerDefinition,
+  ClipNodeGraph,
   SceneSegment,
   Text3DProperties,
   TextClipProperties,
@@ -49,6 +50,7 @@ export interface ProjectClip {
   // Effects
   effects: ProjectEffect[];
   colorCorrection?: ColorCorrectionState;
+  nodeGraph?: ClipNodeGraph;
 
   // Masks
   masks: ProjectMask[];
