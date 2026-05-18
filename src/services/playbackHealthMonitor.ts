@@ -14,6 +14,22 @@ import { Logger } from './logger';
 import { engine } from '../engine/WebGPUEngine';
 import { createFrameContext, getClipTimeInfo, layerBuilder } from './layerBuilder';
 import { useTimelineStore } from '../stores/timeline';
+import type { TimelineClip } from '../types';
+import {
+  buildPlaybackDebugStats,
+  type PlaybackHealthAnomaly,
+  type PlaybackHealthVideoState,
+} from './playbackDebugStats';
+import {
+  canUseSharedPreviewRuntimeSession,
+  getPreviewRuntimeSource,
+  getRuntimeFrameProvider,
+  getScrubRuntimeSource,
+  updateRuntimePlaybackTime,
+} from './mediaRuntime/runtimePlayback';
+import type { RuntimeFrameProvider } from './mediaRuntime/types';
+import { vfPipelineMonitor } from './vfPipelineMonitor';
+import { wcPipelineMonitor } from './wcPipelineMonitor';
 
 const log = Logger.create('PlaybackHealth');
 
@@ -27,7 +43,8 @@ type AnomalyType =
   | 'READYSTATE_DROP'
   | 'GPU_SURFACE_COLD'
   | 'RENDER_STALL'
-  | 'HIGH_DROP_RATE';
+  | 'HIGH_DROP_RATE'
+  | 'PREVIEW_FREEZE';
 
 interface AnomalyEvent {
   type: AnomalyType;
@@ -40,6 +57,28 @@ interface AnomalyEvent {
 interface VideoTimeTracker {
   lastTime: number;
   staleCount: number;
+}
+
+type PlaybackPurgeMode = 'targeted' | 'full';
+
+interface PlaybackPurgeOptions {
+  reason?: string;
+  mode?: PlaybackPurgeMode;
+  resumePlayback?: boolean;
+}
+
+interface PlaybackPurgeResult {
+  reason: string;
+  mode: PlaybackPurgeMode;
+  playheadPosition: number;
+  wasPlaying: boolean;
+  resumeScheduled: boolean;
+  clips: Array<{
+    clipId: string;
+    targetTime: number;
+    hadVideoElement: boolean;
+    webCodecsProvidersReset: number;
+  }>;
 }
 
 // --- Constants ---
@@ -55,6 +94,11 @@ const HIGH_DROP_THRESHOLD = 10;
 const CLIP_ESCALATION_WINDOW_MS = 12000;
 const CLIP_ESCALATION_THRESHOLD = 3;
 const CLIP_ESCALATION_COOLDOWN_MS = 15000;
+const PREVIEW_FREEZE_WINDOW_MS = 1500;
+const PREVIEW_FREEZE_RECOVERY_MS = 650;
+const PREVIEW_FREEZE_STALE_FRAMES = 12;
+const PLAYBACK_PURGE_COOLDOWN_MS = 8000;
+const PLAYBACK_PURGE_RESUME_DELAY_MS = 80;
 
 // --- Service ---
 
@@ -80,8 +124,10 @@ export class PlaybackHealthMonitor {
     GPU_SURFACE_COLD: 0,
     RENDER_STALL: 0,
     HIGH_DROP_RATE: 0,
+    PREVIEW_FREEZE: 0,
   };
   private lastAnomalyTime: Partial<Record<AnomalyType, number>> = {};
+  private lastPlaybackPurgeAt = 0;
 
   private shouldMonitorHtmlVideoHealth(
     clip: {
@@ -272,6 +318,8 @@ export class PlaybackHealthMonitor {
       this.recordAnomaly('HIGH_DROP_RATE', undefined, `${stats.drops.lastSecond} drops/sec`);
     }
 
+    this.maybeRecoverPreviewFreeze(now, isPlaying, stats.decoder);
+
     // Cleanup stale tracker entries for clips no longer in timeline
     const currentClipIdSet = new Set(clips.map((c) => c.id));
     const htmlHealthClipIdSet = new Set(htmlHealthVideoClips.map((c) => c.id));
@@ -290,6 +338,51 @@ export class PlaybackHealthMonitor {
   }
 
   // --- Anomaly recording with cooldown ---
+
+  private maybeRecoverPreviewFreeze(
+    now: number,
+    isPlaying: boolean,
+    decoder: ReturnType<typeof engine.getStats>['decoder']
+  ): void {
+    if (!isPlaying) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (now - this.lastPlaybackPurgeAt < PLAYBACK_PURGE_COOLDOWN_MS) return;
+
+    const healthVideos = this.videos() as PlaybackHealthVideoState[];
+    if (healthVideos.length === 0) return;
+
+    const playback = buildPlaybackDebugStats({
+      decoder,
+      now,
+      windowMs: PREVIEW_FREEZE_WINDOW_MS,
+      wcTimeline: wcPipelineMonitor.timeline(PREVIEW_FREEZE_WINDOW_MS),
+      vfTimeline: vfPipelineMonitor.timeline(PREVIEW_FREEZE_WINDOW_MS),
+      healthVideos,
+      healthAnomalies: this.anomalyLog as PlaybackHealthAnomaly[],
+    });
+
+    const freezeLongEnough = playback.longestPreviewFreezeMs >= PREVIEW_FREEZE_RECOVERY_MS;
+    const staleEnough = playback.stalePreviewWhileTargetMoved >= PREVIEW_FREEZE_STALE_FRAMES;
+    if (!freezeLongEnough || !staleEnough) {
+      return;
+    }
+
+    const detail = [
+      `preview frozen for ${Math.round(playback.longestPreviewFreezeMs)}ms`,
+      `staleMovingFrames=${playback.stalePreviewWhileTargetMoved}`,
+      `path=${playback.lastPreviewFreezePath ?? 'unknown'}`,
+      `pipeline=${playback.pipeline}`,
+    ].join(', ');
+
+    if (this.recordAnomaly('PREVIEW_FREEZE', playback.lastPreviewFreezeClipId, detail)) {
+      this.lastPlaybackPurgeAt = now;
+      this.purgePlaybackPath({
+        reason: 'auto-preview-freeze',
+        mode: 'targeted',
+        resumePlayback: true,
+      });
+    }
+  }
 
   private recordAnomaly(type: AnomalyType, clipId?: string, detail?: string): boolean {
     const now = performance.now();
@@ -405,6 +498,162 @@ export class PlaybackHealthMonitor {
     vsm.recoverClipPlaybackState(clipId, video, targetTime, { resumePlayback });
   }
 
+  private safePurgeSeekTime(video: HTMLVideoElement, targetTime: number): number {
+    const duration = video.duration;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return Math.max(0, targetTime);
+    }
+    return Math.max(0, Math.min(targetTime, duration - 0.001));
+  }
+
+  private resetRuntimeProvider(
+    provider: RuntimeFrameProvider | null | undefined,
+    targetTime: number
+  ): boolean {
+    if (!provider?.isFullMode?.()) {
+      return false;
+    }
+
+    try {
+      provider.pause();
+      provider.seek(targetTime);
+      provider.advanceToTime?.(targetTime);
+      return true;
+    } catch (error) {
+      log.warn('Failed to reset WebCodecs provider during playback purge', error);
+      return false;
+    }
+  }
+
+  private resetWebCodecsProvidersForClip(
+    ctx: ReturnType<typeof createFrameContext>,
+    clip: TimelineClip,
+    targetTime: number
+  ): number {
+    const source = clip.source;
+    if (!source) {
+      return 0;
+    }
+
+    const providers = new Set<RuntimeFrameProvider>();
+    const allowShared = canUseSharedPreviewRuntimeSession(clip, ctx.clipsAtTime);
+    const previewSource = getPreviewRuntimeSource(source, clip.trackId, allowShared);
+    const scrubSource = getScrubRuntimeSource(source, clip.trackId, allowShared);
+
+    updateRuntimePlaybackTime(previewSource, targetTime);
+    updateRuntimePlaybackTime(scrubSource, targetTime);
+
+    const previewProvider = getRuntimeFrameProvider(previewSource);
+    const scrubProvider = getRuntimeFrameProvider(scrubSource);
+    if (previewProvider) providers.add(previewProvider);
+    if (scrubProvider) providers.add(scrubProvider);
+    if (source.webCodecsPlayer) providers.add(source.webCodecsPlayer);
+
+    let resetCount = 0;
+    for (const provider of providers) {
+      if (this.resetRuntimeProvider(provider, targetTime)) {
+        resetCount++;
+      }
+    }
+    return resetCount;
+  }
+
+  purgePlaybackPath(options: PlaybackPurgeOptions = {}): PlaybackPurgeResult {
+    const reason = options.reason ?? 'manual';
+    const mode = options.mode ?? 'targeted';
+    const state = useTimelineStore.getState();
+    const wasPlaying = state.isPlaying;
+    const previousSpeed = state.playbackSpeed;
+    const playheadPosition = state.playheadPosition;
+    const resumePlayback = options.resumePlayback ?? wasPlaying;
+
+    state.setDraggingPlayhead(false);
+    if (wasPlaying) {
+      state.pause();
+      useTimelineStore.getState().setPlaybackSpeed(previousSpeed);
+    }
+
+    const ctx = createFrameContext();
+    const vsm = layerBuilder.getVideoSyncManager();
+    const lc = engine.getLayerCollector();
+    const clipsAtPlayhead = ctx.clips.filter(
+      (clip) =>
+        (clip.source?.videoElement || clip.source?.webCodecsPlayer) &&
+        playheadPosition >= clip.startTime &&
+        playheadPosition < clip.startTime + clip.duration
+    );
+
+    this.videoTimeTracker.clear();
+    this.warmupStartTimes = new WeakMap();
+    this.seekStartTimes.clear();
+    this.clipEscalationEvents.clear();
+    this.clipEscalationCooldowns.clear();
+    vsm.reset();
+    engine.clearVideoCache();
+    if (mode === 'full') {
+      engine.clearScrubbingCache();
+      engine.clearCompositeCache();
+    }
+
+    const purgedClips: PlaybackPurgeResult['clips'] = [];
+    for (const clip of clipsAtPlayhead) {
+      const targetTime = getClipTimeInfo(ctx, clip).clipTime;
+      const video = clip.source?.videoElement;
+      const webCodecsProvidersReset = this.resetWebCodecsProvidersForClip(ctx, clip, targetTime);
+
+      if (video) {
+        const safeTargetTime = this.safePurgeSeekTime(video, targetTime);
+        try {
+          video.pause();
+          video.muted = true;
+          if ((video.src || video.currentSrc) && Math.abs(video.currentTime - safeTargetTime) > 0.01) {
+            video.currentTime = safeTargetTime;
+          }
+        } catch (error) {
+          log.warn('Failed to retarget video element during playback purge', error);
+        }
+
+        lc?.resetVideoGpuReady(video);
+        const videoSrc = video.currentSrc || video.src;
+        if (videoSrc) {
+          engine.clearScrubbingCache(videoSrc);
+        }
+        vsm.resetClipRecoveryState(clip.id, video);
+        vsm.recoverClipPlaybackState(clip.id, video, safeTargetTime, { resumePlayback: false });
+      }
+
+      purgedClips.push({
+        clipId: clip.id,
+        targetTime,
+        hadVideoElement: !!video,
+        webCodecsProvidersReset,
+      });
+    }
+
+    engine.requestNewFrameRender();
+    log.warn(`[PLAYBACK_PURGE] reason=${reason} mode=${mode} clips=${purgedClips.length}`);
+
+    if (resumePlayback) {
+      window.setTimeout(() => {
+        const liveState = useTimelineStore.getState();
+        liveState.setPlaybackSpeed(previousSpeed);
+        void liveState.play().catch((error) => {
+          log.warn('Failed to resume playback after purge', error);
+        });
+        engine.requestNewFrameRender();
+      }, PLAYBACK_PURGE_RESUME_DELAY_MS);
+    }
+
+    return {
+      reason,
+      mode,
+      playheadPosition,
+      wasPlaying,
+      resumeScheduled: resumePlayback,
+      clips: purgedClips,
+    };
+  }
+
   softReset(): void {
     const { clips, playheadPosition } = useTimelineStore.getState();
     const vsm = layerBuilder.getVideoSyncManager();
@@ -498,6 +747,7 @@ export class PlaybackHealthMonitor {
       this.anomalyCounts[key] = 0;
     }
     this.lastAnomalyTime = {};
+    this.lastPlaybackPurgeAt = 0;
     log.info('Health monitor reset');
   }
 
@@ -588,10 +838,12 @@ export class PlaybackHealthMonitor {
         videos: () => ReturnType<PlaybackHealthMonitor['videos']>;
         recover: {
           softReset: () => void;
+          purgePlaybackPath: (mode?: PlaybackPurgeMode) => PlaybackPurgeResult;
           forceDecodeAll: () => void;
           clearWarmups: () => void;
           clearOrphans: () => void;
         };
+        purgePlaybackPath: (mode?: PlaybackPurgeMode) => PlaybackPurgeResult;
         reset: () => void;
       };
     }).__PLAYBACK_HEALTH__ = {
@@ -600,10 +852,12 @@ export class PlaybackHealthMonitor {
       videos: () => this.videos(),
       recover: {
         softReset: () => this.softReset(),
+        purgePlaybackPath: (mode?: PlaybackPurgeMode) => this.purgePlaybackPath({ reason: 'console', mode }),
         forceDecodeAll: () => this.forceDecodeAll(),
         clearWarmups: () => this.clearWarmups(),
         clearOrphans: () => this.clearOrphans(),
       },
+      purgePlaybackPath: (mode?: PlaybackPurgeMode) => this.purgePlaybackPath({ reason: 'console', mode }),
       reset: () => this.reset(),
     };
   }

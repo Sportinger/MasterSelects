@@ -175,6 +175,47 @@ describe('playback debug stats', () => {
     expect(stats.avgAudioDriftMs).toBe(72);
   });
 
+  it('marks severe target-moving preview freezes as bad without requiring decoder events', () => {
+    const vfTimeline: VFPipelineEvent[] = Array.from({ length: 13 }, (_, index) => ({
+      type: 'vf_preview_frame',
+      t: index * 60,
+      detail: {
+        changed: 'false',
+        targetMoved: 'true',
+        previewPath: 'webcodecs',
+        clipId: 'clip-freeze',
+        targetTimeMs: index * 33,
+        displayedTimeMs: 0,
+        driftMs: index * 33,
+      },
+    }));
+
+    const stats = buildPlaybackDebugStats({
+      decoder: 'WebCodecs',
+      now: 800,
+      windowMs: 1000,
+      vfTimeline,
+      healthVideos: [
+        {
+          clipId: 'clip-freeze',
+          src: 'demo.mp4',
+          currentTime: 0,
+          readyState: 4,
+          seeking: false,
+          paused: true,
+          played: 1,
+          warmingUp: false,
+          gpuReady: true,
+        },
+      ],
+    });
+
+    expect(stats.previewFreezeEvents).toBe(1);
+    expect(stats.stalePreviewWhileTargetMoved).toBe(13);
+    expect(stats.longestPreviewFreezeMs).toBe(720);
+    expect(stats.status).toBe('bad');
+  });
+
   it('marks VF playback unhealthy when readyState drops and audio drift show up', () => {
     const vfTimeline: VFPipelineEvent[] = [
       { type: 'vf_capture', t: 0 },

@@ -562,10 +562,19 @@ function derivePlaybackStatus(stats: Omit<PlaybackDebugStats, 'status'>): Playba
   const coldPlayback = stats.coldVideos > 0 && hasLivePlaybackDemand;
   const healthIssuesDuringPlayback = stats.healthAnomalies > 0 && hasLivePlaybackDemand;
   const missingReadyFramesDuringPlayback = noReadyFrames && hasLivePlaybackDemand;
+  const hasPreviewMotionDemand = stats.previewFrames > 0 && stats.stalePreviewWhileTargetMoved > 0;
+  const previewFreezeDuringPlayback =
+    stats.previewFreezeEvents > 0 &&
+    stats.stalePreviewWhileTargetMoved > 0 &&
+    (hasLivePlaybackDemand || hasPreviewMotionDemand);
+  const severePreviewFreeze =
+    previewFreezeDuringPlayback &&
+    (stats.longestPreviewFreezeMs >= 650 || stats.stalePreviewWhileTargetMoved >= 12);
 
   if (
     stats.stalls > 0 ||
     severeCadence ||
+    severePreviewFreeze ||
     healthIssuesDuringPlayback ||
     stats.readyStateDrops > 0 ||
     coldPlayback ||
@@ -578,6 +587,7 @@ function derivePlaybackStatus(stats: Omit<PlaybackDebugStats, 'status'>): Playba
   if (
     degradedCadence ||
     stats.queuePressureEvents > 30 ||
+    previewFreezeDuringPlayback ||
     stats.seeks >= 3 ||
     (stats.decoderResets ?? 0) >= 3 ||
     (stats.maxPendingSeekMs ?? 0) >= 80 ||

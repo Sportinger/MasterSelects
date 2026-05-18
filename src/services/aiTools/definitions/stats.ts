@@ -60,4 +60,30 @@ export const statsToolDefinitions: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'purgePlaybackPath',
+      description: 'Reset the live playback path at the current playhead without reloading the app. Clears VideoSync warmups/seeks, retargets active video/WebCodecs providers, resets GPU-ready state, and optionally resumes playback.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+            enum: ['targeted', 'full'],
+            description: 'targeted resets active playback clips; full also clears broader preview caches. Defaults to targeted.',
+          },
+          resumePlayback: {
+            type: 'boolean',
+            description: 'Whether to resume playback after the purge. Defaults to the pre-purge playing state.',
+          },
+          reason: {
+            type: 'string',
+            description: 'Short diagnostic reason included in logs and tool result.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];

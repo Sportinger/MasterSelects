@@ -154,10 +154,13 @@ export class VideoSyncManager {
     this.lastWarmupRetargetAt = {};
     this.lastPausedJumpPreloadPosition = Number.NaN;
     this.lastPausedJumpPreloadActiveKey = '';
+    this.warmingUpVideos = new WeakSet();
+    this.warmupRetryCooldown = new WeakMap();
     this.warmupAttemptIds = new WeakMap();
     this.warmupWatchdogs = new WeakMap();
     this.warmupClipIds = new WeakMap();
     this.warmupTargetTimes = new WeakMap();
+    this.gpuWarmedUp = new WeakSet();
     this.nextWarmupAttemptId = 1;
     // Clear debounce timers
     for (const id of Object.values(this.preciseSeekTimers)) clearTimeout(id);

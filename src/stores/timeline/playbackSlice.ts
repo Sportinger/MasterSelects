@@ -8,6 +8,14 @@ import { getRuntimeFrameProvider } from '../../services/mediaRuntime/runtimePlay
 import { playheadState, sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { resolvePlaybackStartPosition } from './playbackRange';
 
+function createPlaybackWarmupRequestId(): string {
+  return `playback-warmup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getWarmupTimestamp(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 // Playback actions only (RAM preview and proxy cache in separate slices)
 export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => ({
   // Playback actions
@@ -35,6 +43,8 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
   play: async () => {
     const { clips, inPoint, outPoint, duration, playbackSpeed } = get();
+    set({ playbackWarmup: null });
+
     const playheadPosition = sanitizePlayheadPosition(
       get().playheadPosition,
       sanitizePlayheadPosition(playheadState.position, 0)
@@ -107,7 +117,20 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       ...nestedVideos
     ]));
 
-    if (videosToCheck.length > 0) {
+    const videosNeedingWarmup = videosToCheck.filter((video) => video.readyState < 3);
+
+    if (videosNeedingWarmup.length > 0) {
+      const warmupRequestId = createPlaybackWarmupRequestId();
+      set({
+        playbackWarmup: {
+          requestId: warmupRequestId,
+          startedAt: getWarmupTimestamp(),
+          targetTime: playbackStartPosition,
+          pendingVideoCount: videosNeedingWarmup.length,
+          totalVideoCount: videosToCheck.length,
+        },
+      });
+
       // Wait for all videos to be ready (readyState >= 3 means HAVE_FUTURE_DATA)
       const waitForReady = async (video: HTMLVideoElement): Promise<void> => {
         if (video.readyState >= 3) return;
@@ -141,22 +164,26 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
       // Wait for all videos in parallel with a timeout
       await Promise.race([
-        Promise.all(videosToCheck.map(waitForReady)),
+        Promise.all(videosNeedingWarmup.map(waitForReady)),
         new Promise(resolve => setTimeout(resolve, 1000)) // Max 1 second wait
       ]);
+
+      if (get().playbackWarmup?.requestId !== warmupRequestId) {
+        return;
+      }
     }
 
-    set({ isPlaying: true });
+    set({ playbackWarmup: null, isPlaying: true });
   },
 
   pause: () => {
     // Reset playback speed to normal when pausing
     // So that Space (play/pause toggle) plays forward again
-    set({ isPlaying: false, playbackSpeed: 1 });
+    set({ isPlaying: false, playbackSpeed: 1, playbackWarmup: null });
   },
 
   stop: () => {
-    set({ isPlaying: false, playheadPosition: 0 });
+    set({ isPlaying: false, playheadPosition: 0, playbackWarmup: null });
   },
 
   // View actions

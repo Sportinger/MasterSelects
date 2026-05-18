@@ -492,7 +492,28 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const setSceneGizmoClipIdOverride = useEngineStore((s) => s.setSceneGizmoClipIdOverride);
   const activeSplatLoadProgress = useEngineStore(selectActiveGaussianSplatLoadProgress);
   const setSceneNavFpsMoveSpeed = useEngineStore((s) => s.setSceneNavFpsMoveSpeed);
-  const { clips, selectedClipIds, primarySelectedClipId, selectClip, updateClipTransform, updateTextProperties, updateTextBoundsVertex, updateTextBoundsVertices, setPropertyValue, getInterpolatedTextBounds, maskEditMode, maskPanelActive, layers, selectedLayerId, selectLayer, updateLayer, tracks, isPlaying, playheadPosition } = useTimelineStore(useShallow(s => ({
+  const {
+    clips,
+    selectedClipIds,
+    primarySelectedClipId,
+    selectClip,
+    updateClipTransform,
+    updateTextProperties,
+    updateTextBoundsVertex,
+    updateTextBoundsVertices,
+    setPropertyValue,
+    getInterpolatedTextBounds,
+    maskEditMode,
+    maskPanelActive,
+    layers,
+    selectedLayerId,
+    selectLayer,
+    updateLayer,
+    tracks,
+    isPlaying,
+    playheadPosition,
+    playbackWarmup,
+  } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     primarySelectedClipId: s.primarySelectedClipId,
@@ -512,6 +533,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     tracks: s.tracks,
     isPlaying: s.isPlaying,
     playheadPosition: s.playheadPosition,
+    playbackWarmup: s.playbackWarmup,
   })));
   const { compositions, activeCompositionId } = useMediaStore(useShallow(s => ({
     compositions: s.compositions,
@@ -2399,6 +2421,16 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const editCameraGizmoTransform = editCameraModeActive && activeCameraClipAtPlayhead
     ? resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead)
     : null;
+  const showPlaybackWaiter = Boolean(
+    isEngineReady &&
+    !sourceMonitorActive &&
+    playbackWarmup
+  );
+  const playbackWaiterVideoCount = playbackWarmup?.pendingVideoCount ?? 0;
+  const playbackWaiterLabel = 'Preparing playback';
+  const playbackWaiterDetail = playbackWaiterVideoCount > 0
+    ? `${playbackWaiterVideoCount} video${playbackWaiterVideoCount === 1 ? '' : 's'}`
+    : '';
 
   return (
     <div
@@ -2561,6 +2593,24 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             </>
           )}
         </div>
+
+        {showPlaybackWaiter && (
+          <div
+            className="preview-playback-waiter-overlay"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="preview-playback-waiter">
+              <div className="preview-playback-waiter-spinner" aria-hidden="true" />
+              <div className="preview-playback-waiter-copy">
+                <span className="preview-playback-waiter-title">{playbackWaiterLabel}</span>
+                {playbackWaiterDetail && (
+                  <span className="preview-playback-waiter-detail">{playbackWaiterDetail}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {textPreviewEditorEnabled && selectedClip?.textProperties && selectedTextLayer && (
           <TextPreviewEditor

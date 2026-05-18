@@ -112,6 +112,12 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getStatsHistory', bridgeTelemetry()],
   ['getLogs', bridgeTelemetry()],
   ['getPlaybackTrace', bridgeTelemetry()],
+  ['purgePlaybackPath', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'low',
+    allowedCallers: ['chat', 'devBridge', 'console', 'internal'],
+  }],
   ['reloadApp', bridgeTelemetry()],
   ['debugExport', {
     ...bridgeTelemetry(),

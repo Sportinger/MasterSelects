@@ -121,6 +121,7 @@ import {
   handleGetLogs,
   handleGetPlaybackTrace,
   handleGetStatsHistory,
+  handlePurgePlaybackPath,
 } from './stats';
 import { handleDebugExport } from './export';
 import {
@@ -231,6 +232,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   getStatsHistory: handleGetStatsHistory,
   getLogs: handleGetLogs,
   getPlaybackTrace: handleGetPlaybackTrace,
+  purgePlaybackPath: handlePurgePlaybackPath,
   debugExport: handleDebugExport,
   getNodeWorkspaceDebugState: handleGetNodeWorkspaceDebugState,
   sendAINodePrompt: handleSendAINodePrompt,

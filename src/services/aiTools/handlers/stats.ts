@@ -312,3 +312,23 @@ export async function handleGetPlaybackTrace(
     },
   };
 }
+
+export async function handlePurgePlaybackPath(
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const mode = args.mode === 'full' ? 'full' : 'targeted';
+  const result = playbackHealthMonitor.purgePlaybackPath({
+    reason: typeof args.reason === 'string' && args.reason.trim()
+      ? args.reason.trim()
+      : 'ai-tool',
+    mode,
+    resumePlayback: typeof args.resumePlayback === 'boolean'
+      ? args.resumePlayback
+      : undefined,
+  });
+
+  return {
+    success: true,
+    data: result,
+  };
+}

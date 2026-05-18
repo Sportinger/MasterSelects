@@ -143,6 +143,7 @@ export const useTimelineStore = create<TimelineStore>()(
       snappingEnabled: true,
       isPlaying: false,
       isDraggingPlayhead: false,
+      playbackWarmup: null,
       selectedClipIds: new Set<string>(),
       primarySelectedClipId: null,
 

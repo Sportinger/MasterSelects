@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { createPlaybackSlice } from '../../src/stores/timeline/playbackSlice';
 import { playheadState } from '../../src/services/layerBuilder/PlayheadState';
 import type { TimelineStore } from '../../src/stores/timeline/types';
@@ -46,6 +46,10 @@ describe('playbackSlice HTML readiness gate', () => {
     playheadState.isUsingInternalPosition = false;
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('skips HTML readiness warmup for full WebCodecs clips', async () => {
     const htmlVideo = {
       readyState: 0,
@@ -81,6 +85,93 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(state.isPlaying).toBe(true);
     expect(htmlVideo.play).not.toHaveBeenCalled();
     expect(htmlVideo.pause).not.toHaveBeenCalled();
+  });
+
+  it('exposes playback warmup state while HTML video readiness is pending', async () => {
+    vi.useFakeTimers();
+    getRuntimeFrameProvider.mockReturnValue(null);
+
+    const htmlVideo = {
+      readyState: 0,
+      play: vi.fn(),
+      pause: vi.fn(),
+    };
+    htmlVideo.play.mockImplementation(() => {
+      htmlVideo.readyState = 3;
+      return Promise.resolve();
+    });
+
+    const state = createPlaybackTestStore({
+      clips: [
+        {
+          id: 'clip-1',
+          startTime: 0,
+          duration: 10,
+          source: {
+            videoElement: htmlVideo,
+          },
+        },
+      ],
+      playheadPosition: 1,
+      duration: 60,
+      isPlaying: false,
+      playbackWarmup: null,
+    } as Partial<TimelineStore>);
+
+    const playPromise = state.play();
+
+    expect(state.isPlaying).toBe(false);
+    expect(state.playbackWarmup).toMatchObject({
+      targetTime: 1,
+      pendingVideoCount: 1,
+      totalVideoCount: 1,
+    });
+
+    await vi.advanceTimersByTimeAsync(60);
+    await playPromise;
+
+    expect(state.playbackWarmup).toBeNull();
+    expect(state.isPlaying).toBe(true);
+    expect(htmlVideo.pause).toHaveBeenCalled();
+  });
+
+  it('does not start playback when a pending warmup was canceled', async () => {
+    vi.useFakeTimers();
+    getRuntimeFrameProvider.mockReturnValue(null);
+
+    const htmlVideo = {
+      readyState: 0,
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+    };
+
+    const state = createPlaybackTestStore({
+      clips: [
+        {
+          id: 'clip-1',
+          startTime: 0,
+          duration: 10,
+          source: {
+            videoElement: htmlVideo,
+          },
+        },
+      ],
+      playheadPosition: 1,
+      duration: 60,
+      isPlaying: false,
+      playbackWarmup: null,
+    } as Partial<TimelineStore>);
+
+    const playPromise = state.play();
+    expect(state.playbackWarmup).not.toBeNull();
+
+    state.pause();
+    htmlVideo.readyState = 3;
+    await vi.advanceTimersByTimeAsync(60);
+    await playPromise;
+
+    expect(state.playbackWarmup).toBeNull();
+    expect(state.isPlaying).toBe(false);
   });
 
   it('keeps the internal playhead in sync when moving the playhead while paused', () => {

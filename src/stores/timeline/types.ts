@@ -95,6 +95,14 @@ export interface AIMovingClip {
   startedAt: number;
 }
 
+export interface PlaybackWarmupState {
+  requestId: string;
+  startedAt: number;
+  targetTime: number;
+  pendingVideoCount: number;
+  totalVideoCount: number;
+}
+
 // Timeline marker type
 export interface TimelineMarker {
   id: string;
@@ -117,6 +125,7 @@ export interface TimelineState {
   snappingEnabled: boolean;
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
+  playbackWarmup: PlaybackWarmupState | null;
   selectedClipIds: Set<string>;
   primarySelectedClipId: string | null; // The clip the user actually clicked (for Properties panel)
 
