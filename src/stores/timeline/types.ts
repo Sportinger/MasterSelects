@@ -160,6 +160,8 @@ export interface TimelineState {
   exportProgress: number | null;  // 0-100 percentage
   exportCurrentTime: number | null;  // Current time being rendered
   exportRange: { start: number; end: number } | null;
+  exportPreviewFrame: ImageBitmap | null;  // Latest frame captured from the export pipeline
+  exportPreviewFrameTime: number | null;
 
   // Performance toggles
   thumbnailsEnabled: boolean;
@@ -421,6 +423,7 @@ export interface ProxyCacheActions {
 // Export progress actions interface
 export interface ExportActions {
   setExportProgress: (progress: number | null, currentTime: number | null) => void;
+  setExportPreviewFrame: (frame: ImageBitmap | null, currentTime: number | null) => void;
   startExport: (start: number, end: number) => void;
   endExport: () => void;
 }

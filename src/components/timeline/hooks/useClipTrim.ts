@@ -10,6 +10,7 @@ interface UseClipTrimProps {
   // Clip data
   clipMap: Map<string, TimelineClip>;
   tracks: TimelineTrack[];
+  isExporting: boolean;
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean) => void;
@@ -34,6 +35,7 @@ function canLoopExtendVectorClip(clip: TimelineClip): boolean {
 export function useClipTrim({
   clipMap,
   tracks,
+  isExporting,
   selectClip,
   trimClip,
   moveClip,
@@ -50,6 +52,7 @@ export function useClipTrim({
     (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
       e.stopPropagation();
       e.preventDefault();
+      if (isExporting) return;
 
       const clip = clipMap.get(clipId);
       if (!clip) return;
@@ -187,7 +190,7 @@ export function useClipTrim({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clipMap, tracks, pixelToTime, selectClip, trimClip, moveClip]
+    [clipMap, tracks, isExporting, pixelToTime, selectClip, trimClip, moveClip]
   );
 
   return {

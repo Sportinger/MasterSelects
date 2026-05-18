@@ -27,6 +27,7 @@ import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipS
 import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
 import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
+import { lockTimelineEditActions } from '../../src/stores/timeline/exportEditLock';
 
 // Minimal initial state sufficient for testing slices
 function getInitialState(): Partial<TimelineStore> {
@@ -84,6 +85,13 @@ function getInitialState(): Partial<TimelineStore> {
     // Proxy cache state
     isProxyCaching: false,
     proxyCacheProgress: null,
+    // Export state
+    isExporting: false,
+    exportProgress: null,
+    exportCurrentTime: null,
+    exportRange: null,
+    exportPreviewFrame: null,
+    exportPreviewFrameTime: null,
     // Stub functions that slices might call on other slices
     invalidateCache: () => {},
   };
@@ -257,10 +265,13 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     // Note: updateClipTransform and updateClipEffect are now provided by clipSlice
     const stubActions = {
       updateDuration: () => {},
+      setExportProgress: (progress: number | null, currentTime: number | null) => set({ exportProgress: progress, exportCurrentTime: currentTime }),
+      setExportPreviewFrame: (frame: ImageBitmap | null, currentTime: number | null) => set({ exportPreviewFrame: frame, exportPreviewFrameTime: currentTime }),
+      startExport: (start: number, end: number) => set({ isExporting: true, exportProgress: 0, exportCurrentTime: start, exportRange: { start, end } }),
+      endExport: () => set({ isExporting: false, exportProgress: null, exportCurrentTime: null, exportRange: null, exportPreviewFrame: null, exportPreviewFrameTime: null }),
     };
 
-    return {
-      ...getInitialState(),
+    const actions = lockTimelineEditActions({
       ...selectionActions,
       ...trackActions,
       ...keyframeActions,
@@ -278,6 +289,11 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...positioningUtils,
       ...playbackActions,
       ...stubActions,
+    }, get);
+
+    return {
+      ...getInitialState(),
+      ...actions,
       ...overrides,
     } as TimelineStore;
   });

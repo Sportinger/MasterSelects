@@ -28,6 +28,7 @@ export class WebCodecsExportMode {
   private static readonly INITIAL_LOOKAHEAD_SAMPLES = 90;
   private static readonly DECODE_LOOKAHEAD_SAMPLES = 60;
   private static readonly KEEP_FRAMES_BEHIND = 24;
+  private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 30;
 
   private player: ExportModePlayer;
 
@@ -37,6 +38,8 @@ export class WebCodecsExportMode {
   private exportFramesCts: number[] = []; // Sorted CTS values for index-based lookup
   private exportCurrentIndex = 0;
   private decodeCursorIndex = 0;
+  private presentationOffsetUs = 0;
+  private pendingWarmBuffer: Promise<void> | null = null;
 
   constructor(player: ExportModePlayer) {
     this.player = player;
@@ -57,8 +60,24 @@ export class WebCodecsExportMode {
     return (1_000_000 / Math.max(this.player.getFrameRate(), 1)) * multiplier;
   }
 
+  private updatePresentationOffset(samples: readonly Sample[]): void {
+    let firstPresentationUs = Infinity;
+    for (const sample of samples) {
+      if (!Number.isFinite(sample.cts) || !Number.isFinite(sample.timescale) || sample.timescale <= 0) {
+        continue;
+      }
+      firstPresentationUs = Math.min(firstPresentationUs, (sample.cts * 1_000_000) / sample.timescale);
+    }
+
+    this.presentationOffsetUs = Number.isFinite(firstPresentationUs) ? firstPresentationUs : 0;
+  }
+
   private getSampleTimestampUs(sample: Sample): number {
     return (sample.cts * 1_000_000) / sample.timescale;
+  }
+
+  private getNormalizedSampleTimestampUs(sample: Sample): number {
+    return Math.max(0, this.getSampleTimestampUs(sample) - this.presentationOffsetUs);
   }
 
   private findClosestSampleIndex(targetTimeSeconds: number): number {
@@ -68,12 +87,12 @@ export class WebCodecsExportMode {
       return 0;
     }
 
-    const targetTimeInTimescale = targetTimeSeconds * timescale;
+    const targetUs = targetTimeSeconds * 1_000_000;
     let targetSampleIndex = 0;
     let closestDiff = Infinity;
 
     for (let i = 0; i < samples.length; i++) {
-      const diff = Math.abs(samples[i].cts - targetTimeInTimescale);
+      const diff = Math.abs(this.getNormalizedSampleTimestampUs(samples[i]) - targetUs);
       if (diff < closestDiff) {
         closestDiff = diff;
         targetSampleIndex = i;
@@ -181,7 +200,7 @@ export class WebCodecsExportMode {
       const sample = samples[i];
       const chunk = new EncodedVideoChunk({
         type: sample.is_sync ? 'key' : 'delta',
-        timestamp: this.getSampleTimestampUs(sample),
+        timestamp: this.getNormalizedSampleTimestampUs(sample),
         duration: (sample.duration * 1_000_000) / sample.timescale,
         data: sample.data,
       });
@@ -234,8 +253,22 @@ export class WebCodecsExportMode {
     await this.decodeSampleWindow(
       this.decodeCursorIndex,
       endIndexExclusive,
-      this.getSampleTimestampUs(targetSample)
+      this.getNormalizedSampleTimestampUs(targetSample)
     );
+  }
+
+  private scheduleWarmBufferAroundSample(targetSampleIndex: number): void {
+    if (this.pendingWarmBuffer) {
+      return;
+    }
+
+    this.pendingWarmBuffer = this.warmBufferAroundSample(targetSampleIndex)
+      .catch((error) => {
+        log.warn('Background export decode warmup failed', error);
+      })
+      .finally(() => {
+        this.pendingWarmBuffer = null;
+      });
   }
 
   private async restartFromKeyframe(targetSampleIndex: number): Promise<void> {
@@ -266,7 +299,7 @@ export class WebCodecsExportMode {
     await this.decodeSampleWindow(
       keyframeIndex,
       endIndexExclusive,
-      this.getSampleTimestampUs(targetSample)
+      this.getNormalizedSampleTimestampUs(targetSample)
     );
   }
 
@@ -343,11 +376,12 @@ export class WebCodecsExportMode {
     this.isActive = true;
 
     const allSamples = this.player.getSamples();
-    const targetTimeInTimescale = startTimeSeconds * timescale;
+    this.updatePresentationOffset(allSamples);
+    const targetUs = startTimeSeconds * 1_000_000;
     let startSampleIndex = 0;
     let closestDiff = Infinity;
     for (let i = 0; i < allSamples.length; i++) {
-      const diff = Math.abs(allSamples[i].cts - targetTimeInTimescale);
+      const diff = Math.abs(this.getNormalizedSampleTimestampUs(allSamples[i]) - targetUs);
       if (diff < closestDiff) {
         closestDiff = diff;
         startSampleIndex = i;
@@ -376,12 +410,12 @@ export class WebCodecsExportMode {
     await this.decodeSampleWindow(
       keyframeIndex,
       decodeEnd,
-      this.getSampleTimestampUs(startSample)
+      this.getNormalizedSampleTimestampUs(startSample)
     );
     endDecode();
 
     const startFrameIndex = this.findBufferedFrameIndex(
-      this.getSampleTimestampUs(startSample),
+      this.getNormalizedSampleTimestampUs(startSample),
       this.getFrameToleranceUs(3)
     );
 
@@ -390,7 +424,7 @@ export class WebCodecsExportMode {
       this.player.setCurrentFrame(this.exportFrameBuffer.get(startCts) || null);
       this.exportCurrentIndex = startFrameIndex;
     } else if (this.exportFramesCts.length > 0) {
-      const fallbackIndex = this.findClosestFrameIndex(this.getSampleTimestampUs(startSample));
+      const fallbackIndex = this.findClosestFrameIndex(this.getNormalizedSampleTimestampUs(startSample));
       const fallbackCts = this.exportFramesCts[Math.max(0, fallbackIndex)];
       this.player.setCurrentFrame(this.exportFrameBuffer.get(fallbackCts) || null);
       this.exportCurrentIndex = Math.max(0, fallbackIndex);
@@ -511,11 +545,14 @@ export class WebCodecsExportMode {
         this.exportCurrentIndex = bestIndex;
 
         const framesRemaining = this.exportFramesCts.length - bestIndex;
-        if (framesRemaining < 30 && this.decodeCursorIndex < this.player.getSamples().length) {
+        if (
+          framesRemaining < WebCodecsExportMode.WARM_AHEAD_THRESHOLD_SAMPLES &&
+          this.decodeCursorIndex < this.player.getSamples().length
+        ) {
           log.debug(
             `Decoding ahead: ${framesRemaining} frames remaining, sampleIndex=${this.decodeCursorIndex}/${this.player.getSamples().length}`
           );
-          await this.warmBufferAroundSample(targetSampleIndex);
+          this.scheduleWarmBufferAroundSample(targetSampleIndex);
         }
 
         this.cleanupOldFrames(bestIndex - WebCodecsExportMode.KEEP_FRAMES_BEHIND);
@@ -533,6 +570,18 @@ export class WebCodecsExportMode {
     log.warn(
       `Frame not in buffer: target=${targetCts.toFixed(0)}, range=[${minCtsInBuffer.toFixed(0)}-${maxCtsInBuffer.toFixed(0)}], bufferSize=${this.exportFramesCts.length}`
     );
+
+    if (this.pendingWarmBuffer) {
+      await this.pendingWarmBuffer;
+      bestIndex = this.findBufferedFrameIndex(targetCts, this.getFrameToleranceUs(3));
+      if (bestIndex >= 0 && bestIndex < this.exportFramesCts.length) {
+        const cts = this.exportFramesCts[bestIndex];
+        this.player.setCurrentFrame(this.exportFrameBuffer.get(cts) || null);
+        this.exportCurrentIndex = bestIndex;
+        this.cleanupOldFrames(bestIndex - WebCodecsExportMode.KEEP_FRAMES_BEHIND);
+        return;
+      }
+    }
 
     if (
       targetCts < minCtsInBuffer ||
@@ -628,6 +677,7 @@ export class WebCodecsExportMode {
     this.exportFramesCts = [];
     this.exportCurrentIndex = 0;
     this.decodeCursorIndex = 0;
+    this.pendingWarmBuffer = null;
     log.info('Export mode ended');
   }
 
@@ -642,6 +692,7 @@ export class WebCodecsExportMode {
     this.exportFramesCts = [];
     this.exportCurrentIndex = 0;
     this.decodeCursorIndex = 0;
+    this.pendingWarmBuffer = null;
     this.isActive = false;
   }
 }

@@ -358,6 +358,20 @@ describe('clipSlice', () => {
   // ========== moveClip ==========
 
   describe('moveClip', () => {
+    it('blocks clip movement while an export is active', () => {
+      const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
+      store = createTestTimelineStore({
+        clips: [clip],
+        isExporting: true,
+        snappingEnabled: false,
+      });
+
+      store.getState().moveClip('clip-1', 10);
+
+      const blocked = store.getState().clips.find(c => c.id === 'clip-1')!;
+      expect(blocked.startTime).toBe(0);
+    });
+
     it('moves a clip to a new start time on the same track', () => {
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 5 });
       store = createTestTimelineStore({

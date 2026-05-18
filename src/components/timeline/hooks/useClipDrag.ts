@@ -20,6 +20,7 @@ interface UseClipDragProps {
   selectedClipIds: Set<string>;
   scrollX: number;
   snappingEnabled: boolean;
+  isExporting: boolean;
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean, setPrimaryOnly?: boolean) => void;
@@ -48,6 +49,7 @@ export function useClipDrag({
   selectedClipIds,
   scrollX,
   snappingEnabled,
+  isExporting,
   selectClip,
   moveClip,
   openCompositionTab,
@@ -80,6 +82,7 @@ export function useClipDrag({
       if (e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
+      if (isExporting) return;
 
       // Use ref for current clipMap to avoid stale closure
       const currentClipMap = clipMapRef.current;
@@ -474,7 +477,7 @@ export function useClipDrag({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, pixelToTime, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
+    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
   );
 
   // Handle double-click on clip - open composition if it's a nested comp

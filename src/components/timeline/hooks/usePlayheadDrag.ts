@@ -16,6 +16,7 @@ interface UsePlayheadDragProps {
   outPoint: number | null;
   isRamPreviewing: boolean;
   isPlaying: boolean;
+  isExporting: boolean;
 
   // Actions
   setPlayheadPosition: (time: number) => void;
@@ -42,6 +43,7 @@ export function usePlayheadDrag({
   outPoint,
   isRamPreviewing,
   isPlaying,
+  isExporting,
   setPlayheadPosition,
   setDraggingPlayhead,
   setInPoint,
@@ -59,6 +61,7 @@ export function usePlayheadDrag({
       if (e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
+      if (isExporting) return;
 
       // Pause playback when user clicks on ruler (like Premiere/DaVinci)
       if (isPlaying) {
@@ -82,6 +85,7 @@ export function usePlayheadDrag({
     },
     [
       isPlaying,
+      isExporting,
       pause,
       isRamPreviewing,
       cancelRamPreview,
@@ -98,6 +102,10 @@ export function usePlayheadDrag({
   const handlePlayheadMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (isExporting) {
+        e.preventDefault();
+        return;
+      }
 
       // Pause playback when user drags playhead (like Premiere/DaVinci)
       if (isPlaying) {
@@ -113,7 +121,7 @@ export function usePlayheadDrag({
 
       setDraggingPlayhead(true);
     },
-    [isPlaying, pause, isRamPreviewing, cancelRamPreview, setDraggingPlayhead]
+    [isPlaying, isExporting, pause, isRamPreviewing, cancelRamPreview, setDraggingPlayhead]
   );
 
   // Handle In/Out marker drag
@@ -121,6 +129,7 @@ export function usePlayheadDrag({
     (e: React.MouseEvent, type: 'in' | 'out') => {
       e.stopPropagation();
       e.preventDefault();
+      if (isExporting) return;
 
       if (isPlaying) {
         pause();
@@ -135,7 +144,7 @@ export function usePlayheadDrag({
         originalTime,
       });
     },
-    [isPlaying, pause, inPoint, outPoint]
+    [isPlaying, isExporting, pause, inPoint, outPoint]
   );
 
   // Handle marker dragging

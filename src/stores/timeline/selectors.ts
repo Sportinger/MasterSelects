@@ -42,6 +42,7 @@ export const selectIsRamPreviewing = (state: TimelineStore) => state.isRamPrevie
 export const selectIsExporting = (state: TimelineStore) => state.isExporting;
 export const selectExportProgress = (state: TimelineStore) => state.exportProgress;
 export const selectExportRange = (state: TimelineStore) => state.exportRange;
+export const selectExportPreviewFrame = (state: TimelineStore) => state.exportPreviewFrame;
 export const selectIsProxyCaching = (state: TimelineStore) => state.isProxyCaching;
 export const selectProxyCacheProgress = (state: TimelineStore) => state.proxyCacheProgress;
 
@@ -101,6 +102,8 @@ export const selectPreviewExportState = (state: TimelineStore) => ({
   isExporting: state.isExporting,
   exportProgress: state.exportProgress,
   exportRange: state.exportRange,
+  exportPreviewFrame: state.exportPreviewFrame,
+  exportPreviewFrameTime: state.exportPreviewFrameTime,
 });
 
 // Keyframe state (changes during keyframe edits)

@@ -22,6 +22,7 @@ interface UseClipFadeProps {
   // Clip and track data
   clipMap: Map<string, TimelineClip>;
   tracks: TimelineTrack[];
+  isExporting: boolean;
 
   // Keyframe actions
   addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: EasingType) => void;
@@ -47,6 +48,7 @@ interface UseClipFadeReturn {
 export function useClipFade({
   clipMap,
   tracks,
+  isExporting,
   addKeyframe,
   removeKeyframe,
   moveKeyframe,
@@ -177,6 +179,7 @@ export function useClipFade({
     (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => {
       e.stopPropagation();
       e.preventDefault();
+      if (isExporting) return;
 
       const clip = clipMap.get(clipId);
       if (!clip) return;
@@ -337,7 +340,7 @@ export function useClipFade({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clipMap, tracks, getFadeInDuration, getFadeOutDuration, getClipKeyframes, pixelToTime, addKeyframe, moveKeyframe, removeKeyframe, isAudioClip, ensureAudioVolumeEffect]
+    [clipMap, tracks, isExporting, getFadeInDuration, getFadeOutDuration, getClipKeyframes, pixelToTime, addKeyframe, moveKeyframe, removeKeyframe, isAudioClip, ensureAudioVolumeEffect]
   );
 
   return {

@@ -395,6 +395,7 @@ export function Timeline() {
     selectedClipIds,
     scrollX,
     snappingEnabled,
+    isExporting,
     selectClip,
     moveClip,
     openCompositionTab,
@@ -407,6 +408,7 @@ export function Timeline() {
   const { clipTrim, handleTrimStart } = useClipTrim({
     clipMap,
     tracks,
+    isExporting,
     selectClip,
     trimClip,
     moveClip,
@@ -417,6 +419,7 @@ export function Timeline() {
   const { clipFade, handleFadeStart, getFadeInDuration, getFadeOutDuration } = useClipFade({
     clipMap,
     tracks,
+    isExporting,
     addKeyframe,
     removeKeyframe,
     moveKeyframe,
@@ -434,6 +437,7 @@ export function Timeline() {
     outPoint,
     isRamPreviewing: effectiveIsRamPreviewing,
     isPlaying,
+    isExporting,
     setPlayheadPosition,
     setDraggingPlayhead,
     setInPoint,
@@ -459,6 +463,7 @@ export function Timeline() {
     scrollX,
     tracks,
     clips,
+    isExporting,
     pixelToTime,
     addTrack,
     addClip,
@@ -483,6 +488,11 @@ export function Timeline() {
 
   // Combined drag handlers that check for transition drops first
   const handleCombinedDragOver = useCallback((e: React.DragEvent, trackId: string) => {
+    if (isExporting) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
     if (trackMap.get(trackId)?.locked) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'none';
@@ -498,9 +508,14 @@ export function Timeline() {
     } else {
       handleTrackDragOver(e, trackId);
     }
-  }, [trackMap, isTransitionDrag, handleTransitionDragOver, handleTrackDragOver, scrollX, pixelToTime]);
+  }, [isExporting, trackMap, isTransitionDrag, handleTransitionDragOver, handleTrackDragOver, scrollX, pixelToTime]);
 
   const handleCombinedDrop = useCallback((e: React.DragEvent, trackId: string) => {
+    if (isExporting) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'none';
+      return;
+    }
     if (trackMap.get(trackId)?.locked) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'none';
@@ -516,7 +531,7 @@ export function Timeline() {
     } else {
       handleTrackDrop(e, trackId);
     }
-  }, [trackMap, isTransitionDrag, handleTransitionDrop, handleTrackDrop, scrollX, pixelToTime]);
+  }, [isExporting, trackMap, isTransitionDrag, handleTransitionDrop, handleTrackDrop, scrollX, pixelToTime]);
 
   const handleCombinedDragLeave = useCallback((e: React.DragEvent) => {
     handleTransitionDragLeave();
@@ -1305,7 +1320,7 @@ export function Timeline() {
               (timelineRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
               (trackLanesRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
             }}
-            className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''}`}
+            className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''} ${isExporting ? 'export-locked' : ''}`}
             data-ai-id="timeline-tracks"
             onMouseDown={handleMarqueeMouseDown}
             onDragOver={(e) => e.preventDefault()}

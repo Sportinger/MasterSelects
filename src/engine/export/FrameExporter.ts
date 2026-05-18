@@ -33,6 +33,8 @@ import {
 } from './codecHelpers';
 
 export class FrameExporter {
+  private static readonly PREVIEW_FRAME_INTERVAL_MS = 0;
+
   private settings: FullExportSettings;
   private encoder: VideoEncoderWrapper | null = null;
   private audioPipeline: AudioExportPipeline | null = null;
@@ -42,6 +44,7 @@ export class FrameExporter {
   private exportMode: ExportMode;
   private parallelDecoder: ParallelDecodeManager | null = null;
   private useParallelDecode = false;
+  private lastPreviewFramePublishMs = Number.NEGATIVE_INFINITY;
 
   constructor(settings: FullExportSettings) {
     this.settings = settings;
@@ -315,6 +318,7 @@ export class FrameExporter {
             log.error(`Failed to create VideoFrame at frame ${frame}`);
             continue;
           }
+          this.publishExportPreviewFrame(videoFrame, time);
           const encodeStart = performance.now();
           await this.encoder.encodeVideoFrame(videoFrame, frame, keyframeInterval);
           encodeMs = performance.now() - encodeStart;
@@ -331,6 +335,7 @@ export class FrameExporter {
             log.error(`Failed to read pixels at frame ${frame}`);
             continue;
           }
+          this.publishExportPreviewPixels(pixels, width, height, time);
           const encodeStart = performance.now();
           await this.encoder.encodeFrame(pixels, frame, keyframeInterval);
           encodeMs = performance.now() - encodeStart;
@@ -446,6 +451,67 @@ export class FrameExporter {
     this.isCancelled = true;
     this.audioPipeline?.cancel();
     cleanupExportMode(this.clipStates, this.parallelDecoder);
+  }
+
+  private shouldPublishExportPreviewFrame(): boolean {
+    const now = performance.now();
+    if (now - this.lastPreviewFramePublishMs < FrameExporter.PREVIEW_FRAME_INTERVAL_MS) {
+      return false;
+    }
+    this.lastPreviewFramePublishMs = now;
+    return true;
+  }
+
+  private publishBitmapWhenStillExporting(
+    bitmapPromise: Promise<ImageBitmap>,
+    currentTime: number,
+    cleanup?: () => void,
+  ): void {
+    void bitmapPromise
+      .then((bitmap) => {
+        const timeline = useTimelineStore.getState();
+        if (!timeline.isExporting) {
+          bitmap.close();
+          return;
+        }
+        timeline.setExportPreviewFrame(bitmap, currentTime);
+      })
+      .catch((error) => {
+        log.warn('Could not publish export preview frame', error);
+      })
+      .finally(() => {
+        cleanup?.();
+      });
+  }
+
+  private publishExportPreviewFrame(videoFrame: VideoFrame, currentTime: number): void {
+    if (!this.shouldPublishExportPreviewFrame()) return;
+
+    let previewFrame: VideoFrame;
+    try {
+      previewFrame = videoFrame.clone();
+    } catch (error) {
+      log.warn('Could not clone export frame for preview', error);
+      return;
+    }
+
+    this.publishBitmapWhenStillExporting(
+      createImageBitmap(previewFrame),
+      currentTime,
+      () => previewFrame.close(),
+    );
+  }
+
+  private publishExportPreviewPixels(
+    pixels: Uint8ClampedArray,
+    width: number,
+    height: number,
+    currentTime: number,
+  ): void {
+    if (!this.shouldPublishExportPreviewFrame()) return;
+
+    const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
+    this.publishBitmapWhenStillExporting(createImageBitmap(imageData), currentTime);
   }
 
   private cleanup(originalDimensions: { width: number; height: number }): void {

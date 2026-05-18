@@ -176,6 +176,7 @@ const SEEK_BATCH_MULTIPLIER = 5;  // Multiplier for batch size after seeks (5x =
 const FAR_TARGET_SEEK_THRESHOLD_FRAMES = 30;
 const UPCOMING_CLIP_PREFETCH_SECONDS = 2.0;
 const MAX_PREWARM_CLIP_STARTS = 32;
+const SLOW_BLOCKING_PREFETCH_WARN_MS = 250;
 
 export class ParallelDecodeManager {
   private clipDecoders: Map<string, ClipDecoder> = new Map();
@@ -664,9 +665,14 @@ export class ParallelDecodeManager {
       const needsDecodingBack = !frameInBuffer && clipDecoder.sampleIndex > targetSampleIndex + 30; // Too far ahead
       const needsDecoding = needsDecodingAhead || needsDecodingBack;
       const isBehindTarget = clipDecoder.sampleIndex <= targetSampleIndex; // Are we behind the current target?
+      const targetAheadFrames = targetSampleIndex - clipDecoder.sampleIndex;
+      const targetBehindFrames = clipDecoder.sampleIndex - targetSampleIndex;
       const shouldSeekDirectlyToTarget =
         !frameInBuffer &&
-        Math.abs(targetSampleIndex - clipDecoder.sampleIndex) > FAR_TARGET_SEEK_THRESHOLD_FRAMES;
+        (
+          targetBehindFrames > FAR_TARGET_SEEK_THRESHOLD_FRAMES ||
+          (clipDecoder.frameBuffer.size === 0 && targetAheadFrames > FAR_TARGET_SEEK_THRESHOLD_FRAMES)
+        );
 
       if (needsDecoding && !clipDecoder.isDecoding) {
         log.debug(`"${clipInfo.clipName}": Triggering decode - samples=${clipDecoder.samples.length}, targetIdx=${targetSampleIndex}, currentIdx=${clipDecoder.sampleIndex}, decodeTarget=${decodeTarget}, frameInBuffer=${frameInBuffer}, isBehindTarget=${isBehindTarget}, needsBackSeek=${needsDecodingBack}, directSeek=${shouldSeekDirectlyToTarget}`);
@@ -683,7 +689,28 @@ export class ParallelDecodeManager {
             targetSampleIndex
           );
           if (prefetchTarget.shouldBlock) {
+            const directDecodeStart = performance.now();
             await decodePromise;
+            const directDecodeMs = performance.now() - directDecodeStart;
+            if (directDecodeMs >= SLOW_BLOCKING_PREFETCH_WARN_MS) {
+              log.warn(`${clipDecoder.clipName}: slow direct prefetch decode`, {
+                timelineTime: Number(prefetchTarget.timelineTime.toFixed(3)),
+                sourceTime: Number(sourceTime.toFixed(3)),
+                targetSampleIndex,
+                decodeTarget,
+                sampleIndex: clipDecoder.sampleIndex,
+                directDecodeMs: Number(directDecodeMs.toFixed(1)),
+                directSeek: shouldSeekDirectlyToTarget,
+                decodeQueueSize: clipDecoder.decoder.decodeQueueSize,
+                bufferSize: clipDecoder.frameBuffer.size,
+                bufferedStart: Number.isFinite(clipDecoder.oldestTimestamp)
+                  ? Number((clipDecoder.oldestTimestamp / 1_000_000).toFixed(3))
+                  : null,
+                bufferedEnd: Number.isFinite(clipDecoder.newestTimestamp)
+                  ? Number((clipDecoder.newestTimestamp / 1_000_000).toFixed(3))
+                  : null,
+              });
+            }
           } else {
             void decodePromise;
           }
@@ -709,8 +736,11 @@ export class ParallelDecodeManager {
       const sourceTime = this.timelineToSourceTime(clipInfo, timelineTime);
       const targetTimestamp = sourceTime * 1_000_000;
       const targetSampleIndex = this.findSampleIndexForTime(clipDecoder, sourceTime);
+      const blockingStart = performance.now();
+      let attemptsUsed = 0;
 
       for (let attempt = 0; attempt < 10; attempt++) {
+        attemptsUsed = attempt + 1;
         // Wait for pending decode to complete
         if (clipDecoder.pendingDecode) {
           await clipDecoder.pendingDecode;
@@ -749,6 +779,26 @@ export class ParallelDecodeManager {
       // Final check - strict export should fail instead of using a nearby frame.
       const finalTolerance = this.frameTolerance * 3; // 3x tolerance for final check
       const finalCheck = this.hasUsableBufferedFrame(clipDecoder, targetTimestamp, finalTolerance);
+      const blockingMs = performance.now() - blockingStart;
+      if (blockingMs >= SLOW_BLOCKING_PREFETCH_WARN_MS) {
+        log.warn(`${clipDecoder.clipName}: slow blocking prefetch`, {
+          timelineTime: Number(timelineTime.toFixed(3)),
+          sourceTime: Number(sourceTime.toFixed(3)),
+          targetSampleIndex,
+          sampleIndex: clipDecoder.sampleIndex,
+          attempts: attemptsUsed,
+          blockingMs: Number(blockingMs.toFixed(1)),
+          decodeQueueSize: clipDecoder.decoder.decodeQueueSize,
+          bufferSize: clipDecoder.frameBuffer.size,
+          bufferedStart: Number.isFinite(clipDecoder.oldestTimestamp)
+            ? Number((clipDecoder.oldestTimestamp / 1_000_000).toFixed(3))
+            : null,
+          bufferedEnd: Number.isFinite(clipDecoder.newestTimestamp)
+            ? Number((clipDecoder.newestTimestamp / 1_000_000).toFixed(3))
+            : null,
+          finalCheck,
+        });
+      }
       if (!finalCheck) {
         const availableFrames = Array.from(clipDecoder.frameBuffer.values())
           .map(f => (f.timestamp / 1_000_000).toFixed(3))

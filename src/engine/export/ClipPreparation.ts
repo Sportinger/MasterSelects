@@ -497,45 +497,7 @@ async function initializeFastMode(
 ): Promise<ClipPreparationResult> {
   const { WebCodecsPlayer } = await import('../WebCodecsPlayer');
   const fileDataCache: ClipFileDataCache = new Map();
-
-  // Separate composition clips from regular video clips
-  const regularVideoClips: TimelineClip[] = [];
-  const nestedVideoClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }> = [];
-
-  for (const clip of videoClips) {
-    if (clip.source?.type !== 'video') continue;
-
-    if (clip.isComposition) {
-      clipStates.set(clip.id, {
-        clipId: clip.id,
-        webCodecsPlayer: null,
-        lastSampleIndex: 0,
-        isSequential: false,
-      });
-      log.debug(`Clip ${clip.name}: Composition with nested clips`);
-
-      // Collect nested video clips
-      if (clip.nestedClips) {
-        for (const nestedClip of clip.nestedClips) {
-          if (nestedClip.source?.type === 'video' && nestedClip.source.videoElement) {
-            nestedVideoClips.push({ clip: nestedClip, parentClip: clip });
-          }
-        }
-      }
-    } else {
-      regularVideoClips.push(clip);
-    }
-  }
-
-  // Use parallel decoding if we have 2+ total video clips
-  const totalVideoClips = regularVideoClips.length + nestedVideoClips.length;
-  if (totalVideoClips >= 2) {
-    log.info(`Using PARALLEL decoding for ${regularVideoClips.length} regular + ${nestedVideoClips.length} nested = ${totalVideoClips} video clips`);
-    return initializeParallelDecoding(regularVideoClips, mediaFiles, startTime, endTime, nestedVideoClips, clipStates, fps, endPrepare, fileDataCache);
-  }
-
-  // Single clip: use sequential approach
-  for (const clip of regularVideoClips) {
+  const initializeSequentialClip = async (clip: TimelineClip): Promise<void> => {
     const mediaFileId = getClipMediaFileId(clip);
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
 
@@ -591,6 +553,64 @@ async function initializeFastMode(
     });
 
     log.debug(`Clip ${clip.name}: FAST mode enabled (${exportPlayer.width}x${exportPlayer.height})`);
+  };
+
+  // Separate composition clips from regular video clips
+  const regularVideoClips: TimelineClip[] = [];
+  const nestedVideoClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }> = [];
+
+  for (const clip of videoClips) {
+    if (clip.source?.type !== 'video') continue;
+
+    if (clip.isComposition) {
+      clipStates.set(clip.id, {
+        clipId: clip.id,
+        webCodecsPlayer: null,
+        lastSampleIndex: 0,
+        isSequential: false,
+      });
+      log.debug(`Clip ${clip.name}: Composition with nested clips`);
+
+      // Collect nested video clips
+      if (clip.nestedClips) {
+        for (const nestedClip of clip.nestedClips) {
+          if (nestedClip.source?.type === 'video' && nestedClip.source.videoElement) {
+            nestedVideoClips.push({ clip: nestedClip, parentClip: clip });
+          }
+        }
+      }
+    } else {
+      regularVideoClips.push(clip);
+    }
+  }
+
+  // Use parallel decoding if we have 2+ total video clips
+  const totalVideoClips = regularVideoClips.length + nestedVideoClips.length;
+  if (totalVideoClips >= 2) {
+    if (nestedVideoClips.length === 0) {
+      log.info(`Using multi-clip sequential WebCodecs export for ${regularVideoClips.length} regular video clips`);
+      for (const clip of regularVideoClips) {
+        await initializeSequentialClip(clip);
+      }
+
+      log.info(`All ${regularVideoClips.length} clips using FAST WebCodecs sequential decoding`);
+      endPrepare();
+
+      return {
+        clipStates,
+        parallelDecoder: null,
+        useParallelDecode: false,
+        exportMode: 'fast',
+      };
+    }
+
+    log.info(`Using PARALLEL decoding for ${regularVideoClips.length} regular + ${nestedVideoClips.length} nested = ${totalVideoClips} video clips`);
+    return initializeParallelDecoding(regularVideoClips, mediaFiles, startTime, endTime, nestedVideoClips, clipStates, fps, endPrepare, fileDataCache);
+  }
+
+  // Single clip: use sequential approach
+  for (const clip of regularVideoClips) {
+    await initializeSequentialClip(clip);
   }
 
   log.info(`All ${videoClips.length} clips using FAST WebCodecs sequential decoding`);

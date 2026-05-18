@@ -154,6 +154,7 @@ interface UseExternalDropProps {
   scrollX: number;
   tracks: TimelineTrack[];
   clips: TimelineClip[];
+  isExporting: boolean;
   pixelToTime: (pixel: number) => number;
   addTrack: (type: 'video' | 'audio') => string | undefined;
   addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string, mediaTypeOverride?: string) => void;
@@ -302,6 +303,7 @@ export function useExternalDrop({
   scrollX,
   tracks,
   clips,
+  isExporting,
   pixelToTime,
   addTrack,
   addClip,
@@ -328,6 +330,16 @@ export function useExternalDrop({
     resetVideoNewTrackGesture();
     setExternalDrag(null);
   }, [resetVideoNewTrackGesture]);
+
+  const rejectDropDuringExport = useCallback((e: React.DragEvent) => {
+    if (!isExporting) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'none';
+    dragCounterRef.current = 0;
+    clearExternalDragState();
+    return true;
+  }, [clearExternalDragState, isExporting]);
 
   const updateVideoNewTrackGesture = useCallback((clientY: number, isAudio: boolean) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -736,6 +748,7 @@ export function useExternalDrop({
   // Handle external file drag enter on track
   const handleTrackDragEnter = useCallback(
     (e: React.DragEvent, trackId: string) => {
+      if (rejectDropDuringExport(e)) return;
       e.preventDefault();
       dragCounterRef.current++;
 
@@ -1175,12 +1188,13 @@ export function useExternalDrop({
         }));
       }
     },
-    [tracks, getDesiredStartTime, buildTrackPreviewState, requestVideoDragMetadata, updateResolvedDragMetadata, applyVideoNewTrackOffer]
+    [tracks, rejectDropDuringExport, getDesiredStartTime, buildTrackPreviewState, requestVideoDragMetadata, updateResolvedDragMetadata, applyVideoNewTrackOffer]
   );
 
   // Handle external file drag over track
   const handleTrackDragOver = useCallback(
     (e: React.DragEvent, trackId: string) => {
+      if (rejectDropDuringExport(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
 
@@ -1317,7 +1331,7 @@ export function useExternalDrop({
         */
       }
     },
-    [tracks, getDesiredStartTime, buildTrackPreviewState, resolveImmediateDragPreview, updateVideoNewTrackGesture]
+    [tracks, rejectDropDuringExport, getDesiredStartTime, buildTrackPreviewState, resolveImmediateDragPreview, updateVideoNewTrackGesture]
   );
 
   // Handle external file drag leave
@@ -1342,6 +1356,7 @@ export function useExternalDrop({
   // Handle drag over "new track" drop zone
   const handleNewTrackDragOver = useCallback(
     (e: React.DragEvent, trackType: 'video' | 'audio') => {
+      if (rejectDropDuringExport(e)) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -1394,12 +1409,13 @@ export function useExternalDrop({
         }));
       }
     },
-    [timelineRef, getDesiredStartTime, resolveImmediateDragPreview, updateVideoNewTrackGesture]
+    [timelineRef, rejectDropDuringExport, getDesiredStartTime, resolveImmediateDragPreview, updateVideoNewTrackGesture]
   );
 
   // Handle drop on "new track" zone - creates new track and adds clip
   const handleNewTrackDrop = useCallback(
     async (e: React.DragEvent, trackType: 'video' | 'audio') => {
+      if (rejectDropDuringExport(e)) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -1612,12 +1628,13 @@ export function useExternalDrop({
         }
       }
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture, rejectDropDuringExport]
   );
 
   // Handle external file drop on track
   const handleTrackDrop = useCallback(
     async (e: React.DragEvent, trackId: string) => {
+      if (rejectDropDuringExport(e)) return;
       e.preventDefault();
 
       const desiredStartTime = getDesiredStartTime(e.clientX);
@@ -1821,7 +1838,7 @@ export function useExternalDrop({
         }
       }
     },
-    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, tracks, getDesiredStartTime, resolveTrackStartTime, clearExternalDragState]
+    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, clearExternalDragState]
   );
 
   useEffect(() => {

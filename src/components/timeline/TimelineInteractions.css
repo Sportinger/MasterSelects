@@ -278,6 +278,15 @@
   cursor: crosshair;
 }
 
+.timeline-tracks.export-locked,
+.timeline-tracks.export-locked .timeline-clip,
+.timeline-tracks.export-locked .trim-handle,
+.timeline-tracks.export-locked .fade-handle,
+.timeline-tracks.export-locked .in-out-marker,
+.timeline-tracks.export-locked .marker-flag {
+  cursor: not-allowed !important;
+}
+
 .marquee-selection {
   position: absolute;
   background: rgba(59, 130, 246, 0.15);

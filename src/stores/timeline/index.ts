@@ -33,8 +33,18 @@ import { createAIActionFeedbackSlice } from './aiActionFeedbackSlice';
 import { createPositioningUtils } from './positioningUtils';
 import { createSerializationUtils } from './serializationUtils';
 import { Logger } from '../../services/logger';
+import { lockTimelineEditActions } from './exportEditLock';
 
 const log = Logger.create('Timeline');
+
+function closeExportPreviewFrame(frame: ImageBitmap | null): void {
+  if (!frame) return;
+  try {
+    frame.close();
+  } catch {
+    // ImageBitmap.close() is best-effort cleanup; ignore if the browser already released it.
+  }
+}
 
 // Re-export types for convenience
 export type { TimelineStore, TimelineClip, Keyframe } from './types';
@@ -178,6 +188,8 @@ export const useTimelineStore = create<TimelineStore>()(
       exportProgress: null as number | null,
       exportCurrentTime: null as number | null,
       exportRange: null as { start: number; end: number } | null,
+      exportPreviewFrame: null as ImageBitmap | null,
+      exportPreviewFrameTime: null as number | null,
 
       // Performance toggles (enabled by default)
       thumbnailsEnabled: true,
@@ -257,16 +269,38 @@ export const useTimelineStore = create<TimelineStore>()(
       setExportProgress: (progress: number | null, currentTime: number | null) => {
         set({ exportProgress: progress, exportCurrentTime: currentTime });
       },
+      setExportPreviewFrame: (frame: ImageBitmap | null, currentTime: number | null) => {
+        const previousFrame = get().exportPreviewFrame;
+        if (previousFrame && previousFrame !== frame) {
+          closeExportPreviewFrame(previousFrame);
+        }
+        set({ exportPreviewFrame: frame, exportPreviewFrameTime: currentTime });
+      },
       startExport: (start: number, end: number) => {
-        set({ isExporting: true, exportProgress: 0, exportCurrentTime: start, exportRange: { start, end } });
+        closeExportPreviewFrame(get().exportPreviewFrame);
+        set({
+          isExporting: true,
+          exportProgress: 0,
+          exportCurrentTime: start,
+          exportRange: { start, end },
+          exportPreviewFrame: null,
+          exportPreviewFrameTime: null,
+        });
       },
       endExport: () => {
-        set({ isExporting: false, exportProgress: null, exportCurrentTime: null, exportRange: null });
+        closeExportPreviewFrame(get().exportPreviewFrame);
+        set({
+          isExporting: false,
+          exportProgress: null,
+          exportCurrentTime: null,
+          exportRange: null,
+          exportPreviewFrame: null,
+          exportPreviewFrameTime: null,
+        });
       },
     };
 
-    return {
-      ...initialState,
+    const actions = lockTimelineEditActions({
       ...trackActions,
       ...clipActions,
       ...textClipActions,
@@ -294,6 +328,11 @@ export const useTimelineStore = create<TimelineStore>()(
       ...clipboardActions,
       ...aiActionFeedbackActions,
       ...utils,
+    }, get);
+
+    return {
+      ...initialState,
+      ...actions,
     };
   })
 );

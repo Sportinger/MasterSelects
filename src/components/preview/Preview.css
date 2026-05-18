@@ -212,6 +212,17 @@
   display: block;
 }
 
+.preview-export-frame {
+  position: absolute;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: var(--bg-canvas);
+  display: block;
+  pointer-events: none;
+  z-index: 6;
+}
+
 .preview-container {
   position: relative;
   overflow: hidden;
