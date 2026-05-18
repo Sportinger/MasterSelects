@@ -1,5 +1,37 @@
 [
   {
+    "date": "2026-05-19",
+    "type": "new",
+    "title": "WAV Export and Runtime Updates",
+    "description": "Audio export now includes WAV output support alongside runtime updates that keep export behavior aligned with the current media pipeline.",
+    "section": "Export / Runtime",
+    "commits": ["69db7f5a"]
+  },
+  {
+    "date": "2026-05-19",
+    "type": "improve",
+    "title": "Export Preview and Fast Decode Reliability",
+    "description": "Export previews, timeline locking, and fast export frame lookup now coordinate more reliably across parallel decode and locked-track scenarios.",
+    "section": "Export / Timeline",
+    "commits": ["d7f74a59", "291a303b"]
+  },
+  {
+    "date": "2026-05-19",
+    "type": "improve",
+    "title": "Playback Recovery and Board Organization",
+    "description": "Playback recovery, warmup feedback, media board organization, and track lock UI have been tightened for clearer editing feedback.",
+    "section": "Playback / Project Board",
+    "commits": ["aa6f6587", "f6f51528"]
+  },
+  {
+    "date": "2026-05-19",
+    "type": "improve",
+    "title": "Property-Based Editor Invariants",
+    "description": "The test suite now stress-tests timeline ranges, clip slicing, keyframes, transforms, easing, speed integration, stop markers, camera lenses, export ranges, and file type helpers with randomized property tests.",
+    "section": "Testing / Reliability",
+    "commits": ["a3961981"]
+  },
+  {
     "date": "2026-05-12",
     "type": "new",
     "title": "AI Node Workspace",

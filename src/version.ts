@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.8.0';
+export const APP_VERSION = '1.8.1';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'AI Node Workspace',
-  message: 'Custom AI nodes can now be authored, chatted with, connected in clip node graphs, expose keyframeable parameters, and run in preview/export.',
+  title: 'Export and Timeline Reliability',
+  message: 'WAV export, fast export diagnostics, timeline locking, playback recovery, and property-based editor invariants are now tightened for production.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Live node authoring',
-  message: 'The node workspace now supports manual graph editing, node debugging tools, text layout context, and live render invalidation while paused.',
+  title: 'Release hardening',
+  message: 'The editor now has broader randomized coverage for ranges, slices, transforms, keyframes, easing, speed mapping, and file type helpers.',
   animated: true,
 };
 
