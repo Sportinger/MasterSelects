@@ -30,6 +30,7 @@ import { textRenderer } from '../../services/textRenderer';
 let cachedVideoTracks: TimelineTrack[] | null = null;
 let cachedAnyVideoSolo = false;
 const MAX_EXPORT_NESTING_DEPTH = 4;
+const FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER = 3;
 
 export function initializeLayerBuilder(tracks: TimelineTrack[]): void {
   cachedVideoTracks = tracks.filter(t => t.type === 'video');
@@ -449,7 +450,9 @@ function buildVideoLayer(
       throw new Error(`FAST export failed: parallel decoder is not initialized for clip "${clip.name}".`);
     }
     if (parallelDecoder.hasClip(clip.id)) {
-      const videoFrame = parallelDecoder.getFrameForClip(clip.id, time);
+      const videoFrame = parallelDecoder.getFrameForClip(clip.id, time, {
+        toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+      });
       if (videoFrame) {
         return {
           ...baseLayerProps,
@@ -607,7 +610,9 @@ function buildNestedLayerForExport(
         throw new Error(`FAST export failed: parallel decoder is not initialized for nested clip "${nestedClip.name}".`);
       }
       if (parallelDecoder.hasClip(nestedClip.id)) {
-        const videoFrame = parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime);
+        const videoFrame = parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime, {
+          toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+        });
         if (videoFrame) {
           return {
             ...baseLayer,

@@ -163,6 +163,10 @@ interface ClipDecoder {
   needsKeyframe: boolean;                  // True after flush - must start from keyframe
 }
 
+export interface ParallelDecodeFrameLookupOptions {
+  toleranceMultiplier?: number;
+}
+
 // Buffer settings - tuned for speed like After Effects
 const BUFFER_AHEAD_FRAMES = 60;   // Pre-decode this many frames ahead (1 second at 60fps)
 const BACKGROUND_DECODE_MARGIN_FRAMES = 180; // Refill earlier during fast export so decode output can catch up
@@ -1095,11 +1099,16 @@ export class ParallelDecodeManager {
    * Returns null if frame isn't ready (shouldn't happen if prefetch was called)
    * Optimized: O(log n) binary search instead of O(n) linear scan
    */
-  getFrameForClip(clipId: string, timelineTime: number): VideoFrame | null {
+  getFrameForClip(
+    clipId: string,
+    timelineTime: number,
+    options: ParallelDecodeFrameLookupOptions = {}
+  ): VideoFrame | null {
     const clipDecoder = this.clipDecoders.get(clipId);
     if (!clipDecoder) return null;
 
     const clipInfo = clipDecoder.clipInfo;
+    const lookupTolerance = this.frameTolerance * Math.max(1, options.toleranceMultiplier ?? 1);
 
     // Check if time is within clip range (handles nested clips too)
     if (!this.isTimeInClipRange(clipInfo, timelineTime)) {
@@ -1117,7 +1126,7 @@ export class ParallelDecodeManager {
       return null;
     }
 
-    const useLastFrame = targetTimestamp > clipDecoder.newestTimestamp + this.frameTolerance;
+    const useLastFrame = targetTimestamp > clipDecoder.newestTimestamp + lookupTolerance;
     if (useLastFrame) {
       const lastTimestamp = clipDecoder.sortedTimestamps[clipDecoder.sortedTimestamps.length - 1];
       const lastFrame = clipDecoder.frameBuffer.get(lastTimestamp);
@@ -1125,7 +1134,7 @@ export class ParallelDecodeManager {
       return null;
     }
 
-    const useFirstFrame = targetTimestamp < clipDecoder.oldestTimestamp - this.frameTolerance;
+    const useFirstFrame = targetTimestamp < clipDecoder.oldestTimestamp - lookupTolerance;
     if (useFirstFrame) {
       const firstTimestamp = clipDecoder.sortedTimestamps[0];
       const firstFrame = clipDecoder.frameBuffer.get(firstTimestamp);
@@ -1163,8 +1172,8 @@ export class ParallelDecodeManager {
 
     const decodedFrame = clipDecoder.frameBuffer.get(frameTimestamp);
     if (decodedFrame) {
-      if (frameDiff >= this.frameTolerance) {
-        log.warn(`${clipDecoder.clipName}: nearest frame at ${(frameTimestamp/1_000_000).toFixed(3)}s is outside tolerance for target ${(targetTimestamp/1_000_000).toFixed(3)}s (diff=${(frameDiff/1000).toFixed(1)}ms, tolerance=${(this.frameTolerance/1000).toFixed(1)}ms)`);
+      if (frameDiff >= lookupTolerance) {
+        log.warn(`${clipDecoder.clipName}: nearest frame at ${(frameTimestamp/1_000_000).toFixed(3)}s is outside tolerance for target ${(targetTimestamp/1_000_000).toFixed(3)}s (diff=${(frameDiff/1000).toFixed(1)}ms, tolerance=${(lookupTolerance/1000).toFixed(1)}ms)`);
         return null;
       }
       return decodedFrame.frame;

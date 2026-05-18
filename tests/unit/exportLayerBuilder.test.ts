@@ -9,6 +9,7 @@ import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
 import type { TimelineClip, TimelineTrack } from '../../src/stores/timeline/types';
+import type { ParallelDecodeManager } from '../../src/engine/ParallelDecodeManager';
 
 describe('ExportLayerBuilder', () => {
   beforeEach(() => {
@@ -91,6 +92,82 @@ describe('ExportLayerBuilder', () => {
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.videoFrame).toBe(currentFrame);
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipStates.get('clip-1')?.webCodecsPlayer);
+  });
+
+  it('uses export lookup tolerance for parallel decoded frames', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as unknown as TimelineTrack;
+
+    const videoElement = document.createElement('video');
+    const parallelFrame = {
+      displayWidth: 1920,
+      displayHeight: 1080,
+    } as VideoFrame;
+
+    const clip = {
+      id: 'clip-1',
+      name: 'Clip 1',
+      trackId: 'track-1',
+      startTime: 0,
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      source: {
+        type: 'video',
+        videoElement,
+      },
+      transform: {},
+    } as unknown as TimelineClip;
+
+    const clipStates = new Map<string, ExportClipState>([
+      ['clip-1', {
+        clipId: 'clip-1',
+        webCodecsPlayer: null,
+        lastSampleIndex: 0,
+        isSequential: false,
+        preciseVideoElement: videoElement,
+      }],
+    ]);
+
+    const parallelDecoder = {
+      hasClip: vi.fn(() => true),
+      getFrameForClip: vi.fn(() => parallelFrame),
+    } as unknown as ParallelDecodeManager;
+
+    const ctx: FrameContext = {
+      time: 0.5,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getSourceTimeForClip: () => 0.5,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, clipStates, parallelDecoder, true);
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.videoFrame).toBe(parallelFrame);
+    expect(parallelDecoder.getFrameForClip).toHaveBeenCalledWith(
+      'clip-1',
+      0.5,
+      { toleranceMultiplier: 3 },
+    );
   });
 
   it('forces gaussian splats onto the native scene path while keeping full-quality export settings', () => {
