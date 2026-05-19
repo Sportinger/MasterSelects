@@ -363,7 +363,7 @@ export function getChangelogCalendar(
 // Known issues and bugs - shown in What's New dialog
 // Remove items when fixed
 export const KNOWN_ISSUES: string[] = [
-  'YouTube download requires Native Helper with yt-dlp installed',
+  'Non-Windows/source Native Helper builds require yt-dlp beside the helper or on PATH',
   'Audio waveforms may not display for some video formats',
   'Very long videos (>2 hours) may cause performance issues',
 ];

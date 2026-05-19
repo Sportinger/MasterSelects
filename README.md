@@ -193,7 +193,7 @@ cargo run --release    # WebSocket :9876, HTTP :9877
 | **AI Control** | Local HTTP bridge for external agents to steer the running editor |
 | **Download** | yt-dlp integration for YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other supported sites |
 
-**Platforms:** Windows, Linux, macOS. Building the Native Helper requires Rust. Downloads also require `yt-dlp`. See [Native Helper docs](tools/native-helper/README.md) for platform-specific setup.
+**Platforms:** Windows, Linux, macOS. Building the Native Helper requires Rust. The Windows MSI bundles `yt-dlp.exe`; source builds and non-Windows archive installs use `yt-dlp` from the helper folder or PATH. See [Native Helper docs](tools/native-helper/README.md) for platform-specific setup.
 
 ---
 
@@ -224,7 +224,7 @@ This is alpha software. Features get added fast, things break.
 - Multicam AI is experimental
 - Transitions are experimental
 - Firefox project storage requires the Native Helper backend
-- Video downloads require Native Helper with yt-dlp installed
+- Video downloads require Native Helper; the Windows MSI bundles yt-dlp, while source/non-Windows installs need yt-dlp beside the helper or on PATH
 - Audio waveforms may not display for some video formats
 - Very long videos (>2 hours) may cause performance issues
 
@@ -239,7 +239,7 @@ If something breaks, refresh. If it's still broken, [open an issue](https://gith
 - **Video:** WebCodecs, MediaBunny, mp4box, HTMLVideo fallback, and experimental FFmpeg WASM export path
 - **Audio:** Web Audio API with 10-band live EQ, element-synced playback, drift correction, and waveform extraction
 - **AI:** Built-in OpenAI/Cloud or local Lemonade editor chat with 79 exported tools, Native Helper HTTP bridge for Claude Code / external agents, Claude/Anthropic for experimental multicam EDLs, SAM2 via ONNX Runtime, MatAnyone2 via Native Helper, local Whisper via Hugging Face Transformers, and Kie.ai / hosted cloud / PiAPI-backed generation flows
-- **Native:** Rust helper for Firefox storage backend, native decode/encode, and yt-dlp downloads
+- **Native:** Rust helper for Firefox storage backend, native decode/encode, and bundled/system yt-dlp downloads
 - **Storage:** File System Access API on Chrome, Native Helper backend on Firefox, IndexedDB, local project folders with raw media
 
 ---

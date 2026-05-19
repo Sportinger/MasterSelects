@@ -64,10 +64,11 @@ function getInstallGuide(platform: Platform): InstallGuide {
         title: 'How to install on Windows',
         steps: [
           'Open the GitHub releases page and download the newest published MSI.',
-          'Run the installer and keep the helper running in the system tray.',
+          'Run the installer. It includes yt-dlp for downloads.',
+          'Keep the helper running in the system tray.',
           'Return to MasterSelects and press Check connection.',
         ],
-        note: 'The current helper release includes downloads, Firefox project save/open, and the local AI bridge.',
+        note: 'The Windows MSI installs the helper and yt-dlp together, so no separate pip or winget step is needed for downloads.',
       };
     case 'mac':
       return {

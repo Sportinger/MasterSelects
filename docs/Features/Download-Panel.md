@@ -60,7 +60,7 @@ Any site that `yt-dlp` can fetch can still be downloaded even if it is not liste
 Downloads require the Native Helper for the actual media transfer.
 
 1. The panel asks the helper for available formats
-2. The helper runs `yt-dlp`
+2. The helper runs the bundled Windows `yt-dlp.exe` or a system `yt-dlp`
 3. Progress callbacks feed percent and transfer speed back into the panel
 4. The downloaded file is fetched from the helper
 5. If a project is open, the file is written into `Downloads/<Platform>/`

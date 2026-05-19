@@ -30,10 +30,14 @@ cargo build --release
 cmd /c scripts\build-msi.bat
 ```
 
+`scripts\build-msi.bat` downloads the official `yt-dlp.exe` release binary into `target\release` and bundles it into the MSI next to `masterselects-helper.exe`. Installed Windows helpers therefore do not require a separate `pip install yt-dlp` or system PATH setup for downloads.
+
 ### Linux / macOS
 ```bash
 cargo build --release
 ```
+
+Source builds and archive packages look for `yt-dlp` next to the helper binary first, then fall back to `yt-dlp` on `PATH`.
 
 ## Running
 
@@ -49,7 +53,7 @@ WebSocket (JSON commands) on port 9876, HTTP server on port 9877.
 | Command | Description |
 |---------|-------------|
 | `ping` | Connection keepalive |
-| `info` | System info (helper features, yt-dlp status, project root, AI bridge status) |
+| `info` | System info (helper features, bundled/system yt-dlp status, project root, AI bridge status) |
 | `register_client` | Register the running MasterSelects editor session with the helper |
 | `ai_tool_result` | Return the result of a forwarded AI tool request |
 | `list_formats` | List available download formats for a URL |
