@@ -13,11 +13,14 @@ import {
   parseMaskProperty,
 } from '../../types';
 import {
+  isVectorAnimationSourceType,
   mergeVectorAnimationSettings,
+  parseVectorAnimationDataBindingProperty,
   parseVectorAnimationInputProperty,
   parseVectorAnimationStateProperty,
   getVectorAnimationStateIndex,
   getVectorAnimationStateLabelAtIndex,
+  vectorAnimationDataBindingValueToNumber,
   vectorAnimationInputValueToNumber,
 } from '../../types/vectorAnimation';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
@@ -119,6 +122,10 @@ const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string
   const lottieInput = parseVectorAnimationInputProperty(prop);
   if (lottieInput) {
     return lottieInput.inputName;
+  }
+  const riveData = parseVectorAnimationDataBindingProperty(prop);
+  if (riveData) {
+    return riveData.propertyName;
   }
   if (parseVectorAnimationStateProperty(prop)) {
     return 'State';
@@ -303,14 +310,14 @@ const formatValue = (value: number, prop: string, clip?: KeyframeTrackClip | nul
   if (prop.includes('.volume')) return (value * 100).toFixed(0) + '%';
   if (prop.includes('.band')) return (value > 0 ? '+' : '') + value.toFixed(1) + 'dB';
   const lottieState = parseVectorAnimationStateProperty(prop);
-  if (lottieState && clip?.source?.type === 'lottie') {
+  if (lottieState && isVectorAnimationSourceType(clip?.source?.type)) {
     const mediaFileId = (clip as TimelineClip).mediaFileId ?? (clip as TimelineClip).source?.mediaFileId;
     const stateNames = mediaFileId
       ? useMediaStore.getState().files.find((file) => file.id === mediaFileId)?.vectorAnimation?.stateMachineStates?.[lottieState.stateMachineName] ?? []
       : [];
     return getVectorAnimationStateLabelAtIndex(stateNames, value) ?? `State ${Math.round(value)}`;
   }
-  if (parseVectorAnimationInputProperty(prop)) return value === 0 || value === 1 ? (value >= 0.5 ? 'On' : 'Off') : value.toFixed(2);
+  if (parseVectorAnimationInputProperty(prop) || parseVectorAnimationDataBindingProperty(prop)) return value === 0 || value === 1 ? (value >= 0.5 ? 'On' : 'Off') : value.toFixed(2);
   return value.toFixed(1);
 };
 
@@ -340,12 +347,15 @@ const getValueFromVectorAnimationSettings = (
   clipLocalTime: number,
 ): number | null => {
   const parsed = parseVectorAnimationInputProperty(prop);
-  if (!parsed || clip.source?.type !== 'lottie') {
+  const dataBinding = parseVectorAnimationDataBindingProperty(prop);
+  if ((!parsed && !dataBinding) || !isVectorAnimationSourceType(clip.source?.type)) {
     return null;
   }
 
   const settings = mergeVectorAnimationSettings(clip.source.vectorAnimationSettings);
-  const baseValue = vectorAnimationInputValueToNumber(settings.stateMachineInputValues?.[parsed.inputName]);
+  const baseValue = parsed
+    ? vectorAnimationInputValueToNumber(settings.stateMachineInputValues?.[parsed.inputName])
+    : vectorAnimationDataBindingValueToNumber(settings.dataBindingValues?.[dataBinding!.propertyName]);
   return interpolateKeyframes(
     keyframes as Keyframe[],
     prop as AnimatableProperty,
@@ -361,7 +371,7 @@ const getValueFromVectorAnimationState = (
   clipLocalTime: number,
 ): number | null => {
   const parsed = parseVectorAnimationStateProperty(prop);
-  if (!parsed || clip.source?.type !== 'lottie') {
+  if (!parsed || !isVectorAnimationSourceType(clip.source?.type)) {
     return null;
   }
 
@@ -522,7 +532,7 @@ function PropertyRow({
     // Audio effect properties
     if (prop.includes('.volume')) return 0.005; // 0-1 range
     if (prop.includes('.band')) return 0.1; // dB range (-12 to 12)
-    if (parseVectorAnimationInputProperty(prop)) return 0.02;
+    if (parseVectorAnimationInputProperty(prop) || parseVectorAnimationDataBindingProperty(prop)) return 0.02;
     if (parseVectorAnimationStateProperty(prop)) return 0.2;
     return 0.1;
   };
@@ -549,7 +559,7 @@ function PropertyRow({
     // Audio effect properties
     if (prop.includes('.volume')) return 1; // 100%
     if (prop.includes('.band')) return 0; // 0 dB (no boost/cut)
-    if (parseVectorAnimationInputProperty(prop)) return 0;
+    if (parseVectorAnimationInputProperty(prop) || parseVectorAnimationDataBindingProperty(prop)) return 0;
     if (parseVectorAnimationStateProperty(prop)) return 0;
     return 0;
   };
@@ -847,6 +857,8 @@ function TrackPropertyLabels({
     const bLottieInput = parseVectorAnimationInputProperty(b);
     const aLottieState = parseVectorAnimationStateProperty(a);
     const bLottieState = parseVectorAnimationStateProperty(b);
+    const aRiveData = parseVectorAnimationDataBindingProperty(a);
+    const bRiveData = parseVectorAnimationDataBindingProperty(b);
     if (aLottieState && bLottieState) return 0;
     if (aLottieState) return -1;
     if (bLottieState) return 1;
@@ -855,6 +867,11 @@ function TrackPropertyLabels({
     }
     if (aLottieInput) return -1;
     if (bLottieInput) return 1;
+    if (aRiveData && bRiveData) {
+      return aRiveData.propertyName.localeCompare(bRiveData.propertyName);
+    }
+    if (aRiveData) return -1;
+    if (bRiveData) return 1;
 
     // For effect properties, extract the param name and sort
     if (a.startsWith('effect.') && b.startsWith('effect.')) {

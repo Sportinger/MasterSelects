@@ -26,8 +26,10 @@ import {
   DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
   resolveGaussianSplatSettingsForSource,
 } from '../../engine/gaussian/types';
-import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
+import { readRiveMetadata } from '../../services/vectorAnimation/riveMetadata';
+import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { markDynamicCanvasUpdated } from '../../services/canvasVersion';
 import { resolveGaussianSplatSequenceData } from '../../utils/gaussianSplatSequence';
@@ -1531,7 +1533,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       if (
         !loadFile &&
         fileUrl &&
-        (type === 'video' || type === 'audio' || type === 'image' || type === 'lottie') &&
+        (type === 'video' || type === 'audio' || type === 'image' || type === 'lottie' || type === 'rive') &&
         NativeHelperClient.parseFileReferenceUrl(fileUrl)
       ) {
         const referencedFile = await NativeHelperClient.getReferencedFile(fileUrl, mediaFile.name);
@@ -1730,9 +1732,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
           }));
           wakePreviewAfterRestore();
         }, { once: true });
-      } else if (type === 'lottie') {
+      } else if (isVectorAnimationSourceType(type)) {
         if (!loadFile) {
-          log.warn('Skipping lottie restore - file object not available', { clip: clip.name });
+          log.warn('Skipping vector animation restore - file object not available', { clip: clip.name, type });
           set((state) => ({
             clips: state.clips.map((currentClip) =>
               currentClip.id === clip.id
@@ -1749,14 +1751,16 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
               ...clip,
               file: loadFile,
               source: {
-                type: 'lottie',
+                type,
                 mediaFileId: serializedClip.mediaFileId,
                 naturalDuration: serializedClip.naturalDuration,
                 vectorAnimationSettings: serializedClip.vectorAnimationSettings,
               },
             };
-            const metadata = await readLottieMetadata(loadFile);
-            const runtime = await lottieRuntimeManager.prepareClipSource(runtimeClip, loadFile);
+            const metadata = type === 'lottie'
+              ? await readLottieMetadata(loadFile)
+              : await readRiveMetadata(loadFile);
+            const runtime = await vectorAnimationRuntimeManager.prepareClipSource(runtimeClip, loadFile);
             set((state) => ({
               clips: state.clips.map((currentClip) =>
                 currentClip.id === clip.id
@@ -1764,7 +1768,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                       ...currentClip,
                       file: loadFile,
                       source: {
-                        type: 'lottie',
+                        type,
                         textCanvas: runtime.canvas,
                         mediaFileId: serializedClip.mediaFileId,
                         naturalDuration: metadata.duration ?? serializedClip.naturalDuration ?? serializedClip.duration,
@@ -1923,8 +1927,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         audio.removeAttribute('src');
         audio.load();
       }
-      if (clip.source?.type === 'lottie') {
-        lottieRuntimeManager.destroyClipRuntime(clip.id);
+      if (isVectorAnimationSourceType(clip.source?.type)) {
+        vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
       }
       // WebCodecsPlayers stay in globalWcpCache — don't destroy them.
       // Pause them so the decoder isn't running while detached.

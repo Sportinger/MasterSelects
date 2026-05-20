@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
+  coerceVectorAnimationDataBindingValue,
+  createVectorAnimationDataBindingProperty,
   createVectorAnimationInputProperty,
   isVectorAnimationBounceMode,
+  isVectorAnimationSourceType,
   normalizeVectorAnimationRenderDimension,
   normalizeVectorAnimationStateCues,
+  parseVectorAnimationDataBindingProperty,
   parseVectorAnimationInputProperty,
   resolveVectorAnimationStateName,
 } from '../../src/types/vectorAnimation';
@@ -47,6 +51,14 @@ describe('vector animation input properties', () => {
       inputName: 'On Off',
     });
   });
+
+  it('round-trips encoded Rive data binding properties', () => {
+    const property = createVectorAnimationDataBindingProperty('Count.Value');
+
+    expect(parseVectorAnimationDataBindingProperty(property)).toEqual({
+      propertyName: 'Count.Value',
+    });
+  });
 });
 
 describe('vector animation playback settings', () => {
@@ -57,5 +69,16 @@ describe('vector animation playback settings', () => {
     expect(isVectorAnimationBounceMode('bounce')).toBe(true);
     expect(isVectorAnimationBounceMode('reverse-bounce')).toBe(true);
     expect(isVectorAnimationBounceMode('forward')).toBe(false);
+    expect(isVectorAnimationSourceType('lottie')).toBe(true);
+    expect(isVectorAnimationSourceType('rive')).toBe(true);
+    expect(isVectorAnimationSourceType('video')).toBe(false);
+  });
+});
+
+describe('vector animation data binding values', () => {
+  it('coerces Rive boolean, numeric, and text data binding values', () => {
+    expect(coerceVectorAnimationDataBindingValue({ name: 'enabled', type: 'boolean' }, 1)).toBe(true);
+    expect(coerceVectorAnimationDataBindingValue({ name: 'count', type: 'integer' }, 2.6)).toBe(3);
+    expect(coerceVectorAnimationDataBindingValue({ name: 'label', type: 'string' }, 42)).toBe('42');
   });
 });

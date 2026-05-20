@@ -4,17 +4,24 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import {
   DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
+  coerceVectorAnimationDataBindingValue,
   coerceVectorAnimationInputValue,
+  createVectorAnimationDataBindingProperty,
   createVectorAnimationInputProperty,
   createVectorAnimationStateProperty,
+  getVectorAnimationDataBindingDefaultValue,
   getVectorAnimationInputNumericValue,
   getVectorAnimationStateIndex,
+  isVectorAnimationSourceType,
   normalizeVectorAnimationRenderDimension,
   normalizeVectorAnimationStateCues,
   normalizeVectorAnimationStateName,
+  vectorAnimationDataBindingValueToNumber,
   vectorAnimationInputValueToNumber,
   type VectorAnimationPlaybackMode,
   type VectorAnimationClipSettings,
+  type VectorAnimationDataBindingProperty,
+  type VectorAnimationDataBindingValue,
   type VectorAnimationStateMachineInput,
   type VectorAnimationStateMachineInputValue,
 } from '../../../types/vectorAnimation';
@@ -49,8 +56,29 @@ function formatInputType(input: VectorAnimationStateMachineInput): string {
   return 'Trigger';
 }
 
+function formatDataBindingType(property: VectorAnimationDataBindingProperty): string {
+  if (property.type === 'boolean') return 'Bool';
+  if (property.type === 'integer') return 'Integer';
+  if (property.type === 'number') return 'Number';
+  if (property.type === 'color') return 'Color';
+  if (property.type === 'enum') return 'Enum';
+  if (property.type === 'string') return 'Text';
+  return 'Trigger';
+}
+
 function formatDimensionValue(value: number | undefined): string {
   return value === undefined ? '' : String(value);
+}
+
+function riveColorToHex(value: VectorAnimationDataBindingValue | undefined): string {
+  const numericValue = vectorAnimationDataBindingValueToNumber(value);
+  const rgb = numericValue & 0xffffff;
+  return `#${rgb.toString(16).padStart(6, '0')}`;
+}
+
+function hexToRiveColor(value: string): number {
+  const normalized = /^#[0-9a-f]{6}$/i.test(value) ? value.slice(1) : '000000';
+  return 0xff000000 | Number.parseInt(normalized, 16);
 }
 
 export function LottieTab({ clipId }: LottieTabProps) {
@@ -69,11 +97,13 @@ export function LottieTab({ clipId }: LottieTabProps) {
     ? files.find((file) => file.id === clip.source?.mediaFileId)
     : undefined;
   const metadata = mediaFile?.vectorAnimation;
+  const providerName = metadata?.provider === 'rive' ? 'Rive' : 'Lottie';
   const settings: VectorAnimationClipSettings = {
     ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
     ...clip?.source?.vectorAnimationSettings,
   };
   const animationNames = metadata?.animationNames ?? [];
+  const artboardNames = metadata?.artboardNames ?? [];
   const stateMachineNames = metadata?.stateMachineNames ?? [];
   const selectedStateMachineName = settings.stateMachineName ?? '';
   const stateMachineStateNames = selectedStateMachineName
@@ -113,11 +143,17 @@ export function LottieTab({ clipId }: LottieTabProps) {
     : settings;
   const currentStateName = liveSettings.stateMachineState ?? settings.stateMachineState ?? stateMachineStateNames[0] ?? '';
   const currentStateIndex = getVectorAnimationStateIndex(stateMachineStateNames, currentStateName);
+  const viewModels = metadata?.viewModels ?? [];
+  const selectedViewModelName = settings.viewModelName ?? metadata?.defaultViewModelName ?? viewModels[0]?.name ?? '';
+  const selectedViewModel = selectedViewModelName
+    ? viewModels.find((viewModel) => viewModel.name === selectedViewModelName)
+    : undefined;
+  const dataBindingProperties = selectedViewModel?.properties ?? [];
 
   const updateSettings = useCallback((updates: Partial<VectorAnimationClipSettings>) => {
     const { clips } = useTimelineStore.getState();
     const current = clips.find((candidate) => candidate.id === clipId);
-    if (!current?.source || current.source.type !== 'lottie') {
+    if (!current?.source || !isVectorAnimationSourceType(current.source.type)) {
       return;
     }
 
@@ -247,6 +283,45 @@ export function LottieTab({ clipId }: LottieTabProps) {
     );
   };
 
+  const getDataBindingValue = (
+    property: VectorAnimationDataBindingProperty,
+  ): VectorAnimationDataBindingValue => (
+    coerceVectorAnimationDataBindingValue(
+      property,
+      liveSettings.dataBindingValues?.[property.name] ??
+        settings.dataBindingValues?.[property.name] ??
+        getVectorAnimationDataBindingDefaultValue(property),
+    )
+  );
+
+  const updateDataBindingValue = (
+    property: VectorAnimationDataBindingProperty,
+    value: VectorAnimationDataBindingValue,
+  ) => {
+    if (property.type === 'trigger') {
+      return;
+    }
+
+    const normalizedValue = coerceVectorAnimationDataBindingValue(property, value);
+    if (property.type === 'string' || property.type === 'enum') {
+      updateSettings({
+        viewModelName: selectedViewModelName || settings.viewModelName,
+        dataBindingValues: {
+          ...(settings.dataBindingValues ?? {}),
+          [property.name]: normalizedValue,
+        },
+      });
+      return;
+    }
+
+    const propertyPath = createVectorAnimationDataBindingProperty(property.name);
+    setPropertyValue(
+      clipId,
+      propertyPath as AnimatableProperty,
+      vectorAnimationDataBindingValueToNumber(normalizedValue),
+    );
+  };
+
   const commitRenderDimensions = (draft: Pick<ResolutionDraft, 'width' | 'height'> = resolutionDraft) => {
     const width = normalizeVectorAnimationRenderDimension(Number(draft.width));
     const height = normalizeVectorAnimationRenderDimension(Number(draft.height));
@@ -276,7 +351,7 @@ export function LottieTab({ clipId }: LottieTabProps) {
     }
   };
 
-  if (!clip || clip.source?.type !== 'lottie') {
+  if (!clip || !isVectorAnimationSourceType(clip.source?.type)) {
     return null;
   }
 
@@ -287,7 +362,7 @@ export function LottieTab({ clipId }: LottieTabProps) {
           <div className="lottie-summary-text">
             <div className="lottie-title" title={clip.name}>{clip.name}</div>
             <div className="lottie-meta">
-              {metadata?.width && metadata?.height ? `${metadata.width} x ${metadata.height}` : 'Canvas-backed animation'}
+              {metadata?.width && metadata?.height ? `${metadata.width} x ${metadata.height}` : `${providerName} canvas animation`}
               {metadata?.fps ? ` - ${metadata.fps.toFixed(2)} fps` : ''}
             </div>
           </div>
@@ -363,6 +438,33 @@ export function LottieTab({ clipId }: LottieTabProps) {
             ))}
           </div>
         </div>
+
+        {artboardNames.length > 0 && (
+          <label className="lottie-field-row">
+            <span className="lottie-field-label">Artboard</span>
+            <select
+              className="lottie-select"
+              value={settings.artboard ?? ''}
+              onChange={(event) => updateSettings({
+                artboard: event.target.value || undefined,
+                animationName: undefined,
+                stateMachineName: undefined,
+                stateMachineState: undefined,
+                stateMachineInputValues: undefined,
+                viewModelName: undefined,
+                viewModelInstanceName: undefined,
+                dataBindingValues: undefined,
+              })}
+            >
+              <option value="">Default</option>
+              {artboardNames.map((artboardName) => (
+                <option key={artboardName} value={artboardName}>
+                  {artboardName}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {animationNames.length > 0 && (
           <label className="lottie-field-row">
@@ -619,6 +721,149 @@ export function LottieTab({ clipId }: LottieTabProps) {
                 </div>
               )}
             </>
+          )}
+        </div>
+      )}
+
+      {viewModels.length > 0 && (
+        <div className="properties-section lottie-state-section">
+          <h4>Data Binding</h4>
+
+          <label className="lottie-field-row">
+            <span className="lottie-field-label">View Model</span>
+            <select
+              className="lottie-select"
+              value={selectedViewModelName}
+              onChange={(event) => updateSettings({
+                viewModelName: event.target.value || undefined,
+                viewModelInstanceName: undefined,
+                dataBindingValues: undefined,
+              })}
+            >
+              {viewModels.map((viewModel) => (
+                <option key={viewModel.name} value={viewModel.name}>
+                  {viewModel.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedViewModel?.instanceNames && selectedViewModel.instanceNames.length > 0 && (
+            <label className="lottie-field-row">
+              <span className="lottie-field-label">Instance</span>
+              <select
+                className="lottie-select"
+                value={settings.viewModelInstanceName ?? ''}
+                onChange={(event) => updateSettings({
+                  viewModelInstanceName: event.target.value || undefined,
+                  dataBindingValues: undefined,
+                })}
+              >
+                <option value="">Default</option>
+                {selectedViewModel.instanceNames.map((instanceName) => (
+                  <option key={instanceName} value={instanceName}>
+                    {instanceName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {dataBindingProperties.length > 0 && (
+            <div className="lottie-input-list">
+              <div className="lottie-subsection-title">Properties</div>
+              {dataBindingProperties.map((property) => {
+                const propertyPath = createVectorAnimationDataBindingProperty(property.name);
+                const value = getDataBindingValue(property);
+                const numericValue = vectorAnimationDataBindingValueToNumber(value);
+                const isBooleanOn = Boolean(value);
+                const hasKeyframesForProperty = (clipKeyframes.get(clipId) ?? []).some((keyframe) => keyframe.property === propertyPath);
+
+                return (
+                  <div key={`${property.viewModelName}:${property.name}`} className={`lottie-input-row ${hasKeyframesForProperty ? 'has-keyframes' : ''}`}>
+                    <div className="lottie-input-label">
+                      <span title={property.name}>{property.name}</span>
+                      <span>{formatDataBindingType(property)}</span>
+                    </div>
+
+                    {property.type !== 'string' && property.type !== 'enum' && property.type !== 'trigger' && (
+                      <KeyframeToggle
+                        clipId={clipId}
+                        property={propertyPath as AnimatableProperty}
+                        value={numericValue}
+                      />
+                    )}
+
+                    {property.type === 'boolean' && (
+                      <div className="lottie-boolean-control">
+                        <button
+                          type="button"
+                          className={!isBooleanOn ? 'active' : ''}
+                          onClick={() => updateDataBindingValue(property, false)}
+                        >
+                          Off
+                        </button>
+                        <button
+                          type="button"
+                          className={isBooleanOn ? 'active' : ''}
+                          onClick={() => updateDataBindingValue(property, true)}
+                        >
+                          On
+                        </button>
+                      </div>
+                    )}
+
+                    {(property.type === 'number' || property.type === 'integer') && (
+                      <DraggableNumber
+                        value={numericValue}
+                        onChange={(nextValue) => updateDataBindingValue(property, nextValue)}
+                        defaultValue={vectorAnimationDataBindingValueToNumber(property.defaultValue)}
+                        decimals={property.type === 'integer' ? 0 : 2}
+                        sensitivity={20}
+                      />
+                    )}
+
+                    {property.type === 'color' && (
+                      <span className="lottie-color-swatch">
+                        <input
+                          type="color"
+                          value={riveColorToHex(value)}
+                          onChange={(event) => updateDataBindingValue(property, hexToRiveColor(event.target.value))}
+                          aria-label={`${property.name} color`}
+                        />
+                      </span>
+                    )}
+
+                    {property.type === 'string' && (
+                      <input
+                        className="lottie-input lottie-input-static"
+                        type="text"
+                        value={String(value)}
+                        onChange={(event) => updateDataBindingValue(property, event.target.value)}
+                      />
+                    )}
+
+                    {property.type === 'enum' && (
+                      <select
+                        className="lottie-select"
+                        value={String(value)}
+                        onChange={(event) => updateDataBindingValue(property, event.target.value)}
+                      >
+                        {(property.values ?? []).map((enumValue) => (
+                          <option key={enumValue} value={enumValue}>
+                            {enumValue}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    {property.type === 'trigger' && (
+                      <span className="lottie-input-note">Trigger</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

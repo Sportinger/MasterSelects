@@ -32,14 +32,14 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 | **Video** | MP4, WebM, MOV, AVI, MKV, WMV, M4V, FLV |
 | **Audio** | WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS |
 | **Image** | PNG, JPG/JPEG, GIF, WebP, BMP, SVG |
-| **Vector Animation** | `.lottie`, Lottie JSON (`.json`, content-sniffed) |
+| **Vector Animation** | `.lottie`, `.riv`, Lottie JSON (`.json`, content-sniffed) |
 
 The panel also accepts a few specialized asset types that flow into the timeline as 3D clips:
 
 - `model` files: OBJ, glTF/GLB
 - `gaussian-splat` files: PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC, and SOG-style ZIP payloads
 
-Lottie imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
+Lottie and Rive imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
 
 ### Import Methods
 
@@ -462,7 +462,7 @@ interface MediaFile {
 ### Drag Types
 | Item Type | Drag Payload Kind | Data Transfer Key |
 |-----------|-------------------|-------------------|
-| Media file (video/image/lottie) | `media-file` | `application/x-media-file-id` |
+| Media file (video/image/lottie/rive) | `media-file` | `application/x-media-file-id` |
 | Media file (audio) | `media-file` (marked as audio) | `application/x-media-file-id` |
 | Composition | `composition` | `application/x-composition-id` |
 | Text item | `text` | `application/x-text-item-id` |
@@ -481,7 +481,7 @@ interface MediaFile {
 ### Track Type Enforcement
 | Media Type | Allowed Tracks |
 |------------|----------------|
-| Video/Image/Lottie/Composition/Text/Solid/Mesh | Video tracks only |
+| Video/Image/Lottie/Rive/Composition/Text/Solid/Mesh | Video tracks only |
 | Audio | Audio tracks only |
 
 ---

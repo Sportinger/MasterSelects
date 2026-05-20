@@ -7,7 +7,7 @@ import {
 import type { ExportClipState, FrameContext } from '../../src/engine/export/types';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
-import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../src/services/vectorAnimation/VectorAnimationRuntimeManager';
 import type { TimelineClip, TimelineTrack } from '../../src/stores/timeline/types';
 import type { ParallelDecodeManager } from '../../src/engine/ParallelDecodeManager';
 
@@ -813,7 +813,7 @@ describe('ExportLayerBuilder', () => {
       solo: false,
     } as unknown as TimelineTrack;
     const canvas = document.createElement('canvas');
-    const renderSpy = vi.spyOn(lottieRuntimeManager, 'renderClipAtTime').mockReturnValue(canvas);
+    const renderSpy = vi.spyOn(vectorAnimationRuntimeManager, 'renderClipAtTime').mockReturnValue(canvas);
 
     const clip = {
       id: 'clip-lottie',

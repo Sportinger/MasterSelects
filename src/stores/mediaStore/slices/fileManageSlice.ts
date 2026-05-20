@@ -10,8 +10,10 @@ import { useTimelineStore } from '../../timeline';
 import { Logger } from '../../../services/logger';
 import { engine } from '../../../engine/WebGPUEngine';
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
-import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMetadata';
+import { readRiveMetadata } from '../../../services/vectorAnimation/riveMetadata';
+import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { createThumbnail, handleThumbnailDedup } from '../helpers/thumbnailHelpers';
 import { resolveGaussianSplatSequenceData } from '../../../utils/gaussianSplatSequence';
 
@@ -444,10 +446,12 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
           isLoading: false,
         });
       }, { once: true });
-    } else if (sourceType === 'lottie') {
+    } else if (isVectorAnimationSourceType(sourceType)) {
       try {
-        const metadata = await readLottieMetadata(file);
-        const runtime = await lottieRuntimeManager.prepareClipSource({
+        const metadata = sourceType === 'lottie'
+          ? await readLottieMetadata(file)
+          : await readRiveMetadata(file);
+        const runtime = await vectorAnimationRuntimeManager.prepareClipSource({
           ...clip,
           file,
           source: {
@@ -462,14 +466,14 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
           isLoading: false,
           source: {
             ...clip.source!,
-            type: 'lottie',
+            type: sourceType,
             textCanvas: runtime.canvas,
             naturalDuration: metadata.duration ?? clip.duration,
             mediaFileId,
           },
         });
       } catch (error) {
-        log.warn('Failed to reload lottie for clip', { clipName: clip.name, error });
+        log.warn('Failed to reload vector animation for clip', { clipName: clip.name, sourceType, error });
         timelineStore.updateClip(clip.id, {
           needsReload: false,
           isLoading: false,

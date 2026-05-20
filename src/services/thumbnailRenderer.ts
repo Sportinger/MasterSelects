@@ -2,6 +2,7 @@
 // Shows all layers with effects, not just the first video
 
 import { Logger } from './logger';
+import { isVectorAnimationSourceType } from '../types/vectorAnimation';
 import { compositionRenderer } from './compositionRenderer';
 import type { Effect, Layer } from '../types';
 import { useMediaStore } from '../stores/mediaStore';
@@ -379,7 +380,7 @@ class ThumbnailRendererService {
         c.sourceType === 'text' ||
         c.sourceType === 'solid' ||
         c.sourceType === 'math-scene' ||
-        c.sourceType === 'lottie';
+        isVectorAnimationSourceType(c.sourceType);
       return isOnVideoTrack && isVisualType;
     });
 

@@ -22,6 +22,17 @@ const mocks = vi.hoisted(() => ({
       totalFrames: 120,
     },
   })),
+  prepareRiveAsset: vi.fn(async () => ({
+    metadata: {
+      provider: 'rive',
+      width: 512,
+      height: 512,
+      fps: 60,
+      duration: 5,
+      animationNames: ['Idle'],
+      artboardNames: ['Main'],
+    },
+  })),
 }));
 
 vi.mock('../../src/stores/timeline/helpers/mediaTypeHelpers', () => ({
@@ -64,6 +75,10 @@ vi.mock('../../src/services/projectFileService', () => ({
 
 vi.mock('../../src/services/vectorAnimation/lottieMetadata', () => ({
   prepareLottieAsset: mocks.prepareLottieAsset,
+}));
+
+vi.mock('../../src/services/vectorAnimation/riveMetadata', () => ({
+  prepareRiveAsset: mocks.prepareRiveAsset,
 }));
 
 vi.mock('../../src/stores/settingsStore', () => ({
@@ -149,6 +164,33 @@ describe('processImport', () => {
     expect(result.mediaFile.height).toBe(360);
     expect(result.mediaFile.fps).toBe(30);
     expect(result.mediaFile.duration).toBe(4);
+  });
+
+  it('stores Rive metadata without using HTML media probing', async () => {
+    mocks.classifyMediaType.mockResolvedValue('rive');
+    const riveFile = new File(['rive-bytes'], 'anim.riv', {
+      type: 'application/octet-stream',
+      lastModified: 3,
+    });
+
+    const result = await processImport({
+      file: riveFile,
+      id: 'media-rive-1',
+    });
+
+    expect(mocks.prepareRiveAsset).toHaveBeenCalledWith(riveFile);
+    expect(mocks.getMediaInfo).not.toHaveBeenCalled();
+    expect(result.mediaFile.type).toBe('rive');
+    expect(result.mediaFile.vectorAnimation).toEqual(expect.objectContaining({
+      provider: 'rive',
+      width: 512,
+      height: 512,
+      duration: 5,
+    }));
+    expect(result.mediaFile.width).toBe(512);
+    expect(result.mediaFile.height).toBe(512);
+    expect(result.mediaFile.fps).toBe(60);
+    expect(result.mediaFile.duration).toBe(5);
   });
 
   it('does not mark a partial existing proxy as ready during import', async () => {

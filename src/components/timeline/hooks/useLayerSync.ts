@@ -14,7 +14,8 @@ import { Logger } from '../../../services/logger';
 import { getInterpolatedClipTransform } from '../../../utils/keyframeInterpolation';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
-import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 
 const log = Logger.create('useLayerSync');
 
@@ -269,8 +270,8 @@ export function useLayerSync({
             },
           });
         } else if (nestedClip.source?.textCanvas) {
-          if (nestedClip.source.type === 'lottie') {
-            lottieRuntimeManager.renderClipAtTime(
+          if (isVectorAnimationSourceType(nestedClip.source.type)) {
+            vectorAnimationRuntimeManager.renderClipAtTime(
               nestedClip,
               nestedClip.startTime + nestedLocalTime,
               getInterpolatedVectorAnimationSettings(nestedClip.id, nestedLocalTime),
@@ -807,8 +808,8 @@ export function useLayerSync({
         }
       } else if (clip?.source?.textCanvas) {
         const textClipLocalTime = playheadPosition - clip.startTime;
-        if (clip.source.type === 'lottie') {
-          lottieRuntimeManager.renderClipAtTime(
+        if (isVectorAnimationSourceType(clip.source.type)) {
+          vectorAnimationRuntimeManager.renderClipAtTime(
             clip,
             playheadPosition,
             getInterpolatedVectorAnimationSettings(clip.id, textClipLocalTime),

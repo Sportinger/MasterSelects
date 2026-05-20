@@ -43,7 +43,7 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 
 `FrameExporter` is used for both the WebCodecs and HTMLVideo export buttons.
 
-Canvas-backed sources such as text, solids, and Lottie are re-rendered for every export frame before capture, so the exported frame matches the current timeline time instead of reusing a stale first-frame texture. Motion shape clips are built as `motion` layer sources and rendered by the WebGPU motion renderer at export frame time before compositing.
+Canvas-backed sources such as text, solids, Lottie, and Rive are re-rendered for every export frame before capture, so the exported frame matches the current timeline time instead of reusing a stale first-frame texture. Motion shape clips are built as `motion` layer sources and rendered by the WebGPU motion renderer at export frame time before compositing.
 
 ### Fast Mode
 

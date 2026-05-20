@@ -83,14 +83,15 @@ The numeric mask properties use the same curve and easing behavior as transform 
 
 ### Vector Animation Properties
 
-Lottie state machines use the same keyframe store as transform and effect properties:
+Vector animation state machines and Rive Data Binding use the same keyframe store as transform and effect properties:
 
 ```text
 lottieState.{stateMachine}
 lottieInput.{stateMachine}.{input}
+riveData.{property}
 ```
 
-`lottieState.*` keyframes are discrete named states. They render as blue diamonds and stepped curves because a state change should hold until the next state keyframe, not ease between values. Boolean and numeric `lottieInput.*` properties use the normal stopwatch/keyframe workflow.
+`lottieState.*` keyframes are discrete named states. They render as blue diamonds and stepped curves because a state change should hold until the next state keyframe, not ease between values. Boolean and numeric `lottieInput.*` properties use the normal stopwatch/keyframe workflow. Rive Data Binding properties use `riveData.*` for numeric, integer, boolean, and color values; string and enum bindings remain static clip settings.
 
 ### Motion Shape Properties
 
@@ -177,7 +178,7 @@ When recording is enabled:
 - Dragging a handle updates the stored handle position and switches the keyframe to Bezier mode.
 - `Shift+drag` on a keyframe constrains movement to one axis in the curve editor.
 - Right-clicking a handle resets it to the default 1/3-distance handle for that segment.
-- Lottie state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
+- Vector animation state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
 - Mask path rows expose timing and easing in the timeline; their value is a whole shape snapshot rather than a numeric scalar.
 
 ### Delete and Copy/Paste
