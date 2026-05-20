@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
+import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import type { ClipDragState } from '../types';
 import { Logger } from '../../../services/logger';
 
@@ -164,7 +165,7 @@ export function useClipDrag({
         const sourceType = clipForTrackCheck?.source?.type;
         const requiredTrackType: 'video' | 'audio' | null =
           sourceType === 'audio' ? 'audio' :
-          (sourceType === 'video' || sourceType === 'image' || sourceType === 'lottie' || sourceType === 'text' || sourceType === 'solid' || sourceType === 'model' || sourceType === 'gaussian-splat' || sourceType === 'camera' || sourceType === 'splat-effector' || sourceType === 'math-scene') ? 'video' :
+          (sourceType === 'video' || sourceType === 'image' || isVectorAnimationSourceType(sourceType) || sourceType === 'text' || sourceType === 'solid' || sourceType === 'model' || sourceType === 'gaussian-splat' || sourceType === 'camera' || sourceType === 'splat-effector' || sourceType === 'math-scene') ? 'video' :
           null;
 
         let currentY = 24;

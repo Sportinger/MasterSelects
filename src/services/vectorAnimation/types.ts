@@ -21,3 +21,22 @@ export interface LottieRuntimePrepareResult {
   canvas: HTMLCanvasElement;
   metadata: VectorAnimationMetadata;
 }
+
+export interface RiveRuntimePayload {
+  data: ArrayBuffer;
+  sourceKey: string;
+}
+
+export interface PreparedRiveAsset {
+  metadata: VectorAnimationMetadata;
+  payload: RiveRuntimePayload;
+}
+
+export interface RiveRuntimePrepareResult {
+  canvas: HTMLCanvasElement;
+  metadata: VectorAnimationMetadata;
+}
+
+export type VectorAnimationRuntimePrepareResult =
+  | LottieRuntimePrepareResult
+  | RiveRuntimePrepareResult;

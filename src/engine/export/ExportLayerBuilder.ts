@@ -15,7 +15,8 @@ import { getEffectiveScale } from '../../utils/transformScale';
 import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS, type GaussianSplatSettings } from '../gaussian/types';
-import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import {
   getGaussianSplatSequenceFrame,
   getGaussianSplatSequenceFrameRuntimeKey,
@@ -305,10 +306,10 @@ export function buildLayersAtTime(
         is3D: true,
       });
     }
-    // Handle text, solid, Lottie, and Math Scene clips
-    else if ((clip.source?.type === 'text' || clip.source?.type === 'solid' || clip.source?.type === 'lottie' || clip.source?.type === 'math-scene') && clip.source.textCanvas) {
-      if (clip.source.type === 'lottie') {
-        lottieRuntimeManager.renderClipAtTime(
+    // Handle text, solid, vector animation, and Math Scene clips
+    else if ((clip.source?.type === 'text' || clip.source?.type === 'solid' || isVectorAnimationSourceType(clip.source?.type) || clip.source?.type === 'math-scene') && clip.source.textCanvas) {
+      if (isVectorAnimationSourceType(clip.source.type)) {
+        vectorAnimationRuntimeManager.renderClipAtTime(
           clip,
           time,
           getVectorAnimationSettingsForExport(clip, clipLocalTime, ctx),
@@ -702,9 +703,9 @@ function buildNestedLayerForExport(
     } as Layer;
   }
 
-  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid' || nestedClip.source?.type === 'lottie' || nestedClip.source?.type === 'math-scene') && nestedClip.source.textCanvas) {
-    if (nestedClip.source.type === 'lottie') {
-      lottieRuntimeManager.renderClipAtTime(
+  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid' || isVectorAnimationSourceType(nestedClip.source?.type) || nestedClip.source?.type === 'math-scene') && nestedClip.source.textCanvas) {
+    if (isVectorAnimationSourceType(nestedClip.source.type)) {
+      vectorAnimationRuntimeManager.renderClipAtTime(
         nestedClip,
         nestedClip.startTime + nestedClipLocalTime,
         getVectorAnimationSettingsForExport(nestedClip, nestedClipLocalTime),

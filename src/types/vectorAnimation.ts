@@ -6,14 +6,40 @@ export type VectorAnimationStateMachineInputType = 'boolean' | 'number' | 'strin
 
 export type VectorAnimationStateMachineInputValue = boolean | number | string;
 
+export type VectorAnimationDataBindingType =
+  | 'boolean'
+  | 'number'
+  | 'integer'
+  | 'string'
+  | 'color'
+  | 'enum'
+  | 'trigger';
+
+export type VectorAnimationDataBindingValue = boolean | number | string;
+
 export interface VectorAnimationStateMachineInput {
   name: string;
   type: VectorAnimationStateMachineInputType;
   defaultValue?: VectorAnimationStateMachineInputValue;
 }
 
+export interface VectorAnimationDataBindingProperty {
+  name: string;
+  type: VectorAnimationDataBindingType;
+  viewModelName?: string;
+  defaultValue?: VectorAnimationDataBindingValue;
+  values?: string[];
+}
+
+export interface VectorAnimationViewModelMetadata {
+  name: string;
+  instanceNames?: string[];
+  properties: VectorAnimationDataBindingProperty[];
+}
+
 export type VectorAnimationInputProperty = `lottieInput.${string}.${string}`;
 export type VectorAnimationStateProperty = `lottieState.${string}`;
+export type VectorAnimationDataBindingPropertyPath = `riveData.${string}`;
 
 export interface VectorAnimationMetadata {
   provider: VectorAnimationProvider;
@@ -28,6 +54,10 @@ export interface VectorAnimationMetadata {
   stateMachineNames?: string[];
   stateMachineStates?: Record<string, string[]>;
   stateMachineInputs?: Record<string, VectorAnimationStateMachineInput[]>;
+  viewModelNames?: string[];
+  defaultViewModelName?: string;
+  viewModels?: VectorAnimationViewModelMetadata[];
+  dataBindingProperties?: VectorAnimationDataBindingProperty[];
 }
 
 export interface VectorAnimationStateCue {
@@ -51,6 +81,9 @@ export interface VectorAnimationClipSettings {
   stateMachineState?: string;
   stateMachineStateCues?: VectorAnimationStateCue[];
   stateMachineInputValues?: Record<string, VectorAnimationStateMachineInputValue>;
+  viewModelName?: string;
+  viewModelInstanceName?: string;
+  dataBindingValues?: Record<string, VectorAnimationDataBindingValue>;
 }
 
 export const DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS: VectorAnimationClipSettings = {
@@ -74,6 +107,10 @@ export function shouldLoopVectorAnimation(
 ): boolean {
   const settings = mergeVectorAnimationSettings(sourceSettings);
   return settings.loop || settings.endBehavior === 'loop';
+}
+
+export function isVectorAnimationSourceType(value: unknown): value is VectorAnimationProvider {
+  return value === 'lottie' || value === 'rive';
 }
 
 export function isVectorAnimationBounceMode(
@@ -160,6 +197,12 @@ export function createVectorAnimationStateProperty(
   return `lottieState.${encodePropertyPart(stateMachineName)}` as VectorAnimationStateProperty;
 }
 
+export function createVectorAnimationDataBindingProperty(
+  propertyName: string,
+): VectorAnimationDataBindingPropertyPath {
+  return `riveData.${encodePropertyPart(propertyName)}` as VectorAnimationDataBindingPropertyPath;
+}
+
 export function parseVectorAnimationInputProperty(
   property: string,
 ): { stateMachineName: string; inputName: string } | null {
@@ -191,6 +234,22 @@ export function parseVectorAnimationStateProperty(
   }
 
   return { stateMachineName };
+}
+
+export function parseVectorAnimationDataBindingProperty(
+  property: string,
+): { propertyName: string } | null {
+  const parts = property.split('.');
+  if (parts.length !== 2 || parts[0] !== 'riveData') {
+    return null;
+  }
+
+  const propertyName = decodePropertyPart(parts[1]);
+  if (!propertyName) {
+    return null;
+  }
+
+  return { propertyName };
 }
 
 export function getVectorAnimationStateIndex(
@@ -270,6 +329,69 @@ export function coerceVectorAnimationInputValue(
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return fallback;
+}
+
+export function getVectorAnimationDataBindingDefaultValue(
+  property: VectorAnimationDataBindingProperty,
+): VectorAnimationDataBindingValue {
+  if (property.defaultValue !== undefined) {
+    return property.defaultValue;
+  }
+  if (property.type === 'boolean') {
+    return false;
+  }
+  if (property.type === 'number' || property.type === 'integer' || property.type === 'color') {
+    return 0;
+  }
+  return '';
+}
+
+export function coerceVectorAnimationDataBindingValue(
+  property: VectorAnimationDataBindingProperty,
+  value: VectorAnimationDataBindingValue | undefined,
+): VectorAnimationDataBindingValue {
+  const fallback = getVectorAnimationDataBindingDefaultValue(property);
+
+  if (property.type === 'boolean') {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value >= 0.5;
+    if (typeof value === 'string') return value === 'true' || value === '1';
+    return fallback;
+  }
+
+  if (property.type === 'number' || property.type === 'integer' || property.type === 'color') {
+    const numericValue = typeof value === 'number'
+      ? value
+      : typeof value === 'boolean'
+        ? Number(value)
+        : Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return fallback;
+    }
+    return property.type === 'integer' || property.type === 'color'
+      ? Math.round(numericValue)
+      : numericValue;
+  }
+
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
+}
+
+export function vectorAnimationDataBindingValueToNumber(
+  value: VectorAnimationDataBindingValue | undefined,
+): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'boolean') {
+    return value ? 1 : 0;
+  }
+  if (typeof value === 'string') {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : 0;
+  }
+  return 0;
 }
 
 export function vectorAnimationInputValueToNumber(

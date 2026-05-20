@@ -45,6 +45,7 @@ import { loadVideoMedia } from './clip/addVideoClip';
 import { createAudioClipPlaceholder, loadAudioMedia } from './clip/addAudioClip';
 import { createImageClipPlaceholder, loadImageMedia } from './clip/addImageClip';
 import { createLottieClipPlaceholder, loadLottieMedia } from './clip/addLottieClip';
+import { createRiveClipPlaceholder, loadRiveMedia } from './clip/addRiveClip';
 import { createModelClipPlaceholder, loadModelMedia } from './clip/addModelClip';
 import { createGaussianSplatClipPlaceholder, loadGaussianSplatMedia } from './clip/addGaussianSplatClip';
 import { createVideoElement, createAudioElement } from './helpers/webCodecsHelpers';
@@ -62,7 +63,9 @@ import {
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { updateClipById } from './helpers/clipStateHelpers';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
-import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import { readRiveMetadata } from '../../services/vectorAnimation/riveMetadata';
+import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   addClip: async (trackId, file, startTime, providedDuration, mediaFileId, mediaTypeOverride?) => {
@@ -88,7 +91,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       return;
     }
 
-    if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'lottie' || mediaType === 'model' || mediaType === 'gaussian-avatar' || mediaType === 'gaussian-splat') && targetTrack.type !== 'video') {
+    if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'lottie' || mediaType === 'rive' || mediaType === 'model' || mediaType === 'gaussian-avatar' || mediaType === 'gaussian-splat') && targetTrack.type !== 'video') {
       log.warn('Cannot add visual clip to audio track');
       return;
     }
@@ -282,6 +285,31 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       return;
     }
 
+    if (mediaType === 'rive') {
+      const vectorAnimationMetadata = sourceMediaFile?.vectorAnimation ?? await readRiveMetadata(file);
+      const riveClip = createRiveClipPlaceholder({
+        trackId,
+        file,
+        startTime,
+        estimatedDuration: providedDuration ?? vectorAnimationMetadata.duration ?? estimatedDuration,
+        mediaFileId,
+        metadata: vectorAnimationMetadata,
+      });
+      set({ clips: [...clips, riveClip] });
+      updateDuration();
+
+      await loadRiveMedia({
+        clip: riveClip,
+        file,
+        mediaFileId,
+        metadata: vectorAnimationMetadata,
+        updateClip,
+      });
+
+      invalidateCache();
+      return;
+    }
+
     // Handle image files
     if (mediaType === 'image') {
       const imageClip = createImageClipPlaceholder({ trackId, file, startTime, estimatedDuration });
@@ -465,8 +493,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         audio.src = '';
         audio.load();
       }
-      if (clip.source?.type === 'lottie') {
-        lottieRuntimeManager.destroyClipRuntime(clip.id);
+      if (isVectorAnimationSourceType(clip.source?.type)) {
+        vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
       }
       blobUrlManager.revokeAll(removeId);
     }
@@ -521,7 +549,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       const targetTrack = tracks.find(t => t.id === newTrackId);
       const sourceType = movingClip.source?.type;
       if (targetTrack && sourceType) {
-        if ((sourceType === 'video' || sourceType === 'image' || sourceType === 'lottie' || sourceType === 'camera' || sourceType === 'math-scene') && targetTrack.type !== 'video') return;
+        if ((sourceType === 'video' || sourceType === 'image' || sourceType === 'lottie' || sourceType === 'rive' || sourceType === 'camera' || sourceType === 'math-scene') && targetTrack.type !== 'video') return;
         if (sourceType === 'audio' && targetTrack.type !== 'audio') return;
       }
     }

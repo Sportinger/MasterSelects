@@ -12,7 +12,8 @@ import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
-import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { generateEffectId } from './helpers/idGenerator';
 import { cloneClipNodeGraph, remapClipNodeGraphEffectIds } from '../../services/nodeGraph';
@@ -280,8 +281,8 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
           type: clipData.sourceType,
           mediaFileId: clipData.mediaFileId,
           naturalDuration: clipData.naturalDuration ?? clipData.duration,
-        } : clipData.sourceType === 'lottie' && clipData.mediaFileId ? {
-          type: 'lottie' as const,
+        } : isVectorAnimationSourceType(clipData.sourceType) && clipData.mediaFileId ? {
+          type: clipData.sourceType,
           mediaFileId: clipData.mediaFileId,
           naturalDuration: clipData.naturalDuration ?? clipData.duration,
           vectorAnimationSettings: clipData.vectorAnimationSettings,
@@ -472,24 +473,24 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
 
         const sourceType = newClip.source?.type;
 
-        if (sourceType === 'lottie') {
+        if (isVectorAnimationSourceType(sourceType)) {
           try {
             const runtimeClip: TimelineClip = {
               ...newClip,
               file: mediaFile.file,
               source: {
-                type: 'lottie',
+                type: sourceType,
                 mediaFileId,
                 naturalDuration: newClip.source?.naturalDuration ?? newClip.duration,
                 vectorAnimationSettings: newClip.source?.vectorAnimationSettings,
               },
             };
-            const runtime = await lottieRuntimeManager.prepareClipSource(runtimeClip, mediaFile.file);
+            const runtime = await vectorAnimationRuntimeManager.prepareClipSource(runtimeClip, mediaFile.file);
             const naturalDuration =
               runtime.metadata.duration ??
               newClip.source?.naturalDuration ??
               newClip.duration;
-            lottieRuntimeManager.renderClipAtTime(runtimeClip, runtimeClip.startTime);
+            vectorAnimationRuntimeManager.renderClipAtTime(runtimeClip, runtimeClip.startTime);
 
             set((state) => ({
               clips: state.clips.map((c) =>
@@ -498,7 +499,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
                       ...c,
                       file: mediaFile.file!,
                       source: {
-                        type: 'lottie' as const,
+                        type: sourceType,
                         textCanvas: runtime.canvas,
                         mediaFileId,
                         naturalDuration,
@@ -511,7 +512,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
               ),
             }));
           } catch (error) {
-            log.warn('Failed to restore pasted lottie clip', { clipId: newClip.id, error });
+            log.warn('Failed to restore pasted vector animation clip', { clipId: newClip.id, sourceType, error });
             set((state) => ({
               clips: state.clips.map((c) =>
                 c.id === newClip.id

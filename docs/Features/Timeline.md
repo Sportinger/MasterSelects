@@ -2,14 +2,14 @@
 
 [<- Back to Index](./README.md)
 
-The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
+The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
 
 ---
 
 ## Track Types
 
 ### Video Tracks
-- Hold video, image, Lottie, text, solid, motion shape, mesh, composition, camera, and splat-effector clips.
+- Hold video, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips.
 - Higher tracks render on top of lower tracks.
 - Expanded tracks can show keyframe property rows and curve editors.
 - Default layout starts with `Video 2` above `Video 1`.
@@ -53,12 +53,14 @@ getTrackChildren()  // Query child tracks
 - Created through the timeline text slice.
 - Supports typography, stroke, shadow, and path text.
 
-### Lottie
-- Imported from `.lottie` packages or Lottie JSON files from the Media Panel.
-- Uses the same canvas-backed render path as text and solids, so preview, nested comps, and export stay deterministic.
+### Vector Animation
+- Lottie is imported from `.lottie` packages or Lottie JSON files from the Media Panel.
+- Rive is imported from `.riv` files and rendered through the Rive WASM canvas runtime.
+- Both providers use the same canvas-backed render path as text and solids, so preview, nested comps, and export stay aligned.
 - Exposes per-clip loop, end behavior, playback mode, fit, render resolution, animation selection, and background controls in the Properties panel.
-- `.lottie` state machines can be selected in the Lottie tab, with state changes stored as blue stepped keyframes.
-- Boolean and numeric `.lottie` state-machine inputs appear as normal stopwatch-keyframed properties.
+- State machines can be selected in the provider tab, with state changes stored as blue stepped keyframes when state names are available.
+- Boolean and numeric state-machine inputs appear as normal stopwatch-keyframed properties.
+- Rive Data Binding exposes view models, instances, static string/enum values, and keyframed numeric/boolean/color values.
 - When loop is enabled, the clip can be extended beyond its source duration on the right trim edge without freezing on the first pass.
 
 ### Solid
@@ -107,7 +109,7 @@ getTrackChildren()  // Query child tracks
 
 ### Copy and Paste
 - Copying clips includes linked audio automatically when the video clip is selected.
-- Copy/paste preserves Lottie clip type and vector animation settings.
+- Copy/paste preserves vector animation clip type and vector animation settings.
 - Copy/paste preserves motion shape definitions.
 - Copying keyframes stores them relative to the earliest copied keyframe.
 - Pasting keyframes targets the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the clipboard data.
@@ -143,7 +145,7 @@ getTrackChildren()  // Query child tracks
 - The UI hides `rotation.x`, `rotation.y`, `position.z`, and `scale.z` for 2D clips.
 - Camera clips and native-render gaussian splats keep the camera-style property model visible.
 - Numeric effect parameters appear as `effect.{effectId}.{paramName}` lanes.
-- Lottie state changes appear as `lottieState.{stateMachine}` lanes; state-machine inputs appear as `lottieInput.{stateMachine}.{input}` lanes.
+- Vector animation state changes appear as `lottieState.{stateMachine}` lanes; state-machine inputs appear as `lottieInput.{stateMachine}.{input}` lanes. Rive Data Binding values appear as `riveData.{property}` lanes.
 - Motion shape numeric lanes use registry paths such as `shape.size.w` and `appearance.{id}.stroke.width`.
 - Audio EQ lanes sort `volume` and the band parameters first.
 
@@ -162,7 +164,7 @@ getTrackChildren()  // Query child tracks
 - Composition changes propagate into nested render data.
 - Selected clips can be converted into a new nested composition from the clip context menu.
 - Composition switches trigger clip entrance/exit animations in the timeline UI.
-- Lottie clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
+- Vector animation clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
 
 ### Transitions
 - Transitions operate between adjacent clips on the same track.

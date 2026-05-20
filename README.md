@@ -15,7 +15,7 @@
 <p>
   GPU-first editing with <b>32 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>native WebGPU 3D</b>, and only <b>15 runtime dependencies</b>.<br>
   Built from scratch in <b>2,700+ lines of WGSL</b> and <b>165k lines of TypeScript</b>.<br>
-  Import <b>.lottie, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline.
+  Import <b>.lottie, .riv, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline.
 </p>
 
 <p>
@@ -55,7 +55,7 @@ Decoding depends on what the **browser** supports — the container is just the 
 <tr><td><b>Video codecs</b></td><td>H.264 (AVC), H.265 (HEVC)¹, VP8, VP9, AV1</td></tr>
 <tr><td><b>Audio files</b></td><td>WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS</td></tr>
 <tr><td><b>Image</b></td><td>PNG, JPG/JPEG, WebP, GIF, BMP, SVG</td></tr>
-<tr><td><b>Vector animation</b></td><td><code>.lottie</code> packages and Lottie JSON files (content-sniffed)</td></tr>
+<tr><td><b>Vector animation</b></td><td><code>.lottie</code> packages, <code>.riv</code> files, and Lottie JSON files (content-sniffed)</td></tr>
 <tr><td><b>3D Models</b></td><td>OBJ, glTF, GLB - rendered through the native WebGPU shared-scene path</td></tr>
 <tr><td><b>3D sequences</b></td><td>PLY and GLB frame sequences played as timeline media</td></tr>
 <tr><td><b>Gaussian Splats</b></td><td>PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC, SOG-style ZIP payloads</td></tr>
@@ -87,7 +87,7 @@ Most browser-based video editors share a pattern: Canvas 2D compositing, heavywe
 
 **3-tier scrubbing cache.** **300 GPU textures in VRAM** for instant scrub (Tier 1), per-video last-frame cache for seek transitions (Tier 2), and a **900-frame RAM Preview** with CPU/GPU promotion (Tier 3). When the cache is warm, **scrubbing doesn't decode at all**.
 
-**15 runtime dependencies.** React/React DOM, Zustand, MediaBunny, mp4box, PlayCanvas / splat-transform helpers, dotLottie, HuggingFace Transformers, ONNX Runtime, SoundTouch, WebGPU types, plus an **experimental FFmpeg WASM path**. **Everything else is custom-built from scratch**: the WebGPU compositor, all 32 effect shaders, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI, and the native shared 3D scene path. Zero runtime abstraction layers between your timeline and the GPU.
+**16 runtime dependencies.** React/React DOM, Zustand, MediaBunny, mp4box, PlayCanvas / splat-transform helpers, dotLottie, Rive WASM, HuggingFace Transformers, ONNX Runtime, SoundTouch, WebGPU types, plus an **experimental FFmpeg WASM path**. **Everything else is custom-built from scratch**: the WebGPU compositor, all 32 effect shaders, the keyframe animation system, the export engine, the audio mixer, the text renderer, the mask engine, the video scope renderers, the dock/panel system, the timeline UI, and the native shared 3D scene path. Zero runtime abstraction layers between your timeline and the GPU.
 
 **Nested composition rendering.** Compositions within compositions, each with their own resolution. Rendered to **pooled GPU textures** with frame-level caching, composited in the parent's ping-pong pass, all in a **single `device.queue.submit()`**.
 
@@ -146,7 +146,7 @@ This requires the Native Helper to be running, a MasterSelects editor tab to be 
 | [**Export Pipeline**](docs/Features/Export.md) | WebCodecs Fast/Precise, FFmpeg intermediates, image/audio-only export, FCPXML, and project-persistent presets |
 | [**Live EQ & Audio**](docs/Features/Audio.md) | 10-band parametric EQ with real-time Web Audio preview |
 | [**Download Panel**](docs/Features/Download-Panel.md) | YouTube, TikTok, Instagram, Twitter/X, Vimeo, and other yt-dlp-supported sites via Native Helper |
-| [**Vector Animation**](docs/Features/Vector-Animation.md) | `.lottie` and Lottie JSON clips with bounce playback, render resolution overrides, keyframed state machines, and deterministic preview/export |
+| [**Vector Animation**](docs/Features/Vector-Animation.md) | `.lottie`, `.riv`, and Lottie JSON clips with bounce playback, render resolution overrides, state-machine keyframes, Rive data binding, and preview/export |
 | [**Text & Solids**](docs/Features/Text-Clips.md) | 50 Google Fonts, stroke, shadow, and solid color clips |
 | [**Proxy System**](docs/Features/Proxy-System.md) | GPU-accelerated proxies with resume and cache indicator |
 | [**Output Manager**](docs/Features/Preview.md) | Multi-window outputs, source routing, corner pin warping, slice masks |
@@ -324,7 +324,7 @@ src/
 │   ├── nativeHelper/    # Native decoder + WebSocket client
 │   ├── layerBuilder/    # Layer building + video sync
 │   ├── mediaRuntime/    # Media runtime bindings + playback
-│   ├── vectorAnimation/ # Lottie metadata sniffing + runtime canvas playback
+│   ├── vectorAnimation/ # Lottie/Rive metadata + runtime canvas playback
 │   └── export/          # FCPXML export
 ├── shaders/             # WGSL (composite, effects, output, optical flow, slice)
 ├── hooks/               # React hooks (useEngine, useGlobalHistory, useMIDI, useTheme)

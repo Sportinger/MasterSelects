@@ -47,7 +47,8 @@ import {
   findRelinkMatch,
 } from './relinkMedia';
 import { fromProjectTransform } from './transformSerialization';
-import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import type {
   GaussianSplatSequenceData,
@@ -1807,35 +1808,36 @@ async function reloadNestedCompositionClips(): Promise<void> {
         }));
       };
 
-      if (sourceType === 'lottie') {
+      if (isVectorAnimationSourceType(sourceType)) {
         try {
           nestedClip.source = {
-            type: 'lottie',
+            type: sourceType,
             mediaFileId: nestedSerializedClip.mediaFileId,
             naturalDuration: nestedSerializedClip.naturalDuration,
             vectorAnimationSettings: nestedSerializedClip.vectorAnimationSettings,
           };
-          const runtime = await lottieRuntimeManager.prepareClipSource(nestedClip, nestedMediaFile.file);
+          const runtime = await vectorAnimationRuntimeManager.prepareClipSource(nestedClip, nestedMediaFile.file);
           const naturalDuration =
             runtime.metadata.duration ??
             nestedSerializedClip.naturalDuration ??
             nestedSerializedClip.duration;
 
           nestedClip.source = {
-            type: 'lottie',
+            type: sourceType,
             textCanvas: runtime.canvas,
             mediaFileId: nestedSerializedClip.mediaFileId,
             naturalDuration,
             vectorAnimationSettings: nestedSerializedClip.vectorAnimationSettings,
           };
           nestedClip.isLoading = false;
-          lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime);
+          vectorAnimationRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime);
           notifyNestedReload();
         } catch (error) {
           nestedClip.isLoading = false;
-          log.warn('Failed to reload nested lottie clip', {
+          log.warn('Failed to reload nested vector animation clip', {
             compClipId: compClip.id,
             nestedClipId: nestedClip.id,
+            sourceType,
             error,
           });
         }

@@ -43,7 +43,8 @@ import { getExpectedProxyFrameCount } from '../../stores/mediaStore/helpers/prox
 import { DEFAULT_TRANSFORM, MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { prewarmGaussianSplatRuntime } from '../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { resolveSharedSplatUseNativeRenderer } from '../../engine/scene/runtime/SharedSplatRuntimeUtils';
-import { lottieRuntimeManager } from '../vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 
 const log = Logger.create('LayerBuilder');
@@ -255,7 +256,7 @@ export class LayerBuilderService {
   buildLayersFromStore(): Layer[] {
     // Create frame context (single store read)
     const ctx = createFrameContext();
-    this.syncActiveLottieClips(ctx);
+    this.syncActiveVectorAnimationClips(ctx);
     this.syncActiveMathSceneClips(ctx);
     const { activeLayerSlots = {}, activeCompositionId } = useMediaStore.getState();
     const slotGridActive = useTimelineStore.getState().slotGridProgress > 0.5;
@@ -342,10 +343,10 @@ export class LayerBuilderService {
     return ids;
   }
 
-  private syncActiveLottieClips(ctx: FrameContext): void {
+  private syncActiveVectorAnimationClips(ctx: FrameContext): void {
     for (const clip of ctx.clipsAtTime) {
-      if (clip.source?.type === 'lottie') {
-        lottieRuntimeManager.renderClipAtTime(
+      if (isVectorAnimationSourceType(clip.source?.type)) {
+        vectorAnimationRuntimeManager.renderClipAtTime(
           clip,
           ctx.playheadPosition,
           ctx.getInterpolatedVectorAnimationSettings(clip.id, ctx.playheadPosition - clip.startTime),
@@ -353,7 +354,7 @@ export class LayerBuilderService {
       }
     }
 
-    lottieRuntimeManager.pruneClipRuntimes(this.collectKnownClipIds(ctx.clips));
+    vectorAnimationRuntimeManager.pruneClipRuntimes(this.collectKnownClipIds(ctx.clips));
   }
 
   private syncActiveMathSceneClips(ctx: FrameContext): void {
@@ -529,9 +530,9 @@ export class LayerBuilderService {
     else if (clip.source?.imageElement) {
       layer = this.buildImageLayer(clip, layerIndex, ctx, opacityOverride);
     }
-    // Lottie/vector canvas-backed clip
-    else if (clip.source?.type === 'lottie') {
-      lottieRuntimeManager.renderClipAtTime(
+    // Vector animation canvas-backed clip
+    else if (isVectorAnimationSourceType(clip.source?.type)) {
+      vectorAnimationRuntimeManager.renderClipAtTime(
         clip,
         ctx.playheadPosition,
         ctx.getInterpolatedVectorAnimationSettings(clip.id, ctx.playheadPosition - clip.startTime),
@@ -1600,8 +1601,8 @@ export class LayerBuilderService {
           source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
         } as Layer;
       }
-    } else if (nestedClip.source?.type === 'lottie') {
-      lottieRuntimeManager.renderClipAtTime(
+    } else if (isVectorAnimationSourceType(nestedClip.source?.type)) {
+      vectorAnimationRuntimeManager.renderClipAtTime(
         nestedClip,
         nestedClip.startTime + nestedClipLocalTime,
         ctx.getInterpolatedVectorAnimationSettings(nestedClip.id, nestedClipLocalTime),

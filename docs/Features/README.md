@@ -24,7 +24,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **AI Control** | OpenAI/Cloud or local Lemonade chat with 79 exported tools plus local/native bridge access for external agents |
 | **AI Video Workspace** | Classic AI Video plus FlashBoard board-mode generation and media import |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
-| **Vector Animation** | Lottie clips with deterministic canvas playback, bounce modes, render resolution overrides, keyframed state machines, and export |
+| **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
 | **Audio** | Element-synced playback, drift correction, waveform extraction, EQ, and audio export |
 | **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
 | **Native Helper** | Firefox storage backend, yt-dlp download flow, local AI bridge, native jobs |
@@ -59,7 +59,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
 | [Motion Design](./Motion-Design.md) | Motion layer schema, property registry, rectangle/ellipse shape editing, GPU renderer, and persistence/export plumbing |
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
-| [Vector Animation](./Vector-Animation.md) | Lottie import, runtime playback, bounce modes, state-machine keyframes, and export behavior |
+| [Vector Animation](./Vector-Animation.md) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
 | [Audio](./Audio.md) | Playback sync, EQ, waveform extraction, audio clip behavior, and export |
 | [Export](./Export.md) | WebCodecs fast/precise export, animated GIF, FFmpeg intermediates, image frame/sequence export, audio-only export, FCPXML, and project-persistent presets |
 | [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |

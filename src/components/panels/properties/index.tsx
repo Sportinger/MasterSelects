@@ -4,6 +4,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useEngineStore } from '../../../stores/engineStore';
 import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
+import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { TextTab } from '../TextTab';
 import './PropertiesPanel.css';
 import './EffectsTab.css';
@@ -77,7 +78,8 @@ export function PropertiesPanel() {
   const isSolidClip = selectedClip?.source?.type === 'solid';
   const isMathSceneClip = selectedClip?.source?.type === 'math-scene';
   const isMotionShapeClip = selectedClip?.source?.type === 'motion-shape';
-  const isLottieClip = selectedClip?.source?.type === 'lottie';
+  const isVectorAnimationClip = isVectorAnimationSourceType(selectedClip?.source?.type);
+  const vectorAnimationTabLabel = selectedClip?.source?.type === 'rive' ? 'Rive' : 'Lottie';
   const selectedMeshType = selectedClip?.meshType ?? selectedClip?.source?.meshType;
   const is3DTextClip = selectedClip?.source?.type === 'model' && selectedMeshType === 'text3d';
   const selectedText3DProperties = is3DTextClip
@@ -145,7 +147,7 @@ export function PropertiesPanel() {
       // Set appropriate default tab based on clip type
       if (isGaussianAvatar) {
         setActiveTab('blendshapes');
-      } else if (isLottieClip) {
+      } else if (isVectorAnimationClip) {
         setActiveTab('lottie');
       } else if (isCameraClip) {
         setActiveTab('transform');
@@ -178,13 +180,13 @@ export function PropertiesPanel() {
           (!isGaussianSplat && activeTab === 'gaussian-splat') ||
           (!isCameraClip && activeTab === 'camera') ||
           (!isSplatEffectorClip && activeTab === 'splat-effector') ||
-          (!isLottieClip && activeTab === 'lottie')
+          (!isVectorAnimationClip && activeTab === 'lottie')
         )
       ) {
         setActiveTab('transform');
       }
     }
-  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isLottieClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastClipId, activeTab]);
+  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastClipId, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
@@ -340,9 +342,9 @@ export function PropertiesPanel() {
           </>
         ) : (
           <>
-            {isLottieClip && (
+            {isVectorAnimationClip && (
               <button className={`tab-btn ${activeTab === 'lottie' ? 'active' : ''}`} onClick={() => setActiveTab('lottie')}>
-                Lottie
+                {vectorAnimationTabLabel}
               </button>
             )}
             <button className={`tab-btn ${activeTab === 'transform' ? 'active' : ''}`} onClick={() => setActiveTab('transform')}>Transform</button>
@@ -370,7 +372,7 @@ export function PropertiesPanel() {
             <button className={`tab-btn ${activeTab === 'masks' ? 'active' : ''}`} onClick={() => setActiveTab('masks')}>
               Masks {selectedClip.masks && selectedClip.masks.length > 0 && <span className="badge">{selectedClip.masks.length}</span>}
             </button>
-            {!isSolidClip && !isLottieClip && (
+            {!isSolidClip && !isVectorAnimationClip && (
               <>
                 <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
                   Transcript {selectedClip.transcript && selectedClip.transcript.length > 0 && <span className="badge">{selectedClip.transcript.length}</span>}
@@ -399,7 +401,7 @@ export function PropertiesPanel() {
           {activeTab === '3d-text' && is3DTextClip && selectedText3DProperties && (
             <ThreeDTextTab clipId={selectedClip.id} text3DProperties={selectedText3DProperties} />
           )}
-          {activeTab === 'lottie' && isLottieClip && (
+          {activeTab === 'lottie' && isVectorAnimationClip && (
             <LottieTab clipId={selectedClip.id} />
           )}
           {activeTab === 'math' && isMathSceneClip && selectedClip.mathScene && (

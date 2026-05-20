@@ -90,7 +90,7 @@ This is the core product rule: same grade, different professional control surfac
 
 Add a `Color` tab beside `Transform`, `Effects`, and `Masks` for visual clips.
 
-Recommended tab order for video/image/text/solid/Lottie/3D clips:
+Recommended tab order for video/image/text/solid/Lottie/Rive/3D clips:
 
 ```text
 Transform | Color | Effects | Masks | Transcript | Analysis
@@ -500,7 +500,7 @@ Integration points:
 
 - Add `color` to `PropertiesTab` in `src/components/panels/properties/index.tsx`.
 - Add `color-workspace` to the dock panel system when the expanded workspace is implemented.
-- Insert the tab for visual clips, including text, solid, Lottie, image, video, model, gaussian avatar, and gaussian splat clips. Keep it hidden for audio-only clips and camera/controller clips.
+- Insert the tab for visual clips, including text, solid, Lottie, Rive, image, video, model, gaussian avatar, and gaussian splat clips. Keep it hidden for audio-only clips and camera/controller clips.
 - Keep the active tab reset logic aware of `color` so switching selected clips does not bounce the user back to Transform.
 - Reuse existing `DraggableNumber`, `KeyframeToggle`, `MIDIParameterLabel`, and history batching patterns from `EffectsTab`.
 - Share list/inspector editing primitives between the Properties tab and workspace where practical. The workspace owns the large node graph layout.

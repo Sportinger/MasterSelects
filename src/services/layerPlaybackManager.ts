@@ -17,7 +17,8 @@ import {
 import { flags } from '../engine/featureFlags';
 import { Logger } from './logger';
 import { slotDeckManager } from './slotDeckManager';
-import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from './vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType, type VectorAnimationProvider } from '../types/vectorAnimation';
 import { getEffectiveScale } from '../utils/transformScale';
 
 const log = Logger.create('LayerPlayback');
@@ -164,15 +165,15 @@ class LayerPlaybackManager {
       } else if (sourceType === 'image' && fileUrl) {
         clip.isLoading = true;
         this.loadImageForClip(clip, layerIndex, fileUrl);
-      } else if (sourceType === 'lottie' && mediaFile?.file) {
+      } else if (isVectorAnimationSourceType(sourceType) && mediaFile?.file) {
         clip.isLoading = true;
         clip.source = {
-          type: 'lottie',
+          type: sourceType,
           mediaFileId: serializedClip.mediaFileId,
           naturalDuration: serializedClip.naturalDuration,
           vectorAnimationSettings: serializedClip.vectorAnimationSettings,
         };
-        this.loadLottieForClip(clip, mediaFile.file);
+        this.loadVectorAnimationForClip(clip, mediaFile.file, sourceType);
       } else {
         clip.isLoading = false;
       }
@@ -227,8 +228,8 @@ class LayerPlaybackManager {
         clip.source.audioElement.src = '';
         clip.source.audioElement.load();
       }
-      if (clip.source?.type === 'lottie') {
-        lottieRuntimeManager.destroyClipRuntime(clip.id);
+      if (isVectorAnimationSourceType(clip.source?.type)) {
+        vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
       }
       if (clip.source?.runtimeSourceId && clip.source.runtimeSessionKey) {
         mediaRuntimeRegistry.releaseSession(
@@ -542,8 +543,8 @@ class LayerPlaybackManager {
 
       // Build transform
       const transform = clip.transform || DEFAULT_TRANSFORM;
-      if (clip.source?.type === 'lottie') {
-        lottieRuntimeManager.renderClipAtTime(
+      if (isVectorAnimationSourceType(clip.source?.type)) {
+        vectorAnimationRuntimeManager.renderClipAtTime(
           clip,
           time,
           useTimelineStore.getState().getInterpolatedVectorAnimationSettings(clip.id, clipLocalTime),
@@ -812,34 +813,34 @@ class LayerPlaybackManager {
     }, { once: true });
   }
 
-  private loadLottieForClip(clip: TimelineClip, file: File): void {
+  private loadVectorAnimationForClip(clip: TimelineClip, file: File, sourceType: VectorAnimationProvider): void {
     void (async () => {
       try {
-        if (clip.source?.type !== 'lottie') {
+        if (clip.source?.type !== sourceType) {
           clip.source = {
-            type: 'lottie',
+            type: sourceType,
             mediaFileId: clip.mediaFileId,
             naturalDuration: clip.duration,
           };
         }
-        const runtime = await lottieRuntimeManager.prepareClipSource(clip, file);
+        const runtime = await vectorAnimationRuntimeManager.prepareClipSource(clip, file);
         const naturalDuration =
           runtime.metadata.duration ??
           clip.source?.naturalDuration ??
           clip.duration;
         clip.file = file;
         clip.source = {
-          type: 'lottie',
+          type: sourceType,
           textCanvas: runtime.canvas,
           mediaFileId: clip.mediaFileId,
           naturalDuration,
           vectorAnimationSettings: clip.source?.vectorAnimationSettings,
         };
         clip.isLoading = false;
-        lottieRuntimeManager.renderClipAtTime(clip, clip.startTime);
+        vectorAnimationRuntimeManager.renderClipAtTime(clip, clip.startTime);
       } catch (error) {
         clip.isLoading = false;
-        log.warn(`Failed to load lottie for background clip ${clip.name}`, error);
+        log.warn(`Failed to load vector animation for background clip ${clip.name}`, error);
       }
     })();
   }

@@ -24,13 +24,14 @@ import {
   updateRuntimePlaybackTime,
 } from './mediaRuntime/runtimePlayback';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
-import { lottieRuntimeManager } from './vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from './vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType, type VectorAnimationProvider } from '../types/vectorAnimation';
 import { mathSceneRenderer } from './mathScene/MathSceneRenderer';
 import { getEffectiveScale } from '../utils/transformScale';
 
 type CompositionClipSourceEntry = {
   clipId: string;
-  type: 'video' | 'image' | 'audio' | 'text' | 'math-scene' | 'lottie';
+  type: 'video' | 'image' | 'audio' | 'text' | 'math-scene' | VectorAnimationProvider;
   videoElement?: HTMLVideoElement;
   webCodecsPlayer?: LayerSource['webCodecsPlayer'];
   imageElement?: HTMLImageElement;
@@ -112,7 +113,8 @@ class CompositionRendererService {
     };
   }
 
-  private buildSerializableLottieClip(clip: SerializableClip, file: File): TimelineClip {
+  private buildSerializableVectorAnimationClip(clip: SerializableClip, file: File): TimelineClip {
+    const sourceType = isVectorAnimationSourceType(clip.sourceType) ? clip.sourceType : 'lottie';
     return {
       id: clip.id,
       trackId: clip.trackId,
@@ -123,7 +125,7 @@ class CompositionRendererService {
       inPoint: clip.inPoint,
       outPoint: clip.outPoint,
       source: {
-        type: 'lottie',
+        type: sourceType,
         mediaFileId: clip.mediaFileId,
         naturalDuration: clip.naturalDuration ?? clip.duration,
         vectorAnimationSettings: clip.vectorAnimationSettings,
@@ -340,13 +342,13 @@ class CompositionRendererService {
           continue;
         }
 
-        if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
+        if ((sourceType === 'text' || sourceType === 'math-scene' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
           sources.clipSources.set(clip.id, {
             clipId: clip.id,
             type: sourceType,
             textCanvas: timelineClip.source.textCanvas,
             naturalDuration: clip.duration,
-            ...(sourceType === 'lottie' ? { lottieClip: timelineClip } : {}),
+            ...(isVectorAnimationSourceType(sourceType) ? { lottieClip: timelineClip } : {}),
             ...(sourceType === 'math-scene' ? { mathSceneClip: timelineClip } : {}),
           });
           continue;
@@ -385,13 +387,13 @@ class CompositionRendererService {
                 timelineClip.source
               ),
             });
-          } else if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'lottie') && timelineClip.source.textCanvas) {
+          } else if ((sourceType === 'text' || sourceType === 'math-scene' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
             sources.clipSources.set(clip.id, {
               clipId: clip.id,
               type: sourceType,
               textCanvas: timelineClip.source.textCanvas,
               naturalDuration: clip.duration,
-              ...(sourceType === 'lottie' ? { lottieClip: timelineClip } : {}),
+              ...(isVectorAnimationSourceType(sourceType) ? { lottieClip: timelineClip } : {}),
               ...(sourceType === 'math-scene' ? { mathSceneClip: timelineClip } : {}),
             });
           }
@@ -444,8 +446,8 @@ class CompositionRendererService {
         loadPromises.push(this.loadVideoSource(sources, serializableClip, mediaFile.file));
       } else if (sourceType === 'image') {
         loadPromises.push(this.loadImageSource(sources, serializableClip, mediaFile.file));
-      } else if (sourceType === 'lottie') {
-        loadPromises.push(this.loadLottieSource(sources, serializableClip, mediaFile.file));
+      } else if (isVectorAnimationSourceType(sourceType)) {
+        loadPromises.push(this.loadVectorAnimationSource(sources, serializableClip, mediaFile.file));
       }
     }
 
@@ -563,26 +565,26 @@ class CompositionRendererService {
     });
   }
 
-  private async loadLottieSource(sources: CompositionSources, clip: SerializableClip, file: File): Promise<void> {
+  private async loadVectorAnimationSource(sources: CompositionSources, clip: SerializableClip, file: File): Promise<void> {
     try {
-      const lottieClip = this.buildSerializableLottieClip(clip, file);
-      const runtime = await lottieRuntimeManager.prepareClipSource(lottieClip, file);
-      lottieClip.source = {
-        ...lottieClip.source!,
+      const vectorClip = this.buildSerializableVectorAnimationClip(clip, file);
+      const runtime = await vectorAnimationRuntimeManager.prepareClipSource(vectorClip, file);
+      vectorClip.source = {
+        ...vectorClip.source!,
         textCanvas: runtime.canvas,
         naturalDuration: runtime.metadata.duration ?? clip.naturalDuration ?? clip.duration,
       };
 
       sources.clipSources.set(clip.id, {
         clipId: clip.id,
-        type: 'lottie',
+        type: isVectorAnimationSourceType(clip.sourceType) ? clip.sourceType : 'lottie',
         textCanvas: runtime.canvas,
         file,
-        lottieClip,
+        lottieClip: vectorClip,
         naturalDuration: runtime.metadata.duration ?? clip.naturalDuration ?? clip.duration,
       });
     } catch (error) {
-      log.error(`Failed to load lottie: ${file.name}`, error);
+      log.error(`Failed to load vector animation: ${file.name}`, error);
     }
   }
 
@@ -703,14 +705,14 @@ class CompositionRendererService {
         );
       } else if (source.imageElement) {
         layerSource = this.getBaseLayerSource(source);
-      } else if (source.type === 'lottie') {
+      } else if (isVectorAnimationSourceType(source.type)) {
         const runtimeClip =
-          isActiveComp && timelineClip.source?.type === 'lottie'
+          isActiveComp && isVectorAnimationSourceType(timelineClip.source?.type)
             ? timelineClip
             : source.lottieClip;
         if (runtimeClip) {
           const runtimeClipLocalTime = Math.max(0, time - runtimeClip.startTime);
-          lottieRuntimeManager.renderClipAtTime(
+          vectorAnimationRuntimeManager.renderClipAtTime(
             runtimeClip,
             time,
             useTimelineStore.getState().getInterpolatedVectorAnimationSettings(
@@ -887,8 +889,8 @@ class CompositionRendererService {
           },
         } as Layer);
       } else if (nestedClip.source?.textCanvas) {
-        if (nestedClip.source.type === 'lottie') {
-          lottieRuntimeManager.renderClipAtTime(
+        if (isVectorAnimationSourceType(nestedClip.source.type)) {
+          vectorAnimationRuntimeManager.renderClipAtTime(
             nestedClip,
             nestedTime,
             useTimelineStore.getState().getInterpolatedVectorAnimationSettings(

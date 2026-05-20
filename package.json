@@ -30,6 +30,7 @@
     "@huggingface/transformers": "^3.8.1",
     "@lottiefiles/dotlottie-web": "^0.71.0",
     "@playcanvas/splat-transform": "^1.10.1",
+    "@rive-app/canvas": "^2.37.7",
     "@webgpu/types": "^0.1.66",
     "fflate": "^0.8.2",
     "gifenc": "^1.0.3",

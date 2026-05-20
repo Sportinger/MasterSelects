@@ -15,7 +15,8 @@ import { bindSourceRuntimeForOwner } from '../../services/mediaRuntime/clipBindi
 import { mediaRuntimeRegistry } from '../../services/mediaRuntime/registry';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
-import { lottieRuntimeManager } from '../../services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
+import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import type { MediaFile } from '../../stores/mediaStore/types';
 
 const log = Logger.create('ClipPreparation');
@@ -368,26 +369,26 @@ export async function prepareClipsForExport(
     return clip.startTime < endTime && clipEnd > startTime;
   });
 
-  const lottieClips: TimelineClip[] = [];
+  const vectorAnimationClips: TimelineClip[] = [];
   for (const clip of videoClips) {
-    if (clip.source?.type === 'lottie') {
-      lottieClips.push(clip);
+    if (isVectorAnimationSourceType(clip.source?.type)) {
+      vectorAnimationClips.push(clip);
     }
     if (clip.isComposition && clip.nestedClips?.length) {
       for (const nestedClip of clip.nestedClips) {
-        if (nestedClip.source?.type === 'lottie') {
-          lottieClips.push(nestedClip);
+        if (isVectorAnimationSourceType(nestedClip.source?.type)) {
+          vectorAnimationClips.push(nestedClip);
         }
       }
     }
   }
 
-  if (lottieClips.length > 0) {
-    await Promise.all(lottieClips.map(async (clip) => {
+  if (vectorAnimationClips.length > 0) {
+    await Promise.all(vectorAnimationClips.map(async (clip) => {
       if (!clip.file) {
         return;
       }
-      await lottieRuntimeManager.prepareClipSource(clip, clip.file);
+      await vectorAnimationRuntimeManager.prepareClipSource(clip, clip.file);
     }));
   }
 

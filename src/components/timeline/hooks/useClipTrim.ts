@@ -3,7 +3,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
-import { shouldLoopVectorAnimation } from '../../../types/vectorAnimation';
+import { isVectorAnimationSourceType, shouldLoopVectorAnimation } from '../../../types/vectorAnimation';
 import type { ClipTrimState } from '../types';
 
 interface UseClipTrimProps {
@@ -28,7 +28,7 @@ interface UseClipTrimReturn {
 }
 
 function canLoopExtendVectorClip(clip: TimelineClip): boolean {
-  return clip.source?.type === 'lottie' &&
+  return isVectorAnimationSourceType(clip.source?.type) &&
     shouldLoopVectorAnimation(clip.source.vectorAnimationSettings);
 }
 

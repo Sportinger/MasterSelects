@@ -2,6 +2,7 @@
 
 import type {
   VectorAnimationClipSettings,
+  VectorAnimationDataBindingPropertyPath,
   VectorAnimationInputProperty,
   VectorAnimationProvider,
   VectorAnimationStateProperty,
@@ -900,7 +901,7 @@ export type TextBoundsNumericProperty = `textBounds.${TextBoundsNumericPropertyN
 export type TextBoundsProperty = TextBoundsPathProperty | TextBoundsNumericProperty;
 
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | MotionProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);

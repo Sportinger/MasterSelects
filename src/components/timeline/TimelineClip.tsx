@@ -10,6 +10,7 @@ import { getLabelHex } from '../panels/media/labelColors';
 // PickWhip disabled
 import { Logger } from '../../services/logger';
 import {
+  isVectorAnimationSourceType,
   shouldLoopVectorAnimation,
 } from '../../types/vectorAnimation';
 import { ClipWaveform } from './components/ClipWaveform';
@@ -21,7 +22,7 @@ const log = Logger.create('TimelineClip');
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 
 function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
-  return clip.source?.type === 'lottie' &&
+  return isVectorAnimationSourceType(clip.source?.type) &&
     shouldLoopVectorAnimation(clip.source.vectorAnimationSettings);
 }
 
@@ -295,7 +296,9 @@ function TimelineClipComponent({
   // Determine if this is a solid clip
   const isSolidClip = clip.source?.type === 'solid';
   const isMathSceneClip = clip.source?.type === 'math-scene';
-  const isLottieClip = clip.source?.type === 'lottie';
+  const isVectorAnimationClip = isVectorAnimationSourceType(clip.source?.type);
+  const vectorAnimationIcon = clip.source?.type === 'rive' ? 'R' : 'L';
+  const vectorAnimationTitle = clip.source?.type === 'rive' ? 'Rive Clip' : 'Lottie Clip';
   const isCameraClip = clip.source?.type === 'camera';
   const isGaussianSplatClip = clip.source?.type === 'gaussian-splat';
   const isSplatEffectorClip = clip.source?.type === 'splat-effector';
@@ -953,8 +956,8 @@ function TimelineClipComponent({
                 {isText3DClip ? '3T' : 'T'}
               </span>
             )}
-            {isLottieClip && (
-              <span className="clip-text-icon" title="Lottie Clip">L</span>
+            {isVectorAnimationClip && (
+              <span className="clip-text-icon" title={vectorAnimationTitle}>{vectorAnimationIcon}</span>
             )}
             {isMathSceneClip && (
               <span className="clip-text-icon" title="Math Scene Clip">ƒ</span>

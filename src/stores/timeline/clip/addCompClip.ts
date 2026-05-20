@@ -2,7 +2,7 @@
 // Handles nested composition loading, audio mixdown, and linked audio creation
 
 import type { TimelineClip, TimelineTrack, CompositionTimelineData, SerializableClip, Keyframe } from '../../../types';
-import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
+import { isVectorAnimationSourceType, type VectorAnimationClipSettings, type VectorAnimationProvider } from '../../../types/vectorAnimation';
 import type { Composition } from '../types';
 import { DEFAULT_TRANSFORM, calculateNativeScale, MAX_NESTING_DEPTH } from '../constants';
 import { useMediaStore } from '../../mediaStore';
@@ -14,7 +14,7 @@ import { blobUrlManager } from '../helpers/blobUrlManager';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
 import { thumbnailRenderer } from '../../../services/thumbnailRenderer';
-import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { mathSceneRenderer } from '../../../services/mathScene/MathSceneRenderer';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
 // Note: compositionRenderer is used elsewhere for cache invalidation
@@ -166,8 +166,8 @@ export async function buildClipSegments(
         log.warn('Failed to generate image segment thumbnail', { clipId: serializedClip.id });
       }
     } else if (nestedClip?.source?.textCanvas) {
-      if (nestedClip.source.type === 'lottie') {
-        lottieRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime);
+      if (isVectorAnimationSourceType(nestedClip.source.type)) {
+        vectorAnimationRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime);
       }
 
       try {
@@ -408,7 +408,7 @@ async function loadSubNestedClips(
 
     // Load media directly on the clip object (no store update needed)
     const type = sc.sourceType;
-    const fileUrl = type === 'lottie'
+    const fileUrl = isVectorAnimationSourceType(type)
       ? null
       : blobUrlManager.create(
         clipId,
@@ -456,28 +456,28 @@ async function loadSubNestedClips(
         clip.source = { type: 'audio', audioElement: audio, naturalDuration: audio.duration };
         clip.isLoading = false;
       }, { once: true });
-    } else if (type === 'lottie') {
+    } else if (isVectorAnimationSourceType(type)) {
       clip.source = {
-        type: 'lottie',
+        type,
         mediaFileId: sc.mediaFileId,
         naturalDuration: sc.naturalDuration,
         vectorAnimationSettings: sc.vectorAnimationSettings,
       };
-      void lottieRuntimeManager.prepareClipSource(clip, mediaFile.file).then((runtime) => {
+      void vectorAnimationRuntimeManager.prepareClipSource(clip, mediaFile.file).then((runtime) => {
         const naturalDuration = runtime.metadata.duration ?? sc.naturalDuration ?? sc.duration;
         clip.source = {
-          type: 'lottie',
+          type,
           textCanvas: runtime.canvas,
           mediaFileId: sc.mediaFileId,
           naturalDuration,
           vectorAnimationSettings: sc.vectorAnimationSettings,
         };
         clip.isLoading = false;
-        lottieRuntimeManager.renderClipAtTime(clip, clip.startTime);
-        log.debug('Sub-nested lottie loaded', { clipId, name: clip.name, depth });
+        vectorAnimationRuntimeManager.renderClipAtTime(clip, clip.startTime);
+        log.debug('Sub-nested vector animation loaded', { clipId, name: clip.name, type, depth });
       }).catch((error) => {
         clip.isLoading = false;
-        log.warn('Failed to load sub-nested lottie', { clipId, error });
+        log.warn('Failed to load sub-nested vector animation', { clipId, type, error });
       });
     } else if (type === 'model') {
       clip.source = { type: 'model', modelUrl: fileUrl!, naturalDuration: 3600 };
@@ -683,7 +683,7 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
     // Load media element async - track URL for cleanup
     const type = serializedClip.sourceType;
     const urlType = type === 'video' ? 'video' : type === 'audio' ? 'audio' : type === 'model' ? 'model' : 'image';
-    const fileUrl = type === 'lottie'
+    const fileUrl = isVectorAnimationSourceType(type)
       ? null
       : blobUrlManager.create(nestedClip.id, mediaFile.file, urlType as 'video' | 'audio' | 'image' | 'model');
 
@@ -693,11 +693,12 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       loadAudioNestedClip(compClipId, nestedClip.id, fileUrl!, get, set);
     } else if (type === 'image') {
       loadImageNestedClip(compClipId, nestedClip.id, fileUrl!, get, set);
-    } else if (type === 'lottie') {
-      loadLottieNestedClip(
+    } else if (isVectorAnimationSourceType(type)) {
+      loadVectorAnimationNestedClip(
         compClipId,
         nestedClip.id,
         mediaFile.file,
+        type,
         {
           mediaFileId: serializedClip.mediaFileId,
           naturalDuration: serializedClip.naturalDuration,
@@ -887,10 +888,11 @@ function loadImageNestedClip(
   }, { once: true });
 }
 
-function loadLottieNestedClip(
+function loadVectorAnimationNestedClip(
   compClipId: string,
   nestedClipId: string,
   file: File,
+  sourceType: VectorAnimationProvider,
   sourceInfo: {
     mediaFileId?: string;
     naturalDuration?: number;
@@ -919,26 +921,26 @@ function loadLottieNestedClip(
     }),
     file,
     source: {
-      type: 'lottie',
+      type: sourceType,
       mediaFileId: sourceInfo.mediaFileId,
       naturalDuration: sourceInfo.naturalDuration,
       vectorAnimationSettings: sourceInfo.vectorAnimationSettings,
     },
   };
 
-  void lottieRuntimeManager.prepareClipSource(runtimeClip, file).then((runtime) => {
+  void vectorAnimationRuntimeManager.prepareClipSource(runtimeClip, file).then((runtime) => {
     const naturalDuration =
       runtime.metadata.duration ??
       sourceInfo.naturalDuration ??
       runtimeClip.duration;
     runtimeClip.source = {
-      type: 'lottie',
+      type: sourceType,
       textCanvas: runtime.canvas,
       mediaFileId: sourceInfo.mediaFileId,
       naturalDuration,
       vectorAnimationSettings: sourceInfo.vectorAnimationSettings,
     };
-    lottieRuntimeManager.renderClipAtTime(runtimeClip, runtimeClip.startTime);
+    vectorAnimationRuntimeManager.renderClipAtTime(runtimeClip, runtimeClip.startTime);
 
     set({
       clips: updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
@@ -950,14 +952,14 @@ function loadLottieNestedClip(
 
     const { invalidateCache } = get();
     invalidateCache?.();
-    log.debug('Nested lottie loaded', { compClipId, nestedClipId });
+    log.debug('Nested vector animation loaded', { compClipId, nestedClipId, sourceType });
   }).catch((error) => {
     set({
       clips: updateNestedClipInCompClip(get().clips, compClipId, nestedClipId, {
         isLoading: false,
       }),
     });
-    log.warn('Nested lottie load failed', { compClipId, nestedClipId, error });
+    log.warn('Nested vector animation load failed', { compClipId, nestedClipId, sourceType, error });
   });
 }
 

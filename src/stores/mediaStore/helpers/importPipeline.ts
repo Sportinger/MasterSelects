@@ -13,6 +13,7 @@ import { useSettingsStore } from '../../settingsStore';
 import { Logger } from '../../../services/logger';
 import { prewarmGaussianSplatRuntime } from '../../../engine/scene/runtime/SharedSplatRuntimeCache';
 import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMetadata';
+import { prepareRiveAsset } from '../../../services/vectorAnimation/riveMetadata';
 import { readGaussianSplatFileStats } from './gaussianSplatStats';
 
 const log = Logger.create('Import');
@@ -64,8 +65,8 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   let canonicalFile = file;
   let url = URL.createObjectURL(file);
 
-  const vectorAnimationInfo = type === 'lottie'
-    ? await prepareLottieAsset(file).then((prepared) => ({
+  const vectorAnimationInfo = type === 'lottie' || type === 'rive'
+    ? await (type === 'lottie' ? prepareLottieAsset(file) : prepareRiveAsset(file)).then((prepared) => ({
       duration: prepared.metadata.duration,
       fileSize: file.size,
       fps: prepared.metadata.fps,

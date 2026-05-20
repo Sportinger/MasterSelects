@@ -13,7 +13,7 @@ import {
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
 import { scrubSettleState } from '../../src/services/scrubSettleState';
 import { proxyFrameCache } from '../../src/services/proxyFrameCache';
-import { lottieRuntimeManager } from '../../src/services/vectorAnimation/LottieRuntimeManager';
+import { vectorAnimationRuntimeManager } from '../../src/services/vectorAnimation/VectorAnimationRuntimeManager';
 import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
 import type { TimelineClip } from '../../src/types';
 
@@ -213,7 +213,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
   it('routes lottie clips through the existing canvas layer path', () => {
     const service = new LayerBuilderService();
     const canvas = document.createElement('canvas');
-    const renderSpy = vi.spyOn(lottieRuntimeManager, 'renderClipAtTime').mockReturnValue(canvas);
+    const renderSpy = vi.spyOn(vectorAnimationRuntimeManager, 'renderClipAtTime').mockReturnValue(canvas);
 
     useMediaStore.setState({
       activeCompositionId: null,
