@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.8.2';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'Gaussian Splats are Live!',
-    message: 'Import and play gaussian splat scenes directly in the timeline.',
+    title: 'Rive Runtime is Live!',
+    message: 'Import .riv files, edit Rive state machines, and keyframe Data Binding values directly on the timeline.',
     animated: true,
   },
 };
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Export and Timeline Reliability',
-  message: 'WAV export, fast export diagnostics, timeline locking, playback recovery, and property-based editor invariants are now tightened for production.',
+  title: 'Rive Runtime WASM',
+  message: 'Rive files now import as first-class vector animation clips with runtime rendering, export, thumbnails, persistence, and timeline keyframes.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Release hardening',
-  message: 'The editor now has broader randomized coverage for ranges, slices, transforms, keyframes, easing, speed mapping, and file type helpers.',
+  title: 'Vector Animation Controls',
+  message: 'The Properties panel now exposes Rive artboards, animations, state-machine inputs, events, asset loading hooks, and Data Binding values.',
   animated: true,
 };
 

@@ -1,5 +1,13 @@
 [
   {
+    "date": "2026-05-20",
+    "type": "new",
+    "title": "Rive Runtime WASM",
+    "description": "Rive .riv files now import as first-class vector animation clips with WASM runtime rendering, timeline playback, export support, thumbnails, persistence, state-machine controls, events, asset-loading hooks, and keyframeable Data Binding values.",
+    "section": "Vector Animation",
+    "commits": ["237294e6", "d0829640"]
+  },
+  {
     "date": "2026-05-19",
     "type": "new",
     "title": "WAV Export and Runtime Updates",
