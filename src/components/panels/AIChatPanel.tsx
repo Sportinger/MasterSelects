@@ -23,6 +23,12 @@ import {
   LEMONADE_MODEL_PRESETS,
   type LemonadeModelInfo,
 } from '../../services/lemonadeProvider';
+import {
+  formatStoredToolMessageForApi,
+  formatToolResultForApi,
+  MAX_TOOL_RESULT_MESSAGE_CHARS,
+  type ModelToolResult,
+} from './aiChatSerialization';
 import './AIChatPanel.css';
 
 // Available OpenAI models with credit cost per request
@@ -182,6 +188,7 @@ interface Message {
   role: 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: Date;
+  modelContent?: string;
   toolCalls?: ToolCall[];
   toolName?: string;
   isToolResult?: boolean;
@@ -211,101 +218,11 @@ interface PendingApproval {
 }
 
 interface ExecutedToolResult {
-  result: { success: boolean; data?: unknown; error?: string };
+  result: ModelToolResult;
   toolName: string;
 }
 
 type SelectorMenu = 'provider' | 'model' | null;
-
-const MAX_TOOL_RESULT_MESSAGE_CHARS = 12000;
-const MAX_TOOL_RESULT_ARRAY_ITEMS = 20;
-const MAX_TOOL_RESULT_OBJECT_KEYS = 30;
-const MAX_TOOL_RESULT_STRING_CHARS = 1200;
-
-function truncateText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-
-  return `${value.slice(0, maxLength)}... [truncated]`;
-}
-
-function summarizeToolResultValue(value: unknown, depth = 0): unknown {
-  if (typeof value === 'string') {
-    return truncateText(value, MAX_TOOL_RESULT_STRING_CHARS);
-  }
-
-  if (
-    value === null
-    || typeof value === 'number'
-    || typeof value === 'boolean'
-    || typeof value === 'undefined'
-  ) {
-    return value;
-  }
-
-  if (depth >= 3) {
-    return '[truncated nested value]';
-  }
-
-  if (Array.isArray(value)) {
-    const items = value
-      .slice(0, MAX_TOOL_RESULT_ARRAY_ITEMS)
-      .map((item) => summarizeToolResultValue(item, depth + 1));
-
-    if (value.length > MAX_TOOL_RESULT_ARRAY_ITEMS) {
-      items.push(`[${value.length - MAX_TOOL_RESULT_ARRAY_ITEMS} more items truncated]`);
-    }
-
-    return items;
-  }
-
-  if (typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>);
-    const summary: Record<string, unknown> = {};
-
-    for (const [key, nestedValue] of entries.slice(0, MAX_TOOL_RESULT_OBJECT_KEYS)) {
-      summary[key] = summarizeToolResultValue(nestedValue, depth + 1);
-    }
-
-    if (entries.length > MAX_TOOL_RESULT_OBJECT_KEYS) {
-      summary.__truncatedKeys = entries.length - MAX_TOOL_RESULT_OBJECT_KEYS;
-    }
-
-    return summary;
-  }
-
-  return String(value);
-}
-
-function formatToolResultForApi(
-  result: { success: boolean; data?: unknown; error?: string },
-  maxLength = MAX_TOOL_RESULT_MESSAGE_CHARS,
-): string {
-  const serialized = JSON.stringify(result);
-
-  if (serialized.length <= maxLength) {
-    return serialized;
-  }
-
-  const summarized = JSON.stringify({
-    data: summarizeToolResultValue(result.data),
-    error: result.error ?? null,
-    success: result.success,
-    truncated: true,
-  });
-
-  if (summarized.length <= maxLength) {
-    return summarized;
-  }
-
-  return JSON.stringify({
-    error: result.error ?? null,
-    preview: truncateText(serialized, Math.max(256, maxLength - 128)),
-    success: result.success,
-    truncated: true,
-  });
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -715,7 +632,7 @@ export function AIChatPanel() {
 
           apiMessages.push({
             role: 'tool',
-            content: msg.content,
+            content: formatStoredToolMessageForApi(msg.modelContent ?? msg.content),
             tool_call_id: msg.id,
           });
         }
@@ -983,7 +900,7 @@ export function AIChatPanel() {
           const policy = getToolPolicy(toolCall.name);
           const needsConfirmation = shouldRequireConfirmation(policy, aiApprovalMode);
 
-          let result: { success: boolean; data?: unknown; error?: string };
+          let result: ModelToolResult;
 
           if (needsConfirmation) {
             // Show confirmation UI and wait for user response
@@ -1009,10 +926,17 @@ export function AIChatPanel() {
             }
           }
 
+          const modelToolResultContent = formatToolResultForApi(
+            result,
+            aiProvider === 'lemonade'
+              ? LEMONADE_MAX_TOOL_RESULT_MESSAGE_CHARS
+              : MAX_TOOL_RESULT_MESSAGE_CHARS,
+          );
           const toolResultMessage: Message = {
             id: toolCall.id,
             role: 'tool',
             content: JSON.stringify(result, null, 2),
+            modelContent: modelToolResultContent,
             timestamp: new Date(),
             toolName: toolCall.name,
             isToolResult: true,
@@ -1024,12 +948,7 @@ export function AIChatPanel() {
           // Add tool result to API messages
           apiMessages.push({
             role: 'tool',
-            content: formatToolResultForApi(
-              result,
-              aiProvider === 'lemonade'
-                ? LEMONADE_MAX_TOOL_RESULT_MESSAGE_CHARS
-                : MAX_TOOL_RESULT_MESSAGE_CHARS,
-            ),
+            content: modelToolResultContent,
             tool_call_id: toolCall.id,
           });
         }
