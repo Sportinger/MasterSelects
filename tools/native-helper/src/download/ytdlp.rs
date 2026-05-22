@@ -5,7 +5,7 @@
 //! Auto-retries with browser cookies when YouTube bot detection triggers.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use futures_util::SinkExt;
@@ -18,6 +18,9 @@ use tracing::{info, warn};
 use crate::protocol::{error_codes, Response};
 use crate::utils;
 
+const YTDLP_NOT_FOUND_MESSAGE: &str =
+    "yt-dlp not found. Install or update the Native Helper MSI, or install yt-dlp on PATH.";
+
 /// Type for sending WebSocket messages (for progress streaming)
 pub type WsSender = Arc<tokio::sync::Mutex<
     futures_util::stream::SplitSink<
@@ -26,13 +29,50 @@ pub type WsSender = Arc<tokio::sync::Mutex<
     >,
 >>;
 
-/// Find yt-dlp executable, checking common install locations
+fn executable_works(path: &Path) -> bool {
+    if !path.exists() || !path.is_file() {
+        return false;
+    }
+
+    crate::utils::no_window_std(std::process::Command::new(path).arg("--version"))
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+fn command_works(command: &str) -> bool {
+    crate::utils::no_window_std(std::process::Command::new(command).arg("--version"))
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Find yt-dlp executable, checking the helper install folder before PATH.
 pub fn find_ytdlp() -> Option<PathBuf> {
-    // First check if yt-dlp is in PATH
-    if let Ok(output) = crate::utils::no_window_std(std::process::Command::new("yt-dlp").arg("--version")).output() {
-        if output.status.success() {
-            return Some(PathBuf::from("yt-dlp"));
+    // Packaged helper builds can ship yt-dlp next to the helper executable.
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            #[cfg(windows)]
+            {
+                let bundled = exe_dir.join("yt-dlp.exe");
+                if executable_works(&bundled) {
+                    return Some(bundled);
+                }
+            }
+
+            #[cfg(not(windows))]
+            {
+                let bundled = exe_dir.join("yt-dlp");
+                if executable_works(&bundled) {
+                    return Some(bundled);
+                }
+            }
         }
+    }
+
+    // Then check if yt-dlp is in PATH, which keeps local development flexible.
+    if command_works("yt-dlp") {
+        return Some(PathBuf::from("yt-dlp"));
     }
 
     // On Windows, check common Python user install locations
@@ -43,7 +83,7 @@ pub fn find_ytdlp() -> Option<PathBuf> {
             if let Ok(entries) = std::fs::read_dir(appdata_path.join("Python")) {
                 for entry in entries.flatten() {
                     let scripts = entry.path().join("Scripts").join("yt-dlp.exe");
-                    if scripts.exists() {
+                    if executable_works(&scripts) {
                         return Some(scripts);
                     }
                 }
@@ -56,7 +96,7 @@ pub fn find_ytdlp() -> Option<PathBuf> {
             if let Ok(entries) = std::fs::read_dir(local_path.join("Programs").join("Python")) {
                 for entry in entries.flatten() {
                     let scripts = entry.path().join("Scripts").join("yt-dlp.exe");
-                    if scripts.exists() {
+                    if executable_works(&scripts) {
                         return Some(scripts);
                     }
                 }
@@ -181,7 +221,7 @@ pub async fn handle_list_formats(id: &str, url: &str) -> Response {
                 return Response::error(id, error_codes::DOWNLOAD_FAILED, error_msg);
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Response::error(id, error_codes::YTDLP_NOT_FOUND, "yt-dlp not found. Install with: pip install yt-dlp");
+                return Response::error(id, error_codes::YTDLP_NOT_FOUND, YTDLP_NOT_FOUND_MESSAGE);
             }
             Err(e) => return Response::error(id, error_codes::DOWNLOAD_FAILED, e.to_string()),
         }
@@ -360,7 +400,7 @@ async fn run_download(
             Ok(c) => c,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return DownloadResult::Failed(
-                    Response::error(id, error_codes::YTDLP_NOT_FOUND, "yt-dlp not found. Install with: pip install yt-dlp")
+                    Response::error(id, error_codes::YTDLP_NOT_FOUND, YTDLP_NOT_FOUND_MESSAGE)
                 );
             }
             Err(e) => {
@@ -522,7 +562,7 @@ async fn run_download(
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             DownloadResult::Failed(
-                Response::error(id, error_codes::YTDLP_NOT_FOUND, "yt-dlp not found. Install with: pip install yt-dlp")
+                Response::error(id, error_codes::YTDLP_NOT_FOUND, YTDLP_NOT_FOUND_MESSAGE)
             )
         }
         Err(e) => {

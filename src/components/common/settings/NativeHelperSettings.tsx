@@ -36,7 +36,8 @@ function getInstallSteps(platform: Platform): { steps: string[]; command?: strin
       return {
         steps: [
           'Download the newest MSI from GitHub releases.',
-          'Run the installer and keep the helper running in the system tray.',
+          'Run the installer. It includes yt-dlp for downloads.',
+          'Keep the helper running in the system tray.',
           'Return here and press Check connection.',
         ],
       };

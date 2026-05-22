@@ -42,7 +42,7 @@ Browser (MasterSelects App)
     v
 Native Helper (Rust)
     |
-    | yt-dlp (subprocess)
+    | bundled or system yt-dlp (subprocess)
     | File system (direct)
     | AI tool forwarding
     |
@@ -63,8 +63,9 @@ The helper will automatically be detected by the app.
 ### Windows
 
 1. Download the latest Windows MSI from the toolbar or [GitHub Releases](https://github.com/Sportinger/MasterSelects/releases/latest)
-2. Run the MSI installer, then launch `masterselects-helper.exe` if it does not auto-start
-3. Use `--console` flag to run in terminal mode instead of tray mode
+2. Run the MSI installer. It installs `yt-dlp.exe` next to `masterselects-helper.exe`, so downloads do not need a separate `pip install yt-dlp`
+3. Launch `masterselects-helper.exe` if it does not auto-start
+4. Use `--console` flag to run in terminal mode instead of tray mode
 
 ### macOS
 
@@ -105,7 +106,7 @@ The toolbar shows the helper status:
 
 Click the indicator for details:
 - Helper version
-- yt-dlp availability
+- yt-dlp availability (bundled next to the helper or installed on PATH)
 - Download directory
 - Project root
 - File system command support
@@ -234,10 +235,11 @@ cargo build --release
 
 ### Downloads not working
 
-1. Check yt-dlp is installed and available on PATH
-2. Run `yt-dlp --version` to verify
-3. Check helper log output for errors
-4. If YouTube reports bot or sign-in blocking, close Chrome completely and retry so yt-dlp can read cookies
+1. On Windows, reinstall or update the helper MSI so the bundled `yt-dlp.exe` is present in the install folder
+2. For source builds and non-Windows archive installs, check that `yt-dlp` is installed on PATH or placed next to the helper binary
+3. Run `yt-dlp --version` or `<helper install folder>\yt-dlp.exe --version` to verify
+4. Check helper log output for errors
+5. If YouTube reports bot or sign-in blocking, close Chrome completely and retry so yt-dlp can read cookies
 
 ### Connection errors
 

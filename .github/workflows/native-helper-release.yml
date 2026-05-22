@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v0.3.12)'
+        description: 'Version tag (e.g. v0.3.15)'
         required: true
-        default: 'v0.3.12'
+        default: 'v0.3.15'
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -21,10 +22,14 @@ jobs:
             target: aarch64-apple-darwin
             artifact: MasterSelects-NativeHelper-macos-arm64
             ext: ''
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             artifact: MasterSelects-NativeHelper-macos-x64
             ext: ''
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: MasterSelects-NativeHelper-windows-x64
+            ext: '.msi'
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -39,7 +44,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang pkg-config
+          sudo apt-get install -y clang pkg-config libwayland-dev libxkbcommon-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
@@ -47,9 +52,23 @@ jobs:
           brew install llvm pkg-config
           echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
 
+      - name: Install Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 6.0.2
+          wix extension add WixToolset.UI.wixext/6.0.2
+
       - name: Build
+        if: runner.os != 'Windows'
         working-directory: tools/native-helper
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build Windows MSI
+        if: runner.os == 'Windows'
+        working-directory: tools/native-helper
+        shell: cmd
+        run: scripts\build-msi.bat
 
       - name: Package (Linux)
         if: runner.os == 'Linux'
@@ -69,11 +88,19 @@ jobs:
           chmod +x release/masterselects-helper
           cd release && tar czf ../${{ matrix.artifact }}.tar.gz *
 
-      - name: Upload artifact
+      - name: Upload Unix artifact
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: tools/native-helper/${{ matrix.artifact }}.tar.gz
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: tools/native-helper/target/wix/*.msi
 
   release:
     needs: build
@@ -101,17 +128,19 @@ jobs:
             - Local AI bridge for external agents
 
             ### Downloads
-            - **Windows x64 (MSI)**: Upload manually from `tools/native-helper/target/wix/*.msi`
+            - **Windows x64 (MSI)**: `MasterSelects-NativeHelper-${{ github.event.inputs.version }}-windows-x64.msi`
             - **macOS ARM (Apple Silicon)**: `MasterSelects-NativeHelper-macos-arm64.tar.gz`
             - **macOS x64 (Intel)**: `MasterSelects-NativeHelper-macos-x64.tar.gz`
             - **Linux x64**: `MasterSelects-NativeHelper-linux-x64.tar.gz`
 
             ### Notes
             - Keep the helper running while using MasterSelects
-            - Install [yt-dlp](https://github.com/yt-dlp/yt-dlp) if it is not already available on your system
+            - Windows MSI builds bundle `yt-dlp.exe`; non-Windows archive installs use a bundled `yt-dlp` when present or a system `yt-dlp` on PATH
             - Windows MSI is the preferred package for in-place upgrades
             - FFmpeg is not bundled with the helper packages
           files: |
             artifacts/**/*.tar.gz
+            artifacts/**/*.msi
+          overwrite_files: true
           draft: false
           prerelease: false

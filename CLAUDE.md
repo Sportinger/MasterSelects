@@ -161,11 +161,12 @@ npm run preview              # Built output lokal serven
 
 ### Native Helper (optional, cross-platform)
 ```bash
-# All platforms (FFmpeg decode/encode + yt-dlp downloads):
+# All platforms:
 cd tools/native-helper && cargo run --release
 
 # Windows: requires FFMPEG_DIR + LIBCLANG_PATH env vars (see tools/native-helper/README.md)
 ```
+Windows-MSI-Builds bundlen `yt-dlp.exe`; Source-Builds und nicht-Windows-Archive nutzen `yt-dlp` neben dem Helper-Binary oder aus `PATH`.
 Ports: WebSocket `9876`, HTTP `9877`
 
 ---
