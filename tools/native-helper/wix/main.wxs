@@ -10,6 +10,7 @@
 
         <Feature Id="MainApp" Title="MasterSelects Helper" Description="Core application" Level="1" Display="expand" AllowAbsent="no">
             <ComponentRef Id="MainExecutable" />
+            <ComponentRef Id="BundledYtDlp" />
 
             <Feature Id="ShortcutsFeature" Title="Shortcuts" Description="Start Menu and Desktop shortcuts" Level="1">
                 <ComponentRef Id="StartMenuShortcut" />
@@ -53,6 +54,10 @@
             <File Id="masterselects_helper_exe" Name="masterselects-helper.exe" Source="target\release\masterselects-helper.exe" />
             <RegistryValue Root="HKCU" Key="Software\MasterSelects\Helper" Name="ExePath" Type="string" Value="[INSTALLDIR]masterselects-helper.exe" KeyPath="yes" />
             <RemoveFolder Id="CleanInstallDir" Directory="INSTALLDIR" On="uninstall" />
+        </Component>
+
+        <Component Id="BundledYtDlp" Directory="INSTALLDIR" Guid="A1B2C3D4-6666-4000-8000-000000000001">
+            <File Id="yt_dlp_exe" Name="yt-dlp.exe" Source="target\release\yt-dlp.exe" KeyPath="yes" />
         </Component>
     </Fragment>
 

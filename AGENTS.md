@@ -191,6 +191,8 @@ cd tools/native-helper
 cargo run --release
 ```
 
+Windows-MSI-Builds bundlen `yt-dlp.exe`; Source-Builds und nicht-Windows-Archive nutzen `yt-dlp` neben dem Helper-Binary oder aus `PATH`.
+
 Ports:
 
 - WebSocket: `9876`
