@@ -1,6 +1,7 @@
 // WebGPU device, adapter, and queue initialization
 
 import { Logger } from '../../services/logger';
+import { attachWebGPUDeviceDiagnostics } from '../../services/runtimeDiagnostics';
 
 const log = Logger.create('WebGPUContext');
 
@@ -145,6 +146,7 @@ export class WebGPUContext {
         return false;
       }
       log.info('GPU device created successfully');
+      attachWebGPUDeviceDiagnostics(this.device, 'WebGPUContext');
 
       this.device.lost.then((info) => {
         log.error('Device lost', info.message);

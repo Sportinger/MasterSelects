@@ -21,7 +21,9 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run tests/unit",
-    "test:security": "vitest run tests/security/ tests/unit/aiToolPolicy.test.ts tests/unit/logRedaction.test.ts tests/unit/redact.test.ts --reporter=verbose"
+    "test:security": "vitest run tests/security/ tests/unit/aiToolPolicy.test.ts tests/unit/logRedaction.test.ts tests/unit/redact.test.ts --reporter=verbose",
+    "fixtures:torture-media": "node scripts/prepare-torture-media.mjs",
+    "torture:bridge-fast": "node scripts/run-torture-bridge-fast.mjs"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.6",

@@ -58,6 +58,7 @@ import {
   handleDeleteMediaItem,
   handleMoveMediaItems,
   handleCreateComposition,
+  handleOpenComposition,
   handleSelectMediaItems,
   handleImportLocalFiles,
   handleListLocalFiles,
@@ -119,11 +120,14 @@ import {
 import {
   handleGetStats,
   handleGetLogs,
+  handleGetRuntimeDiagnostics,
   handleGetPlaybackTrace,
   handleGetStatsHistory,
+  handleClearRuntimeDiagnostics,
   handlePurgePlaybackPath,
 } from './stats';
 import { handleDebugExport } from './export';
+import { handleCreateTortureProjectFixture } from './torture';
 import {
   handleGetNodeWorkspaceDebugState,
   handleSendAINodePrompt,
@@ -202,6 +206,7 @@ const mediaHandlers: Record<string, (args: Record<string, unknown>, store: Retur
   deleteMediaItem: handleDeleteMediaItem,
   moveMediaItems: handleMoveMediaItems,
   createComposition: handleCreateComposition,
+  openComposition: handleOpenComposition,
   selectMediaItems: handleSelectMediaItems,
   importLocalFiles: handleImportLocalFiles,
 };
@@ -231,9 +236,12 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   getStats: handleGetStats,
   getStatsHistory: handleGetStatsHistory,
   getLogs: handleGetLogs,
+  getRuntimeDiagnostics: handleGetRuntimeDiagnostics,
+  clearRuntimeDiagnostics: handleClearRuntimeDiagnostics,
   getPlaybackTrace: handleGetPlaybackTrace,
   purgePlaybackPath: handlePurgePlaybackPath,
   debugExport: handleDebugExport,
+  createTortureProjectFixture: handleCreateTortureProjectFixture,
   getNodeWorkspaceDebugState: handleGetNodeWorkspaceDebugState,
   sendAINodePrompt: handleSendAINodePrompt,
 };
@@ -325,6 +333,7 @@ export {
   handleDeleteMediaItem,
   handleMoveMediaItems,
   handleCreateComposition,
+  handleOpenComposition,
   handleSelectMediaItems,
   handleImportLocalFiles,
   handleListLocalFiles,
@@ -373,9 +382,12 @@ export {
   // Stats
   handleGetStats,
   handleGetLogs,
+  handleGetRuntimeDiagnostics,
   handleGetPlaybackTrace,
   handleGetStatsHistory,
+  handleClearRuntimeDiagnostics,
   handleDebugExport,
+  handleCreateTortureProjectFixture,
   handleGetNodeWorkspaceDebugState,
   handleSendAINodePrompt,
 };

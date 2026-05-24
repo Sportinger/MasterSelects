@@ -40,6 +40,7 @@ export const statsToolDefinitions: ToolDefinition[] = [
           level: { type: 'string', description: 'Minimum log level filter: DEBUG, INFO, WARN, ERROR' },
           module: { type: 'string', description: 'Substring filter for the logger module name, e.g. PlaybackHealth or CutTransition' },
           search: { type: 'string', description: 'Substring filter against the message and serialized data' },
+          sinceIso: { type: 'string', description: 'Only return log entries with timestamp greater than or equal to this ISO timestamp' },
         },
         required: [],
       },
@@ -56,6 +57,36 @@ export const statsToolDefinitions: ToolDefinition[] = [
           windowMs: { type: 'number', description: 'Time window in milliseconds to inspect (default: 5000, max: 120000)' },
           limit: { type: 'number', description: 'Maximum number of recent WC/VF events to include (default: 200, max: 2000)' },
         },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getRuntimeDiagnostics',
+      description: 'Get browser runtime diagnostics captured inside the app for bridge-only automation: console entries, window errors, unhandled promise rejections, WebGPU uncaptured errors, and device-lost events.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Maximum number of recent entries to return (default: 100, max: 1000)' },
+          level: { type: 'string', description: 'Minimum diagnostic level filter: DEBUG, INFO, WARN, ERROR' },
+          source: { type: 'string', description: 'Exact source filter, e.g. console, window-error, unhandledrejection, webgpu-uncapturederror, webgpu-device-lost' },
+          search: { type: 'string', description: 'Substring filter against source, message, arguments, stack, and details' },
+          sinceId: { type: 'number', description: 'Only return entries with an id greater than this value' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'clearRuntimeDiagnostics',
+      description: 'Clear the browser runtime diagnostics buffer before a deterministic bridge-driven test run.',
+      parameters: {
+        type: 'object',
+        properties: {},
         required: [],
       },
     },

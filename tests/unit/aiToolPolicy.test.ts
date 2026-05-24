@@ -65,7 +65,7 @@ describe('AI Tool Policy Registry', () => {
   });
 
   it('sensitive tools have sensitiveDataAccess=true', () => {
-    const sensitiveTools = ['getStats', 'getStatsHistory', 'getLogs', 'getPlaybackTrace'];
+    const sensitiveTools = ['getStats', 'getStatsHistory', 'getLogs', 'getRuntimeDiagnostics', 'getPlaybackTrace'];
     for (const name of sensitiveTools) {
       const policy = getToolPolicy(name);
       expect(policy, `Missing policy for ${name}`).toBeDefined();
@@ -125,7 +125,7 @@ describe('AI Tool Policy Registry', () => {
   });
 
   it('devBridge can access live telemetry tools', () => {
-    const bridgeTelemetryTools = ['getStats', 'getStatsHistory', 'getPlaybackTrace'];
+    const bridgeTelemetryTools = ['getStats', 'getStatsHistory', 'getRuntimeDiagnostics', 'getPlaybackTrace'];
     for (const name of bridgeTelemetryTools) {
       const result = checkToolAccess(name, 'devBridge');
       expect(result.allowed, `devBridge should be able to access ${name}`).toBe(true);
@@ -139,13 +139,15 @@ describe('AI Tool Policy Registry', () => {
     }
   });
 
-  it('devBridge can access getLogs', () => {
-    const result = checkToolAccess('getLogs', 'devBridge');
-    expect(result.allowed).toBe(true);
+  it('devBridge can access runtime logs and diagnostics', () => {
+    for (const tool of ['getLogs', 'getRuntimeDiagnostics', 'clearRuntimeDiagnostics']) {
+      const result = checkToolAccess(tool, 'devBridge');
+      expect(result.allowed, `${tool} should be allowed for devBridge`).toBe(true);
+    }
   });
 
   it('sensitive telemetry tools still exclude nativeHelper', () => {
-    const helperBlockedTools = ['getLogs', 'getStats', 'getStatsHistory', 'getPlaybackTrace'];
+    const helperBlockedTools = ['getLogs', 'getRuntimeDiagnostics', 'clearRuntimeDiagnostics', 'getStats', 'getStatsHistory', 'getPlaybackTrace'];
     for (const name of helperBlockedTools) {
       const policy = getToolPolicy(name);
       expect(policy, `Missing policy for ${name}`).toBeDefined();

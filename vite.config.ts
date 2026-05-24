@@ -214,6 +214,13 @@ function validateBridgeRequest(req: IncomingMessage, res: ServerResponse): boole
   return true;
 }
 
+function sanitizeBridgeTimeoutMs(value: unknown, fallbackMs: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallbackMs;
+  }
+  return Math.max(1000, Math.min(300000, Math.round(value)));
+}
+
 // Local File Server - serves local files for AI-driven import
 function localFileServer(): Plugin {
   return {
@@ -562,7 +569,21 @@ function aiToolsBridge(): Plugin {
           setCorsHeaders(req, res);
           res.setHeader('Content-Type', 'application/json');
           pruneClients();
-          res.end(JSON.stringify({ status: 'ready', pending: pendingRequests.size, clients: clients.size }));
+          const now = Date.now();
+          res.end(JSON.stringify({
+            status: 'ready',
+            pending: pendingRequests.size,
+            clients: clients.size,
+            clientTabs: [...clients.values()].map((client) => ({
+              tabId: client.tabId,
+              visibilityState: client.visibilityState,
+              hasFocus: client.hasFocus,
+              lastSeenAgoMs: now - client.lastSeenAt,
+              unresponsiveForMs: client.unresponsiveUntil && client.unresponsiveUntil > now
+                ? client.unresponsiveUntil - now
+                : 0,
+            })),
+          }));
           return;
         }
 
@@ -579,7 +600,7 @@ function aiToolsBridge(): Plugin {
         req.on('data', (chunk: Buffer) => body += chunk.toString());
         req.on('end', () => {
           try {
-            const { tool, args = {} } = JSON.parse(body);
+            const { tool, args = {}, timeoutMs, targetTabId: requestedTargetTabId } = JSON.parse(body);
             if (!tool) {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
@@ -588,14 +609,18 @@ function aiToolsBridge(): Plugin {
             }
 
             const requestId = `r${++requestCounter}-${crypto.randomUUID().slice(0, 8)}`;
-            const targetTabId = pickTargetTabId();
+            const explicitTargetTabId = typeof requestedTargetTabId === 'string' && clients.has(requestedTargetTabId)
+              ? requestedTargetTabId
+              : null;
+            const targetTabId = explicitTargetTabId ?? pickTargetTabId();
+            const requestTimeoutMs = sanitizeBridgeTimeoutMs(timeoutMs, 30000);
 
             const resultPromise = new Promise((resolve) => {
               const timer = setTimeout(() => {
                 pendingRequests.delete(requestId);
                 markClientUnresponsive(targetTabId);
-                resolve({ success: false, error: 'Timeout: no browser tab responded within 30s' });
-              }, 30000);
+                resolve({ success: false, error: `Timeout: no browser tab responded within ${Math.round(requestTimeoutMs / 1000)}s` });
+              }, requestTimeoutMs);
 
               pendingRequests.set(requestId, { resolve, timer });
               server.hot.send('ai-tools:execute', { requestId, tool, args, targetTabId });

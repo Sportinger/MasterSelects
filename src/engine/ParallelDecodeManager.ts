@@ -178,6 +178,18 @@ const UPCOMING_CLIP_PREFETCH_SECONDS = 2.0;
 const MAX_PREWARM_CLIP_STARTS = 32;
 const SLOW_BLOCKING_PREFETCH_WARN_MS = 250;
 
+function isDecoderResetAbort(error: unknown): boolean {
+  if (!error) return false;
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+  if (error instanceof Error) {
+    return error.name === 'AbortError' || error.message.includes('Aborted due to reset');
+  }
+  const message = String(error);
+  return message.includes('AbortError') || message.includes('Aborted due to reset');
+}
+
 export class ParallelDecodeManager {
   private clipDecoders: Map<string, ClipDecoder> = new Map();
   private isActive = false;
@@ -237,7 +249,12 @@ export class ParallelDecodeManager {
         }
       },
       error: (e) => {
-        if (!this.isActive) return;
+        if (!this.isActive) {
+          if (isDecoderResetAbort(e)) {
+            log.debug(`Decoder reset cancelled pending work for ${clipInfo.clipName}`);
+          }
+          return;
+        }
         log.error(`Decoder error for ${clipInfo.clipName}: ${e.message || e}`);
       },
     });
@@ -838,7 +855,12 @@ export class ParallelDecodeManager {
         }
       },
       error: (e) => {
-        if (!this.isActive) return;
+        if (!this.isActive) {
+          if (isDecoderResetAbort(e)) {
+            log.debug(`Decoder reset cancelled pending work for ${clipDecoder.clipName}`);
+          }
+          return;
+        }
         log.error(`Decoder error for ${clipDecoder.clipName}: ${e.message || e}`);
       },
     });
@@ -1087,6 +1109,10 @@ export class ParallelDecodeManager {
           clipDecoder.needsKeyframe = true; // After flush, next decode needs keyframe
         }
       } catch (e) {
+        if (!this.isActive && isDecoderResetAbort(e)) {
+          log.debug(`${clipDecoder.clipName}: pending decode cancelled by decoder reset during cleanup`);
+          return;
+        }
         log.error(`Decode error for ${clipDecoder.clipName}: ${e}`);
       } finally {
         clipDecoder.isDecoding = false;

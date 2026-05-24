@@ -3,6 +3,9 @@ import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from './services/aiT
 import { isFileSystemAccessSupported } from './services/fileSystemService';
 import { NativeHelperClient } from './services/nativeHelper/NativeHelperClient';
 import { useSettingsStore } from './stores/settingsStore';
+import { installRuntimeDiagnostics } from './services/runtimeDiagnostics';
+
+installRuntimeDiagnostics();
 
 function warmNativeHelperForProjectBackend(): void {
   if (typeof window === 'undefined' || isFileSystemAccessSupported()) {

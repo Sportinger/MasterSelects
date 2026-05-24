@@ -152,8 +152,10 @@ export async function handleGetFramesAtTimes(
 ): Promise<ToolResult> {
   const times = (args.times as number[]).slice(0, 8); // Max 8 frames
   const columns = (args.columns as number) || 4;
+  const settleMs = typeof args.settleMs === 'number' ? args.settleMs : undefined;
+  const mode = args.mode === 'dom' ? 'dom' : 'gpu';
 
-  const gridResult = await captureFrameGrid(times, columns, timelineStore);
+  const gridResult = await captureFrameGrid(times, columns, timelineStore, { settleMs, mode });
   if (!gridResult.success) {
     return gridResult;
   }
@@ -163,6 +165,8 @@ export async function handleGetFramesAtTimes(
     data: {
       frameTimes: times,
       columns,
+      settleMs: settleMs ?? 140,
+      mode,
       ...(gridResult.data ?? {}),
     },
   };

@@ -75,6 +75,17 @@ function localFileAccess(): ToolPolicyEntry {
   };
 }
 
+function devBridgeFixture(): ToolPolicyEntry {
+  return {
+    readOnly: false,
+    riskLevel: 'medium',
+    requiresConfirmation: false,
+    sensitiveDataAccess: true,
+    localFileAccess: true,
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  };
+}
+
 const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // ── READ-ONLY (low risk) ──────────────────────────────────────────────
   ['getTimelineState', readOnly()],
@@ -111,6 +122,12 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getStats', bridgeTelemetry()],
   ['getStatsHistory', bridgeTelemetry()],
   ['getLogs', bridgeTelemetry()],
+  ['getRuntimeDiagnostics', bridgeTelemetry()],
+  ['clearRuntimeDiagnostics', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'low',
+  }],
   ['getPlaybackTrace', bridgeTelemetry()],
   ['purgePlaybackPath', {
     ...bridgeTelemetry(),
@@ -125,6 +142,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
     riskLevel: 'medium',
     allowedCallers: ['devBridge', 'console', 'internal'],
   }],
+  ['createTortureProjectFixture', devBridgeFixture()],
   ['getNodeWorkspaceDebugState', {
     ...bridgeTelemetry(),
   }],

@@ -58,6 +58,15 @@ export const previewToolDefinitions: ToolDefinition[] = [
             type: 'number',
             description: 'Number of columns in the grid (default: 4)',
           },
+          settleMs: {
+            type: 'number',
+            description: 'Milliseconds to wait after each seek before reading pixels (default: 140)',
+          },
+          mode: {
+            type: 'string',
+            enum: ['gpu', 'dom'],
+            description: 'Capture from GPU readback or from the visible DOM preview canvas (default: gpu)',
+          },
         },
         required: ['times'],
       },

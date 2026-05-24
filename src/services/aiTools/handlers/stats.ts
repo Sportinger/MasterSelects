@@ -9,6 +9,10 @@ import { vfPipelineMonitor } from '../../vfPipelineMonitor';
 import { wcPipelineMonitor } from '../../wcPipelineMonitor';
 import { slotDeckManager } from '../../slotDeckManager';
 import { exportDiagnostics } from '../../export/exportDiagnostics';
+import {
+  clearRuntimeDiagnostics,
+  getRuntimeDiagnostics,
+} from '../../runtimeDiagnostics';
 import type { ToolResult } from '../types';
 
 const DEFAULT_PLAYBACK_WINDOW_MS = 5000;
@@ -223,6 +227,7 @@ export async function handleGetLogs(
   const moduleFilter = typeof args.module === 'string' ? args.module.trim().toLowerCase() : '';
   const search = typeof args.search === 'string' ? args.search.trim().toLowerCase() : '';
   const level = typeof args.level === 'string' ? args.level.toUpperCase() : '';
+  const sinceIso = typeof args.sinceIso === 'string' ? args.sinceIso.trim() : '';
 
   let logs = Logger.getBuffer(
     level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR'
@@ -239,6 +244,10 @@ export async function handleGetLogs(
       entry.message.toLowerCase().includes(search) ||
       JSON.stringify(entry.data ?? '').toLowerCase().includes(search)
     );
+  }
+
+  if (sinceIso) {
+    logs = logs.filter((entry) => entry.timestamp >= sinceIso);
   }
 
   const recentLogs = logs.slice(-limit);
@@ -260,6 +269,28 @@ export async function handleGetLogs(
       totalMatched: logs.length,
       logs: redactedLogs,
     },
+  };
+}
+
+export async function handleGetRuntimeDiagnostics(
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  return {
+    success: true,
+    data: getRuntimeDiagnostics({
+      limit: typeof args.limit === 'number' ? args.limit : undefined,
+      level: typeof args.level === 'string' ? args.level : undefined,
+      source: typeof args.source === 'string' ? args.source : undefined,
+      search: typeof args.search === 'string' ? args.search : undefined,
+      sinceId: typeof args.sinceId === 'number' ? args.sinceId : undefined,
+    }),
+  };
+}
+
+export async function handleClearRuntimeDiagnostics(): Promise<ToolResult> {
+  return {
+    success: true,
+    data: clearRuntimeDiagnostics(),
   };
 }
 

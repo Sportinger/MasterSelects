@@ -2,20 +2,68 @@
 
 import { useTimelineStore } from '../../stores/timeline';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { NativeHelperClient } from '../nativeHelper';
 import { engine } from '../../engine/WebGPUEngine';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
 import type { ToolResult } from './types';
 
+function waitForTimeout(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitForAnimationFrame(): Promise<number> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(resolve);
+      return;
+    }
+    setTimeout(() => resolve(performance.now()), 16);
+  });
+}
+
+function getCaptureCanvas(): { canvas: HTMLCanvasElement; source: string } | null {
+  const engineState = engine as unknown as {
+    mainPreviewCanvas?: HTMLCanvasElement | null;
+    targetCanvases?: Map<string, { canvas: HTMLCanvasElement; context: GPUCanvasContext }>;
+  };
+
+  const mainPreviewCanvas = engineState.mainPreviewCanvas;
+  if (mainPreviewCanvas && mainPreviewCanvas.width > 0 && mainPreviewCanvas.height > 0) {
+    return { canvas: mainPreviewCanvas, source: 'mainPreviewCanvas' };
+  }
+
+  const activeTargets = useRenderTargetStore.getState().getActiveCompTargets();
+  for (const target of activeTargets) {
+    if (target.canvas && target.canvas.width > 0 && target.canvas.height > 0) {
+      return { canvas: target.canvas, source: `renderTarget:${target.id}` };
+    }
+  }
+
+  const targetCanvases = engineState.targetCanvases;
+  if (targetCanvases) {
+    for (const [targetId, entry] of targetCanvases) {
+      if (entry.canvas.width > 0 && entry.canvas.height > 0) {
+        return { canvas: entry.canvas, source: `engineTarget:${targetId}` };
+      }
+    }
+  }
+
+  return null;
+}
+
 // Helper to capture frames at multiple times and combine into a grid image
 export async function captureFrameGrid(
   times: number[],
   columns: number,
-  timelineStore: ReturnType<typeof useTimelineStore.getState>
+  timelineStore: ReturnType<typeof useTimelineStore.getState>,
+  options: { settleMs?: number; mode?: 'gpu' | 'dom' } = {}
 ): Promise<ToolResult> {
   const frameWidth = 320; // Thumbnail size
   const frameHeight = 180;
   const rows = Math.ceil(times.length / columns);
+  const settleMs = Math.max(50, Math.min(1500, Math.round(options.settleMs ?? 140)));
+  const mode = options.mode ?? 'gpu';
 
   // Create canvas for the grid
   const gridCanvas = document.createElement('canvas');
@@ -40,31 +88,48 @@ export async function captureFrameGrid(
     const col = i % columns;
     const row = Math.floor(i / columns);
 
-    // Move playhead and wait for render
+    // Move playhead and give nested video providers enough time to settle.
     timelineStore.setPlayheadPosition(Math.max(0, time));
-    await new Promise(resolve => setTimeout(resolve, 50)); // Wait for render
+    engine.requestRender();
+    await waitForAnimationFrame();
+    await waitForTimeout(settleMs);
+    engine.requestRender();
+    await waitForAnimationFrame();
 
-    // Capture frame from engine
-    const pixels = await engine.readPixels();
-    if (pixels) {
-      // Create temp canvas for the frame
-      const frameCanvas = document.createElement('canvas');
-      frameCanvas.width = outputWidth;
-      frameCanvas.height = outputHeight;
-      const frameCtx = frameCanvas.getContext('2d');
-
-      if (frameCtx) {
-        const imageData = new ImageData(new Uint8ClampedArray(pixels), outputWidth, outputHeight);
-        frameCtx.putImageData(imageData, 0, 0);
-
-        // Draw scaled frame onto grid
+    if (mode === 'dom') {
+      const captureCanvas = getCaptureCanvas();
+      if (captureCanvas) {
         gridCtx.drawImage(
-          frameCanvas,
+          captureCanvas.canvas,
           col * frameWidth,
           row * frameHeight,
           frameWidth,
           frameHeight
         );
+      }
+    } else {
+      // Capture frame from engine
+      const pixels = await engine.readPixels();
+      if (pixels) {
+        // Create temp canvas for the frame
+        const frameCanvas = document.createElement('canvas');
+        frameCanvas.width = outputWidth;
+        frameCanvas.height = outputHeight;
+        const frameCtx = frameCanvas.getContext('2d');
+
+        if (frameCtx) {
+          const imageData = new ImageData(new Uint8ClampedArray(pixels), outputWidth, outputHeight);
+          frameCtx.putImageData(imageData, 0, 0);
+
+          // Draw scaled frame onto grid
+          gridCtx.drawImage(
+            frameCanvas,
+            col * frameWidth,
+            row * frameHeight,
+            frameWidth,
+            frameHeight
+          );
+        }
       }
     }
 
@@ -103,6 +168,7 @@ export async function captureFrameGrid(
       height: gridCanvas.height,
       frameCount: times.length,
       gridSize: `${columns}x${rows}`,
+      mode,
       dataUrl,
     },
   };
