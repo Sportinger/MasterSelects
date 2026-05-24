@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { requireMediaFileImportResult } from '../../stores/mediaStore/helpers/importResult';
 import { useYouTubeStore, type YouTubeVideo as StoreYouTubeVideo } from '../../stores/youtubeStore';
 import { downloadYouTubeVideo, downloadVideo, subscribeToDownload, isDownloadAvailable, type DownloadProgress } from '../../services/youtubeDownloader';
 import { NativeHelperClient } from '../../services/nativeHelper';
@@ -458,7 +459,10 @@ export function DownloadPanel() {
         if (importedMediaRef.current.has(video.id)) continue;
         const file = await projectFileService.getDownloadFile(video.title, video.platform || 'youtube');
         if (cancelled || !file) continue;
-        const mediaFile = await importFile(file);
+        const mediaFile = requireMediaFileImportResult(
+          await importFile(file),
+          'Downloaded video import',
+        );
         if (cancelled || !mediaFile) continue;
         importedMediaRef.current.set(video.id, {
           mediaId: mediaFile.id,

@@ -35,6 +35,8 @@ export type {
   SplatEffectorItem,
   MathSceneItem,
   MotionShapeItem,
+  SignalAssetItem,
+  SignalAssetItemDiagnostic,
   MeshPrimitiveType,
   SceneCameraSettings,
   SlotClipEndBehavior,
@@ -114,6 +116,10 @@ export const useMediaStore = create<MediaStoreState>()(
     splatEffectorItems: [],
     mathSceneItems: [],
     motionShapeItems: [],
+    signalAssets: [],
+    signalArtifacts: [],
+    signalGraphs: [],
+    signalOperators: [],
     activeCompositionId: 'comp-1',
     openCompositionIds: ['comp-1'],
     slotAssignments: {},
@@ -156,6 +162,7 @@ export const useMediaStore = create<MediaStoreState>()(
         splatEffectorItems,
         mathSceneItems,
         motionShapeItems,
+        signalAssets,
       } = get();
       return [
         ...folders.filter((f) => f.parentId === folderId),
@@ -167,6 +174,7 @@ export const useMediaStore = create<MediaStoreState>()(
         ...splatEffectorItems.filter((e) => e.parentId === folderId),
         ...mathSceneItems.filter((m) => m.parentId === folderId),
         ...motionShapeItems.filter((m) => m.parentId === folderId),
+        ...signalAssets.filter((s) => s.parentId === folderId),
         ...files.filter((f) => f.parentId === folderId),
       ];
     },
@@ -183,6 +191,7 @@ export const useMediaStore = create<MediaStoreState>()(
         splatEffectorItems,
         mathSceneItems,
         motionShapeItems,
+        signalAssets,
       } = get();
       return (
         files.find((f) => f.id === id) ||
@@ -194,7 +203,8 @@ export const useMediaStore = create<MediaStoreState>()(
         cameraItems.find((c) => c.id === id) ||
         splatEffectorItems.find((e) => e.id === id) ||
         mathSceneItems.find((m) => m.id === id) ||
-        motionShapeItems.find((m) => m.id === id)
+        motionShapeItems.find((m) => m.id === id) ||
+        signalAssets.find((s) => s.id === id)
       );
     },
 

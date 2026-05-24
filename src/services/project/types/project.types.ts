@@ -4,10 +4,17 @@ import type { ProjectMediaFile } from './media.types';
 import type { ProjectComposition } from './composition.types';
 import type { ProjectFolder } from './folder.types';
 import type { DockLayout } from '../../../types/dock';
+import type {
+  SignalArtifact,
+  SignalAsset,
+  SignalGraph,
+  SignalOperatorDescriptor,
+} from '../../../signals';
 import type { ProjectFlashBoardState } from '../../../stores/flashboardStore/types';
 import type { ExportStoreData } from '../../../stores/exportStore';
 import type {
   CameraItem,
+  LabelColor,
   MathSceneItem,
   MeshItem,
   MotionShapeItem,
@@ -47,6 +54,23 @@ export interface ProjectMIDIState {
   };
   slotBindings?: Record<number, import('../../../types/midi').MIDINoteBinding | null>;
   parameterBindings?: import('../../../types/midi').MIDIParameterBindings;
+}
+
+export interface ProjectSignalState {
+  schemaVersion: 1;
+  assets: SignalAsset[];
+  artifacts: SignalArtifact[];
+  graphs: SignalGraph[];
+  operators: SignalOperatorDescriptor[];
+  assetItems?: ProjectSignalAssetItemState[];
+  updatedAt?: string;
+}
+
+export interface ProjectSignalAssetItemState {
+  id: string;
+  parentId: string | null;
+  createdAt: number;
+  labelColor?: LabelColor;
 }
 
 export interface ProjectMediaBoardViewport {
@@ -109,6 +133,9 @@ export interface ProjectFile {
 
   // Media references (paths relative to project folder or absolute)
   media: ProjectMediaFile[];
+
+  // Universal Signal IR state for non-legacy import/runtime artifacts
+  signals?: ProjectSignalState;
 
   // Compositions (timelines)
   compositions: ProjectComposition[];

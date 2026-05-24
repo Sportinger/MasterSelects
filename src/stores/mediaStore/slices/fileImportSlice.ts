@@ -1,13 +1,25 @@
 // File import actions - unified import logic
 
-import type { MediaFile, MediaSliceCreator } from '../types';
+import type { FileImportResult, MediaFile, MediaSliceCreator, SignalAssetItem } from '../types';
 import { generateId, processImport } from '../helpers/importPipeline';
 import { processGaussianSplatSequenceImport } from '../helpers/gaussianSplatSequenceImport';
 import { processModelSequenceImport } from '../helpers/modelSequenceImport';
-import { classifyMediaType } from '../../timeline/helpers/mediaTypeHelpers';
 import { fileSystemService } from '../../../services/fileSystemService';
+import { projectFileService } from '../../../services/projectFileService';
+import { artifactService } from '../../../services/project/domains/ArtifactService';
 import { projectDB } from '../../../services/projectDB';
 import { Logger } from '../../../services/logger';
+import {
+  createDefaultUniversalImportOrchestrator,
+  type SignalUniversalImportResult,
+  type UniversalImportPlan,
+} from '../../../importers';
+import type { SignalArtifact } from '../../../signals';
+import {
+  createSignalAssetItem,
+  mergeSignalArtifacts,
+  remapSignalAssetArtifacts,
+} from '../helpers/signalItems';
 import {
   groupGaussianSplatSequenceEntries,
   type GroupedGaussianSplatSequence,
@@ -20,23 +32,33 @@ import {
 import { getGaussianSplatContainerLabelFromFileName } from '../helpers/gaussianSplatStats';
 
 const log = Logger.create('Import');
+const universalImportOrchestrator = createDefaultUniversalImportOrchestrator();
 
 type ImportableMediaType = MediaFile['type'];
 
-interface ResolvedImportEntry extends ModelSequenceImportEntry {
+interface ResolvedLegacyImportEntry extends ModelSequenceImportEntry {
   id: string;
+  route: 'legacy-media';
   type: ImportableMediaType;
 }
 
+interface ResolvedSignalImportEntry extends ModelSequenceImportEntry {
+  id: string;
+  route: 'signal';
+  plan: Extract<UniversalImportPlan, { route: 'signal' }>;
+}
+
+type ResolvedImportEntry = ResolvedLegacyImportEntry | ResolvedSignalImportEntry;
+
 export interface FileImportActions {
-  importFile: (file: File, parentId?: string | null, options?: ImportFileOptions) => Promise<MediaFile>;
-  importFiles: (files: FileList | File[], parentId?: string | null) => Promise<MediaFile[]>;
-  importFilesWithPicker: () => Promise<MediaFile[]>;
+  importFile: (file: File, parentId?: string | null, options?: ImportFileOptions) => Promise<FileImportResult>;
+  importFiles: (files: FileList | File[], parentId?: string | null) => Promise<FileImportResult[]>;
+  importFilesWithPicker: () => Promise<FileImportResult[]>;
   importFilesWithHandles: (filesWithHandles: Array<{
     file: File;
     handle: FileSystemFileHandle;
     absolutePath?: string;
-  }>, parentId?: string | null) => Promise<MediaFile[]>;
+  }>, parentId?: string | null) => Promise<FileImportResult[]>;
   importGaussianAvatar: (file: File, parentId?: string | null) => Promise<MediaFile>;
   importGaussianSplat: (file: File, parentId?: string | null) => Promise<MediaFile>;
 }
@@ -46,12 +68,78 @@ export interface ImportFileOptions {
   projectFileName?: string;
 }
 
-async function resolveImportType(file: File): Promise<ImportableMediaType> {
-  const type = await classifyMediaType(file);
-  if (type === 'unknown') {
-    throw new Error(`Unsupported media type: ${file.name}`);
+async function resolveImportEntry(
+  file: File,
+  options: {
+    id?: string;
+    handle?: FileSystemFileHandle;
+    absolutePath?: string;
+  } = {},
+): Promise<ResolvedImportEntry> {
+  const plan = await universalImportOrchestrator.planImport(file);
+  const id = options.id ?? generateId();
+
+  if (plan.route === 'legacy-media') {
+    return {
+      file,
+      handle: options.handle,
+      absolutePath: options.absolutePath,
+      id,
+      route: 'legacy-media',
+      type: plan.legacyMediaType as ImportableMediaType,
+    };
   }
-  return type as ImportableMediaType;
+
+  return {
+    file,
+    handle: options.handle,
+    absolutePath: options.absolutePath,
+    id,
+    route: 'signal',
+    plan,
+  };
+}
+
+async function persistSignalImportArtifacts(
+  result: SignalUniversalImportResult,
+): Promise<{ asset: SignalUniversalImportResult['asset']; artifacts: SignalArtifact[] }> {
+  const projectHandle = (
+    projectFileService as typeof projectFileService & {
+      getProjectHandle?: () => FileSystemDirectoryHandle | null;
+    }
+  ).getProjectHandle?.() ?? null;
+
+  const store = projectHandle
+    ? artifactService.createStore(projectHandle)
+    : artifactService.createIndexedDBStore();
+  const artifactsByOriginalId = new Map<string, SignalArtifact>();
+
+  try {
+    for (const payload of result.artifactPayloads) {
+      const stored = await store.putArtifact(payload.bytes, {
+        mimeType: payload.mimeType,
+        encoding: payload.artifact.encoding,
+        producer: payload.artifact.producer,
+        sourceRefs: payload.artifact.sourceRefs,
+        metadata: payload.artifact.metadata,
+        createdAt: payload.artifact.createdAt,
+      });
+      artifactsByOriginalId.set(payload.artifactId, stored.manifest);
+    }
+  } catch (error) {
+    const target = projectHandle ? 'project cache' : 'IndexedDB';
+    log.warn(`Signal artifact persistence to ${target} failed; keeping transient memory artifact refs.`, error);
+    return {
+      asset: result.asset,
+      artifacts: result.asset.artifacts,
+    };
+  }
+
+  const asset = remapSignalAssetArtifacts(result.asset, artifactsByOriginalId);
+  return {
+    asset,
+    artifacts: asset.artifacts,
+  };
 }
 
 /**
@@ -79,7 +167,7 @@ function createPlaceholder(file: File, id: string, type: ImportableMediaType, pa
 }
 
 function createSequencePlaceholder(
-  sequence: GroupedModelSequence<ResolvedImportEntry>,
+  sequence: GroupedModelSequence<ResolvedLegacyImportEntry>,
   id: string,
   parentId?: string | null,
 ): MediaFile {
@@ -104,7 +192,7 @@ function createSequencePlaceholder(
 }
 
 function createGaussianSplatSequencePlaceholder(
-  sequence: GroupedGaussianSplatSequence<ResolvedImportEntry>,
+  sequence: GroupedGaussianSplatSequence<ResolvedLegacyImportEntry>,
   id: string,
   parentId?: string | null,
 ): MediaFile {
@@ -162,10 +250,10 @@ function updatePlaceholderImportProgress(
   };
 }
 
-function splitModelSequenceEntries(entries: ResolvedImportEntry[]): {
-  modelSequences: GroupedModelSequence<ResolvedImportEntry>[];
-  gaussianSplatSequences: GroupedGaussianSplatSequence<ResolvedImportEntry>[];
-  singles: ResolvedImportEntry[];
+function splitModelSequenceEntries(entries: ResolvedLegacyImportEntry[]): {
+  modelSequences: GroupedModelSequence<ResolvedLegacyImportEntry>[];
+  gaussianSplatSequences: GroupedGaussianSplatSequence<ResolvedLegacyImportEntry>[];
+  singles: ResolvedLegacyImportEntry[];
 } {
   const modelEntries = entries.filter((entry) => entry.type === 'model');
   const gaussianSplatEntries = entries.filter((entry) => entry.type === 'gaussian-splat');
@@ -183,6 +271,26 @@ function splitModelSequenceEntries(entries: ResolvedImportEntry[]): {
   };
 }
 
+async function runSignalImport(
+  entry: ResolvedSignalImportEntry,
+  parentId?: string | null,
+): Promise<SignalAssetItem> {
+  const result = await universalImportOrchestrator.importPlannedFile(entry.plan, {
+    absolutePath: entry.absolutePath,
+  });
+
+  if (result.route !== 'signal') {
+    throw new Error(`Signal importer resolved "${entry.file.name}" as a legacy media route.`);
+  }
+
+  const persisted = await persistSignalImportArtifacts(result);
+  return createSignalAssetItem(persisted.asset, {
+    parentId,
+    diagnostics: result.diagnostics,
+    providerId: result.provider.id,
+  });
+}
+
 export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set, get) => ({
   importFile: async (file: File, parentId?: string | null, options?: ImportFileOptions) => {
     const existing = get().files.find((f) =>
@@ -194,7 +302,31 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     }
 
     const id = generateId();
-    const type = await resolveImportType(file);
+    const resolved = await resolveImportEntry(file, { id });
+
+    if (resolved.route === 'signal') {
+      const existingSignal = get().signalAssets.find((item) =>
+        item.name === file.name && item.fileSize === file.size
+      );
+      if (existingSignal) {
+        log.info(`Skipping duplicate SignalAsset: ${file.name} (${file.size} bytes) - already exists as ${existingSignal.id}`);
+        return existingSignal;
+      }
+
+      log.info(`Starting Signal import: ${file.name} provider: ${resolved.plan.provider.id} size: ${file.size}`);
+      const signalAsset = await runSignalImport(resolved, parentId);
+      set((state) => ({
+        signalAssets: [
+          ...state.signalAssets.filter((item) => item.id !== signalAsset.id),
+          signalAsset,
+        ],
+        signalArtifacts: mergeSignalArtifacts(state.signalArtifacts, signalAsset.artifacts),
+      }));
+      log.info('Signal import complete:', signalAsset.name);
+      return signalAsset;
+    }
+
+    const type = resolved.type;
     log.info(`Starting: ${file.name} type: ${type} size: ${file.size}`);
 
     const placeholder = createPlaceholder(file, id, type, parentId);
@@ -225,14 +357,12 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
 
   importFiles: async (files: FileList | File[], parentId?: string | null) => {
     const fileArray = Array.from(files);
-    const imported: MediaFile[] = [];
+    const imported: FileImportResult[] = [];
 
-    const entries: ResolvedImportEntry[] = await Promise.all(fileArray.map(async (file) => ({
-      file,
-      id: generateId(),
-      type: await resolveImportType(file),
-    })));
-    const { modelSequences, gaussianSplatSequences, singles } = splitModelSequenceEntries(entries);
+    const entries = await Promise.all(fileArray.map(async (file) => resolveImportEntry(file)));
+    const signalEntries = entries.filter((entry): entry is ResolvedSignalImportEntry => entry.route === 'signal');
+    const legacyEntries = entries.filter((entry): entry is ResolvedLegacyImportEntry => entry.route === 'legacy-media');
+    const { modelSequences, gaussianSplatSequences, singles } = splitModelSequenceEntries(legacyEntries);
 
     set((state) => ({
       files: [
@@ -242,6 +372,22 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
         ...gaussianSplatSequences.map((sequence) => createGaussianSplatSequencePlaceholder(sequence, sequence.entries[0]!.id, parentId)),
       ],
     }));
+
+    for (const entry of signalEntries) {
+      try {
+        const signalAsset = await runSignalImport(entry, parentId);
+        set((state) => ({
+          signalAssets: [
+            ...state.signalAssets.filter((item) => item.id !== signalAsset.id),
+            signalAsset,
+          ],
+          signalArtifacts: mergeSignalArtifacts(state.signalArtifacts, signalAsset.artifacts),
+        }));
+        imported.push(signalAsset);
+      } catch (err) {
+        log.error(`Signal import failed: ${entry.file.name}`, err);
+      }
+    }
 
     for (const sequence of modelSequences) {
       const sequenceId = sequence.entries[0]!.id;
@@ -321,14 +467,13 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     const result = await fileSystemService.pickFiles();
     if (!result || result.length === 0) return [];
 
-    const imported: MediaFile[] = [];
-    const entries: ResolvedImportEntry[] = await Promise.all(result.map(async ({ file, handle }) => ({
-      file,
-      handle,
-      id: generateId(),
-      type: await resolveImportType(file),
-    })));
-    const { modelSequences, gaussianSplatSequences, singles } = splitModelSequenceEntries(entries);
+    const imported: FileImportResult[] = [];
+    const entries = await Promise.all(result.map(async ({ file, handle }) => (
+      resolveImportEntry(file, { handle })
+    )));
+    const signalEntries = entries.filter((entry): entry is ResolvedSignalImportEntry => entry.route === 'signal');
+    const legacyEntries = entries.filter((entry): entry is ResolvedLegacyImportEntry => entry.route === 'legacy-media');
+    const { modelSequences, gaussianSplatSequences, singles } = splitModelSequenceEntries(legacyEntries);
 
     set((state) => ({
       files: [
@@ -338,6 +483,22 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
         ...gaussianSplatSequences.map((sequence) => createGaussianSplatSequencePlaceholder(sequence, sequence.entries[0]!.id)),
       ],
     }));
+
+    for (const entry of signalEntries) {
+      try {
+        const signalAsset = await runSignalImport(entry);
+        set((state) => ({
+          signalAssets: [
+            ...state.signalAssets.filter((item) => item.id !== signalAsset.id),
+            signalAsset,
+          ],
+          signalArtifacts: mergeSignalArtifacts(state.signalArtifacts, signalAsset.artifacts),
+        }));
+        imported.push(signalAsset);
+      } catch (err) {
+        log.error(`Signal import failed: ${entry.file.name}`, err);
+      }
+    }
 
     for (const sequence of modelSequences) {
       const sequenceId = sequence.entries[0]!.id;
@@ -410,16 +571,14 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
   },
 
   importFilesWithHandles: async (filesWithHandles, parentId?: string | null) => {
-    const imported: MediaFile[] = [];
+    const imported: FileImportResult[] = [];
 
-    const entries: ResolvedImportEntry[] = await Promise.all(filesWithHandles.map(async ({ file, handle, absolutePath }) => ({
-      file,
-      handle,
-      absolutePath,
-      id: generateId(),
-      type: await resolveImportType(file),
-    })));
-    const { modelSequences, gaussianSplatSequences, singles } = splitModelSequenceEntries(entries);
+    const entries = await Promise.all(filesWithHandles.map(async ({ file, handle, absolutePath }) => (
+      resolveImportEntry(file, { handle, absolutePath })
+    )));
+    const signalEntries = entries.filter((entry): entry is ResolvedSignalImportEntry => entry.route === 'signal');
+    const legacyEntries = entries.filter((entry): entry is ResolvedLegacyImportEntry => entry.route === 'legacy-media');
+    const { modelSequences, gaussianSplatSequences, singles } = splitModelSequenceEntries(legacyEntries);
 
     set((state) => ({
       files: [
@@ -429,6 +588,22 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
         ...gaussianSplatSequences.map((sequence) => createGaussianSplatSequencePlaceholder(sequence, sequence.entries[0]!.id, parentId)),
       ],
     }));
+
+    for (const entry of signalEntries) {
+      try {
+        const signalAsset = await runSignalImport(entry, parentId);
+        set((state) => ({
+          signalAssets: [
+            ...state.signalAssets.filter((item) => item.id !== signalAsset.id),
+            signalAsset,
+          ],
+          signalArtifacts: mergeSignalArtifacts(state.signalArtifacts, signalAsset.artifacts),
+        }));
+        imported.push(signalAsset);
+      } catch (err) {
+        log.error(`Signal import failed: ${entry.file.name}`, err);
+      }
+    }
 
     for (const sequence of modelSequences) {
       const sequenceId = sequence.entries[0]!.id;

@@ -1,5 +1,3 @@
-import { classifyMediaType } from '../../../stores/timeline/helpers/mediaTypeHelpers';
-
 export interface MediaFolderLike {
   id: string;
   name: string;
@@ -204,13 +202,11 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
         if (handle?.kind === 'file') {
           const fileHandle = handle as FileSystemFileHandle;
           const file = await fileHandle.getFile();
-          if ((await classifyMediaType(file)) !== 'unknown') {
-            pushRecord({
-              file,
-              handle: fileHandle,
-              folderSegments: [],
-            });
-          }
+          pushRecord({
+            file,
+            handle: fileHandle,
+            folderSegments: [],
+          });
           continue;
         }
 
@@ -230,12 +226,10 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
       const entry = itemWithHandle.webkitGetAsEntry();
       if (entry?.isFile) {
         const file = await getFileFromEntry(entry as unknown as FileSystemFileEntryLike);
-        if ((await classifyMediaType(file)) !== 'unknown') {
-          pushRecord({
-            file,
-            folderSegments: [],
-          });
-        }
+        pushRecord({
+          file,
+          folderSegments: [],
+        });
         continue;
       }
 
@@ -251,7 +245,7 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
     }
 
     const file = item.getAsFile();
-    if (file && (await classifyMediaType(file)) !== 'unknown') {
+    if (file) {
       pushRecord({
         file,
         folderSegments: [],
@@ -264,12 +258,10 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
       continue;
     }
 
-    if ((await classifyMediaType(file)) !== 'unknown') {
-      pushRecord({
-        file,
-        folderSegments: [],
-      });
-    }
+    pushRecord({
+      file,
+      folderSegments: [],
+    });
   }
 
   return records;

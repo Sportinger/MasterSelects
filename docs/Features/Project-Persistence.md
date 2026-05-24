@@ -145,6 +145,7 @@ MyProject/
 |   +-- thumbnails/        # Media thumbnails (WebP, keyed by file hash)
 |   +-- splats/            # Cached Gaussian splat runtimes
 |   +-- waveforms/         # Waveform data (Float32Array binary)
+|   +-- artifacts/         # Signal IR artifacts, sharded by SHA-256 hash
 +-- Analysis/              # Clip analysis data (per media file)
 +-- Transcripts/           # Transcript data (per media file)
 +-- Renders/               # Exported renders
@@ -160,12 +161,16 @@ const PROJECT_FOLDERS = {
   TRANSCRIPTS: 'Transcripts',
   CACHE: 'Cache',
   CACHE_THUMBNAILS: 'Cache/thumbnails',
+  CACHE_ARTIFACTS: 'Cache/artifacts',
   CACHE_WAVEFORMS: 'Cache/waveforms',
   RENDERS: 'Renders',
   BACKUPS: 'Backups',
   DOWNLOADS: 'Downloads',
 };
 ```
+
+### Signal Artifacts
+Universal Signal IR imports persist metadata in `project.json` under `signals`. When a File System Access project is open, artifact bytes are stored content-addressed under `Cache/artifacts/sha256/<shard>/<hash>/` with a `manifest.json` and `artifact.bin`. IndexedDB keeps a manifest index for fast lookup/source-ref queries and also provides a content-addressed `artifactBlobs` fallback for imports made before a project folder is available.
 
 ### Auto-Copy to Raw Folder
 When importing media files (controlled by `copyMediaToProject` setting):
@@ -511,7 +516,7 @@ If IndexedDB storage becomes corrupted, an error dialog appears automatically:
 | Storage | Used For | Limits |
 |---------|----------|--------|
 | **Project Folder** | Project data, proxies, analysis, transcripts, cache, renders | Disk space |
-| **IndexedDB** | File handles, recent FSA project handles, media metadata, proxy frames (legacy), analysis cache, thumbnails | ~50MB |
+| **IndexedDB** | File handles, recent FSA project handles, media metadata, proxy frames (legacy), analysis cache, thumbnails, Signal artifact manifests and fallback blobs | Browser quota |
 | **localStorage** | App settings, autosave config, named/default dock layouts, dock layout fallback, recent project metadata, Native Helper project paths | ~5MB |
 
 ---

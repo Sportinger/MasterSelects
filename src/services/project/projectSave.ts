@@ -2,6 +2,10 @@
 
 import { Logger } from '../logger';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
+import {
+  mergeSignalArtifacts,
+  signalAssetItemToProjectMetadata,
+} from '../../stores/mediaStore/helpers/signalItems';
 import { useTimelineStore } from '../../stores/timeline';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
@@ -447,6 +451,32 @@ export async function syncStoresToProject(): Promise<void> {
       projectData.expandedFolderIds = freshState.expandedFolderIds;
       projectData.slotAssignments = freshState.slotAssignments;
       projectData.slotClipSettings = freshState.slotClipSettings;
+
+      const signalAssets = freshState.signalAssets ?? [];
+      const signalArtifacts = signalAssets.reduce(
+        (artifacts, item) => mergeSignalArtifacts(artifacts, item.artifacts),
+        freshState.signalArtifacts ?? [],
+      );
+      const signalGraphs = freshState.signalGraphs ?? [];
+      const signalOperators = freshState.signalOperators ?? [];
+      if (
+        signalAssets.length > 0 ||
+        signalArtifacts.length > 0 ||
+        signalGraphs.length > 0 ||
+        signalOperators.length > 0
+      ) {
+        projectData.signals = {
+          schemaVersion: 1,
+          assets: signalAssets.map((item) => item.asset),
+          artifacts: signalArtifacts,
+          graphs: signalGraphs,
+          operators: signalOperators,
+          assetItems: signalAssets.map(signalAssetItemToProjectMetadata),
+          updatedAt: new Date().toISOString(),
+        };
+      } else {
+        delete projectData.signals;
+      }
 
       // Save YouTube panel state
       const youtubeState = useYouTubeStore.getState().getState();

@@ -12,6 +12,7 @@ const log = Logger.create('AIVideoPanel');
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMediaStore } from '../../stores/mediaStore';
+import { requireMediaFileImportResult } from '../../stores/mediaStore/helpers/importResult';
 import { useTimelineStore } from '../../stores/timeline';
 import { cloudAiService } from '../../services/cloudAiService';
 import {
@@ -418,7 +419,10 @@ export function AIVideoPanel() {
       const folderId = getOrCreateAIVideoFolder();
 
       // Import to media panel
-      const mediaFile = await importFile(file);
+      const mediaFile = requireMediaFileImportResult(
+        await importFile(file),
+        'AI video import',
+      );
 
       // Move to AI Video folder
       useMediaStore.getState().moveToFolder([mediaFile.id], folderId);

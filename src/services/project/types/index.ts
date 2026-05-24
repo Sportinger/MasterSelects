@@ -3,6 +3,8 @@
 export type {
   ProjectFile,
   ProjectSettings,
+  ProjectSignalAssetItemState,
+  ProjectSignalState,
   ProjectMIDIState,
   ProjectYouTubeVideo,
   ProjectYouTubeState,

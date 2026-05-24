@@ -7,6 +7,7 @@ import {
   selectNodeById,
 } from '../../../stores/flashboardStore/selectors';
 import { useMediaStore } from '../../../stores/mediaStore';
+import { isMediaFileImportResult } from '../../../stores/mediaStore/helpers/importResult';
 import { FlashBoardNode } from './FlashBoardNode';
 import { FlashBoardContextMenu } from './FlashBoardContextMenu';
 import { resolveFlashBoardNodeDisplaySize } from './nodeSizing';
@@ -403,9 +404,9 @@ export function FlashBoardCanvas() {
       import('../../../stores/mediaStore').then(({ useMediaStore }) => {
         const { importFile } = useMediaStore.getState();
         Array.from(e.dataTransfer.files).forEach(async (file, i) => {
-          const mediaFile = await importFile(file);
-          if (mediaFile) {
-            createReferenceNode(board.id, mediaFile.id, {
+          const imported = await importFile(file);
+          if (isMediaFileImportResult(imported)) {
+            createReferenceNode(board.id, imported.id, {
               x: canvasPos.x + i * 220,
               y: canvasPos.y,
             });

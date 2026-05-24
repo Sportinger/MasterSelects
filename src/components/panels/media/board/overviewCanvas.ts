@@ -55,6 +55,7 @@ function getMediaBoardOverviewFill(item: MediaBoardItem): string {
   if (item.type === 'camera') return 'rgba(139, 108, 45, 0.86)';
   if (item.type === 'math-scene') return 'rgba(49, 72, 108, 0.9)';
   if (item.type === 'motion-shape') return 'rgba(89, 56, 76, 0.9)';
+  if (item.type === 'signal') return 'rgba(42, 72, 72, 0.9)';
   if (item.type === 'image') return 'rgba(38, 64, 84, 0.88)';
   if (item.type === 'video') return 'rgba(45, 43, 64, 0.9)';
   if (item.type === 'audio') return 'rgba(52, 71, 55, 0.88)';

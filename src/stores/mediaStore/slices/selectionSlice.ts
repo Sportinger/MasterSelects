@@ -44,6 +44,9 @@ export const createSelectionSlice: MediaSliceCreator<SelectionActions> = (set) =
       motionShapeItems: (state.motionShapeItems || []).map((item) =>
         itemIds.includes(item.id) ? { ...item, parentId: folderId } : item
       ),
+      signalAssets: (state.signalAssets || []).map((item) =>
+        itemIds.includes(item.id) ? { ...item, parentId: folderId } : item
+      ),
     }));
   },
 
@@ -99,6 +102,9 @@ export const createSelectionSlice: MediaSliceCreator<SelectionActions> = (set) =
         itemIds.includes(item.id) ? { ...item, labelColor: color } : item
       ),
       motionShapeItems: (state.motionShapeItems || []).map((item) =>
+        itemIds.includes(item.id) ? { ...item, labelColor: color } : item
+      ),
+      signalAssets: (state.signalAssets || []).map((item) =>
         itemIds.includes(item.id) ? { ...item, labelColor: color } : item
       ),
     }));

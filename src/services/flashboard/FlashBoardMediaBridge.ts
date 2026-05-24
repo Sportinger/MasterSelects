@@ -1,5 +1,6 @@
 import { Logger } from '../logger';
 import { useMediaStore } from '../../stores/mediaStore';
+import { requireMediaFileImportResult } from '../../stores/mediaStore/helpers/importResult';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { captureCurrentPreviewFrameFile } from '../previewFrameCapture';
 import type {
@@ -158,10 +159,13 @@ class FlashBoardMediaBridge {
       ? this.getOrCreateVideoSubfolder()
       : this.getOrCreateImageSubfolder();
 
-    const mediaFile = await useMediaStore.getState().importFile(file, folderId, {
-      // Generated URLs expire, so project-local persistence should not depend on the global import setting.
-      forceCopyToProject: true,
-    });
+    const mediaFile = requireMediaFileImportResult(
+      await useMediaStore.getState().importFile(file, folderId, {
+        // Generated URLs expire, so project-local persistence should not depend on the global import setting.
+        forceCopyToProject: true,
+      }),
+      'FlashBoard media import',
+    );
 
     if (!mediaFile) {
       throw new Error('Failed to import media file into Media Pool');
@@ -211,9 +215,12 @@ class FlashBoardMediaBridge {
     }
 
     const folderId = this.getOrCreateImageSubfolder();
-    const mediaFile = await useMediaStore.getState().importFile(file, folderId, {
-      forceCopyToProject: true,
-    });
+    const mediaFile = requireMediaFileImportResult(
+      await useMediaStore.getState().importFile(file, folderId, {
+        forceCopyToProject: true,
+      }),
+      'FlashBoard frame import',
+    );
 
     log.info(`Imported current preview frame: ${mediaFile.name} -> ${mediaFile.id}`);
     return mediaFile;

@@ -24,6 +24,8 @@ const activeThumbnailRequests = new Map<string, Promise<boolean>>();
 export interface FileManageActions {
   removeFile: (id: string) => void;
   renameFile: (id: string, name: string) => void;
+  removeSignalAsset: (id: string) => void;
+  renameSignalAsset: (id: string, name: string) => void;
   ensureFileThumbnail: (id: string) => Promise<boolean>;
   refreshFileUrls: (id: string, options?: { refreshThumbnail?: boolean }) => Promise<boolean>;
   reloadFile: (id: string) => Promise<boolean>;
@@ -45,6 +47,31 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
   renameFile: (id: string, name: string) => {
     set((state) => ({
       files: state.files.map((f) => (f.id === id ? { ...f, name } : f)),
+    }));
+  },
+
+  removeSignalAsset: (id: string) => {
+    set((state) => ({
+      signalAssets: state.signalAssets.filter((item) => item.id !== id),
+      selectedIds: state.selectedIds.filter((sid) => sid !== id),
+    }));
+  },
+
+  renameSignalAsset: (id: string, name: string) => {
+    set((state) => ({
+      signalAssets: state.signalAssets.map((item) => (
+        item.id === id
+          ? {
+              ...item,
+              name,
+              asset: {
+                ...item.asset,
+                name,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : item
+      )),
     }));
   },
 

@@ -82,6 +82,7 @@ import type {
   MediaFile,
   MotionShapeItem,
   ProjectItem,
+  SignalAssetItem,
   SolidItem,
 } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -205,6 +206,10 @@ function getProjectItemIconType(item: ProjectItem | undefined): string | undefin
   return item.type;
 }
 
+function isSignalAssetItem(item: ProjectItem): item is SignalAssetItem {
+  return 'type' in item && item.type === 'signal';
+}
+
 function formatCompactCount(value: number | undefined): string | null {
   if (!value || !Number.isFinite(value) || value <= 0) return null;
   if (value < 1000) return String(Math.round(value));
@@ -264,6 +269,14 @@ function getProjectItemSearchValues(item: ProjectItem): string[] {
       item.filePath ?? '',
       item.absolutePath ?? '',
       item.projectPath ?? '',
+    );
+  } else if (isSignalAssetItem(item)) {
+    values.push(
+      item.asset.source.fileName ?? '',
+      item.asset.source.mimeType ?? '',
+      item.asset.source.extension ?? '',
+      item.providerId ?? '',
+      ...item.signalKinds,
     );
   }
 
@@ -397,6 +410,7 @@ export function MediaPanel() {
   const splatEffectorItems = useMediaStore(state => state.splatEffectorItems ?? []);
   const mathSceneItems = useMediaStore(state => state.mathSceneItems ?? []);
   const motionShapeItems = useMediaStore(state => state.motionShapeItems ?? []);
+  const signalAssets = useMediaStore(state => state.signalAssets ?? []);
   const selectedIds = useMediaStore(state => state.selectedIds);
   const expandedFolderIds = useMediaStore(state => state.expandedFolderIds);
   const fileSystemSupported = useMediaStore(state => state.fileSystemSupported);
@@ -412,9 +426,11 @@ export function MediaPanel() {
     createComposition,
     createFolder,
     removeFile,
+    removeSignalAsset,
     removeComposition,
     removeFolder,
     renameFile,
+    renameSignalAsset,
     renameFolder,
     reloadFile,
     toggleFolderExpanded,
@@ -962,7 +978,7 @@ export function MediaPanel() {
 
   // Sort items comparator
   const getSortValue = useCallback((item: ProjectItem, colId: ColumnId): string | number => {
-    const mediaFile = ('type' in item && item.type !== 'composition' && item.type !== 'text' && item.type !== 'solid' && item.type !== 'camera' && item.type !== 'splat-effector') ? item as MediaFile : null;
+    const mediaFile = isImportedMediaFileItem(item) ? item : null;
     switch (colId) {
       case 'name': return item.name.toLowerCase();
       case 'label': {
@@ -981,7 +997,7 @@ export function MediaPanel() {
       case 'codec': return getMediaFileCodecLabel(mediaFile)?.toLowerCase() || '';
       case 'audio': return mediaFile?.hasAudio ? 1 : 0;
       case 'bitrate': return mediaFile?.bitrate || 0;
-      case 'size': return mediaFile?.fileSize || 0;
+      case 'size': return mediaFile?.fileSize || (isSignalAssetItem(item) ? item.fileSize ?? 0 : 0);
       default: return 0;
     }
   }, []);
@@ -1286,9 +1302,12 @@ export function MediaPanel() {
     const file = files.find(f => f.id === renamingId);
     const folder = folders.find(f => f.id === renamingId);
     const composition = compositions.find(c => c.id === renamingId);
+    const signalAsset = signalAssets.find(item => item.id === renamingId);
 
     if (file) {
       renameFile(renamingId, renameValue.trim());
+    } else if (signalAsset) {
+      renameSignalAsset(renamingId, renameValue.trim());
     } else if (folder) {
       renameFolder(renamingId, renameValue.trim());
     } else if (composition) {
@@ -1296,7 +1315,7 @@ export function MediaPanel() {
     }
 
     setRenamingId(null);
-  }, [renamingId, renameValue, files, folders, compositions, renameFile, renameFolder, updateComposition]);
+  }, [renamingId, renameValue, files, folders, compositions, signalAssets, renameFile, renameSignalAsset, renameFolder, updateComposition]);
 
   // Handle click on item name to start rename (delayed so drag can cancel it)
   const handleNameClick = useCallback((e: React.MouseEvent, id: string, currentName: string) => {
@@ -1341,9 +1360,10 @@ export function MediaPanel() {
       else if (splatEffectorItems.find(e => e.id === id)) removeSplatEffectorItem(id);
       else if (mathSceneItems.find(m => m.id === id)) removeMathSceneItem(id);
       else if (motionShapeItems.find(m => m.id === id)) removeMotionShapeItem(id);
+      else if (signalAssets.find(item => item.id === id)) removeSignalAsset(id);
     });
     closeContextMenu();
-  }, [selectedIds, files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, removeFile, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
+  }, [selectedIds, files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, removeFile, removeSignalAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
 
   // Get the active parent folder (icons view: current open folder, classic/board view: selected folder or null)
   const getActiveParentId = useCallback((): string | null => {
@@ -1633,6 +1653,14 @@ export function MediaPanel() {
       });
       e.dataTransfer.setData('application/x-motion-shape-item-id', item.id);
       e.dataTransfer.effectAllowed = 'copyMove';
+      if (e.currentTarget instanceof HTMLElement) {
+        e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
+      }
+      return;
+    }
+
+    if (item.type === 'signal') {
+      e.dataTransfer.effectAllowed = 'move';
       if (e.currentTarget instanceof HTMLElement) {
         e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
       }
@@ -2099,6 +2127,12 @@ export function MediaPanel() {
       parts.push(`${comp.width}×${comp.height}`);
       parts.push(`${comp.frameRate} fps`);
       if (comp.duration) parts.push(formatDuration(comp.duration));
+    } else if (isSignalAssetItem(item)) {
+      if (item.signalKinds.length > 0) parts.push(item.signalKinds.join(', '));
+      if (item.providerId) parts.push(item.providerId);
+      if (item.fileSize) parts.push(formatFileSize(item.fileSize));
+      const warningCount = item.diagnostics?.filter((diagnostic) => diagnostic.severity !== 'info').length ?? 0;
+      if (warningCount > 0) parts.push(`${warningCount} warning${warningCount !== 1 ? 's' : ''}`);
     } else if ('type' in item) {
       const mf = item as MediaFile;
       if (mf.type === 'gaussian-splat') {
@@ -2196,7 +2230,8 @@ export function MediaPanel() {
     ...splatEffectorItems,
     ...mathSceneItems,
     ...motionShapeItems,
-  ]), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems]);
+    ...signalAssets,
+  ]), [files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets]);
 
   const projectListItems = useMemo<ProjectItem[]>(() => ([
     ...folders,
@@ -2208,8 +2243,9 @@ export function MediaPanel() {
     ...splatEffectorItems,
     ...mathSceneItems,
     ...motionShapeItems,
+    ...signalAssets,
     ...files,
-  ]), [folders, compositions, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, files]);
+  ]), [folders, compositions, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, files]);
 
   const allProjectItemsById = useMemo(() => new Map(allProjectItems.map((item) => [item.id, item])), [allProjectItems]);
   const totalItems = allProjectItems.length;
@@ -4210,7 +4246,8 @@ export function MediaPanel() {
             cameraItems.find(c => c.id === contextMenu.itemId) ||
             splatEffectorItems.find(e => e.id === contextMenu.itemId) ||
             mathSceneItems.find(m => m.id === contextMenu.itemId) ||
-            motionShapeItems.find(m => m.id === contextMenu.itemId)
+            motionShapeItems.find(m => m.id === contextMenu.itemId) ||
+            signalAssets.find(item => item.id === contextMenu.itemId)
           : null;
         const isVideoFile = selectedItem && 'type' in selectedItem && selectedItem.type === 'video';
         const isComposition = selectedItem && 'type' in selectedItem && selectedItem.type === 'composition';

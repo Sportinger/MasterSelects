@@ -14,8 +14,15 @@ function generatedItemCount(project: ProjectFile): number {
     + (project.motionShapeItems?.length ?? 0);
 }
 
+function signalItemCount(project: ProjectFile): number {
+  return (project.signals?.assets.length ?? 0)
+    + (project.signals?.graphs.length ?? 0)
+    + (project.signals?.operators.length ?? 0);
+}
+
 export function hasMeaningfulContent(project: ProjectFile): boolean {
   return project.media.length > 0
+    || signalItemCount(project) > 0
     || project.folders.length > 0
     || project.compositions.length > 1
     || clipCount(project) > 0
@@ -26,6 +33,7 @@ export function hasMeaningfulContent(project: ProjectFile): boolean {
 export function looksLikeFreshEmptyProject(project: ProjectFile): boolean {
   return project.media.length === 0
     && project.folders.length === 0
+    && signalItemCount(project) === 0
     && project.compositions.length <= 1
     && clipCount(project) === 0
     && generatedItemCount(project) === 0;

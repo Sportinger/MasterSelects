@@ -478,15 +478,15 @@ export async function handleImportLocalFiles(
       const fileName = normalizedPath.split('/').pop() || 'unknown';
       const file = new File([blob], fileName, { type: blob.type });
 
-      const mediaFile = await mediaStore.importFile(file);
+      const importedItem = await mediaStore.importFile(file);
       results.push({
-        id: mediaFile.id,
-        name: mediaFile.name,
-        type: mediaFile.type,
-        duration: mediaFile.duration,
+        id: importedItem.id,
+        name: importedItem.name,
+        type: importedItem.type,
+        duration: importedItem.type === 'signal' ? undefined : importedItem.duration,
         path: filePath,
       });
-      log.info(`Imported: ${mediaFile.name} (${mediaFile.type})`);
+      log.info(`Imported: ${importedItem.name} (${importedItem.type})`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       log.error(`Failed to import: ${filePath}`, err);

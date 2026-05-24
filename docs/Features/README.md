@@ -65,6 +65,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
 | [Media Panel](./Media-Panel.md) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
 | [Project Persistence](./Project-Persistence.md) | Save/load model, IndexedDB handle cache, continuous save, interval save mode, relink, and project roots |
+| [Signal IR](./Signal-IR.md) | Contract layer for universal media signals, capability-gated runtime providers, and the Wasm/WIT ABI |
 | [Download Panel](./Download-Panel.md) | yt-dlp-backed downloads, platform mapping, and cookie retry behavior |
 | [Native Helper](./Native-Helper.md) | Local HTTP/WebSocket APIs, auth startup token, and helper-backed flows |
 

@@ -12,9 +12,11 @@ import type {
   MediaFile,
   MediaFolder,
   MotionShapeItem,
+  SignalAssetItem,
   SolidItem,
   TextItem,
 } from './mediaStore/types';
+import type { SignalArtifact, SignalGraph, SignalOperatorDescriptor } from '../signals';
 import type { TimelineMarker } from './timeline/types';
 import type { DockLayout } from '../types/dock';
 import type {
@@ -56,6 +58,10 @@ interface StateSnapshot {
     solidItems: SolidItem[];
     mathSceneItems: MathSceneItem[];
     motionShapeItems: MotionShapeItem[];
+    signalAssets: SignalAssetItem[];
+    signalArtifacts: SignalArtifact[];
+    signalGraphs: SignalGraph[];
+    signalOperators: SignalOperatorDescriptor[];
   };
 
   // Dock layout state
@@ -131,6 +137,10 @@ interface MediaStoreState {
   solidItems: SolidItem[];
   mathSceneItems: MathSceneItem[];
   motionShapeItems: MotionShapeItem[];
+  signalAssets: SignalAssetItem[];
+  signalArtifacts: SignalArtifact[];
+  signalGraphs: SignalGraph[];
+  signalOperators: SignalOperatorDescriptor[];
 }
 
 interface DockStoreSnapshot {
@@ -289,6 +299,10 @@ function createSnapshot(label: string): StateSnapshot {
       solidItems: deepClone(media?.solidItems || []),
       mathSceneItems: deepClone(media?.mathSceneItems || []),
       motionShapeItems: deepClone(media?.motionShapeItems || []),
+      signalAssets: deepClone(media?.signalAssets || []),
+      signalArtifacts: deepClone(media?.signalArtifacts || []),
+      signalGraphs: deepClone(media?.signalGraphs || []),
+      signalOperators: deepClone(media?.signalOperators || []),
     },
     dock: {
       layout: deepClone(dock?.layout ?? null),
@@ -361,6 +375,10 @@ function applySnapshot(snapshot: StateSnapshot) {
       solidItems: deepClone(snapshot.media.solidItems || []),
       mathSceneItems: deepClone(snapshot.media.mathSceneItems || []),
       motionShapeItems: deepClone(snapshot.media.motionShapeItems || []),
+      signalAssets: deepClone(snapshot.media.signalAssets || []),
+      signalArtifacts: deepClone(snapshot.media.signalArtifacts || []),
+      signalGraphs: deepClone(snapshot.media.signalGraphs || []),
+      signalOperators: deepClone(snapshot.media.signalOperators || []),
     });
   }
 

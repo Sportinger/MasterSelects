@@ -8,6 +8,7 @@ import { useSAM2Store } from '../../stores/sam2Store';
 import { getSAM2Service } from '../../services/sam2/SAM2Service';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { requireMediaFileImportResult } from '../../stores/mediaStore/helpers/importResult';
 import { MatAnyoneSetupDialog } from '../common/MatAnyoneSetupDialog';
 import type { TimelineClip } from '../../types';
 import './SAM2Panel.css';
@@ -613,19 +614,25 @@ export function SAM2Panel() {
       const folderId = getOrCreateMattingMediaFolder();
 
       const foregroundFile = await readNativeFileAsFile(NativeHelperClient, matResult.foregroundPath);
-      const foregroundMedia = await useMediaStore.getState().importFile(foregroundFile, folderId, {
-        forceCopyToProject: true,
-        projectFileName: buildMatAnyoneProjectFileName(matResult, matResult.foregroundPath),
-      });
+      const foregroundMedia = requireMediaFileImportResult(
+        await useMediaStore.getState().importFile(foregroundFile, folderId, {
+          forceCopyToProject: true,
+          projectFileName: buildMatAnyoneProjectFileName(matResult, matResult.foregroundPath),
+        }),
+        'MatAnyone foreground import',
+      );
       useMediaStore.getState().moveToFolder([foregroundMedia.id], folderId);
 
       let alphaMediaId: string | null = null;
       try {
         const alphaFile = await readNativeFileAsFile(NativeHelperClient, matResult.alphaPath);
-        const alphaMedia = await useMediaStore.getState().importFile(alphaFile, folderId, {
-          forceCopyToProject: true,
-          projectFileName: buildMatAnyoneProjectFileName(matResult, matResult.alphaPath),
-        });
+        const alphaMedia = requireMediaFileImportResult(
+          await useMediaStore.getState().importFile(alphaFile, folderId, {
+            forceCopyToProject: true,
+            projectFileName: buildMatAnyoneProjectFileName(matResult, matResult.alphaPath),
+          }),
+          'MatAnyone alpha import',
+        );
         useMediaStore.getState().moveToFolder([alphaMedia.id], folderId);
         alphaMediaId = alphaMedia.id;
       } catch (alphaError) {

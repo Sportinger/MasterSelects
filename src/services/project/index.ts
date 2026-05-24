@@ -37,3 +37,4 @@ export { TranscriptService } from './domains/TranscriptService';
 export { CacheService } from './domains/CacheService';
 export { ProxyStorageService } from './domains/ProxyStorageService';
 export { RawMediaService } from './domains/RawMediaService';
+export { ArtifactService, artifactService } from './domains/ArtifactService';

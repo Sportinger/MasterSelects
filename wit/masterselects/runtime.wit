@@ -1,0 +1,63 @@
+package masterselects:runtime@0.1.0;
+
+interface signals {
+  enum signal-kind {
+    texture,
+    audio,
+    geometry,
+    point-cloud,
+    mesh,
+    scene,
+    table,
+    document,
+    vector,
+    curve,
+    mask,
+    text,
+    metadata,
+    event,
+    time,
+    timeline,
+    render-target,
+    binary,
+    number,
+    boolean,
+    string,
+  }
+
+  record artifact-ref {
+    id: string,
+    hash: string,
+    mime-type: string,
+    size: u64,
+  }
+
+  record signal-ref {
+    id: string,
+    kind: signal-kind,
+    artifact: option<artifact-ref>,
+    metadata-json: string,
+  }
+}
+
+interface importer {
+  use signals.{signal-ref};
+
+  record import-request {
+    file-name: string,
+    mime-type: string,
+    bytes: list<u8>,
+  }
+
+  record import-result {
+    signals: list<signal-ref>,
+    diagnostics-json: string,
+  }
+
+  can-import: func(file-name: string, mime-type: string, header: list<u8>) -> bool;
+  import-file: func(request: import-request) -> result<import-result, string>;
+}
+
+world masterselects-importer {
+  export importer;
+}

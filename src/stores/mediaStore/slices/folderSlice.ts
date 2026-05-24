@@ -41,6 +41,9 @@ export const createFolderSlice: MediaSliceCreator<FolderActions> = (set, get) =>
       compositions: state.compositions.map((c) =>
         c.parentId === id ? { ...c, parentId } : c
       ),
+      signalAssets: (state.signalAssets || []).map((item) =>
+        item.parentId === id ? { ...item, parentId } : item
+      ),
       selectedIds: state.selectedIds.filter((sid) => sid !== id),
       expandedFolderIds: state.expandedFolderIds.filter((eid) => eid !== id),
     }));

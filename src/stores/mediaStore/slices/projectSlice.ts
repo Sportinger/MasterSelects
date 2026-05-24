@@ -9,9 +9,11 @@ import type {
   MediaSliceCreator,
   MotionShapeItem,
   ProxyStatus,
+  SignalAssetItem,
   SolidItem,
   TextItem,
 } from '../types';
+import type { SignalArtifact, SignalGraph, SignalOperatorDescriptor } from '../../../signals';
 import { DEFAULT_COMPOSITION } from '../constants';
 import { generateId } from '../helpers/importPipeline';
 import { getExpectedProxyFps, getProxyProgressFromFrameIndices, isProxyFrameIndexSetComplete } from '../helpers/proxyCompleteness';
@@ -275,6 +277,10 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
         splatEffectorItems: state.splatEffectorItems,
         mathSceneItems: state.mathSceneItems,
         motionShapeItems: state.motionShapeItems,
+        signalAssets: state.signalAssets,
+        signalArtifacts: state.signalArtifacts,
+        signalGraphs: state.signalGraphs,
+        signalOperators: state.signalOperators,
       },
     };
 
@@ -345,6 +351,10 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
         splatEffectorItems: (project.data.splatEffectorItems as import('../types').SplatEffectorItem[]) || [],
         mathSceneItems: (project.data.mathSceneItems as MathSceneItem[]) || [],
         motionShapeItems: (project.data.motionShapeItems as MotionShapeItem[]) || [],
+        signalAssets: (project.data.signalAssets as SignalAssetItem[]) || [],
+        signalArtifacts: (project.data.signalArtifacts as SignalArtifact[]) || [],
+        signalGraphs: (project.data.signalGraphs as SignalGraph[]) || [],
+        signalOperators: (project.data.signalOperators as SignalOperatorDescriptor[]) || [],
         activeCompositionId: null,
         openCompositionIds: (project.data.openCompositionIds as string[]) || [],
         expandedFolderIds: project.data.expandedFolderIds,
@@ -405,6 +415,10 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
       splatEffectorItems: [],
       mathSceneItems: [],
       motionShapeItems: [],
+      signalAssets: [],
+      signalArtifacts: [],
+      signalGraphs: [],
+      signalOperators: [],
       activeCompositionId: newCompId,
       openCompositionIds: [newCompId],
       selectedIds: [],

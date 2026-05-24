@@ -2,11 +2,12 @@
 // Stores media file blobs and project data
 
 import { Logger } from './logger';
+import type { ArtifactManifest } from '../artifacts/types';
 
 const log = Logger.create('ProjectDB');
 
 const DB_NAME = 'MASterSelectsDB';
-const DB_VERSION = 6; // Upgraded for source-based thumbnail cache
+const DB_VERSION = 8; // Upgraded for content-addressed artifact manifests and blobs
 
 // Store names
 const STORES = {
@@ -17,6 +18,8 @@ const STORES = {
   ANALYSIS_CACHE: 'analysisCache', // Cache for clip analysis data
   THUMBNAILS: 'thumbnails', // Deduplicated thumbnails by file hash
   SOURCE_THUMBNAILS: 'sourceThumbnails', // 1-per-second source thumbnail cache
+  ARTIFACTS: 'artifacts', // Content-addressed artifact manifest index
+  ARTIFACT_BLOBS: 'artifactBlobs', // Content-addressed artifact bytes
 } as const;
 
 // Source thumbnail: 1 per second per source media file
@@ -116,7 +119,26 @@ export interface StoredProject {
     splatEffectorItems?: unknown[];
     mathSceneItems?: unknown[];
     motionShapeItems?: unknown[];
+    signalAssets?: unknown[];
+    signalArtifacts?: unknown[];
+    signalGraphs?: unknown[];
+    signalOperators?: unknown[];
   };
+}
+
+export interface StoredArtifactManifest {
+  artifactId: string;
+  hash: string;
+  sourceRefs: string[];
+  manifest: ArtifactManifest;
+  updatedAt: number;
+}
+
+export interface StoredArtifactBlob {
+  hash: string;
+  artifactId: string;
+  blob: Blob;
+  updatedAt: number;
 }
 
 class ProjectDatabase {
@@ -215,6 +237,40 @@ class ProjectDatabase {
           const srcThumbStore = db.createObjectStore(STORES.SOURCE_THUMBNAILS, { keyPath: 'id' });
           srcThumbStore.createIndex('mediaFileId', 'mediaFileId', { unique: false });
           srcThumbStore.createIndex('fileHash', 'fileHash', { unique: false });
+        }
+
+        // Create artifact manifest index (new in v7)
+        if (!db.objectStoreNames.contains(STORES.ARTIFACTS)) {
+          const artifactStore = db.createObjectStore(STORES.ARTIFACTS, { keyPath: 'artifactId' });
+          artifactStore.createIndex('hash', 'hash', { unique: false });
+          artifactStore.createIndex('sourceRefs', 'sourceRefs', { unique: false, multiEntry: true });
+          artifactStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        } else if (event.oldVersion < 7) {
+          const artifactStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.ARTIFACTS);
+          if (!artifactStore.indexNames.contains('hash')) {
+            artifactStore.createIndex('hash', 'hash', { unique: false });
+          }
+          if (!artifactStore.indexNames.contains('sourceRefs')) {
+            artifactStore.createIndex('sourceRefs', 'sourceRefs', { unique: false, multiEntry: true });
+          }
+          if (!artifactStore.indexNames.contains('updatedAt')) {
+            artifactStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
+        }
+
+        // Create artifact byte store (new in v8)
+        if (!db.objectStoreNames.contains(STORES.ARTIFACT_BLOBS)) {
+          const artifactBlobStore = db.createObjectStore(STORES.ARTIFACT_BLOBS, { keyPath: 'hash' });
+          artifactBlobStore.createIndex('artifactId', 'artifactId', { unique: false });
+          artifactBlobStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+        } else if (event.oldVersion < 8) {
+          const artifactBlobStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.ARTIFACT_BLOBS);
+          if (!artifactBlobStore.indexNames.contains('artifactId')) {
+            artifactBlobStore.createIndex('artifactId', 'artifactId', { unique: false });
+          }
+          if (!artifactBlobStore.indexNames.contains('updatedAt')) {
+            artifactBlobStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+          }
         }
 
         log.info('Database schema created/upgraded');
@@ -329,6 +385,159 @@ class ProjectDatabase {
 
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
+    });
+  }
+
+  // ============ Artifact Manifests ============
+
+  async saveArtifactManifest(manifest: ArtifactManifest): Promise<void> {
+    const db = await this.init();
+    const record: StoredArtifactManifest = {
+      artifactId: manifest.artifactId,
+      hash: manifest.hash,
+      sourceRefs: manifest.sourceRefs,
+      manifest,
+      updatedAt: Date.now(),
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ARTIFACTS, 'readwrite');
+      const store = transaction.objectStore(STORES.ARTIFACTS);
+      const request = store.put(record);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async saveArtifact(manifest: ArtifactManifest, blob: Blob): Promise<void> {
+    const db = await this.init();
+    const now = Date.now();
+    const manifestRecord: StoredArtifactManifest = {
+      artifactId: manifest.artifactId,
+      hash: manifest.hash,
+      sourceRefs: manifest.sourceRefs,
+      manifest,
+      updatedAt: now,
+    };
+    const blobRecord: StoredArtifactBlob = {
+      hash: manifest.hash,
+      artifactId: manifest.artifactId,
+      blob,
+      updatedAt: now,
+    };
+
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([STORES.ARTIFACTS, STORES.ARTIFACT_BLOBS], 'readwrite');
+      transaction.objectStore(STORES.ARTIFACTS).put(manifestRecord);
+      transaction.objectStore(STORES.ARTIFACT_BLOBS).put(blobRecord);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  async getArtifactManifest(artifactId: string): Promise<ArtifactManifest | undefined> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ARTIFACTS, 'readonly');
+      const store = transaction.objectStore(STORES.ARTIFACTS);
+      const request = store.get(artifactId);
+
+      request.onsuccess = () => {
+        const record = request.result as StoredArtifactManifest | undefined;
+        resolve(record?.manifest);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async listArtifactManifests(): Promise<ArtifactManifest[]> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ARTIFACTS, 'readonly');
+      const store = transaction.objectStore(STORES.ARTIFACTS);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const records = request.result as StoredArtifactManifest[];
+        resolve(records.map((record) => record.manifest));
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async listArtifactManifestsBySource(sourceRef: string): Promise<ArtifactManifest[]> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ARTIFACTS, 'readonly');
+      const store = transaction.objectStore(STORES.ARTIFACTS);
+
+      try {
+        const index = store.index('sourceRefs');
+        const request = index.getAll(sourceRef);
+        request.onsuccess = () => {
+          const records = request.result as StoredArtifactManifest[];
+          resolve(records.map((record) => record.manifest));
+        };
+        request.onerror = () => reject(request.error);
+      } catch {
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const records = request.result as StoredArtifactManifest[];
+          resolve(records
+            .filter((record) => record.sourceRefs.includes(sourceRef))
+            .map((record) => record.manifest));
+        };
+        request.onerror = () => reject(request.error);
+      }
+    });
+  }
+
+  async deleteArtifactManifest(artifactId: string): Promise<void> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ARTIFACTS, 'readwrite');
+      const store = transaction.objectStore(STORES.ARTIFACTS);
+      const request = store.delete(artifactId);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getArtifactBlob(hash: string): Promise<Blob | undefined> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ARTIFACT_BLOBS, 'readonly');
+      const store = transaction.objectStore(STORES.ARTIFACT_BLOBS);
+      const request = store.get(hash);
+
+      request.onsuccess = () => {
+        const record = request.result as StoredArtifactBlob | undefined;
+        resolve(record?.blob);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async deleteArtifactBlob(hash: string): Promise<boolean> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.ARTIFACT_BLOBS, 'readwrite');
+      const store = transaction.objectStore(STORES.ARTIFACT_BLOBS);
+      const getRequest = store.get(hash);
+
+      getRequest.onsuccess = () => {
+        if (!getRequest.result) {
+          resolve(false);
+          return;
+        }
+
+        const deleteRequest = store.delete(hash);
+        deleteRequest.onsuccess = () => resolve(true);
+        deleteRequest.onerror = () => reject(deleteRequest.error);
+      };
+      getRequest.onerror = () => reject(getRequest.error);
     });
   }
 

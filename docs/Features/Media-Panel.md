@@ -33,6 +33,7 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 | **Audio** | WAV, MP3, OGG, FLAC, AAC, M4A, WMA, AIFF, OPUS |
 | **Image** | PNG, JPG/JPEG, GIF, WebP, BMP, SVG |
 | **Vector Animation** | `.lottie`, `.riv`, Lottie JSON (`.json`, content-sniffed) |
+| **Signal Assets** | CSV as table signals; any other unknown file as a binary signal |
 
 The panel also accepts a few specialized asset types that flow into the timeline as 3D clips:
 
@@ -40,6 +41,8 @@ The panel also accepts a few specialized asset types that flow into the timeline
 - `gaussian-splat` files: PLY, compressed PLY, SPLAT, KSPLAT, SPZ, SOG, LCC, and SOG-style ZIP payloads
 
 Lottie and Rive imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
+
+Files that are not legacy timeline media are routed through the universal Signal IR importer instead of being rejected. Signal assets can be organized, renamed, labeled, deleted, saved, and loaded from the Media Panel, but are not currently draggable to the timeline until a renderer adapter exists for their signal kind.
 
 ### Import Methods
 
@@ -71,7 +74,7 @@ Click the **+ Add** button for creating new items:
 
 ### Import Pipeline
 
-Imports use a two-phase approach:
+Legacy media imports use a two-phase approach:
 
 1. **Phase 1 (instant):** A placeholder entry appears immediately in the panel with `isImporting: true`, showing file name and size
 2. **Phase 2 (background):** Full processing runs in the background:
@@ -87,6 +90,8 @@ Imports use a two-phase approach:
 **Batch processing:** When importing multiple files, up to 3 files are processed in parallel.
 
 If a project-local `Raw/` copy is created, that copy becomes the canonical source for the imported asset. The store promotes the copied handle so later reloads and exports do not depend on the original file.
+
+Signal imports use the universal import orchestrator. CSV files emit `table`, `metadata`, and `binary` refs; unknown files emit `binary` and `metadata` refs. When a project is open, their binary artifacts are persisted content-addressed under `Cache/artifacts/` and referenced from `project.json`. Without an open File System Access project, the same artifact store persists bytes in IndexedDB so SignalAssets are not metadata-only session objects.
 
 ### File System Access API
 When supported (Chrome/Edge):

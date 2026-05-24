@@ -11,6 +11,14 @@ import type {
 import type { SplatEffectorSettings } from '../../types/splatEffector';
 import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 import type { ShapePrimitive } from '../../types/motionDesign';
+import type {
+  SignalArtifact,
+  SignalAsset,
+  SignalGraph,
+  SignalKind,
+  SignalMetadata,
+  SignalOperatorDescriptor,
+} from '../../signals';
 
 // Media item types
 export type ImportedMediaType =
@@ -30,7 +38,8 @@ export type MediaType =
   | 'math-scene'
   | 'motion-shape'
   | 'camera'
-  | 'splat-effector';
+  | 'splat-effector'
+  | 'signal';
 
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
@@ -206,6 +215,26 @@ export interface MotionShapeItem extends MediaItem {
   duration: number;
 }
 
+export interface SignalAssetItemDiagnostic {
+  severity: 'info' | 'warning' | 'error';
+  code: string;
+  message: string;
+  metadata?: SignalMetadata;
+}
+
+export interface SignalAssetItem extends MediaItem {
+  type: 'signal';
+  asset: SignalAsset;
+  artifacts: SignalArtifact[];
+  signalKinds: SignalKind[];
+  providerId?: string;
+  fileSize?: number;
+  fileHash?: string;
+  diagnostics?: SignalAssetItemDiagnostic[];
+}
+
+export type FileImportResult = MediaFile | SignalAssetItem;
+
 // 3D camera configuration for compositions
 export interface CompositionCamera {
   enabled: boolean;
@@ -282,7 +311,8 @@ export type ProjectItem =
   | CameraItem
   | SplatEffectorItem
   | MathSceneItem
-  | MotionShapeItem;
+  | MotionShapeItem
+  | SignalAssetItem;
 
 // Slice creator type for mediaStore
 export type MediaSliceCreator<T> = (
@@ -303,6 +333,10 @@ export interface MediaState {
   splatEffectorItems: SplatEffectorItem[];
   mathSceneItems: MathSceneItem[];
   motionShapeItems: MotionShapeItem[];
+  signalAssets: SignalAssetItem[];
+  signalArtifacts: SignalArtifact[];
+  signalGraphs: SignalGraph[];
+  signalOperators: SignalOperatorDescriptor[];
 
   // Active composition
   activeCompositionId: string | null;

@@ -4,6 +4,7 @@
 import type { TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
+import { requireMediaFileImportResult } from '../../mediaStore/helpers/importResult';
 import { initWebCodecsPlayer, createAudioElement } from '../helpers/webCodecsHelpers';
 import { generateWaveformForFile } from '../helpers/waveformHelpers';
 import { generateClipId } from '../helpers/idGenerator';
@@ -77,7 +78,10 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
     ytFolder = mediaStore.createFolder('YouTube');
   }
 
-  const mediaFile = await mediaStore.importFile(file, ytFolder.id);
+  const mediaFile = requireMediaFileImportResult(
+    await mediaStore.importFile(file, ytFolder.id),
+    'YouTube download import',
+  );
 
   // Find/create audio track
   const audioTrackId = findAvailableAudioTrack(clip.startTime, naturalDuration);

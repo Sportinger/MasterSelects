@@ -99,6 +99,7 @@ export function getMediaBoardTypeLabel(item: MediaBoardItem): string {
   if (item.type === 'solid') return 'Solid';
   if (item.type === 'math-scene') return 'Math Scene';
   if (item.type === 'motion-shape') return 'Motion Shape';
+  if (item.type === 'signal') return 'Signal';
   if (item.type === 'model') return 'Model';
   return item.type.charAt(0).toUpperCase() + item.type.slice(1);
 }
@@ -120,7 +121,7 @@ export function getMediaBoardItemAspectRatio(item: MediaBoardItem): number {
     return clampMediaBoardNumber(width / height, MEDIA_BOARD_NODE_ASPECT_MIN, MEDIA_BOARD_NODE_ASPECT_MAX);
   }
 
-  if (item.type === 'camera' || item.type === 'model' || item.type === 'splat-effector' || item.type === 'motion-shape') {
+  if (item.type === 'camera' || item.type === 'model' || item.type === 'splat-effector' || item.type === 'motion-shape' || item.type === 'signal') {
     return 1;
   }
 
