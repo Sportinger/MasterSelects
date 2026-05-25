@@ -15,7 +15,7 @@
 <p>
   GPU-first editing with <b>32 effects</b>, <b>37 blend modes</b>, <b>79 AI tools</b>, <b>native WebGPU 3D</b>, and only <b>15 runtime dependencies</b>.<br>
   Built from scratch in <b>2,700+ lines of WGSL</b> and <b>165k lines of TypeScript</b>.<br>
-  Import <b>.lottie, .riv, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline, with only one max supscription for an coding agent.
+  Import <b>.lottie, .riv, Lottie JSON, OBJ, glTF, GLB, PLY, SPLAT, KSPLAT, SPZ, SOG, LCC</b> assets and play <b>PLY / GLB sequences</b> directly on the timeline. Created with only one max supscription for a coding agent, january till now.
 </p>
 
 <p>
