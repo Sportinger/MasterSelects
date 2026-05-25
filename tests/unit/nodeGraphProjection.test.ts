@@ -96,7 +96,9 @@ describe('buildClipNodeGraph', () => {
       'onsets',
       'phase-correlation',
       'transcript-timing',
+      'frequency-bands',
       'frequency-summary',
+      'audio-metadata',
     ]);
     expect(graph.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -282,6 +284,7 @@ describe('buildClipNodeGraph', () => {
     expect(graph.nodes.map((node) => node.id)).toEqual([
       'source',
       'output',
+      'audio-analysis',
       'audio-effect-hp',
       'effect-volume',
       'audio-output',
@@ -330,21 +333,56 @@ describe('buildClipNodeGraph', () => {
       },
     }), createTrack({ type: 'audio' }));
     const source = graph.nodes.find((node) => node.id === 'source');
+    const analysis = graph.nodes.find((node) => node.id === 'audio-analysis');
     const outputsById = new Map(source?.outputs.map((port) => [port.id, port]) ?? []);
 
+    expect(analysis).toMatchObject({
+      kind: 'analysis',
+      runtime: 'builtin',
+      label: 'Audio Analysis',
+      inputs: expect.arrayContaining([
+        expect.objectContaining({ id: 'audio', type: 'audio' }),
+        expect.objectContaining({ id: 'time', type: 'time' }),
+        expect.objectContaining({ id: 'metadata', type: 'metadata' }),
+      ]),
+    });
+    expect(analysis?.outputs.map((port) => [port.id, port.type, port.metadata?.semanticKind])).toEqual([
+      ['waveform', 'curve', 'waveform'],
+      ['spectrum', 'texture', 'spectrum'],
+      ['spectrum-2', 'texture', 'spectrum'],
+      ['loudness', 'curve', 'loudness'],
+      ['beats', 'event', 'beats'],
+      ['onsets', 'event', 'onsets'],
+      ['phase-correlation', 'curve', 'phase-correlation'],
+      ['transcript-timing', 'text', 'transcript'],
+      ['frequency-bands', 'table', 'frequency-bands'],
+      ['frequency-summary', 'table', 'frequency-summary'],
+      ['audio-metadata', 'metadata', 'audio-metadata'],
+    ]);
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fromNodeId: 'source',
+        fromPortId: 'audio',
+        toNodeId: 'audio-analysis',
+        toPortId: 'audio',
+        type: 'audio',
+      }),
+    ]));
     expect(source?.outputs.map((port) => [port.id, port.type, port.metadata?.semanticKind, port.metadata?.artifactId])).toEqual([
       ['audio', 'audio', 'audio-source', undefined],
       ['time', 'time', undefined, undefined],
       ['metadata', 'metadata', undefined, undefined],
-      ['waveform', 'metadata', 'waveform', 'processed-waveform-artifact'],
-      ['spectrum', 'metadata', 'spectrum', 'processed-spectrum-a'],
-      ['spectrum-2', 'metadata', 'spectrum', 'processed-spectrum-b'],
-      ['loudness', 'metadata', 'loudness', 'processed-loudness-artifact'],
-      ['beats', 'metadata', 'beats', 'beat-artifact'],
-      ['onsets', 'metadata', 'onsets', 'onset-artifact'],
-      ['phase-correlation', 'metadata', 'phase-correlation', 'phase-artifact'],
-      ['transcript-timing', 'metadata', 'transcript', 'transcript-artifact'],
-      ['frequency-summary', 'metadata', 'frequency-summary', 'frequency-artifact'],
+      ['waveform', 'curve', 'waveform', 'processed-waveform-artifact'],
+      ['spectrum', 'texture', 'spectrum', 'processed-spectrum-a'],
+      ['spectrum-2', 'texture', 'spectrum', 'processed-spectrum-b'],
+      ['loudness', 'curve', 'loudness', 'processed-loudness-artifact'],
+      ['beats', 'event', 'beats', 'beat-artifact'],
+      ['onsets', 'event', 'onsets', 'onset-artifact'],
+      ['phase-correlation', 'curve', 'phase-correlation', 'phase-artifact'],
+      ['transcript-timing', 'text', 'transcript', 'transcript-artifact'],
+      ['frequency-bands', 'table', 'frequency-bands', 'frequency-artifact'],
+      ['frequency-summary', 'table', 'frequency-summary', 'frequency-artifact'],
+      ['audio-metadata', 'metadata', 'audio-metadata', undefined],
     ]);
     expect(outputsById.get('waveform')?.metadata).toMatchObject({
       artifactProvenance: 'processed',
@@ -361,6 +399,19 @@ describe('buildClipNodeGraph', () => {
       generateAction: {
         artifactKind: 'spectrogram-tiles',
       },
+    });
+    expect(outputsById.get('frequency-bands')?.metadata).toMatchObject({
+      artifactId: 'frequency-artifact',
+      semanticKind: 'frequency-bands',
+      generateAction: {
+        artifactKind: 'frequency-summary',
+      },
+    });
+    expect(outputsById.get('audio-metadata')?.metadata).toMatchObject({
+      semanticKind: 'audio-metadata',
+      signalRefId: 'audio-rev-1',
+      available: true,
+      previewable: false,
     });
   });
 
@@ -717,8 +768,10 @@ describe('buildClipNodeGraph', () => {
     expect(context).toContain('effectiveRepairSuggestions=');
     expect(context).toContain('hum-notch severity=warning');
     expect(context).toContain('mono-compatibility severity=warning');
-    expect(context).toContain('waveform:metadata semantic=waveform available=true stale=false provenance=processed artifact=processed-waveform-artifact action=processed-waveform-pyramid');
-    expect(context).toContain('spectrum:metadata semantic=spectrum available=true stale=false provenance=processed artifact=processed-spectrum-artifact action=spectrogram-tiles');
+    expect(context).toContain('waveform:curve semantic=waveform available=true stale=false provenance=processed artifact=processed-waveform-artifact action=processed-waveform-pyramid');
+    expect(context).toContain('spectrum:texture semantic=spectrum available=true stale=false provenance=processed artifact=processed-spectrum-artifact action=spectrogram-tiles');
+    expect(context).toContain('frequency-bands:table semantic=frequency-bands available=true stale=false provenance=processed artifact=processed-frequency-artifact action=frequency-summary');
+    expect(context).toContain('audio-metadata:metadata semantic=audio-metadata available=true stale=false provenance=none artifact=none action=none');
     expect(context).not.toContain('0.25,1');
     expect(context).not.toContain('Float32Array');
   });

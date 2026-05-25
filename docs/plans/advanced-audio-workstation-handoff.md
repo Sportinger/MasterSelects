@@ -16,6 +16,10 @@ Recent fixes in this handoff pass:
 - Added deterministic rule-based audio repair suggestions from cached loudness, frequency, and phase analysis.
 - Exposed repair suggestions to AI node authoring context and runtime context without raw audio buffers.
 - Started the professional audio track-header redesign: audio tracks now use a wider timeline header with mixer-strip style controls, vertical meter/fader, pan, S/M/monitor/R/Aux/lock/FX buttons.
+- Upgraded Node Workspace audio analysis ports from generic `metadata` ports to semantic signal types: `curve` waveform/loudness/phase, `texture` spectrum tiles, `table` frequency bands/summaries, `event` beats/onsets, `text` transcript timing, and bounded `metadata` audio metadata.
+- Added `frequencyBands` and `audioMetadata` aliases to AI node runtime signals so generated nodes can read compact analysis tables and source/routing metadata without raw audio buffers.
+- Added a visible `Audio Analysis` graph node for audio-capable clips so artifact-backed analysis signals are not only hidden on the source node.
+- Made Node Workspace audio analysis `Refresh` actions force-regenerate matching artifacts instead of returning early when refs already exist.
 
 ## Verification Run In This Pass
 
@@ -24,6 +28,8 @@ Passed:
 - `npx tsc --noEmit`
 - `npm run test -- tests\unit\audio\processedWaveformPyramidService.test.ts tests\stores\timeline\clipSlice.test.ts tests\stores\timeline\keyframeSlice.test.ts`
 - `npm run test -- tests\unit\audio\audioRepairSuggestions.test.ts tests\unit\aiNodeRuntime.test.ts tests\unit\nodeGraphProjection.test.ts`
+- `npm run test -- tests\unit\nodeGraphProjection.test.ts tests\unit\aiNodeRuntime.test.ts`
+- `npm run test -- tests\unit\nodeGraphProjection.test.ts tests\unit\aiNodeRuntime.test.ts tests\stores\timeline\clipSlice.test.ts`
 - Focused ESLint on the edited audio/node/runtime/timeline files
 - Dev bridge hard reload showed no fresh `TimelineClipComponent` or `getSnapshot` errors
 
@@ -40,11 +46,9 @@ Before committing, run the full required checks:
    - Add better iconography once the app has an icon package or local icon convention for timeline buttons.
    - Tune small-height behavior for audio tracks outside audio focus mode.
 
-2. Complete Node/AI graph contract work:
-   - Change audio analysis ports from generic `metadata` to planned signal types such as `curve`, `texture`, `table`, `event`, and `text`.
-   - Add missing `frequencyBands` and `audioMetadata` ports.
-   - Add lightweight analysis nodes/lanes for source audio even when no audio effects exist.
-   - Make “Refresh” force-regenerate artifacts instead of returning early when refs exist.
+2. Complete the remaining Node/AI graph contract work:
+   - Add richer status/progress badges on the `Audio Analysis` node itself, not only in the inspector port rows.
+   - Consider direct custom-node connection helpers for `frequencyBands`, `spectrum`, `loudness`, beats, and transcript ports.
 
 3. Complete Track F spectral editing:
    - Add spectral brush interaction beyond rectangular selection.

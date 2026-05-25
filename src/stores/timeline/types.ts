@@ -444,6 +444,10 @@ export interface AddClipOptions {
   source?: Partial<NonNullable<TimelineClip['source']>>;
 }
 
+export interface GenerateClipAudioAnalysisOptions {
+  force?: boolean;
+}
+
 // Core clip actions (remain in clipSlice)
 export interface CoreClipActions {
   addClip: (
@@ -464,12 +468,12 @@ export interface CoreClipActions {
   splitClipAtPlayhead: () => void;
   updateClipTransform: (id: string, transform: ClipTransformUpdate) => void;
   toggleClipReverse: (id: string) => void;
-  generateWaveformForClip: (clipId: string) => Promise<void>;
-  generateProcessedWaveformForClip: (clipId: string) => Promise<void>;
-  generateSpectrogramForClip: (clipId: string) => Promise<void>;
-  generateLoudnessForClip: (clipId: string) => Promise<void>;
-  generateBeatOnsetForClip: (clipId: string) => Promise<void>;
-  generateFrequencyPhaseForClip: (clipId: string) => Promise<void>;
+  generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateProcessedWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateSpectrogramForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateLoudnessForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateBeatOnsetForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateFrequencyPhaseForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
   cancelAudioAnalysisForClip: (clipId: string) => void;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
   getClipChildren: (clipId: string) => TimelineClip[];

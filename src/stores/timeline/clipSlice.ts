@@ -8,7 +8,7 @@ import type {
   ClipAudioAnalysisJobKind,
   ClipAudioAnalysisJobPhase,
 } from '../../types/audio';
-import type { AddClipOptions, CoreClipActions, SliceCreator, Composition } from './types';
+import type { AddClipOptions, CoreClipActions, GenerateClipAudioAnalysisOptions, SliceCreator, Composition } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { Logger } from '../../services/logger';
@@ -1110,7 +1110,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
   },
 
-  generateProcessedWaveformForClip: async (clipId: string) => {
+  generateProcessedWaveformForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
@@ -1119,7 +1119,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     if (!clipRequiresProcessedWaveformPyramid(clip, keyframes)) {
       return;
     }
-    if (clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId) {
+    if (!options.force && clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId) {
       return;
     }
 
@@ -1243,17 +1243,17 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
   },
 
-  generateSpectrogramForClip: async (clipId: string) => {
+  generateSpectrogramForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
 
     const keyframes = clipKeyframes.get(clipId) ?? [];
     const needsProcessedSpectrogram = clipRequiresProcessedWaveformPyramid(clip, keyframes);
-    if (needsProcessedSpectrogram && clip.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0]) {
+    if (!options.force && needsProcessedSpectrogram && clip.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0]) {
       return;
     }
-    if (!needsProcessedSpectrogram && clip.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0]) {
+    if (!options.force && !needsProcessedSpectrogram && clip.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0]) {
       return;
     }
 
@@ -1387,17 +1387,17 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
   },
 
-  generateLoudnessForClip: async (clipId: string) => {
+  generateLoudnessForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
 
     const keyframes = clipKeyframes.get(clipId) ?? [];
     const needsProcessedLoudness = clipRequiresProcessedWaveformPyramid(clip, keyframes);
-    if (needsProcessedLoudness && clip.audioState?.processedAnalysisRefs?.loudnessEnvelopeId) {
+    if (!options.force && needsProcessedLoudness && clip.audioState?.processedAnalysisRefs?.loudnessEnvelopeId) {
       return;
     }
-    if (!needsProcessedLoudness && clip.audioState?.sourceAnalysisRefs?.loudnessEnvelopeId) {
+    if (!options.force && !needsProcessedLoudness && clip.audioState?.sourceAnalysisRefs?.loudnessEnvelopeId) {
       return;
     }
 
@@ -1531,7 +1531,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
   },
 
-  generateBeatOnsetForClip: async (clipId: string) => {
+  generateBeatOnsetForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
@@ -1541,7 +1541,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const currentRefs = needsProcessedBeatOnset
       ? clip.audioState?.processedAnalysisRefs
       : clip.audioState?.sourceAnalysisRefs;
-    if (currentRefs?.beatGridId && currentRefs.onsetMapId) {
+    if (!options.force && currentRefs?.beatGridId && currentRefs.onsetMapId) {
       return;
     }
 
@@ -1672,7 +1672,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     }
   },
 
-  generateFrequencyPhaseForClip: async (clipId: string) => {
+  generateFrequencyPhaseForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
@@ -1682,7 +1682,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const currentRefs = needsProcessedFrequencyPhase
       ? clip.audioState?.processedAnalysisRefs
       : clip.audioState?.sourceAnalysisRefs;
-    if (currentRefs?.frequencySummaryId && currentRefs.phaseCorrelationId) {
+    if (!options.force && currentRefs?.frequencySummaryId && currentRefs.phaseCorrelationId) {
       return;
     }
 

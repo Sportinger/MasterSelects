@@ -116,6 +116,8 @@ describe('AI node runtime', () => {
               output.data[17] = audio.routing.master.volumeDb === -1 && audio.routing.master.effectStack[0].descriptorId === 'audio-low-pass' ? 113 : 0;
               output.data[20] = audio.repairSuggestions.some(suggestion => suggestion.kind === 'hum-notch' && suggestion.operation.params.baseFrequencyHz === 50) ? 114 : 0;
               output.data[21] = context.signals.audioRepairSuggestions === audio.repairSuggestions ? 115 : 0;
+              output.data[18] = audio.analysis.effective.frequencyBands.frequencyBandSummary.dominantBandId === 'mains' ? 116 : 0;
+              output.data[22] = context.signals.frequencyBands === audio.analysis.effective.frequencyBands && context.signals.audioMetadata.waveformSampleCount === 1024 && audio.metadata.trackId === 'video-1' ? 117 : 0;
               return { output };
             }
           })
@@ -254,5 +256,7 @@ describe('AI node runtime', () => {
     expect(outputData?.[17]).toBe(113);
     expect(outputData?.[20]).toBe(114);
     expect(outputData?.[21]).toBe(115);
+    expect(outputData?.[18]).toBe(116);
+    expect(outputData?.[22]).toBe(117);
   });
 });

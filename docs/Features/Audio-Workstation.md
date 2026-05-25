@@ -12,7 +12,7 @@ Audio state is split across source media, clips, tracks, the master bus, project
 - Clip `audioState` stores non-destructive edit stacks, spectral image layers, registry-backed FX instances, source/processed analysis refs, and bake provenance.
 - Track `audioState` stores fader, pan, mute/solo, record arm, input monitor, sends, meters, and track FX.
 - `masterAudioState` stores the master fader, limiter, target LUFS, true-peak ceiling, master FX, and export preflight/measurement state.
-- Node Workspace audio ports expose artifact refs and bounded summaries, not raw full-length buffers.
+- Node Workspace exposes a visible `Audio Analysis` node for audio-capable clips, alongside source ports and audio effect lanes. Audio ports expose artifact refs and bounded summaries, not raw full-length buffers. Waveform and loudness ports are `curve` signals, spectrogram ports are `texture` signals, frequency-band summaries are `table` signals, beats/onsets are `event` signals, transcript timing is a `text` signal, and audio metadata stays a bounded `metadata` signal.
 
 ## Timeline Surface
 
@@ -61,6 +61,8 @@ Current focused checks cover:
 - Processed analysis identity excluding static/automated volume.
 - Recording service start/stop/commit behavior, punch-in/out scheduling, fallback backend selection, active chunk and stopped-blob recovery, browser storage quota/persistence warnings, and direct WAV metadata preservation.
 - Track/master routing, sends, export preflight, and audio export paths.
+- Node Workspace audio projection and AI runtime context for semantic audio ports, `frequencyBands`, `audioMetadata`, repair suggestions, and artifact-only bounded summaries.
+- Node Workspace `Generate`/`Refresh` actions for audio analysis ports. Refresh forces regeneration instead of returning early when a matching artifact ref already exists.
 
 ## Sources
 
@@ -73,5 +75,8 @@ Current focused checks cover:
 - `src/services/audio/ClipAudioAnalysisOrchestrator.ts`
 - `src/services/audio/ClipAudioRenderService.ts`
 - `src/services/audio/AudioRecordingService.ts`
+- `src/services/nodeGraph/clipGraphProjection.ts`
+- `src/services/nodeGraph/aiNodeRuntime.ts`
+- `src/services/nodeGraph/aiNodeAuthoringContext.ts`
 - `src/engine/audio/AudioEffectRegistry.ts`
 - `src/engine/audio/AudioExportPipeline.ts`

@@ -174,7 +174,25 @@ interface AINodeRuntimeAudioAnalysisNamespace {
   onsets?: AINodeRuntimeAudioArtifactSignal;
   phaseCorrelation?: AINodeRuntimeAudioArtifactSignal;
   transcriptTiming?: AINodeRuntimeAudioArtifactSignal;
+  frequencyBands?: AINodeRuntimeAudioArtifactSignal;
   frequencySummary?: AINodeRuntimeAudioArtifactSignal;
+}
+
+interface AINodeRuntimeAudioMetadataSignal {
+  sourceType?: string;
+  mediaFileId?: string;
+  sourceAudioRevisionId?: string;
+  trackId?: string;
+  duration: number;
+  inPoint: number;
+  outPoint: number;
+  waveformSampleCount: number;
+  editStackCount: number;
+  spectralLayerCount: number;
+  sourceArtifactCount: number;
+  processedArtifactCount: number;
+  effectiveArtifactCount: number;
+  hasProcessedAnalysis: boolean;
 }
 
 interface AINodeRuntimeAudioContext {
@@ -196,6 +214,7 @@ interface AINodeRuntimeAudioContext {
     processed: AINodeRuntimeAudioAnalysisNamespace;
     effective: AINodeRuntimeAudioAnalysisNamespace;
   };
+  metadata: AINodeRuntimeAudioMetadataSignal;
   repairSuggestions: AudioRepairSuggestion[];
 }
 
@@ -719,6 +738,7 @@ function createAudioAnalysisNamespace(
 ): AINodeRuntimeAudioAnalysisNamespace {
   const spectrogramTileSetIds = refs?.spectrogramTileSetIds ?? [];
   const boundedSpectrogramTileSetIds = spectrogramTileSetIds.slice(0, MAX_RUNTIME_AUDIO_SPECTROGRAM_REFS);
+  const frequencySummary = createAudioArtifactSignal(refs?.frequencySummaryId, 'frequency-summary', provenance);
 
   return {
     waveform: createAudioArtifactSignal(refs?.waveformPyramidId, 'waveform-pyramid', provenance),
@@ -740,7 +760,8 @@ function createAudioAnalysisNamespace(
     onsets: createAudioArtifactSignal(refs?.onsetMapId, 'onset-map', provenance),
     phaseCorrelation: createAudioArtifactSignal(refs?.phaseCorrelationId, 'phase-correlation', provenance),
     transcriptTiming: createAudioArtifactSignal(refs?.transcriptTimingId, 'transcript-timing', provenance),
-    frequencySummary: createAudioArtifactSignal(refs?.frequencySummaryId, 'frequency-summary', provenance),
+    frequencyBands: frequencySummary,
+    frequencySummary,
   };
 }
 
@@ -787,7 +808,48 @@ function mergeAudioAnalysisNamespaces(
     onsets: processed.onsets ?? source.onsets,
     phaseCorrelation: processed.phaseCorrelation ?? source.phaseCorrelation,
     transcriptTiming: processed.transcriptTiming ?? source.transcriptTiming,
+    frequencyBands: processed.frequencyBands ?? source.frequencyBands,
     frequencySummary: processed.frequencySummary ?? source.frequencySummary,
+  };
+}
+
+function countAudioAnalysisRefs(refs: MediaFileAudioAnalysisRefs | undefined): number {
+  if (!refs) {
+    return 0;
+  }
+
+  return [
+    refs.waveformPyramidId,
+    refs.processedWaveformPyramidId,
+    refs.loudnessEnvelopeId,
+    refs.beatGridId,
+    refs.onsetMapId,
+    refs.phaseCorrelationId,
+    refs.transcriptTimingId,
+    refs.frequencySummaryId,
+  ].filter(Boolean).length + (refs.spectrogramTileSetIds?.length ?? 0);
+}
+
+function createAudioMetadataSignal(
+  clip: TimelineClip,
+  track: TimelineTrack | undefined,
+  effectiveRefs: MediaFileAudioAnalysisRefs | undefined,
+): AINodeRuntimeAudioMetadataSignal {
+  return {
+    sourceType: clip.source?.type,
+    mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+    sourceAudioRevisionId: clip.audioState?.sourceAudioRevisionId,
+    trackId: track?.id ?? clip.trackId,
+    duration: clip.duration,
+    inPoint: clip.inPoint,
+    outPoint: clip.outPoint,
+    waveformSampleCount: clip.waveform?.length ?? 0,
+    editStackCount: clip.audioState?.editStack?.length ?? 0,
+    spectralLayerCount: clip.audioState?.spectralLayers?.length ?? 0,
+    sourceArtifactCount: countAudioAnalysisRefs(clip.audioState?.sourceAnalysisRefs),
+    processedArtifactCount: countAudioAnalysisRefs(clip.audioState?.processedAnalysisRefs),
+    effectiveArtifactCount: countAudioAnalysisRefs(effectiveRefs),
+    hasProcessedAnalysis: countAudioAnalysisRefs(clip.audioState?.processedAnalysisRefs) > 0,
   };
 }
 
@@ -899,6 +961,7 @@ function hasAudioAnalysis(namespace: AINodeRuntimeAudioAnalysisNamespace): boole
     namespace.onsets ||
     namespace.phaseCorrelation ||
     namespace.transcriptTiming ||
+    namespace.frequencyBands ||
     namespace.frequencySummary,
   );
 }
@@ -917,6 +980,7 @@ function createRuntimeAudioContext(
   });
   const waveform = summarizeWaveform(clip.waveform);
   const routing = createRuntimeAudioRoutingContext(clip, track, masterAudioState);
+  const metadata = createAudioMetadataSignal(clip, track, effectiveRefs);
   const hasAudioSource = clip.source?.type === 'audio' ||
     clip.source?.type === 'video' ||
     clip.file?.type?.startsWith('audio/') ||
@@ -943,6 +1007,7 @@ function createRuntimeAudioContext(
       processed,
       effective,
     },
+    metadata,
     repairSuggestions,
   };
 }
@@ -1249,6 +1314,8 @@ function processTexture(
         node: { id: definition.id, label: definition.label },
         audio: audioSignal,
         audioAnalysis: audioSignal?.analysis,
+        frequencyBands: audioSignal?.analysis.effective.frequencyBands,
+        audioMetadata: audioSignal?.metadata,
         audioRepairSuggestions: audioSignal?.repairSuggestions,
         text: textSignal,
       },

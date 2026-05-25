@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip, createMockTrack, createMockTransform, resetIdCounter } from '../../helpers/mockData';
+import { clipAudioAnalysisJobService } from '../../../src/services/audio/ClipAudioAnalysisJobService';
 
 describe('clipSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -20,6 +21,10 @@ describe('clipSlice', () => {
   beforeEach(() => {
     resetIdCounter();
     store = createTestTimelineStore();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   // ========== updateClip ==========
@@ -67,6 +72,32 @@ describe('clipSlice', () => {
       expect(updated.audioState).toBe(audioState);
       expect(updated.audioState?.sourceAnalysisRefs).toEqual(audioState.sourceAnalysisRefs);
       expect(updated.audioState?.processedAnalysisRefs).toEqual(audioState.processedAnalysisRefs);
+    });
+
+    it('keeps existing frequency/phase refs unless a caller explicitly force-refreshes analysis', async () => {
+      const runSpy = vi
+        .spyOn(clipAudioAnalysisJobService, 'run')
+        .mockResolvedValue(undefined as never);
+      const clip = createMockClip({
+        id: 'clip-1',
+        source: { type: 'audio' },
+        audioState: {
+          sourceAnalysisRefs: {
+            frequencySummaryId: 'frequency-a',
+            phaseCorrelationId: 'phase-a',
+          },
+        },
+      });
+      store = createTestTimelineStore({ clips: [clip] });
+
+      await store.getState().generateFrequencyPhaseForClip('clip-1');
+      expect(runSpy).not.toHaveBeenCalled();
+
+      await store.getState().generateFrequencyPhaseForClip('clip-1', { force: true });
+      expect(runSpy).toHaveBeenCalledWith(
+        { clipId: 'clip-1', kind: 'frequency-phase-analysis' },
+        expect.any(Function),
+      );
     });
 
     it('invalidates processed audio analysis refs when patching audioState and keeps source refs', () => {

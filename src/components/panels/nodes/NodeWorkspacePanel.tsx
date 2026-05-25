@@ -35,6 +35,7 @@ import type {
   TimelineClip,
   TimelineTrack,
 } from '../../../types';
+import type { GenerateClipAudioAnalysisOptions } from '../../../stores/timeline/types';
 import { EditableDraggableNumber as DraggableNumber } from '../../common/EditableDraggableNumber';
 import { KeyframeToggle, MultiKeyframeToggle } from '../properties/shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../properties/sharedConstants';
@@ -846,7 +847,7 @@ function PortList({
   title: string;
   ports: NodeGraphPort[];
   clip?: TimelineClip | null;
-  onGenerateAudioAnalysis?: (clipId: string, kind: AudioAnalysisArtifactKind) => void;
+  onGenerateAudioAnalysis?: (clipId: string, kind: AudioAnalysisArtifactKind, options?: GenerateClipAudioAnalysisOptions) => void;
   onCancelAudioAnalysis?: (clipId: string) => void;
 }) {
   return (
@@ -887,7 +888,7 @@ function PortList({
                         if (audioAnalysisBusy) {
                           onCancelAudioAnalysis?.(clip.id);
                         } else if (isImplementedAudioAnalysisKind(artifactKind)) {
-                          onGenerateAudioAnalysis?.(clip.id, artifactKind);
+                          onGenerateAudioAnalysis?.(clip.id, artifactKind, { force: available });
                         }
                       }}
                     >
@@ -981,19 +982,23 @@ function NodeInspector({
   const generateBeatOnsetForClip = useTimelineStore((state) => state.generateBeatOnsetForClip);
   const generateFrequencyPhaseForClip = useTimelineStore((state) => state.generateFrequencyPhaseForClip);
   const cancelAudioAnalysisForClip = useTimelineStore((state) => state.cancelAudioAnalysisForClip);
-  const generateAudioAnalysis = useCallback((clipId: string, kind: AudioAnalysisArtifactKind) => {
+  const generateAudioAnalysis = useCallback((
+    clipId: string,
+    kind: AudioAnalysisArtifactKind,
+    options?: GenerateClipAudioAnalysisOptions,
+  ) => {
     if (kind === 'processed-waveform-pyramid') {
-      void generateProcessedWaveformForClip(clipId);
+      void generateProcessedWaveformForClip(clipId, options);
     } else if (kind === 'waveform-pyramid') {
-      void generateWaveformForClip(clipId);
+      void generateWaveformForClip(clipId, options);
     } else if (kind === 'spectrogram-tiles') {
-      void generateSpectrogramForClip(clipId);
+      void generateSpectrogramForClip(clipId, options);
     } else if (kind === 'loudness-envelope') {
-      void generateLoudnessForClip(clipId);
+      void generateLoudnessForClip(clipId, options);
     } else if (kind === 'beat-grid' || kind === 'onset-map') {
-      void generateBeatOnsetForClip(clipId);
+      void generateBeatOnsetForClip(clipId, options);
     } else if (kind === 'phase-correlation' || kind === 'frequency-summary') {
-      void generateFrequencyPhaseForClip(clipId);
+      void generateFrequencyPhaseForClip(clipId, options);
     }
   }, [
     generateBeatOnsetForClip,
