@@ -3,7 +3,7 @@
 // Reduced from ~2031 LOC to ~650 LOC (68% reduction)
 
 import type { TimelineClip, TimelineTrack } from '../../types';
-import type { CoreClipActions, SliceCreator, Composition } from './types';
+import type { AddClipOptions, CoreClipActions, SliceCreator, Composition } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
 import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { Logger } from '../../services/logger';
@@ -22,6 +22,21 @@ function isTrackLocked(tracks: TimelineTrack[], trackId: string | undefined): bo
 function isClipOnLockedTrack(clips: TimelineClip[], tracks: TimelineTrack[], clipId: string): boolean {
   const clip = clips.find(c => c.id === clipId);
   return isTrackLocked(tracks, clip?.trackId);
+}
+
+function applyAddClipOptions(clip: TimelineClip, options?: AddClipOptions): TimelineClip {
+  if (!options) return clip;
+
+  return {
+    ...clip,
+    ...(options.name ? { name: options.name } : {}),
+    ...(options.signalAssetId ? { signalAssetId: options.signalAssetId } : {}),
+    ...(options.signalRefId ? { signalRefId: options.signalRefId } : {}),
+    ...(options.signalRenderAdapterId ? { signalRenderAdapterId: options.signalRenderAdapterId } : {}),
+    source: clip.source && options.source
+      ? { ...clip.source, ...options.source }
+      : clip.source,
+  };
 }
 
 /** Deep clone properties that must not be shared between split clips */
@@ -68,7 +83,7 @@ import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/Ve
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
-  addClip: async (trackId, file, startTime, providedDuration, mediaFileId, mediaTypeOverride?) => {
+  addClip: async (trackId, file, startTime, providedDuration, mediaFileId, mediaTypeOverride?, options?) => {
     const mediaType = (mediaTypeOverride as Awaited<ReturnType<typeof classifyMediaType>> | 'gaussian-avatar' | 'gaussian-splat') || await classifyMediaType(file);
     const estimatedDuration = providedDuration ?? 5;
 
@@ -79,25 +94,25 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const targetTrack = tracks.find(t => t.id === trackId);
     if (!targetTrack) {
       log.warn('Track not found', { trackId });
-      return;
+      return undefined;
     }
     if (targetTrack.locked) {
       log.warn('Cannot add clip to locked track', { trackId });
-      return;
+      return undefined;
     }
 
     if (mediaType === 'unknown') {
       log.warn('Unsupported clip type', { file: file.name });
-      return;
+      return undefined;
     }
 
     if ((mediaType === 'video' || mediaType === 'image' || mediaType === 'lottie' || mediaType === 'rive' || mediaType === 'model' || mediaType === 'gaussian-avatar' || mediaType === 'gaussian-splat') && targetTrack.type !== 'video') {
       log.warn('Cannot add visual clip to audio track');
-      return;
+      return undefined;
     }
     if (mediaType === 'audio' && targetTrack.type !== 'audio') {
       log.warn('Cannot add audio to video track');
-      return;
+      return undefined;
     }
 
     // Helper to update clip when loaded
@@ -216,7 +231,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         finalAudioClipId = audioId;
 
         return {
-          clips: [...state.clips, videoClip, audioClip],
+          clips: [...state.clips, applyAddClipOptions(videoClip, options), audioClip],
           tracks: newTracks,
         };
       });
@@ -234,12 +249,15 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       });
 
       invalidateCache();
-      return;
+      return clipId;
     }
 
     // Handle audio files
     if (mediaType === 'audio') {
-      const audioClip = createAudioClipPlaceholder({ trackId, file, startTime, estimatedDuration, mediaFileId });
+      const audioClip = applyAddClipOptions(
+        createAudioClipPlaceholder({ trackId, file, startTime, estimatedDuration, mediaFileId }),
+        options,
+      );
       // Carry over transcript from MediaFile if available
       if (sourceTranscript) {
         audioClip.transcript = sourceTranscript;
@@ -257,19 +275,22 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       });
 
       invalidateCache();
-      return;
+      return audioClip.id;
     }
 
     if (mediaType === 'lottie') {
       const vectorAnimationMetadata = sourceMediaFile?.vectorAnimation ?? await readLottieMetadata(file);
-      const lottieClip = createLottieClipPlaceholder({
-        trackId,
-        file,
-        startTime,
-        estimatedDuration: providedDuration ?? vectorAnimationMetadata.duration ?? estimatedDuration,
-        mediaFileId,
-        metadata: vectorAnimationMetadata,
-      });
+      const lottieClip = applyAddClipOptions(
+        createLottieClipPlaceholder({
+          trackId,
+          file,
+          startTime,
+          estimatedDuration: providedDuration ?? vectorAnimationMetadata.duration ?? estimatedDuration,
+          mediaFileId,
+          metadata: vectorAnimationMetadata,
+        }),
+        options,
+      );
       set({ clips: [...clips, lottieClip] });
       updateDuration();
 
@@ -282,19 +303,22 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       });
 
       invalidateCache();
-      return;
+      return lottieClip.id;
     }
 
     if (mediaType === 'rive') {
       const vectorAnimationMetadata = sourceMediaFile?.vectorAnimation ?? await readRiveMetadata(file);
-      const riveClip = createRiveClipPlaceholder({
-        trackId,
-        file,
-        startTime,
-        estimatedDuration: providedDuration ?? vectorAnimationMetadata.duration ?? estimatedDuration,
-        mediaFileId,
-        metadata: vectorAnimationMetadata,
-      });
+      const riveClip = applyAddClipOptions(
+        createRiveClipPlaceholder({
+          trackId,
+          file,
+          startTime,
+          estimatedDuration: providedDuration ?? vectorAnimationMetadata.duration ?? estimatedDuration,
+          mediaFileId,
+          metadata: vectorAnimationMetadata,
+        }),
+        options,
+      );
       set({ clips: [...clips, riveClip] });
       updateDuration();
 
@@ -307,17 +331,21 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       });
 
       invalidateCache();
-      return;
+      return riveClip.id;
     }
 
     // Handle image files
     if (mediaType === 'image') {
-      const imageClip = createImageClipPlaceholder({ trackId, file, startTime, estimatedDuration });
+      const imageClip = applyAddClipOptions(
+        createImageClipPlaceholder({ trackId, file, startTime, estimatedDuration }),
+        options,
+      );
       set({ clips: [...clips, imageClip] });
       updateDuration();
 
       await loadImageMedia({ clip: imageClip, updateClip });
       invalidateCache();
+      return imageClip.id;
     }
 
     // Handle 3D model files
@@ -325,21 +353,25 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       const modelSequenceDuration = sourceMediaFile?.modelSequence
         ? (providedDuration ?? sourceMediaFile.modelSequence.frameCount / Math.max(1, sourceMediaFile.modelSequence.fps || 30))
         : undefined;
-      const modelClip = createModelClipPlaceholder({
-        trackId,
-        file,
-        startTime,
-        estimatedDuration: modelSequenceDuration ?? providedDuration ?? 10,
-        mediaFileId,
-        modelSequence: sourceMediaFile?.modelSequence,
-        modelUrl: sourceMediaFile?.url,
-        modelFileName: sourceMediaFile?.name ?? file.name,
-      });
+      const modelClip = applyAddClipOptions(
+        createModelClipPlaceholder({
+          trackId,
+          file,
+          startTime,
+          estimatedDuration: modelSequenceDuration ?? providedDuration ?? 10,
+          mediaFileId,
+          modelSequence: sourceMediaFile?.modelSequence,
+          modelUrl: sourceMediaFile?.url,
+          modelFileName: sourceMediaFile?.name ?? file.name,
+        }),
+        options,
+      );
       modelClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
       set({ clips: [...clips, modelClip] });
       updateDuration();
       loadModelMedia({ clip: modelClip, updateClip });
       invalidateCache();
+      return modelClip.id;
     }
 
     // Legacy gaussian-avatar clips are intentionally disabled.
@@ -348,7 +380,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         file: file.name,
         mediaFileId,
       });
-      return;
+      return undefined;
     }
 
     // Handle Gaussian Splat files
@@ -356,27 +388,33 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       const gaussianSplatSequenceDuration = sourceMediaFile?.gaussianSplatSequence
         ? (providedDuration ?? sourceMediaFile.gaussianSplatSequence.frameCount / Math.max(1, sourceMediaFile.gaussianSplatSequence.fps || 30))
         : undefined;
-      const splatClip = createGaussianSplatClipPlaceholder({
-        trackId,
-        file,
-        startTime,
-        estimatedDuration: gaussianSplatSequenceDuration ?? providedDuration ?? 30,
-        mediaFileId,
-        gaussianSplatSequence: sourceMediaFile?.gaussianSplatSequence,
-        gaussianSplatUrl: sourceMediaFile?.url,
-        gaussianSplatFileName: sourceMediaFile?.name ?? file.name,
-        gaussianSplatRuntimeKey:
-          sourceMediaFile?.projectPath ??
-          sourceMediaFile?.absolutePath ??
-          sourceMediaFile?.filePath ??
-          sourceMediaFile?.url,
-      });
+      const splatClip = applyAddClipOptions(
+        createGaussianSplatClipPlaceholder({
+          trackId,
+          file,
+          startTime,
+          estimatedDuration: gaussianSplatSequenceDuration ?? providedDuration ?? 30,
+          mediaFileId,
+          gaussianSplatSequence: sourceMediaFile?.gaussianSplatSequence,
+          gaussianSplatUrl: sourceMediaFile?.url,
+          gaussianSplatFileName: sourceMediaFile?.name ?? file.name,
+          gaussianSplatRuntimeKey:
+            sourceMediaFile?.projectPath ??
+            sourceMediaFile?.absolutePath ??
+            sourceMediaFile?.filePath ??
+            sourceMediaFile?.url,
+        }),
+        options,
+      );
       splatClip.mediaFileId = mediaFileId;  // Link to MediaFile for nested comp lookup
       set({ clips: [...clips, splatClip] });
       updateDuration();
       loadGaussianSplatMedia({ clip: splatClip, updateClip });
       invalidateCache();
+      return splatClip.id;
     }
+
+    return undefined;
   },
 
   // Add a composition as a clip (nested composition)

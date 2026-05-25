@@ -100,6 +100,22 @@ describe('SerializableClip structure', () => {
     expect(restored.transform.rotation).toEqual({ x: 0, y: 0, z: 45 });
   });
 
+  it('preserves signal renderer adapter references through serialization', () => {
+    const clip = makeSerializableClip({
+      sourceType: 'text',
+      mediaFileId: '',
+      signalAssetId: 'signal-asset-1',
+      signalRefId: 'signal-ref-table',
+      signalRenderAdapterId: 'masterselects.renderer.signal-text-summary',
+    });
+
+    const restored: SerializableClip = JSON.parse(JSON.stringify(clip));
+
+    expect(restored.signalAssetId).toBe('signal-asset-1');
+    expect(restored.signalRefId).toBe('signal-ref-table');
+    expect(restored.signalRenderAdapterId).toBe('masterselects.renderer.signal-text-summary');
+  });
+
   it('preserves effects through JSON round-trip', () => {
     const effects: Effect[] = [
       { id: 'fx-1', name: 'Blur', type: 'blur', enabled: true, params: { radius: 5 } },

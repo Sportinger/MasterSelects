@@ -676,6 +676,9 @@ export interface TimelineClip {
   motion?: MotionLayerDefinition;
   thumbnails?: string[];  // Array of data URLs for filmstrip preview
   mediaFileId?: string;   // Reference to MediaFile for audio/proxy lookup (top-level for YouTube downloads)
+  signalAssetId?: string; // Source SignalAsset for renderer-adapter materialized clips
+  signalRefId?: string;   // Source SignalRef selected by the renderer adapter
+  signalRenderAdapterId?: string; // Renderer adapter that produced the clip materialization
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   linkedGroupId?: string; // ID of multicam group (clips synced together)
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
@@ -771,6 +774,9 @@ export interface SerializableClip {
   trackId: string;
   name: string;
   mediaFileId: string;       // Reference to MediaFile in mediaStore
+  signalAssetId?: string;    // Source SignalAsset for renderer-adapter materialized clips
+  signalRefId?: string;      // Source SignalRef selected by the renderer adapter
+  signalRenderAdapterId?: string; // Renderer adapter that produced the clip materialization
   startTime: number;
   duration: number;
   inPoint: number;

@@ -203,7 +203,7 @@ export function Timeline() {
   const {
     addClip, addCompClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip,
     addMathSceneClip, addMotionShapeClip, moveClip, trimClip,
-    removeClip, selectClip, unlinkGroup, splitClip, splitClipAtPlayhead,
+    updateClip, updateTextProperties, removeClip, selectClip, unlinkGroup, splitClip, splitClipAtPlayhead,
     toggleClipReverse, updateClipTransform, setClipParent, generateWaveformForClip,
     addClipEffect, convertSolidToMotionShape,
   } = store;
@@ -469,6 +469,8 @@ export function Timeline() {
     addClip,
     addCompClip,
     addTextClip,
+    updateTextProperties,
+    updateClip,
     addSolidClip,
     addMeshClip,
     addCameraClip,

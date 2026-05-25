@@ -159,7 +159,7 @@ export const mediaToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'importLocalFiles',
-      description: 'Import supported local files from disk into the media panel. Provide absolute file paths. Uses the dev bridge in development or the Native Helper in production. Supports video, audio, image, 3D model, and gaussian-splat files that the editor already knows how to import. Can optionally place them on the timeline with full control over track and position.',
+      description: 'Import local files from disk into the media panel. Provide absolute file paths. Uses the dev bridge in development or the Native Helper in production. Known timeline media import as legacy media; other files import as SignalAssets. Can optionally place legacy media or SignalAssets on the timeline with full control over track and position.',
       parameters: {
         type: 'object',
         properties: {

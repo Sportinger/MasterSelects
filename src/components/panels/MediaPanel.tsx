@@ -96,6 +96,7 @@ import {
   setExternalDragPayload,
   type ExternalDragPayload,
 } from '../timeline/utils/externalDragSession';
+import { createSignalTimelineAdapterPlan } from '../../runtime/renderers/signalTimelineRendererAdapter';
 
 // Column definitions
 type ColumnId = 'label' | 'name' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
@@ -1660,7 +1661,17 @@ export function MediaPanel() {
     }
 
     if (item.type === 'signal') {
-      e.dataTransfer.effectAllowed = 'move';
+      const plan = createSignalTimelineAdapterPlan(item as SignalAssetItem);
+      setExternalDragPayload({
+        kind: 'signal',
+        id: item.id,
+        duration: plan.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      });
+      e.dataTransfer.setData('application/x-signal-asset-id', item.id);
+      e.dataTransfer.effectAllowed = 'copyMove';
       if (e.currentTarget instanceof HTMLElement) {
         e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
       }
@@ -3179,6 +3190,18 @@ export function MediaPanel() {
         isAudio: false,
         isVideo: true,
         primitive: item.primitive,
+      };
+    }
+
+    if (item.type === 'signal') {
+      const plan = createSignalTimelineAdapterPlan(item as SignalAssetItem);
+      return {
+        kind: 'signal',
+        id: item.id,
+        duration: plan.duration,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
       };
     }
 

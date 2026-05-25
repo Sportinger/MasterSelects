@@ -27,11 +27,16 @@ import {
   type ExternalDragPayload,
 } from '../utils/externalDragSession';
 import type { ExternalDragState } from '../types';
-import type { TimelineTrack, TimelineClip } from '../../../types';
-import type { Composition, MediaFile } from '../../../stores/mediaStore';
+import type { TimelineTrack, TimelineClip, TextClipProperties } from '../../../types';
+import type { Composition, MediaFile, SignalAssetItem } from '../../../stores/mediaStore';
 import type { ShapePrimitive } from '../../../types/motionDesign';
 import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import { Logger } from '../../../services/logger';
+import {
+  createSignalTimelineAdapterPlan,
+  placeSignalAssetOnTimeline,
+} from '../../../runtime/renderers/signalTimelineRendererAdapter';
+import type { AddClipOptions } from '../../../stores/timeline/types';
 
 const log = Logger.create('useExternalDrop');
 
@@ -157,9 +162,19 @@ interface UseExternalDropProps {
   isExporting: boolean;
   pixelToTime: (pixel: number) => number;
   addTrack: (type: 'video' | 'audio') => string | undefined;
-  addClip: (trackId: string, file: File, startTime: number, duration?: number, mediaFileId?: string, mediaTypeOverride?: string) => void;
+  addClip: (
+    trackId: string,
+    file: File,
+    startTime: number,
+    duration?: number,
+    mediaFileId?: string,
+    mediaTypeOverride?: string,
+    options?: AddClipOptions,
+  ) => Promise<string | undefined> | string | undefined | void;
   addCompClip: (trackId: string, comp: Composition, startTime: number) => void | Promise<void>;
   addTextClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => Promise<string | null>;
+  updateTextProperties: (clipId: string, props: Partial<TextClipProperties>) => void;
+  updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
   addMeshClip: (trackId: string, startTime: number, meshType: import('../../../stores/mediaStore/types').MeshPrimitiveType, duration?: number, skipMediaItem?: boolean) => string | null;
   addCameraClip: (trackId: string, startTime: number, duration?: number, skipMediaItem?: boolean) => string | null;
@@ -203,6 +218,8 @@ function getPayloadMimeTypes(payload: ExternalDragPayload): string[] {
       return ['application/x-math-scene-item-id'];
     case 'motion-shape':
       return ['application/x-motion-shape-item-id'];
+    case 'signal':
+      return ['application/x-signal-asset-id'];
     case 'media-file':
       return payload.isAudio
         ? ['application/x-media-file-id', 'application/x-media-is-audio']
@@ -219,6 +236,7 @@ function getPayloadMimeData(payload: ExternalDragPayload, mimeType: string): str
   if (mimeType === 'application/x-splat-effector-item-id' && payload.kind === 'splat-effector') return payload.id;
   if (mimeType === 'application/x-math-scene-item-id' && payload.kind === 'math-scene') return payload.id;
   if (mimeType === 'application/x-motion-shape-item-id' && payload.kind === 'motion-shape') return payload.id;
+  if (mimeType === 'application/x-signal-asset-id' && payload.kind === 'signal') return payload.id;
   if (mimeType === 'application/x-media-file-id' && payload.kind === 'media-file') return payload.id;
   if (mimeType === 'application/x-media-is-audio' && payload.kind === 'media-file' && payload.isAudio) return 'true';
   return '';
@@ -309,6 +327,8 @@ export function useExternalDrop({
   addClip,
   addCompClip,
   addTextClip,
+  updateTextProperties,
+  updateClip,
   addSolidClip,
   addMeshClip,
   addCameraClip,
@@ -378,6 +398,20 @@ export function useExternalDrop({
     const previewDuration = duration ?? dragMetadataCacheRef.current?.duration ?? 5;
     return findClosestNonOverlappingStartTime(trackId, desiredStartTime, previewDuration, clips);
   }, [clips]);
+
+  const addSignalAssetClip = useCallback(async (
+    trackId: string,
+    signalAsset: SignalAssetItem,
+    startTime: number,
+  ) => {
+    const result = await placeSignalAssetOnTimeline(signalAsset, trackId, startTime, {
+      addClip,
+      addTextClip,
+      updateTextProperties,
+      updateClip,
+    });
+    return result.clipId;
+  }, [addClip, addTextClip, updateClip, updateTextProperties]);
 
   const buildTrackPreviewState = useCallback((params: {
     trackId: string;
@@ -637,6 +671,26 @@ export function useExternalDrop({
       const motionShapeItem = mediaStore.motionShapeItems.find((item) => item.id === motionShapeItemId);
       return {
         duration: motionShapeItem?.duration ?? 5,
+        hasAudio: false,
+        isAudio: false,
+        isVideo: true,
+      };
+    }
+
+    if (e.dataTransfer.types.includes('application/x-signal-asset-id')) {
+      if (dragPayload?.kind === 'signal') {
+        return {
+          duration: dragPayload.duration ?? 5,
+          hasAudio: false,
+          isAudio: false,
+          isVideo: true,
+        };
+      }
+
+      const signalAssetId = e.dataTransfer.getData('application/x-signal-asset-id');
+      const signalAsset = mediaStore.signalAssets.find((item) => item.id === signalAssetId);
+      return {
+        duration: signalAsset ? createSignalTimelineAdapterPlan(signalAsset).duration : 5,
         hasAudio: false,
         isAudio: false,
         isVideo: true,
@@ -1125,6 +1179,45 @@ export function useExternalDrop({
         return;
       }
 
+      if (e.dataTransfer.types.includes('application/x-signal-asset-id')) {
+        const signalAssetId = dragPayload?.kind === 'signal'
+          ? dragPayload.id
+          : e.dataTransfer.getData('application/x-signal-asset-id');
+        const signalAsset = signalAssetId
+          ? mediaStore.signalAssets.find((item) => item.id === signalAssetId)
+          : null;
+        const duration = dragPayload?.kind === 'signal'
+          ? dragPayload.duration ?? 5
+          : signalAsset
+            ? createSignalTimelineAdapterPlan(signalAsset).duration
+            : 5;
+
+        if (isAudioTrack) {
+          setExternalDrag(applyVideoNewTrackOffer({
+            trackId: '',
+            startTime,
+            x: e.clientX,
+            y: e.clientY,
+            duration,
+            hasAudio: false,
+            isVideo: true,
+            isAudio: false,
+          }));
+          return;
+        }
+        setExternalDrag(buildTrackPreviewState({
+          trackId,
+          desiredStartTime: startTime,
+          x: e.clientX,
+          y: e.clientY,
+          duration,
+          hasAudio: false,
+          isVideo: true,
+          isAudio: false,
+        }));
+        return;
+      }
+
       if (e.dataTransfer.types.includes('Files')) {
         let dur: number | undefined;
         let hasAudio: boolean | undefined;
@@ -1207,6 +1300,7 @@ export function useExternalDrop({
       const isSplatEffectorDrag = e.dataTransfer.types.includes('application/x-splat-effector-item-id');
       const isMathSceneDrag = e.dataTransfer.types.includes('application/x-math-scene-item-id');
       const isMotionShapeDrag = e.dataTransfer.types.includes('application/x-motion-shape-item-id');
+      const isSignalDrag = e.dataTransfer.types.includes('application/x-signal-asset-id');
       const isFileDrag = e.dataTransfer.types.includes('Files');
 
       if (
@@ -1219,6 +1313,7 @@ export function useExternalDrop({
         isSplatEffectorDrag ||
         isMathSceneDrag ||
         isMotionShapeDrag ||
+        isSignalDrag ||
         isFileDrag
       ) {
         const desiredStartTime = getDesiredStartTime(e.clientX);
@@ -1250,7 +1345,7 @@ export function useExternalDrop({
 
         // Generated visual items and compositions can only go on video tracks
         if (
-          (isTextDrag || isSolidDrag || isMeshDrag || isCameraDrag || isSplatEffectorDrag || isMathSceneDrag || isMotionShapeDrag || isCompDrag) &&
+          (isTextDrag || isSolidDrag || isMeshDrag || isCameraDrag || isSplatEffectorDrag || isMathSceneDrag || isMotionShapeDrag || isSignalDrag || isCompDrag) &&
           isAudioTrack
         ) {
           e.dataTransfer.dropEffect = 'none';
@@ -1431,6 +1526,12 @@ export function useExternalDrop({
       clearExternalDragState();
 
       // Validate file type matches track type BEFORE creating track
+      const signalAssetId = e.dataTransfer.getData('application/x-signal-asset-id');
+      if (signalAssetId && trackType === 'audio') {
+        log.debug('Signal assets can only be dropped on video tracks');
+        return;
+      }
+
       const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
@@ -1561,6 +1662,15 @@ export function useExternalDrop({
         }
       }
 
+      if (signalAssetId) {
+        const mediaStore = useMediaStore.getState();
+        const signalAsset = mediaStore.signalAssets.find((item) => item.id === signalAssetId);
+        if (signalAsset) {
+          await addSignalAssetClip(newTrackId, signalAsset, startTime);
+          return;
+        }
+      }
+
       // Handle media panel drag
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
@@ -1628,7 +1738,7 @@ export function useExternalDrop({
         }
       }
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture, rejectDropDuringExport]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture, rejectDropDuringExport]
   );
 
   // Handle external file drop on track
@@ -1740,6 +1850,17 @@ export function useExternalDrop({
         }
       }
 
+      const signalAssetId = e.dataTransfer.getData('application/x-signal-asset-id');
+      if (signalAssetId) {
+        const mediaStore = useMediaStore.getState();
+        const signalAsset = mediaStore.signalAssets.find((item) => item.id === signalAssetId);
+        if (signalAsset && isVideoTrack) {
+          const plan = createSignalTimelineAdapterPlan(signalAsset);
+          await addSignalAssetClip(trackId, signalAsset, resolveDropStartTime(plan.duration));
+          return;
+        }
+      }
+
       const mediaFileId = e.dataTransfer.getData('application/x-media-file-id');
       if (mediaFileId) {
         const mediaStore = useMediaStore.getState();
@@ -1838,7 +1959,7 @@ export function useExternalDrop({
         }
       }
     },
-    [addCompClip, addClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, clearExternalDragState]
+    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, clearExternalDragState]
   );
 
   useEffect(() => {

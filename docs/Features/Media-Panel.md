@@ -42,7 +42,7 @@ The panel also accepts a few specialized asset types that flow into the timeline
 
 Lottie and Rive imports are treated as first-class media items. `.json` files are only accepted when their contents actually match Lottie structure, so arbitrary JSON data is not misclassified as animation.
 
-Files that are not legacy timeline media are routed through the universal Signal IR importer instead of being rejected. Signal assets can be organized, renamed, labeled, deleted, saved, and loaded from the Media Panel, but are not currently draggable to the timeline until a renderer adapter exists for their signal kind.
+Files that are not legacy timeline media are routed through the universal Signal IR importer instead of being rejected. Signal assets can be organized, renamed, labeled, deleted, saved, loaded, and dragged to video tracks. The timeline renderer dispatcher uses real 3D clip paths for renderable model and point-cloud artifacts, then falls back to text-summary clips for data/document/binary signals that do not yet have a rich renderer. Source signal metadata is preserved on every materialized clip.
 
 ### Import Methods
 
@@ -482,6 +482,7 @@ interface MediaFile {
 - Files still importing or missing cannot be dragged to timeline
 - Compositions cannot be dragged into themselves (active comp check)
 - Mesh items create 3D clips with `is3D: true` and `meshType` (rendered via the shared 3D scene)
+- Signal assets create timeline clips through renderer adapters: OBJ/glTF/GLB mesh or geometry artifacts become `model` clips, PLY/SPLAT-family point-cloud or geometry artifacts become `gaussian-splat` clips, and unsupported Signal refs become text-summary clips.
 
 ### Track Type Enforcement
 | Media Type | Allowed Tracks |

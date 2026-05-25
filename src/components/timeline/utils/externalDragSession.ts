@@ -8,7 +8,8 @@ export interface ExternalDragPayload {
     | 'camera'
     | 'splat-effector'
     | 'math-scene'
-    | 'motion-shape';
+    | 'motion-shape'
+    | 'signal';
   id: string;
   duration?: number;
   hasAudio?: boolean;

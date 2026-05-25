@@ -35,6 +35,9 @@ export interface ProjectClip {
   trackId: string;
   name?: string;
   mediaId: string; // Reference to ProjectMediaFile.id (empty for composition clips)
+  signalAssetId?: string; // Source SignalAsset id for renderer-adapter materialized clips
+  signalRefId?: string; // Source SignalRef id selected by the renderer adapter
+  signalRenderAdapterId?: string; // Renderer adapter id that produced the clip
 
   // Timeline position
   startTime: number;

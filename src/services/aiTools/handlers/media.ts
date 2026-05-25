@@ -9,6 +9,9 @@ import { activateDockPanel, flashPreviewCanvas } from '../aiFeedback';
 import { validateFilePath, getAllowedRoots } from '../../security/fileAccessBroker';
 import { fetchWithDevBridgeAuth, hasDevBridgeToken } from '../../security/devBridgeAuth';
 import { NativeHelperClient } from '../../nativeHelper';
+import {
+  placeSignalAssetOnTimeline,
+} from '../../../runtime/renderers/signalTimelineRendererAdapter';
 
 const log = Logger.create('AITool:Media');
 
@@ -21,6 +24,7 @@ const DEFAULT_LOCAL_FILE_EXTENSIONS = [
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg',
   '.obj', '.gltf', '.glb',
   '.ply', '.splat', '.ksplat', '.spz', '.sog', '.lcc', '.zip',
+  '.csv', '.json', '.txt', '.pdf', '.dxf', '.step', '.stp',
 ] as const;
 
 const LOCAL_FILE_MIME_TYPES: Record<string, string> = {
@@ -51,6 +55,13 @@ const LOCAL_FILE_MIME_TYPES: Record<string, string> = {
   '.sog': 'application/octet-stream',
   '.lcc': 'application/octet-stream',
   '.zip': 'application/zip',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.txt': 'text/plain',
+  '.pdf': 'application/pdf',
+  '.dxf': 'application/dxf',
+  '.step': 'application/step',
+  '.stp': 'application/step',
 };
 
 function normalizeLocalPath(filePath: string): string {
@@ -552,12 +563,37 @@ export async function handleImportLocalFiles(
         : 0;
     }
 
-    const placedClips: Array<{ name: string; trackId: string; startTime: number }> = [];
+    const placedClips: Array<{ name: string; trackId: string; startTime: number; clipId?: string; type?: string }> = [];
     for (const result of results) {
-      const mediaFile = useMediaStore.getState().files.find(f => f.id === result.id);
+      const mediaState = useMediaStore.getState();
+      const signalAsset = mediaState.signalAssets.find(item => item.id === result.id);
+      if (signalAsset) {
+        const targetTrack = useTimelineStore.getState().tracks.find(track => track.id === targetTrackId);
+        if (targetTrack?.type !== 'video') {
+          log.warn(`Skipping SignalAsset timeline placement on non-video track: ${signalAsset.name}`);
+          continue;
+        }
+
+        const placement = await placeSignalAssetOnTimeline(signalAsset, targetTrackId!, currentTime, useTimelineStore.getState());
+        if (placement.clipId) {
+          placedClips.push({
+            name: result.name,
+            trackId: targetTrackId!,
+            startTime: currentTime,
+            clipId: placement.clipId,
+            type: 'signal',
+          });
+          if (sequential) {
+            currentTime += placement.plan.duration;
+          }
+        }
+        continue;
+      }
+
+      const mediaFile = mediaState.files.find(f => f.id === result.id);
       if (mediaFile && mediaFile.file) {
         await useTimelineStore.getState().addClip(targetTrackId!, mediaFile.file, currentTime, mediaFile.duration, mediaFile.id);
-        placedClips.push({ name: result.name, trackId: targetTrackId!, startTime: currentTime });
+        placedClips.push({ name: result.name, trackId: targetTrackId!, startTime: currentTime, type: mediaFile.type });
         if (sequential) {
           currentTime += mediaFile.duration || 5;
         }

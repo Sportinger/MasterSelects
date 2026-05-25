@@ -197,20 +197,18 @@ function MediaBoardNode({
         )}
         {!isCompactNode && duration ? <span className="media-board-duration">{formatDuration(duration)}</span> : null}
         {!isCompactNode && importProgress !== null ? <span className="media-board-progress">{importProgress}%</span> : null}
-        {item.type !== 'signal' ? (
-          <span
-            className="media-board-node-timeline-drag"
-            draggable={importProgress === null}
-            title="Drag to timeline"
-            onMouseDown={(e) => e.stopPropagation()}
-            onDragStart={(e) => onTimelineDragStart(e, item)}
-            onDragEnd={onTimelineDragEnd}
-          >
-            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true">
-              <path d="M3 2h2v12H3V2Zm4 0h2v12H7V2Zm4 0h2v12h-2V2Z" />
-            </svg>
-          </span>
-        ) : null}
+        <span
+          className="media-board-node-timeline-drag"
+          draggable={importProgress === null}
+          title="Drag to timeline"
+          onMouseDown={(e) => e.stopPropagation()}
+          onDragStart={(e) => onTimelineDragStart(e, item)}
+          onDragEnd={onTimelineDragEnd}
+        >
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true">
+            <path d="M3 2h2v12H3V2Zm4 0h2v12H7V2Zm4 0h2v12h-2V2Z" />
+          </svg>
+        </span>
       </div>
       {!isCompactNode ? (
         <div className="media-board-node-body">

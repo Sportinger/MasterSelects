@@ -636,6 +636,9 @@ function convertProjectCompositionToStore(
         trackId: c.trackId,
         name: c.name || '',
         mediaFileId: c.mediaId,  // Map mediaId -> mediaFileId for loadState
+        signalAssetId: c.signalAssetId,
+        signalRefId: c.signalRefId,
+        signalRenderAdapterId: c.signalRenderAdapterId,
         sourceType: c.sourceType || 'video',
         naturalDuration: c.naturalDuration,
         thumbnails: c.thumbnails,

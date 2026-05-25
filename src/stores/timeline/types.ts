@@ -338,9 +338,25 @@ export type ClipTransformUpdate = Omit<Partial<ClipTransform>, 'position' | 'sca
   rotation?: Partial<ClipTransform['rotation']>;
 };
 
+export interface AddClipOptions {
+  name?: string;
+  signalAssetId?: string;
+  signalRefId?: string;
+  signalRenderAdapterId?: string;
+  source?: Partial<NonNullable<TimelineClip['source']>>;
+}
+
 // Core clip actions (remain in clipSlice)
 export interface CoreClipActions {
-  addClip: (trackId: string, file: File, startTime: number, estimatedDuration?: number, mediaFileId?: string, mediaTypeOverride?: string) => Promise<void>;
+  addClip: (
+    trackId: string,
+    file: File,
+    startTime: number,
+    estimatedDuration?: number,
+    mediaFileId?: string,
+    mediaTypeOverride?: string,
+    options?: AddClipOptions,
+  ) => Promise<string | undefined>;
   addCompClip: (trackId: string, composition: Composition, startTime: number) => Promise<void>;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   removeClip: (id: string) => void;
@@ -537,6 +553,9 @@ export interface ClipboardClipData {
   trackType: 'video' | 'audio';
   name: string;
   mediaFileId?: string;
+  signalAssetId?: string;
+  signalRefId?: string;
+  signalRenderAdapterId?: string;
   startTime: number;
   duration: number;
   inPoint: number;
