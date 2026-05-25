@@ -59,6 +59,7 @@ import type { ClipKeyframeTimeGroup, ContextMenuState, TimelineRulerCacheRange }
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 import { createSubcompositionFromSelection } from '../../services/timelineSubcomposition';
+import { getTimelineTrackBaseHeight } from './utils/timelineAudioLayout';
 
 const KEYFRAME_TIME_GROUP_PRECISION = 1000;
 const RAM_PREVIEW_FEATURE_ENABLED = false;
@@ -168,7 +169,7 @@ export function Timeline() {
   const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
 
   // UI settings (rarely changes)
-  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled } =
+  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled, audioDisplayMode } =
     useTimelineStore(useShallow(selectUISettings));
 
   // Preview/export state
@@ -235,7 +236,7 @@ export function Timeline() {
   } = store;
 
   // Tool actions
-  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled } = store;
+  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled, setAudioDisplayMode } = store;
 
   // Marker actions
   const { addMarker, moveMarker, removeMarker, updateMarker } = store;
@@ -369,6 +370,28 @@ export function Timeline() {
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
   const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
+  const timelineViewTrackMap = useMemo(
+    () => new Map(timelineViewTracks.map(t => [t.id, t])),
+    [timelineViewTracks],
+  );
+  const getRenderedTrackBaseHeight = useCallback(
+    (track: TimelineTrackType) => getTimelineTrackBaseHeight(track, audioDisplayMode),
+    [audioDisplayMode],
+  );
+  const getRenderedTrackHeight = useCallback(
+    (trackId: string, fallbackBaseHeight: number) => {
+      const track = timelineViewTrackMap.get(trackId) ?? trackMap.get(trackId);
+      const baseHeight = track ? getRenderedTrackBaseHeight(track) : fallbackBaseHeight;
+      return isTrackExpandedForRender(trackId)
+        ? getExpandedTrackHeight(trackId, baseHeight)
+        : baseHeight;
+    },
+    [timelineViewTrackMap, trackMap, getRenderedTrackBaseHeight, isTrackExpandedForRender, getExpandedTrackHeight],
+  );
+  const getRenderedTrackHeightForTrack = useCallback(
+    (track: TimelineTrackType) => getRenderedTrackHeight(track.id, track.height),
+    [getRenderedTrackHeight],
+  );
   const isClipLocked = useCallback((clipId: string) => {
     const clip = clipMap.get(clipId);
     return !!clip && trackMap.get(clip.trackId)?.locked === true;
@@ -400,6 +423,7 @@ export function Timeline() {
     moveClip,
     openCompositionTab,
     pixelToTime,
+    getRenderedTrackHeight: getRenderedTrackHeightForTrack,
     getSnappedPosition,
     getPositionWithResistance,
   });
@@ -627,7 +651,8 @@ export function Timeline() {
     deselectAllKeyframes,
     pixelToTime,
     isTrackExpanded: isTrackExpandedForRender,
-    getExpandedTrackHeight,
+    getTrackBaseHeight: getRenderedTrackBaseHeight,
+    getExpandedTrackHeight: getRenderedTrackHeight,
   });
 
   // Pick whip drag - extracted to hook
@@ -679,26 +704,16 @@ export function Timeline() {
 
   // Calculate total content height and track snap positions for vertical scrollbar
   // Dependencies: tracks, expansion state, curve editor state, selected clips (affects property rows)
-  const { contentHeight, trackSnapPositions, renderedTrackHeights } = useMemo(() => {
+  const { contentHeight, trackSnapPositions } = useMemo(() => {
     let totalHeight = 0;
     const snapPositions: number[] = [0];
-    const trackHeights = new Map<string, number>();
     for (const track of timelineViewTracks) {
-      const isExpanded = isTrackExpandedForRender(track.id);
-      const trackHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
-      trackHeights.set(track.id, trackHeight);
+      const trackHeight = getRenderedTrackHeight(track.id, track.height);
       totalHeight += trackHeight;
       snapPositions.push(totalHeight);
     }
-    return { contentHeight: totalHeight, trackSnapPositions: snapPositions, renderedTrackHeights: trackHeights };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineViewTracks, isTrackExpandedForRender, getExpandedTrackHeight, expandedCurveProperties, curveEditorHeight, selectedClipIds, clipKeyframes]);
-  const getRenderedTrackHeight = useCallback(
-    (trackId: string, baseHeight: number) =>
-      renderedTrackHeights.get(trackId) ??
-        (isTrackExpandedForRender(trackId) ? getExpandedTrackHeight(trackId, baseHeight) : baseHeight),
-    [renderedTrackHeights, isTrackExpandedForRender, getExpandedTrackHeight],
-  );
+    return { contentHeight: totalHeight, trackSnapPositions: snapPositions };
+  }, [timelineViewTracks, getRenderedTrackHeight, expandedCurveProperties, curveEditorHeight, selectedClipIds, clipKeyframes, audioDisplayMode]);
 
   // Track viewport height for scrollbar
   const [viewportHeight, setViewportHeight] = useState(300);
@@ -962,6 +977,7 @@ export function Timeline() {
           : mediaFile?.proxyStatus;
       const clipKeyframeList = getClipKeyframes(clip.id);
       const keyframeTimeGroups = getClipKeyframeTimeGroups(clipKeyframeList);
+      const trackBaseHeight = getRenderedTrackBaseHeight(track);
 
       return (
         <TimelineClip
@@ -969,6 +985,7 @@ export function Timeline() {
           clip={clip}
           trackId={trackId}
           track={track}
+          trackBaseHeight={trackBaseHeight}
           tracks={tracks}
           clips={clips}
           isSelected={selectedClipIds.has(clip.id)}
@@ -1016,6 +1033,7 @@ export function Timeline() {
     },
     [
       trackMap,
+      getRenderedTrackBaseHeight,
       clipMap,
       clips,
       selectedClipIds,
@@ -1114,7 +1132,7 @@ export function Timeline() {
 
   return (
     <div
-      className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
+      className={`timeline-container audio-mode-${audioDisplayMode} ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
       onMouseDown={() => {
         if (useMediaStore.getState().sourceMonitorFileId) {
           useMediaStore.getState().setSourceMonitorFile(null);
@@ -1142,6 +1160,7 @@ export function Timeline() {
           showTranscriptMarkers={showTranscriptMarkers}
           thumbnailsEnabled={thumbnailsEnabled}
           waveformsEnabled={waveformsEnabled}
+          audioDisplayMode={audioDisplayMode}
           toolMode={toolMode}
           onPlay={play}
           onPause={pause}
@@ -1156,6 +1175,7 @@ export function Timeline() {
           onToggleTranscriptMarkers={toggleTranscriptMarkers}
           onToggleThumbnails={toggleThumbnailsEnabled}
           onToggleWaveforms={toggleWaveformsEnabled}
+          onSetAudioDisplayMode={setAudioDisplayMode}
           onToggleCutTool={toggleCutTool}
           onSetDuration={setDuration}
           onFitToWindow={handleFitToWindow}
@@ -1240,6 +1260,7 @@ export function Timeline() {
                 (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
                 (track.type === 'audio' && anyViewAudioSolo && !track.solo);
               const isExpanded = isTrackExpandedForRender(track.id);
+              const baseHeight = getRenderedTrackBaseHeight(track);
               const dynamicHeight = getRenderedTrackHeight(track.id, track.height);
 
               return (
@@ -1249,6 +1270,7 @@ export function Timeline() {
                     tracks={timelineViewTracks}
                     isDimmed={isDimmed}
                     isExpanded={isExpanded}
+                    baseHeight={baseHeight}
                     dynamicHeight={dynamicHeight}
                     hasKeyframes={!isCompositionTrackMorphing && trackHasKeyframes(track.id)}
                     selectedClipIds={selectedClipIds}
@@ -1310,7 +1332,7 @@ export function Timeline() {
                     ? 'active'
                     : ''
                 }`}
-                style={{ height: 40 }}
+                style={{ height: getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode) }}
               >
                 <span className="track-header-preview-label">+ New Audio Track</span>
               </div>
@@ -1367,6 +1389,7 @@ export function Timeline() {
                   (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
                   (track.type === 'audio' && anyViewAudioSolo && !track.solo);
                 const isExpanded = isTrackExpandedForRender(track.id);
+                const baseHeight = getRenderedTrackBaseHeight(track);
                 const dynamicHeight = getRenderedTrackHeight(track.id, track.height);
 
                 return (
@@ -1376,6 +1399,7 @@ export function Timeline() {
                 clips={isCompositionTrackMorphing ? [] : clips}
                 isDimmed={isDimmed}
                 isExpanded={isExpanded}
+                baseHeight={baseHeight}
                 dynamicHeight={dynamicHeight}
                 isDragTarget={clipDrag?.currentTrackId === track.id}
                 isExternalDragTarget={
@@ -1415,7 +1439,8 @@ export function Timeline() {
             <div className="composition-exit-clips-overlay">
               {tracks.map((track) => {
                 const isExpanded = isTrackExpandedFromState(track.id);
-                const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
+                const baseHeight = getRenderedTrackBaseHeight(track);
+                const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, baseHeight) : baseHeight;
                 const trackClips = clips.filter((clip) => clip.trackId === track.id);
 
                 return (
@@ -1424,7 +1449,7 @@ export function Timeline() {
                     className="composition-exit-track-row"
                     style={{ height: dynamicHeight }}
                   >
-                    <div className="track-clip-row" style={{ height: track.height }}>
+                    <div className="track-clip-row" style={{ height: baseHeight }}>
                       {trackClips.map((clip) => renderClip(clip, track.id))}
                     </div>
                   </div>
@@ -1476,7 +1501,7 @@ export function Timeline() {
           {/* Only show if video has audio (hasAudio !== false) */}
           {externalDrag &&
             externalDrag.audioTrackId === '__new_audio_track__' && (
-              <div className="track-lane audio new-track-preview" style={{ height: 40 }}>
+              <div className="track-lane audio new-track-preview" style={{ height: getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode) }}>
                 <div
                   className="timeline-clip-preview audio"
                   style={{
@@ -1570,6 +1595,7 @@ export function Timeline() {
                   timelineRef={timelineRef}
                   scrollX={scrollX}
                   zoom={zoom}
+                  getTrackBaseHeight={getRenderedTrackBaseHeight}
                   getExpandedTrackHeight={getRenderedTrackHeight}
                 />
               )}

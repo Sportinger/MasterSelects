@@ -42,9 +42,11 @@ const mocks = vi.hoisted(() => ({
     outPoint: null,
     thumbnailsEnabled: true,
     waveformsEnabled: true,
+    audioDisplayMode: 'detailed' as const,
     showTranscriptMarkers: false,
     setThumbnailsEnabled: vi.fn(),
     setWaveformsEnabled: vi.fn(),
+    setAudioDisplayMode: vi.fn(),
     setShowTranscriptMarkers: vi.fn(),
   },
   youtubeState: {
@@ -184,6 +186,7 @@ describe('project media persistence', () => {
     mocks.midiState.slotBindings = {};
     mocks.midiState.parameterBindings = {};
     mocks.timelineState.clips = [];
+    mocks.timelineState.audioDisplayMode = 'detailed';
     mocks.getProjectData.mockReturnValue({
       media: [],
       compositions: [],
@@ -246,6 +249,137 @@ describe('project media persistence', () => {
         projectPath: 'Raw/clip.mp4',
       }),
     ]);
+  }, 10_000);
+
+  it('persists advanced audio refs and state without embedding payload bytes', async () => {
+    const audioAnalysisRefs = {
+      waveformPyramidId: 'artifact:waveform-manifest',
+      loudnessEnvelopeId: 'artifact:loudness-manifest',
+      spectrogramTileSetIds: ['artifact:spectrogram-tiles'],
+    };
+    const clipAudioState = {
+      sourceAnalysisRefs: audioAnalysisRefs,
+      effectStack: [{
+        id: 'fx-volume',
+        descriptorId: 'audio-volume',
+        enabled: true,
+        params: { volume: 0.75 },
+      }],
+      processedAnalysisRefs: {
+        processedWaveformPyramidId: 'artifact:processed-waveform-manifest',
+      },
+    };
+    const trackAudioState = {
+      volumeDb: -3,
+      pan: 0.1,
+      muted: false,
+      solo: false,
+      recordArm: false,
+      inputMonitor: false,
+      meterMode: 'peak',
+    };
+    const masterAudioState = {
+      volumeDb: 0,
+      limiterEnabled: true,
+      truePeakCeilingDb: -1,
+      targetLufs: -14,
+    };
+
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.files = [{
+      id: 'media-audio-1',
+      name: 'dialog.wav',
+      type: 'audio',
+      filePath: 'C:/capture/dialog.wav',
+      projectPath: 'Raw/dialog.wav',
+      duration: 12,
+      audioCodec: 'pcm',
+      container: 'wav',
+      fileSize: 4096,
+      proxyStatus: 'none',
+      audioAnalysisRefs,
+      parentId: null,
+      createdAt: 1,
+    }];
+    mocks.mediaState.compositions = [{
+      id: 'comp-1',
+      name: 'Comp 1',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [] },
+    }];
+    mocks.timelineState.getSerializableState.mockReturnValue({
+      tracks: [{
+        id: 'track-a1',
+        name: 'Audio 1',
+        type: 'audio',
+        height: 60,
+        muted: false,
+        visible: true,
+        solo: false,
+        audioState: trackAudioState,
+      }],
+      clips: [{
+        id: 'clip-a1',
+        trackId: 'track-a1',
+        name: 'dialog.wav',
+        mediaFileId: 'media-audio-1',
+        startTime: 0,
+        duration: 12,
+        inPoint: 0,
+        outPoint: 12,
+        sourceType: 'audio',
+        naturalDuration: 12,
+        waveform: [0.1, 0.2],
+        audioState: clipAudioState,
+        transform: {
+          opacity: 1,
+          blendMode: 'normal',
+          position: { x: 0, y: 0, z: 0 },
+          scale: { x: 1, y: 1 },
+          rotation: { x: 0, y: 0, z: 0 },
+        },
+        effects: [],
+      }],
+      playheadPosition: 0,
+      duration: 60,
+      zoom: 1,
+      scrollX: 0,
+      inPoint: null,
+      outPoint: null,
+      loopPlayback: false,
+      masterAudioState,
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateMedia).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'media-audio-1',
+        audioAnalysisRefs,
+      }),
+    ]);
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'comp-1',
+        masterAudioState,
+        tracks: [
+          expect.objectContaining({ id: 'track-a1', audioState: trackAudioState }),
+        ],
+        clips: [
+          expect.objectContaining({ id: 'clip-a1', audioState: clipAudioState }),
+        ],
+      }),
+    ]);
+    expect(JSON.stringify(mocks.updateCompositions.mock.calls[0][0])).not.toContain('Float32Array');
+    expect(JSON.stringify(mocks.updateCompositions.mock.calls[0][0])).not.toContain('blob:');
   });
 
   it('persists marker MIDI bindings when syncing stores to the project file', async () => {
@@ -1349,6 +1483,151 @@ describe('project media persistence', () => {
     }));
   });
 
+  it('persists timeline audio display mode in project uiState', async () => {
+    const projectData = {
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    };
+    mocks.getProjectData.mockReturnValue(projectData);
+    mocks.timelineState.audioDisplayMode = 'spectral';
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(projectData.uiState).toEqual(expect.objectContaining({
+      audioDisplayMode: 'spectral',
+    }));
+  });
+
+  it('restores advanced audio refs and state from project media and compositions', async () => {
+    const audioAnalysisRefs = {
+      waveformPyramidId: 'artifact:waveform-manifest',
+      processedWaveformPyramidId: 'artifact:processed-waveform-manifest',
+    };
+    const clipAudioState = {
+      sourceAnalysisRefs: audioAnalysisRefs,
+      muted: false,
+      effectStack: [{
+        id: 'fx-eq',
+        descriptorId: 'audio-eq',
+        enabled: true,
+        params: { band1k: 1.5 },
+      }],
+    };
+    const trackAudioState = {
+      volumeDb: -6,
+      pan: -0.25,
+      muted: false,
+      solo: false,
+      recordArm: false,
+      inputMonitor: false,
+      meterMode: 'rms',
+    };
+    const masterAudioState = {
+      volumeDb: -1,
+      limiterEnabled: true,
+      truePeakCeilingDb: -1,
+    };
+
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-audio-1',
+        name: 'dialog.wav',
+        type: 'audio',
+        sourcePath: 'Raw/dialog.wav',
+        projectPath: 'Raw/dialog.wav',
+        duration: 12,
+        audioCodec: 'pcm',
+        container: 'wav',
+        fileSize: 4096,
+        hasProxy: false,
+        audioAnalysisRefs,
+        folderId: null,
+        importedAt: '2026-05-25T10:00:00.000Z',
+      }],
+      compositions: [{
+        id: 'comp-1',
+        name: 'Comp 1',
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        duration: 60,
+        backgroundColor: '#000000',
+        folderId: null,
+        tracks: [{
+          id: 'track-a1',
+          name: 'Audio 1',
+          type: 'audio',
+          height: 60,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          audioState: trackAudioState,
+        }],
+        clips: [{
+          id: 'clip-a1',
+          trackId: 'track-a1',
+          name: 'dialog.wav',
+          mediaId: 'media-audio-1',
+          sourceType: 'audio',
+          startTime: 0,
+          duration: 12,
+          inPoint: 0,
+          outPoint: 12,
+          transform: {
+            opacity: 1,
+            blendMode: 'normal',
+            position: { x: 0, y: 0, z: 0 },
+            scale: { x: 1, y: 1 },
+            rotation: { x: 0, y: 0, z: 0 },
+          },
+          effects: [],
+          masks: [],
+          keyframes: [],
+          volume: 1,
+          audioEnabled: true,
+          audioState: clipAudioState,
+          reversed: false,
+          disabled: false,
+        }],
+        masterAudioState,
+        markers: [],
+      }],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: 'comp-1',
+      openCompositionIds: ['comp-1'],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.mediaState.files[0]).toEqual(expect.objectContaining({
+      id: 'media-audio-1',
+      audioAnalysisRefs,
+    }));
+    expect(mocks.timelineState.loadState).toHaveBeenCalledWith(expect.objectContaining({
+      masterAudioState,
+      tracks: [
+        expect.objectContaining({ id: 'track-a1', audioState: trackAudioState }),
+      ],
+      clips: [
+        expect.objectContaining({ id: 'clip-a1', audioState: clipAudioState }),
+      ],
+    }));
+  });
+
   it('restores model sequence frame urls from project RAW files when loading a project', async () => {
     const frameFiles = [
       new File(['0'], 'hero000000.glb', { type: 'model/gltf-binary' }),
@@ -1818,5 +2097,26 @@ describe('project media persistence', () => {
         }),
       ],
     }));
+    });
   });
-});
+
+  it('restores timeline audio display mode from project uiState', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {
+        audioDisplayMode: 'spectral',
+      },
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.timelineState.setAudioDisplayMode).toHaveBeenCalledWith('spectral');
+  });

@@ -12,8 +12,15 @@
  */
 
 import { Logger } from '../../services/logger';
-import type { Keyframe, Effect, AnimatableProperty } from '../../types';
+import type { AudioEffectInstance, Keyframe, Effect, AnimatableProperty } from '../../types';
 import { normalizeEasingType } from '../../utils/easing';
+import {
+  getAudioEffect,
+  getAudioEffectDefaultParams,
+  getAudioEffectParamNames,
+  type AudioEffectId,
+  type AudioEffectParamValue,
+} from './AudioEffectRegistry';
 
 const log = Logger.create('AudioEffectRenderer');
 
@@ -21,10 +28,20 @@ const log = Logger.create('AudioEffectRenderer');
 export const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
 // EQ parameter names matching the effect params
-export const EQ_BAND_PARAMS = [
-  'band31', 'band62', 'band125', 'band250', 'band500',
-  'band1k', 'band2k', 'band4k', 'band8k', 'band16k'
-];
+export const EQ_BAND_PARAMS = getAudioEffectParamNames('audio-eq');
+
+const AUDIO_EQ_EFFECT_ID = 'audio-eq' satisfies AudioEffectId;
+const AUDIO_VOLUME_EFFECT_ID = 'audio-volume' satisfies AudioEffectId;
+const AUDIO_VOLUME_PARAM = getAudioEffectParamNames(AUDIO_VOLUME_EFFECT_ID)[0] ?? 'volume';
+const LEGACY_AUDIO_EFFECT_RENDER_ORDER = [
+  AUDIO_EQ_EFFECT_ID,
+  AUDIO_VOLUME_EFFECT_ID,
+] as const satisfies readonly AudioEffectId[];
+
+type RenderableAudioEffectInstance = AudioEffectInstance & {
+  bypassed?: boolean;
+  disabled?: boolean;
+};
 
 export interface EffectRenderProgress {
   phase: 'preparing' | 'rendering' | 'complete';
@@ -52,18 +69,13 @@ export class AudioEffectRenderer {
   ): Promise<AudioBuffer> {
     const duration = clipDuration ?? buffer.duration;
 
-    // Find audio effects
-    const volumeEffect = effects.find(e => e.type === 'audio-volume');
-    const eqEffect = effects.find(e => e.type === 'audio-eq');
-
-    // Check if we have any effects to apply
-    const hasVolumeKeyframes = volumeEffect && this.hasEffectKeyframes(keyframes, volumeEffect.id);
-    const hasEQKeyframes = eqEffect && this.hasEffectKeyframes(keyframes, eqEffect.id);
-    const hasNonDefaultVolume = volumeEffect && (volumeEffect.params?.volume as number ?? 1) !== 1;
-    const hasNonDefaultEQ = eqEffect && this.hasNonDefaultEQ(eqEffect);
+    const renderableEffects = this.getRenderableAudioEffects(effects);
+    const hasEffectsToApply = renderableEffects.some(effect =>
+      this.shouldRenderAudioEffect(effect, keyframes)
+    );
 
     // If no effects or all defaults, return original buffer
-    if (!hasVolumeKeyframes && !hasEQKeyframes && !hasNonDefaultVolume && !hasNonDefaultEQ) {
+    if (!hasEffectsToApply) {
       log.debug('No effects to apply, returning original');
       return buffer;
     }
@@ -86,26 +98,29 @@ export class AudioEffectRenderer {
     // Build effect chain
     let currentNode: AudioNode = source;
 
-    // Add EQ if present
-    if (eqEffect) {
-      currentNode = this.createEQChain(
-        offlineContext,
-        currentNode,
-        eqEffect,
-        keyframes,
-        duration
-      );
-    }
+    for (const effect of renderableEffects) {
+      const descriptor = getAudioEffect(effect.type);
+      if (!descriptor) continue;
 
-    // Add volume/gain if present
-    if (volumeEffect) {
-      currentNode = this.createGainNode(
-        offlineContext,
-        currentNode,
-        volumeEffect,
-        keyframes,
-        duration
-      );
+      if (descriptor.id === AUDIO_EQ_EFFECT_ID) {
+        currentNode = this.createEQChain(
+          offlineContext,
+          currentNode,
+          effect,
+          keyframes,
+          duration
+        );
+      }
+
+      if (descriptor.id === AUDIO_VOLUME_EFFECT_ID) {
+        currentNode = this.createGainNode(
+          offlineContext,
+          currentNode,
+          effect,
+          keyframes,
+          duration
+        );
+      }
     }
 
     // Connect to destination
@@ -122,6 +137,87 @@ export class AudioEffectRenderer {
     log.debug(`Rendered ${renderedBuffer.duration.toFixed(2)}s with effects`);
 
     return renderedBuffer;
+  }
+
+  /**
+   * Render registry-backed audio effect instances from the new audio graph
+   * contract through the legacy-compatible offline renderer path.
+   */
+  async renderEffectInstances(
+    buffer: AudioBuffer,
+    effectStack: readonly AudioEffectInstance[],
+    keyframes: Keyframe[],
+    clipDuration?: number,
+    onProgress?: EffectRenderProgressCallback
+  ): Promise<AudioBuffer> {
+    return this.renderEffects(
+      buffer,
+      effectStack.flatMap(effect => {
+        const legacyEffect = this.audioEffectInstanceToLegacyEffect(effect);
+        return legacyEffect ? [legacyEffect] : [];
+      }),
+      keyframes,
+      clipDuration,
+      onProgress
+    );
+  }
+
+  /**
+   * Select legacy audio effects that have registry descriptors, preserving the
+   * historical EQ -> volume render chain independently of UI stack order.
+   */
+  private getRenderableAudioEffects(effects: Effect[]): Effect[] {
+    return LEGACY_AUDIO_EFFECT_RENDER_ORDER.flatMap(effectId => {
+      const descriptor = getAudioEffect(effectId);
+      if (!descriptor) return [];
+
+      const effect = effects.find(candidate =>
+        candidate.type === descriptor.id &&
+        candidate.enabled !== false
+      );
+      return effect ? [effect] : [];
+    });
+  }
+
+  /**
+   * Check if a selected legacy audio effect needs offline rendering.
+   */
+  private shouldRenderAudioEffect(effect: Effect, keyframes: Keyframe[]): boolean {
+    if (effect.enabled === false) {
+      return false;
+    }
+
+    const descriptor = getAudioEffect(effect.type);
+    if (!descriptor) return false;
+
+    if (this.hasEffectKeyframes(keyframes, effect.id)) {
+      return true;
+    }
+
+    if (descriptor.id === AUDIO_EQ_EFFECT_ID) {
+      return this.hasNonDefaultEQ(effect);
+    }
+
+    if (descriptor.id === AUDIO_VOLUME_EFFECT_ID) {
+      return this.hasNonDefaultVolume(effect);
+    }
+
+    return false;
+  }
+
+  private audioEffectInstanceToLegacyEffect(
+    effect: RenderableAudioEffectInstance
+  ): Effect | null {
+    const descriptor = getAudioEffect(effect.descriptorId);
+    if (!descriptor) return null;
+
+    return {
+      id: effect.id,
+      name: descriptor.name,
+      type: descriptor.id,
+      enabled: effect.enabled !== false && effect.disabled !== true && effect.bypassed !== true,
+      params: { ...effect.params },
+    };
   }
 
   /**
@@ -145,7 +241,8 @@ export class AudioEffectRenderer {
 
       // Get default gain from effect params
       const paramName = EQ_BAND_PARAMS[index];
-      const defaultGain = (eqEffect.params?.[paramName] as number) ?? 0;
+      const defaultGain = (eqEffect.params?.[paramName] as number) ??
+        this.getNumericEffectParamDefault(AUDIO_EQ_EFFECT_ID, paramName, 0);
 
       // Get keyframes for this band
       const property = `effect.${eqEffect.id}.${paramName}` as AnimatableProperty;
@@ -185,10 +282,11 @@ export class AudioEffectRenderer {
     const gainNode = context.createGain();
 
     // Get default volume
-    const defaultVolume = (volumeEffect.params?.volume as number) ?? 1;
+    const defaultVolume = (volumeEffect.params?.[AUDIO_VOLUME_PARAM] as number) ??
+      this.getNumericEffectParamDefault(AUDIO_VOLUME_EFFECT_ID, AUDIO_VOLUME_PARAM, 1);
 
     // Get keyframes for volume
-    const property = `effect.${volumeEffect.id}.volume` as AnimatableProperty;
+    const property = `effect.${volumeEffect.id}.${AUDIO_VOLUME_PARAM}` as AnimatableProperty;
     const volumeKeyframes = keyframes.filter(k => k.property === property);
 
     if (volumeKeyframes.length > 0) {
@@ -371,12 +469,52 @@ export class AudioEffectRenderer {
   }
 
   /**
+   * Get a registry default param value for an audio effect.
+   */
+  private getEffectParamDefault(
+    effectId: AudioEffectId,
+    paramName: string
+  ): AudioEffectParamValue | undefined {
+    return getAudioEffectDefaultParams(effectId)[paramName];
+  }
+
+  /**
+   * Get a numeric registry default param value.
+   */
+  private getNumericEffectParamDefault(
+    effectId: AudioEffectId,
+    paramName: string,
+    fallback: number
+  ): number {
+    const defaultValue = this.getEffectParamDefault(effectId, paramName);
+    return typeof defaultValue === 'number' ? defaultValue : fallback;
+  }
+
+  /**
+   * Check if volume has a non-default value.
+   */
+  private hasNonDefaultVolume(volumeEffect: Effect): boolean {
+    const defaultVolume = this.getNumericEffectParamDefault(
+      AUDIO_VOLUME_EFFECT_ID,
+      AUDIO_VOLUME_PARAM,
+      1
+    );
+    const value = (volumeEffect.params?.[AUDIO_VOLUME_PARAM] as number) ?? defaultVolume;
+    return value !== defaultVolume;
+  }
+
+  /**
    * Check if EQ has non-default values
    */
   private hasNonDefaultEQ(eqEffect: Effect): boolean {
+    const defaults = getAudioEffectDefaultParams(AUDIO_EQ_EFFECT_ID);
+
     return EQ_BAND_PARAMS.some(param => {
       const value = eqEffect.params?.[param] as number;
-      return value !== undefined && Math.abs(value) > 0.01;
+      const defaultValue = defaults[param];
+      return value !== undefined &&
+        typeof defaultValue === 'number' &&
+        Math.abs(value - defaultValue) > 0.01;
     });
   }
 

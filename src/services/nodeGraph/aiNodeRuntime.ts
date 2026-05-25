@@ -6,6 +6,7 @@ import type {
   TextClipProperties,
   TimelineClip,
 } from '../../types';
+import type { AudioAnalysisArtifactKind, MediaFileAudioAnalysisRefs } from '../../types/audio';
 import { Logger } from '../logger';
 import { textRenderer } from '../textRenderer';
 import { createTextLayoutSnapshot, type TextBoxRect, type TextLayoutSnapshot } from '../textLayout';
@@ -17,6 +18,7 @@ const log = Logger.create('AINodeRuntime');
 
 const PIXEL_SORT_MAX_PIXELS = 320 * 180;
 const GENERATED_NODE_MAX_PIXELS = 96 * 54;
+const MAX_RUNTIME_AUDIO_SPECTROGRAM_REFS = 16;
 
 export interface AINodeRuntimeTexture {
   data: Uint8ClampedArray;
@@ -42,6 +44,53 @@ type AINodeRuntimeTextSignal = TextClipProperties & {
   box?: TextBoxRect;
 };
 
+interface AINodeRuntimeAudioArtifactSignal {
+  artifactId: string;
+  kind: AudioAnalysisArtifactKind;
+  provenance: 'source' | 'processed';
+  available: true;
+  stale: boolean;
+}
+
+interface AINodeRuntimeWaveformSummary {
+  sampleCount: number;
+  peak: number;
+  rms: number;
+  min: number;
+  max: number;
+  preview: number[];
+}
+
+interface AINodeRuntimeAudioAnalysisNamespace {
+  waveform?: AINodeRuntimeAudioArtifactSignal;
+  processedWaveform?: AINodeRuntimeAudioArtifactSignal;
+  spectrogramTileSets: AINodeRuntimeAudioArtifactSignal[];
+  spectrogramTileSetCount: number;
+  omittedSpectrogramTileSetCount: number;
+  loudness?: AINodeRuntimeAudioArtifactSignal;
+  beats?: AINodeRuntimeAudioArtifactSignal;
+  onsets?: AINodeRuntimeAudioArtifactSignal;
+  phaseCorrelation?: AINodeRuntimeAudioArtifactSignal;
+  transcriptTiming?: AINodeRuntimeAudioArtifactSignal;
+  frequencySummary?: AINodeRuntimeAudioArtifactSignal;
+}
+
+interface AINodeRuntimeAudioContext {
+  source: {
+    mediaFileId?: string;
+    sourceAudioRevisionId?: string;
+    duration: number;
+    inPoint: number;
+    outPoint: number;
+  };
+  waveform?: AINodeRuntimeWaveformSummary;
+  analysis: {
+    source: AINodeRuntimeAudioAnalysisNamespace;
+    processed: AINodeRuntimeAudioAnalysisNamespace;
+    effective: AINodeRuntimeAudioAnalysisNamespace;
+  };
+}
+
 interface AINodeRuntimeContext {
   clipId: string;
   clipLocalTime: number;
@@ -53,6 +102,7 @@ interface AINodeRuntimeContext {
   graph: Record<string, unknown>;
   node: Record<string, unknown>;
   signals: Record<string, unknown>;
+  audio?: AINodeRuntimeAudioContext;
   text?: AINodeRuntimeTextSignal;
 }
 
@@ -60,6 +110,7 @@ type AINodeRuntimeInputValue =
   | AINodeRuntimeTexture
   | AINodeRuntimeTime
   | AINodeRuntimeTextSignal
+  | AINodeRuntimeAudioContext
   | number
   | Record<string, unknown>
   | undefined;
@@ -350,6 +401,160 @@ function createRuntimeSourceMetadata(source: LayerSource): Record<string, unknow
   };
 }
 
+function createAudioArtifactSignal(
+  artifactId: string | undefined,
+  kind: AudioAnalysisArtifactKind,
+  provenance: 'source' | 'processed',
+): AINodeRuntimeAudioArtifactSignal | undefined {
+  if (!artifactId) {
+    return undefined;
+  }
+
+  return {
+    artifactId,
+    kind,
+    provenance,
+    available: true,
+    stale: false,
+  };
+}
+
+function createAudioAnalysisNamespace(
+  refs: MediaFileAudioAnalysisRefs | undefined,
+  provenance: 'source' | 'processed',
+): AINodeRuntimeAudioAnalysisNamespace {
+  const spectrogramTileSetIds = refs?.spectrogramTileSetIds ?? [];
+  const boundedSpectrogramTileSetIds = spectrogramTileSetIds.slice(0, MAX_RUNTIME_AUDIO_SPECTROGRAM_REFS);
+
+  return {
+    waveform: createAudioArtifactSignal(refs?.waveformPyramidId, 'waveform-pyramid', provenance),
+    processedWaveform: createAudioArtifactSignal(
+      refs?.processedWaveformPyramidId,
+      'processed-waveform-pyramid',
+      provenance,
+    ),
+    spectrogramTileSets: boundedSpectrogramTileSetIds
+      .map((artifactId) => createAudioArtifactSignal(artifactId, 'spectrogram-tiles', provenance))
+      .filter((signal): signal is AINodeRuntimeAudioArtifactSignal => Boolean(signal)),
+    spectrogramTileSetCount: spectrogramTileSetIds.length,
+    omittedSpectrogramTileSetCount: Math.max(
+      0,
+      spectrogramTileSetIds.length - boundedSpectrogramTileSetIds.length,
+    ),
+    loudness: createAudioArtifactSignal(refs?.loudnessEnvelopeId, 'loudness-envelope', provenance),
+    beats: createAudioArtifactSignal(refs?.beatGridId, 'beat-grid', provenance),
+    onsets: createAudioArtifactSignal(refs?.onsetMapId, 'onset-map', provenance),
+    phaseCorrelation: createAudioArtifactSignal(refs?.phaseCorrelationId, 'phase-correlation', provenance),
+    transcriptTiming: createAudioArtifactSignal(refs?.transcriptTimingId, 'transcript-timing', provenance),
+    frequencySummary: createAudioArtifactSignal(refs?.frequencySummaryId, 'frequency-summary', provenance),
+  };
+}
+
+function mergeAudioAnalysisNamespaces(
+  source: AINodeRuntimeAudioAnalysisNamespace,
+  processed: AINodeRuntimeAudioAnalysisNamespace,
+): AINodeRuntimeAudioAnalysisNamespace {
+  const spectrogramSource = processed.spectrogramTileSets.length > 0 ? processed : source;
+
+  return {
+    waveform: processed.processedWaveform ?? processed.waveform ?? source.waveform,
+    processedWaveform: processed.processedWaveform ?? source.processedWaveform,
+    spectrogramTileSets: spectrogramSource.spectrogramTileSets,
+    spectrogramTileSetCount: spectrogramSource.spectrogramTileSetCount,
+    omittedSpectrogramTileSetCount: spectrogramSource.omittedSpectrogramTileSetCount,
+    loudness: processed.loudness ?? source.loudness,
+    beats: processed.beats ?? source.beats,
+    onsets: processed.onsets ?? source.onsets,
+    phaseCorrelation: processed.phaseCorrelation ?? source.phaseCorrelation,
+    transcriptTiming: processed.transcriptTiming ?? source.transcriptTiming,
+    frequencySummary: processed.frequencySummary ?? source.frequencySummary,
+  };
+}
+
+function summarizeWaveform(waveform: number[] | undefined): AINodeRuntimeWaveformSummary | undefined {
+  if (!waveform || waveform.length === 0) {
+    return undefined;
+  }
+
+  let peak = 0;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let squareSum = 0;
+
+  for (const value of waveform) {
+    const sample = Number.isFinite(value) ? value : 0;
+    peak = Math.max(peak, Math.abs(sample));
+    min = Math.min(min, sample);
+    max = Math.max(max, sample);
+    squareSum += sample * sample;
+  }
+
+  const previewLength = Math.min(256, waveform.length);
+  const preview = Array.from({ length: previewLength }, (_, index) => {
+    const sourceIndex = Math.min(
+      waveform.length - 1,
+      Math.floor((index / Math.max(1, previewLength)) * waveform.length),
+    );
+    const sample = waveform[sourceIndex];
+    return Number.isFinite(sample) ? sample : 0;
+  });
+
+  return {
+    sampleCount: waveform.length,
+    peak,
+    rms: Math.sqrt(squareSum / waveform.length),
+    min,
+    max,
+    preview,
+  };
+}
+
+function hasAudioAnalysis(namespace: AINodeRuntimeAudioAnalysisNamespace): boolean {
+  return Boolean(
+    namespace.waveform ||
+    namespace.processedWaveform ||
+    namespace.spectrogramTileSetCount > 0 ||
+    namespace.loudness ||
+    namespace.beats ||
+    namespace.onsets ||
+    namespace.phaseCorrelation ||
+    namespace.transcriptTiming ||
+    namespace.frequencySummary,
+  );
+}
+
+function createRuntimeAudioContext(clip: TimelineClip): AINodeRuntimeAudioContext | undefined {
+  const source = createAudioAnalysisNamespace(clip.audioState?.sourceAnalysisRefs, 'source');
+  const processed = createAudioAnalysisNamespace(clip.audioState?.processedAnalysisRefs, 'processed');
+  const effective = mergeAudioAnalysisNamespaces(source, processed);
+  const waveform = summarizeWaveform(clip.waveform);
+  const hasAudioSource = clip.source?.type === 'audio' ||
+    clip.file?.type?.startsWith('audio/') ||
+    Boolean(clip.audioState) ||
+    Boolean(waveform) ||
+    hasAudioAnalysis(effective);
+
+  if (!hasAudioSource) {
+    return undefined;
+  }
+
+  return {
+    source: {
+      mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+      sourceAudioRevisionId: clip.audioState?.sourceAudioRevisionId,
+      duration: clip.duration,
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+    },
+    waveform,
+    analysis: {
+      source,
+      processed,
+      effective,
+    },
+  };
+}
+
 function createTextMeasureContext(): Pick<CanvasRenderingContext2D, 'font' | 'measureText'> | null {
   if (typeof document === 'undefined') {
     return null;
@@ -385,6 +590,7 @@ function createRuntimeMetadata(
   source: LayerSource,
   text?: TextClipProperties,
   dimensions?: { width: number; height: number },
+  audio?: AINodeRuntimeAudioContext,
 ): Record<string, unknown> {
   return {
     clipName: clip.name,
@@ -394,6 +600,7 @@ function createRuntimeMetadata(
     sourceType: clip.source?.type,
     source: createRuntimeSourceMetadata(source),
     clip: createRuntimeClipMetadata(clip),
+    audio,
     text: createRuntimeTextSignal(text, dimensions),
   };
 }
@@ -555,6 +762,7 @@ function runGeneratedNode(
         graph: context.graph,
         node: context.node,
         signals: context.signals,
+        audio: context.audio,
         text: context.text,
       },
       context,
@@ -592,6 +800,7 @@ function processTexture(
   const graphSignal = createSerializableGraph(graph);
   const clipSignal = createRuntimeClipMetadata(clip);
   const sourceSignal = createRuntimeSourceMetadata(source);
+  const audioSignal = createRuntimeAudioContext(clip);
 
   return definitions.reduce((current, definition) => {
     const params = resolveParams(definition.id);
@@ -603,7 +812,7 @@ function processTexture(
     const textSignal = createRuntimeTextSignal(currentText, currentDimensions);
     const metadata = {
       ...(current.metadata ?? {}),
-      ...createRuntimeMetadata(clip, source, currentText, currentDimensions),
+      ...createRuntimeMetadata(clip, source, currentText, currentDimensions, audioSignal),
     };
 
     return runGeneratedNode(definition, current, {
@@ -622,6 +831,7 @@ function processTexture(
         outputs: definition.outputs,
         status: definition.status,
       },
+      audio: audioSignal,
       signals: {
         texture: current,
         time: createRuntimeTime({
@@ -635,6 +845,7 @@ function processTexture(
           graph: graphSignal,
           node: { id: definition.id, label: definition.label },
           signals: {},
+          audio: audioSignal,
           text: textSignal,
         }),
         params,
@@ -643,6 +854,8 @@ function processTexture(
         source: sourceSignal,
         graph: graphSignal,
         node: { id: definition.id, label: definition.label },
+        audio: audioSignal,
+        audioAnalysis: audioSignal?.analysis,
         text: textSignal,
       },
       text: textSignal,

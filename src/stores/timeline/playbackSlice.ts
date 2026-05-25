@@ -324,6 +324,10 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     set({ waveformsEnabled: enabled });
   },
 
+  setAudioDisplayMode: (mode) => {
+    set({ audioDisplayMode: mode });
+  },
+
   toggleTranscriptMarkers: () => {
     set({ showTranscriptMarkers: !get().showTranscriptMarkers });
   },

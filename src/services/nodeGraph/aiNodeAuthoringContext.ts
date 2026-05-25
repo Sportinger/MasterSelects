@@ -1,4 +1,5 @@
 import type { ClipCustomNodeDefinition, NodeGraph, NodeGraphEdge, NodeGraphNode, TimelineClip, TimelineTrack } from '../../types';
+import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
 import { createTextLayoutSnapshot } from '../textLayout';
 import { buildClipNodeGraph } from './clipGraphProjection';
 
@@ -14,6 +15,20 @@ const MAX_TEXT_CONTEXT_CHARS = 1200;
 const MAX_TEXT_PREVIEW_CHARS = 160;
 const MAX_TEXT_LAYOUT_LINES = 24;
 const MAX_TEXT_LAYOUT_CHARACTERS = 80;
+const MAX_AUDIO_CONTEXT_REFS = 16;
+const MAX_AUDIO_CONTEXT_REF_ID_CHARS = 120;
+const AUDIO_ANALYSIS_SEMANTICS = new Set([
+  'waveform',
+  'spectrum',
+  'frequency-bands',
+  'loudness',
+  'beats',
+  'onsets',
+  'phase-correlation',
+  'transcript',
+  'frequency-summary',
+  'audio-metadata',
+]);
 
 function truncateContextValue(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
@@ -190,6 +205,102 @@ function buildTextSourceContext(clip: TimelineClip): string | null {
   ].join('\n');
 }
 
+function formatAudioRefId(id: string): string {
+  return truncateContextValue(id, MAX_AUDIO_CONTEXT_REF_ID_CHARS);
+}
+
+function formatAudioRefList(ids: string[] | undefined): string {
+  if (!ids || ids.length === 0) {
+    return '';
+  }
+
+  const visibleIds = ids.slice(0, MAX_AUDIO_CONTEXT_REFS).map(formatAudioRefId);
+  const omittedCount = ids.length - visibleIds.length;
+  return `spectrograms=${visibleIds.join(',')}${omittedCount > 0 ? `(+${omittedCount} more)` : ''}`;
+}
+
+function formatAudioRefs(refs: MediaFileAudioAnalysisRefs | undefined): string {
+  if (!refs) {
+    return 'none';
+  }
+
+  return [
+    refs.waveformPyramidId ? `waveform=${formatAudioRefId(refs.waveformPyramidId)}` : '',
+    refs.processedWaveformPyramidId ? `processedWaveform=${formatAudioRefId(refs.processedWaveformPyramidId)}` : '',
+    formatAudioRefList(refs.spectrogramTileSetIds),
+    refs.loudnessEnvelopeId ? `loudness=${formatAudioRefId(refs.loudnessEnvelopeId)}` : '',
+    refs.beatGridId ? `beats=${formatAudioRefId(refs.beatGridId)}` : '',
+    refs.onsetMapId ? `onsets=${formatAudioRefId(refs.onsetMapId)}` : '',
+    refs.phaseCorrelationId ? `phase=${formatAudioRefId(refs.phaseCorrelationId)}` : '',
+    refs.transcriptTimingId ? `transcriptTiming=${formatAudioRefId(refs.transcriptTimingId)}` : '',
+    refs.frequencySummaryId ? `frequencySummary=${formatAudioRefId(refs.frequencySummaryId)}` : '',
+  ].filter(Boolean).join(' ') || 'none';
+}
+
+function firstNonEmpty<T>(preferred: T[] | undefined, fallback: T[] | undefined): T[] | undefined {
+  return preferred && preferred.length > 0 ? preferred : fallback;
+}
+
+function getEffectiveAudioRefs(clip: TimelineClip): MediaFileAudioAnalysisRefs | undefined {
+  const source = clip.audioState?.sourceAnalysisRefs;
+  const processed = clip.audioState?.processedAnalysisRefs;
+  if (!source && !processed) {
+    return undefined;
+  }
+
+  return {
+    waveformPyramidId: processed?.processedWaveformPyramidId ??
+      processed?.waveformPyramidId ??
+      source?.waveformPyramidId,
+    processedWaveformPyramidId: processed?.processedWaveformPyramidId ?? source?.processedWaveformPyramidId,
+    spectrogramTileSetIds: firstNonEmpty(processed?.spectrogramTileSetIds, source?.spectrogramTileSetIds),
+    loudnessEnvelopeId: processed?.loudnessEnvelopeId ?? source?.loudnessEnvelopeId,
+    beatGridId: processed?.beatGridId ?? source?.beatGridId,
+    onsetMapId: processed?.onsetMapId ?? source?.onsetMapId,
+    phaseCorrelationId: processed?.phaseCorrelationId ?? source?.phaseCorrelationId,
+    transcriptTimingId: processed?.transcriptTimingId ?? source?.transcriptTimingId,
+    frequencySummaryId: processed?.frequencySummaryId ?? source?.frequencySummaryId,
+  };
+}
+
+function isAudioPort(port: NodeGraphNode['outputs'][number]): boolean {
+  const semanticKind = String(port.metadata?.semanticKind ?? '');
+  return port.type === 'audio' ||
+    semanticKind.startsWith('audio') ||
+    AUDIO_ANALYSIS_SEMANTICS.has(semanticKind);
+}
+
+function buildAudioSourceContext(clip: TimelineClip, graph: NodeGraph): string | null {
+  const sourceNode = graph.nodes.find((node) => node.id === 'source');
+  const audioPorts = sourceNode?.outputs.filter(isAudioPort) ?? [];
+  const hasAudio = clip.source?.type === 'audio'
+    || clip.source?.type === 'video'
+    || (clip.waveform?.length ?? 0) > 0
+    || Boolean(clip.audioState?.sourceAnalysisRefs ?? clip.audioState?.processedAnalysisRefs);
+
+  if (!hasAudio && audioPorts.length === 0) {
+    return null;
+  }
+
+  return [
+    'Audio source:',
+    `- sourceType=${clip.source?.type ?? 'unknown'}`,
+    `- sourceAudioRevision=${clip.audioState?.sourceAudioRevisionId ?? 'none'}`,
+    `- clipMute=${clip.audioState?.muted === true}`,
+    `- soloSafe=${clip.audioState?.soloSafe === true}`,
+    `- waveformSamples=${clip.waveform?.length ?? 0}`,
+    `- sourceAnalysisRefs=${formatAudioRefs(clip.audioState?.sourceAnalysisRefs)}`,
+    `- processedAnalysisRefs=${formatAudioRefs(clip.audioState?.processedAnalysisRefs)}`,
+    `- effectiveAnalysisRefs=${formatAudioRefs(getEffectiveAudioRefs(clip))}`,
+    '- graphPorts:',
+    ...(audioPorts.length > 0
+      ? audioPorts.map((port) => (
+        `  - ${port.id}:${port.type} semantic=${port.metadata?.semanticKind ?? 'audio'} available=${port.metadata?.available !== false} stale=${port.metadata?.stale === true} provenance=${port.metadata?.artifactProvenance ?? 'none'} artifact=${port.metadata?.artifactId ?? 'none'} action=${port.metadata?.generateAction?.artifactKind ?? 'none'}`
+      ))
+      : ['  - none']),
+  ].join('\n');
+}
+
 function buildTimelineContext(clip: TimelineClip, context?: AINodeAuthoringProjectContext): string {
   const clips = context?.clips ?? [clip];
   const tracks = context?.tracks ?? [];
@@ -254,6 +365,8 @@ export function buildAINodeAuthoringContext(
     `- outPoint=${clip.outPoint}`,
     '',
     buildTextSourceContext(clip),
+    '',
+    buildAudioSourceContext(clip, graph),
     '',
     buildTimelineContext(clip, context),
     '',

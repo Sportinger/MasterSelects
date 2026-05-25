@@ -10,7 +10,9 @@ import type {
 import type { ColorCorrectionState, RuntimeColorGrade } from './colorCorrection';
 import type { MotionLayerDefinition, MotionProperty } from './motionDesign';
 import type { ClipNodeGraph } from './nodeGraph';
+import type { ClipAudioState, MasterAudioState, TrackAudioState } from './audio';
 
+export * from './audio';
 export * from './colorCorrection';
 export * from './motionDesign';
 export * from './nodeGraph';
@@ -682,6 +684,7 @@ export interface TimelineClip {
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   linkedGroupId?: string; // ID of multicam group (clips synced together)
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
+  audioState?: ClipAudioState; // Advanced audio workstation state (optional, legacy-safe)
   waveform?: number[];    // Array of normalized amplitude values (0-1) for audio waveform
   waveformGenerating?: boolean;  // True while waveform is being generated
   waveformProgress?: number;     // 0-100 progress of waveform generation
@@ -755,6 +758,7 @@ export interface TimelineTrack {
   solo: boolean;
   locked?: boolean;
   parentTrackId?: string;  // ID of parent track for layer parenting (like AE parenting)
+  audioState?: TrackAudioState;
 }
 
 export interface TimelineState {
@@ -786,6 +790,7 @@ export interface SerializableClip {
   thumbnails?: string[];
   linkedClipId?: string;
   linkedGroupId?: string;  // Multicam group ID
+  audioState?: ClipAudioState;
   waveform?: number[];
   transform: ClipTransform;
   effects: Effect[];         // Effects applied to this clip
@@ -858,6 +863,7 @@ export interface CompositionTimelineData {
   outPoint: number | null;
   loopPlayback: boolean;
   markers?: SerializableMarker[];  // Timeline markers
+  masterAudioState?: MasterAudioState;
 }
 
 // Keyframe animation types

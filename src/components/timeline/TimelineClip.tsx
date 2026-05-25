@@ -17,9 +17,15 @@ import { ClipWaveform } from './components/ClipWaveform';
 import { ClipAnalysisOverlay } from './components/ClipAnalysisOverlay';
 import { FadeCurve } from './components/FadeCurve';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
+import { useTimelineWaveformPyramid } from './hooks/useTimelineWaveformPyramid';
 
 const log = Logger.create('TimelineClip');
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
+const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
+const TIMELINE_VIEWPORT_MIN_PX = 1600;
+const TIMELINE_RENDER_OVERSCAN_PX = 512;
+const THUMBNAIL_RENDER_OVERSCAN_PX = THUMB_WIDTH * 3;
+const requestedWaveformPyramidUpgrades = new Set<string>();
 
 function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
   return isVectorAnimationSourceType(clip.source?.type) &&
@@ -109,6 +115,7 @@ function TimelineClipComponent({
   clip,
   trackId,
   track,
+  trackBaseHeight,
   tracks,
   clips,
   isSelected,
@@ -150,6 +157,10 @@ function TimelineClipComponent({
 }: TimelineClipProps) {
   const thumbnailsEnabled = useTimelineStore(s => s.thumbnailsEnabled);
   const waveformsEnabled = useTimelineStore(s => s.waveformsEnabled);
+  const audioDisplayMode = useTimelineStore(s => s.audioDisplayMode);
+  const waveformPyramidRef = clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId
+    ?? clip.audioState?.sourceAnalysisRefs?.waveformPyramidId;
+  const waveformPyramid = useTimelineWaveformPyramid(waveformPyramidRef);
 
   // Subscribe to playhead position only when cut tool is active (avoids re-renders during playback)
   const playheadPosition = useTimelineStore((state) =>
@@ -404,6 +415,77 @@ function TimelineClipComponent({
     // This clip is part of multi-select drag (but not the primary dragged clip)
     left = timeToPixel(Math.max(0, clip.startTime + clipDrag.multiSelectTimeDelta));
   }
+  const timelineViewportWidth = typeof window === 'undefined'
+    ? TIMELINE_VIEWPORT_FALLBACK_PX
+    : Math.max(TIMELINE_VIEWPORT_MIN_PX, window.innerWidth);
+  const waveformRenderStartPx = Math.max(0, scrollX - left - TIMELINE_RENDER_OVERSCAN_PX);
+  const waveformRenderEndPx = Math.min(width, scrollX - left + timelineViewportWidth + TIMELINE_RENDER_OVERSCAN_PX);
+  const waveformRenderWindow = {
+    startPx: waveformRenderStartPx,
+    width: Math.max(0, waveformRenderEndPx - waveformRenderStartPx),
+  };
+  const thumbnailRenderStartPx = Math.max(0, scrollX - left - THUMBNAIL_RENDER_OVERSCAN_PX);
+  const thumbnailRenderEndPx = Math.min(width, scrollX - left + timelineViewportWidth + THUMBNAIL_RENDER_OVERSCAN_PX);
+  const thumbnailRenderWindow = {
+    startPx: thumbnailRenderStartPx,
+    width: Math.max(0, thumbnailRenderEndPx - thumbnailRenderStartPx),
+  };
+  const sourceSpan = Math.max(0, displayOutPoint - displayInPoint);
+  const thumbnailVisibleInPoint = displayInPoint + sourceSpan * (thumbnailRenderWindow.startPx / Math.max(1, width));
+  const thumbnailVisibleOutPoint = displayInPoint + sourceSpan * (
+    (thumbnailRenderWindow.startPx + thumbnailRenderWindow.width) / Math.max(1, width)
+  );
+
+  useEffect(() => {
+    if (!waveformsEnabled || !isAudioClip || waveformPyramidRef || clip.waveformGenerating || !clip.file) {
+      return;
+    }
+
+    const shouldUpgrade =
+      audioDisplayMode !== 'compact' ||
+      zoom >= 250 ||
+      width > 16_384;
+
+    if (!shouldUpgrade) return;
+
+    const fileKey = [
+      clip.id,
+      clip.file.name,
+      clip.file.size,
+      clip.file.lastModified,
+    ].join(':');
+
+    if (requestedWaveformPyramidUpgrades.has(fileKey)) return;
+    requestedWaveformPyramidUpgrades.add(fileKey);
+
+    const timer = window.setTimeout(() => {
+      const { clips: currentClips, generateWaveformForClip } = useTimelineStore.getState();
+      const currentClip = currentClips.find(current => current.id === clip.id);
+      if (
+        !currentClip ||
+        currentClip.waveformGenerating ||
+        currentClip.audioState?.sourceAnalysisRefs?.waveformPyramidId ||
+        currentClip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId
+      ) {
+        return;
+      }
+
+      void generateWaveformForClip(clip.id);
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    audioDisplayMode,
+    clip.file,
+    clip.id,
+    clip.waveformGenerating,
+    isAudioClip,
+    waveformPyramidRef,
+    waveformsEnabled,
+    width,
+    zoom,
+  ]);
+
   const clipMetaOffset = clip.isLoading
     ? 0
     : Math.min(
@@ -411,8 +493,12 @@ function TimelineClipComponent({
         Math.max(0, width - 48)
       );
 
-  // Calculate how many thumbnails to show based on clip width
-  const visibleThumbs = Math.max(1, Math.ceil(width / THUMB_WIDTH));
+  // Render only the visible filmstrip window. At deep zoom the full clip can be
+  // hundreds of thousands of pixels wide, so tying thumbnails to full clip width
+  // makes the entire timeline unresponsive.
+  const visibleThumbs = thumbnailRenderWindow.width > 0
+    ? Math.max(1, Math.ceil(thumbnailRenderWindow.width / THUMB_WIDTH) + 1)
+    : 0;
 
   // Source-based thumbnail cache: pull thumbnails from cache by mediaFileId
   const sourceMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
@@ -420,8 +506,8 @@ function TimelineClipComponent({
   const useSourceCache = clip.source?.type === 'video' && !!sourceMediaFileId && !isCompositionWithSegments;
   const cachedThumbnails = useThumbnailCache(
     useSourceCache ? sourceMediaFileId : undefined,
-    displayInPoint,
-    displayOutPoint,
+    thumbnailVisibleInPoint,
+    thumbnailVisibleOutPoint,
     visibleThumbs,
     clip.reversed
   );
@@ -539,6 +625,7 @@ function TimelineClipComponent({
     isFading ? 'fading' : '',
     isDragging && clipDrag?.forcingOverlap ? 'forcing-overlap' : '',
     clipTypeClass,
+    isAudioClip ? `audio-mode-${audioDisplayMode}` : '',
     clip.isLoading ? 'loading' : '',
     clip.needsReload ? 'needs-reload' : '',
     hasProxy ? 'has-proxy' : '',
@@ -808,10 +895,15 @@ function TimelineClipComponent({
           <ClipWaveform
             waveform={clip.waveform}
             width={width}
-            height={Math.max(20, track.height - 12)}
+            height={Math.max(20, trackBaseHeight - 12)}
             inPoint={displayInPoint}
             outPoint={displayOutPoint}
             naturalDuration={clip.source?.naturalDuration || clip.duration}
+            displayMode={audioDisplayMode}
+            pixelsPerSecond={zoom}
+            pyramid={waveformPyramid}
+            renderStartPx={waveformRenderWindow.startPx}
+            renderWidth={waveformRenderWindow.width}
           />
         </div>
       )}
@@ -821,10 +913,14 @@ function TimelineClipComponent({
           <ClipWaveform
             waveform={clip.mixdownWaveform}
             width={width}
-            height={Math.min(30, Math.max(16, track.height / 3))}
+            height={Math.min(42, Math.max(16, trackBaseHeight / 3))}
             inPoint={displayInPoint}
             outPoint={displayOutPoint}
             naturalDuration={clip.duration}
+            displayMode={audioDisplayMode}
+            pixelsPerSecond={zoom}
+            renderStartPx={waveformRenderWindow.startPx}
+            renderWidth={waveformRenderWindow.width}
           />
         </div>
       )}
@@ -841,12 +937,28 @@ function TimelineClipComponent({
       )}
       {/* Segment-based thumbnails for nested compositions */}
       {showSegmentThumbnails && (
-        <div className="clip-thumbnails clip-thumbnails-segments">
+        <div
+          className="clip-thumbnails clip-thumbnails-segments clip-thumbnails-windowed"
+          style={{
+            left: thumbnailRenderWindow.startPx,
+            width: thumbnailRenderWindow.width,
+            right: 'auto',
+          }}
+        >
           {compositionSegments.map((segment, segIdx) => {
-            const segmentWidth = (segment.endNorm - segment.startNorm) * 100;
-            const segmentLeft = segment.startNorm * 100;
+            const windowStartNorm = thumbnailRenderWindow.startPx / Math.max(1, width);
+            const windowEndNorm = (thumbnailRenderWindow.startPx + thumbnailRenderWindow.width) / Math.max(1, width);
+            if (segment.endNorm < windowStartNorm || segment.startNorm > windowEndNorm) return null;
+            const windowNormSpan = Math.max(0.0001, windowEndNorm - windowStartNorm);
+            const clippedSegmentStart = Math.max(segment.startNorm, windowStartNorm);
+            const clippedSegmentEnd = Math.min(segment.endNorm, windowEndNorm);
+            const segmentWidth = ((clippedSegmentEnd - clippedSegmentStart) / windowNormSpan) * 100;
+            const segmentLeft = ((clippedSegmentStart - windowStartNorm) / windowNormSpan) * 100;
             // Calculate how many thumbnails fit in this segment
-            const segmentThumbCount = Math.max(1, Math.ceil((segmentWidth / 100) * visibleThumbs));
+            const segmentThumbCount = Math.max(1, Math.min(
+              visibleThumbs,
+              Math.ceil(((clippedSegmentEnd - clippedSegmentStart) * width) / THUMB_WIDTH) + 1,
+            ));
 
             return (
               <div
@@ -886,7 +998,14 @@ function TimelineClipComponent({
       )}
       {/* Regular thumbnail filmstrip - source-based cache or legacy fallback */}
       {showRegularThumbnails && (
-        <div className="clip-thumbnails">
+        <div
+          className="clip-thumbnails clip-thumbnails-windowed"
+          style={{
+            left: thumbnailRenderWindow.startPx,
+            width: thumbnailRenderWindow.width,
+            right: 'auto',
+          }}
+        >
           {useSourceCache ? (
             // Source-based cache: thumbnails already mapped to visible range by hook
             cachedThumbnails.map((thumb, i) => thumb ? (
@@ -906,7 +1025,10 @@ function TimelineClipComponent({
               const naturalDuration = clip.source?.naturalDuration || clip.duration;
               const startRatio = displayInPoint / naturalDuration;
               const endRatio = displayOutPoint / naturalDuration;
-              const positionInTrimmed = i / visibleThumbs;
+              const positionInTrimmed = Math.min(1, Math.max(
+                0,
+                (thumbnailRenderWindow.startPx + i * THUMB_WIDTH) / Math.max(1, width),
+              ));
               const sourceRatio = startRatio + positionInTrimmed * (endRatio - startRatio);
               const thumbIndex = Math.floor(sourceRatio * legacyThumbnails.length);
               const thumb = legacyThumbnails[Math.min(Math.max(0, thumbIndex), legacyThumbnails.length - 1)];
@@ -1042,7 +1164,7 @@ function TimelineClipComponent({
               clipInPoint={clip.inPoint}
               clipStartTime={displayStartTime}
               width={width}
-              height={track.height}
+              height={trackBaseHeight}
             />
           </div>
         </>
@@ -1086,7 +1208,7 @@ function TimelineClipComponent({
             keyframes={opacityKeyframes}
             clipDuration={displayDuration}
             width={width}
-            height={track.height}
+            height={trackBaseHeight}
           />
         </div>
       )}

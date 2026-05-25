@@ -22,6 +22,7 @@ export type {
   NodeGraphOwner,
   NodeGraphPort,
   NodeGraphPortDirection,
+  NodeGraphPortMetadata,
   NodeGraphRuntimeKind,
   NodeGraphSignalType,
 } from '../../types/nodeGraph';

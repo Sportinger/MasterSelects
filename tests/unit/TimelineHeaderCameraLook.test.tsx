@@ -22,6 +22,7 @@ describe('TimelineHeader camera look controls', () => {
         tracks={[track]}
         isDimmed={false}
         isExpanded={false}
+        baseHeight={48}
         dynamicHeight={48}
         hasKeyframes={false}
         selectedClipIds={new Set()}
@@ -98,6 +99,7 @@ describe('TimelineHeader camera look controls', () => {
         tracks={[]}
         isDimmed={false}
         isExpanded
+        baseHeight={48}
         dynamicHeight={120}
         hasKeyframes
         selectedClipIds={new Set(['camera-clip'])}
@@ -171,6 +173,7 @@ describe('TimelineHeader camera look controls', () => {
         tracks={[]}
         isDimmed={false}
         isExpanded
+        baseHeight={48}
         dynamicHeight={120}
         hasKeyframes
         selectedClipIds={new Set(['clip-1'])}
@@ -242,6 +245,7 @@ describe('TimelineHeader camera look controls', () => {
         tracks={[]}
         isDimmed={false}
         isExpanded
+        baseHeight={48}
         dynamicHeight={120}
         hasKeyframes
         selectedClipIds={new Set(['clip-1'])}
@@ -308,6 +312,7 @@ describe('TimelineHeader camera look controls', () => {
         tracks={[]}
         isDimmed={false}
         isExpanded
+        baseHeight={48}
         dynamicHeight={140}
         hasKeyframes
         selectedClipIds={new Set(['clip-1'])}

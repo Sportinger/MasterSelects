@@ -29,6 +29,7 @@ export const selectLoopPlayback = (state: TimelineStore) => state.loopPlayback;
 export const selectToolMode = (state: TimelineStore) => state.toolMode;
 export const selectThumbnailsEnabled = (state: TimelineStore) => state.thumbnailsEnabled;
 export const selectWaveformsEnabled = (state: TimelineStore) => state.waveformsEnabled;
+export const selectAudioDisplayMode = (state: TimelineStore) => state.audioDisplayMode;
 export const selectIsDraggingPlayhead = (state: TimelineStore) => state.isDraggingPlayhead;
 
 // ===========================================
@@ -91,6 +92,7 @@ export const selectUISettings = (state: TimelineStore) => ({
   toolMode: state.toolMode,
   thumbnailsEnabled: state.thumbnailsEnabled,
   waveformsEnabled: state.waveformsEnabled,
+  audioDisplayMode: state.audioDisplayMode,
 });
 
 // Preview/export state (changes during preview/export operations)
@@ -243,6 +245,7 @@ export const selectToolActions = (state: TimelineStore) => ({
   toggleCutTool: state.toggleCutTool,
   toggleThumbnailsEnabled: state.toggleThumbnailsEnabled,
   toggleWaveformsEnabled: state.toggleWaveformsEnabled,
+  setAudioDisplayMode: state.setAudioDisplayMode,
 });
 
 // Marker actions

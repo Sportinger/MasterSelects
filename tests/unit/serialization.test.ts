@@ -79,6 +79,33 @@ describe('SerializableClip structure', () => {
     expect(clip.effects).toEqual([]);
   });
 
+  it('preserves optional advanced audio state through JSON serialization', () => {
+    const clip = makeSerializableClip({
+      audioState: {
+        sourceAudioRevisionId: 'audio-rev-1',
+        sourceAnalysisRefs: {
+          waveformPyramidId: 'waveform-artifact-1',
+          spectrogramTileSetIds: ['spectrogram-tiles-1'],
+        },
+        editStack: [
+          {
+            id: 'audio-op-1',
+            type: 'trim',
+            enabled: true,
+            params: { snapToZeroCrossing: true },
+            timeRange: { start: 1, end: 3 },
+            createdAt: 123,
+          },
+        ],
+      },
+    });
+
+    const restored: SerializableClip = JSON.parse(JSON.stringify(clip));
+
+    expect(restored.audioState).toEqual(clip.audioState);
+    expect(restored.waveform).toBeUndefined();
+  });
+
   it('preserves transform properties through serialization', () => {
     const transform = makeDefaultTransform({
       opacity: 0.75,
@@ -228,6 +255,35 @@ describe('Track serialization', () => {
 
     expect(restored[1].parentTrackId).toBe('track-v1');
   });
+
+  it('tracks preserve optional audio mixer state through JSON round-trip', () => {
+    const tracks: TimelineTrack[] = [
+      {
+        id: 'track-a1',
+        name: 'Audio 1',
+        type: 'audio',
+        height: 80,
+        muted: false,
+        visible: true,
+        solo: false,
+        audioState: {
+          volumeDb: -3,
+          pan: 0.2,
+          muted: false,
+          solo: false,
+          recordArm: true,
+          inputMonitor: true,
+          effectStack: [],
+          sends: [{ id: 'send-1', targetBusId: 'bus-reverb', gainDb: -12, preFader: false, enabled: true }],
+          meterMode: 'lufs',
+        },
+      },
+    ];
+
+    const restored: TimelineTrack[] = JSON.parse(JSON.stringify(tracks));
+
+    expect(restored[0].audioState).toEqual(tracks[0].audioState);
+  });
 });
 
 // ─── Keyframe Map <-> Record conversion ─────────────────────────────────────
@@ -331,6 +387,26 @@ describe('CompositionTimelineData round-trip', () => {
     expect(restored.durationLocked).toBe(true);
     expect(restored.tracks).toHaveLength(2);
     expect(restored.clips).toHaveLength(1);
+  });
+
+  it('preserves optional master audio state through timeline JSON round-trip', () => {
+    const data = makeTimelineData({
+      masterAudioState: {
+        volumeDb: -1,
+        limiterEnabled: true,
+        targetLufs: -14,
+        truePeakCeilingDb: -1,
+        effectStack: [],
+        exportPreflight: {
+          lastCheckedAt: 456,
+          warnings: [{ code: 'true-peak', message: 'True peak near ceiling', severity: 'warning' }],
+        },
+      },
+    });
+
+    const restored: CompositionTimelineData = JSON.parse(JSON.stringify(data));
+
+    expect(restored.masterAudioState).toEqual(data.masterAudioState);
   });
 
   it('null inPoint/outPoint serializes correctly', () => {

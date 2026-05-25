@@ -22,6 +22,7 @@ function TimelineControlsComponent({
   showTranscriptMarkers,
   thumbnailsEnabled,
   waveformsEnabled,
+  audioDisplayMode,
   toolMode,
   onPlay,
   onPause,
@@ -36,6 +37,7 @@ function TimelineControlsComponent({
   onToggleTranscriptMarkers,
   onToggleThumbnails,
   onToggleWaveforms,
+  onSetAudioDisplayMode,
   onToggleCutTool,
   onSetDuration,
   onFitToWindow,
@@ -260,6 +262,28 @@ function TimelineControlsComponent({
               >
                 <span className={`view-check ${waveformsEnabled ? 'checked' : ''}`}>✓</span>
                 <span>Waveforms</span>
+              </div>
+              <div className="view-dropdown-divider" />
+              <div
+                className={`view-dropdown-item ${audioDisplayMode === 'compact' ? 'active' : ''}`}
+                onClick={() => onSetAudioDisplayMode('compact')}
+              >
+                <span className={`view-check ${audioDisplayMode === 'compact' ? 'checked' : ''}`}>✓</span>
+                <span>Compact Audio</span>
+              </div>
+              <div
+                className={`view-dropdown-item ${audioDisplayMode === 'detailed' ? 'active' : ''}`}
+                onClick={() => onSetAudioDisplayMode('detailed')}
+              >
+                <span className={`view-check ${audioDisplayMode === 'detailed' ? 'checked' : ''}`}>✓</span>
+                <span>Detailed Audio</span>
+              </div>
+              <div
+                className={`view-dropdown-item ${audioDisplayMode === 'spectral' ? 'active' : ''}`}
+                onClick={() => onSetAudioDisplayMode('spectral')}
+              >
+                <span className={`view-check ${audioDisplayMode === 'spectral' ? 'checked' : ''}`}>✓</span>
+                <span>Spectral Audio</span>
               </div>
               <div
                 className="view-dropdown-item"

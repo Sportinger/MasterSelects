@@ -259,6 +259,45 @@
   );
 }
 
+.timeline-container.audio-mode-detailed .track-header.audio,
+.timeline-container.audio-mode-detailed .track-lane.audio {
+  border-color: color-mix(in srgb, var(--success) 36%, var(--border-color));
+}
+
+.timeline-container.audio-mode-detailed .track-lane.audio {
+  background:
+    linear-gradient(180deg, rgba(28, 76, 60, 0.22), transparent 46%, rgba(4, 11, 18, 0.18)),
+    repeating-linear-gradient(
+      90deg,
+      var(--bg-secondary),
+      var(--bg-secondary) calc(var(--grid-size, 50px) - 1px),
+      var(--timeline-grid-audio) calc(var(--grid-size, 50px) - 1px),
+      var(--timeline-grid-audio) var(--grid-size, 50px)
+    );
+}
+
+.timeline-container.audio-mode-spectral .track-header.audio,
+.timeline-container.audio-mode-spectral .track-lane.audio {
+  border-color: color-mix(in srgb, #52beff 34%, var(--border-color));
+}
+
+.timeline-container.audio-mode-spectral .track-lane.audio {
+  background:
+    linear-gradient(180deg, rgba(26, 48, 82, 0.38), rgba(13, 28, 46, 0.16) 46%, rgba(45, 20, 51, 0.2)),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent calc(var(--grid-size, 50px) - 1px),
+      rgba(82, 190, 255, 0.16) calc(var(--grid-size, 50px) - 1px),
+      rgba(82, 190, 255, 0.16) var(--grid-size, 50px)
+    );
+}
+
+.timeline-container.audio-mode-spectral .track-header.video,
+.timeline-container.audio-mode-spectral .track-lane.video {
+  filter: saturate(0.78) brightness(0.88);
+}
+
 .track-lane.locked {
   background-color: color-mix(in srgb, var(--bg-secondary) 88%, var(--warning) 12%);
   filter: saturate(0.52) brightness(0.74);

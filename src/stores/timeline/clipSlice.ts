@@ -5,9 +5,10 @@
 import type { TimelineClip, TimelineTrack } from '../../types';
 import type { AddClipOptions, CoreClipActions, SliceCreator, Composition } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
-import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveformHelpers';
+import { generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { Logger } from '../../services/logger';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
+import { generateTimelineWaveformAnalysisForFile } from '../../services/audio/timelineWaveformPyramidCache';
 
 const log = Logger.create('ClipSlice');
 
@@ -897,6 +898,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     try {
       let waveform: number[];
+      let audioAnalysisRefs: import('../../types/audio').MediaFileAudioAnalysisRefs | undefined;
 
       if (clip.isComposition && clip.compositionId) {
         const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
@@ -922,13 +924,34 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });
         return;
       } else {
-        waveform = await generateWaveform(clip.file, 50, (progress, partialWaveform) => {
-          set({ clips: updateClipById(get().clips, clipId, { waveformProgress: progress, waveform: partialWaveform }) });
+        const analysis = await generateTimelineWaveformAnalysisForFile(clip.file, {
+          mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+          onProgress: (progress, partialWaveform) => {
+            set({ clips: updateClipById(get().clips, clipId, { waveformProgress: progress, waveform: partialWaveform }) });
+          },
         });
+        waveform = analysis.waveform;
+        audioAnalysisRefs = analysis.audioAnalysisRefs;
       }
 
       log.debug('Waveform complete', { samples: waveform.length, clip: clip.name });
-      set({ clips: updateClipById(get().clips, clipId, { waveform, waveformGenerating: false, waveformProgress: 100 }) });
+      const currentClip = get().clips.find(c => c.id === clipId);
+      set({ clips: updateClipById(get().clips, clipId, {
+        waveform,
+        ...(audioAnalysisRefs
+          ? {
+              audioState: {
+                ...(currentClip?.audioState ?? {}),
+                sourceAnalysisRefs: {
+                  ...(currentClip?.audioState?.sourceAnalysisRefs ?? {}),
+                  ...audioAnalysisRefs,
+                },
+              },
+            }
+          : {}),
+        waveformGenerating: false,
+        waveformProgress: 100,
+      }) });
     } catch (e) {
       log.error('Waveform generation failed', e);
       set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });

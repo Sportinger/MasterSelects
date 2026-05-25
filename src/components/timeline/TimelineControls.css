@@ -172,6 +172,17 @@
   background: var(--bg-tertiary);
 }
 
+.view-dropdown-item.active {
+  background: var(--bg-tertiary);
+  color: var(--accent-color, #4a9eff);
+}
+
+.view-dropdown-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-color);
+}
+
 .view-check {
   width: 14px;
   font-size: 11px;

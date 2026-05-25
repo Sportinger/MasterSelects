@@ -927,6 +927,7 @@ function TimelineHeaderComponent({
   tracks,
   isDimmed,
   isExpanded,
+  baseHeight,
   dynamicHeight,
   hasKeyframes,
   selectedClipIds,
@@ -1027,7 +1028,7 @@ function TimelineHeaderComponent({
     >
       <div
         className="track-header-top"
-        style={{ height: track.height, cursor: (track.type === 'video' || track.type === 'audio') ? 'pointer' : 'default' }}
+        style={{ height: baseHeight, cursor: (track.type === 'video' || track.type === 'audio') ? 'pointer' : 'default' }}
         onClick={handleHeaderClick}
       >
         <div className="track-header-main">

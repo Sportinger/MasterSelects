@@ -23,6 +23,16 @@
   border: 1px solid #3a7a58;
 }
 
+.timeline-clip.audio.audio-mode-detailed {
+  background: linear-gradient(180deg, #2f7456, #214f40);
+  border-color: color-mix(in srgb, #52beff 22%, #3a7a58);
+}
+
+.timeline-clip.audio.audio-mode-spectral {
+  background: linear-gradient(180deg, #254663, #27324e 48%, #3f2448);
+  border-color: color-mix(in srgb, #52beff 44%, #6f4c78);
+}
+
 .timeline-clip.text {
   background: #5c3d7a;
   border: 1px solid #6d4e8a;
@@ -1090,6 +1100,10 @@
   pointer-events: none;
 }
 
+.clip-thumbnails-windowed .clip-thumb {
+  width: 71px;
+}
+
 .clip-thumb-placeholder {
   height: 100%;
   width: 71px;
@@ -1254,6 +1268,26 @@
   top: 0;
   left: 0;
   pointer-events: none;
+}
+
+.waveform-canvas-detailed,
+.waveform-canvas-spectral {
+  opacity: 0.95;
+}
+
+.waveform-canvas-spectral {
+  mix-blend-mode: screen;
+}
+
+.timeline-clip.audio-mode-spectral .clip-content {
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.58), rgba(0, 0, 0, 0.18) 34%, transparent 64%);
+}
+
+.timeline-clip.audio-mode-spectral .clip-waveform {
+  background:
+    linear-gradient(180deg, rgba(255, 111, 145, 0.12), transparent 31%),
+    linear-gradient(180deg, transparent 32%, rgba(254, 211, 106, 0.1) 33%, transparent 67%),
+    linear-gradient(180deg, transparent 68%, rgba(92, 203, 255, 0.12));
 }
 
 /* Nested composition mixdown waveform - shown at bottom of clip */

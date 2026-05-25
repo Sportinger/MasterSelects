@@ -18,6 +18,7 @@ import type {
   ColorParamValue,
   ColorViewMode,
   RuntimeColorGrade,
+  MasterAudioState,
   TextClipProperties,
   Text3DProperties,
   TextBoundsPath,
@@ -71,6 +72,10 @@ export type MaskEditMode = 'none' | 'drawing' | 'editing' | 'drawingRect' | 'dra
 
 // Timeline tool mode types
 export type TimelineToolMode = 'select' | 'cut';
+
+// Timeline audio display mode. Detailed remains waveform-backed today; spectral
+// reserves the inline image lane used by spectrogram tile artifacts.
+export type TimelineAudioDisplayMode = 'compact' | 'detailed' | 'spectral';
 
 // AI action visual feedback types
 export type AIActionOverlayType = 'split-glow' | 'delete-ghost' | 'trim-highlight' | 'silent-zone' | 'low-quality-zone';
@@ -166,6 +171,7 @@ export interface TimelineState {
   // Performance toggles
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
+  audioDisplayMode: TimelineAudioDisplayMode;
   showTranscriptMarkers: boolean;
 
   // Keyframe animation state
@@ -190,6 +196,9 @@ export interface TimelineState {
 
   // Timeline markers
   markers: TimelineMarker[];
+
+  // Advanced audio workstation state for the composition master bus.
+  masterAudioState?: MasterAudioState;
 
   // Clip entrance animation key (increments on composition switch to trigger animations)
   clipEntranceAnimationKey: number;
@@ -413,6 +422,7 @@ export interface PlaybackActions {
   toggleWaveformsEnabled: () => void;
   setThumbnailsEnabled: (enabled: boolean) => void;
   setWaveformsEnabled: (enabled: boolean) => void;
+  setAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
   toggleTranscriptMarkers: () => void;
   setShowTranscriptMarkers: (enabled: boolean) => void;
 }

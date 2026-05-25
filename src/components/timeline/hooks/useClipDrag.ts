@@ -30,6 +30,7 @@ interface UseClipDragProps {
 
   // Helpers
   pixelToTime: (pixel: number) => number;
+  getRenderedTrackHeight: (track: TimelineTrack) => number;
   getSnappedPosition: (clipId: string, rawTime: number, trackId: string) => { startTime: number; snapped: boolean };
   getPositionWithResistance: (clipId: string, rawTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean; noFreeSpace?: boolean };
 }
@@ -55,6 +56,7 @@ export function useClipDrag({
   moveClip,
   openCompositionTab,
   pixelToTime,
+  getRenderedTrackHeight,
   getSnappedPosition,
   getPositionWithResistance,
 }: UseClipDragProps): UseClipDragReturn {
@@ -171,7 +173,8 @@ export function useClipDrag({
         let currentY = 24;
         let newTrackId = drag.currentTrackId; // Keep current track by default
         for (const track of tracks) {
-          if (mouseY >= currentY && mouseY < currentY + track.height) {
+          const trackHeight = getRenderedTrackHeight(track);
+          if (mouseY >= currentY && mouseY < currentY + trackHeight) {
             // Only change to a different track if both delay and distance thresholds are met
             // AND the track type matches (video clips can't go on audio tracks and vice versa)
             const trackTypeMatches = !requiredTrackType || track.type === requiredTrackType;
@@ -180,7 +183,7 @@ export function useClipDrag({
             }
             break;
           }
-          currentY += track.height;
+          currentY += trackHeight;
         }
 
         const rect = timelineRef.current.getBoundingClientRect();
@@ -478,7 +481,7 @@ export function useClipDrag({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
+    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, getRenderedTrackHeight, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
   );
 
   // Handle double-click on clip - open composition if it's a nested comp

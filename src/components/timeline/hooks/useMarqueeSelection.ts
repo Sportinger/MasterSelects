@@ -33,6 +33,7 @@ interface UseMarqueeSelectionProps {
   // Helpers
   pixelToTime: (pixel: number) => number;
   isTrackExpanded: (trackId: string) => boolean;
+  getTrackBaseHeight: (track: TimelineTrack) => number;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
 }
 
@@ -58,6 +59,7 @@ export function useMarqueeSelection({
   deselectAllKeyframes,
   pixelToTime,
   isTrackExpanded,
+  getTrackBaseHeight,
   getExpandedTrackHeight,
 }: UseMarqueeSelectionProps): UseMarqueeSelectionReturn {
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
@@ -81,7 +83,7 @@ export function useMarqueeSelection({
       const coveredTrackIds = new Set<string>();
 
       for (const track of tracks) {
-        const trackHeight = getExpandedTrackHeight(track.id, track.height);
+        const trackHeight = getExpandedTrackHeight(track.id, getTrackBaseHeight(track));
         const trackTop = currentY;
         const trackBottom = currentY + trackHeight;
 
@@ -107,7 +109,7 @@ export function useMarqueeSelection({
 
       return result;
     },
-    [pixelToTime, tracks, clips, getExpandedTrackHeight]
+    [pixelToTime, tracks, clips, getTrackBaseHeight, getExpandedTrackHeight]
   );
 
   // Helper: Calculate which keyframes intersect with a rectangle
@@ -123,12 +125,13 @@ export function useMarqueeSelection({
       let currentY = 0;
 
       for (const track of tracks) {
-        if (track.type !== 'video') {
-          currentY += track.height;
+        const baseHeight = getTrackBaseHeight(track);
+
+        if (track.type !== 'video' && track.type !== 'audio') {
+          currentY += getExpandedTrackHeight(track.id, baseHeight);
           continue;
         }
 
-        const baseHeight = track.height;
         const isExpanded = isTrackExpanded(track.id);
 
         // Get the selected clip in this track for keyframe display
@@ -197,7 +200,7 @@ export function useMarqueeSelection({
 
       return result;
     },
-    [pixelToTime, tracks, clips, selectedClipIds, clipKeyframes, isTrackExpanded, getExpandedTrackHeight]
+    [pixelToTime, tracks, clips, selectedClipIds, clipKeyframes, isTrackExpanded, getTrackBaseHeight, getExpandedTrackHeight]
   );
 
   // Marquee selection: mouse down on empty area starts selection

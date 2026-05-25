@@ -25,11 +25,41 @@ export type NodeGraphSignalType =
 
 export type NodeGraphPortDirection = 'input' | 'output';
 
+export type NodeGraphAudioSemanticKind =
+  | 'audio-source'
+  | 'waveform'
+  | 'spectrum'
+  | 'frequency-bands'
+  | 'loudness'
+  | 'beats'
+  | 'onsets'
+  | 'phase-correlation'
+  | 'transcript'
+  | 'frequency-summary'
+  | 'audio-metadata';
+
+export interface NodeGraphPortMetadata {
+  semanticKind?: NodeGraphAudioSemanticKind | string;
+  signalRefId?: string;
+  artifactId?: string;
+  artifactProvenance?: 'source' | 'processed';
+  artifactIndex?: number;
+  available?: boolean;
+  stale?: boolean;
+  previewable?: boolean;
+  generateAction?: {
+    type: string;
+    artifactKind?: string;
+    label?: string;
+  };
+}
+
 export interface NodeGraphPort {
   id: string;
   label: string;
   type: NodeGraphSignalType;
   direction: NodeGraphPortDirection;
+  metadata?: NodeGraphPortMetadata;
 }
 
 export type NodeGraphNodeKind =

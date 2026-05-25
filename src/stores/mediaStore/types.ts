@@ -4,6 +4,7 @@ import type {
   AnalysisStatus,
   CompositionTimelineData,
   GaussianSplatSequenceData,
+  MediaFileAudioAnalysisRefs,
   ModelSequenceData,
   TranscriptStatus,
   TranscriptWord,
@@ -105,6 +106,7 @@ export interface MediaFile extends MediaItem {
   fileSize?: number;
   bitrate?: number;      // bits per second
   hasAudio?: boolean;    // Does video have audio tracks?
+  audioAnalysisRefs?: MediaFileAudioAnalysisRefs;
   fileHash?: string;
   thumbnailUrl?: string;
   splatCount?: number;

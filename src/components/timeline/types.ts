@@ -9,6 +9,7 @@ import type {
   EasingType,
   RotationInterpolationMode,
 } from '../../types';
+import type { TimelineAudioDisplayMode } from '../../stores/timeline/types';
 
 // Clip drag state (Premiere-style)
 export interface ClipDragState {
@@ -127,6 +128,7 @@ export interface TimelineControlsProps {
   showTranscriptMarkers: boolean;
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
+  audioDisplayMode: TimelineAudioDisplayMode;
   toolMode: 'select' | 'cut';
   onPlay: () => void;
   onPause: () => void;
@@ -141,6 +143,7 @@ export interface TimelineControlsProps {
   onToggleTranscriptMarkers: () => void;
   onToggleThumbnails: () => void;
   onToggleWaveforms: () => void;
+  onSetAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
   onToggleCutTool: () => void;
   onSetDuration: (duration: number) => void;
   onFitToWindow: () => void;
@@ -156,6 +159,7 @@ export interface TimelineHeaderProps {
   tracks: TimelineTrack[];  // All tracks for parenting target selection
   isDimmed: boolean;
   isExpanded: boolean;
+  baseHeight: number;
   dynamicHeight: number;
   hasKeyframes: boolean;
   selectedClipIds: Set<string>;
@@ -202,6 +206,7 @@ export interface TimelineTrackProps {
   clips: TimelineClip[];
   isDimmed: boolean;
   isExpanded: boolean;
+  baseHeight: number;
   dynamicHeight: number;
   isDragTarget: boolean;
   isExternalDragTarget: boolean;
@@ -254,6 +259,7 @@ export interface TimelineClipProps {
   clip: TimelineClip;
   trackId: string;
   track: TimelineTrack;
+  trackBaseHeight: number;
   tracks: TimelineTrack[];
   clips: TimelineClip[];
   isSelected: boolean;

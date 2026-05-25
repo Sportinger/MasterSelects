@@ -16,6 +16,9 @@ export function useTimelineHelpers({ zoom, clips, getClipKeyframes }: UseTimelin
 
   // Calculate grid interval based on zoom (same logic as TimelineRuler)
   const gridInterval = useMemo(() => {
+    if (zoom >= 1000) return 0.05;
+    if (zoom >= 500) return 0.1;
+    if (zoom >= 250) return 0.25;
     if (zoom >= 100) return 0.5;
     if (zoom >= 50) return 1;
     if (zoom >= 20) return 2;

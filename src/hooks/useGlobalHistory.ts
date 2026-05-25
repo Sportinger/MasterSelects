@@ -172,6 +172,7 @@ export function useGlobalHistory() {
         tracks: state.tracks,
         clipKeyframes: state.clipKeyframes,
         markers: state.markers,
+        masterAudioState: (state as { masterAudioState?: unknown }).masterAudioState,
       }),
       (curr, prev) => {
         if (useHistoryStore.getState().isApplying) return;
@@ -192,6 +193,8 @@ export function useGlobalHistory() {
           debouncedCapture('Modify keyframes');
         } else if (curr.markers !== prev.markers) {
           debouncedCapture('Modify markers');
+        } else if (curr.masterAudioState !== prev.masterAudioState) {
+          debouncedCapture('Modify master audio');
         }
       },
       { equalityFn: shallowEqual, fireImmediately: false }

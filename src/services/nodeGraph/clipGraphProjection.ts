@@ -1,4 +1,5 @@
 import type { Effect, TimelineClip, TimelineTrack } from '../../types';
+import type { AudioAnalysisArtifactKind, MediaFileAudioAnalysisRefs } from '../../types/audio';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type {
   ClipNodeGraph,
@@ -13,6 +14,7 @@ import type {
   NodeGraphLayout,
   NodeGraphNode,
   NodeGraphPort,
+  NodeGraphPortMetadata,
   NodeGraphSignalType,
 } from './types';
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
@@ -20,14 +22,20 @@ import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 const NODE_SPACING_X = 230;
 const MAIN_LANE_Y = 88;
 const AUDIO_LANE_Y = 252;
+const MAX_PROJECTED_SPECTRUM_PORTS = 16;
 
 interface NodeGraphChainHead {
   nodeId: string;
   portId: string;
 }
 
-function outputPort(id: string, label: string, type: NodeGraphSignalType): NodeGraphPort {
-  return { id, label, type, direction: 'output' };
+function outputPort(
+  id: string,
+  label: string,
+  type: NodeGraphSignalType,
+  metadata?: NodeGraphPortMetadata,
+): NodeGraphPort {
+  return { id, label, type, direction: 'output', ...(metadata ? { metadata } : {}) };
 }
 
 function inputPort(id: string, label: string, type: NodeGraphSignalType): NodeGraphPort {
@@ -180,16 +188,176 @@ function isAudioEffect(effect: Effect): boolean {
   return effect.type === 'audio-eq' || effect.type === 'audio-volume';
 }
 
+interface ResolvedAudioAnalysisRef {
+  artifactId: string;
+  artifactKind: AudioAnalysisArtifactKind;
+  provenance: 'source' | 'processed';
+  index?: number;
+}
+
+function hasAnyAudioAnalysisRef(refs: MediaFileAudioAnalysisRefs | undefined): boolean {
+  return Boolean(
+    refs?.waveformPyramidId ||
+    refs?.processedWaveformPyramidId ||
+    refs?.spectrogramTileSetIds?.length ||
+    refs?.loudnessEnvelopeId ||
+    refs?.beatGridId ||
+    refs?.onsetMapId ||
+    refs?.phaseCorrelationId ||
+    refs?.transcriptTimingId ||
+    refs?.frequencySummaryId,
+  );
+}
+
+function firstResolvedRef(
+  processedRef: ResolvedAudioAnalysisRef | undefined,
+  sourceRef: ResolvedAudioAnalysisRef | undefined,
+): ResolvedAudioAnalysisRef | undefined {
+  return processedRef ?? sourceRef;
+}
+
+function resolveAudioRef(
+  provenance: 'source' | 'processed',
+  artifactId: string | undefined,
+  artifactKind: AudioAnalysisArtifactKind,
+  index?: number,
+): ResolvedAudioAnalysisRef | undefined {
+  if (!artifactId) {
+    return undefined;
+  }
+
+  return { artifactId, artifactKind, provenance, ...(index !== undefined ? { index } : {}) };
+}
+
+function resolveAudioRefs(clip: TimelineClip): {
+  waveform?: ResolvedAudioAnalysisRef;
+  spectrum: ResolvedAudioAnalysisRef[];
+  loudness?: ResolvedAudioAnalysisRef;
+  beats?: ResolvedAudioAnalysisRef;
+  onsets?: ResolvedAudioAnalysisRef;
+  phaseCorrelation?: ResolvedAudioAnalysisRef;
+  transcriptTiming?: ResolvedAudioAnalysisRef;
+  frequencySummary?: ResolvedAudioAnalysisRef;
+} {
+  const source = clip.audioState?.sourceAnalysisRefs;
+  const processed = clip.audioState?.processedAnalysisRefs;
+  const processedSpectrum = (processed?.spectrogramTileSetIds ?? [])
+    .slice(0, MAX_PROJECTED_SPECTRUM_PORTS)
+    .map((artifactId, index) => resolveAudioRef('processed', artifactId, 'spectrogram-tiles', index))
+    .filter((ref): ref is ResolvedAudioAnalysisRef => Boolean(ref));
+  const sourceSpectrum = (source?.spectrogramTileSetIds ?? [])
+    .slice(0, MAX_PROJECTED_SPECTRUM_PORTS)
+    .map((artifactId, index) => resolveAudioRef('source', artifactId, 'spectrogram-tiles', index))
+    .filter((ref): ref is ResolvedAudioAnalysisRef => Boolean(ref));
+
+  return {
+    waveform: firstResolvedRef(
+      resolveAudioRef('processed', processed?.processedWaveformPyramidId, 'processed-waveform-pyramid') ??
+        resolveAudioRef('processed', processed?.waveformPyramidId, 'waveform-pyramid'),
+      resolveAudioRef('source', source?.waveformPyramidId, 'waveform-pyramid'),
+    ),
+    spectrum: processedSpectrum.length > 0 ? processedSpectrum : sourceSpectrum,
+    loudness: firstResolvedRef(
+      resolveAudioRef('processed', processed?.loudnessEnvelopeId, 'loudness-envelope'),
+      resolveAudioRef('source', source?.loudnessEnvelopeId, 'loudness-envelope'),
+    ),
+    beats: firstResolvedRef(
+      resolveAudioRef('processed', processed?.beatGridId, 'beat-grid'),
+      resolveAudioRef('source', source?.beatGridId, 'beat-grid'),
+    ),
+    onsets: firstResolvedRef(
+      resolveAudioRef('processed', processed?.onsetMapId, 'onset-map'),
+      resolveAudioRef('source', source?.onsetMapId, 'onset-map'),
+    ),
+    phaseCorrelation: firstResolvedRef(
+      resolveAudioRef('processed', processed?.phaseCorrelationId, 'phase-correlation'),
+      resolveAudioRef('source', source?.phaseCorrelationId, 'phase-correlation'),
+    ),
+    transcriptTiming: firstResolvedRef(
+      resolveAudioRef('processed', processed?.transcriptTimingId, 'transcript-timing'),
+      resolveAudioRef('source', source?.transcriptTimingId, 'transcript-timing'),
+    ),
+    frequencySummary: firstResolvedRef(
+      resolveAudioRef('processed', processed?.frequencySummaryId, 'frequency-summary'),
+      resolveAudioRef('source', source?.frequencySummaryId, 'frequency-summary'),
+    ),
+  };
+}
+
+function audioArtifactPort(
+  id: string,
+  label: string,
+  semanticKind: NonNullable<NodeGraphPortMetadata['semanticKind']>,
+  ref: ResolvedAudioAnalysisRef | undefined,
+  artifactKind: AudioAnalysisArtifactKind,
+): NodeGraphPort {
+  return outputPort(id, label, 'metadata', {
+    semanticKind,
+    signalRefId: ref?.artifactId,
+    artifactId: ref?.artifactId,
+    artifactProvenance: ref?.provenance,
+    artifactIndex: ref?.index,
+    available: Boolean(ref?.artifactId),
+    stale: false,
+    previewable: true,
+    generateAction: {
+      type: 'generate-audio-analysis',
+      artifactKind,
+      label,
+    },
+  });
+}
+
+function appendAudioAnalysisPorts(outputs: NodeGraphPort[], clip: TimelineClip): void {
+  const refs = resolveAudioRefs(clip);
+
+  outputs.push(audioArtifactPort('waveform', 'waveform', 'waveform', refs.waveform, refs.waveform?.artifactKind ?? 'waveform-pyramid'));
+  refs.spectrum.forEach((ref, index) => {
+    outputs.push(audioArtifactPort(
+      index === 0 ? 'spectrum' : `spectrum-${index + 1}`,
+      index === 0 ? 'spectrum' : `spectrum ${index + 1}`,
+      'spectrum',
+      ref,
+      'spectrogram-tiles',
+    ));
+  });
+  if (refs.spectrum.length === 0) {
+    outputs.push(audioArtifactPort('spectrum', 'spectrum', 'spectrum', undefined, 'spectrogram-tiles'));
+  }
+  outputs.push(audioArtifactPort('loudness', 'loudness', 'loudness', refs.loudness, 'loudness-envelope'));
+  outputs.push(audioArtifactPort('beats', 'beats', 'beats', refs.beats, 'beat-grid'));
+  outputs.push(audioArtifactPort('onsets', 'onsets', 'onsets', refs.onsets, 'onset-map'));
+  outputs.push(audioArtifactPort('phase-correlation', 'phase correlation', 'phase-correlation', refs.phaseCorrelation, 'phase-correlation'));
+  outputs.push(audioArtifactPort('transcript-timing', 'transcript timing', 'transcript', refs.transcriptTiming, 'transcript-timing'));
+  outputs.push(audioArtifactPort('frequency-summary', 'frequency summary', 'frequency-summary', refs.frequencySummary, 'frequency-summary'));
+}
+
 function createSourceNode(clip: TimelineClip, track?: TimelineTrack): NodeGraphNode {
   const outputs: NodeGraphPort[] = [];
   const primaryOutput = sourceOutputType(clip);
+  const hasAudioAnalysisSurface = (clip.waveform?.length ?? 0) > 0 ||
+    hasAnyAudioAnalysisRef(clip.audioState?.sourceAnalysisRefs) ||
+    hasAnyAudioAnalysisRef(clip.audioState?.processedAnalysisRefs);
 
-  outputs.push(outputPort(primaryOutput, primaryOutput, primaryOutput));
+  outputs.push(outputPort(
+    primaryOutput,
+    primaryOutput,
+    primaryOutput,
+    primaryOutput === 'audio' ? { semanticKind: 'audio-source', available: true, previewable: true } : undefined,
+  ));
   outputs.push(outputPort('time', 'time', 'time'));
   outputs.push(outputPort('metadata', 'metadata', 'metadata'));
 
   if (clip.source?.type === 'video') {
-    outputs.push(outputPort('audio', 'audio', 'audio'));
+    outputs.push(outputPort('audio', 'audio', 'audio', {
+      semanticKind: 'audio-source',
+      available: true,
+      previewable: true,
+    }));
+  }
+
+  if (hasAudioAnalysisSurface) {
+    appendAudioAnalysisPorts(outputs, clip);
   }
 
   return {

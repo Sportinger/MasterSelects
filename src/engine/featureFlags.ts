@@ -13,6 +13,13 @@ export const flags = {
   useGaussianSplat: true,  // Gaussian Splat avatar rendering (old WebGL path)
   useMotionDesignSystem: false,  // Motion shape/null/adjustment system foundation
   useMotionReplicators: false,  // GPU-instanced motion replicators
+  advancedAudio: false,  // Advanced audio workstation foundation
+  timelineAudioDetailMode: false,  // Expanded timeline audio editing lanes
+  inlineSpectralCanvas: false,  // Timeline-embedded spectrogram/spectral editing
+  audioFocusMode: false,  // Timeline layout optimized for audio editing
+  waveformPyramid: false,  // Artifact-backed multi-resolution waveform data
+  audioEffectRegistry: false,  // Registry-backed audio effect descriptors
+  audioMixer: false,  // Track/send/master mixer controls
 };
 
 // Expose for runtime toggling from devtools

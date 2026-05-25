@@ -244,6 +244,111 @@ describe('buildClipNodeGraph', () => {
     ]);
   });
 
+  it('exposes audio analysis ports with artifact metadata for AI nodes', () => {
+    const graph = buildClipNodeGraph(createClip({
+      source: { type: 'audio', mediaFileId: 'media-a' },
+      waveform: [0, 0.5, 1],
+      audioState: {
+        sourceAudioRevisionId: 'audio-rev-1',
+        sourceAnalysisRefs: {
+          waveformPyramidId: 'waveform-artifact',
+          spectrogramTileSetIds: ['spectrum-artifact'],
+          loudnessEnvelopeId: 'loudness-artifact',
+          beatGridId: 'beat-artifact',
+          onsetMapId: 'onset-artifact',
+          phaseCorrelationId: 'phase-artifact',
+          transcriptTimingId: 'transcript-artifact',
+          frequencySummaryId: 'frequency-artifact',
+        },
+        processedAnalysisRefs: {
+          processedWaveformPyramidId: 'processed-waveform-artifact',
+          spectrogramTileSetIds: ['processed-spectrum-a', 'processed-spectrum-b'],
+          loudnessEnvelopeId: 'processed-loudness-artifact',
+        },
+      },
+    }), createTrack({ type: 'audio' }));
+    const source = graph.nodes.find((node) => node.id === 'source');
+    const outputsById = new Map(source?.outputs.map((port) => [port.id, port]) ?? []);
+
+    expect(source?.outputs.map((port) => [port.id, port.type, port.metadata?.semanticKind, port.metadata?.artifactId])).toEqual([
+      ['audio', 'audio', 'audio-source', undefined],
+      ['time', 'time', undefined, undefined],
+      ['metadata', 'metadata', undefined, undefined],
+      ['waveform', 'metadata', 'waveform', 'processed-waveform-artifact'],
+      ['spectrum', 'metadata', 'spectrum', 'processed-spectrum-a'],
+      ['spectrum-2', 'metadata', 'spectrum', 'processed-spectrum-b'],
+      ['loudness', 'metadata', 'loudness', 'processed-loudness-artifact'],
+      ['beats', 'metadata', 'beats', 'beat-artifact'],
+      ['onsets', 'metadata', 'onsets', 'onset-artifact'],
+      ['phase-correlation', 'metadata', 'phase-correlation', 'phase-artifact'],
+      ['transcript-timing', 'metadata', 'transcript', 'transcript-artifact'],
+      ['frequency-summary', 'metadata', 'frequency-summary', 'frequency-artifact'],
+    ]);
+    expect(outputsById.get('waveform')?.metadata).toMatchObject({
+      artifactProvenance: 'processed',
+      available: true,
+      stale: false,
+      generateAction: {
+        type: 'generate-audio-analysis',
+        artifactKind: 'processed-waveform-pyramid',
+      },
+    });
+    expect(outputsById.get('spectrum-2')?.metadata).toMatchObject({
+      artifactProvenance: 'processed',
+      artifactIndex: 1,
+      generateAction: {
+        artifactKind: 'spectrogram-tiles',
+      },
+    });
+  });
+
+  it('keeps missing audio analysis ports artifact-free and bounds repeated spectrum ports', () => {
+    const graph = buildClipNodeGraph(createClip({
+      source: { type: 'audio', mediaFileId: 'media-a' },
+      waveform: [0],
+      audioState: {
+        sourceAnalysisRefs: {
+          spectrogramTileSetIds: Array.from({ length: 20 }, (_, index) => `source-spectrum-${index + 1}`),
+        },
+      },
+    }), createTrack({ type: 'audio' }));
+    const source = graph.nodes.find((node) => node.id === 'source');
+    const outputsById = new Map(source?.outputs.map((port) => [port.id, port]) ?? []);
+    const spectrumPorts = source?.outputs.filter((port) => port.metadata?.semanticKind === 'spectrum') ?? [];
+
+    expect(spectrumPorts).toHaveLength(16);
+    expect(outputsById.get('spectrum')?.metadata).toMatchObject({
+      artifactId: 'source-spectrum-1',
+      artifactIndex: 0,
+      artifactProvenance: 'source',
+      available: true,
+      stale: false,
+    });
+    expect(outputsById.get('spectrum-16')?.metadata).toMatchObject({
+      artifactId: 'source-spectrum-16',
+      artifactIndex: 15,
+      artifactProvenance: 'source',
+      available: true,
+    });
+    expect(outputsById.get('spectrum-17')).toBeUndefined();
+    expect(outputsById.get('waveform')?.metadata).toMatchObject({
+      artifactId: undefined,
+      signalRefId: undefined,
+      available: false,
+      stale: false,
+      generateAction: {
+        artifactKind: 'waveform-pyramid',
+      },
+    });
+    expect(outputsById.get('loudness')?.metadata).toMatchObject({
+      artifactId: undefined,
+      available: false,
+      generateAction: {
+        artifactKind: 'loudness-envelope',
+      },
+    });
+  });
+
   it('applies persisted node layout from clip graph state', () => {
     const clip = createClip();
     const nodeGraph = updateClipNodeGraphLayout(clip, 'source', { x: 44, y: 55 }, createTrack());
@@ -423,6 +528,44 @@ describe('buildClipNodeGraph', () => {
     expect(context).toContain('contentBounds=');
     expect(context).toContain('chars=');
     expect(context).toContain('layout.characters');
+  });
+
+  it('includes audio artifacts and graph ports in AI node authoring context', () => {
+    const clip = createClip({
+      source: { type: 'audio', mediaFileId: 'media-a' },
+      waveform: [0.25, 1],
+      audioState: {
+        sourceAudioRevisionId: 'audio-rev-1',
+        sourceAnalysisRefs: {
+          waveformPyramidId: 'source-waveform-artifact',
+          spectrogramTileSetIds: ['source-spectrum-artifact'],
+          loudnessEnvelopeId: 'source-loudness-artifact',
+        },
+        processedAnalysisRefs: {
+          processedWaveformPyramidId: 'processed-waveform-artifact',
+          spectrogramTileSetIds: ['processed-spectrum-artifact'],
+          loudnessEnvelopeId: 'processed-loudness-artifact',
+        },
+      },
+    });
+    const track = createTrack({ type: 'audio' });
+    const definition = createClipAICustomNodeDefinition('custom-ai', clip, 'AI Node');
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+    const context = buildAINodeAuthoringContext(
+      { ...clip, nodeGraph },
+      definition,
+      { clips: [{ ...clip, nodeGraph }], tracks: [track] },
+    );
+
+    expect(context).toContain('Audio source:');
+    expect(context).toContain('sourceAudioRevision=audio-rev-1');
+    expect(context).toContain('sourceAnalysisRefs=waveform=source-waveform-artifact spectrograms=source-spectrum-artifact loudness=source-loudness-artifact');
+    expect(context).toContain('processedAnalysisRefs=processedWaveform=processed-waveform-artifact spectrograms=processed-spectrum-artifact loudness=processed-loudness-artifact');
+    expect(context).toContain('effectiveAnalysisRefs=waveform=processed-waveform-artifact processedWaveform=processed-waveform-artifact spectrograms=processed-spectrum-artifact loudness=processed-loudness-artifact');
+    expect(context).toContain('waveform:metadata semantic=waveform available=true stale=false provenance=processed artifact=processed-waveform-artifact action=processed-waveform-pyramid');
+    expect(context).toContain('spectrum:metadata semantic=spectrum available=true stale=false provenance=processed artifact=processed-spectrum-artifact action=spectrogram-tiles');
+    expect(context).not.toContain('0.25,1');
+    expect(context).not.toContain('Float32Array');
   });
 
   it('updates and clones AI custom node authoring state', () => {

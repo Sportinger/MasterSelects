@@ -5,14 +5,17 @@ import type { MeshPrimitiveType, SceneCameraSettings } from '../../../stores/med
 import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
 import type { SplatEffectorSettings } from '../../../types/splatEffector';
 import type {
+  ClipAudioState,
   ClipAnalysis,
   ColorCorrectionState,
   GaussianSplatSequenceData,
+  MasterAudioState,
   ModelSequenceData,
   MathSceneDefinition,
   MotionLayerDefinition,
   ClipNodeGraph,
   SceneSegment,
+  TrackAudioState,
   Text3DProperties,
   TextClipProperties,
   TranscriptWord,
@@ -28,6 +31,7 @@ export interface ProjectTrack {
   visible: boolean;
   muted: boolean;
   solo: boolean;
+  audioState?: TrackAudioState;
 }
 
 export interface ProjectClip {
@@ -64,6 +68,7 @@ export interface ProjectClip {
   // Audio
   volume: number;
   audioEnabled: boolean;
+  audioState?: ClipAudioState;
 
   // Flags
   reversed: boolean;
@@ -136,6 +141,7 @@ export interface ProjectComposition {
   // Tracks and clips
   tracks: ProjectTrack[];
   clips: ProjectClip[];
+  masterAudioState?: MasterAudioState;
 
   // Markers
   markers: ProjectMarker[];

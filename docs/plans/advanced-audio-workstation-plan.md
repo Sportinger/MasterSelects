@@ -334,6 +334,7 @@ interface WaveformLevel {
 
 Required levels:
 
+- Extreme/sample-detail zoom: 32 and 64 samples per bucket.
 - Close zoom: 128 samples per bucket.
 - Normal timeline zoom: 512 samples per bucket.
 - Long clip zoom: 2048 samples per bucket.
@@ -348,6 +349,18 @@ Required levels:
 - Avoid per-render slicing for large arrays; use cached visible windows and idle/background rasterization.
 - Support hundreds of visible waveform clips without blocking timeline interaction.
 - Repeated clips from the same source reuse source artifacts while processed variants are keyed by clip audio state hash.
+
+Current implementation checkpoint:
+
+- `WaveformPyramidGenerator` produces source waveform artifacts with min/max/RMS/peak payloads.
+- `timelineWaveformPyramidCache` generates source pyramid artifacts during waveform generation, keeps a hot in-memory display cache, and can reload artifact payloads through `AudioArtifactStore`.
+- `ClipWaveform` renders through `waveformLod`, selecting a pyramid level by timeline `pixelsPerSecond` when an artifact is available.
+- The timeline renders only the visible waveform window, so deep zoom avoids browser canvas-size stretching and stays sharp at high pixels-per-second.
+- Timeline ruler markers, clip rendering, and thumbnail filmstrips are viewport-windowed with overscan so deep zoom does not scale DOM work with full project duration.
+- `waveformLod` caps generated columns, keeps explicit `pixelsPerSecond` for pyramid choice, and bounds display normalization for invalid/out-of-range inputs.
+- Visible legacy waveform clips automatically request a source waveform-pyramid upgrade in detailed/high-zoom views.
+- Legacy `clip.waveform: number[]` remains a compatibility fallback and is interpolated only when the user zooms past its stored thumbnail resolution.
+- New audio/video-linked waveform generation paths attach the source waveform pyramid ref to `clip.audioState.sourceAnalysisRefs.waveformPyramidId`.
 
 ### Processed Waveforms
 
@@ -652,9 +665,130 @@ Rules:
 - Audio-only WAV export must keep working without WebCodecs audio encoding.
 - Browser-compressed audio remains support-gated because AAC support varies by browser/platform.
 
+## Multi-Agent Implementation Model
+
+This feature is large enough to benefit from parallel agents, but only if each agent has a clear ownership boundary. Agents should work in parallel on disjoint file sets and merge at explicit contract checkpoints. Central schema, project save/load, timeline serialization, history, and node projection files need single ownership per wave.
+
+### Coordination Rules
+
+- Each agent owns a narrow workstream and a declared file set.
+- Agents may read across the repo, but must not edit files owned by another active agent.
+- Shared contract changes land before feature work that depends on them.
+- Runtime behavior should stay backward-compatible until the relevant migration and tests land.
+- Large audio bytes must not be stored in React/Zustand history snapshots or project JSON.
+- Any workstream that changes persisted shape must include save/load and old-project compatibility tests.
+- Any workstream that changes audible output must include live/offline/export equivalence tests.
+- Any UI workstream must be behind feature flags until the schema and artifact contracts are stable.
+
+### High-Conflict Files
+
+These files should have one active owner at a time:
+
+- `src/types/index.ts`
+- `src/types/nodeGraph.ts`
+- `src/services/project/projectSave.ts`
+- `src/services/project/projectLoad.ts`
+- `src/services/project/types/*.ts`
+- `src/stores/timeline/serializationUtils.ts`
+- `src/stores/historyStore.ts`
+- `src/hooks/useGlobalHistory.ts`
+- `src/services/nodeGraph/clipGraphProjection.ts`
+- `src/components/panels/properties/VolumeTab.tsx`
+- `src/engine/audio/AudioEffectRenderer.ts`
+- `src/services/audioRoutingManager.ts`
+
+### Agent Task Contract
+
+Every implementation agent should receive:
+
+- **Objective:** the concrete feature slice to implement.
+- **Owned files:** files the agent may edit.
+- **Read-only context:** files the agent should inspect but not change.
+- **Do not touch:** conflict files owned by another agent in the same wave.
+- **Tests:** exact tests to add or run.
+- **Handoff:** summary of changed files, behavior, risks, and follow-up blockers.
+
+### Parallel Waves
+
+The waves below are dependency gates, not MVP phases. Each wave should be integrated with tests before opening the next wave broadly.
+
+| Wave | Parallel Agents | Can Run In Parallel | Integration Gate |
+|---|---|---|---|
+| 1 | Contract foundations | Schema/types, audio artifact facade, audio effect registry skeleton, feature flags/node metadata | Typecheck, focused unit tests, no runtime behavior change |
+| 2 | Persistence/runtime foundations | Project serialization migration, history capture, decode-safe job runtime, artifact manifest tests | Old projects round-trip, artifact refs persist, worker jobs cancel/progress |
+| 3 | Core audio behavior | AudioGraphRenderer, waveform pyramid generation, processed waveform invalidation, EQ/volume registry migration | Live/offline/export equivalence for legacy audio behavior |
+| 4 | Timeline UI surfaces | Timeline audio detail mode, waveform renderer, Audio Focus Mode, mixer controls, node lane display | Screenshot/UI tests, no regressions in normal timeline mode |
+| 5 | Spectral and repair workflows | Inline spectral canvas, image-in-spectrum layers, repair operations, recording, node audio analysis templates | Export parity, undo/redo, job cancellation, performance checks |
+| 6 | Hardening | Cross-feature QA, docs, issue checklist, dev-bridge diagnostics, full regression suite | Build, lint, tests, targeted browser verification |
+
+### Wave 1 Agent Ownership
+
+These are the safest first parallel implementation slices.
+
+| Agent | Owns | Must Avoid | Output |
+|---|---|---|---|
+| Schema Agent | `src/types/audio.ts`, exports from `src/types/index.ts`, optional audio fields in project/timeline/media type files | Runtime behavior, project save/load logic | JSON-safe audio schema types and compile-only compatibility |
+| Artifact Agent | `src/services/audio/audioArtifactTypes.ts`, `src/services/audio/AudioArtifactStore.ts`, `src/services/audio/waveformPyramidManifest.ts`, audio artifact tests | New storage backend, timeline UI | Typed facade over Signal artifacts and manifest/payload tests |
+| Effect Registry Agent | `src/engine/audio/AudioEffectRegistry.ts`, `src/engine/audio/index.ts`, registry tests | Rewriting `AudioEffectRenderer` or `audioRoutingManager` | Descriptor-only registry preserving `audio-volume` and `audio-eq` ids/defaults |
+| Node/Flags Agent | `src/engine/featureFlags.ts`, `src/types/nodeGraph.ts`, focused Signal/Node contract tests | Clip projection runtime unless assigned in a later wave | Dormant flags and optional `NodeGraphPortMetadata` |
+
+### Wave 2 Agent Ownership
+
+Wave 2 starts after Wave 1 contracts pass typecheck.
+
+| Agent | Owns | Must Avoid | Output |
+|---|---|---|---|
+| Project Migration Agent | `projectSave.ts`, `projectLoad.ts`, project type adapters, serialization tests | Artifact byte storage internals | Optional audio state persists without dropping legacy fields |
+| History Agent | `historyStore.ts`, `useGlobalHistory.ts`, history tests | Timeline UI | Signal/audio artifact refs are captured without storing large bytes |
+| Decode Runtime Agent | `AudioDecodeService`, worker job contracts, decode tests | Timeline rendering | Safe decode/job path with cancellation/progress and bounded browser fallback |
+| Artifact Manifest Agent | waveform/spectrogram/loudness manifest helpers and tests | UI and export | Versioned binary manifest formats and stale-key helpers |
+
+### Wave 3 Agent Ownership
+
+Wave 3 starts after persistence and runtime contracts are stable.
+
+| Agent | Owns | Must Avoid | Output |
+|---|---|---|---|
+| AudioGraph Agent | `AudioGraphRenderer`, graph descriptor types, export scheduling tests | Timeline UI | Shared clip/track/master descriptors for live/offline/export |
+| Legacy Effects Agent | `AudioEffectRenderer`, `audioRoutingManager`, `VolumeTab`, EQ/volume tests | New effects beyond assigned scope | Registry-backed legacy EQ/volume behavior with no old-project regression |
+| Waveform Analysis Agent | waveform pyramid generation, analysis job tests | ClipWaveform UI | Source waveform/loudness artifacts and cache invalidation |
+| Processed Waveform Agent | processed waveform invalidation and graph-backed render tests | Spectral UI | Processed waveform artifacts keyed by clip audio state |
+
+### Wave 4 Agent Ownership
+
+Wave 4 can split UI once data contracts are stable.
+
+| Agent | Owns | Must Avoid | Output |
+|---|---|---|---|
+| Timeline Detail Agent | expanded audio lanes, region selection UI, focus mode shell | Audio DSP internals | Timeline-first editing surface behind flags |
+| Waveform UI Agent | `ClipWaveform` LOD renderer, diagnostics overlays, screenshot tests | Analysis generation internals | Artifact-backed waveform display |
+| Mixer UI Agent | track controls, docked Mixer/Inspector UI, meter shell | Recording backend unless assigned | Track/master controls behind flags |
+| Node Audio UI Agent | node audio lane projection, port badges, generate/refresh actions | AI prompt changes unless assigned | Audio lanes appear from source audio with artifact status |
+
+### Wave 5 Agent Ownership
+
+Wave 5 implements advanced workflows on top of stable timeline/audio contracts.
+
+| Agent | Owns | Must Avoid | Output |
+|---|---|---|---|
+| Inline Spectral Agent | timeline spectral view, tiled render UI, time/frequency selection | Resynthesis DSP unless assigned | Spectrogram editing surface inside expanded timeline lanes |
+| Image Spectrum Agent | spectral image layers, keyframes, mask/resynthesis DSP | General node runtime | Image-to-spectrum workflows with preview/export parity |
+| Repair Agent | silence, hum, de-click, splice smoothing, loudness matching | Model-based audio features | Non-model repair operations through edit stack |
+| Recording Agent | `AudioRecordingService`, device/error/recovery tests | Mixer UI unless assigned | Timeline recording, punch-in/out, waveform generation |
+| AI/Custom Context Agent | bounded audio summaries in AI/custom-node context | Raw audio buffers | Audio-aware prompts/artifact refs without model-based editing |
+
+### Merge Checkpoints
+
+- **Checkpoint 1:** Wave 1 compiles and focused tests pass. No user-visible behavior should change except flags existing.
+- **Checkpoint 2:** Old projects round-trip with legacy waveform/effects and new optional audio fields.
+- **Checkpoint 3:** Legacy `audio-volume` and `audio-eq` produce equivalent live/offline/export behavior through the registry path.
+- **Checkpoint 4:** Timeline can render artifact-backed source waveforms while legacy `clip.waveform` still works.
+- **Checkpoint 5:** Expanded timeline lanes can be enabled without breaking normal video timeline editing.
+- **Checkpoint 6:** Spectral, repair, recording, mixer, and node features all pass undo/save/load/export checks.
+
 ## Full Implementation Tracks
 
-These tracks are not MVP phases. They are the dependency order for integrating the complete feature without corrupting project state, export parity, or history.
+These tracks are not MVP phases. They are the dependency order for integrating the complete feature without corrupting project state, export parity, or history. The tracks map to the multi-agent waves above: each track can be split into agent-owned slices once its upstream contracts are in place.
 
 ### Track A: Schema, Storage, Migration, And History
 
@@ -672,6 +806,10 @@ These tracks are not MVP phases. They are the dependency order for integrating t
 - Define binary manifest formats for waveform, spectrogram, loudness, beat/onset, and phase/correlation data.
 - Add source fingerprinting, decoder versioning, analyzer versioning, and clip audio state hashing.
 
+Current checkpoint:
+
+- `AudioDecodeService` has cancellable runtime probing, terminal-state progress guards, bounded progress, stricter `AudioBuffer` validation, decoded PCM output limits, deterministic metadata cloning, and explicit failure codes for failed runtime probes and oversized decode output.
+
 ### Track C: AudioEffectRegistry And AudioGraphRenderer
 
 - Build the registry descriptor model.
@@ -679,6 +817,12 @@ These tracks are not MVP phases. They are the dependency order for integrating t
 - Add the full required processor set.
 - Build shared live/offline/export graph descriptors.
 - Add tail/latency scheduling and waveform-processing hooks.
+
+Current checkpoint:
+
+- `AudioEffectRegistry` describes `audio-volume` and `audio-eq` defaults/params.
+- `AudioEffectRenderer` consumes registry defaults, skips disabled effects, and can render new `AudioEffectInstance` stacks through the legacy-compatible offline path.
+- `AudioGraphRenderer` projects clip, track, and master effect chains into deterministic JSON-safe graph plans and includes legacy `clip.effects` audio EQ/volume entries for old/current clips without duplicating explicit `audioState.effectStack` entries.
 
 ### Track D: Waveform Pyramid And Timeline Rendering
 
@@ -720,6 +864,11 @@ These tracks are not MVP phases. They are the dependency order for integrating t
 - Let image clips drive spectral masks.
 - Extend bounded AI/custom-node context with audio summaries and artifact refs.
 - Enforce runtime boundaries so generated code cannot process unbounded raw audio.
+
+Current checkpoint:
+
+- Source nodes expose waveform, spectrum, loudness, beats, onsets, phase/correlation, transcript timing, and frequency summary ports with artifact metadata and generate actions.
+- Processed analysis refs win over source refs for effective Node/AI context, spectrum refs are bounded, and runtime/generated AI context exposes artifact refs plus bounded waveform summaries without raw audio buffers.
 
 ### Track I: Repair And Assisted Workflows
 

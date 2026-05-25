@@ -194,6 +194,7 @@ export const useTimelineStore = create<TimelineStore>()(
       // Performance toggles (enabled by default)
       thumbnailsEnabled: true,
       waveformsEnabled: true,
+      audioDisplayMode: 'detailed' as const,
       showTranscriptMarkers: true,
 
       // Keyframe animation state
@@ -218,6 +219,9 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Timeline markers
       markers: [] as import('./types').TimelineMarker[],
+
+      // Composition-level audio master bus state
+      masterAudioState: undefined,
 
       // Clip entrance animation key (increments on composition switch)
       clipEntranceAnimationKey: 0,

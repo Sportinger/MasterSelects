@@ -137,6 +137,7 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     hasProxy:
       file.proxyStatus === 'ready' &&
       isProxyFrameCountComplete(file.proxyFrameCount, file.duration, file.proxyFps ?? file.fps),
+    audioAnalysisRefs: file.audioAnalysisRefs ? structuredClone(file.audioAnalysisRefs) : undefined,
     vectorAnimation: file.vectorAnimation,
     modelSequence: serializeModelSequence(file.modelSequence),
     gaussianSplatSequence: serializeGaussianSplatSequence(file.gaussianSplatSequence),
@@ -175,6 +176,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       visible: t.visible !== false,
       muted: t.muted || false,
       solo: t.solo || false,
+      audioState: t.audioState ? structuredClone(t.audioState) : undefined,
     }));
 
     // Convert clips
@@ -192,6 +194,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,
       waveform: c.waveform,
+      audioState: c.audioState ? structuredClone(c.audioState) : undefined,
       modelSequence: serializeModelSequence(c.source?.modelSequence || c.modelSequence),
       gaussianSplatSequence: serializeGaussianSplatSequence(c.source?.gaussianSplatSequence || c.gaussianSplatSequence),
       meshType: c.source?.meshType || c.meshType,
@@ -289,6 +292,9 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       labelColor: comp.labelColor && comp.labelColor !== 'none' ? comp.labelColor : undefined,
       tracks,
       clips,
+      masterAudioState: timelineData?.masterAudioState
+        ? structuredClone(timelineData.masterAudioState)
+        : undefined,
       markers,
     };
   });
@@ -547,6 +553,7 @@ export async function syncStoresToProject(): Promise<void> {
         transcriptLanguage: transcriptLanguage || undefined,
         thumbnailsEnabled: timelineState.thumbnailsEnabled,
         waveformsEnabled: timelineState.waveformsEnabled,
+        audioDisplayMode: timelineState.audioDisplayMode,
         proxyEnabled: useMediaStore.getState().proxyEnabled,
         showTranscriptMarkers: timelineState.showTranscriptMarkers,
         showChangelogOnStartup: settingsState.showChangelogOnStartup,

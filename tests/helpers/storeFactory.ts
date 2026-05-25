@@ -71,6 +71,7 @@ function getInitialState(): Partial<TimelineStore> {
     // Performance toggles (needed by clipSlice)
     thumbnailsEnabled: false,
     waveformsEnabled: false,
+    audioDisplayMode: 'detailed',
     showTranscriptMarkers: false,
     // Clip animation / slot grid
     clipAnimationPhase: 'idle' as const,
@@ -215,6 +216,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       toggleWaveformsEnabled: () => set({ waveformsEnabled: !get().waveformsEnabled }),
       setThumbnailsEnabled: (enabled: boolean) => set({ thumbnailsEnabled: enabled }),
       setWaveformsEnabled: (enabled: boolean) => set({ waveformsEnabled: enabled }),
+      setAudioDisplayMode: (mode: TimelineStore['audioDisplayMode']) => set({ audioDisplayMode: mode }),
       toggleTranscriptMarkers: () => set({ showTranscriptMarkers: !get().showTranscriptMarkers }),
       setShowTranscriptMarkers: (enabled: boolean) => set({ showTranscriptMarkers: enabled }),
       // RAM preview actions (simplified for testing)

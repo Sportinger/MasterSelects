@@ -11,6 +11,7 @@ interface ParentChildLinksOverlayProps {
   timelineRef: React.RefObject<HTMLDivElement | null>;
   scrollX: number;
   zoom: number;
+  getTrackBaseHeight: (track: Track) => number;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
 }
 
@@ -19,6 +20,7 @@ export function ParentChildLinksOverlay({
   tracks,
   clipDrag,
   zoom,
+  getTrackBaseHeight,
   getExpandedTrackHeight,
 }: ParentChildLinksOverlayProps) {
   return (
@@ -57,10 +59,11 @@ export function ParentChildLinksOverlay({
         const getTrackYPosition = (trackId: string): number => {
           let y = 24; // Offset for new track drop zone
           for (const track of tracks) {
+            const baseHeight = getTrackBaseHeight(track);
             if (track.id === trackId) {
-              return y + track.height / 2;
+              return y + baseHeight / 2;
             }
-            y += getExpandedTrackHeight(track.id, track.height);
+            y += getExpandedTrackHeight(track.id, baseHeight);
           }
           return y;
         };
