@@ -143,12 +143,14 @@ describe('ProcessedWaveformPyramidService', () => {
           { id: 'copy', type: 'copy', enabled: true, params: {}, timeRange: { start: 0, end: 1 }, createdAt: 1 },
           { id: 'bypassed', type: 'reverse', enabled: false, params: {}, timeRange: { start: 0, end: 1 }, createdAt: 2 },
           { id: 'invert', type: 'invert-polarity', enabled: true, params: {}, timeRange: { start: 0, end: 1 }, channelMask: [0], createdAt: 3 },
+          { id: 'room-tone', type: 'room-tone-fill', enabled: true, params: {}, timeRange: { start: 1, end: 2 }, createdAt: 4 },
         ],
       },
     });
 
     expect(collectRenderableClipAudioEditOperations(clip)).toEqual([
       expect.objectContaining({ id: 'invert', type: 'invert-polarity', channelMask: [0] }),
+      expect.objectContaining({ id: 'room-tone', type: 'room-tone-fill' }),
     ]);
   });
 

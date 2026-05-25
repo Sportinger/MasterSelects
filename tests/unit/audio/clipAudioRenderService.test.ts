@@ -559,4 +559,85 @@ describe('ClipAudioRenderService', () => {
     expect(rms(rendered, 256, 768)).toBeGreaterThan(rms(samples, 256, 768) * 0.9);
     expect(rms(rendered, 1280, 1792)).toBeLessThan(rms(samples, 1280, 1792) * 0.6);
   });
+
+  it('compacts buffers for timeline delete-silence operations when requested', async () => {
+    installAudioContextMock();
+    const sourceBuffer = createMockAudioBuffer([[1, 2, 3, 4, 5, 6]], 2);
+    const service = new ClipAudioRenderService({
+      extractor: { trimBuffer: vi.fn((buffer: AudioBuffer) => buffer) },
+      timeStretchProcessor: {
+        processConstantSpeed: vi.fn(),
+        processWithKeyframes: vi.fn(),
+      },
+      effectRenderer: { renderEffectInstances: vi.fn(async (buffer: AudioBuffer) => buffer) },
+    });
+    const clip = createMockClip({
+      id: 'clip-compact-silence',
+      duration: 2,
+      inPoint: 0,
+      outPoint: 3,
+      audioState: {
+        editStack: [
+          {
+            id: 'delete-silence-a',
+            type: 'delete-silence',
+            enabled: true,
+            params: {
+              compactTimeline: true,
+              preserveClipDuration: false,
+            },
+            timeRange: { start: 1, end: 2 },
+            createdAt: 1,
+          },
+        ],
+      },
+    });
+
+    const result = await service.render({ clip, sourceBuffer });
+    const rendered = Array.from(result.buffer.getChannelData(0)).map(value => Number(value.toFixed(4)));
+
+    expect(result.buffer.length).toBe(4);
+    expect(result.buffer.duration).toBe(2);
+    expect(rendered).toEqual([1, 2, 5, 6]);
+  });
+
+  it('fills a target range by looping captured room tone source ranges', async () => {
+    installAudioContextMock();
+    const sourceBuffer = createMockAudioBuffer([[0.2, -0.2, 0.9, 0.9, 0.5, 0.5]], 2);
+    const service = new ClipAudioRenderService({
+      extractor: { trimBuffer: vi.fn((buffer: AudioBuffer) => buffer) },
+      timeStretchProcessor: {
+        processConstantSpeed: vi.fn(),
+        processWithKeyframes: vi.fn(),
+      },
+      effectRenderer: { renderEffectInstances: vi.fn(async (buffer: AudioBuffer) => buffer) },
+    });
+    const clip = createMockClip({
+      id: 'clip-room-tone-fill',
+      duration: 3,
+      inPoint: 0,
+      outPoint: 3,
+      audioState: {
+        editStack: [
+          {
+            id: 'room-tone-a',
+            type: 'room-tone-fill',
+            enabled: true,
+            params: {
+              roomToneSourceRanges: JSON.stringify([{ start: 0, end: 1 }]),
+              roomToneGainDb: 0,
+              crossfadeSeconds: 0,
+            },
+            timeRange: { start: 1, end: 2 },
+            createdAt: 1,
+          },
+        ],
+      },
+    });
+
+    const result = await service.render({ clip, sourceBuffer });
+    const rendered = Array.from(result.buffer.getChannelData(0)).map(value => Number(value.toFixed(4)));
+
+    expect(rendered).toEqual([0.2, -0.2, 0.2, -0.2, 0.5, 0.5]);
+  });
 });

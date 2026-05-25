@@ -44,6 +44,7 @@ import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../t
 import type { Composition } from '../mediaStore';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { MarkerMIDIBinding } from '../../types/midi';
+import type { AudioSilenceDetectionOptions, AudioSilenceRange } from '../../services/audio/audioSilenceDetection';
 
 // Re-export imported types for convenience
 export type {
@@ -125,6 +126,7 @@ export type TimelineAudioRegionEditType = Extract<
   | 'swap-channels'
   | 'mono-sum'
   | 'repair'
+  | 'room-tone-fill'
 >;
 
 export type TimelineSpectralRegionEditType = Extract<
@@ -552,6 +554,20 @@ export interface ApplyAudioRepairSuggestionInput {
   evidence?: ClipAudioEditOperation['params'];
 }
 
+export interface ApplyDetectedSilenceRemovalOptions {
+  detection?: AudioSilenceDetectionOptions;
+  ranges?: AudioSilenceRange[];
+  rippleTimeline?: boolean;
+}
+
+export interface ApplyRoomToneFillOptions {
+  targetRange?: { start: number; end: number };
+  sourceRanges?: AudioSilenceRange[];
+  detection?: AudioSilenceDetectionOptions;
+  gainDb?: number;
+  crossfadeSeconds?: number;
+}
+
 export interface ApplySpectralRegionEditOptions {
   channelMask?: number[];
   keepSelection?: boolean;
@@ -565,6 +581,9 @@ export type AddClipSpectralImageLayerInput = Omit<SpectralImageLayer, 'id'> & {
 export interface AudioEditActions {
   applyAudioRegionEdit: (type: TimelineAudioRegionEditType, options?: ApplyAudioRegionEditOptions) => string | null;
   applyAudioRepairSuggestion: (clipId: string, suggestion: ApplyAudioRepairSuggestionInput) => string | null;
+  detectClipSilenceRanges: (clipId: string, options?: AudioSilenceDetectionOptions) => Promise<AudioSilenceRange[]>;
+  applyDetectedSilenceRemoval: (clipId: string, options?: ApplyDetectedSilenceRemovalOptions) => Promise<string[]>;
+  applyRoomToneFill: (clipId: string, options?: ApplyRoomToneFillOptions) => Promise<string | null>;
   copySelectedAudioRegion: () => boolean;
   pasteAudioRegionToSelection: () => string | null;
   setClipAudioEditOperationEnabled: (clipId: string, operationId: string, enabled: boolean) => void;

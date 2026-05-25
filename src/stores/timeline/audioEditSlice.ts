@@ -3,15 +3,24 @@ import { encodeAudioBufferToWavBlob } from '../../engine/audio/AudioFileEncoder'
 import { AudioExtractor, audioExtractor } from '../../engine/audio/AudioExtractor';
 import { Logger } from '../../services/logger';
 import type {
-  ApplyAudioRepairSuggestionInput,
   AudioEditActions,
+  ApplyDetectedSilenceRemovalOptions,
   SliceCreator,
+  TimelineAudioRegionSelection,
   TimelineAudioRegionEditType,
   TimelineClip,
 } from './types';
 import { generateClipId } from './helpers/idGenerator';
 import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
 import { ClipAudioRenderService } from '../../services/audio/ClipAudioRenderService';
+import {
+  createAudioRepairSuggestionOperation,
+  getClipAudioSourceRange,
+} from '../../services/audio/audioRepairSuggestionOperations';
+import {
+  detectClipSilenceRanges as detectClipSilenceRangesForAudio,
+  type AudioSilenceRange,
+} from '../../services/audio/audioSilenceDetection';
 import { generateTimelineWaveformAnalysisForFile } from '../../services/audio/timelineWaveformPyramidCache';
 import { useMediaStore } from '../mediaStore';
 import { createAudioElement } from './helpers/webCodecsHelpers';
@@ -44,6 +53,7 @@ function operationLabel(type: TimelineAudioRegionEditType): string {
     case 'swap-channels': return 'Swap channels';
     case 'mono-sum': return 'Mono sum';
     case 'repair': return 'Repair region';
+    case 'room-tone-fill': return 'Room tone fill';
   }
 }
 
@@ -107,27 +117,82 @@ function normalizeSpectralLayer(layer: SpectralImageLayer): SpectralImageLayer {
   };
 }
 
-function clipSourceRange(clip: TimelineClip): { start: number; end: number } {
-  const sourceStart = clip.inPoint ?? 0;
-  const sourceEnd = Math.max(sourceStart + 0.001, clip.outPoint ?? sourceStart + clip.duration);
-  return {
-    start: Math.min(sourceStart, sourceEnd),
-    end: Math.max(sourceStart, sourceEnd),
-  };
-}
-
-function serializeRepairSuggestionEvidence(
-  evidence: ApplyAudioRepairSuggestionInput['evidence'],
-): string | undefined {
-  if (!evidence || Object.keys(evidence).length === 0) {
-    return undefined;
-  }
-
-  return JSON.stringify(evidence);
-}
-
 function getClipMediaFileId(clip: TimelineClip): string | undefined {
   return clip.source?.mediaFileId ?? clip.mediaFileId;
+}
+
+function sourceTimeToTimelineTime(clip: TimelineClip, sourceTime: number): number {
+  const sourceRange = getClipAudioSourceRange(clip);
+  const sourceSpan = Math.max(0.001, sourceRange.end - sourceRange.start);
+  const ratio = Math.max(0, Math.min(1, (sourceTime - sourceRange.start) / sourceSpan));
+  return clip.startTime + ratio * clip.duration;
+}
+
+function normalizeDetectedSilenceRanges(
+  clip: TimelineClip,
+  ranges: readonly AudioSilenceRange[],
+): AudioSilenceRange[] {
+  const sourceRange = getClipAudioSourceRange(clip);
+  const normalized = ranges
+    .map(range => {
+      const start = Math.max(sourceRange.start, Math.min(sourceRange.end, Math.min(range.start, range.end)));
+      const end = Math.max(sourceRange.start, Math.min(sourceRange.end, Math.max(range.start, range.end)));
+      return {
+        start,
+        end,
+        duration: Math.max(0, end - start),
+        rmsDb: typeof range.rmsDb === 'number' && Number.isFinite(range.rmsDb) ? range.rmsDb : -120,
+      };
+    })
+    .filter(range => range.duration > 0.01)
+    .toSorted((a, b) => a.start - b.start);
+
+  const merged: AudioSilenceRange[] = [];
+  for (const range of normalized) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start <= previous.end + 0.001) {
+      previous.end = Math.max(previous.end, range.end);
+      previous.duration = previous.end - previous.start;
+      previous.rmsDb = Math.min(previous.rmsDb, range.rmsDb);
+      continue;
+    }
+    merged.push({ ...range });
+  }
+  return merged;
+}
+
+function rangesOverlap(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
+  return Math.min(a.end, b.end) - Math.max(a.start, b.start) > 0.0005;
+}
+
+async function resolveDetectedSilenceRanges(
+  clip: TimelineClip,
+  options: ApplyDetectedSilenceRemovalOptions,
+): Promise<AudioSilenceRange[]> {
+  if (options.ranges?.length) {
+    return options.ranges;
+  }
+  return detectClipSilenceRangesForAudio(clip, options.detection ?? {});
+}
+
+function getSelectedRoomToneTargetRange(
+  clip: TimelineClip,
+  selection: TimelineAudioRegionSelection | null,
+): { start: number; end: number } | null {
+  if (!selection || selection.clipId !== clip.id) return null;
+  const start = Math.min(selection.sourceInPoint, selection.sourceOutPoint);
+  const end = Math.max(selection.sourceInPoint, selection.sourceOutPoint);
+  return end - start > 0.0005 ? { start, end } : null;
+}
+
+function encodeRoomToneSourceRanges(ranges: readonly AudioSilenceRange[]): string | null {
+  if (!ranges.length) return null;
+  return JSON.stringify(ranges.slice(0, 12).map(range => ({
+    start: Number(range.start.toFixed(6)),
+    end: Number(range.end.toFixed(6)),
+    duration: Number(range.duration.toFixed(6)),
+    rmsDb: Number(range.rmsDb.toFixed(3)),
+  })));
 }
 
 function getBaseFileName(fileName: string): string {
@@ -242,35 +307,203 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
       return null;
     }
 
-    const sourceRange = clipSourceRange(clip);
-    if (sourceRange.end - sourceRange.start <= 0.0005) {
+    const operation = createAudioRepairSuggestionOperation(clip, suggestion, {
+      id: createAudioEditOperationId(),
+      createdAt: Date.now(),
+    });
+    if (!operation) {
       log.warn('Cannot apply repair suggestion to an empty clip range', { clipId });
       return null;
     }
 
-    const evidence = serializeRepairSuggestionEvidence(suggestion.evidence);
-    const operation: ClipAudioEditOperation = {
+    captureSnapshot(`Apply ${suggestion.label}`);
+    set({
+      clips: clips.map(currentClip => {
+        if (currentClip.id !== clipId) return currentClip;
+        const audioState = currentClip.audioState ?? {};
+        return clearProcessedAudioAnalysisRefs({
+          ...currentClip,
+          audioState: {
+            ...audioState,
+            editStack: [
+              ...(audioState.editStack ?? []),
+              operation,
+            ],
+          },
+        });
+      }),
+    });
+    get().invalidateCache();
+    return operation.id;
+  },
+
+  detectClipSilenceRanges: async (clipId, options = {}) => {
+    const clip = get().clips.find(c => c.id === clipId);
+    if (!clip || !isAudioClip(clip)) {
+      log.warn('Cannot detect silence for missing or non-audio clip', { clipId });
+      return [];
+    }
+
+    return detectClipSilenceRangesForAudio(clip, options);
+  },
+
+  applyDetectedSilenceRemoval: async (clipId, options = {}) => {
+    const { clips, tracks } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || !isAudioClip(clip)) {
+      log.warn('Cannot remove detected silence from missing or non-audio clip', { clipId });
+      return [];
+    }
+
+    const track = tracks.find(t => t.id === clip.trackId);
+    if (track?.locked) {
+      log.warn('Cannot remove detected silence on locked track', { clipId, trackId: clip.trackId });
+      return [];
+    }
+
+    const ranges = normalizeDetectedSilenceRanges(
+      clip,
+      await resolveDetectedSilenceRanges(clip, options),
+    );
+    if (ranges.length === 0) {
+      log.info('No detected silence ranges to remove', { clipId });
+      return [];
+    }
+
+    const now = Date.now();
+    const totalRemovedSeconds = ranges.reduce((sum, range) => sum + range.duration, 0);
+    const operations: ClipAudioEditOperation[] = ranges.map((range, index) => ({
       id: createAudioEditOperationId(),
-      type: suggestion.operation.editType,
+      type: 'delete-silence',
       enabled: true,
       params: {
-        ...(suggestion.operation.params ?? {}),
-        label: suggestion.operation.params?.label ?? suggestion.label,
-        timelineStart: clip.startTime,
-        timelineEnd: clip.startTime + clip.duration,
-        preserveClipDuration: true,
-        repairSuggestionId: suggestion.id,
-        repairSuggestionKind: suggestion.kind,
-        ...(suggestion.severity ? { repairSuggestionSeverity: suggestion.severity } : {}),
-        ...(typeof suggestion.confidence === 'number' ? { repairSuggestionConfidence: suggestion.confidence } : {}),
-        ...(suggestion.reason ? { repairSuggestionReason: suggestion.reason } : {}),
-        ...(evidence ? { repairSuggestionEvidence: evidence } : {}),
+        label: 'Remove detected silence',
+        detectedSilence: true,
+        compactTimeline: true,
+        preserveClipDuration: false,
+        silenceThresholdDb: options.detection?.thresholdDb ?? -50,
+        silenceRmsDb: Number(range.rmsDb.toFixed(3)),
+        silenceDuration: Number(range.duration.toFixed(6)),
+        sequenceIndex: index + 1,
+        sequenceCount: ranges.length,
+        timelineStart: sourceTimeToTimelineTime(clip, range.start),
+        timelineEnd: sourceTimeToTimelineTime(clip, range.end),
       },
-      timeRange: sourceRange,
+      timeRange: { start: range.start, end: range.end },
+      createdAt: now + index,
+    }));
+    const operationIds = operations.map(operation => operation.id);
+    const compactedDuration = Math.max(0.001, clip.duration - totalRemovedSeconds);
+    const rippleShift = options.rippleTimeline ? clip.duration - compactedDuration : 0;
+    const oldClipEnd = clip.startTime + clip.duration;
+
+    captureSnapshot('Remove detected silence');
+    set({
+      clips: clips.map(currentClip => {
+        if (currentClip.id === clipId) {
+          const audioState = currentClip.audioState ?? {};
+          return clearProcessedAudioAnalysisRefs({
+            ...currentClip,
+            duration: compactedDuration,
+            audioState: {
+              ...audioState,
+              editStack: [
+                ...(audioState.editStack ?? []),
+                ...operations,
+              ],
+            },
+          });
+        }
+
+        if (
+          rippleShift > 0 &&
+          currentClip.trackId === clip.trackId &&
+          currentClip.startTime >= oldClipEnd - 0.0005
+        ) {
+          return {
+            ...currentClip,
+            startTime: Math.max(0, currentClip.startTime - rippleShift),
+          };
+        }
+
+        return currentClip;
+      }),
+    });
+    get().updateDuration();
+    get().invalidateCache();
+    return operationIds;
+  },
+
+  applyRoomToneFill: async (clipId, options = {}) => {
+    const { clips, tracks, audioRegionSelection } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || !isAudioClip(clip)) {
+      log.warn('Cannot apply room tone fill to missing or non-audio clip', { clipId });
+      return null;
+    }
+
+    const track = tracks.find(t => t.id === clip.trackId);
+    if (track?.locked) {
+      log.warn('Cannot apply room tone fill on locked track', { clipId, trackId: clip.trackId });
+      return null;
+    }
+
+    const targetRange = options.targetRange ?? getSelectedRoomToneTargetRange(clip, audioRegionSelection);
+    if (!targetRange || targetRange.end - targetRange.start <= 0.0005) {
+      log.warn('Cannot apply room tone fill without a target audio region', { clipId });
+      return null;
+    }
+
+    const sourceRange = getClipAudioSourceRange(clip);
+    const clampedTarget = {
+      start: Math.max(sourceRange.start, Math.min(sourceRange.end, Math.min(targetRange.start, targetRange.end))),
+      end: Math.max(sourceRange.start, Math.min(sourceRange.end, Math.max(targetRange.start, targetRange.end))),
+    };
+    if (clampedTarget.end - clampedTarget.start <= 0.0005) {
+      log.warn('Cannot apply room tone fill outside the clip source range', { clipId });
+      return null;
+    }
+
+    const detectedSourceRanges = options.sourceRanges?.length
+      ? options.sourceRanges
+      : await detectClipSilenceRangesForAudio(clip, {
+          thresholdDb: options.detection?.thresholdDb ?? -48,
+          minSilenceSeconds: options.detection?.minSilenceSeconds ?? 0.2,
+          windowSeconds: options.detection?.windowSeconds,
+          hopSeconds: options.detection?.hopSeconds,
+          paddingSeconds: options.detection?.paddingSeconds ?? 0,
+          mergeGapSeconds: options.detection?.mergeGapSeconds,
+          maxRanges: options.detection?.maxRanges ?? 16,
+        });
+    const sourceRanges = normalizeDetectedSilenceRanges(clip, detectedSourceRanges)
+      .filter(range => !rangesOverlap(range, clampedTarget))
+      .slice(0, 12);
+    const encodedSourceRanges = encodeRoomToneSourceRanges(sourceRanges);
+    const firstSourceRange = sourceRanges[0];
+    const operation: ClipAudioEditOperation = {
+      id: createAudioEditOperationId(),
+      type: 'room-tone-fill',
+      enabled: true,
+      params: {
+        label: 'Room tone fill',
+        timelineStart: sourceTimeToTimelineTime(clip, clampedTarget.start),
+        timelineEnd: sourceTimeToTimelineTime(clip, clampedTarget.end),
+        preserveClipDuration: true,
+        roomToneGainDb: options.gainDb ?? 0,
+        crossfadeSeconds: options.crossfadeSeconds ?? 0.025,
+        generatedNoiseDb: -66,
+        roomToneSourceCount: sourceRanges.length,
+        ...(encodedSourceRanges ? { roomToneSourceRanges: encodedSourceRanges } : {}),
+        ...(firstSourceRange ? {
+          sourceInPoint: firstSourceRange.start,
+          sourceOutPoint: firstSourceRange.end,
+        } : {}),
+      },
+      timeRange: clampedTarget,
       createdAt: Date.now(),
     };
 
-    captureSnapshot(`Apply ${suggestion.label}`);
+    captureSnapshot('Room tone fill');
     set({
       clips: clips.map(currentClip => {
         if (currentClip.id !== clipId) return currentClip;

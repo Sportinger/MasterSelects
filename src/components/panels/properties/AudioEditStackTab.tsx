@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type {
@@ -10,6 +10,9 @@ import type {
 } from '../../../types';
 import { buildAudioRepairSuggestionsFromRefs } from '../../../services/audio/audioRepairSuggestions';
 import type { AudioRepairSuggestion } from '../../../services/audio/audioRepairSuggestions';
+import { audioRepairPreviewService } from '../../../services/audio/AudioRepairPreviewService';
+import type { AudioRepairPreviewPhase } from '../../../services/audio/AudioRepairPreviewService';
+import type { AudioSilenceRange } from '../../../services/audio/audioSilenceDetection';
 
 const OPERATION_LABELS: Record<ClipAudioEditOperation['type'], string> = {
   trim: 'Trim',
@@ -25,6 +28,7 @@ const OPERATION_LABELS: Record<ClipAudioEditOperation['type'], string> = {
   'mono-sum': 'Mono Sum',
   'split-stereo': 'Split Stereo',
   repair: 'Repair',
+  'room-tone-fill': 'Room Tone Fill',
   'spectral-mask': 'Spectral Mask',
   'spectral-resynthesis': 'Spectral Resynthesis',
 };
@@ -165,16 +169,32 @@ interface AudioEditStackTabProps {
   clipId: string;
 }
 
+interface RepairPreviewUiState {
+  suggestionId: string;
+  phase: AudioRepairPreviewPhase;
+  message?: string;
+}
+
+interface SilenceCleanupUiState {
+  phase: 'idle' | 'analyzing' | 'ready' | 'applying' | 'error';
+  ranges: AudioSilenceRange[];
+  message?: string;
+}
+
 export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   const clip = useTimelineStore(state => state.clips.find(currentClip => currentClip.id === clipId));
   const setClipAudioEditOperationEnabled = useTimelineStore(state => state.setClipAudioEditOperationEnabled);
   const removeClipAudioEditOperation = useTimelineStore(state => state.removeClipAudioEditOperation);
   const clearClipAudioEditStack = useTimelineStore(state => state.clearClipAudioEditStack);
   const applyAudioRepairSuggestion = useTimelineStore(state => state.applyAudioRepairSuggestion);
+  const detectClipSilenceRanges = useTimelineStore(state => state.detectClipSilenceRanges);
+  const applyDetectedSilenceRemoval = useTimelineStore(state => state.applyDetectedSilenceRemoval);
+  const applyRoomToneFill = useTimelineStore(state => state.applyRoomToneFill);
   const bakeClipAudioEditStack = useTimelineStore(state => state.bakeClipAudioEditStack);
   const updateClipSpectralImageLayer = useTimelineStore(state => state.updateClipSpectralImageLayer);
   const removeClipSpectralImageLayer = useTimelineStore(state => state.removeClipSpectralImageLayer);
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
+  const audioRegionSelection = useTimelineStore(state => state.audioRegionSelection);
   const mediaFiles = useMediaStore(state => state.files);
   const imageFilesById = useMemo(() => new Map(
     mediaFiles
@@ -183,6 +203,13 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   ), [mediaFiles]);
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
   const [baking, setBaking] = useState(false);
+  const [repairPreview, setRepairPreview] = useState<RepairPreviewUiState | null>(null);
+  const [silenceThresholdDb, setSilenceThresholdDb] = useState(-50);
+  const [silenceMinSeconds, setSilenceMinSeconds] = useState(0.32);
+  const [silenceCleanup, setSilenceCleanup] = useState<SilenceCleanupUiState>({
+    phase: 'idle',
+    ranges: [],
+  });
 
   const editStack = useMemo(() => clip?.audioState?.editStack ?? [], [clip?.audioState?.editStack]);
   const effectiveAudioAnalysisRefs = useMemo(() => getEffectiveAudioAnalysisRefs(clip), [clip]);
@@ -195,11 +222,75 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   const activeOperationCount = editStack.filter(operation => operation.enabled !== false).length;
   const activeSpectralLayerCount = spectralLayers.filter(layer => layer.enabled !== false).length;
   const selectedOperation = editStack.find(operation => operation.id === selectedOperationId) ?? editStack[0] ?? null;
+  const hasSelectedAudioRegion = audioRegionSelection?.clipId === clip?.id &&
+    Math.abs(audioRegionSelection.sourceOutPoint - audioRegionSelection.sourceInPoint) > 0.0005;
 
   useEffect(() => {
     if (selectedOperationId && editStack.some(operation => operation.id === selectedOperationId)) return;
     setSelectedOperationId(editStack[0]?.id ?? null);
   }, [editStack, selectedOperationId]);
+
+  useEffect(() => {
+    setSilenceCleanup({ phase: 'idle', ranges: [] });
+  }, [clipId]);
+
+  useEffect(() => () => {
+    audioRepairPreviewService.stop();
+  }, []);
+
+  useEffect(() => {
+    if (!repairPreview) return;
+    if (repairSuggestions.some(suggestion => suggestion.id === repairPreview.suggestionId)) return;
+    audioRepairPreviewService.stop();
+    setRepairPreview(null);
+  }, [repairPreview, repairSuggestions]);
+
+  const stopRepairPreview = useCallback(() => {
+    audioRepairPreviewService.stop();
+    setRepairPreview(null);
+  }, []);
+
+  const previewRepairSuggestion = useCallback(async (suggestion: AudioRepairSuggestion) => {
+    if (!clip) return;
+    if (repairPreview?.suggestionId === suggestion.id) {
+      stopRepairPreview();
+      return;
+    }
+
+    setRepairPreview({
+      suggestionId: suggestion.id,
+      phase: 'rendering',
+      message: 'Rendering preview',
+    });
+
+    try {
+      await audioRepairPreviewService.preview({
+        clip,
+        suggestion,
+        timelineTime: playheadPosition,
+        maxDurationSeconds: 8,
+        onStatus: status => {
+          setRepairPreview(current => {
+            if (!current || current.suggestionId !== status.suggestionId) return current;
+            if (status.phase === 'stopped') return null;
+            return {
+              suggestionId: status.suggestionId,
+              phase: status.phase,
+              message: status.message ?? status.progress?.message,
+            };
+          });
+        },
+      });
+    } catch (error) {
+      setRepairPreview(current => current?.suggestionId === suggestion.id
+        ? {
+            suggestionId: suggestion.id,
+            phase: 'error',
+            message: error instanceof Error ? error.message : 'Preview failed',
+          }
+        : current);
+    }
+  }, [clip, playheadPosition, repairPreview?.suggestionId, stopRepairPreview]);
 
   if (!clip) {
     return (
@@ -216,6 +307,92 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
       await bakeClipAudioEditStack(clip.id);
     } finally {
       setBaking(false);
+    }
+  };
+
+  const handleApplyRepairSuggestion = (suggestion: AudioRepairSuggestion) => {
+    if (repairPreview?.suggestionId === suggestion.id) {
+      stopRepairPreview();
+    }
+    applyAudioRepairSuggestion(clip.id, suggestion);
+  };
+
+  const handleAnalyzeSilence = async () => {
+    setSilenceCleanup({ phase: 'analyzing', ranges: [], message: 'Analyzing' });
+    try {
+      const ranges = await detectClipSilenceRanges(clip.id, {
+        thresholdDb: silenceThresholdDb,
+        minSilenceSeconds: silenceMinSeconds,
+      });
+      setSilenceCleanup({
+        phase: 'ready',
+        ranges,
+        message: ranges.length ? `${ranges.length} ranges` : 'No silence found',
+      });
+    } catch (error) {
+      setSilenceCleanup({
+        phase: 'error',
+        ranges: [],
+        message: error instanceof Error ? error.message : 'Silence analysis failed',
+      });
+    }
+  };
+
+  const handleApplySilenceRemoval = async () => {
+    if (silenceCleanup.ranges.length === 0) return;
+    setSilenceCleanup(current => ({ ...current, phase: 'applying', message: 'Applying' }));
+    try {
+      const operationIds = await applyDetectedSilenceRemoval(clip.id, {
+        ranges: silenceCleanup.ranges,
+        detection: {
+          thresholdDb: silenceThresholdDb,
+          minSilenceSeconds: silenceMinSeconds,
+        },
+      });
+      setSilenceCleanup({
+        phase: 'ready',
+        ranges: [],
+        message: operationIds.length ? `${operationIds.length} edits added` : 'No silence removed',
+      });
+    } catch (error) {
+      setSilenceCleanup(current => ({
+        ...current,
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'Silence removal failed',
+      }));
+    }
+  };
+
+  const handleApplyRoomToneFill = async () => {
+    if (!hasSelectedAudioRegion) {
+      setSilenceCleanup(current => ({
+        ...current,
+        phase: 'error',
+        message: 'Select an audio region first',
+      }));
+      return;
+    }
+
+    setSilenceCleanup(current => ({ ...current, phase: 'applying', message: 'Filling room tone' }));
+    try {
+      const operationId = await applyRoomToneFill(clip.id, {
+        sourceRanges: silenceCleanup.ranges,
+        detection: {
+          thresholdDb: silenceThresholdDb,
+          minSilenceSeconds: silenceMinSeconds,
+        },
+      });
+      setSilenceCleanup(current => ({
+        ...current,
+        phase: operationId ? 'ready' : 'error',
+        message: operationId ? 'Room tone edit added' : 'Room tone fill needs a selected range',
+      }));
+    } catch (error) {
+      setSilenceCleanup(current => ({
+        ...current,
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'Room tone fill failed',
+      }));
     }
   };
 
@@ -274,8 +451,9 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
           <div className="audio-repair-suggestion-list">
             {repairSuggestions.map((suggestion) => {
               const applied = isSuggestionApplied(editStack, suggestion);
+              const previewing = repairPreview?.suggestionId === suggestion.id;
               return (
-                <div key={suggestion.id} className={`audio-repair-suggestion-card severity-${suggestion.severity}`}>
+                <div key={suggestion.id} className={`audio-repair-suggestion-card severity-${suggestion.severity} ${previewing ? 'previewing' : ''}`}>
                   <div className="audio-repair-suggestion-main">
                     <div className="audio-repair-suggestion-title">
                       <strong>{suggestion.label}</strong>
@@ -285,15 +463,31 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
                     {formatSuggestionEvidence(suggestion) && (
                       <span className="audio-repair-suggestion-evidence">{formatSuggestionEvidence(suggestion)}</span>
                     )}
+                    {previewing && repairPreview?.message && (
+                      <span className={`audio-repair-suggestion-preview phase-${repairPreview.phase}`}>
+                        {repairPreview.message}
+                      </span>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    disabled={applied}
-                    onClick={() => applyAudioRepairSuggestion(clip.id, suggestion)}
-                  >
-                    {applied ? 'Applied' : 'Apply'}
-                  </button>
+                  <div className="audio-repair-suggestion-actions">
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => previewRepairSuggestion(suggestion)}
+                    >
+                      {previewing
+                        ? (repairPreview.phase === 'rendering' ? 'Rendering' : repairPreview.phase === 'error' ? 'Dismiss' : 'Stop')
+                        : 'Preview'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled={applied}
+                      onClick={() => handleApplyRepairSuggestion(suggestion)}
+                    >
+                      {applied ? 'Applied' : 'Apply'}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -301,6 +495,81 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
         ) : (
           <div className="audio-repair-suggestion-empty">
             No repair suggestions from the current cached analysis.
+          </div>
+        )}
+      </div>
+
+      <div className="audio-silence-cleanup-section">
+        <div className="audio-silence-cleanup-header">
+          <div>
+            <h4>Silence Cleanup</h4>
+            <span>{silenceCleanup.message ?? 'Detect quiet ranges and compact the clip'}</span>
+          </div>
+          <div className="audio-silence-cleanup-actions">
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={handleAnalyzeSilence}
+              disabled={silenceCleanup.phase === 'analyzing' || silenceCleanup.phase === 'applying'}
+            >
+              {silenceCleanup.phase === 'analyzing' ? 'Analyzing' : 'Analyze'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={handleApplySilenceRemoval}
+              disabled={silenceCleanup.ranges.length === 0 || silenceCleanup.phase === 'applying'}
+            >
+              {silenceCleanup.phase === 'applying' ? 'Removing' : 'Remove'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={handleApplyRoomToneFill}
+              disabled={!hasSelectedAudioRegion || silenceCleanup.phase === 'analyzing' || silenceCleanup.phase === 'applying'}
+              title={hasSelectedAudioRegion ? 'Fill the selected audio region with room tone' : 'Select an audio region to fill'}
+            >
+              Fill Tone
+            </button>
+          </div>
+        </div>
+        <div className="audio-silence-cleanup-controls">
+          <label>
+            <span>Threshold</span>
+            <input
+              type="number"
+              min="-100"
+              max="-12"
+              step="1"
+              value={silenceThresholdDb}
+              onChange={(event) => setSilenceThresholdDb(Number(event.currentTarget.value))}
+            />
+            <strong>dB</strong>
+          </label>
+          <label>
+            <span>Min</span>
+            <input
+              type="number"
+              min="0.05"
+              max="30"
+              step="0.01"
+              value={silenceMinSeconds}
+              onChange={(event) => setSilenceMinSeconds(Number(event.currentTarget.value))}
+            />
+            <strong>s</strong>
+          </label>
+        </div>
+        {silenceCleanup.ranges.length > 0 && (
+          <div className="audio-silence-range-list">
+            {silenceCleanup.ranges.slice(0, 5).map((range) => (
+              <div key={`${range.start}-${range.end}`} className="audio-silence-range-row">
+                <span>{formatSeconds(range.start)} - {formatSeconds(range.end)}</span>
+                <strong>{range.duration.toFixed(2)}s | {range.rmsDb.toFixed(1)} dB</strong>
+              </div>
+            ))}
+            {silenceCleanup.ranges.length > 5 && (
+              <div className="audio-silence-range-more">+{silenceCleanup.ranges.length - 5} more</div>
+            )}
           </div>
         )}
       </div>

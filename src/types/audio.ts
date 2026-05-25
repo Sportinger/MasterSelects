@@ -276,6 +276,7 @@ export interface ClipAudioEditOperation {
     | 'mono-sum'
     | 'split-stereo'
     | 'repair'
+    | 'room-tone-fill'
     | 'spectral-mask'
     | 'spectral-resynthesis';
   enabled: boolean;

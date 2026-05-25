@@ -1199,6 +1199,27 @@ function TimelineHeaderComponent({
               )}
             </>
           )}
+          {track.type === 'audio' && (
+            <div
+              className="audio-track-pan-row"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <span className="audio-track-pan-label" aria-hidden="true">L</span>
+              <input
+                className="audio-track-pan-inline"
+                type="range"
+                min="-1"
+                max="1"
+                step="0.01"
+                value={trackPan}
+                aria-label={`${track.name} pan`}
+                title={`Pan ${trackPan === 0 ? 'C' : trackPan < 0 ? `L${Math.round(Math.abs(trackPan) * 100)}` : `R${Math.round(trackPan * 100)}`}`}
+                onChange={handleTrackPanChange}
+              />
+              <span className="audio-track-pan-label" aria-hidden="true">R</span>
+            </div>
+          )}
         </div>
         <div className={`track-controls ${track.type === 'audio' ? 'audio-strip-controls' : ''}`}>
           {track.type === 'audio' ? (
@@ -1299,6 +1320,7 @@ function TimelineHeaderComponent({
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
           >
+            <AudioLevelMeter meter={audioMeter} label={`${track.name} level`} orientation="vertical" />
             <input
               className="audio-track-fader"
               type="range"
@@ -1309,18 +1331,6 @@ function TimelineHeaderComponent({
               aria-label={`${track.name} volume`}
               title={`Volume ${trackVolumeDb.toFixed(1)} dB`}
               onChange={handleTrackVolumeChange}
-            />
-            <AudioLevelMeter meter={audioMeter} label={`${track.name} level`} orientation="vertical" />
-            <input
-              className="audio-track-fader audio-track-pan"
-              type="range"
-              min="-1"
-              max="1"
-              step="0.01"
-              value={trackPan}
-              aria-label={`${track.name} pan`}
-              title={`Pan ${trackPan === 0 ? 'C' : trackPan < 0 ? `L${Math.round(Math.abs(trackPan) * 100)}` : `R${Math.round(trackPan * 100)}`}`}
-              onChange={handleTrackPanChange}
             />
           </div>
         )}

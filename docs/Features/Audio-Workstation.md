@@ -22,7 +22,9 @@ Audio Focus mode keeps the timeline as the detailed editor. It expands audio lan
 - Spectral Audio mode renders real spectrogram tile artifacts inline.
 - Audio region selections create non-destructive edit-stack operations for silence, insert/delete silence, reverse, polarity, channel operations, and repairs.
 - Spectral selections create time/frequency edit operations and image-in-spectrum layers.
-- The Audio Edit Stack panel surfaces cached rule-based repair suggestions from loudness, frequency, and phase analysis. Applying a suggestion creates a non-destructive whole-clip repair or mono-sum operation with evidence metadata; it does not mutate the source file.
+- The Audio Edit Stack panel surfaces cached rule-based repair suggestions from loudness, frequency, and phase analysis. Suggestions can be auditioned through the same render path used by the edit stack before applying. Applying a suggestion creates a non-destructive whole-clip repair or mono-sum operation with evidence metadata; it does not mutate the source file.
+- Silence Cleanup detects quiet clip ranges from decoded source audio with configurable threshold/minimum duration controls. Removing detected silence adds non-destructive compacting `delete-silence` operations, shortens the timeline clip, and optionally ripples later same-track clips through the store action.
+- Room Tone Fill uses selected audio regions as non-destructive fill targets. It loops detected quiet source ranges through the clip render path, with a deterministic low-level noise fallback when no reusable source tone is available.
 - Bake/render creates derived media while preserving the original source file.
 
 ## Mixer Surface
@@ -64,7 +66,9 @@ Current focused checks cover:
 - Track/master routing, sends, export preflight, and audio export paths.
 - Node Workspace audio projection and AI runtime context for semantic audio ports, `frequencyBands`, `audioMetadata`, repair suggestions, and artifact-only bounded summaries.
 - Node Workspace `Generate`/`Refresh` actions for audio analysis ports. Refresh forces regeneration instead of returning early when a matching artifact ref already exists.
-- Rule-based repair suggestions applied from the Audio Edit Stack as non-destructive edit operations with processed-analysis invalidation.
+- Rule-based repair suggestions previewed and applied from the Audio Edit Stack as non-destructive edit operations with processed-analysis invalidation.
+- Silence detection, compacting delete-silence render output, and timeline/store duration updates for detected silence removal.
+- Room-tone fill render output, store operation creation, and processed-analysis invalidation.
 
 ## Sources
 

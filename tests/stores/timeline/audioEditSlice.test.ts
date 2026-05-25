@@ -384,6 +384,141 @@ describe('timeline audio edit slice', () => {
     ]);
   });
 
+  it('applies detected silence removal as compacting non-destructive delete operations', async () => {
+    const clip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      file: new File([], 'dialog.wav', { type: 'audio/wav' }),
+      source: { type: 'audio', naturalDuration: 12 },
+      startTime: 4,
+      duration: 10,
+      inPoint: 1,
+      outPoint: 11,
+      audioState: {
+        sourceAnalysisRefs: { waveformPyramidId: 'source-waveform' },
+        processedAnalysisRefs: { processedWaveformPyramidId: 'processed-waveform' },
+      },
+    });
+    const store = createTestTimelineStore({
+      clips: [
+        clip,
+        createMockClip({
+          id: 'next-clip',
+          trackId: 'audio-1',
+          startTime: 15,
+          duration: 3,
+        }),
+      ],
+    });
+
+    const operationIds = await store.getState().applyDetectedSilenceRemoval('audio-clip', {
+      ranges: [
+        { start: 2, end: 3, duration: 1, rmsDb: -82 },
+        { start: 5, end: 5.5, duration: 0.5, rmsDb: -76 },
+      ],
+      detection: {
+        thresholdDb: -55,
+        minSilenceSeconds: 0.25,
+      },
+      rippleTimeline: true,
+    });
+
+    const updated = store.getState().clips.find(currentClip => currentClip.id === 'audio-clip');
+    const nextClip = store.getState().clips.find(currentClip => currentClip.id === 'next-clip');
+    expect(operationIds).toHaveLength(2);
+    expect(updated?.duration).toBe(8.5);
+    expect(nextClip?.startTime).toBe(13.5);
+    expect(updated?.audioState?.sourceAnalysisRefs?.waveformPyramidId).toBe('source-waveform');
+    expect(updated?.audioState?.processedAnalysisRefs).toBeUndefined();
+    expect(updated?.audioState?.editStack).toEqual([
+      expect.objectContaining({
+        id: operationIds[0],
+        type: 'delete-silence',
+        timeRange: { start: 2, end: 3 },
+        params: expect.objectContaining({
+          detectedSilence: true,
+          compactTimeline: true,
+          preserveClipDuration: false,
+          silenceThresholdDb: -55,
+          silenceRmsDb: -82,
+          timelineStart: 5,
+          timelineEnd: 6,
+        }),
+      }),
+      expect.objectContaining({
+        id: operationIds[1],
+        timeRange: { start: 5, end: 5.5 },
+        params: expect.objectContaining({
+          sequenceIndex: 2,
+          sequenceCount: 2,
+        }),
+      }),
+    ]);
+  });
+
+  it('applies room tone fill to the selected audio region using detected source ranges', async () => {
+    const clip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      file: new File([], 'dialog.wav', { type: 'audio/wav' }),
+      source: { type: 'audio', naturalDuration: 12 },
+      startTime: 4,
+      duration: 10,
+      inPoint: 1,
+      outPoint: 11,
+      audioState: {
+        sourceAnalysisRefs: { waveformPyramidId: 'source-waveform' },
+        processedAnalysisRefs: { processedWaveformPyramidId: 'processed-waveform' },
+      },
+    });
+    const store = createTestTimelineStore({
+      clips: [clip],
+      audioRegionSelection: {
+        clipId: 'audio-clip',
+        trackId: 'audio-1',
+        startTime: 6,
+        endTime: 7,
+        sourceInPoint: 3,
+        sourceOutPoint: 4,
+      },
+    });
+
+    const operationId = await store.getState().applyRoomToneFill('audio-clip', {
+      sourceRanges: [
+        { start: 1.5, end: 2.25, duration: 0.75, rmsDb: -72 },
+      ],
+      gainDb: -3,
+      crossfadeSeconds: 0.04,
+    });
+
+    const updated = store.getState().clips[0];
+    expect(operationId).toBeTruthy();
+    expect(updated.duration).toBe(10);
+    expect(updated.audioState?.sourceAnalysisRefs?.waveformPyramidId).toBe('source-waveform');
+    expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
+    expect(updated.audioState?.editStack).toEqual([
+      expect.objectContaining({
+        id: operationId,
+        type: 'room-tone-fill',
+        enabled: true,
+        timeRange: { start: 3, end: 4 },
+        params: expect.objectContaining({
+          label: 'Room tone fill',
+          timelineStart: 6,
+          timelineEnd: 7,
+          roomToneGainDb: -3,
+          crossfadeSeconds: 0.04,
+          roomToneSourceCount: 1,
+          sourceInPoint: 1.5,
+          sourceOutPoint: 2.25,
+        }),
+      }),
+    ]);
+    expect(updated.audioState?.editStack?.[0].params.roomToneSourceRanges).toBe(JSON.stringify([
+      { start: 1.5, end: 2.25, duration: 0.75, rmsDb: -72 },
+    ]));
+  });
+
   it('does not edit audio clips on locked tracks', () => {
     const store = createTestTimelineStore({
       tracks: [

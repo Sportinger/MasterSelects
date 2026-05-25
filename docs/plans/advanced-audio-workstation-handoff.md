@@ -21,6 +21,10 @@ Recent fixes in this handoff pass:
 - Added a visible `Audio Analysis` graph node for audio-capable clips so artifact-backed analysis signals are not only hidden on the source node.
 - Made Node Workspace audio analysis `Refresh` actions force-regenerate matching artifacts instead of returning early when refs already exist.
 - Surfaced cached repair suggestions in the Audio Edit Stack panel and made Apply create non-destructive whole-clip `repair` or `mono-sum` operations with suggestion/evidence metadata.
+- Added cancellable per-suggestion repair preview/audition from the Audio Edit Stack. Preview and Apply share the same operation builder, render through `ClipAudioRenderService`, and play a bounded clip window around the playhead.
+- Added Silence Cleanup in the Audio Edit Stack panel. It detects quiet ranges from decoded clip audio, applies compacting non-destructive `delete-silence` operations, shortens the clip duration, and supports same-track ripple through the store action.
+- Added Room Tone Fill for selected audio regions. The operation loops detected quiet source ranges in `ClipAudioRenderService`, uses a deterministic low-level fallback when no source tone is available, and remains non-destructive in the clip edit stack.
+- Fixed the timeline audio track meter: vertical RMS/scale layers no longer collapse to a 1px top line, and peak position is now rendered as a positioned hold line.
 
 ## Verification Run In This Pass
 
@@ -32,6 +36,9 @@ Passed:
 - `npm run test -- tests\unit\nodeGraphProjection.test.ts tests\unit\aiNodeRuntime.test.ts`
 - `npm run test -- tests\unit\nodeGraphProjection.test.ts tests\unit\aiNodeRuntime.test.ts tests\stores\timeline\clipSlice.test.ts`
 - `npm run test -- tests\stores\timeline\audioEditSlice.test.ts tests\unit\audio\audioRepairSuggestions.test.ts`
+- `npm run test -- tests\unit\audio\audioRepairSuggestionOperations.test.ts tests\unit\audio\audioRepairPreviewService.test.ts tests\stores\timeline\audioEditSlice.test.ts tests\unit\audio\audioRepairSuggestions.test.ts`
+- `npm run test -- tests\unit\audio\audioSilenceDetection.test.ts tests\unit\audio\clipAudioRenderService.test.ts tests\stores\timeline\audioEditSlice.test.ts tests\unit\audio\audioRepairPreviewService.test.ts tests\unit\audio\audioRepairSuggestionOperations.test.ts`
+- `npm run test -- tests\stores\timeline\trackSlice.test.ts tests\unit\audio\audioMetering.test.ts`
 - Focused ESLint on the edited audio/node/runtime/timeline files
 - Dev bridge hard reload showed no fresh `TimelineClipComponent` or `getSnapshot` errors
 
@@ -58,10 +65,8 @@ Before committing, run the full required checks:
    - Consider GPU-backed spectrogram tile rendering once the CPU canvas path is stable.
 
 4. Complete Track I repair workflow:
-   - Add cancellable audio operation previews for repair/bake paths.
-   - Add amplitude/loudness-based silence range analysis and true timeline-compacting silence removal.
-   - Add room-tone generation/loop DSP.
-   - Add per-suggestion preview/audition before applying or baking repair operations.
+   - Add repair/bake preview for manually authored edit-stack operations, not only rule-based repair suggestions.
+   - Consider a dedicated ripple toggle in the Audio Edit Stack UI; the store action already supports same-track ripple for detected silence removal.
 
 5. Performance:
    - Continue profiling deep zoom responsiveness after the processed-analysis request-key fix.

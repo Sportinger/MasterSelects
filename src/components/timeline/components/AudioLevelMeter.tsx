@@ -22,7 +22,15 @@ export function AudioLevelMeter({
   const peak = meter ? audioMeterDbToUnit(meter.peakDb) : 0;
   const rms = meter ? audioMeterDbToUnit(meter.rmsDb) : 0;
   const rmsTransform = orientation === 'vertical' ? `scaleY(${rms})` : `scaleX(${rms})`;
-  const peakTransform = orientation === 'vertical' ? `scaleY(${peak})` : `scaleX(${peak})`;
+  const peakStyle = orientation === 'vertical'
+    ? {
+        bottom: `${Math.max(0, Math.min(1, peak)) * 100}%`,
+        transform: 'translateY(50%)',
+      }
+    : {
+        left: `${Math.max(0, Math.min(1, peak)) * 100}%`,
+        transform: 'translateX(-50%)',
+      };
   const title = meter
     ? `${label}: peak ${formatDb(meter.peakDb)}, rms ${formatDb(meter.rmsDb)}`
     : `${label}: no live signal`;
@@ -39,7 +47,7 @@ export function AudioLevelMeter({
     >
       <div className="audio-level-meter-scale" />
       <div className="audio-level-meter-rms" style={{ transform: rmsTransform }} />
-      <div className="audio-level-meter-peak" style={{ transform: peakTransform }} />
+      <div className="audio-level-meter-peak" style={peakStyle} />
     </div>
   );
 }

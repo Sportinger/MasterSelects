@@ -181,20 +181,20 @@
 }
 
 .track-header.audio .track-controls {
-  grid-template-columns: repeat(3, 24px);
-  grid-auto-rows: 24px;
-  gap: 4px;
-  right: 7px;
+  grid-template-columns: repeat(3, 22px);
+  grid-auto-rows: 22px;
+  gap: 3px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
 }
 
 .track-header.audio .track-controls .btn-icon {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  border-radius: 5px;
-  font-size: 11px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 4px;
+  font-size: 10px;
   font-weight: 700;
   color: rgba(246, 248, 250, 0.9);
   background:
@@ -213,13 +213,6 @@
     rgba(21, 25, 30, 0.98);
 }
 
-.track-header.audio .track-controls .btn-icon:nth-child(5),
-.track-header.audio .track-controls .btn-icon:nth-child(7) {
-  grid-column: span 2;
-  width: 52px;
-  min-width: 52px;
-}
-
 .track-controls .btn-icon.btn-active {
   color: var(--accent);
   background: var(--accent-dim);
@@ -235,20 +228,25 @@
 
 .audio-track-faders {
   position: absolute;
-  left: 7px;
-  top: 7px;
-  bottom: 7px;
-  width: 32px;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 26px;
   display: grid;
-  grid-template-columns: 10px 16px;
+  grid-template-columns: 14px 10px;
   grid-template-rows: 1fr;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   z-index: 4;
 }
 
+.audio-track-faders .audio-level-meter {
+  width: 100%;
+  height: 100%;
+}
+
 .audio-track-fader {
-  width: 16px;
+  width: 10px;
   min-width: 0;
   height: 100%;
   margin: 0;
@@ -259,16 +257,55 @@
   direction: rtl;
 }
 
-.audio-track-pan {
-  position: absolute;
-  left: 41px;
-  bottom: 4px;
-  width: 85px;
-  height: 8px;
-  writing-mode: horizontal-tb;
-  direction: ltr;
+.audio-track-pan-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+  padding-right: 2px;
+  min-width: 0;
+}
+
+.audio-track-pan-label {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.audio-track-pan-inline {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 10px;
+  margin: 0;
+  padding: 0;
   accent-color: var(--accent-timeline);
   cursor: ew-resize;
+}
+
+.track-header.audio > .track-header-top {
+  padding-right: 84px;
+  padding-left: 4px;
+}
+
+.track-header.audio .track-header-main {
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  row-gap: 2px;
+  padding-left: 30px;
+  min-width: 0;
+  width: 100%;
+}
+
+.track-header.audio .track-header-main > .track-name {
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .audio-level-meter {
@@ -286,15 +323,18 @@
 .audio-level-meter-rms,
 .audio-level-meter-peak {
   position: absolute;
-  inset: 0;
   transform-origin: left center;
   pointer-events: none;
 }
 
-.audio-level-meter.vertical .audio-level-meter-scale,
-.audio-level-meter.vertical .audio-level-meter-rms,
-.audio-level-meter.vertical .audio-level-meter-peak {
-  top: auto;
+.audio-level-meter-scale,
+.audio-level-meter-rms {
+  inset: 0;
+}
+
+.audio-level-meter.vertical .audio-level-meter-rms {
+  inset: auto 0 0 0;
+  height: 100%;
   transform-origin: center bottom;
 }
 
@@ -321,14 +361,18 @@
 }
 
 .audio-level-meter-peak {
+  left: 0;
+  width: 2px;
   height: 2px;
   top: 0;
-  bottom: auto;
   background: linear-gradient(90deg, #5af0a2, #ffe082 72%, #ff5f56);
-  transition: transform 55ms linear;
+  transition: left 55ms linear, bottom 55ms linear;
 }
 
 .audio-level-meter.vertical .audio-level-meter-peak {
+  left: 0;
+  right: 0;
+  width: auto;
   height: 1px;
   top: auto;
   background: rgba(255, 255, 255, 0.92);

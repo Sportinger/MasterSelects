@@ -390,6 +390,11 @@
   border-color: rgba(255, 92, 92, 0.42);
 }
 
+.audio-repair-suggestion-card.previewing {
+  border-color: rgba(112, 246, 220, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(112, 246, 220, 0.16);
+}
+
 .audio-repair-suggestion-main {
   display: grid;
   gap: 3px;
@@ -414,7 +419,8 @@
 }
 
 .audio-repair-suggestion-title span,
-.audio-repair-suggestion-evidence {
+.audio-repair-suggestion-evidence,
+.audio-repair-suggestion-preview {
   color: var(--text-muted);
   font-size: 10px;
   font-family: var(--font-mono);
@@ -432,6 +438,118 @@
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.audio-repair-suggestion-preview {
+  display: block;
+  overflow: hidden;
+  color: rgba(112, 246, 220, 0.86);
+  text-overflow: ellipsis;
+}
+
+.audio-repair-suggestion-preview.phase-error {
+  color: rgba(255, 112, 112, 0.9);
+}
+
+.audio-repair-suggestion-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.audio-silence-cleanup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.audio-silence-cleanup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.audio-silence-cleanup-header h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audio-silence-cleanup-header span,
+.audio-silence-range-row span,
+.audio-silence-range-more {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.audio-silence-cleanup-actions,
+.audio-silence-cleanup-controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.audio-silence-cleanup-controls {
+  flex-wrap: wrap;
+}
+
+.audio-silence-cleanup-controls label {
+  display: grid;
+  grid-template-columns: auto 64px auto;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.audio-silence-cleanup-controls input {
+  width: 64px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.audio-silence-cleanup-controls strong,
+.audio-silence-range-row strong {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.audio-silence-range-list {
+  display: grid;
+  gap: 3px;
+}
+
+.audio-silence-range-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.audio-silence-range-row span,
+.audio-silence-range-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .audio-edit-stack-layout {

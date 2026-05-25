@@ -123,6 +123,7 @@ const RENDERABLE_CLIP_AUDIO_EDIT_TYPES = new Set<ClipAudioEditOperation['type']>
   'swap-channels',
   'mono-sum',
   'repair',
+  'room-tone-fill',
   'spectral-mask',
   'spectral-resynthesis',
 ]);
