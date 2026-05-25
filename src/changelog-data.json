@@ -1,5 +1,29 @@
 [
   {
+    "date": "2026-05-25",
+    "type": "new",
+    "title": "Wasm/WIT Signal Runtime Foundation",
+    "description": "Signal IR, capability-gated runtime policies, content-addressed artifact storage, worker/Wasm host adapters, universal CSV and binary SignalAsset imports, and Signal timeline render adapters now form the foundation for all-media support.",
+    "section": "Architecture / Universal Media",
+    "commits": ["2398e373", "ca793a24"]
+  },
+  {
+    "date": "2026-05-25",
+    "type": "new",
+    "title": "Voxel Relief Effect",
+    "description": "A voxel relief effect is available as part of the GPU effect stack for dimensional stylization work.",
+    "section": "Effects",
+    "commits": ["8be580c5"]
+  },
+  {
+    "date": "2026-05-25",
+    "type": "improve",
+    "title": "Project Save and Bridge Torture Reliability",
+    "description": "Project save/load guardrails and AI Bridge torture diagnostics now better protect active timelines and make browser export smoke tests easier to run from automation.",
+    "section": "Reliability / Debugging",
+    "commits": ["d8139c8c", "b8a8a899"]
+  },
+  {
     "date": "2026-05-22",
     "type": "fix",
     "title": "AI Preview Tool Context Sanitization",

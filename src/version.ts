@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '1.8.3';
+export const APP_VERSION = '1.8.4';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'Rive Runtime is Live!',
-    message: 'Import .riv files, edit Rive state machines, and keyframe Data Binding values directly on the timeline.',
+    title: 'Signal IR Runtime',
+    message: 'Universal SignalAssets, capability-gated runtimes, Wasm/WIT importer contracts, and signal timeline render adapters are now in place.',
     animated: true,
   },
 };
@@ -36,15 +36,15 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'Rive Runtime WASM',
-  message: 'Rive files now import as first-class vector animation clips with runtime rendering, export, thumbnails, persistence, and timeline keyframes.',
+  title: 'Wasm/WIT + Signal IR',
+  message: 'Signal assets now persist content-addressed artifacts and can materialize to text, model, or gaussian-splat timeline clips through renderer adapters.',
   animated: true,
 };
 
 export const WIP_NOTICE: ChangelogNotice | null = {
   type: 'info',
-  title: 'Vector Animation Controls',
-  message: 'The Properties panel now exposes Rive artboards, animations, state-machine inputs, events, asset loading hooks, and Data Binding values.',
+  title: 'Universal Media Architecture',
+  message: 'The next layer is rich renderers for documents, CAD/vector data, point clouds, and external Wasm providers on top of the new Signal IR foundation.',
   animated: true,
 };
 
