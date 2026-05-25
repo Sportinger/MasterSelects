@@ -1056,6 +1056,33 @@ describe('keyframeSlice', () => {
     expect(store.getState().clipKeyframes.get('clip-1')).toBeUndefined();
   });
 
+  it('setPropertyValue: invalidates processed audio analysis when static speed changes', () => {
+    const audioState = {
+      sourceAnalysisRefs: { waveformPyramidId: 'source-waveform' },
+      processedAnalysisRefs: { processedWaveformPyramidId: 'processed-waveform' },
+    };
+    store = createTestTimelineStore({
+      clips: [
+        createMockClip({
+          id: 'clip-speed',
+          trackId: 'video-1',
+          inPoint: 0,
+          outPoint: 10,
+          duration: 10,
+          audioState,
+        }),
+      ],
+    });
+
+    store.getState().setPropertyValue('clip-speed', 'speed', 2);
+    const updatedClip = store.getState().clips.find(c => c.id === 'clip-speed')!;
+
+    expect(updatedClip.speed).toBe(2);
+    expect(updatedClip.duration).toBe(5);
+    expect(updatedClip.audioState?.sourceAnalysisRefs).toEqual(audioState.sourceAnalysisRefs);
+    expect(updatedClip.audioState?.processedAnalysisRefs).toBeUndefined();
+  });
+
   it('setPropertyValue: updates static AI node param when not recording and no keyframes', () => {
     const aiClip = createMockClip({
       id: 'clip-ai',

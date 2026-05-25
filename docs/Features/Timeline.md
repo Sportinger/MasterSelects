@@ -16,7 +16,8 @@ The Timeline is the core editing interface for multi-track editing. It now cover
 
 ### Audio Tracks
 - Hold audio-only clips and audio-linked companions for video clips.
-- Waveforms can be shown at 50 samples per second.
+- Waveforms support compact, detailed, and spectral timeline display modes.
+- Audio Focus mode expands audio lanes and compacts video lanes without switching to a separate editor window.
 - Linked audio follows video movement unless moved independently with `Alt` drag.
 - Default layout includes one audio track named `Audio`.
 
@@ -48,6 +49,10 @@ getTrackChildren()  // Query child tracks
 ### Audio
 - Can exist alone or as linked audio for video clips.
 - Fades are authored through `audio-volume` keyframes.
+- In Audio Focus with detailed or spectral display, dragging inside the waveform creates an inline audio region selection.
+- The region toolbar can copy/paste region metadata and add non-destructive audio edit-stack operations such as silence, insert silence, delete silence, reverse, invert polarity, channel swap, and mono sum.
+- Audio edit-stack chips appear on edited audio clips for quick state, while the selected clip Properties panel exposes an `Audio Edits` tab for inspection, bypass, removal, clear, bake, and bake history.
+- Bake renders active region edits into a new WAV media source and resets the clip edit stack.
 
 ### Text
 - Created through the timeline text slice.

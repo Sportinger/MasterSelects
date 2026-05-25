@@ -19,6 +19,7 @@ import { createClipEffectSlice } from './clipEffectSlice';
 import { createColorCorrectionSlice } from './colorCorrectionSlice';
 import { createLinkedGroupSlice } from './linkedGroupSlice';
 import { createDownloadClipSlice } from './downloadClipSlice';
+import { createAudioEditSlice } from './audioEditSlice';
 import { createPlaybackSlice } from './playbackSlice';
 import { createRamPreviewSlice } from './ramPreviewSlice';
 import { createProxyCacheSlice } from './proxyCacheSlice';
@@ -70,6 +71,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
+    const audioEditActions = createAudioEditSlice(set, get);
     const playbackActions = createPlaybackSlice(set, get);
     const ramPreviewActions = createRamPreviewSlice(set, get);
     const proxyCacheActions = createProxyCacheSlice(set, get);
@@ -195,6 +197,9 @@ export const useTimelineStore = create<TimelineStore>()(
       thumbnailsEnabled: true,
       waveformsEnabled: true,
       audioDisplayMode: 'detailed' as const,
+      audioFocusMode: false,
+      audioRegionSelection: null,
+      audioRegionClipboard: null,
       showTranscriptMarkers: true,
 
       // Keyframe animation state
@@ -318,6 +323,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...colorCorrectionActions,
       ...linkedGroupActions,
       ...downloadClipActions,
+      ...audioEditActions,
       ...playbackActions,
       ...ramPreviewActions,
       ...proxyCacheActions,

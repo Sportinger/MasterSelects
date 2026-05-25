@@ -23,6 +23,7 @@ function TimelineControlsComponent({
   thumbnailsEnabled,
   waveformsEnabled,
   audioDisplayMode,
+  audioFocusMode,
   toolMode,
   onPlay,
   onPause,
@@ -38,6 +39,7 @@ function TimelineControlsComponent({
   onToggleThumbnails,
   onToggleWaveforms,
   onSetAudioDisplayMode,
+  onToggleAudioFocusMode,
   onToggleCutTool,
   onSetDuration,
   onFitToWindow,
@@ -262,6 +264,14 @@ function TimelineControlsComponent({
               >
                 <span className={`view-check ${waveformsEnabled ? 'checked' : ''}`}>✓</span>
                 <span>Waveforms</span>
+              </div>
+              <div className="view-dropdown-divider" />
+              <div
+                className={`view-dropdown-item ${audioFocusMode ? 'active' : ''}`}
+                onClick={onToggleAudioFocusMode}
+              >
+                <span className={`view-check ${audioFocusMode ? 'checked' : ''}`}>✓</span>
+                <span>Audio Focus</span>
               </div>
               <div className="view-dropdown-divider" />
               <div

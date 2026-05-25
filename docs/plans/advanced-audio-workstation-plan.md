@@ -665,6 +665,11 @@ Rules:
 - Audio-only WAV export must keep working without WebCodecs audio encoding.
 - Browser-compressed audio remains support-gated because AAC support varies by browser/platform.
 
+Current checkpoint:
+
+- `ClipAudioRenderService` is now the shared offline clip renderer for trim, reverse, speed/pitch, mute, and clip EQ/volume stacks.
+- `ProcessedWaveformPyramidService` and `AudioExportPipeline` both call that shared renderer, so processed timeline waveforms and exported audio no longer use separate effect/speed paths for clip-local audio behavior.
+
 ## Multi-Agent Implementation Model
 
 This feature is large enough to benefit from parallel agents, but only if each agent has a clear ownership boundary. Agents should work in parallel on disjoint file sets and merge at explicit contract checkpoints. Central schema, project save/load, timeline serialization, history, and node projection files need single ownership per wave.
@@ -837,6 +842,9 @@ Current checkpoint:
 - `audioAnalysisIdentity` creates deterministic processed-audio state hashes from clip timing/playback, source revision, enabled edit/effect/spectral stacks, and optional track/master graph identities while excluding payload-shaped fields.
 - `WaveformPyramidGenerator` can now persist both source `waveform-pyramid` and processed `processed-waveform-pyramid` artifacts with distinct cache keys and compact project refs.
 - Timeline clip edits that affect audio output clear only `audioState.processedAnalysisRefs`; `sourceAnalysisRefs` stay reusable for fallback display and future regeneration.
+- `ProcessedWaveformPyramidService` renders trimmed clip audio through speed/reverse, mute, and clip EQ/volume stacks, writes processed waveform pyramid artifacts, primes the timeline cache, and keys results with legacy audio effects included in the clip audio-state identity.
+- `ClipAudioRenderService` owns clip-local offline audio rendering and is shared by processed waveform generation and export.
+- The timeline store exposes `generateProcessedWaveformForClip`; audio effect and speed edits invalidate stale processed refs, and visible audio clips schedule processed waveform jobs when their clip audio path needs one.
 - `TimelineClip` now loads source and processed waveform pyramids independently, prefers a loaded processed artifact, and falls back to the source pyramid while processed artifacts are loading, missing, or stale.
 - `ClipWaveform` remains a pure renderer and receives a `waveformVariant` hint for source/processed/legacy styling.
 
@@ -845,8 +853,20 @@ Current checkpoint:
 - Build expanded audio clip/track surfaces inside the timeline.
 - Add Audio Focus Mode that compacts/dims video context and gives audio lanes precise editing height.
 - Add region selection, zero-cross snap, cut/copy/paste/trim/silence/reverse/invert/channel tools.
-- Add edit stack inspector, bypass/reorder, markers, and explicit bake/render.
+- Add edit stack inspector in the selected clip Properties panel, bypass/reorder, markers, and explicit bake/render.
 - Integrate undo/redo, save/load, and export parity.
+
+Current checkpoint:
+
+- `audioFocusMode` is a timeline/project UI state. It compacts and subdues video tracks while expanding audio lanes inside the existing timeline.
+- The View menu exposes Audio Focus alongside compact/detailed/spectral audio modes; no separate audio editor window is introduced.
+- Audio clips in focus mode support direct inline region selection on the waveform area, with timeline/source range state and a waveform-valley snap fallback for zero-cross-safe edits.
+- Region selections can now create non-destructive clip edit-stack operations for silence, insert silence, delete silence, paste, reverse, invert polarity, swap channels, and mono sum.
+- Region copy/paste is stored as bounded timeline audio clipboard metadata; paste creates an edit-stack operation instead of mutating the source media.
+- Audio edit-stack operations invalidate only processed analysis refs, keep source waveform refs reusable, can be bypassed, removed, cleared, or baked inline, and are blocked on locked tracks or during export.
+- The selected clip Properties panel exposes an `Audio Edits` tab with the full stack, operation metadata, bypass/remove, clear, bake, and bake history.
+- `ClipAudioRenderService` renders enabled edit-stack operations before clip reverse, speed/pitch, mute, and effects; processed waveforms and exports share that same path.
+- Baking active audio edits renders the edit stack into a new WAV media source, resets the clip edit stack, writes source waveform refs for the baked media, and records bake provenance in `audioState.bakeHistory`.
 
 ### Track F: Inline Spectral Canvas And Image-In-Spectrum
 

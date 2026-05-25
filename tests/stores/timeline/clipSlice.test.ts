@@ -754,6 +754,23 @@ describe('clipSlice', () => {
       expect(updated.effects[0].type).toBe('blur');
       expect(updated.effects[1].type).toBe('hue-shift');
     });
+
+    it('invalidates processed audio analysis refs for audio effects only', () => {
+      const audioState = audioStateWithAnalysisRefs();
+      const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', effects: [], audioState });
+      store = createTestTimelineStore({ clips: [clip] });
+
+      store.getState().addClipEffect('clip-1', 'blur');
+      expect(store.getState().clips.find(c => c.id === 'clip-1')!.audioState?.processedAnalysisRefs).toEqual(
+        audioState.processedAnalysisRefs,
+      );
+
+      store.getState().addClipEffect('clip-1', 'audio-volume');
+      const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(updated.audioState?.sourceAnalysisRefs).toEqual(audioState.sourceAnalysisRefs);
+      expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
+    });
   });
 
   describe('removeClipEffect', () => {
@@ -792,6 +809,25 @@ describe('clipSlice', () => {
 
       expect(updated.effects[0].params.radius).toBe(10);
       expect(updated.effects[0].params.quality).toBe(1); // preserved
+    });
+
+    it('invalidates processed audio analysis refs when audio effect params change', () => {
+      const audioState = audioStateWithAnalysisRefs();
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        audioState,
+        effects: [
+          { id: 'fx-1', name: 'Volume', type: 'audio-volume', enabled: true, params: { volume: 1 } },
+        ],
+      });
+      store = createTestTimelineStore({ clips: [clip] });
+
+      store.getState().updateClipEffect('clip-1', 'fx-1', { volume: 0.6 });
+      const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(updated.audioState?.sourceAnalysisRefs).toEqual(audioState.sourceAnalysisRefs);
+      expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
     });
   });
 

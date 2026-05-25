@@ -44,9 +44,21 @@ If no EQ is active, playback falls back to direct `element.volume` updates.
 ## Waveforms
 
 - Audio clips generate waveforms from decoded audio data.
+- Source waveform pyramids and processed waveform pyramids can be stored as audio analysis artifacts.
+- Processed waveforms are generated through the same clip-local offline audio render path used by export, including trim, region edit-stack operations, reverse, speed/pitch, mute, EQ, and volume when available.
 - Nested composition clips generate waveforms from the mixed-down buffer when available.
 - Large files are skipped: audio-only files above 4 GB and video files above 500 MB.
-- Waveform generation uses the first channel only and normalizes peak data for display.
+- Legacy waveform generation uses the first channel only and normalizes peak data for display.
+
+## Timeline Audio Editing
+
+- `Audio Focus` is available from the Timeline `View` menu.
+- Audio Focus keeps editing on the main timeline: video tracks remain visible as compact context, while audio tracks get larger lanes for detailed waveform work.
+- In Audio Focus with `Detailed Audio` or `Spectral Audio`, dragging inside an audio clip creates an inline audio region selection.
+- Region selections snap to nearby waveform valleys as a zero-cross-safe fallback when source waveform data is available.
+- The inline region toolbar can copy/paste region metadata and add non-destructive edit-stack operations for silence, insert silence, delete silence, reverse, invert polarity, left/right channel swap, and mono sum.
+- Edit-stack operations live on `clip.audioState.editStack`; they can be inspected from the Properties panel `Audio Edits` tab and bypassed, removed, cleared, or baked without mutating the original media file.
+- Baking active edit-stack operations creates a new WAV media source, resets the clip edit stack, keeps the old source immutable, and records bake provenance in `audioState.bakeHistory`.
 
 ## Import And Detection
 
@@ -78,7 +90,7 @@ Audio export is handled by `engine/audio`:
 - `FrameExporter` uses `AudioExportPipeline.exportRawAudio()` for the FFmpeg export path.
 - `ExportPanel` also exposes standalone audio export through the same pipeline.
 - Audio-only WAV export uses `exportRawAudio()` and writes a 16-bit PCM WAV file.
-- The pipeline applies clip trimming, speed changes, EQ, volume, mixing, and then encoding.
+- The pipeline applies clip trimming, region edit-stack operations including paste/insert/delete silence, reverse, speed changes, EQ, volume, mixing, and then encoding.
 - `AudioEncoderWrapper` prefers AAC-LC and falls back to Opus if the browser supports it.
 - Peak normalization is optional and only happens during export when enabled.
 
@@ -92,7 +104,7 @@ FFmpeg exports can still receive raw audio because they use `exportRawAudio()`.
 - No compression or dynamics processing.
 - No reverb, delay, or noise reduction.
 - No LUFS loudness normalization.
-- No spectrum analyzer UI.
+- Spectral Audio mode is a timeline display surface; full spectrogram tile generation and spectral editing tools are still in progress.
 - Live audio is limited by browser `playbackRate` behavior and cannot play backwards.
 
 ## Sources
@@ -101,6 +113,8 @@ FFmpeg exports can still receive raw audio because they use `exportRawAudio()`.
 `src/services/layerBuilder/AudioTrackSyncManager.ts`, `src/services/audioAnalyzer.ts`, `src/services/audioSync.ts`,
 `src/services/compositionAudioMixer.ts`, `src/stores/timeline/helpers/audioDetection.ts`,
 `src/stores/timeline/helpers/audioTrackHelpers.ts`, `src/stores/timeline/helpers/waveformHelpers.ts`,
+`src/stores/timeline/audioEditSlice.ts`, `src/services/audio/ClipAudioRenderService.ts`,
 `src/components/panels/properties/VolumeTab.tsx`, `src/components/panels/properties/EffectsTab.tsx`,
+`src/components/panels/properties/AudioEditStackTab.tsx`,
 `src/components/panels/properties/index.tsx`, `src/components/export/ExportPanel.tsx`,
 `src/engine/export/FrameExporter.ts`, `src/engine/audio/*`

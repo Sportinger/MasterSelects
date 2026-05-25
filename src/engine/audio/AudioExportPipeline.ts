@@ -17,8 +17,7 @@ import { AudioExtractor, audioExtractor } from './AudioExtractor';
 const log = Logger.create('AudioExportPipeline');
 import { AudioEncoderWrapper, type EncodedAudioResult } from './AudioEncoder';
 import { AudioMixer, type AudioTrackData } from './AudioMixer';
-import { TimeStretchProcessor, timeStretchProcessor } from './TimeStretchProcessor';
-import { AudioEffectRenderer, audioEffectRenderer } from './AudioEffectRenderer';
+import { ClipAudioRenderService, type ClipAudioRenderProgress } from '../../services/audio/ClipAudioRenderService';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import type { TimelineClip, TimelineTrack, Keyframe } from '../../types';
@@ -42,8 +41,7 @@ export class AudioExportPipeline {
   private extractor: AudioExtractor;
   private encoder: AudioEncoderWrapper | null = null;
   private mixer: AudioMixer;
-  private timeStretch: TimeStretchProcessor;
-  private effectRenderer: AudioEffectRenderer;
+  private clipAudioRenderer: ClipAudioRenderService;
   private settings: AudioExportSettings;
   private cancelled = false;
 
@@ -59,8 +57,9 @@ export class AudioExportPipeline {
       sampleRate: this.settings.sampleRate,
       normalize: this.settings.normalize,
     });
-    this.timeStretch = timeStretchProcessor;
-    this.effectRenderer = audioEffectRenderer;
+    this.clipAudioRenderer = new ClipAudioRenderService({
+      extractor: this.extractor,
+    });
   }
 
   /**
@@ -99,9 +98,9 @@ export class AudioExportPipeline {
 
       if (this.cancelled) return null;
 
-      // 3. Process speed/pitch for each clip
-      onProgress?.({ phase: 'processing', percent: 0, message: 'Processing speed changes...' });
-      const processedBuffers = await this.processAllSpeed(
+      // 3. Render each clip through the same processed graph used by timeline waveform artifacts
+      onProgress?.({ phase: 'processing', percent: 0, message: 'Rendering timeline audio graph...' });
+      const effectBuffers = await this.renderAllClipAudio(
         audioClips,
         extractedBuffers,
         clipKeyframes,
@@ -110,29 +109,18 @@ export class AudioExportPipeline {
 
       if (this.cancelled) return null;
 
-      // 4. Render effects for each clip
-      onProgress?.({ phase: 'effects', percent: 0, message: 'Applying effects...' });
-      const effectBuffers = await this.renderAllEffects(
-        audioClips,
-        processedBuffers,
-        clipKeyframes,
-        onProgress
-      );
-
-      if (this.cancelled) return null;
-
-      // 5. Mix all tracks
+      // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
       const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime);
       const mixedBuffer = await this.mixer.mixTracks(trackData, duration);
 
       if (this.cancelled) return null;
 
-      // 6. Encode to AAC
+      // 5. Encode to AAC
       onProgress?.({ phase: 'encoding', percent: 0, message: 'Encoding audio...' });
       const result = await this.encodeAudio(mixedBuffer, onProgress);
 
-      // 7. Cleanup
+      // 6. Cleanup
       this.extractor.clearCache();
 
       onProgress?.({ phase: 'complete', percent: 100, message: 'Audio export complete' });
@@ -183,9 +171,9 @@ export class AudioExportPipeline {
 
       if (this.cancelled) return null;
 
-      // 3. Process speed/pitch for each clip
-      onProgress?.({ phase: 'processing', percent: 0, message: 'Processing speed changes...' });
-      const processedBuffers = await this.processAllSpeed(
+      // 3. Render each clip through the same processed graph used by timeline waveform artifacts
+      onProgress?.({ phase: 'processing', percent: 0, message: 'Rendering timeline audio graph...' });
+      const effectBuffers = await this.renderAllClipAudio(
         audioClips,
         extractedBuffers,
         clipKeyframes,
@@ -194,23 +182,12 @@ export class AudioExportPipeline {
 
       if (this.cancelled) return null;
 
-      // 4. Render effects for each clip
-      onProgress?.({ phase: 'effects', percent: 0, message: 'Applying effects...' });
-      const effectBuffers = await this.renderAllEffects(
-        audioClips,
-        processedBuffers,
-        clipKeyframes,
-        onProgress
-      );
-
-      if (this.cancelled) return null;
-
-      // 5. Mix all tracks
+      // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
       const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime);
       const mixedBuffer = await this.mixer.mixTracks(trackData, duration);
 
-      // 6. Cleanup
+      // 5. Cleanup
       this.extractor.clearCache();
 
       onProgress?.({ phase: 'complete', percent: 100, message: 'Audio mixing complete' });
@@ -345,18 +322,12 @@ export class AudioExportPipeline {
           continue;
         }
 
-        // Trim to clip's in/out points
-        const trimmedBuffer = this.extractor.trimBuffer(
-          buffer,
-          clip.inPoint,
-          clip.outPoint
-        );
-
-        buffers.set(clip.id, trimmedBuffer);
+        buffers.set(clip.id, buffer);
       } catch (error) {
         log.error(`Failed to extract audio from ${clip.name}:`, error);
         // Create silent buffer as fallback
-        buffers.set(clip.id, this.extractor.createSilentBuffer(clip.duration));
+        const fallbackDuration = Math.max(clip.outPoint ?? clip.duration, clip.duration, 0.001);
+        buffers.set(clip.id, this.extractor.createSilentBuffer(fallbackDuration));
       }
     }
 
@@ -364,9 +335,9 @@ export class AudioExportPipeline {
   }
 
   /**
-   * Process speed/pitch for all clips
+   * Render all clip-local audio edits/effects through the shared offline graph.
    */
-  private async processAllSpeed(
+  private async renderAllClipAudio(
     clips: TimelineClip[],
     buffers: Map<string, AudioBuffer>,
     clipKeyframes: Map<string, Keyframe[]>,
@@ -384,83 +355,38 @@ export class AudioExportPipeline {
         phase: 'processing',
         percent: Math.round((i / clips.length) * 100),
         currentClip: clip.name,
-        message: `Processing: ${clip.name}`,
+        message: `Rendering audio: ${clip.name}`,
       });
 
       const keyframes = clipKeyframes.get(clip.id) || [];
-      const defaultSpeed = clip.speed ?? 1;
-      const preservesPitch = clip.preservesPitch !== false;
 
-      // Check if we have speed keyframes
-      const speedKeyframes = keyframes.filter(k => k.property === 'speed');
+      const rendered = await this.clipAudioRenderer.render({
+        clip,
+        sourceBuffer: buffer,
+        keyframes,
+        onProgress: progress => this.emitClipRenderProgress(clip, i, clips.length, progress, onProgress),
+      });
 
-      let processedBuffer: AudioBuffer;
-
-      if (speedKeyframes.length > 0) {
-        // Variable speed with keyframes
-        processedBuffer = await this.timeStretch.processWithKeyframes(
-          buffer,
-          keyframes,
-          defaultSpeed,
-          clip.duration,
-          preservesPitch
-        );
-      } else if (Math.abs(defaultSpeed - 1) > 0.01) {
-        // Constant non-1x speed
-        processedBuffer = await this.timeStretch.processConstantSpeed(
-          buffer,
-          Math.abs(defaultSpeed),
-          preservesPitch
-        );
-      } else {
-        // No speed change
-        processedBuffer = buffer;
-      }
-
-      processed.set(clip.id, processedBuffer);
+      processed.set(clip.id, rendered.buffer);
     }
 
     return processed;
   }
 
-  /**
-   * Render effects for all clips
-   */
-  private async renderAllEffects(
-    clips: TimelineClip[],
-    buffers: Map<string, AudioBuffer>,
-    clipKeyframes: Map<string, Keyframe[]>,
-    onProgress?: AudioExportProgressCallback
-  ): Promise<Map<string, AudioBuffer>> {
-    const processed = new Map<string, AudioBuffer>();
-
-    for (let i = 0; i < clips.length; i++) {
-      const clip = clips[i];
-      const buffer = buffers.get(clip.id);
-
-      if (!buffer || this.cancelled) continue;
-
-      onProgress?.({
-        phase: 'effects',
-        percent: Math.round((i / clips.length) * 100),
-        currentClip: clip.name,
-        message: `Effects: ${clip.name}`,
-      });
-
-      const keyframes = clipKeyframes.get(clip.id) || [];
-      const effects = clip.effects || [];
-
-      const processedBuffer = await this.effectRenderer.renderEffects(
-        buffer,
-        effects,
-        keyframes,
-        clip.duration
-      );
-
-      processed.set(clip.id, processedBuffer);
-    }
-
-    return processed;
+  private emitClipRenderProgress(
+    clip: TimelineClip,
+    clipIndex: number,
+    totalClips: number,
+    progress: ClipAudioRenderProgress,
+    onProgress?: AudioExportProgressCallback,
+  ): void {
+    const phase: AudioExportProgress['phase'] = progress.phase === 'effects' ? 'effects' : 'processing';
+    onProgress?.({
+      phase,
+      percent: Math.round(((clipIndex + progress.percent / 100) / Math.max(1, totalClips)) * 100),
+      currentClip: clip.name,
+      message: progress.message ?? `Rendering audio: ${clip.name}`,
+    });
   }
 
   /**

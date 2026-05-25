@@ -27,6 +27,12 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'toggleClipReverse',
   'setClipParent',
   'setClipPreservesPitch',
+  'applyAudioRegionEdit',
+  'pasteAudioRegionToSelection',
+  'setClipAudioEditOperationEnabled',
+  'removeClipAudioEditOperation',
+  'clearClipAudioEditStack',
+  'bakeClipAudioEditStack',
 
   'addTextClip',
   'updateTextProperties',
@@ -162,7 +168,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'clearTimeline',
 ]);
 
-const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip']);
+const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'bakeClipAudioEditStack']);
 const ASYNC_VOID_ACTION_NAMES = new Set<string>(['addClip', 'addCompClip', 'completeDownload', 'loadState']);
 const STRING_FALLBACK_ACTION_NAMES = new Set<string>([
   'addTrack',
@@ -185,6 +191,8 @@ const NULL_FALLBACK_ACTION_NAMES = new Set<string>([
   'addCameraClip',
   'addSplatEffectorClip',
   'addClipAICustomNode',
+  'applyAudioRegionEdit',
+  'pasteAudioRegionToSelection',
 ]);
 
 function getLockedReturnValue(actionName: string): unknown {

@@ -55,6 +55,7 @@ import { normalizeEasingType } from '../../utils/easing';
 import { composeTransforms } from '../../utils/transformComposition';
 import { calculateSourceTime, getSpeedAtTime, calculateTimelineDuration } from '../../utils/speedIntegration';
 import { dispatchKeyframeRecordingFeedback } from '../../utils/keyframeRecordingFeedback';
+import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
 import {
   getHexColorChannel,
   normalizeHexColor,
@@ -1537,7 +1538,9 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
           const sourceDuration = clip.outPoint - clip.inPoint;
           const newDuration = calculateTimelineDuration(keyframes, sourceDuration, value);
           set({
-            clips: clips.map(c => c.id === clipId ? { ...c, speed: value, duration: newDuration } : c)
+            clips: clips.map(c => c.id === clipId
+              ? clearProcessedAudioAnalysisRefs({ ...c, speed: value, duration: newDuration })
+              : c)
           });
           updateDuration(); // Update timeline duration
         }
@@ -1755,7 +1758,9 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
         const absSpeed = Math.abs(value) || 0.01; // Avoid division by zero
         const newDuration = sourceDuration / absSpeed;
         set({
-          clips: clips.map(c => c.id === clipId ? { ...c, speed: value, duration: newDuration } : c)
+          clips: clips.map(c => c.id === clipId
+            ? clearProcessedAudioAnalysisRefs({ ...c, speed: value, duration: newDuration })
+            : c)
         });
         updateDuration(); // Update timeline duration
         invalidateCache();
@@ -2059,7 +2064,9 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       const absSpeed = Math.abs(currentValue) || 0.01;
       const newDuration = sourceDuration / absSpeed;
       set({
-        clips: get().clips.map(c => c.id === clipId ? { ...c, speed: currentValue, duration: newDuration } : c)
+        clips: get().clips.map(c => c.id === clipId
+          ? clearProcessedAudioAnalysisRefs({ ...c, speed: currentValue, duration: newDuration })
+          : c)
       });
       updateDuration();
     } else if (property === 'opacity') {

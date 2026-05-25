@@ -177,6 +177,39 @@ describe('playbackSlice', () => {
     expect(store.getState().snappingEnabled).toBe(true);
   });
 
+  it('audio focus mode can be toggled and set directly', () => {
+    expect(store.getState().audioFocusMode).toBe(false);
+    store.getState().toggleAudioFocusMode();
+    expect(store.getState().audioFocusMode).toBe(true);
+    store.getState().setAudioFocusMode(false);
+    expect(store.getState().audioFocusMode).toBe(false);
+  });
+
+  it('stores and clears timeline audio region selections', () => {
+    store.getState().setAudioRegionSelection({
+      clipId: 'clip-a',
+      trackId: 'audio-1',
+      startTime: 5,
+      endTime: 2,
+      sourceInPoint: 10,
+      sourceOutPoint: 8,
+      snappedToZeroCrossing: true,
+    });
+
+    expect(store.getState().audioRegionSelection).toMatchObject({
+      clipId: 'clip-a',
+      trackId: 'audio-1',
+      startTime: 2,
+      endTime: 5,
+      sourceInPoint: 8,
+      sourceOutPoint: 10,
+      snappedToZeroCrossing: true,
+    });
+
+    store.getState().clearAudioRegionSelection();
+    expect(store.getState().audioRegionSelection).toBeNull();
+  });
+
   it('setScrollX: clamps to >= 0', () => {
     store.getState().setScrollX(50);
     expect(store.getState().scrollX).toBe(50);

@@ -31,6 +31,7 @@ import type {
   ClipCustomNodeParamDefinition,
   ClipCustomNodeParamValue,
   SerializableClip,
+  ClipAudioEditOperation,
 } from '../../types';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
 import type { Composition } from '../mediaStore';
@@ -76,6 +77,42 @@ export type TimelineToolMode = 'select' | 'cut';
 // Timeline audio display mode. Detailed remains waveform-backed today; spectral
 // reserves the inline image lane used by spectrogram tile artifacts.
 export type TimelineAudioDisplayMode = 'compact' | 'detailed' | 'spectral';
+
+export interface TimelineAudioRegionSelection {
+  clipId: string;
+  trackId: string;
+  startTime: number;
+  endTime: number;
+  sourceInPoint: number;
+  sourceOutPoint: number;
+  snappedToZeroCrossing?: boolean;
+}
+
+export interface TimelineAudioRegionClipboard {
+  sourceClipId: string;
+  sourceTrackId: string;
+  sourceMediaFileId?: string;
+  sourceAudioRevisionId?: string;
+  startTime: number;
+  endTime: number;
+  sourceInPoint: number;
+  sourceOutPoint: number;
+  duration: number;
+  copiedAt: number;
+}
+
+export type TimelineAudioRegionEditType = Extract<
+  ClipAudioEditOperation['type'],
+  | 'silence'
+  | 'cut'
+  | 'paste'
+  | 'insert-silence'
+  | 'delete-silence'
+  | 'reverse'
+  | 'invert-polarity'
+  | 'swap-channels'
+  | 'mono-sum'
+>;
 
 // AI action visual feedback types
 export type AIActionOverlayType = 'split-glow' | 'delete-ghost' | 'trim-highlight' | 'silent-zone' | 'low-quality-zone';
@@ -172,6 +209,9 @@ export interface TimelineState {
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
   audioDisplayMode: TimelineAudioDisplayMode;
+  audioFocusMode: boolean;
+  audioRegionSelection: TimelineAudioRegionSelection | null;
+  audioRegionClipboard: TimelineAudioRegionClipboard | null;
   showTranscriptMarkers: boolean;
 
   // Keyframe animation state
@@ -376,6 +416,7 @@ export interface CoreClipActions {
   updateClipTransform: (id: string, transform: ClipTransformUpdate) => void;
   toggleClipReverse: (id: string) => void;
   generateWaveformForClip: (clipId: string) => Promise<void>;
+  generateProcessedWaveformForClip: (clipId: string) => Promise<void>;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
   getClipChildren: (clipId: string) => TimelineClip[];
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
@@ -423,8 +464,28 @@ export interface PlaybackActions {
   setThumbnailsEnabled: (enabled: boolean) => void;
   setWaveformsEnabled: (enabled: boolean) => void;
   setAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
+  setAudioFocusMode: (enabled: boolean) => void;
+  toggleAudioFocusMode: () => void;
+  setAudioRegionSelection: (selection: TimelineAudioRegionSelection | null) => void;
+  clearAudioRegionSelection: () => void;
   toggleTranscriptMarkers: () => void;
   setShowTranscriptMarkers: (enabled: boolean) => void;
+}
+
+export interface ApplyAudioRegionEditOptions {
+  channelMask?: number[];
+  keepSelection?: boolean;
+  params?: ClipAudioEditOperation['params'];
+}
+
+export interface AudioEditActions {
+  applyAudioRegionEdit: (type: TimelineAudioRegionEditType, options?: ApplyAudioRegionEditOptions) => string | null;
+  copySelectedAudioRegion: () => boolean;
+  pasteAudioRegionToSelection: () => string | null;
+  setClipAudioEditOperationEnabled: (clipId: string, operationId: string, enabled: boolean) => void;
+  removeClipAudioEditOperation: (clipId: string, operationId: string) => void;
+  clearClipAudioEditStack: (clipId: string) => void;
+  bakeClipAudioEditStack: (clipId: string) => Promise<string | null>;
 }
 
 // RAM Preview actions interface
@@ -714,6 +775,7 @@ export interface TimelineStore extends
   TrackActions,
   ClipActions,
   PlaybackActions,
+  AudioEditActions,
   RamPreviewActions,
   ProxyCacheActions,
   ExportActions,

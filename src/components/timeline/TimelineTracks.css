@@ -298,6 +298,34 @@
   filter: saturate(0.78) brightness(0.88);
 }
 
+.timeline-container.audio-focus-mode .track-header.video,
+.timeline-container.audio-focus-mode .track-lane.video {
+  opacity: 0.58;
+  filter: saturate(0.62) brightness(0.78);
+}
+
+.timeline-container.audio-focus-mode .track-header.audio,
+.timeline-container.audio-focus-mode .track-lane.audio {
+  border-color: color-mix(in srgb, #52beff 46%, var(--success));
+}
+
+.timeline-container.audio-focus-mode .track-header.audio {
+  background:
+    linear-gradient(90deg, rgba(82, 190, 255, 0.18), rgba(45, 107, 74, 0.18) 56%, transparent);
+}
+
+.timeline-container.audio-focus-mode .track-lane.audio {
+  background:
+    linear-gradient(180deg, rgba(82, 190, 255, 0.12), transparent 18%, rgba(45, 107, 74, 0.22) 50%, rgba(6, 10, 18, 0.24)),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent calc(var(--grid-size, 50px) - 1px),
+      rgba(82, 190, 255, 0.18) calc(var(--grid-size, 50px) - 1px),
+      rgba(82, 190, 255, 0.18) var(--grid-size, 50px)
+    );
+}
+
 .track-lane.locked {
   background-color: color-mix(in srgb, var(--bg-secondary) 88%, var(--warning) 12%);
   filter: saturate(0.52) brightness(0.74);

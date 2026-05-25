@@ -122,6 +122,217 @@
   padding: 0 4px;
 }
 
+/* Audio Edit Stack Tab */
+.audio-edit-stack-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.audio-edit-stack-header,
+.audio-edit-detail-header,
+.audio-edit-bake-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.audio-edit-stack-title {
+  display: flex;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  min-width: 0;
+}
+
+.audio-edit-stack-actions,
+.audio-edit-detail-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.audio-edit-stack-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(180px, 1.1fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+.audio-edit-operation-list,
+.audio-edit-operation-detail,
+.audio-edit-bake-history {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  min-width: 0;
+}
+
+.audio-edit-operation-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.audio-edit-operation-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.audio-edit-operation-row:last-child {
+  border-bottom: 0;
+}
+
+.audio-edit-operation-row:hover,
+.audio-edit-operation-row.selected {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.audio-edit-operation-row.bypassed {
+  opacity: 0.55;
+}
+
+.audio-edit-operation-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.audio-edit-operation-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.audio-edit-operation-name,
+.audio-edit-operation-range,
+.audio-edit-operation-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-edit-operation-name {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.audio-edit-operation-range,
+.audio-edit-operation-state {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.audio-edit-operation-detail {
+  padding: 8px;
+}
+
+.audio-edit-detail-header {
+  margin-bottom: 8px;
+}
+
+.audio-edit-detail-header h4,
+.audio-edit-bake-history h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.audio-edit-detail-header span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.audio-edit-detail-grid,
+.audio-edit-param-list {
+  display: grid;
+  gap: 4px;
+}
+
+.audio-edit-detail-grid {
+  grid-template-columns: 72px minmax(0, 1fr);
+  padding: 7px 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.audio-edit-detail-grid span,
+.audio-edit-param-row span,
+.audio-edit-bake-row span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.audio-edit-detail-grid strong,
+.audio-edit-param-row strong,
+.audio-edit-bake-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-edit-param-list {
+  margin-top: 8px;
+}
+
+.audio-edit-param-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.8fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 20px;
+}
+
+.audio-edit-bake-history {
+  padding: 8px;
+}
+
+.audio-edit-bake-history h4 {
+  margin-bottom: 6px;
+}
+
+.audio-edit-bake-row {
+  min-height: 22px;
+}
+
+@media (max-width: 520px) {
+  .audio-edit-stack-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Blendshapes Tab */
 .blendshapes-tab .section-header-row {
   display: flex;

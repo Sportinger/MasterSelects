@@ -9,6 +9,13 @@ import { generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { Logger } from '../../services/logger';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { generateTimelineWaveformAnalysisForFile } from '../../services/audio/timelineWaveformPyramidCache';
+import { audioExtractor } from '../../engine/audio/AudioExtractor';
+import {
+  ProcessedWaveformPyramidService,
+  clipRequiresProcessedWaveformPyramid,
+  createFileAudioSourceFingerprint,
+  createProcessedClipAudioStateHash,
+} from '../../services/audio/ProcessedWaveformPyramidService';
 
 const log = Logger.create('ClipSlice');
 
@@ -958,6 +965,115 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       }) });
     } catch (e) {
       log.error('Waveform generation failed', e);
+      set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });
+    }
+  },
+
+  generateProcessedWaveformForClip: async (clipId: string) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.waveformGenerating) return;
+
+    const keyframes = clipKeyframes.get(clipId) ?? [];
+    if (!clipRequiresProcessedWaveformPyramid(clip, keyframes)) {
+      return;
+    }
+    if (clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId) {
+      return;
+    }
+
+    set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: true, waveformProgress: 0 }) });
+    log.debug('Starting processed waveform generation', { clip: clip.name });
+
+    try {
+      let sourceBuffer: AudioBuffer | null = null;
+      let sourceFingerprint = '';
+      let mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+
+      if (clip.isComposition && clip.compositionId) {
+        if (clip.mixdownBuffer) {
+          sourceBuffer = clip.mixdownBuffer;
+        } else {
+          const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
+          const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+          if (mixdownResult?.hasAudio) {
+            sourceBuffer = mixdownResult.buffer;
+            set({
+              clips: updateClipById(get().clips, clipId, {
+                mixdownBuffer: mixdownResult.buffer,
+                hasMixdownAudio: true,
+              }),
+            });
+          }
+        }
+
+        if (sourceBuffer) {
+          sourceFingerprint = [
+            'composition-mixdown',
+            clip.compositionId,
+            clip.nestedContentHash ?? 'unknown-content',
+            sourceBuffer.sampleRate,
+            sourceBuffer.length,
+            Number(sourceBuffer.duration.toFixed(6)),
+          ].join(':');
+          mediaFileId = mediaFileId ?? clip.compositionId;
+        }
+      } else if (clip.file) {
+        mediaFileId = mediaFileId ?? `file:${clip.file.name}:${clip.file.size}:${clip.file.lastModified}`;
+        sourceFingerprint = await createFileAudioSourceFingerprint(clip.file);
+        sourceBuffer = await audioExtractor.extractAudio(clip.file, mediaFileId);
+      }
+
+      if (!sourceBuffer) {
+        log.warn('No audio source found for processed waveform', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });
+        return;
+      }
+
+      const service = new ProcessedWaveformPyramidService();
+      const result = await service.generate({
+        clip,
+        sourceBuffer,
+        sourceFingerprint,
+        mediaFileId,
+        keyframes,
+        onProgress: (progress) => {
+          set({
+            clips: updateClipById(get().clips, clipId, {
+              waveformProgress: progress.percent,
+            }),
+          });
+        },
+      });
+
+      const currentClip = get().clips.find(c => c.id === clipId);
+      if (!currentClip) return;
+      if (createProcessedClipAudioStateHash(currentClip) !== result.clipAudioStateHash) {
+        log.debug('Discarding stale processed waveform result', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });
+        return;
+      }
+
+      set({
+        clips: updateClipById(get().clips, clipId, {
+          ...(currentClip.waveform?.length ? {} : { waveform: result.waveform }),
+          audioState: {
+            ...(currentClip.audioState ?? {}),
+            processedAnalysisRefs: {
+              ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+              ...result.audioAnalysisRefs,
+            },
+          },
+          waveformGenerating: false,
+          waveformProgress: 100,
+        }),
+      });
+      log.debug('Processed waveform complete', {
+        clip: clip.name,
+        artifactId: result.artifact.id,
+      });
+    } catch (e) {
+      log.error('Processed waveform generation failed', e);
       set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });
     }
   },

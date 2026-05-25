@@ -42,7 +42,7 @@ function getProjectHandle(): FileSystemDirectoryHandle | null {
   ).getProjectHandle?.() ?? null;
 }
 
-function createCurrentAudioArtifactStore(): AudioArtifactStore {
+export function createCurrentAudioArtifactStore(): AudioArtifactStore {
   const projectHandle = getProjectHandle();
   return new AudioArtifactStore(
     projectHandle

@@ -33,6 +33,11 @@
   border-color: color-mix(in srgb, #52beff 44%, #6f4c78);
 }
 
+.timeline-clip.audio.audio-focus-active {
+  border-color: color-mix(in srgb, #52beff 52%, #3a7a58);
+  box-shadow: inset 0 0 0 1px rgba(82, 190, 255, 0.16);
+}
+
 .timeline-clip.text {
   background: #5c3d7a;
   border: 1px solid #6d4e8a;
@@ -1330,6 +1335,134 @@
     linear-gradient(180deg, rgba(255, 111, 145, 0.12), transparent 31%),
     linear-gradient(180deg, transparent 32%, rgba(254, 211, 106, 0.1) 33%, transparent 67%),
     linear-gradient(180deg, transparent 68%, rgba(92, 203, 255, 0.12));
+}
+
+.clip-audio-region-hitarea {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 18px;
+  bottom: 0;
+  z-index: 12;
+  cursor: text;
+}
+
+.clip-audio-region-selection {
+  position: absolute;
+  top: 18px;
+  bottom: 4px;
+  z-index: 11;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(82, 190, 255, 0.2), rgba(82, 190, 255, 0.07)),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.12) 0,
+      rgba(255, 255, 255, 0.12) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  border: 1px solid rgba(82, 190, 255, 0.74);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.35), 0 0 9px rgba(82, 190, 255, 0.16);
+}
+
+.clip-audio-region-selection.snapped {
+  border-color: rgba(254, 211, 106, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.35), 0 0 10px rgba(254, 211, 106, 0.2);
+}
+
+.clip-audio-region-edge {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  background: rgba(232, 246, 255, 0.92);
+}
+
+.clip-audio-region-edge.left {
+  left: -1px;
+}
+
+.clip-audio-region-edge.right {
+  right: -1px;
+}
+
+.clip-audio-region-toolbar {
+  position: absolute;
+  top: 20px;
+  z-index: 14;
+  display: flex;
+  max-width: calc(100% - 8px);
+  gap: 3px;
+  padding: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: auto;
+  background: rgba(8, 14, 20, 0.86);
+  border: 1px solid rgba(113, 214, 255, 0.46);
+  border-radius: 3px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
+.clip-audio-region-toolbar button,
+.clip-audio-edit-stack button {
+  height: 18px;
+  min-width: 22px;
+  padding: 0 5px;
+  color: rgba(231, 246, 255, 0.94);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+  background: rgba(45, 75, 92, 0.86);
+  border: 1px solid rgba(134, 224, 255, 0.35);
+  border-radius: 2px;
+}
+
+.clip-audio-region-toolbar button:hover,
+.clip-audio-edit-stack button:hover {
+  background: rgba(65, 111, 134, 0.95);
+  border-color: rgba(160, 235, 255, 0.68);
+}
+
+.clip-audio-region-toolbar button:disabled,
+.clip-audio-edit-stack button:disabled {
+  cursor: default;
+  opacity: 0.42;
+  background: rgba(31, 45, 53, 0.72);
+  border-color: rgba(104, 130, 142, 0.26);
+}
+
+.clip-audio-edit-stack {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  max-width: calc(100% - 8px);
+  gap: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: auto;
+}
+
+.clip-audio-edit-stack-count {
+  height: 18px;
+  min-width: 24px;
+  padding: 0 5px;
+  color: rgba(209, 238, 247, 0.9);
+  font-size: 10px;
+  line-height: 18px;
+  white-space: nowrap;
+  background: rgba(4, 10, 14, 0.72);
+  border: 1px solid rgba(133, 199, 219, 0.32);
+  border-radius: 2px;
+}
+
+.clip-audio-edit-stack button.disabled {
+  opacity: 0.48;
+  text-decoration: line-through;
 }
 
 /* Nested composition mixdown waveform - shown at bottom of clip */

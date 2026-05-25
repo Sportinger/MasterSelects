@@ -169,7 +169,7 @@ export function Timeline() {
   const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
 
   // UI settings (rarely changes)
-  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled, audioDisplayMode } =
+  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioFocusMode } =
     useTimelineStore(useShallow(selectUISettings));
 
   // Preview/export state
@@ -236,7 +236,7 @@ export function Timeline() {
   } = store;
 
   // Tool actions
-  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled, setAudioDisplayMode } = store;
+  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled, setAudioDisplayMode, toggleAudioFocusMode } = store;
 
   // Marker actions
   const { addMarker, moveMarker, removeMarker, updateMarker } = store;
@@ -375,8 +375,8 @@ export function Timeline() {
     [timelineViewTracks],
   );
   const getRenderedTrackBaseHeight = useCallback(
-    (track: TimelineTrackType) => getTimelineTrackBaseHeight(track, audioDisplayMode),
-    [audioDisplayMode],
+    (track: TimelineTrackType) => getTimelineTrackBaseHeight(track, audioDisplayMode, audioFocusMode),
+    [audioDisplayMode, audioFocusMode],
   );
   const getRenderedTrackHeight = useCallback(
     (trackId: string, fallbackBaseHeight: number) => {
@@ -1132,7 +1132,7 @@ export function Timeline() {
 
   return (
     <div
-      className={`timeline-container audio-mode-${audioDisplayMode} ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
+      className={`timeline-container audio-mode-${audioDisplayMode} ${audioFocusMode ? 'audio-focus-mode' : ''} ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
       onMouseDown={() => {
         if (useMediaStore.getState().sourceMonitorFileId) {
           useMediaStore.getState().setSourceMonitorFile(null);
@@ -1161,6 +1161,7 @@ export function Timeline() {
           thumbnailsEnabled={thumbnailsEnabled}
           waveformsEnabled={waveformsEnabled}
           audioDisplayMode={audioDisplayMode}
+          audioFocusMode={audioFocusMode}
           toolMode={toolMode}
           onPlay={play}
           onPause={pause}
@@ -1176,6 +1177,7 @@ export function Timeline() {
           onToggleThumbnails={toggleThumbnailsEnabled}
           onToggleWaveforms={toggleWaveformsEnabled}
           onSetAudioDisplayMode={setAudioDisplayMode}
+          onToggleAudioFocusMode={toggleAudioFocusMode}
           onToggleCutTool={toggleCutTool}
           onSetDuration={setDuration}
           onFitToWindow={handleFitToWindow}
@@ -1332,7 +1334,7 @@ export function Timeline() {
                     ? 'active'
                     : ''
                 }`}
-                style={{ height: getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode) }}
+                style={{ height: getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode, audioFocusMode) }}
               >
                 <span className="track-header-preview-label">+ New Audio Track</span>
               </div>
@@ -1501,7 +1503,7 @@ export function Timeline() {
           {/* Only show if video has audio (hasAudio !== false) */}
           {externalDrag &&
             externalDrag.audioTrackId === '__new_audio_track__' && (
-              <div className="track-lane audio new-track-preview" style={{ height: getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode) }}>
+              <div className="track-lane audio new-track-preview" style={{ height: getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode, audioFocusMode) }}>
                 <div
                   className="timeline-clip-preview audio"
                   style={{

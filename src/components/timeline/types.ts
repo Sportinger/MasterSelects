@@ -129,6 +129,7 @@ export interface TimelineControlsProps {
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
   audioDisplayMode: TimelineAudioDisplayMode;
+  audioFocusMode: boolean;
   toolMode: 'select' | 'cut';
   onPlay: () => void;
   onPause: () => void;
@@ -144,6 +145,7 @@ export interface TimelineControlsProps {
   onToggleThumbnails: () => void;
   onToggleWaveforms: () => void;
   onSetAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
+  onToggleAudioFocusMode: () => void;
   onToggleCutTool: () => void;
   onSetDuration: (duration: number) => void;
   onFitToWindow: () => void;

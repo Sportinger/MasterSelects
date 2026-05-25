@@ -328,6 +328,40 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     set({ audioDisplayMode: mode });
   },
 
+  setAudioFocusMode: (enabled) => {
+    set({ audioFocusMode: enabled });
+  },
+
+  toggleAudioFocusMode: () => {
+    set((state) => ({ audioFocusMode: !state.audioFocusMode }));
+  },
+
+  setAudioRegionSelection: (selection) => {
+    if (!selection) {
+      set({ audioRegionSelection: null });
+      return;
+    }
+
+    const startTime = Math.max(0, Math.min(selection.startTime, selection.endTime));
+    const endTime = Math.max(startTime, Math.max(selection.startTime, selection.endTime));
+    const sourceInPoint = Math.min(selection.sourceInPoint, selection.sourceOutPoint);
+    const sourceOutPoint = Math.max(selection.sourceInPoint, selection.sourceOutPoint);
+
+    set({
+      audioRegionSelection: {
+        ...selection,
+        startTime,
+        endTime,
+        sourceInPoint,
+        sourceOutPoint,
+      },
+    });
+  },
+
+  clearAudioRegionSelection: () => {
+    set({ audioRegionSelection: null });
+  },
+
   toggleTranscriptMarkers: () => {
     set({ showTranscriptMarkers: !get().showTranscriptMarkers });
   },

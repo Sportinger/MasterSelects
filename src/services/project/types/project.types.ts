@@ -117,6 +117,7 @@ export interface ProjectUIState {
   thumbnailsEnabled?: boolean;
   waveformsEnabled?: boolean;
   audioDisplayMode?: TimelineAudioDisplayMode;
+  audioFocusMode?: boolean;
   proxyEnabled?: boolean;
   showTranscriptMarkers?: boolean;
   showChangelogOnStartup?: boolean;

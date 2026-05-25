@@ -13,6 +13,11 @@ describe('timeline audio layout', () => {
     expect(getTimelineTrackBaseHeight(track('video', 54), 'spectral')).toBe(54);
   });
 
+  it('compacts video tracks while audio focus mode is active', () => {
+    expect(getTimelineTrackBaseHeight(track('video', 60), 'detailed', true)).toBe(32);
+    expect(getTimelineTrackBaseHeight(track('video', 24), 'spectral', true)).toBe(24);
+  });
+
   it('keeps compact audio at the persisted user track height', () => {
     expect(getTimelineTrackBaseHeight(track('audio', 40), 'compact')).toBe(40);
     expect(getTimelineTrackBaseHeight(track('audio', 24), 'compact')).toBe(24);
@@ -29,6 +34,15 @@ describe('timeline audio layout', () => {
   it('respects user-resized audio tracks when they are taller than the mode minimum', () => {
     expect(getTimelineTrackBaseHeight(track('audio', 96), 'detailed')).toBe(96);
     expect(getTimelineTrackBaseHeight(track('audio', 160), 'spectral')).toBe(160);
+  });
+
+  it('turns audio focus into large inline editor lanes without mutating persisted heights', () => {
+    const audioTrack = track('audio', 40);
+
+    expect(getTimelineTrackBaseHeight(audioTrack, 'compact', true)).toBe(96);
+    expect(getTimelineTrackBaseHeight(audioTrack, 'detailed', true)).toBe(144);
+    expect(getTimelineTrackBaseHeight(audioTrack, 'spectral', true)).toBe(180);
+    expect(audioTrack.height).toBe(40);
   });
 
   it('keeps audio lane sizing stable when persisted heights are invalid', () => {

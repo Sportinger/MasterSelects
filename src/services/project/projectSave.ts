@@ -554,6 +554,7 @@ export async function syncStoresToProject(): Promise<void> {
         thumbnailsEnabled: timelineState.thumbnailsEnabled,
         waveformsEnabled: timelineState.waveformsEnabled,
         audioDisplayMode: timelineState.audioDisplayMode,
+        audioFocusMode: timelineState.audioFocusMode,
         proxyEnabled: useMediaStore.getState().proxyEnabled,
         showTranscriptMarkers: timelineState.showTranscriptMarkers,
         showChangelogOnStartup: settingsState.showChangelogOnStartup,

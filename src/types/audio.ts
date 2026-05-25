@@ -116,6 +116,7 @@ export interface ClipAudioEditOperation {
   type:
     | 'trim'
     | 'cut'
+    | 'silence'
     | 'copy'
     | 'paste'
     | 'insert-silence'
