@@ -2,15 +2,43 @@
 // Consolidates 4 similar 80-line blocks into one reusable handler
 
 import { Logger } from '../logger';
-import type { TimelineClip } from '../../types';
+import type { AudioMeterSnapshot, TimelineClip } from '../../types';
 import type { FrameContext, AudioSyncState, AudioSyncTarget } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { playheadState, setMasterAudio } from './PlayheadState';
 import { audioManager, audioStatusTracker } from '../audioManager';
 import { audioRoutingManager } from '../audioRoutingManager';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
+import { useTimelineStore } from '../../stores/timeline';
+import { createSilentAudioMeterSnapshot } from '../audio/audioMetering';
 
 const log = Logger.create('AudioSyncHandler');
+const TAIL_METER_POLL_INTERVAL_MS = 50;
+const TAIL_METER_SILENCE_HOLD_MS = 700;
+const TAIL_METER_MAX_DURATION_MS = 30_000;
+const TAIL_METER_SILENCE_LINEAR = 0.0003; // roughly -70 dBFS
+
+function hasActiveRouteEffects(route: AudioSyncTarget['masterRoute']): boolean {
+  if (!route) return false;
+  return (
+    Math.abs(route.volume - 1) > 0.001 ||
+    route.eqGains.some(gain => Math.abs(gain) > 0.01) ||
+    route.processors.length > 0
+  );
+}
+
+function isTailMeterSilent(snapshot: AudioMeterSnapshot | null | undefined): boolean {
+  if (!snapshot) return true;
+  return Math.max(snapshot.peakLinear, snapshot.rmsLinear) <= TAIL_METER_SILENCE_LINEAR;
+}
+
+interface TailMeterPoll {
+  element: HTMLMediaElement;
+  trackId: string;
+  startedAt: number;
+  silentSince: number | null;
+  timerId: ReturnType<typeof setInterval>;
+}
 
 /**
  * AudioSyncHandler - Manages audio synchronization for all audio sources
@@ -20,6 +48,7 @@ export class AudioSyncHandler {
   private lastScrubPosition = -1;
   private lastScrubTime = 0;
   private scrubAudioTimeout: ReturnType<typeof setTimeout> | null = null;
+  private tailMeterPolls = new Map<string, TailMeterPoll>();
 
   /**
    * Sync a single audio element with unified logic
@@ -29,11 +58,31 @@ export class AudioSyncHandler {
     ctx: FrameContext,
     state: AudioSyncState
   ): void {
-    const { element, clip, clipTime, absSpeed, isMuted, canBeMaster, type, volume = 1, eqGains } = target;
+    const {
+      element,
+      clip,
+      clipTime,
+      absSpeed,
+      isMuted,
+      canBeMaster,
+      type,
+      volume = 1,
+      eqGains,
+      pan = 0,
+      processors = [],
+      masterRoute,
+      meterTrackId,
+    } = target;
     const effectivelyMuted = isMuted || volume <= 0.01;
 
     // Set muted state
     element.muted = effectivelyMuted;
+    if (effectivelyMuted) {
+      this.cancelTailMeterPolling(meterTrackId);
+      this.pauseIfPlaying(element);
+      this.publishMeter(meterTrackId, createSilentAudioMeterSnapshot(ctx.now));
+      return;
+    }
 
     // Set pitch preservation
     this.setPitchPreservation(element, clip.preservesPitch !== false);
@@ -42,11 +91,16 @@ export class AudioSyncHandler {
 
     // Handle scrubbing
     if (ctx.isDraggingPlayhead && !effectivelyMuted) {
-      this.handleScrub(element, clipTime, ctx, volume, eqGains);
+      this.cancelTailMeterPolling(meterTrackId);
+      this.handleScrub(element, clipTime, ctx, volume, eqGains, pan, processors, masterRoute, meterTrackId);
     } else if (shouldPlay) {
-      this.handlePlayback(element, clipTime, absSpeed, clip, canBeMaster, type, state, volume, eqGains);
+      this.cancelTailMeterPolling(meterTrackId);
+      this.handlePlayback(element, clipTime, absSpeed, clip, canBeMaster, type, state, volume, eqGains, pan, processors, masterRoute, meterTrackId);
     } else {
       this.pauseIfPlaying(element);
+      if (!this.startTailMeterPolling(meterTrackId, element, ctx.now)) {
+        this.publishMeter(meterTrackId, createSilentAudioMeterSnapshot(ctx.now));
+      }
     }
   }
 
@@ -58,7 +112,11 @@ export class AudioSyncHandler {
     clipTime: number,
     ctx: FrameContext,
     volume: number,
-    eqGains?: number[]
+    eqGains?: number[],
+    pan = 0,
+    processors: AudioSyncTarget['processors'] = [],
+    masterRoute?: AudioSyncTarget['masterRoute'],
+    meterTrackId?: string
   ): void {
     const timeSinceLastScrub = ctx.now - this.lastScrubTime;
     const positionChanged = Math.abs(ctx.playheadPosition - this.lastScrubPosition) > 0.005;
@@ -67,7 +125,7 @@ export class AudioSyncHandler {
       this.lastScrubPosition = ctx.playheadPosition;
       this.lastScrubTime = ctx.now;
       element.playbackRate = 1;
-      this.applyScrubEffects(element, volume, eqGains);
+      this.applyScrubEffects(element, volume, eqGains, pan, processors, masterRoute, meterTrackId);
       this.playScrubAudio(element, clipTime);
     }
   }
@@ -79,12 +137,22 @@ export class AudioSyncHandler {
   private applyScrubEffects(
     element: HTMLAudioElement | HTMLVideoElement,
     volume: number,
-    eqGains?: number[]
+    eqGains?: number[],
+    pan = 0,
+    processors: AudioSyncTarget['processors'] = [],
+    masterRoute?: AudioSyncTarget['masterRoute'],
+    meterTrackId?: string
   ): void {
     const hasEQ = eqGains?.some(g => Math.abs(g) > 0.01) ?? false;
+    const hasPan = Math.abs(pan) > 0.001;
+    const hasProcessors = (processors?.length ?? 0) > 0;
+    const hasMasterRoute = hasActiveRouteEffects(masterRoute);
+    const needsMeter = Boolean(meterTrackId);
 
-    if (hasEQ || volume > 1) {
-      void audioRoutingManager.applyEffects(element, volume, eqGains ?? new Array(10).fill(0));
+    if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter) {
+      void audioRoutingManager
+        .applyEffects(element, volume, eqGains ?? new Array(10).fill(0), pan, processors, masterRoute)
+        .then((routed) => this.publishRouteMeter(meterTrackId, routed ? element : null));
       return;
     }
 
@@ -122,7 +190,11 @@ export class AudioSyncHandler {
     type: AudioSyncTarget['type'],
     state: AudioSyncState,
     volume: number = 1,
-    eqGains?: number[]
+    eqGains?: number[],
+    pan = 0,
+    processors: AudioSyncTarget['processors'] = [],
+    masterRoute?: AudioSyncTarget['masterRoute'],
+    meterTrackId?: string
   ): void {
     // Set playback rate
     const targetRate = absSpeed > 0.1 ? absSpeed : 1;
@@ -137,11 +209,17 @@ export class AudioSyncHandler {
 
     // Check if we have EQ to apply (any non-zero gain)
     const hasEQ = eqGains && eqGains.some(g => Math.abs(g) > 0.01);
+    const hasPan = Math.abs(pan) > 0.001;
+    const hasProcessors = (processors?.length ?? 0) > 0;
+    const hasMasterRoute = hasActiveRouteEffects(masterRoute);
+    const needsMeter = Boolean(meterTrackId);
 
-    if (hasEQ) {
+    if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter) {
       // Use Web Audio routing for volume + EQ
       // This handles both volume and EQ through the audio graph
-      audioRoutingManager.applyEffects(element, volume, eqGains!);
+      audioRoutingManager
+        .applyEffects(element, volume, eqGains ?? new Array(10).fill(0), pan, processors, masterRoute)
+        .then((routed) => this.publishRouteMeter(meterTrackId, routed ? element : null));
     } else {
       // Simple volume-only path (no Web Audio overhead)
       // HTMLMediaElement.volume only accepts [0, 1] range - clamp to prevent errors
@@ -217,6 +295,89 @@ export class AudioSyncHandler {
     if (el.preservesPitch !== preserve) {
       el.preservesPitch = preserve;
     }
+  }
+
+  private startTailMeterPolling(
+    trackId: string | undefined,
+    element: HTMLMediaElement,
+    now: number,
+  ): boolean {
+    if (!trackId || !audioRoutingManager.hasRoute(element)) return false;
+
+    const firstSnapshot = this.publishRouteMeter(trackId, element);
+    if (!firstSnapshot) return false;
+
+    const existing = this.tailMeterPolls.get(trackId);
+    if (existing?.element === element) return true;
+    this.cancelTailMeterPolling(trackId);
+
+    const poll: TailMeterPoll = {
+      element,
+      trackId,
+      startedAt: now,
+      silentSince: isTailMeterSilent(firstSnapshot.trackSnapshot) && isTailMeterSilent(firstSnapshot.masterSnapshot)
+        ? now
+        : null,
+      timerId: setInterval(() => {
+        const timestamp = performance.now();
+        const snapshots = this.publishRouteMeter(trackId, element);
+
+        if (!snapshots) {
+          this.cancelTailMeterPolling(trackId);
+          this.publishMeter(trackId, createSilentAudioMeterSnapshot(timestamp));
+          return;
+        }
+
+        const tailIsSilent = isTailMeterSilent(snapshots.trackSnapshot) && isTailMeterSilent(snapshots.masterSnapshot);
+        if (tailIsSilent) {
+          poll.silentSince ??= timestamp;
+        } else {
+          poll.silentSince = null;
+        }
+
+        const silenceHeld = poll.silentSince !== null && timestamp - poll.silentSince >= TAIL_METER_SILENCE_HOLD_MS;
+        const timedOut = timestamp - poll.startedAt >= TAIL_METER_MAX_DURATION_MS;
+        if (silenceHeld || timedOut) {
+          this.cancelTailMeterPolling(trackId);
+          const silent = createSilentAudioMeterSnapshot(timestamp);
+          this.publishMeter(trackId, silent, silent);
+        }
+      }, TAIL_METER_POLL_INTERVAL_MS),
+    };
+
+    this.tailMeterPolls.set(trackId, poll);
+    return true;
+  }
+
+  private cancelTailMeterPolling(trackId: string | undefined): void {
+    if (!trackId) return;
+    const poll = this.tailMeterPolls.get(trackId);
+    if (!poll) return;
+    clearInterval(poll.timerId);
+    this.tailMeterPolls.delete(trackId);
+  }
+
+  private publishRouteMeter(
+    trackId: string | undefined,
+    element: HTMLMediaElement | null,
+  ): { trackSnapshot: AudioMeterSnapshot; masterSnapshot: AudioMeterSnapshot | null } | null {
+    if (!trackId || !element) return null;
+    const snapshot = audioRoutingManager.getMeterSnapshot(element);
+    const masterSnapshot = audioRoutingManager.getMasterMeterSnapshot(snapshot?.updatedAt);
+    if (snapshot) {
+      this.publishMeter(trackId, snapshot, masterSnapshot ?? undefined);
+      return { trackSnapshot: snapshot, masterSnapshot };
+    }
+    return null;
+  }
+
+  private publishMeter(
+    trackId: string | undefined,
+    snapshot: AudioMeterSnapshot,
+    masterSnapshot?: AudioMeterSnapshot,
+  ): void {
+    if (!trackId) return;
+    useTimelineStore.getState().updateRuntimeAudioMeter(trackId, snapshot, masterSnapshot);
   }
 
   /**

@@ -24,8 +24,10 @@ import { createClipEffectSlice } from '../../src/stores/timeline/clipEffectSlice
 import { createColorCorrectionSlice } from '../../src/stores/timeline/colorCorrectionSlice';
 import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSlice';
 import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipSlice';
+import { createAudioEditSlice } from '../../src/stores/timeline/audioEditSlice';
 import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
+import { MAX_ZOOM, MIN_ZOOM } from '../../src/stores/timeline/constants';
 import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
 import { lockTimelineEditActions } from '../../src/stores/timeline/exportEditLock';
 
@@ -71,6 +73,11 @@ function getInitialState(): Partial<TimelineStore> {
     // Performance toggles (needed by clipSlice)
     thumbnailsEnabled: false,
     waveformsEnabled: false,
+    audioDisplayMode: 'detailed',
+    audioFocusMode: false,
+    audioRegionSelection: null,
+    audioRegionClipboard: null,
+    runtimeAudioMeters: { trackMeters: {} },
     showTranscriptMarkers: false,
     // Clip animation / slot grid
     clipAnimationPhase: 'idle' as const,
@@ -116,6 +123,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
+    const audioEditActions = createAudioEditSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
     const positioningUtils = createPositioningUtils(set, get);
 
@@ -139,7 +147,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       },
       pause: () => set({ isPlaying: false, playbackSpeed: 1 }),
       stop: () => set({ isPlaying: false, playheadPosition: 0 }),
-      setZoom: (zoom: number) => set({ zoom: Math.max(0.1, Math.min(200, zoom)) }),
+      setZoom: (zoom: number) => set({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) }),
       toggleSnapping: () => set((state) => ({ snappingEnabled: !state.snappingEnabled })),
       setScrollX: (scrollX: number) => set({ scrollX: Math.max(0, scrollX) }),
       setInPoint: (time: number | null) => {
@@ -215,6 +223,27 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       toggleWaveformsEnabled: () => set({ waveformsEnabled: !get().waveformsEnabled }),
       setThumbnailsEnabled: (enabled: boolean) => set({ thumbnailsEnabled: enabled }),
       setWaveformsEnabled: (enabled: boolean) => set({ waveformsEnabled: enabled }),
+      setAudioDisplayMode: (mode: TimelineStore['audioDisplayMode']) => set({ audioDisplayMode: mode }),
+      setAudioFocusMode: (enabled: boolean) => set({ audioFocusMode: enabled }),
+      toggleAudioFocusMode: () => set({ audioFocusMode: !get().audioFocusMode }),
+      setAudioRegionSelection: (selection: TimelineStore['audioRegionSelection']) => {
+        if (!selection) {
+          set({ audioRegionSelection: null });
+          return;
+        }
+        const startTime = Math.max(0, Math.min(selection.startTime, selection.endTime));
+        const endTime = Math.max(startTime, Math.max(selection.startTime, selection.endTime));
+        set({
+          audioRegionSelection: {
+            ...selection,
+            startTime,
+            endTime,
+            sourceInPoint: Math.min(selection.sourceInPoint, selection.sourceOutPoint),
+            sourceOutPoint: Math.max(selection.sourceInPoint, selection.sourceOutPoint),
+          },
+        });
+      },
+      clearAudioRegionSelection: () => set({ audioRegionSelection: null }),
       toggleTranscriptMarkers: () => set({ showTranscriptMarkers: !get().showTranscriptMarkers }),
       setShowTranscriptMarkers: (enabled: boolean) => set({ showTranscriptMarkers: enabled }),
       // RAM preview actions (simplified for testing)
@@ -285,6 +314,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...colorCorrectionActions,
       ...linkedGroupActions,
       ...downloadClipActions,
+      ...audioEditActions,
       ...nodeGraphActions,
       ...positioningUtils,
       ...playbackActions,

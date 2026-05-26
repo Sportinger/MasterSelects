@@ -25,11 +25,42 @@ export type NodeGraphSignalType =
 
 export type NodeGraphPortDirection = 'input' | 'output';
 
+export type NodeGraphAudioSemanticKind =
+  | 'audio-source'
+  | 'waveform'
+  | 'spectrum'
+  | 'frequency-bands'
+  | 'loudness'
+  | 'beats'
+  | 'onsets'
+  | 'phase-correlation'
+  | 'transcript'
+  | 'frequency-summary'
+  | 'audio-metadata';
+
+export interface NodeGraphPortMetadata {
+  semanticKind?: NodeGraphAudioSemanticKind | string;
+  targetClipId?: string;
+  signalRefId?: string;
+  artifactId?: string;
+  artifactProvenance?: 'source' | 'processed';
+  artifactIndex?: number;
+  available?: boolean;
+  stale?: boolean;
+  previewable?: boolean;
+  generateAction?: {
+    type: string;
+    artifactKind?: string;
+    label?: string;
+  };
+}
+
 export interface NodeGraphPort {
   id: string;
   label: string;
   type: NodeGraphSignalType;
   direction: NodeGraphPortDirection;
+  metadata?: NodeGraphPortMetadata;
 }
 
 export type NodeGraphNodeKind =
@@ -105,6 +136,8 @@ export type ClipNodeGraphBacking =
   | { kind: 'clip-mask-stack' }
   | { kind: 'clip-color-correction' }
   | { kind: 'clip-effect'; effectId: string }
+  | { kind: 'clip-audio-effect-instance'; effectId: string }
+  | { kind: 'clip-audio-analysis' }
   | { kind: 'clip-custom-node'; nodeId: string }
   | { kind: 'clip-output' }
   | { kind: 'clip-audio-output' };

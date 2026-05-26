@@ -5,7 +5,16 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { Logger } from '../services/logger';
 import { flashBoardMediaBridge } from '../services/flashboard/FlashBoardMediaBridge';
-import type { TimelineClip, TimelineTrack, Layer, Keyframe } from '../types';
+import type {
+  ClipAudioState,
+  MasterAudioState,
+  MediaFileAudioAnalysisRefs,
+  TimelineClip,
+  TimelineTrack,
+  TrackAudioState,
+  Layer,
+  Keyframe,
+} from '../types';
 import type {
   Composition,
   MathSceneItem,
@@ -46,6 +55,7 @@ interface StateSnapshot {
     selectedLayerId: string | null;
     clipKeyframes: Record<string, Keyframe[]>;
     markers: TimelineMarker[];
+    masterAudioState?: MasterAudioState;
   };
 
   // Media state
@@ -126,6 +136,7 @@ interface TimelineStoreState {
   selectedLayerId: string | null;
   clipKeyframes: Map<string, Keyframe[]>;
   markers: TimelineMarker[];
+  masterAudioState?: MasterAudioState;
 }
 
 interface MediaStoreState {
@@ -206,14 +217,12 @@ export function initHistoryStoreRefs(stores: {
 function deepClone<T>(obj: T, seen?: WeakSet<object>): T {
   if (obj === null || typeof obj !== 'object') return obj;
   if (obj instanceof Date) return new Date(obj.getTime()) as T;
+  if (isBinaryPayload(obj)) return undefined as T;
 
   // Skip cloning DOM elements, HTMLMediaElements, File objects, etc.
   if (obj instanceof Element || obj instanceof HTMLMediaElement || obj instanceof File) {
     return obj; // Return reference, don't clone
   }
-
-  // Skip ArrayBuffer/TypedArrays (video data, decoded samples — huge)
-  if (obj instanceof ArrayBuffer || ArrayBuffer.isView(obj)) return obj;
 
   // Skip class instances (WebCodecsPlayer, MP4File, VideoDecoder, NativeDecoder, etc.)
   // Only deep-clone plain objects {} and arrays [] — class instances keep reference
@@ -233,8 +242,9 @@ function deepClone<T>(obj: T, seen?: WeakSet<object>): T {
   for (const key in obj) {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       const value = obj[key];
-      // Skip functions and DOM elements
+      // Skip functions, DOM elements, and binary media payloads
       if (typeof value === 'function') continue;
+      if (isBinaryPayload(value)) continue;
       if (value instanceof Element || value instanceof HTMLMediaElement) {
         cloned[key] = value; // Keep reference
       } else {
@@ -245,6 +255,208 @@ function deepClone<T>(obj: T, seen?: WeakSet<object>): T {
   return cloned;
 }
 
+function isBinaryPayload(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return true;
+  if (typeof AudioBuffer !== 'undefined' && value instanceof AudioBuffer) return true;
+  return false;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function isAudioPayloadKey(key: string): boolean {
+  const normalized = key.replace(/[_-]/g, '').toLowerCase();
+
+  // Ref/id fields intentionally stay, even when their names mention payloads.
+  if (
+    normalized === 'payloadrefs' ||
+    normalized.endsWith('ref') ||
+    normalized.endsWith('refs') ||
+    normalized.endsWith('id') ||
+    normalized.endsWith('ids')
+  ) {
+    return false;
+  }
+
+  return (
+    normalized === 'payload' ||
+    normalized === 'bytes' ||
+    normalized === 'buffer' ||
+    normalized === 'blob' ||
+    normalized === 'file' ||
+    normalized === 'samples' ||
+    normalized === 'sampledata' ||
+    normalized === 'audiobuffer' ||
+    normalized === 'arraybuffer' ||
+    normalized.endsWith('samples') ||
+    normalized.endsWith('buffer') ||
+    normalized.includes('channeldata') ||
+    normalized.includes('rawaudio') ||
+    normalized.includes('audiodata') ||
+    normalized.includes('pcm') ||
+    normalized.includes('fftdata') ||
+    normalized.includes('waveformdata') ||
+    normalized.includes('spectrogramdata') ||
+    normalized.includes('tilebytes')
+  );
+}
+
+function cloneJsonSafeAudioValue<T>(value: T, seen?: WeakSet<object>): T | undefined {
+  if (value === null) return value;
+  if (typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'object') return undefined;
+  if (isBinaryPayload(value)) return undefined;
+
+  if (!seen) seen = new WeakSet<object>();
+  if (seen.has(value as object)) return undefined;
+  seen.add(value as object);
+
+  if (Array.isArray(value)) {
+    const clonedArray: unknown[] = [];
+    for (const item of value) {
+      const clonedItem = cloneJsonSafeAudioValue(item, seen);
+      if (clonedItem !== undefined) {
+        clonedArray.push(clonedItem);
+      }
+    }
+    return clonedArray as T;
+  }
+
+  if (!isPlainObject(value)) return undefined;
+
+  const cloned: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (isAudioPayloadKey(key)) continue;
+    const clonedValue = cloneJsonSafeAudioValue(nestedValue, seen);
+    if (clonedValue !== undefined) {
+      cloned[key] = clonedValue;
+    }
+  }
+
+  return cloned as T;
+}
+
+const AUDIO_ANALYSIS_REF_KEYS: Array<keyof MediaFileAudioAnalysisRefs> = [
+  'waveformPyramidId',
+  'processedWaveformPyramidId',
+  'spectrogramTileSetIds',
+  'loudnessEnvelopeId',
+  'beatGridId',
+  'onsetMapId',
+  'phaseCorrelationId',
+  'transcriptTimingId',
+  'frequencySummaryId',
+];
+
+function cloneAudioAnalysisRefs(
+  refs: MediaFileAudioAnalysisRefs | undefined
+): MediaFileAudioAnalysisRefs | undefined {
+  if (!refs) return undefined;
+
+  const cloned: Partial<Record<keyof MediaFileAudioAnalysisRefs, string | string[]>> = {};
+  for (const key of AUDIO_ANALYSIS_REF_KEYS) {
+    const value = refs[key];
+    if (key === 'spectrogramTileSetIds') {
+      if (Array.isArray(value)) {
+        cloned[key] = value.filter((id): id is string => typeof id === 'string');
+      }
+    } else if (typeof value === 'string') {
+      cloned[key] = value;
+    }
+  }
+
+  return Object.keys(cloned).length > 0
+    ? cloned as MediaFileAudioAnalysisRefs
+    : undefined;
+}
+
+function cloneClipAudioState(audioState: ClipAudioState | undefined): ClipAudioState | undefined {
+  const cloned = cloneJsonSafeAudioValue(audioState) as ClipAudioState | undefined;
+  if (!cloned) return undefined;
+
+  const sourceAnalysisRefs = cloneAudioAnalysisRefs(audioState?.sourceAnalysisRefs);
+  const processedAnalysisRefs = cloneAudioAnalysisRefs(audioState?.processedAnalysisRefs);
+  if (sourceAnalysisRefs !== undefined) {
+    cloned.sourceAnalysisRefs = sourceAnalysisRefs;
+  } else {
+    delete cloned.sourceAnalysisRefs;
+  }
+  if (processedAnalysisRefs !== undefined) {
+    cloned.processedAnalysisRefs = processedAnalysisRefs;
+  } else {
+    delete cloned.processedAnalysisRefs;
+  }
+
+  return cloned;
+}
+
+function cloneTrackAudioState(audioState: TrackAudioState | undefined): TrackAudioState | undefined {
+  return cloneJsonSafeAudioValue(audioState) as TrackAudioState | undefined;
+}
+
+function cloneMasterAudioState(audioState: MasterAudioState | undefined): MasterAudioState | undefined {
+  return cloneJsonSafeAudioValue(audioState) as MasterAudioState | undefined;
+}
+
+function cloneClipForHistory<T extends { audioState?: ClipAudioState }>(clip: T): T {
+  const { audioState, ...rest } = clip;
+  const cloned = deepClone(rest) as T;
+  const clonedAudioState = cloneClipAudioState(audioState);
+  if (clonedAudioState !== undefined) {
+    cloned.audioState = clonedAudioState;
+  }
+  return cloned;
+}
+
+function cloneTrackForHistory<T extends { audioState?: TrackAudioState }>(track: T): T {
+  const { audioState, ...rest } = track;
+  const cloned = deepClone(rest) as T;
+  const clonedAudioState = cloneTrackAudioState(audioState);
+  if (clonedAudioState !== undefined) {
+    cloned.audioState = clonedAudioState;
+  }
+  return cloned;
+}
+
+function cloneTimelineDataForHistory(
+  timelineData: NonNullable<Composition['timelineData']>
+): NonNullable<Composition['timelineData']> {
+  const { clips, tracks, masterAudioState, ...rest } = timelineData;
+  const cloned = deepClone(rest) as NonNullable<Composition['timelineData']>;
+  cloned.clips = (clips || []).map(cloneClipForHistory);
+  cloned.tracks = (tracks || []).map(cloneTrackForHistory);
+
+  const clonedMasterAudioState = cloneMasterAudioState(masterAudioState);
+  if (clonedMasterAudioState !== undefined) {
+    cloned.masterAudioState = clonedMasterAudioState;
+  }
+
+  return cloned;
+}
+
+function cloneCompositionForHistory(composition: Composition): Composition {
+  const { timelineData, ...rest } = composition;
+  const cloned = deepClone(rest) as Composition;
+  if (timelineData) {
+    cloned.timelineData = cloneTimelineDataForHistory(timelineData);
+  }
+  return cloned;
+}
+
+function cloneMediaFileForHistory(file: MediaFile): MediaFile {
+  const { audioAnalysisRefs, ...rest } = file;
+  const cloned = deepClone(rest) as MediaFile;
+  const clonedAudioAnalysisRefs = cloneAudioAnalysisRefs(audioAnalysisRefs);
+  if (clonedAudioAnalysisRefs !== undefined) {
+    cloned.audioAnalysisRefs = clonedAudioAnalysisRefs;
+  }
+  return cloned;
+}
 // Create snapshot from current state
 function createSnapshot(label: string): StateSnapshot {
   const timeline = getTimelineState?.() || null;
@@ -269,8 +481,8 @@ function createSnapshot(label: string): StateSnapshot {
     timestamp: Date.now(),
     label,
     timeline: {
-      clips: deepClone(timeline?.clips || []),
-      tracks: deepClone(timeline?.tracks || []),
+      clips: (timeline?.clips || []).map(cloneClipForHistory),
+      tracks: (timeline?.tracks || []).map(cloneTrackForHistory),
       selectedClipIds: timeline?.selectedClipIds ? [...timeline.selectedClipIds] : [],
       zoom: timeline?.zoom || 50,
       scrollX: timeline?.scrollX || 0,
@@ -278,10 +490,11 @@ function createSnapshot(label: string): StateSnapshot {
       selectedLayerId: timeline?.selectedLayerId || null,
       clipKeyframes: keyframesObj,
       markers: deepClone(timeline?.markers || []),
+      masterAudioState: cloneMasterAudioState(timeline?.masterAudioState),
     },
     media: {
-      files: deepClone(media?.files || []),
-      compositions: deepClone(media?.compositions || []),
+      files: (media?.files || []).map(cloneMediaFileForHistory),
+      compositions: (media?.compositions || []).map(cloneCompositionForHistory),
       folders: deepClone(media?.folders || []),
       selectedIds: [...(media?.selectedIds || [])],
       expandedFolderIds: [...(media?.expandedFolderIds || [])],
@@ -331,9 +544,9 @@ function applySnapshot(snapshot: StateSnapshot) {
       }
     }
 
-    setTimelineState({
-      clips: deepClone(snapshot.timeline.clips),
-      tracks: deepClone(snapshot.timeline.tracks),
+    const timelineState: Partial<TimelineStoreState> = {
+      clips: snapshot.timeline.clips.map(cloneClipForHistory),
+      tracks: snapshot.timeline.tracks.map(cloneTrackForHistory),
       selectedClipIds: new Set(snapshot.timeline.selectedClipIds || []),
       zoom: snapshot.timeline.zoom,
       scrollX: snapshot.timeline.scrollX,
@@ -341,7 +554,13 @@ function applySnapshot(snapshot: StateSnapshot) {
       selectedLayerId: snapshot.timeline.selectedLayerId,
       clipKeyframes: restoredKeyframes,
       markers: deepClone(snapshot.timeline.markers || []),
-    });
+    };
+
+    if ('masterAudioState' in currentTimeline || snapshot.timeline.masterAudioState !== undefined) {
+      timelineState.masterAudioState = cloneMasterAudioState(snapshot.timeline.masterAudioState);
+    }
+
+    setTimelineState(timelineState);
   }
 
   // Apply media state (preserve file references)
@@ -350,14 +569,14 @@ function applySnapshot(snapshot: StateSnapshot) {
     const restoredFiles = (snapshot.media.files || []).filter(Boolean).map((file) => {
       const currentFile = (currentMedia.files || []).find((f) => f?.id === file.id);
       return {
-        ...deepClone(file),
+        ...cloneMediaFileForHistory(file),
         file: currentFile?.file || file.file, // Preserve File reference
       };
     });
 
     setMediaState({
       files: restoredFiles,
-      compositions: deepClone(snapshot.media.compositions),
+      compositions: snapshot.media.compositions.map(cloneCompositionForHistory),
       folders: deepClone(snapshot.media.folders),
       selectedIds: [...snapshot.media.selectedIds],
       expandedFolderIds: [...snapshot.media.expandedFolderIds],

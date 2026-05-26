@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
-import type { AnimatableProperty, EffectType } from '../../../types';
+import type { AnimatableProperty, AudioEffectParamValue, EffectType } from '../../../types';
 import { createEffectProperty, isAudioEffect } from '../../../types';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
 import {
@@ -16,14 +16,31 @@ import {
 import { VolumeTab } from './VolumeTab';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 
+type PrimitiveEffectParamValue = number | boolean | string;
+type PrimitiveEffectParams = Record<string, PrimitiveEffectParamValue>;
+type EffectParamsRecord = Record<string, AudioEffectParamValue>;
+
+function toPrimitiveEffectParams(
+  params: EffectParamsRecord | undefined,
+  defaults: PrimitiveEffectParams = {},
+): PrimitiveEffectParams {
+  const primitiveParams: PrimitiveEffectParams = { ...defaults };
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+      primitiveParams[key] = value;
+    }
+  }
+  return primitiveParams;
+}
+
 // Single parameter control renderer
 function renderParamControl(
   paramName: string,
-  paramDef: { type: string; label: string; default: number | boolean | string; min?: number; max?: number; step?: number; options?: { value: string; label: string }[]; animatable?: boolean },
-  value: number | boolean | string,
-  effect: { id: string; params: Record<string, number | boolean | string> },
-  onChange: (params: Record<string, number | boolean | string>) => void,
-  defaults: Record<string, number | boolean | string>,
+  paramDef: { type: string; label: string; default: PrimitiveEffectParamValue; min?: number; max?: number; step?: number; options?: { value: string; label: string }[]; animatable?: boolean },
+  value: PrimitiveEffectParamValue,
+  effect: { id: string; params: PrimitiveEffectParams },
+  onChange: (params: PrimitiveEffectParams) => void,
+  defaults: PrimitiveEffectParams,
   clipId?: string,
   noMaxLimit?: boolean,
   onDragStart?: () => void,
@@ -130,8 +147,8 @@ function renderParamControl(
 
 // Effect parameters with collapsible Quality section
 interface EffectParamsProps {
-  effect: { id: string; type: string; params: Record<string, number | boolean | string> };
-  onChange: (params: Record<string, number | boolean | string>) => void;
+  effect: { id: string; type: string; params: PrimitiveEffectParams };
+  onChange: (params: PrimitiveEffectParams) => void;
   clipId?: string;
   onDragStart?: () => void;
   onDragEnd?: () => void;
@@ -158,7 +175,7 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd }: Effe
   const qualityParams = Object.entries(effectDef.params).filter(([, def]) => def.quality);
 
   const handleResetQuality = () => {
-    const resetParams: Record<string, number | boolean | string> = { ...effect.params };
+    const resetParams: PrimitiveEffectParams = { ...effect.params };
     qualityParams.forEach(([name, def]) => {
       resetParams[name] = def.default;
     });
@@ -209,7 +226,7 @@ function EffectParams({ effect, onChange, clipId, onDragStart, onDragEnd }: Effe
 
 interface EffectsTabProps {
   clipId: string;
-  effects: Array<{ id: string; name: string; type: string; enabled: boolean; params: Record<string, number | boolean | string> }>;
+  effects: Array<{ id: string; name: string; type: string; enabled: boolean; params: EffectParamsRecord }>;
   isAudioClip?: boolean;
 }
 
@@ -265,6 +282,11 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
         <div className="effects-list">
           {videoEffects.map((effect, idx) => {
             const interpolated = interpolatedEffects.find(e => e.id === effect.id) || effect;
+            const effectDef = EFFECT_REGISTRY.get(effect.type);
+            const primitiveParams = toPrimitiveEffectParams(
+              interpolated.params,
+              effectDef ? getDefaultParams(effect.type) : {},
+            );
             const isEnabled = effect.enabled !== false; // default to true if undefined
             const isDragging = dragIdx === idx;
             const isDropTarget = dropIdx === idx;
@@ -321,7 +343,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                 </div>
                 <div className="effect-params">
                   <EffectParams
-                    effect={{ ...effect, params: interpolated.params }}
+                    effect={{ ...effect, params: primitiveParams }}
                     onDragStart={handleBatchStart}
                     onDragEnd={handleBatchEnd}
                     onChange={(params) => {

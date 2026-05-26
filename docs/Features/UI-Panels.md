@@ -86,6 +86,8 @@ All docked panels can be:
 - Closed and reopened from the View menu
 - Floated as independent windows
 - Maximized from the hovered tab with the fullscreen shortcut
+- Dropped into the center of a pane with a large anchored preview, or onto the tab bar for exact tab insertion
+- Dropped onto the outer dock edges to create full-height side strips or full-width top/bottom strips
 
 ### Tab Controls
 
@@ -94,6 +96,7 @@ All docked panels can be:
 | Switch tab | Click |
 | Cycle tabs | Middle mouse scroll |
 | Drag tab | Hold for 500 ms, then drag |
+| Insert into tab group | Drag into the tab group and choose one of the visible gap cubes |
 | Maximize hovered tab | Hover a dock tab and use the fullscreen shortcut |
 
 ### Floating Panels

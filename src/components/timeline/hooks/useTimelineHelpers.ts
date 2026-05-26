@@ -2,30 +2,26 @@
 
 import { useCallback, useMemo } from 'react';
 import type { TimelineClip, Keyframe } from '../../../types';
+import { createTimelineGridPlan } from '../utils/timelineGrid';
 
 interface UseTimelineHelpersProps {
   zoom: number;
+  frameRate?: number | null;
   clips: TimelineClip[];
   getClipKeyframes: (clipId: string) => Keyframe[];
 }
 
-export function useTimelineHelpers({ zoom, clips, getClipKeyframes }: UseTimelineHelpersProps) {
+export function useTimelineHelpers({ zoom, frameRate, clips, getClipKeyframes }: UseTimelineHelpersProps) {
   // Time conversion helpers
   const timeToPixel = useCallback((time: number) => time * zoom, [zoom]);
   const pixelToTime = useCallback((pixel: number) => pixel / zoom, [zoom]);
 
-  // Calculate grid interval based on zoom (same logic as TimelineRuler)
-  const gridInterval = useMemo(() => {
-    if (zoom >= 100) return 0.5;
-    if (zoom >= 50) return 1;
-    if (zoom >= 20) return 2;
-    if (zoom >= 10) return 5;
-    if (zoom >= 5) return 10;
-    if (zoom >= 2) return 30;
-    return 60;
-  }, [zoom]);
-
-  const gridSize = gridInterval * zoom; // Grid line spacing in pixels
+  const gridPlan = useMemo(
+    () => createTimelineGridPlan({ zoom, frameRate }),
+    [frameRate, zoom],
+  );
+  const gridInterval = gridPlan.minorIntervalSeconds;
+  const gridSize = gridPlan.minorIntervalPixels;
 
   // Format time as MM:SS.ms
   const formatTime = useCallback((seconds: number) => {
@@ -87,6 +83,7 @@ export function useTimelineHelpers({ zoom, clips, getClipKeyframes }: UseTimelin
     pixelToTime,
     gridInterval,
     gridSize,
+    gridPlan,
     formatTime,
     parseTime,
     getClipsAtTime,

@@ -7,7 +7,13 @@ import type {
   DockTabGroup,
   DockSplit,
   DropTarget,
+  DropPosition,
 } from '../types/dock';
+
+type EdgeDropPosition = Exclude<DropPosition, 'center'>;
+
+const ROOT_EDGE_DOCK_RATIO = 0.22;
+const ROOT_EDGE_OUTSIDE_MARGIN_PX = 10;
 
 // Generate unique ID
 export function generateId(): string {
@@ -87,9 +93,74 @@ export function insertPanelAtTarget(
   panel: DockPanel,
   target: DropTarget
 ): DockLayout {
+  if (target.scope === 'root-edge' && target.position !== 'center') {
+    return insertPanelAtRootEdge(layout, panel, target.position);
+  }
+
   return {
     ...layout,
     root: insertPanelInNode(layout.root, panel, target),
+  };
+}
+
+export function adjustDropTargetForMovedPanel(
+  root: DockNode,
+  panelId: string,
+  sourceGroupId: string,
+  target: DropTarget
+): DropTarget {
+  if (
+    target.scope === 'root-edge' ||
+    target.position !== 'center' ||
+    target.groupId !== sourceGroupId ||
+    typeof target.tabInsertIndex !== 'number'
+  ) {
+    return target;
+  }
+
+  const sourceNode = findNodeById(root, sourceGroupId);
+  if (!sourceNode || sourceNode.kind !== 'tab-group') {
+    return target;
+  }
+
+  const sourceIndex = sourceNode.panels.findIndex((panel) => panel.id === panelId);
+  if (sourceIndex < 0 || target.tabInsertIndex <= sourceIndex) {
+    return target;
+  }
+
+  return {
+    ...target,
+    tabInsertIndex: target.tabInsertIndex - 1,
+  };
+}
+
+function createPanelTabGroup(panel: DockPanel): DockTabGroup {
+  return {
+    kind: 'tab-group',
+    id: `group-${generateId()}`,
+    panels: [panel],
+    activeIndex: 0,
+  };
+}
+
+function insertPanelAtRootEdge(
+  layout: DockLayout,
+  panel: DockPanel,
+  position: EdgeDropPosition
+): DockLayout {
+  const direction = position === 'left' || position === 'right' ? 'horizontal' : 'vertical';
+  const newGroup = createPanelTabGroup(panel);
+  const isFirst = position === 'left' || position === 'top';
+
+  return {
+    ...layout,
+    root: {
+      kind: 'split',
+      id: `split-${generateId()}`,
+      direction,
+      ratio: isFirst ? ROOT_EDGE_DOCK_RATIO : 1 - ROOT_EDGE_DOCK_RATIO,
+      children: isFirst ? [newGroup, layout.root] : [layout.root, newGroup],
+    },
   };
 }
 
@@ -109,12 +180,7 @@ function insertPanelInNode(node: DockNode, panel: DockPanel, target: DropTarget)
       }
       // Split the group
       const direction = target.position === 'left' || target.position === 'right' ? 'horizontal' : 'vertical';
-      const newGroup: DockTabGroup = {
-        kind: 'tab-group',
-        id: `group-${generateId()}`,
-        panels: [panel],
-        activeIndex: 0,
-      };
+      const newGroup = createPanelTabGroup(panel);
       const isFirst = target.position === 'left' || target.position === 'top';
       return {
         kind: 'split',
@@ -196,3 +262,43 @@ export function calculateDropPosition(
   return 'center';
 }
 
+// Calculate full-dock edge targets for placing panels as screen-edge strips.
+export function calculateRootEdgeDropPosition(
+  rect: DOMRect,
+  mouseX: number,
+  mouseY: number
+): EdgeDropPosition | null {
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  const isOutside =
+    mouseX < rect.left - ROOT_EDGE_OUTSIDE_MARGIN_PX ||
+    mouseX > rect.right + ROOT_EDGE_OUTSIDE_MARGIN_PX ||
+    mouseY < rect.top - ROOT_EDGE_OUTSIDE_MARGIN_PX ||
+    mouseY > rect.bottom + ROOT_EDGE_OUTSIDE_MARGIN_PX;
+
+  if (isOutside) {
+    return null;
+  }
+
+  const thresholdX = Math.min(72, Math.max(32, rect.width * 0.06));
+  const thresholdY = Math.min(72, Math.max(32, rect.height * 0.06));
+  const candidates: Array<{ position: EdgeDropPosition; distance: number; threshold: number }> = [
+    { position: 'left', distance: Math.abs(mouseX - rect.left), threshold: thresholdX },
+    { position: 'right', distance: Math.abs(rect.right - mouseX), threshold: thresholdX },
+    { position: 'top', distance: Math.abs(mouseY - rect.top), threshold: thresholdY },
+    { position: 'bottom', distance: Math.abs(rect.bottom - mouseY), threshold: thresholdY },
+  ];
+  let bestPosition: EdgeDropPosition | null = null;
+  let bestDistance = Infinity;
+
+  for (const candidate of candidates) {
+    if (candidate.distance <= candidate.threshold && candidate.distance < bestDistance) {
+      bestPosition = candidate.position;
+      bestDistance = candidate.distance;
+    }
+  }
+
+  return bestPosition;
+}

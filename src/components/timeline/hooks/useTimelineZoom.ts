@@ -53,8 +53,8 @@ export function useTimelineZoom({
 
   // Fit composition to window - calculate zoom to show entire duration
   const handleFitToWindow = useCallback(() => {
-    const trackLanes = timelineBodyRef.current?.querySelector('.track-lanes-scroll');
-    const viewportWidth = trackLanes?.parentElement?.clientWidth ?? 800;
+    const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
+    const viewportWidth = trackLanes?.clientWidth ?? 800;
     // Calculate zoom: viewportWidth = duration * zoom, so zoom = viewportWidth / duration
     // Subtract some padding (50px) to not be right at the edge
     const targetZoom = Math.max(MIN_ZOOM, (viewportWidth - 50) / duration);
@@ -67,7 +67,7 @@ export function useTimelineZoom({
 
   // Calculate dynamic minimum zoom to prevent zooming out too far beyond duration
   const getDynamicMinZoom = useCallback(() => {
-    const trackLanes = timelineBodyRef.current?.querySelector('.track-lanes');
+    const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
     const viewportWidth = trackLanes?.clientWidth ?? 800;
     // Allow some padding at the end to see the end marker
     // Min zoom ensures duration * zoom >= viewportWidth - END_PADDING
@@ -82,7 +82,7 @@ export function useTimelineZoom({
 
   // Clamp zoom and scrollX when duration or viewport changes
   useEffect(() => {
-    const trackLanes = timelineBodyRef.current?.querySelector('.track-lanes');
+    const trackLanes = timelineBodyRef.current?.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
     const viewportWidth = trackLanes?.clientWidth ?? 800;
     const dynamicMinZoom = Math.max(MIN_ZOOM, (viewportWidth - END_PADDING) / duration);
 
@@ -105,9 +105,12 @@ export function useTimelineZoom({
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
+      if (e.defaultPrevented) return;
+
       // Don't zoom when hovering over track headers (first column for height adjustment)
       const target = e.target as HTMLElement;
       const isOverTrackHeaders = target.closest('.track-headers') !== null;
+      const isOverSplitTrackSection = target.closest('.timeline-track-section') !== null;
 
       // Ctrl+Shift+Scroll (Win/Linux) or Cmd+Shift+Scroll (Mac): toggle slot grid view
       if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
@@ -119,8 +122,8 @@ export function useTimelineZoom({
       if ((e.ctrlKey || e.altKey) && !isOverTrackHeaders) {
         e.preventDefault();
         // Get the track lanes container width for accurate centering
-        const trackLanes = el.querySelector('.track-lanes');
-        const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 120; // 120 = track headers width
+        const trackLanes = el.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
+        const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 210;
 
         // Calculate dynamic minimum zoom with padding to see end marker
         const dynamicMinZoom = Math.max(MIN_ZOOM, (viewportWidth - END_PADDING) / duration);
@@ -146,20 +149,20 @@ export function useTimelineZoom({
       } else if (e.shiftKey && !isOverTrackHeaders) {
         // Shift+scroll = horizontal scroll (use deltaY since mouse wheel is vertical)
         e.preventDefault();
-        const trackLanes = el.querySelector('.track-lanes');
-        const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 120;
+        const trackLanes = el.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
+        const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 210;
         const maxScrollX = Math.max(0, duration * zoom - viewportWidth + END_PADDING);
         setScrollX(Math.max(0, Math.min(maxScrollX, scrollX + e.deltaY)));
       } else {
         // Handle horizontal scroll (e.g., trackpad horizontal gesture)
         if (e.deltaX !== 0) {
-          const trackLanes = el.querySelector('.track-lanes');
-          const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 120;
+          const trackLanes = el.querySelector<HTMLElement>('.timeline-lane-reference, .track-lanes');
+          const viewportWidth = trackLanes?.clientWidth ?? el.clientWidth - 210;
           const maxScrollX = Math.max(0, duration * zoom - viewportWidth + END_PADDING);
           setScrollX(Math.max(0, Math.min(maxScrollX, scrollX + e.deltaX)));
         }
         // Handle vertical scroll — snap to track boundaries (1 track per step)
-        if (e.deltaY !== 0 && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+        if (e.deltaY !== 0 && !e.shiftKey && !e.ctrlKey && !e.altKey && !isOverSplitTrackSection) {
           e.preventDefault();
           const maxScrollY = Math.max(0, contentHeight - viewportHeight);
           const currentY = scrollYRef.current;

@@ -15,7 +15,11 @@ import { scrubSettleState } from '../../src/services/scrubSettleState';
 import { proxyFrameCache } from '../../src/services/proxyFrameCache';
 import { vectorAnimationRuntimeManager } from '../../src/services/vectorAnimation/VectorAnimationRuntimeManager';
 import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip, TimelineTrack } from '../../src/types';
+import {
+  addClipCustomNodeDefinition,
+  createClipAICustomNodeDefinition,
+} from '../../src/services/nodeGraph';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -24,6 +28,12 @@ type LayerBuilderServiceTestAccess = {
   buildLayersFromStore: LayerBuilderService['buildLayersFromStore'];
   getPausedVisualProvider: (...args: unknown[]) => unknown;
   hasRenderableVideoSource: (...args: unknown[]) => boolean;
+  canUseHeldProxyFrame: (
+    heldFrameIndex: number,
+    targetMediaTime: number,
+    proxyFps: number,
+    isDraggingPlayhead: boolean
+  ) => boolean;
 };
 type NestedCompositionSource = {
   nestedComposition?: {
@@ -67,6 +77,20 @@ describe('LayerBuilderService paused visual provider selection', () => {
         },
       })
     ).toBe(false);
+  });
+
+  it('rejects stale held proxy frames during drag scrubs after large time jumps', () => {
+    const service = createService();
+
+    expect(service.canUseHeldProxyFrame(576, 4.8, 30, true)).toBe(false);
+    expect(service.canUseHeldProxyFrame(147, 4.85, 30, true)).toBe(true);
+  });
+
+  it('allows a wider held proxy tolerance for paused non-drag refreshes', () => {
+    const service = createService();
+
+    expect(service.canUseHeldProxyFrame(150, 5.35, 30, false)).toBe(true);
+    expect(service.canUseHeldProxyFrame(150, 5.75, 30, false)).toBe(false);
   });
 
   it('keeps the clip player when the scrub runtime is near the target but has no frame', () => {
@@ -208,6 +232,149 @@ describe('LayerBuilderService paused visual provider selection', () => {
 
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.webCodecsPlayer).toBe(clipPlayer);
+  });
+
+  it('passes linked audio analysis context into rendered AI node layers', () => {
+    const service = new LayerBuilderService();
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = 2;
+    sourceCanvas.height = 1;
+    const sourceContext = sourceCanvas.getContext('2d');
+    expect(sourceContext).not.toBeNull();
+    const imageData = sourceContext?.createImageData(2, 1);
+    expect(imageData).toBeDefined();
+    imageData?.data.set([
+      1, 1, 1, 255,
+      2, 2, 2, 255,
+    ]);
+    if (imageData) {
+      sourceContext?.putImageData(imageData, 0, 0);
+    }
+
+    const videoTrack: TimelineTrack = {
+      id: 'track-v1',
+      name: 'Video 1',
+      type: 'video',
+      visible: true,
+      muted: false,
+      solo: false,
+    };
+    const audioTrack: TimelineTrack = {
+      id: 'track-a1',
+      name: 'Audio 1',
+      type: 'audio',
+      visible: true,
+      muted: false,
+      solo: false,
+      audioState: {
+        volumeDb: -9,
+        pan: 0,
+      },
+    };
+    const audioClip: TimelineClip = {
+      id: 'clip-audio',
+      trackId: 'track-a1',
+      name: 'Linked Audio',
+      file: new File([], 'linked.wav', { type: 'audio/wav' }),
+      mediaFileId: 'media-audio',
+      linkedClipId: 'clip-video',
+      startTime: 0,
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      effects: [],
+      transform: { ...DEFAULT_TRANSFORM },
+      source: { type: 'audio', mediaFileId: 'media-audio' },
+      waveform: [0, 0.5, -0.25],
+      audioState: {
+        sourceAudioRevisionId: 'audio-rev-linked',
+        sourceAnalysisRefs: {
+          frequencySummaryId: 'linked-frequency-summary',
+        },
+      },
+      isLoading: false,
+    };
+    const baseVideoClip: TimelineClip = {
+      id: 'clip-video',
+      trackId: 'track-v1',
+      name: 'Linked Visual',
+      mediaFileId: 'media-video',
+      linkedClipId: 'clip-audio',
+      startTime: 0,
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      effects: [],
+      transform: { ...DEFAULT_TRANSFORM },
+      source: {
+        type: 'text',
+        textCanvas: sourceCanvas,
+      },
+      isLoading: false,
+    };
+    const definition = {
+      ...createClipAICustomNodeDefinition('custom-linked-audio', baseVideoClip),
+      status: 'ready' as const,
+      ai: {
+        prompt: 'Use linked audio at render time',
+        generatedCode: `
+          defineNode({
+            process(input, context) {
+              const output = {
+                ...input.input,
+                data: new Uint8ClampedArray(input.input.data),
+              };
+              const sourceNode = context.graph.nodes.find((node) => node.id === 'source');
+              const frequencyPort = sourceNode.outputs.find((port) => port.id === 'frequency-bands');
+              output.data[0] = context.audio.metadata.trackId === 'track-a1' ? 141 : 0;
+              output.data[1] = context.audio.metadata.mediaFileId === 'media-audio' ? 142 : 0;
+              output.data[2] = context.audio.routing.track.volumeDb === -9 ? 143 : 0;
+              output.data[4] = frequencyPort.metadata.targetClipId === 'clip-audio' ? 144 : 0;
+              output.data[5] = frequencyPort.metadata.artifactId === 'linked-frequency-summary' ? 145 : 0;
+              return { output };
+            }
+          })
+        `,
+      },
+    };
+    const nodeGraph = addClipCustomNodeDefinition(baseVideoClip, definition, videoTrack, {
+      linkedClip: audioClip,
+      linkedTrack: audioTrack,
+    });
+    const videoClip: TimelineClip = {
+      ...baseVideoClip,
+      nodeGraph,
+    };
+
+    useMediaStore.setState({
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [],
+      compositions: [],
+      proxyEnabled: false,
+    });
+
+    useTimelineStore.setState({
+      tracks: [videoTrack, audioTrack],
+      clips: [videoClip, audioClip],
+      playheadPosition: 1,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = service.buildLayersFromStore();
+
+    expect(layers).toHaveLength(1);
+    const outputCanvas = layers[0]?.source?.textCanvas;
+    expect(outputCanvas).toBeInstanceOf(HTMLCanvasElement);
+    const outputData = outputCanvas?.getContext('2d')?.getImageData(0, 0, 2, 1).data;
+    expect(outputData?.[0]).toBe(141);
+    expect(outputData?.[1]).toBe(142);
+    expect(outputData?.[2]).toBe(143);
+    expect(outputData?.[4]).toBe(144);
+    expect(outputData?.[5]).toBe(145);
   });
 
   it('routes lottie clips through the existing canvas layer path', () => {

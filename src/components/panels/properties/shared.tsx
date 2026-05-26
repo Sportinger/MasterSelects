@@ -39,6 +39,30 @@ function getFeedbackValueKey(values: number[]) {
   return values.map(value => Number.isFinite(value) ? value.toFixed(6) : String(value)).join('|');
 }
 
+function useKeyframeToggleState(clipId: string, properties: readonly AnimatableProperty[]) {
+  const recording = useTimelineStore(state => (
+    properties.some(property => (
+      state.keyframeRecordingEnabled?.has(`${clipId}:${property}`) ??
+      useTimelineStore.getState().isRecording?.(clipId, property) ??
+      state.isRecording?.(clipId, property) ??
+      false
+    ))
+  ));
+  const hasKeyframes = useTimelineStore(state => {
+    const keyframes = state.clipKeyframes?.get(clipId);
+    if (keyframes?.length && properties.some(property => keyframes.some(keyframe => keyframe.property === property))) {
+      return true;
+    }
+    return properties.some(property => (
+      state.hasKeyframes?.(clipId, property) ??
+      useTimelineStore.getState().hasKeyframes?.(clipId, property) ??
+      false
+    ));
+  });
+
+  return { recording, hasKeyframes };
+}
+
 function endKeyframeToggleDrag() {
   keyframeToggleDragSession = null;
   window.removeEventListener('pointerup', endKeyframeToggleDrag);
@@ -242,10 +266,7 @@ interface KeyframeToggleProps {
 }
 
 export function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps) {
-  // Use getState() for actions - they're stable and don't need subscriptions
-  const { isRecording, hasKeyframes } = useTimelineStore.getState();
-  const recording = isRecording(clipId, property);
-  const hasKfs = hasKeyframes(clipId, property);
+  const { recording, hasKeyframes } = useKeyframeToggleState(clipId, [property]);
 
   const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
     applyKeyframeToggleEntries(mode, clipId, [{ property, value }]);
@@ -255,11 +276,11 @@ export function KeyframeToggle({ clipId, property, value }: KeyframeToggleProps)
     <KeyframeStopwatchButton
       dragId={`${clipId}:${property}`}
       mode="enable"
-      className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
+      className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKeyframes ? 'has-keyframes' : ''}`}
       feedbackIds={getKeyframeRecordingFeedbackIds(clipId, [property])}
       feedbackValues={[value]}
-      playbackFeedbackEnabled={recording || hasKfs}
-      title={recording || hasKfs ? 'Add keyframe (right-click to disable)' : 'Add keyframe'}
+      playbackFeedbackEnabled={recording || hasKeyframes}
+      title={recording || hasKeyframes ? 'Add keyframe (right-click to disable)' : 'Add keyframe'}
       onApply={handleApply}
     />
   );
@@ -278,9 +299,8 @@ export function MultiKeyframeToggle({
   dragId,
   title = 'Add keyframes',
 }: MultiKeyframeToggleProps) {
-  const { isRecording, hasKeyframes } = useTimelineStore.getState();
-  const anyRecording = entries.some(({ property }) => isRecording(clipId, property));
-  const anyHasKfs = entries.some(({ property }) => hasKeyframes(clipId, property));
+  const properties = entries.map(({ property }) => property);
+  const { recording: anyRecording, hasKeyframes: anyHasKfs } = useKeyframeToggleState(clipId, properties);
 
   const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
     applyKeyframeToggleEntries(mode, clipId, entries);
@@ -645,26 +665,35 @@ export function LegacyDraggableNumber({ value, onChange, defaultValue, sensitivi
 }
 
 // Effect keyframe toggle
-export function EffectKeyframeToggle({ clipId, effectId, paramName, value }: { clipId: string; effectId: string; paramName: string; value: number }) {
-  // Use getState() for actions - they're stable and don't need subscriptions
-  const { isRecording, hasKeyframes } = useTimelineStore.getState();
-  const property = createEffectProperty(effectId, paramName);
-  const recording = isRecording(clipId, property);
-  const hasKfs = hasKeyframes(clipId, property);
+export function EffectKeyframeToggle({
+  clipId,
+  effectId,
+  paramName,
+  property,
+  value,
+}: {
+  clipId: string;
+  effectId?: string;
+  paramName?: string;
+  property?: AnimatableProperty;
+  value: number;
+}) {
+  const effectProperty = property ?? createEffectProperty(effectId ?? '', paramName ?? '');
+  const { recording, hasKeyframes } = useKeyframeToggleState(clipId, [effectProperty]);
 
   const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
-    applyKeyframeToggleEntries(mode, clipId, [{ property, value }]);
-  }, [clipId, property, value]);
+    applyKeyframeToggleEntries(mode, clipId, [{ property: effectProperty, value }]);
+  }, [clipId, effectProperty, value]);
 
   return (
     <KeyframeStopwatchButton
-      dragId={`${clipId}:${property}`}
+      dragId={`${clipId}:${effectProperty}`}
       mode="enable"
-      className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKfs ? 'has-keyframes' : ''}`}
-      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, [property])}
+      className={`keyframe-toggle ${recording ? 'recording' : ''} ${hasKeyframes ? 'has-keyframes' : ''}`}
+      feedbackIds={getKeyframeRecordingFeedbackIds(clipId, [effectProperty])}
       feedbackValues={[value]}
-      playbackFeedbackEnabled={recording || hasKfs}
-      title={recording || hasKfs ? 'Add keyframe (right-click to disable)' : 'Add keyframe'}
+      playbackFeedbackEnabled={recording || hasKeyframes}
+      title={recording || hasKeyframes ? 'Add keyframe (right-click to disable)' : 'Add keyframe'}
       onApply={handleApply}
     />
   );
@@ -672,12 +701,8 @@ export function EffectKeyframeToggle({ clipId, effectId, paramName, value }: { c
 
 // Master keyframe toggle for all 10 EQ bands at once
 export function EQKeyframeToggle({ clipId, effectId, eqBands }: { clipId: string; effectId: string; eqBands: number[] }) {
-  // Use getState() for actions - they're stable and don't need subscriptions
-  const { isRecording, hasKeyframes } = useTimelineStore.getState();
-
-  // Check if any band is recording or has keyframes
-  const anyRecording = EQ_BAND_PARAMS.some(param => isRecording(clipId, createEffectProperty(effectId, param)));
-  const anyHasKfs = EQ_BAND_PARAMS.some(param => hasKeyframes(clipId, createEffectProperty(effectId, param)));
+  const properties = EQ_BAND_PARAMS.map(param => createEffectProperty(effectId, param));
+  const { recording: anyRecording, hasKeyframes: anyHasKfs } = useKeyframeToggleState(clipId, properties);
 
   const handleApply = useCallback((mode: KeyframeToggleDragMode) => {
     applyKeyframeToggleEntries(

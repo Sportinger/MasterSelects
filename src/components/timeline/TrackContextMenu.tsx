@@ -22,26 +22,40 @@ interface TrackContextMenuProps {
 export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
   const { menuRef, adjustedPosition } = useContextMenuPosition(menu);
 
-  // Close on outside click or Escape
+  // Close on outside pointer/context interactions or Escape. Some timeline
+  // surfaces stop bubbling click events, so listen in capture phase.
   useEffect(() => {
     if (!menu) return;
 
-    const handleClickOutside = () => onClose();
+    const handlePointerOutside = (event: PointerEvent | MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    const handleContextMenuOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      onClose();
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
 
     const timeoutId = setTimeout(() => {
-      window.addEventListener('click', handleClickOutside);
+      document.addEventListener('pointerdown', handlePointerOutside, true);
+      document.addEventListener('contextmenu', handleContextMenuOutside, true);
     }, 0);
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       clearTimeout(timeoutId);
-      window.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('pointerdown', handlePointerOutside, true);
+      document.removeEventListener('contextmenu', handleContextMenuOutside, true);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [menu, onClose]);
+  }, [menu, menuRef, onClose]);
 
   if (!menu) return null;
 

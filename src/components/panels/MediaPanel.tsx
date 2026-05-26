@@ -79,11 +79,15 @@ import { useMediaStore } from '../../stores/mediaStore';
 import type {
   CameraItem,
   Composition,
+  MathSceneItem,
   MediaFile,
+  MeshItem,
   MotionShapeItem,
   ProjectItem,
   SignalAssetItem,
   SolidItem,
+  SplatEffectorItem,
+  TextItem,
 } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
@@ -104,6 +108,14 @@ type MediaPanelViewMode = 'classic' | 'icons' | 'board';
 
 const CLASSIC_ROW_HEIGHT = 20;
 const CLASSIC_OVERSCAN_ROWS = 12;
+const EMPTY_TEXT_ITEMS: TextItem[] = [];
+const EMPTY_SOLID_ITEMS: SolidItem[] = [];
+const EMPTY_MESH_ITEMS: MeshItem[] = [];
+const EMPTY_CAMERA_ITEMS: CameraItem[] = [];
+const EMPTY_SPLAT_EFFECTOR_ITEMS: SplatEffectorItem[] = [];
+const EMPTY_MATH_SCENE_ITEMS: MathSceneItem[] = [];
+const EMPTY_MOTION_SHAPE_ITEMS: MotionShapeItem[] = [];
+const EMPTY_SIGNAL_ASSETS: SignalAssetItem[] = [];
 
 interface ClassicListRow {
   item: ProjectItem;
@@ -404,14 +416,14 @@ export function MediaPanel() {
   const files = useMediaStore(state => state.files);
   const compositions = useMediaStore(state => state.compositions);
   const folders = useMediaStore(state => state.folders);
-  const textItems = useMediaStore(state => state.textItems);
-  const solidItems = useMediaStore(state => state.solidItems ?? []);
-  const meshItems = useMediaStore(state => state.meshItems ?? []);
-  const cameraItems = useMediaStore(state => state.cameraItems ?? []);
-  const splatEffectorItems = useMediaStore(state => state.splatEffectorItems ?? []);
-  const mathSceneItems = useMediaStore(state => state.mathSceneItems ?? []);
-  const motionShapeItems = useMediaStore(state => state.motionShapeItems ?? []);
-  const signalAssets = useMediaStore(state => state.signalAssets ?? []);
+  const textItems = useMediaStore(state => state.textItems ?? EMPTY_TEXT_ITEMS);
+  const solidItems = useMediaStore(state => state.solidItems ?? EMPTY_SOLID_ITEMS);
+  const meshItems = useMediaStore(state => state.meshItems ?? EMPTY_MESH_ITEMS);
+  const cameraItems = useMediaStore(state => state.cameraItems ?? EMPTY_CAMERA_ITEMS);
+  const splatEffectorItems = useMediaStore(state => state.splatEffectorItems ?? EMPTY_SPLAT_EFFECTOR_ITEMS);
+  const mathSceneItems = useMediaStore(state => state.mathSceneItems ?? EMPTY_MATH_SCENE_ITEMS);
+  const motionShapeItems = useMediaStore(state => state.motionShapeItems ?? EMPTY_MOTION_SHAPE_ITEMS);
+  const signalAssets = useMediaStore(state => state.signalAssets ?? EMPTY_SIGNAL_ASSETS);
   const selectedIds = useMediaStore(state => state.selectedIds);
   const expandedFolderIds = useMediaStore(state => state.expandedFolderIds);
   const fileSystemSupported = useMediaStore(state => state.fileSystemSupported);
@@ -4107,7 +4119,7 @@ export function MediaPanel() {
       />
 
       {/* Item list with column headers */}
-      <div className="media-panel-content" ref={mediaPanelContentRef}>
+      <div className={`media-panel-content media-panel-content-${viewMode}`} ref={mediaPanelContentRef}>
         {totalItems === 0 ? (
           <div className="media-panel-empty" onContextMenu={(e) => handleContextMenu(e)}>
             <div className="drop-icon">
@@ -4126,7 +4138,20 @@ export function MediaPanel() {
             <p className="hint">{mediaSearchQuery}</p>
           </div>
         ) : viewMode === 'classic' ? (
-          <div className="media-panel-table-wrapper">
+          <div
+            className="media-panel-table-wrapper"
+            ref={itemListRef}
+            onScroll={handleClassicListScroll}
+            onMouseDown={handleMarqueeMouseDown}
+            onContextMenu={(e) => {
+              const target = e.target as HTMLElement;
+              if (!target.closest('.media-item')) handleContextMenu(e);
+            }}
+            style={{
+              position: 'relative',
+              '--media-name-column-width': `${nameColumnWidth}px`,
+            } as React.CSSProperties}
+          >
             {/* Column headers */}
             <div className="media-column-headers">
               {columnOrder.map((colId) => (
@@ -4159,14 +4184,6 @@ export function MediaPanel() {
             </div>
             <div
               className="media-item-list"
-              ref={itemListRef}
-              onScroll={handleClassicListScroll}
-              onMouseDown={handleMarqueeMouseDown}
-              onContextMenu={(e) => {
-                const target = e.target as HTMLElement;
-                if (!target.closest('.media-item')) handleContextMenu(e);
-              }}
-              style={{ position: 'relative' }}
             >
               {classicTopSpacerHeight > 0 && (
                 <div className="media-classic-virtual-spacer" style={{ height: classicTopSpacerHeight }} />

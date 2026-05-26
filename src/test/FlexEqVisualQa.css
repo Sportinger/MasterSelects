@@ -1,0 +1,130 @@
+.flex-eq-qa {
+  min-height: 100vh;
+  padding: 22px;
+  color: var(--text-primary);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(241, 211, 79, 0.08), transparent 30%),
+    linear-gradient(180deg, #111219 0%, #080a0f 100%);
+}
+
+.flex-eq-qa-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 1320px;
+  margin: 0 auto 18px;
+}
+
+.flex-eq-qa-header h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.flex-eq-qa-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.flex-eq-qa-badge {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid rgba(241, 211, 79, 0.34);
+  border-radius: var(--radius-sm);
+  color: #f1d34f;
+  background: rgba(241, 211, 79, 0.1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.flex-eq-qa-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.flex-eq-qa-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(128, 142, 170, 0.28);
+  border-radius: 6px;
+  background: rgba(18, 19, 27, 0.9);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.flex-eq-qa-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.flex-eq-qa-card h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.flex-eq-qa-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.flex-eq-qa-card.compact {
+  align-self: start;
+}
+
+.flex-eq-qa .flex-eq-stage {
+  border-color: rgba(128, 142, 170, 0.32);
+  border-radius: 4px;
+  background: #0c0e14;
+}
+
+.flex-eq-qa .flex-eq-toolbar select,
+.flex-eq-qa .flex-eq-add-row select,
+.flex-eq-qa .flex-eq-selected-band select {
+  background: rgba(12, 14, 20, 0.96);
+}
+
+@media (max-width: 920px) {
+  .flex-eq-qa {
+    padding: 14px;
+    overflow-x: hidden;
+  }
+
+  .flex-eq-qa-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .flex-eq-qa-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .flex-eq-qa-card {
+    width: calc(100vw - 28px);
+    max-width: calc(100vw - 28px);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .flex-eq-qa-card-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .flex-eq-qa-card p {
+    text-align: left;
+  }
+}

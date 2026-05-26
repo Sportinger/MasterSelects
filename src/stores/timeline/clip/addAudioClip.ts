@@ -5,10 +5,11 @@ import type { TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { createAudioElement } from '../helpers/webCodecsHelpers';
-import { generateWaveformForFile, AUDIO_WAVEFORM_THRESHOLD } from '../helpers/waveformHelpers';
+import { AUDIO_WAVEFORM_THRESHOLD } from '../helpers/waveformHelpers';
 import { generateClipId } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
 import { Logger } from '../../../services/logger';
+import { generateTimelineWaveformAnalysisForFile } from '../../../services/audio/timelineWaveformPyramidCache';
 
 const log = Logger.create('AddAudioClip');
 
@@ -91,7 +92,7 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
 
   if (waveformsEnabled && !isLargeFile) {
     // Run waveform generation async (don't await)
-    generateWaveformAsync(clip.id, file, updateClip);
+    generateWaveformAsync(clip.id, file, mediaFileId, updateClip);
   }
 
   // Sync to media store
@@ -107,15 +108,27 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
 async function generateWaveformAsync(
   clipId: string,
   file: File,
+  mediaFileId: string | undefined,
   updateClip: (id: string, updates: Partial<TimelineClip>) => void
 ): Promise<void> {
   try {
     log.debug('Starting waveform generation', { file: file.name });
-    const waveform = await generateWaveformForFile(file);
-    log.debug('Waveform complete', { samples: waveform.length, file: file.name });
+    const analysis = await generateTimelineWaveformAnalysisForFile(file, {
+      mediaFileId,
+      onProgress: (progress, partialWaveform) => {
+        updateClip(clipId, {
+          waveformProgress: progress,
+          waveform: partialWaveform,
+        });
+      },
+    });
+    log.debug('Waveform complete', { samples: analysis.waveform.length, file: file.name });
 
     updateClip(clipId, {
-      waveform,
+      waveform: analysis.waveform,
+      ...(analysis.audioAnalysisRefs
+        ? { audioState: { sourceAnalysisRefs: analysis.audioAnalysisRefs } }
+        : {}),
       waveformGenerating: false,
       waveformProgress: 100,
     });

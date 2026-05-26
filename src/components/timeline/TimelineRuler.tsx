@@ -2,10 +2,16 @@
 
 import React, { memo } from 'react';
 import type { TimelineRulerProps } from './types';
+import { createTimelineGridPlan, formatTimelineTimecode } from './utils/timelineGrid';
+
+const RULER_VIEWPORT_FALLBACK_PX = 1600;
+const RULER_VIEWPORT_MIN_PX = 1600;
+const RULER_RENDER_OVERSCAN_PX = 512;
 
 function TimelineRulerComponent({
   duration,
   zoom,
+  frameRate,
   scrollX,
   onRulerMouseDown,
   formatTime,
@@ -16,54 +22,43 @@ function TimelineRulerComponent({
 
   const width = timeToPixel(duration);
   const markers: React.ReactElement[] = [];
+  const viewportWidth = typeof window === 'undefined'
+    ? RULER_VIEWPORT_FALLBACK_PX
+    : Math.max(RULER_VIEWPORT_MIN_PX, window.innerWidth);
+  const visibleStartTime = Math.max(0, (scrollX - RULER_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001));
+  const visibleEndTime = Math.min(
+    duration,
+    (scrollX + viewportWidth + RULER_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001),
+  );
   const visibleCacheRanges = cacheRanges
     .map((range) => {
       const start = Math.max(0, Math.min(duration, range.start));
       const end = Math.max(start, Math.min(duration, range.end));
       return { ...range, start, end };
     })
-    .filter((range) => range.end > range.start);
+    .filter((range) => range.end > range.start && range.end >= visibleStartTime && range.start <= visibleEndTime);
 
-  // Calculate marker interval based on zoom level
-  // Lower zoom = more zoomed out = need larger intervals
-  let interval = 1; // 1 second default
-  let mainMarkerMultiple = 5; // Show label every 5 markers by default
+  const gridPlan = createTimelineGridPlan({ zoom, frameRate });
+  const interval = gridPlan.minorIntervalSeconds;
+  const firstMarkerIndex = Math.max(0, Math.floor(visibleStartTime / interval));
+  const lastMarkerIndex = Math.max(firstMarkerIndex, Math.ceil(visibleEndTime / interval));
 
-  if (zoom >= 100) {
-    interval = 0.5;
-    mainMarkerMultiple = 2; // Every 1 second
-  } else if (zoom >= 50) {
-    interval = 1;
-    mainMarkerMultiple = 5; // Every 5 seconds
-  } else if (zoom >= 20) {
-    interval = 2;
-    mainMarkerMultiple = 5; // Every 10 seconds
-  } else if (zoom >= 10) {
-    interval = 5;
-    mainMarkerMultiple = 2; // Every 10 seconds
-  } else if (zoom >= 5) {
-    interval = 10;
-    mainMarkerMultiple = 3; // Every 30 seconds
-  } else if (zoom >= 2) {
-    interval = 30;
-    mainMarkerMultiple = 2; // Every 60 seconds
-  } else {
-    interval = 60; // 1 minute
-    mainMarkerMultiple = 5; // Every 5 minutes
-  }
-
-  for (let t = 0; t <= duration; t += interval) {
+  for (let markerIndex = firstMarkerIndex; markerIndex <= lastMarkerIndex; markerIndex += 1) {
+    const t = markerIndex * interval;
+    if (t < 0 || t > duration) continue;
     const x = timeToPixel(t);
-    const markerIndex = Math.round(t / interval);
-    const isMainMarker = markerIndex % mainMarkerMultiple === 0;
+    const isMainMarker = markerIndex % gridPlan.majorEveryMinor === 0;
+    const label = gridPlan.labelMode === 'timecode'
+      ? formatTimelineTimecode(t, gridPlan.frameRate)
+      : formatTime(t);
 
     markers.push(
       <div
-        key={t}
-        className={`time-marker ${isMainMarker ? 'main' : 'sub'}`}
+        key={`${gridPlan.mode}-${markerIndex}`}
+        className={`time-marker ${gridPlan.mode} ${isMainMarker ? 'main' : 'sub'}`}
         style={{ left: x }}
       >
-        {isMainMarker && <span className="time-label">{formatTime(t)}</span>}
+        {isMainMarker && <span className="time-label">{label}</span>}
       </div>
     );
   }

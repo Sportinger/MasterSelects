@@ -564,6 +564,7 @@ export function ExportPanel() {
       Array.isArray(timelineState.tracks) ? timelineState.tracks : [],
       startTime,
       endTime,
+      timelineState.masterAudioState,
     );
     const originalDimensions = engine.getOutputDimensions();
     const ffmpegFrameRenderer = new FFmpegFrameRenderer({

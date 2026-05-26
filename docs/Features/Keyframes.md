@@ -53,7 +53,15 @@ Examples:
 - `effect.effect_123.volume`
 - `effect.effect_123.band1k`
 
-Audio fades are built from `audio-volume.volume` keyframes, and EQ lanes use the same effect-property naming pattern.
+Audio fades are built from `audio-volume.volume` keyframes. Flexible EQ lanes use nested effect-property paths so band and advanced numeric controls can be animated without flattening the EQ schema:
+
+- `effect.effect_123.eq.audible.bands.presence.frequencyHz`
+- `effect.effect_123.eq.audible.bands.presence.gainDb`
+- `effect.effect_123.eq.audible.bands.presence.q`
+- `effect.effect_123.eq.audible.bands.presence.dynamic.thresholdDb`
+- `effect.effect_123.eq.audible.bands.presence.spectralDynamics.attackMs`
+
+The selected EQ band exposes individual stopwatches plus an all-numeric-band stopwatch. The EQ stack item header exposes an all-numeric-EQ stopwatch that writes keyframes for every numeric band parameter at the current playhead.
 
 ### Color Properties
 
@@ -243,7 +251,7 @@ This means speed keyframes can create ramps, reversals, and mixed-rate playback 
 
 - Expanding a track shows flat property rows for the selected clip in that track.
 - The row order prefers transform properties first and effect properties after them.
-- Audio EQ parameters are ordered by band frequency, with `volume` first.
+- Audio EQ parameters are ordered by band frequency, with `volume` first; nested flexible-EQ rows include frequency, gain, Q, dynamic EQ, and Spectral Dynamics numeric parameters.
 - If a curve editor is open for a property, it adds additional height beneath the row.
 
 The row-height constant is 18 px, and the curve editor height clamps to 80-600 px.

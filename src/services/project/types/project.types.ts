@@ -10,8 +10,10 @@ import type {
   SignalGraph,
   SignalOperatorDescriptor,
 } from '../../../signals';
+import type { ProjectAudioState } from '../../../types/audio';
 import type { ProjectFlashBoardState } from '../../../stores/flashboardStore/types';
 import type { ExportStoreData } from '../../../stores/exportStore';
+import type { TimelineAudioDisplayMode, TimelineTrackFocusMode } from '../../../stores/timeline/types';
 import type {
   CameraItem,
   LabelColor,
@@ -114,6 +116,9 @@ export interface ProjectUIState {
   // View toggles
   thumbnailsEnabled?: boolean;
   waveformsEnabled?: boolean;
+  audioDisplayMode?: TimelineAudioDisplayMode;
+  audioFocusMode?: boolean;
+  trackFocusMode?: TimelineTrackFocusMode;
   proxyEnabled?: boolean;
   showTranscriptMarkers?: boolean;
   showChangelogOnStartup?: boolean;
@@ -136,6 +141,9 @@ export interface ProjectFile {
 
   // Universal Signal IR state for non-legacy import/runtime artifacts
   signals?: ProjectSignalState;
+
+  // Advanced audio workstation state and artifact indexes
+  audio?: ProjectAudioState;
 
   // Compositions (timelines)
   compositions: ProjectComposition[];

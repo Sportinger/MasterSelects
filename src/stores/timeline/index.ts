@@ -19,6 +19,7 @@ import { createClipEffectSlice } from './clipEffectSlice';
 import { createColorCorrectionSlice } from './colorCorrectionSlice';
 import { createLinkedGroupSlice } from './linkedGroupSlice';
 import { createDownloadClipSlice } from './downloadClipSlice';
+import { createAudioEditSlice } from './audioEditSlice';
 import { createPlaybackSlice } from './playbackSlice';
 import { createRamPreviewSlice } from './ramPreviewSlice';
 import { createProxyCacheSlice } from './proxyCacheSlice';
@@ -70,6 +71,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
+    const audioEditActions = createAudioEditSlice(set, get);
     const playbackActions = createPlaybackSlice(set, get);
     const ramPreviewActions = createRamPreviewSlice(set, get);
     const proxyCacheActions = createProxyCacheSlice(set, get);
@@ -194,6 +196,13 @@ export const useTimelineStore = create<TimelineStore>()(
       // Performance toggles (enabled by default)
       thumbnailsEnabled: true,
       waveformsEnabled: true,
+      audioDisplayMode: 'detailed' as const,
+      audioLayerAdvancedMode: true,
+      audioFocusMode: false,
+      trackFocusMode: 'balanced' as const,
+      audioRegionSelection: null,
+      audioSpectralRegionSelection: null,
+      audioRegionClipboard: null,
       showTranscriptMarkers: true,
 
       // Keyframe animation state
@@ -218,6 +227,12 @@ export const useTimelineStore = create<TimelineStore>()(
 
       // Timeline markers
       markers: [] as import('./types').TimelineMarker[],
+
+      // Composition-level audio master bus state
+      masterAudioState: undefined,
+      runtimeAudioMeters: {
+        trackMeters: {},
+      },
 
       // Clip entrance animation key (increments on composition switch)
       clipEntranceAnimationKey: 0,
@@ -314,6 +329,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...colorCorrectionActions,
       ...linkedGroupActions,
       ...downloadClipActions,
+      ...audioEditActions,
       ...playbackActions,
       ...ramPreviewActions,
       ...proxyCacheActions,

@@ -14,13 +14,14 @@ import {
   createAudioElement,
   waitForVideoMetadata,
 } from '../helpers/webCodecsHelpers';
-import { shouldSkipWaveform, generateWaveformForFile } from '../helpers/waveformHelpers';
+import { shouldSkipWaveform } from '../helpers/waveformHelpers';
 import { generateLinkedClipIds } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { detectVideoAudio } from '../helpers/audioDetection';
 import { getMP4MetadataFast, estimateDurationFromFileSize } from '../helpers/mp4MetadataHelper';
 import { Logger } from '../../../services/logger';
+import { generateTimelineWaveformAnalysisForFile } from '../../../services/audio/timelineWaveformPyramidCache';
 
 const log = Logger.create('AddVideoClip');
 
@@ -399,8 +400,34 @@ async function loadLinkedAudio(
     setClips(clips => updateClipById(clips, audioClipId, { waveformGenerating: true, waveformProgress: 0 }));
 
     try {
-      const waveform = await generateWaveformForFile(file);
-      setClips(clips => updateClipById(clips, audioClipId, { waveform, waveformGenerating: false, waveformProgress: 100 }));
+      const analysis = await generateTimelineWaveformAnalysisForFile(file, {
+        mediaFileId,
+        onProgress: (progress, partialWaveform) => {
+          setClips(clips => updateClipById(clips, audioClipId, {
+            waveformProgress: progress,
+            waveform: partialWaveform,
+          }));
+        },
+      });
+      setClips(clips => {
+        const currentClip = clips.find(c => c.id === audioClipId);
+        return updateClipById(clips, audioClipId, {
+          waveform: analysis.waveform,
+          ...(analysis.audioAnalysisRefs
+            ? {
+                audioState: {
+                  ...(currentClip?.audioState ?? {}),
+                  sourceAnalysisRefs: {
+                    ...(currentClip?.audioState?.sourceAnalysisRefs ?? {}),
+                    ...analysis.audioAnalysisRefs,
+                  },
+                },
+              }
+            : {}),
+          waveformGenerating: false,
+          waveformProgress: 100,
+        });
+      });
     } catch (e) {
       log.warn('Waveform generation failed', e);
       setClips(clips => updateClipById(clips, audioClipId, { waveformGenerating: false }));

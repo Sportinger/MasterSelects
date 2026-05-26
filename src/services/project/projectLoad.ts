@@ -589,6 +589,7 @@ async function convertProjectMediaToStore(
       absolutePath: representativeAbsolutePath,
       projectPath: representativeProjectPath,
       fileHash: pm.fileHash,
+      audioAnalysisRefs: pm.audioAnalysisRefs ? structuredClone(pm.audioAnalysisRefs) : undefined,
       vectorAnimation: pm.vectorAnimation,
       labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       transcriptStatus,
@@ -636,6 +637,7 @@ function convertProjectCompositionToStore(
         visible: t.visible,
         muted: t.muted,
         solo: t.solo,
+        audioState: t.audioState ? structuredClone(t.audioState) : undefined,
       })),
       clips: pc.clips.map((c) => ({
         id: c.id,
@@ -650,6 +652,7 @@ function convertProjectCompositionToStore(
         thumbnails: c.thumbnails,
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,
+        audioState: c.audioState ? structuredClone(c.audioState) : undefined,
         waveform: c.waveform,
         modelSequence: c.modelSequence,
         gaussianSplatSequence: c.gaussianSplatSequence,
@@ -760,6 +763,7 @@ function convertProjectCompositionToStore(
       inPoint: viewState?.inPoint ?? null,
       outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
+      masterAudioState: pc.masterAudioState ? structuredClone(pc.masterAudioState) : undefined,
       markers: (pc.markers || []).map((marker) => ({
         id: marker.id,
         time: marker.time,
@@ -1207,6 +1211,12 @@ export async function loadProjectToStores(): Promise<void> {
     const ts = useTimelineStore.getState();
     if (ui.thumbnailsEnabled !== undefined) ts.setThumbnailsEnabled(ui.thumbnailsEnabled);
     if (ui.waveformsEnabled !== undefined) ts.setWaveformsEnabled(ui.waveformsEnabled);
+    if (ui.audioDisplayMode !== undefined) ts.setAudioDisplayMode(ui.audioDisplayMode);
+    if (ui.trackFocusMode !== undefined) {
+      ts.setTrackFocusMode(ui.trackFocusMode);
+    } else if (ui.audioFocusMode !== undefined) {
+      ts.setAudioFocusMode(ui.audioFocusMode);
+    }
     if (ui.showTranscriptMarkers !== undefined) ts.setShowTranscriptMarkers(ui.showTranscriptMarkers);
     if (ui.proxyEnabled !== undefined) useMediaStore.getState().setProxyEnabled(ui.proxyEnabled);
 

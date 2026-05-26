@@ -3,13 +3,123 @@
 // Reduced from ~2031 LOC to ~650 LOC (68% reduction)
 
 import type { TimelineClip, TimelineTrack } from '../../types';
-import type { AddClipOptions, CoreClipActions, SliceCreator, Composition } from './types';
+import type {
+  AudioAnalysisArtifactKind,
+  ClipAudioAnalysisJobKind,
+  ClipAudioAnalysisJobPhase,
+} from '../../types/audio';
+import type { AddClipOptions, CoreClipActions, GenerateClipAudioAnalysisOptions, SliceCreator, Composition } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
-import { generateWaveform, generateWaveformFromBuffer } from './helpers/waveformHelpers';
+import { generateWaveformFromBuffer } from './helpers/waveformHelpers';
 import { Logger } from '../../services/logger';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
+import {
+  createCurrentAudioArtifactStore,
+  generateTimelineWaveformAnalysisForFile,
+} from '../../services/audio/timelineWaveformPyramidCache';
+import { audioExtractor } from '../../engine/audio/AudioExtractor';
+import {
+  ProcessedWaveformPyramidService,
+  clipRequiresProcessedWaveformPyramid,
+  createFileAudioSourceFingerprint,
+  createProcessedClipAudioStateHash,
+} from '../../services/audio/ProcessedWaveformPyramidService';
+import { SpectrogramTileSetGenerator } from '../../services/audio/SpectrogramTileSetGenerator';
+import {
+  primeTimelineSpectrogramTileSetCache,
+  readTimelineSpectrogramTileSet,
+} from '../../services/audio/timelineSpectrogramCache';
+import { LoudnessEnvelopeGenerator } from '../../services/audio/LoudnessEnvelopeGenerator';
+import {
+  primeTimelineLoudnessEnvelopeCache,
+  readTimelineLoudnessEnvelope,
+} from '../../services/audio/timelineLoudnessEnvelopeCache';
+import { BeatOnsetAnalysisGenerator } from '../../services/audio/BeatOnsetAnalysisGenerator';
+import {
+  primeTimelineBeatGridCache,
+  primeTimelineOnsetMapCache,
+  readTimelineBeatGrid,
+  readTimelineOnsetMap,
+} from '../../services/audio/timelineBeatOnsetCache';
+import { FrequencyPhaseAnalysisGenerator } from '../../services/audio/FrequencyPhaseAnalysisGenerator';
+import {
+  primeTimelineFrequencySummaryCache,
+  primeTimelinePhaseCorrelationCache,
+  readTimelineFrequencySummary,
+  readTimelinePhaseCorrelation,
+} from '../../services/audio/timelineFrequencyPhaseCache';
+import {
+  isPreparedClipAudioAnalysisInputStale,
+  prepareClipAudioAnalysisInput,
+} from '../../services/audio/ClipAudioAnalysisOrchestrator';
+import {
+  createClipAudioAnalysisJobState,
+  updateClipAudioAnalysisJobState,
+} from '../../services/audio/clipAudioAnalysisJobs';
+import {
+  clipAudioAnalysisJobService,
+  isClipAudioAnalysisJobCancelledError,
+} from '../../services/audio/ClipAudioAnalysisJobService';
 
 const log = Logger.create('ClipSlice');
+
+function createAudioAnalysisJobUpdate(input: {
+  kind: ClipAudioAnalysisJobKind;
+  label: string;
+  artifactKinds: AudioAnalysisArtifactKind[];
+  processed: boolean;
+}): Pick<TimelineClip, 'audioAnalysisJob' | 'waveformGenerating' | 'waveformProgress'> {
+  return {
+    waveformGenerating: true,
+    waveformProgress: 0,
+    audioAnalysisJob: createClipAudioAnalysisJobState(input),
+  };
+}
+
+function updateAudioAnalysisJobProgress(
+  clips: TimelineClip[],
+  clipId: string,
+  progress: number,
+  phase: ClipAudioAnalysisJobPhase,
+  message?: string,
+): TimelineClip[] {
+  const clip = clips.find(c => c.id === clipId);
+  if (!clip?.audioAnalysisJob) {
+    return updateClipById(clips, clipId, { waveformProgress: progress });
+  }
+
+  return updateClipById(clips, clipId, {
+    waveformProgress: progress,
+    audioAnalysisJob: updateClipAudioAnalysisJobState(clip.audioAnalysisJob, {
+      progress,
+      phase,
+      message,
+    }),
+  });
+}
+
+function clearAudioAnalysisJobUpdate(): Pick<
+  TimelineClip,
+  'audioAnalysisJob' | 'waveformGenerating'
+> {
+  return {
+    audioAnalysisJob: undefined,
+    waveformGenerating: false,
+  };
+}
+
+function isAudioAnalysisCancellation(error: unknown): boolean {
+  if (isClipAudioAnalysisJobCancelledError(error)) {
+    return true;
+  }
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const maybe = error as { name?: unknown; code?: unknown };
+  return maybe.name === 'AbortError'
+    || maybe.code === 'cancelled'
+    || (typeof maybe.name === 'string' && maybe.name.includes('Cancelled'));
+}
 
 function isPlaneClip(clip: TimelineClip): boolean {
   return clip.source?.type === 'video' || clip.source?.type === 'image';
@@ -77,6 +187,10 @@ import {
 } from './helpers/idGenerator';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { updateClipById } from './helpers/clipStateHelpers';
+import {
+  applyClipUpdatesWithAudioAnalysisInvalidation,
+  clearProcessedAudioAnalysisRefs,
+} from './helpers/audioAnalysisStateHelpers';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
 import { readRiveMetadata } from '../../services/vectorAnimation/riveMetadata';
 import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
@@ -668,7 +782,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     set({
       clips: clips.map(c => {
         if (c.id !== id) return c;
-        return { ...c, inPoint, outPoint, duration: outPoint - inPoint };
+        return clearProcessedAudioAnalysisRefs({ ...c, inPoint, outPoint, duration: outPoint - inPoint });
       }),
     });
     updateDuration();
@@ -839,7 +953,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       log.warn('Cannot update clip on locked track', { id });
       return;
     }
-    set({ clips: clips.map(c => c.id === id ? { ...c, ...updates } : c) });
+    set({ clips: clips.map(c => c.id === id ? applyClipUpdatesWithAudioAnalysisInvalidation(c, updates) : c) });
     updateDuration();
   },
 
@@ -877,7 +991,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       clips: clips.map(c => {
         if (c.id !== id) return c;
         return {
-          ...c,
+          ...clearProcessedAudioAnalysisRefs(c),
           reversed: !c.reversed,
         };
       }),
@@ -887,51 +1001,849 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
   // ========== WAVEFORM GENERATION ==========
 
+  cancelAudioAnalysisForClip: (clipId: string) => {
+    const cancelled = clipAudioAnalysisJobService.cancelClip(clipId);
+    if (cancelled === 0) return;
+    set({
+      clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()),
+    });
+  },
+
   generateWaveformForClip: async (clipId: string) => {
     const { clips } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
 
-    set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: true, waveformProgress: 0 }) });
+    set({
+      clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+        kind: 'waveform-pyramid',
+        label: 'Waveform',
+        artifactKinds: ['waveform-pyramid'],
+        processed: false,
+      })),
+    });
     log.debug('Starting waveform generation', { clip: clip.name });
 
     try {
-      let waveform: number[];
+      await clipAudioAnalysisJobService.run({ clipId, kind: 'waveform-pyramid' }, async ({ signal }) => {
+        set({
+          clips: updateAudioAnalysisJobProgress(get().clips, clipId, 1, 'preparing', 'Preparing waveform'),
+        });
+        let waveform: number[];
+        let audioAnalysisRefs: import('../../types/audio').MediaFileAudioAnalysisRefs | undefined;
 
-      if (clip.isComposition && clip.compositionId) {
-        const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
-        const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+        if (clip.isComposition && clip.compositionId) {
+          const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
+          const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+          if (signal.aborted) throw signal.reason;
 
-        if (mixdownResult?.hasAudio) {
-          waveform = mixdownResult.waveform;
-          const mixdownAudio = compositionAudioMixer.createAudioElement(mixdownResult.buffer);
+          if (mixdownResult?.hasAudio) {
+            waveform = mixdownResult.waveform;
+            const mixdownAudio = compositionAudioMixer.createAudioElement(mixdownResult.buffer);
+            set({
+              clips: updateClipById(get().clips, clipId, {
+                source: { type: 'audio' as const, audioElement: mixdownAudio, naturalDuration: mixdownResult.duration },
+                mixdownBuffer: mixdownResult.buffer,
+                hasMixdownAudio: true,
+              }),
+            });
+          } else if (clip.mixdownBuffer) {
+            waveform = generateWaveformFromBuffer(clip.mixdownBuffer, 50);
+          } else {
+            waveform = new Array(Math.max(1, Math.floor(clip.duration * 50))).fill(0);
+          }
+        } else if (!clip.file) {
+          log.warn('No file found for clip', { clipId });
+          set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+          return;
+        } else {
+          const analysis = await generateTimelineWaveformAnalysisForFile(clip.file, {
+            mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+            signal,
+            onProgress: (progress, partialWaveform) => {
+              set({
+                clips: updateAudioAnalysisJobProgress(
+                  updateClipById(get().clips, clipId, { waveform: partialWaveform }),
+                  clipId,
+                  progress,
+                  'analyzing',
+                ),
+              });
+            },
+            onPyramidProgress: (progress) => {
+              set({
+                clips: updateAudioAnalysisJobProgress(
+                  get().clips,
+                  clipId,
+                  Math.min(98, Math.round(progress.percent)),
+                  progress.phase.startsWith('storing') ? 'storing' : 'analyzing',
+                  progress.message,
+                ),
+              });
+            },
+          });
+          waveform = analysis.waveform;
+          audioAnalysisRefs = analysis.audioAnalysisRefs;
+        }
+
+        if (signal.aborted) throw signal.reason;
+        log.debug('Waveform complete', { samples: waveform.length, clip: clip.name });
+        const currentClip = get().clips.find(c => c.id === clipId);
+        set({ clips: updateClipById(get().clips, clipId, {
+          waveform,
+          ...(audioAnalysisRefs
+            ? {
+                audioState: {
+                  ...(currentClip?.audioState ?? {}),
+                  sourceAnalysisRefs: {
+                    ...(currentClip?.audioState?.sourceAnalysisRefs ?? {}),
+                    ...audioAnalysisRefs,
+                  },
+                },
+              }
+            : {}),
+          ...clearAudioAnalysisJobUpdate(),
+          waveformProgress: 100,
+        }) });
+      });
+    } catch (e) {
+      if (isAudioAnalysisCancellation(e)) {
+        log.debug('Waveform generation cancelled', { clipId });
+      } else {
+        log.error('Waveform generation failed', e);
+      }
+      set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+    }
+  },
+
+  generateProcessedWaveformForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.waveformGenerating) return;
+
+    const keyframes = clipKeyframes.get(clipId) ?? [];
+    if (!clipRequiresProcessedWaveformPyramid(clip, keyframes)) {
+      return;
+    }
+    if (!options.force && clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId) {
+      return;
+    }
+
+    set({
+      clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+        kind: 'processed-waveform-pyramid',
+        label: 'Processed Waveform',
+        artifactKinds: ['processed-waveform-pyramid'],
+        processed: true,
+      })),
+    });
+    log.debug('Starting processed waveform generation', { clip: clip.name });
+
+    try {
+      await clipAudioAnalysisJobService.run({ clipId, kind: 'processed-waveform-pyramid' }, async ({ signal }) => {
+        set({
+          clips: updateAudioAnalysisJobProgress(get().clips, clipId, 1, 'preparing', 'Preparing processed waveform'),
+        });
+        let sourceBuffer: AudioBuffer | null = null;
+        let sourceFingerprint = '';
+        let mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+
+        if (clip.isComposition && clip.compositionId) {
+          if (clip.mixdownBuffer) {
+            sourceBuffer = clip.mixdownBuffer;
+          } else {
+            const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
+            const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+            if (signal.aborted) throw signal.reason;
+            if (mixdownResult?.hasAudio) {
+              sourceBuffer = mixdownResult.buffer;
+              set({
+                clips: updateClipById(get().clips, clipId, {
+                  mixdownBuffer: mixdownResult.buffer,
+                  hasMixdownAudio: true,
+                }),
+              });
+            }
+          }
+
+          if (sourceBuffer) {
+            sourceFingerprint = [
+              'composition-mixdown',
+              clip.compositionId,
+              clip.nestedContentHash ?? 'unknown-content',
+              sourceBuffer.sampleRate,
+              sourceBuffer.length,
+              Number(sourceBuffer.duration.toFixed(6)),
+            ].join(':');
+            mediaFileId = mediaFileId ?? clip.compositionId;
+          }
+        } else if (clip.file) {
+          mediaFileId = mediaFileId ?? `file:${clip.file.name}:${clip.file.size}:${clip.file.lastModified}`;
+          sourceFingerprint = await createFileAudioSourceFingerprint(clip.file);
+          if (signal.aborted) throw signal.reason;
+          sourceBuffer = await audioExtractor.extractAudio(clip.file, mediaFileId);
+          if (signal.aborted) throw signal.reason;
+        }
+
+        if (!sourceBuffer) {
+          log.warn('No audio source found for processed waveform', { clipId });
+          set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+          return;
+        }
+
+        const service = new ProcessedWaveformPyramidService();
+        const result = await service.generate({
+          clip,
+          sourceBuffer,
+          sourceFingerprint,
+          mediaFileId,
+          keyframes,
+          signal,
+          onProgress: (progress) => {
+            set({
+              clips: updateAudioAnalysisJobProgress(
+                get().clips,
+                clipId,
+                progress.percent,
+                progress.phase === 'waveform' ? 'analyzing' : 'rendering-processed-audio',
+                progress.message,
+              ),
+            });
+          },
+        });
+
+        const currentClip = get().clips.find(c => c.id === clipId);
+        if (!currentClip) return;
+        if (createProcessedClipAudioStateHash(currentClip, { keyframes }) !== result.clipAudioStateHash) {
+          log.debug('Discarding stale processed waveform result', { clipId });
+          set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+          return;
+        }
+
+        set({
+          clips: updateClipById(get().clips, clipId, {
+            ...(currentClip.waveform?.length ? {} : { waveform: result.waveform }),
+            audioState: {
+              ...(currentClip.audioState ?? {}),
+              processedAnalysisRefs: {
+                ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+                ...result.audioAnalysisRefs,
+              },
+            },
+            ...clearAudioAnalysisJobUpdate(),
+            waveformProgress: 100,
+          }),
+        });
+        log.debug('Processed waveform complete', {
+          clip: clip.name,
+          artifactId: result.artifact.id,
+        });
+      });
+    } catch (e) {
+      if (isAudioAnalysisCancellation(e)) {
+        log.debug('Processed waveform generation cancelled', { clipId });
+      } else {
+        log.error('Processed waveform generation failed', e);
+      }
+      set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+    }
+  },
+
+  generateSpectrogramForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.waveformGenerating) return;
+
+    const keyframes = clipKeyframes.get(clipId) ?? [];
+    const needsProcessedSpectrogram = clipRequiresProcessedWaveformPyramid(clip, keyframes);
+    if (!options.force && needsProcessedSpectrogram && clip.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0]) {
+      return;
+    }
+    if (!options.force && !needsProcessedSpectrogram && clip.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0]) {
+      return;
+    }
+
+    set({
+      clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+        kind: 'spectrogram-tiles',
+        label: 'Spectrogram',
+        artifactKinds: ['spectrogram-tiles'],
+        processed: needsProcessedSpectrogram,
+      })),
+    });
+    log.debug('Starting spectrogram generation', {
+      clip: clip.name,
+      processed: needsProcessedSpectrogram,
+    });
+
+    try {
+      await clipAudioAnalysisJobService.run({ clipId, kind: 'spectrogram-tiles' }, async ({ signal }) => {
+      const prepared = await prepareClipAudioAnalysisInput({
+        clip,
+        keyframes,
+        needsProcessed: needsProcessedSpectrogram,
+        signal,
+        onMixdownReady: (buffer) => {
           set({
             clips: updateClipById(get().clips, clipId, {
-              source: { type: 'audio' as const, audioElement: mixdownAudio, naturalDuration: mixdownResult.duration },
-              mixdownBuffer: mixdownResult.buffer,
+              mixdownBuffer: buffer,
               hasMixdownAudio: true,
             }),
           });
-        } else if (clip.mixdownBuffer) {
-          waveform = generateWaveformFromBuffer(clip.mixdownBuffer, 50);
-        } else {
-          waveform = new Array(Math.max(1, Math.floor(clip.duration * 50))).fill(0);
-        }
-      } else if (!clip.file) {
-        log.warn('No file found for clip', { clipId });
-        set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });
+        },
+        onRenderProgress: (progress) => {
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              Math.min(66, Math.round(progress.percent * 0.66)),
+              'rendering-processed-audio',
+              progress.message,
+            ),
+          });
+        },
+      });
+
+      if (!prepared) {
+        log.warn('No audio source found for spectrogram', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
         return;
-      } else {
-        waveform = await generateWaveform(clip.file, 50, (progress, partialWaveform) => {
-          set({ clips: updateClipById(get().clips, clipId, { waveformProgress: progress, waveform: partialWaveform }) });
-        });
       }
 
-      log.debug('Waveform complete', { samples: waveform.length, clip: clip.name });
-      set({ clips: updateClipById(get().clips, clipId, { waveform, waveformGenerating: false, waveformProgress: 100 }) });
+      const store = createCurrentAudioArtifactStore();
+      const generator = new SpectrogramTileSetGenerator({ artifactStore: store });
+      const generated = await generator.generate({
+        mediaFileId: prepared.mediaFileId,
+        sourceFingerprint: prepared.sourceFingerprint,
+        buffer: prepared.analysisBuffer,
+        clipAudioStateHash: prepared.clipAudioStateHash,
+        decoderId: prepared.decoderId,
+        decoderVersion: prepared.decoderVersion,
+        metadata: prepared.metadata,
+      }, {
+        signal,
+        onProgress: (progress) => {
+          const base = needsProcessedSpectrogram ? 66 : 0;
+          const scale = needsProcessedSpectrogram ? 0.32 : 0.98;
+          const nextProgress = Math.min(98, Math.round(base + progress.percent * scale));
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              nextProgress,
+              progress.phase.startsWith('storing') ? 'storing' : 'analyzing',
+              progress.message,
+            ),
+          });
+        },
+      });
+      const tileSet = await readTimelineSpectrogramTileSet(generated.manifest, store);
+
+      primeTimelineSpectrogramTileSetCache([
+        generated.artifact.id,
+        generated.artifact.manifestRef.artifactId,
+        generated.analysisRef.artifactId,
+      ], tileSet);
+
+      const currentClip = get().clips.find(c => c.id === clipId);
+      if (!currentClip) return;
+      if (isPreparedClipAudioAnalysisInputStale(prepared, currentClip)) {
+        log.debug('Discarding stale processed spectrogram result', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        return;
+      }
+
+      const refId = generated.artifact.manifestRef.artifactId;
+      set({
+        clips: updateClipById(get().clips, clipId, {
+          audioState: {
+            ...(currentClip.audioState ?? {}),
+            ...(needsProcessedSpectrogram
+              ? {
+                  processedAnalysisRefs: {
+                    ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+                    spectrogramTileSetIds: [refId],
+                  },
+                }
+              : {
+                  sourceAnalysisRefs: {
+                    ...(currentClip.audioState?.sourceAnalysisRefs ?? {}),
+                    spectrogramTileSetIds: [refId],
+                  },
+                }),
+          },
+          ...clearAudioAnalysisJobUpdate(),
+          waveformProgress: 100,
+        }),
+      });
+
+      log.debug('Spectrogram generation complete', {
+        clip: clip.name,
+        artifactId: generated.artifact.id,
+        processed: needsProcessedSpectrogram,
+      });
+      });
     } catch (e) {
-      log.error('Waveform generation failed', e);
-      set({ clips: updateClipById(get().clips, clipId, { waveformGenerating: false }) });
+      if (isAudioAnalysisCancellation(e)) {
+        log.debug('Spectrogram generation cancelled', { clipId });
+      } else {
+        log.error('Spectrogram generation failed', e);
+      }
+      set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+    }
+  },
+
+  generateLoudnessForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.waveformGenerating) return;
+
+    const keyframes = clipKeyframes.get(clipId) ?? [];
+    const needsProcessedLoudness = clipRequiresProcessedWaveformPyramid(clip, keyframes);
+    if (!options.force && needsProcessedLoudness && clip.audioState?.processedAnalysisRefs?.loudnessEnvelopeId) {
+      return;
+    }
+    if (!options.force && !needsProcessedLoudness && clip.audioState?.sourceAnalysisRefs?.loudnessEnvelopeId) {
+      return;
+    }
+
+    set({
+      clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+        kind: 'loudness-envelope',
+        label: 'Loudness',
+        artifactKinds: ['loudness-envelope'],
+        processed: needsProcessedLoudness,
+      })),
+    });
+    log.debug('Starting loudness generation', {
+      clip: clip.name,
+      processed: needsProcessedLoudness,
+    });
+
+    try {
+      await clipAudioAnalysisJobService.run({ clipId, kind: 'loudness-envelope' }, async ({ signal }) => {
+      const prepared = await prepareClipAudioAnalysisInput({
+        clip,
+        keyframes,
+        needsProcessed: needsProcessedLoudness,
+        signal,
+        onMixdownReady: (buffer) => {
+          set({
+            clips: updateClipById(get().clips, clipId, {
+              mixdownBuffer: buffer,
+              hasMixdownAudio: true,
+            }),
+          });
+        },
+        onRenderProgress: (progress) => {
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              Math.min(66, Math.round(progress.percent * 0.66)),
+              'rendering-processed-audio',
+              progress.message,
+            ),
+          });
+        },
+      });
+
+      if (!prepared) {
+        log.warn('No audio source found for loudness', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        return;
+      }
+
+      const store = createCurrentAudioArtifactStore();
+      const generator = new LoudnessEnvelopeGenerator({ artifactStore: store });
+      const generated = await generator.generate({
+        mediaFileId: prepared.mediaFileId,
+        sourceFingerprint: prepared.sourceFingerprint,
+        buffer: prepared.analysisBuffer,
+        clipAudioStateHash: prepared.clipAudioStateHash,
+        decoderId: prepared.decoderId,
+        decoderVersion: prepared.decoderVersion,
+        metadata: prepared.metadata,
+      }, {
+        signal,
+        onProgress: (progress) => {
+          const base = needsProcessedLoudness ? 66 : 0;
+          const scale = needsProcessedLoudness ? 0.32 : 0.98;
+          const nextProgress = Math.min(98, Math.round(base + progress.percent * scale));
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              nextProgress,
+              progress.phase.startsWith('storing') ? 'storing' : 'analyzing',
+              progress.message,
+            ),
+          });
+        },
+      });
+      const envelope = await readTimelineLoudnessEnvelope(generated.manifest, store);
+
+      primeTimelineLoudnessEnvelopeCache([
+        generated.artifact.id,
+        generated.artifact.manifestRef.artifactId,
+        generated.analysisRef.artifactId,
+      ], envelope);
+
+      const currentClip = get().clips.find(c => c.id === clipId);
+      if (!currentClip) return;
+      if (isPreparedClipAudioAnalysisInputStale(prepared, currentClip)) {
+        log.debug('Discarding stale processed loudness result', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        return;
+      }
+
+      const refId = generated.artifact.manifestRef.artifactId;
+      set({
+        clips: updateClipById(get().clips, clipId, {
+          audioState: {
+            ...(currentClip.audioState ?? {}),
+            ...(needsProcessedLoudness
+              ? {
+                  processedAnalysisRefs: {
+                    ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+                    loudnessEnvelopeId: refId,
+                  },
+                }
+              : {
+                  sourceAnalysisRefs: {
+                    ...(currentClip.audioState?.sourceAnalysisRefs ?? {}),
+                    loudnessEnvelopeId: refId,
+                  },
+                }),
+          },
+          ...clearAudioAnalysisJobUpdate(),
+          waveformProgress: 100,
+        }),
+      });
+
+      log.debug('Loudness generation complete', {
+        clip: clip.name,
+        artifactId: generated.artifact.id,
+        processed: needsProcessedLoudness,
+      });
+      });
+    } catch (e) {
+      if (isAudioAnalysisCancellation(e)) {
+        log.debug('Loudness generation cancelled', { clipId });
+      } else {
+        log.error('Loudness generation failed', e);
+      }
+      set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+    }
+  },
+
+  generateBeatOnsetForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.waveformGenerating) return;
+
+    const keyframes = clipKeyframes.get(clipId) ?? [];
+    const needsProcessedBeatOnset = clipRequiresProcessedWaveformPyramid(clip, keyframes);
+    const currentRefs = needsProcessedBeatOnset
+      ? clip.audioState?.processedAnalysisRefs
+      : clip.audioState?.sourceAnalysisRefs;
+    if (!options.force && currentRefs?.beatGridId && currentRefs.onsetMapId) {
+      return;
+    }
+
+    set({
+      clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+        kind: 'beat-onset-analysis',
+        label: 'Beat/Onset',
+        artifactKinds: ['beat-grid', 'onset-map'],
+        processed: needsProcessedBeatOnset,
+      })),
+    });
+    log.debug('Starting beat/onset analysis', {
+      clip: clip.name,
+      processed: needsProcessedBeatOnset,
+    });
+
+    try {
+      await clipAudioAnalysisJobService.run({ clipId, kind: 'beat-onset-analysis' }, async ({ signal }) => {
+      const prepared = await prepareClipAudioAnalysisInput({
+        clip,
+        keyframes,
+        needsProcessed: needsProcessedBeatOnset,
+        signal,
+        onMixdownReady: (buffer) => {
+          set({
+            clips: updateClipById(get().clips, clipId, {
+              mixdownBuffer: buffer,
+              hasMixdownAudio: true,
+            }),
+          });
+        },
+        onRenderProgress: (progress) => {
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              Math.min(66, Math.round(progress.percent * 0.66)),
+              'rendering-processed-audio',
+              progress.message,
+            ),
+          });
+        },
+      });
+
+      if (!prepared) {
+        log.warn('No audio source found for beat/onset analysis', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        return;
+      }
+
+      const store = createCurrentAudioArtifactStore();
+      const generator = new BeatOnsetAnalysisGenerator({ artifactStore: store });
+      const generated = await generator.generate({
+        mediaFileId: prepared.mediaFileId,
+        sourceFingerprint: prepared.sourceFingerprint,
+        buffer: prepared.analysisBuffer,
+        clipAudioStateHash: prepared.clipAudioStateHash,
+        decoderId: prepared.decoderId,
+        decoderVersion: prepared.decoderVersion,
+        metadata: prepared.metadata,
+      }, {
+        signal,
+        onProgress: (progress) => {
+          const base = needsProcessedBeatOnset ? 66 : 0;
+          const scale = needsProcessedBeatOnset ? 0.32 : 0.98;
+          const nextProgress = Math.min(98, Math.round(base + progress.percent * scale));
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              nextProgress,
+              progress.phase.startsWith('storing') ? 'storing' : 'analyzing',
+              progress.message,
+            ),
+          });
+        },
+      });
+
+      const currentClip = get().clips.find(c => c.id === clipId);
+      if (!currentClip) return;
+      if (isPreparedClipAudioAnalysisInputStale(prepared, currentClip)) {
+        log.debug('Discarding stale processed beat/onset result', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        return;
+      }
+
+      const beatGridId = generated.beatArtifact.manifestRef.artifactId;
+      const onsetMapId = generated.onsetArtifact.manifestRef.artifactId;
+      const [beatGrid, onsetMap] = await Promise.all([
+        readTimelineBeatGrid(generated.beatManifest, store),
+        readTimelineOnsetMap(generated.onsetManifest, store),
+      ]);
+      primeTimelineBeatGridCache([
+        beatGridId,
+        generated.beatArtifact.id,
+        generated.beatArtifact.manifestRef.artifactId,
+      ], beatGrid);
+      primeTimelineOnsetMapCache([
+        onsetMapId,
+        generated.onsetArtifact.id,
+        generated.onsetArtifact.manifestRef.artifactId,
+      ], onsetMap);
+      set({
+        clips: updateClipById(get().clips, clipId, {
+          audioState: {
+            ...(currentClip.audioState ?? {}),
+            ...(needsProcessedBeatOnset
+              ? {
+                  processedAnalysisRefs: {
+                    ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+                    beatGridId,
+                    onsetMapId,
+                  },
+                }
+              : {
+                  sourceAnalysisRefs: {
+                    ...(currentClip.audioState?.sourceAnalysisRefs ?? {}),
+                    beatGridId,
+                    onsetMapId,
+                  },
+                }),
+          },
+          ...clearAudioAnalysisJobUpdate(),
+          waveformProgress: 100,
+        }),
+      });
+
+      log.debug('Beat/onset analysis complete', {
+        clip: clip.name,
+        beatArtifactId: generated.beatArtifact.id,
+        onsetArtifactId: generated.onsetArtifact.id,
+        processed: needsProcessedBeatOnset,
+      });
+      });
+    } catch (e) {
+      if (isAudioAnalysisCancellation(e)) {
+        log.debug('Beat/onset analysis cancelled', { clipId });
+      } else {
+        log.error('Beat/onset analysis failed', e);
+      }
+      set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+    }
+  },
+
+  generateFrequencyPhaseForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
+    const { clips, clipKeyframes } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.waveformGenerating) return;
+
+    const keyframes = clipKeyframes.get(clipId) ?? [];
+    const needsProcessedFrequencyPhase = clipRequiresProcessedWaveformPyramid(clip, keyframes);
+    const currentRefs = needsProcessedFrequencyPhase
+      ? clip.audioState?.processedAnalysisRefs
+      : clip.audioState?.sourceAnalysisRefs;
+    if (!options.force && currentRefs?.frequencySummaryId && currentRefs.phaseCorrelationId) {
+      return;
+    }
+
+    set({
+      clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
+        kind: 'frequency-phase-analysis',
+        label: 'Frequency/Phase',
+        artifactKinds: ['frequency-summary', 'phase-correlation'],
+        processed: needsProcessedFrequencyPhase,
+      })),
+    });
+    log.debug('Starting frequency/phase analysis', {
+      clip: clip.name,
+      processed: needsProcessedFrequencyPhase,
+    });
+
+    try {
+      await clipAudioAnalysisJobService.run({ clipId, kind: 'frequency-phase-analysis' }, async ({ signal }) => {
+      const prepared = await prepareClipAudioAnalysisInput({
+        clip,
+        keyframes,
+        needsProcessed: needsProcessedFrequencyPhase,
+        signal,
+        onMixdownReady: (buffer) => {
+          set({
+            clips: updateClipById(get().clips, clipId, {
+              mixdownBuffer: buffer,
+              hasMixdownAudio: true,
+            }),
+          });
+        },
+        onRenderProgress: (progress) => {
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              Math.min(66, Math.round(progress.percent * 0.66)),
+              'rendering-processed-audio',
+              progress.message,
+            ),
+          });
+        },
+      });
+
+      if (!prepared) {
+        log.warn('No audio source found for frequency/phase analysis', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        return;
+      }
+
+      const store = createCurrentAudioArtifactStore();
+      const generator = new FrequencyPhaseAnalysisGenerator({ artifactStore: store });
+      const generated = await generator.generate({
+        mediaFileId: prepared.mediaFileId,
+        sourceFingerprint: prepared.sourceFingerprint,
+        buffer: prepared.analysisBuffer,
+        clipAudioStateHash: prepared.clipAudioStateHash,
+        decoderId: prepared.decoderId,
+        decoderVersion: prepared.decoderVersion,
+        metadata: prepared.metadata,
+      }, {
+        signal,
+        onProgress: (progress) => {
+          const base = needsProcessedFrequencyPhase ? 66 : 0;
+          const scale = needsProcessedFrequencyPhase ? 0.32 : 0.98;
+          const nextProgress = Math.min(98, Math.round(base + progress.percent * scale));
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              nextProgress,
+              progress.phase.startsWith('storing') ? 'storing' : 'analyzing',
+              progress.message,
+            ),
+          });
+        },
+      });
+      const [frequencySummary, phaseCorrelation] = await Promise.all([
+        readTimelineFrequencySummary(generated.frequencyManifest, store),
+        readTimelinePhaseCorrelation(generated.phaseManifest, store),
+      ]);
+      primeTimelineFrequencySummaryCache([
+        generated.frequencyArtifact.id,
+        generated.frequencyArtifact.manifestRef.artifactId,
+        generated.frequencyAnalysisRef.artifactId,
+      ], frequencySummary);
+      primeTimelinePhaseCorrelationCache([
+        generated.phaseArtifact.id,
+        generated.phaseArtifact.manifestRef.artifactId,
+        generated.phaseAnalysisRef.artifactId,
+      ], phaseCorrelation);
+
+      const currentClip = get().clips.find(c => c.id === clipId);
+      if (!currentClip) return;
+      if (isPreparedClipAudioAnalysisInputStale(prepared, currentClip)) {
+        log.debug('Discarding stale processed frequency/phase result', { clipId });
+        set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+        return;
+      }
+
+      const frequencySummaryId = generated.frequencyArtifact.manifestRef.artifactId;
+      const phaseCorrelationId = generated.phaseArtifact.manifestRef.artifactId;
+      set({
+        clips: updateClipById(get().clips, clipId, {
+          audioState: {
+            ...(currentClip.audioState ?? {}),
+            ...(needsProcessedFrequencyPhase
+              ? {
+                  processedAnalysisRefs: {
+                    ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+                    frequencySummaryId,
+                    phaseCorrelationId,
+                  },
+                }
+              : {
+                  sourceAnalysisRefs: {
+                    ...(currentClip.audioState?.sourceAnalysisRefs ?? {}),
+                    frequencySummaryId,
+                    phaseCorrelationId,
+                  },
+                }),
+          },
+          ...clearAudioAnalysisJobUpdate(),
+          waveformProgress: 100,
+        }),
+      });
+
+      log.debug('Frequency/phase analysis complete', {
+        clip: clip.name,
+        frequencyArtifactId: generated.frequencyArtifact.id,
+        phaseArtifactId: generated.phaseArtifact.id,
+        processed: needsProcessedFrequencyPhase,
+      });
+      });
+    } catch (e) {
+      if (isAudioAnalysisCancellation(e)) {
+        log.debug('Frequency/phase analysis cancelled', { clipId });
+      } else {
+        log.error('Frequency/phase analysis failed', e);
+      }
+      set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
     }
   },
 
@@ -975,7 +1887,12 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       log.warn('Cannot update clip pitch on locked track', { clipId });
       return;
     }
-    set({ clips: updateClipById(get().clips, clipId, { preservesPitch }) });
+    set({
+      clips: get().clips.map(c => {
+        if (c.id !== clipId) return c;
+        return clearProcessedAudioAnalysisRefs({ ...c, preservesPitch });
+      }),
+    });
   },
 
   // Refresh nested clips when source composition changes

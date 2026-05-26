@@ -8,7 +8,7 @@ import type {
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'color-workspace' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'scene-description' | 'youtube' | 'download' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'audio-mixer' | 'color-workspace' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'scene-description' | 'youtube' | 'download' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 
 // Scope panel types for filtering in View menu
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
@@ -104,10 +104,12 @@ export interface HoveredDockTabTarget {
 
 // Drop target for drag operations
 export type DropPosition = 'center' | 'left' | 'right' | 'top' | 'bottom';
+export type DropScope = 'pane' | 'root-edge';
 
 export interface DropTarget {
   groupId: string;
   position: DropPosition;
+  scope?: DropScope; // Omitted/`pane` targets an existing tab group; `root-edge` wraps the full dock root
   tabInsertIndex?: number; // When position is 'center', which slot to insert at
 }
 
@@ -158,6 +160,13 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     title: 'Properties',
     minWidth: 200,
     minHeight: 150,
+    closable: false,
+  },
+  'audio-mixer': {
+    type: 'audio-mixer',
+    title: 'Audio Mixer',
+    minWidth: 420,
+    minHeight: 280,
     closable: false,
   },
   'color-workspace': {

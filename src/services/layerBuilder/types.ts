@@ -4,6 +4,7 @@ import type {
   TimelineClip,
   TimelineTrack,
   Effect,
+  MasterAudioState,
   RuntimeColorGrade,
   AnimatableProperty,
   ClipCustomNodeParamValue,
@@ -12,6 +13,7 @@ import type {
 } from '../../types';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
+import type { AudioRouteEffectSettings, LiveAudioRouteProcessor } from '../audio/audioGraphRouteSettings';
 
 /**
  * Clip time calculation result - memoized per clip per frame
@@ -36,6 +38,7 @@ export interface FrameContext {
   isDraggingPlayhead: boolean;
   playheadPosition: number;
   playbackSpeed: number;
+  masterAudioState?: MasterAudioState;
   activeCompId: string;
   proxyEnabled: boolean;
 
@@ -96,6 +99,10 @@ export interface AudioSyncTarget {
   type: 'audioTrack' | 'audioProxy' | 'videoElement' | 'mixdown';
   volume?: number; // 0-2, from audio-volume effect (default 1)
   eqGains?: number[]; // 10-band EQ gains in dB, from audio-eq effect
+  pan?: number; // Stereo pan -1..1, from track audio graph
+  processors?: LiveAudioRouteProcessor[]; // Browser-supported live processors from clip/track audio FX
+  masterRoute?: AudioRouteEffectSettings; // Runtime master bus FX/fader, applied after track metering
+  meterTrackId?: string; // Runtime-only track meter destination
 }
 
 /**

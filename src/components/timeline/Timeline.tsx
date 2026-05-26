@@ -33,7 +33,6 @@ import { TransitionOverlays } from './components/TransitionOverlays';
 import { AIActionOverlays } from './components/AIActionOverlays';
 import { PickWhipCables } from './components/PickWhipCables';
 import { ParentChildLinksOverlay } from './components/ParentChildLinksOverlay';
-import { VerticalScrollbar } from './VerticalScrollbar';
 import { SlotGrid } from './SlotGrid';
 import { animateSlotGrid } from './slotGridAnimation';
 import { useTimelineKeyboard } from './hooks/useTimelineKeyboard';
@@ -55,14 +54,47 @@ import { useTimelineHelpers } from './hooks/useTimelineHelpers';
 import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { MIN_ZOOM, MAX_ZOOM } from '../../stores/timeline/constants';
+import type { TimelineTrackFocusMode } from '../../stores/timeline/types';
 import type { ClipKeyframeTimeGroup, ContextMenuState, TimelineRulerCacheRange } from './types';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 import { createSubcompositionFromSelection } from '../../services/timelineSubcomposition';
+import { getTimelineTrackBaseHeight } from './utils/timelineAudioLayout';
 
 const KEYFRAME_TIME_GROUP_PRECISION = 1000;
 const RAM_PREVIEW_FEATURE_ENABLED = false;
-const TRACK_HEADER_WIDTH = 150;
+const TRACK_HEADER_WIDTH = 210;
+const SPLIT_DIVIDER_HEIGHT = 2;
+const COLLAPSED_TRACK_HEIGHT = 32;
+const MIN_SPLIT_SECTION_HEIGHT = 48;
+const SPLIT_FOCUS_EDGE_THRESHOLD_PX = 44;
+
+type TrackSectionKind = 'video' | 'audio';
+
+type TrackSectionMetrics = {
+  contentHeight: number;
+};
+
+function clampScrollY(scrollY: number, contentHeight: number, viewportHeight: number): number {
+  const maxScroll = Math.max(0, contentHeight - viewportHeight);
+  return Math.max(0, Math.min(maxScroll, scrollY));
+}
+
+function getNormalizedWheelDeltaY(e: React.WheelEvent, viewportHeight: number): number {
+  if (e.deltaMode === 1) return e.deltaY * 40;
+  if (e.deltaMode === 2) return e.deltaY * viewportHeight;
+  return e.deltaY;
+}
+
+function getTrackFocusModeForSplitPosition(videoHeight: number, availableHeight: number): TimelineTrackFocusMode {
+  const edgeThreshold = Math.min(
+    Math.max(COLLAPSED_TRACK_HEIGHT + 8, availableHeight * 0.12),
+    SPLIT_FOCUS_EDGE_THRESHOLD_PX,
+  );
+  if (videoHeight <= edgeThreshold) return 'audio';
+  if (availableHeight - videoHeight <= edgeThreshold) return 'video';
+  return 'balanced';
+}
 
 function buildCompositionSwitchTracks(
   currentTracks: TimelineTrackType[],
@@ -168,8 +200,9 @@ export function Timeline() {
   const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
 
   // UI settings (rarely changes)
-  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled } =
+  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioLayerAdvancedMode, audioFocusMode, trackFocusMode } =
     useTimelineStore(useShallow(selectUISettings));
+  const effectiveAudioLayerAdvancedMode = audioLayerAdvancedMode !== false;
 
   // Preview/export state
   const { ramPreviewEnabled, ramPreviewProgress, ramPreviewRange, isRamPreviewing, isExporting, exportProgress, exportRange } =
@@ -235,7 +268,7 @@ export function Timeline() {
   } = store;
 
   // Tool actions
-  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled } = store;
+  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled, setAudioDisplayMode, toggleAudioLayerAdvancedMode, toggleAudioFocusMode, setTrackFocusMode } = store;
 
   // Marker actions
   const { addMarker, moveMarker, removeMarker, updateMarker } = store;
@@ -268,7 +301,6 @@ export function Timeline() {
   const timelineBodyRef = useRef<HTMLDivElement>(null);
   const trackLanesRef = useRef<HTMLDivElement>(null);
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
   const [scrubCacheRevision, setScrubCacheRevision] = useState(0);
 
   useEffect(() => {
@@ -369,21 +401,45 @@ export function Timeline() {
   // Performance: Create lookup maps for O(1) clip/track access (must be before hooks that use them)
   const clipMap = useMemo(() => new Map(clips.map(c => [c.id, c])), [clips]);
   const trackMap = useMemo(() => new Map(tracks.map(t => [t.id, t])), [tracks]);
+  const timelineViewTrackMap = useMemo(
+    () => new Map(timelineViewTracks.map(t => [t.id, t])),
+    [timelineViewTracks],
+  );
+  const getRenderedTrackBaseHeight = useCallback(
+    (track: TimelineTrackType) => getTimelineTrackBaseHeight(track, audioDisplayMode, audioFocusMode),
+    [audioDisplayMode, audioFocusMode],
+  );
+  const getRenderedTrackHeight = useCallback(
+    (trackId: string, fallbackBaseHeight: number) => {
+      const track = timelineViewTrackMap.get(trackId) ?? trackMap.get(trackId);
+      const baseHeight = track ? getRenderedTrackBaseHeight(track) : fallbackBaseHeight;
+      return isTrackExpandedForRender(trackId)
+        ? getExpandedTrackHeight(trackId, baseHeight)
+        : baseHeight;
+    },
+    [timelineViewTrackMap, trackMap, getRenderedTrackBaseHeight, isTrackExpandedForRender, getExpandedTrackHeight],
+  );
+  const getRenderedTrackHeightForTrack = useCallback(
+    (track: TimelineTrackType) => getRenderedTrackHeight(track.id, track.height),
+    [getRenderedTrackHeight],
+  );
   const isClipLocked = useCallback((clipId: string) => {
     const clip = clipMap.get(clipId);
     return !!clip && trackMap.get(clip.trackId)?.locked === true;
   }, [clipMap, trackMap]);
 
   // Time helpers - extracted to hook
+  const compositionFrameRate = activeComposition?.frameRate ?? 30;
   const {
     timeToPixel,
     pixelToTime,
     gridSize,
+    gridPlan,
     formatTime,
     parseTime,
     getClipsAtTime,
     getSnapTargetTimes,
-  } = useTimelineHelpers({ zoom, clips, getClipKeyframes });
+  } = useTimelineHelpers({ zoom, frameRate: compositionFrameRate, clips, getClipKeyframes });
 
   // Clip dragging - extracted to hook
   const { clipDrag, handleClipMouseDown, handleClipDoubleClick } = useClipDrag({
@@ -400,6 +456,7 @@ export function Timeline() {
     moveClip,
     openCompositionTab,
     pixelToTime,
+    getRenderedTrackHeight: getRenderedTrackHeightForTrack,
     getSnappedPosition,
     getPositionWithResistance,
   });
@@ -540,8 +597,19 @@ export function Timeline() {
     handleTrackDragLeave(e);
   }, [handleTransitionDragLeave, handleTrackDragLeave]);
 
-  // Vertical scroll position (custom scrollbar)
+  // Vertical scroll is split by media section so video and audio can be navigated independently.
   const [scrollY, setScrollY] = useState(0);
+  const [videoScrollY, setVideoScrollY] = useState(0);
+  const [audioScrollY, setAudioScrollY] = useState(0);
+  const videoSectionViewportRef = useRef<HTMLDivElement>(null);
+  const audioSectionViewportRef = useRef<HTMLDivElement>(null);
+  const [videoViewportHeight, setVideoViewportHeight] = useState(160);
+  const [audioViewportHeight, setAudioViewportHeight] = useState(160);
+  const [splitViewportHeight, setSplitViewportHeight] = useState(320);
+  const [splitDragVideoHeight, setSplitDragVideoHeight] = useState<number | null>(null);
+  const [balancedSplitRatio, setBalancedSplitRatio] = useState<number | null>(null);
+  const splitDragFrameRef = useRef<number | null>(null);
+  const splitDragPendingClientYRef = useRef<number | null>(null);
   const [hoveredKeyframeRow, setHoveredKeyframeRow] = useState<{
     trackId: string;
     property: AnimatableProperty;
@@ -627,7 +695,8 @@ export function Timeline() {
     deselectAllKeyframes,
     pixelToTime,
     isTrackExpanded: isTrackExpandedForRender,
-    getExpandedTrackHeight,
+    getTrackBaseHeight: getRenderedTrackBaseHeight,
+    getExpandedTrackHeight: getRenderedTrackHeight,
   });
 
   // Pick whip drag - extracted to hook
@@ -674,74 +743,334 @@ export function Timeline() {
     return false;
   }, [anyAudioSolo]);
 
-  // Subscribe to curveEditorHeight for snap position recalculation
-  const curveEditorHeight = useTimelineStore(s => s.curveEditorHeight);
-
-  // Calculate total content height and track snap positions for vertical scrollbar
-  // Dependencies: tracks, expansion state, curve editor state, selected clips (affects property rows)
-  const { contentHeight, trackSnapPositions, renderedTrackHeights } = useMemo(() => {
-    let totalHeight = 0;
-    const snapPositions: number[] = [0];
-    const trackHeights = new Map<string, number>();
-    for (const track of timelineViewTracks) {
-      const isExpanded = isTrackExpandedForRender(track.id);
-      const trackHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
-      trackHeights.set(track.id, trackHeight);
-      totalHeight += trackHeight;
-      snapPositions.push(totalHeight);
-    }
-    return { contentHeight: totalHeight, trackSnapPositions: snapPositions, renderedTrackHeights: trackHeights };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineViewTracks, isTrackExpandedForRender, getExpandedTrackHeight, expandedCurveProperties, curveEditorHeight, selectedClipIds, clipKeyframes]);
-  const getRenderedTrackHeight = useCallback(
-    (trackId: string, baseHeight: number) =>
-      renderedTrackHeights.get(trackId) ??
-        (isTrackExpandedForRender(trackId) ? getExpandedTrackHeight(trackId, baseHeight) : baseHeight),
-    [renderedTrackHeights, isTrackExpandedForRender, getExpandedTrackHeight],
+  const isVideoSectionCollapsed = trackFocusMode === 'audio';
+  const isAudioSectionCollapsed = trackFocusMode === 'video';
+  const timelineViewVideoTracks = useMemo(
+    () => timelineViewTracks.filter(track => track.type === 'video'),
+    [timelineViewTracks],
+  );
+  const timelineViewAudioTracks = useMemo(
+    () => timelineViewTracks.filter(track => track.type === 'audio'),
+    [timelineViewTracks],
+  );
+  const displayedVideoTracks = useMemo(
+    () => isVideoSectionCollapsed ? timelineViewVideoTracks.slice(0, 1) : timelineViewVideoTracks,
+    [isVideoSectionCollapsed, timelineViewVideoTracks],
+  );
+  const displayedAudioTracks = useMemo(
+    () => isAudioSectionCollapsed ? timelineViewAudioTracks.slice(0, 1) : timelineViewAudioTracks,
+    [isAudioSectionCollapsed, timelineViewAudioTracks],
   );
 
-  // Track viewport height for scrollbar
-  const [viewportHeight, setViewportHeight] = useState(300);
+  const isSectionCollapsed = useCallback(
+    (sectionKind: TrackSectionKind) =>
+      sectionKind === 'video' ? isVideoSectionCollapsed : isAudioSectionCollapsed,
+    [isAudioSectionCollapsed, isVideoSectionCollapsed],
+  );
 
-  // Update viewport height on resize
+  const getSectionTrackBaseHeight = useCallback(
+    (track: TimelineTrackType, sectionKind: TrackSectionKind) =>
+      isSectionCollapsed(sectionKind) ? COLLAPSED_TRACK_HEIGHT : getRenderedTrackBaseHeight(track),
+    [getRenderedTrackBaseHeight, isSectionCollapsed],
+  );
+
+  const getSectionTrackHeight = useCallback(
+    (track: TimelineTrackType, sectionKind: TrackSectionKind) => {
+      const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
+      if (isSectionCollapsed(sectionKind)) return baseHeight;
+      return isTrackExpandedForRender(track.id)
+        ? getExpandedTrackHeight(track.id, baseHeight)
+        : baseHeight;
+    },
+    [getExpandedTrackHeight, getSectionTrackBaseHeight, isSectionCollapsed, isTrackExpandedForRender],
+  );
+
+  const buildSectionMetrics = useCallback(
+    (sectionTracks: TimelineTrackType[], sectionKind: TrackSectionKind): TrackSectionMetrics => {
+      let totalHeight = 0;
+
+      for (const track of sectionTracks) {
+        totalHeight += getSectionTrackHeight(track, sectionKind);
+      }
+
+      return { contentHeight: totalHeight };
+    },
+    [getSectionTrackHeight],
+  );
+
+  const videoSectionMetrics = useMemo(
+    () => buildSectionMetrics(displayedVideoTracks, 'video'),
+    [buildSectionMetrics, displayedVideoTracks],
+  );
+  const audioSectionMetrics = useMemo(
+    () => buildSectionMetrics(displayedAudioTracks, 'audio'),
+    [buildSectionMetrics, displayedAudioTracks],
+  );
+
+  const clampSplitDragVideoHeight = useCallback((nextVideoHeight: number, availableHeight: number) => {
+    const minVideoHeight = timelineViewVideoTracks.length > 0 ? COLLAPSED_TRACK_HEIGHT : 0;
+    const minAudioHeight = timelineViewAudioTracks.length > 0 ? COLLAPSED_TRACK_HEIGHT : 0;
+    const maxVideoHeight = Math.max(minVideoHeight, availableHeight - minAudioHeight);
+    return Math.max(minVideoHeight, Math.min(maxVideoHeight, nextVideoHeight));
+  }, [timelineViewAudioTracks.length, timelineViewVideoTracks.length]);
+
+  const { videoSectionHeight, audioSectionHeight } = useMemo(() => {
+    const availableHeight = Math.max(0, splitViewportHeight - SPLIT_DIVIDER_HEIGHT);
+    const videoContentHeight = videoSectionMetrics.contentHeight;
+    const audioContentHeight = audioSectionMetrics.contentHeight;
+
+    if (splitDragVideoHeight !== null) {
+      const videoHeight = clampSplitDragVideoHeight(splitDragVideoHeight, availableHeight);
+      return {
+        videoSectionHeight: videoHeight,
+        audioSectionHeight: Math.max(0, availableHeight - videoHeight),
+      };
+    }
+
+    if (trackFocusMode === 'balanced' && balancedSplitRatio !== null) {
+      const videoHeight = clampSplitDragVideoHeight(availableHeight * balancedSplitRatio, availableHeight);
+      return {
+        videoSectionHeight: videoHeight,
+        audioSectionHeight: Math.max(0, availableHeight - videoHeight),
+      };
+    }
+
+    if (trackFocusMode === 'audio') {
+      const videoHeight = videoContentHeight;
+      return {
+        videoSectionHeight: videoHeight,
+        audioSectionHeight: Math.max(0, availableHeight - videoHeight),
+      };
+    }
+
+    if (trackFocusMode === 'video') {
+      const audioHeight = audioContentHeight;
+      return {
+        videoSectionHeight: Math.max(0, availableHeight - audioHeight),
+        audioSectionHeight: audioHeight,
+      };
+    }
+
+    const totalContentHeight = videoContentHeight + audioContentHeight;
+    if (totalContentHeight <= 0) {
+      return {
+        videoSectionHeight: availableHeight / 2,
+        audioSectionHeight: availableHeight / 2,
+      };
+    }
+
+    if (totalContentHeight <= availableHeight) {
+      return {
+        videoSectionHeight: videoContentHeight,
+        audioSectionHeight: Math.max(0, availableHeight - videoContentHeight),
+      };
+    }
+
+    if (videoContentHeight <= 0) {
+      return { videoSectionHeight: 0, audioSectionHeight: availableHeight };
+    }
+    if (audioContentHeight <= 0) {
+      return { videoSectionHeight: availableHeight, audioSectionHeight: 0 };
+    }
+
+    const minSectionHeight = Math.min(MIN_SPLIT_SECTION_HEIGHT, availableHeight / 2);
+    const proportionalVideoHeight = availableHeight * (videoContentHeight / totalContentHeight);
+    const videoHeight = Math.max(
+      minSectionHeight,
+      Math.min(availableHeight - minSectionHeight, proportionalVideoHeight),
+    );
+
+    return {
+      videoSectionHeight: videoHeight,
+      audioSectionHeight: Math.max(0, availableHeight - videoHeight),
+    };
+  }, [
+    audioSectionMetrics.contentHeight,
+    balancedSplitRatio,
+    clampSplitDragVideoHeight,
+    splitDragVideoHeight,
+    splitViewportHeight,
+    trackFocusMode,
+    videoSectionMetrics.contentHeight,
+  ]);
+
+  // Legacy vertical values remain for zoom-hook compatibility; section wheel handlers own real Y scroll.
+  const contentHeight = Math.max(videoSectionMetrics.contentHeight, audioSectionMetrics.contentHeight);
+  const trackSnapPositions = useMemo(() => [0], []);
+  const viewportHeight = Math.max(videoViewportHeight, audioViewportHeight, 1);
+
+  // Update split viewport measurements on resize and during panel layout changes.
   useEffect(() => {
-    const updateViewportHeight = () => {
+    const updateViewportHeights = () => {
       if (scrollWrapperRef.current) {
-        setViewportHeight(scrollWrapperRef.current.clientHeight);
+        setSplitViewportHeight(scrollWrapperRef.current.clientHeight);
+      }
+      if (videoSectionViewportRef.current) {
+        setVideoViewportHeight(videoSectionViewportRef.current.clientHeight);
+      }
+      if (audioSectionViewportRef.current) {
+        setAudioViewportHeight(audioSectionViewportRef.current.clientHeight);
       }
     };
-    updateViewportHeight();
-    window.addEventListener('resize', updateViewportHeight);
-    return () => window.removeEventListener('resize', updateViewportHeight);
+
+    updateViewportHeights();
+
+    const observer = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(updateViewportHeights)
+      : null;
+    [scrollWrapperRef.current, videoSectionViewportRef.current, audioSectionViewportRef.current]
+      .forEach((element) => {
+        if (element) observer?.observe(element);
+      });
+    window.addEventListener('resize', updateViewportHeights);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateViewportHeights);
+    };
   }, []);
 
-  // Auto-scroll based on which track type is being hovered during drag
+  useEffect(() => {
+    setVideoScrollY((current) => isVideoSectionCollapsed
+      ? 0
+      : clampScrollY(current, videoSectionMetrics.contentHeight, videoViewportHeight));
+  }, [isVideoSectionCollapsed, videoSectionMetrics.contentHeight, videoViewportHeight]);
+
+  useEffect(() => {
+    setAudioScrollY((current) => isAudioSectionCollapsed
+      ? 0
+      : clampScrollY(current, audioSectionMetrics.contentHeight, audioViewportHeight));
+  }, [audioSectionMetrics.contentHeight, audioViewportHeight, isAudioSectionCollapsed]);
+
+  // Auto-scroll based on which track type is being hovered during drag.
   useEffect(() => {
     if (!externalDrag) return;
 
-    // Determine if we're hovering over an audio or video area
     const hoveredTrack = tracks.find((t) => t.id === externalDrag.trackId);
     const isOverAudio = hoveredTrack?.type === 'audio' ||
       externalDrag.newTrackType === 'audio' ||
-      // For audio-only files, always scroll to bottom
       externalDrag.isAudio;
     const isOverVideo = hoveredTrack?.type === 'video' ||
       externalDrag.newTrackType === 'video';
 
-    if (isOverAudio && contentRef.current) {
-      // Scroll to bottom to show audio tracks / audio drop zone
-      const actualHeight = contentRef.current.scrollHeight;
-      const maxScroll = Math.max(0, actualHeight - viewportHeight);
-      if (maxScroll > scrollY) {
-        setScrollY(maxScroll);
-      }
-    } else if (isOverVideo) {
-      // Scroll to top to show video tracks / video drop zone
-      if (scrollY > 0) {
-        setScrollY(0);
-      }
+    if (isOverAudio && !isAudioSectionCollapsed) {
+      setAudioScrollY(Math.max(0, audioSectionMetrics.contentHeight - audioViewportHeight));
+    } else if (isOverVideo && !isVideoSectionCollapsed) {
+      setVideoScrollY(0);
     }
-  }, [externalDrag, tracks, contentHeight, viewportHeight, scrollY]);
+  }, [
+    audioSectionMetrics.contentHeight,
+    audioViewportHeight,
+    externalDrag,
+    isAudioSectionCollapsed,
+    isVideoSectionCollapsed,
+    tracks,
+  ]);
+
+  const handleSectionWheel = useCallback((
+    e: React.WheelEvent,
+    sectionKind: TrackSectionKind,
+  ) => {
+    if (e.deltaY === 0 || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (isSectionCollapsed(sectionKind)) return;
+
+    const metrics = sectionKind === 'video' ? videoSectionMetrics : audioSectionMetrics;
+    const measuredViewportHeight = sectionKind === 'video' ? videoViewportHeight : audioViewportHeight;
+    if (metrics.contentHeight <= measuredViewportHeight) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const deltaY = getNormalizedWheelDeltaY(e, measuredViewportHeight);
+    if (sectionKind === 'video') {
+      setVideoScrollY((current) => clampScrollY(current + deltaY, metrics.contentHeight, measuredViewportHeight));
+    } else {
+      setAudioScrollY((current) => clampScrollY(current + deltaY, metrics.contentHeight, measuredViewportHeight));
+    }
+  }, [
+    audioSectionMetrics,
+    audioViewportHeight,
+    isSectionCollapsed,
+    videoSectionMetrics,
+    videoViewportHeight,
+  ]);
+
+  const handleTrackFocusStep = useCallback((direction: 'up' | 'down') => {
+    const focusOrder: TimelineTrackFocusMode[] = ['audio', 'balanced', 'video'];
+    const currentIndex = focusOrder.indexOf(trackFocusMode);
+    const nextIndex = direction === 'up'
+      ? Math.max(0, currentIndex - 1)
+      : Math.min(focusOrder.length - 1, currentIndex + 1);
+    setTrackFocusMode(focusOrder[nextIndex]);
+  }, [setTrackFocusMode, trackFocusMode]);
+
+  const applySplitDragPosition = useCallback((clientY: number) => {
+    const wrapper = scrollWrapperRef.current;
+    if (!wrapper) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const availableHeight = Math.max(0, rect.height - SPLIT_DIVIDER_HEIGHT);
+    if (availableHeight <= 0) return;
+
+    const nextVideoHeight = clampSplitDragVideoHeight(clientY - rect.top, availableHeight);
+    const nextMode = getTrackFocusModeForSplitPosition(nextVideoHeight, availableHeight);
+
+    setSplitDragVideoHeight(nextVideoHeight);
+    if (nextMode === 'balanced') {
+      setBalancedSplitRatio(nextVideoHeight / availableHeight);
+    }
+    if (useTimelineStore.getState().trackFocusMode !== nextMode) {
+      setTrackFocusMode(nextMode);
+    }
+  }, [clampSplitDragVideoHeight, setTrackFocusMode]);
+
+  const scheduleSplitDragPosition = useCallback((clientY: number) => {
+    splitDragPendingClientYRef.current = clientY;
+    if (splitDragFrameRef.current !== null) return;
+
+    splitDragFrameRef.current = window.requestAnimationFrame(() => {
+      splitDragFrameRef.current = null;
+      const pendingClientY = splitDragPendingClientYRef.current;
+      if (pendingClientY !== null) {
+        applySplitDragPosition(pendingClientY);
+      }
+    });
+  }, [applySplitDragPosition]);
+
+  useEffect(() => () => {
+    if (splitDragFrameRef.current !== null) {
+      window.cancelAnimationFrame(splitDragFrameRef.current);
+      splitDragFrameRef.current = null;
+    }
+  }, []);
+
+  const handleSplitDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    applySplitDragPosition(e.clientY);
+
+    const handleMouseMove = (event: MouseEvent) => {
+      event.preventDefault();
+      scheduleSplitDragPosition(event.clientY);
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      if (splitDragFrameRef.current !== null) {
+        window.cancelAnimationFrame(splitDragFrameRef.current);
+        splitDragFrameRef.current = null;
+      }
+      splitDragPendingClientYRef.current = null;
+      applySplitDragPosition(event.clientY);
+      setSplitDragVideoHeight(null);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [applySplitDragPosition, scheduleSplitDragPosition]);
 
   // Performance: Memoize proxy-ready file count
   const mediaFilesWithProxyCount = useMemo(
@@ -826,23 +1155,29 @@ export function Timeline() {
   // Audio master clock playback loop - extracted to hook
   usePlaybackLoop({ isPlaying });
 
-  // Handle shift+mousewheel on track header to resize height
-  const handleTrackHeaderWheel = useCallback(
+  // Shift/Alt + wheel resizes tracks from either the header or the lane under the cursor.
+  const handleTrackHeightWheel = useCallback(
     (e: React.WheelEvent, trackId: string) => {
       const track = trackMap.get(trackId);
       if (!track) return;
 
+      const wheelDelta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+      if (wheelDelta === 0) return;
+
+      const timelineState = useTimelineStore.getState();
+      const currentTrack = timelineState.tracks.find(candidate => candidate.id === trackId) ?? track;
+
       if (e.altKey) {
         e.preventDefault();
         e.stopPropagation();
-        // Smooth scaling: small multiplier so each wheel notch (~100 deltaY) = ~5px
-        const delta = -e.deltaY * 0.05;
-        useTimelineStore.getState().scaleTracksOfType(track.type, delta);
+        // Smooth scaling: each mouse-wheel notch is roughly 5px of track height.
+        const delta = -wheelDelta * 0.05;
+        timelineState.scaleTracksOfType(currentTrack.type, delta);
       } else if (e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
-        const delta = -e.deltaY * 0.05;
-        useTimelineStore.getState().setTrackHeight(trackId, track.height + delta);
+        const delta = -wheelDelta * 0.05;
+        timelineState.setTrackHeight(trackId, currentTrack.height + delta);
       }
     },
     [trackMap]
@@ -921,7 +1256,7 @@ export function Timeline() {
 
   // Render a clip
   const renderClip = useCallback(
-    (clip: TimelineClipType, trackId: string) => {
+    (clip: TimelineClipType, trackId: string, trackBaseHeightOverride?: number) => {
       const track = trackMap.get(trackId);
       if (!track) return null;
 
@@ -962,6 +1297,7 @@ export function Timeline() {
           : mediaFile?.proxyStatus;
       const clipKeyframeList = getClipKeyframes(clip.id);
       const keyframeTimeGroups = getClipKeyframeTimeGroups(clipKeyframeList);
+      const trackBaseHeight = trackBaseHeightOverride ?? getRenderedTrackBaseHeight(track);
 
       return (
         <TimelineClip
@@ -969,6 +1305,7 @@ export function Timeline() {
           clip={clip}
           trackId={trackId}
           track={track}
+          trackBaseHeight={trackBaseHeight}
           tracks={tracks}
           clips={clips}
           isSelected={selectedClipIds.has(clip.id)}
@@ -1016,6 +1353,7 @@ export function Timeline() {
     },
     [
       trackMap,
+      getRenderedTrackBaseHeight,
       clipMap,
       clips,
       selectedClipIds,
@@ -1112,9 +1450,401 @@ export function Timeline() {
     ? getProxyCachedRanges().map((range) => ({ ...range, type: 'proxy' as const }))
     : getScrubCachedRangesForRuler().map((range) => ({ ...range, type: 'cache' as const }));
 
+  const renderTrackSection = (sectionKind: TrackSectionKind) => {
+    const isVideoSection = sectionKind === 'video';
+    const sectionTracks = isVideoSection ? displayedVideoTracks : displayedAudioTracks;
+    const allSectionTracks = isVideoSection ? timelineViewVideoTracks : timelineViewAudioTracks;
+    const sectionScrollY = isVideoSection ? videoScrollY : audioScrollY;
+    const sectionHeight = isVideoSection ? videoSectionHeight : audioSectionHeight;
+    const sectionViewportRef = isVideoSection ? videoSectionViewportRef : audioSectionViewportRef;
+    const sectionCollapsed = isSectionCollapsed(sectionKind);
+    const sectionPhaseClass = clipAnimationPhase === 'exiting'
+      ? 'phase-exiting'
+      : clipAnimationPhase === 'entering'
+        ? 'phase-entering'
+        : '';
+    const audioPreviewHeight = getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode, audioFocusMode);
+
+    const renderClipForSection = (clip: TimelineClipType, trackId: string) => {
+      const track = allSectionTracks.find(candidate => candidate.id === trackId)
+        ?? timelineViewTrackMap.get(trackId)
+        ?? trackMap.get(trackId);
+      return renderClip(
+        clip,
+        trackId,
+        track ? getSectionTrackBaseHeight(track, sectionKind) : undefined,
+      );
+    };
+
+    const getSectionTrackHeightById = (trackId: string, fallbackBaseHeight: number) => {
+      const track = allSectionTracks.find(candidate => candidate.id === trackId)
+        ?? timelineViewTrackMap.get(trackId)
+        ?? trackMap.get(trackId);
+      return track ? getSectionTrackHeight(track, sectionKind) : fallbackBaseHeight;
+    };
+
+    const getSectionTrackHeightForOverlay = (track: TimelineTrackType) =>
+      getSectionTrackHeight(track, sectionKind);
+
+    return (
+      <div
+        className={`timeline-track-section ${sectionKind} ${sectionCollapsed ? 'collapsed' : ''}`}
+        data-section-kind={sectionKind}
+        style={{ height: sectionHeight }}
+      >
+        <div
+          className="timeline-section-viewport"
+          ref={sectionViewportRef}
+          onWheel={(e) => handleSectionWheel(e, sectionKind)}
+        >
+          <div
+            className="timeline-content-row timeline-section-content-row"
+            style={{ transform: `translateY(-${sectionScrollY}px)` }}
+          >
+            <div className={`track-headers ${sectionPhaseClass}`}>
+              {isVideoSection && externalDrag?.showVideoNewTrackZone && !sectionCollapsed && (
+                <div
+                  className={`track-header-preview video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
+                  style={{ height: 60 }}
+                >
+                  <span className="track-header-preview-label">+ New Video Track</span>
+                </div>
+              )}
+
+              {sectionTracks.map((track) => {
+                const isDimmed =
+                  (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
+                  (track.type === 'audio' && anyViewAudioSolo && !track.solo);
+                const isExpanded = !sectionCollapsed && isTrackExpandedForRender(track.id);
+                const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
+                const dynamicHeight = getSectionTrackHeight(track, sectionKind);
+
+                return (
+                  <TimelineHeader
+                    key={track.id}
+                    track={track}
+                    tracks={timelineViewTracks}
+                    isDimmed={isDimmed}
+                    isExpanded={isExpanded}
+                    baseHeight={baseHeight}
+                    dynamicHeight={dynamicHeight}
+                    hasKeyframes={!sectionCollapsed && !isCompositionTrackMorphing && trackHasKeyframes(track.id)}
+                    selectedClipIds={selectedClipIds}
+                    clips={isCompositionTrackMorphing || sectionCollapsed ? [] : clips}
+                    playheadPosition={playheadPosition}
+                    onToggleExpand={() => {
+                      if (!sectionCollapsed) toggleTrackExpanded(track.id);
+                    }}
+                    onToggleSolo={() =>
+                      useTimelineStore.getState().setTrackSolo(track.id, !(track.audioState?.solo ?? track.solo))
+                    }
+                    onToggleLocked={() =>
+                      useTimelineStore.getState().setTrackLocked(track.id, !track.locked)
+                    }
+                    onToggleMuted={() =>
+                      useTimelineStore.getState().setTrackMuted(track.id, !(track.audioState?.muted ?? track.muted))
+                    }
+                    onToggleVisible={() =>
+                      useTimelineStore.getState().setTrackVisible(track.id, !track.visible)
+                    }
+                    onRenameTrack={(name) =>
+                      useTimelineStore.getState().renameTrack(track.id, name)
+                    }
+                    onWheel={(e) => handleTrackHeightWheel(e, track.id)}
+                    clipKeyframes={clipKeyframes}
+                    getClipKeyframes={getClipKeyframes}
+                    getInterpolatedTransform={getInterpolatedTransform}
+                    getInterpolatedEffects={getInterpolatedEffects}
+                    addKeyframe={addKeyframe}
+                    setPlayheadPosition={setPlayheadPosition}
+                    setPropertyValue={setPropertyValue}
+                    expandedCurveProperties={expandedCurveProperties}
+                    onToggleCurveExpanded={toggleCurveExpanded}
+                    hoveredKeyframeRow={hoveredKeyframeRow}
+                    onKeyframeRowHover={handleKeyframeRowHover}
+                    audioLayerAdvancedMode={effectiveAudioLayerAdvancedMode}
+                    showCollapsedAudioSummaryMeter={!isVideoSection && sectionCollapsed}
+                    onSetTrackParent={setTrackParent}
+                    onTrackPickWhipDragStart={handleTrackPickWhipDragStart}
+                    onTrackPickWhipDragEnd={handleTrackPickWhipDragEnd}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTrackContextMenu({
+                        x: e.clientX,
+                        y: e.clientY,
+                        trackId: track.id,
+                        trackType: track.type as 'video' | 'audio',
+                        trackName: track.name,
+                      });
+                    }}
+                  />
+                );
+              })}
+
+              {!isVideoSection && externalDrag && externalDrag.hasAudio && !sectionCollapsed && (
+                <div
+                  className={`track-header-preview audio ${
+                    externalDrag.newTrackType === 'audio' ||
+                    (externalDrag.newTrackType === 'video' && externalDrag.hasAudio) ||
+                    (externalDrag.isVideo && externalDrag.audioTrackId === '__new_audio_track__')
+                      ? 'active'
+                      : ''
+                  }`}
+                  style={{ height: audioPreviewHeight }}
+                >
+                  <span className="track-header-preview-label">+ New Audio Track</span>
+                </div>
+              )}
+            </div>
+
+            <div
+              className={`timeline-section-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''} ${isExporting ? 'export-locked' : ''}`}
+              onMouseDown={handleMarqueeMouseDown}
+            >
+              <div
+                className={`track-lanes-scroll ${sectionPhaseClass} timeline-grid-${gridPlan.mode}`}
+                style={{
+                  transform: `translateX(-${scrollX}px)`,
+                  minWidth: Math.max(duration * zoom + 500, 2000),
+                  ['--grid-size' as string]: `${gridSize}px`,
+                }}
+              >
+                {isVideoSection && externalDrag && !externalDrag.isAudio && externalDrag.showVideoNewTrackZone && !sectionCollapsed && (
+                  <div
+                    className={`new-track-drop-zone video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
+                    onDragOver={(e) => handleNewTrackDragOver(e, 'video')}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      dragCounterRef.current++;
+                    }}
+                    onDragLeave={handleTrackDragLeave}
+                    onDrop={(e) => handleNewTrackDrop(e, 'video')}
+                  >
+                    <span className="drop-zone-label">+ Drop to create new Video Track</span>
+                    {externalDrag.newTrackType === 'video' && (
+                      <div
+                        className="timeline-clip-preview video"
+                        style={{
+                          left: timeToPixel(externalDrag.startTime),
+                          width: timeToPixel(externalDrag.duration ?? 5),
+                        }}
+                      >
+                        <div className="clip-content">
+                          <span className="clip-name">New clip</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {sectionTracks.map((track) => {
+                  const isDimmed =
+                    (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
+                    (track.type === 'audio' && anyViewAudioSolo && !track.solo);
+                  const isExpanded = !sectionCollapsed && isTrackExpandedForRender(track.id);
+                  const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
+                  const dynamicHeight = getSectionTrackHeight(track, sectionKind);
+
+                  return (
+                    <TimelineTrack
+                      key={track.id}
+                      track={track}
+                      clips={isCompositionTrackMorphing ? [] : clips}
+                      isDimmed={isDimmed}
+                      isExpanded={isExpanded}
+                      baseHeight={baseHeight}
+                      dynamicHeight={dynamicHeight}
+                      isDragTarget={clipDrag?.currentTrackId === track.id}
+                      isExternalDragTarget={
+                        externalDrag?.trackId === track.id ||
+                        externalDrag?.audioTrackId === track.id ||
+                        externalDrag?.videoTrackId === track.id
+                      }
+                      selectedClipIds={selectedClipIds}
+                      selectedKeyframeIds={selectedKeyframeIds}
+                      clipDrag={clipDrag}
+                      clipTrim={clipTrim}
+                      externalDrag={externalDrag}
+                      zoom={zoom}
+                      scrollX={scrollX}
+                      timelineRef={timelineRef}
+                      onClipMouseDown={handleClipMouseDown}
+                      onClipContextMenu={handleClipContextMenu}
+                      onTrimStart={handleTrimStart}
+                      onDrop={(e) => handleCombinedDrop(e, track.id)}
+                      onDragOver={(e) => handleCombinedDragOver(e, track.id)}
+                      onDragEnter={(e) => handleTrackDragEnter(e, track.id)}
+                      onDragLeave={handleCombinedDragLeave}
+                      onWheel={(e) => handleTrackHeightWheel(e, track.id)}
+                      renderClip={(clip, trackId) => renderClipForSection(clip, trackId)}
+                      clipKeyframes={clipKeyframes}
+                      renderKeyframeDiamonds={renderKeyframeDiamonds}
+                      timeToPixel={timeToPixel}
+                      pixelToTime={pixelToTime}
+                      expandedCurveProperties={expandedCurveProperties}
+                      onSelectKeyframe={selectKeyframe}
+                      onMoveKeyframe={moveKeyframe}
+                      onUpdateBezierHandle={updateBezierHandle}
+                    />
+                  );
+                })}
+
+                {isCompositionTrackMorphing && (
+                  <div className="composition-exit-clips-overlay">
+                    {allSectionTracks.map((track) => {
+                      const isExpanded = !sectionCollapsed && isTrackExpandedFromState(track.id);
+                      const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
+                      const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, baseHeight) : baseHeight;
+                      const trackClips = clips.filter((clip) => clip.trackId === track.id);
+
+                      return (
+                        <div
+                          key={`exit-${track.id}`}
+                          className="composition-exit-track-row"
+                          style={{ height: dynamicHeight }}
+                        >
+                          <div className="track-clip-row" style={{ height: baseHeight }}>
+                            {trackClips.map((clip) => renderClipForSection(clip, track.id))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {!isCompositionTrackMorphing && (
+                  <TransitionOverlays
+                    activeJunction={activeJunction}
+                    clips={clips}
+                    tracks={allSectionTracks}
+                    timeToPixel={timeToPixel}
+                    isTrackExpanded={(trackId) => !sectionCollapsed && isTrackExpandedForRender(trackId)}
+                    getExpandedTrackHeight={getSectionTrackHeightById}
+                    getTrackHeight={getSectionTrackHeightForOverlay}
+                  />
+                )}
+
+                {!isCompositionTrackMorphing && (
+                  <AIActionOverlays
+                    tracks={allSectionTracks}
+                    timeToPixel={timeToPixel}
+                    isTrackExpanded={(trackId) => !sectionCollapsed && isTrackExpandedForRender(trackId)}
+                    getExpandedTrackHeight={getSectionTrackHeightById}
+                    getTrackHeight={getSectionTrackHeightForOverlay}
+                  />
+                )}
+
+                {isVideoSection && externalDrag?.videoTrackId === '__new_video_track__' && !sectionCollapsed && (
+                  <div className="track-lane video new-track-preview" style={{ height: 60 }}>
+                    <div
+                      className="timeline-clip-preview video"
+                      style={{
+                        left: timeToPixel(externalDrag.startTime),
+                        width: timeToPixel(externalDrag.duration ?? 5),
+                      }}
+                    >
+                      <div className="clip-content">
+                        <span className="clip-name">+ New Video Track</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isVideoSection && externalDrag?.audioTrackId === '__new_audio_track__' && !sectionCollapsed && (
+                  <div className="track-lane audio new-track-preview" style={{ height: audioPreviewHeight }}>
+                    <div
+                      className="timeline-clip-preview audio"
+                      style={{
+                        left: timeToPixel(externalDrag.startTime),
+                        width: timeToPixel(externalDrag.duration ?? 5),
+                      }}
+                    >
+                      <div className="clip-content">
+                        <span className="clip-name">+ New Audio Track</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!isVideoSection && externalDrag && (externalDrag.newTrackType === 'audio' || externalDrag.hasAudio !== false) && !sectionCollapsed && (
+                  <div
+                    className={`new-track-drop-zone audio ${
+                      externalDrag.newTrackType === 'audio' ||
+                      (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)
+                        ? 'active'
+                        : ''
+                    }`}
+                    onDragOver={(e) => handleNewTrackDragOver(e, 'audio')}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      dragCounterRef.current++;
+                    }}
+                    onDragLeave={handleTrackDragLeave}
+                    onDrop={(e) => handleNewTrackDrop(e, 'audio')}
+                  >
+                    <span className="drop-zone-label">+ Drop to create new Audio Track</span>
+                    {(externalDrag.newTrackType === 'audio' ||
+                      (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)) && (
+                      <div
+                        className="timeline-clip-preview audio"
+                        style={{
+                          left: timeToPixel(externalDrag.startTime),
+                          width: timeToPixel(externalDrag.duration ?? 5),
+                        }}
+                      >
+                        <div className="clip-content">
+                          <span className="clip-name">
+                            {externalDrag.newTrackType === 'video' ? 'Audio (linked)' : 'New clip'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <TimelineOverlays
+                  timeToPixel={timeToPixel}
+                  formatTime={formatTime}
+                  inPoint={inPoint}
+                  outPoint={outPoint}
+                  duration={duration}
+                  markerDrag={markerDrag}
+                  onMarkerMouseDown={handleMarkerMouseDown}
+                  switchMotionClass={timelineSwitchMotionClass}
+                  clipDrag={clipDrag}
+                  isRamPreviewing={effectiveIsRamPreviewing}
+                  ramPreviewProgress={effectiveRamPreviewProgress}
+                  playheadPosition={playheadPosition}
+                  isExporting={isExporting}
+                  exportProgress={exportProgress}
+                  exportRange={exportRange}
+                  getCachedRanges={getCachedRanges}
+                />
+
+                {!isCompositionTrackMorphing && (
+                  <ParentChildLinksOverlay
+                    clips={clips}
+                    tracks={allSectionTracks}
+                    clipDrag={clipDrag}
+                    timelineRef={timelineRef}
+                    scrollX={scrollX}
+                    zoom={zoom}
+                    getTrackBaseHeight={(track) => getSectionTrackBaseHeight(track, sectionKind)}
+                    getExpandedTrackHeight={getSectionTrackHeightById}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
-      className={`timeline-container ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
+      className={`timeline-container audio-mode-${audioDisplayMode} timeline-split-mode-${trackFocusMode} ${audioFocusMode ? 'audio-focus-mode' : ''} ${trackFocusMode === 'video' ? 'video-focus-mode' : ''} ${splitDragVideoHeight !== null ? 'is-split-dragging' : ''} ${clipDrag || clipTrim ? 'is-dragging' : ''}`}
       onMouseDown={() => {
         if (useMediaStore.getState().sourceMonitorFileId) {
           useMediaStore.getState().setSourceMonitorFile(null);
@@ -1142,6 +1872,9 @@ export function Timeline() {
           showTranscriptMarkers={showTranscriptMarkers}
           thumbnailsEnabled={thumbnailsEnabled}
           waveformsEnabled={waveformsEnabled}
+          audioDisplayMode={audioDisplayMode}
+          audioFocusMode={audioFocusMode}
+          trackFocusMode={trackFocusMode}
           toolMode={toolMode}
           onPlay={play}
           onPause={pause}
@@ -1156,6 +1889,9 @@ export function Timeline() {
           onToggleTranscriptMarkers={toggleTranscriptMarkers}
           onToggleThumbnails={toggleThumbnailsEnabled}
           onToggleWaveforms={toggleWaveformsEnabled}
+          onSetAudioDisplayMode={setAudioDisplayMode}
+          onToggleAudioFocusMode={toggleAudioFocusMode}
+          onSetTrackFocusMode={setTrackFocusMode}
           onToggleCutTool={toggleCutTool}
           onSetDuration={setDuration}
           onFitToWindow={handleFitToWindow}
@@ -1216,6 +1952,7 @@ export function Timeline() {
               <TimelineRuler
                 duration={duration}
                 zoom={zoom}
+                frameRate={compositionFrameRate}
                 scrollX={scrollX}
                 onRulerMouseDown={handleRulerMouseDown}
                 formatTime={formatTime}
@@ -1224,360 +1961,91 @@ export function Timeline() {
             </div>
           </div>
           <div className="timeline-scroll-wrapper" ref={scrollWrapperRef}>
-            <div className="timeline-content-row" ref={contentRef} style={{ transform: `translateY(-${scrollY}px)` }}>
-          <div className={`track-headers ${clipAnimationPhase === 'exiting' ? 'phase-exiting' : clipAnimationPhase === 'entering' ? 'phase-entering' : ''}`}>
-            {/* New video track preview header - appears when dragging over new track zone */}
-            {externalDrag?.showVideoNewTrackZone && (
-              <div
-                className={`track-header-preview video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
-                style={{ height: 60 }}
-              >
-                <span className="track-header-preview-label">+ New Video Track</span>
-              </div>
-            )}
-            {timelineViewTracks.map((track) => {
-              const isDimmed =
-                (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
-                (track.type === 'audio' && anyViewAudioSolo && !track.solo);
-              const isExpanded = isTrackExpandedForRender(track.id);
-              const dynamicHeight = getRenderedTrackHeight(track.id, track.height);
-
-              return (
-                  <TimelineHeader
-                    key={track.id}
-                    track={track}
-                    tracks={timelineViewTracks}
-                    isDimmed={isDimmed}
-                    isExpanded={isExpanded}
-                    dynamicHeight={dynamicHeight}
-                    hasKeyframes={!isCompositionTrackMorphing && trackHasKeyframes(track.id)}
-                    selectedClipIds={selectedClipIds}
-                    clips={isCompositionTrackMorphing ? [] : clips}
-                    playheadPosition={playheadPosition}
-                    onToggleExpand={() => toggleTrackExpanded(track.id)}
-                    onToggleSolo={() =>
-                      useTimelineStore.getState().setTrackSolo(track.id, !track.solo)
-                    }
-                    onToggleLocked={() =>
-                      useTimelineStore.getState().setTrackLocked(track.id, !track.locked)
-                    }
-                    onToggleMuted={() =>
-                      useTimelineStore.getState().setTrackMuted(track.id, !track.muted)
-                    }
-                    onToggleVisible={() =>
-                      useTimelineStore.getState().setTrackVisible(track.id, !track.visible)
-                    }
-                    onRenameTrack={(name) =>
-                      useTimelineStore.getState().renameTrack(track.id, name)
-                    }
-                    onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
-                    clipKeyframes={clipKeyframes}
-                    getClipKeyframes={getClipKeyframes}
-                    getInterpolatedTransform={getInterpolatedTransform}
-                    getInterpolatedEffects={getInterpolatedEffects}
-                    addKeyframe={addKeyframe}
-                    setPlayheadPosition={setPlayheadPosition}
-                    setPropertyValue={setPropertyValue}
-                    expandedCurveProperties={expandedCurveProperties}
-                    onToggleCurveExpanded={toggleCurveExpanded}
-                    hoveredKeyframeRow={hoveredKeyframeRow}
-                    onKeyframeRowHover={handleKeyframeRowHover}
-                    onSetTrackParent={setTrackParent}
-                    onTrackPickWhipDragStart={handleTrackPickWhipDragStart}
-                    onTrackPickWhipDragEnd={handleTrackPickWhipDragEnd}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setTrackContextMenu({
-                        x: e.clientX,
-                        y: e.clientY,
-                        trackId: track.id,
-                        trackType: track.type as 'video' | 'audio',
-                        trackName: track.name,
-                      });
-                    }}
-                  />
-              );
-            })}
-            {/* New audio track preview header - appears when dragging over new track zone or linked audio needs new track */}
-            {/* Only show if the video has audio */}
-            {externalDrag && externalDrag.hasAudio && (
-              <div
-                className={`track-header-preview audio ${
-                  externalDrag.newTrackType === 'audio' ||
-                  (externalDrag.newTrackType === 'video' && externalDrag.hasAudio) ||
-                  (externalDrag.isVideo && externalDrag.audioTrackId === '__new_audio_track__')
-                    ? 'active'
-                    : ''
-                }`}
-                style={{ height: 40 }}
-              >
-                <span className="track-header-preview-label">+ New Audio Track</span>
-              </div>
-            )}
-          </div>
-
-          <div
-            ref={(el) => {
-              (timelineRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-              (trackLanesRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-            }}
-            className={`timeline-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''} ${isExporting ? 'export-locked' : ''}`}
-            data-ai-id="timeline-tracks"
-            onMouseDown={handleMarqueeMouseDown}
-            onDragOver={(e) => e.preventDefault()}
-            onDragLeave={handleContainerDragLeave}
-          >
-            <div className={`track-lanes-scroll ${clipAnimationPhase === 'exiting' ? 'phase-exiting' : clipAnimationPhase === 'entering' ? 'phase-entering' : ''}`} style={{
-              transform: `translateX(-${scrollX}px)`,
-              minWidth: Math.max(duration * zoom + 500, 2000), // Ensure background extends beyond visible content
-              ['--grid-size' as string]: `${gridSize}px`,
-            }}>
-              {/* New Video Track drop zone - at TOP above video tracks */}
-              {externalDrag && !externalDrag.isAudio && externalDrag.showVideoNewTrackZone && (
-                <div
-                  className={`new-track-drop-zone video ${externalDrag.newTrackType === 'video' ? 'active' : ''}`}
-                  onDragOver={(e) => handleNewTrackDragOver(e, 'video')}
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    dragCounterRef.current++;
-                  }}
-                  onDragLeave={handleTrackDragLeave}
-                  onDrop={(e) => handleNewTrackDrop(e, 'video')}
-                >
-                  <span className="drop-zone-label">+ Drop to create new Video Track</span>
-                  {externalDrag.newTrackType === 'video' && (
-                    <div
-                      className="timeline-clip-preview video"
-                      style={{
-                        left: timeToPixel(externalDrag.startTime),
-                        width: timeToPixel(externalDrag.duration ?? 5),
-                      }}
-                    >
-                      <div className="clip-content">
-                        <span className="clip-name">New clip</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {timelineViewTracks.map((track) => {
-                const isDimmed =
-                  (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
-                  (track.type === 'audio' && anyViewAudioSolo && !track.solo);
-                const isExpanded = isTrackExpandedForRender(track.id);
-                const dynamicHeight = getRenderedTrackHeight(track.id, track.height);
-
-                return (
-                  <TimelineTrack
-                key={track.id}
-                track={track}
-                clips={isCompositionTrackMorphing ? [] : clips}
-                isDimmed={isDimmed}
-                isExpanded={isExpanded}
-                dynamicHeight={dynamicHeight}
-                isDragTarget={clipDrag?.currentTrackId === track.id}
-                isExternalDragTarget={
-                  externalDrag?.trackId === track.id ||
-                  externalDrag?.audioTrackId === track.id ||
-                  externalDrag?.videoTrackId === track.id
-                }
-                selectedClipIds={selectedClipIds}
-                selectedKeyframeIds={selectedKeyframeIds}
-                clipDrag={clipDrag}
-                clipTrim={clipTrim}
-                externalDrag={externalDrag}
-                zoom={zoom}
-                scrollX={scrollX}
-                timelineRef={timelineRef}
-                onClipMouseDown={handleClipMouseDown}
-                onClipContextMenu={handleClipContextMenu}
-                onTrimStart={handleTrimStart}
-                onDrop={(e) => handleCombinedDrop(e, track.id)}
-                onDragOver={(e) => handleCombinedDragOver(e, track.id)}
-                onDragEnter={(e) => handleTrackDragEnter(e, track.id)}
-                onDragLeave={handleCombinedDragLeave}
-                renderClip={renderClip}
-                clipKeyframes={clipKeyframes}
-                renderKeyframeDiamonds={renderKeyframeDiamonds}
-                timeToPixel={timeToPixel}
-                pixelToTime={pixelToTime}
-                expandedCurveProperties={expandedCurveProperties}
-                onSelectKeyframe={selectKeyframe}
-                onMoveKeyframe={moveKeyframe}
-                onUpdateBezierHandle={updateBezierHandle}
-              />
-            );
-          })}
-
-          {isCompositionTrackMorphing && (
-            <div className="composition-exit-clips-overlay">
-              {tracks.map((track) => {
-                const isExpanded = isTrackExpandedFromState(track.id);
-                const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, track.height) : track.height;
-                const trackClips = clips.filter((clip) => clip.trackId === track.id);
-
-                return (
-                  <div
-                    key={`exit-${track.id}`}
-                    className="composition-exit-track-row"
-                    style={{ height: dynamicHeight }}
-                  >
-                    <div className="track-clip-row" style={{ height: track.height }}>
-                      {trackClips.map((clip) => renderClip(clip, track.id))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {!isCompositionTrackMorphing && (
-            <TransitionOverlays
-              activeJunction={activeJunction}
-              clips={clips}
-              tracks={tracks}
-              timeToPixel={timeToPixel}
-              isTrackExpanded={isTrackExpandedForRender}
-              getExpandedTrackHeight={getRenderedTrackHeight}
-            />
-          )}
-
-          {!isCompositionTrackMorphing && (
-            <AIActionOverlays
-              tracks={tracks}
-              timeToPixel={timeToPixel}
-              isTrackExpanded={isTrackExpandedForRender}
-              getExpandedTrackHeight={getRenderedTrackHeight}
-            />
-          )}
-
-          {/* New video track preview for linked audio-to-video */}
-          {/* When hovering audio track, show linked video preview as new track */}
-          {externalDrag &&
-            externalDrag.videoTrackId === '__new_video_track__' && (
-              <div className="track-lane video new-track-preview" style={{ height: 60 }}>
-                <div
-                  className="timeline-clip-preview video"
-                  style={{
-                    left: timeToPixel(externalDrag.startTime),
-                    width: timeToPixel(externalDrag.duration ?? 5),
-                  }}
-                >
-                  <div className="clip-content">
-                    <span className="clip-name">+ New Video Track</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          {/* New audio track preview for linked video audio */}
-          {/* Only show if video has audio (hasAudio !== false) */}
-          {externalDrag &&
-            externalDrag.audioTrackId === '__new_audio_track__' && (
-              <div className="track-lane audio new-track-preview" style={{ height: 40 }}>
-                <div
-                  className="timeline-clip-preview audio"
-                  style={{
-                    left: timeToPixel(externalDrag.startTime),
-                    width: timeToPixel(externalDrag.duration ?? 5),
-                  }}
-                >
-                  <div className="clip-content">
-                    <span className="clip-name">+ New Audio Track</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          {/* New Audio Track drop zone - at BOTTOM below audio tracks */}
-          {/* Only show for audio files OR videos with audio (hasAudio !== false) */}
-          {externalDrag && (externalDrag.newTrackType === 'audio' || externalDrag.hasAudio !== false) && (
             <div
-              className={`new-track-drop-zone audio ${
-                externalDrag.newTrackType === 'audio' ||
-                (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)
-                  ? 'active'
-                  : ''
-              }`}
-              onDragOver={(e) => handleNewTrackDragOver(e, 'audio')}
-              onDragEnter={(e) => {
-                e.preventDefault();
-                dragCounterRef.current++;
+              ref={(el) => {
+                (trackLanesRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
               }}
-              onDragLeave={handleTrackDragLeave}
-              onDrop={(e) => handleNewTrackDrop(e, 'audio')}
+              className={`timeline-track-stack timeline-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''} ${isExporting ? 'export-locked' : ''}`}
+              data-ai-id="timeline-tracks"
+              onDragOver={(e) => e.preventDefault()}
+              onDragLeave={handleContainerDragLeave}
             >
-              <span className="drop-zone-label">+ Drop to create new Audio Track</span>
-              {/* Show audio preview when dropping audio OR when dropping video with audio */}
-              {(externalDrag.newTrackType === 'audio' ||
-                (externalDrag.newTrackType === 'video' && externalDrag.hasAudio !== false)) && (
+              <div
+                ref={timelineRef}
+                className="timeline-lane-reference"
+                style={{ left: TRACK_HEADER_WIDTH }}
+                aria-hidden="true"
+              />
+              {renderTrackSection('video')}
+              <div
+                className={`timeline-split-divider ${splitDragVideoHeight !== null ? 'dragging' : ''}`}
+                aria-label="Timeline split controls"
+              >
                 <div
-                  className="timeline-clip-preview audio"
-                  style={{
-                    left: timeToPixel(externalDrag.startTime),
-                    width: timeToPixel(externalDrag.duration ?? 5),
-                  }}
-                >
-                  <div className="clip-content">
-                    <span className="clip-name">
-                      {externalDrag.newTrackType === 'video' ? 'Audio (linked)' : 'New clip'}
-                    </span>
-                  </div>
+                  className="timeline-split-divider-hitbox"
+                  onMouseDown={handleSplitDividerMouseDown}
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize video and audio track sections"
+                />
+                <div className="timeline-split-divider-controls">
+                  <button
+                    type="button"
+                    className="timeline-split-button"
+                    onClick={() => handleTrackFocusStep('up')}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    disabled={trackFocusMode === 'audio'}
+                    title={trackFocusMode === 'audio' ? 'Already in audio focus' : 'Move track focus up'}
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M4 10l4-4 4 4" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="timeline-split-button"
+                    onClick={() => handleTrackFocusStep('down')}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    disabled={trackFocusMode === 'video'}
+                    title={trackFocusMode === 'video' ? 'Already in video focus' : 'Move track focus down'}
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M4 6l4 4 4-4" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className={`timeline-split-button timeline-audio-layer-mode-button ${effectiveAudioLayerAdvancedMode ? 'active' : ''}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleAudioLayerAdvancedMode();
+                    }}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    aria-pressed={effectiveAudioLayerAdvancedMode}
+                    title={effectiveAudioLayerAdvancedMode ? 'Hide advanced audio layer controls' : 'Show advanced audio layer controls'}
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M1.8 8s2.2-4 6.2-4 6.2 4 6.2 4-2.2 4-6.2 4-6.2-4-6.2-4z" />
+                      <circle cx="8" cy="8" r="1.8" />
+                      {!effectiveAudioLayerAdvancedMode && <path d="M3 3l10 10" />}
+                    </svg>
+                  </button>
                 </div>
-              )}
-            </div>
-          )}
-
-          <TimelineOverlays
-            timeToPixel={timeToPixel}
-            formatTime={formatTime}
-            inPoint={inPoint}
-            outPoint={outPoint}
-            duration={duration}
-            markerDrag={markerDrag}
-            onMarkerMouseDown={handleMarkerMouseDown}
-            switchMotionClass={timelineSwitchMotionClass}
-            clipDrag={clipDrag}
-            isRamPreviewing={effectiveIsRamPreviewing}
-            ramPreviewProgress={effectiveRamPreviewProgress}
-            playheadPosition={playheadPosition}
-            isExporting={isExporting}
-            exportProgress={exportProgress}
-            exportRange={exportRange}
-            getCachedRanges={getCachedRanges}
-          />
-
-              {/* Marquee selection rectangle */}
+                <div className="timeline-split-divider-line" />
+              </div>
+              {renderTrackSection('audio')}
               {marquee && (
                 <div
                   className="marquee-selection"
                   style={{
-                    left: Math.min(marquee.startX, marquee.currentX),
+                    left: Math.min(marquee.startX, marquee.currentX) - scrollX,
                     top: Math.min(marquee.startY, marquee.currentY),
                     width: Math.abs(marquee.currentX - marquee.startX),
                     height: Math.abs(marquee.currentY - marquee.startY),
                   }}
                 />
               )}
-
-              {!isCompositionTrackMorphing && (
-                <ParentChildLinksOverlay
-                  clips={clips}
-                  tracks={tracks}
-                  clipDrag={clipDrag}
-                  timelineRef={timelineRef}
-                  scrollX={scrollX}
-                  zoom={zoom}
-                  getExpandedTrackHeight={getRenderedTrackHeight}
-                />
-              )}
-
-
-            </div>{/* track-lanes-scroll */}
-          </div>{/* timeline-tracks */}
-            </div>{/* timeline-content-row */}
+            </div>
           </div>{/* timeline-scroll-wrapper */}
 
           {/* Playhead - spans from ruler through all tracks */}
@@ -1635,14 +2103,6 @@ export function Timeline() {
         </div>{/* timeline-body-content */}
 
         {/* Vertical Scrollbar — hide when slot grid is active */}
-        {slotGridProgress < 1 && (
-          <VerticalScrollbar
-            scrollY={scrollY}
-            contentHeight={contentHeight}
-            viewportHeight={viewportHeight}
-            onScrollChange={setScrollY}
-          />
-        )}
       </div>{/* timeline-body */}
 
       {/* Timeline Navigator - horizontal scrollbar with zoom handles — hide when slot grid is active */}

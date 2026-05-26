@@ -17,6 +17,9 @@ const truncateText = (text: string, maxLength: number): string => {
 };
 
 const HOLD_DURATION = 500; // ms to hold before drag starts
+const TAB_INSERT_HOT_ZONE_PX = 36;
+const TAB_SLOT_SIZE_PX = 22;
+const TAB_SLOT_GAP_PX = 7;
 
 interface DockTabPaneProps {
   group: DockTabGroup;
@@ -108,8 +111,10 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const middleDragStartRef = useRef<{ x: number; scrollLeft: number } | null>(null);
 
   const activePanel = group.panels[group.activeIndex];
-  const isDropTarget = dragState.dropTarget?.groupId === group.id;
-  const dropPosition = dragState.dropTarget?.position;
+  const isDropTarget = dragState.dropTarget?.scope !== 'root-edge' && dragState.dropTarget?.groupId === group.id;
+  const dropPosition = isDropTarget ? dragState.dropTarget?.position : undefined;
+  const showTabSlotOverlay = isDropTarget && dropPosition === 'center' && dragState.dropTarget?.tabInsertIndex !== undefined;
+  const showCenterDropOverlay = isDropTarget && dropPosition === 'center';
   const panelZoom = activePanel ? (layout.panelZoom?.[activePanel.id] ?? 1.0) : 1.0;
   const timelinePanel = useMemo(() => group.panels.find((panel) => panel.type === 'timeline') ?? null, [group.panels]);
   const hoveredPanelId = hoveredTabTarget?.panelId ?? null;
@@ -373,28 +378,17 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     };
   }, []);
 
-  // Calculate tab insert index based on mouse position over tab bar
-  const calculateTabInsertIndex = useCallback((mouseX: number): number => {
-    if (!tabBarRef.current) return group.panels.length;
+  // Calculate tab insert index against the visible slot cubes centered in the drop square.
+  const calculateTabInsertIndex = useCallback((mouseX: number, paneRect: DOMRect): number => {
+    const slotCount = group.panels.length + 1;
+    if (slotCount <= 1 || paneRect.width <= 0) return 0;
 
-    const tabBar = tabBarRef.current;
-    const tabs = tabBar.querySelectorAll('.dock-tab');
-    const tabBarRect = tabBar.getBoundingClientRect();
+    const rowWidth = slotCount * TAB_SLOT_SIZE_PX + (slotCount - 1) * TAB_SLOT_GAP_PX;
+    const slotStep = TAB_SLOT_SIZE_PX + TAB_SLOT_GAP_PX;
+    const firstSlotCenterX = paneRect.left + paneRect.width / 2 - rowWidth / 2 + TAB_SLOT_SIZE_PX / 2;
+    const rawIndex = Math.round((mouseX - firstSlotCenterX) / slotStep);
 
-    // Adjust for scroll position
-    const relativeX = mouseX - tabBarRect.left + tabBar.scrollLeft;
-
-    // Find the slot - check midpoint of each tab
-    let insertIndex = 0;
-    tabs.forEach((tab, index) => {
-      const tabEl = tab as HTMLElement;
-      const tabMidpoint = tabEl.offsetLeft + tabEl.offsetWidth / 2;
-      if (relativeX > tabMidpoint) {
-        insertIndex = index + 1;
-      }
-    });
-
-    return insertIndex;
+    return Math.max(0, Math.min(slotCount - 1, rawIndex));
   }, [group.panels.length]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -412,15 +406,14 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     const tabBarRect = tabBarRef.current?.getBoundingClientRect();
     let position = calculateDropPosition(rect, e.clientX, e.clientY);
 
-    // Check if hovering over tab bar area for center position
     let tabInsertIndex: number | undefined;
-    if (tabBarRect && e.clientY >= tabBarRect.top && e.clientY <= tabBarRect.bottom) {
+    if (tabBarRect && e.clientY >= tabBarRect.top && e.clientY <= tabBarRect.bottom + TAB_INSERT_HOT_ZONE_PX) {
       // Mouse is over tab bar - use center with specific insert index
       position = 'center';
-      tabInsertIndex = calculateTabInsertIndex(e.clientX);
+      tabInsertIndex = calculateTabInsertIndex(e.clientX, rect);
     } else if (position === 'center') {
-      // Center but not over tab bar - insert at end
-      tabInsertIndex = group.panels.length;
+      // Center tab-group drops still need an explicit insertion slot.
+      tabInsertIndex = calculateTabInsertIndex(e.clientX, rect);
     }
 
     updateDrag(
@@ -431,7 +424,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
 
   const handleMouseLeave = useCallback(() => {
     clearHoveredTabTarget();
-    if (dragState.isDragging && dragState.dropTarget?.groupId === group.id) {
+    if (dragState.isDragging && dragState.dropTarget?.scope !== 'root-edge' && dragState.dropTarget?.groupId === group.id) {
       updateDrag(dragState.currentPos, null);
     }
   }, [clearHoveredTabTarget, dragState, group.id, updateDrag]);
@@ -640,7 +633,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         style={{ '--panel-zoom': panelZoom } as React.CSSProperties}
         onMouseEnter={handlePaneMouseEnter}
       >
-        <div className="dock-panel-content-inner">
+        <div className={`dock-panel-content-inner ${activePanel ? `dock-panel-content-inner--${activePanel.type}` : ''}`}>
           {activePanel && <DockPanelContent panel={activePanel} />}
         </div>
         {/* Zoom indicator */}
@@ -656,19 +649,19 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         <div className={`dock-drop-overlay ${dropPosition}`} />
       )}
 
+      {showCenterDropOverlay && (
+        <div className="dock-drop-overlay center" />
+      )}
+
       {/* Tab slot indicators when dragging to center/tabs */}
-      {isDropTarget && dropPosition === 'center' && (
-        <div className="dock-tab-slots-overlay">
-          {group.panels.map((_, index) => (
+      {showTabSlotOverlay && (
+        <div className="dock-tab-slots-overlay" aria-hidden="true">
+          {Array.from({ length: group.panels.length + 1 }, (_, index) => (
             <div
               key={`slot-${index}`}
               className={`dock-tab-slot ${dragState.dropTarget?.tabInsertIndex === index ? 'active' : ''}`}
             />
           ))}
-          {/* Final slot after last tab */}
-          <div
-            className={`dock-tab-slot ${dragState.dropTarget?.tabInsertIndex === group.panels.length ? 'active' : ''}`}
-          />
         </div>
       )}
     </div>

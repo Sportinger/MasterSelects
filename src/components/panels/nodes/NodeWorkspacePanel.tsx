@@ -23,6 +23,7 @@ import {
 import { createEffectProperty, createNodeGraphParamProperty } from '../../../types';
 import type {
   AnimatableProperty,
+  AudioAnalysisArtifactKind,
   BlendMode,
   ClipCustomNodeConversationKind,
   ClipCustomNodeConversationMessage,
@@ -30,9 +31,11 @@ import type {
   ClipCustomNodeParamDefinition,
   ClipCustomNodeParamValue,
   Effect,
+  MasterAudioState,
   TimelineClip,
   TimelineTrack,
 } from '../../../types';
+import type { GenerateClipAudioAnalysisOptions } from '../../../stores/timeline/types';
 import { EditableDraggableNumber as DraggableNumber } from '../../common/EditableDraggableNumber';
 import { KeyframeToggle, MultiKeyframeToggle } from '../properties/shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../properties/sharedConstants';
@@ -68,6 +71,7 @@ interface NodeWorkspaceContextMenuState {
 interface AINodeProjectContext {
   clips: TimelineClip[];
   tracks: TimelineTrack[];
+  masterAudioState?: MasterAudioState;
 }
 
 function clampNodeWorkspaceInspectorWidth(width: number, panelWidth?: number): number {
@@ -103,6 +107,12 @@ function formatParamValue(value: string | number | boolean): string {
     return Number.isInteger(value) ? String(value) : value.toFixed(3).replace(/\.?0+$/, '');
   }
   return String(value);
+}
+
+function coerceEffectEditorValue(value: unknown, fallback: number | boolean | string): number | boolean | string {
+  return typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
+    ? value
+    : fallback;
 }
 
 function clampAINodeNumber(value: number, param: ClipCustomNodeParamDefinition): number {
@@ -522,7 +532,7 @@ function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGr
               effect={effect}
               paramName={paramName}
               paramDef={paramDef}
-              value={interpolatedEffect.params[paramName] ?? paramDef.default}
+              value={coerceEffectEditorValue(interpolatedEffect.params[paramName], paramDef.default)}
             />
           ))
         ) : (
@@ -818,18 +828,132 @@ function TransformNodeParameters({ clip }: { clip: TimelineClip }) {
   );
 }
 
-function PortList({ title, ports }: { title: string; ports: NodeGraphPort[] }) {
+const IMPLEMENTED_AUDIO_ANALYSIS_KINDS = new Set<AudioAnalysisArtifactKind>([
+  'waveform-pyramid',
+  'processed-waveform-pyramid',
+  'spectrogram-tiles',
+  'loudness-envelope',
+  'beat-grid',
+  'onset-map',
+  'phase-correlation',
+  'frequency-summary',
+]);
+
+const AI_SEED_AUDIO_PORT_KINDS = new Set([
+  'waveform',
+  'spectrum',
+  'frequency-bands',
+  'loudness',
+  'beats',
+  'onsets',
+  'phase-correlation',
+  'transcript',
+  'frequency-summary',
+  'audio-metadata',
+]);
+
+function isImplementedAudioAnalysisKind(kind: string | undefined): kind is AudioAnalysisArtifactKind {
+  return !!kind && IMPLEMENTED_AUDIO_ANALYSIS_KINDS.has(kind as AudioAnalysisArtifactKind);
+}
+
+function canSeedAICustomNodeFromPort(port: NodeGraphPort): boolean {
+  if (port.direction !== 'output') return false;
+  if (port.metadata?.generateAction?.type === 'generate-audio-analysis') return true;
+  const semanticKind = typeof port.metadata?.semanticKind === 'string' ? port.metadata.semanticKind : undefined;
+  return semanticKind !== undefined && AI_SEED_AUDIO_PORT_KINDS.has(semanticKind);
+}
+
+function PortList({
+  title,
+  ports,
+  clip,
+  clips,
+  nodeId,
+  onGenerateAudioAnalysis,
+  onCancelAudioAnalysis,
+  onCreateAICustomNodeFromPort,
+}: {
+  title: string;
+  ports: NodeGraphPort[];
+  clip?: TimelineClip | null;
+  clips?: TimelineClip[];
+  nodeId?: string;
+  onGenerateAudioAnalysis?: (clipId: string, kind: AudioAnalysisArtifactKind, options?: GenerateClipAudioAnalysisOptions) => void;
+  onCancelAudioAnalysis?: (clipId: string) => void;
+  onCreateAICustomNodeFromPort?: (source: { fromNodeId: string; fromPortId: string; label?: string }) => void;
+}) {
   return (
     <div className="node-workspace-inspector-section">
       <div className="node-workspace-inspector-section-title">{title}</div>
       {ports.length > 0 ? (
         <div className="node-workspace-inspector-ports">
-          {ports.map((port) => (
-            <div key={port.id} className="node-workspace-inspector-port">
-              <span>{port.label}</span>
-              <span>{port.type}</span>
-            </div>
-          ))}
+          {ports.map((port) => {
+            const generateAction = port.metadata?.generateAction;
+            const artifactKind = generateAction?.type === 'generate-audio-analysis'
+              ? generateAction.artifactKind
+              : undefined;
+            const targetClipId = typeof port.metadata?.targetClipId === 'string'
+              ? port.metadata.targetClipId
+              : clip?.id;
+            const targetClip = targetClipId
+              ? clips?.find((candidate) => candidate.id === targetClipId) ?? clip
+              : clip;
+            const audioAnalysisBusy = targetClip?.audioAnalysisJob !== undefined || targetClip?.waveformGenerating === true;
+            const canGenerate = !!targetClip
+              && !!artifactKind
+              && isImplementedAudioAnalysisKind(artifactKind)
+              && !audioAnalysisBusy;
+            const canCancel = !!targetClip && !!artifactKind && audioAnalysisBusy;
+            const available = port.metadata?.available !== false;
+            const canCreateAI = !!clip && !!nodeId && canSeedAICustomNodeFromPort(port);
+
+            return (
+              <div key={port.id} className="node-workspace-inspector-port">
+                <span className="node-workspace-inspector-port-main">
+                  <span>{port.label}</span>
+                  {port.metadata?.artifactId && (
+                    <span className="node-workspace-inspector-port-artifact">{port.metadata.artifactId}</span>
+                  )}
+                </span>
+                <span className="node-workspace-inspector-port-side">
+                  <span>{port.type}</span>
+                  {artifactKind && (
+                    <button
+                      type="button"
+                      className="node-workspace-port-action"
+                      disabled={!canGenerate && !canCancel}
+                      onClick={() => {
+                        if (!targetClip) return;
+                        if (audioAnalysisBusy) {
+                          onCancelAudioAnalysis?.(targetClip.id);
+                        } else if (isImplementedAudioAnalysisKind(artifactKind)) {
+                          onGenerateAudioAnalysis?.(targetClip.id, artifactKind, { force: available });
+                        }
+                      }}
+                    >
+                      {audioAnalysisBusy ? 'Cancel' : available ? 'Refresh' : 'Generate'}
+                    </button>
+                  )}
+                  {canCreateAI && (
+                    <button
+                      type="button"
+                      className="node-workspace-port-action ai"
+                      onClick={() => {
+                        if (!nodeId) return;
+                        onCreateAICustomNodeFromPort?.({
+                          fromNodeId: nodeId,
+                          fromPortId: port.id,
+                          label: `${port.label} AI`,
+                        });
+                      }}
+                    >
+                      AI
+                    </button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="node-workspace-inspector-empty">None</div>
@@ -906,6 +1030,57 @@ function NodeInspector({
   const canEditTransform = !!clip && node?.id === 'transform';
   const canEditEffect = !!clip && node?.id.startsWith('effect-');
   const canEditCustom = !!clip && node?.kind === 'custom';
+  const generateWaveformForClip = useTimelineStore((state) => state.generateWaveformForClip);
+  const generateProcessedWaveformForClip = useTimelineStore((state) => state.generateProcessedWaveformForClip);
+  const generateSpectrogramForClip = useTimelineStore((state) => state.generateSpectrogramForClip);
+  const generateLoudnessForClip = useTimelineStore((state) => state.generateLoudnessForClip);
+  const generateBeatOnsetForClip = useTimelineStore((state) => state.generateBeatOnsetForClip);
+  const generateFrequencyPhaseForClip = useTimelineStore((state) => state.generateFrequencyPhaseForClip);
+  const cancelAudioAnalysisForClip = useTimelineStore((state) => state.cancelAudioAnalysisForClip);
+  const addClipAICustomNodeFromPort = useTimelineStore((state) => state.addClipAICustomNodeFromPort);
+  const clips = useTimelineStore((state) => state.clips);
+  const nodeTargetClipId = typeof node?.params?.targetClipId === 'string'
+    ? node.params.targetClipId
+    : clip?.id;
+  const nodeTargetClip = nodeTargetClipId
+    ? clips.find((candidate) => candidate.id === nodeTargetClipId) ?? clip
+    : clip;
+  const generateAudioAnalysis = useCallback((
+    clipId: string,
+    kind: AudioAnalysisArtifactKind,
+    options?: GenerateClipAudioAnalysisOptions,
+  ) => {
+    if (kind === 'processed-waveform-pyramid') {
+      void generateProcessedWaveformForClip(clipId, options);
+    } else if (kind === 'waveform-pyramid') {
+      void generateWaveformForClip(clipId, options);
+    } else if (kind === 'spectrogram-tiles') {
+      void generateSpectrogramForClip(clipId, options);
+    } else if (kind === 'loudness-envelope') {
+      void generateLoudnessForClip(clipId, options);
+    } else if (kind === 'beat-grid' || kind === 'onset-map') {
+      void generateBeatOnsetForClip(clipId, options);
+    } else if (kind === 'phase-correlation' || kind === 'frequency-summary') {
+      void generateFrequencyPhaseForClip(clipId, options);
+    }
+  }, [
+    generateBeatOnsetForClip,
+    generateFrequencyPhaseForClip,
+    generateLoudnessForClip,
+    generateProcessedWaveformForClip,
+    generateSpectrogramForClip,
+    generateWaveformForClip,
+  ]);
+  const createAICustomNodeFromPort = useCallback((source: { fromNodeId: string; fromPortId: string; label?: string }) => {
+    if (!clip) return;
+    startBatch('Add AI node from audio port');
+    try {
+      const nodeId = addClipAICustomNodeFromPort(clip.id, source);
+      if (nodeId) onSelectNode(nodeId);
+    } finally {
+      endBatch();
+    }
+  }, [addClipAICustomNodeFromPort, clip, onSelectNode]);
 
   if (!node) {
     return (
@@ -944,15 +1119,33 @@ function NodeInspector({
         )}
       </div>
 
-      <PortList title="Inputs" ports={node.inputs} />
-      <PortList title="Outputs" ports={node.outputs} />
+      <PortList
+        title="Inputs"
+        ports={node.inputs}
+        clip={clip}
+        clips={clips}
+        nodeId={node.id}
+        onGenerateAudioAnalysis={generateAudioAnalysis}
+        onCancelAudioAnalysis={cancelAudioAnalysisForClip}
+        onCreateAICustomNodeFromPort={createAICustomNodeFromPort}
+      />
+      <PortList
+        title="Outputs"
+        ports={node.outputs}
+        clip={clip}
+        clips={clips}
+        nodeId={node.id}
+        onGenerateAudioAnalysis={generateAudioAnalysis}
+        onCancelAudioAnalysis={cancelAudioAnalysisForClip}
+        onCreateAICustomNodeFromPort={createAICustomNodeFromPort}
+      />
 
       <div className="node-workspace-inspector-section">
         <div className="node-workspace-inspector-section-title">Parameters</div>
         {canEditTransform ? (
           <TransformNodeParameters clip={clip} />
-        ) : canEditEffect ? (
-          <EffectNodeParameters clip={clip} node={node} />
+        ) : canEditEffect && nodeTargetClip ? (
+          <EffectNodeParameters clip={nodeTargetClip} node={node} />
         ) : params.length > 0 ? (
           <div className="node-workspace-param-list">
             {params.map(([key, value]) => (
@@ -987,6 +1180,7 @@ function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGr
   const accountSession = useAccountStore((state) => state.session);
   const clips = useTimelineStore((state) => state.clips);
   const tracks = useTimelineStore((state) => state.tracks);
+  const masterAudioState = useTimelineStore((state) => state.masterAudioState);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -1059,7 +1253,7 @@ function CustomNodeParameters({ clip, node }: { clip: TimelineClip; node: NodeGr
         clip,
         definition,
         access,
-        { clips, tracks },
+        { clips, tracks, masterAudioState },
       );
       if (!response) {
         throw new Error('AI returned an empty response.');
@@ -1469,11 +1663,14 @@ export function NodeWorkspacePanel() {
     if (!subject || subject.kind !== 'clip') return;
     const node = subject.graph.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
+    const targetClipId = typeof node.params?.targetClipId === 'string'
+      ? node.params.targetClipId
+      : subject.id;
 
     startBatch('Toggle node bypass');
     try {
       if (node.kind === 'effect' && nodeId.startsWith('effect-')) {
-        setClipEffectEnabled(subject.id, nodeId.slice('effect-'.length), node.params?.enabled === false);
+        setClipEffectEnabled(targetClipId, nodeId.slice('effect-'.length), node.params?.enabled === false);
       } else if (node.kind === 'custom') {
         updateClipAICustomNode(subject.id, nodeId, { bypassed: node.params?.bypassed !== true });
       }

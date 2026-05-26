@@ -491,6 +491,7 @@ function TimelineKeyframesComponent({
             key={kf.id}
             className={`keyframe-diamond easing-${easing} ${rotationPathDisplayMode ? `rotation-path-${rotationPathDisplayMode}` : ''} ${isSelected ? 'selected' : ''} ${isDragging ? 'dragging' : ''} ${isRowHovered ? 'row-highlighted' : ''} ${isStateChange ? 'state-change' : ''} ${aiAnimatedKeyframes.has(kf.id) ? 'ai-keyframe-added' : ''}`}
             style={{ left: `${xPos}px` }}
+            data-keyframe-id={kf.id}
             onMouseDown={(e) => handleMouseDown(e, kf, clip)}
             onDoubleClick={handleDoubleClick}
             onMouseEnter={() => onKeyframeRowHover?.(trackId, property, true)}

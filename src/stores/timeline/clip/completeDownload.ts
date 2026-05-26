@@ -6,11 +6,11 @@ import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { requireMediaFileImportResult } from '../../mediaStore/helpers/importResult';
 import { initWebCodecsPlayer, createAudioElement } from '../helpers/webCodecsHelpers';
-import { generateWaveformForFile } from '../helpers/waveformHelpers';
 import { generateClipId } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
+import { generateTimelineWaveformAnalysisForFile } from '../../../services/audio/timelineWaveformPyramidCache';
 
 const log = Logger.create('CompleteDownload');
 
@@ -169,7 +169,7 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
 
     // Generate waveform in background
     if (waveformsEnabled) {
-      generateWaveformAsync(audioClipId, file, get, set);
+      generateWaveformAsync(audioClipId, file, mediaFile.id, get, set);
     }
   }
 
@@ -187,14 +187,38 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
 async function generateWaveformAsync(
   audioClipId: string,
   file: File,
+  mediaFileId: string,
   get: () => { clips: TimelineClip[] },
   set: (state: { clips: TimelineClip[] }) => void
 ): Promise<void> {
   set({ clips: updateClipById(get().clips, audioClipId, { waveformGenerating: true, waveformProgress: 0 }) });
 
   try {
-    const waveform = await generateWaveformForFile(file);
-    set({ clips: updateClipById(get().clips, audioClipId, { waveform, waveformGenerating: false }) });
+    const analysis = await generateTimelineWaveformAnalysisForFile(file, {
+      mediaFileId,
+      onProgress: (progress, partialWaveform) => {
+        set({ clips: updateClipById(get().clips, audioClipId, { waveformProgress: progress, waveform: partialWaveform }) });
+      },
+    });
+    const currentClip = get().clips.find((clip) => clip.id === audioClipId);
+    set({
+      clips: updateClipById(get().clips, audioClipId, {
+        waveform: analysis.waveform,
+        ...(analysis.audioAnalysisRefs
+          ? {
+              audioState: {
+                ...(currentClip?.audioState ?? {}),
+                sourceAnalysisRefs: {
+                  ...(currentClip?.audioState?.sourceAnalysisRefs ?? {}),
+                  ...analysis.audioAnalysisRefs,
+                },
+              },
+            }
+          : {}),
+        waveformGenerating: false,
+        waveformProgress: 100,
+      }),
+    });
     log.debug('Waveform generated for audio clip');
   } catch (e) {
     log.warn('Waveform generation failed', e);

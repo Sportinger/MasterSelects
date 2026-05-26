@@ -5,6 +5,7 @@ import type {
   ClipCustomNodeConversationKind,
   ClipCustomNodeConversationMessage,
   ClipCustomNodeDefinition,
+  MasterAudioState,
   TimelineClip,
   TimelineTrack,
 } from '../../../types';
@@ -148,7 +149,7 @@ function resolveAINodeAccess(): AINodeGenerationAccess {
 function buildAINodeMessages(
   clip: TimelineClip,
   definition: ClipCustomNodeDefinition,
-  projectContext: { clips: TimelineClip[]; tracks: TimelineTrack[] },
+  projectContext: { clips: TimelineClip[]; tracks: TimelineTrack[]; masterAudioState?: MasterAudioState },
   userPrompt: string,
 ): LemonadeMessage[] {
   const authoringContext = buildAINodeAuthoringContext(clip, definition, projectContext);
@@ -213,7 +214,7 @@ async function generateAINodeResponse(
   clip: TimelineClip,
   definition: ClipCustomNodeDefinition,
   access: AINodeGenerationAccess,
-  projectContext: { clips: TimelineClip[]; tracks: TimelineTrack[] },
+  projectContext: { clips: TimelineClip[]; tracks: TimelineTrack[]; masterAudioState?: MasterAudioState },
   userPrompt: string,
 ): Promise<string> {
   const messages = buildAINodeMessages(clip, definition, projectContext, userPrompt);
@@ -329,7 +330,7 @@ export async function handleGetNodeWorkspaceDebugState(args: Record<string, unkn
       return {
         ...summary,
         authoringContext: includeAuthoringContext && (!nodeId || nodeId === definition.id)
-          ? buildAINodeAuthoringContext(clip, definition, { clips: state.clips, tracks })
+          ? buildAINodeAuthoringContext(clip, definition, { clips: state.clips, tracks, masterAudioState: state.masterAudioState })
           : undefined,
       };
     });
@@ -382,7 +383,7 @@ export async function handleSendAINodePrompt(args: Record<string, unknown>): Pro
     match.clip,
     match.definition,
     access,
-    { clips: timelineStore.clips, tracks: timelineStore.tracks },
+    { clips: timelineStore.clips, tracks: timelineStore.tracks, masterAudioState: timelineStore.masterAudioState },
     prompt,
   );
   if (!response) {

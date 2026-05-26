@@ -18,6 +18,11 @@ import type {
   ColorParamValue,
   ColorViewMode,
   RuntimeColorGrade,
+  MasterAudioState,
+  AudioExportPreflightState,
+  TrackAudioState,
+  AudioMeterSnapshot,
+  RuntimeAudioMeterState,
   TextClipProperties,
   Text3DProperties,
   TextBoundsPath,
@@ -30,11 +35,17 @@ import type {
   ClipCustomNodeParamDefinition,
   ClipCustomNodeParamValue,
   SerializableClip,
+  ClipAudioEditOperation,
+  AudioEffectInstance,
+  AudioSendState,
+  SpectralImageLayer,
 } from '../../types';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
 import type { Composition } from '../mediaStore';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { MarkerMIDIBinding } from '../../types/midi';
+import type { AudioSilenceDetectionOptions, AudioSilenceRange } from '../../services/audio/audioSilenceDetection';
+import type { AudioTransientDetectionOptions, AudioTransientRange } from '../../services/audio/audioTransientDetection';
 
 // Re-export imported types for convenience
 export type {
@@ -71,6 +82,63 @@ export type MaskEditMode = 'none' | 'drawing' | 'editing' | 'drawingRect' | 'dra
 
 // Timeline tool mode types
 export type TimelineToolMode = 'select' | 'cut';
+
+// Timeline audio display mode. Detailed remains waveform-backed today; spectral
+// reserves the inline image lane used by spectrogram tile artifacts.
+export type TimelineAudioDisplayMode = 'compact' | 'detailed' | 'spectral';
+export type TimelineTrackFocusMode = 'balanced' | 'audio' | 'video';
+
+export interface TimelineAudioRegionSelection {
+  clipId: string;
+  trackId: string;
+  startTime: number;
+  endTime: number;
+  sourceInPoint: number;
+  sourceOutPoint: number;
+  snappedToZeroCrossing?: boolean;
+}
+
+export interface TimelineSpectralRegionSelection extends TimelineAudioRegionSelection {
+  frequencyMinHz: number;
+  frequencyMaxHz: number;
+  selectionMode?: 'rectangle' | 'brush';
+  brushTimeRadiusSeconds?: number;
+  brushFrequencyRadiusHz?: number;
+}
+
+export interface TimelineAudioRegionClipboard {
+  sourceClipId: string;
+  sourceTrackId: string;
+  sourceMediaFileId?: string;
+  sourceAudioRevisionId?: string;
+  startTime: number;
+  endTime: number;
+  sourceInPoint: number;
+  sourceOutPoint: number;
+  duration: number;
+  copiedAt: number;
+}
+
+export type TimelineAudioRegionEditType = Extract<
+  ClipAudioEditOperation['type'],
+  | 'silence'
+  | 'cut'
+  | 'paste'
+  | 'insert-silence'
+  | 'delete-silence'
+  | 'reverse'
+  | 'invert-polarity'
+  | 'swap-channels'
+  | 'mono-sum'
+  | 'split-stereo'
+  | 'repair'
+  | 'room-tone-fill'
+>;
+
+export type TimelineSpectralRegionEditType = Extract<
+  ClipAudioEditOperation['type'],
+  'spectral-mask' | 'spectral-resynthesis'
+>;
 
 // AI action visual feedback types
 export type AIActionOverlayType = 'split-glow' | 'delete-ghost' | 'trim-highlight' | 'silent-zone' | 'low-quality-zone';
@@ -166,6 +234,13 @@ export interface TimelineState {
   // Performance toggles
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
+  audioDisplayMode: TimelineAudioDisplayMode;
+  audioLayerAdvancedMode: boolean;
+  audioFocusMode: boolean;
+  trackFocusMode: TimelineTrackFocusMode;
+  audioRegionSelection: TimelineAudioRegionSelection | null;
+  audioSpectralRegionSelection: TimelineSpectralRegionSelection | null;
+  audioRegionClipboard: TimelineAudioRegionClipboard | null;
   showTranscriptMarkers: boolean;
 
   // Keyframe animation state
@@ -190,6 +265,10 @@ export interface TimelineState {
 
   // Timeline markers
   markers: TimelineMarker[];
+
+  // Advanced audio workstation state for the composition master bus.
+  masterAudioState?: MasterAudioState;
+  runtimeAudioMeters: RuntimeAudioMeterState;
 
   // Clip entrance animation key (increments on composition switch to trigger animations)
   clipEntranceAnimationKey: number;
@@ -223,6 +302,30 @@ export interface TrackActions {
   setTrackMuted: (id: string, muted: boolean) => void;
   setTrackVisible: (id: string, visible: boolean) => void;
   setTrackSolo: (id: string, solo: boolean) => void;
+  updateTrackAudioState: (id: string, patch: Partial<TrackAudioState>) => void;
+  setTrackAudioVolumeDb: (id: string, volumeDb: number) => void;
+  setTrackAudioPan: (id: string, pan: number) => void;
+  addTrackAudioSend: (trackId: string, targetBusId?: string) => string | null;
+  updateTrackAudioSend: (trackId: string, sendId: string, patch: Partial<AudioSendState>) => void;
+  removeTrackAudioSend: (trackId: string, sendId: string) => void;
+  addTrackAudioEffectInstance: (trackId: string, descriptorId: string) => string | null;
+  removeTrackAudioEffectInstance: (trackId: string, effectId: string) => void;
+  updateTrackAudioEffectInstance: (trackId: string, effectId: string, params: Partial<AudioEffectInstance['params']>) => void;
+  setTrackAudioEffectInstanceEnabled: (trackId: string, effectId: string, enabled: boolean) => void;
+  reorderTrackAudioEffectInstance: (trackId: string, effectId: string, newIndex: number) => void;
+  updateMasterAudioState: (patch: Partial<MasterAudioState>) => void;
+  setMasterAudioVolumeDb: (volumeDb: number) => void;
+  setMasterLimiterEnabled: (enabled: boolean) => void;
+  setMasterTruePeakCeilingDb: (truePeakCeilingDb: number) => void;
+  setMasterTargetLufs: (targetLufs: number | undefined) => void;
+  runAudioExportPreflight: (startTime?: number, endTime?: number, renderedBuffer?: AudioBuffer | null) => AudioExportPreflightState;
+  addMasterAudioEffectInstance: (descriptorId: string) => string | null;
+  removeMasterAudioEffectInstance: (effectId: string) => void;
+  updateMasterAudioEffectInstance: (effectId: string, params: Partial<AudioEffectInstance['params']>) => void;
+  setMasterAudioEffectInstanceEnabled: (effectId: string, enabled: boolean) => void;
+  reorderMasterAudioEffectInstance: (effectId: string, newIndex: number) => void;
+  updateRuntimeAudioMeter: (trackId: string, snapshot: AudioMeterSnapshot, masterSnapshot?: AudioMeterSnapshot) => void;
+  clearStaleRuntimeAudioMeters: (maxAgeMs?: number, now?: number) => void;
   setTrackLocked: (id: string, locked: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;
   scaleTracksOfType: (type: 'video' | 'audio', delta: number) => void;
@@ -294,6 +397,11 @@ export interface ClipEffectActions {
   updateClipEffect: (clipId: string, effectId: string, params: Partial<Effect['params']>) => void;
   setClipEffectEnabled: (clipId: string, effectId: string, enabled: boolean) => void;
   reorderClipEffect: (clipId: string, effectId: string, newIndex: number) => void;
+  addClipAudioEffectInstance: (clipId: string, descriptorId: string) => string | null;
+  removeClipAudioEffectInstance: (clipId: string, effectId: string) => void;
+  updateClipAudioEffectInstance: (clipId: string, effectId: string, params: Partial<AudioEffectInstance['params']>) => void;
+  setClipAudioEffectInstanceEnabled: (clipId: string, effectId: string, enabled: boolean) => void;
+  reorderClipAudioEffectInstance: (clipId: string, effectId: string, newIndex: number) => void;
 }
 
 export interface ColorCorrectionActions {
@@ -346,6 +454,10 @@ export interface AddClipOptions {
   source?: Partial<NonNullable<TimelineClip['source']>>;
 }
 
+export interface GenerateClipAudioAnalysisOptions {
+  force?: boolean;
+}
+
 // Core clip actions (remain in clipSlice)
 export interface CoreClipActions {
   addClip: (
@@ -366,7 +478,13 @@ export interface CoreClipActions {
   splitClipAtPlayhead: () => void;
   updateClipTransform: (id: string, transform: ClipTransformUpdate) => void;
   toggleClipReverse: (id: string) => void;
-  generateWaveformForClip: (clipId: string) => Promise<void>;
+  generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateProcessedWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateSpectrogramForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateLoudnessForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateBeatOnsetForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  generateFrequencyPhaseForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => Promise<void>;
+  cancelAudioAnalysisForClip: (clipId: string) => void;
   setClipParent: (clipId: string, parentClipId: string | null) => void;
   getClipChildren: (clipId: string) => TimelineClip[];
   setClipPreservesPitch: (clipId: string, preservesPitch: boolean) => void;
@@ -413,8 +531,90 @@ export interface PlaybackActions {
   toggleWaveformsEnabled: () => void;
   setThumbnailsEnabled: (enabled: boolean) => void;
   setWaveformsEnabled: (enabled: boolean) => void;
+  setAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
+  setAudioLayerAdvancedMode: (enabled: boolean) => void;
+  toggleAudioLayerAdvancedMode: () => void;
+  setAudioFocusMode: (enabled: boolean) => void;
+  toggleAudioFocusMode: () => void;
+  setTrackFocusMode: (mode: TimelineTrackFocusMode) => void;
+  setAudioRegionSelection: (selection: TimelineAudioRegionSelection | null) => void;
+  clearAudioRegionSelection: () => void;
+  setAudioSpectralRegionSelection: (selection: TimelineSpectralRegionSelection | null) => void;
+  clearAudioSpectralRegionSelection: () => void;
   toggleTranscriptMarkers: () => void;
   setShowTranscriptMarkers: (enabled: boolean) => void;
+}
+
+export interface ApplyAudioRegionEditOptions {
+  channelMask?: number[];
+  keepSelection?: boolean;
+  params?: ClipAudioEditOperation['params'];
+}
+
+export interface ApplyAudioRepairSuggestionInput {
+  id: string;
+  kind: string;
+  label: string;
+  severity?: string;
+  confidence?: number;
+  reason?: string;
+  operation: {
+    editType: Extract<ClipAudioEditOperation['type'], 'repair' | 'mono-sum'>;
+    params?: ClipAudioEditOperation['params'];
+  };
+  evidence?: ClipAudioEditOperation['params'];
+}
+
+export interface ApplyDetectedSilenceRemovalOptions {
+  detection?: AudioSilenceDetectionOptions;
+  ranges?: AudioSilenceRange[];
+  rippleTimeline?: boolean;
+}
+
+export interface ApplyRoomToneFillOptions {
+  targetRange?: { start: number; end: number };
+  sourceRanges?: AudioSilenceRange[];
+  detection?: AudioSilenceDetectionOptions;
+  gainDb?: number;
+  crossfadeSeconds?: number;
+}
+
+export interface ApplyDetectedTransientSofteningOptions {
+  detection?: AudioTransientDetectionOptions;
+  ranges?: AudioTransientRange[];
+  gainDb?: number;
+  attackSeconds?: number;
+  releaseSeconds?: number;
+}
+
+export interface ApplySpectralRegionEditOptions {
+  channelMask?: number[];
+  keepSelection?: boolean;
+  params?: ClipAudioEditOperation['params'];
+}
+
+export type AddClipSpectralImageLayerInput = Omit<SpectralImageLayer, 'id'> & {
+  id?: string;
+};
+
+export interface AudioEditActions {
+  applyAudioRegionEdit: (type: TimelineAudioRegionEditType, options?: ApplyAudioRegionEditOptions) => string | null;
+  applyAudioRepairSuggestion: (clipId: string, suggestion: ApplyAudioRepairSuggestionInput) => string | null;
+  detectClipSilenceRanges: (clipId: string, options?: AudioSilenceDetectionOptions) => Promise<AudioSilenceRange[]>;
+  applyDetectedSilenceRemoval: (clipId: string, options?: ApplyDetectedSilenceRemovalOptions) => Promise<string[]>;
+  applyRoomToneFill: (clipId: string, options?: ApplyRoomToneFillOptions) => Promise<string | null>;
+  detectClipTransientRanges: (clipId: string, options?: AudioTransientDetectionOptions) => Promise<AudioTransientRange[]>;
+  applyDetectedTransientSoftening: (clipId: string, options?: ApplyDetectedTransientSofteningOptions) => Promise<string[]>;
+  copySelectedAudioRegion: () => boolean;
+  pasteAudioRegionToSelection: () => string | null;
+  setClipAudioEditOperationEnabled: (clipId: string, operationId: string, enabled: boolean) => void;
+  removeClipAudioEditOperation: (clipId: string, operationId: string) => void;
+  clearClipAudioEditStack: (clipId: string) => void;
+  bakeClipAudioEditStack: (clipId: string) => Promise<string | null>;
+  applySpectralRegionEdit: (type: TimelineSpectralRegionEditType, options?: ApplySpectralRegionEditOptions) => string | null;
+  addClipSpectralImageLayer: (clipId: string, layer: AddClipSpectralImageLayerInput) => string | null;
+  updateClipSpectralImageLayer: (clipId: string, layerId: string, patch: Partial<SpectralImageLayer>) => void;
+  removeClipSpectralImageLayer: (clipId: string, layerId: string) => void;
 }
 
 // RAM Preview actions interface
@@ -529,6 +729,11 @@ export interface TransitionActions {
 export interface NodeGraphActions {
   ensureClipNodeGraph: (clipId: string) => void;
   addClipAICustomNode: (clipId: string) => string | null;
+  addClipAICustomNodeFromPort: (clipId: string, source: {
+    fromNodeId: string;
+    fromPortId: string;
+    label?: string;
+  }) => string | null;
   updateClipAICustomNode: (clipId: string, nodeId: string, updates: {
     label?: string;
     description?: string;
@@ -704,6 +909,7 @@ export interface TimelineStore extends
   TrackActions,
   ClipActions,
   PlaybackActions,
+  AudioEditActions,
   RamPreviewActions,
   ProxyCacheActions,
   ExportActions,

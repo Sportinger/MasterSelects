@@ -151,7 +151,7 @@ Audio export is handled separately from the video encoder.
 ### Current Flow
 
 - Audio is extracted from the selected timeline range.
-- `AudioExportPipeline` renders the mixed audio.
+- `AudioExportPipeline` renders the mixed audio through the same clip-local path used for processed timeline waveforms.
 - Audio-only WAV export writes the mixed `AudioBuffer` as 16-bit PCM WAV.
 - WebCodecs export can mux the audio chunks into the final file.
 
@@ -161,6 +161,7 @@ Audio export is handled separately from the video encoder.
 - The existing browser-compressed audio-only path writes the detected browser codec (`.aac` or `.ogg`).
 - AAC is used for MP4 when supported.
 - Opus is used for WebM when supported.
+- Clip-local trim, region edit-stack operations including paste/insert/delete silence, reverse, speed/pitch, mute, EQ, and volume are rendered before mixing.
 - If the browser cannot encode a usable audio format, the export can proceed without audio.
 
 ### Limitation

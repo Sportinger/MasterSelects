@@ -17,7 +17,7 @@ interface EffectInstance {
   type: string;
   name: string;
   enabled: boolean;
-  params: Record<string, number | boolean | string>;
+  params: Record<string, unknown>;
 }
 
 interface FeedbackState {
@@ -27,6 +27,16 @@ interface FeedbackState {
   height: number;
   clearPending: boolean;
   resetActive: boolean;
+}
+
+function toPrimitiveEffectParams(params: Record<string, unknown>): Record<string, number | boolean | string> {
+  const primitiveParams: Record<string, number | boolean | string> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+      primitiveParams[key] = value;
+    }
+  }
+  return primitiveParams;
 }
 
 export class EffectsPipeline {
@@ -173,7 +183,7 @@ export class EffectsPipeline {
     const definition = getEffect(effect.type);
     if (!definition) return null;
 
-    return definition.packUniforms(effect.params, outputWidth, outputHeight);
+    return definition.packUniforms(toPrimitiveEffectParams(effect.params), outputWidth, outputHeight);
   }
 
   /**

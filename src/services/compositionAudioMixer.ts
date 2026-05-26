@@ -14,6 +14,12 @@ const log = Logger.create('CompositionAudioMixer');
 import { useTimelineStore } from '../stores/timeline';
 import { AudioMixer, type AudioTrackData } from '../engine/audio/AudioMixer';
 import { audioExtractor } from '../engine/audio/AudioExtractor';
+import {
+  getTrackAudioMuted,
+  getTrackAudioSolo,
+  getTrackPan,
+  getTrackVolumeDb,
+} from './audio/audioGraphRouteSettings';
 import type { TimelineClip, TimelineTrack, SerializableClip } from '../types';
 import { generateWaveformFromBuffer } from '../stores/timeline/helpers/waveformHelpers';
 import { MAX_NESTING_DEPTH } from '../stores/timeline/constants';
@@ -163,8 +169,10 @@ class CompositionAudioMixerService {
           buffer: processedBuffer,
           startTime: clip.startTime,
           trackId: clip.trackId,
-          trackMuted: track?.muted || false,
-          trackSolo: track?.solo || false,
+          trackMuted: track ? getTrackAudioMuted(track) : false,
+          trackSolo: track ? getTrackAudioSolo(track) : false,
+          trackVolumeDb: track ? getTrackVolumeDb(track) : 0,
+          trackPan: track ? getTrackPan(track) : 0,
           clipVolume: clip.transform?.opacity ?? 1, // Use opacity as volume proxy
         });
       } catch (e) {

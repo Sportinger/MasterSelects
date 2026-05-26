@@ -2,21 +2,41 @@ import type {
   ClipCustomNodeDefinition,
   ClipCustomNodeParamValue,
   LayerSource,
+  MasterAudioState,
   NodeGraph,
+  NodeGraphPort,
   TextClipProperties,
+  TimelineTrack,
   TimelineClip,
+  AudioEffectInstance,
 } from '../../types';
+import type { AudioAnalysisArtifactKind, MediaFileAudioAnalysisRefs } from '../../types/audio';
 import { Logger } from '../logger';
 import { textRenderer } from '../textRenderer';
 import { createTextLayoutSnapshot, type TextBoxRect, type TextLayoutSnapshot } from '../textLayout';
 import { getCanvasVersion, markDynamicCanvasUpdated } from '../canvasVersion';
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 import { buildClipNodeGraph } from './clipGraphProjection';
+import { getCachedTimelineLoudnessEnvelope } from '../audio/timelineLoudnessEnvelopeCache';
+import {
+  getCachedTimelineFrequencySummary,
+  getCachedTimelinePhaseCorrelation,
+} from '../audio/timelineFrequencyPhaseCache';
+import {
+  getCachedTimelineBeatGrid,
+  getCachedTimelineOnsetMap,
+} from '../audio/timelineBeatOnsetCache';
+import {
+  buildAudioRepairSuggestionsFromRefs,
+  type AudioRepairSuggestion,
+} from '../audio/audioRepairSuggestions';
 
 const log = Logger.create('AINodeRuntime');
 
 const PIXEL_SORT_MAX_PIXELS = 320 * 180;
 const GENERATED_NODE_MAX_PIXELS = 96 * 54;
+const MAX_RUNTIME_AUDIO_SPECTROGRAM_REFS = 16;
+const MAX_RUNTIME_AUDIO_REPAIR_SUGGESTIONS = 6;
 
 export interface AINodeRuntimeTexture {
   data: Uint8ClampedArray;
@@ -42,6 +62,193 @@ type AINodeRuntimeTextSignal = TextClipProperties & {
   box?: TextBoxRect;
 };
 
+interface AINodeRuntimeAudioArtifactSignal {
+  artifactId: string;
+  kind: AudioAnalysisArtifactKind;
+  provenance: 'source' | 'processed';
+  available: true;
+  stale: boolean;
+  loudnessSummary?: AINodeRuntimeLoudnessSummary;
+  beatGridSummary?: AINodeRuntimeBeatGridSummary;
+  onsetMapSummary?: AINodeRuntimeOnsetMapSummary;
+  phaseCorrelationSummary?: AINodeRuntimePhaseCorrelationSummary;
+  frequencyBandSummary?: AINodeRuntimeFrequencyBandSummary;
+}
+
+interface AINodeRuntimeLoudnessCurvePreview {
+  metric: string;
+  pointCount: number;
+  minDb: number;
+  maxDb: number;
+  previewDb: number[];
+}
+
+interface AINodeRuntimeLoudnessSummary {
+  integratedLufs?: number;
+  truePeakDbtp?: number;
+  samplePeakDbfs?: number;
+  rmsDbfs?: number;
+  curves: AINodeRuntimeLoudnessCurvePreview[];
+}
+
+interface AINodeRuntimeFrequencyBandSummary {
+  spectralCentroidHz: number;
+  lowEnergyShare: number;
+  midEnergyShare: number;
+  highEnergyShare: number;
+  dominantBandId?: string;
+  bands: Array<{
+    bandId: string;
+    label: string;
+    minFrequency: number;
+    maxFrequency: number;
+    rmsDb: number;
+    peakDb: number;
+    energyShare: number;
+    centroidHz: number;
+  }>;
+}
+
+interface AINodeRuntimePhaseCorrelationSummary {
+  averageCorrelation: number;
+  minimumCorrelation: number;
+  maximumCorrelation: number;
+  negativeCorrelationPercent: number;
+  averageMidSideRatioDb: number;
+  stereoWidth: number;
+  monoCompatible: boolean;
+  pointCount: number;
+  preview: Array<{
+    time: number;
+    correlation: number;
+    midSideRatioDb: number;
+  }>;
+}
+
+interface AINodeRuntimeAudioEventPreview {
+  time: number;
+  strength: number;
+  confidence: number;
+}
+
+interface AINodeRuntimeBeatGridSummary {
+  tempoBpm?: number;
+  beatCount: number;
+  confidence: number;
+  preview: AINodeRuntimeAudioEventPreview[];
+}
+
+interface AINodeRuntimeOnsetMapSummary {
+  eventCount: number;
+  averageStrength: number;
+  peakStrength: number;
+  preview: AINodeRuntimeAudioEventPreview[];
+}
+
+interface AINodeRuntimeWaveformSummary {
+  sampleCount: number;
+  peak: number;
+  rms: number;
+  min: number;
+  max: number;
+  preview: number[];
+}
+
+interface AINodeRuntimeAudioEffectSummary {
+  id: string;
+  descriptorId: string;
+  enabled: boolean;
+  params: Record<string, string | number | boolean>;
+}
+
+interface AINodeRuntimeClipAudioRoutingContext {
+  muted: boolean;
+  soloSafe: boolean;
+  sourceAudioRevisionId?: string;
+  editStackCount: number;
+  spectralLayerCount: number;
+  effectStack: AINodeRuntimeAudioEffectSummary[];
+}
+
+interface AINodeRuntimeTrackAudioRoutingContext {
+  trackId: string;
+  name?: string;
+  muted: boolean;
+  solo: boolean;
+  volumeDb: number;
+  pan: number;
+  meterMode?: string;
+  sendCount: number;
+  effectStack: AINodeRuntimeAudioEffectSummary[];
+}
+
+interface AINodeRuntimeMasterAudioRoutingContext {
+  volumeDb: number;
+  limiterEnabled: boolean;
+  truePeakCeilingDb: number;
+  targetLufs?: number;
+  effectStack: AINodeRuntimeAudioEffectSummary[];
+}
+
+interface AINodeRuntimeAudioAnalysisNamespace {
+  waveform?: AINodeRuntimeAudioArtifactSignal;
+  processedWaveform?: AINodeRuntimeAudioArtifactSignal;
+  spectrogramTileSets: AINodeRuntimeAudioArtifactSignal[];
+  spectrogramTileSetCount: number;
+  omittedSpectrogramTileSetCount: number;
+  loudness?: AINodeRuntimeAudioArtifactSignal;
+  beats?: AINodeRuntimeAudioArtifactSignal;
+  onsets?: AINodeRuntimeAudioArtifactSignal;
+  phaseCorrelation?: AINodeRuntimeAudioArtifactSignal;
+  transcriptTiming?: AINodeRuntimeAudioArtifactSignal;
+  frequencyBands?: AINodeRuntimeAudioArtifactSignal;
+  frequencySummary?: AINodeRuntimeAudioArtifactSignal;
+}
+
+interface AINodeRuntimeAudioMetadataSignal {
+  clipId: string;
+  linkedClipId?: string;
+  sourceType?: string;
+  mediaFileId?: string;
+  sourceAudioRevisionId?: string;
+  trackId?: string;
+  duration: number;
+  inPoint: number;
+  outPoint: number;
+  waveformSampleCount: number;
+  editStackCount: number;
+  spectralLayerCount: number;
+  sourceArtifactCount: number;
+  processedArtifactCount: number;
+  effectiveArtifactCount: number;
+  hasProcessedAnalysis: boolean;
+}
+
+interface AINodeRuntimeAudioContext {
+  source: {
+    clipId: string;
+    linkedClipId?: string;
+    mediaFileId?: string;
+    sourceAudioRevisionId?: string;
+    duration: number;
+    inPoint: number;
+    outPoint: number;
+  };
+  waveform?: AINodeRuntimeWaveformSummary;
+  routing: {
+    clip: AINodeRuntimeClipAudioRoutingContext;
+    track?: AINodeRuntimeTrackAudioRoutingContext;
+    master: AINodeRuntimeMasterAudioRoutingContext;
+  };
+  analysis: {
+    source: AINodeRuntimeAudioAnalysisNamespace;
+    processed: AINodeRuntimeAudioAnalysisNamespace;
+    effective: AINodeRuntimeAudioAnalysisNamespace;
+  };
+  metadata: AINodeRuntimeAudioMetadataSignal;
+  repairSuggestions: AudioRepairSuggestion[];
+}
+
 interface AINodeRuntimeContext {
   clipId: string;
   clipLocalTime: number;
@@ -52,7 +259,8 @@ interface AINodeRuntimeContext {
   source: Record<string, unknown>;
   graph: Record<string, unknown>;
   node: Record<string, unknown>;
-  signals: Record<string, unknown>;
+  signals: Record<string, AINodeRuntimeInputValue>;
+  audio?: AINodeRuntimeAudioContext;
   text?: AINodeRuntimeTextSignal;
 }
 
@@ -60,7 +268,12 @@ type AINodeRuntimeInputValue =
   | AINodeRuntimeTexture
   | AINodeRuntimeTime
   | AINodeRuntimeTextSignal
+  | AINodeRuntimeAudioContext
+  | string
   | number
+  | boolean
+  | readonly unknown[]
+  | object
   | Record<string, unknown>
   | undefined;
 
@@ -80,6 +293,13 @@ interface RuntimeCacheEntry {
 }
 
 type AINodeParamResolver = (nodeId: string) => Record<string, ClipCustomNodeParamValue>;
+
+interface AINodeRuntimeAudioOptions {
+  track?: TimelineTrack;
+  linkedClip?: TimelineClip | null;
+  linkedTrack?: TimelineTrack | null;
+  masterAudioState?: MasterAudioState;
+}
 
 const runtimeCache = new Map<string, RuntimeCacheEntry>();
 const executableCache = new Map<string, AINodeExecutable | null>();
@@ -270,6 +490,53 @@ function stableStringifyParams(params: Record<string, ClipCustomNodeParamValue>)
     .join(',');
 }
 
+function createRuntimeTrackAudioSignature(track?: TimelineTrack | null): Record<string, unknown> | null {
+  return track ? {
+      id: track.id,
+      muted: track.audioState?.muted ?? track.muted === true,
+      solo: track.audioState?.solo ?? track.solo === true,
+      volumeDb: track.audioState?.volumeDb ?? 0,
+      pan: track.audioState?.pan ?? 0,
+      meterMode: track.audioState?.meterMode,
+      sendCount: track.audioState?.sends?.length ?? 0,
+      effectStack: summarizeAudioEffectStack(track.audioState?.effectStack),
+    } : null;
+}
+
+function createRuntimeAudioOptionsSignature(options: AINodeRuntimeAudioOptions = {}): string {
+  const { track, linkedClip, linkedTrack, masterAudioState } = options;
+  return JSON.stringify({
+    track: createRuntimeTrackAudioSignature(track),
+    linkedClip: linkedClip ? createRuntimeClipAudioSignature(linkedClip) : null,
+    linkedTrack: createRuntimeTrackAudioSignature(linkedTrack),
+    master: masterAudioState ? {
+      volumeDb: masterAudioState.volumeDb,
+      limiterEnabled: masterAudioState.limiterEnabled,
+      truePeakCeilingDb: masterAudioState.truePeakCeilingDb,
+      targetLufs: masterAudioState.targetLufs,
+      effectStack: summarizeAudioEffectStack(masterAudioState.effectStack),
+    } : null,
+  });
+}
+
+function createRuntimeClipAudioSignature(clip: TimelineClip): string {
+  return JSON.stringify({
+    id: clip.id,
+    trackId: clip.trackId,
+    sourceType: clip.source?.type,
+    mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+    waveformSampleCount: clip.waveform?.length ?? 0,
+    sourceAudioRevisionId: clip.audioState?.sourceAudioRevisionId,
+    muted: clip.audioState?.muted === true,
+    soloSafe: clip.audioState?.soloSafe === true,
+    editStackCount: clip.audioState?.editStack?.length ?? 0,
+    spectralLayerCount: clip.audioState?.spectralLayers?.length ?? 0,
+    effectStack: summarizeAudioEffectStack(clip.audioState?.effectStack),
+    sourceAnalysisRefs: clip.audioState?.sourceAnalysisRefs ?? null,
+    processedAnalysisRefs: clip.audioState?.processedAnalysisRefs ?? null,
+  });
+}
+
 function createSourceContentSignature(source: LayerSource): string {
   const canvas = source.textCanvas;
   if (canvas) {
@@ -308,6 +575,99 @@ function createRuntimeTime(context: AINodeRuntimeContext): AINodeRuntimeTime {
     valueOf: () => context.clipLocalTime,
     toString: () => String(context.clipLocalTime),
   };
+}
+
+function findAudioArtifactSignal(
+  signals: readonly AINodeRuntimeAudioArtifactSignal[],
+  port: NodeGraphPort | undefined,
+): AINodeRuntimeAudioArtifactSignal | undefined {
+  const artifactId = port?.metadata?.artifactId ?? port?.metadata?.signalRefId;
+  if (artifactId) {
+    const byArtifact = signals.find((signal) => signal.artifactId === artifactId);
+    if (byArtifact) {
+      return byArtifact;
+    }
+  }
+
+  const artifactIndex = port?.metadata?.artifactIndex;
+  if (typeof artifactIndex === 'number') {
+    return signals[artifactIndex];
+  }
+
+  return signals[0];
+}
+
+function resolveSourcePortRuntimeSignal(
+  port: NodeGraphPort | undefined,
+  baseSignals: Record<string, AINodeRuntimeInputValue>,
+  audioSignal?: AINodeRuntimeAudioContext,
+): AINodeRuntimeInputValue {
+  if (!port) {
+    return undefined;
+  }
+
+  if (port.id in baseSignals) {
+    return baseSignals[port.id];
+  }
+
+  const analysis = audioSignal?.analysis.effective;
+  switch (port.metadata?.semanticKind) {
+    case 'audio-source':
+      return audioSignal;
+    case 'waveform':
+      return analysis?.waveform;
+    case 'spectrum':
+      return findAudioArtifactSignal(analysis?.spectrogramTileSets ?? [], port);
+    case 'loudness':
+      return analysis?.loudness;
+    case 'beats':
+      return analysis?.beats;
+    case 'onsets':
+      return analysis?.onsets;
+    case 'phase-correlation':
+      return analysis?.phaseCorrelation;
+    case 'transcript':
+      return analysis?.transcriptTiming;
+    case 'frequency-bands':
+    case 'frequency-summary':
+      return analysis?.frequencyBands;
+    case 'audio-metadata':
+      return audioSignal?.metadata;
+    default:
+      return undefined;
+  }
+}
+
+function createConnectedNodeInputs(
+  graph: NodeGraph,
+  nodeId: string,
+  baseSignals: Record<string, AINodeRuntimeInputValue>,
+  audioSignal?: AINodeRuntimeAudioContext,
+): Record<string, AINodeRuntimeInputValue> {
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const connectedInputs: Record<string, AINodeRuntimeInputValue> = {};
+
+  for (const edgeToNode of graph.edges) {
+    if (edgeToNode.toNodeId !== nodeId) {
+      continue;
+    }
+
+    if (edgeToNode.toPortId === 'input' && edgeToNode.type === 'texture') {
+      continue;
+    }
+
+    const fromNode = nodesById.get(edgeToNode.fromNodeId);
+    const fromPort = fromNode?.outputs.find((port) => port.id === edgeToNode.fromPortId);
+    const value = edgeToNode.fromNodeId === 'source'
+      ? resolveSourcePortRuntimeSignal(fromPort, baseSignals, audioSignal)
+      : undefined;
+
+    if (value !== undefined) {
+      connectedInputs[edgeToNode.toPortId] = value;
+    }
+  }
+
+  return connectedInputs;
 }
 
 function createSerializableGraph(graph: NodeGraph): Record<string, unknown> {
@@ -350,6 +710,538 @@ function createRuntimeSourceMetadata(source: LayerSource): Record<string, unknow
   };
 }
 
+function createAudioArtifactSignal(
+  artifactId: string | undefined,
+  kind: AudioAnalysisArtifactKind,
+  provenance: 'source' | 'processed',
+): AINodeRuntimeAudioArtifactSignal | undefined {
+  if (!artifactId) {
+    return undefined;
+  }
+
+  const loudnessSummary = kind === 'loudness-envelope'
+    ? createCachedLoudnessSummary(artifactId)
+    : undefined;
+  const beatGridSummary = kind === 'beat-grid'
+    ? createCachedBeatGridSummary(artifactId)
+    : undefined;
+  const onsetMapSummary = kind === 'onset-map'
+    ? createCachedOnsetMapSummary(artifactId)
+    : undefined;
+  const phaseCorrelationSummary = kind === 'phase-correlation'
+    ? createCachedPhaseCorrelationSummary(artifactId)
+    : undefined;
+  const frequencyBandSummary = kind === 'frequency-summary'
+    ? createCachedFrequencyBandSummary(artifactId)
+    : undefined;
+
+  return {
+    artifactId,
+    kind,
+    provenance,
+    available: true,
+    stale: false,
+    ...(loudnessSummary ? { loudnessSummary } : {}),
+    ...(beatGridSummary ? { beatGridSummary } : {}),
+    ...(onsetMapSummary ? { onsetMapSummary } : {}),
+    ...(phaseCorrelationSummary ? { phaseCorrelationSummary } : {}),
+    ...(frequencyBandSummary ? { frequencyBandSummary } : {}),
+  };
+}
+
+function roundAudioValue(value: number, decimals = 4): number {
+  return Number.isFinite(value) ? Number(value.toFixed(decimals)) : value;
+}
+
+function roundAudioDb(value: number): number {
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : value;
+}
+
+function createPreview(values: Float32Array, maxPoints: number): number[] {
+  if (values.length === 0) {
+    return [];
+  }
+
+  const count = Math.min(maxPoints, values.length);
+  return Array.from({ length: count }, (_, index) => {
+    const sourceIndex = Math.min(
+      values.length - 1,
+      Math.floor((index / Math.max(1, count - 1)) * (values.length - 1)),
+    );
+    return roundAudioDb(values[sourceIndex] ?? 0);
+  });
+}
+
+function createAudioEventPreview(
+  events: readonly { time: number; strength: number; confidence: number }[],
+  maxPoints: number,
+): AINodeRuntimeAudioEventPreview[] {
+  if (events.length === 0) {
+    return [];
+  }
+
+  const count = Math.min(maxPoints, events.length);
+  return Array.from({ length: count }, (_, index) => {
+    const sourceIndex = Math.min(
+      events.length - 1,
+      Math.floor((index / Math.max(1, count - 1)) * (events.length - 1)),
+    );
+    const event = events[sourceIndex] ?? { time: 0, strength: 0, confidence: 0 };
+    return {
+      time: roundAudioValue(event.time, 3),
+      strength: roundAudioValue(event.strength),
+      confidence: roundAudioValue(event.confidence),
+    };
+  });
+}
+
+function createCachedBeatGridSummary(artifactId: string): AINodeRuntimeBeatGridSummary | undefined {
+  const grid = getCachedTimelineBeatGrid(artifactId);
+  if (!grid) {
+    return undefined;
+  }
+
+  return {
+    tempoBpm: grid.tempoBpm === undefined ? undefined : roundAudioValue(grid.tempoBpm, 2),
+    beatCount: grid.beatCount,
+    confidence: roundAudioValue(grid.summary.confidence),
+    preview: createAudioEventPreview(grid.beats, 32),
+  };
+}
+
+function createCachedOnsetMapSummary(artifactId: string): AINodeRuntimeOnsetMapSummary | undefined {
+  const map = getCachedTimelineOnsetMap(artifactId);
+  if (!map) {
+    return undefined;
+  }
+
+  return {
+    eventCount: map.eventCount,
+    averageStrength: roundAudioValue(map.summary.averageStrength),
+    peakStrength: roundAudioValue(map.summary.peakStrength),
+    preview: createAudioEventPreview(map.onsets, 32),
+  };
+}
+
+function createCachedLoudnessSummary(artifactId: string): AINodeRuntimeLoudnessSummary | undefined {
+  const envelope = getCachedTimelineLoudnessEnvelope(artifactId);
+  if (!envelope) {
+    return undefined;
+  }
+
+  return {
+    integratedLufs: envelope.summary?.integratedLufs === undefined
+      ? undefined
+      : roundAudioDb(envelope.summary.integratedLufs),
+    truePeakDbtp: envelope.summary?.truePeakDbtp === undefined
+      ? undefined
+      : roundAudioDb(envelope.summary.truePeakDbtp),
+    samplePeakDbfs: envelope.summary?.samplePeakDbfs === undefined
+      ? undefined
+      : roundAudioDb(envelope.summary.samplePeakDbfs),
+    rmsDbfs: envelope.summary?.rmsDbfs === undefined
+      ? undefined
+      : roundAudioDb(envelope.summary.rmsDbfs),
+    curves: envelope.curves.slice(0, 8).map((curve) => {
+      let minDb = Number.POSITIVE_INFINITY;
+      let maxDb = Number.NEGATIVE_INFINITY;
+      for (const value of curve.values) {
+        const finite = Number.isFinite(value) ? value : 0;
+        minDb = Math.min(minDb, finite);
+        maxDb = Math.max(maxDb, finite);
+      }
+
+      return {
+        metric: curve.metric,
+        pointCount: curve.pointCount,
+        minDb: roundAudioDb(minDb === Number.POSITIVE_INFINITY ? 0 : minDb),
+        maxDb: roundAudioDb(maxDb === Number.NEGATIVE_INFINITY ? 0 : maxDb),
+        previewDb: createPreview(curve.values, 32),
+      };
+    }),
+  };
+}
+
+function createCachedFrequencyBandSummary(artifactId: string): AINodeRuntimeFrequencyBandSummary | undefined {
+  const summary = getCachedTimelineFrequencySummary(artifactId);
+  if (!summary) {
+    return undefined;
+  }
+
+  return {
+    spectralCentroidHz: roundAudioValue(summary.summary.spectralCentroidHz, 2),
+    lowEnergyShare: roundAudioValue(summary.summary.lowEnergyShare),
+    midEnergyShare: roundAudioValue(summary.summary.midEnergyShare),
+    highEnergyShare: roundAudioValue(summary.summary.highEnergyShare),
+    dominantBandId: summary.summary.dominantBandId,
+    bands: summary.bands.slice(0, 12).map((band) => ({
+      bandId: band.bandId,
+      label: band.label,
+      minFrequency: roundAudioValue(band.minFrequency, 2),
+      maxFrequency: roundAudioValue(band.maxFrequency, 2),
+      rmsDb: roundAudioDb(band.rmsDb),
+      peakDb: roundAudioDb(band.peakDb),
+      energyShare: roundAudioValue(band.energyShare),
+      centroidHz: roundAudioValue(band.centroidHz, 2),
+    })),
+  };
+}
+
+function createPhaseCorrelationPreview(
+  points: NonNullable<ReturnType<typeof getCachedTimelinePhaseCorrelation>>['points'],
+  maxPoints: number,
+): AINodeRuntimePhaseCorrelationSummary['preview'] {
+  if (points.length === 0) {
+    return [];
+  }
+
+  const count = Math.min(maxPoints, points.length);
+  return Array.from({ length: count }, (_, index) => {
+    const sourceIndex = Math.min(
+      points.length - 1,
+      Math.floor((index / Math.max(1, count - 1)) * (points.length - 1)),
+    );
+    const point = points[sourceIndex] ?? { time: 0, correlation: 1, midSideRatioDb: 0 };
+    return {
+      time: roundAudioValue(point.time, 3),
+      correlation: roundAudioValue(point.correlation),
+      midSideRatioDb: roundAudioDb(point.midSideRatioDb),
+    };
+  });
+}
+
+function createCachedPhaseCorrelationSummary(artifactId: string): AINodeRuntimePhaseCorrelationSummary | undefined {
+  const phase = getCachedTimelinePhaseCorrelation(artifactId);
+  if (!phase) {
+    return undefined;
+  }
+
+  return {
+    averageCorrelation: roundAudioValue(phase.summary.averageCorrelation),
+    minimumCorrelation: roundAudioValue(phase.summary.minimumCorrelation),
+    maximumCorrelation: roundAudioValue(phase.summary.maximumCorrelation),
+    negativeCorrelationPercent: roundAudioValue(phase.summary.negativeCorrelationPercent),
+    averageMidSideRatioDb: roundAudioDb(phase.summary.averageMidSideRatioDb),
+    stereoWidth: roundAudioValue(phase.summary.stereoWidth),
+    monoCompatible: phase.summary.monoCompatible,
+    pointCount: phase.points.length,
+    preview: createPhaseCorrelationPreview(phase.points, 32),
+  };
+}
+
+function createAudioAnalysisNamespace(
+  refs: MediaFileAudioAnalysisRefs | undefined,
+  provenance: 'source' | 'processed',
+): AINodeRuntimeAudioAnalysisNamespace {
+  const spectrogramTileSetIds = refs?.spectrogramTileSetIds ?? [];
+  const boundedSpectrogramTileSetIds = spectrogramTileSetIds.slice(0, MAX_RUNTIME_AUDIO_SPECTROGRAM_REFS);
+  const frequencySummary = createAudioArtifactSignal(refs?.frequencySummaryId, 'frequency-summary', provenance);
+
+  return {
+    waveform: createAudioArtifactSignal(refs?.waveformPyramidId, 'waveform-pyramid', provenance),
+    processedWaveform: createAudioArtifactSignal(
+      refs?.processedWaveformPyramidId,
+      'processed-waveform-pyramid',
+      provenance,
+    ),
+    spectrogramTileSets: boundedSpectrogramTileSetIds
+      .map((artifactId) => createAudioArtifactSignal(artifactId, 'spectrogram-tiles', provenance))
+      .filter((signal): signal is AINodeRuntimeAudioArtifactSignal => Boolean(signal)),
+    spectrogramTileSetCount: spectrogramTileSetIds.length,
+    omittedSpectrogramTileSetCount: Math.max(
+      0,
+      spectrogramTileSetIds.length - boundedSpectrogramTileSetIds.length,
+    ),
+    loudness: createAudioArtifactSignal(refs?.loudnessEnvelopeId, 'loudness-envelope', provenance),
+    beats: createAudioArtifactSignal(refs?.beatGridId, 'beat-grid', provenance),
+    onsets: createAudioArtifactSignal(refs?.onsetMapId, 'onset-map', provenance),
+    phaseCorrelation: createAudioArtifactSignal(refs?.phaseCorrelationId, 'phase-correlation', provenance),
+    transcriptTiming: createAudioArtifactSignal(refs?.transcriptTimingId, 'transcript-timing', provenance),
+    frequencyBands: frequencySummary,
+    frequencySummary,
+  };
+}
+
+function firstNonEmptyRefs<T>(preferred: T[] | undefined, fallback: T[] | undefined): T[] | undefined {
+  return preferred && preferred.length > 0 ? preferred : fallback;
+}
+
+function getEffectiveAudioAnalysisRefs(clip: TimelineClip): MediaFileAudioAnalysisRefs | undefined {
+  const source = clip.audioState?.sourceAnalysisRefs;
+  const processed = clip.audioState?.processedAnalysisRefs;
+  if (!source && !processed) {
+    return undefined;
+  }
+
+  return {
+    waveformPyramidId: processed?.processedWaveformPyramidId ??
+      processed?.waveformPyramidId ??
+      source?.waveformPyramidId,
+    processedWaveformPyramidId: processed?.processedWaveformPyramidId ?? source?.processedWaveformPyramidId,
+    spectrogramTileSetIds: firstNonEmptyRefs(processed?.spectrogramTileSetIds, source?.spectrogramTileSetIds),
+    loudnessEnvelopeId: processed?.loudnessEnvelopeId ?? source?.loudnessEnvelopeId,
+    beatGridId: processed?.beatGridId ?? source?.beatGridId,
+    onsetMapId: processed?.onsetMapId ?? source?.onsetMapId,
+    phaseCorrelationId: processed?.phaseCorrelationId ?? source?.phaseCorrelationId,
+    transcriptTimingId: processed?.transcriptTimingId ?? source?.transcriptTimingId,
+    frequencySummaryId: processed?.frequencySummaryId ?? source?.frequencySummaryId,
+  };
+}
+
+function mergeAudioAnalysisNamespaces(
+  source: AINodeRuntimeAudioAnalysisNamespace,
+  processed: AINodeRuntimeAudioAnalysisNamespace,
+): AINodeRuntimeAudioAnalysisNamespace {
+  const spectrogramSource = processed.spectrogramTileSets.length > 0 ? processed : source;
+
+  return {
+    waveform: processed.processedWaveform ?? processed.waveform ?? source.waveform,
+    processedWaveform: processed.processedWaveform ?? source.processedWaveform,
+    spectrogramTileSets: spectrogramSource.spectrogramTileSets,
+    spectrogramTileSetCount: spectrogramSource.spectrogramTileSetCount,
+    omittedSpectrogramTileSetCount: spectrogramSource.omittedSpectrogramTileSetCount,
+    loudness: processed.loudness ?? source.loudness,
+    beats: processed.beats ?? source.beats,
+    onsets: processed.onsets ?? source.onsets,
+    phaseCorrelation: processed.phaseCorrelation ?? source.phaseCorrelation,
+    transcriptTiming: processed.transcriptTiming ?? source.transcriptTiming,
+    frequencyBands: processed.frequencyBands ?? source.frequencyBands,
+    frequencySummary: processed.frequencySummary ?? source.frequencySummary,
+  };
+}
+
+function countAudioAnalysisRefs(refs: MediaFileAudioAnalysisRefs | undefined): number {
+  if (!refs) {
+    return 0;
+  }
+
+  return [
+    refs.waveformPyramidId,
+    refs.processedWaveformPyramidId,
+    refs.loudnessEnvelopeId,
+    refs.beatGridId,
+    refs.onsetMapId,
+    refs.phaseCorrelationId,
+    refs.transcriptTimingId,
+    refs.frequencySummaryId,
+  ].filter(Boolean).length + (refs.spectrogramTileSetIds?.length ?? 0);
+}
+
+function createAudioMetadataSignal(
+  clip: TimelineClip,
+  track: TimelineTrack | undefined,
+  effectiveRefs: MediaFileAudioAnalysisRefs | undefined,
+): AINodeRuntimeAudioMetadataSignal {
+  return {
+    clipId: clip.id,
+    linkedClipId: clip.linkedClipId,
+    sourceType: clip.source?.type,
+    mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+    sourceAudioRevisionId: clip.audioState?.sourceAudioRevisionId,
+    trackId: track?.id ?? clip.trackId,
+    duration: clip.duration,
+    inPoint: clip.inPoint,
+    outPoint: clip.outPoint,
+    waveformSampleCount: clip.waveform?.length ?? 0,
+    editStackCount: clip.audioState?.editStack?.length ?? 0,
+    spectralLayerCount: clip.audioState?.spectralLayers?.length ?? 0,
+    sourceArtifactCount: countAudioAnalysisRefs(clip.audioState?.sourceAnalysisRefs),
+    processedArtifactCount: countAudioAnalysisRefs(clip.audioState?.processedAnalysisRefs),
+    effectiveArtifactCount: countAudioAnalysisRefs(effectiveRefs),
+    hasProcessedAnalysis: countAudioAnalysisRefs(clip.audioState?.processedAnalysisRefs) > 0,
+  };
+}
+
+function summarizeWaveform(waveform: number[] | undefined): AINodeRuntimeWaveformSummary | undefined {
+  if (!waveform || waveform.length === 0) {
+    return undefined;
+  }
+
+  let peak = 0;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let squareSum = 0;
+
+  for (const value of waveform) {
+    const sample = Number.isFinite(value) ? value : 0;
+    peak = Math.max(peak, Math.abs(sample));
+    min = Math.min(min, sample);
+    max = Math.max(max, sample);
+    squareSum += sample * sample;
+  }
+
+  const previewLength = Math.min(256, waveform.length);
+  const preview = Array.from({ length: previewLength }, (_, index) => {
+    const sourceIndex = Math.min(
+      waveform.length - 1,
+      Math.floor((index / Math.max(1, previewLength)) * waveform.length),
+    );
+    const sample = waveform[sourceIndex];
+    return Number.isFinite(sample) ? sample : 0;
+  });
+
+  return {
+    sampleCount: waveform.length,
+    peak,
+    rms: Math.sqrt(squareSum / waveform.length),
+    min,
+    max,
+    preview,
+  };
+}
+
+function sanitizeAudioEffectParams(
+  params: AudioEffectInstance['params'] | undefined,
+): Record<string, string | number | boolean> {
+  const sanitized: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+function summarizeAudioEffectStack(
+  effects: readonly AudioEffectInstance[] | undefined,
+): AINodeRuntimeAudioEffectSummary[] {
+  return (effects ?? []).slice(0, 32).map(effect => ({
+    id: effect.id,
+    descriptorId: effect.descriptorId,
+    enabled: effect.enabled !== false,
+    params: sanitizeAudioEffectParams(effect.params),
+  }));
+}
+
+function createRuntimeAudioRoutingContext(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  masterAudioState?: MasterAudioState,
+): AINodeRuntimeAudioContext['routing'] {
+  return {
+    clip: {
+      muted: clip.audioState?.muted === true,
+      soloSafe: clip.audioState?.soloSafe === true,
+      sourceAudioRevisionId: clip.audioState?.sourceAudioRevisionId,
+      editStackCount: clip.audioState?.editStack?.length ?? 0,
+      spectralLayerCount: clip.audioState?.spectralLayers?.length ?? 0,
+      effectStack: summarizeAudioEffectStack(clip.audioState?.effectStack),
+    },
+    ...(track ? {
+      track: {
+        trackId: track.id,
+        name: track.name,
+        muted: track.audioState?.muted ?? track.muted === true,
+        solo: track.audioState?.solo ?? track.solo === true,
+        volumeDb: track.audioState?.volumeDb ?? 0,
+        pan: track.audioState?.pan ?? 0,
+        meterMode: track.audioState?.meterMode,
+        sendCount: track.audioState?.sends?.length ?? 0,
+        effectStack: summarizeAudioEffectStack(track.audioState?.effectStack),
+      },
+    } : {}),
+    master: {
+      volumeDb: masterAudioState?.volumeDb ?? 0,
+      limiterEnabled: masterAudioState?.limiterEnabled ?? false,
+      truePeakCeilingDb: masterAudioState?.truePeakCeilingDb ?? 0,
+      targetLufs: masterAudioState?.targetLufs,
+      effectStack: summarizeAudioEffectStack(masterAudioState?.effectStack),
+    },
+  };
+}
+
+function hasAudioAnalysis(namespace: AINodeRuntimeAudioAnalysisNamespace): boolean {
+  return Boolean(
+    namespace.waveform ||
+    namespace.processedWaveform ||
+    namespace.spectrogramTileSetCount > 0 ||
+    namespace.loudness ||
+    namespace.beats ||
+    namespace.onsets ||
+    namespace.phaseCorrelation ||
+    namespace.transcriptTiming ||
+    namespace.frequencyBands ||
+    namespace.frequencySummary,
+  );
+}
+
+function createRuntimeAudioContext(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  masterAudioState?: MasterAudioState,
+): AINodeRuntimeAudioContext | undefined {
+  const source = createAudioAnalysisNamespace(clip.audioState?.sourceAnalysisRefs, 'source');
+  const processed = createAudioAnalysisNamespace(clip.audioState?.processedAnalysisRefs, 'processed');
+  const effective = mergeAudioAnalysisNamespaces(source, processed);
+  const effectiveRefs = getEffectiveAudioAnalysisRefs(clip);
+  const repairSuggestions = buildAudioRepairSuggestionsFromRefs(effectiveRefs, {
+    maxSuggestions: MAX_RUNTIME_AUDIO_REPAIR_SUGGESTIONS,
+  });
+  const waveform = summarizeWaveform(clip.waveform);
+  const routing = createRuntimeAudioRoutingContext(clip, track, masterAudioState);
+  const metadata = createAudioMetadataSignal(clip, track, effectiveRefs);
+  const hasAudioSource = clip.source?.type === 'audio' ||
+    clip.source?.type === 'video' ||
+    clip.file?.type?.startsWith('audio/') ||
+    Boolean(clip.audioState) ||
+    Boolean(waveform) ||
+    hasAudioAnalysis(effective);
+
+  if (!hasAudioSource) {
+    return undefined;
+  }
+
+  return {
+    source: {
+      clipId: clip.id,
+      linkedClipId: clip.linkedClipId,
+      mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+      sourceAudioRevisionId: clip.audioState?.sourceAudioRevisionId,
+      duration: clip.duration,
+      inPoint: clip.inPoint,
+      outPoint: clip.outPoint,
+    },
+    waveform,
+    routing,
+    analysis: {
+      source,
+      processed,
+      effective,
+    },
+    metadata,
+    repairSuggestions,
+  };
+}
+
+function isRuntimeAudioClipCandidate(clip: TimelineClip | null | undefined): clip is TimelineClip {
+  if (!clip) {
+    return false;
+  }
+
+  return clip.source?.type === 'audio' ||
+    clip.file?.type?.startsWith('audio/') === true ||
+    Boolean(clip.audioState) ||
+    Boolean(clip.waveform?.length);
+}
+
+function resolveRuntimeAudioInput(
+  clip: TimelineClip,
+  audioOptions: AINodeRuntimeAudioOptions,
+): { clip: TimelineClip; track?: TimelineTrack } {
+  const linkedClip = audioOptions.linkedClip;
+  if (isRuntimeAudioClipCandidate(linkedClip)) {
+    return {
+      clip: linkedClip,
+      track: audioOptions.linkedTrack ?? audioOptions.track,
+    };
+  }
+
+  return {
+    clip,
+    track: audioOptions.track,
+  };
+}
+
 function createTextMeasureContext(): Pick<CanvasRenderingContext2D, 'font' | 'measureText'> | null {
   if (typeof document === 'undefined') {
     return null;
@@ -385,6 +1277,7 @@ function createRuntimeMetadata(
   source: LayerSource,
   text?: TextClipProperties,
   dimensions?: { width: number; height: number },
+  audio?: AINodeRuntimeAudioContext,
 ): Record<string, unknown> {
   return {
     clipName: clip.name,
@@ -394,6 +1287,7 @@ function createRuntimeMetadata(
     sourceType: clip.source?.type,
     source: createRuntimeSourceMetadata(source),
     clip: createRuntimeClipMetadata(clip),
+    audio,
     text: createRuntimeTextSignal(text, dimensions),
   };
 }
@@ -531,6 +1425,7 @@ function runGeneratedNode(
   definition: ClipCustomNodeDefinition,
   texture: AINodeRuntimeTexture,
   context: AINodeRuntimeContext,
+  connectedInputs: Record<string, AINodeRuntimeInputValue> = {},
 ): AINodeRuntimeTexture {
   const code = extractAINodeGeneratedCode(definition.ai.generatedCode ?? '');
   if (!code) {
@@ -545,8 +1440,8 @@ function runGeneratedNode(
   try {
     const result = executable.process(
       {
-    input: texture,
-    texture,
+        input: texture,
+        texture,
         time: createRuntimeTime(context),
         metadata: context.metadata,
         params: context.params,
@@ -555,7 +1450,16 @@ function runGeneratedNode(
         graph: context.graph,
         node: context.node,
         signals: context.signals,
+        audio: context.audio,
+        audioAnalysis: context.signals.audioAnalysis,
+        frequencyBands: context.signals.frequencyBands,
+        beats: context.signals.beats,
+        onsets: context.signals.onsets,
+        audioMetadata: context.signals.audioMetadata,
+        audioRepairSuggestions: context.signals.audioRepairSuggestions,
         text: context.text,
+        connectedInputs,
+        ...connectedInputs,
       },
       context,
     );
@@ -587,11 +1491,21 @@ function processTexture(
   texture: AINodeRuntimeTexture,
   clipLocalTime: number,
   resolveParams: AINodeParamResolver,
+  audioOptions: AINodeRuntimeAudioOptions = {},
 ): AINodeRuntimeTexture {
-  const graph = buildClipNodeGraph(clip);
+  const graph = buildClipNodeGraph(clip, audioOptions.track, {
+    linkedClip: audioOptions.linkedClip,
+    linkedTrack: audioOptions.linkedTrack,
+  });
   const graphSignal = createSerializableGraph(graph);
   const clipSignal = createRuntimeClipMetadata(clip);
   const sourceSignal = createRuntimeSourceMetadata(source);
+  const runtimeAudioInput = resolveRuntimeAudioInput(clip, audioOptions);
+  const audioSignal = createRuntimeAudioContext(
+    runtimeAudioInput.clip,
+    runtimeAudioInput.track,
+    audioOptions.masterAudioState,
+  );
 
   return definitions.reduce((current, definition) => {
     const params = resolveParams(definition.id);
@@ -603,7 +1517,44 @@ function processTexture(
     const textSignal = createRuntimeTextSignal(currentText, currentDimensions);
     const metadata = {
       ...(current.metadata ?? {}),
-      ...createRuntimeMetadata(clip, source, currentText, currentDimensions),
+      ...createRuntimeMetadata(clip, source, currentText, currentDimensions, audioSignal),
+    };
+    const timeSignal = createRuntimeTime({
+      clipId: clip.id,
+      clipLocalTime,
+      mediaTime: source.mediaTime,
+      params,
+      metadata,
+      clip: clipSignal,
+      source: sourceSignal,
+      graph: graphSignal,
+      node: { id: definition.id, label: definition.label },
+      signals: {},
+      audio: audioSignal,
+      text: textSignal,
+    });
+    const baseSignals: Record<string, AINodeRuntimeInputValue> = {
+      texture: current,
+      time: timeSignal,
+      params,
+      metadata,
+      clip: clipSignal,
+      source: sourceSignal,
+      graph: graphSignal,
+      node: { id: definition.id, label: definition.label },
+      audio: audioSignal,
+      audioAnalysis: audioSignal?.analysis,
+      frequencyBands: audioSignal?.analysis.effective.frequencyBands,
+      beats: audioSignal?.analysis.effective.beats,
+      onsets: audioSignal?.analysis.effective.onsets,
+      audioMetadata: audioSignal?.metadata,
+      audioRepairSuggestions: audioSignal?.repairSuggestions,
+      text: textSignal,
+    };
+    const connectedInputs = createConnectedNodeInputs(graph, definition.id, baseSignals, audioSignal);
+    const signals = {
+      ...baseSignals,
+      connectedInputs,
     };
 
     return runGeneratedNode(definition, current, {
@@ -622,31 +1573,10 @@ function processTexture(
         outputs: definition.outputs,
         status: definition.status,
       },
-      signals: {
-        texture: current,
-        time: createRuntimeTime({
-          clipId: clip.id,
-          clipLocalTime,
-          mediaTime: source.mediaTime,
-          params,
-          metadata,
-          clip: clipSignal,
-          source: sourceSignal,
-          graph: graphSignal,
-          node: { id: definition.id, label: definition.label },
-          signals: {},
-          text: textSignal,
-        }),
-        params,
-        metadata,
-        clip: clipSignal,
-        source: sourceSignal,
-        graph: graphSignal,
-        node: { id: definition.id, label: definition.label },
-        text: textSignal,
-      },
+      audio: audioSignal,
+      signals,
       text: textSignal,
-    });
+    }, connectedInputs);
   }, texture);
 }
 
@@ -656,6 +1586,7 @@ export function renderClipAINodesToCanvas(
   layerId: string,
   clipLocalTime: number,
   resolveParams: AINodeParamResolver = () => ({}),
+  audioOptions: AINodeRuntimeAudioOptions = {},
 ): HTMLCanvasElement | null {
   const runnableNodes = getConnectedRunnableCustomNodes(clip);
   if (runnableNodes.length === 0 || typeof document === 'undefined') {
@@ -679,6 +1610,8 @@ export function renderClipAINodesToCanvas(
     createSourceContentSignature(source),
     processSize.width,
     processSize.height,
+    createRuntimeClipAudioSignature(clip),
+    createRuntimeAudioOptionsSignature(audioOptions),
     runnableNodes
       .map((definition) => {
         const params = resolveParams(definition.id);
@@ -713,6 +1646,7 @@ export function renderClipAINodesToCanvas(
       },
       clipLocalTime,
       resolveParams,
+      audioOptions,
     );
 
     entry.canvas.width = output.width;

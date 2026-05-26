@@ -8,6 +8,14 @@
     "commits": ["5ffc1774", "a731f5fb"]
   },
   {
+    "date": "2026-05-26",
+    "type": "improve",
+    "title": "Advanced Audio Workstation",
+    "description": "The audio mixer now uses workstation-style vertical strips, independent track/master routing, live stereo meters, tail-aware reverb export, bridge audio diagnostics, and compact timeline audio controls that scale down to video-layer heights.",
+    "section": "Audio / Timeline",
+    "commits": ["3dd9beac", "9d22361e", "4724c577"]
+  },
+  {
     "date": "2026-05-25",
     "type": "new",
     "title": "Wasm/WIT Signal Runtime Foundation",

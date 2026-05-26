@@ -41,9 +41,12 @@ import './styles/app-shell.css';
 import './styles/shared-controls.css';
 
 // Dev test pages - lazy loaded to avoid bloating main bundle
-// Access via ?test=parallel-decode
+// Access via ?test=parallel-decode or ?test=flex-eq
 const ParallelDecodeTest = lazy(() =>
   import('./test/ParallelDecodeTest').then(m => ({ default: m.ParallelDecodeTest }))
+);
+const FlexEqVisualQa = lazy(() =>
+  import('./test/FlexEqVisualQa').then(m => ({ default: m.FlexEqVisualQa }))
 );
 
 function App() {
@@ -340,6 +343,14 @@ function App() {
     return (
       <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
         <ParallelDecodeTest />
+      </Suspense>
+    );
+  }
+
+  if (testMode === 'flex-eq') {
+    return (
+      <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
+        <FlexEqVisualQa />
       </Suspense>
     );
   }

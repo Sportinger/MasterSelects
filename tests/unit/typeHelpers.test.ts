@@ -81,12 +81,12 @@ describe('isEffectProperty', () => {
 describe('parseEffectProperty', () => {
   it('valid effect property → { effectId, paramName }', () => {
     const result = parseEffectProperty('effect.abc123.shift' as EffectProperty);
-    expect(result).toEqual({ effectId: 'abc123', paramName: 'shift' });
+    expect(result).toEqual({ effectId: 'abc123', paramName: 'shift', paramPath: ['shift'] });
   });
 
   it('different property names', () => {
     const result = parseEffectProperty('effect.myEffect.amount' as EffectProperty);
-    expect(result).toEqual({ effectId: 'myEffect', paramName: 'amount' });
+    expect(result).toEqual({ effectId: 'myEffect', paramName: 'amount', paramPath: ['amount'] });
   });
 
   it('invalid format (too few parts) → null', () => {
@@ -94,9 +94,9 @@ describe('parseEffectProperty', () => {
     expect(result).toBeNull();
   });
 
-  it('invalid format (too many parts) → null', () => {
+  it('nested format → full param path', () => {
     const result = parseEffectProperty('effect.abc.def.ghi' as EffectProperty);
-    expect(result).toBeNull();
+    expect(result).toEqual({ effectId: 'abc', paramName: 'def.ghi', paramPath: ['def', 'ghi'] });
   });
 
   it('wrong prefix → null', () => {
@@ -116,27 +116,27 @@ describe('parseEffectProperty', () => {
 
   it('effect property with empty effectId → still parses (effect..param)', () => {
     const result = parseEffectProperty('effect..param' as EffectProperty);
-    expect(result).toEqual({ effectId: '', paramName: 'param' });
+    expect(result).toEqual({ effectId: '', paramName: 'param', paramPath: ['param'] });
   });
 
   it('effect property with empty paramName → still parses (effect.id.)', () => {
     const result = parseEffectProperty('effect.id.' as EffectProperty);
-    expect(result).toEqual({ effectId: 'id', paramName: '' });
+    expect(result).toEqual({ effectId: 'id', paramName: '', paramPath: [''] });
   });
 
   it('effect property with underscored id', () => {
     const result = parseEffectProperty('effect.effect_789012.contrast' as EffectProperty);
-    expect(result).toEqual({ effectId: 'effect_789012', paramName: 'contrast' });
+    expect(result).toEqual({ effectId: 'effect_789012', paramName: 'contrast', paramPath: ['contrast'] });
   });
 
   it('effect property with hyphenated id', () => {
     const result = parseEffectProperty('effect.hue-shift-1.amount' as EffectProperty);
-    expect(result).toEqual({ effectId: 'hue-shift-1', paramName: 'amount' });
+    expect(result).toEqual({ effectId: 'hue-shift-1', paramName: 'amount', paramPath: ['amount'] });
   });
 
-  it('five parts → null', () => {
+  it('five parts → nested path', () => {
     const result = parseEffectProperty('effect.a.b.c.d' as EffectProperty);
-    expect(result).toBeNull();
+    expect(result).toEqual({ effectId: 'a', paramName: 'b.c.d', paramPath: ['b', 'c', 'd'] });
   });
 
   it('exactly two parts (effect.something) → null', () => {
@@ -160,7 +160,7 @@ describe('createEffectProperty', () => {
   it('roundtrip with parseEffectProperty', () => {
     const prop = createEffectProperty('myEffect', 'amount');
     const parsed = parseEffectProperty(prop);
-    expect(parsed).toEqual({ effectId: 'myEffect', paramName: 'amount' });
+    expect(parsed).toEqual({ effectId: 'myEffect', paramName: 'amount', paramPath: ['amount'] });
   });
 
   it('result is detected by isEffectProperty', () => {
@@ -184,7 +184,7 @@ describe('createEffectProperty', () => {
     for (const tc of testCases) {
       const prop = createEffectProperty(tc.effectId, tc.paramName);
       const parsed = parseEffectProperty(prop);
-      expect(parsed).toEqual(tc);
+      expect(parsed).toEqual({ ...tc, paramPath: [tc.paramName] });
     }
   });
 
@@ -199,7 +199,7 @@ describe('createEffectProperty', () => {
     expect(prop).toBe('effect..');
     // Parsing this should return empty strings
     const parsed = parseEffectProperty(prop);
-    expect(parsed).toEqual({ effectId: '', paramName: '' });
+    expect(parsed).toEqual({ effectId: '', paramName: '', paramPath: [''] });
   });
 });
 
@@ -227,6 +227,30 @@ describe('isAudioEffect', () => {
     expect(isAudioEffect('audio-volume')).toBe(true);
   });
 
+  it('professional audio effects are true', () => {
+    expect(isAudioEffect('audio-pan')).toBe(true);
+    expect(isAudioEffect('audio-normalize')).toBe(true);
+    expect(isAudioEffect('audio-parametric-eq')).toBe(true);
+    expect(isAudioEffect('audio-high-pass')).toBe(true);
+    expect(isAudioEffect('audio-low-pass')).toBe(true);
+    expect(isAudioEffect('audio-hum-notch')).toBe(true);
+    expect(isAudioEffect('audio-de-click')).toBe(true);
+    expect(isAudioEffect('audio-noise-reduction')).toBe(true);
+    expect(isAudioEffect('audio-spectral-gate')).toBe(true);
+    expect(isAudioEffect('audio-compressor')).toBe(true);
+    expect(isAudioEffect('audio-de-esser')).toBe(true);
+    expect(isAudioEffect('audio-limiter')).toBe(true);
+    expect(isAudioEffect('audio-noise-gate')).toBe(true);
+    expect(isAudioEffect('audio-expander')).toBe(true);
+    expect(isAudioEffect('audio-delay')).toBe(true);
+    expect(isAudioEffect('audio-reverb')).toBe(true);
+    expect(isAudioEffect('audio-saturation')).toBe(true);
+    expect(isAudioEffect('audio-polarity-invert')).toBe(true);
+    expect(isAudioEffect('audio-mono-sum')).toBe(true);
+    expect(isAudioEffect('audio-channel-swap')).toBe(true);
+    expect(isAudioEffect('audio-stereo-split')).toBe(true);
+  });
+
   it('visual effects → false', () => {
     const visualEffects: EffectType[] = [
       'hue-shift',
@@ -252,12 +276,41 @@ describe('isAudioEffect', () => {
       'hue-shift', 'saturation', 'brightness', 'contrast',
       'blur', 'pixelate', 'kaleidoscope', 'mirror',
       'invert', 'rgb-split', 'levels', 'voxel-relief',
-      'audio-eq', 'audio-volume',
+      'audio-eq', 'audio-volume', 'audio-pan', 'audio-normalize', 'audio-parametric-eq', 'audio-high-pass', 'audio-low-pass',
+      'audio-hum-notch', 'audio-de-click', 'audio-noise-reduction',
+      'audio-spectral-gate',
+      'audio-compressor', 'audio-de-esser', 'audio-limiter', 'audio-noise-gate', 'audio-expander',
+      'audio-delay', 'audio-reverb', 'audio-saturation',
+      'audio-polarity-invert', 'audio-mono-sum', 'audio-channel-swap', 'audio-stereo-split',
     ];
     const audioEffects = allEffects.filter(e => isAudioEffect(e));
     const visualEffects = allEffects.filter(e => !isAudioEffect(e));
-    // Audio effects should be exactly the two known ones
-    expect(audioEffects).toEqual(['audio-eq', 'audio-volume']);
+    // Audio effects should be exactly the registered audio effect union
+    expect(audioEffects).toEqual([
+      'audio-eq',
+      'audio-volume',
+      'audio-pan',
+      'audio-normalize',
+      'audio-parametric-eq',
+      'audio-high-pass',
+      'audio-low-pass',
+      'audio-hum-notch',
+      'audio-de-click',
+      'audio-noise-reduction',
+      'audio-spectral-gate',
+      'audio-compressor',
+      'audio-de-esser',
+      'audio-limiter',
+      'audio-noise-gate',
+      'audio-expander',
+      'audio-delay',
+      'audio-reverb',
+      'audio-saturation',
+      'audio-polarity-invert',
+      'audio-mono-sum',
+      'audio-channel-swap',
+      'audio-stereo-split',
+    ]);
     // Visual effects should be the remaining 12
     expect(visualEffects).toHaveLength(12);
     // Together they cover all

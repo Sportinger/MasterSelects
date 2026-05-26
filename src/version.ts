@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'AI Audio Workflow',
-  message: 'ElevenLabs text-to-speech generation is integrated with FlashBoard cards, media-board routing, project persistence, history, pricing metadata, and settings.',
+  title: 'Advanced Audio + AI Audio Workflow',
+  message: 'ElevenLabs audio generation and the advanced timeline audio workstation now cover generated audio cards, mixer routing, metering, export tails, and bridge diagnostics.',
   animated: true,
 };
 

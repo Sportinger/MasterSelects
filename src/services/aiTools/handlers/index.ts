@@ -119,6 +119,7 @@ import {
 
 import {
   handleGetStats,
+  handleGetAudioDiagnostics,
   handleGetLogs,
   handleGetRuntimeDiagnostics,
   handleGetPlaybackTrace,
@@ -234,6 +235,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   },
   // Stats
   getStats: handleGetStats,
+  getAudioDiagnostics: handleGetAudioDiagnostics,
   getStatsHistory: handleGetStatsHistory,
   getLogs: handleGetLogs,
   getRuntimeDiagnostics: handleGetRuntimeDiagnostics,

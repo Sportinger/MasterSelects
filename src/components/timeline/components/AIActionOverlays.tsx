@@ -14,6 +14,7 @@ interface AIActionOverlaysProps {
   timeToPixel: (time: number) => number;
   isTrackExpanded: (trackId: string) => boolean;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
+  getTrackHeight?: (track: TimelineTrack) => number;
 }
 
 type TrackLayout = {
@@ -24,15 +25,18 @@ type TrackLayout = {
 function buildTrackLayouts(
   tracks: TimelineTrack[],
   isTrackExpanded: (trackId: string) => boolean,
-  getExpandedTrackHeight: (trackId: string, baseHeight: number) => number
+  getExpandedTrackHeight: (trackId: string, baseHeight: number) => number,
+  getTrackHeight?: (track: TimelineTrack) => number,
 ): Map<string, TrackLayout> {
   let top = 0;
   const layouts = new Map<string, TrackLayout>();
 
   for (const track of tracks) {
-    const height = isTrackExpanded(track.id)
-      ? getExpandedTrackHeight(track.id, track.height)
-      : track.height;
+    const height = getTrackHeight
+      ? getTrackHeight(track)
+      : isTrackExpanded(track.id)
+        ? getExpandedTrackHeight(track.id, track.height)
+        : track.height;
     layouts.set(track.id, { top, height });
     top += height;
   }
@@ -315,12 +319,13 @@ export function AIActionOverlays({
   timeToPixel,
   isTrackExpanded,
   getExpandedTrackHeight,
+  getTrackHeight,
 }: AIActionOverlaysProps) {
   const overlays = useTimelineStore(s => s.aiActionOverlays);
 
   if (overlays.length === 0) return null;
 
-  const trackLayouts = buildTrackLayouts(tracks, isTrackExpanded, getExpandedTrackHeight);
+  const trackLayouts = buildTrackLayouts(tracks, isTrackExpanded, getExpandedTrackHeight, getTrackHeight);
   const splitGlowOverlays = overlays.filter(overlay => overlay.type === 'split-glow');
   const otherOverlays = overlays.filter(overlay => overlay.type !== 'split-glow');
 

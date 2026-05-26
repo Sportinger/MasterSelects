@@ -10,6 +10,7 @@ import {
   signalKindsForMediaType,
   signalKindsForTimelineSourceType,
 } from '../../../src/signals';
+import type { NodeGraphPort } from '../../../src/types';
 
 const fixedNow = () => '2026-05-24T00:00:00.000Z';
 
@@ -115,5 +116,33 @@ describe('Signal IR contracts', () => {
     expect(signalKindsForTimelineSourceType('gaussian-splat')).toEqual(['point-cloud', 'geometry', 'metadata']);
     expect(signalKindsForTimelineSourceType('lottie')).toEqual(['vector', 'texture', 'metadata']);
     expect(signalKindsForMediaType('composition')).toEqual(['timeline', 'scene', 'metadata']);
+  });
+
+  it('keeps audio node port metadata JSON-safe and artifact-backed', () => {
+    const port: NodeGraphPort = {
+      id: 'spectrum',
+      label: 'Spectrum',
+      type: 'metadata',
+      direction: 'output',
+      metadata: {
+        semanticKind: 'spectrum',
+        signalRefId: 'signal-audio-spectrum',
+        artifactId: 'artifact-spectrum-tiles',
+        artifactProvenance: 'processed',
+        artifactIndex: 2,
+        available: true,
+        stale: true,
+        previewable: true,
+        generateAction: {
+          type: 'audio.generateAnalysis',
+          artifactKind: 'spectrogram-tiles',
+          label: 'Generate spectrogram',
+        },
+      },
+    };
+
+    const restored: NodeGraphPort = JSON.parse(JSON.stringify(port));
+
+    expect(restored.metadata).toEqual(port.metadata);
   });
 });

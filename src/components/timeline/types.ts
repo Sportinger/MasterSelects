@@ -9,6 +9,7 @@ import type {
   EasingType,
   RotationInterpolationMode,
 } from '../../types';
+import type { TimelineAudioDisplayMode, TimelineTrackFocusMode } from '../../stores/timeline/types';
 
 // Clip drag state (Premiere-style)
 export interface ClipDragState {
@@ -105,6 +106,7 @@ export interface TimelineRulerCacheRange {
 export interface TimelineRulerProps {
   duration: number;
   zoom: number;
+  frameRate?: number | null;
   scrollX: number;
   onRulerMouseDown: (e: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;
@@ -127,6 +129,9 @@ export interface TimelineControlsProps {
   showTranscriptMarkers: boolean;
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
+  audioDisplayMode: TimelineAudioDisplayMode;
+  audioFocusMode: boolean;
+  trackFocusMode: TimelineTrackFocusMode;
   toolMode: 'select' | 'cut';
   onPlay: () => void;
   onPause: () => void;
@@ -141,6 +146,9 @@ export interface TimelineControlsProps {
   onToggleTranscriptMarkers: () => void;
   onToggleThumbnails: () => void;
   onToggleWaveforms: () => void;
+  onSetAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
+  onToggleAudioFocusMode: () => void;
+  onSetTrackFocusMode: (mode: TimelineTrackFocusMode) => void;
   onToggleCutTool: () => void;
   onSetDuration: (duration: number) => void;
   onFitToWindow: () => void;
@@ -156,6 +164,7 @@ export interface TimelineHeaderProps {
   tracks: TimelineTrack[];  // All tracks for parenting target selection
   isDimmed: boolean;
   isExpanded: boolean;
+  baseHeight: number;
   dynamicHeight: number;
   hasKeyframes: boolean;
   selectedClipIds: Set<string>;
@@ -190,6 +199,8 @@ export interface TimelineHeaderProps {
   onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
   hoveredKeyframeRow?: { trackId: string; property: AnimatableProperty } | null;
   onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
+  audioLayerAdvancedMode?: boolean;
+  showCollapsedAudioSummaryMeter?: boolean;
   // Track parenting (layer linking)
   onSetTrackParent: (trackId: string, parentTrackId: string | null) => void;
   onTrackPickWhipDragStart: (trackId: string, startX: number, startY: number) => void;
@@ -202,6 +213,7 @@ export interface TimelineTrackProps {
   clips: TimelineClip[];
   isDimmed: boolean;
   isExpanded: boolean;
+  baseHeight: number;
   dynamicHeight: number;
   isDragTarget: boolean;
   isExternalDragTarget: boolean;
@@ -220,7 +232,8 @@ export interface TimelineTrackProps {
   onDragOver: (e: React.DragEvent) => void;
   onDragEnter: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
-  renderClip: (clip: TimelineClip, trackId: string) => React.ReactNode;
+  onWheel?: (e: React.WheelEvent) => void;
+  renderClip: (clip: TimelineClip, trackId: string, trackBaseHeightOverride?: number) => React.ReactNode;
   // For keyframe tracks - clipKeyframes map triggers re-render when keyframes change
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
@@ -254,6 +267,7 @@ export interface TimelineClipProps {
   clip: TimelineClip;
   trackId: string;
   track: TimelineTrack;
+  trackBaseHeight: number;
   tracks: TimelineTrack[];
   clips: TimelineClip[];
   isSelected: boolean;

@@ -1,8 +1,10 @@
 // Timeline overlay elements (markers, work area, cache indicators, etc.)
 
 import '../TimelineInteractions.css';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ClipDragState } from '../types';
+import { audioRecordingService } from '../../../services/audio/AudioRecordingService';
+import { isAudioRecordingActivePhase } from '../../../services/audio/timelineRecordingWorkflow';
 
 interface TimelineOverlaysProps {
   // Time conversion
@@ -52,6 +54,16 @@ export function TimelineOverlays({
   exportRange,
   getCachedRanges,
 }: TimelineOverlaysProps) {
+  const [recordingState, setRecordingState] = useState(audioRecordingService.getSnapshot());
+  useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
+
+  const recordingPunchStart = recordingState.punchInTime ?? recordingState.startTime;
+  const recordingPunchEnd = recordingState.punchOutTime;
+  const recordingPunchActive = isAudioRecordingActivePhase(recordingState.phase)
+    && recordingPunchStart !== undefined
+    && recordingPunchEnd !== undefined
+    && recordingPunchEnd > recordingPunchStart;
+
   return (
     <>
       {/* Snap line */}
@@ -85,6 +97,17 @@ export function TimelineOverlays({
             />
           )}
         </>
+      )}
+
+      {recordingPunchActive && (
+        <div
+          className={`timeline-recording-punch-range ${recordingState.phase}`}
+          style={{
+            left: timeToPixel(recordingPunchStart),
+            width: Math.max(2, timeToPixel(recordingPunchEnd - recordingPunchStart)),
+          }}
+          title={`Recording punch: ${formatTime(recordingPunchStart)} - ${formatTime(recordingPunchEnd)}`}
+        />
       )}
 
       {/* RAM preview progress */}
@@ -145,7 +168,7 @@ export function TimelineOverlays({
       {/* In marker */}
       {inPoint !== null && (
         <div
-          className={`in-out-marker in-marker ${switchMotionClass} ${markerDrag?.type === 'in' ? 'dragging' : ''}`}
+          className={`in-out-marker in-marker ${recordingPunchActive ? 'recording-punch' : ''} ${switchMotionClass} ${markerDrag?.type === 'in' ? 'dragging' : ''}`}
           style={{ left: timeToPixel(inPoint) }}
           title={`In: ${formatTime(inPoint)} (drag to move)`}
         >
@@ -162,7 +185,7 @@ export function TimelineOverlays({
       {/* Out marker */}
       {outPoint !== null && (
         <div
-          className={`in-out-marker out-marker ${switchMotionClass} ${markerDrag?.type === 'out' ? 'dragging' : ''}`}
+          className={`in-out-marker out-marker ${recordingPunchActive ? 'recording-punch' : ''} ${switchMotionClass} ${markerDrag?.type === 'out' ? 'dragging' : ''}`}
           style={{ left: timeToPixel(outPoint) }}
           title={`Out: ${formatTime(outPoint)} (drag to move)`}
         >

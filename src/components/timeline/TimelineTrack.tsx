@@ -6,6 +6,10 @@ import type { AnimatableProperty, BezierHandle, ClipMask, Keyframe } from '../..
 import { CurveEditor } from './CurveEditor';
 import { parseVectorAnimationInputProperty, parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 
+const TRACK_VIEWPORT_FALLBACK_PX = 1600;
+const TRACK_VIEWPORT_MIN_PX = 1600;
+const TRACK_RENDER_OVERSCAN_PX = 1200;
+
 type KeyframeTrackClip = {
   id: string;
   startTime: number;
@@ -173,30 +177,34 @@ function TimelineTrackComponent({
   clips,
   isDimmed,
   isExpanded,
+  baseHeight,
   dynamicHeight,
   isDragTarget,
   isExternalDragTarget,
   selectedClipIds,
   selectedKeyframeIds,
   clipDrag,
+  clipTrim,
   externalDrag,
   onDrop,
   onDragOver,
   onDragEnter,
   onDragLeave,
+  onWheel,
   renderClip,
   clipKeyframes,
   renderKeyframeDiamonds,
   timeToPixel,
   pixelToTime,
-  scrollX: _scrollX,
+  zoom,
+  scrollX,
   expandedCurveProperties,
   onSelectKeyframe,
   onMoveKeyframe,
   onUpdateBezierHandle,
 }: TimelineTrackProps) {
   // Deduplicate by clip id so transient store/render races do not produce duplicate React keys.
-  const trackClips = useMemo(() => {
+  const allTrackClips = useMemo(() => {
     const uniqueClips = new Map<string, typeof clips[number]>();
     clips.forEach((clip) => {
       if (clip.trackId !== track.id || uniqueClips.has(clip.id)) return;
@@ -204,8 +212,29 @@ function TimelineTrackComponent({
     });
     return Array.from(uniqueClips.values());
   }, [clips, track.id]);
-  const trackClipIds = useMemo(() => new Set(trackClips.map((clip) => clip.id)), [trackClips]);
-  const selectedTrackClip = trackClips.find((c) => selectedClipIds.has(c.id));
+  const viewportWidth = typeof window === 'undefined'
+    ? TRACK_VIEWPORT_FALLBACK_PX
+    : Math.max(TRACK_VIEWPORT_MIN_PX, window.innerWidth);
+  const visibleStartTime = Math.max(0, (scrollX - TRACK_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001));
+  const visibleEndTime = (scrollX + viewportWidth + TRACK_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001);
+  const trackClips = useMemo(() => {
+    const draggedClipIds = new Set<string>();
+    if (clipDrag) {
+      draggedClipIds.add(clipDrag.clipId);
+      clipDrag.multiSelectClipIds?.forEach((clipId) => draggedClipIds.add(clipId));
+    }
+
+    return allTrackClips.filter((clip) => {
+      if (selectedClipIds.has(clip.id) || draggedClipIds.has(clip.id) || clipTrim?.clipId === clip.id) {
+        return true;
+      }
+      const clipStart = clip.startTime;
+      const clipEnd = clip.startTime + clip.duration;
+      return clipEnd >= visibleStartTime && clipStart <= visibleEndTime;
+    });
+  }, [allTrackClips, clipDrag, clipTrim?.clipId, selectedClipIds, visibleEndTime, visibleStartTime]);
+  const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
+  const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
 
   return (
     <div
@@ -220,9 +249,10 @@ function TimelineTrackComponent({
       onDragOver={onDragOver}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
+      onWheelCapture={onWheel}
     >
       {/* Clip row - the normal clip area */}
-      <div className="track-clip-row" style={{ height: track.height }}>
+      <div className="track-clip-row" style={{ height: baseHeight }}>
         {/* Render clips belonging to this track */}
         {trackClips.map((clip) => renderClip(clip, track.id))}
         {/* Render clip being dragged TO this track */}

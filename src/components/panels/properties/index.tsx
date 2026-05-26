@@ -4,6 +4,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useEngineStore } from '../../../stores/engineStore';
 import { DEFAULT_TEXT_3D_PROPERTIES } from '../../../stores/timeline/constants';
+import { isAudioEffect } from '../../../types';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { TextTab } from '../TextTab';
 import './PropertiesPanel.css';
@@ -13,12 +14,13 @@ import './TextTab.css';
 import './VolumeBlendshapeTabs.css';
 
 // Tab type
-type PropertiesTab = 'transform' | 'color' | 'effects' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip';
+type PropertiesTab = 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
 const ColorTab = lazy(() => import('./ColorTab').then(m => ({ default: m.ColorTab })));
 const EffectsTab = lazy(() => import('./EffectsTab').then(m => ({ default: m.EffectsTab })));
+const AudioEditStackTab = lazy(() => import('./AudioEditStackTab').then(m => ({ default: m.AudioEditStackTab })));
 const MasksTab = lazy(() => import('./MasksTab').then(m => ({ default: m.MasksTab })));
 const TranscriptTab = lazy(() => import('./TranscriptTab').then(m => ({ default: m.TranscriptTab })));
 const AnalysisTab = lazy(() => import('./AnalysisTab').then(m => ({ default: m.AnalysisTab })));
@@ -70,6 +72,7 @@ export function PropertiesPanel() {
   // Check if it's an audio clip
   const selectedTrack = selectedClip ? tracks.find(t => t.id === selectedClip.trackId) : null;
   const isAudioClip = selectedTrack?.type === 'audio';
+  const selectedClipAudioEditCount = selectedClip?.audioState?.editStack?.length ?? 0;
 
   // Check if it's a text clip
   const isTextClip = selectedClip?.source?.type === 'text';
@@ -166,7 +169,7 @@ export function PropertiesPanel() {
       } else if (isTextClip) {
         setActiveTab('text');
       } else if (isAudioClip && (activeTab === 'transform' || activeTab === 'color' || activeTab === 'masks' || activeTab === 'text' || activeTab === '3d-text' || activeTab === 'blendshapes')) {
-        setActiveTab('effects');
+        setActiveTab(selectedClipAudioEditCount > 0 ? 'audio-edits' : 'effects');
       } else if (
         !isAudioClip &&
         !isTextClip &&
@@ -186,7 +189,7 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       }
     }
-  }, [selectedClipId, isAudioClip, isTextClip, is3DTextClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastClipId, activeTab]);
+  }, [selectedClipId, isAudioClip, selectedClipAudioEditCount, isTextClip, is3DTextClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastClipId, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
@@ -257,7 +260,8 @@ export function PropertiesPanel() {
   const interpolatedSpeed = getInterpolatedSpeed(selectedClip.id, clipLocalTime);
 
   // Count non-audio effects for badge
-  const visualEffects = (selectedClip.effects || []).filter(e => e.type !== 'audio-volume' && e.type !== 'audio-eq');
+  const visualEffects = (selectedClip.effects || []).filter(e => !isAudioEffect(e.type));
+  const audioEditCount = selectedClipAudioEditCount;
 
   return (
     <div className="properties-panel">
@@ -283,6 +287,9 @@ export function PropertiesPanel() {
           <>
             <button className={`tab-btn ${activeTab === 'effects' ? 'active' : ''}`} onClick={() => setActiveTab('effects')}>
               Effects {visualEffects.length > 0 && <span className="badge">{visualEffects.length}</span>}
+            </button>
+            <button className={`tab-btn ${activeTab === 'audio-edits' ? 'active' : ''}`} onClick={() => setActiveTab('audio-edits')}>
+              Audio Edits {audioEditCount > 0 && <span className="badge">{audioEditCount}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
               Transcript {selectedClip.transcript && selectedClip.transcript.length > 0 && <span className="badge">{selectedClip.transcript.length}</span>}
@@ -416,6 +423,7 @@ export function PropertiesPanel() {
           {activeTab === 'gaussian-splat' && isGaussianSplat && <GaussianSplatTab clipId={selectedClip.id} />}
           {activeTab === 'splat-effector' && isSplatEffectorClip && <SplatEffectorTab clipId={selectedClip.id} />}
           {activeTab === 'effects' && <EffectsTab clipId={selectedClip.id} effects={selectedClip.effects || []} isAudioClip={isAudioClip} />}
+          {activeTab === 'audio-edits' && isAudioClip && <AudioEditStackTab clipId={selectedClip.id} />}
           {activeTab === 'masks' && !isAudioClip && <MasksTab clipId={selectedClip.id} masks={selectedClip.masks} />}
           {activeTab === 'transcript' && (
             <TranscriptTab

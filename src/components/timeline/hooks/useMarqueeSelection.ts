@@ -4,7 +4,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack, AnimatableProperty } from '../../../types';
 import type { MarqueeState, ClipDragState, ClipTrimState, MarkerDragState } from '../types';
-import { PROPERTY_ROW_HEIGHT } from '../../../stores/timeline/constants';
 import { useTimelineStore } from '../../../stores/timeline';
 
 interface UseMarqueeSelectionProps {
@@ -33,6 +32,7 @@ interface UseMarqueeSelectionProps {
   // Helpers
   pixelToTime: (pixel: number) => number;
   isTrackExpanded: (trackId: string) => boolean;
+  getTrackBaseHeight: (track: TimelineTrack) => number;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
 }
 
@@ -44,11 +44,11 @@ interface UseMarqueeSelectionReturn {
 export function useMarqueeSelection({
   trackLanesRef,
   scrollX,
-  clips,
-  tracks,
+  clips: _clips,
+  tracks: _tracks,
   selectedClipIds,
   selectedKeyframeIds,
-  clipKeyframes,
+  clipKeyframes: _clipKeyframes,
   clipDrag,
   clipTrim,
   markerDrag,
@@ -56,9 +56,10 @@ export function useMarqueeSelection({
   selectClip,
   selectKeyframe,
   deselectAllKeyframes,
-  pixelToTime,
-  isTrackExpanded,
-  getExpandedTrackHeight,
+  pixelToTime: _pixelToTime,
+  isTrackExpanded: _isTrackExpanded,
+  getTrackBaseHeight: _getTrackBaseHeight,
+  getExpandedTrackHeight: _getExpandedTrackHeight,
 }: UseMarqueeSelectionProps): UseMarqueeSelectionReturn {
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const marqueeRef = useRef(marquee);
@@ -71,133 +72,56 @@ export function useMarqueeSelection({
   const getClipsInRect = useCallback(
     (left: number, right: number, top: number, bottom: number): Set<string> => {
       const result = new Set<string>();
+      const container = trackLanesRef.current;
+      if (!container) return result;
 
-      // Convert pixel bounds to time
-      const startTime = pixelToTime(left);
-      const endTime = pixelToTime(right);
+      const containerRect = container.getBoundingClientRect();
+      container.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]').forEach((clipElement) => {
+        const clipId = clipElement.dataset.clipId;
+        if (!clipId) return;
 
-      // Calculate which tracks are covered by the rectangle
-      let currentY = 0;
-      const coveredTrackIds = new Set<string>();
+        const clipRect = clipElement.getBoundingClientRect();
+        const clipLeft = clipRect.left - containerRect.left + scrollX;
+        const clipRight = clipRect.right - containerRect.left + scrollX;
+        const clipTop = clipRect.top - containerRect.top;
+        const clipBottom = clipRect.bottom - containerRect.top;
 
-      for (const track of tracks) {
-        const trackHeight = getExpandedTrackHeight(track.id, track.height);
-        const trackTop = currentY;
-        const trackBottom = currentY + trackHeight;
-
-        // Check if rectangle overlaps with this track
-        if (bottom > trackTop && top < trackBottom) {
-          coveredTrackIds.add(track.id);
+        if (clipRight > left && clipLeft < right && clipBottom > top && clipTop < bottom) {
+          result.add(clipId);
         }
-
-        currentY += trackHeight;
-      }
-
-      // Find all clips that intersect with the selection rectangle
-      for (const clip of clips) {
-        // Check if clip's track is in covered tracks
-        if (!coveredTrackIds.has(clip.trackId)) continue;
-
-        // Check if clip's time range overlaps with selection time range
-        const clipEnd = clip.startTime + clip.duration;
-        if (clip.startTime < endTime && clipEnd > startTime) {
-          result.add(clip.id);
-        }
-      }
+      });
 
       return result;
     },
-    [pixelToTime, tracks, clips, getExpandedTrackHeight]
+    [scrollX, trackLanesRef]
   );
 
   // Helper: Calculate which keyframes intersect with a rectangle
   const getKeyframesInRect = useCallback(
     (left: number, right: number, top: number, bottom: number): Set<string> => {
       const result = new Set<string>();
+      const container = trackLanesRef.current;
+      if (!container) return result;
 
-      // Convert pixel bounds to time
-      const startTime = pixelToTime(left);
-      const endTime = pixelToTime(right);
+      const containerRect = container.getBoundingClientRect();
+      container.querySelectorAll<HTMLElement>('.keyframe-diamond[data-keyframe-id]').forEach((keyframeElement) => {
+        const keyframeId = keyframeElement.dataset.keyframeId;
+        if (!keyframeId) return;
 
-      // Calculate track positions
-      let currentY = 0;
+        const keyframeRect = keyframeElement.getBoundingClientRect();
+        const keyframeLeft = keyframeRect.left - containerRect.left + scrollX;
+        const keyframeRight = keyframeRect.right - containerRect.left + scrollX;
+        const keyframeTop = keyframeRect.top - containerRect.top;
+        const keyframeBottom = keyframeRect.bottom - containerRect.top;
 
-      for (const track of tracks) {
-        if (track.type !== 'video') {
-          currentY += track.height;
-          continue;
+        if (keyframeRight > left && keyframeLeft < right && keyframeBottom > top && keyframeTop < bottom) {
+          result.add(keyframeId);
         }
-
-        const baseHeight = track.height;
-        const isExpanded = isTrackExpanded(track.id);
-
-        // Get the selected clip in this track for keyframe display
-        const trackClips = clips.filter(c => c.trackId === track.id);
-        const selectedTrackClip = trackClips.find(c => selectedClipIds.has(c.id));
-
-        if (!isExpanded || !selectedTrackClip) {
-          currentY += baseHeight;
-          continue;
-        }
-
-        // Get keyframes for the selected clip
-        const keyframes = clipKeyframes.get(selectedTrackClip.id) || [];
-        if (keyframes.length === 0) {
-          currentY += baseHeight;
-          continue;
-        }
-
-        const showsCamera3DProps =
-          selectedTrackClip.source?.type === 'camera';
-        const propertyOrder = showsCamera3DProps
-          ? ['camera.fov', 'camera.near', 'camera.far', 'camera.resolutionWidth', 'camera.resolutionHeight', 'opacity', 'position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z']
-          : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z'];
-
-        // Get unique properties with keyframes in sorted order
-        const uniqueProps = [...new Set(keyframes.map(k => k.property))].filter((prop) => {
-          if (selectedTrackClip.is3D || showsCamera3DProps) return true;
-          return prop !== 'rotation.x' && prop !== 'rotation.y' && prop !== 'position.z' && prop !== 'scale.z';
-        });
-        const sortedProps = uniqueProps.sort((a, b) => {
-          const aIdx = propertyOrder.indexOf(a);
-          const bIdx = propertyOrder.indexOf(b);
-          if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
-          if (aIdx !== -1) return -1;
-          if (bIdx !== -1) return 1;
-          return a.localeCompare(b);
-        });
-
-        // Calculate Y position for each property row
-        // Property rows start after the base track height
-        const propertyRowStart = currentY + baseHeight;
-
-        for (let propIndex = 0; propIndex < sortedProps.length; propIndex++) {
-          const prop = sortedProps[propIndex];
-          const rowTop = propertyRowStart + propIndex * PROPERTY_ROW_HEIGHT;
-          const rowBottom = rowTop + PROPERTY_ROW_HEIGHT;
-
-          // Check if this row is within the marquee Y bounds
-          if (bottom > rowTop && top < rowBottom) {
-            // Find keyframes in this property that are within the time range
-            const propKeyframes = keyframes.filter(k => k.property === prop);
-
-            for (const kf of propKeyframes) {
-              const absTime = selectedTrackClip.startTime + kf.time;
-              // Check if keyframe time is within selection
-              if (absTime >= startTime && absTime <= endTime) {
-                result.add(kf.id);
-              }
-            }
-          }
-        }
-
-        // Move to next track (include expanded height)
-        currentY += getExpandedTrackHeight(track.id, baseHeight);
-      }
+      });
 
       return result;
     },
-    [pixelToTime, tracks, clips, selectedClipIds, clipKeyframes, isTrackExpanded, getExpandedTrackHeight]
+    [scrollX, trackLanesRef]
   );
 
   // Marquee selection: mouse down on empty area starts selection
@@ -214,6 +138,7 @@ export function useMarqueeSelection({
         target.closest('.trim-handle') ||
         target.closest('.fade-handle') ||
         target.closest('.track-header') ||
+        target.closest('.timeline-split-divider') ||
         target.closest('.keyframe-diamond')
       ) {
         return;

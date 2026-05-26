@@ -108,7 +108,7 @@ export class FrameExporter {
     const clips = Array.isArray(state.clips) ? state.clips : [];
     const requestedAudio = !!includeAudio;
     const audioClipsInRange = requestedAudio
-      ? AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime)
+      ? AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, state.masterAudioState)
       : [];
     const shouldExportAudio = requestedAudio && audioClipsInRange.length > 0;
     const clipsInRange = collectRenderableExportClipsInRange(startTime, endTime, tracks, clips);

@@ -7,6 +7,7 @@ import { engine } from '../../engine/WebGPUEngine';
 import { getRuntimeFrameProvider } from '../../services/mediaRuntime/runtimePlayback';
 import { playheadState, sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { resolvePlaybackStartPosition } from './playbackRange';
+import { prewarmProxyFramesForTimelinePosition } from '../../services/proxyFramePrewarm';
 
 function createPlaybackWarmupRequestId(): string {
   return `playback-warmup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -34,6 +35,15 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
     if (!get().isPlaying && !get().isDraggingPlayhead) {
       engine.requestNewFrameRender();
+    }
+
+    const latestState = get();
+    if (!latestState.isPlaying) {
+      prewarmProxyFramesForTimelinePosition(
+        latestState,
+        useMediaStore.getState().files,
+        clampedPosition
+      );
     }
   },
 
@@ -322,6 +332,92 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
   setWaveformsEnabled: (enabled: boolean) => {
     set({ waveformsEnabled: enabled });
+  },
+
+  setAudioDisplayMode: (mode) => {
+    set({ audioDisplayMode: mode });
+  },
+
+  setAudioLayerAdvancedMode: (enabled) => {
+    set({ audioLayerAdvancedMode: enabled });
+  },
+
+  toggleAudioLayerAdvancedMode: () => {
+    set((state) => ({ audioLayerAdvancedMode: !(state.audioLayerAdvancedMode !== false) }));
+  },
+
+  setAudioFocusMode: (enabled) => {
+    set({ audioFocusMode: enabled, trackFocusMode: enabled ? 'audio' : 'balanced' });
+  },
+
+  toggleAudioFocusMode: () => {
+    set((state) => {
+      const nextEnabled = !state.audioFocusMode;
+      return {
+        audioFocusMode: nextEnabled,
+        trackFocusMode: nextEnabled ? 'audio' : 'balanced',
+      };
+    });
+  },
+
+  setTrackFocusMode: (mode) => {
+    set({ trackFocusMode: mode, audioFocusMode: mode === 'audio' });
+  },
+
+  setAudioRegionSelection: (selection) => {
+    if (!selection) {
+      set({ audioRegionSelection: null });
+      return;
+    }
+
+    const startTime = Math.max(0, Math.min(selection.startTime, selection.endTime));
+    const endTime = Math.max(startTime, Math.max(selection.startTime, selection.endTime));
+    const sourceInPoint = Math.min(selection.sourceInPoint, selection.sourceOutPoint);
+    const sourceOutPoint = Math.max(selection.sourceInPoint, selection.sourceOutPoint);
+
+    set({
+      audioRegionSelection: {
+        ...selection,
+        startTime,
+        endTime,
+        sourceInPoint,
+        sourceOutPoint,
+      },
+    });
+  },
+
+  clearAudioRegionSelection: () => {
+    set({ audioRegionSelection: null });
+  },
+
+  setAudioSpectralRegionSelection: (selection) => {
+    if (!selection) {
+      set({ audioSpectralRegionSelection: null });
+      return;
+    }
+
+    const startTime = Math.max(0, Math.min(selection.startTime, selection.endTime));
+    const endTime = Math.max(startTime, Math.max(selection.startTime, selection.endTime));
+    const sourceInPoint = Math.min(selection.sourceInPoint, selection.sourceOutPoint);
+    const sourceOutPoint = Math.max(selection.sourceInPoint, selection.sourceOutPoint);
+    const frequencyMinHz = Math.max(0, Math.min(selection.frequencyMinHz, selection.frequencyMaxHz));
+    const frequencyMaxHz = Math.max(frequencyMinHz, Math.max(selection.frequencyMinHz, selection.frequencyMaxHz));
+
+    set({
+      audioSpectralRegionSelection: {
+        ...selection,
+        startTime,
+        endTime,
+        sourceInPoint,
+        sourceOutPoint,
+        frequencyMinHz,
+        frequencyMaxHz,
+      },
+    });
+  },
+
+  clearAudioSpectralRegionSelection: () => {
+    set({ audioSpectralRegionSelection: null });
   },
 
   toggleTranscriptMarkers: () => {

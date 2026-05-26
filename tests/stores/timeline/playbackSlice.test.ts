@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
+import { MAX_ZOOM, MIN_ZOOM } from '../../../src/stores/timeline/constants';
 
 describe('playbackSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -150,18 +151,18 @@ describe('playbackSlice', () => {
     expect(store.getState().zoom).toBe(100);
 
     store.getState().setZoom(0.001);
-    expect(store.getState().zoom).toBe(0.1); // MIN_ZOOM
+    expect(store.getState().zoom).toBe(MIN_ZOOM);
 
-    store.getState().setZoom(999);
-    expect(store.getState().zoom).toBe(200); // MAX_ZOOM
+    store.getState().setZoom(MAX_ZOOM + 1);
+    expect(store.getState().zoom).toBe(MAX_ZOOM);
   });
 
   it('setZoom: accepts exact boundary values', () => {
-    store.getState().setZoom(0.1);
-    expect(store.getState().zoom).toBe(0.1);
+    store.getState().setZoom(MIN_ZOOM);
+    expect(store.getState().zoom).toBe(MIN_ZOOM);
 
-    store.getState().setZoom(200);
-    expect(store.getState().zoom).toBe(200);
+    store.getState().setZoom(MAX_ZOOM);
+    expect(store.getState().zoom).toBe(MAX_ZOOM);
   });
 
   it('setZoom: handles fractional zoom levels', () => {
@@ -175,6 +176,39 @@ describe('playbackSlice', () => {
     expect(store.getState().snappingEnabled).toBe(false);
     store.getState().toggleSnapping();
     expect(store.getState().snappingEnabled).toBe(true);
+  });
+
+  it('audio focus mode can be toggled and set directly', () => {
+    expect(store.getState().audioFocusMode).toBe(false);
+    store.getState().toggleAudioFocusMode();
+    expect(store.getState().audioFocusMode).toBe(true);
+    store.getState().setAudioFocusMode(false);
+    expect(store.getState().audioFocusMode).toBe(false);
+  });
+
+  it('stores and clears timeline audio region selections', () => {
+    store.getState().setAudioRegionSelection({
+      clipId: 'clip-a',
+      trackId: 'audio-1',
+      startTime: 5,
+      endTime: 2,
+      sourceInPoint: 10,
+      sourceOutPoint: 8,
+      snappedToZeroCrossing: true,
+    });
+
+    expect(store.getState().audioRegionSelection).toMatchObject({
+      clipId: 'clip-a',
+      trackId: 'audio-1',
+      startTime: 2,
+      endTime: 5,
+      sourceInPoint: 8,
+      sourceOutPoint: 10,
+      snappedToZeroCrossing: true,
+    });
+
+    store.getState().clearAudioRegionSelection();
+    expect(store.getState().audioRegionSelection).toBeNull();
   });
 
   it('setScrollX: clamps to >= 0', () => {

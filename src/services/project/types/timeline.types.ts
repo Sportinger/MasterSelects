@@ -1,5 +1,7 @@
 // Timeline-related types (keyframes, markers, effects, masks, transforms)
 
+import type { AudioEffectParamValue } from '../../../types/audio';
+
 export interface ProjectTransform {
   x: number;
   y: number;
@@ -22,7 +24,7 @@ export interface ProjectEffect {
   type: string;
   name: string;
   enabled: boolean;
-  params: Record<string, number | boolean | string>;
+  params: Record<string, AudioEffectParamValue>;
 }
 
 export interface ProjectMaskVertex {

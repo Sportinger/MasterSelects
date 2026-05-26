@@ -62,7 +62,7 @@
 }
 
 .timeline-header-row .ruler-header {
-  width: 150px;
+  width: 210px;
   flex-shrink: 0;
   height: 30px;
   display: flex;
@@ -91,6 +91,170 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+}
+
+.timeline-track-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.timeline-lane-reference {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.timeline-track-section {
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.timeline-track-section.audio {
+  background: linear-gradient(180deg, rgba(20, 42, 36, 0.18), transparent 40%), var(--bg-secondary);
+}
+
+.timeline-track-section.collapsed {
+  flex-shrink: 0;
+}
+
+.timeline-container.is-split-dragging .timeline-track-section,
+.timeline-container.is-split-dragging .track-header,
+.timeline-container.is-split-dragging .track-header-top,
+.timeline-container.is-split-dragging .track-lane,
+.timeline-container.is-split-dragging .track-clip-row {
+  transition: none !important;
+}
+
+.timeline-section-viewport {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.timeline-section-content-row {
+  min-height: 0;
+  will-change: transform;
+}
+
+.timeline-section-tracks {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.timeline-split-divider {
+  position: relative;
+  display: block;
+  flex: 0 0 2px;
+  width: 100%;
+  height: 2px;
+  overflow: visible;
+  background: transparent;
+  z-index: 24;
+}
+
+.timeline-split-divider-hitbox {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -6px;
+  bottom: -6px;
+  z-index: 1;
+  cursor: ns-resize;
+}
+
+.timeline-split-divider.dragging .timeline-split-divider-line,
+.timeline-split-divider-hitbox:hover ~ .timeline-split-divider-line {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--success) 86%, transparent), transparent 42%),
+    color-mix(in srgb, var(--success) 72%, var(--border-color));
+}
+
+.timeline-split-divider-controls {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  width: auto;
+  padding: 0;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+}
+
+.timeline-split-button {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  background: rgba(8, 11, 14, 0.78);
+  cursor: pointer;
+}
+
+.timeline-split-button:hover,
+.timeline-split-button.active {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--success) 48%, var(--border-color));
+  background: color-mix(in srgb, var(--success) 18%, var(--bg-tertiary));
+}
+
+.timeline-split-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.timeline-split-button:disabled:hover {
+  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(8, 11, 14, 0.78);
+}
+
+.timeline-split-button svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.timeline-split-divider-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--success) 70%, transparent), transparent 42%),
+    color-mix(in srgb, var(--success) 48%, var(--border-color));
 }
 
 /* Content row - track headers and lanes side by side */
@@ -148,10 +312,20 @@
   border-left-color: var(--border-strong);
 }
 
+.time-marker.frame.main {
+  border-left-color: color-mix(in srgb, var(--text-secondary) 68%, var(--border-strong));
+}
+
 .time-marker.sub {
   border-left-color: var(--bg-active);
   height: 50%;
   top: 50%;
+}
+
+.time-marker.frame.sub {
+  border-left-color: color-mix(in srgb, var(--text-secondary) 28%, transparent);
+  height: 64%;
+  top: 36%;
 }
 
 .time-label {

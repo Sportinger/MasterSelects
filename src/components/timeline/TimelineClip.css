@@ -23,6 +23,21 @@
   border: 1px solid #3a7a58;
 }
 
+.timeline-clip.audio.audio-mode-detailed {
+  background: linear-gradient(180deg, #2f7456, #214f40);
+  border-color: color-mix(in srgb, #52beff 22%, #3a7a58);
+}
+
+.timeline-clip.audio.audio-mode-spectral {
+  background: linear-gradient(180deg, #254663, #27324e 48%, #3f2448);
+  border-color: color-mix(in srgb, #52beff 44%, #6f4c78);
+}
+
+.timeline-clip.audio.audio-focus-active {
+  border-color: color-mix(in srgb, #52beff 52%, #3a7a58);
+  box-shadow: inset 0 0 0 1px rgba(82, 190, 255, 0.16);
+}
+
 .timeline-clip.text {
   background: #5c3d7a;
   border: 1px solid #6d4e8a;
@@ -1090,6 +1105,10 @@
   pointer-events: none;
 }
 
+.clip-thumbnails-windowed .clip-thumb {
+  width: 71px;
+}
+
 .clip-thumb-placeholder {
   height: 100%;
   width: 71px;
@@ -1219,6 +1238,24 @@
   height: 100%;
 }
 
+.audio-automation-curve-container {
+  z-index: 16;
+  mix-blend-mode: screen;
+}
+
+.audio-automation-curve-container .fade-curve-svg path:first-of-type {
+  fill: rgba(51, 197, 255, 0.13);
+}
+
+.audio-automation-curve-container .fade-curve-svg path:nth-of-type(2) {
+  stroke: rgba(96, 217, 255, 0.86);
+  stroke-width: 1.6;
+}
+
+.audio-automation-curve-container .fade-curve-svg circle {
+  fill: rgba(96, 217, 255, 0.95);
+}
+
 /* Audio Waveform */
 .clip-waveform {
   position: absolute;
@@ -1254,6 +1291,491 @@
   top: 0;
   left: 0;
   pointer-events: none;
+}
+
+.waveform-canvas-detailed,
+.waveform-canvas-spectral {
+  opacity: 0.95;
+}
+
+.waveform-canvas-source {
+  filter: saturate(1.04);
+}
+
+.waveform-canvas-processed {
+  filter: saturate(1.18) contrast(1.06);
+}
+
+.timeline-clip.waveform-processed-approximate-source .clip-waveform::after,
+.timeline-clip.waveform-processed-pending .clip-waveform::after,
+.timeline-clip.waveform-processed-loading .clip-waveform::after,
+.timeline-clip.waveform-processed-missing .clip-waveform::after,
+.timeline-clip.waveform-processed-error .clip-waveform::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.08),
+    transparent
+  );
+  opacity: 0.7;
+}
+
+.timeline-clip.waveform-processed-pending .clip-waveform::after,
+.timeline-clip.waveform-processed-loading .clip-waveform::after {
+  animation: waveform-processed-pending 1.4s ease-in-out infinite;
+}
+
+.timeline-clip.waveform-processed-approximate-source .clip-waveform::after {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 206, 96, 0.12) 0,
+      rgba(255, 206, 96, 0.12) 2px,
+      transparent 2px,
+      transparent 10px
+    );
+  opacity: 0.42;
+}
+
+.timeline-clip.waveform-processed-missing .clip-waveform::after,
+.timeline-clip.waveform-processed-error .clip-waveform::after {
+  opacity: 0.3;
+}
+
+.clip-audio-status-stack {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 8px);
+  pointer-events: none;
+}
+
+.clip-audio-analysis-status,
+.clip-audio-diagnostic-badge {
+  min-width: 28px;
+  height: 16px;
+  padding: 0 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  background: rgba(8, 12, 17, 0.8);
+  color: rgba(238, 242, 247, 0.92);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.clip-audio-analysis-status-approximate-source {
+  border-color: rgba(255, 207, 96, 0.5);
+  color: #ffd66c;
+}
+
+.clip-audio-analysis-status-pending {
+  border-color: rgba(94, 203, 255, 0.42);
+  color: #93ddff;
+}
+
+.clip-audio-analysis-status-missing,
+.clip-audio-analysis-status-error {
+  border-color: rgba(255, 117, 117, 0.48);
+  color: #ff8f8f;
+}
+
+.timeline-clip.audio-diagnostic-clipping .clip-waveform {
+  box-shadow:
+    inset 0 1px rgba(255, 94, 94, 0.7),
+    inset 0 -1px rgba(255, 94, 94, 0.44);
+}
+
+.timeline-clip.audio-diagnostic-silence .clip-waveform {
+  box-shadow:
+    inset 0 1px rgba(157, 183, 205, 0.42),
+    inset 0 -1px rgba(157, 183, 205, 0.28);
+}
+
+.clip-audio-diagnostic-badge-clipping {
+  border-color: rgba(255, 104, 104, 0.58);
+  background: rgba(39, 10, 12, 0.82);
+  color: #ff8d8d;
+}
+
+.clip-audio-diagnostic-badge-silence {
+  border-color: rgba(151, 188, 220, 0.5);
+  background: rgba(9, 14, 19, 0.78);
+  color: #bdd9ee;
+}
+
+@keyframes waveform-processed-pending {
+  0% {
+    transform: translateX(-70%);
+  }
+  100% {
+    transform: translateX(70%);
+  }
+}
+
+.timeline-clip.audio-mode-spectral .clip-content {
+  background: rgba(4, 9, 14, 0.52);
+}
+
+.timeline-clip.audio-mode-spectral .clip-waveform {
+  background: rgba(3, 8, 14, 0.28);
+}
+
+.spectrogram-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.spectrogram-canvas-source {
+  filter: saturate(1.05) contrast(1.04);
+}
+
+.spectrogram-canvas-processed {
+  filter: saturate(1.12) contrast(1.08);
+}
+
+.spectrogram-pending {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 1px) 0 0 / 100% 18px,
+    rgba(3, 8, 14, 0.42);
+}
+
+.spectrogram-pending::after,
+.timeline-clip.spectrogram-processed-approximate-source .clip-waveform::after,
+.timeline-clip.spectrogram-processed-pending .clip-waveform::after,
+.timeline-clip.spectrogram-processed-loading .clip-waveform::after,
+.timeline-clip.spectrogram-processed-missing .clip-waveform::after,
+.timeline-clip.spectrogram-processed-error .clip-waveform::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(94, 203, 255, 0.16),
+    transparent
+  );
+  opacity: 0.7;
+  animation: waveform-processed-pending 1.4s ease-in-out infinite;
+}
+
+.timeline-clip.spectrogram-processed-approximate-source .clip-waveform::after {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 206, 96, 0.16) 0,
+      rgba(255, 206, 96, 0.16) 2px,
+      transparent 2px,
+      transparent 10px
+    );
+  opacity: 0.36;
+  animation: none;
+}
+
+.clip-audio-region-hitarea {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 18px;
+  bottom: 0;
+  z-index: 12;
+  cursor: text;
+}
+
+.clip-audio-region-selection {
+  position: absolute;
+  top: 18px;
+  bottom: 4px;
+  z-index: 11;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(82, 190, 255, 0.2), rgba(82, 190, 255, 0.07)),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.12) 0,
+      rgba(255, 255, 255, 0.12) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  border: 1px solid rgba(82, 190, 255, 0.74);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.35), 0 0 9px rgba(82, 190, 255, 0.16);
+}
+
+.clip-audio-region-selection.snapped {
+  border-color: rgba(254, 211, 106, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.35), 0 0 10px rgba(254, 211, 106, 0.2);
+}
+
+.clip-spectral-region-hitarea {
+  cursor: crosshair;
+}
+
+.clip-spectral-region-selection {
+  position: absolute;
+  z-index: 11;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 201, 94, 0.22), rgba(255, 88, 123, 0.08)),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.14) 0,
+      rgba(255, 255, 255, 0.14) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  border: 1px solid rgba(255, 201, 94, 0.86);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.4), 0 0 12px rgba(255, 148, 94, 0.22);
+}
+
+.clip-spectral-region-selection.brush {
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at center, rgba(112, 246, 220, 0.32), rgba(112, 246, 220, 0.11) 58%, rgba(112, 246, 220, 0.02) 100%),
+    repeating-radial-gradient(ellipse at center, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 7px);
+  border-color: rgba(112, 246, 220, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.34), 0 0 14px rgba(112, 246, 220, 0.28);
+}
+
+.clip-spectral-region-selection.brush .clip-spectral-region-corner {
+  display: none;
+}
+
+.clip-spectral-region-corner {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-color: rgba(250, 253, 255, 0.92);
+  border-style: solid;
+}
+
+.clip-spectral-region-corner.tl {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+
+.clip-spectral-region-corner.tr {
+  top: -1px;
+  right: -1px;
+  border-width: 1px 1px 0 0;
+}
+
+.clip-spectral-region-corner.bl {
+  bottom: -1px;
+  left: -1px;
+  border-width: 0 0 1px 1px;
+}
+
+.clip-spectral-region-corner.br {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+.clip-spectral-image-layer {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  min-width: 4px;
+  min-height: 8px;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.28)),
+    rgba(43, 167, 148, 0.32);
+  background-position: center;
+  background-size: cover;
+  border: 1px solid rgba(112, 246, 220, 0.78);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(4, 12, 14, 0.42), 0 0 11px rgba(73, 228, 196, 0.2);
+  mix-blend-mode: screen;
+}
+
+.clip-spectral-image-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.18) 0,
+      rgba(255, 255, 255, 0.18) 1px,
+      transparent 1px,
+      transparent 10px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.11) 0,
+      rgba(255, 255, 255, 0.11) 1px,
+      transparent 1px,
+      transparent 8px
+    );
+  opacity: 0.34;
+}
+
+.clip-spectral-image-layer span {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  padding: 1px 3px;
+  overflow: hidden;
+  color: rgba(237, 255, 250, 0.94);
+  font-size: 9px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(4, 12, 14, 0.7);
+}
+
+.clip-spectral-image-layer.blend-boost {
+  border-color: rgba(255, 222, 112, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(24, 16, 4, 0.4), 0 0 10px rgba(255, 203, 86, 0.2);
+}
+
+.clip-spectral-image-layer.blend-gate,
+.clip-spectral-image-layer.blend-sidechain-mask {
+  border-color: rgba(149, 189, 255, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(4, 10, 24, 0.4), 0 0 10px rgba(109, 152, 255, 0.2);
+}
+
+.clip-spectral-image-layer.blend-replace {
+  border-color: rgba(255, 126, 203, 0.84);
+  box-shadow: inset 0 0 0 1px rgba(24, 4, 17, 0.4), 0 0 10px rgba(255, 105, 191, 0.22);
+}
+
+.clip-audio-region-edge {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  background: rgba(232, 246, 255, 0.92);
+}
+
+.clip-audio-region-edge.left {
+  left: -1px;
+}
+
+.clip-audio-region-edge.right {
+  right: -1px;
+}
+
+.clip-audio-region-toolbar {
+  position: absolute;
+  top: 20px;
+  z-index: 14;
+  display: flex;
+  max-width: calc(100% - 8px);
+  gap: 3px;
+  padding: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: auto;
+  background: rgba(8, 14, 20, 0.86);
+  border: 1px solid rgba(113, 214, 255, 0.46);
+  border-radius: 3px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
+.clip-spectral-region-toolbar {
+  position: absolute;
+  z-index: 14;
+  display: flex;
+  max-width: calc(100% - 8px);
+  gap: 3px;
+  padding: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: auto;
+  background: rgba(14, 12, 8, 0.88);
+  border: 1px solid rgba(255, 201, 94, 0.52);
+  border-radius: 3px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.32);
+}
+
+.clip-audio-region-toolbar button,
+.clip-spectral-region-toolbar button,
+.clip-audio-edit-stack button {
+  height: 18px;
+  min-width: 22px;
+  padding: 0 5px;
+  color: rgba(231, 246, 255, 0.94);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+  background: rgba(45, 75, 92, 0.86);
+  border: 1px solid rgba(134, 224, 255, 0.35);
+  border-radius: 2px;
+}
+
+.clip-audio-region-toolbar button:hover,
+.clip-spectral-region-toolbar button:hover,
+.clip-audio-edit-stack button:hover {
+  background: rgba(65, 111, 134, 0.95);
+  border-color: rgba(160, 235, 255, 0.68);
+}
+
+.clip-audio-region-toolbar button:disabled,
+.clip-spectral-region-toolbar button:disabled,
+.clip-audio-edit-stack button:disabled {
+  cursor: default;
+  opacity: 0.42;
+  background: rgba(31, 45, 53, 0.72);
+  border-color: rgba(104, 130, 142, 0.26);
+}
+
+.clip-audio-edit-stack {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  max-width: calc(100% - 8px);
+  gap: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: auto;
+}
+
+.clip-audio-edit-stack-count {
+  height: 18px;
+  min-width: 24px;
+  padding: 0 5px;
+  color: rgba(209, 238, 247, 0.9);
+  font-size: 10px;
+  line-height: 18px;
+  white-space: nowrap;
+  background: rgba(4, 10, 14, 0.72);
+  border: 1px solid rgba(133, 199, 219, 0.32);
+  border-radius: 2px;
+}
+
+.clip-audio-edit-stack button.disabled {
+  opacity: 0.48;
+  text-decoration: line-through;
 }
 
 /* Nested composition mixdown waveform - shown at bottom of clip */

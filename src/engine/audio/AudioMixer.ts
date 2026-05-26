@@ -9,6 +9,14 @@
  */
 
 import { Logger } from '../../services/logger';
+import {
+  DEFAULT_TRUE_PEAK_CEILING_DB,
+  clampAudioPan,
+  clampLinearGain,
+  dbToLinearGain,
+  finiteNumber,
+  hasNonDefaultAudioPan,
+} from './audioMath';
 
 const log = Logger.create('AudioMixer');
 
@@ -16,10 +24,17 @@ export interface AudioTrackData {
   clipId: string;
   buffer: AudioBuffer;      // Already processed (speed, effects)
   startTime: number;        // Position on timeline (seconds)
+  sourceOffsetTime?: number; // Offset into buffer for exports that begin inside a clip
   trackId: string;
   trackMuted: boolean;
   trackSolo: boolean;
+  mixRole?: 'main' | 'send';
+  sendId?: string;
+  sendTargetBusId?: string;
+  sendPreFader?: boolean;
   clipVolume?: number;      // Additional clip volume (0-1, default 1)
+  trackVolumeDb?: number;   // Track fader in dB, default 0
+  trackPan?: number;        // Stereo pan -1..1, default 0
 }
 
 export interface MixerSettings {
@@ -27,6 +42,9 @@ export interface MixerSettings {
   numberOfChannels: number; // Output channels (default 2 = stereo)
   normalize: boolean;       // Peak normalize output (default false)
   headroom: number;         // Headroom in dB for normalization (default -1)
+  masterVolumeDb: number;   // Master fader in dB (default 0)
+  masterLimiterEnabled: boolean; // Reduce final peak to truePeakCeilingDb
+  masterTruePeakCeilingDb: number; // Final peak ceiling in dBFS
 }
 
 export interface MixProgress {
@@ -47,6 +65,9 @@ export class AudioMixer {
       numberOfChannels: settings?.numberOfChannels ?? 2,
       normalize: settings?.normalize ?? false,
       headroom: settings?.headroom ?? -1,
+      masterVolumeDb: settings?.masterVolumeDb ?? 0,
+      masterLimiterEnabled: settings?.masterLimiterEnabled ?? false,
+      masterTruePeakCeilingDb: settings?.masterTruePeakCeilingDb ?? DEFAULT_TRUE_PEAK_CEILING_DB,
     };
   }
 
@@ -115,8 +136,11 @@ export class AudioMixer {
     // Render the mix
     const mixedBuffer = await offlineContext.startRendering();
 
-    // Normalize if requested
-    if (this.settings.normalize) {
+    if (
+      this.settings.masterVolumeDb !== 0
+      || this.settings.masterLimiterEnabled
+      || this.settings.normalize
+    ) {
       onProgress?.({
         phase: 'normalizing',
         percent: 90,
@@ -124,7 +148,7 @@ export class AudioMixer {
         totalTracks: activeTracks.length,
       });
 
-      this.normalizeBuffer(mixedBuffer);
+      this.processMasterBuffer(mixedBuffer);
     }
 
     onProgress?.({
@@ -178,25 +202,51 @@ export class AudioMixer {
       buffer = this.convertToStereo(buffer);
     }
 
-    // Create source and gain nodes
+    // Create source and per-track processing nodes
     const source = context.createBufferSource();
     source.buffer = buffer;
 
-    // Apply clip volume if specified
-    if (track.clipVolume !== undefined && track.clipVolume !== 1) {
+    const clipGain = clampLinearGain(track.clipVolume, 1);
+    const trackGain = dbToLinearGain(track.trackVolumeDb);
+    const combinedGain = clipGain * trackGain;
+    let outputNode: AudioNode = source;
+
+    if (Math.abs(combinedGain - 1) > 0.001) {
       const gainNode = context.createGain();
-      gainNode.gain.value = Math.max(0, Math.min(2, track.clipVolume));
-      source.connect(gainNode);
-      gainNode.connect(context.destination);
-    } else {
-      source.connect(context.destination);
+      gainNode.gain.value = Math.max(0, Math.min(8, combinedGain));
+      outputNode.connect(gainNode);
+      outputNode = gainNode;
     }
 
-    // Start at the correct timeline position
-    const startTime = Math.max(0, track.startTime);
-    source.start(startTime);
+    const pan = clampAudioPan(track.trackPan);
+    if (this.settings.numberOfChannels >= 2 && hasNonDefaultAudioPan(pan)) {
+      const panNode = context.createStereoPanner();
+      panNode.pan.value = pan;
+      outputNode.connect(panNode);
+      outputNode = panNode;
+    }
 
-    log.debug(`Added clip ${track.clipId} at ${startTime.toFixed(2)}s (${buffer.duration.toFixed(2)}s)`);
+    outputNode.connect(context.destination);
+
+    // Start at the correct timeline position and source offset. When an export
+    // begins mid-clip, startTime is clamped to 0 while sourceOffsetTime skips
+    // the already elapsed part of the rendered clip buffer.
+    const startTime = Math.max(0, track.startTime);
+    const sourceOffsetTime = Math.max(
+      0,
+      finiteNumber(track.sourceOffsetTime, track.startTime < 0 ? -track.startTime : 0)
+    );
+    if (sourceOffsetTime >= buffer.duration) {
+      log.debug(`Skipping clip ${track.clipId}: source offset ${sourceOffsetTime.toFixed(2)}s exceeds buffer duration ${buffer.duration.toFixed(2)}s`);
+      return;
+    }
+    source.start(startTime, sourceOffsetTime);
+
+    log.debug(`Added clip ${track.clipId} at ${startTime.toFixed(2)}s (${buffer.duration.toFixed(2)}s)`, {
+      sourceOffsetTime,
+      trackVolumeDb: track.trackVolumeDb ?? 0,
+      trackPan: pan,
+    });
   }
 
   /**
@@ -291,6 +341,63 @@ export class AudioMixer {
         data[i] *= normalizeGain;
       }
     }
+  }
+
+  /**
+   * Apply master fader, optional final peak ceiling, and requested normalization.
+   * Modifies the buffer in place and returns it for call chaining.
+   */
+  processMasterBuffer(buffer: AudioBuffer, settings?: Partial<MixerSettings>): AudioBuffer {
+    const masterVolumeDb = finiteNumber(settings?.masterVolumeDb, this.settings.masterVolumeDb);
+    const limiterEnabled = settings?.masterLimiterEnabled ?? this.settings.masterLimiterEnabled;
+    const truePeakCeilingDb = finiteNumber(
+      settings?.masterTruePeakCeilingDb,
+      this.settings.masterTruePeakCeilingDb
+    );
+    const normalize = settings?.normalize ?? this.settings.normalize;
+
+    const masterGain = dbToLinearGain(masterVolumeDb);
+    if (Math.abs(masterGain - 1) > 0.001) {
+      this.applyLinearGain(buffer, masterGain);
+    }
+
+    if (limiterEnabled) {
+      this.applyPeakCeiling(buffer, truePeakCeilingDb);
+    }
+
+    if (normalize) {
+      this.normalizeBuffer(buffer);
+    }
+
+    return buffer;
+  }
+
+  private applyLinearGain(buffer: AudioBuffer, gain: number): void {
+    if (!Number.isFinite(gain) || gain === 1) return;
+    const safeGain = Math.max(0, Math.min(16, gain));
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < data.length; i++) {
+        data[i] *= safeGain;
+      }
+    }
+  }
+
+  private applyPeakCeiling(buffer: AudioBuffer, ceilingDb: number): void {
+    let peak = 0;
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < data.length; i++) {
+        peak = Math.max(peak, Math.abs(data[i]));
+      }
+    }
+
+    if (peak <= 0) return;
+
+    const ceiling = dbToLinearGain(ceilingDb, DEFAULT_TRUE_PEAK_CEILING_DB);
+    if (peak <= ceiling) return;
+
+    this.applyLinearGain(buffer, ceiling / peak);
   }
 
   /**

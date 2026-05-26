@@ -1,7 +1,7 @@
 // AudioTrackSyncManager - Handles audio element synchronization with playhead
 // Extracted from LayerBuilderService for separation of concerns
 
-import type { TimelineClip, Effect } from '../../types';
+import type { TimelineClip, TimelineTrack } from '../../types';
 import type { FrameContext, AudioSyncState } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { playheadState } from './PlayheadState';
@@ -10,34 +10,23 @@ import { AudioSyncHandler, createAudioSyncState, finalizeAudioSync, resumeAudioC
 import { proxyFrameCache } from '../proxyFrameCache';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { Logger } from '../logger';
+import { createLiveAudioRouteSettings, type LiveAudioRouteSettings } from '../audio/audioGraphRouteSettings';
+import { useTimelineStore } from '../../stores/timeline';
 
 const log = Logger.create('CutTransition');
 
-/**
- * Get interpolated volume for a clip from audio-volume effect
- */
-function getClipVolume(ctx: FrameContext, clip: TimelineClip, clipLocalTime: number): number {
-  const effects = ctx.getInterpolatedEffects(clip.id, clipLocalTime);
-  const volumeEffect = effects.find((e: Effect) => e.type === 'audio-volume');
-  return (volumeEffect?.params?.volume as number) ?? 1;
-}
-
-// EQ band parameter names (matching audio-eq effect)
-const EQ_BAND_PARAMS = [
-  'band31', 'band62', 'band125', 'band250', 'band500',
-  'band1k', 'band2k', 'band4k', 'band8k', 'band16k'
-];
-
-/**
- * Get interpolated EQ gains for a clip from audio-eq effect
- * Returns array of 10 gain values in dB, or undefined if no EQ effect
- */
-function getClipEQGains(ctx: FrameContext, clip: TimelineClip, clipLocalTime: number): number[] | undefined {
-  const effects = ctx.getInterpolatedEffects(clip.id, clipLocalTime);
-  const eqEffect = effects.find((e: Effect) => e.type === 'audio-eq');
-  if (!eqEffect) return undefined;
-
-  return EQ_BAND_PARAMS.map(param => (eqEffect.params?.[param] as number) ?? 0);
+function getClipAudioRouteSettings(
+  ctx: FrameContext,
+  clip: TimelineClip,
+  track: TimelineTrack | undefined,
+  clipLocalTime: number,
+): LiveAudioRouteSettings {
+  return createLiveAudioRouteSettings({
+    clip,
+    track,
+    masterAudioState: ctx.masterAudioState,
+    interpolatedClipEffects: ctx.getInterpolatedEffects(clip.id, clipLocalTime),
+  });
 }
 
 export class AudioTrackSyncManager {
@@ -73,6 +62,7 @@ export class AudioTrackSyncManager {
     // Audio can't play backwards and fast-forward sounds bad
     if (ctx.playbackSpeed !== 1 && ctx.isPlaying) {
       this.muteAllAudio(ctx);
+      useTimelineStore.getState().clearStaleRuntimeAudioMeters(0, ctx.now);
       return;
     }
 
@@ -124,6 +114,7 @@ export class AudioTrackSyncManager {
 
     // Finalize
     finalizeAudioSync(state, ctx.isPlaying);
+    useTimelineStore.getState().clearStaleRuntimeAudioMeters(650, ctx.now);
   }
 
   /**
@@ -146,7 +137,8 @@ export class AudioTrackSyncManager {
       if (!audio.src && audio.readyState === 0) continue;
 
       const timeInfo = getClipTimeInfo(ctx, clip);
-      const isMuted = !ctx.unmutedAudioTrackIds.has(track.id);
+      const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime);
+      const isMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted;
 
       // Use handoff element if available (seamless cut transition)
       const handoffAudio = this.audioHandoffs.get(clip.id);
@@ -158,8 +150,12 @@ export class AudioTrackSyncManager {
         isMuted,
         canBeMaster: true,
         type: 'audioTrack',
-        volume: getClipVolume(ctx, clip, timeInfo.clipLocalTime),
-        eqGains: getClipEQGains(ctx, clip, timeInfo.clipLocalTime),
+        volume: routeSettings.volume,
+        eqGains: routeSettings.eqGains,
+        pan: routeSettings.pan,
+        processors: routeSettings.processors,
+        masterRoute: routeSettings.master,
+        meterTrackId: track.id,
       }, ctx, state);
     }
   }
@@ -182,11 +178,19 @@ export class AudioTrackSyncManager {
       const linkedAudioClip = this.getLinkedAudioClipAtPlayhead(ctx, clip);
       const audioSettingsClip = linkedAudioClip ?? clip;
       const audioSettingsTimeInfo = linkedAudioClip ? getClipTimeInfo(ctx, linkedAudioClip) : timeInfo;
+      const linkedAudioTrack = linkedAudioClip
+        ? ctx.audioTracks.find(candidate => candidate.id === linkedAudioClip.trackId)
+        : undefined;
+      const audioSettingsTrack = linkedAudioTrack ?? track;
 
       // Varispeed scrubbing should follow the effective audio clip settings.
-      const clipVolume = getClipVolume(ctx, audioSettingsClip, audioSettingsTimeInfo.clipLocalTime);
-      const eqGains = getClipEQGains(ctx, audioSettingsClip, audioSettingsTimeInfo.clipLocalTime);
-      let audioMuted = isMuted || clipVolume <= 0.01;
+      const routeSettings = getClipAudioRouteSettings(
+        ctx,
+        audioSettingsClip,
+        audioSettingsTrack,
+        audioSettingsTimeInfo.clipLocalTime
+      );
+      let audioMuted = isMuted || routeSettings.muted || routeSettings.volume <= 0.01;
 
       if (!audioMuted && linkedAudioClip) {
         const linkedTrackMuted = !ctx.unmutedAudioTrackIds.has(linkedAudioClip.trackId);
@@ -207,8 +211,18 @@ export class AudioTrackSyncManager {
           timeInfo.clipTime,
           undefined,
           video.currentSrc || video.src,
-          { volume: clipVolume, eqGains }
+          {
+            volume: routeSettings.volume,
+            eqGains: routeSettings.eqGains,
+            pan: routeSettings.pan,
+            processors: routeSettings.processors,
+            masterRoute: routeSettings.master,
+          }
         );
+        const scrubMeter = proxyFrameCache.getScrubMeterSnapshot(ctx.now);
+        if (scrubMeter) {
+          useTimelineStore.getState().updateRuntimeAudioMeter(audioSettingsTrack.id, scrubMeter);
+        }
       }
 
       // Audio proxy handling
@@ -240,8 +254,12 @@ export class AudioTrackSyncManager {
               isMuted,
               canBeMaster: !state.masterSet,
               type: 'audioProxy',
-              volume: clipVolume,
-              eqGains,
+              volume: routeSettings.volume,
+              eqGains: routeSettings.eqGains,
+              pan: routeSettings.pan,
+              processors: routeSettings.processors,
+              masterRoute: routeSettings.master,
+              meterTrackId: audioSettingsTrack.id,
             }, ctx, state);
           } else if (!audioProxy.paused) {
             audioProxy.pause();
@@ -277,17 +295,22 @@ export class AudioTrackSyncManager {
       const timeInfo = getClipTimeInfo(ctx, clip);
       const track = ctx.videoTracks.find(t => t.id === clip.trackId);
       const isMuted = track ? !isVideoTrackVisible(ctx, track.id) : false;
+      const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime);
 
       this.audioSyncHandler.syncAudioElement({
         element: clip.mixdownAudio,
         clip,
         clipTime: timeInfo.clipTime,
         absSpeed: timeInfo.absSpeed,
-        isMuted,
+        isMuted: isMuted || routeSettings.muted,
         canBeMaster: !state.masterSet,
         type: 'mixdown',
-        volume: getClipVolume(ctx, clip, timeInfo.clipLocalTime),
-        eqGains: getClipEQGains(ctx, clip, timeInfo.clipLocalTime),
+        volume: routeSettings.volume,
+        eqGains: routeSettings.eqGains,
+        pan: routeSettings.pan,
+        processors: routeSettings.processors,
+        masterRoute: routeSettings.master,
+        meterTrackId: track?.id,
       }, ctx, state);
     }
   }

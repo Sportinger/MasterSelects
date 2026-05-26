@@ -9,6 +9,7 @@ interface TransitionOverlaysProps {
   timeToPixel: (time: number) => number;
   isTrackExpanded: (trackId: string) => boolean;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
+  getTrackHeight?: (track: TimelineTrack) => number;
 }
 
 export function TransitionOverlays({
@@ -18,7 +19,14 @@ export function TransitionOverlays({
   timeToPixel,
   isTrackExpanded,
   getExpandedTrackHeight,
+  getTrackHeight,
 }: TransitionOverlaysProps) {
+  const resolveTrackHeight = (track: TimelineTrack) => getTrackHeight
+    ? getTrackHeight(track)
+    : isTrackExpanded(track.id)
+      ? getExpandedTrackHeight(track.id, track.height)
+      : track.height;
+
   return (
     <>
       {/* Junction highlight for transition drop */}
@@ -69,8 +77,8 @@ export function TransitionOverlays({
         const trackIndex = tracks.indexOf(track);
         const trackTop = tracks
           .slice(0, trackIndex)
-          .reduce((sum, t) => sum + (isTrackExpanded(t.id) ? getExpandedTrackHeight(t.id, t.height) : t.height), 0);
-        const trackHeight = isTrackExpanded(track.id) ? getExpandedTrackHeight(track.id, track.height) : track.height;
+          .reduce((sum, t) => sum + resolveTrackHeight(t), 0);
+        const trackHeight = resolveTrackHeight(track);
 
         // Transition spans from clipB.startTime to clipA.startTime + clipA.duration
         const transitionStart = clipB.startTime;

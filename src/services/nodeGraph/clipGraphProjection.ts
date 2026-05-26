@@ -1,4 +1,6 @@
-import type { Effect, TimelineClip, TimelineTrack } from '../../types';
+import type { AudioEffectInstance, Effect, TimelineClip, TimelineTrack } from '../../types';
+import type { AudioAnalysisArtifactKind, MediaFileAudioAnalysisRefs } from '../../types/audio';
+import { getAudioEffect, hasAudioEffect } from '../../engine/audio/AudioEffectRegistry';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type {
   ClipNodeGraph,
@@ -13,6 +15,7 @@ import type {
   NodeGraphLayout,
   NodeGraphNode,
   NodeGraphPort,
+  NodeGraphPortMetadata,
   NodeGraphSignalType,
 } from './types';
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
@@ -20,22 +23,39 @@ import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 const NODE_SPACING_X = 230;
 const MAIN_LANE_Y = 88;
 const AUDIO_LANE_Y = 252;
+const AUDIO_ANALYSIS_LANE_Y = 416;
+const MAX_PROJECTED_SPECTRUM_PORTS = 16;
+
+export interface ClipNodeGraphBuildOptions {
+  linkedClip?: TimelineClip | null;
+  linkedTrack?: TimelineTrack | null;
+}
 
 interface NodeGraphChainHead {
   nodeId: string;
   portId: string;
 }
 
-function outputPort(id: string, label: string, type: NodeGraphSignalType): NodeGraphPort {
-  return { id, label, type, direction: 'output' };
+function outputPort(
+  id: string,
+  label: string,
+  type: NodeGraphSignalType,
+  metadata?: NodeGraphPortMetadata,
+): NodeGraphPort {
+  return { id, label, type, direction: 'output', ...(metadata ? { metadata } : {}) };
 }
 
-function inputPort(id: string, label: string, type: NodeGraphSignalType): NodeGraphPort {
-  return { id, label, type, direction: 'input' };
+function inputPort(
+  id: string,
+  label: string,
+  type: NodeGraphSignalType,
+  metadata?: NodeGraphPortMetadata,
+): NodeGraphPort {
+  return { id, label, type, direction: 'input', ...(metadata ? { metadata } : {}) };
 }
 
 function clonePort(port: NodeGraphPort): NodeGraphPort {
-  return { ...port };
+  return { ...port, ...(port.metadata ? { metadata: { ...port.metadata } } : {}) };
 }
 
 function edge(
@@ -125,6 +145,30 @@ function isVisualSource(clip: TimelineClip): boolean {
   return clip.source?.type !== 'audio';
 }
 
+function isAudioSourceClip(clip: TimelineClip | undefined | null): clip is TimelineClip {
+  return !!clip && (
+    clip.source?.type === 'audio' ||
+    clip.source?.type === 'video' ||
+    clip.file?.type?.startsWith('audio/') === true ||
+    (clip.waveform?.length ?? 0) > 0 ||
+    hasAnyAudioAnalysisRef(clip.audioState?.sourceAnalysisRefs) ||
+    hasAnyAudioAnalysisRef(clip.audioState?.processedAnalysisRefs)
+  );
+}
+
+function resolveLinkedAudioClip(clip: TimelineClip, linkedClip?: TimelineClip | null): TimelineClip | undefined {
+  if (linkedClip?.source?.type === 'audio') {
+    return linkedClip;
+  }
+  if (clip.source?.type === 'audio') {
+    return clip;
+  }
+  if (isAudioSourceClip(clip)) {
+    return clip;
+  }
+  return isAudioSourceClip(linkedClip) ? linkedClip : undefined;
+}
+
 function sourceOutputType(clip: TimelineClip): NodeGraphSignalType {
   switch (clip.source?.type) {
     case 'model':
@@ -142,6 +186,21 @@ function describeSource(clip: TimelineClip, track?: TimelineTrack): string {
   const sourceType = clip.source?.type ?? 'unknown';
   const trackLabel = track ? `${track.name} ${track.type}` : 'Timeline clip';
   return `${trackLabel} source: ${sourceType}`;
+}
+
+function describeLinkedSource(
+  clip: TimelineClip,
+  track: TimelineTrack | undefined,
+  audioClip: TimelineClip | undefined,
+  linkedTrack?: TimelineTrack | null,
+): string {
+  const description = describeSource(clip, track);
+  if (!audioClip || audioClip.id === clip.id) {
+    return description;
+  }
+
+  const audioTrackLabel = linkedTrack ? `${linkedTrack.name} ${linkedTrack.type}` : 'linked audio clip';
+  return `${description}; audio from ${audioTrackLabel}`;
 }
 
 function transformIsDefault(clip: TimelineClip): boolean {
@@ -177,27 +236,258 @@ function hasForcedBuiltInNode(clip: TimelineClip, node: ClipNodeGraphForcedBuilt
 }
 
 function isAudioEffect(effect: Effect): boolean {
-  return effect.type === 'audio-eq' || effect.type === 'audio-volume';
+  return hasAudioEffect(effect.type);
 }
 
-function createSourceNode(clip: TimelineClip, track?: TimelineTrack): NodeGraphNode {
+function hasAudioAnalysisSurface(clip: TimelineClip): boolean {
+  return clip.source?.type === 'audio' ||
+    clip.source?.type === 'video' ||
+    clip.file?.type?.startsWith('audio/') === true ||
+    (clip.waveform?.length ?? 0) > 0 ||
+    hasAnyAudioAnalysisRef(clip.audioState?.sourceAnalysisRefs) ||
+    hasAnyAudioAnalysisRef(clip.audioState?.processedAnalysisRefs);
+}
+
+interface ResolvedAudioAnalysisRef {
+  artifactId: string;
+  artifactKind: AudioAnalysisArtifactKind;
+  provenance: 'source' | 'processed';
+  index?: number;
+}
+
+function hasAnyAudioAnalysisRef(refs: MediaFileAudioAnalysisRefs | undefined): boolean {
+  return Boolean(
+    refs?.waveformPyramidId ||
+    refs?.processedWaveformPyramidId ||
+    refs?.spectrogramTileSetIds?.length ||
+    refs?.loudnessEnvelopeId ||
+    refs?.beatGridId ||
+    refs?.onsetMapId ||
+    refs?.phaseCorrelationId ||
+    refs?.transcriptTimingId ||
+    refs?.frequencySummaryId,
+  );
+}
+
+function firstResolvedRef(
+  processedRef: ResolvedAudioAnalysisRef | undefined,
+  sourceRef: ResolvedAudioAnalysisRef | undefined,
+): ResolvedAudioAnalysisRef | undefined {
+  return processedRef ?? sourceRef;
+}
+
+function resolveAudioRef(
+  provenance: 'source' | 'processed',
+  artifactId: string | undefined,
+  artifactKind: AudioAnalysisArtifactKind,
+  index?: number,
+): ResolvedAudioAnalysisRef | undefined {
+  if (!artifactId) {
+    return undefined;
+  }
+
+  return { artifactId, artifactKind, provenance, ...(index !== undefined ? { index } : {}) };
+}
+
+function resolveAudioRefs(clip: TimelineClip): {
+  waveform?: ResolvedAudioAnalysisRef;
+  spectrum: ResolvedAudioAnalysisRef[];
+  loudness?: ResolvedAudioAnalysisRef;
+  beats?: ResolvedAudioAnalysisRef;
+  onsets?: ResolvedAudioAnalysisRef;
+  phaseCorrelation?: ResolvedAudioAnalysisRef;
+  transcriptTiming?: ResolvedAudioAnalysisRef;
+  frequencySummary?: ResolvedAudioAnalysisRef;
+} {
+  const source = clip.audioState?.sourceAnalysisRefs;
+  const processed = clip.audioState?.processedAnalysisRefs;
+  const processedSpectrum = (processed?.spectrogramTileSetIds ?? [])
+    .slice(0, MAX_PROJECTED_SPECTRUM_PORTS)
+    .map((artifactId, index) => resolveAudioRef('processed', artifactId, 'spectrogram-tiles', index))
+    .filter((ref): ref is ResolvedAudioAnalysisRef => Boolean(ref));
+  const sourceSpectrum = (source?.spectrogramTileSetIds ?? [])
+    .slice(0, MAX_PROJECTED_SPECTRUM_PORTS)
+    .map((artifactId, index) => resolveAudioRef('source', artifactId, 'spectrogram-tiles', index))
+    .filter((ref): ref is ResolvedAudioAnalysisRef => Boolean(ref));
+
+  return {
+    waveform: firstResolvedRef(
+      resolveAudioRef('processed', processed?.processedWaveformPyramidId, 'processed-waveform-pyramid') ??
+        resolveAudioRef('processed', processed?.waveformPyramidId, 'waveform-pyramid'),
+      resolveAudioRef('source', source?.waveformPyramidId, 'waveform-pyramid'),
+    ),
+    spectrum: processedSpectrum.length > 0 ? processedSpectrum : sourceSpectrum,
+    loudness: firstResolvedRef(
+      resolveAudioRef('processed', processed?.loudnessEnvelopeId, 'loudness-envelope'),
+      resolveAudioRef('source', source?.loudnessEnvelopeId, 'loudness-envelope'),
+    ),
+    beats: firstResolvedRef(
+      resolveAudioRef('processed', processed?.beatGridId, 'beat-grid'),
+      resolveAudioRef('source', source?.beatGridId, 'beat-grid'),
+    ),
+    onsets: firstResolvedRef(
+      resolveAudioRef('processed', processed?.onsetMapId, 'onset-map'),
+      resolveAudioRef('source', source?.onsetMapId, 'onset-map'),
+    ),
+    phaseCorrelation: firstResolvedRef(
+      resolveAudioRef('processed', processed?.phaseCorrelationId, 'phase-correlation'),
+      resolveAudioRef('source', source?.phaseCorrelationId, 'phase-correlation'),
+    ),
+    transcriptTiming: firstResolvedRef(
+      resolveAudioRef('processed', processed?.transcriptTimingId, 'transcript-timing'),
+      resolveAudioRef('source', source?.transcriptTimingId, 'transcript-timing'),
+    ),
+    frequencySummary: firstResolvedRef(
+      resolveAudioRef('processed', processed?.frequencySummaryId, 'frequency-summary'),
+      resolveAudioRef('source', source?.frequencySummaryId, 'frequency-summary'),
+    ),
+  };
+}
+
+function audioArtifactPort(
+  id: string,
+  label: string,
+  type: NodeGraphSignalType,
+  semanticKind: NonNullable<NodeGraphPortMetadata['semanticKind']>,
+  ref: ResolvedAudioAnalysisRef | undefined,
+  artifactKind: AudioAnalysisArtifactKind,
+  targetClipId: string,
+): NodeGraphPort {
+  return outputPort(id, label, type, {
+    semanticKind,
+    targetClipId,
+    signalRefId: ref?.artifactId,
+    artifactId: ref?.artifactId,
+    artifactProvenance: ref?.provenance,
+    artifactIndex: ref?.index,
+    available: Boolean(ref?.artifactId),
+    stale: false,
+    previewable: true,
+    generateAction: {
+      type: 'generate-audio-analysis',
+      artifactKind,
+      label,
+    },
+  });
+}
+
+function audioMetadataPort(clip: TimelineClip): NodeGraphPort {
+  const signalRefId = clip.audioState?.sourceAudioRevisionId ?? clip.mediaFileId ?? clip.source?.mediaFileId;
+  return outputPort('audio-metadata', 'audio metadata', 'metadata', {
+    semanticKind: 'audio-metadata',
+    targetClipId: clip.id,
+    signalRefId,
+    available: true,
+    stale: false,
+    previewable: false,
+  });
+}
+
+function appendAudioAnalysisPorts(outputs: NodeGraphPort[], clip: TimelineClip): void {
+  const refs = resolveAudioRefs(clip);
+  const targetClipId = clip.id;
+
+  outputs.push(audioArtifactPort(
+    'waveform',
+    'waveform',
+    'curve',
+    'waveform',
+    refs.waveform,
+    refs.waveform?.artifactKind ?? 'waveform-pyramid',
+    targetClipId,
+  ));
+  refs.spectrum.forEach((ref, index) => {
+    outputs.push(audioArtifactPort(
+      index === 0 ? 'spectrum' : `spectrum-${index + 1}`,
+      index === 0 ? 'spectrum' : `spectrum ${index + 1}`,
+      'texture',
+      'spectrum',
+      ref,
+      'spectrogram-tiles',
+      targetClipId,
+    ));
+  });
+  if (refs.spectrum.length === 0) {
+    outputs.push(audioArtifactPort('spectrum', 'spectrum', 'texture', 'spectrum', undefined, 'spectrogram-tiles', targetClipId));
+  }
+  outputs.push(audioArtifactPort('loudness', 'loudness', 'curve', 'loudness', refs.loudness, 'loudness-envelope', targetClipId));
+  outputs.push(audioArtifactPort('beats', 'beats', 'event', 'beats', refs.beats, 'beat-grid', targetClipId));
+  outputs.push(audioArtifactPort('onsets', 'onsets', 'event', 'onsets', refs.onsets, 'onset-map', targetClipId));
+  outputs.push(audioArtifactPort('phase-correlation', 'phase correlation', 'curve', 'phase-correlation', refs.phaseCorrelation, 'phase-correlation', targetClipId));
+  outputs.push(audioArtifactPort('transcript-timing', 'transcript timing', 'text', 'transcript', refs.transcriptTiming, 'transcript-timing', targetClipId));
+  outputs.push(audioArtifactPort('frequency-bands', 'frequency bands', 'table', 'frequency-bands', refs.frequencySummary, 'frequency-summary', targetClipId));
+  outputs.push(audioArtifactPort('frequency-summary', 'frequency summary', 'table', 'frequency-summary', refs.frequencySummary, 'frequency-summary', targetClipId));
+  outputs.push(audioMetadataPort(clip));
+}
+
+function summarizeAudioAnalysisOutputs(outputs: readonly NodeGraphPort[]): Record<string, string | number | boolean> {
+  const artifactPorts = outputs.filter(port => port.metadata?.generateAction?.type === 'generate-audio-analysis');
+  const total = artifactPorts.length;
+  const available = artifactPorts.filter(port => port.metadata?.available === true).length;
+  const stale = artifactPorts.filter(port => port.metadata?.stale === true).length;
+  const processed = artifactPorts.filter(port => port.metadata?.artifactProvenance === 'processed').length;
+  const source = artifactPorts.filter(port => port.metadata?.artifactProvenance === 'source').length;
+  const missing = Math.max(0, total - available);
+
+  return {
+    status: total === 0 || available === 0 ? 'empty' : missing > 0 || stale > 0 ? 'partial' : 'ready',
+    artifactPorts: total,
+    availableArtifacts: available,
+    missingArtifacts: missing,
+    staleArtifacts: stale,
+    processedArtifacts: processed,
+    sourceArtifacts: source,
+    progressPercent: total > 0 ? Math.round((available / total) * 100) : 0,
+  };
+}
+
+function createSourceNode(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
+): NodeGraphNode {
   const outputs: NodeGraphPort[] = [];
   const primaryOutput = sourceOutputType(clip);
+  const linkedClip = options.linkedClip ?? undefined;
+  const audioClip = resolveLinkedAudioClip(clip, linkedClip);
+  const audioAnalysisOutputStart = outputs.length;
 
-  outputs.push(outputPort(primaryOutput, primaryOutput, primaryOutput));
+  outputs.push(outputPort(
+    primaryOutput,
+    primaryOutput,
+    primaryOutput,
+    primaryOutput === 'audio'
+      ? { semanticKind: 'audio-source', targetClipId: audioClip?.id ?? clip.id, available: true, previewable: true }
+      : undefined,
+  ));
   outputs.push(outputPort('time', 'time', 'time'));
   outputs.push(outputPort('metadata', 'metadata', 'metadata'));
 
-  if (clip.source?.type === 'video') {
-    outputs.push(outputPort('audio', 'audio', 'audio'));
+  if (audioClip && primaryOutput !== 'audio') {
+    outputs.push(outputPort('audio', 'audio', 'audio', {
+      semanticKind: 'audio-source',
+      targetClipId: audioClip.id,
+      available: true,
+      previewable: true,
+    }));
   }
+
+  if (audioClip && hasAudioAnalysisSurface(audioClip)) {
+    appendAudioAnalysisPorts(outputs, audioClip);
+  }
+  const analysisOutputs = outputs.slice(audioAnalysisOutputStart).filter((port) => (
+    port.metadata?.generateAction?.type === 'generate-audio-analysis'
+  ));
+  const hasAnalysisOutputs = analysisOutputs.length > 0;
 
   return {
     id: 'source',
     kind: 'source',
     runtime: 'builtin',
-    label: `${clip.source?.type ?? 'Unknown'} Source`,
-    description: describeSource(clip, track),
+    label: audioClip && audioClip.id !== clip.id
+      ? `${clip.source?.type ?? 'Unknown'} + audio Source`
+      : `${clip.source?.type ?? 'Unknown'} Source`,
+    description: describeLinkedSource(clip, track, audioClip, options.linkedTrack),
     sourceType: clip.source?.type,
     inputs: [],
     outputs,
@@ -206,6 +496,12 @@ function createSourceNode(clip: TimelineClip, track?: TimelineTrack): NodeGraphN
       duration: clip.duration,
       inPoint: clip.inPoint,
       outPoint: clip.outPoint,
+      ...(audioClip && audioClip.id !== clip.id ? { linkedAudioClipId: audioClip.id } : {}),
+      ...(hasAnalysisOutputs ? {
+        sourceRefs: hasAnyAudioAnalysisRef(audioClip?.audioState?.sourceAnalysisRefs),
+        processedRefs: hasAnyAudioAnalysisRef(audioClip?.audioState?.processedAnalysisRefs),
+        ...summarizeAudioAnalysisOutputs(outputs),
+      } : {}),
     },
     layout: { x: 0, y: MAIN_LANE_Y },
   };
@@ -274,7 +570,13 @@ function createColorNode(depth: number, signalType: NodeGraphSignalType, clip: T
   };
 }
 
-function createEffectNode(effect: Effect, depth: number, laneY: number, signalType: NodeGraphSignalType): NodeGraphNode {
+function createEffectNode(
+  effect: Effect,
+  depth: number,
+  laneY: number,
+  signalType: NodeGraphSignalType,
+  targetClipId?: string,
+): NodeGraphNode {
   const paramCount = Object.keys(effect.params ?? {}).length;
   return {
     id: `effect-${effect.id}`,
@@ -287,12 +589,41 @@ function createEffectNode(effect: Effect, depth: number, laneY: number, signalTy
     params: {
       enabled: effect.enabled !== false,
       params: paramCount,
+      ...(targetClipId ? { targetClipId } : {}),
     },
     layout: { x: depth * NODE_SPACING_X, y: laneY },
   };
 }
 
-function createCustomNode(definition: ClipCustomNodeDefinition, depth: number): NodeGraphNode {
+function createAudioEffectInstanceNode(
+  effect: AudioEffectInstance,
+  depth: number,
+  laneY = AUDIO_LANE_Y,
+  targetClipId?: string,
+): NodeGraphNode {
+  const descriptor = getAudioEffect(effect.descriptorId);
+  const paramCount = Object.keys(effect.params ?? {}).length;
+
+  return {
+    id: `audio-effect-${effect.id}`,
+    kind: 'effect',
+    runtime: 'builtin',
+    label: descriptor?.name ?? effect.descriptorId,
+    description: `${effect.enabled === false ? 'Disabled ' : ''}${effect.descriptorId} registry audio effect`,
+    inputs: [inputPort('input', 'audio', 'audio')],
+    outputs: [outputPort('output', 'audio', 'audio')],
+    params: {
+      enabled: effect.enabled !== false,
+      params: paramCount,
+      descriptorId: effect.descriptorId,
+      automationMode: effect.automationMode ?? 'none',
+      ...(targetClipId ? { targetClipId } : {}),
+    },
+    layout: { x: depth * NODE_SPACING_X, y: laneY },
+  };
+}
+
+function createCustomNode(definition: ClipCustomNodeDefinition, depth: number, laneY = MAIN_LANE_Y): NodeGraphNode {
   const promptState = definition.ai.prompt.trim().length > 0 ? 'configured' : 'empty';
   return {
     id: definition.id,
@@ -308,28 +639,36 @@ function createCustomNode(definition: ClipCustomNodeDefinition, depth: number): 
       bypassed: definition.bypassed === true,
       ...(definition.params ?? {}),
     },
-    layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
+    layout: { x: depth * NODE_SPACING_X, y: laneY },
   };
 }
 
-function createOutputNode(depth: number, clip: TimelineClip, signalType: NodeGraphSignalType, y = MAIN_LANE_Y): NodeGraphNode {
+function createOutputNode(
+  depth: number,
+  clip: TimelineClip,
+  signalType: NodeGraphSignalType,
+  includeAudioInput = false,
+): NodeGraphNode {
+  const inputs = [
+    inputPort('input', signalType, signalType),
+    ...(includeAudioInput ? [inputPort('audio', 'audio', 'audio')] : []),
+    inputPort('time', 'time', 'time'),
+    inputPort('metadata', 'metadata', 'metadata'),
+  ];
+
   return {
-    id: y === AUDIO_LANE_Y ? 'audio-output' : 'output',
+    id: 'output',
     kind: 'output',
     runtime: 'builtin',
-    label: y === AUDIO_LANE_Y ? 'Audio Output' : 'Clip Output',
+    label: 'Clip Output',
     description: 'Final signal consumed by the timeline, preview, and export layer builders.',
-    inputs: [
-      inputPort('input', signalType, signalType),
-      inputPort('time', 'time', 'time'),
-      inputPort('metadata', 'metadata', 'metadata'),
-    ],
+    inputs,
     outputs: [outputPort('clip', 'timeline', 'timeline')],
     params: {
       duration: clip.duration,
       outPoint: clip.outPoint,
     },
-    layout: { x: depth * NODE_SPACING_X, y },
+    layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
   };
 }
 
@@ -346,6 +685,78 @@ function appendProcessingNode(
   return { nodeId: node.id, portId: 'output' };
 }
 
+function appendAudioProcessingNodes(
+  nodes: NodeGraphNode[],
+  edges: NodeGraphEdge[],
+  chain: NodeGraphChainHead,
+  audioClip: TimelineClip,
+  depth: number,
+  laneY: number,
+): { chain: NodeGraphChainHead; depth: number } {
+  let audioChain = chain;
+  let audioDepth = depth;
+  const registryAudioEffects = audioClip.audioState?.effectStack ?? [];
+  const legacyAudioEffects = audioClip.effects.filter(isAudioEffect);
+
+  for (const effect of registryAudioEffects) {
+    audioChain = appendProcessingNode(
+      nodes,
+      edges,
+      audioChain.nodeId,
+      audioChain.portId,
+      createAudioEffectInstanceNode(effect, audioDepth, laneY, audioClip.id),
+      'audio',
+    );
+    audioDepth += 1;
+  }
+
+  for (const effect of legacyAudioEffects) {
+    audioChain = appendProcessingNode(
+      nodes,
+      edges,
+      audioChain.nodeId,
+      audioChain.portId,
+      createEffectNode(effect, audioDepth, laneY, 'audio', audioClip.id),
+      'audio',
+    );
+    audioDepth += 1;
+  }
+
+  return { chain: audioChain, depth: audioDepth };
+}
+
+function isAudioAnalysisSemanticKind(kind: string | undefined): boolean {
+  return kind === 'waveform' ||
+    kind === 'spectrum' ||
+    kind === 'frequency-bands' ||
+    kind === 'loudness' ||
+    kind === 'beats' ||
+    kind === 'onsets' ||
+    kind === 'phase-correlation' ||
+    kind === 'transcript' ||
+    kind === 'frequency-summary' ||
+    kind === 'audio-metadata';
+}
+
+function isAudioAnalysisSeededInput(port: NodeGraphPort | undefined): boolean {
+  if (!port?.metadata) return false;
+  return port.metadata.generateAction?.type === 'generate-audio-analysis' ||
+    isAudioAnalysisSemanticKind(typeof port.metadata.semanticKind === 'string' ? port.metadata.semanticKind : undefined);
+}
+
+function isMainSignalCustomNode(definition: ClipCustomNodeDefinition, primarySignal: NodeGraphSignalType): boolean {
+  const input = definition.inputs.find((port) => port.id === 'input');
+  const output = definition.outputs.find((port) => port.id === 'output');
+  return input?.type === primarySignal &&
+    output?.type === primarySignal &&
+    !isAudioAnalysisSeededInput(input);
+}
+
+function customNodeLaneY(definition: ClipCustomNodeDefinition): number {
+  const primaryInput = definition.inputs.find((port) => port.id === 'input');
+  return isAudioAnalysisSeededInput(primaryInput) ? AUDIO_ANALYSIS_LANE_Y : MAIN_LANE_Y;
+}
+
 function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
   switch (node.id) {
     case 'source':
@@ -356,6 +767,8 @@ function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
       return { kind: 'clip-mask-stack' };
     case 'color':
       return { kind: 'clip-color-correction' };
+    case 'audio-analysis':
+      return { kind: 'clip-audio-analysis' };
     case 'output':
       return { kind: 'clip-output' };
     case 'audio-output':
@@ -363,6 +776,9 @@ function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
     default:
       if (node.id.startsWith('custom-')) {
         return { kind: 'clip-custom-node', nodeId: node.id };
+      }
+      if (node.id.startsWith('audio-effect-')) {
+        return { kind: 'clip-audio-effect-instance', effectId: node.id.slice('audio-effect-'.length) };
       }
       if (node.id.startsWith('effect-')) {
         return { kind: 'clip-effect', effectId: node.id.slice('effect-'.length) };
@@ -445,8 +861,12 @@ function applyClipNodeGraphState(graph: NodeGraph, state?: ClipNodeGraph): NodeG
   };
 }
 
-function buildProjectedClipNodeGraphState(clip: TimelineClip, track?: TimelineTrack): ClipNodeGraph {
-  const graph = buildClipNodeGraphView(clip, track);
+function buildProjectedClipNodeGraphState(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
+): ClipNodeGraph {
+  const graph = buildClipNodeGraphView(clip, track, options);
   const manualEdges = clip.nodeGraph?.manualEdges === undefined
     ? undefined
     : validateManualEdges(graph, clip.nodeGraph.manualEdges);
@@ -464,8 +884,9 @@ export function reconcileClipNodeGraphState(
   clip: TimelineClip,
   track?: TimelineTrack,
   existingState?: ClipNodeGraph,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const projectedState = buildProjectedClipNodeGraphState(clip, track);
+  const projectedState = buildProjectedClipNodeGraphState(clip, track, options);
   if (!existingState || existingState.version !== 1) {
     return projectedState;
   }
@@ -478,7 +899,7 @@ export function reconcileClipNodeGraphState(
       customNodes: cloneCustomNodeDefinitions(existingState.customNodes),
       forcedBuiltIns: existingState.forcedBuiltIns ? [...existingState.forcedBuiltIns] : undefined,
     },
-  }, track);
+  }, track, options);
   const manualEdges = existingState.manualEdges === undefined
     ? undefined
     : validateManualEdges(graphForValidation, existingState.manualEdges);
@@ -496,8 +917,12 @@ export function reconcileClipNodeGraphState(
   };
 }
 
-export function createClipNodeGraphState(clip: TimelineClip, track?: TimelineTrack): ClipNodeGraph {
-  return reconcileClipNodeGraphState(clip, track);
+export function createClipNodeGraphState(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
+): ClipNodeGraph {
+  return reconcileClipNodeGraphState(clip, track, undefined, options);
 }
 
 export function updateClipNodeGraphLayout(
@@ -505,8 +930,9 @@ export function updateClipNodeGraphLayout(
   nodeId: string,
   layout: NodeGraphLayout,
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
   const nodes = state.nodes.map((node) => (
     node.id === nodeId
       ? { ...node, layout: cloneLayout(layout) }
@@ -528,9 +954,10 @@ export function connectClipNodeGraphPorts(
   clip: TimelineClip,
   connection: NodeGraphConnectionRequest,
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
-  const graph = buildClipNodeGraph({ ...clip, nodeGraph: state }, track);
+  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
+  const graph = buildClipNodeGraph({ ...clip, nodeGraph: state }, track, options);
   const nextEdge = createValidatedManualEdge(graph, connection);
 
   if (!nextEdge) {
@@ -557,9 +984,10 @@ export function disconnectClipNodeGraphEdge(
   clip: TimelineClip,
   edgeId: string,
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
-  const graph = buildClipNodeGraph({ ...clip, nodeGraph: state }, track);
+  const state = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
+  const graph = buildClipNodeGraph({ ...clip, nodeGraph: state }, track, options);
   const edges = graph.edges.filter((candidate) => candidate.id !== edgeId).map(cloneEdge);
 
   if (edges.length === graph.edges.length) {
@@ -573,26 +1001,53 @@ export function disconnectClipNodeGraphEdge(
   };
 }
 
+interface CreateClipAICustomNodeOptions {
+  primaryInput?: Pick<NodeGraphPort, 'id' | 'label' | 'type' | 'metadata'>;
+  additionalInputs?: Pick<NodeGraphPort, 'id' | 'label' | 'type' | 'metadata'>[];
+  outputType?: NodeGraphSignalType;
+  description?: string;
+  prompt?: string;
+}
+
 export function createClipAICustomNodeDefinition(
   id: string,
   clip: TimelineClip,
   label = 'AI Node',
+  options: CreateClipAICustomNodeOptions = {},
 ): ClipCustomNodeDefinition {
   const signalType = sourceOutputType(clip);
+  const primaryInput = options.primaryInput ?? {
+    id: 'input',
+    label: signalType,
+    type: signalType,
+  };
+  const outputType = options.outputType ?? primaryInput.type;
   return {
     id,
     label,
+    ...(options.description ? { description: options.description } : {}),
     runtime: 'typescript',
     status: 'draft',
     inputs: [
-      inputPort('input', signalType, signalType),
+      inputPort(
+        primaryInput.id,
+        primaryInput.label,
+        primaryInput.type,
+        primaryInput.metadata ? { ...primaryInput.metadata } : undefined,
+      ),
+      ...(options.additionalInputs ?? []).map((port) => inputPort(
+        port.id,
+        port.label,
+        port.type,
+        port.metadata ? { ...port.metadata } : undefined,
+      )),
       inputPort('time', 'time', 'time'),
       inputPort('metadata', 'metadata', 'metadata'),
     ],
-    outputs: [outputPort('output', signalType, signalType)],
+    outputs: [outputPort('output', outputType, outputType)],
     params: {},
     ai: {
-      prompt: '',
+      prompt: options.prompt ?? '',
       updatedAt: Date.now(),
     },
   };
@@ -602,8 +1057,9 @@ export function addClipCustomNodeDefinition(
   clip: TimelineClip,
   definition: ClipCustomNodeDefinition,
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
   const customNodes = [
     ...(baseState.customNodes ?? []),
     cloneCustomNodeDefinition(definition),
@@ -614,15 +1070,16 @@ export function addClipCustomNodeDefinition(
     updatedAt: Date.now(),
   };
 
-  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState, options);
 }
 
 export function removeClipCustomNodeDefinition(
   clip: TimelineClip,
   nodeId: string,
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
   const customNodes = (baseState.customNodes ?? []).filter((definition) => definition.id !== nodeId);
 
   if (customNodes.length === (baseState.customNodes ?? []).length) {
@@ -640,15 +1097,16 @@ export function removeClipCustomNodeDefinition(
     updatedAt: Date.now(),
   };
 
-  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState, options);
 }
 
 export function showClipBuiltInNode(
   clip: TimelineClip,
   node: ClipNodeGraphForcedBuiltIn,
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
   const forcedBuiltIns = Array.from(new Set([...(baseState.forcedBuiltIns ?? []), node]));
   const nextState: ClipNodeGraph = {
     ...baseState,
@@ -656,15 +1114,16 @@ export function showClipBuiltInNode(
     updatedAt: Date.now(),
   };
 
-  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState, options);
 }
 
 export function hideClipBuiltInNode(
   clip: TimelineClip,
   node: ClipNodeGraphForcedBuiltIn,
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
   const forcedBuiltIns = (baseState.forcedBuiltIns ?? []).filter((candidate) => candidate !== node);
   const nextState: ClipNodeGraph = {
     ...baseState,
@@ -672,7 +1131,7 @@ export function hideClipBuiltInNode(
     updatedAt: Date.now(),
   };
 
-  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState, options);
 }
 
 export function updateClipCustomNodeDefinition(
@@ -682,8 +1141,9 @@ export function updateClipCustomNodeDefinition(
     ai?: Partial<ClipCustomNodeDefinition['ai']>;
   },
   track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
 ): ClipNodeGraph {
-  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph);
+  const baseState = reconcileClipNodeGraphState(clip, track, clip.nodeGraph, options);
   const customNodes = (baseState.customNodes ?? []).map((definition) => (
     definition.id === nodeId
       ? {
@@ -704,7 +1164,7 @@ export function updateClipCustomNodeDefinition(
     updatedAt: Date.now(),
   };
 
-  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState);
+  return reconcileClipNodeGraphState({ ...clip, nodeGraph: nextState }, track, nextState, options);
 }
 
 export function cloneClipNodeGraph(graph?: ClipNodeGraph): ClipNodeGraph | undefined {
@@ -776,13 +1236,19 @@ export function remapClipNodeGraphEffectIds(
   };
 }
 
-function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): NodeGraph {
+function buildClipNodeGraphView(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
+): NodeGraph {
   const nodes: NodeGraphNode[] = [];
   const edges: NodeGraphEdge[] = [];
-  const sourceNode = createSourceNode(clip, track);
+  const sourceNode = createSourceNode(clip, track, options);
   nodes.push(sourceNode);
 
   const primarySignal = sourceOutputType(clip);
+  const audioClip = resolveLinkedAudioClip(clip, options.linkedClip);
+  const hasAudioOutput = Boolean(audioClip);
   let depth = 1;
   let chain: NodeGraphChainHead = { nodeId: sourceNode.id, portId: primarySignal };
 
@@ -834,7 +1300,19 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
     depth += 1;
   }
 
+  if (primarySignal === 'audio' && audioClip) {
+    const audioResult = appendAudioProcessingNodes(nodes, edges, chain, audioClip, depth, MAIN_LANE_Y);
+    chain = audioResult.chain;
+    depth = audioResult.depth;
+  }
+
+  const standaloneCustomNodes: ClipCustomNodeDefinition[] = [];
   for (const customNode of clip.nodeGraph?.customNodes ?? []) {
+    if (!isMainSignalCustomNode(customNode, primarySignal)) {
+      standaloneCustomNodes.push(customNode);
+      continue;
+    }
+
     chain = appendProcessingNode(
       nodes,
       edges,
@@ -846,31 +1324,26 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
     depth += 1;
   }
 
-  const outputNode = createOutputNode(depth, clip, primarySignal);
+  const outputNode = createOutputNode(depth, clip, primarySignal, hasAudioOutput && primarySignal !== 'audio');
   nodes.push(outputNode);
   edges.push(edge(chain.nodeId, chain.portId, outputNode.id, 'input', primarySignal));
   edges.push(edge(sourceNode.id, 'time', outputNode.id, 'time', 'time'));
   edges.push(edge(sourceNode.id, 'metadata', outputNode.id, 'metadata', 'metadata'));
 
-  const audioSourceAvailable = clip.source?.type === 'audio' || clip.source?.type === 'video';
-  const audioEffects = clip.effects.filter(isAudioEffect);
-  if (audioSourceAvailable && audioEffects.length > 0) {
-    let audioDepth = 1;
-    let audioChain: NodeGraphChainHead = { nodeId: sourceNode.id, portId: 'audio' };
-    for (const effect of audioEffects) {
-      audioChain = appendProcessingNode(
-        nodes,
-        edges,
-        audioChain.nodeId,
-        audioChain.portId,
-        createEffectNode(effect, audioDepth, AUDIO_LANE_Y, 'audio'),
-        'audio',
-      );
-      audioDepth += 1;
-    }
-    const audioOutput = createOutputNode(audioDepth, clip, 'audio', AUDIO_LANE_Y);
-    nodes.push(audioOutput);
-    edges.push(edge(audioChain.nodeId, audioChain.portId, audioOutput.id, 'input', 'audio'));
+  standaloneCustomNodes.forEach((customNode, index) => {
+    nodes.push(createCustomNode(customNode, depth + index + 1, customNodeLaneY(customNode)));
+  });
+
+  if (audioClip && primarySignal !== 'audio') {
+    const audioResult = appendAudioProcessingNodes(
+      nodes,
+      edges,
+      { nodeId: sourceNode.id, portId: 'audio' },
+      audioClip,
+      1,
+      AUDIO_LANE_Y,
+    );
+    edges.push(edge(audioResult.chain.nodeId, audioResult.chain.portId, outputNode.id, 'audio', 'audio'));
   }
 
   return {
@@ -885,6 +1358,10 @@ function buildClipNodeGraphView(clip: TimelineClip, track?: TimelineTrack): Node
   };
 }
 
-export function buildClipNodeGraph(clip: TimelineClip, track?: TimelineTrack): NodeGraph {
-  return applyClipNodeGraphState(buildClipNodeGraphView(clip, track), clip.nodeGraph);
+export function buildClipNodeGraph(
+  clip: TimelineClip,
+  track?: TimelineTrack,
+  options: ClipNodeGraphBuildOptions = {},
+): NodeGraph {
+  return applyClipNodeGraphState(buildClipNodeGraphView(clip, track, options), clip.nodeGraph);
 }

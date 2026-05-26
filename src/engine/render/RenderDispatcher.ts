@@ -931,11 +931,18 @@ export class RenderDispatcher {
         typeof this.lastPreviewDisplayedTimeMs === 'number'
           ? Math.abs(previewFallback.targetTimeMs - this.lastPreviewDisplayedTimeMs)
           : undefined;
+      const canHoldEmptyScrubFrame =
+        isDragging &&
+        this.lastRenderHadContent &&
+        (
+          emptyScrubHoldDriftMs === undefined ||
+          emptyScrubHoldDriftMs <= 250
+        );
       const shouldHoldEmptyFrame =
         hasVisibleInputLayer &&
         (
           (isPlaying && this.shouldHoldLastFrameOnEmptyPlayback(previewFallback.targetTimeMs)) ||
-          (isDragging && this.lastRenderHadContent)
+          canHoldEmptyScrubFrame
         );
 
       if (shouldHoldEmptyFrame) {

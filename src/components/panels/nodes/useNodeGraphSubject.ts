@@ -1,5 +1,9 @@
 import { useMemo } from 'react';
 import { buildClipNodeGraph, type NodeGraph } from '../../../services/nodeGraph';
+import {
+  createNodeGraphOwnerClip,
+  resolveLinkedClipNodeGraphContext,
+} from '../../../services/nodeGraph/clipGraphLinking';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 
@@ -10,6 +14,8 @@ export interface NodeGraphClipSubject {
   subtitle: string;
   clip: TimelineClip;
   track: TimelineTrack | null;
+  selectedClip: TimelineClip;
+  linkedClip: TimelineClip | null;
   graph: NodeGraph;
 }
 
@@ -25,27 +31,37 @@ export function useNodeGraphSubject(): NodeGraphSubject | null {
     ? primarySelectedClipId
     : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
 
-  const selectedClip = selectedClipId
-    ? clips.find((clip) => clip.id === selectedClipId) ?? null
-    : null;
-  const selectedTrack = selectedClip
-    ? tracks.find((track) => track.id === selectedClip.trackId) ?? null
-    : null;
+  const graphContext = useMemo(
+    () => resolveLinkedClipNodeGraphContext(clips, tracks, selectedClipId),
+    [clips, tracks, selectedClipId],
+  );
 
   return useMemo(() => {
-    if (!selectedClip) {
+    if (!graphContext) {
       return null;
     }
 
-    const graph = buildClipNodeGraph(selectedClip, selectedTrack ?? undefined);
+    const graphClip = createNodeGraphOwnerClip(graphContext);
+    const graph = buildClipNodeGraph(graphClip, graphContext.ownerTrack ?? undefined, {
+      linkedClip: graphContext.linkedClip,
+      linkedTrack: graphContext.linkedTrack,
+    });
+    const linkedSubtitle = graphContext.linkedClip && graphContext.linkedTrack
+      ? ` + ${graphContext.linkedTrack.name} / ${graphContext.linkedTrack.type}`
+      : '';
+
     return {
       kind: 'clip',
-      id: selectedClip.id,
-      name: selectedClip.name,
-      subtitle: selectedTrack ? `${selectedTrack.name} / ${selectedTrack.type}` : 'Timeline clip',
-      clip: selectedClip,
-      track: selectedTrack,
+      id: graphClip.id,
+      name: graphClip.name,
+      subtitle: graphContext.ownerTrack
+        ? `${graphContext.ownerTrack.name} / ${graphContext.ownerTrack.type}${linkedSubtitle}`
+        : 'Timeline clip',
+      clip: graphClip,
+      track: graphContext.ownerTrack,
+      selectedClip: graphContext.selectedClip,
+      linkedClip: graphContext.linkedClip,
       graph,
     };
-  }, [selectedClip, selectedTrack]);
+  }, [graphContext]);
 }

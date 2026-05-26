@@ -10,7 +10,15 @@ import type {
 import type { ColorCorrectionState, RuntimeColorGrade } from './colorCorrection';
 import type { MotionLayerDefinition, MotionProperty } from './motionDesign';
 import type { ClipNodeGraph } from './nodeGraph';
+import type {
+  AudioEffectParamValue,
+  ClipAudioAnalysisJobState,
+  ClipAudioState,
+  MasterAudioState,
+  TrackAudioState,
+} from './audio';
 
+export * from './audio';
 export * from './colorCorrection';
 export * from './motionDesign';
 export * from './nodeGraph';
@@ -387,7 +395,7 @@ export interface Effect {
   name: string;
   type: EffectType;
   enabled: boolean;
-  params: Record<string, number | boolean | string>;
+  params: Record<string, AudioEffectParamValue>;
 }
 
 export type EffectType =
@@ -407,11 +415,54 @@ export type EffectType =
   | 'voxel-relief'
   // Audio effects
   | 'audio-eq'
-  | 'audio-volume';
+  | 'audio-volume'
+  | 'audio-pan'
+  | 'audio-normalize'
+  | 'audio-parametric-eq'
+  | 'audio-high-pass'
+  | 'audio-low-pass'
+  | 'audio-hum-notch'
+  | 'audio-de-click'
+  | 'audio-noise-reduction'
+  | 'audio-spectral-gate'
+  | 'audio-compressor'
+  | 'audio-de-esser'
+  | 'audio-limiter'
+  | 'audio-noise-gate'
+  | 'audio-expander'
+  | 'audio-delay'
+  | 'audio-reverb'
+  | 'audio-saturation'
+  | 'audio-polarity-invert'
+  | 'audio-mono-sum'
+  | 'audio-channel-swap'
+  | 'audio-stereo-split';
 
 // Helper to check if an effect type is an audio effect
 export function isAudioEffect(type: EffectType): boolean {
-  return type === 'audio-eq' || type === 'audio-volume';
+  return type === 'audio-eq' ||
+    type === 'audio-volume' ||
+    type === 'audio-pan' ||
+    type === 'audio-normalize' ||
+    type === 'audio-parametric-eq' ||
+    type === 'audio-high-pass' ||
+    type === 'audio-low-pass' ||
+    type === 'audio-hum-notch' ||
+    type === 'audio-de-click' ||
+    type === 'audio-noise-reduction' ||
+    type === 'audio-spectral-gate' ||
+    type === 'audio-compressor' ||
+    type === 'audio-de-esser' ||
+    type === 'audio-limiter' ||
+    type === 'audio-noise-gate' ||
+    type === 'audio-expander' ||
+    type === 'audio-delay' ||
+    type === 'audio-reverb' ||
+    type === 'audio-saturation' ||
+    type === 'audio-polarity-invert' ||
+    type === 'audio-mono-sum' ||
+    type === 'audio-channel-swap' ||
+    type === 'audio-stereo-split';
 }
 
 export interface Project {
@@ -682,6 +733,8 @@ export interface TimelineClip {
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   linkedGroupId?: string; // ID of multicam group (clips synced together)
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
+  audioState?: ClipAudioState; // Advanced audio workstation state (optional, legacy-safe)
+  audioAnalysisJob?: ClipAudioAnalysisJobState; // Transient current audio-analysis job state
   waveform?: number[];    // Array of normalized amplitude values (0-1) for audio waveform
   waveformGenerating?: boolean;  // True while waveform is being generated
   waveformProgress?: number;     // 0-100 progress of waveform generation
@@ -755,6 +808,7 @@ export interface TimelineTrack {
   solo: boolean;
   locked?: boolean;
   parentTrackId?: string;  // ID of parent track for layer parenting (like AE parenting)
+  audioState?: TrackAudioState;
 }
 
 export interface TimelineState {
@@ -786,6 +840,7 @@ export interface SerializableClip {
   thumbnails?: string[];
   linkedClipId?: string;
   linkedGroupId?: string;  // Multicam group ID
+  audioState?: ClipAudioState;
   waveform?: number[];
   transform: ClipTransform;
   effects: Effect[];         // Effects applied to this clip
@@ -858,6 +913,7 @@ export interface CompositionTimelineData {
   outPoint: number | null;
   loopPlayback: boolean;
   markers?: SerializableMarker[];  // Timeline markers
+  masterAudioState?: MasterAudioState;
 }
 
 // Keyframe animation types
@@ -881,8 +937,8 @@ export type TransformProperty =
 export type CameraPropertyName = 'fov' | 'near' | 'far' | 'resolutionWidth' | 'resolutionHeight';
 export type CameraProperty = `camera.${CameraPropertyName}`;
 
-// Effect property format: effect.{effectId}.{paramName}
-// Example: effect.effect_123456.shift, effect.effect_123456.amount
+// Effect property format: effect.{effectId}.{paramPath}
+// Example: effect.effect_123456.shift, effect.eq1.eq.audible.bands.band1k.gainDb
 export type EffectProperty = `effect.${string}.${string}`;
 
 // AI/custom node exposed parameter format: node.{nodeId}.{paramName}
@@ -923,11 +979,12 @@ export function isEffectProperty(property: string): property is EffectProperty {
   return property.startsWith('effect.');
 }
 
-// Helper to parse effect property into parts
-export function parseEffectProperty(property: EffectProperty): { effectId: string; paramName: string } | null {
+// Helper to parse effect property into parts. paramName preserves the full nested
+// path after the effect id for compatibility with older callers.
+export function parseEffectProperty(property: EffectProperty): { effectId: string; paramName: string; paramPath: string[] } | null {
   const parts = property.split('.');
-  if (parts.length === 3 && parts[0] === 'effect') {
-    return { effectId: parts[1], paramName: parts[2] };
+  if (parts.length >= 3 && parts[0] === 'effect') {
+    return { effectId: parts[1], paramName: parts.slice(2).join('.'), paramPath: parts.slice(2) };
   }
   return null;
 }

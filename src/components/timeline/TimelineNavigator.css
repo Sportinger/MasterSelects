@@ -4,7 +4,7 @@
   height: 16px;
   background: var(--bg-primary);
   border-top: 1px solid var(--border-color);
-  padding: 3px 14px 3px 150px; /* Left: track headers width, Right: vertical scrollbar width */
+  padding: 3px 14px 3px 210px; /* Left: track headers width, Right: vertical scrollbar width */
   flex-shrink: 0;
 }
 

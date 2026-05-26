@@ -1,7 +1,9 @@
 // Root dock container - wraps docked panels and renders floating panels
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useDockStore } from '../../stores/dockStore';
+import type { DropTarget } from '../../types/dock';
+import { calculateRootEdgeDropPosition } from '../../utils/dockLayout';
 import { DockNode } from './DockNode';
 import { FloatingPanel } from './FloatingPanel';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
@@ -12,6 +14,24 @@ export function DockContainer() {
   const hasMountedRef = useRef(false);
   const maximizeAnimationTimeoutRef = useRef<number | null>(null);
   const { layout, dragState, endDrag, cancelDrag, updateDrag, toggleHoveredTabMaximized, maximizedPanelId } = useDockStore();
+
+  const getRootEdgeDropTarget = useCallback((mouseX: number, mouseY: number): DropTarget | null => {
+    const container = containerRef.current;
+    if (!container) return null;
+
+    const position = calculateRootEdgeDropPosition(container.getBoundingClientRect(), mouseX, mouseY);
+    if (!position) return null;
+
+    return {
+      groupId: layout.root.id,
+      position,
+      scope: 'root-edge',
+    };
+  }, [layout.root.id]);
+
+  const rootEdgeDropPosition = dragState.dropTarget?.scope === 'root-edge'
+    ? dragState.dropTarget.position
+    : null;
 
   useEffect(() => {
     if (!hasMountedRef.current) {
@@ -46,8 +66,12 @@ export function DockContainer() {
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragState.isDragging) return;
-      // Update drag position (drop target is updated by individual panes)
-      updateDrag({ x: e.clientX, y: e.clientY }, dragState.dropTarget);
+
+      const rootEdgeTarget = getRootEdgeDropTarget(e.clientX, e.clientY);
+      const nextDropTarget = rootEdgeTarget
+        ?? (dragState.dropTarget?.scope === 'root-edge' ? null : dragState.dropTarget);
+
+      updateDrag({ x: e.clientX, y: e.clientY }, nextDropTarget);
     };
 
     const handleMouseUp = () => {
@@ -84,7 +108,7 @@ export function DockContainer() {
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [dragState.isDragging, dragState.dropTarget, endDrag, cancelDrag, updateDrag, toggleHoveredTabMaximized]);
+  }, [dragState.isDragging, dragState.dropTarget, endDrag, cancelDrag, updateDrag, toggleHoveredTabMaximized, getRootEdgeDropTarget]);
 
   return (
     <div
@@ -95,6 +119,11 @@ export function DockContainer() {
       <div className="dock-root">
         <DockNode node={layout.root} />
       </div>
+
+      {/* Full-root edge target preview */}
+      {dragState.isDragging && rootEdgeDropPosition && (
+        <div className={`dock-root-drop-overlay ${rootEdgeDropPosition}`} />
+      )}
 
       {/* Floating panels */}
       {layout.floatingPanels.map((floating) => (

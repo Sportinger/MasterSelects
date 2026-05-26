@@ -210,6 +210,27 @@
   box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
 }
 
+.timeline-recording-punch-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 12;
+  pointer-events: none;
+  background: color-mix(in srgb, #ff5a4f 12%, transparent);
+  border-left: 1px solid rgba(255, 90, 79, 0.8);
+  border-right: 1px solid rgba(255, 90, 79, 0.8);
+}
+
+.timeline-recording-punch-range.waiting-for-punch {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 70%, transparent);
+}
+
+.in-out-marker.recording-punch .marker-flag,
+.in-out-marker.recording-punch .marker-line {
+  background: #ff5a4f;
+}
+
 .in-out-marker.dragging .marker-line {
   width: 3px;
   box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);

@@ -127,8 +127,7 @@
 }
 
 .dock-tab-pane.drop-target {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 1px rgba(45, 140, 235, 0.32);
 }
 
 .dock-tab-pane.is-maximized-pane {
@@ -390,6 +389,10 @@
   font-size: calc(1em * var(--panel-zoom, 1));
 }
 
+.dock-panel-content-inner--media {
+  overflow: hidden;
+}
+
 /* Make child panels fill the space */
 .dock-panel-content-inner > * {
   flex: 1;
@@ -420,80 +423,151 @@
 /* Drop zone overlay */
 .dock-drop-overlay {
   position: absolute;
-  background: rgba(45, 140, 235, 0.15);
-  border: 2px dashed var(--accent);
+  inset: 0;
   pointer-events: none;
   z-index: 100;
 }
 
-.dock-drop-overlay.left {
-  top: 0;
-  left: 0;
-  width: 50%;
-  height: 100%;
+.dock-drop-overlay::before {
+  content: '';
+  position: absolute;
+  background:
+    linear-gradient(180deg, rgba(130, 255, 214, 0.16) 0%, rgba(45, 140, 235, 0.13) 100%),
+    rgba(45, 140, 235, 0.16);
+  border: 1px solid rgba(129, 255, 213, 0.95);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 16px rgba(45, 140, 235, 0.28);
+  border-radius: 1px;
 }
 
-.dock-drop-overlay.right {
-  top: 0;
-  right: 0;
-  width: 50%;
-  height: 100%;
+.dock-drop-overlay.left::before {
+  top: 34px;
+  bottom: 12px;
+  left: 12px;
+  width: calc(50% - 18px);
 }
 
-.dock-drop-overlay.top {
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 50%;
+.dock-drop-overlay.right::before {
+  top: 34px;
+  right: 12px;
+  bottom: 12px;
+  width: calc(50% - 18px);
 }
 
-.dock-drop-overlay.bottom {
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 50%;
+.dock-drop-overlay.top::before {
+  top: 34px;
+  right: 12px;
+  left: 12px;
+  height: calc(50% - 40px);
 }
 
-.dock-drop-overlay.center {
-  top: 10%;
-  left: 10%;
-  right: 10%;
-  bottom: 10%;
-  width: auto;
-  height: auto;
+.dock-drop-overlay.bottom::before {
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  height: calc(50% - 20px);
+}
+
+.dock-drop-overlay.center::before {
+  top: 50%;
+  left: 50%;
+  width: min(56%, 460px);
+  height: min(42%, 260px);
+  min-width: min(220px, calc(100% - 32px));
+  min-height: min(110px, calc(100% - 64px));
+  transform: translate(-50%, -50%);
+}
+
+/* Full-root edge target preview */
+.dock-root-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 240;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.dock-root-drop-overlay::before {
+  content: '';
+  position: absolute;
+  background:
+    linear-gradient(180deg, rgba(130, 255, 214, 0.18) 0%, rgba(45, 140, 235, 0.16) 100%),
+    rgba(45, 140, 235, 0.18);
+  border: 1px solid rgba(129, 255, 213, 0.98);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 22px rgba(45, 140, 235, 0.32);
+  border-radius: 1px;
+}
+
+.dock-root-drop-overlay.left::before {
+  top: 8px;
+  bottom: 8px;
+  left: 8px;
+  width: min(28%, 340px);
+}
+
+.dock-root-drop-overlay.right::before {
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: min(28%, 340px);
+}
+
+.dock-root-drop-overlay.top::before {
+  top: 8px;
+  right: 8px;
+  left: 8px;
+  height: min(28%, 230px);
+}
+
+.dock-root-drop-overlay.bottom::before {
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  height: min(28%, 230px);
 }
 
 /* Tab slot indicators for precise tab insertion */
 .dock-tab-slots-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 26px;
-  display: flex;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 22px;
+  gap: 7px;
   align-items: center;
-  padding: 0 4px;
+  justify-content: center;
+  max-width: calc(100% - 24px);
+  height: 22px;
+  padding: 0;
+  overflow: visible;
   pointer-events: none;
-  z-index: 100;
-  background: rgba(0, 0, 0, 0.3);
-  gap: 4px;
+  z-index: 220;
+  transform: translate(-50%, -50%);
 }
 
 .dock-tab-slot {
-  width: 40px;
-  height: 20px;
-  border: 2px dashed var(--border-color);
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(129, 255, 213, 0.45);
   border-radius: 2px;
-  background: transparent;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
+  background: rgba(45, 140, 235, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
 
 .dock-tab-slot.active {
-  border-color: var(--accent);
-  background: rgba(45, 140, 235, 0.25);
-  box-shadow: 0 0 8px rgba(45, 140, 235, 0.4);
-  transform: scale(1.1);
+  border-color: rgba(129, 255, 213, 1);
+  background:
+    linear-gradient(180deg, rgba(129, 255, 213, 0.85) 0%, rgba(45, 140, 235, 0.52) 100%),
+    rgba(45, 140, 235, 0.5);
+  box-shadow:
+    0 0 10px rgba(45, 140, 235, 0.52),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px) scale(1.16);
 }
 
 /* Drag preview */

@@ -25,7 +25,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **AI Generative Workspace** | Classic video generation plus FlashBoard video/image/audio generation and media import |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
-| **Audio** | Element-synced playback, drift correction, waveform extraction, EQ, and audio export |
+| **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, mixer, recording, and export parity |
 | **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
 | **Native Helper** | Firefox storage backend, yt-dlp download flow, local AI bridge, native jobs |
 | **Security And Debugging** | Token-gated bridges, allowed-root file policy, playback monitors, logger tooling |
@@ -60,7 +60,8 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [Motion Design](./Motion-Design.md) | Motion layer schema, property registry, rectangle/ellipse shape editing, GPU renderer, and persistence/export plumbing |
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Vector Animation](./Vector-Animation.md) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
-| [Audio](./Audio.md) | Playback sync, EQ, waveform extraction, audio clip behavior, and export |
+| [Audio](./Audio.md) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
+| [Audio Workstation](./Audio-Workstation.md) | Target audio architecture, timeline detail mode, docked mixer, artifact refs, and analysis efficiency |
 | [Export](./Export.md) | WebCodecs fast/precise export, animated GIF, FFmpeg intermediates, image frame/sequence export, audio-only export, FCPXML, and project-persistent presets |
 | [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
 | [Media Panel](./Media-Panel.md) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
@@ -75,6 +76,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | [Landing Page](./Landing-Page.md) | Dev-only front page concept, separate URL strategy, and current landing/editor split |
 | [AI Integration](./AI-Integration.md) | OpenAI/Cloud and Lemonade chat, 79 exported tools, segmentation, transcription, and bridge behavior |
+| [Guided Action Runtime Plan](./Guided-Action-Runtime-Plan.md) | Target architecture for AI action replay, interactive tutorials, guided workflows, and parallel implementation workstreams |
 | [FlashBoard](./FlashBoard.md) | Board-mode AI canvas for text-to-video, image-to-video, and image generation |
 | [Multicam AI](./Multicam-AI.md) | Sync, transcription, multicam analysis, and Anthropic-powered EDL generation |
 | [Debugging](./Debugging.md) | Logger service, runtime monitors, log sync, and AI-facing debug tools |
@@ -92,7 +94,7 @@ Frontend          React 19 + TypeScript + Vite 7.x
 State             Zustand with modular timeline and media slices
 Rendering         WebGPU + WGSL + shared-scene 3D runtime
 Media             MediaBunny, WebCodecs, HTML media fallback paths
-Audio             Web Audio API, EQ, drift correction, waveform extraction
+Audio             Web Audio API, artifact-backed analysis, spectral display, clip/track/master FX, recording
 AI                OpenAI/Cloud chat, local Lemonade chat, Kie.ai, PiAPI catalog, SAM2, MatAnyone2
 Persistence       File System Access API, project-local RAW copies, IndexedDB handle/cache storage
 Native Helper     Rust service with HTTP/WebSocket bridge, yt-dlp, helper-backed jobs

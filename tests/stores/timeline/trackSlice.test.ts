@@ -2,6 +2,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip, createMockTrack } from '../../helpers/mockData';
 
+function createMockAudioBuffer(samples: number[], sampleRate = 10): AudioBuffer {
+  const data = Float32Array.from(samples);
+  return {
+    length: data.length,
+    duration: data.length / sampleRate,
+    sampleRate,
+    numberOfChannels: 1,
+    getChannelData: () => data,
+  } as unknown as AudioBuffer;
+}
+
 describe('trackSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
 
@@ -212,6 +223,15 @@ describe('trackSlice', () => {
     expect(store.getState().tracks.find(t => t.id === 'audio-1')!.muted).toBe(false);
   });
 
+  it('setTrackMuted: keeps audioState mute in sync for audio tracks', () => {
+    store.getState().setTrackMuted('audio-1', true);
+    const audioTrack = store.getState().tracks.find(t => t.id === 'audio-1')!;
+    expect(audioTrack.muted).toBe(true);
+    expect(audioTrack.audioState?.muted).toBe(true);
+    expect(audioTrack.audioState?.volumeDb).toBe(0);
+    expect(audioTrack.audioState?.pan).toBe(0);
+  });
+
   // ──────────────────────────────────────────────────
   // setTrackVisible
   // ──────────────────────────────────────────────────
@@ -284,9 +304,234 @@ describe('trackSlice', () => {
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
 
+  it('setTrackSolo: keeps audioState solo in sync for audio tracks', () => {
+    store.getState().setTrackSolo('audio-1', true);
+    const audioTrack = store.getState().tracks.find(t => t.id === 'audio-1')!;
+    expect(audioTrack.solo).toBe(true);
+    expect(audioTrack.audioState?.solo).toBe(true);
+  });
+
+  it('updateTrackAudioState: clamps track fader and pan and syncs legacy flags', () => {
+    store.getState().updateTrackAudioState('audio-1', {
+      volumeDb: 24,
+      pan: -2,
+      muted: true,
+      solo: true,
+      meterMode: 'lufs',
+    });
+
+    const audioTrack = store.getState().tracks.find(t => t.id === 'audio-1')!;
+    expect(audioTrack.muted).toBe(true);
+    expect(audioTrack.solo).toBe(true);
+    expect(audioTrack.audioState?.volumeDb).toBe(18);
+    expect(audioTrack.audioState?.pan).toBe(-1);
+    expect(audioTrack.audioState?.meterMode).toBe('lufs');
+  });
+
+  it('setTrackAudioVolumeDb and setTrackAudioPan update audioState without affecting other tracks', () => {
+    store.getState().setTrackAudioVolumeDb('audio-1', -9);
+    store.getState().setTrackAudioPan('audio-1', 0.35);
+
+    const audioTrack = store.getState().tracks.find(t => t.id === 'audio-1')!;
+    const videoTrack = store.getState().tracks.find(t => t.id === 'video-1')!;
+    expect(audioTrack.audioState?.volumeDb).toBe(-9);
+    expect(audioTrack.audioState?.pan).toBe(0.35);
+    expect(videoTrack.audioState).toBeUndefined();
+  });
+
+  it('track audio send actions add, clamp, bypass, and remove sends', () => {
+    const sendId = store.getState().addTrackAudioSend('audio-1', 'bus-room');
+
+    expect(sendId).toEqual(expect.any(String));
+
+    store.getState().updateTrackAudioSend('audio-1', sendId!, {
+      gainDb: 36,
+      preFader: true,
+      enabled: false,
+      targetBusId: 'bus-cue',
+    });
+
+    let audioTrack = store.getState().tracks.find(t => t.id === 'audio-1')!;
+    expect(audioTrack.audioState?.sends).toEqual([
+      expect.objectContaining({
+        id: sendId,
+        targetBusId: 'bus-cue',
+        gainDb: 18,
+        preFader: true,
+        enabled: false,
+      }),
+    ]);
+
+    store.getState().removeTrackAudioSend('audio-1', sendId!);
+    audioTrack = store.getState().tracks.find(t => t.id === 'audio-1')!;
+    expect(audioTrack.audioState?.sends).toBeUndefined();
+  });
+
+  it('track audio effect actions manage registry effect stacks in order', () => {
+    const highPassId = store.getState().addTrackAudioEffectInstance('audio-1', 'audio-high-pass');
+    const limiterId = store.getState().addTrackAudioEffectInstance('audio-1', 'audio-limiter');
+
+    expect(highPassId).toEqual(expect.any(String));
+    expect(limiterId).toEqual(expect.any(String));
+
+    store.getState().updateTrackAudioEffectInstance('audio-1', highPassId!, { frequencyHz: 120 });
+    store.getState().setTrackAudioEffectInstanceEnabled('audio-1', limiterId!, false);
+    store.getState().reorderTrackAudioEffectInstance('audio-1', limiterId!, 0);
+
+    const audioTrack = store.getState().tracks.find(t => t.id === 'audio-1')!;
+    expect(audioTrack.audioState?.effectStack?.map(effect => effect.id)).toEqual([limiterId, highPassId]);
+    expect(audioTrack.audioState?.effectStack?.[0]).toMatchObject({
+      descriptorId: 'audio-limiter',
+      enabled: false,
+      automationMode: 'track',
+    });
+    expect(audioTrack.audioState?.effectStack?.[1].params.frequencyHz).toBe(120);
+
+    store.getState().removeTrackAudioEffectInstance('audio-1', limiterId!);
+    expect(store.getState().tracks.find(t => t.id === 'audio-1')?.audioState?.effectStack?.map(effect => effect.id)).toEqual([highPassId]);
+  });
+
+  it('master audio actions clamp bus settings and manage registry effect stacks', () => {
+    store.getState().setMasterAudioVolumeDb(24);
+    store.getState().setMasterTruePeakCeilingDb(4);
+    store.getState().setMasterTargetLufs(-80);
+    store.getState().setMasterLimiterEnabled(true);
+
+    const compressorId = store.getState().addMasterAudioEffectInstance('audio-compressor');
+    const gateId = store.getState().addMasterAudioEffectInstance('audio-noise-gate');
+
+    store.getState().updateMasterAudioEffectInstance(compressorId!, { thresholdDb: -18, ratio: 3 });
+    store.getState().setMasterAudioEffectInstanceEnabled(gateId!, false);
+    store.getState().reorderMasterAudioEffectInstance(gateId!, 0);
+
+    const master = store.getState().masterAudioState;
+    expect(master).toMatchObject({
+      volumeDb: 18,
+      truePeakCeilingDb: 0,
+      targetLufs: -36,
+      limiterEnabled: true,
+    });
+    expect(master?.effectStack?.map(effect => effect.id)).toEqual([gateId, compressorId]);
+    expect(master?.effectStack?.[0]).toMatchObject({
+      descriptorId: 'audio-noise-gate',
+      enabled: false,
+      automationMode: 'track',
+    });
+    expect(master?.effectStack?.[1].params).toMatchObject({ thresholdDb: -18, ratio: 3 });
+
+    store.getState().removeMasterAudioEffectInstance(gateId!);
+    expect(store.getState().masterAudioState?.effectStack?.map(effect => effect.id)).toEqual([compressorId]);
+  });
+
   // ──────────────────────────────────────────────────
   // setTrackHeight
   // ──────────────────────────────────────────────────
+
+  it('runAudioExportPreflight stores master preflight warnings for the selected range', () => {
+    store = createTestTimelineStore({
+      duration: 5,
+      tracks: [
+        createMockTrack({
+          id: 'audio-1',
+          name: 'Audio 1',
+          type: 'audio',
+          audioState: {
+            volumeDb: 0,
+            pan: 0,
+            muted: false,
+            solo: false,
+            recordArm: true,
+            inputMonitor: false,
+            meterMode: 'peak',
+          },
+        }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'clip-audio',
+          trackId: 'audio-1',
+          startTime: 0,
+          duration: 5,
+          outPoint: 5,
+          source: { type: 'audio', mediaFileId: 'media-a' },
+          mediaFileId: 'media-a',
+        }),
+      ],
+    });
+
+    const result = store.getState().runAudioExportPreflight(0, 5);
+
+    expect(result.warnings?.map(item => item.code)).toContain('audio-export-record-arm-active');
+    expect(store.getState().masterAudioState?.exportPreflight).toEqual(result);
+  });
+
+  it('runAudioExportPreflight keeps rendered LUFS and true-peak measurement history', () => {
+    store = createTestTimelineStore({
+      duration: 5,
+      tracks: [
+        createMockTrack({
+          id: 'audio-1',
+          name: 'Audio 1',
+          type: 'audio',
+          audioState: {
+            volumeDb: 0,
+            pan: 0,
+            muted: false,
+            solo: false,
+            recordArm: false,
+            inputMonitor: false,
+            meterMode: 'peak',
+          },
+        }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'clip-audio',
+          trackId: 'audio-1',
+          startTime: 0,
+          duration: 5,
+          outPoint: 5,
+          source: { type: 'audio', mediaFileId: 'media-a' },
+          mediaFileId: 'media-a',
+        }),
+      ],
+    });
+
+    const first = store.getState().runAudioExportPreflight(
+      0,
+      5,
+      createMockAudioBuffer([0.1, -0.1, 0.1, -0.1], 4),
+    );
+
+    expect(first.measurement).toBeDefined();
+    expect(first.measurementHistory).toEqual([
+      {
+        checkedAt: first.lastCheckedAt,
+        startTime: 0,
+        endTime: 5,
+        measurement: first.measurement,
+      },
+    ]);
+
+    const staticCheck = store.getState().runAudioExportPreflight(0, 5);
+    expect(staticCheck.measurement).toBeUndefined();
+    expect(staticCheck.measurementHistory).toEqual(first.measurementHistory);
+
+    const second = store.getState().runAudioExportPreflight(
+      1,
+      3,
+      createMockAudioBuffer([0.4, -0.4, 0.2, -0.2], 4),
+    );
+
+    expect(second.measurementHistory).toHaveLength(2);
+    expect(second.measurementHistory?.[0]).toMatchObject({
+      checkedAt: second.lastCheckedAt,
+      startTime: 1,
+      endTime: 3,
+      measurement: second.measurement,
+    });
+    expect(second.measurementHistory?.[1]).toEqual(first.measurementHistory?.[0]);
+  });
 
   it('setTrackHeight: clamps to min/max', () => {
     store.getState().setTrackHeight('video-1', 5); // below min
@@ -660,5 +905,63 @@ describe('trackSlice', () => {
     const newId = store.getState().addTrack('audio');
     store.getState().setTrackVisible(newId, false);
     expect(store.getState().tracks.find(t => t.id === newId)!.visible).toBe(false);
+  });
+
+  it('updateRuntimeAudioMeter stores track meters and aggregates master peak/rms', () => {
+    store.getState().updateRuntimeAudioMeter('audio-1', {
+      peakLinear: 0.5,
+      rmsLinear: 0.25,
+      peakDb: -6.02,
+      rmsDb: -12.04,
+      clipping: false,
+      updatedAt: 1000,
+    });
+    store.getState().updateRuntimeAudioMeter('audio-2', {
+      peakLinear: 0.25,
+      rmsLinear: 0.25,
+      peakDb: -12.04,
+      rmsDb: -12.04,
+      clipping: false,
+      updatedAt: 1010,
+    });
+
+    const meters = store.getState().runtimeAudioMeters;
+    expect(meters.trackMeters['audio-1'].peakLinear).toBe(0.5);
+    expect(meters.trackMeters['audio-2'].peakLinear).toBe(0.25);
+    expect(meters.master?.peakLinear).toBe(0.5);
+    expect(meters.master?.rmsLinear).toBeCloseTo(Math.sqrt(0.25 * 0.25 + 0.25 * 0.25));
+  });
+
+  it('clearStaleRuntimeAudioMeters removes stale track meters and leaves a silent master', () => {
+    store.getState().updateRuntimeAudioMeter('audio-1', {
+      peakLinear: 0.5,
+      rmsLinear: 0.25,
+      peakDb: -6.02,
+      rmsDb: -12.04,
+      clipping: false,
+      updatedAt: 1000,
+    });
+
+    store.getState().clearStaleRuntimeAudioMeters(100, 1201);
+
+    const meters = store.getState().runtimeAudioMeters;
+    expect(meters.trackMeters).toEqual({});
+    expect(meters.master?.peakLinear).toBe(0);
+    expect(meters.master?.rmsLinear).toBe(0);
+  });
+
+  it('removeTrack clears that track runtime meter', () => {
+    store.getState().updateRuntimeAudioMeter('audio-1', {
+      peakLinear: 0.5,
+      rmsLinear: 0.25,
+      peakDb: -6.02,
+      rmsDb: -12.04,
+      clipping: false,
+      updatedAt: 1000,
+    });
+
+    store.getState().removeTrack('audio-1');
+
+    expect(store.getState().runtimeAudioMeters.trackMeters['audio-1']).toBeUndefined();
   });
 });

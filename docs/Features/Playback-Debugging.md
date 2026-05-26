@@ -52,6 +52,7 @@ When the dev bridge or Native Helper bridge is available, prefer the structured 
 
 - `getStats`
 - `getStatsHistory`
+- `getAudioDiagnostics`
 - `getLogs`
 - `getPlaybackTrace`
 - `simulateScrub`
@@ -66,6 +67,8 @@ The most useful payload for real playback bugs is usually:
 2. `getPlaybackTrace`
 3. `getLogs` filtered to playback modules
 
+For crackling, pops, or dropouts during audible playback, capture `getAudioDiagnostics` during the noise. It reports per-element ready/buffer state, approximate source-time drift, Web Audio context latency/state, routing graph state, and recent `audio_drift` / `audio_drift_correct` events.
+
 ---
 
 ## Signals To Watch
@@ -77,6 +80,9 @@ These fields are the highest-signal indicators in traces and health snapshots:
 - `previewFreezeEvents`
 - `previewPathCounts.empty`
 - `driftSeconds`
+- `getAudioDiagnostics.events.correctionMs`
+- `getAudioDiagnostics.mediaElements[].buffered.bufferedAheadSeconds`
+- `getAudioDiagnostics.routing.context.baseLatencyMs`
 - `firstPreviewUpdateMs`
 - `FRAME_STALL`
 - `SEEK_STUCK`

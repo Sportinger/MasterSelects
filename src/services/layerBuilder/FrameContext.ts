@@ -8,6 +8,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { getPlayheadPosition } from './PlayheadState';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
+import { getTrackAudioMuted, getTrackAudioSolo } from '../audio/audioGraphRouteSettings';
 
 function getClipsAtTime(clips: TimelineClip[], playheadPosition: number): TimelineClip[] {
   const EPSILON = 1e-6;
@@ -84,6 +85,7 @@ export function createFrameContext(): FrameContext {
     isDraggingPlayhead,
     playheadPosition: storePlayheadPosition,
     playbackSpeed,
+    masterAudioState,
     getInterpolatedTransform,
     getInterpolatedEffects,
     getInterpolatedNodeGraphParams,
@@ -123,6 +125,7 @@ export function createFrameContext(): FrameContext {
     isDraggingPlayhead,
     playheadPosition,
     playbackSpeed,
+    masterAudioState,
     activeCompId,
     proxyEnabled,
 
@@ -169,7 +172,7 @@ export function createFrameContext(): FrameContext {
 
     get anyAudioSolo(): boolean {
       if (_anyAudioSolo === null) {
-        _anyAudioSolo = this.audioTracks.some(t => t.solo);
+        _anyAudioSolo = this.audioTracks.some(getTrackAudioSolo);
       }
       return _anyAudioSolo;
     },
@@ -192,7 +195,7 @@ export function createFrameContext(): FrameContext {
         _unmutedAudioTrackIds = new Set();
         const anyAudioSolo = this.anyAudioSolo;
         for (const track of this.audioTracks) {
-          if (!track.muted && (!anyAudioSolo || track.solo)) {
+          if (!getTrackAudioMuted(track) && (!anyAudioSolo || getTrackAudioSolo(track))) {
             _unmutedAudioTrackIds.add(track.id);
           }
         }
