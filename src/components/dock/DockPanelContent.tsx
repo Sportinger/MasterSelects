@@ -17,7 +17,6 @@ const ColorWorkspacePanel = lazy(() => import('../panels/color-workspace/ColorWo
 const NodeWorkspacePanel = lazy(() => import('../panels/nodes/NodeWorkspacePanel').then(m => ({ default: m.NodeWorkspacePanel })));
 const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
 const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
-const AIVideoPanel = lazy(() => import('../panels/AIVideoPanel').then(m => ({ default: m.AIVideoPanel })));
 const DownloadPanel = lazy(() => import('../panels/DownloadPanel').then(m => ({ default: m.DownloadPanel })));
 const MIDIMappingPanel = lazy(() => import('../panels/MIDIMappingPanel').then(m => ({ default: m.MIDIMappingPanel })));
 const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
@@ -78,8 +77,6 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><MultiCamPanel /></Suspense>;
     case 'ai-chat':
       return <Suspense fallback={<PanelLoading />}><AIChatPanel /></Suspense>;
-    case 'ai-video':
-      return <Suspense fallback={<PanelLoading />}><AIVideoPanel /></Suspense>;
     case 'ai-segment':
       return <Suspense fallback={<PanelLoading />}><SAM2Panel /></Suspense>;
     case 'youtube':

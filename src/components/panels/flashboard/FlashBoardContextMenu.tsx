@@ -11,20 +11,24 @@ const log = Logger.create('FlashBoardContextMenu');
 function appendReferenceMediaFileId(
   currentIds: string[],
   mediaFileId: string,
-  maxReferenceImages?: number,
+  maxReferenceMedia?: number,
 ): string[] {
   const withoutExisting = currentIds.filter((id) => id !== mediaFileId);
 
   if (
-    typeof maxReferenceImages === 'number'
-    && Number.isFinite(maxReferenceImages)
-    && maxReferenceImages > 0
-    && withoutExisting.length >= maxReferenceImages
+    typeof maxReferenceMedia === 'number'
+    && Number.isFinite(maxReferenceMedia)
+    && maxReferenceMedia > 0
+    && withoutExisting.length >= maxReferenceMedia
   ) {
     return currentIds;
   }
 
   return [...withoutExisting, mediaFileId];
+}
+
+function isPromptReferenceMediaType(type: string | undefined): boolean {
+  return type === 'image' || type === 'video' || type === 'audio';
 }
 
 interface ContextMenuProps {
@@ -157,6 +161,25 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
   const canUseAsVisualReference = nodeMediaType === 'image' || nodeMediaType === 'video';
   const canAssignVideoReference = Boolean(node?.result?.mediaFileId && activeVideoReferenceTarget && canUseAsVisualReference);
   const canAssignImageReference = Boolean(node?.result?.mediaFileId && activeImageReferenceTarget && canUseAsVisualReference) && !isImageReferenceLimitReached;
+  const composerReferenceLimit = composerCatalogEntry?.maxReferenceMedia ?? composerCatalogEntry?.maxReferenceImages;
+  const composerReferenceIds = useMemo(
+    () => composer.referenceMediaFileIds ?? [],
+    [composer.referenceMediaFileIds],
+  );
+  const isAlreadyComposerReference = Boolean(
+    node?.result?.mediaFileId && composerReferenceIds.includes(node.result.mediaFileId)
+  );
+  const isComposerReferenceLimitReached = Boolean(
+    node?.result?.mediaFileId
+    && composerReferenceLimit
+    && composerReferenceIds.length >= composerReferenceLimit
+    && !isAlreadyComposerReference
+  );
+  const canUseAsPromptReference = Boolean(
+    node?.result?.mediaFileId
+    && isPromptReferenceMediaType(nodeMediaType)
+    && !isComposerReferenceLimitReached
+  );
   const canSendBackward = targetNodeIds.length > 0 && boardNodes.length > 1;
   const canBringForward = targetNodeIds.length > 0 && boardNodes.length > 1;
 
@@ -225,6 +248,26 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
     flashBoardMediaBridge.addToTimeline(node.result.mediaFileId);
     onClose();
   }, [node, onClose]);
+
+  const handleTogglePromptReference = useCallback(() => {
+    if (!node?.result?.mediaFileId) return;
+
+    if (isAlreadyComposerReference) {
+      updateComposer({
+        referenceMediaFileIds: composerReferenceIds.filter((mediaFileId) => mediaFileId !== node.result?.mediaFileId),
+      });
+    } else {
+      updateComposer({
+        referenceMediaFileIds: appendReferenceMediaFileId(
+          composerReferenceIds,
+          node.result.mediaFileId,
+          composerReferenceLimit,
+        ),
+      });
+    }
+
+    onClose();
+  }, [composerReferenceIds, composerReferenceLimit, isAlreadyComposerReference, node, onClose, updateComposer]);
 
   const handleAssignReference = useCallback((slot: 'start' | 'end' | 'reference') => {
     if (!node?.result?.mediaFileId) return;
@@ -312,6 +355,23 @@ export function FlashBoardContextMenu({ x, y, node, boardId, canvasPosition, onC
       )}
       {node && (
         <>
+          {node.result?.mediaFileId && isPromptReferenceMediaType(nodeMediaType) && (
+            <>
+              <button
+                className="flashboard-context-item"
+                disabled={!canUseAsPromptReference}
+                onClick={handleTogglePromptReference}
+              >
+                {isAlreadyComposerReference ? 'Unreference from AI Prompt' : 'Reference in AI Prompt'}
+              </button>
+              {isComposerReferenceLimitReached && (
+                <button className="flashboard-context-item hint" disabled>
+                  Prompt reference limit reached ({composerReferenceIds.length}/{composerReferenceLimit})
+                </button>
+              )}
+              <div className="flashboard-context-separator" />
+            </>
+          )}
           {node.result?.mediaFileId && canUseAsVisualReference && (
             <>
               {activeVideoReferenceTarget && (

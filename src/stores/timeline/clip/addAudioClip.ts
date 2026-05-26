@@ -115,6 +115,7 @@ async function generateWaveformAsync(
     log.debug('Starting waveform generation', { file: file.name });
     const analysis = await generateTimelineWaveformAnalysisForFile(file, {
       mediaFileId,
+      includePyramid: false,
       onProgress: (progress, partialWaveform) => {
         updateClip(clipId, {
           waveformProgress: progress,
@@ -126,6 +127,7 @@ async function generateWaveformAsync(
 
     updateClip(clipId, {
       waveform: analysis.waveform,
+      waveformChannels: analysis.waveformChannels,
       ...(analysis.audioAnalysisRefs
         ? { audioState: { sourceAnalysisRefs: analysis.audioAnalysisRefs } }
         : {}),

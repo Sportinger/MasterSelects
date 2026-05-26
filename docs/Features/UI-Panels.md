@@ -109,7 +109,7 @@ All docked panels can be:
 
 ## Available Panels
 
-MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline.
+MasterSelects currently exposes 16 active dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline. The old `ai-video` panel type is treated as a deprecated saved-layout migration target; generation now lives inside the Media Panel.
 
 | Panel | Type ID | Surface |
 |-------|---------|---------|
@@ -121,7 +121,6 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 | **Export** | `export` | Render and export controls |
 | **MIDI Mapping** | `midi-mapping` | Editable list of assigned MIDI notes and trigger previews |
 | **AI Chat** | `ai-chat` | Editing assistant chat |
-| **AI Generative** | `ai-video` | Classic video generator plus FlashBoard video/image/audio workspace |
 | **AI Segment** | `ai-segment` | Local SAM2 segmentation tools |
 | **AI Scene Description** | `scene-description` | Scene list with playback sync |
 | **Downloads** | `download` | URL search/download surface |
@@ -170,6 +169,7 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 - Drag-to-timeline support
 - Type-specific project items for text, solids, meshes, cameras, and splat effectors
 - Board mode right-drag supports smooth edge autopan; dragging far out onto a timeline lane hands off to the same timeline drag preview/drop path as list-view media drags, then restores the item at its original board position
+- Bottom-right **Generate** tray expands into the FlashBoard prompt composer for video, image, speech, and music generation without opening a separate dock tab
 
 ### Export Panel
 
@@ -215,26 +215,20 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 - Click-to-seek scene segments
 - Playback-synced highlighting
 
-### AI Generative Panel
+### Media Generator Tray
 
-- Dual-mode surface:
-  - Classic mode keeps the older prompt and history generator UI
-  - Board mode embeds FlashBoard for video, image, hosted ElevenLabs audio, BYO ElevenLabs audio, and Suno music generation
-- Service and provider selection reflect the active backend
-- Generate and History tabs remain available at the top level
-- Access overlay appears when no Kie.ai, ElevenLabs, or hosted cloud access is available
-- Current generation backends are Kie.ai, MasterSelects Cloud, ElevenLabs, and Kie.ai-backed Suno; hosted ElevenLabs speech uses Cloud credits while BYO ElevenLabs still uses the local settings key. PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current panel
+- Compact bottom-right prompt entry point inside the Media Panel
+- Expanded tray embeds only the compact FlashBoard prompt composer for video, image, hosted ElevenLabs audio, BYO ElevenLabs audio, and Suno music generation
+- Active generation jobs render as compact preview cards above the prompt, including queued/processing state, elapsed timer, progress, prompt, and failed-job dismissal
+- Service and provider selection reflect the active backend through the FlashBoard composer
+- Image, video, and audio media can be attached as ordered prompt references from the Media Panel context menu or by dragging them onto the expanded composer
+- Current generation backends are Kie.ai, MasterSelects Cloud, ElevenLabs, and Kie.ai-backed Suno; hosted ElevenLabs speech uses Cloud credits while BYO ElevenLabs still uses the local settings key. PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current generator
 
-#### FlashBoard Workspace
+#### FlashBoard Prompt Composer
 
-- Top toolbar with board tabs, rename, delete, new board, and queue state
-- `+ New Draft` action for creating draft nodes on the active board
-- Canvas with pan, zoom, selection, drag/drop, resize handles, and a context menu
-- Reference tray for start and end image slots
-- Composer panel for prompt/text-to-speech/music input, output/model selection, duration, aspect ratio, mode, multi-shot authoring, audio voice settings, and Suno song controls
-- Inspector-style node details for status, cost, references, progress, and retry/delete actions
+- Composer panel for prompt/text-to-speech/music input, ordered media references, output/model selection, duration, aspect ratio, mode, multi-shot authoring, audio voice settings, and Suno song controls
 - Completed generations are imported back into the media store and can be sent to the timeline; ElevenLabs and Suno audio imports under `AI Gen / Audio`
-- Load failures fall back to classic mode via the error boundary
+- The tray reuses the FlashBoard queue/import runtime without showing the full node canvas
 
 ### Downloads Panel
 
@@ -387,7 +381,7 @@ The unified Properties panel adapts its tabs to the selected clip type and to sl
 
 The built-in desktop layout is a three-column dock:
 
-- Left column: Media, AI Chat, AI Generative, Downloads
+- Left column: Media, AI Chat, Downloads
 - Center: Preview
 - Right column: Export, Properties, Waveform, Histogram, Vectorscope
 - Bottom: Timeline
@@ -495,9 +489,9 @@ Edit menu -> Settings
 
 ### API Keys
 
-The current AI Generative-relevant keys are:
+The current Media generator-relevant keys are:
 
-- `Kie.ai` for the current local-provider classic and board-backed generation flow
+- `Kie.ai` for the current local-provider FlashBoard generation flow
 - `Kie.ai` also powers FlashBoard Suno music generation
 - `ElevenLabs` for FlashBoard text-to-speech audio generation
 - `PiAPI` for legacy compatibility and older catalog/pricing paths

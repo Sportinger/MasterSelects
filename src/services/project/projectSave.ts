@@ -196,6 +196,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,
       waveform: c.waveform,
+      waveformChannels: c.waveformChannels,
       audioState: c.audioState ? structuredClone(c.audioState) : undefined,
       modelSequence: serializeModelSequence(c.source?.modelSequence || c.modelSequence),
       gaussianSplatSequence: serializeGaussianSplatSequence(c.source?.gaussianSplatSequence || c.gaussianSplatSequence),

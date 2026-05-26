@@ -844,6 +844,7 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
           inPoint: 0,
           outPoint: nextOutPoint,
           waveform: analysis.waveform,
+          waveformChannels: analysis.waveformChannels,
           waveformGenerating: false,
           waveformProgress: 100,
           source: {

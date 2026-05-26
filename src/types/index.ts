@@ -735,7 +735,8 @@ export interface TimelineClip {
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
   audioState?: ClipAudioState; // Advanced audio workstation state (optional, legacy-safe)
   audioAnalysisJob?: ClipAudioAnalysisJobState; // Transient current audio-analysis job state
-  waveform?: number[];    // Array of normalized amplitude values (0-1) for audio waveform
+  waveform?: number[];    // Array of normalized aggregate amplitude values (0-1) for audio waveform
+  waveformChannels?: number[][]; // Optional per-channel waveform previews for stereo/multichannel audio
   waveformGenerating?: boolean;  // True while waveform is being generated
   waveformProgress?: number;     // 0-100 progress of waveform generation
   transform: ClipTransform;  // Visual transform properties
@@ -842,6 +843,7 @@ export interface SerializableClip {
   linkedGroupId?: string;  // Multicam group ID
   audioState?: ClipAudioState;
   waveform?: number[];
+  waveformChannels?: number[][];
   transform: ClipTransform;
   effects: Effect[];         // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;

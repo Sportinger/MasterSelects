@@ -10,6 +10,7 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 
 - [Importing Media](#importing-media)
 - [View Modes](#view-modes)
+- [AI Generator Tray](#ai-generator-tray)
 - [Source Thumbnail Cache](#source-thumbnail-cache)
 - [Folder Organization](#folder-organization)
 - [Compositions](#compositions)
@@ -164,7 +165,15 @@ The panel supports three view modes through the header mode control. The selecte
 - Use the small handle on a node to drag that item to the timeline with the same drag payloads as Classic and Icons view
 - Switching to or from Board view morphs folder groups from/to their Classic rows or Icons thumbnails using the same 500ms view transition as media items
 - The board uses the same Add dropdown and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
-- The **AI** board action opens the existing AI Video panel; generated results still import through the normal Media Store path
+- The **Generate** board action expands the Media Panel's bottom-right AI generator tray; generated results still import through the normal Media Store path
+
+### AI Generator Tray
+- A compact **Generate** pill is available at the bottom right of the Media Panel without changing the current Classic, Icons, or Board view
+- Expanding the pill opens only the compact FlashBoard prompt composer: prompt field, model controls, ordered reference media cards, multi-shot controls, and the generate button
+- Image, video, and audio files can be referenced from Classic, Icons, or Board view by right-clicking and choosing **Reference in AI Prompt**; the same menu changes to **Unreference from AI Prompt** when all selected media are already linked
+- Dragging a media-panel image, video, or audio item onto the expanded prompt composer appends it to the ordered reference strip without moving it between folders
+- Queued and running generations appear above the prompt as compact preview cards with output type, status, elapsed timer, prompt, provider metadata, progress when available, and dismiss controls for failed/canceled jobs
+- The tray replaces the old dock-level AI Generative tab, so generation starts from Media and results land back in the Media Pool under the normal AI Gen folders
 
 Board pan and reorder previews use imperative CSS transforms and commit final order only on mouse-up/drop. This avoids re-rendering the Media Panel and writing `localStorage` on every pointer move, which keeps board interaction responsive while heavy preview scenes or splat renders are active.
 
@@ -338,6 +347,7 @@ Right-click on items or empty space for context options.
 - **Mesh** ▶ submenu: Cube, Sphere, Plane, Cylinder, Torus, Cone
 
 ### Single/Multi Selection
+- **Reference in AI Prompt** / **Unreference from AI Prompt** for selected image, video, and audio files
 - **Rename** (single selection only)
 - **Move to Folder** submenu (shows available folders + "Root")
 - **Delete** (shows count for multi-selection)

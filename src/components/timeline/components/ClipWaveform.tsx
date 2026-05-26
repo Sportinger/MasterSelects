@@ -286,15 +286,18 @@ function getLegacySmoothingRadius(
 
 function resolveWaveformChannelIndexes(
   pyramid: TimelineWaveformPyramid | null | undefined,
+  waveformChannels: readonly (readonly number[])[] | undefined,
   height: number,
 ): number[] {
-  if (!pyramid) return [0];
-
-  const sourceChannels = pyramid.levels.find(level => level.channels.length > 0)?.channels ?? [];
-  const channelIndexes = [...new Set(sourceChannels
-    .map(channel => channel.channelIndex)
-    .filter(channelIndex => Number.isInteger(channelIndex) && channelIndex >= 0))]
-    .toSorted((a, b) => a - b);
+  const sourceChannels = pyramid?.levels.find(level => level.channels.length > 0)?.channels ?? [];
+  const channelIndexes = sourceChannels.length > 0
+    ? [...new Set(sourceChannels
+        .map(channel => channel.channelIndex)
+        .filter(channelIndex => Number.isInteger(channelIndex) && channelIndex >= 0))]
+        .toSorted((a, b) => a - b)
+    : (waveformChannels ?? [])
+        .map((channel, channelIndex) => (channel?.length ? channelIndex : -1))
+        .filter(channelIndex => channelIndex >= 0);
 
   if (channelIndexes.length === 0) return [0];
 
@@ -320,6 +323,7 @@ function drawWaveformColumns(
 
 export const ClipWaveform = memo(function ClipWaveform({
   waveform,
+  waveformChannels,
   width,
   height,
   inPoint,
@@ -334,6 +338,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   renderWidth,
 }: {
   waveform: number[];
+  waveformChannels?: number[][];
   width: number;
   height: number;
   inPoint: number;
@@ -348,7 +353,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   renderWidth?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const renderChannelIndexes = resolveWaveformChannelIndexes(pyramid, height);
+  const renderChannelIndexes = resolveWaveformChannelIndexes(pyramid, waveformChannels, height);
   const renderChannelCount = renderChannelIndexes.length;
 
   useEffect(() => {
@@ -367,7 +372,8 @@ export const ClipWaveform = memo(function ClipWaveform({
       if (cancelled) return;
 
       const canvas = canvasRef.current;
-      if (!canvas || (!pyramid && (!waveform || waveform.length === 0)) || width <= 0 || naturalDuration <= 0) return;
+      const hasLegacyWaveform = Boolean(waveform?.length || waveformChannels?.some(channel => channel.length > 0));
+      if (!canvas || (!pyramid && !hasLegacyWaveform) || width <= 0 || naturalDuration <= 0) return;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -399,7 +405,7 @@ export const ClipWaveform = memo(function ClipWaveform({
         : 'rgba(6, 10, 18, 0.12)';
       ctx.fillRect(0, 0, canvasWidth, height);
 
-      const channelIndexes = resolveWaveformChannelIndexes(pyramid, height);
+      const channelIndexes = resolveWaveformChannelIndexes(pyramid, waveformChannels, height);
       const laneGap = channelIndexes.length > 1 ? 2 : 0;
       const laneHeight = Math.max(8, (height - laneGap * (channelIndexes.length - 1)) / channelIndexes.length);
 
@@ -412,6 +418,7 @@ export const ClipWaveform = memo(function ClipWaveform({
 
         const lod = buildWaveformLod({
           waveform: waveform ?? [],
+          waveformChannels,
           pyramid,
           width: canvasWidth,
           inPoint: visibleInPoint,
@@ -447,9 +454,9 @@ export const ClipWaveform = memo(function ClipWaveform({
       cancelled = true;
       cancel(frameId);
     };
-  }, [waveform, width, height, inPoint, outPoint, naturalDuration, displayMode, pixelsPerSecond, pyramid, waveformVariant, displayGain, renderStartPx, renderWidth]);
+  }, [waveform, waveformChannels, width, height, inPoint, outPoint, naturalDuration, displayMode, pixelsPerSecond, pyramid, waveformVariant, displayGain, renderStartPx, renderWidth]);
 
-  if ((!pyramid && (!waveform || waveform.length === 0)) || width <= 0 || renderWidth === 0) return null;
+  if ((!pyramid && (!waveform?.length && !waveformChannels?.some(channel => channel.length > 0))) || width <= 0 || renderWidth === 0) return null;
 
   const clipWidth = Math.max(1, width);
   const canvasLeft = Math.max(0, Math.min(clipWidth, renderStartPx));

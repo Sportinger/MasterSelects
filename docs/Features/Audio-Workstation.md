@@ -19,7 +19,7 @@ Audio state is split across source media, clips, tracks, the master bus, project
 
 Audio Focus mode keeps the timeline as the detailed editor. It expands audio lanes while leaving video layers visible as compact context.
 
-- Detailed Audio mode renders high-resolution waveform pyramids through timeline LOD windows.
+- Detailed Audio mode upgrades clips from the fast stereo/multichannel preview to high-resolution waveform pyramids after import; compact mode waits until deep zoom or an explicit analysis job. The timeline context-menu regenerate action refreshes the fast preview only, while detailed artifact generation remains cancellable and yields during bucket analysis.
 - Spectral Audio mode renders real spectrogram tile artifacts inline.
 - Artifact-backed waveform lanes render stereo and multi-channel sources as separated channel lanes when the waveform pyramid includes channel data. Legacy thumbnails remain mono fallback views.
 - Waveform and spectrogram lanes show compact processed-analysis status badges. `SRC` means the lane is temporarily showing source/legacy data while non-destructive edits, FX, speed, or spectral layers require processed analysis; `PEND`, `MISS`, and `ERR` distinguish loading, missing, and failed processed artifacts.

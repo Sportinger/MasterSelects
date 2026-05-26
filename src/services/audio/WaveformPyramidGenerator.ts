@@ -116,6 +116,7 @@ interface GenerationContext {
 const WAVEFORM_STATISTICS = ['min', 'max', 'rms', 'peak'] as const satisfies readonly WaveformStatistic[];
 const DEFAULT_DECODER_ID = 'audio-buffer';
 const DEFAULT_DECODER_VERSION = '1.0.0';
+const ANALYSIS_YIELD_SAMPLE_BUDGET = 262_144;
 const textEncoder = new TextEncoder();
 
 export class WaveformPyramidGeneratorError extends Error {
@@ -176,6 +177,12 @@ function throwIfCancelled(signal: AbortSignal | undefined, jobId: string): void 
   if (signal?.aborted) {
     throw cancelledError(jobId, getAbortReason(signal));
   }
+}
+
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, 0);
+  });
 }
 
 function clampPercent(value: number): number {
@@ -283,18 +290,19 @@ function safeSample(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function calculateChannelStats(
+async function calculateChannelStats(
   data: Float32Array,
   bufferLength: number,
   samplesPerBucket: number,
   channelIndex: number,
   context: GenerationContext,
-): WaveformChannelStats {
+): Promise<WaveformChannelStats> {
   const bucketCount = Math.ceil(bufferLength / samplesPerBucket);
   const min = new Float32Array(bucketCount);
   const max = new Float32Array(bucketCount);
   const rms = new Float32Array(bucketCount);
   const peak = new Float32Array(bucketCount);
+  let samplesSinceYield = 0;
 
   for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex += 1) {
     throwIfCancelled(context.signal, context.jobId);
@@ -319,6 +327,13 @@ function calculateChannelStats(
     max[bucketIndex] = count > 0 ? bucketMax : 0;
     rms[bucketIndex] = count > 0 ? Math.sqrt(squareSum / count) : 0;
     peak[bucketIndex] = bucketPeak;
+    samplesSinceYield += count;
+
+    if (samplesSinceYield >= ANALYSIS_YIELD_SAMPLE_BUDGET) {
+      await yieldToMainThread();
+      samplesSinceYield = 0;
+      throwIfCancelled(context.signal, context.jobId);
+    }
   }
 
   return { channelIndex, min, max, rms, peak };
@@ -434,7 +449,7 @@ export class WaveformPyramidGenerator {
       });
       throwIfCancelled(options.signal, jobId);
 
-      const levelStats = this.generateLevelStats(request.buffer, bucketSizes, context);
+      const levelStats = await this.generateLevelStats(request.buffer, bucketSizes, context);
       const stored = await this.storePayloads({
         request,
         analyzerVersion,
@@ -536,15 +551,18 @@ export class WaveformPyramidGenerator {
     }
   }
 
-  private generateLevelStats(
+  private async generateLevelStats(
     buffer: AudioBuffer,
     bucketSizes: readonly number[],
     context: GenerationContext,
-  ): WaveformLevelStats[] {
+  ): Promise<WaveformLevelStats[]> {
     const workUnits = bucketSizes.length * buffer.numberOfChannels;
     let completedUnits = 0;
+    const levels: WaveformLevelStats[] = [];
 
-    return bucketSizes.map((samplesPerBucket, levelIndex) => {
+    for (let levelIndex = 0; levelIndex < bucketSizes.length; levelIndex += 1) {
+      const samplesPerBucket = bucketSizes[levelIndex];
+      if (!samplesPerBucket) continue;
       const level: WaveformLevelStats = {
         samplesPerBucket,
         bucketDuration: samplesPerBucket / buffer.sampleRate,
@@ -564,7 +582,7 @@ export class WaveformPyramidGenerator {
         });
         throwIfCancelled(context.signal, context.jobId);
 
-        level.channels.push(calculateChannelStats(
+        level.channels.push(await calculateChannelStats(
           buffer.getChannelData(channelIndex),
           buffer.length,
           samplesPerBucket,
@@ -574,8 +592,10 @@ export class WaveformPyramidGenerator {
         completedUnits += 1;
       }
 
-      return level;
-    });
+      levels.push(level);
+    }
+
+    return levels;
   }
 
   private async storePayloads(input: {

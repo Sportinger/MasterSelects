@@ -402,6 +402,7 @@ async function loadLinkedAudio(
     try {
       const analysis = await generateTimelineWaveformAnalysisForFile(file, {
         mediaFileId,
+        includePyramid: false,
         onProgress: (progress, partialWaveform) => {
           setClips(clips => updateClipById(clips, audioClipId, {
             waveformProgress: progress,
@@ -413,6 +414,7 @@ async function loadLinkedAudio(
         const currentClip = clips.find(c => c.id === audioClipId);
         return updateClipById(clips, audioClipId, {
           waveform: analysis.waveform,
+          waveformChannels: analysis.waveformChannels,
           ...(analysis.audioAnalysisRefs
             ? {
                 audioState: {

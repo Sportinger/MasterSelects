@@ -33,6 +33,17 @@ const PRELOAD_BEHIND_FRAMES = 30; // 1 second behind for reverse scrubbing
 const PARALLEL_LOAD_COUNT = 16; // More parallel loads for faster preload
 const SCRUB_PRELOAD_RANGE = 90; // 3 seconds around scrub position
 const SCRUB_TELEPORT_SECONDS = 2; // Large jumps should abandon stale queued scrub preloads
+const SCRUB_STATIONARY_EPSILON_SECONDS = 0.003;
+const SCRUB_STATIONARY_STOP_MS = 140;
+const SCRUB_GRAIN_DURATION_SECONDS = 0.065;
+const SCRUB_GRAIN_SPACING_SECONDS = 0.018;
+const SCRUB_GRAIN_FADE_SECONDS = 0.006;
+const SCRUB_GRAIN_SCHEDULE_AHEAD_SECONDS = 0.16;
+const SCRUB_GRAIN_PEAK_GAIN = 0.42;
+const SCRUB_RESYNC_POSITION_DELTA_SECONDS = 0.045;
+const SCRUB_FAST_VELOCITY_SECONDS_PER_SECOND = 2.5;
+const SCRUB_PENDING_GRAIN_KEEP_AHEAD_SECONDS = 0.012;
+const SCRUB_REVERSE_THRESHOLD_SECONDS_PER_SECOND = -0.04;
 const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const HUM_NOTCH_MAX_HARMONICS = 8;
 
@@ -77,6 +88,12 @@ interface ScrubProcessorNode {
   gainByChannel?: number[];
   envelopeByChannel?: number[];
   gainReductionDb?: number;
+}
+
+interface ScrubGrain {
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+  startTime: number;
 }
 
 function clampScrubFrequency(ctx: BaseAudioContext, value: number): number {
@@ -1080,22 +1097,28 @@ class ProxyFrameCache {
   }
 
   // ============================================
-  // VARISPEED AUDIO SCRUBBING (Web Audio API)
-  // Like Premiere/Resolve: continuous audio that follows scrub speed
+  // GRANULAR AUDIO SCRUBBING (Web Audio API)
+  // Overlapping short grains with fades for smoother timeline scrub feedback
   // ============================================
 
-  // Varispeed scrubbing state
+  // Granular scrub audio state
   private scrubSource: AudioBufferSourceNode | null = null;
+  private scrubGrains = new Set<ScrubGrain>();
   private scrubSourceGain: GainNode | null = null;
   private scrubPanNode: StereoPannerNode | null = null;
   private scrubEqFilters: BiquadFilterNode[] = [];
   private scrubProcessorNodes: ScrubProcessorNode[] = [];
   private scrubProcessorSignature = '';
-  private scrubStartTime = 0; // AudioContext time when scrub started
-  private scrubStartPosition = 0; // Audio position when scrub started
   private scrubCurrentMediaId: string | null = null;
   private scrubLastPosition = 0;
   private scrubLastTime = 0;
+  private scrubLastMovementTime = 0;
+  private scrubNextGrainTime = 0;
+  private scrubSmoothedVelocity = 0;
+  private scrubLastDirection: 1 | -1 = 1;
+  private scrubPausedMediaId: string | null = null;
+  private scrubPausedPosition: number | null = null;
+  private scrubStationaryTimer: ReturnType<typeof setTimeout> | null = null;
   private scrubIsActive = false;
 
   /**
@@ -1307,9 +1330,9 @@ class ProxyFrameCache {
 
 
   /**
-   * VARISPEED SCRUBBING - Call this continuously while scrubbing
-   * Audio plays continuously and follows the scrub position/speed
-   * Like Premiere Pro / DaVinci Resolve
+   * Granular scrub audio - call continuously while dragging the playhead.
+   * Short overlapping grains avoid the gated/stalled sound of one long
+   * playbackRate-driven buffer source and allow backward scrub feedback.
    */
   playScrubAudio(
     mediaFileId: string,
@@ -1325,9 +1348,8 @@ class ProxyFrameCache {
       return;
     }
 
-    // Debug: Log that varispeed is active
     if (!this.scrubIsActive) {
-      log.debug(`VARISPEED starting at ${targetTime.toFixed(2)}s`);
+      log.debug(`Granular scrub starting at ${targetTime.toFixed(2)}s`);
     }
 
     const ctx = this.getAudioContext();
@@ -1342,79 +1364,53 @@ class ProxyFrameCache {
     const scrubProcessors = options?.processors ?? [];
     const processorSignature = scrubProcessorSignature(scrubProcessors);
     const now = performance.now();
-    const clampedTarget = Math.max(0, Math.min(targetTime, buffer.duration - 0.1));
+    const maxTargetTime = Math.max(0, buffer.duration - SCRUB_GRAIN_DURATION_SECONDS);
+    const clampedTarget = Math.max(0, Math.min(targetTime, maxTargetTime));
 
-    // Calculate scrub velocity (how fast user is scrubbing)
-    const timeDelta = (now - this.scrubLastTime) / 1000; // seconds
-    const posDelta = clampedTarget - this.scrubLastPosition;
+    const hasPreviousScrubSample = this.scrubLastTime > 0 && Number.isFinite(this.scrubLastPosition);
+    const timeDelta = hasPreviousScrubSample ? (now - this.scrubLastTime) / 1000 : 0;
+    const posDelta = hasPreviousScrubSample ? clampedTarget - this.scrubLastPosition : 0;
+    const sameScrubMedia = this.scrubCurrentMediaId === mediaFileId || this.scrubPausedMediaId === mediaFileId;
+    const targetMoved = !hasPreviousScrubSample ||
+      !sameScrubMedia ||
+      Math.abs(posDelta) > SCRUB_STATIONARY_EPSILON_SECONDS;
+
+    if (targetMoved) {
+      this.scrubLastMovementTime = now;
+      this.scrubPausedMediaId = null;
+      this.scrubPausedPosition = null;
+    } else if (
+      this.scrubPausedMediaId === mediaFileId &&
+      this.scrubPausedPosition !== null &&
+      Math.abs(clampedTarget - this.scrubPausedPosition) <= SCRUB_STATIONARY_EPSILON_SECONDS
+    ) {
+      this.scrubLastPosition = clampedTarget;
+      this.scrubLastTime = now;
+      return;
+    } else if (
+      this.scrubLastMovementTime > 0 &&
+      now - this.scrubLastMovementTime >= SCRUB_STATIONARY_STOP_MS
+    ) {
+      this.scrubLastPosition = clampedTarget;
+      this.scrubLastTime = now;
+      this.pauseStationaryScrubAudio(mediaFileId, clampedTarget);
+      return;
+    }
+
     this.scrubLastPosition = clampedTarget;
     this.scrubLastTime = now;
 
-    // Need new source if: different media, not active, or position jumped too far
-    const needNewSource =
-      !this.scrubIsActive ||
+    const needsNewEffectChain =
+      !this.scrubSourceGain ||
       this.scrubCurrentMediaId !== mediaFileId ||
-      !this.scrubSource ||
       this.scrubProcessorSignature !== processorSignature;
 
-    if (needNewSource) {
-      // Stop existing source
-      this.stopScrubAudio();
-
-      this.scrubSource = ctx.createBufferSource();
-      this.scrubSource.buffer = buffer;
-      this.scrubSource.playbackRate.value = 1.0;
-      this.attachScrubEffectChain(ctx, this.scrubSource, scrubVolume, scrubEqGains, scrubPan, scrubProcessors);
-      this.scrubProcessorSignature = processorSignature;
-
-      // Start playing from target position
-      this.scrubSource.start(0, clampedTarget);
-      this.scrubStartTime = ctx.currentTime;
-      this.scrubStartPosition = clampedTarget;
+    if (needsNewEffectChain) {
+      this.stopScrubAudio({ keepMotionTracking: true });
+      this.attachScrubEffectChain(ctx, scrubVolume, scrubEqGains, scrubPan, scrubProcessors);
       this.scrubCurrentMediaId = mediaFileId;
-      this.scrubIsActive = true;
-
-      // Guard: only deactivate if THIS source is still the current one
-      // (onended fires asynchronously and could clobber a newer source)
-      const thisSource = this.scrubSource;
-      thisSource.onended = () => {
-        if (this.scrubSource === thisSource) {
-          this.scrubIsActive = false;
-          this.scrubSource = null;
-        }
-      };
-    } else if (this.scrubSource && timeDelta > 0.001) {
-      this.updateScrubEffects(scrubVolume, scrubEqGains, scrubPan, scrubProcessors);
-
-      // Calculate where audio SHOULD be vs where it IS
-      const elapsedAudioTime = (ctx.currentTime - this.scrubStartTime) * this.scrubSource.playbackRate.value;
-      const currentAudioPos = this.scrubStartPosition + elapsedAudioTime;
-      const drift = clampedTarget - currentAudioPos;
-
-      // If drift is too large (>300ms), restart at correct position
-      if (Math.abs(drift) > 0.3) {
-        this.stopScrubAudio();
-        // Will restart on next call
-        return;
-      }
-
-      // Calculate target playback rate based on scrub velocity
-      // scrubSpeed = how many seconds of audio per second of real time
-      const scrubSpeed = timeDelta > 0.01 ? Math.abs(posDelta) / timeDelta : 1;
-
-      // Clamp to reasonable range and add drift correction
-      const driftCorrection = drift * 2; // Gentle drift correction
-      let targetRate = Math.max(0.25, Math.min(4.0, scrubSpeed + driftCorrection));
-
-      // If scrubbing backwards, we can't play backwards, so just slow down a lot
-      if (posDelta < -0.001) {
-        targetRate = 0.25; // Minimum speed for backwards feel
-      }
-
-      // Smooth rate changes to avoid clicks
-      const currentRate = this.scrubSource.playbackRate.value;
-      const smoothedRate = currentRate + (targetRate - currentRate) * 0.3;
-      this.scrubSource.playbackRate.value = Math.max(0.25, Math.min(4.0, smoothedRate));
+      this.scrubNextGrainTime = ctx.currentTime;
+      this.scrubSmoothedVelocity = 0;
     } else {
       this.updateScrubEffects(scrubVolume, scrubEqGains, scrubPan, scrubProcessors);
     }
@@ -1422,20 +1418,233 @@ class ProxyFrameCache {
     if (this.scrubGain && Math.abs(this.scrubGain.gain.value - scrubMasterVolume) > 0.001) {
       this.scrubGain.gain.value = scrubMasterVolume;
     }
+
+    if (targetMoved) {
+      const rawVelocity = timeDelta > 0.001 ? posDelta / timeDelta : 0;
+      const previousVelocity = this.scrubSmoothedVelocity;
+      this.scrubSmoothedVelocity =
+        this.scrubSmoothedVelocity === 0
+          ? rawVelocity
+          : this.scrubSmoothedVelocity + (rawVelocity - this.scrubSmoothedVelocity) * 0.35;
+      if (this.scrubSmoothedVelocity < SCRUB_REVERSE_THRESHOLD_SECONDS_PER_SECOND) {
+        this.scrubLastDirection = -1;
+      } else if (this.scrubSmoothedVelocity > Math.abs(SCRUB_REVERSE_THRESHOLD_SECONDS_PER_SECOND)) {
+        this.scrubLastDirection = 1;
+      }
+      if (this.shouldResyncScrubSchedule(posDelta, rawVelocity, previousVelocity)) {
+        this.resyncScrubGrainSchedule(ctx.currentTime);
+      }
+      this.scheduleScrubGrains(ctx, buffer, clampedTarget, this.scrubSmoothedVelocity);
+      this.scheduleStationaryScrubStop(mediaFileId, clampedTarget);
+    }
+  }
+
+  private shouldResyncScrubSchedule(
+    positionDelta: number,
+    rawVelocity: number,
+    previousVelocity: number,
+  ): boolean {
+    if (Math.abs(positionDelta) >= SCRUB_RESYNC_POSITION_DELTA_SECONDS) return true;
+    if (Math.abs(rawVelocity) >= SCRUB_FAST_VELOCITY_SECONDS_PER_SECOND) return true;
+    if (Math.abs(previousVelocity) < 0.001 || Math.abs(rawVelocity) < 0.001) return false;
+    return Math.sign(previousVelocity) !== Math.sign(rawVelocity);
+  }
+
+  private resyncScrubGrainSchedule(currentTime: number): void {
+    this.stopPendingScrubGrains(currentTime + SCRUB_PENDING_GRAIN_KEEP_AHEAD_SECONDS);
+    this.scrubNextGrainTime = currentTime;
+  }
+
+  private stopPendingScrubGrains(startAfter: number): void {
+    for (const grain of Array.from(this.scrubGrains)) {
+      if (grain.startTime <= startAfter) continue;
+      try {
+        grain.source.onended = null;
+        grain.source.stop();
+      } catch { /* ignore */ }
+      this.cleanupScrubGrain(grain);
+    }
+  }
+
+  private scheduleScrubGrains(
+    ctx: AudioContext,
+    buffer: AudioBuffer,
+    targetPosition: number,
+    velocity: number,
+  ): void {
+    if (!this.scrubSourceGain) return;
+
+    const scheduleUntil = ctx.currentTime + SCRUB_GRAIN_SCHEDULE_AHEAD_SECONDS;
+    if (this.scrubNextGrainTime < ctx.currentTime) {
+      this.scrubNextGrainTime = ctx.currentTime;
+    }
+
+    let scheduledCount = 0;
+    while (this.scrubNextGrainTime < scheduleUntil) {
+      const leadSeconds = Math.max(0, this.scrubNextGrainTime - ctx.currentTime);
+      const grainPosition = targetPosition + velocity * leadSeconds;
+      this.scheduleScrubGrain(ctx, buffer, grainPosition, velocity, this.scrubNextGrainTime);
+      this.scrubNextGrainTime += SCRUB_GRAIN_SPACING_SECONDS;
+      scheduledCount += 1;
+    }
+
+    if (scheduledCount === 0 && Math.abs(velocity) >= SCRUB_FAST_VELOCITY_SECONDS_PER_SECOND) {
+      this.resyncScrubGrainSchedule(ctx.currentTime);
+      this.scheduleScrubGrain(ctx, buffer, targetPosition, velocity, this.scrubNextGrainTime);
+      this.scrubNextGrainTime += SCRUB_GRAIN_SPACING_SECONDS;
+    }
+  }
+
+  private scheduleScrubGrain(
+    ctx: AudioContext,
+    buffer: AudioBuffer,
+    position: number,
+    velocity: number,
+    startTime: number,
+  ): void {
+    const direction: 1 | -1 =
+      velocity < SCRUB_REVERSE_THRESHOLD_SECONDS_PER_SECOND ? -1 : this.scrubLastDirection;
+    const grainDuration = Math.min(
+      SCRUB_GRAIN_DURATION_SECONDS,
+      Math.max(0.01, buffer.duration || SCRUB_GRAIN_DURATION_SECONDS),
+    );
+    const sourceBuffer = direction < 0
+      ? this.createReverseScrubGrainBuffer(ctx, buffer, position, grainDuration)
+      : buffer;
+    const offset = direction < 0
+      ? 0
+      : this.getScrubGrainOffset(buffer, position, grainDuration);
+    const playbackDuration = Math.min(grainDuration, sourceBuffer.duration);
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+
+    source.buffer = sourceBuffer;
+    source.playbackRate.value = this.getScrubGrainPlaybackRate(velocity);
+    this.shapeScrubGrainGain(gain.gain, startTime, playbackDuration);
+
+    source.connect(gain);
+    gain.connect(this.scrubSourceGain!);
+
+    const grain: ScrubGrain = { source, gain, startTime };
+    this.scrubGrains.add(grain);
+    this.scrubSource = source;
+    this.scrubIsActive = true;
+
+    source.onended = () => {
+      this.cleanupScrubGrain(grain);
+      if (this.scrubSource === source) {
+        this.scrubSource = null;
+      }
+      if (this.scrubGrains.size === 0 && this.scrubPausedMediaId !== null) {
+        this.scrubIsActive = false;
+      }
+    };
+
+    source.start(startTime, offset, playbackDuration);
+  }
+
+  private getScrubGrainOffset(
+    buffer: AudioBuffer,
+    position: number,
+    duration: number,
+  ): number {
+    const maxOffset = Math.max(0, buffer.duration - duration);
+    return Math.max(0, Math.min(position, maxOffset));
+  }
+
+  private getScrubGrainPlaybackRate(velocity: number): number {
+    const speed = Math.abs(velocity);
+    if (!Number.isFinite(speed) || speed < 0.001) return 1;
+    return Math.max(0.75, Math.min(2.25, speed));
+  }
+
+  private shapeScrubGrainGain(gain: AudioParam, startTime: number, duration: number): void {
+    const fadeSeconds = Math.min(SCRUB_GRAIN_FADE_SECONDS, duration / 3);
+    const peakStart = startTime + fadeSeconds;
+    const peakEnd = Math.max(peakStart, startTime + duration - fadeSeconds);
+    gain.cancelScheduledValues(startTime);
+    gain.setValueAtTime(0, startTime);
+    gain.linearRampToValueAtTime(SCRUB_GRAIN_PEAK_GAIN, peakStart);
+    gain.setValueAtTime(SCRUB_GRAIN_PEAK_GAIN, peakEnd);
+    gain.linearRampToValueAtTime(0, startTime + duration);
+  }
+
+  private createReverseScrubGrainBuffer(
+    ctx: AudioContext,
+    buffer: AudioBuffer,
+    position: number,
+    duration: number,
+  ): AudioBuffer {
+    const sampleCount = Math.max(
+      1,
+      Math.min(buffer.length, Math.ceil(duration * buffer.sampleRate)),
+    );
+    const reversed = ctx.createBuffer(buffer.numberOfChannels, sampleCount, buffer.sampleRate);
+    const endSample = Math.max(
+      sampleCount,
+      Math.min(buffer.length, Math.round(position * buffer.sampleRate)),
+    );
+    const startSample = endSample - sampleCount;
+
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      const source = buffer.getChannelData(channel);
+      const target = reversed.getChannelData(channel);
+      for (let i = 0; i < sampleCount; i += 1) {
+        target[i] = source[startSample + sampleCount - 1 - i] ?? 0;
+      }
+    }
+
+    return reversed;
+  }
+
+  private scheduleStationaryScrubStop(mediaFileId: string, position: number): void {
+    this.clearScrubStationaryTimer();
+    this.scrubStationaryTimer = setTimeout(() => {
+      this.scrubStationaryTimer = null;
+      const now = performance.now();
+      const sameMedia = this.scrubCurrentMediaId === mediaFileId || this.scrubPausedMediaId === mediaFileId;
+      const samePosition = Math.abs(this.scrubLastPosition - position) <= SCRUB_STATIONARY_EPSILON_SECONDS;
+
+      if (
+        sameMedia &&
+        samePosition &&
+        this.scrubLastMovementTime > 0 &&
+        now - this.scrubLastMovementTime >= SCRUB_STATIONARY_STOP_MS
+      ) {
+        this.scrubLastTime = now;
+        this.pauseStationaryScrubAudio(mediaFileId, position);
+      }
+    }, SCRUB_STATIONARY_STOP_MS);
+  }
+
+  private pauseStationaryScrubAudio(mediaFileId: string, position: number): void {
+    this.clearScrubStationaryTimer();
+    this.scrubPausedMediaId = mediaFileId;
+    this.scrubPausedPosition = position;
+    this.scrubLastPosition = position;
+  }
+
+  private clearScrubStationaryTimer(): void {
+    if (this.scrubStationaryTimer !== null) {
+      clearTimeout(this.scrubStationaryTimer);
+      this.scrubStationaryTimer = null;
+    }
   }
 
   /**
    * Stop scrub audio - call when scrubbing ends
    */
-  stopScrubAudio(): void {
-    if (this.scrubSource) {
+  stopScrubAudio(options: { keepMotionTracking?: boolean } = {}): void {
+    this.clearScrubStationaryTimer();
+
+    for (const grain of Array.from(this.scrubGrains)) {
       try {
-        this.scrubSource.onended = null; // Prevent async callback from clobbering new source
-        this.scrubSource.stop();
-        this.scrubSource.disconnect();
+        grain.source.onended = null;
+        grain.source.stop();
       } catch { /* ignore */ }
-      this.scrubSource = null;
+      this.cleanupScrubGrain(grain);
     }
+    this.scrubSource = null;
     if (this.scrubSourceGain) {
       try {
         this.scrubSourceGain.disconnect();
@@ -1489,6 +1698,28 @@ class ProxyFrameCache {
 
     // Also reset frame scrub tracking state
     this.resetScrubState();
+
+    if (!options.keepMotionTracking) {
+      this.scrubLastPosition = 0;
+      this.scrubLastTime = 0;
+      this.scrubLastMovementTime = 0;
+      this.scrubNextGrainTime = 0;
+      this.scrubSmoothedVelocity = 0;
+      this.scrubLastDirection = 1;
+      this.scrubPausedMediaId = null;
+      this.scrubPausedPosition = null;
+      this.scrubStationaryTimer = null;
+    }
+  }
+
+  private cleanupScrubGrain(grain: ScrubGrain): void {
+    this.scrubGrains.delete(grain);
+    try {
+      grain.source.disconnect();
+    } catch { /* ignore */ }
+    try {
+      grain.gain.disconnect();
+    } catch { /* ignore */ }
   }
 
   getScrubMeterSnapshot(updatedAt = performance.now()): AudioMeterSnapshot | null {
@@ -1528,7 +1759,6 @@ class ProxyFrameCache {
 
   private attachScrubEffectChain(
     ctx: AudioContext,
-    source: AudioBufferSourceNode,
     volume: number,
     eqGains: number[],
     pan: number,
@@ -1559,7 +1789,6 @@ class ProxyFrameCache {
       return filter;
     });
 
-    source.connect(this.scrubSourceGain);
     let tail: AudioNode = this.scrubSourceGain;
     for (const processor of this.scrubProcessorNodes) {
       if (processor.inputNode && processor.outputNode) {
@@ -1755,7 +1984,6 @@ class ProxyFrameCache {
       this.audioCache.delete(mediaFileId);
     }
 
-    // Clear audio buffer cache
     this.audioBufferCache.delete(mediaFileId);
   }
 
@@ -1771,7 +1999,6 @@ class ProxyFrameCache {
     }
     this.audioCache.clear();
 
-    // Clear audio buffer cache
     this.audioBufferCache.clear();
 
     // Clean up audio context

@@ -89,6 +89,7 @@ export interface ProjectClip {
   linkedGroupId?: string;
   thumbnails?: string[];
   waveform?: number[];
+  waveformChannels?: number[][];
   meshType?: MeshPrimitiveType;
   cameraSettings?: SceneCameraSettings;
   splatEffectorSettings?: SplatEffectorSettings;

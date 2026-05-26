@@ -121,6 +121,23 @@ function isAudioAnalysisCancellation(error: unknown): boolean {
     || (typeof maybe.name === 'string' && maybe.name.includes('Cancelled'));
 }
 
+async function resolveClipSourceFile(clip: TimelineClip): Promise<File | undefined> {
+  if (clip.file instanceof File) {
+    return clip.file;
+  }
+
+  const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+  if (!mediaFileId) return undefined;
+
+  try {
+    const { useMediaStore } = await import('../mediaStore');
+    const mediaFile = useMediaStore.getState().files.find(file => file.id === mediaFileId);
+    return mediaFile?.file;
+  } catch {
+    return undefined;
+  }
+}
+
 function isPlaneClip(clip: TimelineClip): boolean {
   return clip.source?.type === 'video' || clip.source?.type === 'image';
 }
@@ -1009,20 +1026,21 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     });
   },
 
-  generateWaveformForClip: async (clipId: string) => {
+  generateWaveformForClip: async (clipId: string, options: GenerateClipAudioAnalysisOptions = {}) => {
     const { clips } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
+    const includePyramid = options.previewOnly !== true;
 
     set({
       clips: updateClipById(get().clips, clipId, createAudioAnalysisJobUpdate({
         kind: 'waveform-pyramid',
-        label: 'Waveform',
-        artifactKinds: ['waveform-pyramid'],
+        label: includePyramid ? 'Waveform' : 'Waveform Preview',
+        artifactKinds: includePyramid ? ['waveform-pyramid'] : [],
         processed: false,
       })),
     });
-    log.debug('Starting waveform generation', { clip: clip.name });
+    log.debug('Starting waveform generation', { clip: clip.name, includePyramid });
 
     try {
       await clipAudioAnalysisJobService.run({ clipId, kind: 'waveform-pyramid' }, async ({ signal }) => {
@@ -1030,6 +1048,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           clips: updateAudioAnalysisJobProgress(get().clips, clipId, 1, 'preparing', 'Preparing waveform'),
         });
         let waveform: number[];
+        let waveformChannels: number[][] | undefined;
         let audioAnalysisRefs: import('../../types/audio').MediaFileAudioAnalysisRefs | undefined;
 
         if (clip.isComposition && clip.compositionId) {
@@ -1052,13 +1071,18 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           } else {
             waveform = new Array(Math.max(1, Math.floor(clip.duration * 50))).fill(0);
           }
-        } else if (!clip.file) {
-          log.warn('No file found for clip', { clipId });
-          set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
-          return;
         } else {
-          const analysis = await generateTimelineWaveformAnalysisForFile(clip.file, {
+          const sourceFile = await resolveClipSourceFile(clip);
+          if (!sourceFile) {
+            log.warn('No file found for clip', { clipId });
+            set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+            return;
+          }
+
+          set({ clips: updateClipById(get().clips, clipId, { file: sourceFile }) });
+          const analysis = await generateTimelineWaveformAnalysisForFile(sourceFile, {
             mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+            includePyramid,
             signal,
             onProgress: (progress, partialWaveform) => {
               set({
@@ -1083,6 +1107,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
             },
           });
           waveform = analysis.waveform;
+          waveformChannels = analysis.waveformChannels;
           audioAnalysisRefs = analysis.audioAnalysisRefs;
         }
 
@@ -1091,6 +1116,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         const currentClip = get().clips.find(c => c.id === clipId);
         set({ clips: updateClipById(get().clips, clipId, {
           waveform,
+          waveformChannels,
           ...(audioAnalysisRefs
             ? {
                 audioState: {
@@ -1177,12 +1203,16 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
             ].join(':');
             mediaFileId = mediaFileId ?? clip.compositionId;
           }
-        } else if (clip.file) {
-          mediaFileId = mediaFileId ?? `file:${clip.file.name}:${clip.file.size}:${clip.file.lastModified}`;
-          sourceFingerprint = await createFileAudioSourceFingerprint(clip.file);
-          if (signal.aborted) throw signal.reason;
-          sourceBuffer = await audioExtractor.extractAudio(clip.file, mediaFileId);
-          if (signal.aborted) throw signal.reason;
+        } else {
+          const sourceFile = await resolveClipSourceFile(clip);
+          if (sourceFile) {
+            mediaFileId = mediaFileId ?? `file:${sourceFile.name}:${sourceFile.size}:${sourceFile.lastModified}`;
+            set({ clips: updateClipById(get().clips, clipId, { file: sourceFile }) });
+            sourceFingerprint = await createFileAudioSourceFingerprint(sourceFile);
+            if (signal.aborted) throw signal.reason;
+            sourceBuffer = await audioExtractor.extractAudio(sourceFile, mediaFileId);
+            if (signal.aborted) throw signal.reason;
+          }
         }
 
         if (!sourceBuffer) {

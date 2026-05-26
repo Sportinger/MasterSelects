@@ -15,6 +15,7 @@ import { selectActiveBoard } from '../../../stores/flashboardStore/selectors';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useAccountStore } from '../../../stores/accountStore';
+import { getExternalDragPayload } from '../../timeline/utils/externalDragSession';
 import {
   ELEVENLABS_MP3_OUTPUT_FORMATS,
   elevenLabsService,
@@ -38,6 +39,7 @@ import {
 import { getCatalogEntries } from '../../../services/flashboard/FlashBoardModelCatalog';
 import { getCatalogEntryPriceEstimate, getFlashBoardPriceEstimate } from '../../../services/flashboard/FlashBoardPricing';
 import type { CatalogEntry } from '../../../services/flashboard/types';
+import { FileTypeIcon } from '../media/FileTypeIcon';
 
 type PopoverType =
   | 'model'
@@ -61,7 +63,10 @@ interface ComposerReferenceBadge {
   key: string;
   role: FlashBoardComposerReferenceRole;
   mediaFileId: string;
+  mediaType: 'image' | 'video' | 'audio';
+  previewUrl?: string;
   roleLabel: string;
+  thumbnailUrl?: string;
   displayName: string;
 }
 
@@ -74,6 +79,12 @@ interface FlashBoardComposerProps {
 }
 
 const MAX_MULTI_SHOTS = 5;
+const MEDIA_FILE_DRAG_MIME = 'application/x-media-file-id';
+const MEDIA_PANEL_ITEM_DRAG_MIME = 'application/x-media-panel-item';
+
+function isReferenceableMediaType(type: string | undefined): type is 'image' | 'video' | 'audio' {
+  return type === 'image' || type === 'video' || type === 'audio';
+}
 
 const ELEVENLABS_OUTPUT_FORMAT_LABELS: Record<ElevenLabsMp3OutputFormat, string> = {
   mp3_44100_128: 'MP3 44.1 kHz / 128 kbps',
@@ -365,6 +376,20 @@ function clampReferenceMediaFileIds(referenceMediaFileIds: string[], maxReferenc
     : limitedIds;
 }
 
+function appendReferenceMediaFileIds(currentIds: string[], nextIds: string[]): string[] {
+  const seen = new Set(currentIds);
+  const result = [...currentIds];
+
+  for (const nextId of nextIds) {
+    if (!seen.has(nextId)) {
+      seen.add(nextId);
+      result.push(nextId);
+    }
+  }
+
+  return result;
+}
+
 export function FlashBoardComposer({
   initialProviderId,
   initialService,
@@ -467,6 +492,7 @@ export function FlashBoardComposer({
   const [isLoadingElevenLabsVoices, setIsLoadingElevenLabsVoices] = useState(false);
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [voiceRefreshNonce, setVoiceRefreshNonce] = useState(0);
+  const [isReferenceDragOver, setIsReferenceDragOver] = useState(false);
 
   const selectedEntry = useMemo(
     () => visibleCatalog.find((e) => e.service === service && e.providerId === providerId),
@@ -666,56 +692,75 @@ export function FlashBoardComposer({
     service,
     version,
   ]);
-  const maxReferenceImages = !isAudioMode && selectedEntry?.supportsTextToImage
-    ? selectedEntry.maxReferenceImages
-    : undefined;
+  const maxReferenceMedia = selectedEntry?.maxReferenceMedia ?? selectedEntry?.maxReferenceImages;
   const effectiveReferenceMediaFileIds = useMemo(
-    () => clampReferenceMediaFileIds(composer.referenceMediaFileIds ?? [], maxReferenceImages),
-    [composer.referenceMediaFileIds, maxReferenceImages],
+    () => clampReferenceMediaFileIds(composer.referenceMediaFileIds ?? [], maxReferenceMedia),
+    [composer.referenceMediaFileIds, maxReferenceMedia],
   );
   const canGenerate = Boolean(board && selectedEntry && effectivePrompt)
     && !multiShotValidationError
     && !audioValidationError;
   const canAddShot = multiShots && normalizedMultiPrompt.length < Math.min(MAX_MULTI_SHOTS, Math.max(1, duration));
-  const mediaFileNamesById = useMemo(
-    () => new Map(mediaFiles.map((file) => [file.id, file.name])),
+  const mediaFilesById = useMemo(
+    () => new Map(mediaFiles.map((file) => [file.id, file])),
     [mediaFiles],
   );
   const composerReferenceBadges = useMemo<ComposerReferenceBadge[]>(() => {
     const badges: ComposerReferenceBadge[] = [];
+    const getBadgeMedia = (mediaFileId: string) => {
+      const mediaFile = mediaFilesById.get(mediaFileId);
+      return {
+        displayName: mediaFile?.name,
+        mediaType: isReferenceableMediaType(mediaFile?.type) ? mediaFile.type : 'image',
+        previewUrl: mediaFile?.url,
+        thumbnailUrl: mediaFile?.thumbnailUrl || (mediaFile?.type === 'image' ? mediaFile.url : undefined),
+      };
+    };
 
     if (composer.startMediaFileId) {
+      const media = getBadgeMedia(composer.startMediaFileId);
       badges.push({
         key: `start-${composer.startMediaFileId}`,
         role: 'start',
         mediaFileId: composer.startMediaFileId,
+        mediaType: media.mediaType,
+        previewUrl: media.previewUrl,
         roleLabel: 'IN',
-        displayName: mediaFileNamesById.get(composer.startMediaFileId) ?? 'Start frame',
+        thumbnailUrl: media.thumbnailUrl,
+        displayName: media.displayName ?? 'Start frame',
       });
     }
 
     if (composer.endMediaFileId) {
+      const media = getBadgeMedia(composer.endMediaFileId);
       badges.push({
         key: `end-${composer.endMediaFileId}`,
         role: 'end',
         mediaFileId: composer.endMediaFileId,
+        mediaType: media.mediaType,
+        previewUrl: media.previewUrl,
         roleLabel: 'OUT',
-        displayName: mediaFileNamesById.get(composer.endMediaFileId) ?? 'End frame',
+        thumbnailUrl: media.thumbnailUrl,
+        displayName: media.displayName ?? 'End frame',
       });
     }
 
     effectiveReferenceMediaFileIds.forEach((mediaFileId, index) => {
+      const media = getBadgeMedia(mediaFileId);
       badges.push({
         key: `reference-${mediaFileId}`,
         role: 'reference',
         mediaFileId,
+        mediaType: media.mediaType,
+        previewUrl: media.previewUrl,
         roleLabel: `REF ${index + 1}`,
-        displayName: mediaFileNamesById.get(mediaFileId) ?? 'Reference frame',
+        thumbnailUrl: media.thumbnailUrl,
+        displayName: media.displayName ?? 'Reference media',
       });
     });
 
     return badges;
-  }, [composer.endMediaFileId, composer.startMediaFileId, effectiveReferenceMediaFileIds, mediaFileNamesById]);
+  }, [composer.endMediaFileId, composer.startMediaFileId, effectiveReferenceMediaFileIds, mediaFilesById]);
 
   useEffect(() => {
     if (!initialEntry) {
@@ -862,7 +907,6 @@ export function FlashBoardComposer({
     if (isAudioMode) {
       if (composer.startMediaFileId !== undefined) nextPatch.startMediaFileId = undefined;
       if (composer.endMediaFileId !== undefined) nextPatch.endMediaFileId = undefined;
-      if (composer.referenceMediaFileIds.length > 0) nextPatch.referenceMediaFileIds = [];
     }
 
     if (!isAudioMode && !selectedEntry.supportsImageToVideo) {
@@ -874,13 +918,8 @@ export function FlashBoardComposer({
       nextPatch.endMediaFileId = undefined;
     }
 
-    if (!isAudioMode && !selectedEntry.supportsTextToImage && composer.referenceMediaFileIds.length > 0) {
-      nextPatch.referenceMediaFileIds = [];
-    }
-
     if (
-      !isAudioMode
-      && selectedEntry.supportsTextToImage
+      typeof maxReferenceMedia === 'number'
       && composer.referenceMediaFileIds !== effectiveReferenceMediaFileIds
     ) {
       nextPatch.referenceMediaFileIds = effectiveReferenceMediaFileIds;
@@ -922,6 +961,7 @@ export function FlashBoardComposer({
     isSunoMode,
     languageCode,
     languageOverride,
+    maxReferenceMedia,
     multiShots,
     normalizedMultiPrompt,
     outputFormat,
@@ -1108,9 +1148,10 @@ export function FlashBoardComposer({
         multiPrompt: nextIsAudio ? [] : normalizedMultiPrompt,
         startMediaFileId: !nextIsAudio && entry.supportsImageToVideo ? composer.startMediaFileId : undefined,
         endMediaFileId: !nextIsAudio && entry.supportsImageToVideo && !multiShots ? composer.endMediaFileId : undefined,
-        referenceMediaFileIds: !nextIsAudio && entry.supportsTextToImage
-          ? clampReferenceMediaFileIds(composer.referenceMediaFileIds, entry.maxReferenceImages)
-          : [],
+        referenceMediaFileIds: clampReferenceMediaFileIds(
+          composer.referenceMediaFileIds,
+          entry.maxReferenceMedia ?? entry.maxReferenceImages,
+        ),
         voiceId: nextIsElevenLabs ? voiceId.trim() : undefined,
         voiceName: nextIsElevenLabs ? voiceName.trim() : undefined,
         languageOverride: nextIsElevenLabs ? languageOverride : undefined,
@@ -1196,7 +1237,7 @@ export function FlashBoardComposer({
       sunoAudioWeight: requestIsSuno ? sunoAudioWeight : undefined,
       startMediaFileId: !requestIsAudio && selectedEntry.supportsImageToVideo ? composer.startMediaFileId : undefined,
       endMediaFileId: !requestIsAudio && selectedEntry.supportsImageToVideo && !multiShots ? composer.endMediaFileId : undefined,
-      referenceMediaFileIds: !requestIsAudio && selectedEntry.supportsTextToImage ? effectiveReferenceMediaFileIds : [],
+      referenceMediaFileIds: requestIsAudio ? [] : effectiveReferenceMediaFileIds,
     });
     queueNode(node.id);
     setPrompt('');
@@ -1320,6 +1361,74 @@ export function FlashBoardComposer({
     });
   }, [effectiveReferenceMediaFileIds, setHoveredComposerReference, updateComposer]);
 
+  const getReferenceMediaFileIdsFromTransfer = useCallback((dataTransfer: DataTransfer): string[] => {
+    const externalDragPayload = getExternalDragPayload();
+    const ids = [
+      dataTransfer.getData(MEDIA_FILE_DRAG_MIME),
+      dataTransfer.getData(MEDIA_PANEL_ITEM_DRAG_MIME),
+      externalDragPayload?.kind === 'media-file' ? externalDragPayload.id : '',
+    ].filter(Boolean);
+
+    return ids.filter((id, index) => {
+      if (ids.indexOf(id) !== index) {
+        return false;
+      }
+      const mediaFile = mediaFilesById.get(id);
+      return isReferenceableMediaType(mediaFile?.type);
+    });
+  }, [mediaFilesById]);
+
+  const hasReferenceDragType = useCallback((dataTransfer: DataTransfer): boolean => (
+    dataTransfer.types.includes(MEDIA_FILE_DRAG_MIME)
+    || dataTransfer.types.includes(MEDIA_PANEL_ITEM_DRAG_MIME)
+    || getExternalDragPayload()?.kind === 'media-file'
+  ), []);
+
+  const handleReferenceDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasReferenceDragType(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsReferenceDragOver(true);
+  }, [hasReferenceDragType]);
+
+  const handleReferenceDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setIsReferenceDragOver(false);
+    }
+  }, []);
+
+  const handleReferenceDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasReferenceDragType(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsReferenceDragOver(false);
+
+    const droppedIds = getReferenceMediaFileIdsFromTransfer(event.dataTransfer);
+    if (droppedIds.length === 0) {
+      return;
+    }
+
+    const currentReferences = useFlashBoardStore.getState().composer.referenceMediaFileIds ?? [];
+    updateComposer({
+      referenceMediaFileIds: clampReferenceMediaFileIds(
+        appendReferenceMediaFileIds(currentReferences, droppedIds),
+        maxReferenceMedia,
+      ),
+    });
+  }, [
+    getReferenceMediaFileIdsFromTransfer,
+    hasReferenceDragType,
+    maxReferenceMedia,
+    updateComposer,
+  ]);
+
   const handleSelectVoice = useCallback((voice: ElevenLabsVoice) => {
     setVoiceId(voice.voiceId);
     setVoiceName(voice.name);
@@ -1377,58 +1486,79 @@ export function FlashBoardComposer({
   if (!board) return null;
 
   return (
-    <div className="fb-bubble" onKeyDown={handleKeyDown} onMouseDown={(e) => e.stopPropagation()}>
-      <div className="fb-bubble-row">
-        <textarea
-          className="fb-bubble-input"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder={
-            isSunoMode
-              ? 'Describe the song, mood, lyrics, or background music...'
-              : isAudioMode
-              ? 'Text to speak...'
-              : multiShots
-                ? 'Overall scene or style (optional when using multishot)...'
-                : 'Describe what to generate...'
-          }
-          rows={isAudioMode ? 2 : multiShots ? 3 : 2}
-        />
-        <button className="fb-bubble-close" onClick={() => setPrompt('')} title="Clear">&times;</button>
-      </div>
-
-      {!isAudioMode && composerReferenceBadges.length > 0 && (
-        <>
-          <div className="fb-bubble-reference-badges">
+    <div
+      className={`fb-bubble ${composerReferenceBadges.length > 0 ? 'has-references' : ''} ${isReferenceDragOver ? 'reference-drop-active' : ''}`}
+      onKeyDown={handleKeyDown}
+      onMouseDown={(e) => e.stopPropagation()}
+      onDragOver={handleReferenceDragOver}
+      onDragLeave={handleReferenceDragLeave}
+      onDrop={handleReferenceDrop}
+    >
+      <div className={`fb-bubble-main ${composerReferenceBadges.length > 0 ? 'has-references' : ''}`}>
+        {composerReferenceBadges.length > 0 && (
+          <div className="fb-reference-strip" aria-label="AI prompt references">
             {composerReferenceBadges.map((badge) => (
               <div
                 key={badge.key}
-                className={`fb-bubble-reference-badge ${badge.role}`}
+                className={`fb-reference-card ${badge.role} ${badge.mediaType}`}
                 title={badge.displayName}
                 onMouseEnter={() => setHoveredComposerReference({ mediaFileId: badge.mediaFileId, role: badge.role })}
                 onMouseLeave={() => setHoveredComposerReference(null)}
               >
-                <span className="fb-bubble-reference-role">{badge.roleLabel}</span>
-                <span className="fb-bubble-reference-name">{badge.displayName}</span>
+                <span className="fb-reference-number">{badge.roleLabel.replace('REF ', '')}</span>
                 <button
-                  className="fb-bubble-reference-close"
+                  className="fb-reference-remove"
                   type="button"
                   onClick={() => handleRemoveComposerReference(badge)}
                   title={`Remove ${badge.roleLabel}`}
                 >
                   &times;
                 </button>
+                <div className="fb-reference-preview">
+                  {badge.thumbnailUrl ? (
+                    <img src={badge.thumbnailUrl} alt="" draggable={false} />
+                  ) : badge.mediaType === 'video' && badge.previewUrl ? (
+                    <video src={badge.previewUrl} muted playsInline preload="metadata" />
+                  ) : (
+                    <div className="fb-reference-placeholder">
+                      <FileTypeIcon type={badge.mediaType} large />
+                    </div>
+                  )}
+                </div>
+                <div className="fb-reference-name">{badge.displayName}</div>
               </div>
             ))}
           </div>
-          {selectedEntry?.supportsTextToImage && effectiveReferenceMediaFileIds.length > 0 && (
+        )}
+
+        <div className="fb-bubble-prompt">
+          <div className="fb-bubble-row">
+            <textarea
+              className="fb-bubble-input"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder={
+                isSunoMode
+                  ? 'Describe the song, mood, lyrics, or background music...'
+                  : isAudioMode
+                  ? 'Text to speak...'
+                  : multiShots
+                    ? 'Overall scene or style (optional when using multishot)...'
+                    : 'Describe what to generate...'
+              }
+              rows={isAudioMode ? 2 : multiShots ? 3 : 2}
+            />
+            <button className="fb-bubble-close" onClick={() => setPrompt('')} title="Clear">&times;</button>
+          </div>
+
+          {effectiveReferenceMediaFileIds.length > 0 && (
             <div className="fb-bubble-reference-hint">
               Use REF 1, REF 2, ... in the prompt. {effectiveReferenceMediaFileIds.length}
-              {typeof maxReferenceImages === 'number' ? `/${maxReferenceImages}` : ''} linked.
+              {typeof maxReferenceMedia === 'number' ? `/${maxReferenceMedia}` : ''} linked.
             </div>
           )}
-        </>
-      )}
+        </div>
+      </div>
 
       {!isAudioMode && multiShots && (
         <div className="fb-multishot-panel">

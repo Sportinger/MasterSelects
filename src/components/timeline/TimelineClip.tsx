@@ -50,7 +50,9 @@ const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
 const TIMELINE_VIEWPORT_MIN_PX = 1600;
 const TIMELINE_RENDER_OVERSCAN_PX = 512;
 const THUMBNAIL_RENDER_OVERSCAN_PX = THUMB_WIDTH * 3;
-const requestedWaveformPyramidUpgrades = new Set<string>();
+const WAVEFORM_PYRAMID_AUTO_UPGRADE_ZOOM = 250;
+const WAVEFORM_PYRAMID_AUTO_UPGRADE_WIDTH = 16_384;
+const inFlightSourceWaveformPyramidUpgrades = new Set<string>();
 const inFlightProcessedWaveformPyramidUpgrades = new Set<string>();
 const inFlightSpectrogramTileSetUpgrades = new Set<string>();
 const EMPTY_CLIP_KEYFRAMES = [] as const;
@@ -291,15 +293,25 @@ function TimelineClipComponent({
     () => clipRequiresProcessedWaveformPyramid(clip, clipAudioKeyframes),
     [clip, clipAudioKeyframes],
   );
+  const canResolveAudioSourceForAnalysis = Boolean(
+    clip.isComposition ||
+    clip.file ||
+    clip.mediaFileId ||
+    clip.source?.mediaFileId,
+  );
   const processedWaveformStatus = resolveProcessedAudioAnalysisDisplayStatus({
     artifactLabel: 'waveform',
     needsProcessed: needsProcessedAudioAnalysis,
     processedRef: processedWaveformPyramidRef,
     processedReady: Boolean(processedWaveformPyramid),
-    fallbackAvailable: Boolean(sourceWaveformPyramid || (clip.waveform?.length ?? 0) > 0),
+    fallbackAvailable: Boolean(
+      sourceWaveformPyramid ||
+      (clip.waveform?.length ?? 0) > 0 ||
+      clip.waveformChannels?.some(channel => channel.length > 0),
+    ),
     loadStatus: processedWaveformState.status,
     jobActive: clip.audioAnalysisJob?.artifactKinds.includes('processed-waveform-pyramid') === true,
-    autoGenerateEligible: Boolean(clip.isComposition || clip.file),
+    autoGenerateEligible: canResolveAudioSourceForAnalysis,
   });
   const processedSpectrogramStatus = resolveProcessedAudioAnalysisDisplayStatus({
     artifactLabel: 'spectrogram',
@@ -309,7 +321,7 @@ function TimelineClipComponent({
     fallbackAvailable: Boolean(sourceSpectrogramTileSet),
     loadStatus: processedSpectrogramState.status,
     jobActive: clip.audioAnalysisJob?.artifactKinds.includes('spectrogram-tiles') === true,
-    autoGenerateEligible: Boolean(clip.isComposition || clip.file),
+    autoGenerateEligible: canResolveAudioSourceForAnalysis,
   });
   const audioAnalysisDisplayStatus = audioDisplayMode === 'spectral'
     ? processedSpectrogramStatus
@@ -597,25 +609,37 @@ function TimelineClipComponent({
   );
 
   useEffect(() => {
-    if (!waveformsEnabled || !isAudioClip || sourceWaveformPyramidRef || clip.waveformGenerating || !clip.file) {
+    if (!waveformsEnabled || !isAudioClip || sourceWaveformPyramidRef || clip.waveformGenerating) {
       return;
     }
 
     const shouldUpgrade =
       audioDisplayMode === 'detailed' ||
-      (audioDisplayMode === 'compact' && (zoom >= 250 || width > 16_384));
+      (audioDisplayMode === 'compact' && (zoom >= WAVEFORM_PYRAMID_AUTO_UPGRADE_ZOOM || width > WAVEFORM_PYRAMID_AUTO_UPGRADE_WIDTH));
 
     if (!shouldUpgrade) return;
 
+    const sourceKey = clip.file
+      ? [
+          clip.id,
+          clip.file.name,
+          clip.file.size,
+          clip.file.lastModified,
+        ].join(':')
+      : [
+          clip.id,
+          clip.mediaFileId ?? clip.source?.mediaFileId ?? 'no-media-file',
+          clip.name,
+        ].join(':');
+
     const fileKey = [
       clip.id,
-      clip.file.name,
-      clip.file.size,
-      clip.file.lastModified,
+      sourceKey,
+      audioDisplayMode,
     ].join(':');
 
-    if (requestedWaveformPyramidUpgrades.has(fileKey)) return;
-    requestedWaveformPyramidUpgrades.add(fileKey);
+    if (inFlightSourceWaveformPyramidUpgrades.has(fileKey)) return;
+    inFlightSourceWaveformPyramidUpgrades.add(fileKey);
 
     const timer = window.setTimeout(() => {
       const { clips: currentClips, generateWaveformForClip } = useTimelineStore.getState();
@@ -625,16 +649,26 @@ function TimelineClipComponent({
         currentClip.waveformGenerating ||
         currentClip.audioState?.sourceAnalysisRefs?.waveformPyramidId
       ) {
+        inFlightSourceWaveformPyramidUpgrades.delete(fileKey);
         return;
       }
 
-      void generateWaveformForClip(clip.id);
+      void generateWaveformForClip(clip.id)
+        .finally(() => {
+          inFlightSourceWaveformPyramidUpgrades.delete(fileKey);
+        });
     }, 300);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      inFlightSourceWaveformPyramidUpgrades.delete(fileKey);
+    };
   }, [
     audioDisplayMode,
     clip.file,
+    clip.mediaFileId,
+    clip.name,
+    clip.source?.mediaFileId,
     clip.id,
     clip.waveformGenerating,
     isAudioClip,
@@ -1670,6 +1704,7 @@ function TimelineClipComponent({
         audioDisplayMode === 'spectral'
         || waveformPyramid
         || (clip.waveform && clip.waveform.length > 0)
+        || clip.waveformChannels?.some(channel => channel.length > 0)
       ) && (
         <div className="clip-waveform">
           {audioDisplayMode === 'spectral' && spectrogramTileSet ? (
@@ -1686,9 +1721,10 @@ function TimelineClipComponent({
             />
           ) : audioDisplayMode === 'spectral' ? (
             <div className="spectrogram-pending" />
-          ) : waveformPyramid || (clip.waveform && clip.waveform.length > 0) ? (
+          ) : waveformPyramid || (clip.waveform && clip.waveform.length > 0) || clip.waveformChannels?.some(channel => channel.length > 0) ? (
             <ClipWaveform
               waveform={clip.waveform ?? []}
+              waveformChannels={clip.waveformChannels}
               width={width}
               height={Math.max(20, trackBaseHeight - 12)}
               inPoint={waveformInPoint}

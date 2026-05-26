@@ -11,6 +11,7 @@ import { LabelColorPicker } from './media/LabelColorPicker';
 import { getItemImportProgress, isImportedMediaFileItem } from './media/itemTypeGuards';
 import { handleSubmenuHover, handleSubmenuLeave } from './media/submenuPosition';
 import { collectDroppedMediaFiles, planDroppedMediaImports } from './media/dropImport';
+import { MediaAIGenerativeTray } from './media/MediaAIGenerativeTray';
 import { MediaBoardView } from './media/board/MediaBoardView';
 import {
   DEFAULT_BOARD_VIEWPORT,
@@ -76,6 +77,7 @@ import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxy
 
 const log = Logger.create('MediaPanel');
 import { useMediaStore } from '../../stores/mediaStore';
+import { useFlashBoardStore } from '../../stores/flashboardStore';
 import type {
   CameraItem,
   Composition,
@@ -217,6 +219,29 @@ function getProjectItemIconType(item: ProjectItem | undefined): string | undefin
       : 'mesh';
   }
   return item.type;
+}
+
+function isAiReferenceMediaFile(item: ProjectItem | null | undefined): item is MediaFile {
+  if (!item) return false;
+  return isImportedMediaFileItem(item) && (
+    item.type === 'image' ||
+    item.type === 'video' ||
+    item.type === 'audio'
+  );
+}
+
+function appendUniqueIds(current: string[], next: string[]): string[] {
+  const seen = new Set(current);
+  const result = [...current];
+
+  for (const id of next) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      result.push(id);
+    }
+  }
+
+  return result;
 }
 
 function isSignalAssetItem(item: ProjectItem): item is SignalAssetItem {
@@ -431,6 +456,8 @@ export function MediaPanel() {
   const activeCompositionId = useMediaStore(state => state.activeCompositionId);
   const refreshFileUrls = useMediaStore(state => state.refreshFileUrls);
   const ensureFileThumbnail = useMediaStore(state => state.ensureFileThumbnail);
+  const composerReferenceMediaFileIds = useFlashBoardStore(state => state.composer.referenceMediaFileIds);
+  const updateFlashBoardComposer = useFlashBoardStore(state => state.updateComposer);
 
   // Actions from getState() - stable, no subscription needed
   const {
@@ -514,6 +541,7 @@ export function MediaPanel() {
   const [labelPickerItemId, setLabelPickerItemId] = useState<string | null>(null);
   const [labelPickerPos, setLabelPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [viewMode, setViewMode] = useState<MediaPanelViewMode>(loadMediaPanelViewMode);
+  const [isGenerativeTrayExpanded, setGenerativeTrayExpanded] = useState(false);
   const [mediaSearchQuery, setMediaSearchQuery] = useState('');
   // Grid view: current open folder (null = root)
   const [gridFolderId, setGridFolderId] = useState<string | null>(null);
@@ -1298,6 +1326,23 @@ export function MediaPanel() {
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
   }, []);
+
+  const handleToggleAiPromptReferences = useCallback((mediaFileIds: string[]) => {
+    if (mediaFileIds.length === 0) {
+      closeContextMenu();
+      return;
+    }
+
+    const currentReferences = useFlashBoardStore.getState().composer.referenceMediaFileIds ?? [];
+    const allSelectedReferences = mediaFileIds.every((id) => currentReferences.includes(id));
+    const nextReferences = allSelectedReferences
+      ? currentReferences.filter((id) => !mediaFileIds.includes(id))
+      : appendUniqueIds(currentReferences, mediaFileIds);
+
+    updateFlashBoardComposer({ referenceMediaFileIds: nextReferences });
+    setGenerativeTrayExpanded(true);
+    closeContextMenu();
+  }, [closeContextMenu, updateFlashBoardComposer]);
 
   // Rename handling
   const startRename = useCallback((id: string, currentName: string) => {
@@ -2692,7 +2737,7 @@ export function MediaPanel() {
   }, []);
 
   const openBoardAI = useCallback(() => {
-    useDockStore.getState().activatePanelType('ai-video');
+    setGenerativeTrayExpanded(true);
     closeContextMenu();
   }, [closeContextMenu]);
 
@@ -4259,6 +4304,11 @@ export function MediaPanel() {
         )}
       </div>
 
+      <MediaAIGenerativeTray
+        expanded={isGenerativeTrayExpanded}
+        onExpandedChange={setGenerativeTrayExpanded}
+      />
+
       {/* Drop overlay - shown when dragging files from outside */}
       {isExternalDragOver && (
         <div className="media-panel-drop-overlay">
@@ -4295,6 +4345,17 @@ export function MediaPanel() {
         const mediaFile = isVideoFile ? (selectedItem as MediaFile) : null;
         const composition = isComposition ? (selectedItem as Composition) : null;
         const solidItem = isSolidItem ? (selectedItem as SolidItem) : null;
+        const contextSelectionIds = multiSelect && contextMenu.itemId && selectedIds.includes(contextMenu.itemId)
+          ? selectedIds
+          : contextMenu.itemId
+            ? [contextMenu.itemId]
+            : [];
+        const aiReferenceMediaFileIds = contextSelectionIds.filter((id) => {
+          const candidate = files.find((file) => file.id === id);
+          return isAiReferenceMediaFile(candidate);
+        });
+        const allContextMediaReferenced = aiReferenceMediaFileIds.length > 0
+          && aiReferenceMediaFileIds.every((id) => composerReferenceMediaFileIds.includes(id));
         const isGenerating = mediaFile?.proxyStatus === 'generating';
         const hasProxy = mediaFile?.proxyStatus === 'ready';
         // Available folders for "Move to Folder" submenu
@@ -4388,6 +4449,16 @@ export function MediaPanel() {
             {(contextMenu.itemId || multiSelect) && (
               <>
                 <div className="context-menu-separator" />
+
+                {aiReferenceMediaFileIds.length > 0 && (
+                  <div
+                    className="context-menu-item"
+                    onClick={() => handleToggleAiPromptReferences(aiReferenceMediaFileIds)}
+                  >
+                    {allContextMediaReferenced ? 'Unreference from AI Prompt' : 'Reference in AI Prompt'}
+                    {aiReferenceMediaFileIds.length > 1 ? ` (${aiReferenceMediaFileIds.length})` : ''}
+                  </div>
+                )}
 
                 {/* Rename - only for single selection */}
                 {!multiSelect && selectedItem && (

@@ -297,9 +297,9 @@ export function MediaBoardView({
           <button
             className="btn btn-sm"
             onClick={onOpenAI}
-            title="Open AI Generative panel"
+            title="Expand AI generator"
           >
-            AI
+            Generate
           </button>
           <button className="btn btn-sm" onClick={onResetLayout} title="Reset board layout">
             Reset

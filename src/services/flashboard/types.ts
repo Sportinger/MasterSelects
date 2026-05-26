@@ -75,5 +75,6 @@ export interface CatalogEntry {
   supportsMultiShot?: boolean;
   imageSizes?: string[];
   maxReferenceImages?: number;
+  maxReferenceMedia?: number;
   outputType?: FlashBoardOutputType;
 }

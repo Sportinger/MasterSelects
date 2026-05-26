@@ -11,7 +11,7 @@ GPT-powered editing with 79 exported tools across 15 exported definition groups,
 - [AI Chat Panel](#ai-chat-panel)
 - [Chat Providers](#chat-providers)
 - [Lemonade Local Setup](#lemonade-local-setup)
-- [AI Generative Panel](#ai-generative-panel)
+- [Media Generator Tray](#media-generator-tray)
 - [AI Segmentation and MatAnyone2](#ai-segmentation-and-matanyone2)
 - [AI Editor Tools](#ai-editor-tools)
 - [AI Visual Feedback System](#ai-visual-feedback-system)
@@ -122,50 +122,42 @@ That console surface is dev-only. The Vite dev bridge and the Native Helper HTTP
 
 ---
 
-## AI Generative Panel
+## Media Generator Tray
 
 ### Location
-- Tab next to AI Chat in dock panels
-- View menu -> AI Generative
+- Bottom-right **Generate** tray inside the Media Panel
+- Board view toolbar -> Generate
 
-### Panel Tabs
-- **AI Generative**: Generation interface
-- **History**: List of generated videos
+The old dock-level AI Generative tab is deprecated and removed from default and saved layouts. Generation is now launched from Media so generated results land directly beside imported assets.
 
-### Board Mode
-- Board workspace for arranging video, image, and audio generation prompts, reference frames, and generated results on a canvas
-- Right-click empty space to create a draft or add the current preview frame as a reference node
-- Left-drag pans the canvas everywhere, including over nodes
-- Right-drag node moves with smooth edge auto-pan
-- Right-drag empty canvas starts a marquee selection, and right-dragging a selected node moves the whole selection
-- Double-click a node to center and fit it with padding
-- Active IN / OUT / REF assignments appear as removable color badges around the prompt box
-- Hovering a prompt-box badge strongly emphasizes the linked board node for as long as the badge is hovered
-- Nano Banana 2 accepts up to 14 ordered reference images; the composer labels them as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
-- IN / OUT / REF outlines scale with zoom and use a stronger glow so references stay readable while navigating the board
+### FlashBoard Prompt Mode
+- Compact prompt composer for video, image, and audio generation
+- Active IN / OUT / REF assignments appear as removable media cards around the prompt box
+- Media Panel image, video, and audio files can be referenced by right-clicking them or dragging them onto the expanded prompt composer
+- Nano Banana 2 accepts up to 14 ordered reference images; Kie.ai Seedance 2.0 accepts multimodal image/video/audio references and sends audio references as `reference_audio_urls` for lip-sync / performance timing; the composer labels generic references as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
+- Seedance 2.0 cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present
+- Queued and running generations appear as Media Panel preview cards with output type, status, elapsed timer, prompt, metadata, and progress when the provider reports it
+- The tray reuses the FlashBoard queue/import runtime without showing the full node canvas
 
 ### Current Backends
 
-The current AI Generative stack is no longer best described as "PiAPI as one unified gateway". The active UI routes are:
+The current generator stack is no longer best described as "PiAPI as one unified gateway". The active UI routes are:
 
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
-| `Kie.ai` | Classic generator and FlashBoard | Current provider list comes from `getKieAiProviders()`; user-supplied key in Settings |
-| `MasterSelects Cloud` | Classic generator and FlashBoard when hosted access is available | Hosted credits/account flow; board mode resolves to hosted Kling when no local Kie key is present; FlashBoard can also use hosted ElevenLabs speech via `/api/ai/audio` |
+| `Kie.ai` | FlashBoard | Current provider list comes from `getKieAiProviders()`; user-supplied key in Settings |
+| `MasterSelects Cloud` | FlashBoard when hosted access is available | Hosted credits/account flow; the tray resolves to hosted Kling when no local Kie key is present; FlashBoard can also use hosted ElevenLabs speech via `/api/ai/audio` |
 | `ElevenLabs` | FlashBoard audio generation | User-supplied key in Settings; text-to-speech output imports as durable audio media |
 | `Suno` | FlashBoard music generation | Uses Kie.ai's Suno API with the user-supplied Kie.ai key; generated music imports as durable audio media |
 | `PiAPI` | Legacy compatibility and some catalog/pricing metadata | Still present in older history/key migration paths and FlashBoard pricing/catalog helpers, but not the primary runtime path the current panel describes |
 
 The practical rule for the current branch is:
-- Classic mode uses Kie.ai or hosted cloud, depending on available credentials.
-- Board mode can select Kie.ai, hosted cloud, hosted ElevenLabs speech, BYO ElevenLabs, and Suno music from the same FlashBoard composer.
-- ElevenLabs-only access opens the board on the audio text-to-speech target.
-- Service/provider labels in the panel reflect that active backend instead of a permanent PiAPI abstraction layer.
+- The Media generator tray can select Kie.ai, hosted cloud, hosted ElevenLabs speech, BYO ElevenLabs, and Suno music from the compact FlashBoard composer.
+- ElevenLabs-only access opens the composer on the audio text-to-speech target.
+- Service/provider labels in the tray reflect that active backend instead of a permanent PiAPI abstraction layer.
 - BYO ElevenLabs keys are stored through the same encrypted local API-key path as the other provider keys and are not persisted in Zustand localStorage. Hosted ElevenLabs uses the Cloudflare `ELEVENLABS_API_KEY` secret and charges logged-in users by hosted credits.
 
 ### Timeline Integration
-- Add to Timeline is enabled by default
-- Classic generated clips auto-import to the `AI Video` folder
 - FlashBoard generated media imports under `AI Gen / Video`, `AI Gen / Images`, or `AI Gen / Audio`
 - Video/image clips are placed on video tracks; generated ElevenLabs speech and Suno music behave like normal imported audio and route to an audio track
 
@@ -183,7 +175,7 @@ The panel combines two different mask sources:
 SAM 2 inference runs locally in the browser using ONNX Runtime with WebGPU acceleration. No API keys or cloud services are involved.
 
 ### Location
-- Tab in dock panels alongside AI Chat and AI Generative
+- Tab in dock panels alongside AI Chat and Scene Description
 - View menu -> AI Segment
 
 ### One-Time Model Download

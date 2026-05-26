@@ -36,6 +36,7 @@ export interface WaveformLodResult {
 
 export interface BuildWaveformLodInput {
   waveform?: readonly number[];
+  waveformChannels?: readonly (readonly number[])[];
   pyramid?: TimelineWaveformPyramid | null;
   width: number;
   inPoint: number;
@@ -314,7 +315,11 @@ export function buildWaveformLod(input: BuildWaveformLodInput): WaveformLodResul
     if (pyramidResult) return pyramidResult;
   }
 
-  return buildLegacyColumns(input.waveform ?? [], width, pixelsPerSecond, range);
+  const legacyWaveform = input.channelIndex !== undefined
+    ? input.waveformChannels?.[input.channelIndex] ?? input.waveform
+    : input.waveform;
+
+  return buildLegacyColumns(legacyWaveform ?? [], width, pixelsPerSecond, range);
 }
 
 export function smoothWaveformColumns(

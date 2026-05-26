@@ -5,6 +5,7 @@ import { useEffect, useCallback } from 'react';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore';
+import type { GenerateClipAudioAnalysisOptions } from '../../stores/timeline/types';
 import type { ContextMenuState } from './types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -30,7 +31,7 @@ interface TimelineContextMenuProps {
   splitClipAtPlayhead: () => void;
   toggleClipReverse: (clipId: string) => void;
   unlinkGroup: (clipId: string) => void;
-  generateWaveformForClip: (clipId: string) => void;
+  generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
   convertSolidToMotionShape: (clipId: string) => string | null;
   createSubcompositionFromSelection: (clipId: string) => void;
   copyClipEffects: (clipId: string) => void;
@@ -442,7 +443,7 @@ export function TimelineContextMenu({
             className={`context-menu-item ${clip?.waveformGenerating ? 'disabled' : ''}`}
             onClick={() => {
               if (contextMenu.clipId && !clip?.waveformGenerating) {
-                generateWaveformForClip(contextMenu.clipId);
+                generateWaveformForClip(contextMenu.clipId, { previewOnly: true });
               }
               setContextMenu(null);
             }}

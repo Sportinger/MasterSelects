@@ -654,6 +654,7 @@ function convertProjectCompositionToStore(
         linkedGroupId: c.linkedGroupId,
         audioState: c.audioState ? structuredClone(c.audioState) : undefined,
         waveform: c.waveform,
+        waveformChannels: c.waveformChannels,
         modelSequence: c.modelSequence,
         gaussianSplatSequence: c.gaussianSplatSequence,
         threeDEffectorsEnabled: c.threeDEffectorsEnabled,

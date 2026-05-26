@@ -142,6 +142,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         // Visual data - reuse existing thumbnails and waveforms
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
         waveform: clip.waveform ? [...clip.waveform] : undefined,
+        waveformChannels: clip.waveformChannels?.map(channel => [...channel]),
         isComposition: clip.isComposition,
         compositionId: clip.compositionId,
         is3D: clip.is3D,
@@ -327,6 +328,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         // Reuse existing thumbnails and waveforms from copied clip
         thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
         waveform: clipData.waveform ? [...clipData.waveform] : undefined,
+        waveformChannels: clipData.waveformChannels?.map(channel => [...channel]),
         isComposition: clipData.isComposition,
         compositionId: clipData.compositionId,
         is3D: clipData.is3D,

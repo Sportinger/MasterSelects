@@ -2,7 +2,7 @@ import { Logger } from '../logger';
 import { piApiService } from '../piApiService';
 import { kieAiService } from '../kieAiService';
 import { cloudAiService } from '../cloudAiService';
-import type { TextToVideoParams, ImageToVideoParams } from '../piApiService';
+import type { TextToVideoParams, ImageToVideoParams, GenerationReferenceMedia } from '../piApiService';
 import type { FlashBoardGenerationRequest, FlashBoardMediaType } from '../../stores/flashboardStore/types';
 import type { SubmitNodeJobInput, SubmitNodeJobResult } from './types';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -28,6 +28,21 @@ function sanitizeForFilename(value: string, maxLen = 32): string {
     .slice(0, maxLen)
     .replace(/_$/, '')
     .toLowerCase() || 'untitled';
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to read media as data URL'));
+      }
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read media'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 interface QueueEntry {
@@ -127,6 +142,19 @@ class FlashBoardJobService {
     }
   }
 
+  private async normalizeImageSourceForUpload(url: string): Promise<string> {
+    if (url.startsWith('data:') || /^https?:\/\//i.test(url)) {
+      return url;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to read reference image: ${response.status}`);
+    }
+
+    return blobToDataUrl(await response.blob());
+  }
+
   private async resolveReferenceImage(mediaFileId: string | undefined): Promise<string | undefined> {
     if (!mediaFileId) {
       return undefined;
@@ -139,12 +167,16 @@ class FlashBoardJobService {
     }
 
     if (mediaFile.type === 'image') {
-      return mediaFile.url;
+      if (mediaFile.file) {
+        return blobToDataUrl(mediaFile.file);
+      }
+
+      return this.normalizeImageSourceForUpload(mediaFile.url);
     }
 
     if (mediaFile.type === 'video') {
       if (mediaFile.thumbnailUrl) {
-        return mediaFile.thumbnailUrl;
+        return this.normalizeImageSourceForUpload(mediaFile.thumbnailUrl);
       }
 
       if (mediaFile.file) {
@@ -155,14 +187,40 @@ class FlashBoardJobService {
               file.id === mediaFile.id ? { ...file, thumbnailUrl } : file
             )),
           }));
-          return thumbnailUrl;
+          return this.normalizeImageSourceForUpload(thumbnailUrl);
         }
       }
 
       throw new Error('Reference video has no preview frame available');
     }
 
-    throw new Error('Reference media must be an image or video');
+    throw new Error('Image generation can only use image references or video preview frames');
+  }
+
+  private resolveReferenceMedia(mediaFileId: string): GenerationReferenceMedia {
+    const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+
+    if (!mediaFile) {
+      throw new Error('Reference media not found');
+    }
+
+    if (mediaFile.type !== 'image' && mediaFile.type !== 'video' && mediaFile.type !== 'audio') {
+      throw new Error('Reference media must be an image, video, or audio file');
+    }
+
+    const source = mediaFile.file ?? mediaFile.url;
+    if (!source) {
+      throw new Error('Reference media has no readable file source');
+    }
+
+    return {
+      id: mediaFile.id,
+      mediaType: mediaFile.type,
+      source,
+      fileName: mediaFile.file?.name ?? mediaFile.name,
+      label: mediaFile.name,
+      mimeType: mediaFile.file?.type,
+    };
   }
 
   private async startJob(entry: QueueEntry): Promise<void> {
@@ -317,8 +375,12 @@ class FlashBoardJobService {
         const effectiveReferenceMediaFileIds = typeof catalogEntry?.maxReferenceImages === 'number'
           ? (request.referenceMediaFileIds ?? []).slice(0, catalogEntry.maxReferenceImages)
           : (request.referenceMediaFileIds ?? []);
+        const visualReferenceMediaFileIds = effectiveReferenceMediaFileIds.filter((mediaFileId) => {
+          const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+          return mediaFile?.type === 'image' || mediaFile?.type === 'video';
+        });
         const referenceImageInputs = (await Promise.all(
-          effectiveReferenceMediaFileIds.map((mediaFileId) => this.resolveReferenceImage(mediaFileId))
+          visualReferenceMediaFileIds.map((mediaFileId) => this.resolveReferenceImage(mediaFileId))
         )).filter((imageUrl): imageUrl is string => Boolean(imageUrl));
 
         const remoteTaskId = request.service === 'cloud'
@@ -386,6 +448,13 @@ class FlashBoardJobService {
 
       const hasStartImage = !!request.startMediaFileId;
       const isTextToVideo = !hasStartImage;
+      const videoCatalogEntry = getCatalogEntry(request.service, request.providerId);
+      const effectiveVideoReferenceMediaFileIds = typeof videoCatalogEntry?.maxReferenceMedia === 'number'
+        ? (request.referenceMediaFileIds ?? []).slice(0, videoCatalogEntry.maxReferenceMedia)
+        : (request.referenceMediaFileIds ?? []);
+      const referenceMedia = request.service === 'kieai'
+        ? effectiveVideoReferenceMediaFileIds.map((mediaFileId) => this.resolveReferenceMedia(mediaFileId))
+        : undefined;
 
       let remoteTaskId: string;
 
@@ -401,6 +470,7 @@ class FlashBoardJobService {
           sound: request.multiShots ? true : request.generateAudio,
           multiShots: request.multiShots,
           multiPrompt: request.multiPrompt,
+          referenceMedia,
         };
 
         if (request.service === 'piapi') {
@@ -426,6 +496,7 @@ class FlashBoardJobService {
           multiPrompt: request.multiPrompt,
           startImageUrl,
           endImageUrl: request.multiShots ? undefined : endImageUrl,
+          referenceMedia,
         };
 
         if (request.service === 'piapi') {

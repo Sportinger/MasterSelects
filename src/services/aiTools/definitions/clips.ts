@@ -7,7 +7,7 @@ export const clipToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'getClipDetails',
-      description: 'Get detailed information about a specific clip including its analysis data, transcript, effects, and transform properties.',
+      description: 'Get detailed information about a specific clip including analysis data, waveform status, transcript, effects, and transform properties.',
       parameters: {
         type: 'object',
         properties: {

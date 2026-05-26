@@ -298,16 +298,19 @@ class FlashBoardMediaBridge {
   startDragToTimeline(event: DragEvent, mediaFileId: string): void {
     if (!event.dataTransfer) return;
 
+    event.dataTransfer.setData('application/x-media-file-id', mediaFileId);
+
     const mediaFile = useMediaStore.getState().files.find(f => f.id === mediaFileId);
-    if (!mediaFile || !mediaFile.file || mediaFile.isImporting) {
+    if (!mediaFile || mediaFile.isImporting) {
       log.warn('Cannot start drag — media file not ready:', mediaFileId);
       return;
     }
 
     // Set the ExternalDragPayload so the timeline drop handler can resolve it
     const isAudioOnly =
-      mediaFile.file.type.startsWith('audio/') ||
-      /\.(mp3|wav|ogg|aac|m4a|flac|wma|aiff|alac|opus)$/i.test(mediaFile.file.name);
+      mediaFile.type === 'audio' ||
+      mediaFile.file?.type.startsWith('audio/') ||
+      /\.(mp3|wav|ogg|aac|m4a|flac|wma|aiff|alac|opus)$/i.test(mediaFile.file?.name ?? mediaFile.name);
 
     setExternalDragPayload({
       kind: 'media-file',
@@ -319,8 +322,6 @@ class FlashBoardMediaBridge {
       file: mediaFile.file,
     });
 
-    // Set the standard drag data type
-    event.dataTransfer.setData('application/x-media-file-id', mediaFileId);
     if (isAudioOnly) {
       event.dataTransfer.setData('application/x-media-is-audio', 'true');
     }

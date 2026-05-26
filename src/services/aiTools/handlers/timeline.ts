@@ -10,7 +10,18 @@ export async function handleGetTimelineState(
   _args: Record<string, unknown>,
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
-  const { tracks, clips, playheadPosition, duration, inPoint, outPoint, zoom, selectedClipIds } = timelineStore;
+  const {
+    tracks,
+    clips,
+    playheadPosition,
+    duration,
+    inPoint,
+    outPoint,
+    zoom,
+    selectedClipIds,
+    waveformsEnabled,
+    audioDisplayMode,
+  } = timelineStore;
 
   const videoTracks = tracks.filter(t => t.type === 'video').map(t => formatTrackInfo(t, clips));
   const audioTracks = tracks.filter(t => t.type === 'audio').map(t => formatTrackInfo(t, clips));
@@ -42,6 +53,8 @@ export async function handleGetTimelineState(
       inPoint,
       outPoint,
       zoom,
+      waveformsEnabled,
+      audioDisplayMode,
       totalClips: clips.length,
       // Selected clips info
       selectedClipIds: selectedClipIdsArray,

@@ -456,6 +456,7 @@ export interface AddClipOptions {
 
 export interface GenerateClipAudioAnalysisOptions {
   force?: boolean;
+  previewOnly?: boolean;
 }
 
 // Core clip actions (remain in clipSlice)
@@ -790,6 +791,7 @@ export interface ClipboardClipData {
   // Visual data (thumbnails, waveforms)
   thumbnails?: string[];
   waveform?: number[];
+  waveformChannels?: number[][];
   // Composition clips
   isComposition?: boolean;
   compositionId?: string;

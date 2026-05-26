@@ -135,6 +135,24 @@ describe('buildWaveformLod', () => {
     expect(result?.columns.map((column) => column.peak)).toEqual([0.5, 1]);
   });
 
+  it('uses per-channel legacy thumbnail data when a channel is requested', () => {
+    const result = buildWaveformLod({
+      waveform: [1, 1, 1, 1],
+      waveformChannels: [
+        [0, 0.25, 0.5, 0.25],
+        [0.75, 0.5, 0.25, 0],
+      ],
+      channelIndex: 1,
+      width: 2,
+      inPoint: 0,
+      outPoint: 1,
+      naturalDuration: 1,
+    });
+
+    expect(result?.source).toBe('legacy-aggregate');
+    expect(result?.columns.map((column) => column.peak)).toEqual([0.75, 0.25]);
+  });
+
   it('smooths legacy columns without changing their count', () => {
     const columns = [
       { min: 0, max: 0, rms: 0, peak: 0 },

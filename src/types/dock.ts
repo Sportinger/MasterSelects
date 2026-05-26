@@ -16,8 +16,11 @@ export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogra
 // WIP panel types — shown grayed out with bug icon in View menu
 export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions'];
 
+// Deprecated panel types stay in the union only so persisted layouts can be migrated away.
+export const DEPRECATED_PANEL_TYPES: PanelType[] = ['ai-video'];
+
 // AI panel types for View menu grouping
-export const AI_PANEL_TYPES: PanelType[] = ['ai-chat', 'ai-video', 'ai-segment', 'scene-description'];
+export const AI_PANEL_TYPES: PanelType[] = ['ai-chat', 'ai-segment', 'scene-description'];
 
 export type PreviewPanelSource =
   | RenderSourceActiveComp

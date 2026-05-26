@@ -210,6 +210,7 @@ export interface TextToVideoParams {
   sound?: boolean;
   multiShots?: boolean;
   multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
+  referenceMedia?: GenerationReferenceMedia[];
 }
 
 export interface ImageToVideoParams {
@@ -226,6 +227,7 @@ export interface ImageToVideoParams {
   sound?: boolean;
   multiShots?: boolean;
   multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
+  referenceMedia?: GenerationReferenceMedia[];
 }
 
 export interface AccountInfo {
@@ -233,6 +235,17 @@ export interface AccountInfo {
   accountId: string;
   credits: number;
   creditsUsd: number;
+}
+
+export type GenerationReferenceMediaType = 'image' | 'video' | 'audio';
+
+export interface GenerationReferenceMedia {
+  id?: string;
+  mediaType: GenerationReferenceMediaType;
+  source: Blob | string;
+  fileName?: string;
+  label?: string;
+  mimeType?: string;
 }
 
 interface PiApiResponse {

@@ -16,7 +16,7 @@ import type {
   HoveredDockTabTarget,
   SavedDockLayout,
 } from '../types/dock';
-import { PANEL_CONFIGS } from '../types/dock';
+import { DEPRECATED_PANEL_TYPES, PANEL_CONFIGS } from '../types/dock';
 import {
   removePanel,
   insertPanelAtTarget,
@@ -31,7 +31,10 @@ const log = Logger.create('DockStore');
 const LEGACY_DEFAULT_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default';
 
 // Valid panel types (used to filter out removed panels from saved layouts)
-const VALID_PANEL_TYPES = new Set(Object.keys(PANEL_CONFIGS));
+const DEPRECATED_PANEL_TYPE_SET = new Set<PanelType>(DEPRECATED_PANEL_TYPES);
+const VALID_PANEL_TYPES = new Set(
+  (Object.keys(PANEL_CONFIGS) as PanelType[]).filter((type) => !DEPRECATED_PANEL_TYPE_SET.has(type)),
+);
 const LEGACY_PANEL_TYPE_ALIASES: Partial<Record<PanelType, PanelType>> = {
   youtube: 'download',
 };
@@ -193,7 +196,7 @@ function areDockLayoutsEqual(left: DockLayout, right: DockLayout): boolean {
 }
 
 // Default layout configuration
-// 3-column layout: Media/AI left, Preview center, Properties/Scopes right
+// 3-column layout: Media/AI Chat left, Preview center, Properties/Scopes right
 // Timeline at bottom
 const DEFAULT_LAYOUT: DockLayout = {
   root: {
@@ -214,7 +217,6 @@ const DEFAULT_LAYOUT: DockLayout = {
             panels: [
               { id: 'media', type: 'media', title: 'Media' },
               { id: 'ai-chat', type: 'ai-chat', title: 'AI Chat' },
-              { id: 'ai-video', type: 'ai-video', title: 'AI Generative' },
               { id: 'download', type: 'download', title: 'Downloads' },
             ],
             activeIndex: 0, // Media active
@@ -623,7 +625,7 @@ export const useDockStore = create<DockState>()(
           // Also check floating panels
           layout.floatingPanels.forEach((f) => {
             const normalizedType = resolvePanelType(f.panel.type);
-            if (!types.includes(normalizedType)) {
+            if (VALID_PANEL_TYPES.has(normalizedType) && !types.includes(normalizedType)) {
               types.push(normalizedType);
             }
           });
@@ -645,6 +647,7 @@ export const useDockStore = create<DockState>()(
 
         showPanelType: (type) => {
           const resolvedType = resolvePanelType(type);
+          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
           const { layout, isPanelTypeVisible } = get();
           if (isPanelTypeVisible(resolvedType)) return; // Already visible
 
@@ -711,6 +714,7 @@ export const useDockStore = create<DockState>()(
 
         activatePanelType: (type) => {
           const resolvedType = resolvePanelType(type);
+          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
           const { layout, setActiveTab, showPanelType, isPanelTypeVisible, bringToFront } = get();
 
           // First make sure the panel is visible
@@ -1002,7 +1006,7 @@ function collectPanelTypes(node: DockNode, types: PanelType[]): void {
   if (node.kind === 'tab-group') {
     node.panels.forEach((p) => {
       const normalizedType = resolvePanelType(p.type);
-      if (!types.includes(normalizedType)) {
+      if (VALID_PANEL_TYPES.has(normalizedType) && !types.includes(normalizedType)) {
         types.push(normalizedType);
       }
     });

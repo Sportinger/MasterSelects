@@ -296,6 +296,16 @@ export async function handleGetClipDetails(
           }
         : null,
       isLoading: clip.isLoading ?? false,
+      hasFile: clip.file instanceof File,
+      waveform: {
+        generating: clip.waveformGenerating === true,
+        progress: clip.waveformProgress ?? null,
+        sampleCount: clip.waveform?.length ?? 0,
+        channelCount: clip.waveformChannels?.length ?? null,
+        hasSourcePyramid: Boolean(clip.audioState?.sourceAnalysisRefs?.waveformPyramidId),
+        hasProcessedPyramid: Boolean(clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId),
+        audioAnalysisJob: clip.audioAnalysisJob ?? null,
+      },
       gaussianSceneKey,
       gaussianSceneLoaded,
       renderDiagnostics,

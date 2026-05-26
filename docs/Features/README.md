@@ -22,7 +22,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | **Timeline Editing** | Multi-track editing, nested compositions, markers, shortcuts, and keyframes |
 | **Node Workspace** | Dockable selected-clip processing graph derived from live timeline state |
 | **AI Control** | OpenAI/Cloud or local Lemonade chat with 79 exported tools plus local/native bridge access for external agents |
-| **AI Generative Workspace** | Classic video generation plus FlashBoard video/image/audio generation and media import |
+| **Media Generator Tray** | FlashBoard video/image/audio generation embedded in the Media Panel with queue previews and media import |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, and splat effectors |
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
 | **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, mixer, recording, and export parity |
