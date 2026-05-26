@@ -235,6 +235,7 @@ export interface TimelineState {
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
   audioDisplayMode: TimelineAudioDisplayMode;
+  audioLayerAdvancedMode: boolean;
   audioFocusMode: boolean;
   trackFocusMode: TimelineTrackFocusMode;
   audioRegionSelection: TimelineAudioRegionSelection | null;
@@ -531,6 +532,8 @@ export interface PlaybackActions {
   setThumbnailsEnabled: (enabled: boolean) => void;
   setWaveformsEnabled: (enabled: boolean) => void;
   setAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
+  setAudioLayerAdvancedMode: (enabled: boolean) => void;
+  toggleAudioLayerAdvancedMode: () => void;
   setAudioFocusMode: (enabled: boolean) => void;
   toggleAudioFocusMode: () => void;
   setTrackFocusMode: (mode: TimelineTrackFocusMode) => void;

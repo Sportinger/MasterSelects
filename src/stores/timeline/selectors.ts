@@ -97,6 +97,7 @@ export const selectUISettings = (state: TimelineStore) => ({
   thumbnailsEnabled: state.thumbnailsEnabled,
   waveformsEnabled: state.waveformsEnabled,
   audioDisplayMode: state.audioDisplayMode,
+  audioLayerAdvancedMode: state.audioLayerAdvancedMode,
   audioFocusMode: state.audioFocusMode,
   trackFocusMode: state.trackFocusMode,
 });

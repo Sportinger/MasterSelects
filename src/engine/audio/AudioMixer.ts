@@ -24,6 +24,7 @@ export interface AudioTrackData {
   clipId: string;
   buffer: AudioBuffer;      // Already processed (speed, effects)
   startTime: number;        // Position on timeline (seconds)
+  sourceOffsetTime?: number; // Offset into buffer for exports that begin inside a clip
   trackId: string;
   trackMuted: boolean;
   trackSolo: boolean;
@@ -227,11 +228,22 @@ export class AudioMixer {
 
     outputNode.connect(context.destination);
 
-    // Start at the correct timeline position
+    // Start at the correct timeline position and source offset. When an export
+    // begins mid-clip, startTime is clamped to 0 while sourceOffsetTime skips
+    // the already elapsed part of the rendered clip buffer.
     const startTime = Math.max(0, track.startTime);
-    source.start(startTime);
+    const sourceOffsetTime = Math.max(
+      0,
+      finiteNumber(track.sourceOffsetTime, track.startTime < 0 ? -track.startTime : 0)
+    );
+    if (sourceOffsetTime >= buffer.duration) {
+      log.debug(`Skipping clip ${track.clipId}: source offset ${sourceOffsetTime.toFixed(2)}s exceeds buffer duration ${buffer.duration.toFixed(2)}s`);
+      return;
+    }
+    source.start(startTime, sourceOffsetTime);
 
     log.debug(`Added clip ${track.clipId} at ${startTime.toFixed(2)}s (${buffer.duration.toFixed(2)}s)`, {
+      sourceOffsetTime,
       trackVolumeDb: track.trackVolumeDb ?? 0,
       trackPan: pan,
     });

@@ -28,16 +28,18 @@ describe('timeline audio layout', () => {
     expect(getTimelineTrackBaseHeight(track('audio', 24), 'compact')).toBe(24);
   });
 
-  it('derives larger timeline-first audio editor lanes without rewriting persisted heights', () => {
+  it('keeps normal audio lanes at the persisted user track height', () => {
     const audioTrack = track('audio', 40);
 
-    expect(getTimelineTrackBaseHeight(audioTrack, 'detailed')).toBe(72);
-    expect(getTimelineTrackBaseHeight(audioTrack, 'spectral')).toBe(128);
+    expect(getTimelineTrackBaseHeight(audioTrack, 'detailed')).toBe(40);
+    expect(getTimelineTrackBaseHeight(audioTrack, 'spectral')).toBe(40);
     expect(audioTrack.height).toBe(40);
   });
 
-  it('respects user-resized audio tracks when they are taller than the mode minimum', () => {
+  it('respects user-resized audio tracks in normal audio modes', () => {
+    expect(getTimelineTrackBaseHeight(track('audio', 24), 'detailed')).toBe(24);
     expect(getTimelineTrackBaseHeight(track('audio', 96), 'detailed')).toBe(96);
+    expect(getTimelineTrackBaseHeight(track('audio', 24), 'spectral')).toBe(24);
     expect(getTimelineTrackBaseHeight(track('audio', 160), 'spectral')).toBe(160);
   });
 
@@ -52,16 +54,17 @@ describe('timeline audio layout', () => {
 
   it('keeps audio lane sizing stable when persisted heights are invalid', () => {
     expect(getTimelineTrackBaseHeight(track('audio', Number.NaN), 'compact')).toBe(0);
-    expect(getTimelineTrackBaseHeight(track('audio', Number.NaN), 'detailed')).toBe(72);
-    expect(getTimelineTrackBaseHeight(track('audio', -24), 'spectral')).toBe(128);
+    expect(getTimelineTrackBaseHeight(track('audio', Number.NaN), 'detailed')).toBe(0);
+    expect(getTimelineTrackBaseHeight(track('audio', -24), 'spectral')).toBe(0);
   });
 
   it('selects stable audio track header densities for compact and editor-height lanes', () => {
     expect(getAudioTrackHeaderDensity(Number.NaN)).toBe('condensed');
     expect(getAudioTrackHeaderDensity(24)).toBe('condensed');
     expect(getAudioTrackHeaderDensity(40)).toBe('compact');
-    expect(getAudioTrackHeaderDensity(71)).toBe('compact');
-    expect(getAudioTrackHeaderDensity(72)).toBe('full');
+    expect(getAudioTrackHeaderDensity(72)).toBe('compact');
+    expect(getAudioTrackHeaderDensity(95)).toBe('compact');
+    expect(getAudioTrackHeaderDensity(96)).toBe('full');
     expect(getAudioTrackHeaderDensity(144)).toBe('full');
   });
 

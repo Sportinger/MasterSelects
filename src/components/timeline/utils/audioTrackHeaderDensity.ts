@@ -1,10 +1,10 @@
 export type AudioTrackHeaderDensity = 'full' | 'compact' | 'condensed';
 
 export function getAudioTrackHeaderDensity(baseHeight: number): AudioTrackHeaderDensity {
-  if (!Number.isFinite(baseHeight) || baseHeight < 36) {
+  if (!Number.isFinite(baseHeight) || baseHeight < 32) {
     return 'condensed';
   }
-  if (baseHeight < 72) {
+  if (baseHeight < 96) {
     return 'compact';
   }
   return 'full';

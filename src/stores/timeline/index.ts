@@ -197,6 +197,7 @@ export const useTimelineStore = create<TimelineStore>()(
       thumbnailsEnabled: true,
       waveformsEnabled: true,
       audioDisplayMode: 'detailed' as const,
+      audioLayerAdvancedMode: true,
       audioFocusMode: false,
       trackFocusMode: 'balanced' as const,
       audioRegionSelection: null,

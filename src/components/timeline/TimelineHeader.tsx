@@ -1,6 +1,6 @@
 // TimelineHeader component - Track headers (left side)
 
-import { memo, type MouseEvent as ReactMouseEvent, useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { TimelineHeaderProps } from './types';
 import type { AnimatableProperty, AudioEffectParamValue, AudioSendState, ClipMask, ClipTransform, ColorCorrectionState, Keyframe, TimelineClip } from '../../types';
 import {
@@ -1233,6 +1233,7 @@ function TimelineHeaderComponent({
   onToggleCurveExpanded,
   hoveredKeyframeRow,
   onKeyframeRowHover,
+  audioLayerAdvancedMode = true,
   showCollapsedAudioSummaryMeter = false,
 }: TimelineHeaderProps) {
   // Get the first selected clip in this track
@@ -1248,13 +1249,33 @@ function TimelineHeaderComponent({
   const trackPan = track.audioState?.pan ?? 0;
   const trackVolumeLabel = formatAudioTrackVolumeDb(trackVolumeDb);
   const trackPanLabel = formatAudioTrackPan(trackPan);
+  const trackVolumeUnit = Math.max(0, Math.min(1, (trackVolumeDb + 60) / 78));
   const audioHeaderDensity = track.type === 'audio'
     ? getAudioTrackHeaderDensity(baseHeight)
     : null;
-  const audioMeter = useTimelineStore(state => track.type === 'audio'
+  const isAudioTrack = track.type === 'audio';
+  const showAudioSummaryMeter = isAudioTrack && audioLayerAdvancedMode && showCollapsedAudioSummaryMeter;
+  const showAdvancedAudioControls = isAudioTrack && audioLayerAdvancedMode && !showCollapsedAudioSummaryMeter;
+  const audioHeaderControlScale = showAdvancedAudioControls && audioHeaderDensity === 'full'
+    ? Math.max(0.78, Math.min(1, baseHeight / 96))
+    : 1;
+  const audioHeaderFaderScale = showAdvancedAudioControls && audioHeaderDensity !== 'condensed'
+    ? Math.max(0, Math.min(1, baseHeight / 96))
+    : 1;
+  const trackHeaderStyle = {
+    height: dynamicHeight,
+    ...(isAudioTrack ? {
+      '--audio-strip-control-scale': audioHeaderControlScale.toFixed(3),
+      '--audio-strip-fader-scale': audioHeaderFaderScale.toFixed(3),
+    } : {}),
+  } as CSSProperties & {
+    '--audio-strip-control-scale'?: string;
+    '--audio-strip-fader-scale'?: string;
+  };
+  const audioMeter = useTimelineStore(state => showAdvancedAudioControls
     ? state.runtimeAudioMeters.trackMeters[track.id]
     : undefined);
-  const collapsedAudioSummaryMeter = useTimelineStore(state => showCollapsedAudioSummaryMeter
+  const collapsedAudioSummaryMeter = useTimelineStore(state => showAudioSummaryMeter
     ? state.runtimeAudioMeters.master
     : undefined);
   const [audioFxOpen, setAudioFxOpen] = useState(false);
@@ -1373,10 +1394,12 @@ function TimelineHeaderComponent({
         isExpanded ? 'expanded' : ''
       } ${track.locked ? 'locked' : ''} ${
         audioHeaderDensity ? `audio-strip-${audioHeaderDensity}` : ''
-      } ${audioFxOpen || audioSendsOpen ? 'popover-open' : ''} ${
-        showCollapsedAudioSummaryMeter ? 'audio-summary-meter-visible' : ''
+      } ${isAudioTrack ? (audioLayerAdvancedMode ? 'audio-layer-advanced' : 'audio-layer-basic') : ''} ${
+        showAdvancedAudioControls && (audioFxOpen || audioSendsOpen) ? 'popover-open' : ''
+      } ${
+        showAudioSummaryMeter ? 'audio-summary-meter-visible' : ''
       }`}
-      style={{ height: dynamicHeight }}
+      style={trackHeaderStyle}
       onWheel={onWheel}
       onContextMenu={onContextMenu}
     >
@@ -1385,7 +1408,7 @@ function TimelineHeaderComponent({
         style={{ height: baseHeight, cursor: (track.type === 'video' || track.type === 'audio') ? 'pointer' : 'default' }}
         onClick={handleHeaderClick}
       >
-        {showCollapsedAudioSummaryMeter && (
+        {showAudioSummaryMeter && (
           <AudioLevelMeter
             meter={collapsedAudioSummaryMeter}
             label="Summed audio level"
@@ -1437,7 +1460,7 @@ function TimelineHeaderComponent({
               )}
             </>
           )}
-          {track.type === 'audio' && (
+          {showAdvancedAudioControls && (
             <div
               className="audio-track-pan-row"
               onClick={(event) => event.stopPropagation()}
@@ -1464,7 +1487,7 @@ function TimelineHeaderComponent({
         </div>
         <div className={`track-controls ${track.type === 'audio' ? 'audio-strip-controls' : ''}`}>
           {track.type === 'audio' ? (
-            showCollapsedAudioSummaryMeter ? (
+            showAudioSummaryMeter ? (
               <>
                 <button
                   className={`btn-icon ${effectiveMuted ? 'muted' : ''}`}
@@ -1504,7 +1527,7 @@ function TimelineHeaderComponent({
                   <span className="audio-button-label-short">A</span>
                 </button>
               </>
-            ) : (
+            ) : showAdvancedAudioControls ? (
               <>
                 <button
                   className={`btn-icon ${effectiveSolo ? 'solo-active' : ''}`}
@@ -1571,6 +1594,30 @@ function TimelineHeaderComponent({
                   FX
                 </button>
               </>
+            ) : (
+              <>
+                <button
+                  className={`btn-icon ${effectiveSolo ? 'solo-active' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); onToggleSolo(); }}
+                  title={effectiveSolo ? 'Solo On' : 'Solo Off'}
+                >
+                  S
+                </button>
+                <button
+                  className={`btn-icon ${effectiveMuted ? 'muted' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); onToggleMuted(); }}
+                  title={effectiveMuted ? 'Unmute' : 'Mute'}
+                >
+                  M
+                </button>
+                <button
+                  className={`btn-icon ${track.locked ? 'locked-active' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); onToggleLocked?.(); }}
+                  title={track.locked ? 'Unlock Track' : 'Lock Track'}
+                >
+                  <TrackHeaderIcon name={track.locked ? 'lock' : 'unlock'} />
+                </button>
+              </>
             )
           ) : (
             <>
@@ -1598,7 +1645,7 @@ function TimelineHeaderComponent({
             </>
           )}
         </div>
-        {track.type === 'audio' && (
+        {showAdvancedAudioControls && (
           <div
             className="audio-track-faders"
             onClick={(event) => event.stopPropagation()}
@@ -1611,23 +1658,32 @@ function TimelineHeaderComponent({
               display="auto"
             />
             <div className="audio-track-fader-column">
-              <input
-                className="audio-track-fader"
-                type="range"
-                min="-60"
-                max="18"
-                step="0.5"
-                value={trackVolumeDb}
-                aria-label={`${track.name} volume`}
-                title={`Volume ${trackVolumeLabel} dB. Double-click to reset.`}
-                onChange={handleTrackVolumeChange}
-                onDoubleClick={handleTrackVolumeReset}
-              />
+              <div
+                className="audio-track-fader-control"
+                style={{ '--audio-track-volume-unit': trackVolumeUnit.toFixed(4) } as CSSProperties & { '--audio-track-volume-unit': string }}
+              >
+                <div className="audio-track-fader-rail" aria-hidden="true">
+                  <div className="audio-track-fader-fill" />
+                  <div className="audio-track-fader-thumb" />
+                </div>
+                <input
+                  className="audio-track-fader"
+                  type="range"
+                  min="-60"
+                  max="18"
+                  step="0.5"
+                  value={trackVolumeDb}
+                  aria-label={`${track.name} volume`}
+                  title={`Volume ${trackVolumeLabel} dB. Double-click to reset.`}
+                  onChange={handleTrackVolumeChange}
+                  onDoubleClick={handleTrackVolumeReset}
+                />
+              </div>
               <span className="audio-track-fader-value" aria-hidden="true">{trackVolumeLabel}</span>
             </div>
           </div>
         )}
-        {track.type === 'audio' && audioFxOpen && (
+        {showAdvancedAudioControls && audioFxOpen && (
           <div
             ref={audioFxPopoverRef}
             className="audio-track-popover audio-track-fx-popover"
@@ -1647,7 +1703,7 @@ function TimelineHeaderComponent({
             />
           </div>
         )}
-        {track.type === 'audio' && audioSendsOpen && (
+        {showAdvancedAudioControls && audioSendsOpen && (
           <div
             ref={audioSendsPopoverRef}
             className="audio-track-popover audio-track-sends-popover"

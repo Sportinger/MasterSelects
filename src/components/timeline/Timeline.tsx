@@ -200,8 +200,9 @@ export function Timeline() {
   const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
 
   // UI settings (rarely changes)
-  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioFocusMode, trackFocusMode } =
+  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioLayerAdvancedMode, audioFocusMode, trackFocusMode } =
     useTimelineStore(useShallow(selectUISettings));
+  const effectiveAudioLayerAdvancedMode = audioLayerAdvancedMode !== false;
 
   // Preview/export state
   const { ramPreviewEnabled, ramPreviewProgress, ramPreviewRange, isRamPreviewing, isExporting, exportProgress, exportRange } =
@@ -267,7 +268,7 @@ export function Timeline() {
   } = store;
 
   // Tool actions
-  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled, setAudioDisplayMode, toggleAudioFocusMode, setTrackFocusMode } = store;
+  const { setToolMode, toggleCutTool, toggleThumbnailsEnabled, toggleWaveformsEnabled, setAudioDisplayMode, toggleAudioLayerAdvancedMode, toggleAudioFocusMode, setTrackFocusMode } = store;
 
   // Marker actions
   const { addMarker, moveMarker, removeMarker, updateMarker } = store;
@@ -1154,23 +1155,29 @@ export function Timeline() {
   // Audio master clock playback loop - extracted to hook
   usePlaybackLoop({ isPlaying });
 
-  // Handle shift+mousewheel on track header to resize height
-  const handleTrackHeaderWheel = useCallback(
+  // Shift/Alt + wheel resizes tracks from either the header or the lane under the cursor.
+  const handleTrackHeightWheel = useCallback(
     (e: React.WheelEvent, trackId: string) => {
       const track = trackMap.get(trackId);
       if (!track) return;
 
+      const wheelDelta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+      if (wheelDelta === 0) return;
+
+      const timelineState = useTimelineStore.getState();
+      const currentTrack = timelineState.tracks.find(candidate => candidate.id === trackId) ?? track;
+
       if (e.altKey) {
         e.preventDefault();
         e.stopPropagation();
-        // Smooth scaling: small multiplier so each wheel notch (~100 deltaY) = ~5px
-        const delta = -e.deltaY * 0.05;
-        useTimelineStore.getState().scaleTracksOfType(track.type, delta);
+        // Smooth scaling: each mouse-wheel notch is roughly 5px of track height.
+        const delta = -wheelDelta * 0.05;
+        timelineState.scaleTracksOfType(currentTrack.type, delta);
       } else if (e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
-        const delta = -e.deltaY * 0.05;
-        useTimelineStore.getState().setTrackHeight(trackId, track.height + delta);
+        const delta = -wheelDelta * 0.05;
+        timelineState.setTrackHeight(trackId, currentTrack.height + delta);
       }
     },
     [trackMap]
@@ -1543,7 +1550,7 @@ export function Timeline() {
                     onRenameTrack={(name) =>
                       useTimelineStore.getState().renameTrack(track.id, name)
                     }
-                    onWheel={(e) => handleTrackHeaderWheel(e, track.id)}
+                    onWheel={(e) => handleTrackHeightWheel(e, track.id)}
                     clipKeyframes={clipKeyframes}
                     getClipKeyframes={getClipKeyframes}
                     getInterpolatedTransform={getInterpolatedTransform}
@@ -1555,6 +1562,7 @@ export function Timeline() {
                     onToggleCurveExpanded={toggleCurveExpanded}
                     hoveredKeyframeRow={hoveredKeyframeRow}
                     onKeyframeRowHover={handleKeyframeRowHover}
+                    audioLayerAdvancedMode={effectiveAudioLayerAdvancedMode}
                     showCollapsedAudioSummaryMeter={!isVideoSection && sectionCollapsed}
                     onSetTrackParent={setTrackParent}
                     onTrackPickWhipDragStart={handleTrackPickWhipDragStart}
@@ -1668,6 +1676,7 @@ export function Timeline() {
                       onDragOver={(e) => handleCombinedDragOver(e, track.id)}
                       onDragEnter={(e) => handleTrackDragEnter(e, track.id)}
                       onDragLeave={handleCombinedDragLeave}
+                      onWheel={(e) => handleTrackHeightWheel(e, track.id)}
                       renderClip={(clip, trackId) => renderClipForSection(clip, trackId)}
                       clipKeyframes={clipKeyframes}
                       renderKeyframeDiamonds={renderKeyframeDiamonds}
@@ -2002,6 +2011,23 @@ export function Timeline() {
                   >
                     <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                       <path d="M4 6l4 4 4-4" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className={`timeline-split-button timeline-audio-layer-mode-button ${effectiveAudioLayerAdvancedMode ? 'active' : ''}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleAudioLayerAdvancedMode();
+                    }}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    aria-pressed={effectiveAudioLayerAdvancedMode}
+                    title={effectiveAudioLayerAdvancedMode ? 'Hide advanced audio layer controls' : 'Show advanced audio layer controls'}
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path d="M1.8 8s2.2-4 6.2-4 6.2 4 6.2 4-2.2 4-6.2 4-6.2-4-6.2-4z" />
+                      <circle cx="8" cy="8" r="1.8" />
+                      {!effectiveAudioLayerAdvancedMode && <path d="M3 3l10 10" />}
                     </svg>
                   </button>
                 </div>

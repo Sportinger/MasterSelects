@@ -159,6 +159,7 @@ The app exposes several runtime monitors that feed the AI debug tools and the co
 The playback-related AI tools read from the same sources:
 - `getStats`
 - `getStatsHistory`
+- `getAudioDiagnostics`
 - `getLogs`
 - `getPlaybackTrace`
 - `purgePlaybackPath`
@@ -171,12 +172,15 @@ Those tools surface:
 - Cache and slot-deck stats
 - Render loop and render dispatcher state
 - WebCodecs / VF pipeline event windows
+- Audio media element ready/buffer state, Web Audio context latency, routing graph state, and recent audio drift/correction events
 
 `purgePlaybackPath` resets the live playback path at the current playhead without a page reload. It clears VideoSync warmups/seeks, retargets active HTMLVideo/WebCodecs providers, resets GPU-ready state, and can resume playback automatically. The health monitor can invoke the same path when `vf_preview_frame` telemetry shows the playhead target moving while the preview frame remains frozen.
 
 When playback start has to wait for active HTML video readiness, `TimelineState.playbackWarmup` is set until the readiness gate finishes or is canceled. The main preview renders a small `Preparing playback` overlay only for that pre-start gate, so background VideoSync warmups during normal playback do not look like blocking loading states.
 
-`getStatsHistory` is capped to 1-30 samples, `getLogs` caps the returned buffer to 1-500 entries, and `getPlaybackTrace` caps the inspected time window and event count so the bridge stays responsive.
+`getAudioDiagnostics` is the focused bridge tool for audio crackle/dropout debugging. Capture it during audible playback to inspect `mediaSummary`, per-element `buffered.bufferedAheadSeconds`, `routing.context.baseLatencyMs`, `status.drift`, and `events.correctionMs`.
+
+`getStatsHistory` is capped to 1-30 samples, `getAudioDiagnostics` caps the inspected event window and returned event count, `getLogs` caps the returned buffer to 1-500 entries, and `getPlaybackTrace` caps the inspected time window and event count so the bridge stays responsive.
 
 ---
 

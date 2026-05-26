@@ -199,6 +199,7 @@ export interface TimelineHeaderProps {
   onToggleCurveExpanded: (trackId: string, property: AnimatableProperty) => void;
   hoveredKeyframeRow?: { trackId: string; property: AnimatableProperty } | null;
   onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
+  audioLayerAdvancedMode?: boolean;
   showCollapsedAudioSummaryMeter?: boolean;
   // Track parenting (layer linking)
   onSetTrackParent: (trackId: string, parentTrackId: string | null) => void;
@@ -231,6 +232,7 @@ export interface TimelineTrackProps {
   onDragOver: (e: React.DragEvent) => void;
   onDragEnter: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
+  onWheel?: (e: React.WheelEvent) => void;
   renderClip: (clip: TimelineClip, trackId: string, trackBaseHeightOverride?: number) => React.ReactNode;
   // For keyframe tracks - clipKeyframes map triggers re-render when keyframes change
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;

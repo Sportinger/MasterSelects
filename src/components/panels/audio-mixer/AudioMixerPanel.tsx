@@ -1,4 +1,4 @@
-import { type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import './AudioMixerPanel.css';
 import { useTimelineStore } from '../../../stores/timeline';
 import type {
@@ -217,7 +217,7 @@ function MixerRack({
   );
 }
 
-function TrackMixerStrip({
+function TrackMixerStripComponent({
   track,
   index,
   focused,
@@ -365,7 +365,14 @@ function TrackMixerStrip({
   );
 }
 
-function MasterMixerStrip({
+const TrackMixerStrip = memo(TrackMixerStripComponent, (prev, next) => (
+  prev.track === next.track
+  && prev.index === next.index
+  && prev.focused === next.focused
+  && prev.onOpenFx === next.onOpenFx
+));
+
+function MasterMixerStripComponent({
   masterAudio,
   focused,
   preflightMeasuring,
@@ -473,6 +480,15 @@ function MasterMixerStrip({
   );
 }
 
+const MasterMixerStrip = memo(MasterMixerStripComponent, (prev, next) => (
+  prev.masterAudio === next.masterAudio
+  && prev.focused === next.focused
+  && prev.preflightMeasuring === next.preflightMeasuring
+  && prev.onOpenFx === next.onOpenFx
+  && prev.onStaticPreflight === next.onStaticPreflight
+  && prev.onRenderedPreflight === next.onRenderedPreflight
+));
+
 function MixerFxWindow({
   target,
   tracks,
@@ -484,7 +500,12 @@ function MixerFxWindow({
   masterAudio: MasterAudioState;
   onClose: () => void;
 }) {
-  const runtimeMeters = useTimelineStore(state => state.runtimeAudioMeters);
+  const meter = useTimelineStore(state => {
+    if (!target) return undefined;
+    return target.scope === 'track'
+      ? state.runtimeAudioMeters.trackMeters[target.trackId]
+      : state.runtimeAudioMeters.master;
+  });
   if (!target) return null;
 
   const track = target.scope === 'track'
@@ -500,10 +521,6 @@ function MixerFxWindow({
   const title = target.scope === 'track'
     ? `${track?.name ?? 'Track'} FX`
     : 'Master FX';
-  const meter = target.scope === 'track' && track
-    ? runtimeMeters.trackMeters[track.id]
-    : runtimeMeters.master;
-
   if (target.scope === 'track' && !track) return null;
 
   return (
@@ -570,7 +587,6 @@ export function AudioMixerPanel() {
   const duration = useTimelineStore(state => state.duration);
   const inPoint = useTimelineStore(state => state.inPoint);
   const outPoint = useTimelineStore(state => state.outPoint);
-  const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
   const [recordingState, setRecordingState] = useState(audioRecordingService.getSnapshot());
@@ -612,12 +628,13 @@ export function AudioMixerPanel() {
   const recordingStorageWarnings = recordingState.storageWarnings ?? [];
   const recordingStorageWarning = recordingStorageWarnings.find(warning => warning.severity === 'warning')
     ?? recordingStorageWarnings[0];
-  const recordingRange = useMemo(() => resolveTimelineRecordingRange({
-    playheadPosition,
+  // Read the playhead as a snapshot only. Subscribing here would re-render the full mixer every playback frame.
+  const recordingRange = resolveTimelineRecordingRange({
+    playheadPosition: useTimelineStore.getState().playheadPosition,
     inPoint,
     outPoint,
     duration,
-  }), [duration, inPoint, outPoint, playheadPosition]);
+  });
   const recordingElapsed = recordingState.startedAt
     ? Math.max(0, ((recordingState.phase === 'recording' ? Date.now() : (recordingState.lastCompletedAt ?? Date.now())) - recordingState.startedAt) / 1000)
     : 0;
@@ -656,20 +673,24 @@ export function AudioMixerPanel() {
     if (recordingBusy) return;
     setRecordingBusy(true);
     try {
+      const timelineState = useTimelineStore.getState();
+      const currentArmedAudioTracks = timelineState.tracks.filter(track => (
+        track.type === 'audio' && track.audioState?.recordArm === true
+      ));
       await toggleTimelineAudioRecording({
         isRecording,
-        armedAudioTracks,
-        playheadPosition,
-        inPoint,
-        outPoint,
-        duration,
+        armedAudioTracks: currentArmedAudioTracks,
+        playheadPosition: timelineState.playheadPosition,
+        inPoint: timelineState.inPoint,
+        outPoint: timelineState.outPoint,
+        duration: timelineState.duration,
         noArmedTrackCode: 'audio-recording-no-armed-track',
         failureCode: 'audio-recording-failed',
       });
     } finally {
       setRecordingBusy(false);
     }
-  }, [armedAudioTracks, duration, inPoint, isRecording, outPoint, playheadPosition, recordingBusy]);
+  }, [isRecording, recordingBusy]);
 
   const handleJumpToEqInstance = useCallback((instance: AudioEqInstanceDescriptor) => {
     if (instance.scope === 'clip') {

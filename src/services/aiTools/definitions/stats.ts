@@ -31,6 +31,21 @@ export const statsToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'getAudioDiagnostics',
+      description: 'Get focused live audio playback diagnostics for crackle/dropout debugging. Returns media element ready/buffer state, audio drift/correction events, Web Audio context latency/state, routing graph state, and recent audio events.',
+      parameters: {
+        type: 'object',
+        properties: {
+          windowMs: { type: 'number', description: 'Recent audio event window in milliseconds (default: 5000, max: 120000)' },
+          eventLimit: { type: 'number', description: 'Maximum recent audio events to include (default: 50, max: 500)' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getLogs',
       description: 'Get recent buffered browser logs for debugging. Supports filtering by level, module name, and search text.',
       parameters: {

@@ -120,6 +120,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
 
   // ── SENSITIVE (read-only but debug data) ──────────────────────────────
   ['getStats', bridgeTelemetry()],
+  ['getAudioDiagnostics', bridgeTelemetry()],
   ['getStatsHistory', bridgeTelemetry()],
   ['getLogs', bridgeTelemetry()],
   ['getRuntimeDiagnostics', bridgeTelemetry()],

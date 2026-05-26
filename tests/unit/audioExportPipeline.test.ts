@@ -193,6 +193,29 @@ describe('AudioExportPipeline audio preflight', () => {
     ).toEqual(['audible-solo']);
   });
 
+  it('keeps clips eligible when a time effect tail overlaps the export range', () => {
+    const clip = createClip({
+      id: 'tail-audio',
+      trackId: audioTrack.id,
+      startTime: 0,
+      duration: 5,
+      source: { type: 'audio', audioElement: {} as HTMLAudioElement },
+      audioState: {
+        effectStack: [{
+          id: 'reverb-1',
+          descriptorId: 'audio-reverb',
+          enabled: true,
+          params: { roomSize: 0.4, decaySeconds: 2, damping: 0.2, mix: 1 },
+        }],
+      },
+    });
+
+    expect(
+      AudioExportPipeline.getClipsWithAudio([clip], [videoTrack, audioTrack], 5.5, 6)
+        .map(candidate => candidate.id)
+    ).toEqual(['tail-audio']);
+  });
+
   it('prepares mixer track data from the normalized audio graph', () => {
     const clip = createClip({
       id: 'graph-audio',
@@ -227,6 +250,7 @@ describe('AudioExportPipeline audio preflight', () => {
       expect.objectContaining({
         clipId: 'graph-audio',
         startTime: 1,
+        sourceOffsetTime: 0,
         trackId: audioTrack.id,
         trackMuted: false,
         trackSolo: false,
@@ -234,6 +258,32 @@ describe('AudioExportPipeline audio preflight', () => {
         trackPan: 0.5,
       }),
     ]);
+  });
+
+  it('adds a source offset when an export starts inside an audio clip', () => {
+    const clip = createClip({
+      id: 'midrange-audio',
+      trackId: audioTrack.id,
+      startTime: 2,
+      duration: 8,
+      source: { type: 'audio', audioElement: {} as HTMLAudioElement },
+    });
+    const plan = renderAudioGraph({ clips: [clip], tracks: [videoTrack, audioTrack], mode: 'export' });
+    const pipeline = new AudioExportPipeline() as AudioExportPipelineTestAccess;
+
+    const trackData = pipeline.prepareTrackData(
+      [clip],
+      new Map([[clip.id, createMockAudioBuffer()]]),
+      [videoTrack, audioTrack],
+      5.25,
+      plan
+    );
+
+    expect(trackData[0]).toEqual(expect.objectContaining({
+      clipId: 'midrange-audio',
+      startTime: -3.25,
+      sourceOffsetTime: 3.25,
+    }));
   });
 
   it('prepares export send returns as additional mixer entries', () => {

@@ -13,6 +13,7 @@ import {
   clearRuntimeDiagnostics,
   getRuntimeDiagnostics,
 } from '../../runtimeDiagnostics';
+import { collectAudioDiagnostics } from '../../audio/audioDiagnostics';
 import type { ToolResult } from '../types';
 
 const DEFAULT_PLAYBACK_WINDOW_MS = 5000;
@@ -130,6 +131,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
     decoder: s.decoder,
     layerCount: s.layerCount,
     audio: s.audio,
+    audioDiagnostics: collectAudioDiagnostics({ windowMs: playbackWindowMs, eventLimit: 20 }),
     health: playbackHealthMonitor.snapshot(),
     cache: collectCacheSnapshot(),
     slotDecks: slotDeckManager.getSnapshot(),
@@ -177,6 +179,21 @@ export async function handleGetStats(): Promise<ToolResult> {
   return {
     success: true,
     data: collectSnapshot(),
+  };
+}
+
+export async function handleGetAudioDiagnostics(
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const windowMs = Math.min(
+    Math.max(Number(args.windowMs) || DEFAULT_PLAYBACK_WINDOW_MS, 100),
+    MAX_TRACE_WINDOW_MS
+  );
+  const eventLimit = Math.min(Math.max(Number(args.eventLimit) || 50, 1), 500);
+
+  return {
+    success: true,
+    data: collectAudioDiagnostics({ windowMs, eventLimit }),
   };
 }
 

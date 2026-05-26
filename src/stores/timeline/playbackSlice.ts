@@ -338,6 +338,14 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     set({ audioDisplayMode: mode });
   },
 
+  setAudioLayerAdvancedMode: (enabled) => {
+    set({ audioLayerAdvancedMode: enabled });
+  },
+
+  toggleAudioLayerAdvancedMode: () => {
+    set((state) => ({ audioLayerAdvancedMode: !(state.audioLayerAdvancedMode !== false) }));
+  },
+
   setAudioFocusMode: (enabled) => {
     set({ audioFocusMode: enabled, trackFocusMode: enabled ? 'audio' : 'balanced' });
   },

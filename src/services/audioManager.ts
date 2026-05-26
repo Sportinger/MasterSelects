@@ -199,6 +199,28 @@ class AudioManager {
       await this.audioContext.resume();
     }
   }
+
+  getDebugSnapshot(): Record<string, unknown> {
+    const context = this.audioContext as (AudioContext & { outputLatency?: number }) | null;
+    return {
+      initialized: this.initialized,
+      mediaElementSourceCount: this.mediaElementSources.size,
+      eqGains: [...this.eqGains],
+      masterVolume: this.getMasterVolume(),
+      context: context
+        ? {
+            state: context.state,
+            sampleRate: context.sampleRate,
+            currentTime: Math.round(context.currentTime * 1000) / 1000,
+            baseLatencyMs: Math.round((context.baseLatency ?? 0) * 100000) / 100,
+            outputLatencyMs: typeof context.outputLatency === 'number'
+              ? Math.round(context.outputLatency * 100000) / 100
+              : undefined,
+            destinationMaxChannelCount: context.destination.maxChannelCount,
+          }
+        : null,
+    };
+  }
 }
 
 // Audio status tracker for stats display

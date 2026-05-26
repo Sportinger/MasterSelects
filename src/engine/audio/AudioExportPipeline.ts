@@ -16,9 +16,10 @@ import { AudioExtractor, audioExtractor } from './AudioExtractor';
 import { AudioEncoderWrapper, type EncodedAudioResult } from './AudioEncoder';
 import { AudioMixer, type AudioTrackData } from './AudioMixer';
 import { renderAudioGraph } from './AudioGraphRenderer';
-import type { AudioGraphRenderPlan } from './AudioGraphTypes';
+import type { AudioGraphEffectPlanStep, AudioGraphJsonValue, AudioGraphRenderPlan } from './AudioGraphTypes';
 import { AudioEffectRenderer } from './AudioEffectRenderer';
-import { dbToLinearGain } from './audioMath';
+import { getAudioEffect } from './AudioEffectRegistry';
+import { dbToLinearGain, finiteNumber } from './audioMath';
 import { ClipAudioRenderService, type ClipAudioRenderProgress } from '../../services/audio/ClipAudioRenderService';
 import {
   audioGraphPlanStepsToEffectInstances,
@@ -26,9 +27,10 @@ import {
 import { analyzeAudioBufferLoudnessSummary } from '../../services/audio/LoudnessEnvelopeGenerator';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
-import type { TimelineClip, TimelineTrack, Keyframe } from '../../types';
+import type { AudioEffectInstance, Effect, MasterAudioState, TimelineClip, TimelineTrack, Keyframe } from '../../types';
 
 const log = Logger.create('AudioExportPipeline');
+const MAX_EXPORT_EFFECT_TAIL_SECONDS = 30;
 
 export interface AudioExportSettings {
   sampleRate: number;       // 44100 or 48000
@@ -44,6 +46,105 @@ export interface AudioExportProgress {
 }
 
 export type AudioExportProgressCallback = (progress: AudioExportProgress) => void;
+
+function clampExportTailSeconds(seconds: number): number {
+  return Math.max(0, Math.min(MAX_EXPORT_EFFECT_TAIL_SECONDS, seconds));
+}
+
+function getParamNumber(params: Record<string, unknown> | undefined, key: string, fallback: number): number {
+  return finiteNumber(params?.[key], fallback);
+}
+
+function getEffectTailSeconds(descriptorId: string, params?: Record<string, unknown>): number {
+  const descriptor = getAudioEffect(descriptorId);
+  const descriptorTail = finiteNumber(descriptor?.tailSeconds, 0);
+
+  if (descriptorId === 'audio-reverb') {
+    return clampExportTailSeconds(Math.max(descriptorTail, getParamNumber(params, 'decaySeconds', 0)));
+  }
+
+  if (descriptorId === 'audio-delay') {
+    const delaySeconds = getParamNumber(params, 'delayMs', 0) / 1000;
+    const feedback = Math.max(0, Math.min(0.95, getParamNumber(params, 'feedback', 0)));
+    const repeats = feedback > 0.001
+      ? Math.ceil(Math.log(0.001) / Math.log(feedback))
+      : 1;
+    return clampExportTailSeconds(Math.max(descriptorTail, delaySeconds * Math.max(1, repeats)));
+  }
+
+  return clampExportTailSeconds(descriptorTail);
+}
+
+function getEffectStackTailSeconds(effectStack: readonly AudioEffectInstance[] | undefined): number {
+  return clampExportTailSeconds((effectStack ?? []).reduce((sum, effect) => {
+    const flags = effect as AudioEffectInstance & { disabled?: boolean; bypassed?: boolean };
+    if (effect.enabled === false || flags.disabled === true || flags.bypassed === true) return sum;
+    return sum + getEffectTailSeconds(effect.descriptorId, effect.params as Record<string, unknown> | undefined);
+  }, 0));
+}
+
+function getLegacyEffectTailSeconds(effects: readonly Effect[] | undefined): number {
+  return clampExportTailSeconds((effects ?? []).reduce((sum, effect) => {
+    if (effect.enabled === false) return sum;
+    return sum + getEffectTailSeconds(effect.type, effect.params as Record<string, unknown> | undefined);
+  }, 0));
+}
+
+function getPlanTailSeconds(effectChain: readonly AudioGraphEffectPlanStep[] | undefined): number {
+  return clampExportTailSeconds((effectChain ?? []).reduce((sum, effect) => (
+    sum + getEffectTailSeconds(effect.descriptorId, effect.params as Record<string, AudioGraphJsonValue>)
+  ), 0));
+}
+
+function getClipExportTailSeconds(
+  clip: TimelineClip,
+  track: TimelineTrack | undefined,
+  masterAudioState?: MasterAudioState,
+): number {
+  return clampExportTailSeconds(
+    getEffectStackTailSeconds(clip.audioState?.effectStack) +
+    getLegacyEffectTailSeconds(clip.effects) +
+    getEffectStackTailSeconds(track?.audioState?.effectStack) +
+    getEffectStackTailSeconds(masterAudioState?.effectStack)
+  );
+}
+
+function createAudioBufferLike(numberOfChannels: number, length: number, sampleRate: number): AudioBuffer {
+  const maybeWindow = globalThis as typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+  const AudioContextCtor = globalThis.AudioContext ?? maybeWindow.webkitAudioContext;
+  if (AudioContextCtor) {
+    const context = new AudioContextCtor();
+    const createBuffer = (context as AudioContext & { createBuffer?: BaseAudioContext['createBuffer'] }).createBuffer;
+    if (typeof createBuffer === 'function') {
+      const buffer = createBuffer.call(context, numberOfChannels, Math.max(1, length), sampleRate);
+      void context.close();
+      return buffer;
+    }
+    void context.close();
+  }
+
+  const channelData = Array.from({ length: numberOfChannels }, () => new Float32Array(Math.max(1, length)));
+  return {
+    numberOfChannels,
+    sampleRate,
+    length: Math.max(1, length),
+    duration: Math.max(1, length) / sampleRate,
+    getChannelData: (channelIndex: number) => channelData[channelIndex] ?? channelData[0],
+  } as unknown as AudioBuffer;
+}
+
+function appendSilence(buffer: AudioBuffer, tailSeconds: number): AudioBuffer {
+  const tailSamples = Math.max(0, Math.ceil(clampExportTailSeconds(tailSeconds) * buffer.sampleRate));
+  if (tailSamples <= 0) return buffer;
+
+  const extended = createAudioBufferLike(buffer.numberOfChannels, buffer.length + tailSamples, buffer.sampleRate);
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    extended.getChannelData(channel).set(buffer.getChannelData(channel));
+  }
+  return extended;
+}
 
 export class AudioExportPipeline {
   private extractor: AudioExtractor;
@@ -92,7 +193,7 @@ export class AudioExportPipeline {
     log.info(`Starting export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s (${duration.toFixed(2)}s)`);
 
     // 1. Find all clips with audio in the export range
-    const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime);
+    const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState);
 
     if (audioClips.length === 0) {
       log.info('No audio clips found in export range');
@@ -178,7 +279,7 @@ export class AudioExportPipeline {
     log.info(`Starting raw audio export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
 
     // 1. Find all clips with audio in the export range
-    const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime);
+    const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState);
 
     if (audioClips.length === 0) {
       log.info('No audio clips found in export range');
@@ -253,9 +354,10 @@ export class AudioExportPipeline {
     clips: TimelineClip[],
     tracks: TimelineTrack[],
     startTime: number,
-    endTime: number
+    endTime: number,
+    masterAudioState?: MasterAudioState
   ): boolean {
-    return AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime).length > 0;
+    return AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState).length > 0;
   }
 
   /**
@@ -265,14 +367,17 @@ export class AudioExportPipeline {
     clips: TimelineClip[],
     tracks: TimelineTrack[],
     startTime: number,
-    endTime: number
+    endTime: number,
+    masterAudioState?: MasterAudioState
   ): TimelineClip[] {
     const mediaFiles = useMediaStore.getState().files;
 
     const candidates = clips.filter(clip => {
       // Check if clip is in range
+      const track = tracks.find(candidate => candidate.id === clip.trackId);
       const clipEnd = clip.startTime + clip.duration;
-      if (clipEnd <= startTime || clip.startTime >= endTime) {
+      const tailSeconds = getClipExportTailSeconds(clip, track, masterAudioState);
+      if (clipEnd + tailSeconds <= startTime || clip.startTime >= endTime) {
         return false;
       }
 
@@ -387,6 +492,7 @@ export class AudioExportPipeline {
     onProgress?: AudioExportProgressCallback
   ): Promise<Map<string, AudioBuffer>> {
     const processed = new Map<string, AudioBuffer>();
+    const clipPlanById = new Map(audioGraphPlan.clips.map(clip => [clip.clipId, clip]));
     const trackPlanById = new Map(audioGraphPlan.tracks.map(track => [track.trackId, track]));
 
     for (let i = 0; i < clips.length; i++) {
@@ -403,22 +509,28 @@ export class AudioExportPipeline {
       });
 
       const keyframes = clipKeyframes.get(clip.id) || [];
+      const clipPlan = clipPlanById.get(clip.id);
+      const clipTailSeconds = getPlanTailSeconds(clipPlan?.effectChain);
 
       const rendered = await this.clipAudioRenderer.render({
         clip,
         sourceBuffer: buffer,
         keyframes,
+        effectTailSeconds: clipTailSeconds,
         onProgress: progress => this.emitClipRenderProgress(clip, i, clips.length, progress, onProgress),
       });
 
       const trackPlan = trackPlanById.get(clip.trackId);
       const trackEffects = audioGraphPlanStepsToEffectInstances(trackPlan?.effectChain);
+      const trackInputBuffer = trackEffects.length > 0
+        ? appendSilence(rendered.buffer, getPlanTailSeconds(trackPlan?.effectChain))
+        : rendered.buffer;
       const trackRenderedBuffer = trackEffects.length > 0
         ? await this.graphEffectRenderer.renderEffectInstances(
-          rendered.buffer,
+          trackInputBuffer,
           trackEffects,
           [],
-          rendered.buffer.duration
+          trackInputBuffer.duration
         )
         : rendered.buffer;
 
@@ -544,6 +656,7 @@ export class AudioExportPipeline {
         clipId: clip.id,
         buffer,
         startTime: clip.startTime - exportStartTime, // Adjust for export range
+        sourceOffsetTime: Math.max(0, exportStartTime - clip.startTime),
         trackId: clip.trackId,
         trackMuted: trackPlan.muted || !trackPlan.active,
         trackSolo: trackPlan.solo,

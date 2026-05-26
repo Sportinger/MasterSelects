@@ -190,6 +190,7 @@ function TimelineTrackComponent({
   onDragOver,
   onDragEnter,
   onDragLeave,
+  onWheel,
   renderClip,
   clipKeyframes,
   renderKeyframeDiamonds,
@@ -248,6 +249,7 @@ function TimelineTrackComponent({
       onDragOver={onDragOver}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
+      onWheelCapture={onWheel}
     >
       {/* Clip row - the normal clip area */}
       <div className="track-clip-row" style={{ height: baseHeight }}>

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TimelineHeader } from '../../src/components/timeline/TimelineHeader';
 import { createDefaultAudioEqParams } from '../../src/engine/audio/eq/AudioEqDefaults';
 import { useTimelineStore } from '../../src/stores/timeline';
+import type { TimelineHeaderProps } from '../../src/components/timeline/types';
 import type { AnimatableProperty, ClipTransform, TimelineTrack } from '../../src/types';
 import { createMockClip } from '../helpers/mockData';
 
@@ -41,7 +42,7 @@ function defaultTransform(): ClipTransform {
   };
 }
 
-function renderAudioHeader(height: number) {
+function renderAudioHeader(height: number, props: Partial<TimelineHeaderProps> = {}) {
   const track = createAudioTrack(height);
 
   return render(
@@ -76,6 +77,7 @@ function renderAudioHeader(height: number) {
       onSetTrackParent={vi.fn()}
       onTrackPickWhipDragStart={vi.fn()}
       onTrackPickWhipDragEnd={vi.fn()}
+      {...props}
     />,
   );
 }
@@ -124,6 +126,23 @@ describe('TimelineHeader audio mixer strip', () => {
     expect(container.querySelector('.audio-track-faders')).not.toBeNull();
     expect(container.querySelector('.audio-button-label-short')?.textContent).toBe('A');
     expect(container.querySelector('.audio-button-label-wide')?.textContent).toBe('Aux');
+  });
+
+  it('renders basic audio layer mode with only solo, mute, and lock controls', () => {
+    const { container } = renderAudioHeader(96, { audioLayerAdvancedMode: false });
+
+    expect(container.querySelector('.track-header.audio.audio-layer-basic')).not.toBeNull();
+    expect(container.querySelector('.audio-level-meter.vertical')).toBeNull();
+    expect(container.querySelector('.audio-track-fader')).toBeNull();
+    expect(container.querySelector('.audio-track-pan-inline')).toBeNull();
+
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('.track-controls .btn-icon'));
+    expect(buttons).toHaveLength(3);
+    expect(buttons[0]?.textContent).toBe('S');
+    expect(buttons[1]?.textContent).toBe('M');
+    expect(buttons.some(button => button.textContent === 'R')).toBe(false);
+    expect(buttons.some(button => button.textContent === 'FX')).toBe(false);
+    expect(buttons.some(button => button.textContent?.includes('Aux'))).toBe(false);
   });
 
   it('uses condensed audio density for short lanes', () => {

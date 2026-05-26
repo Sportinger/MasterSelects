@@ -33,6 +33,20 @@ const log = Logger.create('AudioRouting');
 // EQ frequencies (10-band)
 const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const HUM_NOTCH_MAX_HARMONICS = 8;
+const REVERB_IMPULSE_CACHE_LIMIT = 24;
+
+const audioRoutingDebugCounters = {
+  applyEffectsCalls: 0,
+  routeCreates: 0,
+  routeProcessorRebuilds: 0,
+  masterProcessorRebuilds: 0,
+  reverbImpulseBuilds: 0,
+  reverbImpulseCacheHits: 0,
+  reverbImpulseBuildMsTotal: 0,
+  reverbImpulseBuildMsMax: 0,
+};
+
+const reverbImpulseCache = new Map<string, AudioBuffer>();
 
 interface AudioRoute {
   sourceNode: MediaElementAudioSourceNode;
@@ -122,6 +136,111 @@ function normalizeDynamicsReductionDb(rawReduction: number): number {
 function limiterReductionDb(inputLinear: number, outputLinear: number): number {
   if (inputLinear <= 0 || outputLinear <= 0 || outputLinear >= inputLinear) return 0;
   return normalizeDynamicsReductionDb(20 * Math.log10(inputLinear / outputLinear));
+}
+
+function roundDebug(value: number, decimals = 3): number {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+function getMediaElementSourceSummary(element: HTMLMediaElement): Record<string, unknown> {
+  const currentSrc = element.currentSrc || element.src || '';
+  const srcKind = currentSrc.startsWith('blob:')
+    ? 'blob'
+    : currentSrc.startsWith('data:')
+      ? 'data'
+      : currentSrc
+        ? 'url'
+        : 'none';
+  return {
+    hasSrc: Boolean(currentSrc),
+    srcKind,
+    srcTail: currentSrc ? currentSrc.slice(-32) : '',
+  };
+}
+
+function getRouteElementDebugSnapshot(element: HTMLMediaElement): Record<string, unknown> {
+  return {
+    tagName: element.tagName.toLowerCase(),
+    paused: element.paused,
+    ended: element.ended,
+    muted: element.muted,
+    volume: roundDebug(element.volume),
+    playbackRate: roundDebug(element.playbackRate),
+    defaultPlaybackRate: roundDebug(element.defaultPlaybackRate),
+    currentTime: roundDebug(element.currentTime),
+    duration: Number.isFinite(element.duration) ? roundDebug(element.duration) : null,
+    readyState: element.readyState,
+    networkState: element.networkState,
+    seeking: element.seeking,
+    error: element.error
+      ? {
+          code: element.error.code,
+          message: element.error.message,
+        }
+      : null,
+    ...getMediaElementSourceSummary(element),
+  };
+}
+
+function getProcessorDebugSnapshot(processor: AudioRouteProcessorNode): Record<string, unknown> {
+  return {
+    id: processor.id,
+    type: processor.type,
+    nodeCount: processor.nodes.length,
+    hasScriptProcessor: Boolean(processor.scriptProcessor),
+    lastReverbSignature: processor.lastReverbSignature,
+    lastSaturationSignature: processor.lastSaturationSignature,
+  };
+}
+
+function reverbImpulseCacheKey(
+  ctx: BaseAudioContext,
+  roomSize: number,
+  decaySeconds: number,
+  damping: number,
+): string {
+  return [
+    ctx.sampleRate,
+    roomSize.toFixed(3),
+    decaySeconds.toFixed(3),
+    damping.toFixed(3),
+  ].join(':');
+}
+
+function getOrCreateReverbImpulse(
+  ctx: BaseAudioContext,
+  roomSize: number,
+  decaySeconds: number,
+  damping: number,
+): AudioBuffer {
+  const key = reverbImpulseCacheKey(ctx, roomSize, decaySeconds, damping);
+  const cached = reverbImpulseCache.get(key);
+  if (cached) {
+    audioRoutingDebugCounters.reverbImpulseCacheHits++;
+    reverbImpulseCache.delete(key);
+    reverbImpulseCache.set(key, cached);
+    return cached;
+  }
+
+  const startedAt = performance.now();
+  const buffer = createReverbImpulse(ctx, roomSize, decaySeconds, damping);
+  const elapsedMs = performance.now() - startedAt;
+  audioRoutingDebugCounters.reverbImpulseBuilds++;
+  audioRoutingDebugCounters.reverbImpulseBuildMsTotal += elapsedMs;
+  audioRoutingDebugCounters.reverbImpulseBuildMsMax = Math.max(
+    audioRoutingDebugCounters.reverbImpulseBuildMsMax,
+    elapsedMs,
+  );
+
+  reverbImpulseCache.set(key, buffer);
+  while (reverbImpulseCache.size > REVERB_IMPULSE_CACHE_LIMIT) {
+    const oldestKey = reverbImpulseCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    reverbImpulseCache.delete(oldestKey);
+  }
+  return buffer;
 }
 
 function updateProcessorNode(
@@ -254,7 +373,7 @@ function updateProcessorNode(
     node.dryGain.gain.value = 1 - mix;
     node.wetGain.gain.value = mix;
     if (node.lastReverbSignature !== signature) {
-      node.convolver.buffer = createReverbImpulse(ctx, roomSize, decaySeconds, damping);
+      node.convolver.buffer = getOrCreateReverbImpulse(ctx, roomSize, decaySeconds, damping);
       node.lastReverbSignature = signature;
     }
   }
@@ -935,6 +1054,7 @@ class AudioRoutingManager {
       this.reconnectRouteChain(route);
 
       this.routes.set(element, route);
+      audioRoutingDebugCounters.routeCreates++;
       log.debug('Created audio route for element');
 
       return route;
@@ -958,6 +1078,7 @@ class AudioRoutingManager {
     processors: readonly LiveAudioRouteProcessor[] = [],
     masterRoute?: AudioRouteEffectSettings,
   ): Promise<boolean> {
+    audioRoutingDebugCounters.applyEffectsCalls++;
     const route = await this.getOrCreateRoute(element);
     if (!route) {
       // Fallback: just set element volume directly (no EQ)
@@ -1088,6 +1209,60 @@ class AudioRoutingManager {
    */
   get activeRouteCount(): number {
     return this.routes.size;
+  }
+
+  getDebugSnapshot(): Record<string, unknown> {
+    const context = this.audioContext as (AudioContext & { outputLatency?: number }) | null;
+    return {
+      context: context
+        ? {
+            state: context.state,
+            sampleRate: context.sampleRate,
+            currentTime: roundDebug(context.currentTime),
+            baseLatencyMs: roundDebug((context.baseLatency ?? 0) * 1000, 2),
+            outputLatencyMs: typeof context.outputLatency === 'number'
+              ? roundDebug(context.outputLatency * 1000, 2)
+              : undefined,
+            destinationMaxChannelCount: context.destination.maxChannelCount,
+            resumePending: this.contextResumePromise !== null,
+          }
+        : null,
+      routeCount: this.routes.size,
+      masterRoute: this.masterRoute
+        ? {
+            gain: roundDebug(this.masterRoute.gainNode.gain.value),
+            processorCount: this.masterRoute.processorNodes.length,
+            processorTypes: this.masterRoute.processorNodes.map(processor => processor.type),
+            processors: this.masterRoute.processorNodes.map(getProcessorDebugSnapshot),
+            eqGains: this.masterRoute.lastEQGains.map(gain => roundDebug(gain, 2)),
+            analyserFftSize: this.masterRoute.analyserNode.fftSize,
+            lastProcessorSignature: this.masterRoute.lastProcessorSignature,
+          }
+        : null,
+      routes: Array.from(this.routes.entries()).map(([element, route], index) => ({
+        index,
+        element: getRouteElementDebugSnapshot(element),
+        gain: roundDebug(route.gainNode.gain.value),
+        pan: roundDebug(route.panNode.pan.value),
+        processorCount: route.processorNodes.length,
+        processorTypes: route.processorNodes.map(processor => processor.type),
+        processors: route.processorNodes.map(getProcessorDebugSnapshot),
+        eqGains: route.lastEQGains.map(gain => roundDebug(gain, 2)),
+        analyserFftSize: route.analyserNode.fftSize,
+        lastProcessorSignature: route.lastProcessorSignature,
+      })),
+      counters: {
+        ...audioRoutingDebugCounters,
+        reverbImpulseCacheSize: reverbImpulseCache.size,
+        reverbImpulseBuildMsAvg: audioRoutingDebugCounters.reverbImpulseBuilds > 0
+          ? roundDebug(
+              audioRoutingDebugCounters.reverbImpulseBuildMsTotal / audioRoutingDebugCounters.reverbImpulseBuilds,
+              2,
+            )
+          : 0,
+        reverbImpulseBuildMsMax: roundDebug(audioRoutingDebugCounters.reverbImpulseBuildMsMax, 2),
+      },
+    };
   }
 
   private disconnectMasterRoute(): void {
@@ -1361,6 +1536,7 @@ class AudioRoutingManager {
   ): void {
     const signature = processorSignature(processors);
     if (signature !== route.lastProcessorSignature) {
+      audioRoutingDebugCounters.routeProcessorRebuilds++;
       route.processorNodes.forEach(processor => processor.nodes.forEach(node => node.disconnect()));
       route.processorNodes = processors.map(processor => this.createProcessorNode(ctx, processor));
       route.lastProcessorSignature = signature;
@@ -1398,6 +1574,7 @@ class AudioRoutingManager {
 
     const signature = processorSignature(processors);
     if (signature !== route.lastProcessorSignature) {
+      audioRoutingDebugCounters.masterProcessorRebuilds++;
       route.processorNodes.forEach(processor => processor.nodes.forEach(node => node.disconnect()));
       route.processorNodes = processors.map(processor => this.createProcessorNode(ctx, processor));
       route.lastProcessorSignature = signature;

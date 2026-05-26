@@ -3,8 +3,8 @@ import type { TimelineAudioDisplayMode } from '../../../stores/timeline/types';
 
 const AUDIO_MODE_MIN_BASE_HEIGHT: Record<TimelineAudioDisplayMode, number> = {
   compact: 0,
-  detailed: 72,
-  spectral: 128,
+  detailed: 0,
+  spectral: 0,
 };
 
 const AUDIO_FOCUS_MIN_BASE_HEIGHT: Record<TimelineAudioDisplayMode, number> = {

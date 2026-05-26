@@ -33,6 +33,7 @@ export interface ClipAudioRenderRequest {
   sourceBuffer: AudioBuffer;
   keyframes?: readonly Keyframe[];
   effectMode?: 'output' | 'analysis-shape';
+  effectTailSeconds?: number;
   onProgress?: (progress: ClipAudioRenderProgress) => void;
 }
 
@@ -114,6 +115,17 @@ function cloneAudioBuffer(buffer: AudioBuffer): AudioBuffer {
     cloned.getChannelData(channel).set(buffer.getChannelData(channel));
   }
   return cloned;
+}
+
+function appendSilence(buffer: AudioBuffer, tailSeconds: number): AudioBuffer {
+  const tailSamples = Math.max(0, Math.ceil(finiteNumber(tailSeconds, 0) * buffer.sampleRate));
+  if (tailSamples <= 0) return buffer;
+
+  const extended = createAudioBuffer(buffer.numberOfChannels, buffer.length + tailSamples, buffer.sampleRate);
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    extended.getChannelData(channel).set(buffer.getChannelData(channel));
+  }
+  return extended;
 }
 
 function finiteNumber(value: unknown, fallback: number): number {
@@ -1632,7 +1644,7 @@ export class ClipAudioRenderService {
   }
 
   async render(request: ClipAudioRenderRequest): Promise<ClipAudioRenderResult> {
-    const { clip, sourceBuffer, keyframes = [], effectMode = 'output', onProgress } = request;
+    const { clip, sourceBuffer, keyframes = [], effectMode = 'output', effectTailSeconds = 0, onProgress } = request;
 
     let processedBuffer = this.trimClipBuffer(clip, sourceBuffer, onProgress);
     processedBuffer = this.renderEditStack(clip, processedBuffer, onProgress);
@@ -1657,6 +1669,7 @@ export class ClipAudioRenderService {
       });
       processedBuffer = createSilentLike(processedBuffer);
     } else {
+      processedBuffer = appendSilence(processedBuffer, effectTailSeconds);
       processedBuffer = await this.renderEffects(clip, processedBuffer, keyframes, effectMode, onProgress);
     }
 
