@@ -876,7 +876,7 @@ function normalizeItemFolderParents<T extends StoreItemWithParent>(
   return repairedCount > 0 ? normalized : items;
 }
 
-const FLASHBOARD_SERVICES = new Set<FlashBoardService>(['piapi', 'kieai', 'cloud', 'elevenlabs']);
+const FLASHBOARD_SERVICES = new Set<FlashBoardService>(['piapi', 'kieai', 'cloud', 'elevenlabs', 'suno']);
 const FLASHBOARD_OUTPUT_TYPES = new Set<FlashBoardOutputType>(['video', 'image', 'audio']);
 const FLASHBOARD_MEDIA_TYPES = new Set<FlashBoardMediaType>(['video', 'image', 'audio']);
 
@@ -894,7 +894,7 @@ function normalizeFlashBoardOutputType(
     return value as FlashBoardOutputType;
   }
 
-  return service === 'elevenlabs' ? 'audio' : undefined;
+  return service === 'elevenlabs' || service === 'suno' ? 'audio' : undefined;
 }
 
 function normalizeFlashBoardMediaType(value: unknown): FlashBoardMediaType {

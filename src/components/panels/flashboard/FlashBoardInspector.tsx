@@ -130,6 +130,18 @@ export function FlashBoardInspector() {
               {node.request.voiceName && `Voice: ${node.request.voiceName}`}
               {node.request.voiceName && <br />}
               Model: {node.request.version}
+              {node.request.sunoTitle && (
+                <>
+                  <br />
+                  Title: {node.request.sunoTitle}
+                </>
+              )}
+              {node.request.sunoStyle && (
+                <>
+                  <br />
+                  Style: {node.request.sunoStyle}
+                </>
+              )}
               {node.request.outputFormat && (
                 <>
                   <br />

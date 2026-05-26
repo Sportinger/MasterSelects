@@ -1,6 +1,7 @@
 import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/types';
 import { calculateKieAiCost } from '../kieAiService';
 import { calculateCost as calculatePiApiCost } from '../piApiService';
+import { estimateHostedElevenLabsSpeechCredits, type ElevenLabsModelRates } from '../elevenLabsService';
 import type { CatalogEntry } from './types';
 
 const KIEAI_USD_PER_CREDIT = 0.005;
@@ -27,10 +28,13 @@ export interface FlashBoardPricingInput {
   generateAudio?: boolean;
   imageSize?: string;
   mode?: string;
+  modelId?: string;
+  modelRates?: ElevenLabsModelRates;
   multiShots?: boolean;
   outputType?: FlashBoardGenerationRequest['outputType'];
   providerId: string;
   service: PricingService;
+  text?: string;
 }
 
 function formatUsd(value: number): string {
@@ -82,6 +86,24 @@ function buildHostedImageEstimate(input: FlashBoardPricingInput): FlashBoardPric
   };
 }
 
+function buildHostedElevenLabsEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
+  const text = input.text?.trim() ?? '';
+  if (!text) {
+    return null;
+  }
+
+  const estimate = estimateHostedElevenLabsSpeechCredits(
+    text,
+    input.modelId ?? 'eleven_multilingual_v2',
+    input.modelRates,
+  );
+
+  return {
+    compactLabel: `${estimate.creditsRequired} cr`,
+    fullLabel: `${estimate.creditsRequired} credits for ${estimate.textCharacters.toLocaleString()} chars`,
+  };
+}
+
 function buildKieVideoEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
   const duration = normalizeVideoDuration(input.duration);
   const mode = normalizeMode(input.mode);
@@ -121,7 +143,11 @@ function buildPiApiEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstim
 }
 
 export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
-  if (input.service === 'elevenlabs' || input.outputType === 'audio') {
+  if (input.outputType === 'audio') {
+    return input.service === 'cloud' ? buildHostedElevenLabsEstimate(input) : null;
+  }
+
+  if (input.service === 'elevenlabs') {
     return null;
   }
 

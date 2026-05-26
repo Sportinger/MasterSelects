@@ -15,6 +15,8 @@ export type ElevenLabsMp3OutputFormat = typeof ELEVENLABS_MP3_OUTPUT_FORMATS[num
 export const DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT: ElevenLabsMp3OutputFormat = 'mp3_44100_128';
 export const ELEVENLABS_MP3_MIME_TYPE = 'audio/mpeg';
 export const ELEVENLABS_MP3_EXTENSION = 'mp3';
+export const ELEVENLABS_PROVIDER_USD_PER_CREDIT = 0.0001;
+export const MASTERSELECTS_HOSTED_USD_PER_CREDIT = 0.001;
 
 export type ElevenLabsErrorCode =
   | 'missing_api_key'
@@ -36,6 +38,58 @@ export interface ElevenLabsLanguage {
 export interface ElevenLabsModelRates {
   characterCostMultiplier?: number;
   costDiscountMultiplier?: number;
+}
+
+export interface HostedElevenLabsSpeechCostEstimate {
+  creditsRequired: number;
+  modelMultiplier: number;
+  providerCredits: number;
+  textCharacters: number;
+  usdEstimate: number;
+}
+
+export function isFlashOrTurboElevenLabsModel(modelId: string): boolean {
+  const normalized = modelId.toLowerCase();
+  return normalized.includes('flash') || normalized.includes('turbo');
+}
+
+export function getElevenLabsModelCharacterCostMultiplier(
+  modelId: string,
+  modelRates?: ElevenLabsModelRates | null,
+): number {
+  const explicitMultiplier = modelRates?.characterCostMultiplier;
+  if (typeof explicitMultiplier === 'number' && Number.isFinite(explicitMultiplier) && explicitMultiplier > 0) {
+    return explicitMultiplier;
+  }
+
+  return isFlashOrTurboElevenLabsModel(modelId) ? 0.5 : 1;
+}
+
+export function calculateHostedElevenLabsCredits(providerCredits: number): number {
+  if (!Number.isFinite(providerCredits) || providerCredits <= 0) {
+    return 0;
+  }
+
+  return Math.max(1, Math.ceil((providerCredits * ELEVENLABS_PROVIDER_USD_PER_CREDIT) / MASTERSELECTS_HOSTED_USD_PER_CREDIT));
+}
+
+export function estimateHostedElevenLabsSpeechCredits(
+  text: string,
+  modelId: string,
+  modelRates?: ElevenLabsModelRates | null,
+): HostedElevenLabsSpeechCostEstimate {
+  const textCharacters = text.length;
+  const modelMultiplier = getElevenLabsModelCharacterCostMultiplier(modelId, modelRates);
+  const providerCredits = Math.ceil(textCharacters * modelMultiplier);
+  const creditsRequired = calculateHostedElevenLabsCredits(providerCredits);
+
+  return {
+    creditsRequired,
+    modelMultiplier,
+    providerCredits,
+    textCharacters,
+    usdEstimate: providerCredits * ELEVENLABS_PROVIDER_USD_PER_CREDIT,
+  };
 }
 
 export interface ElevenLabsModel {

@@ -219,11 +219,11 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 
 - Dual-mode surface:
   - Classic mode keeps the older prompt and history generator UI
-  - Board mode embeds FlashBoard for video, image, and ElevenLabs audio generation
+  - Board mode embeds FlashBoard for video, image, hosted ElevenLabs audio, BYO ElevenLabs audio, and Suno music generation
 - Service and provider selection reflect the active backend
 - Generate and History tabs remain available at the top level
 - Access overlay appears when no Kie.ai, ElevenLabs, or hosted cloud access is available
-- Current generation backends are Kie.ai, MasterSelects Cloud, and ElevenLabs; PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current panel
+- Current generation backends are Kie.ai, MasterSelects Cloud, ElevenLabs, and Kie.ai-backed Suno; hosted ElevenLabs speech uses Cloud credits while BYO ElevenLabs still uses the local settings key. PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current panel
 
 #### FlashBoard Workspace
 
@@ -231,9 +231,9 @@ MasterSelects currently exposes 17 dockable panel types, plus the Slot Grid over
 - `+ New Draft` action for creating draft nodes on the active board
 - Canvas with pan, zoom, selection, drag/drop, resize handles, and a context menu
 - Reference tray for start and end image slots
-- Composer panel for prompt/text-to-speech input, output/model selection, duration, aspect ratio, mode, multi-shot authoring, and audio voice settings
+- Composer panel for prompt/text-to-speech/music input, output/model selection, duration, aspect ratio, mode, multi-shot authoring, audio voice settings, and Suno song controls
 - Inspector-style node details for status, cost, references, progress, and retry/delete actions
-- Completed generations are imported back into the media store and can be sent to the timeline; ElevenLabs audio imports under `AI Gen / Audio`
+- Completed generations are imported back into the media store and can be sent to the timeline; ElevenLabs and Suno audio imports under `AI Gen / Audio`
 - Load failures fall back to classic mode via the error boundary
 
 ### Downloads Panel
@@ -498,6 +498,7 @@ Edit menu -> Settings
 The current AI Generative-relevant keys are:
 
 - `Kie.ai` for the current local-provider classic and board-backed generation flow
+- `Kie.ai` also powers FlashBoard Suno music generation
 - `ElevenLabs` for FlashBoard text-to-speech audio generation
 - `PiAPI` for legacy compatibility and older catalog/pricing paths
 

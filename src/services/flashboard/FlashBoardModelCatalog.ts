@@ -2,6 +2,7 @@ import { getVideoProviders } from '../piApiService';
 import { getKieAiProviders } from '../kieAiService';
 import type { CatalogEntry } from './types';
 import { DEFAULT_ELEVENLABS_MODEL_ID } from '../../stores/flashboardStore/defaults';
+import { DEFAULT_SUNO_MODEL_ID, SUNO_MODEL_IDS, SUNO_PROVIDER_ID } from '../sunoService';
 
 export function getCatalogEntries(): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
@@ -66,6 +67,42 @@ export function getCatalogEntries(): CatalogEntry[] {
     providerId: 'elevenlabs-tts',
     name: 'ElevenLabs',
     description: 'Text-to-speech voice generation',
+    versions: [DEFAULT_ELEVENLABS_MODEL_ID],
+    modes: [],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: false,
+    supportsTextToAudio: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    outputType: 'audio',
+  });
+
+  entries.push({
+    service: 'suno',
+    providerId: SUNO_PROVIDER_ID,
+    name: 'Suno',
+    description: 'Text-to-music generation via Kie.ai Suno',
+    versions: [DEFAULT_SUNO_MODEL_ID, ...SUNO_MODEL_IDS.filter((model) => model !== DEFAULT_SUNO_MODEL_ID)],
+    modes: [],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: false,
+    supportsTextToAudio: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    outputType: 'audio',
+  });
+
+  entries.push({
+    service: 'cloud',
+    providerId: 'cloud-elevenlabs-tts',
+    name: 'ElevenLabs (Cloud)',
+    description: 'Hosted text-to-speech generation via MasterSelects Cloud credits',
     versions: [DEFAULT_ELEVENLABS_MODEL_ID],
     modes: [],
     durations: [],

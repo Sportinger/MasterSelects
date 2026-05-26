@@ -7,9 +7,10 @@ export interface FlashBoardStoreState {
   hoveredComposerReference: FlashBoardHoveredComposerReference | null;
 }
 
-export type FlashBoardService = 'piapi' | 'kieai' | 'cloud' | 'elevenlabs';
+export type FlashBoardService = 'piapi' | 'kieai' | 'cloud' | 'elevenlabs' | 'suno';
 export type FlashBoardOutputType = 'video' | 'image' | 'audio';
 export type FlashBoardMediaType = 'video' | 'image' | 'audio';
+export type FlashBoardSunoVocalGender = 'm' | 'f';
 
 export interface FlashBoardVoiceSettings {
   speed?: number;
@@ -41,6 +42,15 @@ export interface FlashBoardComposerState {
   languageCode?: string;
   outputFormat?: string;
   voiceSettings?: FlashBoardVoiceSettings;
+  sunoCustomMode?: boolean;
+  sunoInstrumental?: boolean;
+  sunoStyle?: string;
+  sunoTitle?: string;
+  sunoNegativeTags?: string;
+  sunoVocalGender?: FlashBoardSunoVocalGender;
+  sunoStyleWeight?: number;
+  sunoWeirdnessConstraint?: number;
+  sunoAudioWeight?: number;
   startMediaFileId?: string;
   endMediaFileId?: string;
   referenceMediaFileIds: string[];
@@ -94,6 +104,15 @@ export interface FlashBoardGenerationRequest {
   languageCode?: string;
   outputFormat?: string;
   voiceSettings?: FlashBoardVoiceSettings;
+  sunoCustomMode?: boolean;
+  sunoInstrumental?: boolean;
+  sunoStyle?: string;
+  sunoTitle?: string;
+  sunoNegativeTags?: string;
+  sunoVocalGender?: FlashBoardSunoVocalGender;
+  sunoStyleWeight?: number;
+  sunoWeirdnessConstraint?: number;
+  sunoAudioWeight?: number;
   startMediaFileId?: string;
   endMediaFileId?: string;
   referenceMediaFileIds: string[];
@@ -167,6 +186,15 @@ export interface FlashBoardGenerationMetadata {
   languageCode?: string;
   outputFormat?: string;
   voiceSettings?: FlashBoardVoiceSettings;
+  sunoCustomMode?: boolean;
+  sunoInstrumental?: boolean;
+  sunoStyle?: string;
+  sunoTitle?: string;
+  sunoNegativeTags?: string;
+  sunoVocalGender?: FlashBoardSunoVocalGender;
+  sunoStyleWeight?: number;
+  sunoWeirdnessConstraint?: number;
+  sunoAudioWeight?: number;
   startMediaFileId?: string;
   endMediaFileId?: string;
   referenceMediaFileIds: string[];

@@ -15,6 +15,7 @@ import {
   elevenLabsService,
   isElevenLabsMp3OutputFormat,
 } from '../elevenLabsService';
+import { SUNO_PROVIDER_ID, sunoService } from '../sunoService';
 
 const log = Logger.create('FlashBoardJob');
 
@@ -177,13 +178,80 @@ class FlashBoardJobService {
       if (request.service === 'kieai') {
         kieAiService.setApiKey(kieai);
       }
+      if (request.service === 'suno') {
+        sunoService.setApiKey(kieai);
+      }
       if (request.service === 'elevenlabs') {
         elevenLabsService.setApiKey(elevenlabs);
       }
 
+      const isSunoMusicRequest = request.service === 'suno' || request.providerId === SUNO_PROVIDER_ID;
+      if (isSunoMusicRequest) {
+        if (!request.prompt.trim()) {
+          throw new Error('Describe the music before generating with Suno.');
+        }
+
+        const remoteTaskId = await sunoService.createMusic({
+          audioWeight: request.sunoAudioWeight,
+          customMode: request.sunoCustomMode,
+          instrumental: request.sunoInstrumental,
+          model: request.version,
+          negativeTags: request.sunoNegativeTags,
+          prompt: request.prompt,
+          style: request.sunoStyle,
+          styleWeight: request.sunoStyleWeight,
+          title: request.sunoTitle,
+          vocalGender: request.sunoVocalGender,
+          weirdnessConstraint: request.sunoWeirdnessConstraint,
+        }, abortController.signal);
+
+        this.running.push({
+          nodeId,
+          remoteTaskId,
+          service: request.service,
+          abortController,
+        });
+        this.onUpdate?.(nodeId, { status: 'processing', progress: 0.05, remoteTaskId });
+
+        const task = await sunoService.pollMusicTaskUntilComplete(
+          remoteTaskId,
+          (currentTask) => {
+            if (abortController.signal.aborted) throw new Error('Canceled');
+            this.onUpdate?.(nodeId, {
+              status: 'processing',
+              progress: currentTask.progress,
+              remoteTaskId,
+            });
+          },
+          10000,
+          900000,
+          abortController.signal,
+        );
+
+        this.running = this.running.filter(r => r.nodeId !== nodeId);
+        const audioUrl = task.results?.[0]?.audioUrl;
+        if (task.status === 'completed' && audioUrl) {
+          this.onUpdate?.(nodeId, {
+            status: 'completed',
+            progress: 1,
+            remoteTaskId,
+            assetUrl: audioUrl,
+            mediaType: 'audio',
+          });
+        } else {
+          this.onUpdate?.(nodeId, {
+            status: 'failed',
+            error: task.error || 'Suno generation finished without an audio URL.',
+            remoteTaskId,
+          });
+        }
+        this.processQueue();
+        return;
+      }
+
       if (request.outputType === 'audio' || request.service === 'elevenlabs') {
-        if (request.service !== 'elevenlabs') {
-          throw new Error('Audio generation is currently only supported through ElevenLabs');
+        if (request.service !== 'elevenlabs' && request.service !== 'cloud') {
+          throw new Error('Audio generation is currently only supported through ElevenLabs and Suno');
         }
         if (!request.voiceId?.trim()) {
           throw new Error('Choose an ElevenLabs voice before generating speech.');
@@ -204,14 +272,21 @@ class FlashBoardJobService {
         const outputFormat = request.outputFormat && isElevenLabsMp3OutputFormat(request.outputFormat)
           ? request.outputFormat
           : DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT;
-        const speech = await elevenLabsService.createSpeech({
+        const speechParams = {
           voiceId: request.voiceId,
           text: request.prompt,
           modelId: request.version,
           languageCode: request.languageOverride ? request.languageCode : undefined,
           outputFormat,
           voiceSettings: request.voiceSettings,
-        }, abortController.signal);
+        };
+        const speech = request.service === 'cloud'
+          ? await cloudAiService.createElevenLabsSpeech(
+              speechParams,
+              `flashboard-audio:${nodeId}:${Date.now()}`,
+              abortController.signal,
+            )
+          : await elevenLabsService.createSpeech(speechParams, abortController.signal);
         const voiceSlug = sanitizeForFilename(request.voiceName || request.voiceId, 24);
         const promptSlug = sanitizeForFilename(request.prompt, 32);
         const timestamp = Date.now();

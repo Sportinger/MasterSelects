@@ -1,3 +1,10 @@
+import type {
+  ElevenLabsCreateSpeechParams,
+  ElevenLabsModel,
+  ElevenLabsVoiceSearchParams,
+  ElevenLabsVoiceSearchResult,
+} from './elevenLabsService';
+
 export type AuthProvider = 'google' | 'magic_link';
 export type BillingPlanId = 'free' | 'starter' | 'pro' | 'studio';
 
@@ -103,7 +110,7 @@ export interface CloudAiGatewayError {
   message: string;
 }
 
-export type CloudAiGatewayKind = 'ai.chat' | 'ai.video';
+export type CloudAiGatewayKind = 'ai.audio' | 'ai.chat' | 'ai.video';
 export type CloudAiGatewayMode = 'byo' | 'hosted';
 export type CloudAiGatewayStatus =
   | 'accepted'
@@ -182,6 +189,17 @@ export interface CloudAiVideoRequest {
   taskId?: string;
 }
 
+export interface CloudAiAudioSpeechRequest {
+  idempotencyKey?: string;
+  params: ElevenLabsCreateSpeechParams;
+}
+
+export interface CloudAiAudioModelsResponse {
+  models: ElevenLabsModel[];
+}
+
+export type CloudAiAudioVoicesResponse = ElevenLabsVoiceSearchResult;
+
 export interface CloudAiCapabilitiesResponse {
   byoRequired?: boolean;
   capability?: Record<string, unknown>;
@@ -214,6 +232,7 @@ const HOSTED_CLOUD_API_ROUTES = [
   '/api/billing',
   '/api/stripe',
   '/api/ai/chat',
+  '/api/ai/audio',
   '/api/ai/video',
 ];
 
@@ -474,6 +493,36 @@ async function requestJson<T>(path: string, init: ApiRequestInit = {}): Promise<
   return data;
 }
 
+async function requestBinary(path: string, init: RequestInit = {}): Promise<{ blob: Blob; response: Response }> {
+  const response = await requestResponse(path, {
+    ...init,
+    headers: {
+      Accept: 'audio/mpeg',
+      ...(init.headers ?? {}),
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    let message = `Request failed with status ${response.status}`;
+
+    if (text.trim()) {
+      try {
+        message = getApiErrorMessage(JSON.parse(text) as ApiErrorResponse, response.status);
+      } catch {
+        message = text.trim();
+      }
+    }
+
+    throw new Error(message);
+  }
+
+  return {
+    blob: await response.blob(),
+    response,
+  };
+}
+
 export const cloudApi = {
   auth: {
     callback(state: string): Promise<CallbackResponse> {
@@ -550,6 +599,48 @@ export const cloudApi = {
             'Content-Type': 'application/json',
           },
           method: 'POST',
+        });
+      },
+    },
+    audio: {
+      capabilities(): Promise<CloudAiCapabilitiesResponse> {
+        const url = new URL('/api/ai/audio', window.location.origin);
+        url.searchParams.set('action', 'capabilities');
+        return requestJson<CloudAiCapabilitiesResponse>(url.toString(), { method: 'GET' });
+      },
+      models(): Promise<CloudAiGatewayEnvelope<CloudAiAudioModelsResponse>> {
+        const url = new URL('/api/ai/audio', window.location.origin);
+        url.searchParams.set('action', 'models');
+        return requestJson<CloudAiGatewayEnvelope<CloudAiAudioModelsResponse>>(url.toString(), { method: 'GET' });
+      },
+      voices(params: ElevenLabsVoiceSearchParams = {}): Promise<CloudAiGatewayEnvelope<CloudAiAudioVoicesResponse>> {
+        const url = new URL('/api/ai/audio', window.location.origin);
+        url.searchParams.set('action', 'voices');
+
+        if (params.nextPageToken) url.searchParams.set('nextPageToken', params.nextPageToken);
+        if (params.pageSize !== undefined) url.searchParams.set('pageSize', String(params.pageSize));
+        if (params.search) url.searchParams.set('search', params.search);
+        if (params.sort) url.searchParams.set('sort', params.sort);
+        if (params.sortDirection) url.searchParams.set('sortDirection', params.sortDirection);
+        if (params.voiceType) url.searchParams.set('voiceType', params.voiceType);
+        if (params.category) url.searchParams.set('category', params.category);
+        if (params.fineTuningState) url.searchParams.set('fineTuningState', params.fineTuningState);
+        if (params.collectionId) url.searchParams.set('collectionId', params.collectionId);
+        if (params.includeTotalCount !== undefined) url.searchParams.set('includeTotalCount', String(params.includeTotalCount));
+        for (const voiceId of params.voiceIds ?? []) {
+          url.searchParams.append('voiceIds', voiceId);
+        }
+
+        return requestJson<CloudAiGatewayEnvelope<CloudAiAudioVoicesResponse>>(url.toString(), { method: 'GET' });
+      },
+      speech(body: CloudAiAudioSpeechRequest, signal?: AbortSignal): Promise<{ blob: Blob; response: Response }> {
+        return requestBinary('/api/ai/audio', {
+          body: JSON.stringify(body),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          method: 'POST',
+          signal,
         });
       },
     },

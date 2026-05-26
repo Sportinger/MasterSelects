@@ -39,6 +39,15 @@ export interface ImportGeneratedMediaInput {
     languageCode?: string;
     outputFormat?: string;
     voiceSettings?: FlashBoardGenerationRequest['voiceSettings'];
+    sunoCustomMode?: boolean;
+    sunoInstrumental?: boolean;
+    sunoStyle?: string;
+    sunoTitle?: string;
+    sunoNegativeTags?: string;
+    sunoVocalGender?: FlashBoardGenerationRequest['sunoVocalGender'];
+    sunoStyleWeight?: number;
+    sunoWeirdnessConstraint?: number;
+    sunoAudioWeight?: number;
     startMediaFileId?: string;
     endMediaFileId?: string;
     referenceMediaFileIds: string[];

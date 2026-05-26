@@ -14,9 +14,12 @@ vi.mock('../../src/services/logger', () => ({
 }));
 
 import {
+  calculateHostedElevenLabsCredits,
   ELEVENLABS_MP3_MIME_TYPE,
   ElevenLabsService,
   ElevenLabsServiceError,
+  estimateHostedElevenLabsSpeechCredits,
+  getElevenLabsModelCharacterCostMultiplier,
   type ElevenLabsMp3OutputFormat,
 } from '../../src/services/elevenLabsService';
 
@@ -316,5 +319,27 @@ describe('ElevenLabsService', () => {
 
     await expect(service.listModels()).rejects.toEqual(expect.any(ElevenLabsServiceError));
     await expect(service.listModels()).rejects.toMatchObject({ code: 'aborted' });
+  });
+
+  it('estimates hosted speech credits from text length and model multiplier', () => {
+    expect(getElevenLabsModelCharacterCostMultiplier('eleven_flash_v2_5')).toBe(0.5);
+    expect(getElevenLabsModelCharacterCostMultiplier('eleven_turbo_v2_5')).toBe(0.5);
+    expect(getElevenLabsModelCharacterCostMultiplier('eleven_multilingual_v2')).toBe(1);
+    expect(getElevenLabsModelCharacterCostMultiplier('custom', { characterCostMultiplier: 0.25 })).toBe(0.25);
+
+    expect(estimateHostedElevenLabsSpeechCredits('a'.repeat(1000), 'eleven_flash_v2_5')).toMatchObject({
+      providerCredits: 500,
+      creditsRequired: 50,
+      usdEstimate: 0.05,
+      textCharacters: 1000,
+    });
+    expect(estimateHostedElevenLabsSpeechCredits('a'.repeat(1000), 'eleven_multilingual_v2')).toMatchObject({
+      providerCredits: 1000,
+      creditsRequired: 100,
+      usdEstimate: 0.1,
+      textCharacters: 1000,
+    });
+    expect(calculateHostedElevenLabsCredits(0)).toBe(0);
+    expect(calculateHostedElevenLabsCredits(1)).toBe(1);
   });
 });

@@ -135,7 +135,7 @@ export async function createUsageEvent(
 export async function completeUsageEvent(
   db: AppD1Database,
   idempotencyKey: string,
-  updates: { ledgerEntryId?: string | null; status?: UsageStatus } = {},
+  updates: { creditCost?: number | null; ledgerEntryId?: string | null; status?: UsageStatus } = {},
 ): Promise<void> {
   const completedAt = new Date().toISOString();
 
@@ -145,11 +145,12 @@ export async function completeUsageEvent(
         UPDATE usage_events
         SET status = COALESCE(?, status),
             ledger_entry_id = COALESCE(?, ledger_entry_id),
+            credit_cost = COALESCE(?, credit_cost),
             completed_at = ?
         WHERE idempotency_key = ?
       `,
     )
-    .bind(updates.status ?? 'completed', updates.ledgerEntryId ?? null, completedAt, idempotencyKey)
+    .bind(updates.status ?? 'completed', updates.ledgerEntryId ?? null, updates.creditCost ?? null, completedAt, idempotencyKey)
     .run();
 }
 

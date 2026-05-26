@@ -39,6 +39,7 @@ export interface Env {
   AUTH_EMAIL_FROM?: string;
   DB: AppD1Database;
   ENVIRONMENT?: string;
+  ELEVENLABS_API_KEY?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   KIEAI_API_KEY?: string;

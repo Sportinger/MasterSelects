@@ -2,6 +2,17 @@ import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type Cl
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
 import type { TextToImageParams } from './kieAiService';
 import { useAccountStore } from '../stores/accountStore';
+import {
+  DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT,
+  ELEVENLABS_MP3_EXTENSION,
+  ELEVENLABS_MP3_MIME_TYPE,
+  isElevenLabsMp3OutputFormat,
+  type ElevenLabsCreateSpeechParams,
+  type ElevenLabsModel,
+  type ElevenLabsSpeechResult,
+  type ElevenLabsVoiceSearchParams,
+  type ElevenLabsVoiceSearchResult,
+} from './elevenLabsService';
 import type {
   AccountInfo,
   ImageToVideoParams,
@@ -111,6 +122,19 @@ function syncHostedCreditBalance(response: { creditBalance?: number | null }): v
   useAccountStore.getState().applyHostedCreditBalance(response.creditBalance);
 }
 
+function syncHostedCreditBalanceFromHeaders(headers: Headers): void {
+  const creditBalance = Number(headers.get('X-MasterSelects-Credit-Balance'));
+  if (!Number.isFinite(creditBalance)) {
+    return;
+  }
+
+  useAccountStore.getState().applyHostedCreditBalance(creditBalance);
+}
+
+function createHostedAudioIdempotencyKey(): string {
+  return `hosted-audio:${Date.now()}:${crypto.randomUUID()}`;
+}
+
 export const cloudAiService = {
   async createChatCompletion(body: Record<string, unknown>): Promise<unknown> {
     const response = await cloudApi.ai.chat.create(body as unknown as CloudAiChatRequest);
@@ -166,6 +190,44 @@ export const cloudAiService = {
     });
     syncHostedCreditBalance(response);
     return getHostedTaskId(response, 'Hosted image generation did not return a task id');
+  },
+  async listElevenLabsModels(): Promise<ElevenLabsModel[]> {
+    const response = await cloudApi.ai.audio.models();
+    syncHostedCreditBalance(response);
+    return response.data?.models ?? [];
+  },
+  async listElevenLabsVoices(params: ElevenLabsVoiceSearchParams = {}): Promise<ElevenLabsVoiceSearchResult> {
+    const response = await cloudApi.ai.audio.voices(params);
+    syncHostedCreditBalance(response);
+    return response.data ?? {
+      voices: [],
+      hasMore: false,
+      nextPageToken: null,
+    };
+  },
+  async createElevenLabsSpeech(
+    params: ElevenLabsCreateSpeechParams,
+    idempotencyKey = createHostedAudioIdempotencyKey(),
+    signal?: AbortSignal,
+  ): Promise<ElevenLabsSpeechResult> {
+    const { blob, response } = await cloudApi.ai.audio.speech({
+      idempotencyKey,
+      params,
+    }, signal);
+    syncHostedCreditBalanceFromHeaders(response.headers);
+
+    const outputFormatHeader = response.headers.get('X-MasterSelects-Output-Format') ?? '';
+    const outputFormat = isElevenLabsMp3OutputFormat(outputFormatHeader)
+      ? outputFormatHeader
+      : params.outputFormat ?? DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT;
+
+    return {
+      audio: blob,
+      mimeType: ELEVENLABS_MP3_MIME_TYPE,
+      extension: ELEVENLABS_MP3_EXTENSION,
+      outputFormat,
+      size: blob.size,
+    };
   },
   access: {
     resolve: resolveAiAccess,

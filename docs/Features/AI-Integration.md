@@ -151,22 +151,23 @@ The current AI Generative stack is no longer best described as "PiAPI as one uni
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
 | `Kie.ai` | Classic generator and FlashBoard | Current provider list comes from `getKieAiProviders()`; user-supplied key in Settings |
-| `MasterSelects Cloud` | Classic generator and FlashBoard when hosted access is available | Hosted credits/account flow; board mode resolves to hosted Kling when no local Kie key is present |
+| `MasterSelects Cloud` | Classic generator and FlashBoard when hosted access is available | Hosted credits/account flow; board mode resolves to hosted Kling when no local Kie key is present; FlashBoard can also use hosted ElevenLabs speech via `/api/ai/audio` |
 | `ElevenLabs` | FlashBoard audio generation | User-supplied key in Settings; text-to-speech output imports as durable audio media |
+| `Suno` | FlashBoard music generation | Uses Kie.ai's Suno API with the user-supplied Kie.ai key; generated music imports as durable audio media |
 | `PiAPI` | Legacy compatibility and some catalog/pricing metadata | Still present in older history/key migration paths and FlashBoard pricing/catalog helpers, but not the primary runtime path the current panel describes |
 
 The practical rule for the current branch is:
 - Classic mode uses Kie.ai or hosted cloud, depending on available credentials.
-- Board mode can select Kie.ai, hosted cloud, and ElevenLabs from the same FlashBoard composer.
+- Board mode can select Kie.ai, hosted cloud, hosted ElevenLabs speech, BYO ElevenLabs, and Suno music from the same FlashBoard composer.
 - ElevenLabs-only access opens the board on the audio text-to-speech target.
 - Service/provider labels in the panel reflect that active backend instead of a permanent PiAPI abstraction layer.
-- ElevenLabs keys are stored through the same encrypted local API-key path as the other provider keys and are not persisted in Zustand localStorage.
+- BYO ElevenLabs keys are stored through the same encrypted local API-key path as the other provider keys and are not persisted in Zustand localStorage. Hosted ElevenLabs uses the Cloudflare `ELEVENLABS_API_KEY` secret and charges logged-in users by hosted credits.
 
 ### Timeline Integration
 - Add to Timeline is enabled by default
 - Classic generated clips auto-import to the `AI Video` folder
 - FlashBoard generated media imports under `AI Gen / Video`, `AI Gen / Images`, or `AI Gen / Audio`
-- Video/image clips are placed on video tracks; generated ElevenLabs speech behaves like normal imported audio and routes to an audio track
+- Video/image clips are placed on video tracks; generated ElevenLabs speech and Suno music behave like normal imported audio and route to an audio track
 
 ---
 

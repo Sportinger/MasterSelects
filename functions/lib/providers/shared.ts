@@ -1,5 +1,5 @@
 export type HostedGatewayMode = 'hosted' | 'byo';
-export type HostedGatewayKind = 'ai.chat' | 'ai.video';
+export type HostedGatewayKind = 'ai.audio' | 'ai.chat' | 'ai.video';
 export type HostedGatewayStatus =
   | 'accepted'
   | 'byo_required'

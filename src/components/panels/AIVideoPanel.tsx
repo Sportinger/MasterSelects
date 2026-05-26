@@ -1,4 +1,4 @@
-// AI Generative panel - AI generation via Kie.ai, MasterSelects Cloud, and ElevenLabs.
+// AI Generative panel - AI generation via Kie.ai, MasterSelects Cloud, ElevenLabs, and Suno.
 // Classic mode supports video. Board mode is the shared video/image/audio workspace.
 
 import { Component, type ReactNode, useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
@@ -35,7 +35,7 @@ import './AIVideoPanel.css';
 
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
-const AI_GENERATIVE_BOARD_SERVICES: Array<'kieai' | 'cloud' | 'elevenlabs'> = ['kieai', 'cloud', 'elevenlabs'];
+const AI_GENERATIVE_BOARD_SERVICES: Array<'kieai' | 'cloud' | 'elevenlabs' | 'suno'> = ['kieai', 'cloud', 'elevenlabs', 'suno'];
 
 interface FlashBoardErrorBoundaryProps {
   children: ReactNode;
@@ -665,7 +665,7 @@ export function AIVideoPanel() {
             <span className="no-key-icon">🎬</span>
             <p>Sign in or add an API key to use AI Generative</p>
             <span className="no-key-hint">
-              Board mode supports Kie.ai, MasterSelects Cloud, and ElevenLabs audio generation.
+              Board mode supports Kie.ai, MasterSelects Cloud, ElevenLabs speech, and Suno music generation.
             </span>
             <div className="no-key-actions">
               <button className="btn-settings" onClick={openAuthDialog}>

@@ -2,7 +2,7 @@
 
 ## Local Development
 
-Hosted auth, billing, and hosted AI do not exist on plain `vite` alone. If you open `http://localhost:5173/` without the Cloudflare backend, routes such as `/api/me`, `/api/auth/login`, `/api/billing/summary`, `/api/ai/chat`, and `/api/ai/video` will fail.
+Hosted auth, billing, and hosted AI do not exist on plain `vite` alone. If you open `http://localhost:5173/` without the Cloudflare backend, routes such as `/api/me`, `/api/auth/login`, `/api/billing/summary`, `/api/ai/chat`, `/api/ai/audio`, and `/api/ai/video` will fail.
 
 Use the combined dev flow:
 
@@ -29,6 +29,7 @@ The Vite dev server proxies the hosted routes to the Functions server:
 - `/api/billing/*`
 - `/api/stripe/*`
 - `/api/ai/chat`
+- `/api/ai/audio`
 - `/api/ai/video`
 
 `npm run dev:api` applies local D1 migrations automatically. If you run `wrangler pages dev` yourself, run `npm run cf:migrate:local` first.
@@ -47,6 +48,7 @@ That summary feeds the visible plan, credit balance, entitlements, hosted AI ava
 Hosted AI uses two different server routes:
 
 - `/api/ai/chat` is OpenAI-backed and credit-gated
+- `/api/ai/audio` is ElevenLabs-backed for hosted FlashBoard text-to-speech, also credit-gated
 - `/api/ai/video` is Kie.ai-backed for Kling 3.0 and Nano Banana 2, also credit-gated
 
 Hosted chat requests are also logged best-effort into D1:
@@ -65,6 +67,8 @@ The hosted video route accepts:
 
 Video status is polled through `/api/ai/video?taskId=...`. Successful hosted requests return a task ID and the current credit balance, which the client syncs back into the account store.
 
+Hosted ElevenLabs speech returns an MP3 response directly. The route estimates cost before calling ElevenLabs from text length and model pricing, then finalizes the credit charge from ElevenLabs' `x-character-count` header when it is present.
+
 ## Secrets
 
 Set these as Cloudflare Pages or Workers secrets:
@@ -77,9 +81,10 @@ wrangler secret put STRIPE_SECRET_KEY
 wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put OPENAI_API_KEY
 wrangler secret put KIEAI_API_KEY
+wrangler secret put ELEVENLABS_API_KEY
 ```
 
-`OPENAI_API_KEY` is used by hosted chat. `KIEAI_API_KEY` is used by hosted video and hosted image generation.
+`OPENAI_API_KEY` is used by hosted chat. `KIEAI_API_KEY` is used by hosted video and hosted image generation. `ELEVENLABS_API_KEY` is used by hosted FlashBoard text-to-speech.
 
 ## Non-Secret Vars
 
