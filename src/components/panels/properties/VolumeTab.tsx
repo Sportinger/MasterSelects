@@ -1,5 +1,4 @@
 // Volume Tab - Audio volume and EQ controls
-import { useEffect } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { createEffectProperty } from '../../../types';
 import { EQ_FREQUENCIES } from '../../../services/audioManager';
@@ -7,12 +6,15 @@ import { DraggableNumber, EffectKeyframeToggle, EQKeyframeToggle } from './share
 import { EQ_BAND_PARAMS } from './sharedConstants';
 import { MIDIParameterLabel } from './MIDIParameterLabel';
 import { AudioEffectStackControl } from './AudioEffectStackControl';
+import { GraphicalEqualizerControl } from './GraphicalEqualizerControl';
+import { formatEqualizerFrequency } from './equalizerFormatting';
 
 // dB conversion helpers (internal gain 0–2 ↔ display dB)
 const SILENCE_THRESHOLD_DB = -60;
 const gainToDb = (gain: number): number => gain <= 0 ? SILENCE_THRESHOLD_DB : Math.max(SILENCE_THRESHOLD_DB, 20 * Math.log10(gain));
 const dbToGain = (db: number): number => db <= SILENCE_THRESHOLD_DB ? 0 : Math.pow(10, db / 20);
 const LEGACY_VOLUME_EQ_EFFECT_IDS = new Set(['audio-volume', 'audio-eq']);
+type LegacyAudioEffectType = 'audio-volume' | 'audio-eq';
 
 interface VolumeTabProps {
   clipId: string;
@@ -23,6 +25,12 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
   // Reactive data - subscribe to specific values only
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clips = useTimelineStore(state => state.clips);
+  const runtimeDynamics = useTimelineStore(state => {
+    const currentClip = state.clips.find(candidate => candidate.id === clipId);
+    return currentClip
+      ? state.runtimeAudioMeters.trackMeters[currentClip.trackId]?.dynamics
+      : undefined;
+  });
   // Actions from getState() - stable, no subscription needed
   const {
     setPropertyValue,
@@ -41,49 +49,73 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
   const preservesPitch = clip?.preservesPitch !== false; // default true
   const clipAudioEffectStack = clip?.audioState?.effectStack ?? [];
 
-  // Auto-add audio effects if they don't exist
-  useEffect(() => {
-    const hasVolumeEffect = effects.some(e => e.type === 'audio-volume');
-    const hasEQEffect = effects.some(e => e.type === 'audio-eq');
-    if (!hasVolumeEffect) addClipEffect(clipId, 'audio-volume');
-    if (!hasEQEffect) addClipEffect(clipId, 'audio-eq');
-  }, [clipId, effects, addClipEffect]);
+  const getOrCreateLegacyAudioEffectId = (effectType: LegacyAudioEffectType): string => {
+    const currentClip = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+    const currentEffect = currentClip?.effects.find(effect => effect.type === effectType);
+    return currentEffect?.id ?? addClipEffect(clipId, effectType);
+  };
 
   // Get current values
-  const volumeEffect = interpolatedEffects.find(e => e.type === 'audio-volume');
-  const eqEffect = interpolatedEffects.find(e => e.type === 'audio-eq');
+  const actualVolumeEffect = effects.find(e => e.type === 'audio-volume');
+  const actualEqEffect = effects.find(e => e.type === 'audio-eq');
+  const volumeEffect = interpolatedEffects.find(e => e.type === 'audio-volume') ?? actualVolumeEffect;
+  const eqEffect = interpolatedEffects.find(e => e.type === 'audio-eq') ?? actualEqEffect;
   const volume = (volumeEffect?.params?.volume as number) ?? 1;
   const eqBands = EQ_BAND_PARAMS.map(param => (eqEffect?.params?.[param] as number) ?? 0);
-  const volumeMIDITarget = volumeEffect ? {
+  const volumeMIDITarget = actualVolumeEffect ? {
     clipId,
-    property: createEffectProperty(volumeEffect.id, 'volume'),
+    property: createEffectProperty(actualVolumeEffect.id, 'volume'),
     label: 'Volume',
     currentValue: volume,
     min: dbToGain(SILENCE_THRESHOLD_DB),
     max: dbToGain(6),
   } : null;
 
-  const formatFreq = (freq: number) => freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
-
   const handleVolumeChange = (value: number) => {
-    if (!volumeEffect) return;
-    const property = createEffectProperty(volumeEffect.id, 'volume');
+    const effectId = getOrCreateLegacyAudioEffectId('audio-volume');
+    const property = createEffectProperty(effectId, 'volume');
     setPropertyValue(clipId, property, value);
   };
 
   const handleEQChange = (bandIndex: number, value: number) => {
-    if (!eqEffect) return;
-    const property = createEffectProperty(eqEffect.id, EQ_BAND_PARAMS[bandIndex]);
+    const effectId = getOrCreateLegacyAudioEffectId('audio-eq');
+    const property = createEffectProperty(effectId, EQ_BAND_PARAMS[bandIndex]);
     setPropertyValue(clipId, property, value);
   };
 
   const handleResetEQ = () => {
-    if (!eqEffect) return;
+    const effectId = actualEqEffect?.id;
+    if (!effectId) return;
     EQ_BAND_PARAMS.forEach(param => {
-      const property = createEffectProperty(eqEffect.id, param);
+      const property = createEffectProperty(effectId, param);
       setPropertyValue(clipId, property, 0);
     });
   };
+
+  const eqGraphBands = EQ_FREQUENCIES.map((freq, index) => {
+    const label = formatEqualizerFrequency(freq);
+    return {
+      id: EQ_BAND_PARAMS[index],
+      frequencyHz: freq,
+      valueDb: eqBands[index],
+      ariaLabel: `${label}Hz EQ`,
+      label: (
+        <MIDIParameterLabel
+          as="span"
+          target={actualEqEffect ? {
+            clipId,
+            property: createEffectProperty(actualEqEffect.id, EQ_BAND_PARAMS[index]),
+            label: `${label}Hz EQ`,
+            currentValue: eqBands[index],
+            min: -12,
+            max: 12,
+          } : null}
+        >
+          {label}
+        </MIDIParameterLabel>
+      ),
+    };
+  });
 
   return (
     <div className="properties-tab-content volume-tab">
@@ -135,49 +167,21 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
       <div className="properties-section eq-section">
         <div className="section-header-row">
           <h4>10-Band Equalizer</h4>
-          {eqEffect && (
-            <EQKeyframeToggle clipId={clipId} effectId={eqEffect.id} eqBands={eqBands} />
+          {actualEqEffect && (
+            <EQKeyframeToggle clipId={clipId} effectId={actualEqEffect.id} eqBands={eqBands} />
           )}
           <button className="btn btn-sm" onClick={handleResetEQ}>Reset</button>
         </div>
 
-        <div className="eq-bands">
-          {EQ_FREQUENCIES.map((freq, index) => (
-            <div key={freq} className="eq-band">
-              <div className="eq-band-value">
-                {eqBands[index] > 0 ? '+' : ''}{eqBands[index].toFixed(1)}
-              </div>
-              <input type="range" className="eq-slider" min="-12" max="12" step="0.5"
-                value={eqBands[index]} onChange={(e) => handleEQChange(index, parseFloat(e.target.value))}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleEQChange(index, 0);
-                }}
-                title={`${formatFreq(freq)}Hz: ${eqBands[index].toFixed(1)}dB`} />
-              <MIDIParameterLabel
-                as="div"
-                className="eq-band-label"
-                target={eqEffect ? {
-                  clipId,
-                  property: createEffectProperty(eqEffect.id, EQ_BAND_PARAMS[index]),
-                  label: `${formatFreq(freq)}Hz EQ`,
-                  currentValue: eqBands[index],
-                  min: -12,
-                  max: 12,
-                } : null}
-              >
-                {formatFreq(freq)}
-              </MIDIParameterLabel>
-            </div>
-          ))}
-        </div>
-
-        <div className="eq-scale">
-          <span>+12dB</span>
-          <span>0dB</span>
-          <span>-12dB</span>
-        </div>
+        <GraphicalEqualizerControl
+          bands={eqGraphBands}
+          minDb={-12}
+          maxDb={12}
+          step={0.5}
+          ariaLabel="10-band clip equalizer"
+          onChange={handleEQChange}
+          onResetBand={(bandIndex) => handleEQChange(bandIndex, 0)}
+        />
       </div>
 
       {/* Registry Audio Effects Section */}
@@ -186,6 +190,7 @@ export function VolumeTab({ clipId, effects }: VolumeTabProps) {
           effects={clipAudioEffectStack}
           excludeDescriptorIds={LEGACY_VOLUME_EQ_EFFECT_IDS}
           keyframeClipId={clipId}
+          runtimeDynamics={runtimeDynamics}
           onAddEffect={(descriptorId) => addClipAudioEffectInstance(clipId, descriptorId)}
           onUpdateEffect={(effect, paramName, value) => updateClipAudioEffectInstance(clipId, effect.id, { [paramName]: value })}
           onSetEffectEnabled={(effectId, enabled) => setClipAudioEffectInstanceEnabled(clipId, effectId, enabled)}

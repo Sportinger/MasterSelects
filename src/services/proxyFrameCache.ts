@@ -12,7 +12,7 @@ import { fileSystemService } from './fileSystemService';
 import { useMediaStore } from '../stores/mediaStore';
 import { clampAudioPan, dbToLinearGain, finiteNumber } from '../engine/audio/audioMath';
 import type { LiveAudioRouteProcessor } from './audio/audioGraphRouteSettings';
-import type { AudioMeterSnapshot } from '../types';
+import type { AudioDynamicsReductionSnapshot, AudioMeterSnapshot } from '../types';
 import { calculateAudioMeterSnapshot } from './audio/audioMetering';
 
 // Cache settings - tuned for fast scrubbing
@@ -21,7 +21,9 @@ const PRELOAD_AHEAD_FRAMES = 60; // 2 seconds ahead for playback
 const PRELOAD_BEHIND_FRAMES = 30; // 1 second behind for reverse scrubbing
 const PARALLEL_LOAD_COUNT = 16; // More parallel loads for faster preload
 const SCRUB_PRELOAD_RANGE = 90; // 3 seconds around scrub position
+const SCRUB_TELEPORT_SECONDS = 2; // Large jumps should abandon stale queued scrub preloads
 const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const HUM_NOTCH_MAX_HARMONICS = 8;
 
 // Frame cache entry
 interface CachedFrame {
@@ -44,11 +46,23 @@ interface ScrubAudioOptions {
 }
 
 interface ScrubProcessorNode {
+  id: string;
   type: LiveAudioRouteProcessor['type'];
   nodes: AudioNode[];
+  inputNode?: AudioNode;
+  outputNode?: AudioNode;
+  panner?: StereoPannerNode;
   filter?: BiquadFilterNode;
+  filters?: BiquadFilterNode[];
   compressor?: DynamicsCompressorNode;
   makeupGain?: GainNode;
+  dryGain?: GainNode;
+  wetGain?: GainNode;
+  scriptProcessor?: ScriptProcessorNode;
+  sampleProcessor?: LiveAudioRouteProcessor;
+  gainByChannel?: number[];
+  envelopeByChannel?: number[];
+  gainReductionDb?: number;
 }
 
 function clampScrubFrequency(ctx: BaseAudioContext, value: number): number {
@@ -60,15 +74,64 @@ function scrubProcessorSignature(processors: readonly LiveAudioRouteProcessor[] 
   return processors.map(processor => `${processor.id}:${processor.type}`).join('|');
 }
 
+function normalizeScrubDynamicsReductionDb(rawReduction: number): number {
+  if (!Number.isFinite(rawReduction)) return 0;
+  const reduction = rawReduction < 0 ? -rawReduction : rawReduction;
+  return Math.max(0, Math.min(60, reduction));
+}
+
+function scrubLimiterReductionDb(inputLinear: number, outputLinear: number): number {
+  if (inputLinear <= 0 || outputLinear <= 0 || outputLinear >= inputLinear) return 0;
+  return normalizeScrubDynamicsReductionDb(20 * Math.log10(inputLinear / outputLinear));
+}
+
 function updateScrubProcessorNode(
   ctx: BaseAudioContext,
   node: ScrubProcessorNode,
   processor: LiveAudioRouteProcessor,
 ): void {
+  if (processor.type === 'pan' && node.panner) {
+    node.panner.pan.value = clampAudioPan(finiteNumber(processor.pan, 0));
+    return;
+  }
+
+  if (processor.type === 'parametric-eq' && node.filter) {
+    node.filter.type = 'peaking';
+    node.filter.frequency.value = clampScrubFrequency(ctx, processor.frequencyHz);
+    node.filter.Q.value = Math.max(0.0001, Math.min(30, finiteNumber(processor.q, 1)));
+    node.filter.gain.value = Math.max(-48, Math.min(48, finiteNumber(processor.gainDb, 0)));
+    return;
+  }
+
   if ((processor.type === 'high-pass' || processor.type === 'low-pass') && node.filter) {
     node.filter.type = processor.type === 'high-pass' ? 'highpass' : 'lowpass';
     node.filter.frequency.value = clampScrubFrequency(ctx, processor.frequencyHz);
     node.filter.Q.value = Math.max(0.0001, Math.min(30, finiteNumber(processor.q, 0.707)));
+    return;
+  }
+
+  if (processor.type === 'hum-notch' && node.filters && node.dryGain && node.wetGain) {
+    const nyquist = Math.max(20, ctx.sampleRate / 2 - 1);
+    const baseFrequency = Math.max(20, Math.min(nyquist, finiteNumber(processor.frequencyHz, 50)));
+    const q = Math.max(1, Math.min(80, finiteNumber(processor.q, 30)));
+    const harmonicCount = Math.max(1, Math.min(HUM_NOTCH_MAX_HARMONICS, Math.round(finiteNumber(processor.harmonics, 2))));
+    const mix = Math.max(0, Math.min(1, finiteNumber(processor.mix, 1)));
+    node.dryGain.gain.value = 1 - mix;
+    node.wetGain.gain.value = mix;
+    node.filters.forEach((filter, index) => {
+      const harmonic = index + 1;
+      const frequency = baseFrequency * harmonic;
+      if (harmonic <= harmonicCount && frequency < nyquist) {
+        filter.type = 'notch';
+        filter.frequency.value = Math.max(20, Math.min(nyquist, frequency));
+        filter.Q.value = q;
+      } else {
+        filter.type = 'peaking';
+        filter.frequency.value = Math.min(nyquist, 1000);
+        filter.Q.value = 0.707;
+        filter.gain.value = 0;
+      }
+    });
     return;
   }
 
@@ -81,6 +144,402 @@ function updateScrubProcessorNode(
     if (node.makeupGain) {
       node.makeupGain.gain.value = Math.max(0, Math.min(4, dbToLinearGain(processor.makeupGainDb)));
     }
+    return;
+  }
+
+  if (
+    (
+      processor.type === 'limiter' ||
+      processor.type === 'noise-gate' ||
+      processor.type === 'expander' ||
+      processor.type === 'de-click' ||
+      processor.type === 'noise-reduction' ||
+      processor.type === 'saturation' ||
+      processor.type === 'polarity-invert' ||
+      processor.type === 'mono-sum' ||
+      processor.type === 'channel-swap' ||
+      processor.type === 'stereo-split'
+    ) &&
+    node.scriptProcessor
+  ) {
+    node.sampleProcessor = processor;
+  }
+}
+
+function copyScrubInputToOutput(input: AudioBuffer, output: AudioBuffer): void {
+  const fallbackChannel = input.numberOfChannels - 1;
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    output.getChannelData(channel).set(source);
+  }
+}
+
+function processScrubLimiterFrame(
+  node: ScrubProcessorNode,
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'limiter' }>,
+): void {
+  const ceiling = Math.max(0.000001, dbToLinearGain(processor.ceilingDb));
+  const inputGain = dbToLinearGain(processor.inputGainDb);
+  const fallbackChannel = input.numberOfChannels - 1;
+  let maxReductionDb = 0;
+
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    const target = output.getChannelData(channel);
+    for (let sampleIndex = 0; sampleIndex < target.length; sampleIndex += 1) {
+      const driven = (source[sampleIndex] ?? 0) * inputGain;
+      const limited = Math.max(-ceiling, Math.min(ceiling, driven));
+      target[sampleIndex] = limited;
+      maxReductionDb = Math.max(maxReductionDb, scrubLimiterReductionDb(Math.abs(driven), Math.abs(limited)));
+    }
+  }
+
+  node.gainReductionDb = maxReductionDb;
+}
+
+function processScrubNoiseGateFrame(
+  node: ScrubProcessorNode,
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'noise-gate' }>,
+): void {
+  const threshold = dbToLinearGain(processor.thresholdDb);
+  const floorGain = dbToLinearGain(processor.floorDb);
+  const attackMs = Math.max(0.001, finiteNumber(processor.attackMs, 2));
+  const releaseMs = Math.max(0.001, finiteNumber(processor.releaseMs, 80));
+  const attackCoefficient = Math.exp(-1 / (input.sampleRate * attackMs / 1000));
+  const releaseCoefficient = Math.exp(-1 / (input.sampleRate * releaseMs / 1000));
+  const fallbackChannel = input.numberOfChannels - 1;
+  const gainByChannel = node.gainByChannel ?? [];
+  let maxReductionDb = 0;
+
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    const target = output.getChannelData(channel);
+    let gain = gainByChannel[channel] ?? 1;
+    for (let sampleIndex = 0; sampleIndex < target.length; sampleIndex += 1) {
+      const sample = source[sampleIndex] ?? 0;
+      const targetGain = Math.abs(sample) >= threshold ? 1 : floorGain;
+      const coefficient = targetGain > gain ? attackCoefficient : releaseCoefficient;
+      gain = targetGain + coefficient * (gain - targetGain);
+      target[sampleIndex] = sample * gain;
+      maxReductionDb = Math.max(
+        maxReductionDb,
+        normalizeScrubDynamicsReductionDb(-20 * Math.log10(Math.max(0.000001, gain))),
+      );
+    }
+    gainByChannel[channel] = gain;
+  }
+
+  node.gainByChannel = gainByChannel;
+  node.gainReductionDb = maxReductionDb;
+}
+
+function calculateScrubExpanderTargetGain(sample: number, processor: Extract<LiveAudioRouteProcessor, { type: 'expander' }>): number {
+  const thresholdDb = Math.max(-100, Math.min(0, finiteNumber(processor.thresholdDb, 0)));
+  const ratio = Math.max(1, Math.min(20, finiteNumber(processor.ratio, 1)));
+  const rangeDb = Math.max(0, Math.min(80, finiteNumber(processor.rangeDb, 0)));
+  if (ratio <= 1.0001 || rangeDb <= 0.0001) return 1;
+  const inputDb = 20 * Math.log10(Math.max(0.000001, Math.abs(sample)));
+  if (inputDb >= thresholdDb) return 1;
+  const reductionDb = Math.min(rangeDb, (thresholdDb - inputDb) * (ratio - 1));
+  return dbToLinearGain(-reductionDb);
+}
+
+function processScrubExpanderFrame(
+  node: ScrubProcessorNode,
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'expander' }>,
+): void {
+  const attackMs = Math.max(0.001, finiteNumber(processor.attackMs, 2));
+  const releaseMs = Math.max(0.001, finiteNumber(processor.releaseMs, 120));
+  const attackCoefficient = Math.exp(-1 / (input.sampleRate * attackMs / 1000));
+  const releaseCoefficient = Math.exp(-1 / (input.sampleRate * releaseMs / 1000));
+  const fallbackChannel = input.numberOfChannels - 1;
+  const gainByChannel = node.gainByChannel ?? [];
+  let maxReductionDb = 0;
+
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    const target = output.getChannelData(channel);
+    let gain = gainByChannel[channel] ?? 1;
+    for (let sampleIndex = 0; sampleIndex < target.length; sampleIndex += 1) {
+      const sample = source[sampleIndex] ?? 0;
+      const targetGain = calculateScrubExpanderTargetGain(sample, processor);
+      const coefficient = targetGain < gain ? attackCoefficient : releaseCoefficient;
+      gain = targetGain + coefficient * (gain - targetGain);
+      target[sampleIndex] = sample * gain;
+      maxReductionDb = Math.max(maxReductionDb, normalizeScrubDynamicsReductionDb(-20 * Math.log10(Math.max(0.000001, gain))));
+    }
+    gainByChannel[channel] = gain;
+  }
+
+  node.gainByChannel = gainByChannel;
+  node.gainReductionDb = maxReductionDb;
+}
+
+function calculateScrubNoiseReductionTargetGain(
+  envelope: number,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'noise-reduction' }>,
+): number {
+  const thresholdDb = Math.max(-100, Math.min(0, finiteNumber(processor.thresholdDb, -60)));
+  const reductionDb = Math.max(0, Math.min(60, finiteNumber(processor.reductionDb, 0)));
+  const sensitivity = Math.max(0.1, Math.min(4, finiteNumber(processor.sensitivity, 1)));
+  if (reductionDb <= 0.0001) return 1;
+  const envelopeDb = 20 * Math.log10(Math.max(0.000001, envelope));
+  if (envelopeDb >= thresholdDb) return 1;
+  const reductionRatio = Math.max(0, Math.min(1, ((thresholdDb - envelopeDb) / 48) * sensitivity));
+  return dbToLinearGain(-reductionDb * reductionRatio);
+}
+
+function processScrubNoiseReductionFrame(
+  node: ScrubProcessorNode,
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'noise-reduction' }>,
+): void {
+  const attackMs = Math.max(0.001, finiteNumber(processor.attackMs, 5));
+  const releaseMs = Math.max(0.001, finiteNumber(processor.releaseMs, 160));
+  const attackCoefficient = Math.exp(-1 / (input.sampleRate * attackMs / 1000));
+  const releaseCoefficient = Math.exp(-1 / (input.sampleRate * releaseMs / 1000));
+  const mix = Math.max(0, Math.min(1, finiteNumber(processor.mix, 0)));
+  const fallbackChannel = input.numberOfChannels - 1;
+  const gainByChannel = node.gainByChannel ?? [];
+  const envelopeByChannel = node.envelopeByChannel ?? [];
+
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    const target = output.getChannelData(channel);
+    let gain = gainByChannel[channel] ?? 1;
+    let envelope = envelopeByChannel[channel] ?? 0;
+    for (let sampleIndex = 0; sampleIndex < target.length; sampleIndex += 1) {
+      const dry = source[sampleIndex] ?? 0;
+      const amplitude = Math.abs(dry);
+      const envelopeCoefficient = amplitude > envelope ? attackCoefficient : releaseCoefficient;
+      envelope = amplitude + envelopeCoefficient * (envelope - amplitude);
+      const targetGain = calculateScrubNoiseReductionTargetGain(envelope, processor);
+      const gainCoefficient = targetGain < gain ? attackCoefficient : releaseCoefficient;
+      gain = targetGain + gainCoefficient * (gain - targetGain);
+      target[sampleIndex] = dry * (1 - mix) + dry * gain * mix;
+    }
+    gainByChannel[channel] = gain;
+    envelopeByChannel[channel] = envelope;
+  }
+
+  node.gainByChannel = gainByChannel;
+  node.envelopeByChannel = envelopeByChannel;
+  node.gainReductionDb = 0;
+}
+
+function processScrubSaturationFrame(
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'saturation' }>,
+): void {
+  const driveDb = Math.max(0, Math.min(48, finiteNumber(processor.driveDb, 0)));
+  const drive = dbToLinearGain(driveDb);
+  const normalizer = driveDb <= 0.001 ? 1 : Math.tanh(drive) || 1;
+  const mix = Math.max(0, Math.min(1, finiteNumber(processor.mix, 0)));
+  const cutoff = Math.max(20, Math.min(input.sampleRate / 2 - 1, finiteNumber(processor.toneHz, 16000)));
+  const toneAlpha = 1 - Math.exp(-2 * Math.PI * cutoff / input.sampleRate);
+  const fallbackChannel = input.numberOfChannels - 1;
+
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    const target = output.getChannelData(channel);
+    let toneState = 0;
+
+    for (let sampleIndex = 0; sampleIndex < target.length; sampleIndex += 1) {
+      const dry = source[sampleIndex] ?? 0;
+      const saturated = driveDb <= 0.001 ? dry : Math.tanh(dry * drive) / normalizer;
+      toneState += toneAlpha * (saturated - toneState);
+      target[sampleIndex] = Math.max(-1, Math.min(1, dry * (1 - mix) + toneState * mix));
+    }
+  }
+}
+
+function processScrubPolarityInvertFrame(
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'polarity-invert' }>,
+): void {
+  const fallbackChannel = input.numberOfChannels - 1;
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    const target = output.getChannelData(channel);
+    const invert =
+      processor.channelMode === 'all' ||
+      (processor.channelMode === 'left' && channel === 0) ||
+      (processor.channelMode === 'right' && channel === 1);
+
+    for (let sampleIndex = 0; sampleIndex < target.length; sampleIndex += 1) {
+      const sample = source[sampleIndex] ?? 0;
+      target[sampleIndex] = invert ? -sample : sample;
+    }
+  }
+}
+
+function processScrubMonoSumFrame(input: AudioBuffer, output: AudioBuffer): void {
+  const sourceChannels = Array.from({ length: input.numberOfChannels }, (_, channel) => input.getChannelData(channel));
+  for (let sampleIndex = 0; sampleIndex < output.length; sampleIndex += 1) {
+    let sum = 0;
+    for (const source of sourceChannels) {
+      sum += source[sampleIndex] ?? 0;
+    }
+    const mono = sourceChannels.length > 0 ? sum / sourceChannels.length : 0;
+    for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+      output.getChannelData(channel)[sampleIndex] = mono;
+    }
+  }
+}
+
+function processScrubChannelSwapFrame(input: AudioBuffer, output: AudioBuffer): void {
+  const fallbackChannel = input.numberOfChannels - 1;
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const sourceChannel = input.numberOfChannels >= 2
+      ? channel === 0 ? 1 : channel === 1 ? 0 : channel
+      : channel;
+    const source = input.getChannelData(Math.max(0, Math.min(sourceChannel, fallbackChannel)));
+    output.getChannelData(channel).set(source);
+  }
+}
+
+function processScrubDeClickFrame(
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'de-click' }>,
+): void {
+  const fallbackChannel = input.numberOfChannels - 1;
+  const threshold = Math.max(0.01, Math.min(1, finiteNumber(processor.threshold, 0.35)));
+  const ratio = Math.max(1, finiteNumber(processor.ratio, 4));
+  const mix = Math.max(0, Math.min(1, finiteNumber(processor.mix, 1)));
+
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    const source = input.getChannelData(Math.max(0, Math.min(channel, fallbackChannel)));
+    const target = output.getChannelData(channel);
+    if (target.length <= 2) {
+      target.set(source);
+      continue;
+    }
+    target[0] = source[0] ?? 0;
+    target[target.length - 1] = source[target.length - 1] ?? 0;
+
+    for (let sampleIndex = 1; sampleIndex < target.length - 1; sampleIndex += 1) {
+      const previous = source[sampleIndex - 1] ?? 0;
+      const dry = source[sampleIndex] ?? 0;
+      const next = source[sampleIndex + 1] ?? 0;
+      const prediction = (previous + next) / 2;
+      const residual = Math.abs(dry - prediction);
+      const neighborEnergy = (Math.abs(previous) + Math.abs(next)) / 2;
+      const click = residual >= threshold && residual >= neighborEnergy * ratio;
+      target[sampleIndex] = click ? dry * (1 - mix) + prediction * mix : dry;
+    }
+  }
+}
+
+function processScrubStereoSplitFrame(
+  input: AudioBuffer,
+  output: AudioBuffer,
+  processor: Extract<LiveAudioRouteProcessor, { type: 'stereo-split' }>,
+): void {
+  const sourceChannel = Math.max(
+    0,
+    Math.min(input.numberOfChannels - 1, Math.round(finiteNumber(processor.sourceChannel, 0))),
+  );
+  const source = input.getChannelData(sourceChannel);
+  for (let channel = 0; channel < output.numberOfChannels; channel += 1) {
+    output.getChannelData(channel).set(source);
+  }
+}
+
+function attachScrubSampleProcessor(node: ScrubProcessorNode): void {
+  const scriptProcessor = node.scriptProcessor;
+  if (!scriptProcessor) return;
+
+  scriptProcessor.onaudioprocess = (event: AudioProcessingEvent) => {
+    const processor = node.sampleProcessor;
+    if (processor?.type === 'limiter') {
+      processScrubLimiterFrame(node, event.inputBuffer, event.outputBuffer, processor);
+      return;
+    }
+
+    if (processor?.type === 'noise-gate') {
+      processScrubNoiseGateFrame(node, event.inputBuffer, event.outputBuffer, processor);
+      return;
+    }
+
+    if (processor?.type === 'expander') {
+      processScrubExpanderFrame(node, event.inputBuffer, event.outputBuffer, processor);
+      return;
+    }
+
+    if (processor?.type === 'de-click') {
+      processScrubDeClickFrame(event.inputBuffer, event.outputBuffer, processor);
+      node.gainReductionDb = 0;
+      return;
+    }
+
+    if (processor?.type === 'noise-reduction') {
+      processScrubNoiseReductionFrame(node, event.inputBuffer, event.outputBuffer, processor);
+      return;
+    }
+
+    if (processor?.type === 'saturation') {
+      processScrubSaturationFrame(event.inputBuffer, event.outputBuffer, processor);
+      node.gainReductionDb = 0;
+      return;
+    }
+
+    if (processor?.type === 'polarity-invert') {
+      processScrubPolarityInvertFrame(event.inputBuffer, event.outputBuffer, processor);
+      node.gainReductionDb = 0;
+      return;
+    }
+
+    if (processor?.type === 'mono-sum') {
+      processScrubMonoSumFrame(event.inputBuffer, event.outputBuffer);
+      node.gainReductionDb = 0;
+      return;
+    }
+
+    if (processor?.type === 'channel-swap') {
+      processScrubChannelSwapFrame(event.inputBuffer, event.outputBuffer);
+      node.gainReductionDb = 0;
+      return;
+    }
+
+    if (processor?.type === 'stereo-split') {
+      processScrubStereoSplitFrame(event.inputBuffer, event.outputBuffer, processor);
+      node.gainReductionDb = 0;
+      return;
+    }
+
+    copyScrubInputToOutput(event.inputBuffer, event.outputBuffer);
+    node.gainReductionDb = 0;
+  };
+}
+
+function reconnectScrubCustomProcessor(node: ScrubProcessorNode): void {
+  if (
+    node.type === 'hum-notch' &&
+    node.inputNode &&
+    node.outputNode &&
+    node.dryGain &&
+    node.wetGain &&
+    node.filters?.length
+  ) {
+    node.inputNode.connect(node.dryGain);
+    node.dryGain.connect(node.outputNode);
+    let wetTail: AudioNode = node.inputNode;
+    for (const filter of node.filters) {
+      wetTail.connect(filter);
+      wetTail = filter;
+    }
+    wetTail.connect(node.wetGain);
+    node.wetGain.connect(node.outputNode);
   }
 }
 
@@ -297,13 +756,49 @@ class ProxyFrameCache {
   private lastScrubFrame = -1;
   private scrubDirection = 0; // -1 = backward, 0 = stopped, 1 = forward
   private isScrubbing = false;
+  private scrubPreloadQueueDrops = 0;
+
+  private removeQueuedPreloadsForMedia(mediaFileId: string): number {
+    const prefix = `${mediaFileId}_`;
+    const before = this.preloadQueue.length;
+    this.preloadQueue = this.preloadQueue.filter((key) => !key.startsWith(prefix));
+    return before - this.preloadQueue.length;
+  }
+
+  private parsePreloadKey(key: string): { mediaFileId: string; frameIndex: number } | null {
+    const separatorIndex = key.lastIndexOf('_');
+    if (separatorIndex <= 0 || separatorIndex >= key.length - 1) {
+      return null;
+    }
+
+    const frameIndex = Number.parseInt(key.slice(separatorIndex + 1), 10);
+    if (!Number.isFinite(frameIndex)) {
+      return null;
+    }
+
+    return {
+      mediaFileId: key.slice(0, separatorIndex),
+      frameIndex,
+    };
+  }
 
   // Schedule preloading of frames around current position (bidirectional)
-  private schedulePreload(mediaFileId: string, currentFrameIndex: number, _fps: number) {
+  private schedulePreload(mediaFileId: string, currentFrameIndex: number, fps: number) {
     // Detect scrub direction
     if (this.lastScrubFrame >= 0) {
       const delta = currentFrameIndex - this.lastScrubFrame;
-      if (Math.abs(delta) > 0 && Math.abs(delta) < 100) {
+      const teleportThresholdFrames = Math.max(
+        SCRUB_PRELOAD_RANGE,
+        Math.floor(Math.max(1, fps) * SCRUB_TELEPORT_SECONDS)
+      );
+      if (Math.abs(delta) >= teleportThresholdFrames) {
+        const dropped = this.removeQueuedPreloadsForMedia(mediaFileId);
+        if (dropped > 0) {
+          this.scrubPreloadQueueDrops += dropped;
+        }
+        this.scrubDirection = delta > 0 ? 1 : -1;
+        this.isScrubbing = true;
+      } else if (Math.abs(delta) > 0) {
         this.scrubDirection = delta > 0 ? 1 : -1;
         this.isScrubbing = true;
       }
@@ -389,12 +884,14 @@ class ProxyFrameCache {
 
       // Load batch in parallel
       const loadPromises = batch.map(async (key) => {
-        const [mediaFileId, frameIndexStr] = key.split('_');
-        const frameIndex = parseInt(frameIndexStr, 10);
+        const parsed = this.parsePreloadKey(key);
+        if (!parsed) {
+          return { key, success: false };
+        }
 
-        const image = await this.loadFrame(mediaFileId, frameIndex);
+        const image = await this.loadFrame(parsed.mediaFileId, parsed.frameIndex);
         if (image) {
-          this.addToCache(mediaFileId, frameIndex, image);
+          this.addToCache(parsed.mediaFileId, parsed.frameIndex, image);
         }
         return { key, success: !!image };
       });
@@ -895,7 +1392,7 @@ class ProxyFrameCache {
   getScrubMeterSnapshot(updatedAt = performance.now()): AudioMeterSnapshot | null {
     if (!this.scrubAnalyser || !this.scrubMeterBuffer || !this.scrubIsActive) return null;
     this.scrubAnalyser.getFloatTimeDomainData(this.scrubMeterBuffer);
-    return calculateAudioMeterSnapshot(this.scrubMeterBuffer, updatedAt);
+    return calculateAudioMeterSnapshot(this.scrubMeterBuffer, updatedAt, this.getScrubDynamicsSnapshot(updatedAt));
   }
 
   /**
@@ -931,9 +1428,15 @@ class ProxyFrameCache {
     source.connect(this.scrubSourceGain);
     let tail: AudioNode = this.scrubSourceGain;
     for (const processor of this.scrubProcessorNodes) {
-      for (const node of processor.nodes) {
-        tail.connect(node);
-        tail = node;
+      if (processor.inputNode && processor.outputNode) {
+        reconnectScrubCustomProcessor(processor);
+        tail.connect(processor.inputNode);
+        tail = processor.outputNode;
+      } else {
+        for (const node of processor.nodes) {
+          tail.connect(node);
+          tail = node;
+        }
       }
     }
     tail.connect(this.scrubEqFilters[0]);
@@ -973,9 +1476,22 @@ class ProxyFrameCache {
     ctx: BaseAudioContext,
     processor: LiveAudioRouteProcessor,
   ): ScrubProcessorNode {
-    if (processor.type === 'high-pass' || processor.type === 'low-pass') {
+    if (processor.type === 'pan') {
+      const panner = ctx.createStereoPanner();
+      const node: ScrubProcessorNode = {
+        id: processor.id,
+        type: 'pan',
+        nodes: [panner],
+        panner,
+      };
+      updateScrubProcessorNode(ctx, node, processor);
+      return node;
+    }
+
+    if (processor.type === 'high-pass' || processor.type === 'low-pass' || processor.type === 'parametric-eq') {
       const filter = ctx.createBiquadFilter();
       const node: ScrubProcessorNode = {
+        id: processor.id,
         type: processor.type,
         nodes: [filter],
         filter,
@@ -984,9 +1500,64 @@ class ProxyFrameCache {
       return node;
     }
 
+    if (processor.type === 'hum-notch') {
+      const input = ctx.createGain();
+      const dryGain = ctx.createGain();
+      const filters = Array.from({ length: HUM_NOTCH_MAX_HARMONICS }, () => ctx.createBiquadFilter());
+      const wetGain = ctx.createGain();
+      const output = ctx.createGain();
+      const node: ScrubProcessorNode = {
+        id: processor.id,
+        type: 'hum-notch',
+        nodes: [input, dryGain, ...filters, wetGain, output],
+        inputNode: input,
+        outputNode: output,
+        dryGain,
+        wetGain,
+        filters,
+      };
+      updateScrubProcessorNode(ctx, node, processor);
+      return node;
+    }
+
+    if (
+      processor.type === 'limiter' ||
+      processor.type === 'noise-gate' ||
+      processor.type === 'expander' ||
+      processor.type === 'de-click' ||
+      processor.type === 'noise-reduction' ||
+      processor.type === 'saturation' ||
+      processor.type === 'polarity-invert' ||
+      processor.type === 'mono-sum' ||
+      processor.type === 'channel-swap' ||
+      processor.type === 'stereo-split'
+    ) {
+      const scriptProcessor = ctx.createScriptProcessor(1024, 2, 2);
+      const node: ScrubProcessorNode = {
+        id: processor.id,
+        type: processor.type,
+        nodes: [scriptProcessor],
+        scriptProcessor,
+        sampleProcessor: processor,
+      };
+      attachScrubSampleProcessor(node);
+      updateScrubProcessorNode(ctx, node, processor);
+      return node;
+    }
+
+    if (processor.type !== 'compressor') {
+      const gain = ctx.createGain();
+      return {
+        id: processor.id,
+        type: processor.type,
+        nodes: [gain],
+      };
+    }
+
     const compressor = ctx.createDynamicsCompressor();
     const makeupGain = ctx.createGain();
     const node: ScrubProcessorNode = {
+      id: processor.id,
       type: 'compressor',
       nodes: [compressor, makeupGain],
       compressor,
@@ -994,6 +1565,33 @@ class ProxyFrameCache {
     };
     updateScrubProcessorNode(ctx, node, processor);
     return node;
+  }
+
+  private getScrubDynamicsSnapshot(updatedAt: number): Record<string, AudioDynamicsReductionSnapshot> | undefined {
+    const dynamics: Record<string, AudioDynamicsReductionSnapshot> = {};
+
+    for (const processor of this.scrubProcessorNodes) {
+      if (processor.type === 'compressor' && processor.compressor) {
+        dynamics[processor.id] = {
+          effectId: processor.id,
+          processorType: 'compressor',
+          gainReductionDb: normalizeScrubDynamicsReductionDb(processor.compressor.reduction),
+          updatedAt,
+        };
+        continue;
+      }
+
+      if ((processor.type === 'limiter' || processor.type === 'noise-gate' || processor.type === 'expander') && processor.scriptProcessor) {
+        dynamics[processor.id] = {
+          effectId: processor.id,
+          processorType: processor.type,
+          gainReductionDb: normalizeScrubDynamicsReductionDb(processor.gainReductionDb ?? 0),
+          updatedAt,
+        };
+      }
+    }
+
+    return Object.keys(dynamics).length > 0 ? dynamics : undefined;
   }
 
   // Clear cache for a specific media file
@@ -1155,6 +1753,7 @@ class ProxyFrameCache {
       isPreloading: this.isPreloading,
       isScrubbing: this.isScrubbing,
       scrubDirection: this.scrubDirection,
+      scrubPreloadQueueDrops: this.scrubPreloadQueueDrops,
       hitRate: this.cacheHits / Math.max(1, this.cacheHits + this.cacheMisses),
     };
   }

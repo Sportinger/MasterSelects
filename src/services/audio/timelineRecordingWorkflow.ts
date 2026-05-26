@@ -32,6 +32,7 @@ const MIN_PUNCH_DURATION_SECONDS = 0.02;
 
 export function isAudioRecordingActivePhase(phase: AudioRecordingPhase): boolean {
   return phase === 'waiting-for-punch'
+    || phase === 'warming-input'
     || phase === 'recording'
     || phase === 'requesting-input'
     || phase === 'stopping';

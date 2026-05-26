@@ -1,6 +1,14 @@
 // Track-related actions slice
 
-import type { AudioEffectInstance, AudioMeterSnapshot, AudioSendState, MasterAudioState, TimelineTrack, TrackAudioState } from '../../types';
+import type {
+  AudioEffectInstance,
+  AudioExportPreflightState,
+  AudioMeterSnapshot,
+  AudioSendState,
+  MasterAudioState,
+  TimelineTrack,
+  TrackAudioState,
+} from '../../types';
 import type { TrackActions, SliceCreator } from './types';
 import { MIN_TRACK_HEIGHT, MAX_TRACK_HEIGHT } from './constants';
 import { Logger } from '../../services/logger';
@@ -153,6 +161,7 @@ function reorderEffectStack(
 }
 
 const RUNTIME_AUDIO_METER_MAX_AGE_MS = 450;
+const AUDIO_EXPORT_PREFLIGHT_HISTORY_LIMIT = 8;
 
 function updateRuntimeMeterState(
   currentTrackMeters: Record<string, AudioMeterSnapshot>,
@@ -178,6 +187,36 @@ function updateRuntimeMeterState(
   return {
     trackMeters,
     master: aggregateAudioMeterSnapshots(Object.values(trackMeters), now),
+  };
+}
+
+function withAudioExportPreflightMeasurementHistory(
+  current: AudioExportPreflightState | undefined,
+  next: AudioExportPreflightState,
+  rangeStart: number,
+  rangeEnd: number,
+): AudioExportPreflightState {
+  const existing = current?.measurementHistory ?? [];
+  if (!next.measurement) {
+    return existing.length > 0
+      ? {
+          ...next,
+          measurementHistory: existing.slice(0, AUDIO_EXPORT_PREFLIGHT_HISTORY_LIMIT),
+        }
+      : next;
+  }
+
+  return {
+    ...next,
+    measurementHistory: [
+      {
+        checkedAt: next.lastCheckedAt ?? Date.now(),
+        startTime: Math.max(0, Math.min(rangeStart, rangeEnd)),
+        endTime: Math.max(0, Math.max(rangeStart, rangeEnd)),
+        measurement: next.measurement,
+      },
+      ...existing,
+    ].slice(0, AUDIO_EXPORT_PREFLIGHT_HISTORY_LIMIT),
   };
 }
 
@@ -491,7 +530,7 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     const { clips, tracks, masterAudioState, duration, inPoint, outPoint } = get();
     const rangeStart = startTime ?? inPoint ?? 0;
     const rangeEnd = endTime ?? outPoint ?? duration;
-    const exportPreflight = computeAudioExportPreflight({
+    const computedPreflight = computeAudioExportPreflight({
       clips,
       tracks,
       masterAudioState,
@@ -499,6 +538,12 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
       endTime: rangeEnd,
       renderedBuffer,
     });
+    const exportPreflight = withAudioExportPreflightMeasurementHistory(
+      masterAudioState?.exportPreflight,
+      computedPreflight,
+      rangeStart,
+      rangeEnd,
+    );
     set({
       masterAudioState: ensureMasterAudioState(masterAudioState, {
         exportPreflight,

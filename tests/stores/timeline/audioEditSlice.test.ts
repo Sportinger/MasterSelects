@@ -188,7 +188,60 @@ describe('timeline audio edit slice', () => {
         params: expect.objectContaining({
           frequencyMinHz: 240,
           frequencyMaxHz: 2400,
+          selectionMode: 'rectangle',
           blendMode: 'attenuate',
+        }),
+      }),
+    ]);
+  });
+
+  it('persists spectral brush metadata on non-destructive spectral operations', () => {
+    const clip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      file: new File([], 'dialog.wav', { type: 'audio/wav' }),
+      source: { type: 'audio', naturalDuration: 10 },
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      audioState: {
+        sourceAnalysisRefs: { spectrogramTileSetIds: ['source-spectrum'] },
+        processedAnalysisRefs: { spectrogramTileSetIds: ['processed-spectrum'] },
+      },
+    });
+    const store = createTestTimelineStore({
+      clips: [clip],
+      audioSpectralRegionSelection: {
+        clipId: 'audio-clip',
+        trackId: 'audio-1',
+        startTime: 2.75,
+        endTime: 3.25,
+        sourceInPoint: 2.75,
+        sourceOutPoint: 3.25,
+        frequencyMinHz: 800,
+        frequencyMaxHz: 1600,
+        selectionMode: 'brush',
+        brushTimeRadiusSeconds: 0.25,
+        brushFrequencyRadiusHz: 400,
+      },
+    });
+
+    const operationId = store.getState().applySpectralRegionEdit('spectral-resynthesis');
+
+    expect(operationId).toBeTruthy();
+    expect(store.getState().clips[0].audioState?.editStack).toEqual([
+      expect.objectContaining({
+        id: operationId,
+        type: 'spectral-resynthesis',
+        timeRange: { start: 2.75, end: 3.25 },
+        params: expect.objectContaining({
+          selectionMode: 'brush',
+          brushShape: 'soft-ellipse',
+          brushTimeRadiusSeconds: 0.25,
+          brushFrequencyRadiusHz: 400,
+          featherTime: 0.175,
+          featherFrequencyHz: 176,
+          blendMode: 'replace',
         }),
       }),
     ]);
@@ -451,6 +504,59 @@ describe('timeline audio edit slice', () => {
         params: expect.objectContaining({
           sequenceIndex: 2,
           sequenceCount: 2,
+        }),
+      }),
+    ]);
+  });
+
+  it('applies detected transient softening as non-destructive repair operations', async () => {
+    const clip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      file: new File([], 'dialog.wav', { type: 'audio/wav' }),
+      source: { type: 'audio', naturalDuration: 8 },
+      startTime: 4,
+      duration: 6,
+      inPoint: 1,
+      outPoint: 7,
+      audioState: {
+        sourceAnalysisRefs: { waveformPyramidId: 'source-waveform' },
+        processedAnalysisRefs: { processedWaveformPyramidId: 'processed-waveform' },
+      },
+    });
+    const store = createTestTimelineStore({ clips: [clip] });
+
+    const operationIds = await store.getState().applyDetectedTransientSoftening('audio-clip', {
+      ranges: [
+        { start: 2, end: 2.04, duration: 0.04, peakDb: -1.2, rmsDb: -24.4, crestDb: 23.2, strength: 7.1 },
+      ],
+      detection: {
+        crestThresholdDb: 18,
+        minPeakDb: -8,
+      },
+      gainDb: -9,
+    });
+
+    const updated = store.getState().clips[0];
+    expect(operationIds).toHaveLength(1);
+    expect(updated.audioState?.sourceAnalysisRefs?.waveformPyramidId).toBe('source-waveform');
+    expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
+    expect(updated.audioState?.editStack).toEqual([
+      expect.objectContaining({
+        id: operationIds[0],
+        type: 'repair',
+        enabled: true,
+        timeRange: { start: 2, end: 2.04 },
+        params: expect.objectContaining({
+          label: 'Soften detected transient',
+          repairType: 'transient-soften',
+          detectedTransient: true,
+          preserveClipDuration: true,
+          gainDb: -9,
+          transientPeakDb: -1.2,
+          transientRmsDb: -24.4,
+          transientCrestDb: 23.2,
+          timelineStart: 5,
         }),
       }),
     ]);

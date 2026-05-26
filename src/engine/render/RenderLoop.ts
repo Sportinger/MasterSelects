@@ -216,8 +216,20 @@ export class RenderLoop {
 
     // Check if we're stalled (no render for too long while we should be rendering)
     if (timeSinceRender > this.WATCHDOG_STALL_THRESHOLD) {
-      // If we're idle and not playing, this is expected - not a stall
-      if (this.isIdle && !this.isPlaying) return;
+      // If nothing is asking the render loop to stay awake, a long gap is the
+      // expected idle state. This can happen in background/unfocused tabs before
+      // the RAF loop gets a chance to flip `isIdle` itself.
+      const hasRenderDemand =
+        this.isPlaying ||
+        this.isScrubbing ||
+        this.continuousRender ||
+        this.renderRequested ||
+        this.idleSuppressed ||
+        (this.hasActiveVideo && now - this.lastActivityTime <= this.IDLE_TIMEOUT);
+      if (!hasRenderDemand) {
+        this.isIdle = true;
+        return;
+      }
 
       log.warn(`Render stall detected: ${timeSinceRender.toFixed(0)}ms since last render (idle=${this.isIdle}, playing=${this.isPlaying})`);
 

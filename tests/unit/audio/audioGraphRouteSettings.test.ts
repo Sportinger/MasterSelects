@@ -233,6 +233,31 @@ describe('audio graph route settings', () => {
             params: { frequencyHz: 120, q: 0.9 },
           }),
           audioEffect({
+            id: 'clip-pan',
+            descriptorId: 'audio-pan',
+            params: { pan: -0.35 },
+          }),
+          audioEffect({
+            id: 'clip-parametric',
+            descriptorId: 'audio-parametric-eq',
+            params: { frequencyHz: 2400, gainDb: -3, q: 1.2 },
+          }),
+          audioEffect({
+            id: 'clip-hum-notch',
+            descriptorId: 'audio-hum-notch',
+            params: { frequencyHz: 60, q: 25, harmonics: 3, mix: 0.8 },
+          }),
+          audioEffect({
+            id: 'clip-de-click',
+            descriptorId: 'audio-de-click',
+            params: { threshold: 0.3, ratio: 5, mix: 0.75 },
+          }),
+          audioEffect({
+            id: 'clip-noise-reduction',
+            descriptorId: 'audio-noise-reduction',
+            params: { thresholdDb: -58, reductionDb: 18, sensitivity: 1.6, attackMs: 6, releaseMs: 180, mix: 0.7 },
+          }),
+          audioEffect({
             id: 'clip-de-esser',
             descriptorId: 'audio-de-esser',
             params: { frequencyHz: 7200, thresholdDb: -22, ratio: 4, kneeDb: 6, attackMs: 1, releaseMs: 90, makeupGainDb: 0 },
@@ -241,6 +266,16 @@ describe('audio graph route settings', () => {
             id: 'clip-gate',
             descriptorId: 'audio-noise-gate',
             params: { thresholdDb: -45, floorDb: -80, attackMs: 2, releaseMs: 80 },
+          }),
+          audioEffect({
+            id: 'clip-expander',
+            descriptorId: 'audio-expander',
+            params: { thresholdDb: -38, ratio: 2.5, rangeDb: 18, attackMs: 3, releaseMs: 110 },
+          }),
+          audioEffect({
+            id: 'clip-polarity',
+            descriptorId: 'audio-polarity-invert',
+            params: { channelMode: 'left' },
           }),
         ],
       },
@@ -278,6 +313,11 @@ describe('audio graph route settings', () => {
             params: { frequencyHz: 18000, q: 0.707 },
           }),
           audioEffect({
+            id: 'master-limiter',
+            descriptorId: 'audio-limiter',
+            params: { ceilingDb: -1, inputGainDb: 2 },
+          }),
+          audioEffect({
             id: 'master-delay',
             descriptorId: 'audio-delay',
             params: { delayMs: 180, feedback: 0.25, mix: 0.3, toneHz: 9000 },
@@ -287,6 +327,26 @@ describe('audio graph route settings', () => {
             descriptorId: 'audio-reverb',
             params: { roomSize: 0.55, decaySeconds: 1.8, damping: 0.4, mix: 0.2 },
           }),
+          audioEffect({
+            id: 'master-saturation',
+            descriptorId: 'audio-saturation',
+            params: { driveDb: 9, toneHz: 11000, mix: 0.35 },
+          }),
+          audioEffect({
+            id: 'master-mono',
+            descriptorId: 'audio-mono-sum',
+            params: {},
+          }),
+          audioEffect({
+            id: 'master-swap',
+            descriptorId: 'audio-channel-swap',
+            params: {},
+          }),
+          audioEffect({
+            id: 'master-stereo-split',
+            descriptorId: 'audio-stereo-split',
+            params: { sourceChannel: 1 },
+          }),
         ],
       },
       interpolatedClipEffects: [],
@@ -294,6 +354,20 @@ describe('audio graph route settings', () => {
 
     expect(route.processors).toEqual([
       { id: 'clip-high-pass', type: 'high-pass', frequencyHz: 120, q: 0.9 },
+      { id: 'clip-pan', type: 'pan', pan: -0.35 },
+      { id: 'clip-parametric', type: 'parametric-eq', frequencyHz: 2400, gainDb: -3, q: 1.2 },
+      { id: 'clip-hum-notch', type: 'hum-notch', frequencyHz: 60, q: 25, harmonics: 3, mix: 0.8 },
+      { id: 'clip-de-click', type: 'de-click', threshold: 0.3, ratio: 5, mix: 0.75 },
+      {
+        id: 'clip-noise-reduction',
+        type: 'noise-reduction',
+        thresholdDb: -58,
+        reductionDb: 18,
+        sensitivity: 1.6,
+        attackMs: 6,
+        releaseMs: 180,
+        mix: 0.7,
+      },
       {
         id: 'clip-de-esser',
         type: 'de-esser',
@@ -306,6 +380,24 @@ describe('audio graph route settings', () => {
         makeupGainDb: 0,
       },
       {
+        id: 'clip-gate',
+        type: 'noise-gate',
+        thresholdDb: -45,
+        floorDb: -80,
+        attackMs: 2,
+        releaseMs: 80,
+      },
+      {
+        id: 'clip-expander',
+        type: 'expander',
+        thresholdDb: -38,
+        ratio: 2.5,
+        rangeDb: 18,
+        attackMs: 3,
+        releaseMs: 110,
+      },
+      { id: 'clip-polarity', type: 'polarity-invert', channelMode: 'left' },
+      {
         id: 'track-compressor',
         type: 'compressor',
         thresholdDb: -18,
@@ -316,8 +408,13 @@ describe('audio graph route settings', () => {
         makeupGainDb: 2,
       },
       { id: 'master-low-pass', type: 'low-pass', frequencyHz: 18000, q: 0.707 },
+      { id: 'master-limiter', type: 'limiter', ceilingDb: -1, inputGainDb: 2 },
       { id: 'master-delay', type: 'delay', delayMs: 180, feedback: 0.25, mix: 0.3, toneHz: 9000 },
       { id: 'master-reverb', type: 'reverb', roomSize: 0.55, decaySeconds: 1.8, damping: 0.4, mix: 0.2 },
+      { id: 'master-saturation', type: 'saturation', driveDb: 9, toneHz: 11000, mix: 0.35 },
+      { id: 'master-mono', type: 'mono-sum' },
+      { id: 'master-swap', type: 'channel-swap' },
+      { id: 'master-stereo-split', type: 'stereo-split', sourceChannel: 1 },
     ]);
   });
 });

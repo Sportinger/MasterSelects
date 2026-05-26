@@ -16,6 +16,7 @@ const NODE_WIDTH = 184;
 const NODE_MIN_HEIGHT = 126;
 const PORT_ROW_HEIGHT = 18;
 const PORT_START_Y = 86;
+const BADGED_PORT_START_Y = 116;
 const PORT_DOT_CENTER_X = 12;
 const PORT_DOT_CENTER_Y = 7;
 const FIT_MARGIN = 42;
@@ -74,6 +75,12 @@ interface PortReference {
   type: NodeGraphPort['type'];
 }
 
+interface NodeBadge {
+  label: string;
+  tone: 'ready' | 'partial' | 'empty' | 'processed' | 'stale';
+  title?: string;
+}
+
 interface ConnectionDraft extends PortReference {
   pointerId: number;
   start: NodeGraphPoint;
@@ -84,9 +91,60 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function getNodeParamNumber(node: NodeGraphNode, key: string): number {
+  const value = node.params?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function getNodeParamString(node: NodeGraphNode, key: string): string {
+  const value = node.params?.[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function getAudioAnalysisBadges(node: NodeGraphNode): NodeBadge[] {
+  if (!node.params || typeof node.params.status !== 'string' || typeof node.params.artifactPorts !== 'number') {
+    return [];
+  }
+
+  const status = getNodeParamString(node, 'status');
+  const total = getNodeParamNumber(node, 'artifactPorts');
+  const available = getNodeParamNumber(node, 'availableArtifacts');
+  const missing = getNodeParamNumber(node, 'missingArtifacts');
+  const stale = getNodeParamNumber(node, 'staleArtifacts');
+  const processed = getNodeParamNumber(node, 'processedArtifacts');
+  const statusTone: NodeBadge['tone'] = status === 'ready' ? 'ready' : status === 'partial' ? 'partial' : 'empty';
+  const statusLabel = status === 'ready' ? 'Ready' : status === 'partial' ? 'Partial' : 'Missing';
+  const badges: NodeBadge[] = [
+    {
+      label: statusLabel,
+      tone: stale > 0 ? 'stale' : statusTone,
+      title: `${available}/${total} analysis artifacts available${missing > 0 ? `, ${missing} missing` : ''}${stale > 0 ? `, ${stale} stale` : ''}`,
+    },
+    {
+      label: `${available}/${total}`,
+      tone: missing > 0 || stale > 0 ? 'partial' : 'ready',
+      title: 'Available analysis artifacts',
+    },
+  ];
+
+  if (processed > 0) {
+    badges.push({
+      label: `${processed} processed`,
+      tone: 'processed',
+      title: 'Processed audio analysis artifacts are active',
+    });
+  }
+
+  return badges;
+}
+
+function getNodePortStartY(node: NodeGraphNode): number {
+  return getAudioAnalysisBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y;
+}
+
 function getNodeHeight(node: NodeGraphNode): number {
   const portRows = Math.max(node.inputs.length, node.outputs.length, 1);
-  return Math.max(NODE_MIN_HEIGHT, PORT_START_Y + (portRows * PORT_ROW_HEIGHT) + 16);
+  return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows * PORT_ROW_HEIGHT) + 16);
 }
 
 function getGraphBounds(graph: NodeGraph): NodeBounds {
@@ -115,7 +173,7 @@ function getPortCenter(node: NodeGraphNode, portId: string, direction: 'input' |
   const portIndex = Math.max(0, ports.findIndex((port) => port.id === portId));
   return {
     x: node.layout.x + (direction === 'input' ? PORT_DOT_CENTER_X : NODE_WIDTH - PORT_DOT_CENTER_X),
-    y: node.layout.y + PORT_START_Y + (portIndex * PORT_ROW_HEIGHT) + PORT_DOT_CENTER_Y,
+    y: node.layout.y + getNodePortStartY(node) + (portIndex * PORT_ROW_HEIGHT) + PORT_DOT_CENTER_Y,
   };
 }
 
@@ -649,6 +707,8 @@ export function NodeGraphCanvas({
             const isSelected = node.id === selectedNodeId;
             const isBypassable = isNodeBypassable(node);
             const isBypassed = isNodeBypassed(node);
+            const nodeBadges = getAudioAnalysisBadges(node);
+            const analysisProgress = clamp(getNodeParamNumber(node, 'progressPercent'), 0, 100);
             return (
               <div
                 key={node.id}
@@ -709,7 +769,23 @@ export function NodeGraphCanvas({
                 <div className="node-workspace-node-description" title={node.description}>
                   {node.description ?? 'Built-in processing node'}
                 </div>
-                <div className="node-workspace-node-ports">
+                {nodeBadges.length > 0 && (
+                  <div className="node-workspace-node-badges">
+                    {nodeBadges.map((badge) => (
+                      <span
+                        key={`${badge.tone}:${badge.label}`}
+                        className={`node-workspace-node-badge tone-${badge.tone}`}
+                        title={badge.title}
+                      >
+                        {badge.label}
+                      </span>
+                    ))}
+                    <span className="node-workspace-node-progress" title={`${analysisProgress}% available`}>
+                      <span style={{ width: `${analysisProgress}%` }} />
+                    </span>
+                  </div>
+                )}
+                <div className="node-workspace-node-ports" style={{ top: getNodePortStartY(node) }}>
                   <div className="node-workspace-port-column">
                     {node.inputs.map((port) => renderPort(node, port))}
                   </div>

@@ -48,6 +48,8 @@ import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 
 const log = Logger.create('LayerBuilder');
+const SCRUB_PROXY_HOLD_MAX_DRIFT_SECONDS = 0.15;
+const PAUSED_PROXY_HOLD_MAX_DRIFT_SECONDS = 0.5;
 
 /**
  * LayerBuilderService - Builds render layers from timeline state
@@ -81,6 +83,23 @@ export class LayerBuilderService {
     return typeof value === 'number' && Number.isFinite(value) && value > 0
       ? value
       : undefined;
+  }
+
+  private canUseHeldProxyFrame(
+    heldFrameIndex: number,
+    targetMediaTime: number,
+    proxyFps: number,
+    isDraggingPlayhead: boolean
+  ): boolean {
+    const heldMediaTime = heldFrameIndex / proxyFps;
+    const frameFloor = (isDraggingPlayhead ? 3 : 6) / proxyFps;
+    const maxDrift = Math.max(
+      frameFloor,
+      isDraggingPlayhead
+        ? SCRUB_PROXY_HOLD_MAX_DRIFT_SECONDS
+        : PAUSED_PROXY_HOLD_MAX_DRIFT_SECONDS
+    );
+    return Math.abs(heldMediaTime - targetMediaTime) <= maxDrift;
   }
 
   private getRenderableFile(file: File | undefined): File | undefined {
@@ -597,6 +616,10 @@ export class LayerBuilderService {
 
     const timeInfo = getClipTimeInfo(ctx, clip);
     const track = ctx.tracks.find(candidate => candidate.id === clip.trackId);
+    const linkedClip = this.findLinkedClip(clip, ctx);
+    const linkedTrack = linkedClip
+      ? ctx.tracks.find(candidate => candidate.id === linkedClip.trackId)
+      : undefined;
     const canvas = renderClipAINodesToCanvas(
       clip,
       layer.source,
@@ -605,6 +628,8 @@ export class LayerBuilderService {
       (nodeId) => ctx.getInterpolatedNodeGraphParams(clip.id, nodeId, timeInfo.clipLocalTime),
       {
         track,
+        linkedClip,
+        linkedTrack,
         masterAudioState: ctx.masterAudioState,
       },
     );
@@ -624,6 +649,14 @@ export class LayerBuilderService {
         previewPath: 'ai-node-runtime',
       },
     };
+  }
+
+  private findLinkedClip(clip: TimelineClip, ctx: FrameContext): TimelineClip | null {
+    if (clip.linkedClipId) {
+      return ctx.clips.find(candidate => candidate.id === clip.linkedClipId) ?? null;
+    }
+
+    return ctx.clips.find(candidate => candidate.linkedClipId === clip.id) ?? null;
   }
 
   private buildMotionShapeLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer | null {
@@ -916,7 +949,10 @@ export class LayerBuilderService {
 
     // Use previous cached frame as fallback
     const cached = this.proxyFramesRef.get(cacheKey);
-    if (cached?.image) {
+    if (
+      cached?.image &&
+      this.canUseHeldProxyFrame(cached.frameIndex, clipTime, proxyFps, ctx.isDraggingPlayhead)
+    ) {
       return this.buildImageLayerFromElement(clip, layerIndex, cached.image, clipTime, ctx, opacityOverride, {
         displayedMediaTime: cached.frameIndex / proxyFps,
         targetMediaTime: clipTime,
@@ -1546,6 +1582,7 @@ export class LayerBuilderService {
             nestedClipTime,
             mediaFile,
             baseLayer,
+            ctx.isDraggingPlayhead,
           );
           if (proxyLayer) return proxyLayer;
         }
@@ -1683,6 +1720,7 @@ export class LayerBuilderService {
     nestedClipTime: number,
     mediaFile: MediaFile,
     baseLayer: Omit<Layer, 'source'>,
+    isDraggingPlayhead: boolean,
   ): Layer | null {
     const proxyFps = mediaFile.proxyFps || 30;
     const frameIndex = Math.floor(nestedClipTime * proxyFps);
@@ -1710,7 +1748,10 @@ export class LayerBuilderService {
     }
 
     const heldFrame = this.proxyFramesRef.get(cacheKey);
-    if (heldFrame?.image) {
+    if (
+      heldFrame?.image &&
+      this.canUseHeldProxyFrame(heldFrame.frameIndex, nestedClipTime, proxyFps, isDraggingPlayhead)
+    ) {
       return this.buildNestedProxyImageLayer(
         baseLayer,
         heldFrame.image,

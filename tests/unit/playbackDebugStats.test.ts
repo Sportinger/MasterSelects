@@ -114,6 +114,73 @@ describe('playback debug stats', () => {
     expect(stats.status).toBe('ok');
   });
 
+  it('does not mark cold seeking video elements bad when responsive proxy scrub preview is available', () => {
+    const vfTimeline: VFPipelineEvent[] = [
+      { type: 'vf_preview_frame', t: 0, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 16, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 33, detail: { changed: 'false', targetMoved: 'false', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 50, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
+    ];
+
+    const stats = buildPlaybackDebugStats({
+      decoder: 'HTMLVideo',
+      now: 80,
+      windowMs: 200,
+      vfTimeline,
+      healthVideos: [
+        {
+          clipId: 'clip-proxy',
+          src: 'demo.mp4',
+          currentTime: 5.4,
+          readyState: 1,
+          seeking: true,
+          paused: true,
+          played: 0,
+          warmingUp: false,
+          gpuReady: false,
+        },
+      ],
+    });
+
+    expect(stats.coldVideos).toBe(1);
+    expect(stats.seekingVideos).toBe(1);
+    expect(stats.worstReadyState).toBe(1);
+    expect(stats.previewPathCounts).toEqual({ 'proxy-frame': 4 });
+    expect(stats.previewFreezeEvents).toBe(0);
+    expect(stats.status).toBe('ok');
+  });
+
+  it('still marks cold seeking video elements bad when proxy scrub preview freezes', () => {
+    const vfTimeline: VFPipelineEvent[] = [
+      { type: 'vf_preview_frame', t: 0, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-frame-hold', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 40, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-frame-hold', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 80, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-frame-hold', clipId: 'clip-proxy' } },
+    ];
+
+    const stats = buildPlaybackDebugStats({
+      decoder: 'HTMLVideo',
+      now: 100,
+      windowMs: 200,
+      vfTimeline,
+      healthVideos: [
+        {
+          clipId: 'clip-proxy',
+          src: 'demo.mp4',
+          currentTime: 5.4,
+          readyState: 1,
+          seeking: true,
+          paused: true,
+          played: 0,
+          warmingUp: false,
+          gpuReady: false,
+        },
+      ],
+    });
+
+    expect(stats.previewFreezeEvents).toBe(1);
+    expect(stats.status).toBe('bad');
+  });
+
   it('includes preview telemetry in the top-level snapshot for webcodecs playback', () => {
     const wcTimeline: PipelineEvent[] = [
       { type: 'decode_feed', t: 0 },

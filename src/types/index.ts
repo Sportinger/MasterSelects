@@ -415,27 +415,49 @@ export type EffectType =
   // Audio effects
   | 'audio-eq'
   | 'audio-volume'
+  | 'audio-pan'
+  | 'audio-parametric-eq'
   | 'audio-high-pass'
   | 'audio-low-pass'
+  | 'audio-hum-notch'
+  | 'audio-de-click'
+  | 'audio-noise-reduction'
   | 'audio-compressor'
   | 'audio-de-esser'
   | 'audio-limiter'
   | 'audio-noise-gate'
+  | 'audio-expander'
   | 'audio-delay'
-  | 'audio-reverb';
+  | 'audio-reverb'
+  | 'audio-saturation'
+  | 'audio-polarity-invert'
+  | 'audio-mono-sum'
+  | 'audio-channel-swap'
+  | 'audio-stereo-split';
 
 // Helper to check if an effect type is an audio effect
 export function isAudioEffect(type: EffectType): boolean {
   return type === 'audio-eq' ||
     type === 'audio-volume' ||
+    type === 'audio-pan' ||
+    type === 'audio-parametric-eq' ||
     type === 'audio-high-pass' ||
     type === 'audio-low-pass' ||
+    type === 'audio-hum-notch' ||
+    type === 'audio-de-click' ||
+    type === 'audio-noise-reduction' ||
     type === 'audio-compressor' ||
     type === 'audio-de-esser' ||
     type === 'audio-limiter' ||
     type === 'audio-noise-gate' ||
+    type === 'audio-expander' ||
     type === 'audio-delay' ||
-    type === 'audio-reverb';
+    type === 'audio-reverb' ||
+    type === 'audio-saturation' ||
+    type === 'audio-polarity-invert' ||
+    type === 'audio-mono-sum' ||
+    type === 'audio-channel-swap' ||
+    type === 'audio-stereo-split';
 }
 
 export interface Project {

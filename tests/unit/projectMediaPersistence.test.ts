@@ -279,17 +279,73 @@ describe('project media persistence', () => {
       loudnessEnvelopeId: 'artifact:loudness-manifest',
       spectrogramTileSetIds: ['artifact:spectrogram-tiles'],
     };
+    const bakeAsset = {
+      id: 'derived-audio-bake-1',
+      mediaFileId: 'media-derived-bake-1',
+      sourceMediaFileId: 'media-audio-1',
+      sourceClipId: 'clip-a1',
+      operationIds: ['op-spectral-replace', 'op-room-tone'],
+      createdAt: 1779713000000,
+      provenance: {
+        mode: 'bake',
+        renderPath: 'clip-audio-render-service',
+      },
+    };
     const clipAudioState = {
       sourceAnalysisRefs: audioAnalysisRefs,
+      editStack: [
+        {
+          id: 'op-spectral-replace',
+          type: 'spectral-resynthesis',
+          enabled: true,
+          params: {
+            frequencyMinHz: 320,
+            frequencyMaxHz: 2400,
+            blendMode: 'replace',
+          },
+          timeRange: { start: 1, end: 4 },
+          createdAt: 1779713000100,
+        },
+        {
+          id: 'op-room-tone',
+          type: 'room-tone-fill',
+          enabled: true,
+          params: {
+            roomToneSourceRanges: JSON.stringify([{ start: 7, end: 8.5 }]),
+            gainDb: -36,
+          },
+          timeRange: { start: 4.5, end: 5.2 },
+          createdAt: 1779713000200,
+        },
+      ],
       effectStack: [{
         id: 'fx-volume',
         descriptorId: 'audio-volume',
         enabled: true,
         params: { volume: 0.75 },
       }],
+      spectralLayers: [{
+        id: 'spectral-image-1',
+        imageMediaFileId: 'media-image-mask-1',
+        timeStart: 1,
+        duration: 3,
+        frequencyMin: 320,
+        frequencyMax: 2400,
+        opacity: 0.85,
+        enabled: true,
+        blendMode: 'replace',
+        gainDb: -6,
+        featherTime: 0.05,
+        featherFrequency: 120,
+        keyframes: [
+          { id: 'skf-1', time: 1, opacity: 0.2, gainDb: -18, frequencyMin: 320, frequencyMax: 1800 },
+          { id: 'skf-2', time: 3.5, opacity: 1, gainDb: -3, frequencyMin: 500, frequencyMax: 2400 },
+        ],
+      }],
       processedAnalysisRefs: {
         processedWaveformPyramidId: 'artifact:processed-waveform-manifest',
       },
+      bakeHistory: [bakeAsset],
     };
     const trackAudioState = {
       volumeDb: -3,
@@ -422,6 +478,7 @@ describe('project media persistence', () => {
         'artifact:spectrogram-tiles',
         'artifact:processed-waveform-manifest',
       ]),
+      derivedAssets: expect.arrayContaining([bakeAsset]),
       masterAudioState,
     }));
     const serializedProjectCompositions = JSON.stringify(mocks.updateCompositions.mock.calls[0][0]);
@@ -430,6 +487,8 @@ describe('project media persistence', () => {
     expect(serializedProjectCompositions).not.toContain('audioAnalysisJob');
     expect(serializedProjectCompositions).not.toContain('waveformGenerating');
     expect(serializedProjectCompositions).not.toContain('waveformProgress');
+    expect(serializedProjectCompositions).toContain('spectral-image-1');
+    expect(serializedProjectCompositions).toContain('op-spectral-replace');
   });
 
   it('persists marker MIDI bindings when syncing stores to the project file', async () => {
@@ -1564,11 +1623,53 @@ describe('project media persistence', () => {
     const clipAudioState = {
       sourceAnalysisRefs: audioAnalysisRefs,
       muted: false,
+      editStack: [{
+        id: 'op-spectral-replace',
+        type: 'spectral-resynthesis',
+        enabled: true,
+        params: {
+          frequencyMinHz: 300,
+          frequencyMaxHz: 2100,
+          blendMode: 'replace',
+        },
+        timeRange: { start: 2, end: 5 },
+        createdAt: 1779713000100,
+      }],
       effectStack: [{
         id: 'fx-eq',
         descriptorId: 'audio-eq',
         enabled: true,
         params: { band1k: 1.5 },
+      }],
+      spectralLayers: [{
+        id: 'spectral-image-restore-1',
+        imageMediaFileId: 'media-image-mask-1',
+        timeStart: 2,
+        duration: 3,
+        frequencyMin: 300,
+        frequencyMax: 2100,
+        opacity: 0.9,
+        enabled: true,
+        blendMode: 'replace',
+        gainDb: -4,
+        featherTime: 0.04,
+        featherFrequency: 160,
+        keyframes: [
+          { id: 'skf-restore-1', time: 2, opacity: 0.25, gainDb: -16, frequencyMin: 300, frequencyMax: 1500 },
+          { id: 'skf-restore-2', time: 4.5, opacity: 1, gainDb: -2, frequencyMin: 600, frequencyMax: 2100 },
+        ],
+      }],
+      bakeHistory: [{
+        id: 'derived-audio-bake-restore-1',
+        mediaFileId: 'media-derived-bake-restore-1',
+        sourceMediaFileId: 'media-audio-1',
+        sourceClipId: 'clip-a1',
+        operationIds: ['op-spectral-replace'],
+        createdAt: 1779713000300,
+        provenance: {
+          mode: 'bake',
+          renderPath: 'clip-audio-render-service',
+        },
       }],
     };
     const trackAudioState = {

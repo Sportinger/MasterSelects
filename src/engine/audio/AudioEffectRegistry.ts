@@ -1,15 +1,26 @@
 export type AudioEffectParamValue = number | boolean | string;
 export type AudioEffectId =
   | 'audio-volume'
+  | 'audio-pan'
   | 'audio-eq'
+  | 'audio-parametric-eq'
   | 'audio-high-pass'
   | 'audio-low-pass'
+  | 'audio-hum-notch'
+  | 'audio-de-click'
+  | 'audio-noise-reduction'
   | 'audio-compressor'
   | 'audio-de-esser'
   | 'audio-limiter'
   | 'audio-noise-gate'
+  | 'audio-expander'
   | 'audio-delay'
-  | 'audio-reverb';
+  | 'audio-reverb'
+  | 'audio-saturation'
+  | 'audio-polarity-invert'
+  | 'audio-mono-sum'
+  | 'audio-channel-swap'
+  | 'audio-stereo-split';
 
 export interface AudioEffectParamDescriptor {
   name: string;
@@ -19,10 +30,11 @@ export interface AudioEffectParamDescriptor {
 export interface AudioEffectDescriptor {
   id: AudioEffectId;
   name: string;
-  category?: 'gain' | 'eq' | 'filter' | 'dynamics' | 'time' | 'utility' | 'repair' | 'spectral';
+  category?: 'gain' | 'eq' | 'filter' | 'dynamics' | 'time' | 'distortion' | 'utility' | 'repair' | 'spectral';
   automation?: 'none' | 'clip' | 'track' | 'sample-accurate';
   latencySamples?: number;
   tailSeconds?: number;
+  defaultAudible?: boolean;
   paramNames: readonly string[];
   params: Readonly<Record<string, AudioEffectParamDescriptor>>;
 }
@@ -57,9 +69,19 @@ const AUDIO_VOLUME_DEFAULTS = {
   volume: 1,
 } as const;
 
+const AUDIO_PAN_DEFAULTS = {
+  pan: 0,
+} as const;
+
 const AUDIO_EQ_DEFAULTS: Record<string, 0> = Object.fromEntries(
   AUDIO_EQ_BAND_PARAMS.map(paramName => [paramName, 0])
 ) as Record<string, 0>;
+
+const AUDIO_PARAMETRIC_EQ_DEFAULTS = {
+  frequencyHz: 1000,
+  gainDb: 0,
+  q: 1,
+} as const;
 
 const AUDIO_HIGH_PASS_DEFAULTS = {
   frequencyHz: 20,
@@ -69,6 +91,28 @@ const AUDIO_HIGH_PASS_DEFAULTS = {
 const AUDIO_LOW_PASS_DEFAULTS = {
   frequencyHz: 22000,
   q: 0.707,
+} as const;
+
+const AUDIO_HUM_NOTCH_DEFAULTS = {
+  frequencyHz: 50,
+  q: 30,
+  harmonics: 2,
+  mix: 1,
+} as const;
+
+const AUDIO_DE_CLICK_DEFAULTS = {
+  threshold: 0.35,
+  ratio: 4,
+  mix: 1,
+} as const;
+
+const AUDIO_NOISE_REDUCTION_DEFAULTS = {
+  thresholdDb: -60,
+  reductionDb: 0,
+  sensitivity: 1,
+  attackMs: 5,
+  releaseMs: 160,
+  mix: 0,
 } as const;
 
 const AUDIO_COMPRESSOR_DEFAULTS = {
@@ -102,6 +146,14 @@ const AUDIO_NOISE_GATE_DEFAULTS = {
   releaseMs: 80,
 } as const;
 
+const AUDIO_EXPANDER_DEFAULTS = {
+  thresholdDb: 0,
+  ratio: 1,
+  rangeDb: 0,
+  attackMs: 2,
+  releaseMs: 120,
+} as const;
+
 const AUDIO_DELAY_DEFAULTS = {
   delayMs: 250,
   feedback: 0,
@@ -116,6 +168,22 @@ const AUDIO_REVERB_DEFAULTS = {
   mix: 0,
 } as const;
 
+const AUDIO_SATURATION_DEFAULTS = {
+  driveDb: 0,
+  toneHz: 16000,
+  mix: 0,
+} as const;
+
+const AUDIO_POLARITY_INVERT_DEFAULTS = {
+  channelMode: 'all',
+} as const;
+
+const AUDIO_MONO_SUM_DEFAULTS = {} as const;
+const AUDIO_CHANNEL_SWAP_DEFAULTS = {} as const;
+const AUDIO_STEREO_SPLIT_DEFAULTS = {
+  sourceChannel: 0,
+} as const;
+
 const AUDIO_EFFECT_DESCRIPTORS = [
   Object.freeze({
     id: 'audio-volume',
@@ -128,6 +196,16 @@ const AUDIO_EFFECT_DESCRIPTORS = [
     params: createParamDescriptors(AUDIO_VOLUME_DEFAULTS),
   }),
   Object.freeze({
+    id: 'audio-pan',
+    name: 'Pan',
+    category: 'gain',
+    automation: 'sample-accurate',
+    latencySamples: 0,
+    tailSeconds: 0,
+    paramNames: Object.freeze(Object.keys(AUDIO_PAN_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_PAN_DEFAULTS),
+  }),
+  Object.freeze({
     id: 'audio-eq',
     name: 'EQ',
     category: 'eq',
@@ -136,6 +214,16 @@ const AUDIO_EFFECT_DESCRIPTORS = [
     tailSeconds: 0,
     paramNames: AUDIO_EQ_BAND_PARAMS,
     params: createParamDescriptors(AUDIO_EQ_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-parametric-eq',
+    name: 'Parametric EQ',
+    category: 'eq',
+    automation: 'sample-accurate',
+    latencySamples: 0,
+    tailSeconds: 0,
+    paramNames: Object.freeze(Object.keys(AUDIO_PARAMETRIC_EQ_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_PARAMETRIC_EQ_DEFAULTS),
   }),
   Object.freeze({
     id: 'audio-high-pass',
@@ -156,6 +244,38 @@ const AUDIO_EFFECT_DESCRIPTORS = [
     tailSeconds: 0,
     paramNames: Object.freeze(Object.keys(AUDIO_LOW_PASS_DEFAULTS)),
     params: createParamDescriptors(AUDIO_LOW_PASS_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-hum-notch',
+    name: 'Hum Notch',
+    category: 'repair',
+    automation: 'clip',
+    latencySamples: 0,
+    tailSeconds: 0,
+    defaultAudible: true,
+    paramNames: Object.freeze(Object.keys(AUDIO_HUM_NOTCH_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_HUM_NOTCH_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-de-click',
+    name: 'De-click',
+    category: 'repair',
+    automation: 'clip',
+    latencySamples: 0,
+    tailSeconds: 0,
+    defaultAudible: true,
+    paramNames: Object.freeze(Object.keys(AUDIO_DE_CLICK_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_DE_CLICK_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-noise-reduction',
+    name: 'Noise Reduction',
+    category: 'repair',
+    automation: 'clip',
+    latencySamples: 0,
+    tailSeconds: 0,
+    paramNames: Object.freeze(Object.keys(AUDIO_NOISE_REDUCTION_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_NOISE_REDUCTION_DEFAULTS),
   }),
   Object.freeze({
     id: 'audio-compressor',
@@ -198,6 +318,16 @@ const AUDIO_EFFECT_DESCRIPTORS = [
     params: createParamDescriptors(AUDIO_NOISE_GATE_DEFAULTS),
   }),
   Object.freeze({
+    id: 'audio-expander',
+    name: 'Expander',
+    category: 'dynamics',
+    automation: 'clip',
+    latencySamples: 0,
+    tailSeconds: 0,
+    paramNames: Object.freeze(Object.keys(AUDIO_EXPANDER_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_EXPANDER_DEFAULTS),
+  }),
+  Object.freeze({
     id: 'audio-delay',
     name: 'Delay',
     category: 'time',
@@ -216,6 +346,60 @@ const AUDIO_EFFECT_DESCRIPTORS = [
     tailSeconds: 3,
     paramNames: Object.freeze(Object.keys(AUDIO_REVERB_DEFAULTS)),
     params: createParamDescriptors(AUDIO_REVERB_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-saturation',
+    name: 'Saturation',
+    category: 'distortion',
+    automation: 'clip',
+    latencySamples: 0,
+    tailSeconds: 0,
+    paramNames: Object.freeze(Object.keys(AUDIO_SATURATION_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_SATURATION_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-polarity-invert',
+    name: 'Polarity Invert',
+    category: 'utility',
+    automation: 'none',
+    latencySamples: 0,
+    tailSeconds: 0,
+    defaultAudible: true,
+    paramNames: Object.freeze(Object.keys(AUDIO_POLARITY_INVERT_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_POLARITY_INVERT_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-mono-sum',
+    name: 'Mono Sum',
+    category: 'utility',
+    automation: 'none',
+    latencySamples: 0,
+    tailSeconds: 0,
+    defaultAudible: true,
+    paramNames: Object.freeze(Object.keys(AUDIO_MONO_SUM_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_MONO_SUM_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-channel-swap',
+    name: 'Channel Swap',
+    category: 'utility',
+    automation: 'none',
+    latencySamples: 0,
+    tailSeconds: 0,
+    defaultAudible: true,
+    paramNames: Object.freeze(Object.keys(AUDIO_CHANNEL_SWAP_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_CHANNEL_SWAP_DEFAULTS),
+  }),
+  Object.freeze({
+    id: 'audio-stereo-split',
+    name: 'Stereo Split',
+    category: 'utility',
+    automation: 'none',
+    latencySamples: 0,
+    tailSeconds: 0,
+    defaultAudible: true,
+    paramNames: Object.freeze(Object.keys(AUDIO_STEREO_SPLIT_DEFAULTS)),
+    params: createParamDescriptors(AUDIO_STEREO_SPLIT_DEFAULTS),
   }),
 ] as const satisfies readonly AudioEffectDescriptor[];
 

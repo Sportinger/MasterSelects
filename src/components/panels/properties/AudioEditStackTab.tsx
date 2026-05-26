@@ -10,9 +10,12 @@ import type {
 } from '../../../types';
 import { buildAudioRepairSuggestionsFromRefs } from '../../../services/audio/audioRepairSuggestions';
 import type { AudioRepairSuggestion } from '../../../services/audio/audioRepairSuggestions';
+import { audioEditPreviewService } from '../../../services/audio/AudioEditPreviewService';
+import type { AudioEditPreviewPhase } from '../../../services/audio/AudioEditPreviewService';
 import { audioRepairPreviewService } from '../../../services/audio/AudioRepairPreviewService';
 import type { AudioRepairPreviewPhase } from '../../../services/audio/AudioRepairPreviewService';
 import type { AudioSilenceRange } from '../../../services/audio/audioSilenceDetection';
+import type { AudioTransientRange } from '../../../services/audio/audioTransientDetection';
 
 const OPERATION_LABELS: Record<ClipAudioEditOperation['type'], string> = {
   trim: 'Trim',
@@ -165,6 +168,13 @@ function isSuggestionApplied(editStack: ClipAudioEditOperation[], suggestion: Au
   );
 }
 
+function getPreviewButtonLabel(previewing: boolean, phase: AudioEditPreviewPhase | AudioRepairPreviewPhase | undefined, idleLabel = 'Preview'): string {
+  if (!previewing) return idleLabel;
+  if (phase === 'rendering') return 'Rendering';
+  if (phase === 'error') return 'Dismiss';
+  return 'Stop';
+}
+
 interface AudioEditStackTabProps {
   clipId: string;
 }
@@ -175,9 +185,21 @@ interface RepairPreviewUiState {
   message?: string;
 }
 
+interface EditPreviewUiState {
+  previewId: string;
+  phase: AudioEditPreviewPhase;
+  message?: string;
+}
+
 interface SilenceCleanupUiState {
   phase: 'idle' | 'analyzing' | 'ready' | 'applying' | 'error';
   ranges: AudioSilenceRange[];
+  message?: string;
+}
+
+interface TransientCleanupUiState {
+  phase: 'idle' | 'analyzing' | 'ready' | 'applying' | 'error';
+  ranges: AudioTransientRange[];
   message?: string;
 }
 
@@ -190,6 +212,8 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   const detectClipSilenceRanges = useTimelineStore(state => state.detectClipSilenceRanges);
   const applyDetectedSilenceRemoval = useTimelineStore(state => state.applyDetectedSilenceRemoval);
   const applyRoomToneFill = useTimelineStore(state => state.applyRoomToneFill);
+  const detectClipTransientRanges = useTimelineStore(state => state.detectClipTransientRanges);
+  const applyDetectedTransientSoftening = useTimelineStore(state => state.applyDetectedTransientSoftening);
   const bakeClipAudioEditStack = useTimelineStore(state => state.bakeClipAudioEditStack);
   const updateClipSpectralImageLayer = useTimelineStore(state => state.updateClipSpectralImageLayer);
   const removeClipSpectralImageLayer = useTimelineStore(state => state.removeClipSpectralImageLayer);
@@ -204,9 +228,18 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
   const [baking, setBaking] = useState(false);
   const [repairPreview, setRepairPreview] = useState<RepairPreviewUiState | null>(null);
+  const [editPreview, setEditPreview] = useState<EditPreviewUiState | null>(null);
   const [silenceThresholdDb, setSilenceThresholdDb] = useState(-50);
   const [silenceMinSeconds, setSilenceMinSeconds] = useState(0.32);
+  const [silenceRippleTimeline, setSilenceRippleTimeline] = useState(false);
+  const [transientCrestDb, setTransientCrestDb] = useState(18);
+  const [transientMinPeakDb, setTransientMinPeakDb] = useState(-8);
+  const [transientGainDb, setTransientGainDb] = useState(-6);
   const [silenceCleanup, setSilenceCleanup] = useState<SilenceCleanupUiState>({
+    phase: 'idle',
+    ranges: [],
+  });
+  const [transientCleanup, setTransientCleanup] = useState<TransientCleanupUiState>({
     phase: 'idle',
     ranges: [],
   });
@@ -222,8 +255,11 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   const activeOperationCount = editStack.filter(operation => operation.enabled !== false).length;
   const activeSpectralLayerCount = spectralLayers.filter(layer => layer.enabled !== false).length;
   const selectedOperation = editStack.find(operation => operation.id === selectedOperationId) ?? editStack[0] ?? null;
-  const hasSelectedAudioRegion = audioRegionSelection?.clipId === clip?.id &&
-    Math.abs(audioRegionSelection.sourceOutPoint - audioRegionSelection.sourceInPoint) > 0.0005;
+  const hasSelectedAudioRegion = Boolean(
+    audioRegionSelection &&
+      audioRegionSelection.clipId === clip?.id &&
+      Math.abs(audioRegionSelection.sourceOutPoint - audioRegionSelection.sourceInPoint) > 0.0005,
+  );
 
   useEffect(() => {
     if (selectedOperationId && editStack.some(operation => operation.id === selectedOperationId)) return;
@@ -232,11 +268,24 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
 
   useEffect(() => {
     setSilenceCleanup({ phase: 'idle', ranges: [] });
+    setTransientCleanup({ phase: 'idle', ranges: [] });
   }, [clipId]);
 
   useEffect(() => () => {
+    audioEditPreviewService.stop();
     audioRepairPreviewService.stop();
   }, []);
+
+  useEffect(() => {
+    if (!editPreview) return;
+    if (editPreview.previewId === 'stack' && activeOperationCount > 0) return;
+    if (editPreview.previewId.startsWith('operation:')) {
+      const operationId = editPreview.previewId.slice('operation:'.length);
+      if (editStack.some(operation => operation.id === operationId)) return;
+    }
+    audioEditPreviewService.stop();
+    setEditPreview(null);
+  }, [activeOperationCount, editPreview, editStack]);
 
   useEffect(() => {
     if (!repairPreview) return;
@@ -250,6 +299,11 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
     setRepairPreview(null);
   }, []);
 
+  const stopEditPreview = useCallback(() => {
+    audioEditPreviewService.stop();
+    setEditPreview(null);
+  }, []);
+
   const previewRepairSuggestion = useCallback(async (suggestion: AudioRepairSuggestion) => {
     if (!clip) return;
     if (repairPreview?.suggestionId === suggestion.id) {
@@ -257,6 +311,7 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
       return;
     }
 
+    stopEditPreview();
     setRepairPreview({
       suggestionId: suggestion.id,
       phase: 'rendering',
@@ -290,7 +345,148 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
           }
         : current);
     }
-  }, [clip, playheadPosition, repairPreview?.suggestionId, stopRepairPreview]);
+  }, [clip, playheadPosition, repairPreview?.suggestionId, stopEditPreview, stopRepairPreview]);
+
+  const previewEditStack = useCallback(async () => {
+    if (!clip || activeOperationCount === 0) return;
+    const previewId = 'stack';
+    if (editPreview?.previewId === previewId) {
+      stopEditPreview();
+      return;
+    }
+
+    stopRepairPreview();
+    setEditPreview({
+      previewId,
+      phase: 'rendering',
+      message: 'Rendering stack preview',
+    });
+
+    try {
+      await audioEditPreviewService.preview({
+        clip,
+        operations: editStack,
+        mode: 'stack',
+        previewId,
+        timelineTime: playheadPosition,
+        maxDurationSeconds: 8,
+        includeSpectralLayers: true,
+        onStatus: status => {
+          setEditPreview(current => {
+            if (!current || current.previewId !== status.previewId) return current;
+            if (status.phase === 'stopped') return null;
+            return {
+              previewId: status.previewId,
+              phase: status.phase,
+              message: status.message ?? status.progress?.message,
+            };
+          });
+        },
+      });
+    } catch (error) {
+      setEditPreview(current => current?.previewId === previewId
+        ? {
+            previewId,
+            phase: 'error',
+            message: error instanceof Error ? error.message : 'Preview failed',
+          }
+        : current);
+    }
+  }, [activeOperationCount, clip, editPreview?.previewId, editStack, playheadPosition, stopEditPreview, stopRepairPreview]);
+
+  const previewSourceAudio = useCallback(async () => {
+    if (!clip) return;
+    const previewId = 'source';
+    if (editPreview?.previewId === previewId) {
+      stopEditPreview();
+      return;
+    }
+
+    stopRepairPreview();
+    setEditPreview({
+      previewId,
+      phase: 'rendering',
+      message: 'Rendering source preview',
+    });
+
+    try {
+      await audioEditPreviewService.preview({
+        clip,
+        operations: [],
+        mode: 'source',
+        previewId,
+        timelineTime: playheadPosition,
+        maxDurationSeconds: 8,
+        includeSpectralLayers: false,
+        onStatus: status => {
+          setEditPreview(current => {
+            if (!current || current.previewId !== status.previewId) return current;
+            if (status.phase === 'stopped') return null;
+            return {
+              previewId: status.previewId,
+              phase: status.phase,
+              message: status.message ?? status.progress?.message,
+            };
+          });
+        },
+      });
+    } catch (error) {
+      setEditPreview(current => current?.previewId === previewId
+        ? {
+            previewId,
+            phase: 'error',
+            message: error instanceof Error ? error.message : 'Preview failed',
+          }
+        : current);
+    }
+  }, [clip, editPreview?.previewId, playheadPosition, stopEditPreview, stopRepairPreview]);
+
+  const previewEditOperation = useCallback(async (operation: ClipAudioEditOperation) => {
+    if (!clip || operation.enabled === false) return;
+    const previewId = `operation:${operation.id}`;
+    if (editPreview?.previewId === previewId) {
+      stopEditPreview();
+      return;
+    }
+
+    stopRepairPreview();
+    setEditPreview({
+      previewId,
+      phase: 'rendering',
+      message: 'Rendering operation preview',
+    });
+
+    try {
+      await audioEditPreviewService.preview({
+        clip,
+        operations: [operation],
+        mode: 'operation',
+        previewId,
+        timelineTime: playheadPosition,
+        maxDurationSeconds: 8,
+        includeSpectralLayers: false,
+        onStatus: status => {
+          setEditPreview(current => {
+            if (!current || current.previewId !== status.previewId) return current;
+            if (status.phase === 'stopped') return null;
+            return {
+              previewId: status.previewId,
+              phase: status.phase,
+              message: status.message ?? status.progress?.message,
+            };
+          });
+        },
+      });
+    } catch (error) {
+      setEditPreview(current => current?.previewId === previewId
+        ? {
+            previewId,
+            phase: 'error',
+            message: error instanceof Error ? error.message : 'Preview failed',
+          }
+        : current);
+    }
+  }, [clip, editPreview?.previewId, playheadPosition, stopEditPreview, stopRepairPreview]);
 
   if (!clip) {
     return (
@@ -302,6 +498,8 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
 
   const handleBake = async () => {
     if (baking || activeOperationCount === 0) return;
+    stopEditPreview();
+    stopRepairPreview();
     setBaking(true);
     try {
       await bakeClipAudioEditStack(clip.id);
@@ -314,7 +512,25 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
     if (repairPreview?.suggestionId === suggestion.id) {
       stopRepairPreview();
     }
+    stopEditPreview();
     applyAudioRepairSuggestion(clip.id, suggestion);
+  };
+
+  const handleClearEditStack = () => {
+    stopEditPreview();
+    clearClipAudioEditStack(clip.id);
+  };
+
+  const handleToggleSelectedOperation = () => {
+    if (!selectedOperation) return;
+    stopEditPreview();
+    setClipAudioEditOperationEnabled(clip.id, selectedOperation.id, selectedOperation.enabled === false);
+  };
+
+  const handleRemoveSelectedOperation = () => {
+    if (!selectedOperation) return;
+    stopEditPreview();
+    removeClipAudioEditOperation(clip.id, selectedOperation.id);
   };
 
   const handleAnalyzeSilence = async () => {
@@ -340,6 +556,7 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
 
   const handleApplySilenceRemoval = async () => {
     if (silenceCleanup.ranges.length === 0) return;
+    stopEditPreview();
     setSilenceCleanup(current => ({ ...current, phase: 'applying', message: 'Applying' }));
     try {
       const operationIds = await applyDetectedSilenceRemoval(clip.id, {
@@ -348,6 +565,7 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
           thresholdDb: silenceThresholdDb,
           minSilenceSeconds: silenceMinSeconds,
         },
+        rippleTimeline: silenceRippleTimeline,
       });
       setSilenceCleanup({
         phase: 'ready',
@@ -373,6 +591,7 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
       return;
     }
 
+    stopEditPreview();
     setSilenceCleanup(current => ({ ...current, phase: 'applying', message: 'Filling room tone' }));
     try {
       const operationId = await applyRoomToneFill(clip.id, {
@@ -392,6 +611,54 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
         ...current,
         phase: 'error',
         message: error instanceof Error ? error.message : 'Room tone fill failed',
+      }));
+    }
+  };
+
+  const handleAnalyzeTransients = async () => {
+    setTransientCleanup({ phase: 'analyzing', ranges: [], message: 'Analyzing' });
+    try {
+      const ranges = await detectClipTransientRanges(clip.id, {
+        crestThresholdDb: transientCrestDb,
+        minPeakDb: transientMinPeakDb,
+      });
+      setTransientCleanup({
+        phase: 'ready',
+        ranges,
+        message: ranges.length ? `${ranges.length} transients` : 'No strong transients found',
+      });
+    } catch (error) {
+      setTransientCleanup({
+        phase: 'error',
+        ranges: [],
+        message: error instanceof Error ? error.message : 'Transient analysis failed',
+      });
+    }
+  };
+
+  const handleApplyTransientSoftening = async () => {
+    if (transientCleanup.ranges.length === 0) return;
+    stopEditPreview();
+    setTransientCleanup(current => ({ ...current, phase: 'applying', message: 'Applying' }));
+    try {
+      const operationIds = await applyDetectedTransientSoftening(clip.id, {
+        ranges: transientCleanup.ranges,
+        detection: {
+          crestThresholdDb: transientCrestDb,
+          minPeakDb: transientMinPeakDb,
+        },
+        gainDb: transientGainDb,
+      });
+      setTransientCleanup({
+        phase: 'ready',
+        ranges: [],
+        message: operationIds.length ? `${operationIds.length} edits added` : 'No transients softened',
+      });
+    } catch (error) {
+      setTransientCleanup(current => ({
+        ...current,
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'Transient softening failed',
       }));
     }
   };
@@ -431,14 +698,37 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
           <span>{activeSpectralLayerCount}/{spectralLayers.length} image layers</span>
         </div>
         <div className="audio-edit-stack-actions">
+          <button
+            className="btn btn-sm"
+            onClick={previewSourceAudio}
+          >
+            {getPreviewButtonLabel(editPreview?.previewId === 'source', editPreview?.phase, 'Preview Source')}
+          </button>
+          <button
+            className="btn btn-sm"
+            onClick={previewEditStack}
+            disabled={activeOperationCount === 0}
+          >
+            {getPreviewButtonLabel(editPreview?.previewId === 'stack', editPreview?.phase, 'Preview Stack')}
+          </button>
           <button className="btn btn-sm" onClick={handleBake} disabled={baking || activeOperationCount === 0}>
             {baking ? 'Baking...' : 'Bake'}
           </button>
-          <button className="btn btn-sm" onClick={() => clearClipAudioEditStack(clip.id)} disabled={editStack.length === 0}>
+          <button className="btn btn-sm" onClick={handleClearEditStack} disabled={editStack.length === 0}>
             Clear
           </button>
         </div>
       </div>
+      {editPreview?.previewId === 'stack' && editPreview.message && (
+        <span className={`audio-edit-preview-status phase-${editPreview.phase}`}>
+          {editPreview.message}
+        </span>
+      )}
+      {editPreview?.previewId === 'source' && editPreview.message && (
+        <span className={`audio-edit-preview-status phase-${editPreview.phase}`}>
+          {editPreview.message}
+        </span>
+      )}
 
       <div className="audio-repair-suggestion-section">
         <div className="audio-repair-suggestion-header">
@@ -475,9 +765,7 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
                       className="btn btn-sm"
                       onClick={() => previewRepairSuggestion(suggestion)}
                     >
-                      {previewing
-                        ? (repairPreview.phase === 'rendering' ? 'Rendering' : repairPreview.phase === 'error' ? 'Dismiss' : 'Stop')
-                        : 'Preview'}
+                      {getPreviewButtonLabel(previewing, repairPreview?.phase)}
                     </button>
                     <button
                       type="button"
@@ -558,6 +846,14 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
             />
             <strong>s</strong>
           </label>
+          <label className="audio-silence-ripple-toggle">
+            <input
+              type="checkbox"
+              checked={silenceRippleTimeline}
+              onChange={(event) => setSilenceRippleTimeline(event.currentTarget.checked)}
+            />
+            <span>Ripple later clips</span>
+          </label>
         </div>
         {silenceCleanup.ranges.length > 0 && (
           <div className="audio-silence-range-list">
@@ -569,6 +865,84 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
             ))}
             {silenceCleanup.ranges.length > 5 && (
               <div className="audio-silence-range-more">+{silenceCleanup.ranges.length - 5} more</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="audio-silence-cleanup-section audio-transient-cleanup-section">
+        <div className="audio-silence-cleanup-header">
+          <div>
+            <h4>Transient Cleanup</h4>
+            <span>{transientCleanup.message ?? 'Detect sharp peaks and soften them non-destructively'}</span>
+          </div>
+          <div className="audio-silence-cleanup-actions">
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={handleAnalyzeTransients}
+              disabled={transientCleanup.phase === 'analyzing' || transientCleanup.phase === 'applying'}
+            >
+              {transientCleanup.phase === 'analyzing' ? 'Analyzing' : 'Analyze'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={handleApplyTransientSoftening}
+              disabled={transientCleanup.ranges.length === 0 || transientCleanup.phase === 'applying'}
+            >
+              {transientCleanup.phase === 'applying' ? 'Softening' : 'Soften'}
+            </button>
+          </div>
+        </div>
+        <div className="audio-silence-cleanup-controls">
+          <label>
+            <span>Crest</span>
+            <input
+              type="number"
+              min="6"
+              max="60"
+              step="1"
+              value={transientCrestDb}
+              onChange={(event) => setTransientCrestDb(Number(event.currentTarget.value))}
+            />
+            <strong>dB</strong>
+          </label>
+          <label>
+            <span>Peak</span>
+            <input
+              type="number"
+              min="-60"
+              max="0"
+              step="1"
+              value={transientMinPeakDb}
+              onChange={(event) => setTransientMinPeakDb(Number(event.currentTarget.value))}
+            />
+            <strong>dB</strong>
+          </label>
+          <label>
+            <span>Gain</span>
+            <input
+              type="number"
+              min="-36"
+              max="0"
+              step="0.5"
+              value={transientGainDb}
+              onChange={(event) => setTransientGainDb(Number(event.currentTarget.value))}
+            />
+            <strong>dB</strong>
+          </label>
+        </div>
+        {transientCleanup.ranges.length > 0 && (
+          <div className="audio-silence-range-list">
+            {transientCleanup.ranges.slice(0, 5).map((range) => (
+              <div key={`${range.start}-${range.end}`} className="audio-silence-range-row">
+                <span>{formatSeconds(range.start)} - {formatSeconds(range.end)}</span>
+                <strong>{range.crestDb.toFixed(1)} dB crest | {range.peakDb.toFixed(1)} dB peak</strong>
+              </div>
+            ))}
+            {transientCleanup.ranges.length > 5 && (
+              <div className="audio-silence-range-more">+{transientCleanup.ranges.length - 5} more</div>
             )}
           </div>
         )}
@@ -610,15 +984,30 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
                 <div className="audio-edit-detail-actions">
                   <button
                     className="btn btn-sm"
-                    onClick={() => setClipAudioEditOperationEnabled(clip.id, selectedOperation.id, selectedOperation.enabled === false)}
+                    onClick={() => previewEditOperation(selectedOperation)}
+                    disabled={selectedOperation.enabled === false}
+                  >
+                    {getPreviewButtonLabel(
+                      editPreview?.previewId === `operation:${selectedOperation.id}`,
+                      editPreview?.phase,
+                    )}
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={handleToggleSelectedOperation}
                   >
                     {selectedOperation.enabled === false ? 'Enable' : 'Bypass'}
                   </button>
-                  <button className="btn btn-sm btn-danger" onClick={() => removeClipAudioEditOperation(clip.id, selectedOperation.id)}>
+                  <button className="btn btn-sm btn-danger" onClick={handleRemoveSelectedOperation}>
                     Remove
                   </button>
                 </div>
               </div>
+              {editPreview?.previewId === `operation:${selectedOperation.id}` && editPreview.message && (
+                <span className={`audio-edit-preview-status phase-${editPreview.phase}`}>
+                  {editPreview.message}
+                </span>
+              )}
 
               <div className="audio-edit-detail-grid">
                 <span>Source</span>

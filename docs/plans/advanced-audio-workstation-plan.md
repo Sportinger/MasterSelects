@@ -364,6 +364,8 @@ Current implementation checkpoint:
 - The timeline renders only the visible waveform window, so deep zoom avoids browser canvas-size stretching and stays sharp at high pixels-per-second.
 - Timeline ruler markers, clip rendering, and thumbnail filmstrips are viewport-windowed with overscan so deep zoom does not scale DOM work with full project duration.
 - `waveformLod` caps generated columns, keeps explicit `pixelsPerSecond` for pyramid choice, and bounds display normalization for invalid/out-of-range inputs.
+- The timeline zoom cap is 10,000 px/sec for precise audio editing, with 10ms/20ms ruler and grid intervals at the deepest zoom levels.
+- `ClipWaveform` schedules canvas work on cancellable animation frames, so rapid zoom/scroll updates drop stale paints before doing synchronous canvas work.
 - Visible legacy waveform clips automatically request a source waveform-pyramid upgrade in detailed/high-zoom views.
 - Legacy `clip.waveform: number[]` remains a compatibility fallback and is interpolated only when the user zooms past its stored thumbnail resolution.
 - New audio/video-linked waveform generation paths attach the source waveform pyramid ref to `clip.audioState.sourceAnalysisRefs.waveformPyramidId`.
@@ -608,6 +610,7 @@ Audio-capable source nodes should expose semantic ports backed by existing gener
 | `audioMetadata` | `metadata` | Sample rate, channels, codec, duration, analysis refs, and warnings. |
 
 The graph should show an audio/spectral lane whenever source audio exists, even before audio effects are added. Missing analysis artifacts should appear as generate/refresh actions in the node inspector.
+Linked video/audio clips use one graph owner. Selecting either linked clip opens the same visual-clip graph; the `Source` node exposes texture, audio, and analysis ports, and the single `Clip Output` node accepts both visual and audio signals. There is no separate Audio Analysis node or Audio Output node in the canonical projection.
 
 ### Bounded Audio Context
 
@@ -833,11 +836,13 @@ Current checkpoint:
 
 Current checkpoint:
 
-- `AudioEffectRegistry` describes `audio-volume`, `audio-eq`, `audio-high-pass`, `audio-low-pass`, `audio-compressor`, `audio-limiter`, `audio-noise-gate`, `audio-delay`, and `audio-reverb` with defaults, category metadata, automation metadata, latency, and tail declarations.
-- `AudioEffectRenderer` consumes registry defaults, skips disabled/default effects, preserves legacy EQ/volume ordering for old `clip.effects`, and renders new `AudioEffectInstance` stacks through registry-aware offline processors. EQ, gain, filters, and compressor use Web Audio offline nodes; limiter, noise gate, delay, and reverb use deterministic sample-domain processors.
+- `AudioEffectRegistry` describes `audio-volume`, `audio-pan`, `audio-eq`, `audio-parametric-eq`, `audio-high-pass`, `audio-low-pass`, `audio-hum-notch`, `audio-de-click`, `audio-noise-reduction`, `audio-compressor`, `audio-de-esser`, `audio-limiter`, `audio-noise-gate`, `audio-expander`, `audio-delay`, `audio-reverb`, `audio-saturation`, `audio-polarity-invert`, `audio-mono-sum`, `audio-channel-swap`, and `audio-stereo-split` with defaults, category metadata, automation metadata, latency, tail declarations, and default-audible metadata where adding an effect is itself the audible operation.
+- `AudioEffectRenderer` consumes registry defaults, skips disabled/default effects, preserves legacy EQ/volume ordering for old `clip.effects`, and renders new `AudioEffectInstance` stacks through registry-aware offline processors. EQ, gain, pan, parametric EQ, filters, hum notch, compressor, and de-esser use Web Audio offline nodes; de-click, noise reduction, limiter, noise gate, expander, delay, reverb, saturation, polarity invert, mono sum, channel swap, and stereo split use deterministic sample-domain processors that read clip effect keyframes where applicable during export/render.
 - Clip audio effect-stack actions can add, update, bypass, remove, and reorder registry `AudioEffectInstance` entries on `clip.audioState.effectStack`, with processed-analysis invalidation tied to the same registry/default logic as rendering.
-- The audio Properties tab now exposes a registry-backed `Audio FX Stack` inspector for clip-level high-pass, low-pass, compressor, limiter, noise-gate, delay, and reverb params without replacing the existing volume/EQ controls.
+- The audio Properties tab now exposes a registry-backed `Audio FX Stack` inspector for clip-level high-pass, low-pass, hum notch, de-click, noise reduction, compressor, limiter, noise gate, expander, delay, reverb, saturation, pan, and utility-channel params without replacing the existing volume/EQ controls.
+- The legacy Volume/EQ tab now uses lazy defaults for missing `audio-volume` and `audio-eq` entries and creates those effects only on user edits, so opening Properties no longer mutates clip history.
 - `AudioGraphRenderer` projects clip, track, and master effect chains into deterministic JSON-safe graph plans and includes legacy `clip.effects` audio EQ/volume entries for old/current clips without duplicating explicit `audioState.effectStack` entries.
+- Live playback route settings and varispeed scrub audio now project registry pan, parametric EQ, hum notch, de-click, noise reduction, expander, saturation, polarity invert, mono sum, channel swap, and stereo split through the same registry-backed route contract as export-visible effect stacks.
 
 ### Track D: Waveform Pyramid And Timeline Rendering
 
@@ -865,8 +870,12 @@ Current checkpoint:
 - The timeline store exposes `generateFrequencyPhaseForClip`; generated frequency/phase refs are written together, cached, and stale-checked against the same processed audio-state identity.
 - `TimelineClip` now loads source and processed waveform pyramids independently, prefers a loaded processed artifact, and falls back to the source pyramid while processed artifacts are loading, missing, or stale.
 - `ClipWaveform` remains a pure renderer and receives a `waveformVariant` hint for source/processed/legacy styling.
+- `ClipWaveform` now renders waveform pyramid channels as separated stereo/multi-channel lanes, including artifact-only views when the old normalized thumbnail array is unavailable.
+- Timeline waveform lanes now surface `CLIP` and `SIL` diagnostics from the visible waveform pyramid. Clipping uses artifact peak data only, while legacy normalized thumbnail fallback is restricted to near-zero silence detection so old thumbnails do not produce false clipping warnings.
+- Audio clips now render enabled `audio-volume` fade/automation keyframes as an overlay curve on the waveform lane, so cheap volume-only automation remains visible without forcing processed-analysis regeneration.
 - Static and automated `audio-volume` changes are treated as output/display gain rather than signal-shape analysis invalidators. Source artifacts and compatible processed artifacts remain reusable while the timeline waveform applies a cheap display gain during interaction.
 - Processed-analysis invalidation now distinguishes cache-neutral `audioState` metadata and pure volume effect-stack patches from signal-shaping edits, so volume changes do not drop processed refs while edit stacks, spectral layers, mute/source-revision changes, speed/reverse, and non-default processors still do.
+- Paused and drag playhead changes now prewarm exact proxy frames for the active video position before the render path falls back, reducing cold deep-zoom scrub `empty`/nearest-proxy frames without triggering audio re-analysis.
 
 ### Track E: Timeline Audio Detail Mode
 
@@ -881,7 +890,7 @@ Current checkpoint:
 - `audioFocusMode` is a timeline/project UI state. It compacts and subdues video tracks while expanding audio lanes inside the existing timeline.
 - The View menu exposes Audio Focus alongside compact/detailed/spectral audio modes; no separate audio editor window is introduced.
 - Audio clips in focus mode support direct inline region selection on the waveform area, with timeline/source range state and a waveform-valley snap fallback for zero-cross-safe edits.
-- Region selections can now create non-destructive clip edit-stack operations for silence, insert silence, delete silence, paste, reverse, invert polarity, swap channels, and mono sum.
+- Region selections can now create non-destructive clip edit-stack operations for silence, insert silence, delete silence, paste, reverse, invert polarity, swap channels, mono sum, and stereo split.
 - Spectral Audio in focus mode supports coordinate-accurate time/frequency region selection directly over the inline spectrogram lane.
 - Spectral selections can create non-destructive `spectral-mask` and `spectral-resynthesis` edit-stack operations with bounded frequency ranges and processed-analysis invalidation.
 - `ClipAudioRenderService` renders `spectral-mask` operations as deterministic band-limited attenuation inside the selected time/frequency bounds, giving processed analysis, bake, and export a shared path for spectral masks.
@@ -906,9 +915,10 @@ Current checkpoint:
 - Timeline spectral mode now requests spectrogram artifacts on demand, prefers processed spectrograms when clip audio edits/effects/speed require them, and falls back to source spectrograms otherwise.
 - `ClipSpectrogram` renders real artifact-backed spectrogram tiles inline in the existing timeline lane; spectral mode no longer overlays the old fake spectral waveform bands.
 - Timeline spectrogram artifacts are cached through `timelineSpectrogramCache` and covered by unit tests for payload encoding, manifest metadata, cache priming, and frequency-bin content.
+- Timeline waveform/spectrogram lanes now distinguish current processed artifacts from fallback source views. Source approximations display a `SRC` badge and stale stripe when non-destructive edits, signal-shaping FX, speed, or spectral layers require processed analysis; referenced artifacts show `PEND`, `MISS`, or `ERR` for loading, missing, or failed processed loads.
 - Image-in-spectrum layers now have an end-to-end non-destructive path: users can add the selected Media panel image from a spectral selection or drop an image onto the spectral lane, the layer is visualized inline, editable from the selected clip `Audio Edits` tab, stored on `clip.audioState.spectralLayers`, invalidates processed refs, and is rendered by `ClipAudioRenderService` through bounded image luminance/alpha masks for processed analysis, bake, and export parity.
 - Spectral image layers support layer-local keyframes for opacity, gain, and frequency bounds. The keyframes are stored with the layer, editable from the `Audio Edits` tab, normalized by the timeline store, and evaluated by the shared render path.
-- `attenuate`, `boost`, `gate`, `sidechain-mask`, and `replace` are deterministic phase-preserving band operations today. Full phase-synthesized image resynthesis and spectral brush editing remain open inside this track.
+- `attenuate`, `boost`, `gate`, and `sidechain-mask` are deterministic phase-preserving band operations. `replace` now uses an STFT/overlap-add image resynthesis path: image luminance maps to time/frequency bin magnitudes, existing source phase is reused when present, and silent source bins use deterministic phase-continuous synthesis so image layers can generate tonal spectral structure while remaining non-destructive. Spectral image masks are stored at higher resolution and bilinearly sampled for smoother image-driven edits. Spectral brush editing is implemented for region operations. The current CPU spectrogram canvas path is pixel-budgeted for deep zoom and uses precomputed frame/frequency lookup tables; GPU-backed spectrogram tile rendering remains a future quality/performance upgrade once the CPU path is stable.
 
 ### Track G: Mixer, Bus, And Recording
 
@@ -921,10 +931,11 @@ Current checkpoint:
 
 - Track and master audio state now expose inline timeline controls for volume, pan, mute/solo, limiter settings, and registry-backed FX stacks.
 - Audio track headers now expose Aux send management inline: add, enable/bypass, target-bus id, gain, pre/post fader, and remove. The state is normalized through timeline track actions and reused by the AudioGraph export path.
-- Live route settings merge clip, track, and master volume/EQ state, fold enabled Aux sends into the master-return gain model with pre/post-fader parity, and project browser-supported registry processors for high-pass, low-pass, compressor, de-esser, delay, and reverb into `audioRoutingManager`.
-- Element playback and varispeed scrub audio pass the same live processor chain, so filter, compressor, de-esser, delay, and reverb edits are audible while editing where Web Audio can represent them.
+- Live route settings merge clip, track, and master volume/EQ state, fold enabled Aux sends into the master-return gain model with pre/post-fader parity, and project browser-supported registry processors for pan, high-pass, low-pass, parametric EQ, hum notch, de-click, noise reduction, compressor, de-esser, limiter, noise gate, expander, delay, reverb, saturation, and utility channel effects into `audioRoutingManager`.
+- Element playback and varispeed scrub audio pass the same live processor identity. Filter/compressor processors use native Web Audio nodes, limiter/noise-gate/expander/de-click/saturation/channel processors use sample-domain preview nodes, and de-esser/delay/reverb remain represented where the current browser graph can model them.
 - Track headers and the master bus now display runtime Peak/RMS meters fed by `AnalyserNode` snapshots from element routes and the varispeed scrub graph. Meter state is held in non-serialized `runtimeAudioMeters` with stale cleanup and master aggregation.
 - The master bus stores and displays an Export Preflight result built from the normalized AudioGraph. Static `Check` reports invalid skipped effects, enabled sends rendered as master-return audio, active record/input-monitor states, and positive master gain without a limiter. Export now applies track sends, then the master target LUFS after master effects/fader and before the final limiter/peak-normalize stage; rendered `Measure` exports the current audio range to an `AudioBuffer` and records integrated LUFS, true peak, sample peak, RMS, and target mismatch warnings.
+- Rendered preflight measurements are retained as a bounded master-side history, so LUFS/true-peak/RMS comparisons survive later static checks and remain visible in the docked mixer while staying serialized with the project audio state.
 - Timeline audio track headers now include `R` record-arm and `I` input-monitor controls. The toolbar Record button starts capture for armed tracks at the current playhead, stops into imported audio media, adds recorded clips to the armed tracks, and queues waveform/loudness artifact jobs for the recorded clips.
 - `AudioRecordingService` owns browser capture sessions, active-session recovery metadata, cancellation, WAV transcode when possible, project-copy import, timeline clip creation, and post-recording analysis job kickoff.
 - Recording now prefers an AudioWorklet PCM backend that captures `Float32` chunks and writes direct 16-bit PCM WAV files through `AudioFileEncoder`; MediaRecorder remains the compatibility fallback for browsers without AudioWorklet capture.
@@ -932,7 +943,9 @@ Current checkpoint:
 - The docked `Audio Mixer` panel is registered as a first-class core dock panel, opens from the View menu, and exposes dense track/master strips for volume, pan, mute/solo, record arm, input monitor, meters, sends, track FX, master FX, limiter, and export preflight without leaving the timeline workspace.
 - Static legacy `audio-volume`, registry `audio-volume`, and volume automation preserve processed analysis refs and stay out of processed-analysis identity, so loudness-only edits reuse existing waveform/spectrogram/loudness artifacts instead of restarting heavy analysis jobs.
 - Recording now estimates browser storage headroom before capture, requests persistent storage for long or low-headroom sessions when available, and surfaces quota/persistence warnings in both the timeline toolbar and Audio Mixer without blocking capture.
-- Limiter and noise gate remain deterministic offline/export processors; full live dynamics UI, expanded LUFS/true-peak history views, and pre-roll input warmup are still open work for this track.
+- Punch recording now warms audio inputs shortly before punch-in with paused capture handles, then resumes capture exactly at the punch point so device permission/initialization latency is reduced without adding pre-roll audio to the committed clip.
+- Track, clip, and master FX stacks now render a dedicated dynamics view for compressor, de-esser, limiter, noise gate, and expander effects. The view shows the same registry params used by live/offline/export paths as a transfer curve plus threshold/ceiling/floor/range/timing readouts instead of leaving dynamics as an unstructured numeric list.
+- Runtime audio meter snapshots now carry live gain-reduction readings for Web Audio compressor/de-esser processors and sample-domain limiter/noise-gate/expander processors, keyed by effect id. Clip, track, and master dynamics views display those readings as `GR` readouts while the master meter keeps the strongest current reduction per effect id across audible tracks.
 
 ### Track H: Node Workspace And Signal IR Integration
 
@@ -950,7 +963,10 @@ Current checkpoint:
 - Source nodes expose audio-analysis ports whenever the clip has an audio/video source, even before analysis artifacts exist, so Node inspector generate actions are discoverable.
 - The Node inspector can generate/refresh implemented audio analysis artifacts directly from source output ports: waveform, processed waveform, spectrogram tiles, loudness envelopes, beat grids, onset maps, phase correlation, and frequency summaries.
 - Processed analysis refs win over source refs for effective Node/AI context, spectrum refs are bounded, and runtime/generated AI context exposes artifact refs plus bounded waveform and cached loudness, frequency, and phase summaries without raw audio buffers.
-- AI node render runtime now receives bounded clip/track/master routing context alongside audio analysis refs, and its cache signature includes clip audio refs plus track/master audio state so generated nodes rerender when relevant audio context changes.
+- AI node render runtime now receives bounded clip/track/master routing context alongside audio analysis refs, resolves linked video/audio clips to the linked audio clip for audio context, and includes clip, linked-clip, track, linked-track, and master audio state in its cache signature so generated nodes rerender when relevant audio context changes.
+- Renderable AI nodes now receive direct source audio-analysis connections as bounded named inputs, with the same values mirrored under `context.signals.connectedInputs`, so audio-reactive texture nodes can consume connected frequency-band tables, audio metadata, and other source audio ports without raw buffers.
+- The bounded AI audio source and metadata context includes clip identity and linked-clip identity so generated nodes can safely tell whether they are reading the visual owner or the linked audio source.
+- Source audio-port `AI` actions now create renderable audio-reactive visual AI nodes for visual graph owners, insert them into the texture chain, and wire the selected audio signal as a bounded named sidechain such as `frequencyBands`. Audio-only graph owners retain the standalone analysis-typed node path until a safe audio-sample AI runtime exists.
 
 ### Track I: Repair And Assisted Workflows
 
@@ -960,8 +976,11 @@ Current checkpoint:
 
 Current checkpoint:
 
-- Hum notch, de-click, splice smoothing, and RMS loudness matching are available as timeline region `repair` operations.
+- Hum notch, de-click, noise reduction, splice smoothing, and RMS loudness matching are available as deterministic repair workflows. Hum notch and de-click are available as registry-backed default-audible insert effects for clip/track/master FX stacks; noise reduction is a registry-backed insert that stays neutral until reduction/mix are raised.
 - Repair operations are stored in `clip.audioState.editStack`, invalidate only processed analysis refs, and render through `ClipAudioRenderService`, giving processed waveform/spectrogram jobs, bake, and export the same deterministic output.
+- Silence Cleanup detects quiet source ranges, applies compacting non-destructive `delete-silence` operations, can optionally ripple later same-track clips, and leaves original media untouched.
+- Room Tone Fill loops detected quiet source ranges into selected regions through a non-destructive `room-tone-fill` operation, with deterministic low-level generated tone as fallback.
+- Transient Cleanup detects high-crest short peaks from decoded clip audio, creates non-destructive `repair` operations with `repairType: transient-soften`, and renders the attenuation through the same preview/bake/export edit-stack path.
 
 ### Track J: Documentation, Feature Flags, And Verification
 
@@ -992,7 +1011,7 @@ Current checkpoint:
 | Spectrogram | Deterministic tile generation, zoom/pan rendering, coordinate accuracy, storage budget, cancellation, and stale indicators. |
 | Spectral image layers | Mask placement, keyframes, blend modes, replace/resynthesis, preview/export parity, invalid image handling, and undo/bypass. |
 | Mixer/recording | Track volume/pan/mute/solo, sends, master limiter, meters, AudioWorklet/MediaRecorder fallback capture, no input device, permission failure, stop/cancel, recovery, and waveform generation. |
-| Repair workflows | Before/after preview, non-destructive operation creation, cancellation, fallback path, no UI freeze, and export parity. |
+| Repair workflows | Before/after preview, non-destructive operation creation, silence cleanup, room-tone fill, transient softening, cancellation, fallback path, no UI freeze, and export parity. |
 | Node integration | Audio lanes appear from source audio, artifact-backed ports resolve, stale warnings appear, generated nodes stay bounded, and visual nodes can sample audio artifacts. |
 | Export | WAV, browser audio, FFmpeg/raw audio, video-with-audio, nested composition audio, in/out ranges, tails, latency, sends, master limiter, and spectral edits. |
 

@@ -245,6 +245,10 @@
   border-top-color: rgba(92, 190, 214, 0.86);
 }
 
+.node-workspace-node-analysis {
+  border-top-color: rgba(112, 246, 220, 0.82);
+}
+
 .node-workspace-node-output {
   border-top-color: rgba(151, 169, 190, 0.86);
 }
@@ -322,6 +326,80 @@
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.node-workspace-node-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 5px 10px 0;
+}
+
+.node-workspace-node-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  max-width: 72px;
+  overflow: hidden;
+  padding: 0 5px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-family: var(--font-mono);
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-workspace-node-badge.tone-ready {
+  border-color: rgba(84, 190, 142, 0.42);
+  background: rgba(84, 190, 142, 0.12);
+  color: rgba(125, 232, 173, 0.92);
+}
+
+.node-workspace-node-badge.tone-partial {
+  border-color: rgba(238, 186, 91, 0.4);
+  background: rgba(238, 186, 91, 0.12);
+  color: rgba(255, 220, 142, 0.92);
+}
+
+.node-workspace-node-badge.tone-empty {
+  border-color: rgba(151, 169, 190, 0.22);
+  background: rgba(151, 169, 190, 0.08);
+}
+
+.node-workspace-node-badge.tone-processed {
+  border-color: rgba(112, 246, 220, 0.36);
+  background: rgba(112, 246, 220, 0.1);
+  color: rgba(132, 246, 226, 0.9);
+}
+
+.node-workspace-node-badge.tone-stale {
+  border-color: rgba(255, 112, 112, 0.4);
+  background: rgba(255, 112, 112, 0.11);
+  color: rgba(255, 154, 154, 0.94);
+}
+
+.node-workspace-node-progress {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 18px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.node-workspace-node-progress span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(84, 190, 142, 0.88), rgba(112, 246, 220, 0.86));
 }
 
 .node-workspace-node-ports {
@@ -567,10 +645,23 @@
   cursor: pointer;
 }
 
+.node-workspace-port-action.ai {
+  min-width: 30px;
+  border-color: rgba(112, 190, 246, 0.42);
+  background: rgba(112, 190, 246, 0.1);
+  color: rgba(203, 232, 255, 0.96);
+}
+
 .node-workspace-port-action:hover:not(:disabled) {
   border-color: rgba(84, 190, 142, 0.62);
   background: rgba(84, 190, 142, 0.16);
   color: #d7f6e7;
+}
+
+.node-workspace-port-action.ai:hover:not(:disabled) {
+  border-color: rgba(112, 190, 246, 0.68);
+  background: rgba(112, 190, 246, 0.18);
+  color: #e0f2ff;
 }
 
 .node-workspace-port-action:disabled {

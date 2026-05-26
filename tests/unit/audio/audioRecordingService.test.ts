@@ -627,6 +627,61 @@ describe('AudioRecordingService', () => {
     }
   });
 
+  it('warms input before punch-in but resumes capture at the punch point', async () => {
+    vi.useFakeTimers();
+    try {
+      let timelineTime = 3;
+      const resume = vi.fn();
+      const backend = createBackend({ resume });
+      const service = createAudioRecordingService({
+        backend,
+        encodeToWav: false,
+        recoveryStorage: new MemoryStorage(),
+        recoveryBlobStore: new MemoryRecoveryBlobStore(),
+        now: vi.fn()
+          .mockReturnValueOnce(1000)
+          .mockReturnValueOnce(2000),
+      });
+
+      await service.start({
+        targets: [{ trackId: 'audio-1' }],
+        startTime: 5,
+        punchInTime: 5,
+        punchOutTime: 8,
+        getTimelineTime: () => timelineTime,
+      });
+
+      timelineTime = 3.6;
+      await vi.advanceTimersByTimeAsync(60);
+
+      expect(backend.start).toHaveBeenCalledTimes(1);
+      expect(backend.start).toHaveBeenCalledWith(expect.objectContaining({
+        initiallyPaused: true,
+        startTime: 5,
+      }));
+      expect(resume).not.toHaveBeenCalled();
+      expect(service.getSnapshot().phase).toBe('warming-input');
+
+      timelineTime = 5;
+      await vi.advanceTimersByTimeAsync(60);
+
+      expect(resume).toHaveBeenCalledWith({
+        startedAt: 2000,
+        startTime: 5,
+      });
+      expect(service.getSnapshot()).toMatchObject({
+        phase: 'recording',
+        startTime: 5,
+        punchInTime: 5,
+        punchOutTime: 8,
+      });
+
+      await service.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('auto-stops at punch-out time and runs the punch-out callback', async () => {
     vi.useFakeTimers();
     try {

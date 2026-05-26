@@ -20,6 +20,7 @@ const log = Logger.create('AudioRecordingService');
 const RECOVERY_STORAGE_KEY = 'masterselects.audioRecording.recovery.v1';
 const DEFAULT_TIMESLICE_MS = 1000;
 const PUNCH_OUT_POLL_MS = 50;
+const PUNCH_INPUT_WARMUP_SECONDS = 1.5;
 const DEFAULT_OPEN_ENDED_RECORDING_STORAGE_SECONDS = 30 * 60;
 const PCM_RECOVERY_STORAGE_BYTES_PER_MINUTE_PER_INPUT = 48 * 1024 * 1024;
 const MIN_RECORDING_STORAGE_HEADROOM_BYTES = 256 * 1024 * 1024;
@@ -111,6 +112,7 @@ export interface AudioRecordingCaptureStartInput {
   mimeTypes: string[];
   timesliceMs: number;
   chunkSink?: AudioRecordingChunkSink;
+  initiallyPaused?: boolean;
 }
 
 export interface AudioRecordingRawResult {
@@ -125,6 +127,7 @@ export interface AudioRecordingRawResult {
 export interface AudioRecordingCapture {
   mimeType: string;
   stream?: MediaStream;
+  resume?: (input?: { startedAt?: number; startTime?: number }) => void;
   stop: () => Promise<AudioRecordingRawResult>;
   cancel: () => Promise<void>;
 }
@@ -405,7 +408,9 @@ export class AudioWorkletAudioCaptureBackend implements AudioRecordingCaptureBac
     let processor: AudioWorkletNode | undefined;
     let sink: GainNode | undefined;
     let finalized = false;
-    let acceptingChunks = true;
+    let acceptingChunks = input.initiallyPaused !== true;
+    let captureStartedAt = input.startedAt;
+    let captureStartTime = input.startTime;
     let stopAckResolve: (() => void) | undefined;
     let stopAckTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const chunks: Float32PcmChunk[] = [];
@@ -445,7 +450,7 @@ export class AudioWorkletAudioCaptureBackend implements AudioRecordingCaptureBac
         !input.chunkSink ||
         recoveryCheckpointFrameCount <= 0 ||
         !input.sessionId ||
-        typeof input.startedAt !== 'number'
+        typeof captureStartedAt !== 'number'
       ) {
         recoveryCheckpointChunks = [];
         recoveryCheckpointFrameCount = 0;
@@ -478,8 +483,8 @@ export class AudioWorkletAudioCaptureBackend implements AudioRecordingCaptureBac
         kind: 'audio-worklet-pcm-f32',
         blob,
         mimeType: blob.type,
-        startedAt: input.startedAt,
-        startTime: input.startTime ?? 0,
+        startedAt: captureStartedAt,
+        startTime: captureStartTime ?? 0,
         timeStart: checkpointStartFrame / sampleRate,
         duration: checkpointFrameCount / sampleRate,
         sampleRate,
@@ -571,6 +576,11 @@ export class AudioWorkletAudioCaptureBackend implements AudioRecordingCaptureBac
       return {
         mimeType: 'audio/wav',
         stream,
+        resume: (resumeInput) => {
+          captureStartedAt = resumeInput?.startedAt ?? captureStartedAt;
+          captureStartTime = resumeInput?.startTime ?? captureStartTime;
+          acceptingChunks = true;
+        },
         stop: async () => {
           await requestStopAck();
           acceptingChunks = false;
@@ -625,13 +635,16 @@ export class MediaRecorderAudioCaptureBackend implements AudioRecordingCaptureBa
     const chunks: Blob[] = [];
     const pendingRecoveryWrites: Promise<unknown>[] = [];
     let chunkIndex = 0;
+    let captureStartedAt = input.startedAt;
+    let captureStartTime = input.startTime;
+    let hasStartedRecorder = false;
 
     recorder.addEventListener('dataavailable', (event) => {
       if (event.data.size > 0) {
         const currentChunkIndex = chunkIndex;
         chunkIndex += 1;
         chunks.push(event.data);
-        if (input.chunkSink && input.sessionId && typeof input.startedAt === 'number') {
+        if (input.chunkSink && input.sessionId && typeof captureStartedAt === 'number') {
           const chunkMimeType = event.data.type || recorder.mimeType || mimeType || 'audio/webm';
           pendingRecoveryWrites.push(input.chunkSink.writeChunk({
             sessionId: input.sessionId,
@@ -641,8 +654,8 @@ export class MediaRecorderAudioCaptureBackend implements AudioRecordingCaptureBa
             kind: 'media-recorder',
             blob: event.data,
             mimeType: chunkMimeType,
-            startedAt: input.startedAt,
-            startTime: input.startTime ?? 0,
+            startedAt: captureStartedAt,
+            startTime: captureStartTime ?? 0,
             timeStart: (currentChunkIndex * input.timesliceMs) / 1000,
             duration: input.timesliceMs / 1000,
           }).catch(error => {
@@ -652,11 +665,24 @@ export class MediaRecorderAudioCaptureBackend implements AudioRecordingCaptureBa
       }
     });
 
-    recorder.start(input.timesliceMs);
+    const startRecorder = (): void => {
+      if (hasStartedRecorder || recorder.state !== 'inactive') return;
+      recorder.start(input.timesliceMs);
+      hasStartedRecorder = true;
+    };
+
+    if (input.initiallyPaused !== true) {
+      startRecorder();
+    }
 
     return {
       mimeType: recorder.mimeType || mimeType || '',
       stream,
+      resume: (resumeInput) => {
+        captureStartedAt = resumeInput?.startedAt ?? captureStartedAt;
+        captureStartTime = resumeInput?.startTime ?? captureStartTime;
+        startRecorder();
+      },
       stop: () => new Promise<AudioRecordingRawResult>((resolve, reject) => {
         const finish = async () => {
           stopStream(stream);
@@ -675,7 +701,7 @@ export class MediaRecorderAudioCaptureBackend implements AudioRecordingCaptureBa
           reject(eventError instanceof Error ? eventError : new Error('Audio recording failed.'));
         }, { once: true });
 
-        if (recorder.state === 'inactive') {
+        if (!hasStartedRecorder || recorder.state === 'inactive') {
           void finish();
           return;
         }
@@ -689,7 +715,7 @@ export class MediaRecorderAudioCaptureBackend implements AudioRecordingCaptureBa
         }
       }),
       cancel: async () => {
-        if (recorder.state !== 'inactive') {
+        if (hasStartedRecorder && recorder.state !== 'inactive') {
           recorder.stop();
         }
         stopStream(stream);
@@ -1600,17 +1626,22 @@ export class AudioRecordingService {
     return DEFAULT_OPEN_ENDED_RECORDING_STORAGE_SECONDS;
   }
 
-  private async beginSessionCapture(session: ActiveRecordingSession): Promise<void> {
+  private async beginSessionCapture(
+    session: ActiveRecordingSession,
+    options: { pausedUntilPunch?: boolean } = {},
+  ): Promise<void> {
     if (this.activeSession !== session) return;
     if (session.captureStarting || session.captures.length > 0) return;
     session.captureStarting = true;
     const wasWaitingForPunch = this.snapshot.phase === 'waiting-for-punch';
-    this.clearPunchInMonitor(session);
+    if (!options.pausedUntilPunch) {
+      this.clearPunchInMonitor(session);
+    }
 
     const targetTrackIds = getRecordingTargetTrackIds(session.targets);
     const inputDeviceIds = getRecordingInputDeviceIds(session.targets);
     this.setSnapshot({
-      phase: 'requesting-input',
+      phase: options.pausedUntilPunch ? 'warming-input' : 'requesting-input',
       sessionId: session.sessionId,
       targetTrackIds,
       startedAt: session.startedAt,
@@ -1624,7 +1655,7 @@ export class AudioRecordingService {
 
     const captures: ActiveCaptureGroup[] = [];
     try {
-      if (wasWaitingForPunch) {
+      if (wasWaitingForPunch && !options.pausedUntilPunch) {
         session.startedAt = this.now();
       }
       for (const group of session.captureGroups) {
@@ -1637,6 +1668,7 @@ export class AudioRecordingService {
           mimeTypes: session.mimeTypes,
           timesliceMs: DEFAULT_TIMESLICE_MS,
           chunkSink: this.createRecoveryChunkSink(session),
+          initiallyPaused: options.pausedUntilPunch,
         });
         captures.push({
           inputDeviceId: group.inputDeviceId,
@@ -1665,6 +1697,21 @@ export class AudioRecordingService {
         punchOutTime: session.punchOutTime,
         status: 'active',
       });
+      if (options.pausedUntilPunch) {
+        this.setSnapshot({
+          phase: 'warming-input',
+          sessionId: session.sessionId,
+          targetTrackIds,
+          startedAt: session.startedAt,
+          startTime: session.startTime,
+          punchInTime: session.punchInTime,
+          punchOutTime: session.punchOutTime,
+          elapsedSeconds: 0,
+          inputDeviceIds,
+          storageWarnings: session.storageWarnings,
+        });
+        return;
+      }
       this.armPunchOutMonitor(session);
       this.setSnapshot({
         phase: 'recording',
@@ -1712,6 +1759,46 @@ export class AudioRecordingService {
     }
   }
 
+  private resumeSessionCapture(session: ActiveRecordingSession): void {
+    if (this.activeSession !== session || session.captures.length === 0) return;
+
+    this.clearPunchInMonitor(session);
+    session.startedAt = this.now();
+    const targetTrackIds = getRecordingTargetTrackIds(session.targets);
+    const inputDeviceIds = getRecordingInputDeviceIds(session.targets);
+
+    for (const group of session.captures) {
+      group.capture.resume?.({
+        startedAt: session.startedAt,
+        startTime: session.startTime,
+      });
+    }
+
+    this.persistRecoveryEntry({
+      sessionId: session.sessionId,
+      targetTrackIds,
+      inputDeviceIds,
+      startedAt: session.startedAt,
+      startTime: session.startTime,
+      punchInTime: session.punchInTime,
+      punchOutTime: session.punchOutTime,
+      status: 'active',
+    });
+    this.armPunchOutMonitor(session);
+    this.setSnapshot({
+      phase: 'recording',
+      sessionId: session.sessionId,
+      targetTrackIds,
+      startedAt: session.startedAt,
+      startTime: session.startTime,
+      punchInTime: session.punchInTime,
+      punchOutTime: session.punchOutTime,
+      elapsedSeconds: 0,
+      inputDeviceIds,
+      storageWarnings: session.storageWarnings,
+    });
+  }
+
   private createRecoveryChunkSink(session: ActiveRecordingSession): AudioRecordingChunkSink {
     return {
       writeChunk: async (chunk) => {
@@ -1742,7 +1829,11 @@ export class AudioRecordingService {
 
   private armPunchInMonitor(session: ActiveRecordingSession): void {
     const checkPunchIn = async (): Promise<void> => {
-      if (this.activeSession !== session || session.captureStarting || session.captures.length > 0) return;
+      if (this.activeSession !== session) return;
+      if (session.captureStarting) {
+        session.punchInTimer = globalThis.setTimeout(checkPunchIn, PUNCH_OUT_POLL_MS);
+        return;
+      }
 
       const timelineTime = session.getTimelineTime?.();
       if (
@@ -1751,10 +1842,27 @@ export class AudioRecordingService {
         typeof session.punchInTime === 'number' &&
         timelineTime >= session.punchInTime
       ) {
-        await this.beginSessionCapture(session).catch(error => {
-          log.warn('Punch-in recording start failed', error);
-        });
+        if (session.captures.length > 0) {
+          this.resumeSessionCapture(session);
+        } else {
+          await this.beginSessionCapture(session).catch(error => {
+            log.warn('Punch-in recording start failed', error);
+          });
+        }
         return;
+      }
+
+      if (
+        session.captures.length === 0 &&
+        typeof timelineTime === 'number' &&
+        Number.isFinite(timelineTime) &&
+        typeof session.punchInTime === 'number' &&
+        timelineTime >= session.punchInTime - PUNCH_INPUT_WARMUP_SECONDS
+      ) {
+        await this.beginSessionCapture(session, { pausedUntilPunch: true }).catch(error => {
+          log.warn('Punch-in input warmup failed', error);
+        });
+        if (this.activeSession !== session) return;
       }
 
       session.punchInTimer = globalThis.setTimeout(checkPunchIn, PUNCH_OUT_POLL_MS);

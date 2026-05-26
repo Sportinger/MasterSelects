@@ -125,8 +125,8 @@ function dbToLinearGain(db: number): number {
   return Math.pow(10, db / 20);
 }
 
-const SPECTRAL_IMAGE_MASK_MAX_WIDTH = 160;
-const SPECTRAL_IMAGE_MASK_MAX_HEIGHT = 96;
+const SPECTRAL_IMAGE_MASK_MAX_WIDTH = 512;
+const SPECTRAL_IMAGE_MASK_MAX_HEIGHT = 256;
 const SPECTRAL_IMAGE_LAYER_SUBBANDS = 16;
 const spectralImageMaskCache = new Map<string, Promise<SpectralImageLayerMask | null>>();
 
@@ -170,13 +170,32 @@ function createSpectralLayerSampleRange(
   return { start, end };
 }
 
-function sampleSpectralImageMask(mask: SpectralImageLayerMask, xUnit: number, yUnit: number): number {
-  const x = Math.max(0, Math.min(mask.width - 1, Math.round(xUnit * (mask.width - 1))));
-  const y = Math.max(0, Math.min(mask.height - 1, Math.round(yUnit * (mask.height - 1))));
+function sampleSpectralImageMaskPixel(mask: SpectralImageLayerMask, x: number, y: number): number {
   const index = y * mask.width + x;
   const luminance = Math.max(0, Math.min(1, mask.luminance[index] ?? 0));
   const alpha = mask.alpha ? Math.max(0, Math.min(1, mask.alpha[index] ?? 1)) : 1;
   return luminance * alpha;
+}
+
+function sampleSpectralImageMask(mask: SpectralImageLayerMask, xUnit: number, yUnit: number): number {
+  if (mask.width <= 1 && mask.height <= 1) {
+    return sampleSpectralImageMaskPixel(mask, 0, 0);
+  }
+
+  const xFloat = clamp01(xUnit) * Math.max(0, mask.width - 1);
+  const yFloat = clamp01(yUnit) * Math.max(0, mask.height - 1);
+  const x0 = Math.max(0, Math.min(mask.width - 1, Math.floor(xFloat)));
+  const y0 = Math.max(0, Math.min(mask.height - 1, Math.floor(yFloat)));
+  const x1 = Math.max(0, Math.min(mask.width - 1, x0 + 1));
+  const y1 = Math.max(0, Math.min(mask.height - 1, y0 + 1));
+  const tx = xFloat - x0;
+  const ty = yFloat - y0;
+
+  const top = sampleSpectralImageMaskPixel(mask, x0, y0) * (1 - tx) +
+    sampleSpectralImageMaskPixel(mask, x1, y0) * tx;
+  const bottom = sampleSpectralImageMaskPixel(mask, x0, y1) * (1 - tx) +
+    sampleSpectralImageMaskPixel(mask, x1, y1) * tx;
+  return top * (1 - ty) + bottom * ty;
 }
 
 function createSpectralLayerAutomationTracks(layer: SpectralImageLayer): SpectralImageLayerAutomationTracks {
@@ -310,12 +329,179 @@ function spectralLayerFrequencyFeather(
   return Math.min(low, high);
 }
 
+function chooseSpectralImageLayerFftSize(sampleRate: number, rangeLength: number): number {
+  const target = nextPowerOfTwo(Math.max(512, Math.round(sampleRate * 0.046)));
+  const bounded = nextPowerOfTwo(Math.max(64, Math.min(rangeLength, target)));
+  return Math.max(64, Math.min(4096, bounded));
+}
+
+function deterministicSpectralImagePhase(channel: number, frameIndex: number, bin: number): number {
+  const seed = (channel + 1) * 1013 + frameIndex * 9176 + bin * 37;
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return (x - Math.floor(x)) * Math.PI * 2;
+}
+
+function wrapRadians(phase: number): number {
+  const fullTurn = Math.PI * 2;
+  const wrapped = phase % fullTurn;
+  return wrapped < 0 ? wrapped + fullTurn : wrapped;
+}
+
+function synthesizedSpectralImagePhase(
+  channel: number,
+  frameIndex: number,
+  bin: number,
+  hopSize: number,
+  fftSize: number,
+): number {
+  const initialPhase = deterministicSpectralImagePhase(channel, 0, bin);
+  const phaseAdvance = (Math.PI * 2 * bin * hopSize * frameIndex) / Math.max(1, fftSize);
+  return wrapRadians(initialPhase + phaseAdvance);
+}
+
+function setSymmetricFftBinMagnitude(
+  real: Float32Array,
+  imag: Float32Array,
+  bin: number,
+  magnitude: number,
+  phase: number,
+): void {
+  const clampedMagnitude = Math.max(0, magnitude);
+  real[bin] = Math.cos(phase) * clampedMagnitude;
+  imag[bin] = Math.sin(phase) * clampedMagnitude;
+
+  const positiveBinCount = Math.floor(real.length / 2);
+  if (bin > 0 && bin < positiveBinCount) {
+    const mirror = real.length - bin;
+    real[mirror] = real[bin];
+    imag[mirror] = -imag[bin];
+  }
+}
+
+function applySpectralImageLayerResynthesis(
+  buffer: AudioBuffer,
+  clip: TimelineClip,
+  layer: SpectralImageLayer,
+  mask: SpectralImageLayerMask,
+): void {
+  const range = createSpectralLayerSampleRange(layer, clip, buffer);
+  const rangeLength = Math.max(0, range.end - range.start);
+  if (rangeLength < 4) return;
+
+  const nyquist = Math.max(20, buffer.sampleRate / 2 - 1);
+  const frequencyUnion = spectralImageLayerFrequencyUnion(layer, nyquist);
+  if (frequencyUnion.maxHz <= frequencyUnion.minHz) return;
+
+  const fftSize = chooseSpectralImageLayerFftSize(buffer.sampleRate, rangeLength);
+  const hopSize = Math.max(1, Math.floor(fftSize / 4));
+  const window = hannWindow(fftSize);
+  const automationTracks = createSpectralLayerAutomationTracks(layer);
+  const featherSamples = Math.max(0, Math.min(
+    Math.floor(rangeLength / 2),
+    Math.round(finiteNumber(layer.featherTime, 0) * buffer.sampleRate),
+  ));
+  const featherHz = Math.max(0, finiteNumber(layer.featherFrequency, 0));
+  const clipSourceStart = Math.max(0, finiteNumber(clip.inPoint, 0));
+  const frameStartOffset = -Math.floor(fftSize / 2);
+  const frameCount = Math.max(1, Math.ceil((rangeLength - frameStartOffset) / hopSize));
+  const positiveBinCount = Math.floor(fftSize / 2);
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const data = buffer.getChannelData(channel);
+    const output = new Float32Array(rangeLength);
+    const normalization = new Float32Array(rangeLength);
+    const real = new Float32Array(fftSize);
+    const imag = new Float32Array(fftSize);
+
+    for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+      const frameStart = frameStartOffset + frameIndex * hopSize;
+      real.fill(0);
+      imag.fill(0);
+      let framePower = 0;
+      let frameSampleCount = 0;
+
+      for (let sampleOffset = 0; sampleOffset < fftSize; sampleOffset += 1) {
+        const localIndex = frameStart + sampleOffset;
+        const sample = localIndex >= 0 && localIndex < rangeLength ? data[range.start + localIndex] ?? 0 : 0;
+        framePower += sample * sample;
+        frameSampleCount += 1;
+        real[sampleOffset] = sample * window[sampleOffset];
+      }
+
+      fftRadix2(real, imag);
+
+      const frameCenter = frameStart + fftSize / 2;
+      const frameCenterSourceSeconds = clipSourceStart + (range.start + frameCenter) / buffer.sampleRate;
+      const localTimeSeconds = Math.max(0, frameCenterSourceSeconds - layer.timeStart);
+      const state = evaluateSpectralLayerRenderState(layer, automationTracks, localTimeSeconds, nyquist);
+      const timeFeather = rangeFeatherFactor(Math.max(0, Math.min(rangeLength - 1, Math.round(frameCenter))), { start: 0, end: rangeLength }, featherSamples);
+      const xUnit = clamp01(frameCenter / Math.max(1, rangeLength - 1));
+      const frameRms = Math.sqrt(framePower / Math.max(1, frameSampleCount));
+      const floorMagnitude = Math.max(frameRms * fftSize * 0.25, 0.0015 * fftSize);
+      const sourcePhaseThreshold = Math.max(0.000001, floorMagnitude * 0.02);
+      const gain = Math.max(0, Math.min(8, dbToLinearGain(state.gainDb)));
+
+      if (state.opacity > 0 && timeFeather > 0) {
+        for (let bin = 0; bin <= positiveBinCount; bin += 1) {
+          const frequencyHz = (bin * buffer.sampleRate) / fftSize;
+          if (frequencyHz < state.frequencyMin || frequencyHz > state.frequencyMax) continue;
+          const frequencyFeather = spectralLayerFrequencyFeather(
+            frequencyHz,
+            state.frequencyMin,
+            state.frequencyMax,
+            featherHz,
+          );
+          if (frequencyFeather <= 0) continue;
+
+          const activeFrequencyUnit = clamp01((frequencyHz - state.frequencyMin) / Math.max(1, state.frequencyMax - state.frequencyMin));
+          const imageY = 1 - activeFrequencyUnit;
+          const maskStrength = sampleSpectralImageMask(mask, xUnit, imageY);
+          const strength = clamp01(maskStrength * state.opacity * timeFeather * frequencyFeather);
+          if (strength <= 0) continue;
+
+          const currentReal = real[bin] ?? 0;
+          const currentImag = imag[bin] ?? 0;
+          const currentMagnitude = Math.hypot(currentReal, currentImag);
+          const targetMagnitude = floorMagnitude * gain * maskStrength;
+          const nextMagnitude = currentMagnitude * (1 - strength) + targetMagnitude * strength;
+          const phase = currentMagnitude > sourcePhaseThreshold
+            ? Math.atan2(currentImag, currentReal)
+            : synthesizedSpectralImagePhase(channel, frameIndex, bin, hopSize, fftSize);
+          setSymmetricFftBinMagnitude(real, imag, bin, nextMagnitude, phase);
+        }
+      }
+
+      fftRadix2(real, imag, true);
+
+      for (let sampleOffset = 0; sampleOffset < fftSize; sampleOffset += 1) {
+        const localIndex = frameStart + sampleOffset;
+        if (localIndex < 0 || localIndex >= rangeLength) continue;
+        const windowValue = window[sampleOffset];
+        output[localIndex] += real[sampleOffset] * windowValue;
+        normalization[localIndex] += windowValue * windowValue;
+      }
+    }
+
+    for (let localIndex = 0; localIndex < rangeLength; localIndex += 1) {
+      const normalized = normalization[localIndex] > 0.000001
+        ? output[localIndex] / normalization[localIndex]
+        : data[range.start + localIndex] ?? 0;
+      data[range.start + localIndex] = normalized;
+    }
+  }
+}
+
 function applySpectralImageLayer(
   buffer: AudioBuffer,
   clip: TimelineClip,
   layer: SpectralImageLayer,
   mask: SpectralImageLayerMask,
 ): void {
+  if (layer.blendMode === 'replace') {
+    applySpectralImageLayerResynthesis(buffer, clip, layer, mask);
+    return;
+  }
+
   const range = createSpectralLayerSampleRange(layer, clip, buffer);
   if (range.end <= range.start) return;
 
@@ -568,6 +754,27 @@ function monoSumRange(
     const mono = sum / channelData.length;
     for (const data of channelData) {
       data[sample] = mono;
+    }
+  }
+}
+
+function splitStereoRange(
+  buffer: AudioBuffer,
+  range: { start: number; end: number },
+  channels: readonly number[],
+  operation: ClipAudioEditOperation,
+): void {
+  if (buffer.numberOfChannels <= 0 || channels.length === 0) return;
+  const sourceChannel = Math.max(
+    0,
+    Math.min(buffer.numberOfChannels - 1, Math.round(finiteNumber(operation.params.sourceChannel, channels[0] ?? 0))),
+  );
+  const source = buffer.getChannelData(sourceChannel).slice(range.start, range.end);
+
+  for (const channel of channels) {
+    const target = buffer.getChannelData(channel);
+    for (let localIndex = 0; localIndex < source.length; localIndex += 1) {
+      target[range.start + localIndex] = source[localIndex] ?? 0;
     }
   }
 }
@@ -892,6 +1099,250 @@ function applySpectralBandGainRange(
   }
 }
 
+function nextPowerOfTwo(value: number): number {
+  let power = 1;
+  while (power < value) {
+    power *= 2;
+  }
+  return power;
+}
+
+function isPowerOfTwo(value: number): boolean {
+  return Number.isInteger(value) && value > 0 && (value & (value - 1)) === 0;
+}
+
+function chooseSpectralResynthesisFftSize(
+  operation: ClipAudioEditOperation,
+  sampleRate: number,
+  rangeLength: number,
+): number {
+  const requested = finiteNumber(operation.params.fftSize, Number.NaN);
+  if (isPowerOfTwo(requested) && requested >= 64 && requested <= 8192) {
+    return requested;
+  }
+
+  const target = nextPowerOfTwo(Math.max(64, Math.round(sampleRate * 0.046)));
+  const boundedByRange = Math.max(64, Math.min(4096, nextPowerOfTwo(Math.max(64, Math.min(rangeLength, target)))));
+  return boundedByRange;
+}
+
+function hannWindow(size: number): Float32Array {
+  const window = new Float32Array(size);
+  if (size <= 1) {
+    window.fill(1);
+    return window;
+  }
+
+  for (let index = 0; index < size; index += 1) {
+    window[index] = 0.5 - 0.5 * Math.cos((2 * Math.PI * index) / (size - 1));
+  }
+  return window;
+}
+
+function fftRadix2(real: Float32Array, imag: Float32Array, inverse = false): void {
+  const n = real.length;
+  if (n !== imag.length || !isPowerOfTwo(n)) {
+    throw new Error('FFT buffers must be equal power-of-two lengths.');
+  }
+
+  let j = 0;
+  for (let i = 1; i < n - 1; i += 1) {
+    let bit = n >> 1;
+    while (j & bit) {
+      j ^= bit;
+      bit >>= 1;
+    }
+    j ^= bit;
+    if (i < j) {
+      const realSwap = real[i];
+      real[i] = real[j];
+      real[j] = realSwap;
+      const imagSwap = imag[i];
+      imag[i] = imag[j];
+      imag[j] = imagSwap;
+    }
+  }
+
+  for (let size = 2; size <= n; size <<= 1) {
+    const half = size >> 1;
+    const angle = (inverse ? 2 : -2) * Math.PI / size;
+    const phaseStepReal = Math.cos(angle);
+    const phaseStepImag = Math.sin(angle);
+
+    for (let offset = 0; offset < n; offset += size) {
+      let phaseReal = 1;
+      let phaseImag = 0;
+      for (let index = 0; index < half; index += 1) {
+        const evenIndex = offset + index;
+        const oddIndex = evenIndex + half;
+        const oddReal = real[oddIndex] * phaseReal - imag[oddIndex] * phaseImag;
+        const oddImag = real[oddIndex] * phaseImag + imag[oddIndex] * phaseReal;
+        real[oddIndex] = real[evenIndex] - oddReal;
+        imag[oddIndex] = imag[evenIndex] - oddImag;
+        real[evenIndex] += oddReal;
+        imag[evenIndex] += oddImag;
+
+        const nextPhaseReal = phaseReal * phaseStepReal - phaseImag * phaseStepImag;
+        phaseImag = phaseReal * phaseStepImag + phaseImag * phaseStepReal;
+        phaseReal = nextPhaseReal;
+      }
+    }
+  }
+
+  if (inverse) {
+    for (let index = 0; index < n; index += 1) {
+      real[index] /= n;
+      imag[index] /= n;
+    }
+  }
+}
+
+function frequencyBandWeight(
+  frequencyHz: number,
+  minHz: number,
+  maxHz: number,
+  featherHz: number,
+): number {
+  if (frequencyHz < minHz - featherHz || frequencyHz > maxHz + featherHz) return 0;
+  if (frequencyHz >= minHz && frequencyHz <= maxHz) return 1;
+  if (featherHz <= 0) return 0;
+
+  if (frequencyHz < minHz) {
+    return Math.max(0, Math.min(1, (frequencyHz - (minHz - featherHz)) / featherHz));
+  }
+  return Math.max(0, Math.min(1, ((maxHz + featherHz) - frequencyHz) / featherHz));
+}
+
+function spectralBrushWeight(
+  operation: ClipAudioEditOperation,
+  frameCenterSeconds: number,
+  frequencyHz: number,
+  rangeDurationSeconds: number,
+  minHz: number,
+  maxHz: number,
+): number {
+  if (operation.params.selectionMode !== 'brush') return 1;
+
+  const timeRadiusSeconds = Math.max(
+    0.001,
+    finiteNumber(operation.params.brushTimeRadiusSeconds, rangeDurationSeconds / 2),
+  );
+  const frequencyRadiusHz = Math.max(
+    1,
+    finiteNumber(operation.params.brushFrequencyRadiusHz, Math.max(1, (maxHz - minHz) / 2)),
+  );
+  const timeCenterSeconds = rangeDurationSeconds / 2;
+  const frequencyCenterHz = (minHz + maxHz) / 2;
+  const normalizedTime = Math.abs(frameCenterSeconds - timeCenterSeconds) / timeRadiusSeconds;
+  const normalizedFrequency = Math.abs(frequencyHz - frequencyCenterHz) / frequencyRadiusHz;
+  const distance = Math.sqrt(normalizedTime * normalizedTime + normalizedFrequency * normalizedFrequency);
+  if (distance >= 1) return 0;
+  if (distance <= 0.55) return 1;
+  const edge = (distance - 0.55) / 0.45;
+  return Math.max(0, Math.min(1, 1 - edge * edge * (3 - 2 * edge)));
+}
+
+function applySpectralResynthesisRange(
+  buffer: AudioBuffer,
+  range: { start: number; end: number },
+  channels: readonly number[],
+  operation: ClipAudioEditOperation,
+): void {
+  const rangeLength = Math.max(0, range.end - range.start);
+  if (rangeLength < 4) return;
+
+  const nyquist = buffer.sampleRate / 2;
+  const frequencyMinHz = Math.max(0, Math.min(nyquist, finiteNumber(operation.params.frequencyMinHz, 0)));
+  const frequencyMaxHz = Math.max(frequencyMinHz, Math.min(nyquist, finiteNumber(operation.params.frequencyMaxHz, nyquist)));
+  const gainDb = finiteNumber(operation.params.gainDb, 6);
+  const spectralGain = Math.max(0, Math.min(8, dbToLinearGain(gainDb)));
+  const gainDelta = spectralGain - 1;
+  if (frequencyMaxHz <= frequencyMinHz || Math.abs(gainDelta) < 0.001) return;
+
+  const fftSize = chooseSpectralResynthesisFftSize(operation, buffer.sampleRate, rangeLength);
+  const hopSize = Math.max(1, Math.floor(finiteNumber(operation.params.hopSize, fftSize / 4)));
+  const window = hannWindow(fftSize);
+  const real = new Float32Array(fftSize);
+  const imag = new Float32Array(fftSize);
+  const output = new Float32Array(rangeLength);
+  const normalization = new Float32Array(rangeLength);
+  const featherHz = Math.max(0, finiteNumber(operation.params.featherFrequencyHz, Math.max(12, (frequencyMaxHz - frequencyMinHz) * 0.08)));
+  const rangeDurationSeconds = rangeLength / buffer.sampleRate;
+  const frameStartOffset = -Math.floor(fftSize / 2);
+  const frameCount = Math.max(1, Math.ceil((rangeLength - frameStartOffset) / hopSize));
+
+  for (const channel of channels) {
+    const data = buffer.getChannelData(channel);
+    output.fill(0);
+    normalization.fill(0);
+
+    for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+      const frameStart = frameStartOffset + frameIndex * hopSize;
+      real.fill(0);
+      imag.fill(0);
+
+      for (let sampleOffset = 0; sampleOffset < fftSize; sampleOffset += 1) {
+        const localIndex = frameStart + sampleOffset;
+        const sample = localIndex >= 0 && localIndex < rangeLength ? data[range.start + localIndex] ?? 0 : 0;
+        real[sampleOffset] = sample * window[sampleOffset];
+      }
+
+      fftRadix2(real, imag);
+
+      const frameCenterSeconds = (frameStart + fftSize / 2) / buffer.sampleRate;
+      const positiveBinCount = Math.floor(fftSize / 2);
+      for (let bin = 0; bin <= positiveBinCount; bin += 1) {
+        const frequencyHz = (bin * buffer.sampleRate) / fftSize;
+        const bandWeight = frequencyBandWeight(frequencyHz, frequencyMinHz, frequencyMaxHz, featherHz);
+        if (bandWeight <= 0) continue;
+        const brushWeight = spectralBrushWeight(
+          operation,
+          frameCenterSeconds,
+          frequencyHz,
+          rangeDurationSeconds,
+          frequencyMinHz,
+          frequencyMaxHz,
+        );
+        const weight = bandWeight * brushWeight;
+        if (weight <= 0) continue;
+
+        const scale = 1 + gainDelta * weight;
+        real[bin] *= scale;
+        imag[bin] *= scale;
+
+        if (bin > 0 && bin < positiveBinCount) {
+          const mirror = fftSize - bin;
+          real[mirror] *= scale;
+          imag[mirror] *= scale;
+        }
+      }
+
+      fftRadix2(real, imag, true);
+
+      for (let sampleOffset = 0; sampleOffset < fftSize; sampleOffset += 1) {
+        const localIndex = frameStart + sampleOffset;
+        if (localIndex < 0 || localIndex >= rangeLength) continue;
+        const windowValue = window[sampleOffset];
+        output[localIndex] += real[sampleOffset] * windowValue;
+        normalization[localIndex] += windowValue * windowValue;
+      }
+    }
+
+    const featherSamples = Math.max(0, Math.min(
+      Math.floor(rangeLength / 2),
+      Math.round(finiteNumber(operation.params.featherTime, 0.015) * buffer.sampleRate),
+    ));
+    for (let localIndex = 0; localIndex < rangeLength; localIndex += 1) {
+      const normalized = normalization[localIndex] > 0.000001
+        ? output[localIndex] / normalization[localIndex]
+        : data[range.start + localIndex] ?? 0;
+      const blend = rangeFeatherFactor(localIndex, { start: 0, end: rangeLength }, featherSamples);
+      const source = data[range.start + localIndex] ?? 0;
+      data[range.start + localIndex] = source * (1 - blend) + normalized * blend;
+    }
+  }
+}
+
 function rangeFeatherFactor(
   sample: number,
   range: { start: number; end: number },
@@ -1097,6 +1548,43 @@ function applyLoudnessMatchRepairRange(
   }
 }
 
+function applyTransientSoftenRepairRange(
+  buffer: AudioBuffer,
+  range: { start: number; end: number },
+  channels: readonly number[],
+  operation: ClipAudioEditOperation,
+): void {
+  const rangeLength = range.end - range.start;
+  if (rangeLength <= 1) return;
+
+  const requestedGainDb = finiteNumber(operation.params.gainDb, -6);
+  const targetGain = dbToLinearGain(Math.min(0, Math.max(-36, requestedGainDb)));
+  if (Math.abs(targetGain - 1) < 0.001) return;
+
+  const halfRange = Math.max(1, Math.floor(rangeLength / 2));
+  const attackSamples = Math.max(1, Math.min(
+    halfRange,
+    Math.round(finiteNumber(operation.params.attackSeconds, 0.002) * buffer.sampleRate),
+  ));
+  const releaseSamples = Math.max(1, Math.min(
+    halfRange,
+    Math.round(finiteNumber(operation.params.releaseSeconds, 0.018) * buffer.sampleRate),
+  ));
+
+  for (const channel of channels) {
+    const data = buffer.getChannelData(channel);
+    for (let sample = range.start; sample < range.end; sample += 1) {
+      const local = sample - range.start;
+      const fromEnd = range.end - 1 - sample;
+      const attack = Math.min(1, local / attackSamples);
+      const release = Math.min(1, fromEnd / releaseSamples);
+      const envelope = Math.max(0, Math.min(1, Math.min(attack, release)));
+      const smooth = envelope * envelope * (3 - 2 * envelope);
+      data[sample] = (data[sample] ?? 0) * (1 + (targetGain - 1) * smooth);
+    }
+  }
+}
+
 function applyRepairRange(
   buffer: AudioBuffer,
   range: { start: number; end: number },
@@ -1115,6 +1603,9 @@ function applyRepairRange(
       break;
     case 'loudness-match':
       applyLoudnessMatchRepairRange(buffer, range, channels, operation);
+      break;
+    case 'transient-soften':
+      applyTransientSoftenRepairRange(buffer, range, channels, operation);
       break;
   }
 }
@@ -1246,6 +1737,9 @@ export class ClipAudioRenderService {
         case 'mono-sum':
           monoSumRange(edited, range, channels);
           break;
+        case 'split-stereo':
+          splitStereoRange(edited, range, channels, operation);
+          break;
         case 'insert-silence':
           insertSilencePreservingDuration(edited, range, channels, operation);
           break;
@@ -1263,8 +1757,10 @@ export class ClipAudioRenderService {
           fillRangeWithRoomTone(edited, clip, range, channels, operation);
           break;
         case 'spectral-mask':
-        case 'spectral-resynthesis':
           applySpectralBandGainRange(edited, range, channels, operation);
+          break;
+        case 'spectral-resynthesis':
+          applySpectralResynthesisRange(edited, range, channels, operation);
           break;
       }
     }

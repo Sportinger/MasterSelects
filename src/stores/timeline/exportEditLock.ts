@@ -46,6 +46,10 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'setClipParent',
   'setClipPreservesPitch',
   'applyAudioRegionEdit',
+  'applyAudioRepairSuggestion',
+  'applyDetectedSilenceRemoval',
+  'applyRoomToneFill',
+  'applyDetectedTransientSoftening',
   'pasteAudioRegionToSelection',
   'setClipAudioEditOperationEnabled',
   'removeClipAudioEditOperation',
@@ -162,6 +166,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'updateTransitionDuration',
 
   'addClipAICustomNode',
+  'addClipAICustomNodeFromPort',
   'updateClipAICustomNode',
   'removeClipNodeGraphNode',
   'showClipNodeGraphBuiltIn',
@@ -195,7 +200,8 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'clearTimeline',
 ]);
 
-const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'bakeClipAudioEditStack']);
+const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'bakeClipAudioEditStack', 'applyRoomToneFill']);
+const ASYNC_ARRAY_ACTION_NAMES = new Set<string>(['applyDetectedSilenceRemoval', 'applyDetectedTransientSoftening']);
 const ASYNC_VOID_ACTION_NAMES = new Set<string>(['addClip', 'addCompClip', 'completeDownload', 'loadState']);
 const STRING_FALLBACK_ACTION_NAMES = new Set<string>([
   'addTrack',
@@ -218,7 +224,9 @@ const NULL_FALLBACK_ACTION_NAMES = new Set<string>([
   'addCameraClip',
   'addSplatEffectorClip',
   'addClipAICustomNode',
+  'addClipAICustomNodeFromPort',
   'applyAudioRegionEdit',
+  'applyAudioRepairSuggestion',
   'pasteAudioRegionToSelection',
   'addClipAudioEffectInstance',
   'addTrackAudioEffectInstance',
@@ -227,6 +235,7 @@ const NULL_FALLBACK_ACTION_NAMES = new Set<string>([
 
 function getLockedReturnValue(actionName: string): unknown {
   if (ASYNC_NULL_ACTION_NAMES.has(actionName)) return Promise.resolve(null);
+  if (ASYNC_ARRAY_ACTION_NAMES.has(actionName)) return Promise.resolve([]);
   if (ASYNC_VOID_ACTION_NAMES.has(actionName)) return Promise.resolve();
   if (STRING_FALLBACK_ACTION_NAMES.has(actionName)) return '';
   if (NULL_FALLBACK_ACTION_NAMES.has(actionName)) return null;

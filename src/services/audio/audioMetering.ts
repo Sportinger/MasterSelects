@@ -1,4 +1,4 @@
-import type { AudioMeterSnapshot } from '../../types';
+import type { AudioDynamicsReductionSnapshot, AudioMeterSnapshot } from '../../types';
 
 export const AUDIO_METER_FLOOR_DB = -120;
 const AUDIO_METER_CLIP_THRESHOLD = 0.999;
@@ -22,9 +22,13 @@ export function createSilentAudioMeterSnapshot(updatedAt: number): AudioMeterSna
 export function calculateAudioMeterSnapshot(
   samples: ArrayLike<number>,
   updatedAt: number,
+  dynamics?: Record<string, AudioDynamicsReductionSnapshot>,
 ): AudioMeterSnapshot {
   if (samples.length === 0) {
-    return createSilentAudioMeterSnapshot(updatedAt);
+    return {
+      ...createSilentAudioMeterSnapshot(updatedAt),
+      ...(dynamics && Object.keys(dynamics).length > 0 ? { dynamics } : {}),
+    };
   }
 
   let peakLinear = 0;
@@ -45,7 +49,28 @@ export function calculateAudioMeterSnapshot(
     rmsDb: audioMeterLinearToDb(rmsLinear),
     clipping: peakLinear >= AUDIO_METER_CLIP_THRESHOLD,
     updatedAt,
+    ...(dynamics && Object.keys(dynamics).length > 0 ? { dynamics } : {}),
   };
+}
+
+function aggregateDynamicsSnapshots(
+  snapshots: readonly AudioMeterSnapshot[],
+  updatedAt: number,
+): Record<string, AudioDynamicsReductionSnapshot> | undefined {
+  const dynamics: Record<string, AudioDynamicsReductionSnapshot> = {};
+
+  for (const snapshot of snapshots) {
+    for (const [effectId, reduction] of Object.entries(snapshot.dynamics ?? {})) {
+      const current = dynamics[effectId];
+      if (current && current.gainReductionDb >= reduction.gainReductionDb) continue;
+      dynamics[effectId] = {
+        ...reduction,
+        updatedAt,
+      };
+    }
+  }
+
+  return Object.keys(dynamics).length > 0 ? dynamics : undefined;
 }
 
 export function aggregateAudioMeterSnapshots(
@@ -67,6 +92,7 @@ export function aggregateAudioMeterSnapshots(
   }
 
   const rmsLinear = Math.min(1, Math.sqrt(rmsPower));
+  const dynamics = aggregateDynamicsSnapshots(snapshots, updatedAt);
   return {
     peakLinear,
     rmsLinear,
@@ -74,6 +100,7 @@ export function aggregateAudioMeterSnapshots(
     rmsDb: audioMeterLinearToDb(rmsLinear),
     clipping: clipping || peakLinear >= AUDIO_METER_CLIP_THRESHOLD,
     updatedAt,
+    ...(dynamics ? { dynamics } : {}),
   };
 }
 

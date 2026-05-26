@@ -40,6 +40,7 @@ export type NodeGraphAudioSemanticKind =
 
 export interface NodeGraphPortMetadata {
   semanticKind?: NodeGraphAudioSemanticKind | string;
+  targetClipId?: string;
   signalRefId?: string;
   artifactId?: string;
   artifactProvenance?: 'source' | 'processed';

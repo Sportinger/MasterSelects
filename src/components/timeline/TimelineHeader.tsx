@@ -31,6 +31,11 @@ import { useTimelineStore } from '../../stores/timeline';
 import { AudioLevelMeter } from './components/AudioLevelMeter';
 import { AudioEffectStackControl } from '../panels/properties/AudioEffectStackControl';
 import {
+  formatAudioTrackPan,
+  formatAudioTrackVolumeDb,
+  getAudioTrackHeaderDensity,
+} from './utils/audioTrackHeaderDensity';
+import {
   getCameraLookRotationAxis,
   resolveCameraLookAtFixedEyeUpdates,
 } from '../../engine/scene/CameraClipControlUtils';
@@ -56,6 +61,39 @@ type KeyframeTrackClip = {
     };
   } | null;
 };
+
+type TrackHeaderIconName = 'speaker' | 'lock' | 'unlock' | 'eye' | 'eyeOff';
+
+function TrackHeaderIcon({ name }: { name: TrackHeaderIconName }) {
+  if (name === 'speaker') {
+    return (
+      <svg className="track-header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 9h4l5-4v14l-5-4H4z" />
+        <path d="M16 8.5c1.1 1 1.7 2.2 1.7 3.5s-.6 2.5-1.7 3.5" />
+        <path d="M18.6 6c1.8 1.7 2.8 3.7 2.8 6s-1 4.3-2.8 6" />
+      </svg>
+    );
+  }
+
+  if (name === 'lock' || name === 'unlock') {
+    return (
+      <svg className="track-header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="5" y="10" width="14" height="10" rx="2" />
+        {name === 'lock'
+          ? <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          : <path d="M8 10V7a4 4 0 0 1 7.4-2.1" />}
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="track-header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" />
+      <circle cx="12" cy="12" r="2.8" />
+      {name === 'eyeOff' && <path d="M4 4l16 16" />}
+    </svg>
+  );
+}
 
 const usesCameraPropertyModel = (clip: KeyframeTrackClip | null | undefined): boolean => {
   if (!clip?.source) return false;
@@ -1039,6 +1077,11 @@ function TimelineHeaderComponent({
   const trackInputMonitor = track.audioState?.inputMonitor === true;
   const trackVolumeDb = track.audioState?.volumeDb ?? 0;
   const trackPan = track.audioState?.pan ?? 0;
+  const trackVolumeLabel = formatAudioTrackVolumeDb(trackVolumeDb);
+  const trackPanLabel = formatAudioTrackPan(trackPan);
+  const audioHeaderDensity = track.type === 'audio'
+    ? getAudioTrackHeaderDensity(baseHeight)
+    : null;
   const audioMeter = useTimelineStore(state => track.type === 'audio'
     ? state.runtimeAudioMeters.trackMeters[track.id]
     : undefined);
@@ -1144,7 +1187,9 @@ function TimelineHeaderComponent({
     <div
       className={`track-header ${track.type} ${isDimmed ? 'dimmed' : ''} ${
         isExpanded ? 'expanded' : ''
-      } ${track.locked ? 'locked' : ''} ${audioFxOpen || audioSendsOpen ? 'popover-open' : ''}`}
+      } ${track.locked ? 'locked' : ''} ${
+        audioHeaderDensity ? `audio-strip-${audioHeaderDensity}` : ''
+      } ${audioFxOpen || audioSendsOpen ? 'popover-open' : ''}`}
       style={{ height: dynamicHeight }}
       onWheel={onWheel}
       onContextMenu={onContextMenu}
@@ -1214,10 +1259,11 @@ function TimelineHeaderComponent({
                 step="0.01"
                 value={trackPan}
                 aria-label={`${track.name} pan`}
-                title={`Pan ${trackPan === 0 ? 'C' : trackPan < 0 ? `L${Math.round(Math.abs(trackPan) * 100)}` : `R${Math.round(trackPan * 100)}`}`}
+                title={`Pan ${trackPanLabel}`}
                 onChange={handleTrackPanChange}
               />
               <span className="audio-track-pan-label" aria-hidden="true">R</span>
+              <span className="audio-track-pan-value" aria-hidden="true">{trackPanLabel}</span>
             </div>
           )}
         </div>
@@ -1246,7 +1292,7 @@ function TimelineHeaderComponent({
                 }}
                 title={trackInputMonitor ? 'Input monitor on' : 'Input monitor off'}
               >
-                {'\uD83D\uDD0A'}
+                <TrackHeaderIcon name="speaker" />
               </button>
               <button
                 className={`btn-icon ${trackRecordArm ? 'record-active' : ''}`}
@@ -1267,14 +1313,15 @@ function TimelineHeaderComponent({
                 }}
                 title="Track sends"
               >
-                Aux
+                <span className="audio-button-label-wide">Aux</span>
+                <span className="audio-button-label-short">A</span>
               </button>
               <button
                 className={`btn-icon ${track.locked ? 'locked-active' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onToggleLocked?.(); }}
                 title={track.locked ? 'Unlock Track' : 'Lock Track'}
               >
-                {track.locked ? '\uD83D\uDD12' : '\uD83D\uDD13'}
+                <TrackHeaderIcon name={track.locked ? 'lock' : 'unlock'} />
               </button>
               <button
                 className={`btn-icon ${audioFxOpen || (track.audioState?.effectStack?.length ?? 0) > 0 ? 'btn-active' : ''}`}
@@ -1302,14 +1349,14 @@ function TimelineHeaderComponent({
                 onClick={(e) => { e.stopPropagation(); onToggleLocked?.(); }}
                 title={track.locked ? 'Unlock Track' : 'Lock Track'}
               >
-                {track.locked ? '\uD83D\uDD12' : '\uD83D\uDD13'}
+                <TrackHeaderIcon name={track.locked ? 'lock' : 'unlock'} />
               </button>
               <button
                 className={`btn-icon ${!track.visible ? 'hidden' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onToggleVisible(); }}
                 title={track.visible ? 'Hide' : 'Show'}
               >
-                {track.visible ? '\uD83D\uDC41' : '\uD83D\uDC41\u200D\uD83D\uDDE8'}
+                <TrackHeaderIcon name={track.visible ? 'eye' : 'eyeOff'} />
               </button>
             </>
           )}
@@ -1321,17 +1368,20 @@ function TimelineHeaderComponent({
             onPointerDown={(event) => event.stopPropagation()}
           >
             <AudioLevelMeter meter={audioMeter} label={`${track.name} level`} orientation="vertical" />
-            <input
-              className="audio-track-fader"
-              type="range"
-              min="-60"
-              max="18"
-              step="0.5"
-              value={trackVolumeDb}
-              aria-label={`${track.name} volume`}
-              title={`Volume ${trackVolumeDb.toFixed(1)} dB`}
-              onChange={handleTrackVolumeChange}
-            />
+            <div className="audio-track-fader-column">
+              <input
+                className="audio-track-fader"
+                type="range"
+                min="-60"
+                max="18"
+                step="0.5"
+                value={trackVolumeDb}
+                aria-label={`${track.name} volume`}
+                title={`Volume ${trackVolumeLabel} dB`}
+                onChange={handleTrackVolumeChange}
+              />
+              <span className="audio-track-fader-value" aria-hidden="true">{trackVolumeLabel}</span>
+            </div>
           </div>
         )}
         {track.type === 'audio' && audioFxOpen && (

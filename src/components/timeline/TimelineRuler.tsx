@@ -41,7 +41,13 @@ function TimelineRulerComponent({
   let interval = 1; // 1 second default
   let mainMarkerMultiple = 5; // Show label every 5 markers by default
 
-  if (zoom >= 1000) {
+  if (zoom >= 5000) {
+    interval = 0.01;
+    mainMarkerMultiple = 10; // Every 0.1 seconds
+  } else if (zoom >= 2500) {
+    interval = 0.02;
+    mainMarkerMultiple = 5; // Every 0.1 seconds
+  } else if (zoom >= 1000) {
     interval = 0.05;
     mainMarkerMultiple = 20; // Every 1 second
   } else if (zoom >= 500) {

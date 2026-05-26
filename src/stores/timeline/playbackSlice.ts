@@ -7,6 +7,7 @@ import { engine } from '../../engine/WebGPUEngine';
 import { getRuntimeFrameProvider } from '../../services/mediaRuntime/runtimePlayback';
 import { playheadState, sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { resolvePlaybackStartPosition } from './playbackRange';
+import { prewarmProxyFramesForTimelinePosition } from '../../services/proxyFramePrewarm';
 
 function createPlaybackWarmupRequestId(): string {
   return `playback-warmup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -34,6 +35,15 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
     if (!get().isPlaying && !get().isDraggingPlayhead) {
       engine.requestNewFrameRender();
+    }
+
+    const latestState = get();
+    if (!latestState.isPlaying) {
+      prewarmProxyFramesForTimelinePosition(
+        latestState,
+        useMediaStore.getState().files,
+        clampedPosition
+      );
     }
   },
 

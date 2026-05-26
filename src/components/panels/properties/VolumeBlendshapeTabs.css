@@ -122,6 +122,266 @@
   padding: 0 4px;
 }
 
+.graphic-eq {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.graphic-eq-stage {
+  position: relative;
+  height: 154px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.035), transparent 38%),
+    color-mix(in srgb, var(--bg-primary) 88%, #06080d);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.graphic-eq.compact .graphic-eq-stage {
+  height: 118px;
+}
+
+.graphic-eq-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.graphic-eq-frame {
+  fill: transparent;
+}
+
+.graphic-eq-db-line line,
+.graphic-eq-frequency-line line {
+  stroke: rgba(132, 144, 168, 0.18);
+  stroke-width: 0.35;
+}
+
+.graphic-eq-db-line.zero line {
+  stroke: rgba(230, 238, 255, 0.44);
+  stroke-width: 0.55;
+}
+
+.graphic-eq-db-line text,
+.graphic-eq-frequency-line text,
+.graphic-eq-point-readout {
+  fill: rgba(210, 220, 238, 0.68);
+  font-family: var(--font-mono);
+  font-size: 2.55px;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.graphic-eq-db-line text {
+  text-anchor: start;
+}
+
+.graphic-eq-frequency-line text {
+  text-anchor: middle;
+}
+
+.graphic-eq-band-lobe {
+  opacity: 0.24;
+  stroke-width: 0.3;
+  pointer-events: none;
+}
+
+.graphic-eq-area {
+  pointer-events: none;
+}
+
+.graphic-eq-area.positive {
+  fill: rgba(171, 71, 255, 0.34);
+}
+
+.graphic-eq-area.negative {
+  fill: rgba(42, 158, 221, 0.32);
+}
+
+.graphic-eq-curve-shadow,
+.graphic-eq-curve {
+  fill: none;
+  pointer-events: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.graphic-eq-curve-shadow {
+  stroke: rgba(0, 0, 0, 0.76);
+  stroke-width: 2.7;
+}
+
+.graphic-eq-curve {
+  stroke-width: 1.55;
+}
+
+.graphic-eq-active-line {
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 0.55;
+  pointer-events: none;
+}
+
+.graphic-eq-point circle {
+  stroke-width: 0.65;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+  pointer-events: none;
+}
+
+.graphic-eq-point.active circle {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.45));
+}
+
+.graphic-eq-point-readout {
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.86);
+  stroke-width: 1.2px;
+}
+
+.graphic-eq-band-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
+  gap: 4px;
+  min-width: 0;
+}
+
+.graphic-eq-band-control {
+  display: grid;
+  grid-template-rows: 16px 12px 13px;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+}
+
+.graphic-eq-band-control.active {
+  border-color: color-mix(in srgb, var(--accent-color, #4a9eff) 72%, var(--border-color));
+  background: color-mix(in srgb, var(--bg-hover) 76%, transparent);
+}
+
+.graphic-eq-band-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.graphic-eq-band-topline.has-keyframe {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.graphic-eq-band-kf {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+}
+
+.graphic-eq-band-kf .keyframe-toggle {
+  width: 16px;
+  height: 16px;
+}
+
+.graphic-eq-band-value,
+.graphic-eq-band-label {
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphic-eq-band-value {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.graphic-eq-band-value.boost {
+  color: rgba(113, 224, 145, 0.94);
+}
+
+.graphic-eq-band-value.cut {
+  color: rgba(103, 190, 255, 0.94);
+}
+
+.graphic-eq-band-label {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.graphic-eq-band-range {
+  width: 100%;
+  min-width: 0;
+  height: 12px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.graphic-eq-band-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--border-color) 78%, transparent);
+}
+
+.graphic-eq-band-range::-webkit-slider-thumb {
+  width: 9px;
+  height: 9px;
+  margin-top: -3px;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  background: currentColor;
+  cursor: pointer;
+}
+
+.graphic-eq-band-range::-moz-range-track {
+  height: 3px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--border-color) 78%, transparent);
+}
+
+.graphic-eq-band-range::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  background: currentColor;
+  cursor: pointer;
+}
+
+.graphic-eq.compact {
+  gap: 5px;
+}
+
+.graphic-eq.compact .graphic-eq-band-controls {
+  grid-template-columns: repeat(auto-fit, minmax(38px, 1fr));
+  gap: 3px;
+}
+
+.graphic-eq.compact .graphic-eq-band-control {
+  grid-template-rows: 14px 10px 11px;
+  padding: 3px;
+}
+
+.graphic-eq.compact .graphic-eq-band-value,
+.graphic-eq.compact .graphic-eq-band-label {
+  font-size: 8px;
+}
+
 /* Registry Audio Effect Stack */
 .audio-effect-stack-section {
   display: flex;
@@ -222,6 +482,137 @@
   gap: 6px;
 }
 
+.audio-dynamics-view {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 8px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-tertiary) 58%, transparent);
+}
+
+.audio-dynamics-meter {
+  min-width: 0;
+  aspect-ratio: 1.8 / 1;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--border-color) 34%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--border-color) 28%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  background-size: 25% 100%, 100% 25%, 100% 100%;
+}
+
+.audio-dynamics-meter svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.audio-dynamics-reference {
+  stroke: color-mix(in srgb, var(--text-muted) 34%, transparent);
+  stroke-width: 1;
+}
+
+.audio-dynamics-curve {
+  fill: none;
+  stroke: var(--accent-color, #4a9eff);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.audio-dynamics-view.audio-noise-gate .audio-dynamics-curve {
+  stroke: var(--warning);
+}
+
+.audio-dynamics-view.audio-limiter .audio-dynamics-curve {
+  stroke: var(--danger);
+}
+
+.audio-dynamics-meter circle {
+  fill: var(--bg-primary);
+  stroke: var(--accent-color, #4a9eff);
+  stroke-width: 1.8;
+}
+
+.audio-dynamics-meter text {
+  fill: var(--text-secondary);
+  font-size: 8px;
+  font-family: var(--font-mono);
+  text-anchor: middle;
+}
+
+.audio-dynamics-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.audio-dynamics-readout strong,
+.audio-dynamics-readout span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-dynamics-readout strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.audio-dynamics-readout span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.audio-dynamics-live {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.audio-dynamics-live span,
+.audio-dynamics-live strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-dynamics-live span {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.audio-dynamics-live strong {
+  color: var(--text-primary);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.audio-dynamics-live i {
+  grid-column: 1 / -1;
+  display: block;
+  width: 100%;
+  height: 4px;
+  transform-origin: left center;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent-color, #4a9eff), var(--warning));
+  opacity: 0.78;
+}
+
 .audio-effect-param-row {
   display: grid;
   grid-template-columns: minmax(72px, 0.8fr) minmax(96px, 1fr);
@@ -298,6 +689,21 @@
   justify-content: flex-start;
 }
 
+.audio-effect-stack-compact .audio-dynamics-view {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 6px;
+  padding: 5px;
+}
+
+.audio-effect-stack-compact .audio-dynamics-live {
+  grid-column: 1 / -1;
+}
+
+.audio-effect-stack-compact .audio-dynamics-readout strong,
+.audio-effect-stack-compact .audio-dynamics-readout span {
+  font-size: 9px;
+}
+
 .audio-effect-stack-compact .audio-effect-param-row {
   grid-template-columns: minmax(72px, 0.9fr) minmax(74px, 1fr);
   gap: 6px;
@@ -333,6 +739,21 @@
   display: flex;
   gap: 4px;
   flex: 0 0 auto;
+}
+
+.audio-edit-preview-status {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  color: rgba(112, 246, 220, 0.86);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-edit-preview-status.phase-error {
+  color: rgba(255, 112, 112, 0.9);
 }
 
 .audio-repair-suggestion-section {
@@ -527,6 +948,23 @@
   font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 500;
+}
+
+.audio-silence-cleanup-controls .audio-silence-ripple-toggle {
+  display: flex;
+  grid-template-columns: none;
+  gap: 5px;
+  align-items: center;
+}
+
+.audio-silence-ripple-toggle input {
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent-timeline);
 }
 
 .audio-silence-range-list {

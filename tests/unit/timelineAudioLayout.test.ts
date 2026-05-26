@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import {
+  formatAudioTrackPan,
+  formatAudioTrackVolumeDb,
+  getAudioTrackHeaderDensity,
+} from '../../src/components/timeline/utils/audioTrackHeaderDensity';
 import { getTimelineTrackBaseHeight } from '../../src/components/timeline/utils/timelineAudioLayout';
 import type { TimelineTrack } from '../../src/types';
 
@@ -49,5 +54,26 @@ describe('timeline audio layout', () => {
     expect(getTimelineTrackBaseHeight(track('audio', Number.NaN), 'compact')).toBe(0);
     expect(getTimelineTrackBaseHeight(track('audio', Number.NaN), 'detailed')).toBe(72);
     expect(getTimelineTrackBaseHeight(track('audio', -24), 'spectral')).toBe(128);
+  });
+
+  it('selects stable audio track header densities for compact and editor-height lanes', () => {
+    expect(getAudioTrackHeaderDensity(Number.NaN)).toBe('condensed');
+    expect(getAudioTrackHeaderDensity(24)).toBe('condensed');
+    expect(getAudioTrackHeaderDensity(40)).toBe('compact');
+    expect(getAudioTrackHeaderDensity(71)).toBe('compact');
+    expect(getAudioTrackHeaderDensity(72)).toBe('full');
+    expect(getAudioTrackHeaderDensity(144)).toBe('full');
+  });
+
+  it('formats compact audio track strip readouts', () => {
+    expect(formatAudioTrackVolumeDb(Number.NaN)).toBe('0.0');
+    expect(formatAudioTrackVolumeDb(-60)).toBe('-inf');
+    expect(formatAudioTrackVolumeDb(-8.25)).toBe('-8.3');
+    expect(formatAudioTrackVolumeDb(3)).toBe('+3.0');
+
+    expect(formatAudioTrackPan(Number.NaN)).toBe('C');
+    expect(formatAudioTrackPan(0)).toBe('C');
+    expect(formatAudioTrackPan(-0.42)).toBe('L42');
+    expect(formatAudioTrackPan(1.4)).toBe('R100');
   });
 });

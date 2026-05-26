@@ -271,6 +271,7 @@
 }
 
 .audio-mixer-meter .audio-level-meter-scale,
+.audio-mixer-meter .audio-level-meter-peak-fill,
 .audio-mixer-meter .audio-level-meter-rms,
 .audio-mixer-meter .audio-level-meter-peak {
   position: absolute;
@@ -289,6 +290,11 @@
 .audio-mixer-meter .audio-level-meter-rms {
   background: linear-gradient(90deg, rgba(67, 205, 139, 0.64), rgba(238, 186, 91, 0.66));
   transition: transform 80ms linear;
+}
+
+.audio-mixer-meter .audio-level-meter-peak-fill {
+  background: linear-gradient(90deg, rgba(49, 214, 129, 0.58), rgba(255, 208, 82, 0.66) 76%, rgba(255, 99, 84, 0.72));
+  transition: transform 65ms linear, opacity 120ms ease;
 }
 
 .audio-mixer-meter .audio-level-meter-peak {
@@ -450,6 +456,47 @@
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-mixer-measurement-history {
+  min-width: 0;
+}
+
+.audio-mixer-measurement-history summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.audio-mixer-measurement-history div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.audio-mixer-measurement-history p {
+  display: grid;
+  grid-template-columns: 54px minmax(54px, 0.85fr) minmax(52px, 1fr) minmax(52px, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 5px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.audio-mixer-measurement-history p span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -90,6 +90,9 @@ describe('ProcessedWaveformPyramidService', () => {
       audioState: {
         effectStack: [
           { id: 'hp-default', descriptorId: 'audio-high-pass', enabled: true, params: {} },
+          { id: 'pan-default', descriptorId: 'audio-pan', enabled: true, params: {} },
+          { id: 'expander-default', descriptorId: 'audio-expander', enabled: true, params: {} },
+          { id: 'noise-reduction-default', descriptorId: 'audio-noise-reduction', enabled: true, params: {} },
         ],
       },
     });
@@ -99,7 +102,26 @@ describe('ProcessedWaveformPyramidService', () => {
     const professionalAudioEffect = createMockClip({
       audioState: {
         effectStack: [
+          { id: 'pan', descriptorId: 'audio-pan', enabled: true, params: { pan: 0.5 } },
+          { id: 'expander', descriptorId: 'audio-expander', enabled: true, params: { thresholdDb: -35, ratio: 2, rangeDb: 18 } },
+          { id: 'noise-reduction', descriptorId: 'audio-noise-reduction', enabled: true, params: { thresholdDb: -58, reductionDb: 18, mix: 0.7 } },
           { id: 'compressor', descriptorId: 'audio-compressor', enabled: true, params: { thresholdDb: -18, ratio: 3 } },
+        ],
+      },
+    });
+    const defaultAudibleUtilityEffect = createMockClip({
+      audioState: {
+        effectStack: [
+          { id: 'mono-sum', descriptorId: 'audio-mono-sum', enabled: true, params: {} },
+          { id: 'stereo-split', descriptorId: 'audio-stereo-split', enabled: true, params: {} },
+        ],
+      },
+    });
+    const defaultAudibleRepairEffect = createMockClip({
+      audioState: {
+        effectStack: [
+          { id: 'hum-notch', descriptorId: 'audio-hum-notch', enabled: true, params: {} },
+          { id: 'de-click', descriptorId: 'audio-de-click', enabled: true, params: {} },
         ],
       },
     });
@@ -125,6 +147,8 @@ describe('ProcessedWaveformPyramidService', () => {
     expect(clipRequiresProcessedWaveformPyramid(defaultFilter)).toBe(false);
     expect(clipRequiresProcessedWaveformPyramid(audioEffect)).toBe(true);
     expect(clipRequiresProcessedWaveformPyramid(professionalAudioEffect)).toBe(true);
+    expect(clipRequiresProcessedWaveformPyramid(defaultAudibleUtilityEffect)).toBe(true);
+    expect(clipRequiresProcessedWaveformPyramid(defaultAudibleRepairEffect)).toBe(true);
     expect(clipRequiresProcessedWaveformPyramid(audioEdit)).toBe(true);
     expect(clipRequiresProcessedWaveformPyramid(createMockClip({ speed: 0.5 }))).toBe(true);
     expect(clipRequiresProcessedWaveformPyramid(createMockClip({ reversed: true }))).toBe(true);

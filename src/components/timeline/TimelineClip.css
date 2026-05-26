@@ -1238,6 +1238,24 @@
   height: 100%;
 }
 
+.audio-automation-curve-container {
+  z-index: 16;
+  mix-blend-mode: screen;
+}
+
+.audio-automation-curve-container .fade-curve-svg path:first-of-type {
+  fill: rgba(51, 197, 255, 0.13);
+}
+
+.audio-automation-curve-container .fade-curve-svg path:nth-of-type(2) {
+  stroke: rgba(96, 217, 255, 0.86);
+  stroke-width: 1.6;
+}
+
+.audio-automation-curve-container .fade-curve-svg circle {
+  fill: rgba(96, 217, 255, 0.95);
+}
+
 /* Audio Waveform */
 .clip-waveform {
   position: absolute;
@@ -1288,6 +1306,8 @@
   filter: saturate(1.18) contrast(1.06);
 }
 
+.timeline-clip.waveform-processed-approximate-source .clip-waveform::after,
+.timeline-clip.waveform-processed-pending .clip-waveform::after,
 .timeline-clip.waveform-processed-loading .clip-waveform::after,
 .timeline-clip.waveform-processed-missing .clip-waveform::after,
 .timeline-clip.waveform-processed-error .clip-waveform::after {
@@ -1304,13 +1324,97 @@
   opacity: 0.7;
 }
 
+.timeline-clip.waveform-processed-pending .clip-waveform::after,
 .timeline-clip.waveform-processed-loading .clip-waveform::after {
   animation: waveform-processed-pending 1.4s ease-in-out infinite;
+}
+
+.timeline-clip.waveform-processed-approximate-source .clip-waveform::after {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 206, 96, 0.12) 0,
+      rgba(255, 206, 96, 0.12) 2px,
+      transparent 2px,
+      transparent 10px
+    );
+  opacity: 0.42;
 }
 
 .timeline-clip.waveform-processed-missing .clip-waveform::after,
 .timeline-clip.waveform-processed-error .clip-waveform::after {
   opacity: 0.3;
+}
+
+.clip-audio-status-stack {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 8px);
+  pointer-events: none;
+}
+
+.clip-audio-analysis-status,
+.clip-audio-diagnostic-badge {
+  min-width: 28px;
+  height: 16px;
+  padding: 0 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  background: rgba(8, 12, 17, 0.8);
+  color: rgba(238, 242, 247, 0.92);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.clip-audio-analysis-status-approximate-source {
+  border-color: rgba(255, 207, 96, 0.5);
+  color: #ffd66c;
+}
+
+.clip-audio-analysis-status-pending {
+  border-color: rgba(94, 203, 255, 0.42);
+  color: #93ddff;
+}
+
+.clip-audio-analysis-status-missing,
+.clip-audio-analysis-status-error {
+  border-color: rgba(255, 117, 117, 0.48);
+  color: #ff8f8f;
+}
+
+.timeline-clip.audio-diagnostic-clipping .clip-waveform {
+  box-shadow:
+    inset 0 1px rgba(255, 94, 94, 0.7),
+    inset 0 -1px rgba(255, 94, 94, 0.44);
+}
+
+.timeline-clip.audio-diagnostic-silence .clip-waveform {
+  box-shadow:
+    inset 0 1px rgba(157, 183, 205, 0.42),
+    inset 0 -1px rgba(157, 183, 205, 0.28);
+}
+
+.clip-audio-diagnostic-badge-clipping {
+  border-color: rgba(255, 104, 104, 0.58);
+  background: rgba(39, 10, 12, 0.82);
+  color: #ff8d8d;
+}
+
+.clip-audio-diagnostic-badge-silence {
+  border-color: rgba(151, 188, 220, 0.5);
+  background: rgba(9, 14, 19, 0.78);
+  color: #bdd9ee;
 }
 
 @keyframes waveform-processed-pending {
@@ -1355,6 +1459,8 @@
 }
 
 .spectrogram-pending::after,
+.timeline-clip.spectrogram-processed-approximate-source .clip-waveform::after,
+.timeline-clip.spectrogram-processed-pending .clip-waveform::after,
 .timeline-clip.spectrogram-processed-loading .clip-waveform::after,
 .timeline-clip.spectrogram-processed-missing .clip-waveform::after,
 .timeline-clip.spectrogram-processed-error .clip-waveform::after {
@@ -1370,6 +1476,19 @@
   );
   opacity: 0.7;
   animation: waveform-processed-pending 1.4s ease-in-out infinite;
+}
+
+.timeline-clip.spectrogram-processed-approximate-source .clip-waveform::after {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 206, 96, 0.16) 0,
+      rgba(255, 206, 96, 0.16) 2px,
+      transparent 2px,
+      transparent 10px
+    );
+  opacity: 0.36;
+  animation: none;
 }
 
 .clip-audio-region-hitarea {
@@ -1427,6 +1546,19 @@
   border: 1px solid rgba(255, 201, 94, 0.86);
   border-radius: 2px;
   box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.4), 0 0 12px rgba(255, 148, 94, 0.22);
+}
+
+.clip-spectral-region-selection.brush {
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at center, rgba(112, 246, 220, 0.32), rgba(112, 246, 220, 0.11) 58%, rgba(112, 246, 220, 0.02) 100%),
+    repeating-radial-gradient(ellipse at center, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 7px);
+  border-color: rgba(112, 246, 220, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.34), 0 0 14px rgba(112, 246, 220, 0.28);
+}
+
+.clip-spectral-region-selection.brush .clip-spectral-region-corner {
+  display: none;
 }
 
 .clip-spectral-region-corner {

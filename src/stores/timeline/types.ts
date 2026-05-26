@@ -45,6 +45,7 @@ import type { Composition } from '../mediaStore';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { MarkerMIDIBinding } from '../../types/midi';
 import type { AudioSilenceDetectionOptions, AudioSilenceRange } from '../../services/audio/audioSilenceDetection';
+import type { AudioTransientDetectionOptions, AudioTransientRange } from '../../services/audio/audioTransientDetection';
 
 // Re-export imported types for convenience
 export type {
@@ -99,6 +100,9 @@ export interface TimelineAudioRegionSelection {
 export interface TimelineSpectralRegionSelection extends TimelineAudioRegionSelection {
   frequencyMinHz: number;
   frequencyMaxHz: number;
+  selectionMode?: 'rectangle' | 'brush';
+  brushTimeRadiusSeconds?: number;
+  brushFrequencyRadiusHz?: number;
 }
 
 export interface TimelineAudioRegionClipboard {
@@ -125,6 +129,7 @@ export type TimelineAudioRegionEditType = Extract<
   | 'invert-polarity'
   | 'swap-channels'
   | 'mono-sum'
+  | 'split-stereo'
   | 'repair'
   | 'room-tone-fill'
 >;
@@ -568,6 +573,14 @@ export interface ApplyRoomToneFillOptions {
   crossfadeSeconds?: number;
 }
 
+export interface ApplyDetectedTransientSofteningOptions {
+  detection?: AudioTransientDetectionOptions;
+  ranges?: AudioTransientRange[];
+  gainDb?: number;
+  attackSeconds?: number;
+  releaseSeconds?: number;
+}
+
 export interface ApplySpectralRegionEditOptions {
   channelMask?: number[];
   keepSelection?: boolean;
@@ -584,6 +597,8 @@ export interface AudioEditActions {
   detectClipSilenceRanges: (clipId: string, options?: AudioSilenceDetectionOptions) => Promise<AudioSilenceRange[]>;
   applyDetectedSilenceRemoval: (clipId: string, options?: ApplyDetectedSilenceRemovalOptions) => Promise<string[]>;
   applyRoomToneFill: (clipId: string, options?: ApplyRoomToneFillOptions) => Promise<string | null>;
+  detectClipTransientRanges: (clipId: string, options?: AudioTransientDetectionOptions) => Promise<AudioTransientRange[]>;
+  applyDetectedTransientSoftening: (clipId: string, options?: ApplyDetectedTransientSofteningOptions) => Promise<string[]>;
   copySelectedAudioRegion: () => boolean;
   pasteAudioRegionToSelection: () => string | null;
   setClipAudioEditOperationEnabled: (clipId: string, operationId: string, enabled: boolean) => void;
@@ -708,6 +723,11 @@ export interface TransitionActions {
 export interface NodeGraphActions {
   ensureClipNodeGraph: (clipId: string) => void;
   addClipAICustomNode: (clipId: string) => string | null;
+  addClipAICustomNodeFromPort: (clipId: string, source: {
+    fromNodeId: string;
+    fromPortId: string;
+    label?: string;
+  }) => string | null;
   updateClipAICustomNode: (clipId: string, nodeId: string, updates: {
     label?: string;
     description?: string;

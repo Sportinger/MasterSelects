@@ -5,6 +5,7 @@ import { Logger } from '../../services/logger';
 import type {
   AudioEditActions,
   ApplyDetectedSilenceRemovalOptions,
+  ApplyDetectedTransientSofteningOptions,
   SliceCreator,
   TimelineAudioRegionSelection,
   TimelineAudioRegionEditType,
@@ -21,6 +22,10 @@ import {
   detectClipSilenceRanges as detectClipSilenceRangesForAudio,
   type AudioSilenceRange,
 } from '../../services/audio/audioSilenceDetection';
+import {
+  detectClipTransientRanges as detectClipTransientRangesForAudio,
+  type AudioTransientRange,
+} from '../../services/audio/audioTransientDetection';
 import { generateTimelineWaveformAnalysisForFile } from '../../services/audio/timelineWaveformPyramidCache';
 import { useMediaStore } from '../mediaStore';
 import { createAudioElement } from './helpers/webCodecsHelpers';
@@ -52,6 +57,7 @@ function operationLabel(type: TimelineAudioRegionEditType): string {
     case 'invert-polarity': return 'Invert polarity';
     case 'swap-channels': return 'Swap channels';
     case 'mono-sum': return 'Mono sum';
+    case 'split-stereo': return 'Split stereo';
     case 'repair': return 'Repair region';
     case 'room-tone-fill': return 'Room tone fill';
   }
@@ -161,6 +167,29 @@ function normalizeDetectedSilenceRanges(
   return merged;
 }
 
+function normalizeDetectedTransientRanges(
+  clip: TimelineClip,
+  ranges: readonly AudioTransientRange[],
+): AudioTransientRange[] {
+  const sourceRange = getClipAudioSourceRange(clip);
+  return ranges
+    .map(range => {
+      const start = Math.max(sourceRange.start, Math.min(sourceRange.end, Math.min(range.start, range.end)));
+      const end = Math.max(sourceRange.start, Math.min(sourceRange.end, Math.max(range.start, range.end)));
+      return {
+        start,
+        end,
+        duration: Math.max(0, end - start),
+        peakDb: typeof range.peakDb === 'number' && Number.isFinite(range.peakDb) ? range.peakDb : -120,
+        rmsDb: typeof range.rmsDb === 'number' && Number.isFinite(range.rmsDb) ? range.rmsDb : -120,
+        crestDb: typeof range.crestDb === 'number' && Number.isFinite(range.crestDb) ? range.crestDb : 0,
+        strength: typeof range.strength === 'number' && Number.isFinite(range.strength) ? range.strength : 0,
+      };
+    })
+    .filter(range => range.duration > 0.001)
+    .toSorted((a, b) => a.start - b.start);
+}
+
 function rangesOverlap(a: { start: number; end: number }, b: { start: number; end: number }): boolean {
   return Math.min(a.end, b.end) - Math.max(a.start, b.start) > 0.0005;
 }
@@ -173,6 +202,16 @@ async function resolveDetectedSilenceRanges(
     return options.ranges;
   }
   return detectClipSilenceRangesForAudio(clip, options.detection ?? {});
+}
+
+async function resolveDetectedTransientRanges(
+  clip: TimelineClip,
+  options: ApplyDetectedTransientSofteningOptions,
+): Promise<AudioTransientRange[]> {
+  if (options.ranges?.length) {
+    return options.ranges;
+  }
+  return detectClipTransientRangesForAudio(clip, options.detection ?? {});
 }
 
 function getSelectedRoomToneTargetRange(
@@ -524,6 +563,87 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
     return operation.id;
   },
 
+  detectClipTransientRanges: async (clipId, options = {}) => {
+    const clip = get().clips.find(c => c.id === clipId);
+    if (!clip || !isAudioClip(clip)) {
+      log.warn('Cannot detect transients for missing or non-audio clip', { clipId });
+      return [];
+    }
+
+    return detectClipTransientRangesForAudio(clip, options);
+  },
+
+  applyDetectedTransientSoftening: async (clipId, options = {}) => {
+    const { clips, tracks } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || !isAudioClip(clip)) {
+      log.warn('Cannot soften detected transients for missing or non-audio clip', { clipId });
+      return [];
+    }
+
+    const track = tracks.find(t => t.id === clip.trackId);
+    if (track?.locked) {
+      log.warn('Cannot soften detected transients on locked track', { clipId, trackId: clip.trackId });
+      return [];
+    }
+
+    const ranges = normalizeDetectedTransientRanges(
+      clip,
+      await resolveDetectedTransientRanges(clip, options),
+    );
+    if (ranges.length === 0) {
+      log.info('No detected transients to soften', { clipId });
+      return [];
+    }
+
+    const now = Date.now();
+    const operations: ClipAudioEditOperation[] = ranges.map((range, index) => ({
+      id: createAudioEditOperationId(),
+      type: 'repair',
+      enabled: true,
+      params: {
+        label: 'Soften detected transient',
+        repairType: 'transient-soften',
+        detectedTransient: true,
+        preserveClipDuration: true,
+        gainDb: options.gainDb ?? -6,
+        attackSeconds: options.attackSeconds ?? 0.002,
+        releaseSeconds: options.releaseSeconds ?? 0.018,
+        transientPeakDb: Number(range.peakDb.toFixed(3)),
+        transientRmsDb: Number(range.rmsDb.toFixed(3)),
+        transientCrestDb: Number(range.crestDb.toFixed(3)),
+        transientStrength: Number(range.strength.toFixed(3)),
+        sequenceIndex: index + 1,
+        sequenceCount: ranges.length,
+        timelineStart: sourceTimeToTimelineTime(clip, range.start),
+        timelineEnd: sourceTimeToTimelineTime(clip, range.end),
+      },
+      timeRange: { start: range.start, end: range.end },
+      createdAt: now + index,
+    }));
+    const operationIds = operations.map(operation => operation.id);
+
+    captureSnapshot('Soften detected transients');
+    set({
+      clips: clips.map(currentClip => {
+        if (currentClip.id !== clipId) return currentClip;
+        const audioState = currentClip.audioState ?? {};
+        return clearProcessedAudioAnalysisRefs({
+          ...currentClip,
+          audioState: {
+            ...audioState,
+            editStack: [
+              ...(audioState.editStack ?? []),
+              ...operations,
+            ],
+          },
+        });
+      }),
+    });
+    get().invalidateCache();
+    return operationIds;
+  },
+
   copySelectedAudioRegion: () => {
     const { audioRegionSelection, clips } = get();
     if (!audioRegionSelection) {
@@ -814,10 +934,18 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
         timelineEnd: audioSpectralRegionSelection.endTime,
         frequencyMinHz,
         frequencyMaxHz,
+        selectionMode: audioSpectralRegionSelection.selectionMode ?? 'rectangle',
+        ...(audioSpectralRegionSelection.selectionMode === 'brush'
+          ? {
+              brushShape: 'soft-ellipse',
+              brushTimeRadiusSeconds: audioSpectralRegionSelection.brushTimeRadiusSeconds ?? Math.max(0.001, (end - start) / 2),
+              brushFrequencyRadiusHz: audioSpectralRegionSelection.brushFrequencyRadiusHz ?? Math.max(1, (frequencyMaxHz - frequencyMinHz) / 2),
+            }
+          : {}),
         blendMode: type === 'spectral-mask' ? 'attenuate' : 'replace',
         gainDb: type === 'spectral-mask' ? -18 : 6,
-        featherTime: 0.015,
-        featherFrequencyHz: Math.max(12, (frequencyMaxHz - frequencyMinHz) * 0.05),
+        featherTime: audioSpectralRegionSelection.selectionMode === 'brush' ? Math.max(0.015, (end - start) * 0.35) : 0.015,
+        featherFrequencyHz: Math.max(12, (frequencyMaxHz - frequencyMinHz) * (audioSpectralRegionSelection.selectionMode === 'brush' ? 0.22 : 0.05)),
         ...(options.params ?? {}),
       },
       timeRange: { start, end },

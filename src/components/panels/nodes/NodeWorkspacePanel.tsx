@@ -833,22 +833,48 @@ const IMPLEMENTED_AUDIO_ANALYSIS_KINDS = new Set<AudioAnalysisArtifactKind>([
   'frequency-summary',
 ]);
 
+const AI_SEED_AUDIO_PORT_KINDS = new Set([
+  'waveform',
+  'spectrum',
+  'frequency-bands',
+  'loudness',
+  'beats',
+  'onsets',
+  'phase-correlation',
+  'transcript',
+  'frequency-summary',
+  'audio-metadata',
+]);
+
 function isImplementedAudioAnalysisKind(kind: string | undefined): kind is AudioAnalysisArtifactKind {
   return !!kind && IMPLEMENTED_AUDIO_ANALYSIS_KINDS.has(kind as AudioAnalysisArtifactKind);
+}
+
+function canSeedAICustomNodeFromPort(port: NodeGraphPort): boolean {
+  if (port.direction !== 'output') return false;
+  if (port.metadata?.generateAction?.type === 'generate-audio-analysis') return true;
+  const semanticKind = typeof port.metadata?.semanticKind === 'string' ? port.metadata.semanticKind : undefined;
+  return semanticKind !== undefined && AI_SEED_AUDIO_PORT_KINDS.has(semanticKind);
 }
 
 function PortList({
   title,
   ports,
   clip,
+  clips,
+  nodeId,
   onGenerateAudioAnalysis,
   onCancelAudioAnalysis,
+  onCreateAICustomNodeFromPort,
 }: {
   title: string;
   ports: NodeGraphPort[];
   clip?: TimelineClip | null;
+  clips?: TimelineClip[];
+  nodeId?: string;
   onGenerateAudioAnalysis?: (clipId: string, kind: AudioAnalysisArtifactKind, options?: GenerateClipAudioAnalysisOptions) => void;
   onCancelAudioAnalysis?: (clipId: string) => void;
+  onCreateAICustomNodeFromPort?: (source: { fromNodeId: string; fromPortId: string; label?: string }) => void;
 }) {
   return (
     <div className="node-workspace-inspector-section">
@@ -860,13 +886,20 @@ function PortList({
             const artifactKind = generateAction?.type === 'generate-audio-analysis'
               ? generateAction.artifactKind
               : undefined;
-            const audioAnalysisBusy = clip?.audioAnalysisJob !== undefined || clip?.waveformGenerating === true;
-            const canGenerate = !!clip
+            const targetClipId = typeof port.metadata?.targetClipId === 'string'
+              ? port.metadata.targetClipId
+              : clip?.id;
+            const targetClip = targetClipId
+              ? clips?.find((candidate) => candidate.id === targetClipId) ?? clip
+              : clip;
+            const audioAnalysisBusy = targetClip?.audioAnalysisJob !== undefined || targetClip?.waveformGenerating === true;
+            const canGenerate = !!targetClip
               && !!artifactKind
               && isImplementedAudioAnalysisKind(artifactKind)
               && !audioAnalysisBusy;
-            const canCancel = !!clip && !!artifactKind && audioAnalysisBusy;
+            const canCancel = !!targetClip && !!artifactKind && audioAnalysisBusy;
             const available = port.metadata?.available !== false;
+            const canCreateAI = !!clip && !!nodeId && canSeedAICustomNodeFromPort(port);
 
             return (
               <div key={port.id} className="node-workspace-inspector-port">
@@ -884,15 +917,31 @@ function PortList({
                       className="node-workspace-port-action"
                       disabled={!canGenerate && !canCancel}
                       onClick={() => {
-                        if (!clip) return;
+                        if (!targetClip) return;
                         if (audioAnalysisBusy) {
-                          onCancelAudioAnalysis?.(clip.id);
+                          onCancelAudioAnalysis?.(targetClip.id);
                         } else if (isImplementedAudioAnalysisKind(artifactKind)) {
-                          onGenerateAudioAnalysis?.(clip.id, artifactKind, { force: available });
+                          onGenerateAudioAnalysis?.(targetClip.id, artifactKind, { force: available });
                         }
                       }}
                     >
                       {audioAnalysisBusy ? 'Cancel' : available ? 'Refresh' : 'Generate'}
+                    </button>
+                  )}
+                  {canCreateAI && (
+                    <button
+                      type="button"
+                      className="node-workspace-port-action ai"
+                      onClick={() => {
+                        if (!nodeId) return;
+                        onCreateAICustomNodeFromPort?.({
+                          fromNodeId: nodeId,
+                          fromPortId: port.id,
+                          label: `${port.label} AI`,
+                        });
+                      }}
+                    >
+                      AI
                     </button>
                   )}
                 </span>
@@ -982,6 +1031,14 @@ function NodeInspector({
   const generateBeatOnsetForClip = useTimelineStore((state) => state.generateBeatOnsetForClip);
   const generateFrequencyPhaseForClip = useTimelineStore((state) => state.generateFrequencyPhaseForClip);
   const cancelAudioAnalysisForClip = useTimelineStore((state) => state.cancelAudioAnalysisForClip);
+  const addClipAICustomNodeFromPort = useTimelineStore((state) => state.addClipAICustomNodeFromPort);
+  const clips = useTimelineStore((state) => state.clips);
+  const nodeTargetClipId = typeof node?.params?.targetClipId === 'string'
+    ? node.params.targetClipId
+    : clip?.id;
+  const nodeTargetClip = nodeTargetClipId
+    ? clips.find((candidate) => candidate.id === nodeTargetClipId) ?? clip
+    : clip;
   const generateAudioAnalysis = useCallback((
     clipId: string,
     kind: AudioAnalysisArtifactKind,
@@ -1008,6 +1065,16 @@ function NodeInspector({
     generateSpectrogramForClip,
     generateWaveformForClip,
   ]);
+  const createAICustomNodeFromPort = useCallback((source: { fromNodeId: string; fromPortId: string; label?: string }) => {
+    if (!clip) return;
+    startBatch('Add AI node from audio port');
+    try {
+      const nodeId = addClipAICustomNodeFromPort(clip.id, source);
+      if (nodeId) onSelectNode(nodeId);
+    } finally {
+      endBatch();
+    }
+  }, [addClipAICustomNodeFromPort, clip, onSelectNode]);
 
   if (!node) {
     return (
@@ -1050,23 +1117,29 @@ function NodeInspector({
         title="Inputs"
         ports={node.inputs}
         clip={clip}
+        clips={clips}
+        nodeId={node.id}
         onGenerateAudioAnalysis={generateAudioAnalysis}
         onCancelAudioAnalysis={cancelAudioAnalysisForClip}
+        onCreateAICustomNodeFromPort={createAICustomNodeFromPort}
       />
       <PortList
         title="Outputs"
         ports={node.outputs}
         clip={clip}
+        clips={clips}
+        nodeId={node.id}
         onGenerateAudioAnalysis={generateAudioAnalysis}
         onCancelAudioAnalysis={cancelAudioAnalysisForClip}
+        onCreateAICustomNodeFromPort={createAICustomNodeFromPort}
       />
 
       <div className="node-workspace-inspector-section">
         <div className="node-workspace-inspector-section-title">Parameters</div>
         {canEditTransform ? (
           <TransformNodeParameters clip={clip} />
-        ) : canEditEffect ? (
-          <EffectNodeParameters clip={clip} node={node} />
+        ) : canEditEffect && nodeTargetClip ? (
+          <EffectNodeParameters clip={nodeTargetClip} node={node} />
         ) : params.length > 0 ? (
           <div className="node-workspace-param-list">
             {params.map(([key, value]) => (
@@ -1584,11 +1657,14 @@ export function NodeWorkspacePanel() {
     if (!subject || subject.kind !== 'clip') return;
     const node = subject.graph.nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
+    const targetClipId = typeof node.params?.targetClipId === 'string'
+      ? node.params.targetClipId
+      : subject.id;
 
     startBatch('Toggle node bypass');
     try {
       if (node.kind === 'effect' && nodeId.startsWith('effect-')) {
-        setClipEffectEnabled(subject.id, nodeId.slice('effect-'.length), node.params?.enabled === false);
+        setClipEffectEnabled(targetClipId, nodeId.slice('effect-'.length), node.params?.enabled === false);
       } else if (node.kind === 'custom') {
         updateClipAICustomNode(subject.id, nodeId, { bypassed: node.params?.bypassed !== true });
       }

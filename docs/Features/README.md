@@ -76,6 +76,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | [Landing Page](./Landing-Page.md) | Dev-only front page concept, separate URL strategy, and current landing/editor split |
 | [AI Integration](./AI-Integration.md) | OpenAI/Cloud and Lemonade chat, 79 exported tools, segmentation, transcription, and bridge behavior |
+| [Guided Action Runtime Plan](./Guided-Action-Runtime-Plan.md) | Target architecture for AI action replay, interactive tutorials, guided workflows, and parallel implementation workstreams |
 | [FlashBoard](./FlashBoard.md) | Board-mode AI canvas for text-to-video, image-to-video, and image generation |
 | [Multicam AI](./Multicam-AI.md) | Sync, transcription, multicam analysis, and Anthropic-powered EDL generation |
 | [Debugging](./Debugging.md) | Logger service, runtime monitors, log sync, and AI-facing debug tools |

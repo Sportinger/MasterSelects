@@ -22,6 +22,7 @@ type RenderDispatcherTestAccess = {
   ensureExportLayersReady: RenderDispatcher['ensureExportLayersReady'];
   lastRenderHadContent: boolean;
   lastPreviewTargetTimeMs?: number;
+  lastPreviewDisplayedTimeMs?: number;
   render: RenderDispatcher['render'];
   collectActiveSplatEffectors: (width: number, height: number) => unknown[];
   process3DLayers: (layerData: LayerRenderData[], device: GPUDevice, width: number, height: number) => void;
@@ -235,6 +236,33 @@ describe('RenderDispatcher empty playback hold', () => {
     expect(recordMainPreviewFrame).toHaveBeenCalledWith('empty', undefined, {
       clipId: 'clip-1',
       targetTimeMs: 8020,
+    });
+    expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
+    expect(dispatcher.lastRenderHadContent).toBe(false);
+  });
+
+  it('clears stale empty scrub holds after large drag teleports', () => {
+    const { dispatcher, deps, renderEmptyFrame, recordMainPreviewFrame } = createDispatcher(false);
+
+    useTimelineStore.setState({ isDraggingPlayhead: true });
+    dispatcher.lastRenderHadContent = true;
+    dispatcher.lastPreviewDisplayedTimeMs = 19_160;
+
+    dispatcher.render([{
+      id: 'layer-1',
+      sourceClipId: 'clip-1',
+      visible: true,
+      opacity: 1,
+      source: {
+        type: 'video',
+        mediaTime: 4.8,
+      },
+    } as unknown as Layer]);
+
+    expect(renderEmptyFrame).toHaveBeenCalledTimes(1);
+    expect(recordMainPreviewFrame).toHaveBeenCalledWith('empty', undefined, {
+      clipId: 'clip-1',
+      targetTimeMs: 4800,
     });
     expect(deps.performanceStats.setLayerCount).toHaveBeenCalledWith(0);
     expect(dispatcher.lastRenderHadContent).toBe(false);

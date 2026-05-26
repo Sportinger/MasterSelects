@@ -934,6 +934,25 @@ describe('clipSlice', () => {
       expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
     });
 
+    it('invalidates processed audio analysis refs when adding default-audible utility FX', () => {
+      const audioState = audioStateWithAnalysisRefs();
+      const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', effects: [], audioState });
+      store = createTestTimelineStore({ clips: [clip] });
+
+      const effectId = store.getState().addClipAudioEffectInstance('clip-1', 'audio-mono-sum');
+      const updated = store.getState().clips.find(c => c.id === 'clip-1')!;
+
+      expect(effectId).toBeTruthy();
+      expect(updated.audioState?.effectStack?.[0]).toMatchObject({
+        id: effectId,
+        descriptorId: 'audio-mono-sum',
+        enabled: true,
+        params: {},
+      });
+      expect(updated.audioState?.sourceAnalysisRefs).toEqual(audioState.sourceAnalysisRefs);
+      expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
+    });
+
     it('keeps processed audio analysis refs when changing registry volume gain', () => {
       const audioState = audioStateWithAnalysisRefs();
       const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', effects: [], audioState });

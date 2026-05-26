@@ -27,6 +27,7 @@ import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipS
 import { createAudioEditSlice } from '../../src/stores/timeline/audioEditSlice';
 import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
+import { MAX_ZOOM, MIN_ZOOM } from '../../src/stores/timeline/constants';
 import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
 import { lockTimelineEditActions } from '../../src/stores/timeline/exportEditLock';
 
@@ -146,7 +147,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       },
       pause: () => set({ isPlaying: false, playbackSpeed: 1 }),
       stop: () => set({ isPlaying: false, playheadPosition: 0 }),
-      setZoom: (zoom: number) => set({ zoom: Math.max(0.1, Math.min(200, zoom)) }),
+      setZoom: (zoom: number) => set({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) }),
       toggleSnapping: () => set((state) => ({ snappingEnabled: !state.snappingEnabled })),
       setScrollX: (scrollX: number) => set({ scrollX: Math.max(0, scrollX) }),
       setInPoint: (time: number | null) => {

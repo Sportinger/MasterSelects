@@ -29,9 +29,13 @@ import {
   collectLegacyAudioEffectRouteSettings,
 } from '../../services/audio/audioGraphRouteSettings';
 import { resolveTimelineAudioRegionSelection } from './utils/audioEditSelection';
+import { resolveProcessedAudioAnalysisDisplayStatus } from './utils/audioAnalysisDisplayStatus';
+import { resolveAudioWaveformDiagnostics } from './utils/audioWaveformDiagnostics';
+import { resolveAudioVolumeAutomationCurveKeyframes } from './utils/audioAutomationCurve';
 import {
   frequencyHzFromSpectralY,
   getSpectralMaxFrequencyHz,
+  resolveTimelineSpectralBrushSelection,
   resolveTimelineSpectralRegionSelection,
   spectralYFromFrequencyHz,
 } from './utils/spectralSelection';
@@ -88,6 +92,9 @@ type SpectralRegionDragState = AudioRegionDragState & {
   rectTop: number;
   rectHeight: number;
   maxFrequencyHz: number;
+  mode: 'rectangle' | 'brush';
+  brushTimeRadiusSeconds?: number;
+  brushFrequencyRadiusHz?: number;
 };
 
 function StaticClipIcon({
@@ -280,6 +287,33 @@ function TimelineClipComponent({
     && !processedSpectrogramState.tileSet
     ? `spectrogram-processed-${processedSpectrogramState.status}`
     : '';
+  const needsProcessedAudioAnalysis = useMemo(
+    () => clipRequiresProcessedWaveformPyramid(clip, clipAudioKeyframes),
+    [clip, clipAudioKeyframes],
+  );
+  const processedWaveformStatus = resolveProcessedAudioAnalysisDisplayStatus({
+    artifactLabel: 'waveform',
+    needsProcessed: needsProcessedAudioAnalysis,
+    processedRef: processedWaveformPyramidRef,
+    processedReady: Boolean(processedWaveformPyramid),
+    fallbackAvailable: Boolean(sourceWaveformPyramid || (clip.waveform?.length ?? 0) > 0),
+    loadStatus: processedWaveformState.status,
+    jobActive: clip.audioAnalysisJob?.artifactKinds.includes('processed-waveform-pyramid') === true,
+    autoGenerateEligible: Boolean(clip.isComposition || clip.file),
+  });
+  const processedSpectrogramStatus = resolveProcessedAudioAnalysisDisplayStatus({
+    artifactLabel: 'spectrogram',
+    needsProcessed: needsProcessedAudioAnalysis,
+    processedRef: processedSpectrogramTileSetRef,
+    processedReady: Boolean(processedSpectrogramTileSet),
+    fallbackAvailable: Boolean(sourceSpectrogramTileSet),
+    loadStatus: processedSpectrogramState.status,
+    jobActive: clip.audioAnalysisJob?.artifactKinds.includes('spectrogram-tiles') === true,
+    autoGenerateEligible: Boolean(clip.isComposition || clip.file),
+  });
+  const audioAnalysisDisplayStatus = audioDisplayMode === 'spectral'
+    ? processedSpectrogramStatus
+    : processedWaveformStatus;
   const audioEditStack = clip.audioState?.editStack ?? [];
   const activeAudioEditCount = audioEditStack.filter(operation => operation.enabled !== false).length;
 
@@ -732,6 +766,49 @@ function TimelineClipComponent({
   const spectrogramOutPoint = processedSpectrogramTileSet
     ? Math.max(0.001, processedSpectrogramTileSet.duration)
     : displayOutPoint;
+  const audioWaveformDiagnostics = useMemo(() => {
+    if (!isAudioClip || !waveformsEnabled) return null;
+    if (!waveformPyramid && (!clip.waveform || clip.waveform.length === 0)) return null;
+
+    return resolveAudioWaveformDiagnostics({
+      waveform: clip.waveform,
+      pyramid: waveformPyramid,
+      inPoint: waveformInPoint,
+      outPoint: waveformOutPoint,
+      naturalDuration: waveformNaturalDuration,
+      gain: waveformVariant === 'processed' ? 1 : waveformDisplayGain,
+    });
+  }, [
+    clip.waveform,
+    isAudioClip,
+    waveformDisplayGain,
+    waveformInPoint,
+    waveformNaturalDuration,
+    waveformOutPoint,
+    waveformPyramid,
+    waveformVariant,
+    waveformsEnabled,
+  ]);
+  const audioVolumeAutomationKeyframes = useMemo(() => {
+    if (!isAudioClip) return [];
+
+    return resolveAudioVolumeAutomationCurveKeyframes({
+      keyframes: clipAudioKeyframes,
+      legacyEffects: clip.effects,
+      audioEffectStack: clip.audioState?.effectStack,
+      clipDuration: displayDuration,
+    });
+  }, [
+    clip.audioState?.effectStack,
+    clip.effects,
+    clipAudioKeyframes,
+    displayDuration,
+    isAudioClip,
+  ]);
+  const visibleFadeCurveKeyframes = isAudioClip ? audioVolumeAutomationKeyframes : opacityKeyframes;
+  const visibleFadeCurveKey = visibleFadeCurveKeyframes
+    .map(k => `${k.id}:${k.time.toFixed(3)}:${k.value}:${k.handleIn?.x ?? ''}:${k.handleIn?.y ?? ''}:${k.handleOut?.x ?? ''}:${k.handleOut?.y ?? ''}`)
+    .join('|');
 
   const clipMetaOffset = clip.isLoading
     ? 0
@@ -893,21 +970,38 @@ function TimelineClipComponent({
     drag: SpectralRegionDragState,
     clientX: number,
     clientY: number,
-  ) => resolveTimelineSpectralRegionSelection({
-    clip: {
+  ) => {
+    const selectionClip = {
       ...clip,
       startTime: displayStartTime,
       duration: displayDuration,
       inPoint: displayInPoint,
       outPoint: displayOutPoint,
       waveform: clip.waveform,
-    },
-    anchorTimelineTime: drag.anchorTimelineTime,
-    focusTimelineTime: timelineTimeFromAudioRegionClientX(clientX, drag),
-    anchorFrequencyHz: drag.anchorFrequencyHz,
-    focusFrequencyHz: frequencyHzFromSpectralY(clientY - drag.rectTop, drag.rectHeight, drag.maxFrequencyHz),
-    maxFrequencyHz: drag.maxFrequencyHz,
-  }), [
+    };
+    const focusTimelineTime = timelineTimeFromAudioRegionClientX(clientX, drag);
+    const focusFrequencyHz = frequencyHzFromSpectralY(clientY - drag.rectTop, drag.rectHeight, drag.maxFrequencyHz);
+
+    if (drag.mode === 'brush') {
+      return resolveTimelineSpectralBrushSelection({
+        clip: selectionClip,
+        centerTimelineTime: focusTimelineTime,
+        centerFrequencyHz: focusFrequencyHz,
+        timeRadiusSeconds: drag.brushTimeRadiusSeconds ?? 0.08,
+        frequencyRadiusHz: drag.brushFrequencyRadiusHz ?? drag.maxFrequencyHz * 0.04,
+        maxFrequencyHz: drag.maxFrequencyHz,
+      });
+    }
+
+    return resolveTimelineSpectralRegionSelection({
+      clip: selectionClip,
+      anchorTimelineTime: drag.anchorTimelineTime,
+      focusTimelineTime,
+      anchorFrequencyHz: drag.anchorFrequencyHz,
+      focusFrequencyHz,
+      maxFrequencyHz: drag.maxFrequencyHz,
+    });
+  }, [
     clip,
     displayDuration,
     displayInPoint,
@@ -942,6 +1036,7 @@ function TimelineClipComponent({
     e.stopPropagation();
 
     const rect = e.currentTarget.getBoundingClientRect();
+    const brushMode = e.shiftKey || e.altKey;
     const drag: SpectralRegionDragState = {
       anchorTimelineTime: timelineTimeFromAudioRegionClientX(e.clientX, {
         rectLeft: rect.left,
@@ -955,6 +1050,9 @@ function TimelineClipComponent({
       rectTop: rect.top,
       rectHeight: rect.height,
       maxFrequencyHz: spectralMaxFrequencyHz,
+      mode: brushMode ? 'brush' : 'rectangle',
+      brushTimeRadiusSeconds: brushMode ? Math.max(0.025, Math.min(0.5, 18 / Math.max(1, zoom))) : undefined,
+      brushFrequencyRadiusHz: brushMode ? Math.max(80, spectralMaxFrequencyHz * 0.045) : undefined,
     };
 
     setSpectralRegionDrag(drag);
@@ -1001,6 +1099,7 @@ function TimelineClipComponent({
 
     const handleDocumentMouseUp = (e: MouseEvent) => {
       if (
+        spectralRegionDrag.mode !== 'brush' &&
         Math.abs(e.clientX - spectralRegionDrag.startClientX) < 3 &&
         Math.abs(e.clientY - spectralRegionDrag.startClientY) < 3
       ) {
@@ -1058,6 +1157,9 @@ function TimelineClipComponent({
     clip.waveformGenerating ? 'generating-waveform' : '',
     waveformProcessingState,
     spectrogramProcessingState,
+    audioDisplayMode === 'spectral' ? '' : (processedWaveformStatus?.className ?? ''),
+    audioDisplayMode === 'spectral' ? (processedSpectrogramStatus?.className ?? '') : '',
+    ...(audioWaveformDiagnostics?.classNames ?? []),
     clip.parentClipId ? 'has-parent' : '',
     clip.isPendingDownload ? 'pending-download' : '',
     clip.downloadError ? 'download-error' : '',
@@ -1236,6 +1338,14 @@ function TimelineClipComponent({
     e.preventDefault();
     e.stopPropagation();
     applyAudioRegionEdit(type);
+  };
+  const handleApplyAudioRegionEditWithParams = (
+    type: TimelineAudioRegionEditType,
+    params: Record<string, string | number | boolean | null>,
+  ) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    applyAudioRegionEdit(type, { params });
   };
   const handleApplyAudioRepairEdit = (
     label: string,
@@ -1558,6 +1668,7 @@ function TimelineClipComponent({
       {/* Audio waveform / spectrogram */}
       {waveformsEnabled && isAudioClip && (
         audioDisplayMode === 'spectral'
+        || waveformPyramid
         || (clip.waveform && clip.waveform.length > 0)
       ) && (
         <div className="clip-waveform">
@@ -1575,9 +1686,9 @@ function TimelineClipComponent({
             />
           ) : audioDisplayMode === 'spectral' ? (
             <div className="spectrogram-pending" />
-          ) : clip.waveform && clip.waveform.length > 0 ? (
+          ) : waveformPyramid || (clip.waveform && clip.waveform.length > 0) ? (
             <ClipWaveform
-              waveform={clip.waveform}
+              waveform={clip.waveform ?? []}
               width={width}
               height={Math.max(20, trackBaseHeight - 12)}
               inPoint={waveformInPoint}
@@ -1592,6 +1703,30 @@ function TimelineClipComponent({
               renderWidth={waveformRenderWindow.width}
             />
           ) : null}
+          {(audioAnalysisDisplayStatus || (audioWaveformDiagnostics?.badges.length ?? 0) > 0) && (
+            <div className="clip-audio-status-stack">
+              {audioAnalysisDisplayStatus && (
+                <div
+                  className={`clip-audio-analysis-status clip-audio-analysis-status-${audioAnalysisDisplayStatus.kind}`}
+                  title={audioAnalysisDisplayStatus.title}
+                  data-audio-analysis-status={audioAnalysisDisplayStatus.kind}
+                >
+                  {audioAnalysisDisplayStatus.label}
+                </div>
+              )}
+              {audioWaveformDiagnostics?.badges.map((badge) => (
+                <div
+                  key={badge.kind}
+                  className={`clip-audio-diagnostic-badge ${badge.className}`}
+                  title={badge.title}
+                  data-audio-diagnostic={badge.kind}
+                  data-audio-diagnostic-source={audioWaveformDiagnostics.source}
+                >
+                  {badge.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {audioRegionOverlay && (
@@ -1622,6 +1757,8 @@ function TimelineClipComponent({
           <button type="button" onClick={handleApplyAudioRegionEdit('invert-polarity')} title="Invert selected region polarity">Inv</button>
           <button type="button" onClick={handleApplyAudioRegionEdit('swap-channels')} title="Swap left and right channels">LR</button>
           <button type="button" onClick={handleApplyAudioRegionEdit('mono-sum')} title="Sum selected channels to mono">Mono</button>
+          <button type="button" onClick={handleApplyAudioRegionEditWithParams('split-stereo', { sourceChannel: 0, label: 'Split stereo left' })} title="Copy left channel across selected channels">L-M</button>
+          <button type="button" onClick={handleApplyAudioRegionEditWithParams('split-stereo', { sourceChannel: 1, label: 'Split stereo right' })} title="Copy right channel across selected channels">R-M</button>
           <button type="button" onClick={handleApplyAudioRepairEdit('Hum notch', { repairType: 'hum-notch', baseFrequencyHz: 50, harmonicCount: 6, q: 35, featherTime: 0.02 })} title="Apply 50 Hz hum notch repair">Hum</button>
           <button type="button" onClick={handleApplyAudioRepairEdit('De-click', { repairType: 'de-click', threshold: 0.35, ratio: 4 })} title="Interpolate impulse clicks in the selected region">Click</button>
           <button type="button" onClick={handleApplyAudioRepairEdit('Splice smooth', { repairType: 'splice-smooth', edgeSeconds: 0.008 })} title="Smooth selected region boundaries">Smth</button>
@@ -1630,7 +1767,7 @@ function TimelineClipComponent({
       )}
       {spectralRegionOverlay && (
         <div
-          className="clip-spectral-region-selection"
+          className={`clip-spectral-region-selection ${audioSpectralRegionSelection?.selectionMode === 'brush' ? 'brush' : 'rectangle'}`}
           style={{
             left: spectralRegionOverlay.left,
             width: spectralRegionOverlay.width,
@@ -1745,7 +1882,7 @@ function TimelineClipComponent({
             e.stopPropagation();
             clearAudioSpectralRegionSelection();
           }}
-          title="Drag spectral region"
+          title="Drag spectral region; hold Shift or Alt for brush"
         />
       )}
       {/* Nested composition mixdown waveform - shown overlaid on thumbnails */}
@@ -2041,12 +2178,15 @@ function TimelineClipComponent({
           })}
         </div>
       )}
-      {/* Fade curve - SVG bezier curve showing opacity animation */}
-      {opacityKeyframes.length >= 2 && (
-        <div className="fade-curve-container">
+      {/* Fade curve - SVG bezier curve showing opacity or audio-volume automation */}
+      {visibleFadeCurveKeyframes.length >= 2 && (
+        <div
+          className={`fade-curve-container ${isAudioClip ? 'audio-automation-curve-container' : ''}`}
+          data-audio-automation-curve={isAudioClip ? 'volume' : undefined}
+        >
           <FadeCurve
-            key={opacityKeyframes.map(k => `${k.id}:${k.time.toFixed(3)}:${k.value}:${k.handleIn?.x ?? ''}:${k.handleIn?.y ?? ''}:${k.handleOut?.x ?? ''}:${k.handleOut?.y ?? ''}`).join('|')}
-            keyframes={opacityKeyframes}
+            key={visibleFadeCurveKey}
+            keyframes={visibleFadeCurveKeyframes}
             clipDuration={displayDuration}
             width={width}
             height={trackBaseHeight}

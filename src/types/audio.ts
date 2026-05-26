@@ -132,6 +132,7 @@ export interface AudioDerivedAssetRef {
 export type AudioRecordingPhase =
   | 'idle'
   | 'waiting-for-punch'
+  | 'warming-input'
   | 'requesting-input'
   | 'recording'
   | 'stopping'
@@ -326,6 +327,14 @@ export interface AudioMeterSnapshot {
   rmsDb: number;
   clipping: boolean;
   updatedAt: number;
+  dynamics?: Record<string, AudioDynamicsReductionSnapshot>;
+}
+
+export interface AudioDynamicsReductionSnapshot {
+  effectId: string;
+  processorType: 'compressor' | 'de-esser' | 'limiter' | 'noise-gate' | 'expander';
+  gainReductionDb: number;
+  updatedAt: number;
 }
 
 export interface RuntimeAudioMeterState {
@@ -337,6 +346,7 @@ export interface AudioExportPreflightState {
   lastCheckedAt?: number;
   warnings?: AudioAnalysisWarning[];
   measurement?: AudioExportPreflightMeasurement;
+  measurementHistory?: AudioExportPreflightMeasurementHistoryEntry[];
 }
 
 export interface AudioExportPreflightMeasurement {
@@ -351,6 +361,13 @@ export interface AudioExportPreflightMeasurement {
   targetLufs?: number;
   loudnessDelta?: number;
   truePeakCeilingDb?: number;
+}
+
+export interface AudioExportPreflightMeasurementHistoryEntry {
+  checkedAt: number;
+  startTime: number;
+  endTime: number;
+  measurement: AudioExportPreflightMeasurement;
 }
 
 export interface MasterAudioState {

@@ -213,7 +213,7 @@ describe('buildClipNodeGraph', () => {
     ]);
   });
 
-  it('projects audio effects into a separate audio lane and output', () => {
+  it('projects audio effects into an audio lane feeding the combined output', () => {
     const audioVolume: Effect = {
       id: 'volume',
       name: 'Volume',
@@ -230,7 +230,6 @@ describe('buildClipNodeGraph', () => {
     };
     const graph = buildClipNodeGraph(createClip({ effects: [audioVolume, audioEq] }), createTrack());
     const visualOutput = graph.nodes.find((node) => node.id === 'output');
-    const audioOutput = graph.nodes.find((node) => node.id === 'audio-output');
     const audioEffectNodes = graph.nodes.filter((node) => node.id === 'effect-volume' || node.id === 'effect-eq');
 
     expect(graph.nodes.map((node) => node.id)).toEqual([
@@ -238,16 +237,15 @@ describe('buildClipNodeGraph', () => {
       'output',
       'effect-volume',
       'effect-eq',
-      'audio-output',
     ]);
-    expect(audioOutput).toMatchObject({
+    expect(visualOutput).toMatchObject({
       kind: 'output',
-      label: 'Audio Output',
-      inputs: expect.arrayContaining([expect.objectContaining({ id: 'input', type: 'audio' })]),
+      label: 'Clip Output',
+      inputs: expect.arrayContaining([expect.objectContaining({ id: 'audio', type: 'audio' })]),
     });
-    expect(audioEffectNodes.map((node) => node.layout.y)).toEqual([audioOutput?.layout.y, audioOutput?.layout.y]);
-    expect(audioOutput?.layout.y).not.toBe(visualOutput?.layout.y);
-    expect(graph.edges.filter((edge) => edge.type === 'audio' && edge.toPortId === 'input').map((edge) => [
+    expect(audioEffectNodes.map((node) => node.layout.y)).toEqual([252, 252]);
+    expect(audioEffectNodes.every((node) => node.layout.y !== visualOutput?.layout.y)).toBe(true);
+    expect(graph.edges.filter((edge) => edge.type === 'audio').map((edge) => [
       edge.fromNodeId,
       edge.fromPortId,
       edge.toNodeId,
@@ -255,7 +253,7 @@ describe('buildClipNodeGraph', () => {
     ])).toEqual([
       ['source', 'audio', 'effect-volume', 'input'],
       ['effect-volume', 'output', 'effect-eq', 'input'],
-      ['effect-eq', 'output', 'audio-output', 'input'],
+      ['effect-eq', 'output', 'output', 'audio'],
     ]);
   });
 
@@ -283,11 +281,9 @@ describe('buildClipNodeGraph', () => {
 
     expect(graph.nodes.map((node) => node.id)).toEqual([
       'source',
-      'output',
-      'audio-analysis',
       'audio-effect-hp',
       'effect-volume',
-      'audio-output',
+      'output',
     ]);
     expect(graph.nodes.find((node) => node.id === 'audio-effect-hp')).toMatchObject({
       kind: 'effect',
@@ -302,10 +298,9 @@ describe('buildClipNodeGraph', () => {
       edge.fromNodeId,
       edge.toNodeId,
     ])).toEqual([
-      ['source', 'output'],
       ['source', 'audio-effect-hp'],
       ['audio-effect-hp', 'effect-volume'],
-      ['effect-volume', 'audio-output'],
+      ['effect-volume', 'output'],
     ]);
   });
 
@@ -333,38 +328,31 @@ describe('buildClipNodeGraph', () => {
       },
     }), createTrack({ type: 'audio' }));
     const source = graph.nodes.find((node) => node.id === 'source');
-    const analysis = graph.nodes.find((node) => node.id === 'audio-analysis');
     const outputsById = new Map(source?.outputs.map((port) => [port.id, port]) ?? []);
 
-    expect(analysis).toMatchObject({
-      kind: 'analysis',
+    expect(graph.nodes.find((node) => node.id === 'audio-analysis')).toBeUndefined();
+    expect(source).toMatchObject({
+      kind: 'source',
       runtime: 'builtin',
-      label: 'Audio Analysis',
-      inputs: expect.arrayContaining([
-        expect.objectContaining({ id: 'audio', type: 'audio' }),
-        expect.objectContaining({ id: 'time', type: 'time' }),
-        expect.objectContaining({ id: 'metadata', type: 'metadata' }),
-      ]),
+      params: {
+        sourceRefs: true,
+        processedRefs: true,
+        status: 'ready',
+        artifactPorts: 10,
+        availableArtifacts: 10,
+        missingArtifacts: 0,
+        staleArtifacts: 0,
+        processedArtifacts: 4,
+        sourceArtifacts: 6,
+        progressPercent: 100,
+      },
     });
-    expect(analysis?.outputs.map((port) => [port.id, port.type, port.metadata?.semanticKind])).toEqual([
-      ['waveform', 'curve', 'waveform'],
-      ['spectrum', 'texture', 'spectrum'],
-      ['spectrum-2', 'texture', 'spectrum'],
-      ['loudness', 'curve', 'loudness'],
-      ['beats', 'event', 'beats'],
-      ['onsets', 'event', 'onsets'],
-      ['phase-correlation', 'curve', 'phase-correlation'],
-      ['transcript-timing', 'text', 'transcript'],
-      ['frequency-bands', 'table', 'frequency-bands'],
-      ['frequency-summary', 'table', 'frequency-summary'],
-      ['audio-metadata', 'metadata', 'audio-metadata'],
-    ]);
     expect(graph.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({
         fromNodeId: 'source',
         fromPortId: 'audio',
-        toNodeId: 'audio-analysis',
-        toPortId: 'audio',
+        toNodeId: 'output',
+        toPortId: 'input',
         type: 'audio',
       }),
     ]));
@@ -385,6 +373,7 @@ describe('buildClipNodeGraph', () => {
       ['audio-metadata', 'metadata', 'audio-metadata', undefined],
     ]);
     expect(outputsById.get('waveform')?.metadata).toMatchObject({
+      targetClipId: 'clip-1',
       artifactProvenance: 'processed',
       available: true,
       stale: false,
@@ -394,6 +383,7 @@ describe('buildClipNodeGraph', () => {
       },
     });
     expect(outputsById.get('spectrum-2')?.metadata).toMatchObject({
+      targetClipId: 'clip-1',
       artifactProvenance: 'processed',
       artifactIndex: 1,
       generateAction: {
@@ -460,6 +450,86 @@ describe('buildClipNodeGraph', () => {
         artifactKind: 'loudness-envelope',
       },
     });
+    expect(graph.nodes.find((node) => node.id === 'audio-analysis')).toBeUndefined();
+    expect(source?.params).toMatchObject({
+      status: 'partial',
+      artifactPorts: 24,
+      availableArtifacts: 16,
+      missingArtifacts: 8,
+      progressPercent: 67,
+    });
+  });
+
+  it('projects linked video and audio clips as one combined source and output graph', () => {
+    const videoClip = createClip({
+      id: 'video-clip',
+      name: 'Linked Video',
+      linkedClipId: 'audio-clip',
+      source: { type: 'video', mediaFileId: 'media-video' },
+    });
+    const audioClip = createClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      name: 'Linked Audio',
+      linkedClipId: 'video-clip',
+      file: new File([], 'linked.wav', { type: 'audio/wav' }),
+      source: { type: 'audio', mediaFileId: 'media-audio' },
+      waveform: [0.2, 0.6],
+      audioState: {
+        sourceAudioRevisionId: 'linked-audio-rev',
+        sourceAnalysisRefs: {
+          frequencySummaryId: 'linked-frequency',
+        },
+      },
+    });
+    const graph = buildClipNodeGraph(videoClip, createTrack(), {
+      linkedClip: audioClip,
+      linkedTrack: createTrack({ id: 'audio-1', name: 'Audio 1', type: 'audio' }),
+    });
+    const source = graph.nodes.find((node) => node.id === 'source');
+    const output = graph.nodes.find((node) => node.id === 'output');
+    const outputsById = new Map(source?.outputs.map((port) => [port.id, port]) ?? []);
+
+    expect(graph.id).toBe('clip-graph:video-clip');
+    expect(graph.nodes.find((node) => node.id === 'audio-analysis')).toBeUndefined();
+    expect(graph.nodes.find((node) => node.id === 'audio-output')).toBeUndefined();
+    expect(source).toMatchObject({
+      label: 'video + audio Source',
+      params: {
+        linkedAudioClipId: 'audio-clip',
+        sourceRefs: true,
+        status: 'partial',
+      },
+    });
+    expect(output?.inputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'input', type: 'texture' }),
+      expect.objectContaining({ id: 'audio', type: 'audio' }),
+    ]));
+    expect(outputsById.get('audio')?.metadata).toMatchObject({
+      semanticKind: 'audio-source',
+      targetClipId: 'audio-clip',
+    });
+    expect(outputsById.get('frequency-bands')?.metadata).toMatchObject({
+      artifactId: 'linked-frequency',
+      semanticKind: 'frequency-bands',
+      targetClipId: 'audio-clip',
+    });
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fromNodeId: 'source',
+        fromPortId: 'texture',
+        toNodeId: 'output',
+        toPortId: 'input',
+        type: 'texture',
+      }),
+      expect.objectContaining({
+        fromNodeId: 'source',
+        fromPortId: 'audio',
+        toNodeId: 'output',
+        toPortId: 'audio',
+        type: 'audio',
+      }),
+    ]));
   });
 
   it('applies persisted node layout from clip graph state', () => {
@@ -555,6 +625,82 @@ describe('buildClipNodeGraph', () => {
       ['source', 'custom-ai'],
       ['custom-ai', 'output'],
     ]);
+  });
+
+  it('keeps source audio-analysis seeded AI custom nodes off the main signal chain', () => {
+    const clip = createClip({
+      source: { type: 'audio', mediaFileId: 'media-a' },
+      file: new File([], 'voice.wav', { type: 'audio/wav' }),
+      waveform: [0.2, 0.8],
+      audioState: {
+        sourceAnalysisRefs: {
+          frequencySummaryId: 'frequency-artifact',
+        },
+      },
+    });
+    const track = createTrack({ type: 'audio' });
+    const baseGraph = buildClipNodeGraph(clip, track);
+    const frequencyPort = baseGraph.nodes
+      .find((node) => node.id === 'source')
+      ?.outputs.find((port) => port.id === 'frequency-bands');
+
+    expect(frequencyPort).toMatchObject({
+      type: 'table',
+      metadata: {
+        semanticKind: 'frequency-bands',
+        artifactId: 'frequency-artifact',
+      },
+    });
+
+    const definition = createClipAICustomNodeDefinition('custom-frequency-ai', clip, 'Frequency AI', {
+      primaryInput: {
+        id: 'input',
+        label: frequencyPort!.label,
+        type: frequencyPort!.type,
+        metadata: frequencyPort!.metadata,
+      },
+      outputType: frequencyPort!.type,
+      description: 'Analyze frequency bands.',
+      prompt: 'Use the connected frequency bands.',
+    });
+    const nodeGraph = addClipCustomNodeDefinition(clip, definition, track);
+    const graph = buildClipNodeGraph({ ...clip, nodeGraph }, track);
+
+    const frequencyNode = graph.nodes.find((node) => node.id === 'custom-frequency-ai');
+    expect(frequencyNode?.inputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'input', type: 'table', metadata: expect.objectContaining({ semanticKind: 'frequency-bands' }) }),
+    ]));
+    expect(frequencyNode?.outputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'output', type: 'table' }),
+    ]));
+    expect(graph.edges.some((edge) => edge.toNodeId === 'custom-frequency-ai')).toBe(false);
+    expect(graph.edges).toContainEqual(expect.objectContaining({
+      fromNodeId: 'source',
+      fromPortId: 'audio',
+      toNodeId: 'output',
+      toPortId: 'input',
+      type: 'audio',
+    }));
+
+    const connected = connectClipNodeGraphPorts(
+      { ...clip, nodeGraph },
+      {
+        fromNodeId: 'source',
+        fromPortId: 'frequency-bands',
+        toNodeId: 'custom-frequency-ai',
+        toPortId: 'input',
+      },
+      track,
+    );
+    const connectedGraph = buildClipNodeGraph({ ...clip, nodeGraph: connected }, track);
+
+    expect(connectedGraph.edges).toContainEqual(expect.objectContaining({
+      fromNodeId: 'source',
+      fromPortId: 'frequency-bands',
+      toNodeId: 'custom-frequency-ai',
+      toPortId: 'input',
+      type: 'table',
+    }));
   });
 
   it('persists manual node graph links and disconnections', () => {

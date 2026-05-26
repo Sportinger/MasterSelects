@@ -13,27 +13,49 @@ describe('AudioEffectRegistry', () => {
   it('registers professional audio effect descriptors in stable UI/render order', () => {
     expect(Array.from(AUDIO_EFFECT_REGISTRY.keys())).toEqual([
       'audio-volume',
+      'audio-pan',
       'audio-eq',
+      'audio-parametric-eq',
       'audio-high-pass',
       'audio-low-pass',
+      'audio-hum-notch',
+      'audio-de-click',
+      'audio-noise-reduction',
       'audio-compressor',
       'audio-de-esser',
       'audio-limiter',
       'audio-noise-gate',
+      'audio-expander',
       'audio-delay',
       'audio-reverb',
+      'audio-saturation',
+      'audio-polarity-invert',
+      'audio-mono-sum',
+      'audio-channel-swap',
+      'audio-stereo-split',
     ]);
     expect(getAllAudioEffects().map(effect => effect.id)).toEqual([
       'audio-volume',
+      'audio-pan',
       'audio-eq',
+      'audio-parametric-eq',
       'audio-high-pass',
       'audio-low-pass',
+      'audio-hum-notch',
+      'audio-de-click',
+      'audio-noise-reduction',
       'audio-compressor',
       'audio-de-esser',
       'audio-limiter',
       'audio-noise-gate',
+      'audio-expander',
       'audio-delay',
       'audio-reverb',
+      'audio-saturation',
+      'audio-polarity-invert',
+      'audio-mono-sum',
+      'audio-channel-swap',
+      'audio-stereo-split',
     ]);
   });
 
@@ -46,6 +68,14 @@ describe('AudioEffectRegistry', () => {
     });
     expect(getAudioEffectDefaultParams('audio-volume')).toEqual({ volume: 1 });
     expect(getAudioEffectParamNames('audio-volume')).toEqual(['volume']);
+    expect(getAudioEffect('audio-pan')).toMatchObject({
+      id: 'audio-pan',
+      name: 'Pan',
+      category: 'gain',
+      paramNames: ['pan'],
+    });
+    expect(getAudioEffectDefaultParams('audio-pan')).toEqual({ pan: 0 });
+    expect(getAudioEffectParamNames('audio-pan')).toEqual(['pan']);
   });
 
   it('describes audio-eq defaults and params in renderer order', () => {
@@ -82,6 +112,18 @@ describe('AudioEffectRegistry', () => {
   });
 
   it('describes filter and dynamics defaults', () => {
+    expect(getAudioEffect('audio-parametric-eq')).toMatchObject({
+      id: 'audio-parametric-eq',
+      name: 'Parametric EQ',
+      category: 'eq',
+      paramNames: ['frequencyHz', 'gainDb', 'q'],
+    });
+    expect(getAudioEffectDefaultParams('audio-parametric-eq')).toEqual({
+      frequencyHz: 1000,
+      gainDb: 0,
+      q: 1,
+    });
+
     expect(getAudioEffect('audio-high-pass')).toMatchObject({
       id: 'audio-high-pass',
       name: 'High Pass Filter',
@@ -97,6 +139,48 @@ describe('AudioEffectRegistry', () => {
       paramNames: ['frequencyHz', 'q'],
     });
     expect(getAudioEffectDefaultParams('audio-low-pass')).toEqual({ frequencyHz: 22000, q: 0.707 });
+
+    expect(getAudioEffect('audio-hum-notch')).toMatchObject({
+      id: 'audio-hum-notch',
+      name: 'Hum Notch',
+      category: 'repair',
+      defaultAudible: true,
+      paramNames: ['frequencyHz', 'q', 'harmonics', 'mix'],
+    });
+    expect(getAudioEffectDefaultParams('audio-hum-notch')).toEqual({
+      frequencyHz: 50,
+      q: 30,
+      harmonics: 2,
+      mix: 1,
+    });
+
+    expect(getAudioEffect('audio-de-click')).toMatchObject({
+      id: 'audio-de-click',
+      name: 'De-click',
+      category: 'repair',
+      defaultAudible: true,
+      paramNames: ['threshold', 'ratio', 'mix'],
+    });
+    expect(getAudioEffectDefaultParams('audio-de-click')).toEqual({
+      threshold: 0.35,
+      ratio: 4,
+      mix: 1,
+    });
+
+    expect(getAudioEffect('audio-noise-reduction')).toMatchObject({
+      id: 'audio-noise-reduction',
+      name: 'Noise Reduction',
+      category: 'repair',
+      paramNames: ['thresholdDb', 'reductionDb', 'sensitivity', 'attackMs', 'releaseMs', 'mix'],
+    });
+    expect(getAudioEffectDefaultParams('audio-noise-reduction')).toEqual({
+      thresholdDb: -60,
+      reductionDb: 0,
+      sensitivity: 1,
+      attackMs: 5,
+      releaseMs: 160,
+      mix: 0,
+    });
 
     expect(getAudioEffect('audio-compressor')).toMatchObject({
       id: 'audio-compressor',
@@ -137,6 +221,19 @@ describe('AudioEffectRegistry', () => {
       attackMs: 2,
       releaseMs: 80,
     });
+    expect(getAudioEffect('audio-expander')).toMatchObject({
+      id: 'audio-expander',
+      name: 'Expander',
+      category: 'dynamics',
+      paramNames: ['thresholdDb', 'ratio', 'rangeDb', 'attackMs', 'releaseMs'],
+    });
+    expect(getAudioEffectDefaultParams('audio-expander')).toEqual({
+      thresholdDb: 0,
+      ratio: 1,
+      rangeDb: 0,
+      attackMs: 2,
+      releaseMs: 120,
+    });
     expect(getAudioEffect('audio-delay')).toMatchObject({
       id: 'audio-delay',
       name: 'Delay',
@@ -161,6 +258,51 @@ describe('AudioEffectRegistry', () => {
       damping: 0.35,
       mix: 0,
     });
+    expect(getAudioEffect('audio-saturation')).toMatchObject({
+      id: 'audio-saturation',
+      name: 'Saturation',
+      category: 'distortion',
+      paramNames: ['driveDb', 'toneHz', 'mix'],
+    });
+    expect(getAudioEffectDefaultParams('audio-saturation')).toEqual({
+      driveDb: 0,
+      toneHz: 16000,
+      mix: 0,
+    });
+    expect(getAudioEffect('audio-polarity-invert')).toMatchObject({
+      id: 'audio-polarity-invert',
+      name: 'Polarity Invert',
+      category: 'utility',
+      defaultAudible: true,
+      paramNames: ['channelMode'],
+    });
+    expect(getAudioEffectDefaultParams('audio-polarity-invert')).toEqual({
+      channelMode: 'all',
+    });
+    expect(getAudioEffect('audio-mono-sum')).toMatchObject({
+      id: 'audio-mono-sum',
+      name: 'Mono Sum',
+      category: 'utility',
+      defaultAudible: true,
+      paramNames: [],
+    });
+    expect(getAudioEffectDefaultParams('audio-mono-sum')).toEqual({});
+    expect(getAudioEffect('audio-channel-swap')).toMatchObject({
+      id: 'audio-channel-swap',
+      name: 'Channel Swap',
+      category: 'utility',
+      defaultAudible: true,
+      paramNames: [],
+    });
+    expect(getAudioEffectDefaultParams('audio-channel-swap')).toEqual({});
+    expect(getAudioEffect('audio-stereo-split')).toMatchObject({
+      id: 'audio-stereo-split',
+      name: 'Stereo Split',
+      category: 'utility',
+      defaultAudible: true,
+      paramNames: ['sourceChannel'],
+    });
+    expect(getAudioEffectDefaultParams('audio-stereo-split')).toEqual({ sourceChannel: 0 });
   });
 
   it('returns defensive copies for arrays and default params', () => {

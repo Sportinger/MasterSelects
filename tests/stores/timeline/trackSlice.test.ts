@@ -2,6 +2,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip, createMockTrack } from '../../helpers/mockData';
 
+function createMockAudioBuffer(samples: number[], sampleRate = 10): AudioBuffer {
+  const data = Float32Array.from(samples);
+  return {
+    length: data.length,
+    duration: data.length / sampleRate,
+    sampleRate,
+    numberOfChannels: 1,
+    getChannelData: () => data,
+  } as unknown as AudioBuffer;
+}
+
 describe('trackSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
 
@@ -452,6 +463,74 @@ describe('trackSlice', () => {
 
     expect(result.warnings?.map(item => item.code)).toContain('audio-export-record-arm-active');
     expect(store.getState().masterAudioState?.exportPreflight).toEqual(result);
+  });
+
+  it('runAudioExportPreflight keeps rendered LUFS and true-peak measurement history', () => {
+    store = createTestTimelineStore({
+      duration: 5,
+      tracks: [
+        createMockTrack({
+          id: 'audio-1',
+          name: 'Audio 1',
+          type: 'audio',
+          audioState: {
+            volumeDb: 0,
+            pan: 0,
+            muted: false,
+            solo: false,
+            recordArm: false,
+            inputMonitor: false,
+            meterMode: 'peak',
+          },
+        }),
+      ],
+      clips: [
+        createMockClip({
+          id: 'clip-audio',
+          trackId: 'audio-1',
+          startTime: 0,
+          duration: 5,
+          outPoint: 5,
+          source: { type: 'audio', mediaFileId: 'media-a' },
+          mediaFileId: 'media-a',
+        }),
+      ],
+    });
+
+    const first = store.getState().runAudioExportPreflight(
+      0,
+      5,
+      createMockAudioBuffer([0.1, -0.1, 0.1, -0.1], 4),
+    );
+
+    expect(first.measurement).toBeDefined();
+    expect(first.measurementHistory).toEqual([
+      {
+        checkedAt: first.lastCheckedAt,
+        startTime: 0,
+        endTime: 5,
+        measurement: first.measurement,
+      },
+    ]);
+
+    const staticCheck = store.getState().runAudioExportPreflight(0, 5);
+    expect(staticCheck.measurement).toBeUndefined();
+    expect(staticCheck.measurementHistory).toEqual(first.measurementHistory);
+
+    const second = store.getState().runAudioExportPreflight(
+      1,
+      3,
+      createMockAudioBuffer([0.4, -0.4, 0.2, -0.2], 4),
+    );
+
+    expect(second.measurementHistory).toHaveLength(2);
+    expect(second.measurementHistory?.[0]).toMatchObject({
+      checkedAt: second.lastCheckedAt,
+      startTime: 1,
+      endTime: 3,
+      measurement: second.measurement,
+    });
+    expect(second.measurementHistory?.[1]).toEqual(first.measurementHistory?.[0]);
   });
 
   it('setTrackHeight: clamps to min/max', () => {

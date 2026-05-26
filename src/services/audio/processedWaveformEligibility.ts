@@ -79,6 +79,7 @@ export function legacyAudioEffectRequiresProcessedAnalysis(
 ): boolean {
   if (!effect || effect.enabled === false || !hasAudioEffect(effect.type)) return false;
   if (effect.type === 'audio-volume') return false;
+  if (getAudioEffect(effect.type)?.defaultAudible === true) return true;
   if (hasAudioEffectAutomationKeyframes(effect.id, keyframes)) return true;
   return audioEffectParamDiffersFromDefault(effect.type, effect.params);
 }
@@ -97,6 +98,7 @@ export function audioEffectInstanceRequiresProcessedAnalysis(
     return false;
   }
   if (effect.descriptorId === 'audio-volume') return false;
+  if (getAudioEffect(effect.descriptorId)?.defaultAudible === true) return true;
   if (hasAudioEffectAutomationKeyframes(effect.id, keyframes)) return true;
   return audioEffectParamDiffersFromDefault(effect.descriptorId, effect.params);
 }
@@ -122,6 +124,7 @@ const RENDERABLE_CLIP_AUDIO_EDIT_TYPES = new Set<ClipAudioEditOperation['type']>
   'invert-polarity',
   'swap-channels',
   'mono-sum',
+  'split-stereo',
   'repair',
   'room-tone-fill',
   'spectral-mask',

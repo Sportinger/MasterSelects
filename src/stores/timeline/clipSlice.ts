@@ -35,6 +35,12 @@ import {
   readTimelineLoudnessEnvelope,
 } from '../../services/audio/timelineLoudnessEnvelopeCache';
 import { BeatOnsetAnalysisGenerator } from '../../services/audio/BeatOnsetAnalysisGenerator';
+import {
+  primeTimelineBeatGridCache,
+  primeTimelineOnsetMapCache,
+  readTimelineBeatGrid,
+  readTimelineOnsetMap,
+} from '../../services/audio/timelineBeatOnsetCache';
 import { FrequencyPhaseAnalysisGenerator } from '../../services/audio/FrequencyPhaseAnalysisGenerator';
 import {
   primeTimelineFrequencySummaryCache,
@@ -1630,6 +1636,20 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
       const beatGridId = generated.beatArtifact.manifestRef.artifactId;
       const onsetMapId = generated.onsetArtifact.manifestRef.artifactId;
+      const [beatGrid, onsetMap] = await Promise.all([
+        readTimelineBeatGrid(generated.beatManifest, store),
+        readTimelineOnsetMap(generated.onsetManifest, store),
+      ]);
+      primeTimelineBeatGridCache([
+        beatGridId,
+        generated.beatArtifact.id,
+        generated.beatArtifact.manifestRef.artifactId,
+      ], beatGrid);
+      primeTimelineOnsetMapCache([
+        onsetMapId,
+        generated.onsetArtifact.id,
+        generated.onsetArtifact.manifestRef.artifactId,
+      ], onsetMap);
       set({
         clips: updateClipById(get().clips, clipId, {
           audioState: {

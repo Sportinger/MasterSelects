@@ -14,6 +14,7 @@ export {
   updateClipCustomNodeDefinition,
   updateClipNodeGraphLayout,
 } from './clipGraphProjection';
+export type { ClipNodeGraphBuildOptions } from './clipGraphProjection';
 export {
   hasRunnableAINodes,
   renderClipAINodesToCanvas,

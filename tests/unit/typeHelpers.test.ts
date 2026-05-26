@@ -228,14 +228,25 @@ describe('isAudioEffect', () => {
   });
 
   it('professional audio effects are true', () => {
+    expect(isAudioEffect('audio-pan')).toBe(true);
+    expect(isAudioEffect('audio-parametric-eq')).toBe(true);
     expect(isAudioEffect('audio-high-pass')).toBe(true);
     expect(isAudioEffect('audio-low-pass')).toBe(true);
+    expect(isAudioEffect('audio-hum-notch')).toBe(true);
+    expect(isAudioEffect('audio-de-click')).toBe(true);
+    expect(isAudioEffect('audio-noise-reduction')).toBe(true);
     expect(isAudioEffect('audio-compressor')).toBe(true);
     expect(isAudioEffect('audio-de-esser')).toBe(true);
     expect(isAudioEffect('audio-limiter')).toBe(true);
     expect(isAudioEffect('audio-noise-gate')).toBe(true);
+    expect(isAudioEffect('audio-expander')).toBe(true);
     expect(isAudioEffect('audio-delay')).toBe(true);
     expect(isAudioEffect('audio-reverb')).toBe(true);
+    expect(isAudioEffect('audio-saturation')).toBe(true);
+    expect(isAudioEffect('audio-polarity-invert')).toBe(true);
+    expect(isAudioEffect('audio-mono-sum')).toBe(true);
+    expect(isAudioEffect('audio-channel-swap')).toBe(true);
+    expect(isAudioEffect('audio-stereo-split')).toBe(true);
   });
 
   it('visual effects → false', () => {
@@ -263,9 +274,11 @@ describe('isAudioEffect', () => {
       'hue-shift', 'saturation', 'brightness', 'contrast',
       'blur', 'pixelate', 'kaleidoscope', 'mirror',
       'invert', 'rgb-split', 'levels', 'voxel-relief',
-      'audio-eq', 'audio-volume', 'audio-high-pass', 'audio-low-pass',
-      'audio-compressor', 'audio-de-esser', 'audio-limiter', 'audio-noise-gate',
-      'audio-delay', 'audio-reverb',
+      'audio-eq', 'audio-volume', 'audio-pan', 'audio-parametric-eq', 'audio-high-pass', 'audio-low-pass',
+      'audio-hum-notch', 'audio-de-click', 'audio-noise-reduction',
+      'audio-compressor', 'audio-de-esser', 'audio-limiter', 'audio-noise-gate', 'audio-expander',
+      'audio-delay', 'audio-reverb', 'audio-saturation',
+      'audio-polarity-invert', 'audio-mono-sum', 'audio-channel-swap', 'audio-stereo-split',
     ];
     const audioEffects = allEffects.filter(e => isAudioEffect(e));
     const visualEffects = allEffects.filter(e => !isAudioEffect(e));
@@ -273,14 +286,25 @@ describe('isAudioEffect', () => {
     expect(audioEffects).toEqual([
       'audio-eq',
       'audio-volume',
+      'audio-pan',
+      'audio-parametric-eq',
       'audio-high-pass',
       'audio-low-pass',
+      'audio-hum-notch',
+      'audio-de-click',
+      'audio-noise-reduction',
       'audio-compressor',
       'audio-de-esser',
       'audio-limiter',
       'audio-noise-gate',
+      'audio-expander',
       'audio-delay',
       'audio-reverb',
+      'audio-saturation',
+      'audio-polarity-invert',
+      'audio-mono-sum',
+      'audio-channel-swap',
+      'audio-stereo-split',
     ]);
     // Visual effects should be the remaining 12
     expect(visualEffects).toHaveLength(12);

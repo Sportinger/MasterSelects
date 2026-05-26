@@ -8,10 +8,18 @@ import {
   getCachedTimelinePhaseCorrelation,
 } from '../audio/timelineFrequencyPhaseCache';
 import {
+  getCachedTimelineBeatGrid,
+  getCachedTimelineOnsetMap,
+} from '../audio/timelineBeatOnsetCache';
+import {
   buildAudioRepairSuggestionsFromRefs,
   type AudioRepairSuggestion,
 } from '../audio/audioRepairSuggestions';
 import { buildClipNodeGraph } from './clipGraphProjection';
+import {
+  createNodeGraphOwnerClip,
+  resolveLinkedClipNodeGraphContext,
+} from './clipGraphLinking';
 
 interface AINodeAuthoringProjectContext {
   clips?: TimelineClip[];
@@ -365,6 +373,51 @@ function formatCachedPhaseCorrelationSummary(refId: string | undefined): string 
   ].join(' ');
 }
 
+function formatAudioEventPreview(events: readonly { time: number; strength: number; confidence: number }[]): string {
+  return events
+    .slice(0, 8)
+    .map((event) => `${roundAudioValue(event.time, 3)}s:${roundAudioValue(event.strength)}/${roundAudioValue(event.confidence)}`)
+    .join(',');
+}
+
+function formatCachedBeatGridSummary(refId: string | undefined): string {
+  if (!refId) {
+    return 'none';
+  }
+
+  const beatGrid = getCachedTimelineBeatGrid(refId);
+  if (!beatGrid) {
+    return `ref=${formatAudioRefId(refId)} summary=not-loaded`;
+  }
+
+  return [
+    `ref=${formatAudioRefId(refId)}`,
+    `tempoBpm=${beatGrid.tempoBpm !== undefined ? roundAudioValue(beatGrid.tempoBpm, 2) : 'unknown'}`,
+    `beats=${beatGrid.beatCount}`,
+    `confidence=${roundAudioValue(beatGrid.summary.confidence)}`,
+    `preview=${formatAudioEventPreview(beatGrid.beats) || 'none'}`,
+  ].join(' ');
+}
+
+function formatCachedOnsetMapSummary(refId: string | undefined): string {
+  if (!refId) {
+    return 'none';
+  }
+
+  const onsetMap = getCachedTimelineOnsetMap(refId);
+  if (!onsetMap) {
+    return `ref=${formatAudioRefId(refId)} summary=not-loaded`;
+  }
+
+  return [
+    `ref=${formatAudioRefId(refId)}`,
+    `events=${onsetMap.eventCount}`,
+    `avgStrength=${roundAudioValue(onsetMap.summary.averageStrength)}`,
+    `peakStrength=${roundAudioValue(onsetMap.summary.peakStrength)}`,
+    `preview=${formatAudioEventPreview(onsetMap.onsets) || 'none'}`,
+  ].join(' ');
+}
+
 function formatRepairSuggestion(suggestion: AudioRepairSuggestion): string {
   const params = Object.entries(suggestion.operation.params)
     .slice(0, MAX_AUDIO_CONTEXT_PARAMS)
@@ -464,6 +517,8 @@ function buildAudioSourceContext(
     `- processedAnalysisRefs=${formatAudioRefs(clip.audioState?.processedAnalysisRefs)}`,
     `- effectiveAnalysisRefs=${formatAudioRefs(effectiveRefs)}`,
     `- effectiveLoudnessSummary=${formatCachedLoudnessSummary(effectiveRefs?.loudnessEnvelopeId)}`,
+    `- effectiveBeatGridSummary=${formatCachedBeatGridSummary(effectiveRefs?.beatGridId)}`,
+    `- effectiveOnsetMapSummary=${formatCachedOnsetMapSummary(effectiveRefs?.onsetMapId)}`,
     `- effectiveFrequencySummary=${formatCachedFrequencySummary(effectiveRefs?.frequencySummaryId)}`,
     `- effectivePhaseCorrelationSummary=${formatCachedPhaseCorrelationSummary(effectiveRefs?.phaseCorrelationId)}`,
     `- effectiveRepairSuggestions=${formatAudioRepairSuggestions(effectiveRefs)}`,
@@ -527,8 +582,18 @@ export function buildAINodeAuthoringContext(
   definition: ClipCustomNodeDefinition,
   context?: AINodeAuthoringProjectContext,
 ): string {
-  const graph = buildClipNodeGraph(clip);
-  const track = context?.tracks?.find(candidate => candidate.id === clip.trackId);
+  const linkedContext = context
+    ? resolveLinkedClipNodeGraphContext(context.clips ?? [clip], context.tracks ?? [], clip.id)
+    : null;
+  const graphClip = linkedContext ? createNodeGraphOwnerClip(linkedContext) : clip;
+  const graph = buildClipNodeGraph(graphClip, linkedContext?.ownerTrack ?? undefined, {
+    linkedClip: linkedContext?.linkedClip,
+    linkedTrack: linkedContext?.linkedTrack,
+  });
+  const track = linkedContext?.ownerTrack ?? context?.tracks?.find(candidate => candidate.id === clip.trackId);
+  const audioContextClip = linkedContext?.linkedClip?.source?.type === 'audio'
+    ? linkedContext.linkedClip
+    : graphClip;
 
   return [
     'MASTERSELECTS AI NODE AUTHORING CONTEXT',
@@ -538,19 +603,20 @@ export function buildAINodeAuthoringContext(
     '- color params use hex strings like "#008cff" at runtime and are keyframed internally through RGB channels',
     '',
     'Clip:',
-    `- id=${clip.id}`,
-    `- name="${clip.name}"`,
-    `- source=${clip.source?.type ?? 'unknown'}`,
-    `- file="${clip.file?.name ?? 'unknown'}"`,
-    `- duration=${clip.duration}`,
-    `- inPoint=${clip.inPoint}`,
-    `- outPoint=${clip.outPoint}`,
+    `- id=${graphClip.id}`,
+    `- name="${graphClip.name}"`,
+    `- source=${graphClip.source?.type ?? 'unknown'}`,
+    `- file="${graphClip.file?.name ?? 'unknown'}"`,
+    `- duration=${graphClip.duration}`,
+    `- inPoint=${graphClip.inPoint}`,
+    `- outPoint=${graphClip.outPoint}`,
+    linkedContext?.linkedClip ? `- linkedClip=${linkedContext.linkedClip.id}:${linkedContext.linkedClip.source?.type ?? 'unknown'}` : '',
     '',
-    buildTextSourceContext(clip),
+    buildTextSourceContext(graphClip),
     '',
-    buildAudioSourceContext(clip, graph, track, context?.masterAudioState),
+    buildAudioSourceContext(audioContextClip, graph, track, context?.masterAudioState),
     '',
-    buildTimelineContext(clip, context),
+    buildTimelineContext(graphClip, context),
     '',
     buildGraphContext(graph, definition),
     '',

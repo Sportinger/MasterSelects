@@ -13,6 +13,15 @@ export interface TimelineSpectralSelectionInput {
   maxFrequencyHz: number;
 }
 
+export interface TimelineSpectralBrushSelectionInput {
+  clip: TimelineSpectralSelectionInput['clip'];
+  centerTimelineTime: number;
+  centerFrequencyHz: number;
+  timeRadiusSeconds: number;
+  frequencyRadiusHz: number;
+  maxFrequencyHz: number;
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, value));
@@ -51,5 +60,31 @@ export function resolveTimelineSpectralRegionSelection(
     ...timeSelection,
     frequencyMinHz,
     frequencyMaxHz,
+    selectionMode: 'rectangle',
+  };
+}
+
+export function resolveTimelineSpectralBrushSelection(
+  input: TimelineSpectralBrushSelectionInput,
+): TimelineSpectralRegionSelection {
+  const maxFrequencyHz = Math.max(1, Number.isFinite(input.maxFrequencyHz) ? input.maxFrequencyHz : 24_000);
+  const timeRadiusSeconds = Math.max(0.001, Number.isFinite(input.timeRadiusSeconds) ? input.timeRadiusSeconds : 0.05);
+  const frequencyRadiusHz = Math.max(1, Number.isFinite(input.frequencyRadiusHz) ? input.frequencyRadiusHz : maxFrequencyHz * 0.04);
+  const frequencyMinHz = clamp(input.centerFrequencyHz - frequencyRadiusHz, 0, maxFrequencyHz);
+  const frequencyMaxHz = clamp(input.centerFrequencyHz + frequencyRadiusHz, frequencyMinHz, maxFrequencyHz);
+  const selection = resolveTimelineSpectralRegionSelection({
+    clip: input.clip,
+    anchorTimelineTime: input.centerTimelineTime - timeRadiusSeconds,
+    focusTimelineTime: input.centerTimelineTime + timeRadiusSeconds,
+    anchorFrequencyHz: frequencyMinHz,
+    focusFrequencyHz: frequencyMaxHz,
+    maxFrequencyHz,
+  });
+
+  return {
+    ...selection,
+    selectionMode: 'brush',
+    brushTimeRadiusSeconds: timeRadiusSeconds,
+    brushFrequencyRadiusHz: frequencyRadiusHz,
   };
 }

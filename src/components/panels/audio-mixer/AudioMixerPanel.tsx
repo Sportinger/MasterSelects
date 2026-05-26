@@ -53,6 +53,15 @@ function formatSeconds(value: number): string {
   return `${value.toFixed(1)}s`;
 }
 
+function formatClock(timestamp: number | undefined): string {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return '--:--:--';
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 function getPreflightStatus(preflight: AudioExportPreflightState | undefined): {
   label: string;
   className: string;
@@ -77,6 +86,8 @@ function getRecordingLabel(phase: string): string {
   switch (phase) {
     case 'waiting-for-punch':
       return 'Waiting for punch';
+    case 'warming-input':
+      return 'Warming input';
     case 'requesting-input':
       return 'Requesting input';
     case 'recording':
@@ -271,6 +282,7 @@ function TrackMixerStrip({
           title={`${track.name} FX`}
           className="audio-effect-stack-compact audio-mixer-fx-stack"
           effects={audioState.effectStack ?? []}
+          runtimeDynamics={meter?.dynamics}
           emptyLabel="No track FX"
           onAddEffect={(descriptorId) => useTimelineStore.getState().addTrackAudioEffectInstance(track.id, descriptorId)}
           onUpdateEffect={(effect, paramName, value) => useTimelineStore.getState().updateTrackAudioEffectInstance(track.id, effect.id, { [paramName]: value })}
@@ -299,6 +311,7 @@ function MasterMixerStrip({
   const status = getPreflightStatus(preflight);
   const warnings = preflight?.warnings ?? [];
   const measurement = preflight?.measurement;
+  const measurementHistory = preflight?.measurementHistory ?? [];
 
   return (
     <section className={`audio-mixer-strip master ${masterAudio.limiterEnabled ? 'limited' : ''}`}>
@@ -380,6 +393,21 @@ function MasterMixerStrip({
             <span>RMS {measurement.rmsDbfs?.toFixed(1) ?? 'n/a'} dBFS</span>
           </div>
         )}
+        {measurementHistory.length > 0 && (
+          <details className="audio-mixer-measurement-history" open={measurementHistory.length > 1}>
+            <summary>Meter History ({measurementHistory.length})</summary>
+            <div>
+              {measurementHistory.slice(0, 5).map((entry, index) => (
+                <p key={`${entry.checkedAt}-${index}`}>
+                  <span>{formatClock(entry.checkedAt)}</span>
+                  <span>{entry.startTime.toFixed(1)}-{entry.endTime.toFixed(1)}s</span>
+                  <span>{entry.measurement.integratedLufs?.toFixed(1) ?? 'n/a'} LUFS</span>
+                  <span>{entry.measurement.truePeakDbtp?.toFixed(1) ?? 'n/a'} dBTP</span>
+                </p>
+              ))}
+            </div>
+          </details>
+        )}
         {warnings.length > 0 && (
           <div className="audio-mixer-warning-list">
             {warnings.slice(0, 4).map((warning) => (
@@ -396,6 +424,7 @@ function MasterMixerStrip({
           title="Master FX"
           className="audio-effect-stack-compact audio-mixer-fx-stack"
           effects={masterAudio.effectStack ?? []}
+          runtimeDynamics={meter?.dynamics}
           emptyLabel="No master FX"
           onAddEffect={(descriptorId) => useTimelineStore.getState().addMasterAudioEffectInstance(descriptorId)}
           onUpdateEffect={(effect, paramName, value) => useTimelineStore.getState().updateMasterAudioEffectInstance(effect.id, { [paramName]: value })}

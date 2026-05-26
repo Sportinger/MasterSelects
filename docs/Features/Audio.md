@@ -41,14 +41,14 @@ For audio clips, that tab renders the `VolumeTab`.
 - Volume is stored as the `audio-volume` effect and displayed in dB.
 - EQ is stored as the `audio-eq` effect with 10 bands: 31, 62, 125, 250, 500, 1k, 2k, 4k, 8k, 16k.
 - `AudioEffectRegistry` is the source of truth for audio effect descriptors, defaults, automation metadata, and render support.
-- Registered professional effects now include high-pass filter, low-pass filter, compressor, de-esser, limiter, noise gate, delay, and reverb in addition to volume and EQ.
-- Offline rendering applies registry-backed effect instances through `AudioEffectRenderer`; Web Audio nodes cover EQ, gain, filters, compressor, and split-band de-essing, while deterministic sample-domain processors cover limiter, noise gate, delay, and reverb. Clip processed analysis and export use this same renderer through `ClipAudioRenderService`.
+- Registered professional effects now include pan, parametric EQ, high-pass filter, low-pass filter, hum notch, de-click, noise reduction, compressor, de-esser, limiter, noise gate, expander, delay, reverb, saturation, polarity invert, mono sum, channel swap, and stereo split in addition to volume and 10-band EQ.
+- Offline rendering applies registry-backed effect instances through `AudioEffectRenderer`; Web Audio nodes cover EQ, gain, pan, parametric EQ, filters, hum notch, compressor, and split-band de-essing, while deterministic sample-domain processors cover de-click, broadband noise reduction, limiter, noise gate, expander, delay, reverb, saturation, polarity invert, mono sum, channel swap, and stereo split. Clip processed analysis and export use this same renderer through `ClipAudioRenderService`.
 - The audio Properties tab exposes a registry-backed `Audio FX Stack` for adding, reordering, bypassing, removing, and editing clip `audioState.effectStack` effects. Static default effects stay no-op; non-default signal-shaping params invalidate only processed analysis refs.
-- Static and automated `audio-volume` changes are handled as output/display gain. They do not invalidate source artifacts or processed waveform/spectrogram/loudness/beat/frequency refs; EQ, filter, compressor, limiter, noise-gate, speed, reverse, and edit-stack changes remain signal-shaping and invalidate processed refs.
+- Static and automated `audio-volume` changes are handled as output/display gain. They do not invalidate source artifacts or processed waveform/spectrogram/loudness/beat/frequency refs; EQ, filter, dynamics, time, saturation, utility channel processors, speed, reverse, and edit-stack changes remain signal-shaping and invalidate processed refs.
 - The `Keep Pitch` toggle maps to the clip-level `preservesPitch` flag.
-- The tab auto-adds missing `audio-volume` and `audio-eq` effects when opened.
+- The tab displays lazy default values for missing `audio-volume` and `audio-eq` effects and creates those legacy effects only when the user edits a volume or EQ control, so opening Properties does not dirty history.
 
-Live routing uses `audioRoutingManager` when EQ, pan, above-unity gain, Aux send gain, runtime metering, or browser-supported registry processors are active. Current live processors include high-pass, low-pass, compressor, de-esser, delay, and reverb. If a route is pure gain at or below unity and no meter is needed, playback falls back to direct `element.volume` updates.
+Live routing uses `audioRoutingManager` when EQ, pan, above-unity gain, Aux send gain, runtime metering, or browser-supported registry processors are active. Current live processors include registry pan, parametric EQ, high-pass, low-pass, hum notch, de-click, noise reduction, compressor, de-esser, limiter, noise gate, expander, delay, reverb, saturation, polarity invert, mono sum, channel swap, and stereo split. Varispeed scrub audio mirrors the supported route contract for registry pan, parametric EQ, hum notch, de-click, noise reduction, limiter, noise gate, expander, saturation, polarity invert, mono sum, channel swap, and stereo split instead of silently dropping those processors. If a route is pure gain at or below unity and no meter is needed, playback falls back to direct `element.volume` updates.
 
 ## Waveforms
 
@@ -73,7 +73,7 @@ Live routing uses `audioRoutingManager` when EQ, pan, above-unity gain, Aux send
 - Audio Focus keeps editing on the main timeline: video tracks remain visible as compact context, while audio tracks get larger lanes for detailed waveform work.
 - In Audio Focus with `Detailed Audio`, dragging inside an audio clip creates an inline audio region selection.
 - Region selections snap to nearby waveform valleys as a zero-cross-safe fallback when source waveform data is available.
-- The inline region toolbar can copy/paste region metadata and add non-destructive edit-stack operations for silence, insert silence, delete silence, reverse, invert polarity, left/right channel swap, mono sum, and repair operations.
+- The inline region toolbar can copy/paste region metadata and add non-destructive edit-stack operations for silence, insert silence, delete silence, reverse, invert polarity, left/right channel swap, mono sum, stereo split to mono, and repair operations.
 - Repair operations currently include 50 Hz hum notch filtering, de-click interpolation, splice-edge smoothing, and region RMS loudness matching. They are stored as `repair` edit-stack operations, so bypass, bake, processed analysis, and export all use the same path.
 - In Audio Focus with `Spectral Audio`, dragging inside an audio clip creates a time/frequency selection over the inline spectrogram.
 - The spectral region toolbar can add non-destructive `spectral-mask` or `spectral-resynthesis` edit-stack operations with bounded frequency metadata.
@@ -139,12 +139,12 @@ FFmpeg exports can still receive raw audio because they use `exportRawAudio()`.
 
 ## Limitations
 
-- No broadband noise reduction.
+- Basic non-neural broadband noise reduction is available as a deterministic registry insert for live playback, scrub preview, processed analysis, bake, and export. Advanced noise-profile learning, spectral restoration, and neural denoise are still out of scope.
 - Runtime meters cover live Peak/RMS track and master previews. Offline loudness analysis remains artifact-based for LUFS/history/detail views.
 - Recording persists active/stopped/error recovery metadata, stores active chunks and stopped capture blobs as artifacts, exposes stale entries in the Audio Mixer, and removes temporary recovery artifacts after a successful retry or dismiss. Before recovery-backed capture starts, `AudioRecordingService` estimates browser storage headroom, requests persistent storage for long or low-headroom takes when the browser supports it, and surfaces quota/persistence warnings in the toolbar and Audio Mixer.
 - Export applies the master target LUFS when set. The gain is computed from the rendered master bus after master effects/fader, capped to +/-24 dB, skipped for effective silence, and applied before the final limiter/peak normalization stage.
 - Live playback and export render enabled track sends into the master mix as send-return audio. Dedicated return-bus effect chains are still part of the broader mixer work.
-- Compressor, delay, and reverb have browser Web Audio live-routing support; limiter and noise gate have offline/export render support while full live-routing UI for every dynamics parameter is still in progress.
+- Compressor, de-esser, limiter, noise gate, expander, delay, reverb, pan, parametric EQ, hum notch, de-click, noise reduction, saturation, polarity invert, mono sum, channel swap, and stereo split have live-routing support plus offline/export render support. Full noise-profile restoration and full de-click restoration suites are still broader workstation work.
 - Region RMS loudness matching exists through the non-destructive repair stack. Full LUFS/true-peak loudness workflows are still in progress.
 - Spectral Audio mode has artifact-backed spectrogram display, time/frequency region edit operations, renderable spectral masks, and deterministic image-in-spectrum layers with layer keyframes. Brush editing and full phase-synthesized image resynthesis are still in progress.
 - Live audio is limited by browser `playbackRate` behavior and cannot play backwards.

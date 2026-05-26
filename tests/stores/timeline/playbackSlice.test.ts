@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createTestTimelineStore } from '../../helpers/storeFactory';
+import { MAX_ZOOM, MIN_ZOOM } from '../../../src/stores/timeline/constants';
 
 describe('playbackSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -150,18 +151,18 @@ describe('playbackSlice', () => {
     expect(store.getState().zoom).toBe(100);
 
     store.getState().setZoom(0.001);
-    expect(store.getState().zoom).toBe(0.1); // MIN_ZOOM
+    expect(store.getState().zoom).toBe(MIN_ZOOM);
 
-    store.getState().setZoom(999);
-    expect(store.getState().zoom).toBe(200); // MAX_ZOOM
+    store.getState().setZoom(MAX_ZOOM + 1);
+    expect(store.getState().zoom).toBe(MAX_ZOOM);
   });
 
   it('setZoom: accepts exact boundary values', () => {
-    store.getState().setZoom(0.1);
-    expect(store.getState().zoom).toBe(0.1);
+    store.getState().setZoom(MIN_ZOOM);
+    expect(store.getState().zoom).toBe(MIN_ZOOM);
 
-    store.getState().setZoom(200);
-    expect(store.getState().zoom).toBe(200);
+    store.getState().setZoom(MAX_ZOOM);
+    expect(store.getState().zoom).toBe(MAX_ZOOM);
   });
 
   it('setZoom: handles fractional zoom levels', () => {
