@@ -2,15 +2,28 @@
 // between aiTools/index.ts and handlers/clips.ts
 
 let _aiExecutionActive = false;
+let _legacyFeedbackMode: 'native' | 'bridge' | 'off' = 'native';
 let _totalStaggerBudgetMs = 3000;
 let _remainingStaggerBudgetMs = 3000;
 
-export function setAIExecutionActive(active: boolean): void {
+export function setAIExecutionActive(
+  active: boolean,
+  legacyFeedbackMode: 'native' | 'bridge' | 'off' = 'native',
+): void {
   _aiExecutionActive = active;
+  _legacyFeedbackMode = active ? legacyFeedbackMode : 'native';
 }
 
 export function isAIExecutionActive(): boolean {
+  return _aiExecutionActive && _legacyFeedbackMode === 'native';
+}
+
+export function isAIExecutionRunning(): boolean {
   return _aiExecutionActive;
+}
+
+export function getAIExecutionLegacyFeedbackMode(): 'native' | 'bridge' | 'off' {
+  return _legacyFeedbackMode;
 }
 
 /**

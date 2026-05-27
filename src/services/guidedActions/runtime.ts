@@ -30,6 +30,7 @@ import type {
 
 type StopStatus = 'cancelled' | 'skipped';
 type ActiveSessionPolicy = 'reject' | 'cancel-existing';
+const REDUCED_MOTION_BUDGET_MS = 250;
 
 interface GuidedRuntimeClock {
   now: () => number;
@@ -131,7 +132,9 @@ export class GuidedActionRuntime {
 
     const sessionId = request.sessionId ?? createGuidedSessionId();
     const controller = new AbortController();
-    const animationBudget = normalizeGuidedAnimationBudget(request.animationBudget);
+    const animationBudget = applyReducedMotionBudget(
+      normalizeGuidedAnimationBudget(request.animationBudget),
+    );
     const visualizationMode = animationBudget.disabled
       ? 'off'
       : request.visualizationMode ?? 'concise';
@@ -481,6 +484,26 @@ function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new GuidedRuntimeAbortError();
   }
+}
+
+function applyReducedMotionBudget(budget: ReturnType<typeof normalizeGuidedAnimationBudget>): ReturnType<typeof normalizeGuidedAnimationBudget> {
+  if (budget.disabled || !prefersReducedGuidedMotion()) {
+    return budget;
+  }
+
+  return {
+    ...budget,
+    compression: 'aggressive',
+    totalMs: Math.min(budget.totalMs, REDUCED_MOTION_BUDGET_MS),
+  };
+}
+
+function prefersReducedGuidedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return false;
+  }
+
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function isToolResult(value: unknown): value is ToolResult {

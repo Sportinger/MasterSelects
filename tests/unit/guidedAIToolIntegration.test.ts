@@ -198,6 +198,28 @@ describe('guided AI tool integration', () => {
       status: 'completed',
     }));
   });
+
+  it('suppresses legacy AI feedback while guided replay owns chat visualization', async () => {
+    flags.guidedActionsRuntime = true;
+    flags.guidedActionsAIReplay = true;
+    const clip = createClip();
+    useTimelineStore.setState({ clips: [clip], aiActionOverlays: [] });
+
+    const result = await executeAITool('splitClip', {
+      clipId: clip.id,
+      splitTime: 2,
+      withLinked: false,
+    }, 'chat', {
+      guidedAnimationBudgetMs: 0,
+    });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().aiActionOverlays).toHaveLength(0);
+    expect(useGuidedActionStore.getState().activeSession).toEqual(expect.objectContaining({
+      label: 'AI: splitClip',
+      status: 'completed',
+    }));
+  });
 });
 
 function createClip(overrides: Partial<TimelineClip> = {}): TimelineClip {

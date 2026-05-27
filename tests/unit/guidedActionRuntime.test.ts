@@ -165,6 +165,58 @@ describe('guided action runtime', () => {
     expect(state.spotlight).toBeNull();
   });
 
+  it('caps planned animation when the system prefers reduced motion', async () => {
+    vi.useFakeTimers();
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({
+        addEventListener: vi.fn(),
+        addListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        matches: true,
+        media: '(prefers-reduced-motion: reduce)',
+        onchange: null,
+        removeEventListener: vi.fn(),
+        removeListener: vi.fn(),
+      }),
+    });
+    const runtime = new GuidedActionRuntime({
+      actionHandlers: {
+        executeTool: () => ({ success: true }),
+      },
+    });
+
+    try {
+      const resultPromise = runtime.startSession({
+        sessionId: 'reduced-motion',
+        callerContext: 'chat',
+        animationBudget: { totalMs: 5000, compression: 'none' },
+        actions: [
+          { type: 'delay', ms: 1000 },
+          { type: 'executeTool', tool: 'setTransform', args: { clipId: 'clip-1', x: 240 } },
+        ],
+      });
+
+      await Promise.resolve();
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(result.status).toBe('completed');
+      expect(result.diagnostics.normalizedBudgetMs).toBe(250);
+      expect(result.diagnostics.plannedDurationMs).toBeLessThanOrEqual(250);
+      expect(useGuidedActionStore.getState().activeSession?.context.animationBudget).toEqual(expect.objectContaining({
+        compression: 'aggressive',
+        totalMs: 250,
+      }));
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: originalMatchMedia,
+      });
+    }
+  });
+
   it('fails a session when confirmState validation does not match store state', async () => {
     const runtime = new GuidedActionRuntime({
       targetRegistry: new GuidedTargetRegistry(),

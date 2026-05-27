@@ -28,6 +28,62 @@ export function GuidedActionOverlay() {
   useEffect(() => registerDomGuidedTargetResolvers(guidedTargetRegistry), []);
 
   useEffect(() => {
+    if (
+      !activeSession
+      || activeSession.status !== 'running'
+      || activeSession.context.visualizationMode === 'off'
+      || activeSession.context.animationBudget.disabled
+    ) {
+      return;
+    }
+
+    let frameId: number | null = null;
+    let disposed = false;
+
+    const resolveVisibleTargets = () => {
+      frameId = null;
+      const targets = collectVisibleTargets({
+        calloutTarget: callout?.target,
+        highlightTargets: highlights.map((highlight) => highlight.target),
+        inputLockTargets: activeSession.context.inputLock.mode === 'targetOnly'
+          ? activeSession.context.inputLock.targets
+          : [],
+        spotlightTarget: spotlight,
+      });
+
+      for (const target of targets) {
+        void guidedTargetRegistry.resolve(target, {
+          sessionId: activeSession.id,
+          nowMs: Date.now(),
+        }).then((resolution) => {
+          if (!disposed) {
+            useGuidedActionStore.getState().recordTargetResolution(resolution);
+          }
+        });
+      }
+    };
+
+    const scheduleResolve = () => {
+      if (frameId !== null) {
+        return;
+      }
+      frameId = window.requestAnimationFrame(resolveVisibleTargets);
+    };
+
+    window.addEventListener('resize', scheduleResolve);
+    window.addEventListener('scroll', scheduleResolve, true);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener('resize', scheduleResolve);
+      window.removeEventListener('scroll', scheduleResolve, true);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [activeSession, callout, highlights, spotlight]);
+
+  useEffect(() => {
     if (!activeSession || activeSession.context.inputLock.mode !== 'locked') {
       return;
     }
@@ -216,6 +272,34 @@ function clampRectToViewport(
   }
 
   return { x, y, width, height };
+}
+
+function collectVisibleTargets({
+  calloutTarget,
+  highlightTargets,
+  inputLockTargets,
+  spotlightTarget,
+}: {
+  calloutTarget?: GuidedTargetRef;
+  highlightTargets: GuidedTargetRef[];
+  inputLockTargets: GuidedTargetRef[];
+  spotlightTarget: GuidedTargetRef | null;
+}): GuidedTargetRef[] {
+  const targets = [
+    spotlightTarget,
+    calloutTarget ?? null,
+    ...highlightTargets,
+    ...inputLockTargets,
+  ].filter((target): target is GuidedTargetRef => target !== null);
+  const seen = new Set<string>();
+  return targets.filter((target) => {
+    const key = getGuidedTargetKey(target);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function buildTargetOnlyShieldSegments(

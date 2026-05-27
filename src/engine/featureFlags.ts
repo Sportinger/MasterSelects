@@ -20,9 +20,9 @@ export const flags = {
   waveformPyramid: false,  // Artifact-backed multi-resolution waveform data
   audioEffectRegistry: false,  // Registry-backed audio effect descriptors
   audioMixer: false,  // Track/send/master mixer controls
-  guidedActionsRuntime: false,  // Shared guided action contracts, scheduler, and transient session store
-  guidedActionsAIReplay: false,  // Visual replay for AI tool calls
-  guidedActionsTutorials: false,  // Tutorial scenarios using guided actions
+  guidedActionsRuntime: true,  // Shared guided action contracts, scheduler, and transient session store
+  guidedActionsAIReplay: true,  // Visual replay for AI tool calls
+  guidedActionsTutorials: true,  // Tutorial scenarios using guided actions
   guidedActionsRecorder: false,  // Future guided action authoring/recording layer
 };
 

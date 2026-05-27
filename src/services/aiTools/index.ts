@@ -94,9 +94,10 @@ export async function executeAITool(
     return { success: false, error: access.reason };
   }
 
-  setAIExecutionActive(true);
+  const useGuidedExecution = shouldUseGuidedAIToolExecution(callerContext, options);
+  setAIExecutionActive(true, useGuidedExecution ? getGuidedLegacyFeedback(options) : getLegacyFeedback(options));
   try {
-    if (shouldUseGuidedAIToolExecution(callerContext, options)) {
+    if (useGuidedExecution) {
       return await executeGuidedAITool(toolName, args, callerContext, options);
     }
     return await _executeAIToolInternal(toolName, args, callerContext, options);
@@ -141,7 +142,7 @@ export async function executeAIToolCalls(
     }));
   }
 
-  setAIExecutionActive(true);
+  setAIExecutionActive(true, getGuidedLegacyFeedback(options));
   try {
     const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, options);
     const guidedResultByKey = new Map(guidedResults.map((result) => [getToolCallResultKey(result), result.result]));
@@ -392,6 +393,10 @@ function consumeGuidedReplayBudget(
 
 function getGuidedLegacyFeedback(options: AIToolExecutionOptions): GuidedLegacyFeedbackMode {
   return options.guidedLegacyFeedback ?? 'off';
+}
+
+function getLegacyFeedback(options: AIToolExecutionOptions): GuidedLegacyFeedbackMode {
+  return options.legacyFeedback ?? 'native';
 }
 
 function getGuidedVisualizationMode(options: AIToolExecutionOptions): GuidedVisualizationMode | undefined {
