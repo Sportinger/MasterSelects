@@ -41,6 +41,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'trimClip',
   'splitClip',
   'splitClipAtPlayhead',
+  'prepareTimelinePlacementRange',
   'updateClipTransform',
   'toggleClipReverse',
   'setClipParent',
@@ -193,8 +194,6 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'toggleLoopPlayback',
   'setPlaybackSpeed',
   'setDuration',
-  'setToolMode',
-  'toggleCutTool',
 
   'loadState',
   'clearTimeline',

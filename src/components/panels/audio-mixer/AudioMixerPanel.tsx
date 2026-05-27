@@ -1,6 +1,8 @@
 import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import './AudioMixerPanel.css';
 import { useTimelineStore } from '../../../stores/timeline';
+import type { LabelColor } from '../../../stores/mediaStore/types';
 import type {
   AudioEffectInstance,
   AudioExportPreflightState,
@@ -11,17 +13,15 @@ import type {
 } from '../../../types';
 import { AudioExportPipeline } from '../../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../../services/audio/AudioRecordingService';
-import {
-  isAudioRecordingActivePhase,
-  resolveTimelineRecordingRange,
-  toggleTimelineAudioRecording,
-} from '../../../services/audio/timelineRecordingWorkflow';
 import { getAudioEffect } from '../../../engine/audio/AudioEffectRegistry';
 import { AudioEffectStackControl } from '../properties/AudioEffectStackControl';
 import { AudioEqualizerInstanceList } from '../properties/AudioEqualizerInstanceList';
 import { AudioLevelMeter } from '../../timeline/components/AudioLevelMeter';
 import { getAudioPanSliderStyle } from '../../timeline/utils/audioPanSliderStyle';
 import { collectAudioEqInstances, type AudioEqInstanceDescriptor } from '../../../engine/audio';
+import { LABEL_COLORS, getLabelHex } from '../media/labelColors';
+import { useContextMenuPosition } from '../../../hooks/useContextMenuPosition';
+import { getTimelineTrackColor, getTrackLabelColor } from '../../timeline/trackColor';
 
 const DEFAULT_MASTER_AUDIO_STATE: MasterAudioState = {
   volumeDb: 0,
@@ -32,7 +32,6 @@ const DEFAULT_MASTER_AUDIO_STATE: MasterAudioState = {
 };
 
 const MASTER_FOCUS_ID = '__master__';
-const TRACK_COLORS = ['#b2e000', '#cc8a12', '#5527b8', '#c23491', '#185b2f', '#9a9d70', '#6b122a', '#ac0a53'];
 
 type MixerCssProperties = CSSProperties & {
   '--strip-color'?: string;
@@ -41,6 +40,12 @@ type MixerCssProperties = CSSProperties & {
 type FxWindowTarget =
   | { scope: 'track'; trackId: string; effectId?: string }
   | { scope: 'master'; effectId?: string };
+
+type TrackColorMenuTarget = {
+  x: number;
+  y: number;
+  trackId: string;
+};
 
 function getTrackAudioState(track: TimelineTrack): TrackAudioState {
   return {
@@ -93,37 +98,6 @@ function getPreflightStatus(preflight: AudioExportPreflightState | undefined): {
     return { label: 'Checked', className: 'ok' };
   }
   return { label: 'Not checked', className: '' };
-}
-
-function getRecordingLabel(phase: string): string {
-  switch (phase) {
-    case 'waiting-for-punch':
-      return 'Waiting for punch';
-    case 'warming-input':
-      return 'Warming input';
-    case 'requesting-input':
-      return 'Requesting input';
-    case 'recording':
-      return 'Recording';
-    case 'stopping':
-      return 'Stopping';
-    case 'complete':
-      return 'Complete';
-    case 'error':
-      return 'Error';
-    default:
-      return 'Idle';
-  }
-}
-
-function getTrackColor(track: TimelineTrack, index: number): string {
-  const name = track.name.toLowerCase();
-  if (name.includes('kick') || name.includes('drum')) return '#516a86';
-  if (name.includes('snare')) return '#355f85';
-  if (name.includes('synth')) return '#77815d';
-  if (name.includes('violin')) return TRACK_COLORS[index % TRACK_COLORS.length];
-  if (name.includes('voice') || name.includes('dialog')) return '#53a8d9';
-  return TRACK_COLORS[index % TRACK_COLORS.length];
 }
 
 function getEffectName(effect: AudioEffectInstance): string {
@@ -223,12 +197,14 @@ function TrackMixerStripComponent({
   focused,
   onFocus,
   onOpenFx,
+  onOpenColorMenu,
 }: {
   track: TimelineTrack;
   index: number;
   focused: boolean;
   onFocus: () => void;
   onOpenFx: (target: FxWindowTarget) => void;
+  onOpenColorMenu: (event: ReactMouseEvent, trackId: string) => void;
 }) {
   const meter = useTimelineStore(state => state.runtimeAudioMeters.trackMeters[track.id]);
   const audioState = getTrackAudioState(track);
@@ -236,7 +212,7 @@ function TrackMixerStripComponent({
   const effectiveSolo = audioState.solo;
   const effects = audioState.effectStack ?? [];
   const sends = audioState.sends ?? [];
-  const stripStyle: MixerCssProperties = { '--strip-color': getTrackColor(track, index) };
+  const stripStyle: MixerCssProperties = { '--strip-color': getTimelineTrackColor(track, index) };
   const resetTrackPan = (event: ReactMouseEvent<HTMLInputElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -253,6 +229,7 @@ function TrackMixerStripComponent({
       className={`audio-mixer-strip ${focused ? 'focused' : ''} ${effectiveMuted ? 'muted' : ''} ${audioState.recordArm ? 'armed' : ''}`}
       style={stripStyle}
       onClick={onFocus}
+      onContextMenu={(event) => onOpenColorMenu(event, track.id)}
     >
       <div className="audio-mixer-strip-color" aria-hidden="true" />
 
@@ -370,6 +347,7 @@ const TrackMixerStrip = memo(TrackMixerStripComponent, (prev, next) => (
   && prev.index === next.index
   && prev.focused === next.focused
   && prev.onOpenFx === next.onOpenFx
+  && prev.onOpenColorMenu === next.onOpenColorMenu
 ));
 
 function MasterMixerStripComponent({
@@ -580,6 +558,107 @@ function MixerFxWindow({
   );
 }
 
+function MixerTrackColorMenu({
+  target,
+  tracks,
+  onClose,
+}: {
+  target: TrackColorMenuTarget | null;
+  tracks: readonly TimelineTrack[];
+  onClose: () => void;
+}) {
+  const { menuRef, adjustedPosition } = useContextMenuPosition(target);
+
+  useEffect(() => {
+    if (!target) return undefined;
+
+    const handlePointerOutside = (event: PointerEvent | MouseEvent) => {
+      const eventTarget = event.target;
+      if (eventTarget instanceof Node && menuRef.current?.contains(eventTarget)) return;
+      onClose();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('pointerdown', handlePointerOutside, true);
+      document.addEventListener('contextmenu', handlePointerOutside, true);
+    }, 0);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('pointerdown', handlePointerOutside, true);
+      document.removeEventListener('contextmenu', handlePointerOutside, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuRef, onClose, target]);
+
+  if (!target) return null;
+
+  const track = tracks.find(candidate => candidate.id === target.trackId);
+  if (!track) return null;
+
+  const trackIndex = tracks.findIndex(candidate => candidate.id === target.trackId);
+  const currentColor = getTrackLabelColor(track);
+  const currentColorHex = currentColor === 'none'
+    ? getTimelineTrackColor(track, trackIndex)
+    : getLabelHex(currentColor);
+  const handleSetTrackColor = (color: LabelColor) => {
+    useTimelineStore.getState().setTrackLabelColor(track.id, color);
+    onClose();
+  };
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="timeline-context-menu audio-mixer-track-color-menu"
+      style={{
+        position: 'fixed',
+        left: adjustedPosition?.x ?? target.x,
+        top: adjustedPosition?.y ?? target.y,
+        zIndex: 10000,
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <div className="context-menu-item disabled">
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span
+            className="clip-color-indicator"
+            style={{
+              background: currentColorHex,
+              width: 10,
+              height: 10,
+              borderRadius: 2,
+              border: '1px solid rgba(255,255,255,0.2)',
+              flexShrink: 0,
+            }}
+          />
+          {track.name}
+        </span>
+      </div>
+      <div className="context-menu-separator" />
+      <div className="clip-color-grid audio-mixer-track-color-grid">
+        {LABEL_COLORS.map(color => (
+          <span
+            key={color.key}
+            className={`label-picker-swatch ${color.key === 'none' ? 'none' : ''} ${currentColor === color.key ? 'active' : ''}`}
+            title={color.name}
+            style={{ background: color.key === 'none' ? 'var(--bg-tertiary)' : color.hex }}
+            onClick={() => handleSetTrackColor(color.key)}
+          >
+            {color.key === 'none' && <span className="label-picker-x">&times;</span>}
+          </span>
+        ))}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export function AudioMixerPanel() {
   const tracks = useTimelineStore(state => state.tracks);
   const clips = useTimelineStore(state => state.clips);
@@ -590,10 +669,10 @@ export function AudioMixerPanel() {
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
   const [recordingState, setRecordingState] = useState(audioRecordingService.getSnapshot());
-  const [recordingBusy, setRecordingBusy] = useState(false);
   const [preflightMeasuring, setPreflightMeasuring] = useState(false);
   const [focusedStripId, setFocusedStripId] = useState<string>(MASTER_FOCUS_ID);
   const [fxWindowTarget, setFxWindowTarget] = useState<FxWindowTarget | null>(null);
+  const [trackColorMenuTarget, setTrackColorMenuTarget] = useState<TrackColorMenuTarget | null>(null);
 
   useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
 
@@ -614,30 +693,12 @@ export function AudioMixerPanel() {
     }
   }, [audioTracks, fxWindowTarget]);
 
-  const armedAudioTracks = useMemo(
-    () => audioTracks.filter(track => track.audioState?.recordArm === true),
-    [audioTracks],
-  );
   const masterAudio = masterAudioState ?? DEFAULT_MASTER_AUDIO_STATE;
   const eqInstances = useMemo(
     () => collectAudioEqInstances({ clips, tracks: audioTracks, masterAudioState: masterAudio }),
     [audioTracks, clips, masterAudio],
   );
   const recoveryEntries = recordingState.recoveryEntries ?? audioRecordingService.listRecoveryEntries();
-  const isRecording = isAudioRecordingActivePhase(recordingState.phase);
-  const recordingStorageWarnings = recordingState.storageWarnings ?? [];
-  const recordingStorageWarning = recordingStorageWarnings.find(warning => warning.severity === 'warning')
-    ?? recordingStorageWarnings[0];
-  // Read the playhead as a snapshot only. Subscribing here would re-render the full mixer every playback frame.
-  const recordingRange = resolveTimelineRecordingRange({
-    playheadPosition: useTimelineStore.getState().playheadPosition,
-    inPoint,
-    outPoint,
-    duration,
-  });
-  const recordingElapsed = recordingState.startedAt
-    ? Math.max(0, ((recordingState.phase === 'recording' ? Date.now() : (recordingState.lastCompletedAt ?? Date.now())) - recordingState.startedAt) / 1000)
-    : 0;
 
   const handleStaticPreflight = useCallback(() => {
     runAudioExportPreflight(inPoint ?? 0, outPoint ?? duration);
@@ -669,34 +730,22 @@ export function AudioMixerPanel() {
     }
   }, [duration, inPoint, outPoint, preflightMeasuring, runAudioExportPreflight]);
 
-  const handleRecordToggle = useCallback(async () => {
-    if (recordingBusy) return;
-    setRecordingBusy(true);
-    try {
-      const timelineState = useTimelineStore.getState();
-      const currentArmedAudioTracks = timelineState.tracks.filter(track => (
-        track.type === 'audio' && track.audioState?.recordArm === true
-      ));
-      await toggleTimelineAudioRecording({
-        isRecording,
-        armedAudioTracks: currentArmedAudioTracks,
-        playheadPosition: timelineState.playheadPosition,
-        inPoint: timelineState.inPoint,
-        outPoint: timelineState.outPoint,
-        duration: timelineState.duration,
-        noArmedTrackCode: 'audio-recording-no-armed-track',
-        failureCode: 'audio-recording-failed',
-      });
-    } finally {
-      setRecordingBusy(false);
-    }
-  }, [isRecording, recordingBusy]);
-
   const handleJumpToEqInstance = useCallback((instance: AudioEqInstanceDescriptor) => {
     if (instance.scope === 'clip') {
       selectClip(instance.ownerId);
     }
   }, [selectClip]);
+
+  const handleOpenTrackColorMenu = useCallback((event: ReactMouseEvent, trackId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setFocusedStripId(trackId);
+    setTrackColorMenuTarget({
+      x: event.clientX,
+      y: event.clientY,
+      trackId,
+    });
+  }, []);
 
   const handleCommitRecovery = useCallback(async (sessionId: string) => {
     try {
@@ -715,73 +764,10 @@ export function AudioMixerPanel() {
     }
   }, []);
 
-  const activeSends = audioTracks.reduce((count, track) => (
-    count + (track.audioState?.sends?.filter(send => send.enabled !== false).length ?? 0)
-  ), 0);
-  const activeFx = audioTracks.reduce((count, track) => (
-    count + (track.audioState?.effectStack?.filter(effect => effect.enabled !== false).length ?? 0)
-  ), masterAudio.effectStack?.filter(effect => effect.enabled !== false).length ?? 0);
-  const preflightStatus = getPreflightStatus(masterAudio.exportPreflight);
   const focusedIsMaster = focusedStripId === MASTER_FOCUS_ID;
-  const recordButtonTitle = isRecording
-    ? `Stop audio recording${recordingElapsed > 0 ? ` (${formatSeconds(recordingElapsed)})` : ''}`
-    : armedAudioTracks.length > 0
-      ? recordingRange.punchOutTime !== undefined
-        ? `Punch record ${formatSeconds(recordingRange.startTime)} to ${formatSeconds(recordingRange.punchOutTime)}`
-        : `Record ${armedAudioTracks.length} armed track${armedAudioTracks.length === 1 ? '' : 's'} from ${formatSeconds(recordingRange.startTime)}`
-      : 'Arm an audio track before recording';
 
   return (
     <div className="audio-mixer-panel">
-      <header className="audio-mixer-header">
-        <div>
-          <h3>Audio Mixer</h3>
-          <span>
-            {audioTracks.length} tracks / {activeSends} sends / {activeFx} FX
-          </span>
-        </div>
-        <div className="audio-mixer-header-actions">
-          <span className={`audio-mixer-live-pill ${isRecording ? 'recording' : ''}`}>
-            {isRecording ? 'Recording' : 'Live'}
-          </span>
-          <span className={`audio-mixer-status ${preflightStatus.className}`}>{preflightStatus.label}</span>
-          {recoveryEntries.length > 0 && (
-            <span className="audio-mixer-status warning">{recoveryEntries.length} recovery</span>
-          )}
-          {recordingStorageWarning && (
-            <span
-              className={`audio-mixer-status ${recordingStorageWarning.severity === 'warning' ? 'warning' : ''}`}
-              title={recordingStorageWarning.message}
-            >
-              Storage
-            </span>
-          )}
-          <button
-            type="button"
-            className={`audio-mixer-record ${isRecording ? 'recording' : ''} ${armedAudioTracks.length > 0 ? 'armed' : ''}`}
-            onClick={handleRecordToggle}
-            disabled={recordingBusy || (!isRecording && armedAudioTracks.length === 0)}
-            title={recordButtonTitle}
-          >
-            {isRecording ? 'Stop' : 'Record'}
-          </button>
-        </div>
-      </header>
-
-      <div className="audio-mixer-recording-state">
-        <span>{getRecordingLabel(recordingState.phase)}</span>
-        {recordingState.punchInTime !== undefined && (
-          <span>Punch {formatSeconds(recordingState.punchInTime)}{recordingState.punchOutTime !== undefined ? `-${formatSeconds(recordingState.punchOutTime)}` : ''}</span>
-        )}
-        {recordingElapsed > 0 && <strong>{formatSeconds(recordingElapsed)}</strong>}
-        {recordingState.lastError && <em>{recordingState.lastError}</em>}
-        {recordingStorageWarning && (
-          <em className={`storage ${recordingStorageWarning.severity}`}>
-            {recordingStorageWarning.message}
-          </em>
-        )}
-      </div>
-
       {recoveryEntries.length > 0 && (
         <div className="audio-mixer-recovery-list">
           {recoveryEntries.slice(0, 4).map(entry => (
@@ -832,6 +818,7 @@ export function AudioMixerPanel() {
                   focused={focusedStripId === track.id}
                   onFocus={() => setFocusedStripId(track.id)}
                   onOpenFx={setFxWindowTarget}
+                  onOpenColorMenu={handleOpenTrackColorMenu}
                 />
               ))}
             </div>
@@ -855,6 +842,11 @@ export function AudioMixerPanel() {
           tracks={audioTracks}
           masterAudio={masterAudio}
           onClose={() => setFxWindowTarget(null)}
+        />
+        <MixerTrackColorMenu
+          target={trackColorMenuTarget}
+          tracks={audioTracks}
+          onClose={() => setTrackColorMenuTarget(null)}
         />
       </div>
     </div>

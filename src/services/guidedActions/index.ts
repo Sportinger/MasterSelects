@@ -7,6 +7,7 @@ export * from './runtime';
 export * from './compiler';
 export * from './semanticExecutionAdapter';
 export * from './surfaceInteractionDriver';
+export * from './choreography/timelineEditReplayDescriptors';
 export * from './scenarios/recording';
 export * from './scenarios/tutorialScenarioCompiler';
 export * from './scenarios/validation';

@@ -8,8 +8,8 @@ import { FileStorageService, fileStorageService } from './core/FileStorageServic
 import { NativeFileStorageService, nativeFileStorageService } from './core/NativeFileStorageService';
 import { NativeProjectCoreService } from './core/NativeProjectCoreService';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
-
-const log = Logger.create('ProjectFileService');
+import { artifactService } from './domains/ArtifactService';
+import { getHashFromArtifactId, normalizeArtifactId } from '../../artifacts/ids';
 import { ProjectCoreService } from './core/ProjectCoreService';
 import { AnalysisService } from './domains/AnalysisService';
 import { TranscriptService } from './domains/TranscriptService';
@@ -32,11 +32,26 @@ import {
 } from './recentProjects';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from './types';
 
+const log = Logger.create('ProjectFileService');
+
 type IterableDirectoryHandle = FileSystemDirectoryHandle & {
   values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle>;
 };
 
 export type ProjectBackend = 'fsa' | 'native';
+
+export interface DeleteMediaFileArtifactsOptions {
+  mediaId: string;
+  projectPath?: string;
+  fileHash?: string;
+  proxyStorageKeys?: string[];
+  audioArtifactRefs?: string[];
+}
+
+export interface DeleteMediaFileArtifactsResult {
+  deleted: string[];
+  failed: string[];
+}
 
 class ProjectFileService {
   // Domain services
@@ -252,6 +267,22 @@ class ProjectFileService {
         type: this.getMimeTypeFromFileName(target.fileName),
       }),
     };
+  }
+
+  private async deleteRawFileNative(relativePath: string): Promise<boolean> {
+    const projectPath = this.nativeCoreService?.getProjectPath();
+
+    if (!projectPath) {
+      return false;
+    }
+
+    const target = parseRawRelativePath(relativePath);
+    if (!target) {
+      return false;
+    }
+
+    const fullPath = this.joinPath(projectPath, target.relativePath);
+    return NativeHelperClient.deleteFile(fullPath);
   }
 
   private createNativeFileHandle(fullPath: string, name: string): FileSystemFileHandle {
@@ -670,6 +701,21 @@ class ProjectFileService {
     return this.fileStorage.deleteFile(handle, subFolder as ProjectFolderKey, fileName);
   }
 
+  async deleteEntry(
+    subFolder: keyof typeof PROJECT_FOLDERS,
+    entryName: string,
+    options?: { recursive?: boolean }
+  ): Promise<boolean> {
+    if (this._activeBackend === 'native' && this.nativeFileStorage && this.nativeCoreService) {
+      const path = this.nativeCoreService.getProjectPath();
+      if (!path) return false;
+      return this.nativeFileStorage.deleteEntry(path, subFolder as ProjectFolderKey, entryName, options);
+    }
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.fileStorage.deleteEntry(handle, subFolder as ProjectFolderKey, entryName, options);
+  }
+
   async listFiles(subFolder: keyof typeof PROJECT_FOLDERS): Promise<string[]> {
     if (this._activeBackend === 'native' && this.nativeFileStorage && this.nativeCoreService) {
       const path = this.nativeCoreService.getProjectPath();
@@ -706,6 +752,20 @@ class ProjectFileService {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return null;
     return this.rawMediaService.getFileFromRaw(handle, relativePath);
+  }
+
+  async deleteRawFile(relativePath: string | undefined): Promise<boolean> {
+    if (!relativePath) {
+      return false;
+    }
+
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      return this.deleteRawFileNative(relativePath);
+    }
+
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.rawMediaService.deleteFromRaw(handle, relativePath);
   }
 
   resolveRawFilePath(relativePath: string | undefined): string | null {
@@ -843,6 +903,16 @@ class ProjectFileService {
     return this.cacheService.hasThumbnail(handle, fileHash);
   }
 
+  async deleteThumbnail(fileHash: string): Promise<boolean> {
+    if (this._activeBackend === 'native') {
+      return this.deleteFile('CACHE_THUMBNAILS', `${fileHash}.jpg`);
+    }
+
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.cacheService.deleteThumbnail(handle, fileHash);
+  }
+
   async saveGaussianSplatRuntime(fileHash: string, variant: string, blob: Blob): Promise<boolean> {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return false;
@@ -871,6 +941,16 @@ class ProjectFileService {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return null;
     return this.cacheService.getWaveform(handle, mediaId);
+  }
+
+  async deleteWaveform(mediaId: string): Promise<boolean> {
+    if (this._activeBackend === 'native') {
+      return this.deleteFile('CACHE_WAVEFORMS', `${mediaId}.waveform`);
+    }
+
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.cacheService.deleteWaveform(handle, mediaId);
   }
 
   // ============================================
@@ -961,6 +1041,16 @@ class ProjectFileService {
     return this.proxyStorageService.hasProxyAudio(handle, mediaId);
   }
 
+  async deleteProxy(mediaId: string): Promise<boolean> {
+    if (this._activeBackend === 'native') {
+      return this.deleteEntry('PROXY', mediaId, { recursive: true });
+    }
+
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.proxyStorageService.deleteProxy(handle, mediaId);
+  }
+
   // ============================================
   // ANALYSIS SERVICE DELEGATION
   // ============================================
@@ -1006,6 +1096,10 @@ class ProjectFileService {
   }
 
   async deleteAnalysis(mediaId: string): Promise<boolean> {
+    if (this._activeBackend === 'native') {
+      return this.deleteFile('ANALYSIS', `${mediaId}.json`);
+    }
+
     const handle = this.coreService.getProjectHandle();
     if (!handle) return false;
     return this.analysisService.deleteAnalysis(handle, mediaId);
@@ -1031,6 +1125,102 @@ class ProjectFileService {
     const handle = this.coreService.getProjectHandle();
     if (!handle) return [];
     return this.transcriptService.getTranscribedRanges(handle, mediaId);
+  }
+
+  async deleteTranscript(mediaId: string): Promise<boolean> {
+    if (this._activeBackend === 'native') {
+      return this.deleteFile('TRANSCRIPTS', `${mediaId}.json`);
+    }
+
+    const handle = this.coreService.getProjectHandle();
+    if (!handle) return false;
+    return this.transcriptService.deleteTranscript(handle, mediaId);
+  }
+
+  async deleteAudioArtifact(ref: string): Promise<boolean> {
+    const artifactId = normalizeArtifactId(ref);
+    const hash = getHashFromArtifactId(artifactId);
+    let deleted = false;
+
+    if (this._activeBackend === 'native' && hash) {
+      deleted = await this.deleteEntry(
+        'CACHE_ARTIFACTS',
+        `sha256/${hash.slice(0, 2)}/${hash}`,
+        { recursive: true },
+      ) || deleted;
+    } else {
+      const handle = this.coreService.getProjectHandle();
+      if (handle) {
+        deleted = await artifactService.deleteArtifact(handle, artifactId) || deleted;
+      }
+    }
+
+    try {
+      deleted = await artifactService.createIndexedDBStore().deleteArtifact(artifactId) || deleted;
+    } catch (error) {
+      log.debug('IndexedDB artifact delete skipped', { artifactId, error });
+    }
+
+    if (hash) {
+      try {
+        await projectDB.deleteArtifactManifest(artifactId);
+        await projectDB.deleteArtifactBlob(hash);
+      } catch (error) {
+        log.debug('Artifact manifest/blob cleanup skipped', { artifactId, error });
+      }
+    }
+
+    return deleted;
+  }
+
+  async deleteMediaFileArtifacts(options: DeleteMediaFileArtifactsOptions): Promise<DeleteMediaFileArtifactsResult> {
+    const deleted: string[] = [];
+    const failed: string[] = [];
+    const uniqueProxyKeys = [...new Set([
+      ...(options.proxyStorageKeys ?? []),
+      options.fileHash,
+      options.mediaId,
+    ].filter((key): key is string => Boolean(key)))];
+    const uniqueAudioRefs = [...new Set(options.audioArtifactRefs ?? [])];
+
+    const attempt = async (label: string, task: () => Promise<boolean>) => {
+      try {
+        const ok = await task();
+        if (ok) {
+          deleted.push(label);
+        }
+      } catch (error) {
+        failed.push(label);
+        log.warn('Failed to delete media artifact', { label, error });
+      }
+    };
+
+    if (options.projectPath) {
+      await attempt(`raw:${options.projectPath}`, () => this.deleteRawFile(options.projectPath));
+    }
+
+    if (options.fileHash) {
+      await attempt(`thumbnail:${options.fileHash}`, () => this.deleteThumbnail(options.fileHash!));
+
+      const splatRuntimeFiles = await this.listFiles('CACHE_SPLATS');
+      for (const fileName of splatRuntimeFiles.filter((name) => name.startsWith(`${options.fileHash}.`) && name.endsWith('.rtgs'))) {
+        await attempt(`splat-runtime:${fileName}`, () => this.deleteFile('CACHE_SPLATS', fileName));
+      }
+    }
+
+    await attempt(`analysis:${options.mediaId}`, () => this.deleteAnalysis(options.mediaId));
+    await attempt(`transcript:${options.mediaId}`, () => this.deleteTranscript(options.mediaId));
+    await attempt(`waveform:${options.mediaId}`, () => this.deleteWaveform(options.mediaId));
+
+    for (const proxyKey of uniqueProxyKeys) {
+      await attempt(`proxy:${proxyKey}`, () => this.deleteProxy(proxyKey));
+    }
+
+    for (const ref of uniqueAudioRefs) {
+      await attempt(`audio-artifact:${ref}`, () => this.deleteAudioArtifact(ref));
+    }
+
+    return { deleted, failed };
   }
 }
 

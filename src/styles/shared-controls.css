@@ -537,7 +537,7 @@ input[type="checkbox"] {
 .context-menu-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 8px 12px;
   cursor: pointer;
   transition: background 0.1s;
@@ -593,6 +593,8 @@ input[type="checkbox"] {
 }
 
 .submenu-arrow {
+  margin-left: auto;
+  padding-left: 12px;
   font-size: 8px;
   color: var(--text-secondary);
 }
@@ -614,7 +616,7 @@ input[type="checkbox"] {
   z-index: 10001;
 }
 
-.context-menu-item.has-submenu:hover .context-submenu {
+.context-menu-item.has-submenu:hover > .context-submenu {
   display: block;
 }
 

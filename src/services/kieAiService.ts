@@ -957,7 +957,7 @@ class KieAiService {
       accountName: 'Kie.ai',
       accountId: '',
       credits,
-      creditsUsd: credits, // Kie.ai credits map 1:1 to USD
+      creditsUsd: credits * 0.005,
     };
   }
 }

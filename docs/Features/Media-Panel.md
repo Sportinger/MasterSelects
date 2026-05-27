@@ -13,6 +13,7 @@ Import, organize, and manage media assets with folder structure, proxy generatio
 - [AI Generator Tray](#ai-generator-tray)
 - [Source Thumbnail Cache](#source-thumbnail-cache)
 - [Folder Organization](#folder-organization)
+- [Deleting Media](#deleting-media)
 - [Compositions](#compositions)
 - [Proxy Generation](#proxy-generation)
 - [Selection](#selection)
@@ -213,6 +214,18 @@ renameFolder(id, name)            // Rename
 toggleFolderExpanded(id)          // Toggle expand/collapse
 moveToFolder(itemIds[], folderId) // Move items (null = root)
 ```
+
+---
+
+## Deleting Media
+
+Deleting imported media files from the Media Panel now performs a project-wide cleanup:
+
+- If the media is used by clips in any composition, a confirmation dialog reports that those clips will be removed from all compositions.
+- Project-local source files in `Raw/` are deleted when no remaining media item references the same project path.
+- Derived project files are deleted: `Proxy/` folders, `Analysis/*.json`, `Transcripts/*.json`, `Cache/waveforms/*.waveform`, `Cache/thumbnails/*.jpg`, gaussian-splat runtime caches, and referenced audio-analysis artifacts.
+- IndexedDB mirrors are cleaned up as well: media records, proxy frames, analysis cache, source thumbnails, thumbnails, file handles, and audio artifacts.
+- Hash-based artifacts such as proxies and thumbnails are preserved when another remaining media item still shares the same file hash.
 
 ---
 

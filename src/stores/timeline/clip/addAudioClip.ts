@@ -13,6 +13,22 @@ import { generateTimelineWaveformAnalysisForFile } from '../../../services/audio
 
 const log = Logger.create('AddAudioClip');
 
+function getCachedMediaWaveform(mediaFileId: string | undefined): Pick<TimelineClip, 'audioState' | 'waveform' | 'waveformChannels' | 'waveformGenerating' | 'waveformProgress'> | null {
+  if (!mediaFileId) return null;
+  const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+  if (!mediaFile?.waveform?.length) return null;
+
+  return {
+    waveform: mediaFile.waveform,
+    waveformChannels: mediaFile.waveformChannels,
+    ...(mediaFile.audioAnalysisRefs
+      ? { audioState: { sourceAnalysisRefs: mediaFile.audioAnalysisRefs } }
+      : {}),
+    waveformGenerating: false,
+    waveformProgress: 100,
+  };
+}
+
 export interface AddAudioClipParams {
   trackId: string;
   file: File;
@@ -74,6 +90,7 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
 
   // Check if this is a large file (audio-only has higher threshold)
   const isLargeFile = file.size > AUDIO_WAVEFORM_THRESHOLD;
+  const cachedWaveform = getCachedMediaWaveform(mediaFileId);
 
   // Mark clip as ready first (waveform will load in background)
   updateClip(clip.id, {
@@ -81,8 +98,10 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
     outPoint: naturalDuration,
     source: { type: 'audio', audioElement: audio, naturalDuration, mediaFileId },
     isLoading: false,
-    waveformGenerating: waveformsEnabled && !isLargeFile,
-    waveformProgress: 0,
+    ...(cachedWaveform ?? {
+      waveformGenerating: waveformsEnabled && !isLargeFile,
+      waveformProgress: 0,
+    }),
   });
 
   // Generate waveform in background - only if enabled and not very large
@@ -90,7 +109,7 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
     log.debug('Skipping waveform for very large file', { sizeMB: (file.size / 1024 / 1024).toFixed(0), file: file.name });
   }
 
-  if (waveformsEnabled && !isLargeFile) {
+  if (waveformsEnabled && !isLargeFile && !cachedWaveform) {
     // Run waveform generation async (don't await)
     generateWaveformAsync(clip.id, file, mediaFileId, updateClip);
   }

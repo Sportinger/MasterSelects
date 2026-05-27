@@ -8,6 +8,15 @@ export interface TimelineGridPlan {
   minorIntervalPixels: number;
   majorEveryMinor: number;
   labelMode: 'time' | 'timecode';
+  timeIntervalSeconds: number;
+  timeIntervalPixels: number;
+  timeMajorIntervalSeconds: number;
+  timeMajorEveryMinor: number;
+  frameIntervalSeconds: number;
+  frameIntervalPixels: number;
+  frameMajorEveryMinor: number;
+  frameGridOpacity: number;
+  timeGridOpacity: number;
 }
 
 interface CreateTimelineGridPlanInput {
@@ -17,6 +26,8 @@ interface CreateTimelineGridPlanInput {
 
 const DEFAULT_FRAME_RATE = 30;
 const MIN_FRAME_LINE_PX = 6;
+const FRAME_GRID_FADE_START_PX = 3;
+const FRAME_GRID_FADE_END_PX = 9;
 const TARGET_TIME_LINE_PX = 40;
 const TARGET_LABEL_PX = 120;
 const NICE_SECONDS = [1, 2, 5];
@@ -54,6 +65,12 @@ function getMajorEveryMinor(majorIntervalSeconds: number, minorIntervalSeconds: 
   return Math.max(1, Math.round(majorIntervalSeconds / Math.max(minorIntervalSeconds, 0.001)));
 }
 
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  if (edge0 === edge1) return value >= edge1 ? 1 : 0;
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 export function createTimelineGridPlan({
   zoom,
   frameRate,
@@ -62,9 +79,15 @@ export function createTimelineGridPlan({
   const safeFrameRate = sanitizePositiveNumber(frameRate, DEFAULT_FRAME_RATE);
   const frameDurationSeconds = 1 / safeFrameRate;
   const frameWidthPixels = safeZoom * frameDurationSeconds;
+  const timeIntervalSeconds = getNiceSecondsAtLeast(TARGET_TIME_LINE_PX / safeZoom);
+  const timeMajorIntervalSeconds = getNiceSecondsAtLeast(TARGET_LABEL_PX / safeZoom);
+  const timeIntervalPixels = timeIntervalSeconds * safeZoom;
+  const timeMajorEveryMinor = getMajorEveryMinor(timeMajorIntervalSeconds, timeIntervalSeconds);
+  const labelFrameStep = getNiceFrameStepAtLeast(TARGET_LABEL_PX / frameWidthPixels);
+  const frameGridOpacity = smoothstep(FRAME_GRID_FADE_START_PX, FRAME_GRID_FADE_END_PX, frameWidthPixels);
+  const timeGridOpacity = 1 - frameGridOpacity;
 
   if (frameWidthPixels >= MIN_FRAME_LINE_PX) {
-    const labelFrameStep = getNiceFrameStepAtLeast(TARGET_LABEL_PX / frameWidthPixels);
     const majorIntervalSeconds = labelFrameStep * frameDurationSeconds;
 
     return {
@@ -75,20 +98,35 @@ export function createTimelineGridPlan({
       minorIntervalPixels: frameWidthPixels,
       majorEveryMinor: labelFrameStep,
       labelMode: 'timecode',
+      timeIntervalSeconds,
+      timeIntervalPixels,
+      timeMajorIntervalSeconds,
+      timeMajorEveryMinor,
+      frameIntervalSeconds: frameDurationSeconds,
+      frameIntervalPixels: frameWidthPixels,
+      frameMajorEveryMinor: labelFrameStep,
+      frameGridOpacity,
+      timeGridOpacity,
     };
   }
-
-  const minorIntervalSeconds = getNiceSecondsAtLeast(TARGET_TIME_LINE_PX / safeZoom);
-  const majorIntervalSeconds = getNiceSecondsAtLeast(TARGET_LABEL_PX / safeZoom);
 
   return {
     mode: 'time',
     frameRate: safeFrameRate,
-    minorIntervalSeconds,
-    majorIntervalSeconds,
-    minorIntervalPixels: minorIntervalSeconds * safeZoom,
-    majorEveryMinor: getMajorEveryMinor(majorIntervalSeconds, minorIntervalSeconds),
+    minorIntervalSeconds: timeIntervalSeconds,
+    majorIntervalSeconds: timeMajorIntervalSeconds,
+    minorIntervalPixels: timeIntervalPixels,
+    majorEveryMinor: timeMajorEveryMinor,
     labelMode: 'time',
+    timeIntervalSeconds,
+    timeIntervalPixels,
+    timeMajorIntervalSeconds,
+    timeMajorEveryMinor,
+    frameIntervalSeconds: frameDurationSeconds,
+    frameIntervalPixels: frameWidthPixels,
+    frameMajorEveryMinor: labelFrameStep,
+    frameGridOpacity,
+    timeGridOpacity,
   };
 }
 

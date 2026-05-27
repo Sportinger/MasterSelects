@@ -40,7 +40,7 @@ import './AIVideoPanel.css';
 
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
-const AI_GENERATIVE_BOARD_SERVICES: Array<'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = ['kieai', 'evolink', 'elevenlabs', 'suno'];
+const AI_GENERATIVE_BOARD_SERVICES: Array<'cloud' | 'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = ['cloud', 'kieai', 'evolink', 'elevenlabs', 'suno'];
 
 interface FlashBoardErrorBoundaryProps {
   children: ReactNode;
@@ -187,6 +187,8 @@ function JobTimer({ startDate }: { startDate: Date }) {
 
 export function AIVideoPanel() {
   const { apiKeys, openSettings } = useSettingsStore();
+  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
+  const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
   const accountSession = useAccountStore((s) => s.session);
   const loadAccountState = useAccountStore((s) => s.loadAccountState);
   const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
@@ -208,15 +210,20 @@ export function AIVideoPanel() {
 
   // Get current provider config
   const currentProvider = getKieAiProvider(selectedProvider) || providers[0];
-  const boardService = apiKeys.kieai
+  const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && apiKeys.kieai.trim());
+  const useEvolinkKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.evolink && apiKeys.evolink.trim());
+  const useElevenLabsKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.elevenlabs && apiKeys.elevenlabs.trim());
+  const boardService = useKieAiKeyByDefault
     ? 'kieai'
-    : apiKeys.evolink
+    : useEvolinkKeyByDefault
       ? 'evolink'
-      : apiKeys.elevenlabs
+      : useElevenLabsKeyByDefault
         ? 'elevenlabs'
-        : 'kieai';
+        : 'cloud';
   const boardProviderId =
-    boardService === 'evolink'
+    boardService === 'cloud'
+      ? 'cloud-kling'
+      : boardService === 'evolink'
       ? EVOLINK_NANO_BANANA_2_PROVIDER_ID
       : boardService === 'elevenlabs'
         ? 'elevenlabs-tts'
@@ -265,8 +272,8 @@ export function AIVideoPanel() {
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Check if API credentials are available for the selected service
-  const hasClassicGenerationAccess = Boolean(apiKeys.kieai || hasHostedCloudAccess);
-  const hasGenerationAccess = Boolean(apiKeys.kieai || apiKeys.evolink || apiKeys.elevenlabs || hasHostedCloudAccess);
+  const hasClassicGenerationAccess = Boolean(useKieAiKeyByDefault || hasHostedCloudAccess);
+  const hasGenerationAccess = Boolean(useKieAiKeyByDefault || useEvolinkKeyByDefault || useElevenLabsKeyByDefault || hasHostedCloudAccess);
 
   // Fetch account balance
   const fetchAccountBalance = useCallback(async () => {
@@ -274,9 +281,9 @@ export function AIVideoPanel() {
     try {
       let service: typeof cloudAiService | typeof kieAiService | typeof evolinkService | null = null;
 
-      if (apiKeys.kieai) {
+      if (useKieAiKeyByDefault) {
         service = kieAiService;
-      } else if (apiKeys.evolink) {
+      } else if (useEvolinkKeyByDefault) {
         service = evolinkService;
       } else if (hasHostedCloudAccess) {
         service = cloudAiService;
@@ -294,18 +301,18 @@ export function AIVideoPanel() {
     } finally {
       setIsLoadingBalance(false);
     }
-  }, [apiKeys.evolink, apiKeys.kieai, hasHostedCloudAccess]);
+  }, [hasHostedCloudAccess, useEvolinkKeyByDefault, useKieAiKeyByDefault]);
 
   // Set API key when it changes and fetch balance
   useEffect(() => {
-    if (apiKeys.kieai) {
+    if (useKieAiKeyByDefault) {
       kieAiService.setApiKey(apiKeys.kieai);
     }
-    if (apiKeys.evolink) {
+    if (useEvolinkKeyByDefault) {
       evolinkService.setApiKey(apiKeys.evolink);
     }
     fetchAccountBalance();
-  }, [apiKeys.evolink, apiKeys.kieai, fetchAccountBalance]);
+  }, [apiKeys.evolink, apiKeys.kieai, fetchAccountBalance, useEvolinkKeyByDefault, useKieAiKeyByDefault]);
 
   // Update version when provider changes
   useEffect(() => {
@@ -500,12 +507,12 @@ export function AIVideoPanel() {
 
   // Get the active service instance
   const getActiveService = useCallback(() => {
-    if (!apiKeys.kieai && hasHostedCloudAccess) {
+    if (!useKieAiKeyByDefault && hasHostedCloudAccess) {
       return cloudAiService;
     }
 
     return kieAiService;
-  }, [apiKeys.kieai, hasHostedCloudAccess]);
+  }, [hasHostedCloudAccess, useKieAiKeyByDefault]);
 
   // Generate video
   const generateVideo = useCallback(async () => {
@@ -548,7 +555,7 @@ export function AIVideoPanel() {
         taskId = await service.createImageToVideo(params);
       }
 
-      if (!apiKeys.kieai && hasHostedCloudAccess) {
+      if (!useKieAiKeyByDefault && hasHostedCloudAccess) {
         void loadAccountState();
         void fetchAccountBalance();
       }
@@ -612,8 +619,9 @@ export function AIVideoPanel() {
   }, [
     prompt, selectedProvider, selectedVersion, duration, aspectRatio, mode, generateAudio,
     generationType, startImagePreview, startCropData, endImagePreview, endCropData, isGenerating,
-    importVideoToProject, getCroppedImageUrl, getActiveService, apiKeys.kieai, hasHostedCloudAccess, loadAccountState,
+    importVideoToProject, getCroppedImageUrl, getActiveService, hasHostedCloudAccess, loadAccountState,
     fetchAccountBalance,
+    useKieAiKeyByDefault,
   ]);
 
   // Remove job from list

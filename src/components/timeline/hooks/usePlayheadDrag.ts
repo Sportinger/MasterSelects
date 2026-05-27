@@ -128,6 +128,7 @@ export function usePlayheadDrag({
   const handleMarkerMouseDown = useCallback(
     (e: React.MouseEvent, type: 'in' | 'out') => {
       e.stopPropagation();
+      if (e.button !== 0) return;
       e.preventDefault();
       if (isExporting) return;
 

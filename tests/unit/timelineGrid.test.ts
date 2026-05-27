@@ -8,6 +8,9 @@ describe('timeline grid planner', () => {
     expect(plan.mode).toBe('frame');
     expect(plan.minorIntervalSeconds).toBeCloseTo(1 / 30);
     expect(plan.minorIntervalPixels).toBeCloseTo(10);
+    expect(plan.frameIntervalPixels).toBeCloseTo(10);
+    expect(plan.frameGridOpacity).toBe(1);
+    expect(plan.timeGridOpacity).toBe(0);
     expect(plan.labelMode).toBe('timecode');
   });
 
@@ -16,7 +19,22 @@ describe('timeline grid planner', () => {
 
     expect(plan.mode).toBe('time');
     expect(plan.minorIntervalPixels).toBeGreaterThanOrEqual(40);
+    expect(plan.frameGridOpacity).toBe(0);
+    expect(plan.timeGridOpacity).toBe(1);
     expect(plan.labelMode).toBe('time');
+  });
+
+  it('fades frame grid visibility in before switching to frame labels', () => {
+    const plan = createTimelineGridPlan({ zoom: 150, frameRate: 30 });
+
+    expect(plan.mode).toBe('time');
+    expect(plan.frameIntervalPixels).toBeCloseTo(5);
+    expect(plan.timeIntervalPixels).toBeGreaterThan(plan.frameIntervalPixels);
+    expect(plan.frameGridOpacity).toBeGreaterThan(0);
+    expect(plan.frameGridOpacity).toBeLessThan(1);
+    expect(plan.timeGridOpacity).toBeGreaterThan(0);
+    expect(plan.timeGridOpacity).toBeLessThan(1);
+    expect(plan.frameGridOpacity + plan.timeGridOpacity).toBeCloseTo(1);
   });
 
   it('honors fractional composition frame rates for frame spacing', () => {

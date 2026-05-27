@@ -5,7 +5,7 @@ import { useEffect, useCallback } from 'react';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore';
-import type { GenerateClipAudioAnalysisOptions } from '../../stores/timeline/types';
+import type { GenerateClipAudioAnalysisOptions, TimelineAudioDisplayMode } from '../../stores/timeline/types';
 import type { ContextMenuState } from './types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';
@@ -24,14 +24,22 @@ interface TimelineContextMenuProps {
   clipMap: Map<string, TimelineClip>;
   selectedClipIds: Set<string>;
   isClipLocked: (clipId: string) => boolean;
+  thumbnailsEnabled: boolean;
+  waveformsEnabled: boolean;
+  audioDisplayMode: TimelineAudioDisplayMode;
 
   // Actions
   selectClip: (clipId: string) => void;
   removeClip: (clipId: string) => void;
   splitClipAtPlayhead: () => void;
+  rippleDeleteSelection: (clipIds?: string[]) => void;
+  deleteGapAtTime: (time: number) => void;
   toggleClipReverse: (clipId: string) => void;
   unlinkGroup: (clipId: string) => void;
   generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
+  toggleThumbnailsEnabled: () => void;
+  toggleWaveformsEnabled: () => void;
+  setAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
   convertSolidToMotionShape: (clipId: string) => string | null;
   createSubcompositionFromSelection: (clipId: string) => void;
   copyClipEffects: (clipId: string) => void;
@@ -52,12 +60,20 @@ export function TimelineContextMenu({
   clipMap,
   selectedClipIds,
   isClipLocked,
+  thumbnailsEnabled,
+  waveformsEnabled,
+  audioDisplayMode,
   selectClip: _selectClip,
   removeClip,
   splitClipAtPlayhead,
+  rippleDeleteSelection,
+  deleteGapAtTime,
   toggleClipReverse,
   unlinkGroup,
   generateWaveformForClip,
+  toggleThumbnailsEnabled,
+  toggleWaveformsEnabled,
+  setAudioDisplayMode,
   convertSolidToMotionShape,
   createSubcompositionFromSelection,
   copyClipEffects,
@@ -177,6 +193,7 @@ export function TimelineContextMenu({
   const mediaFile = getMediaFileForClip(contextMenu.clipId);
   const clip = clipMap.get(contextMenu.clipId);
   const isVideo = clip?.source?.type === 'video';
+  const isAudio = clip?.source?.type === 'audio';
   const isSolid = clip?.source?.type === 'solid';
   const isGenerating = mediaFile?.proxyStatus === 'generating';
   const hasProxy = mediaFile?.proxyStatus === 'ready';
@@ -307,6 +324,58 @@ export function TimelineContextMenu({
         </>
       )}
 
+      {(isVideo || isAudio) && (
+        <>
+          <div className="context-menu-separator" />
+          {isVideo && (
+            <div
+              className={`context-menu-item ${thumbnailsEnabled ? 'checked' : ''}`}
+              onClick={() => {
+                toggleThumbnailsEnabled();
+                setContextMenu(null);
+              }}
+            >
+              {thumbnailsEnabled ? '\u2713 ' : ''}Thumbnails
+            </div>
+          )}
+          {isAudio && (
+            <>
+              <div
+                className={`context-menu-item ${waveformsEnabled ? 'checked' : ''}`}
+                onClick={() => {
+                  toggleWaveformsEnabled();
+                  setContextMenu(null);
+                }}
+              >
+                {waveformsEnabled ? '\u2713 ' : ''}Waveforms
+              </div>
+              <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                <span>Audio Display</span>
+                <span className="submenu-arrow">{'\u25B6'}</span>
+                <div className="context-submenu">
+                  {([
+                    ['compact', 'Compact Audio'],
+                    ['detailed', 'Detailed Audio'],
+                    ['spectral', 'Spectral Audio'],
+                  ] as const).map(([mode, label]) => (
+                    <div
+                      key={mode}
+                      className={`context-menu-item ${audioDisplayMode === mode ? 'checked' : ''}`}
+                      onClick={() => {
+                        setAudioDisplayMode(mode);
+                        setContextMenu(null);
+                      }}
+                    >
+                      {audioDisplayMode === mode ? '\u2713 ' : ''}{label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
       <div className="context-menu-separator" />
       <div
         className="context-menu-item"
@@ -361,6 +430,27 @@ export function TimelineContextMenu({
         }}
       >
         Split at Playhead (C)
+      </div>
+      <div
+        className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
+        onClick={() => {
+          if (!canModifyTargets) return;
+          rippleDeleteSelection(targetClipIds);
+          setContextMenu(null);
+        }}
+      >
+        Ripple Delete
+      </div>
+      <div
+        className="context-menu-item"
+        onClick={() => {
+          if (!contextMenu) return;
+          const targetTime = Math.max(0, (clip?.startTime ?? 0) - 0.0005);
+          deleteGapAtTime(targetTime);
+          setContextMenu(null);
+        }}
+      >
+        Delete Gap at Clip Start
       </div>
 
       {isSolid && (
@@ -436,7 +526,7 @@ export function TimelineContextMenu({
       </div>
 
       {/* Generate Waveform option for audio clips */}
-      {clip?.source?.type === 'audio' && (
+      {isAudio && (
         <>
           <div className="context-menu-separator" />
           <div
@@ -457,7 +547,7 @@ export function TimelineContextMenu({
         </>
       )}
 
-      {(isVideo || clip?.source?.type === 'audio') && (
+      {(isVideo || isAudio) && (
         <>
           <div className="context-menu-separator" />
           <div

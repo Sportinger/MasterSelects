@@ -137,6 +137,7 @@ interface TimelineStoreState {
   clipKeyframes: Map<string, Keyframe[]>;
   markers: TimelineMarker[];
   masterAudioState?: MasterAudioState;
+  isExporting?: boolean;
 }
 
 interface MediaStoreState {
@@ -616,6 +617,10 @@ function applySnapshot(snapshot: StateSnapshot) {
   }
 }
 
+function isTimelineHistoryLocked(): boolean {
+  return getTimelineState?.().isExporting === true;
+}
+
 export const useHistoryStore = create<HistoryState>()(
   subscribeWithSelector((set, get) => ({
     undoStack: [],
@@ -655,6 +660,11 @@ export const useHistoryStore = create<HistoryState>()(
     },
 
     undo: () => {
+      if (isTimelineHistoryLocked()) {
+        log.warn('Blocked undo during timeline export');
+        return;
+      }
+
       // End any stuck batch first (safety: lost mouseup etc.)
       if (get().batchId !== null) {
         get().endBatch();
@@ -695,6 +705,11 @@ export const useHistoryStore = create<HistoryState>()(
     },
 
     redo: () => {
+      if (isTimelineHistoryLocked()) {
+        log.warn('Blocked redo during timeline export');
+        return;
+      }
+
       // End any stuck batch first
       if (get().batchId !== null) {
         get().endBatch();

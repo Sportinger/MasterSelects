@@ -33,7 +33,12 @@ export const ACTION_META: ShortcutActionMeta[] = [
   { id: 'edit.blendModeNext', label: 'Next Blend Mode', category: 'Editing' },
   { id: 'edit.blendModePrev', label: 'Previous Blend Mode', category: 'Editing' },
   // Tools
+  { id: 'tool.select', label: 'Select Tool', category: 'Tools' },
+  { id: 'tool.selectionGroup', label: 'Cycle Selection Tools', category: 'Tools' },
   { id: 'tool.cutToggle', label: 'Cut / Razor Tool', category: 'Tools' },
+  { id: 'tool.trimGroup', label: 'Cycle Trim Tools', category: 'Tools' },
+  { id: 'tool.placementGroup', label: 'Cycle Placement Tools', category: 'Tools' },
+  { id: 'tool.navigationGroup', label: 'Cycle Navigation Tools', category: 'Tools' },
   // Project
   { id: 'project.new', label: 'New Project', category: 'Project' },
   { id: 'project.open', label: 'Open Project', category: 'Project' },
@@ -102,7 +107,12 @@ const BASE_MAP: ShortcutMap = {
   // Panels
   'panel.toggleHoveredFullscreen': [{ key: 'ü' }],
   // Overridden per preset:
+  'tool.select': [{ key: 'v' }],
+  'tool.selectionGroup': [{ key: 'a' }],
   'tool.cutToggle': [{ key: 'c' }],
+  'tool.trimGroup': [],
+  'tool.placementGroup': [],
+  'tool.navigationGroup': [],
   'edit.splitAtPlayhead': [{ key: 'c', shift: true }],
   // Preview
   'preview.editMode': [{ key: 'tab' }],
@@ -148,6 +158,7 @@ const premiere = createPreset('premiere', 'Premiere Pro', {
   // Ctrl+Shift+X = Clear In/Out
   'edit.clearInOut': [{ key: 'x', ctrl: true, shift: true }],
   // C = Razor tool
+  'tool.select': [{ key: 'v' }],
   'tool.cutToggle': [{ key: 'c' }],
   // Ctrl+K = Add Edit (split at playhead)
   'edit.splitAtPlayhead': [{ key: 'k', ctrl: true }],
@@ -164,6 +175,7 @@ const davinci = createPreset('davinci', 'DaVinci Resolve', {
   // Alt+X = Clear In/Out
   'edit.clearInOut': [{ key: 'x', alt: true }],
   // B = Blade tool
+  'tool.select': [{ key: 'a' }],
   'tool.cutToggle': [{ key: 'b' }],
   // Ctrl+B = Split at playhead
   'edit.splitAtPlayhead': [{ key: 'b', ctrl: true }],
@@ -183,6 +195,7 @@ const finalcut = createPreset('finalcut', 'Final Cut Pro', {
   // Option+X = Clear In/Out (alt maps to Option on Mac)
   'edit.clearInOut': [{ key: 'x', alt: true }],
   // B = Blade tool
+  'tool.select': [{ key: 'a' }],
   'tool.cutToggle': [{ key: 'b' }],
   // Cmd+B = Blade at playhead
   'edit.splitAtPlayhead': [{ key: 'b', ctrl: true }],
@@ -223,6 +236,7 @@ const aftereffects = createPreset('aftereffects', 'After Effects', {
   'edit.blendModeNext': [{ key: '=', shift: true }],
   'edit.blendModePrev': [{ key: '-', shift: true }],
   // No Razor tool in AE
+  'tool.select': [{ key: 'v' }],
   'tool.cutToggle': [],
   // Ctrl+Alt+N = New Project (Ctrl+N is New Comp in AE)
   'project.new': [{ key: 'n', ctrl: true, alt: true }],

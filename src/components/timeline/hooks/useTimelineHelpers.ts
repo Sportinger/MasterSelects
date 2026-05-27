@@ -21,7 +21,7 @@ export function useTimelineHelpers({ zoom, frameRate, clips, getClipKeyframes }:
     [frameRate, zoom],
   );
   const gridInterval = gridPlan.minorIntervalSeconds;
-  const gridSize = gridPlan.minorIntervalPixels;
+  const gridSize = gridPlan.timeIntervalPixels;
 
   // Format time as MM:SS.ms
   const formatTime = useCallback((seconds: number) => {

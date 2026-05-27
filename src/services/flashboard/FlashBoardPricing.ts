@@ -4,11 +4,11 @@ import { calculateCost as calculatePiApiCost } from '../piApiService';
 import { estimateHostedElevenLabsSpeechCredits, type ElevenLabsModelRates } from '../elevenLabsService';
 import type { CatalogEntry } from './types';
 
-const KIEAI_USD_PER_CREDIT = 0.005;
-// Hosted customer credits are priced at 5x vendor Kie credits for a small margin.
-const HOSTED_KIE_CREDIT_MULTIPLIER = 5;
+export const KIEAI_USD_PER_CREDIT = 0.005;
+// Hosted customer credits are priced at 6x vendor Kie credits to keep margin after VAT, Stripe, and FX.
+export const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
 
-const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
+export const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
   'nano-banana-2': {
     '1K': 0.04,
     '2K': 0.06,

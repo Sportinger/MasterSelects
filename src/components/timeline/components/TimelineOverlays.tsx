@@ -2,6 +2,7 @@
 
 import '../TimelineInteractions.css';
 import React, { useEffect, useState } from 'react';
+import { IconFlag3Filled } from '@tabler/icons-react';
 import type { ClipDragState } from '../types';
 import { audioRecordingService } from '../../../services/audio/AudioRecordingService';
 import { isAudioRecordingActivePhase } from '../../../services/audio/timelineRecordingWorkflow';
@@ -10,6 +11,7 @@ interface TimelineOverlaysProps {
   // Time conversion
   timeToPixel: (time: number) => number;
   formatTime: (seconds: number) => string;
+  scrollX: number;
 
   // In/Out points
   inPoint: number | null;
@@ -17,7 +19,11 @@ interface TimelineOverlaysProps {
   duration: number;
   markerDrag: { type: 'in' | 'out' } | null;
   onMarkerMouseDown: (e: React.MouseEvent, type: 'in' | 'out') => void;
+  onMarkerContextMenu?: (e: React.MouseEvent, type: 'in' | 'out') => void;
   switchMotionClass?: string;
+  renderMode?: 'all' | 'trackOverlays' | 'rangeMarkers';
+  inLineOpacity?: number;
+  outLineOpacity?: number;
 
   // Clip drag
   clipDrag: ClipDragState | null;
@@ -39,12 +45,17 @@ interface TimelineOverlaysProps {
 export function TimelineOverlays({
   timeToPixel,
   formatTime,
+  scrollX,
   inPoint,
   outPoint,
   duration,
   markerDrag,
   onMarkerMouseDown,
+  onMarkerContextMenu,
   switchMotionClass = '',
+  renderMode = 'all',
+  inLineOpacity = 1,
+  outLineOpacity = 1,
   clipDrag,
   isRamPreviewing,
   ramPreviewProgress,
@@ -57,6 +68,10 @@ export function TimelineOverlays({
   const [recordingState, setRecordingState] = useState(audioRecordingService.getSnapshot());
   useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
 
+  const timeToViewportPixel = (time: number) => timeToPixel(time) - scrollX;
+  const renderTrackOverlays = renderMode !== 'rangeMarkers';
+  const renderRangeMarkers = renderMode !== 'trackOverlays';
+
   const recordingPunchStart = recordingState.punchInTime ?? recordingState.startTime;
   const recordingPunchEnd = recordingState.punchOutTime;
   const recordingPunchActive = isAudioRecordingActivePhase(recordingState.phase)
@@ -67,22 +82,22 @@ export function TimelineOverlays({
   return (
     <>
       {/* Snap line */}
-      {clipDrag?.isSnapping && clipDrag.snapIndicatorTime !== null && (
-        <div className="snap-line" style={{ left: timeToPixel(clipDrag.snapIndicatorTime) }} />
+      {renderTrackOverlays && clipDrag?.isSnapping && clipDrag.snapIndicatorTime !== null && (
+        <div className="snap-line" style={{ left: timeToViewportPixel(clipDrag.snapIndicatorTime) }} />
       )}
       {/* Guide line at original position when dragging across tracks (dimmer when not snapped) */}
-      {clipDrag && !clipDrag.isSnapping && clipDrag.trackChangeGuideTime !== null && (
-        <div className="snap-line snap-line-guide" style={{ left: timeToPixel(clipDrag.trackChangeGuideTime) }} />
+      {renderTrackOverlays && clipDrag && !clipDrag.isSnapping && clipDrag.trackChangeGuideTime !== null && (
+        <div className="snap-line snap-line-guide" style={{ left: timeToViewportPixel(clipDrag.trackChangeGuideTime) }} />
       )}
 
       {/* Work area overlays */}
-      {(inPoint !== null || outPoint !== null) && (
+      {renderTrackOverlays && (inPoint !== null || outPoint !== null) && (
         <>
           {inPoint !== null && inPoint > 0 && (
             <div
               className="work-area-overlay before"
               style={{
-                left: 0,
+                left: timeToViewportPixel(0),
                 width: timeToPixel(inPoint),
               }}
             />
@@ -91,7 +106,7 @@ export function TimelineOverlays({
             <div
               className="work-area-overlay after"
               style={{
-                left: timeToPixel(outPoint),
+                left: timeToViewportPixel(outPoint),
                 width: timeToPixel(duration - outPoint),
               }}
             />
@@ -99,11 +114,11 @@ export function TimelineOverlays({
         </>
       )}
 
-      {recordingPunchActive && (
+      {renderTrackOverlays && recordingPunchActive && (
         <div
           className={`timeline-recording-punch-range ${recordingState.phase}`}
           style={{
-            left: timeToPixel(recordingPunchStart),
+            left: timeToViewportPixel(recordingPunchStart),
             width: Math.max(2, timeToPixel(recordingPunchEnd - recordingPunchStart)),
           }}
           title={`Recording punch: ${formatTime(recordingPunchStart)} - ${formatTime(recordingPunchEnd)}`}
@@ -111,11 +126,11 @@ export function TimelineOverlays({
       )}
 
       {/* RAM preview progress */}
-      {isRamPreviewing && ramPreviewProgress !== null && (
+      {renderTrackOverlays && isRamPreviewing && ramPreviewProgress !== null && (
         <div
           className="ram-preview-progress-text"
           style={{
-            left: timeToPixel(playheadPosition) + 10,
+            left: timeToViewportPixel(playheadPosition) + 10,
           }}
         >
           {Math.round(ramPreviewProgress)}%
@@ -123,13 +138,13 @@ export function TimelineOverlays({
       )}
 
       {/* Export Progress Overlay */}
-      {isExporting && exportRange && (
+      {renderTrackOverlays && isExporting && exportRange && (
         <>
           {/* Progress bar - grows based on percentage (0-100%) */}
           <div
             className="timeline-export-overlay"
             style={{
-              left: timeToPixel(exportRange.start),
+              left: timeToViewportPixel(exportRange.start),
               width: timeToPixel(
                 (exportRange.end - exportRange.start) * ((exportProgress ?? 0) / 100)
               ),
@@ -140,7 +155,7 @@ export function TimelineOverlays({
             className="timeline-export-text"
             style={{
               left:
-                timeToPixel(
+                timeToViewportPixel(
                   exportRange.start +
                     (exportRange.end - exportRange.start) * ((exportProgress ?? 0) / 100)
                 ) - 10,
@@ -153,12 +168,12 @@ export function TimelineOverlays({
       )}
 
       {/* Playback cache indicators (blue) */}
-      {getCachedRanges().map((range, i) => (
+      {renderTrackOverlays && getCachedRanges().map((range, i) => (
         <div
           key={i}
           className="playback-cache-indicator"
           style={{
-            left: timeToPixel(range.start),
+            left: timeToViewportPixel(range.start),
             width: Math.max(2, timeToPixel(range.end - range.start)),
           }}
           title={`Cached: ${formatTime(range.start)} - ${formatTime(range.end)}`}
@@ -166,34 +181,42 @@ export function TimelineOverlays({
       ))}
 
       {/* In marker */}
-      {inPoint !== null && (
+      {renderRangeMarkers && inPoint !== null && (
         <div
           className={`in-out-marker in-marker ${recordingPunchActive ? 'recording-punch' : ''} ${switchMotionClass} ${markerDrag?.type === 'in' ? 'dragging' : ''}`}
-          style={{ left: timeToPixel(inPoint) }}
+          style={{
+            left: timeToViewportPixel(inPoint),
+            '--timeline-line-opacity': markerDrag?.type === 'in' ? 1 : inLineOpacity,
+          } as React.CSSProperties}
           title={`In: ${formatTime(inPoint)} (drag to move)`}
+          onContextMenu={(e) => onMarkerContextMenu?.(e, 'in')}
         >
           <div
             className="marker-flag"
             onMouseDown={(e) => onMarkerMouseDown(e, 'in')}
           >
-            I
+            <IconFlag3Filled className="timeline-flag-icon in-flag" aria-hidden="true" />
           </div>
           <div className="marker-line" />
         </div>
       )}
 
       {/* Out marker */}
-      {outPoint !== null && (
+      {renderRangeMarkers && outPoint !== null && (
         <div
           className={`in-out-marker out-marker ${recordingPunchActive ? 'recording-punch' : ''} ${switchMotionClass} ${markerDrag?.type === 'out' ? 'dragging' : ''}`}
-          style={{ left: timeToPixel(outPoint) }}
+          style={{
+            left: timeToViewportPixel(outPoint),
+            '--timeline-line-opacity': markerDrag?.type === 'out' ? 1 : outLineOpacity,
+          } as React.CSSProperties}
           title={`Out: ${formatTime(outPoint)} (drag to move)`}
+          onContextMenu={(e) => onMarkerContextMenu?.(e, 'out')}
         >
           <div
             className="marker-flag"
             onMouseDown={(e) => onMarkerMouseDown(e, 'out')}
           >
-            O
+            <IconFlag3Filled className="timeline-flag-icon out-flag" aria-hidden="true" />
           </div>
           <div className="marker-line" />
         </div>

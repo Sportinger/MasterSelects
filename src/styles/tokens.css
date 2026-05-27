@@ -281,7 +281,7 @@
 
   /* Timeline grid lines (subtle tinted vertical lines) */
   --timeline-grid-video: #282830;
-  --timeline-grid-audio: #283028;
+  --timeline-grid-audio: #2c2c2c;
 
   /* Preview overlay buttons (over dark canvas) */
   --preview-overlay-bg: rgba(0, 0, 0, 0.6);
@@ -371,7 +371,7 @@
 
   /* Timeline grid - light tinted lines */
   --timeline-grid-video: #d0d0d8;
-  --timeline-grid-audio: #c8d8c8;
+  --timeline-grid-audio: #d0d0d0;
 
   /* Preview overlay - frosted glass on dark canvas */
   --preview-overlay-bg: rgba(255, 255, 255, 0.2);
@@ -433,7 +433,7 @@
 
   /* Timeline grid - deeper black tinted lines */
   --timeline-grid-video: #101018;
-  --timeline-grid-audio: #081008;
+  --timeline-grid-audio: #101010;
 }
 
 }

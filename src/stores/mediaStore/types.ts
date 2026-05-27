@@ -107,6 +107,10 @@ export interface MediaFile extends MediaItem {
   bitrate?: number;      // bits per second
   hasAudio?: boolean;    // Does video have audio tracks?
   audioAnalysisRefs?: MediaFileAudioAnalysisRefs;
+  waveform?: number[];
+  waveformChannels?: number[][];
+  waveformStatus?: 'idle' | 'generating' | 'ready' | 'skipped' | 'error';
+  waveformProgress?: number;
   fileHash?: string;
   thumbnailUrl?: string;
   splatCount?: number;
@@ -352,6 +356,8 @@ export interface MediaState {
   previewCompositionId: string | null;
   sourceMonitorFileId: string | null;
   sourceMonitorPlaybackRequestId: number;
+  sourceMonitorInPoint: number | null;
+  sourceMonitorOutPoint: number | null;
 
   // Multi-layer playback (Resolume-style)
   activeLayerSlots: Record<number, string | null>;  // layerIndex (0=A..3=D) → compositionId

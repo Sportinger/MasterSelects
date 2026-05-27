@@ -121,6 +121,7 @@ function createMockStores() {
     selectedLayerId: null,
     clipKeyframes: new Map(),
     markers: [],
+    isExporting: false,
   };
   let mediaState: MediaMockState = {
     files: [],
@@ -418,6 +419,26 @@ describe('historyStore', () => {
   });
 
   // ─── Multiple sequential undo/redo ─────────────────────────────────
+
+  it('undo/redo: blocked while timeline export is active', () => {
+    mocks.setTimelineState({ zoom: 10 });
+    useHistoryStore.getState().captureSnapshot('zoom-10');
+    mocks.setTimelineState({ zoom: 20 });
+    useHistoryStore.getState().captureSnapshot('zoom-20');
+    mocks.setTimelineState({ isExporting: true });
+
+    useHistoryStore.getState().undo();
+    expect(mocks.timeline.getState().zoom).toBe(20);
+    expect(useHistoryStore.getState().currentSnapshot!.label).toBe('zoom-20');
+
+    mocks.setTimelineState({ isExporting: false });
+    useHistoryStore.getState().undo();
+    expect(mocks.timeline.getState().zoom).toBe(10);
+
+    mocks.setTimelineState({ isExporting: true });
+    useHistoryStore.getState().redo();
+    expect(mocks.timeline.getState().zoom).toBe(10);
+  });
 
   it('multiple sequential undos restore state correctly', () => {
     mocks.setTimelineState({ zoom: 10 });

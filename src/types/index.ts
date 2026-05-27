@@ -804,6 +804,7 @@ export interface TimelineTrack {
   name: string;
   type: 'video' | 'audio';
   height: number;
+  labelColor?: import('../stores/mediaStore/types').LabelColor;
   muted: boolean;
   visible: boolean;
   solo: boolean;

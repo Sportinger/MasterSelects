@@ -406,6 +406,7 @@
 
 .welcome-overlay.auth-dialog-pricing {
   width: min(1180px, 94vw);
+  max-height: min(92vh, 920px);
 }
 
 /* ─── Secondary / Ghost action buttons ─── */
@@ -608,7 +609,34 @@
 }
 
 .pricing-dialog-content {
-  gap: 28px;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.pricing-dialog-top-cta {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  align-items: center;
+}
+
+.pricing-dialog-top-selection {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pricing-dialog-signup {
+  width: min(360px, 100%);
+  min-height: 48px;
+  margin-top: 0;
+  border-color: rgba(232, 210, 145, 0.36);
+  font-size: 15px;
 }
 
 .pricing-dialog-intro {
@@ -1230,6 +1258,123 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
+.account-prices-card {
+  gap: 16px;
+}
+
+.account-price-rate {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.account-price-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.account-price-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.account-price-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.account-price-category {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(232, 210, 145, 0.72);
+}
+
+.account-price-name {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-price-note {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 11px;
+}
+
+.account-price-values {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.account-price-values strong {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+}
+
+.account-price-values span {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 11px;
+}
+
+.account-plan-price-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.account-plan-price-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(232, 210, 145, 0.12);
+  background: rgba(232, 210, 145, 0.045);
+}
+
+.account-plan-price-card span {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.account-plan-price-card strong {
+  overflow: hidden;
+  color: rgba(255, 237, 187, 0.94);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-plan-price-card em {
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
 .account-actions-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1322,6 +1467,11 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.02));
 }
 
+.pricing-dialog-footer-prices {
+  align-items: stretch;
+  grid-template-columns: 1fr;
+}
+
 .pricing-dialog-selection {
   display: flex;
   flex-direction: column;
@@ -1347,6 +1497,110 @@
   font-size: 13px;
   line-height: 1.55;
   color: rgba(255, 255, 255, 0.48);
+}
+
+.pricing-cloud-prices {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.pricing-cloud-prices-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.pricing-cloud-credit-rate {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border: 1px solid rgba(232, 210, 145, 0.16);
+  border-radius: 999px;
+  background: rgba(232, 210, 145, 0.06);
+  color: rgba(255, 237, 187, 0.9);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pricing-cloud-price-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pricing-cloud-price-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.pricing-cloud-price-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pricing-cloud-price-category {
+  color: rgba(232, 210, 145, 0.72);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pricing-cloud-price-name {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pricing-cloud-price-note {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pricing-cloud-price-values {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pricing-cloud-price-values strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pricing-cloud-price-values span {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 10px;
+}
+
+.pricing-dialog-checkout {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 250px;
 }
 
 .pricing-dialog-submit {
@@ -1377,8 +1631,52 @@
     align-items: flex-start;
   }
 
+  .account-price-list,
+  .account-plan-price-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-price-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .account-price-values {
+    align-items: flex-start;
+    text-align: left;
+  }
+
   .pricing-dialog-footer {
     grid-template-columns: 1fr;
+  }
+
+  .pricing-dialog-top-cta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pricing-dialog-signup {
+    width: 100%;
+  }
+
+  .pricing-cloud-prices-header {
+    flex-direction: column;
+  }
+
+  .pricing-cloud-price-list {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-cloud-price-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing-cloud-price-values {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .pricing-dialog-checkout {
+    width: auto;
   }
 
   .pricing-dialog-submit {

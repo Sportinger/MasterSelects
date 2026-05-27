@@ -25,6 +25,22 @@ import { generateTimelineWaveformAnalysisForFile } from '../../../services/audio
 
 const log = Logger.create('AddVideoClip');
 
+function getCachedMediaWaveform(mediaFileId: string | undefined): Pick<TimelineClip, 'audioState' | 'waveform' | 'waveformChannels' | 'waveformGenerating' | 'waveformProgress'> | null {
+  if (!mediaFileId) return null;
+  const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+  if (!mediaFile?.waveform?.length) return null;
+
+  return {
+    waveform: mediaFile.waveform,
+    waveformChannels: mediaFile.waveformChannels,
+    ...(mediaFile.audioAnalysisRefs
+      ? { audioState: { sourceAnalysisRefs: mediaFile.audioAnalysisRefs } }
+      : {}),
+    waveformGenerating: false,
+    waveformProgress: 100,
+  };
+}
+
 type FileWithPath = File & { path?: string };
 
 export interface AddVideoClipParams {
@@ -388,14 +404,16 @@ async function loadLinkedAudio(
   blobUrlManager.create(audioClipId, file, 'audio');
 
   // Mark audio clip as ready immediately
+  const cachedWaveform = getCachedMediaWaveform(mediaFileId);
   updateClip(audioClipId, {
     source: { type: 'audio', audioElement: audio, naturalDuration, mediaFileId },
     isLoading: false,
+    ...(cachedWaveform ?? {}),
   });
 
   // Generate waveform in background (non-blocking) - only if enabled and not large file
   const isLargeFile = shouldSkipWaveform(file);
-  if (waveformsEnabled && !isLargeFile) {
+  if (waveformsEnabled && !isLargeFile && !cachedWaveform) {
     // Mark waveform generation starting
     setClips(clips => updateClipById(clips, audioClipId, { waveformGenerating: true, waveformProgress: 0 }));
 

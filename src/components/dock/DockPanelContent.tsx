@@ -13,7 +13,6 @@ import { normalizePreviewPanelSource } from '../../utils/previewPanelSource';
 // AI services, YouTube API, and multicam analysis code
 const ExportPanel = lazy(() => import('../export/ExportPanel').then(m => ({ default: m.ExportPanel })));
 const AudioMixerPanel = lazy(() => import('../panels/audio-mixer/AudioMixerPanel').then(m => ({ default: m.AudioMixerPanel })));
-const ColorWorkspacePanel = lazy(() => import('../panels/color-workspace/ColorWorkspacePanel').then(m => ({ default: m.ColorWorkspacePanel })));
 const NodeWorkspacePanel = lazy(() => import('../panels/nodes/NodeWorkspacePanel').then(m => ({ default: m.NodeWorkspacePanel })));
 const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
 const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
@@ -63,8 +62,6 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <PropertiesPanel />;
     case 'audio-mixer':
       return <Suspense fallback={<PanelLoading />}><AudioMixerPanel /></Suspense>;
-    case 'color-workspace':
-      return <Suspense fallback={<PanelLoading />}><ColorWorkspacePanel /></Suspense>;
     case 'node-workspace':
       return <Suspense fallback={<PanelLoading />}><NodeWorkspacePanel /></Suspense>;
     case 'timeline':

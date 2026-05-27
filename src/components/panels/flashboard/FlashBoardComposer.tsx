@@ -53,6 +53,7 @@ import {
 } from '../../../services/flashboard/FlashBoardPromptRefiner';
 import {
   DEFAULT_FLASHBOARD_CHAT_PROVIDER,
+  DEFAULT_FLASHBOARD_CHAT_MODEL,
   DEFAULT_FLASHBOARD_CHAT_TEMPERATURE,
   DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   FLASHBOARD_CHAT_MODEL_OPTIONS,
@@ -583,36 +584,84 @@ export function FlashBoardComposer({
   const mediaFiles = useMediaStore((s) => s.files);
   const openAiApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.openai));
   const anthropicApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.anthropic));
+  const piApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.piapi));
   const kieAiApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.kieai));
   const evolinkApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.evolink));
   const elevenLabsApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.elevenlabs));
+  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
+  const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
   const lemonadeEndpoint = useSettingsStore((s) => s.lemonadeEndpoint);
   const openSettings = useSettingsStore((s) => s.openSettings);
-  const hasOpenAiKey = openAiApiKey.trim().length > 0;
-  const hasAnthropicKey = anthropicApiKey.trim().length > 0;
-  const hasKieAiKey = kieAiApiKey.trim().length > 0;
-  const hasEvolinkKey = evolinkApiKey.trim().length > 0;
-  const hasElevenLabsKey = elevenLabsApiKey.trim().length > 0;
+  const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && openAiApiKey.trim());
+  const useAnthropicKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.anthropic && anthropicApiKey.trim());
+  const usePiApiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.piapi && piApiKey.trim());
+  const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && kieAiApiKey.trim());
+  const useEvolinkKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.evolink && evolinkApiKey.trim());
+  const useElevenLabsKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.elevenlabs && elevenLabsApiKey.trim());
+  const hasOpenAiKey = useOpenAiKeyByDefault;
+  const hasAnthropicKey = useAnthropicKeyByDefault;
+  const hasKieAiKey = useKieAiKeyByDefault;
+  const hasEvolinkKey = useEvolinkKeyByDefault;
+  const hasElevenLabsKey = useElevenLabsKeyByDefault;
   const accountSession = useAccountStore((s) => s.session);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
+  const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
+  const openPricingDialog = useAccountStore((s) => s.openPricingDialog);
   const hasHostedSession = accountSession?.authenticated === true;
   const hasHostedAudioAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
 
   const catalog = useMemo(() => getCatalogEntries(), []);
+  const cloudFallbackAllowed = !serviceScope && (!allowedServices?.length || allowedServices.includes('cloud'));
+  const emptyCatalogFallbackService: CatalogEntry['service'] = cloudFallbackAllowed
+    ? 'cloud'
+    : serviceScope ?? initialService ?? DEFAULT_FLASHBOARD_SERVICE;
   const visibleCatalog = useMemo(
     () => catalog.filter((entry) => {
-      if (entry.service === 'cloud') {
-        return false;
-      }
       if (serviceScope && entry.service !== serviceScope) {
         return false;
       }
       if (allowedServices?.length && !allowedServices.includes(entry.service)) {
         return false;
       }
-      return true;
+      if (entry.service === 'cloud') {
+        if (!hasHostedSession) {
+          return false;
+        }
+        if ((entry.providerId === 'cloud-kling' || entry.providerId === 'nano-banana-2') && useKieAiKeyByDefault) {
+          return false;
+        }
+        if (entry.providerId === 'cloud-elevenlabs-tts' && useElevenLabsKeyByDefault) {
+          return false;
+        }
+        return true;
+      }
+      if (entry.service === 'piapi') {
+        return usePiApiKeyByDefault;
+      }
+      if (entry.service === 'kieai') {
+        return useKieAiKeyByDefault;
+      }
+      if (entry.service === 'evolink') {
+        return useEvolinkKeyByDefault;
+      }
+      if (entry.service === 'elevenlabs') {
+        return useElevenLabsKeyByDefault;
+      }
+      if (entry.service === 'suno') {
+        return useKieAiKeyByDefault;
+      }
+      return false;
     }),
-    [allowedServices, catalog, serviceScope],
+    [
+      allowedServices,
+      catalog,
+      hasHostedSession,
+      serviceScope,
+      useElevenLabsKeyByDefault,
+      useEvolinkKeyByDefault,
+      useKieAiKeyByDefault,
+      usePiApiKeyByDefault,
+    ],
   );
   const modelEntriesByCategory = useMemo(
     () => visibleCatalog.reduce<Record<ModelCategoryId, CatalogEntry[]>>((groups, entry) => {
@@ -646,7 +695,9 @@ export function FlashBoardComposer({
       return visibleCatalog.find((entry) => (
         entry.service === DEFAULT_FLASHBOARD_SERVICE
         && entry.providerId === DEFAULT_FLASHBOARD_PROVIDER_ID
-      )) ?? visibleCatalog[0];
+      ))
+        ?? visibleCatalog.find((entry) => entry.service === 'cloud' && entry.providerId === DEFAULT_FLASHBOARD_PROVIDER_ID)
+        ?? visibleCatalog[0];
     },
     [initialProviderId, initialService, serviceScope, visibleCatalog],
   );
@@ -668,16 +719,16 @@ export function FlashBoardComposer({
   const appliedInitialTargetRef = useRef<string | null>(null);
 
   const [service, setService] = useState<CatalogEntry['service']>(
-    initialEntry?.service ?? serviceScope ?? initialService ?? DEFAULT_FLASHBOARD_SERVICE,
+    initialEntry?.service ?? visibleCatalog[0]?.service ?? emptyCatalogFallbackService,
   );
-  const [providerId, setProviderId] = useState(initialEntry?.providerId ?? initialProviderId ?? '');
+  const [providerId, setProviderId] = useState(initialEntry?.providerId ?? visibleCatalog[0]?.providerId ?? initialProviderId ?? '');
   const [version, setVersion] = useState(initialVersion ?? initialEntry?.versions[0] ?? DEFAULT_FLASHBOARD_MODEL_VERSION);
   const [mode, setMode] = useState('std');
   const [prompt, setPrompt] = useState('');
   const [chatPanelOpen, setChatPanelOpen] = useState(initialMode === 'chat');
   const [chatPrompt, setChatPrompt] = useState('');
   const [chatProvider, setChatProvider] = useState<FlashBoardChatProvider>(DEFAULT_FLASHBOARD_CHAT_PROVIDER);
-  const [chatModel, setChatModel] = useState(FLASHBOARD_CHAT_MODEL_OPTIONS[DEFAULT_FLASHBOARD_CHAT_PROVIDER][0]?.id ?? 'gpt-5.5');
+  const [chatModel, setChatModel] = useState(DEFAULT_FLASHBOARD_CHAT_MODEL);
   const [chatTemperature, setChatTemperature] = useState(DEFAULT_FLASHBOARD_CHAT_TEMPERATURE);
   const [openAiReasoningEffort, setOpenAiReasoningEffort] = useState<FlashBoardOpenAiReasoningEffort>(
     DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
@@ -801,9 +852,6 @@ export function FlashBoardComposer({
     return '';
   }, [multiShots, normalizedMultiPrompt, prompt]);
   const effectiveChatPrompt = chatPrompt.trim();
-  const canUseHostedKieFallback = hasHostedSession
-    && service === 'kieai'
-    && (providerId === 'nano-banana-2' || providerId === 'kling-3.0');
   const chatModelOptions = useMemo<FlashBoardChatModelOption[]>(() => {
     if (chatProvider !== 'lemonade') {
       return FLASHBOARD_CHAT_MODEL_OPTIONS[chatProvider];
@@ -959,12 +1007,20 @@ export function FlashBoardComposer({
     voiceId,
   ]);
   const backendValidationError = useMemo(() => {
-    if (service === 'kieai' && !hasKieAiKey && !canUseHostedKieFallback) {
-      return 'Add a Kie.ai API key in Settings to generate with Kie.ai.';
+    if (service === 'piapi' && !usePiApiKeyByDefault) {
+      return 'Enable a PiAPI key as default in Settings to generate with PiAPI.';
+    }
+
+    if (service === 'kieai' && !hasKieAiKey) {
+      return 'Enable a Kie.ai key as default in Settings to generate with Kie.ai.';
     }
 
     if (service === 'evolink' && !hasEvolinkKey) {
-      return 'Add an EvoLink API key in Settings to generate with EvoLink.';
+      return 'Enable an EvoLink key as default in Settings to generate with EvoLink.';
+    }
+
+    if (service === 'suno' && !hasKieAiKey) {
+      return 'Enable a Kie.ai key as default in Settings to generate with Suno.';
     }
 
     if (service === 'cloud' && !isHostedAudioMode && !hasHostedSession) {
@@ -972,7 +1028,7 @@ export function FlashBoardComposer({
     }
 
     return null;
-  }, [canUseHostedKieFallback, hasEvolinkKey, hasHostedSession, hasKieAiKey, isHostedAudioMode, service]);
+  }, [hasEvolinkKey, hasHostedSession, hasKieAiKey, isHostedAudioMode, service, usePiApiKeyByDefault]);
   const currentPrice = useMemo(() => (
     selectedEntry
       ? getFlashBoardPriceEstimate({
@@ -1646,7 +1702,7 @@ export function FlashBoardComposer({
     try {
       const response = await sendFlashBoardChatMessage({
         anthropicApiKey,
-        hostedAvailable: chatProvider === 'openai' && hasHostedSession,
+        hostedAvailable: chatProvider === 'openai' && hasHostedSession && !useOpenAiKeyByDefault,
         lemonadeEndpoint,
         model: activeChatModelId,
         openAiApiKey,
@@ -1693,7 +1749,23 @@ export function FlashBoardComposer({
     openAiApiKey,
     openAiReasoningEffort,
     openSettings,
+    useOpenAiKeyByDefault,
   ]);
+
+  const handleClearChatHistory = useCallback(() => {
+    closePopover();
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
+    if (copiedChatResetTimeoutRef.current !== null) {
+      window.clearTimeout(copiedChatResetTimeoutRef.current);
+      copiedChatResetTimeoutRef.current = null;
+    }
+    setChatMessages([]);
+    setChatPrompt('');
+    setChatError(null);
+    setCopiedChatMessageId(null);
+    setIsChatting(false);
+  }, [closePopover]);
 
   const handleChatMessageDoubleClick = useCallback((message: FlashBoardChatMessage) => {
     if (message.role !== 'assistant' || message.isPending || !message.text.trim()) {
@@ -1820,9 +1892,8 @@ export function FlashBoardComposer({
     const requestIsAudio = selectedEntry.outputType === 'audio' || service === 'elevenlabs' || service === 'suno';
     const requestIsSuno = service === 'suno' || providerId === SUNO_PROVIDER_ID;
     const requestIsElevenLabs = requestIsAudio && !requestIsSuno;
-    const requestService = canUseHostedKieFallback && !hasKieAiKey ? 'cloud' : service;
     updateNodeRequest(node.id, {
-      service: requestService,
+      service,
       providerId,
       version,
       outputType: selectedEntry.outputType ?? 'video',
@@ -1858,7 +1929,6 @@ export function FlashBoardComposer({
     aspectRatio,
     board,
     canGenerate,
-    canUseHostedKieFallback,
     composer.endMediaFileId,
     composer.startMediaFileId,
     createDraftNode,
@@ -1866,7 +1936,6 @@ export function FlashBoardComposer({
     effectiveGenerateAudio,
     effectivePrompt,
     effectiveReferenceMediaFileIds,
-    hasKieAiKey,
     imageSize,
     languageCode,
     languageOverride,
@@ -2532,6 +2601,8 @@ export function FlashBoardComposer({
   const composerStyle = showComposerReferences
     ? ({ '--fb-reference-strip-width': `${Math.max(80, composerReferenceBadges.length * 80 + 4)}px` } as CSSProperties)
     : undefined;
+  const showChatCloudActions = Boolean(chatError && !hasHostedSession && /sign in/i.test(chatError));
+  const showGenerationCloudActions = Boolean(backendValidationError && service === 'cloud' && /sign in/i.test(backendValidationError));
 
   return (
     <div
@@ -2564,9 +2635,19 @@ export function FlashBoardComposer({
             );
           })}
           {chatError && (
-            <div className="fb-chat-message assistant is-error">
+            <div className={`fb-chat-message assistant is-error ${showChatCloudActions ? 'has-cloud-actions' : ''}`}>
               <div className="fb-chat-output-label">Error</div>
               <div className="fb-chat-output-message">{chatError}</div>
+              {showChatCloudActions && (
+                <div className="fb-chat-error-actions">
+                  <button type="button" onClick={openPricingDialog}>
+                    Prices
+                  </button>
+                  <button type="button" onClick={openAuthDialog}>
+                    Sign in
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2870,7 +2951,19 @@ export function FlashBoardComposer({
       )}
 
       {!chatPanelOpen && backendValidationError && (
-        <div className="fb-audio-warning compact">{backendValidationError}</div>
+        <div className={`fb-audio-warning compact ${showGenerationCloudActions ? 'has-cloud-actions' : ''}`}>
+          <span>{backendValidationError}</span>
+          {showGenerationCloudActions && (
+            <div className="fb-cloud-warning-actions">
+              <button type="button" onClick={openPricingDialog}>
+                Prices
+              </button>
+              <button type="button" onClick={openAuthDialog}>
+                Sign in
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {!chatPanelOpen && promptRefineError && (
@@ -3500,6 +3593,15 @@ export function FlashBoardComposer({
               title={chatTemperatureSupported ? `Temperature: ${chatTemperature.toFixed(1)}` : 'Temperature fixed for this model'}
             >
               {chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}
+            </button>
+            <button
+              className="fb-pill fb-chat-clear-pill"
+              type="button"
+              onClick={handleClearChatHistory}
+              disabled={chatMessages.length === 0 && !chatPrompt && !chatError}
+              title="Clear chat history and start a new chat"
+            >
+              New
             </button>
 
             {renderedPopover === 'chatProvider' && (

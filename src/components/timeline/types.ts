@@ -9,15 +9,17 @@ import type {
   EasingType,
   RotationInterpolationMode,
 } from '../../types';
-import type { TimelineAudioDisplayMode, TimelineTrackFocusMode } from '../../stores/timeline/types';
+import type { TimelineAudioDisplayMode, TimelineToolId, TimelineTrackFocusMode } from '../../stores/timeline/types';
 
 // Clip drag state (Premiere-style)
 export interface ClipDragState {
   clipId: string;
+  toolGesture?: 'slip' | 'slide';
   originalStartTime: number;
   originalTrackId: string;
   grabOffsetX: number;      // Where on the clip we grabbed (in pixels)
   grabY: number;            // Mouse Y relative to track lanes at grab start (for track-change resistance)
+  gestureStartX?: number;   // Mouse X at gesture start for body tools like Slip/Slide
   currentX: number;         // Current mouse X position
   currentTrackId: string;
   snappedTime: number | null;  // Snapped position (if snapping) - used for clip positioning
@@ -30,6 +32,7 @@ export interface ClipDragState {
   // Multi-select drag support
   multiSelectTimeDelta?: number;  // Time delta to apply to all selected clips during preview
   multiSelectClipIds?: string[];  // IDs of clips being moved together (excluding the main dragged clip)
+  sourceTimeDelta?: number;       // Source in/out delta for Slip preview and commit
 }
 
 // Clip trim state
@@ -90,6 +93,7 @@ export interface ContextMenuState {
 
 // Marquee selection state for rectangle selection
 export interface MarqueeState {
+  mode?: 'marquee' | 'range';
   startX: number;      // Start X position relative to track-lanes
   startY: number;      // Start Y position relative to track-lanes
   currentX: number;    // Current X position
@@ -118,6 +122,7 @@ export interface TimelineRulerProps {
 
 // Props for TimelineControls component
 export interface TimelineControlsProps {
+  variant?: 'full' | 'main' | 'utility' | 'transport' | 'zoom';
   isPlaying: boolean;
   loopPlayback: boolean;
   playheadPosition: number;
@@ -142,9 +147,6 @@ export interface TimelineControlsProps {
   onToggleLoop: () => void;
   onSetZoom: (zoom: number) => void;
   onToggleSnapping: () => void;
-  onSetInPoint: () => void;
-  onSetOutPoint: () => void;
-  onClearInOut: () => void;
   onToggleProxy: () => void;
   onToggleTranscriptMarkers: () => void;
   onToggleThumbnails: () => void;
@@ -179,6 +181,8 @@ export interface TimelineHeaderProps {
   onRenameTrack: (name: string) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onWheel: (e: React.WheelEvent) => void;
+  onResizeStart?: (e: React.PointerEvent, trackId: string) => void;
+  isResizeActive?: boolean;
   // For property labels - clipKeyframes map triggers re-render when keyframes change
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   getClipKeyframes: (clipId: string) => Array<{
@@ -211,6 +215,7 @@ export interface TimelineHeaderProps {
 // Props for TimelineTrack component
 export interface TimelineTrackProps {
   track: TimelineTrack;
+  trackColor?: string;
   clips: TimelineClip[];
   isDimmed: boolean;
   isExpanded: boolean;
@@ -220,6 +225,7 @@ export interface TimelineTrackProps {
   isExternalDragTarget: boolean;
   selectedClipIds: Set<string>;
   selectedKeyframeIds: Set<string>;
+  activeTimelineToolId: TimelineToolId;
   clipDrag: ClipDragState | null;
   clipTrim: ClipTrimState | null;
   externalDrag: ExternalDragState | null;
@@ -233,6 +239,8 @@ export interface TimelineTrackProps {
   onDragOver: (e: React.DragEvent) => void;
   onDragEnter: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
+  onResizeStart?: (e: React.PointerEvent, trackId: string) => void;
+  isResizeActive?: boolean;
   renderClip: (clip: TimelineClip, trackId: string, trackBaseHeightOverride?: number) => React.ReactNode;
   // For keyframe tracks - clipKeyframes map triggers re-render when keyframes change
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
@@ -244,6 +252,7 @@ export interface TimelineTrackProps {
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
   onUpdateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
+  addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: string | null) => void;
 }
 
 // Pick whip drag state for layer parenting
@@ -282,21 +291,18 @@ export interface TimelineClipProps {
   clipFade: ClipFadeState | null;
   zoom: number;
   scrollX: number;
+  timelineViewportWidth: number;
   timelineRef: React.RefObject<HTMLDivElement | null>;
   proxyEnabled: boolean;
   proxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
   proxyProgress: number;
   showTranscriptMarkers: boolean;
-  toolMode: 'select' | 'cut';
   snappingEnabled: boolean;
-  cutHoverInfo: { clipId: string; time: number } | null;
-  onCutHover: (clipId: string | null, time: number | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onDoubleClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onTrimStart: (e: React.MouseEvent, edge: 'left' | 'right') => void;
   onFadeStart: (e: React.MouseEvent, edge: 'left' | 'right') => void;
-  onCutAtPosition: (clipId: string, time: number) => void;
   hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
   fadeInDuration: number;  // Current fade-in duration in seconds
   fadeOutDuration: number;  // Current fade-out duration in seconds

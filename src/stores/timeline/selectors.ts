@@ -27,6 +27,11 @@ export const selectInPoint = (state: TimelineStore) => state.inPoint;
 export const selectOutPoint = (state: TimelineStore) => state.outPoint;
 export const selectLoopPlayback = (state: TimelineStore) => state.loopPlayback;
 export const selectToolMode = (state: TimelineStore) => state.toolMode;
+export const selectActiveTimelineToolId = (state: TimelineStore) => state.activeTimelineToolId;
+export const selectLastTimelineToolByGroup = (state: TimelineStore) => state.lastTimelineToolByGroup;
+export const selectOpenTimelineToolGroupId = (state: TimelineStore) => state.openTimelineToolGroupId;
+export const selectTimelineRangeSelection = (state: TimelineStore) => state.timelineRangeSelection;
+export const selectTimelineToolPreview = (state: TimelineStore) => state.timelineToolPreview;
 export const selectThumbnailsEnabled = (state: TimelineStore) => state.thumbnailsEnabled;
 export const selectWaveformsEnabled = (state: TimelineStore) => state.waveformsEnabled;
 export const selectAudioDisplayMode = (state: TimelineStore) => state.audioDisplayMode;
@@ -85,6 +90,8 @@ export const selectPlaybackState = (state: TimelineStore) => ({
 export const selectViewState = (state: TimelineStore) => ({
   zoom: state.zoom,
   scrollX: state.scrollX,
+  trackHeaderWidth: state.trackHeaderWidth,
+  timelineSplitRatio: state.timelineSplitRatio,
 });
 
 // UI settings (rarely changes)
@@ -94,6 +101,8 @@ export const selectUISettings = (state: TimelineStore) => ({
   outPoint: state.outPoint,
   loopPlayback: state.loopPlayback,
   toolMode: state.toolMode,
+  activeTimelineToolId: state.activeTimelineToolId,
+  openTimelineToolGroupId: state.openTimelineToolGroupId,
   thumbnailsEnabled: state.thumbnailsEnabled,
   waveformsEnabled: state.waveformsEnabled,
   audioDisplayMode: state.audioDisplayMode,
@@ -248,6 +257,12 @@ export const selectPreviewActions = (state: TimelineStore) => ({
 
 // Tool actions
 export const selectToolActions = (state: TimelineStore) => ({
+  setActiveTimelineTool: state.setActiveTimelineTool,
+  activateTimelineToolGroup: state.activateTimelineToolGroup,
+  cycleTimelineToolGroup: state.cycleTimelineToolGroup,
+  setOpenTimelineToolGroup: state.setOpenTimelineToolGroup,
+  setMomentaryTimelineTool: state.setMomentaryTimelineTool,
+  clearMomentaryTimelineTool: state.clearMomentaryTimelineTool,
   setToolMode: state.setToolMode,
   toggleCutTool: state.toggleCutTool,
   toggleThumbnailsEnabled: state.toggleThumbnailsEnabled,

@@ -119,6 +119,8 @@ export interface ProjectUIState {
   audioDisplayMode?: TimelineAudioDisplayMode;
   audioFocusMode?: boolean;
   trackFocusMode?: TimelineTrackFocusMode;
+  trackHeaderWidth?: number;
+  timelineSplitRatio?: number | null;
   proxyEnabled?: boolean;
   showTranscriptMarkers?: boolean;
   showChangelogOnStartup?: boolean;

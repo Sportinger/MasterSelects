@@ -1,13 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
+import { BILLING_PLANS, formatBillingPlanLabel } from '../../services/billingPlans';
+import { CLOUD_AI_PRICE_ROWS, CLOUD_EUR_PER_CREDIT, CLOUD_PRICE_BASELINE_PLAN } from '../../services/cloudAiPricing';
 import './authBillingDialogs.css';
 
 interface AccountDialogProps {
   onClose: () => void;
 }
 
+type AccountDetailView = 'usage' | 'prices';
+
 function formatCredits(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
+}
+
+function formatEuro(value: number): string {
+  const fractionDigits = value < 0.1 ? 3 : 2;
+  return new Intl.NumberFormat('de-DE', {
+    currency: 'EUR',
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: fractionDigits,
+    style: 'currency',
+  }).format(value);
 }
 
 function formatSubscriptionStatus(status: string | null | undefined): string {
@@ -39,8 +53,9 @@ function formatBillingDate(value: string | null | undefined): string | null {
 }
 
 export function AccountDialog({ onClose }: AccountDialogProps) {
-  const { billingSummary, error, isLoading, logout, openBillingPortal, openPricingDialog } = useAccountStore();
+  const { billingSummary, error, isLoading, logout, openBillingPortal } = useAccountStore();
   const [isClosing, setIsClosing] = useState(false);
+  const [detailView, setDetailView] = useState<AccountDetailView>('usage');
 
   const handleClose = useCallback(() => {
     if (isClosing) return;
@@ -144,44 +159,93 @@ export function AccountDialog({ onClose }: AccountDialogProps) {
             </div>
           </div>
 
-          <div className="account-usage-card">
-            <div className="account-usage-header">
-              <div className="account-metric-label">Recent usage</div>
-              {usageRows.length > 0 && (
-                <span className="account-usage-summary">
-                  {summary?.usage.completedCount ?? 0} complete, {formatCredits(summary?.usage.creditCost ?? 0)} credits
-                </span>
-              )}
-            </div>
+          {detailView === 'usage' ? (
+            <div className="account-usage-card">
+              <div className="account-usage-header">
+                <div className="account-metric-label">Recent usage</div>
+                {usageRows.length > 0 && (
+                  <span className="account-usage-summary">
+                    {summary?.usage.completedCount ?? 0} complete, {formatCredits(summary?.usage.creditCost ?? 0)} credits
+                  </span>
+                )}
+              </div>
 
-            <div className="account-usage-list">
-              {usageRows.map((entry) => (
-                <div key={entry.feature} className="account-usage-entry">
-                  <div className="account-usage-feature">
-                    <span className="account-usage-name">{entry.feature}</span>
-                    <span className="account-usage-detail">
-                      {entry.completedCount} complete, {formatCredits(entry.creditCost)} credits
+              <div className="account-usage-list">
+                {usageRows.map((entry) => (
+                  <div key={entry.feature} className="account-usage-entry">
+                    <div className="account-usage-feature">
+                      <span className="account-usage-name">{entry.feature}</span>
+                      <span className="account-usage-detail">
+                        {entry.completedCount} complete, {formatCredits(entry.creditCost)} credits
+                      </span>
+                    </div>
+                    <span className="account-usage-count">
+                      {entry.pendingCount > 0 ? `${entry.pendingCount} pending` : 'Done'}
                     </span>
                   </div>
-                  <span className="account-usage-count">
-                    {entry.pendingCount > 0 ? `${entry.pendingCount} pending` : 'Done'}
-                  </span>
-                </div>
-              ))}
-              {!usageRows.length && (
-                <div className="account-usage-empty">
-                  <strong className="account-usage-empty-title">No hosted activity yet.</strong>
-                  <span className="account-usage-empty-detail">
-                    Image, chat, and video generations will appear here once you run them.
-                  </span>
-                </div>
-              )}
+                ))}
+                {!usageRows.length && (
+                  <div className="account-usage-empty">
+                    <strong className="account-usage-empty-title">No hosted activity yet.</strong>
+                    <span className="account-usage-empty-detail">
+                      Image, chat, and video generations will appear here once you run them.
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="account-usage-card account-prices-card">
+              <div className="account-usage-header">
+                <div>
+                  <div className="account-metric-label">Cloud AI prices</div>
+                  <span className="account-price-rate">
+                    Euro estimates use {formatBillingPlanLabel(CLOUD_PRICE_BASELINE_PLAN.id)}:
+                    {' '}
+                    {formatEuro(CLOUD_PRICE_BASELINE_PLAN.priceEurMonthly)} / {formatCredits(CLOUD_PRICE_BASELINE_PLAN.credits)} credits
+                  </span>
+                </div>
+                <span className="account-usage-summary">
+                  {formatEuro(CLOUD_EUR_PER_CREDIT)} / credit
+                </span>
+              </div>
+
+              <div className="account-price-list">
+                {CLOUD_AI_PRICE_ROWS.map((row) => (
+                  <div key={`${row.category}-${row.name}-${row.note}`} className="account-price-entry">
+                    <div className="account-price-main">
+                      <span className="account-price-category">{row.category}</span>
+                      <strong className="account-price-name">{row.name}</strong>
+                      <span className="account-price-note">{row.note}</span>
+                    </div>
+                    <div className="account-price-values">
+                      <strong>{formatCredits(row.credits)} cr / {row.unit}</strong>
+                      <span>{formatEuro(row.credits * CLOUD_EUR_PER_CREDIT)} / {row.unit}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="account-plan-price-grid">
+                {BILLING_PLANS.map((plan) => (
+                  <div key={plan.id} className="account-plan-price-card">
+                    <span>{formatBillingPlanLabel(plan.id)}</span>
+                    <strong>{plan.priceAmount} {plan.priceSuffix}</strong>
+                    <em>{formatCredits(plan.credits)} credits / month</em>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className={`account-actions-row ${hasBillingAccount ? '' : 'account-actions-row-single'}`.trim()}>
-            <button className="auth-dialog-submit" disabled={isLoading} onClick={() => openPricingDialog()} type="button">
-              View plans
+            <button
+              className="auth-dialog-submit"
+              disabled={isLoading}
+              onClick={() => setDetailView((current) => current === 'usage' ? 'prices' : 'usage')}
+              type="button"
+            >
+              {detailView === 'usage' ? 'Prices' : 'Recent usage'}
             </button>
             {hasBillingAccount && (
               <button className="auth-dialog-action-secondary" disabled={isLoading} onClick={() => openBillingPortal()} type="button">

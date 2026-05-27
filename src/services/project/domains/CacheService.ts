@@ -45,6 +45,13 @@ export class CacheService {
     return thumb !== null && thumb.size > 0;
   }
 
+  async deleteThumbnail(
+    projectHandle: FileSystemDirectoryHandle,
+    fileHash: string,
+  ): Promise<boolean> {
+    return this.fileStorage.deleteFile(projectHandle, 'CACHE_THUMBNAILS', `${fileHash}.jpg`);
+  }
+
   async saveGaussianSplatRuntime(
     projectHandle: FileSystemDirectoryHandle,
     fileHash: string,
@@ -69,6 +76,14 @@ export class CacheService {
   ): Promise<boolean> {
     const file = await this.getGaussianSplatRuntime(projectHandle, fileHash, variant);
     return file !== null && file.size > 0;
+  }
+
+  async deleteGaussianSplatRuntime(
+    projectHandle: FileSystemDirectoryHandle,
+    fileHash: string,
+    variant: string,
+  ): Promise<boolean> {
+    return this.fileStorage.deleteFile(projectHandle, 'CACHE_SPLATS', `${fileHash}.${variant}.rtgs`);
   }
 
   // ============================================
@@ -99,5 +114,12 @@ export class CacheService {
 
     const buffer = await file.arrayBuffer();
     return new Float32Array(buffer);
+  }
+
+  async deleteWaveform(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string
+  ): Promise<boolean> {
+    return this.fileStorage.deleteFile(projectHandle, 'CACHE_WAVEFORMS', `${mediaId}.waveform`);
   }
 }

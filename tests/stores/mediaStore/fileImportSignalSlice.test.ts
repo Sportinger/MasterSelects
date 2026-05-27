@@ -8,9 +8,17 @@ const importPipelineMocks = vi.hoisted(() => ({
   processImport: vi.fn(),
 }));
 
+const waveformMocks = vi.hoisted(() => ({
+  generateTimelineWaveformAnalysisForFile: vi.fn(),
+}));
+
 vi.mock('../../../src/stores/mediaStore/helpers/importPipeline', () => ({
   generateId: vi.fn(() => `test-import-${++importPipelineMocks.nextId}`),
   processImport: importPipelineMocks.processImport,
+}));
+
+vi.mock('../../../src/services/audio/timelineWaveformPyramidCache', () => ({
+  generateTimelineWaveformAnalysisForFile: waveformMocks.generateTimelineWaveformAnalysisForFile,
 }));
 
 vi.mock('../../../src/services/projectFileService', () => ({
@@ -79,6 +87,14 @@ describe('fileImportSlice Signal imports', () => {
   beforeEach(() => {
     importPipelineMocks.nextId = 0;
     importPipelineMocks.processImport.mockReset();
+    waveformMocks.generateTimelineWaveformAnalysisForFile.mockReset();
+    waveformMocks.generateTimelineWaveformAnalysisForFile.mockResolvedValue({
+      waveform: [0.1, 0.7, 1, 0.25],
+      waveformChannels: [
+        [0.1, 0.7, 1, 0.25],
+        [0.05, 0.5, 0.8, 0.2],
+      ],
+    });
   });
 
   it('imports CSV files through the universal signal route', async () => {
@@ -127,5 +143,46 @@ describe('fileImportSlice Signal imports', () => {
     expect(signalAsset?.signalKinds).toEqual(['binary', 'metadata']);
     expect(signalAsset?.artifacts).toHaveLength(1);
     expect(signalAsset?.artifacts[0]?.storage.kind).toBe('memory');
+  });
+
+  it('starts detailed source waveform generation after audio import finalizes', async () => {
+    const store = createTestStore();
+    const file = new File(['audio'], 'voice.wav', { type: 'audio/wav' });
+    const mediaFile = {
+      id: 'test-import-1',
+      name: 'voice.wav',
+      type: 'audio',
+      parentId: 'folder-1',
+      createdAt: 1,
+      file,
+      url: 'blob:voice',
+      duration: 12,
+      hasAudio: true,
+    } as const;
+    importPipelineMocks.processImport.mockResolvedValue({ mediaFile });
+
+    await store.getState().importFile(file, 'folder-1');
+
+    expect(waveformMocks.generateTimelineWaveformAnalysisForFile).toHaveBeenCalledWith(
+      file,
+      expect.objectContaining({
+        mediaFileId: 'test-import-1',
+        includePyramid: false,
+        samplesPerSecond: 160,
+        maxPreviewSamples: 32000,
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(store.getState().files[0]?.waveformStatus).toBe('ready');
+    });
+    expect(store.getState().files[0]).toMatchObject({
+      waveform: [0.1, 0.7, 1, 0.25],
+      waveformChannels: [
+        [0.1, 0.7, 1, 0.25],
+        [0.05, 0.5, 0.8, 0.2],
+      ],
+      waveformProgress: 100,
+    });
   });
 });

@@ -53,6 +53,7 @@ describe('PricingDialog', () => {
       creditBalance: 4440,
       error: null,
       isLoading: false,
+      session: { authenticated: true, provider: 'dev' },
       startCheckout: vi.fn().mockResolvedValue(undefined),
     });
   });
@@ -84,7 +85,38 @@ describe('PricingDialog', () => {
     expect(proCard).toHaveClass('pricing-plan-selected');
     expect(within(proCard!).getByText('New')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Upgrade to Pro' })).toBeEnabled();
-    expect(screen.getByText(/prorated difference immediately/i)).toBeInTheDocument();
+  });
+
+  it('shows the Cloud AI price list below the plans', () => {
+    render(<PricingDialog onClose={vi.fn()} />);
+
+    const priceList = screen.getByLabelText('Cloud AI prices');
+
+    expect(within(priceList).getByText('Price list')).toBeInTheDocument();
+    expect(within(priceList).getByText('Kling 3.0 Standard')).toBeInTheDocument();
+    expect(within(priceList).getByText('84 cr / sec')).toBeInTheDocument();
+    expect(within(priceList).getByText('48 cr / image')).toBeInTheDocument();
+  });
+
+  it('shows a top sign-up button when no account is loaded', () => {
+    const openAuthDialog = vi.fn();
+    useAccountStore.setState({
+      billingSummary: null,
+      creditBalance: 0,
+      error: null,
+      isLoading: false,
+      openAuthDialog,
+      session: null,
+    });
+
+    render(<PricingDialog onClose={vi.fn()} />);
+
+    const signUpButton = screen.getByRole('button', { name: 'Sign up' });
+    expect(signUpButton).toBeEnabled();
+
+    fireEvent.click(signUpButton);
+
+    expect(openAuthDialog).toHaveBeenCalledTimes(1);
   });
 
   it('allows selecting the free plan as a downgrade target', () => {
@@ -106,6 +138,7 @@ describe('PricingDialog', () => {
       creditBalance: 4440,
       error: null,
       isLoading: false,
+      session: { authenticated: true, provider: 'dev' },
       startCheckout: vi.fn().mockResolvedValue(undefined),
     });
 
@@ -115,7 +148,6 @@ describe('PricingDialog', () => {
     expect(starterCard).not.toBeNull();
 
     expect(within(starterCard!).getByText('Canceled')).toBeInTheDocument();
-    expect(screen.getByText(/Canceled · ends on/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Canceled plan' })).toBeDisabled();
   });
 });

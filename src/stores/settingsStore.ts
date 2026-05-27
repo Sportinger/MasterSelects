@@ -83,6 +83,18 @@ export interface APIKeys {
   klingSecretKey: string;
 }
 
+export type ApiKeyDefaultProvider = 'openai' | 'anthropic' | 'piapi' | 'kieai' | 'evolink' | 'elevenlabs';
+export type ApiKeyDefaults = Record<ApiKeyDefaultProvider, boolean>;
+
+const DEFAULT_API_KEY_DEFAULTS: ApiKeyDefaults = {
+  openai: false,
+  anthropic: false,
+  piapi: false,
+  kieai: false,
+  evolink: false,
+  elevenlabs: false,
+};
+
 // Autosave interval options (in minutes)
 export type AutosaveInterval = 1 | 2 | 5 | 10;
 
@@ -97,6 +109,8 @@ interface SettingsState {
 
   // API Keys
   apiKeys: APIKeys;
+  apiKeysUnlocked: boolean;
+  apiKeyDefaults: ApiKeyDefaults;
 
   // Transcription settings
   transcriptionProvider: TranscriptionProvider;
@@ -176,6 +190,9 @@ interface SettingsState {
   setCustomHue: (hue: number) => void;
   setCustomBrightness: (brightness: number) => void;
   setApiKey: (provider: keyof APIKeys, key: string) => void;
+  setApiKeysUnlocked: (unlocked: boolean) => void;
+  toggleApiKeysUnlocked: () => void;
+  setApiKeyDefault: (provider: ApiKeyDefaultProvider, enabled: boolean) => void;
   setTranscriptionProvider: (provider: TranscriptionProvider) => void;
   setPreviewQuality: (quality: PreviewQuality) => void;
   setShowTransparencyGrid: (show: boolean) => void;
@@ -227,6 +244,7 @@ interface SettingsState {
   // Helpers
   getActiveApiKey: () => string | null;
   hasApiKey: (provider: keyof APIKeys) => boolean;
+  shouldUseApiKeyByDefault: (provider: ApiKeyDefaultProvider) => boolean;
 
   // API key persistence (encrypted in IndexedDB)
   loadApiKeys: () => Promise<void>;
@@ -253,6 +271,8 @@ export const useSettingsStore = create<SettingsState>()(
         klingAccessKey: '',
         klingSecretKey: '',
       },
+      apiKeysUnlocked: false,
+      apiKeyDefaults: { ...DEFAULT_API_KEY_DEFAULTS },
       transcriptionProvider: 'local',
       previewQuality: 1, // Full quality by default
       showTransparencyGrid: false, // Don't show checkerboard by default
@@ -317,6 +337,24 @@ export const useSettingsStore = create<SettingsState>()(
           .catch((err) => {
             log.error('Failed to save API key:', err);
           });
+      },
+
+      setApiKeysUnlocked: (unlocked) => {
+        set({ apiKeysUnlocked: unlocked });
+      },
+
+      toggleApiKeysUnlocked: () => {
+        set((state) => ({ apiKeysUnlocked: !state.apiKeysUnlocked }));
+      },
+
+      setApiKeyDefault: (provider, enabled) => {
+        set((state) => ({
+          apiKeyDefaults: {
+            ...DEFAULT_API_KEY_DEFAULTS,
+            ...state.apiKeyDefaults,
+            [provider]: enabled,
+          },
+        }));
       },
 
       setTranscriptionProvider: (provider) => {
@@ -531,6 +569,19 @@ export const useSettingsStore = create<SettingsState>()(
         return !!get().apiKeys[provider];
       },
 
+      shouldUseApiKeyByDefault: (provider) => {
+        const state = get();
+        const defaults = {
+          ...DEFAULT_API_KEY_DEFAULTS,
+          ...state.apiKeyDefaults,
+        };
+        return Boolean(
+          state.apiKeysUnlocked
+          && defaults[provider]
+          && state.apiKeys[provider]?.trim(),
+        );
+      },
+
       // Load API keys from encrypted IndexedDB (call on app startup)
       // Falls back to .keys.enc in the project folder if IndexedDB is empty
       loadApiKeys: async () => {
@@ -564,6 +615,8 @@ export const useSettingsStore = create<SettingsState>()(
         theme: state.theme,
         customHue: state.customHue,
         customBrightness: state.customBrightness,
+        apiKeysUnlocked: state.apiKeysUnlocked,
+        apiKeyDefaults: state.apiKeyDefaults,
         transcriptionProvider: state.transcriptionProvider,
         previewQuality: state.previewQuality,
         showTransparencyGrid: state.showTransparencyGrid,

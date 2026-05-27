@@ -431,6 +431,8 @@ function parseChatCompletionPayload(data: unknown): {
 export function AIChatPanel() {
   const {
     apiKeys,
+    apiKeyDefaults,
+    apiKeysUnlocked,
     openSettings,
     aiApprovalMode,
     aiProvider,
@@ -546,8 +548,8 @@ export function AIChatPanel() {
   }, [aiProvider, lemonadeEndpoint]);
 
   const hasHostedAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
-  const hasApiKey = !!apiKeys.openai;
-  const openAiAccessMode: 'hosted' | 'byo' | 'none' = hasHostedAccess ? 'hosted' : hasApiKey ? 'byo' : 'none';
+  const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && apiKeys.openai.trim());
+  const openAiAccessMode: 'hosted' | 'byo' | 'none' = useOpenAiKeyByDefault ? 'byo' : hasHostedAccess ? 'hosted' : 'none';
   const accessMode: 'hosted' | 'byo' | 'lemonade' | 'none' =
     aiProvider === 'lemonade'
       ? (lemonadeStatus === 'online' ? 'lemonade' : 'none')
@@ -581,7 +583,9 @@ export function AIChatPanel() {
     : OPENAI_MODELS.map((option) => ({
       id: option.id,
       label: option.name,
-      meta: option.credits === 1 ? '1 credit' : `${option.credits} credits`,
+      meta: accessMode === 'byo'
+        ? 'OpenAI API'
+        : option.credits === 1 ? '1 credit' : `${option.credits} credits`,
       disabled: false,
     }));
   const modelMenuDisabled = isLoading || (aiProvider === 'lemonade' && lemonadeModelOptions.length === 0);
@@ -1218,9 +1222,14 @@ export function AIChatPanel() {
                     Use Lemonade
                   </button>
                   {!accountSession?.authenticated ? (
-                    <button className="btn-settings secondary" onClick={openAuthDialog}>
-                      Sign in
-                    </button>
+                    <>
+                      <button className="btn-settings secondary" onClick={openPricingDialog}>
+                        Prices
+                      </button>
+                      <button className="btn-settings secondary" onClick={openAuthDialog}>
+                        Sign in
+                      </button>
+                    </>
                   ) : (
                     <button className="btn-settings secondary" onClick={openPricingDialog}>
                       View plans

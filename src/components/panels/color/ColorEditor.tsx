@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { startBatch, endBatch } from '../../../stores/historyStore';
-import { useDockStore } from '../../../stores/dockStore';
 import {
   MAX_RUNTIME_PRIMARY_NODES,
   PRIMARY_COLOR_PARAM_DEFS,
@@ -254,7 +253,7 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
   const selectedNode =
     activeVersion.nodes.find(node => node.id === colorState.ui.selectedNodeId) ??
     editableNodes[0];
-  const renderedViewMode: ColorViewMode = workspace ? 'nodes' : 'list';
+  const renderedViewMode: ColorViewMode = workspace ? 'nodes' : colorState.ui.viewMode;
   const workspaceViewport = colorState.ui.workspaceViewport ?? { x: 0, y: 0, zoom: 1 };
   const clipColorKeyframes = clipKeyframes.get(clipId) || [];
   const clipLocalTime = Math.max(0, Math.min(clip.duration, playheadPosition - clip.startTime));
@@ -267,9 +266,6 @@ export function ColorEditor({ clipId, workspace = false, onExitWorkspace }: Colo
 
   const openWorkspace = () => {
     setColorViewMode(clipId, 'nodes');
-    const dock = useDockStore.getState();
-    dock.activatePanelType('color-workspace');
-    window.setTimeout(() => dock.activatePanelType('color-workspace'), 0);
   };
 
   const switchViewMode = (nextViewMode: ColorViewMode) => {

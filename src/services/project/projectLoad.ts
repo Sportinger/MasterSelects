@@ -590,6 +590,10 @@ async function convertProjectMediaToStore(
       projectPath: representativeProjectPath,
       fileHash: pm.fileHash,
       audioAnalysisRefs: pm.audioAnalysisRefs ? structuredClone(pm.audioAnalysisRefs) : undefined,
+      waveform: pm.waveform ? [...pm.waveform] : undefined,
+      waveformChannels: pm.waveformChannels?.map(channel => [...channel]),
+      waveformStatus: pm.waveform?.length ? 'ready' : undefined,
+      waveformProgress: pm.waveform?.length ? 100 : undefined,
       vectorAnimation: pm.vectorAnimation,
       labelColor: pm.labelColor as import('../../stores/mediaStore/types').LabelColor | undefined,
       transcriptStatus,
@@ -633,6 +637,7 @@ function convertProjectCompositionToStore(
         name: t.name,
         type: t.type,
         height: t.height,
+        labelColor: t.labelColor,
         locked: t.locked,
         visible: t.visible,
         muted: t.muted,
@@ -1218,6 +1223,8 @@ export async function loadProjectToStores(): Promise<void> {
     } else if (ui.audioFocusMode !== undefined) {
       ts.setAudioFocusMode(ui.audioFocusMode);
     }
+    if (ui.trackHeaderWidth !== undefined) ts.setTrackHeaderWidth(ui.trackHeaderWidth);
+    if ('timelineSplitRatio' in ui) ts.setTimelineSplitRatio(ui.timelineSplitRatio ?? null);
     if (ui.showTranscriptMarkers !== undefined) ts.setShowTranscriptMarkers(ui.showTranscriptMarkers);
     if (ui.proxyEnabled !== undefined) useMediaStore.getState().setProxyEnabled(ui.proxyEnabled);
 

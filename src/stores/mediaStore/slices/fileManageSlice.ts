@@ -1,7 +1,8 @@
 // File management actions - remove, rename, reload
 // SIMPLIFIED: Uses RAW folder for easy relinking
 
-import type { MediaSliceCreator, MediaState } from '../types';
+import type { Composition, MediaFile, MediaSliceCreator, MediaState } from '../types';
+import type { CompositionTimelineData, SerializableClip, TimelineClip } from '../../../types';
 import { projectFileService } from '../../../services/projectFileService';
 import { fileSystemService } from '../../../services/fileSystemService';
 import { projectDB } from '../../../services/projectDB';
@@ -16,6 +17,9 @@ import { readRiveMetadata } from '../../../services/vectorAnimation/riveMetadata
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { createThumbnail, handleThumbnailDedup } from '../helpers/thumbnailHelpers';
 import { resolveGaussianSplatSequenceData } from '../../../utils/gaussianSplatSequence';
+import { compositionRenderer } from '../../../services/compositionRenderer';
+import { collectAudioAnalysisArtifactIdsFromRefs } from '../../../services/audio/projectAudioState';
+import { blobUrlManager } from '../../timeline/helpers/blobUrlManager';
 
 const log = Logger.create('Reload');
 const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
@@ -23,6 +27,8 @@ const activeThumbnailRequests = new Map<string, Promise<boolean>>();
 
 export interface FileManageActions {
   removeFile: (id: string) => void;
+  getMediaFileUsages: (ids: string[]) => MediaFileUsageSummary[];
+  deleteMediaFilesEverywhere: (ids: string[]) => Promise<DeleteMediaFilesEverywhereResult>;
   renameFile: (id: string, name: string) => void;
   removeSignalAsset: (id: string) => void;
   renameSignalAsset: (id: string, name: string) => void;
@@ -32,16 +38,540 @@ export interface FileManageActions {
   reloadAllFiles: () => Promise<number>;
 }
 
+export interface MediaFileCompositionUsage {
+  compositionId: string;
+  compositionName: string;
+  clipCount: number;
+}
+
+export interface MediaFileUsageSummary {
+  mediaFileId: string;
+  mediaFileName: string;
+  clipCount: number;
+  compositions: MediaFileCompositionUsage[];
+}
+
+export interface DeleteMediaFilesEverywhereResult {
+  deletedMediaFileIds: string[];
+  removedClipCount: number;
+  usages: MediaFileUsageSummary[];
+  artifactFailures: string[];
+}
+
+type ClipWithMediaReference = {
+  id: string;
+  name?: string;
+  mediaFileId?: string;
+  file?: File;
+  sourceType?: string;
+  source?: {
+    mediaFileId?: string;
+    file?: File;
+    filePath?: string;
+    runtimeSourceId?: string;
+    modelUrl?: string;
+    gaussianAvatarUrl?: string;
+    gaussianSplatUrl?: string;
+    gaussianSplatFileName?: string;
+    gaussianSplatFileHash?: string;
+    gaussianSplatRuntimeKey?: string;
+    videoElement?: HTMLVideoElement;
+    audioElement?: HTMLAudioElement;
+    imageElement?: HTMLImageElement;
+  } | null;
+};
+
+function getClipMediaFileId(clip: ClipWithMediaReference): string | undefined {
+  return clip.mediaFileId || clip.source?.mediaFileId;
+}
+
+function normalizeMediaReference(value: string | undefined): string | undefined {
+  const normalized = value?.trim().replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
+  return normalized || undefined;
+}
+
+function getBaseName(value: string | undefined): string | undefined {
+  const normalized = normalizeMediaReference(value);
+  if (!normalized) return undefined;
+  return normalized.split('/').filter(Boolean).pop();
+}
+
+function addComparableString(target: Set<string>, value: string | undefined): void {
+  const normalized = normalizeMediaReference(value);
+  if (!normalized) return;
+  target.add(normalized);
+}
+
+function pathReferencesMatch(a: string, b: string): boolean {
+  return a === b || a.endsWith(`/${b}`) || b.endsWith(`/${a}`);
+}
+
+interface MediaFileDeleteTarget {
+  id: string;
+  file?: File;
+  fileHash?: string;
+  references: Set<string>;
+  uniqueNames: Set<string>;
+}
+
+interface MediaFileDeleteMatcher {
+  targetIds: Set<string>;
+  matchClip: (clip: ClipWithMediaReference) => string | undefined;
+}
+
+function createMediaFileDeleteMatcher(targetFiles: MediaFile[], allFiles: MediaFile[]): MediaFileDeleteMatcher {
+  const targetIds = new Set(targetFiles.map(file => file.id));
+  const fileNameCounts = new Map<string, number>();
+
+  for (const file of allFiles) {
+    const names = [
+      normalizeMediaReference(file.name),
+      getBaseName(file.projectPath),
+      getBaseName(file.filePath),
+      getBaseName(file.absolutePath),
+    ].filter((value): value is string => Boolean(value));
+
+    for (const name of new Set(names)) {
+      fileNameCounts.set(name, (fileNameCounts.get(name) ?? 0) + 1);
+    }
+  }
+
+  const targets: MediaFileDeleteTarget[] = targetFiles.map((file) => {
+    const references = new Set<string>();
+    const uniqueNames = new Set<string>();
+    addComparableString(references, file.projectPath);
+    addComparableString(references, file.filePath);
+    addComparableString(references, file.absolutePath);
+    addComparableString(references, file.url);
+    addComparableString(references, file.thumbnailUrl);
+    addComparableString(references, file.proxyVideoUrl);
+
+    for (const name of [
+      normalizeMediaReference(file.name),
+      getBaseName(file.projectPath),
+      getBaseName(file.filePath),
+      getBaseName(file.absolutePath),
+    ]) {
+      if (name && fileNameCounts.get(name) === 1) {
+        uniqueNames.add(name);
+      }
+    }
+
+    return {
+      id: file.id,
+      file: file.file,
+      fileHash: file.fileHash,
+      references,
+      uniqueNames,
+    };
+  });
+
+  const matchClip = (clip: ClipWithMediaReference): string | undefined => {
+    const directMediaFileId = getClipMediaFileId(clip);
+    if (directMediaFileId && targetIds.has(directMediaFileId)) {
+      return directMediaFileId;
+    }
+
+    const clipSource = clip.source;
+    const clipFiles = [clip.file, clipSource?.file].filter((file): file is File => Boolean(file));
+    const clipReferences = [
+      clipSource?.filePath,
+      clipSource?.runtimeSourceId,
+      clipSource?.modelUrl,
+      clipSource?.gaussianAvatarUrl,
+      clipSource?.gaussianSplatUrl,
+      clipSource?.gaussianSplatRuntimeKey,
+      clipSource?.videoElement?.currentSrc || clipSource?.videoElement?.src,
+      clipSource?.audioElement?.currentSrc || clipSource?.audioElement?.src,
+      clipSource?.imageElement?.currentSrc || clipSource?.imageElement?.src,
+    ]
+      .map(normalizeMediaReference)
+      .filter((value): value is string => Boolean(value));
+    const clipNames = [
+      clip.name,
+      clip.file?.name,
+      clipSource?.file?.name,
+      clipSource?.gaussianSplatFileName,
+      getBaseName(clipSource?.filePath),
+      getBaseName(clipSource?.runtimeSourceId),
+      getBaseName(clipSource?.gaussianSplatRuntimeKey),
+    ]
+      .map(normalizeMediaReference)
+      .filter((value): value is string => Boolean(value));
+
+    for (const target of targets) {
+      if (target.file && clipFiles.some(file => file === target.file)) {
+        return target.id;
+      }
+
+      if (target.fileHash && clipSource?.gaussianSplatFileHash === target.fileHash) {
+        return target.id;
+      }
+
+      if (clipReferences.some(clipReference =>
+        [...target.references].some(targetReference => pathReferencesMatch(clipReference, targetReference))
+      )) {
+        return target.id;
+      }
+
+      if (clipNames.some(name => target.uniqueNames.has(name))) {
+        return target.id;
+      }
+    }
+
+    return undefined;
+  };
+
+  return { targetIds, matchClip };
+}
+
+function getCompositionClipsForUsage(
+  composition: Composition,
+  activeCompositionId: string | null,
+  activeTimelineClips: TimelineClip[],
+): ClipWithMediaReference[] {
+  if (composition.id === activeCompositionId && activeTimelineClips.length > 0) {
+    return activeTimelineClips;
+  }
+  return composition.timelineData?.clips ?? [];
+}
+
+export function collectMediaFileUsages(
+  ids: string[],
+  files: MediaFile[],
+  compositions: Composition[],
+  activeCompositionId: string | null,
+  activeTimelineClips: TimelineClip[] = useTimelineStore.getState().clips,
+): MediaFileUsageSummary[] {
+  const targetIds = new Set(ids);
+  const targetFiles = files.filter(file => targetIds.has(file.id));
+  const matcher = createMediaFileDeleteMatcher(targetFiles, files);
+  const summaries = new Map<string, MediaFileUsageSummary>();
+  const mediaFileNames = new Map(files.map(file => [file.id, file.name]));
+
+  for (const id of targetIds) {
+    summaries.set(id, {
+      mediaFileId: id,
+      mediaFileName: mediaFileNames.get(id) ?? id,
+      clipCount: 0,
+      compositions: [],
+    });
+  }
+
+  for (const composition of compositions) {
+    const clips = getCompositionClipsForUsage(composition, activeCompositionId, activeTimelineClips);
+    const counts = new Map<string, number>();
+
+    for (const clip of clips) {
+      const mediaFileId = matcher.matchClip(clip);
+      if (!mediaFileId || !targetIds.has(mediaFileId)) {
+        continue;
+      }
+      counts.set(mediaFileId, (counts.get(mediaFileId) ?? 0) + 1);
+    }
+
+    for (const [mediaFileId, clipCount] of counts) {
+      const summary = summaries.get(mediaFileId);
+      if (!summary) continue;
+      summary.clipCount += clipCount;
+      summary.compositions.push({
+        compositionId: composition.id,
+        compositionName: composition.name,
+        clipCount,
+      });
+    }
+  }
+
+  return [...summaries.values()].filter(summary => summary.clipCount > 0);
+}
+
+function revokeMediaFileUrls(file: MediaFile): void {
+  if (isBlobUrl(file.url)) URL.revokeObjectURL(file.url);
+  if (isBlobUrl(file.thumbnailUrl) && file.thumbnailUrl !== file.url) {
+    URL.revokeObjectURL(file.thumbnailUrl);
+  }
+  if (isBlobUrl(file.proxyVideoUrl) && file.proxyVideoUrl !== file.url && file.proxyVideoUrl !== file.thumbnailUrl) {
+    URL.revokeObjectURL(file.proxyVideoUrl);
+  }
+}
+
+function cleanupTimelineClipResources(clip: TimelineClip): void {
+  if (clip.source?.type === 'video' && clip.source.videoElement) {
+    const video = clip.source.videoElement;
+    video.pause();
+    video.src = '';
+    video.load();
+    engine.cleanupVideo(video);
+  }
+
+  if (clip.source?.type === 'audio' && clip.source.audioElement) {
+    const audio = clip.source.audioElement;
+    audio.pause();
+    audio.src = '';
+    audio.load();
+  }
+
+  if (clip.mixdownAudio) {
+    clip.mixdownAudio.pause();
+    clip.mixdownAudio.src = '';
+    clip.mixdownAudio.load();
+  }
+
+  if (isVectorAnimationSourceType(clip.source?.type)) {
+    vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
+  }
+
+  blobUrlManager.revokeAll(clip.id);
+}
+
+function clearRemovedClipLinks<T extends { linkedClipId?: string }>(clip: T, removedClipIds: Set<string>): T {
+  if (clip.linkedClipId && removedClipIds.has(clip.linkedClipId)) {
+    return { ...clip, linkedClipId: undefined };
+  }
+  return clip;
+}
+
+function removeActiveTimelineClipsByMediaMatcher(matcher: MediaFileDeleteMatcher): Set<string> {
+  const timelineStore = useTimelineStore.getState();
+  const clipsToRemove = timelineStore.clips.filter(clip => Boolean(matcher.matchClip(clip)));
+  const removedClipIds = new Set(clipsToRemove.map(clip => clip.id));
+
+  if (removedClipIds.size === 0) {
+    return removedClipIds;
+  }
+
+  for (const clip of clipsToRemove) {
+    cleanupTimelineClipResources(clip);
+  }
+
+  const removedKeyframeIds = new Set<string>();
+  const nextClipKeyframes = new Map(timelineStore.clipKeyframes);
+  for (const clipId of removedClipIds) {
+    for (const keyframe of nextClipKeyframes.get(clipId) ?? []) {
+      removedKeyframeIds.add(keyframe.id);
+    }
+    nextClipKeyframes.delete(clipId);
+  }
+
+  useTimelineStore.setState({
+    clips: timelineStore.clips
+      .filter(clip => !removedClipIds.has(clip.id))
+      .map(clip => clearRemovedClipLinks(clip, removedClipIds)),
+    layers: timelineStore.layers.filter(layer => !layer || !removedClipIds.has(layer.id)),
+    selectedLayerId: timelineStore.selectedLayerId && removedClipIds.has(timelineStore.selectedLayerId)
+      ? null
+      : timelineStore.selectedLayerId,
+    selectedClipIds: new Set([...timelineStore.selectedClipIds].filter(id => !removedClipIds.has(id))),
+    primarySelectedClipId: timelineStore.primarySelectedClipId && removedClipIds.has(timelineStore.primarySelectedClipId)
+      ? null
+      : timelineStore.primarySelectedClipId,
+    clipKeyframes: nextClipKeyframes,
+    selectedKeyframeIds: new Set([...timelineStore.selectedKeyframeIds].filter(id => !removedKeyframeIds.has(id))),
+    keyframeRecordingEnabled: new Set(
+      [...timelineStore.keyframeRecordingEnabled].filter(key =>
+        ![...removedClipIds].some(clipId => key.startsWith(`${clipId}:`))
+      )
+    ),
+  });
+
+  const nextTimelineStore = useTimelineStore.getState();
+  nextTimelineStore.updateDuration();
+  nextTimelineStore.invalidateCache();
+
+  return removedClipIds;
+}
+
+function removeMediaClipsFromTimelineData(
+  timelineData: CompositionTimelineData | undefined,
+  matcher: MediaFileDeleteMatcher,
+): { timelineData: CompositionTimelineData | undefined; removedClipIds: Set<string> } {
+  const removedClipIds = new Set<string>();
+  if (!timelineData) {
+    return { timelineData, removedClipIds };
+  }
+
+  for (const clip of timelineData.clips) {
+    if (matcher.matchClip(clip)) {
+      removedClipIds.add(clip.id);
+    }
+  }
+
+  if (removedClipIds.size === 0) {
+    return { timelineData, removedClipIds };
+  }
+
+  const clips = timelineData.clips
+    .filter(clip => !removedClipIds.has(clip.id))
+    .map(clip => clearRemovedClipLinks(clip, removedClipIds)) as SerializableClip[];
+
+  return {
+    timelineData: { ...timelineData, clips },
+    removedClipIds,
+  };
+}
+
+function removeMediaClipsFromAllCompositions(
+  set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
+  get: () => MediaState,
+  matcher: MediaFileDeleteMatcher,
+): { removedClipIds: Set<string>; changedCompositionIds: Set<string> } {
+  const removedClipIds = removeActiveTimelineClipsByMediaMatcher(matcher);
+  const changedCompositionIds = new Set<string>();
+  const activeCompositionId = get().activeCompositionId;
+  const activeTimelineData = activeCompositionId && removedClipIds.size > 0
+    ? useTimelineStore.getState().getSerializableState()
+    : null;
+
+  set((state) => ({
+    compositions: state.compositions.map((composition) => {
+      if (composition.id === activeCompositionId && activeTimelineData) {
+        changedCompositionIds.add(composition.id);
+        return {
+          ...composition,
+          duration: activeTimelineData.duration,
+          timelineData: activeTimelineData,
+        };
+      }
+
+      const result = removeMediaClipsFromTimelineData(composition.timelineData, matcher);
+      if (result.removedClipIds.size === 0) {
+        return composition;
+      }
+
+      for (const clipId of result.removedClipIds) {
+        removedClipIds.add(clipId);
+      }
+      changedCompositionIds.add(composition.id);
+      return {
+        ...composition,
+        timelineData: result.timelineData,
+      };
+    }),
+  }));
+
+  for (const compositionId of changedCompositionIds) {
+    compositionRenderer.invalidateCompositionAndParents(compositionId);
+  }
+
+  return { removedClipIds, changedCompositionIds };
+}
+
+async function cleanupIndexedDbMediaArtifacts(file: MediaFile, options?: { deleteHashArtifacts?: boolean }): Promise<void> {
+  const proxyKeys = [...new Set([
+    file.id,
+    options?.deleteHashArtifacts === false ? undefined : file.fileHash,
+  ].filter((key): key is string => Boolean(key)))];
+  const cleanupTasks: Promise<unknown>[] = [
+    projectDB.deleteMediaFile(file.id),
+    projectDB.deleteAnalysis(file.id),
+    projectDB.deleteSourceThumbnails(file.id),
+    projectDB.deleteHandle(`media_${file.id}`),
+    ...proxyKeys.map(key => projectDB.deleteProxyFrames(key)),
+  ];
+
+  if (file.fileHash && options?.deleteHashArtifacts !== false) {
+    cleanupTasks.push(projectDB.deleteThumbnail(file.fileHash));
+  }
+
+  await Promise.allSettled(cleanupTasks);
+}
+
 export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set, get) => ({
   removeFile: (id: string) => {
     const file = get().files.find((f) => f.id === id);
-    if (file?.url) URL.revokeObjectURL(file.url);
-    if (file?.thumbnailUrl?.startsWith('blob:')) URL.revokeObjectURL(file.thumbnailUrl);
+    if (file) {
+      revokeMediaFileUrls(file);
+    }
 
     set((state) => ({
       files: state.files.filter((f) => f.id !== id),
       selectedIds: state.selectedIds.filter((sid) => sid !== id),
     }));
+  },
+
+  getMediaFileUsages: (ids: string[]) => {
+    const state = get();
+    return collectMediaFileUsages(
+      ids,
+      state.files,
+      state.compositions,
+      state.activeCompositionId,
+    );
+  },
+
+  deleteMediaFilesEverywhere: async (ids: string[]) => {
+    const uniqueIds = [...new Set(ids)];
+    const mediaFileIds = new Set(uniqueIds);
+    const state = get();
+    const filesToDelete = state.files.filter(file => mediaFileIds.has(file.id));
+    const matcher = createMediaFileDeleteMatcher(filesToDelete, state.files);
+    const usages = collectMediaFileUsages(
+      filesToDelete.map(file => file.id),
+      state.files,
+      state.compositions,
+      state.activeCompositionId,
+    );
+
+    if (filesToDelete.length === 0) {
+      return {
+        deletedMediaFileIds: [],
+        removedClipCount: 0,
+        usages,
+        artifactFailures: [],
+      };
+    }
+
+    const { removedClipIds } = removeMediaClipsFromAllCompositions(
+      set,
+      get,
+      matcher,
+    );
+
+    const deletedIds = new Set(filesToDelete.map(file => file.id));
+    const remainingFiles = get().files.filter(file => !deletedIds.has(file.id));
+    const artifactFailures: string[] = [];
+    for (const file of filesToDelete) {
+      const rawPathIsShared = Boolean(
+        file.projectPath && remainingFiles.some(remaining => remaining.projectPath === file.projectPath)
+      );
+      const fileHashIsShared = Boolean(
+        file.fileHash && remainingFiles.some(remaining => remaining.fileHash === file.fileHash)
+      );
+      const artifactResult = await projectFileService.deleteMediaFileArtifacts({
+        mediaId: file.id,
+        projectPath: rawPathIsShared ? undefined : file.projectPath,
+        fileHash: fileHashIsShared ? undefined : file.fileHash,
+        audioArtifactRefs: collectAudioAnalysisArtifactIdsFromRefs(file.audioAnalysisRefs),
+      });
+
+      artifactFailures.push(...artifactResult.failed);
+      await cleanupIndexedDbMediaArtifacts(file, { deleteHashArtifacts: !fileHashIsShared });
+      revokeMediaFileUrls(file);
+    }
+
+    set((current) => ({
+      files: current.files.filter(file => !deletedIds.has(file.id)),
+      selectedIds: current.selectedIds.filter(id => !deletedIds.has(id)),
+      sourceMonitorFileId: current.sourceMonitorFileId && deletedIds.has(current.sourceMonitorFileId)
+        ? null
+        : current.sourceMonitorFileId,
+      sourceMonitorInPoint: current.sourceMonitorFileId && deletedIds.has(current.sourceMonitorFileId)
+        ? null
+        : current.sourceMonitorInPoint,
+      sourceMonitorOutPoint: current.sourceMonitorFileId && deletedIds.has(current.sourceMonitorFileId)
+        ? null
+        : current.sourceMonitorOutPoint,
+      sourceMonitorPlaybackRequestId: current.sourceMonitorFileId && deletedIds.has(current.sourceMonitorFileId)
+        ? current.sourceMonitorPlaybackRequestId + 1
+        : current.sourceMonitorPlaybackRequestId,
+    }));
+
+    return {
+      deletedMediaFileIds: [...deletedIds],
+      removedClipCount: removedClipIds.size,
+      usages,
+      artifactFailures,
+    };
   },
 
   renameFile: (id: string, name: string) => {

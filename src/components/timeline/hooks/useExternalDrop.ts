@@ -38,7 +38,8 @@ import {
   createSignalTimelineAdapterPlan,
   placeSignalAssetOnTimeline,
 } from '../../../runtime/renderers/signalTimelineRendererAdapter';
-import type { AddClipOptions } from '../../../stores/timeline/types';
+import type { AddClipOptions, TimelineToolId } from '../../../stores/timeline/types';
+import type { TimelineEditResult, TimelinePlacementMode } from '../../../stores/timeline/editOperations/types';
 
 const log = Logger.create('useExternalDrop');
 
@@ -162,7 +163,19 @@ interface UseExternalDropProps {
   tracks: TimelineTrack[];
   clips: TimelineClip[];
   isExporting: boolean;
+  activeTimelineToolId: TimelineToolId;
   pixelToTime: (pixel: number) => number;
+  prepareTimelinePlacementRange: (
+    mode: TimelinePlacementMode,
+    options: {
+      trackIds?: string[];
+      startTime?: number;
+      duration?: number;
+      includeLinked?: boolean;
+      source?: 'external-drop';
+      historyLabel?: string;
+    },
+  ) => TimelineEditResult;
   addTrack: (type: 'video' | 'audio') => string | undefined;
   addClip: (
     trackId: string,
@@ -282,7 +295,9 @@ export function useExternalDrop({
   tracks,
   clips,
   isExporting,
+  activeTimelineToolId,
   pixelToTime,
+  prepareTimelinePlacementRange,
   addTrack,
   addClip,
   addCompClip,
@@ -355,9 +370,43 @@ export function useExternalDrop({
     desiredStartTime: number,
     duration?: number
   ) => {
+    if (activeTimelineToolId === 'position-overwrite') {
+      return Math.max(0, desiredStartTime);
+    }
+
     const previewDuration = duration ?? dragMetadataCacheRef.current?.duration ?? 5;
     return findClosestNonOverlappingStartTime(trackId, desiredStartTime, previewDuration, clips);
-  }, [clips]);
+  }, [activeTimelineToolId, clips]);
+
+  const getDropPlacementTrackIds = useCallback((primaryTrackId: string): string[] => {
+    const ids = new Set<string>([primaryTrackId]);
+    const preview = externalDrag;
+    if (preview?.audioTrackId && !preview.audioTrackId.startsWith('__')) ids.add(preview.audioTrackId);
+    if (preview?.videoTrackId && !preview.videoTrackId.startsWith('__')) ids.add(preview.videoTrackId);
+    return [...ids];
+  }, [externalDrag]);
+
+  const prepareDropPlacement = useCallback((
+    primaryTrackId: string,
+    startTime: number,
+    duration?: number,
+  ) => {
+    if (activeTimelineToolId !== 'position-overwrite') return;
+
+    prepareTimelinePlacementRange('position-overwrite', {
+      trackIds: getDropPlacementTrackIds(primaryTrackId),
+      startTime,
+      duration: duration ?? externalDrag?.duration ?? dragMetadataCacheRef.current?.duration ?? 5,
+      includeLinked: true,
+      source: 'external-drop',
+      historyLabel: 'Position overwrite drop',
+    });
+  }, [
+    activeTimelineToolId,
+    externalDrag?.duration,
+    getDropPlacementTrackIds,
+    prepareTimelinePlacementRange,
+  ]);
 
   const addSignalAssetClip = useCallback(async (
     trackId: string,
@@ -1714,6 +1763,11 @@ export function useExternalDrop({
       const desiredStartTime = getDesiredStartTime(e.clientX);
       const resolveDropStartTime = (duration?: number) =>
         resolveTrackStartTime(trackId, desiredStartTime, duration ?? externalDrag?.duration);
+      const prepareDropStartTime = (duration?: number) => {
+        const startTime = resolveDropStartTime(duration);
+        prepareDropPlacement(trackId, startTime, duration);
+        return startTime;
+      };
 
       const cachedDuration =
         externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
@@ -1731,7 +1785,7 @@ export function useExternalDrop({
         const comp = mediaStore.compositions.find((c) => c.id === compositionId);
         if (comp) {
           const compDuration = comp.timelineData?.duration ?? comp.duration ?? 5;
-          addCompClip(trackId, comp, resolveDropStartTime(compDuration));
+          addCompClip(trackId, comp, prepareDropStartTime(compDuration));
           return;
         }
       }
@@ -1742,7 +1796,7 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const textItem = mediaStore.textItems.find((t) => t.id === textItemId);
         if (textItem && isVideoTrack) {
-          addTextClip(trackId, resolveDropStartTime(textItem.duration), textItem.duration, true);
+          addTextClip(trackId, prepareDropStartTime(textItem.duration), textItem.duration, true);
           return;
         }
       }
@@ -1753,7 +1807,7 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const solidItem = mediaStore.solidItems.find((s) => s.id === solidItemId);
         if (solidItem && isVideoTrack) {
-          addSolidClip(trackId, resolveDropStartTime(solidItem.duration), solidItem.color, solidItem.duration, true);
+          addSolidClip(trackId, prepareDropStartTime(solidItem.duration), solidItem.color, solidItem.duration, true);
           return;
         }
       }
@@ -1764,7 +1818,7 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const meshItem = mediaStore.meshItems.find((m) => m.id === meshItemId);
         if (meshItem && isVideoTrack) {
-          addMeshClip(trackId, resolveDropStartTime(meshItem.duration), meshItem.meshType, meshItem.duration, true);
+          addMeshClip(trackId, prepareDropStartTime(meshItem.duration), meshItem.meshType, meshItem.duration, true);
           return;
         }
       }
@@ -1775,7 +1829,7 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const cameraItem = mediaStore.cameraItems.find((c) => c.id === cameraItemId);
         if (cameraItem && isVideoTrack) {
-          addCameraClip(trackId, resolveDropStartTime(cameraItem.duration), cameraItem.duration, true);
+          addCameraClip(trackId, prepareDropStartTime(cameraItem.duration), cameraItem.duration, true);
           return;
         }
       }
@@ -1785,7 +1839,7 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const effectorItem = mediaStore.splatEffectorItems.find((effector) => effector.id === effectorItemId);
         if (effectorItem && isVideoTrack) {
-          addSplatEffectorClip(trackId, resolveDropStartTime(effectorItem.duration), effectorItem.duration, true);
+          addSplatEffectorClip(trackId, prepareDropStartTime(effectorItem.duration), effectorItem.duration, true);
           return;
         }
       }
@@ -1795,7 +1849,7 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const mathSceneItem = mediaStore.mathSceneItems.find((item) => item.id === mathSceneItemId);
         if (mathSceneItem && isVideoTrack) {
-          addMathSceneClip(trackId, resolveDropStartTime(mathSceneItem.duration), mathSceneItem.duration, true);
+          addMathSceneClip(trackId, prepareDropStartTime(mathSceneItem.duration), mathSceneItem.duration, true);
           return;
         }
       }
@@ -1805,7 +1859,7 @@ export function useExternalDrop({
         const mediaStore = useMediaStore.getState();
         const motionShapeItem = mediaStore.motionShapeItems.find((item) => item.id === motionShapeItemId);
         if (motionShapeItem && isVideoTrack) {
-          addMotionShapeClip(trackId, resolveDropStartTime(motionShapeItem.duration), {
+          addMotionShapeClip(trackId, prepareDropStartTime(motionShapeItem.duration), {
             primitive: motionShapeItem.primitive,
             duration: motionShapeItem.duration,
             name: motionShapeItem.name,
@@ -1820,7 +1874,7 @@ export function useExternalDrop({
         const signalAsset = mediaStore.signalAssets.find((item) => item.id === signalAssetId);
         if (signalAsset && isVideoTrack) {
           const plan = createSignalTimelineAdapterPlan(signalAsset);
-          await addSignalAssetClip(trackId, signalAsset, resolveDropStartTime(plan.duration));
+          await addSignalAssetClip(trackId, signalAsset, prepareDropStartTime(plan.duration));
           return;
         }
       }
@@ -1847,7 +1901,7 @@ export function useExternalDrop({
             return;
           }
 
-          addClip(trackId, file, resolveDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, getTimelineMediaTypeOverride(mediaFile));
+          addClip(trackId, file, prepareDropStartTime(mediaFile.duration), mediaFile.duration, mediaFileId, getTimelineMediaTypeOverride(mediaFile));
           return;
         }
       }
@@ -1887,7 +1941,7 @@ export function useExternalDrop({
                   }
 
                   // Add clip immediately for instant visual feedback
-                  addClip(trackId, file, resolveDropStartTime(cachedDuration), cachedDuration, undefined, typeOverride);
+                  addClip(trackId, file, prepareDropStartTime(cachedDuration), cachedDuration, undefined, typeOverride);
                   // Fire-and-forget media import (loadVideoMedia will pick it up)
                   mediaStore.importFilesWithHandles([{ file, handle, absolutePath: filePath }]);
                   log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
@@ -1916,14 +1970,14 @@ export function useExternalDrop({
             }
 
             // Add clip immediately for instant visual feedback
-            addClip(trackId, file, resolveDropStartTime(cachedDuration), cachedDuration, undefined, typeOverride);
+            addClip(trackId, file, prepareDropStartTime(cachedDuration), cachedDuration, undefined, typeOverride);
             // Fire-and-forget media import (loadVideoMedia will pick it up)
             mediaStore.importFile(file);
           }
         }
       }
     },
-    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, clearExternalDragState]
+    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragState]
   );
 
   useEffect(() => {

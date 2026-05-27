@@ -140,6 +140,10 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
       file.proxyStatus === 'ready' &&
       isProxyFrameCountComplete(file.proxyFrameCount, file.duration, file.proxyFps ?? file.fps),
     audioAnalysisRefs: file.audioAnalysisRefs ? structuredClone(file.audioAnalysisRefs) : undefined,
+    waveform: file.waveformStatus === 'ready' && file.waveform ? [...file.waveform] : undefined,
+    waveformChannels: file.waveformStatus === 'ready'
+      ? file.waveformChannels?.map(channel => [...channel])
+      : undefined,
     vectorAnimation: file.vectorAnimation,
     modelSequence: serializeModelSequence(file.modelSequence),
     gaussianSplatSequence: serializeGaussianSplatSequence(file.gaussianSplatSequence),
@@ -174,6 +178,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       name: t.name,
       type: t.type,
       height: t.height || 60,
+      labelColor: t.labelColor && t.labelColor !== 'none' ? t.labelColor : undefined,
       locked: t.locked || false,
       visible: t.visible !== false,
       muted: t.muted || false,
@@ -598,6 +603,8 @@ export async function syncStoresToProject(): Promise<void> {
         audioDisplayMode: timelineState.audioDisplayMode,
         audioFocusMode: timelineState.audioFocusMode,
         trackFocusMode: timelineState.trackFocusMode,
+        trackHeaderWidth: timelineState.trackHeaderWidth,
+        timelineSplitRatio: timelineState.timelineSplitRatio,
         proxyEnabled: useMediaStore.getState().proxyEnabled,
         showTranscriptMarkers: timelineState.showTranscriptMarkers,
         showChangelogOnStartup: settingsState.showChangelogOnStartup,

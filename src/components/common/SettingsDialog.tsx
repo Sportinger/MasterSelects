@@ -1,6 +1,6 @@
 // Settings Dialog - After Effects style preferences with sidebar navigation
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useDraggableDialog } from './settings/useDraggableDialog';
 import { AppearanceSettings } from './settings/AppearanceSettings';
@@ -47,6 +47,14 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const { position, isDragging, handleMouseDown } = useDraggableDialog(dialogRef);
 
   const { apiKeys, setApiKey } = useSettingsStore();
+  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
+  const visibleCategories = useMemo(
+    () => categories.filter((cat) => apiKeysUnlocked || cat.id !== 'apiKeys'),
+    [apiKeysUnlocked],
+  );
+  const resolvedActiveCategory = !apiKeysUnlocked && activeCategory === 'apiKeys'
+    ? 'general'
+    : activeCategory;
 
   // Local state for API keys (to avoid saving on every keystroke)
   const [localKeys, setLocalKeys] = useState<{ [key: string]: string }>({ ...apiKeys });
@@ -63,7 +71,7 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
   };
 
   const renderCategoryContent = () => {
-    switch (activeCategory) {
+    switch (resolvedActiveCategory) {
       case 'general': return <GeneralSettings />;
       case 'midi': return <MidiSettings />;
       case 'shortcuts': return <ShortcutsSettings />;
@@ -98,10 +106,10 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
         <div className="settings-main">
           {/* Sidebar */}
           <div className="settings-sidebar">
-            {categories.map((cat) => (
+            {visibleCategories.map((cat) => (
               <button
                 key={cat.id}
-                className={`sidebar-item ${activeCategory === cat.id ? 'active' : ''}`}
+                className={`sidebar-item ${resolvedActiveCategory === cat.id ? 'active' : ''}`}
                 onClick={() => setActiveCategory(cat.id)}
               >
                 <span className="sidebar-icon">{cat.icon}</span>

@@ -6,8 +6,11 @@ import type { TimelineClip, TimelineTrack } from '../../../types';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import type { ClipDragState } from '../types';
 import { Logger } from '../../../services/logger';
+import type { TimelineToolId } from '../../../stores/timeline/types';
+import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 
 const log = Logger.create('useClipDrag');
+const MIN_TOOL_GESTURE_DURATION = 0.1;
 
 interface UseClipDragProps {
   // Refs
@@ -22,10 +25,15 @@ interface UseClipDragProps {
   scrollX: number;
   snappingEnabled: boolean;
   isExporting: boolean;
+  activeTimelineToolId: TimelineToolId;
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean, setPrimaryOnly?: boolean) => void;
   moveClip: (clipId: string, newStartTime: number, trackId: string, skipLinked?: boolean, skipGroup?: boolean, skipTrim?: boolean, excludeClipIds?: string[]) => void;
+  applyTimelineEditOperation: (
+    operation: TimelineEditOperation,
+    options: { source: 'ui'; historyLabel?: string },
+  ) => TimelineEditResult;
   openCompositionTab: (compositionId: string) => void;
 
   // Helpers
@@ -42,6 +50,57 @@ interface UseClipDragReturn {
   handleClipDoubleClick: (e: React.MouseEvent, clipId: string) => void;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getClipEnd(clip: TimelineClip): number {
+  return clip.startTime + clip.duration;
+}
+
+function getSourceDuration(clip: TimelineClip): number {
+  const naturalDuration = clip.source?.naturalDuration;
+  if (Number.isFinite(naturalDuration) && naturalDuration && naturalDuration > 0) {
+    return naturalDuration;
+  }
+  return Math.max(clip.outPoint, clip.inPoint + clip.duration, clip.duration, MIN_TOOL_GESTURE_DURATION);
+}
+
+function getSortedTrackClips(clips: TimelineClip[], trackId: string, excludeClipId: string): TimelineClip[] {
+  return clips
+    .filter((candidate) => candidate.trackId === trackId && candidate.id !== excludeClipId)
+    .toSorted((left, right) => left.startTime - right.startTime || left.id.localeCompare(right.id));
+}
+
+function findPreviousClip(clips: TimelineClip[], clip: TimelineClip): TimelineClip | null {
+  const candidates = getSortedTrackClips(clips, clip.trackId, clip.id)
+    .filter((candidate) => getClipEnd(candidate) <= clip.startTime + 0.0001);
+  return candidates[candidates.length - 1] ?? null;
+}
+
+function findNextClip(clips: TimelineClip[], clip: TimelineClip): TimelineClip | null {
+  return getSortedTrackClips(clips, clip.trackId, clip.id)
+    .find((candidate) => candidate.startTime >= getClipEnd(clip) - 0.0001) ?? null;
+}
+
+function clampSlipSourceDelta(clip: TimelineClip, sourceDelta: number): number {
+  const visibleSourceDuration = clip.outPoint - clip.inPoint;
+  const sourceDuration = getSourceDuration(clip);
+  const maxInPoint = Math.max(0, sourceDuration - visibleSourceDuration);
+  const nextInPoint = clamp(clip.inPoint + sourceDelta, 0, maxInPoint);
+  return nextInPoint - clip.inPoint;
+}
+
+function clampSlideTimelineDelta(clips: TimelineClip[], clip: TimelineClip, timelineDelta: number): number {
+  const previousClip = findPreviousClip(clips, clip);
+  const nextClip = findNextClip(clips, clip);
+  if (!previousClip || !nextClip) return 0;
+
+  const minDelta = -(previousClip.duration - MIN_TOOL_GESTURE_DURATION);
+  const maxDelta = nextClip.duration - MIN_TOOL_GESTURE_DURATION;
+  return clamp(timelineDelta, minDelta, maxDelta);
+}
+
 export function useClipDrag({
   trackLanesRef,
   timelineRef,
@@ -52,8 +111,10 @@ export function useClipDrag({
   scrollX,
   snappingEnabled,
   isExporting,
+  activeTimelineToolId,
   selectClip,
   moveClip,
+  applyTimelineEditOperation,
   openCompositionTab,
   pixelToTime,
   getRenderedTrackHeight,
@@ -126,13 +187,18 @@ export function useClipDrag({
       const grabOffsetX = e.clientX - clipRect.left;
       const lanesRectInit = trackLanesRef.current?.getBoundingClientRect();
       const grabY = lanesRectInit ? e.clientY - lanesRectInit.top : 0;
+      const toolGesture = activeTimelineToolId === 'slip' || activeTimelineToolId === 'slide'
+        ? activeTimelineToolId
+        : undefined;
 
       const initialDrag: ClipDragState = {
         clipId,
+        toolGesture,
         originalStartTime: clip.startTime,
         originalTrackId: clip.trackId,
         grabOffsetX,
         grabY,
+        gestureStartX: e.clientX,
         currentX: e.clientX,
         currentTrackId: clip.trackId,
         snappedTime: clip.startTime,
@@ -152,6 +218,34 @@ export function useClipDrag({
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const drag = clipDragRef.current;
         if (!drag || !trackLanesRef.current || !timelineRef.current) return;
+
+        if (drag.toolGesture === 'slip' || drag.toolGesture === 'slide') {
+          const currentClip = clipMapRef.current.get(drag.clipId);
+          if (!currentClip) return;
+
+          const rawDelta = pixelToTime(moveEvent.clientX - (drag.gestureStartX ?? drag.currentX));
+          const clampedDelta = drag.toolGesture === 'slip'
+            ? clampSlipSourceDelta(currentClip, rawDelta)
+            : clampSlideTimelineDelta([...clipMapRef.current.values()], currentClip, rawDelta);
+          const newDrag: ClipDragState = {
+            ...drag,
+            currentX: moveEvent.clientX,
+            currentTrackId: currentClip.trackId,
+            snappedTime: drag.toolGesture === 'slide'
+              ? Math.max(0, currentClip.startTime + clampedDelta)
+              : currentClip.startTime,
+            snapIndicatorTime: null,
+            isSnapping: false,
+            trackChangeGuideTime: null,
+            altKeyPressed: moveEvent.altKey,
+            forcingOverlap: false,
+            multiSelectTimeDelta: drag.toolGesture === 'slide' ? clampedDelta : undefined,
+            sourceTimeDelta: drag.toolGesture === 'slip' ? clampedDelta : undefined,
+          };
+          setClipDrag(newDrag);
+          clipDragRef.current = newDrag;
+          return;
+        }
 
         const lanesRect = trackLanesRef.current.getBoundingClientRect();
         const mouseY = moveEvent.clientY - lanesRect.top;
@@ -402,6 +496,44 @@ export function useClipDrag({
       const handleMouseUp = (upEvent: MouseEvent) => {
         const drag = clipDragRef.current;
         if (drag && timelineRef.current) {
+          if (drag.toolGesture === 'slip' || drag.toolGesture === 'slide') {
+            const currentClip = clipMapRef.current.get(drag.clipId);
+            if (currentClip) {
+              const rawDelta = pixelToTime(upEvent.clientX - (drag.gestureStartX ?? drag.currentX));
+              const delta = drag.toolGesture === 'slip'
+                ? drag.sourceTimeDelta ?? clampSlipSourceDelta(currentClip, rawDelta)
+                : drag.multiSelectTimeDelta ?? clampSlideTimelineDelta([...clipMapRef.current.values()], currentClip, rawDelta);
+              if (drag.toolGesture === 'slip') {
+                applyTimelineEditOperation({
+                  id: `slip:${drag.clipId}:${Date.now()}`,
+                  type: 'slip-clip',
+                  clipId: drag.clipId,
+                  sourceDelta: delta,
+                  includeLinked: !drag.altKeyPressed,
+                }, {
+                  source: 'ui',
+                  historyLabel: 'Slip clip',
+                });
+              } else {
+                applyTimelineEditOperation({
+                  id: `slide:${drag.clipId}:${Date.now()}`,
+                  type: 'slide-clip',
+                  clipId: drag.clipId,
+                  timelineDelta: delta,
+                  includeLinked: !drag.altKeyPressed,
+                }, {
+                  source: 'ui',
+                  historyLabel: 'Slide clip',
+                });
+              }
+            }
+            setClipDrag(null);
+            clipDragRef.current = null;
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            return;
+          }
+
           // Use refs to get current values (avoid stale closures)
           const currentSelectedIds = selectedClipIdsRef.current;
           const currentClipMap = clipMapRef.current;
@@ -494,7 +626,7 @@ export function useClipDrag({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, getRenderedTrackHeight, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
+    [activeTimelineToolId, applyTimelineEditOperation, trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, getRenderedTrackHeight, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
   );
 
   // Handle double-click on clip - open composition if it's a nested comp

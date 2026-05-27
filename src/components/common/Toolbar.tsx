@@ -7,7 +7,11 @@ import { Logger } from '../../services/logger';
 
 const log = Logger.create('Toolbar');
 import { useEngine } from '../../hooks/useEngine';
-import { useDockStore } from '../../stores/dockStore';
+import {
+  CAN_EDIT_FACTORY_DOCK_LAYOUTS,
+  isProtectedFactoryDockLayout,
+  useDockStore,
+} from '../../stores/dockStore';
 import { PANEL_CONFIGS, AI_PANEL_TYPES, SCOPE_PANEL_TYPES, WIP_PANEL_TYPES, DEPRECATED_PANEL_TYPES, type PanelType } from '../../types/dock';
 import { useSettingsStore, type AutosaveInterval } from '../../stores/settingsStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
@@ -567,6 +571,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   const activeSavedLayout = useMemo(() => {
     return savedLayouts.find((savedLayout) => savedLayout.id === activeSavedLayoutId) ?? null;
   }, [activeSavedLayoutId, savedLayouts]);
+  const activeSavedLayoutProtected = isProtectedFactoryDockLayout(activeSavedLayout);
 
   const handleSaveNamedLayout = useCallback(() => {
     const name = window.prompt('Save current layout as:', 'New Layout');
@@ -579,11 +584,15 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
   }, [saveNamedLayout]);
 
   const handleSaveCurrentNamedLayout = useCallback(() => {
+    if (activeSavedLayoutProtected) {
+      return;
+    }
+
     const savedLayout = saveCurrentNamedLayout();
     if (savedLayout) {
       closeMenu();
     }
-  }, [saveCurrentNamedLayout]);
+  }, [activeSavedLayoutProtected, saveCurrentNamedLayout]);
 
   const handleLoadSavedLayout = useCallback((layoutId: string) => {
     loadSavedLayout(layoutId);
@@ -928,8 +937,14 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
                   <button
                     className="menu-option"
                     onClick={handleSaveCurrentNamedLayout}
-                    disabled={!activeSavedLayout}
-                    title={activeSavedLayout ? `Overwrite ${activeSavedLayout.name}` : 'Load or save a named layout first'}
+                    disabled={!activeSavedLayout || activeSavedLayoutProtected}
+                    title={
+                      activeSavedLayoutProtected
+                        ? 'Built-in layouts can only be edited on the dev server'
+                        : activeSavedLayout
+                          ? `Overwrite ${activeSavedLayout.name}`
+                          : 'Load or save a named layout first'
+                    }
                   >
                     <span>Save to Current Layout</span>
                     {activeSavedLayout && <span className="menu-hint">{activeSavedLayout.name}</span>}
@@ -949,9 +964,11 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
                       const isDefaultLayout = savedLayout.id === defaultSavedLayoutId;
                       const isActiveLayout = savedLayout.id === activeSavedLayoutId;
                       const isFavoriteLayout = savedLayout.favorite === true;
+                      const isBuiltInLayout = savedLayout.factory === true;
                       const layoutHint = [
                         isActiveLayout ? 'Current' : null,
                         isDefaultLayout ? 'Default' : null,
+                        isBuiltInLayout && !CAN_EDIT_FACTORY_DOCK_LAYOUTS ? 'Built-in' : null,
                       ].filter(Boolean).join(' / ');
                       return (
                         <div key={savedLayout.id} className="menu-layout-row">

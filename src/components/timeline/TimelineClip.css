@@ -19,23 +19,35 @@
 }
 
 .timeline-clip.audio {
-  background: #2d6b4a;
-  border: 1px solid #3a7a58;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--track-color, #303030) 72%, #202020),
+    color-mix(in srgb, var(--track-color, #303030) 36%, #101010)
+  );
+  border: 1px solid color-mix(in srgb, var(--track-color, #303030) 72%, #050505);
 }
 
 .timeline-clip.audio.audio-mode-detailed {
-  background: linear-gradient(180deg, #2f7456, #214f40);
-  border-color: color-mix(in srgb, #52beff 22%, #3a7a58);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--track-color, #303030) 76%, #202020),
+    color-mix(in srgb, var(--track-color, #303030) 40%, #101010)
+  );
+  border-color: color-mix(in srgb, var(--track-color, #303030) 76%, #050505);
 }
 
 .timeline-clip.audio.audio-mode-spectral {
-  background: linear-gradient(180deg, #254663, #27324e 48%, #3f2448);
-  border-color: color-mix(in srgb, #52beff 44%, #6f4c78);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--track-color, #303030) 70%, #202020),
+    color-mix(in srgb, var(--track-color, #303030) 34%, #101010)
+  );
+  border-color: color-mix(in srgb, var(--track-color, #303030) 72%, #050505);
 }
 
 .timeline-clip.audio.audio-focus-active {
-  border-color: color-mix(in srgb, #52beff 52%, #3a7a58);
-  box-shadow: inset 0 0 0 1px rgba(82, 190, 255, 0.16);
+  border-color: color-mix(in srgb, var(--track-color, #303030) 72%, #050505);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--track-color, #303030) 28%, transparent);
 }
 
 .timeline-clip.text {
@@ -363,7 +375,7 @@
 .clip-proxy-badge {
   position: absolute;
   top: 2px;
-  right: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 2px);
   background: var(--success);
   color: var(--text-inverse);
   font-size: 9px;
@@ -376,7 +388,7 @@
 .clip-proxy-error {
   position: absolute;
   top: 2px;
-  right: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 2px);
   background: var(--danger);
   color: var(--text-inverse);
   font-size: 9px;
@@ -390,7 +402,7 @@
 .clip-proxy-generating {
   position: absolute;
   top: 2px;
-  right: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 2px);
   display: flex;
   align-items: center;
   gap: 3px;
@@ -440,18 +452,6 @@
   transition: height 0.3s ease-out;
 }
 
-.timeline-clip.has-proxy {
-  border-color: var(--success) !important;
-}
-
-.timeline-clip.generating-proxy {
-  border-color: var(--warning-light) !important;
-}
-
-.timeline-clip.proxy-error {
-  border-color: var(--danger) !important;
-}
-
 /* Loading state takes visual priority over proxy states */
 .timeline-clip.loading.has-proxy,
 .timeline-clip.loading.generating-proxy {
@@ -467,7 +467,7 @@
 .clip-reversed-badge {
   position: absolute;
   top: 2px;
-  right: 20px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 20px);
   background: #f97316;
   color: var(--text-inverse);
   font-size: 10px;
@@ -513,7 +513,7 @@
 .clip-linked-group-badge {
   position: absolute;
   top: 2px;
-  right: 38px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 38px);
   background: var(--purple);
   color: var(--text-on-accent);
   font-size: 10px;
@@ -532,7 +532,7 @@
 .clip-transcript-badge {
   position: absolute;
   bottom: 2px;
-  right: 20px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 20px);
   background: var(--accent);
   color: var(--text-inverse);
   font-size: 8px;
@@ -548,7 +548,7 @@
 .clip-analysis-badge {
   position: absolute;
   bottom: 2px;
-  right: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 2px);
   background: #e88a1a;
   color: var(--text-inverse);
   font-size: 8px;
@@ -825,7 +825,7 @@
 .analysis-legend-labels {
   position: absolute;
   top: 2px;
-  right: 4px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 4px);
   display: flex;
   gap: 8px;
   font-size: 8px;
@@ -960,6 +960,30 @@
   z-index: 99;
 }
 
+.timeline-clip.slipping,
+.timeline-clip.sliding {
+  opacity: 0.92;
+  z-index: 100;
+  box-shadow: 0 0 0 2px var(--accent-timeline), 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.timeline-clip.slipping::after,
+.timeline-clip.sliding::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  pointer-events: none;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.18) 0,
+      rgba(255, 255, 255, 0.18) 1px,
+      transparent 1px,
+      transparent 12px
+    );
+}
+
 /* Visual feedback when forcing overlap - red glow to indicate clip will be trimmed */
 .timeline-clip.forcing-overlap {
   box-shadow: 0 0 0 2px var(--danger), 0 4px 12px rgba(239, 68, 68, 0.5);
@@ -967,7 +991,7 @@
 
 /* Cut tool mode */
 .timeline-clip.cut-mode {
-  cursor: crosshair !important;
+  cursor: inherit;
 }
 
 .timeline-clip.cut-mode:hover {
@@ -1169,6 +1193,11 @@
   opacity: 1;
 }
 
+.timeline-body-content[class*="timeline-tool-active-"] .trim-handle,
+.timeline-body-content[class*="timeline-tool-active-"] .fade-handle {
+  cursor: inherit;
+}
+
 /* Fade handles - corner handles for fade-in/out */
 .fade-handle {
   position: absolute;
@@ -1349,7 +1378,7 @@
 .clip-audio-status-stack {
   position: absolute;
   top: 4px;
-  right: 4px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 4px);
   z-index: 18;
   display: flex;
   align-items: center;
@@ -1749,7 +1778,7 @@
 .clip-audio-edit-stack {
   position: absolute;
   top: 3px;
-  right: 4px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 4px);
   z-index: 15;
   display: flex;
   align-items: center;

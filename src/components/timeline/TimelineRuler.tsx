@@ -39,28 +39,50 @@ function TimelineRulerComponent({
     .filter((range) => range.end > range.start && range.end >= visibleStartTime && range.start <= visibleEndTime);
 
   const gridPlan = createTimelineGridPlan({ zoom, frameRate });
-  const interval = gridPlan.minorIntervalSeconds;
-  const firstMarkerIndex = Math.max(0, Math.floor(visibleStartTime / interval));
-  const lastMarkerIndex = Math.max(firstMarkerIndex, Math.ceil(visibleEndTime / interval));
+  const timeInterval = gridPlan.timeIntervalSeconds;
+  const firstTimeMarkerIndex = Math.max(0, Math.floor(visibleStartTime / timeInterval));
+  const lastTimeMarkerIndex = Math.max(firstTimeMarkerIndex, Math.ceil(visibleEndTime / timeInterval));
 
-  for (let markerIndex = firstMarkerIndex; markerIndex <= lastMarkerIndex; markerIndex += 1) {
-    const t = markerIndex * interval;
+  for (let markerIndex = firstTimeMarkerIndex; markerIndex <= lastTimeMarkerIndex; markerIndex += 1) {
+    const t = markerIndex * timeInterval;
     if (t < 0 || t > duration) continue;
     const x = timeToPixel(t);
-    const isMainMarker = markerIndex % gridPlan.majorEveryMinor === 0;
-    const label = gridPlan.labelMode === 'timecode'
-      ? formatTimelineTimecode(t, gridPlan.frameRate)
-      : formatTime(t);
+    const isMainMarker = markerIndex % gridPlan.timeMajorEveryMinor === 0;
 
     markers.push(
       <div
-        key={`${gridPlan.mode}-${markerIndex}`}
-        className={`time-marker ${gridPlan.mode} ${isMainMarker ? 'main' : 'sub'}`}
-        style={{ left: x }}
+        key={`time-${markerIndex}`}
+        className={`time-marker time ${isMainMarker ? 'main' : 'sub'}`}
+        style={{ left: x, opacity: gridPlan.timeGridOpacity }}
       >
-        {isMainMarker && <span className="time-label">{label}</span>}
+        {gridPlan.mode === 'time' && isMainMarker && <span className="time-label">{formatTime(t)}</span>}
       </div>
     );
+  }
+
+  if (gridPlan.frameGridOpacity > 0) {
+    const frameInterval = gridPlan.frameIntervalSeconds;
+    const firstFrameMarkerIndex = Math.max(0, Math.floor(visibleStartTime / frameInterval));
+    const lastFrameMarkerIndex = Math.max(firstFrameMarkerIndex, Math.ceil(visibleEndTime / frameInterval));
+
+    for (let markerIndex = firstFrameMarkerIndex; markerIndex <= lastFrameMarkerIndex; markerIndex += 1) {
+      const t = markerIndex * frameInterval;
+      if (t < 0 || t > duration) continue;
+      const x = timeToPixel(t);
+      const isMainMarker = markerIndex % gridPlan.frameMajorEveryMinor === 0;
+
+      markers.push(
+        <div
+          key={`frame-${markerIndex}`}
+          className={`time-marker frame ${isMainMarker ? 'main' : 'sub'}`}
+          style={{ left: x, opacity: gridPlan.frameGridOpacity }}
+        >
+          {gridPlan.mode === 'frame' && isMainMarker && (
+            <span className="time-label">{formatTimelineTimecode(t, gridPlan.frameRate)}</span>
+          )}
+        </div>
+      );
+    }
   }
 
   return (

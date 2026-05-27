@@ -483,6 +483,9 @@ saveLayoutAsDefault()      // View -> Layouts; stores dock layout, timeline focu
 resetLayout()              // View -> Layouts
 ```
 
+The hardcoded default layout is the shared Video/Audio Edit arrangement: Media on the left,
+Preview in the center, Properties/Export on the right, and a compact Timeline at the bottom.
+
 ---
 
 ## Troubleshooting

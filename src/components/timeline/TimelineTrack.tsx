@@ -9,6 +9,7 @@ import { parseVectorAnimationInputProperty, parseVectorAnimationStateProperty } 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_VIEWPORT_MIN_PX = 1600;
 const TRACK_RENDER_OVERSCAN_PX = 1200;
+const EPSILON = 0.0001;
 
 type KeyframeTrackClip = {
   id: string;
@@ -49,10 +50,12 @@ function TrackPropertyTracks({
   clipKeyframes,
   renderKeyframeDiamonds,
   expandedCurveProperties,
+  activeTimelineToolId,
   selectedKeyframeIds,
   onSelectKeyframe,
   onMoveKeyframe,
   onUpdateBezierHandle,
+  addKeyframe,
   timeToPixel,
   pixelToTime,
 }: {
@@ -61,10 +64,12 @@ function TrackPropertyTracks({
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
   expandedCurveProperties: Map<string, Set<AnimatableProperty>>;
+  activeTimelineToolId: TimelineTrackProps['activeTimelineToolId'];
   selectedKeyframeIds: Set<string>;
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
   onUpdateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
+  addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: string | null) => void;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
 }) {
@@ -134,6 +139,46 @@ function TrackPropertyTracks({
   // Get all keyframes for this clip
   const allKeyframes = clipKeyframes.get(selectedClip.id) || [];
 
+  const resolvePenKeyframeValue = (
+    keyframes: Array<{ time: number; value: number }>,
+    time: number,
+  ): number => {
+    const sorted = keyframes.toSorted((a, b) => a.time - b.time);
+    if (sorted.length === 0) return 0;
+    if (time <= sorted[0].time) return sorted[0].value;
+    const last = sorted[sorted.length - 1];
+    if (time >= last.time) return last.value;
+
+    for (let index = 1; index < sorted.length; index += 1) {
+      const next = sorted[index];
+      if (time > next.time) continue;
+      const previous = sorted[index - 1];
+      const span = Math.max(EPSILON, next.time - previous.time);
+      const progress = Math.max(0, Math.min(1, (time - previous.time) / span));
+      return previous.value + (next.value - previous.value) * progress;
+    }
+
+    return last.value;
+  };
+
+  const handlePenKeyframeMouseDown = (
+    event: React.MouseEvent<HTMLDivElement>,
+    property: AnimatableProperty,
+    propertyKeyframes: Array<{ time: number; value: number }>,
+  ) => {
+    if (activeTimelineToolId !== 'pen-keyframe') return;
+    if (event.button !== 0 || !selectedClip) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const absoluteTime = pixelToTime(event.clientX - rect.left);
+    const localTime = Math.max(0, Math.min(selectedClip.duration, absoluteTime - selectedClip.startTime));
+    const value = resolvePenKeyframeValue(propertyKeyframes, localTime);
+    addKeyframe(selectedClip.id, property, value, localTime, 'linear');
+  };
+
   return (
     <div className="track-property-tracks" ref={containerRef}>
       {sortedProperties.map((prop) => {
@@ -142,7 +187,10 @@ function TrackPropertyTracks({
 
         return (
           <div key={prop} className={`keyframe-track-row flat ${isCurveExpanded ? 'curve-expanded' : ''}`}>
-            <div className="keyframe-track">
+            <div
+              className="keyframe-track"
+              onMouseDown={(event) => handlePenKeyframeMouseDown(event, prop as AnimatableProperty, propKeyframes)}
+            >
               <div className="keyframe-track-line" />
               {renderKeyframeDiamonds(trackId, prop as AnimatableProperty)}
             </div>
@@ -174,6 +222,7 @@ function TrackPropertyTracks({
 
 function TimelineTrackComponent({
   track,
+  trackColor,
   clips,
   isDimmed,
   isExpanded,
@@ -183,6 +232,7 @@ function TimelineTrackComponent({
   isExternalDragTarget,
   selectedClipIds,
   selectedKeyframeIds,
+  activeTimelineToolId,
   clipDrag,
   clipTrim,
   externalDrag,
@@ -190,6 +240,8 @@ function TimelineTrackComponent({
   onDragOver,
   onDragEnter,
   onDragLeave,
+  onResizeStart,
+  isResizeActive = false,
   renderClip,
   clipKeyframes,
   renderKeyframeDiamonds,
@@ -201,6 +253,7 @@ function TimelineTrackComponent({
   onSelectKeyframe,
   onMoveKeyframe,
   onUpdateBezierHandle,
+  addKeyframe,
 }: TimelineTrackProps) {
   // Deduplicate by clip id so transient store/render races do not produce duplicate React keys.
   const allTrackClips = useMemo(() => {
@@ -234,6 +287,10 @@ function TimelineTrackComponent({
   }, [allTrackClips, clipDrag, clipTrim?.clipId, selectedClipIds, visibleEndTime, visibleStartTime]);
   const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
+  const trackLaneStyle = {
+    height: dynamicHeight,
+    ...(trackColor ? { '--track-color': trackColor } : {}),
+  } as React.CSSProperties & { '--track-color'?: string };
   const renderExternalPreview = (
     className: string,
     left: number,
@@ -266,9 +323,9 @@ function TimelineTrackComponent({
         isExpanded ? 'expanded' : ''
       } ${isDragTarget ? 'drag-target' : ''} ${
         isExternalDragTarget ? 'external-drag-target' : ''
-      } ${track.locked ? 'locked' : ''}`}
+      } ${track.locked ? 'locked' : ''} ${isResizeActive ? 'resizing' : ''}`}
       data-track-id={track.id}
-      style={{ height: dynamicHeight }}
+      style={trackLaneStyle}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragEnter={onDragEnter}
@@ -319,12 +376,23 @@ function TimelineTrackComponent({
           clipKeyframes={clipKeyframes}
           renderKeyframeDiamonds={renderKeyframeDiamonds}
           expandedCurveProperties={expandedCurveProperties}
+          activeTimelineToolId={activeTimelineToolId}
           selectedKeyframeIds={selectedKeyframeIds}
           onSelectKeyframe={onSelectKeyframe}
           onMoveKeyframe={onMoveKeyframe}
           onUpdateBezierHandle={onUpdateBezierHandle}
+          addKeyframe={addKeyframe}
           timeToPixel={timeToPixel}
           pixelToTime={pixelToTime}
+        />
+      )}
+      {onResizeStart && (
+        <div
+          className={`track-resize-handle track-resize-handle-lane ${isResizeActive ? 'active' : ''}`}
+          role="separator"
+          aria-orientation="horizontal"
+          title="Drag to resize track height"
+          onPointerDown={(event) => onResizeStart(event, track.id)}
         />
       )}
     </div>

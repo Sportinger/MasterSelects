@@ -91,6 +91,7 @@ import type {
   SplatEffectorItem,
   TextItem,
 } from '../../stores/mediaStore';
+import type { MediaFileUsageSummary } from '../../stores/mediaStore/slices/fileManageSlice';
 import { useTimelineStore } from '../../stores/timeline';
 import { useDockStore } from '../../stores/dockStore';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
@@ -414,6 +415,26 @@ function getMediaFileCodecLabel(mediaFile: MediaFile | null): string | undefined
   return undefined;
 }
 
+interface MediaDeleteConfirmationRequest {
+  selectedIds: string[];
+  fileIds: string[];
+  mediaFiles: MediaFile[];
+  usages: MediaFileUsageSummary[];
+}
+
+function getMediaDeleteImpact(
+  mediaFiles: MediaFile[],
+  usages: MediaFileUsageSummary[],
+): { clipCount: number; compositionCount: number; fileLabel: string } {
+  const clipCount = usages.reduce((total, usage) => total + usage.clipCount, 0);
+  const compositionCount = new Set(usages.flatMap(usage => usage.compositions.map(composition => composition.compositionId))).size;
+  const fileLabel = mediaFiles.length === 1
+    ? `"${mediaFiles[0].name}"`
+    : `${mediaFiles.length} media files`;
+
+  return { clipCount, compositionCount, fileLabel };
+}
+
 function rectToTransitionBox(rect: DOMRect): MediaPanelTransitionBox {
   return {
     left: rect.left,
@@ -465,7 +486,8 @@ export function MediaPanel() {
     importFilesWithPicker,
     createComposition,
     createFolder,
-    removeFile,
+    getMediaFileUsages,
+    deleteMediaFilesEverywhere,
     removeSignalAsset,
     removeComposition,
     removeFolder,
@@ -533,6 +555,8 @@ export function MediaPanel() {
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const [settingsDialog, setSettingsDialog] = useState<{ compositionId: string; width: number; height: number; frameRate: number; duration: number } | null>(null);
   const [solidSettingsDialog, setSolidSettingsDialog] = useState<{ solidItemId: string; width: number; height: number; color: string } | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<MediaDeleteConfirmationRequest | null>(null);
+  const [deleteConfirmationBusy, setDeleteConfirmationBusy] = useState(false);
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [internalDragId, setInternalDragId] = useState<string | null>(null);
@@ -1276,7 +1300,7 @@ export function MediaPanel() {
     } else if (item.type === 'composition') {
       // Open composition in timeline (as a tab)
       openCompositionTab(item.id);
-    } else if ((item.type === 'video' || item.type === 'image') && 'file' in item && (item as MediaFile).file) {
+    } else if ((item.type === 'video' || item.type === 'image' || item.type === 'audio') && 'file' in item && (item as MediaFile).file) {
       // Open in source monitor
       useMediaStore.getState().setSourceMonitorFile(item.id);
     } else if ('file' in item && mediaNeedsRelink(item as MediaFile)) {
@@ -1405,11 +1429,17 @@ export function MediaPanel() {
     });
   }, []);
 
-  // Delete selected items
-  const handleDelete = useCallback(() => {
-    selectedIds.forEach(id => {
-      if (files.find(f => f.id === id)) removeFile(id);
-      else if (compositions.find(c => c.id === id)) removeComposition(id);
+  const deleteSelectedItems = useCallback(async (idsToDelete: string[], fileIdsToDelete: string[]) => {
+    if (fileIdsToDelete.length > 0) {
+      const result = await deleteMediaFilesEverywhere(fileIdsToDelete);
+      if (result.artifactFailures.length > 0) {
+        log.warn('Some media artifacts could not be deleted', result.artifactFailures);
+      }
+    }
+
+    idsToDelete.forEach(id => {
+      if (fileIdsToDelete.includes(id)) return;
+      if (compositions.find(c => c.id === id)) removeComposition(id);
       else if (folders.find(f => f.id === id)) removeFolder(id);
       else if (textItems.find(t => t.id === id)) removeTextItem(id);
       else if (solidItems.find(s => s.id === id)) removeSolidItem(id);
@@ -1421,7 +1451,55 @@ export function MediaPanel() {
       else if (signalAssets.find(item => item.id === id)) removeSignalAsset(id);
     });
     closeContextMenu();
-  }, [selectedIds, files, compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, removeFile, removeSignalAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
+  }, [compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, deleteMediaFilesEverywhere, removeSignalAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
+
+  // Delete selected items
+  const handleDelete = useCallback(async () => {
+    const selectedFileIds = selectedIds.filter(id => files.some(file => file.id === id));
+    const selectedFiles = files.filter(file => selectedFileIds.includes(file.id));
+
+    if (selectedFiles.length > 0) {
+      const usages = getMediaFileUsages(selectedFileIds);
+      const hasProjectArtifacts = selectedFiles.some(file =>
+        Boolean(
+          file.projectPath ||
+          file.fileHash ||
+          file.audioAnalysisRefs ||
+          file.proxyStatus ||
+          file.proxyFrameCount ||
+          file.thumbnailUrl ||
+          file.transcriptStatus ||
+          file.analysisStatus
+        )
+      );
+
+      if (usages.length > 0 || hasProjectArtifacts) {
+        setDeleteConfirmation({
+          selectedIds: [...selectedIds],
+          fileIds: selectedFileIds,
+          mediaFiles: selectedFiles,
+          usages,
+        });
+        closeContextMenu();
+        return;
+      }
+    }
+
+    await deleteSelectedItems([...selectedIds], selectedFileIds);
+  }, [selectedIds, files, getMediaFileUsages, deleteSelectedItems, closeContextMenu]);
+
+  const confirmMediaDelete = useCallback(async () => {
+    if (!deleteConfirmation || deleteConfirmationBusy) return;
+    setDeleteConfirmationBusy(true);
+    try {
+      await deleteSelectedItems(deleteConfirmation.selectedIds, deleteConfirmation.fileIds);
+      setDeleteConfirmation(null);
+    } catch (error) {
+      log.error('Failed to delete media items', error);
+    } finally {
+      setDeleteConfirmationBusy(false);
+    }
+  }, [deleteConfirmation, deleteConfirmationBusy, deleteSelectedItems]);
 
   // Get the active parent folder (icons view: current open folder, classic/board view: selected folder or null)
   const getActiveParentId = useCallback((): string | null => {
@@ -4075,78 +4153,83 @@ export function MediaPanel() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+              <span>Add</span>
+              <span className="submenu-arrow">&#9654;</span>
+              <div className="context-submenu">
+                <div className="context-menu-item" onClick={() => { handleNewComposition(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="composition" /></span>
+                  <span>Composition</span>
+                </div>
+                <div className="context-menu-item" onClick={() => { handleNewFolder(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><span className="media-folder-icon">&#128193;</span></span>
+                  <span>Folder</span>
+                </div>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item" onClick={() => { handleNewText(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="text" /></span>
+                  <span>Text</span>
+                </div>
+                <div className="context-menu-item" onClick={() => { handleNewText3D(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="text-3d" /></span>
+                  <span>3D Text</span>
+                </div>
+                <div className="context-menu-item" onClick={() => { handleNewSolid(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
+                  <span>Solid</span>
+                </div>
+                <div className="context-menu-item" onClick={() => { handleNewCamera(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="camera" /></span>
+                  <span>Camera</span>
+                </div>
+                <div className="context-menu-item" onClick={() => { handleNewSplatEffector(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="splat-effector" /></span>
+                  <span>3D Effector</span>
+                </div>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item" onClick={() => { handleNewMathScene(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="math-scene" /></span>
+                  <span>Math Scene</span>
+                </div>
+                <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                  <span className="context-menu-icon"><FileTypeIcon type="motion-shape" /></span>
+                  <span>Motion Shape</span>
+                  <span className="submenu-arrow">&#9654;</span>
+                  <div className="context-submenu">
+                    <div className="context-menu-item" onClick={() => { handleNewMotionShape('rectangle'); closeContextMenu(); }}>
+                      Rectangle
+                    </div>
+                    <div className="context-menu-item" onClick={() => { handleNewMotionShape('ellipse'); closeContextMenu(); }}>
+                      Ellipse
+                    </div>
+                  </div>
+                </div>
+                <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                  <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
+                  <span>Mesh</span>
+                  <span className="submenu-arrow">&#9654;</span>
+                  <div className="context-submenu">
+                    {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
+                      <div key={meshType} className="context-menu-item" onClick={() => { handleNewMesh(meshType); closeContextMenu(); }}>
+                        {meshType.charAt(0).toUpperCase() + meshType.slice(1)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="context-menu-item" onClick={() => { handleImportGaussianSplat(); closeContextMenu(); }}>
+                  <span className="context-menu-icon"><FileTypeIcon type="gaussian-splat" /></span>
+                  <span>Gaussian Splat</span>
+                </div>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item disabled" onClick={closeContextMenu}>
+                  <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
+                  <span>Adjustment Layer</span>
+                  <span className="context-menu-hint">Coming soon</span>
+                </div>
+              </div>
+            </div>
             <div className="context-menu-item" onClick={handleImport}>
               Import Media...
-            </div>
-            <div className="context-menu-separator" />
-            <div className="context-menu-item" onClick={() => { handleNewComposition(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="composition" /></span>
-              Composition
-            </div>
-            <div className="context-menu-item" onClick={() => { handleNewFolder(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><span className="media-folder-icon">&#128193;</span></span>
-              Folder
-            </div>
-            <div className="context-menu-separator" />
-            <div className="context-menu-item" onClick={() => { handleNewText(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="text" /></span>
-              Text
-            </div>
-            <div className="context-menu-item" onClick={() => { handleNewText3D(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="text-3d" /></span>
-              3D Text
-            </div>
-            <div className="context-menu-item" onClick={() => { handleNewSolid(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
-              Solid
-            </div>
-            <div className="context-menu-item" onClick={() => { handleNewCamera(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="camera" /></span>
-              Camera
-            </div>
-            <div className="context-menu-item" onClick={() => { handleNewSplatEffector(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="splat-effector" /></span>
-              3D Effector
-            </div>
-            <div className="context-menu-separator" />
-            <div className="context-menu-item" onClick={() => { handleNewMathScene(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="math-scene" /></span>
-              Math Scene
-            </div>
-            <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-              <span className="context-menu-icon"><FileTypeIcon type="motion-shape" /></span>
-              <span>Motion Shape</span>
-              <span className="submenu-arrow">&#9654;</span>
-              <div className="context-submenu">
-                <div className="context-menu-item" onClick={() => { handleNewMotionShape('rectangle'); closeContextMenu(); }}>
-                  Rectangle
-                </div>
-                <div className="context-menu-item" onClick={() => { handleNewMotionShape('ellipse'); closeContextMenu(); }}>
-                  Ellipse
-                </div>
-              </div>
-            </div>
-            <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-              <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
-              <span>Mesh</span>
-              <span className="submenu-arrow">&#9654;</span>
-              <div className="context-submenu">
-                {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
-                  <div key={meshType} className="context-menu-item" onClick={() => { handleNewMesh(meshType); closeContextMenu(); }}>
-                    {meshType.charAt(0).toUpperCase() + meshType.slice(1)}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="context-menu-item" onClick={() => { handleImportGaussianSplat(); closeContextMenu(); }}>
-              <span className="context-menu-icon"><FileTypeIcon type="gaussian-splat" /></span>
-              Gaussian Splat
-            </div>
-            <div className="context-menu-separator" />
-            <div className="context-menu-item disabled" onClick={closeContextMenu}>
-              <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
-              Adjustment Layer
-              <span className="context-menu-hint">Coming soon</span>
             </div>
             {(contextMenu.itemId || multiSelect) && (
               <>
@@ -4321,6 +4404,70 @@ export function MediaPanel() {
                 </div>
               </>
             )}
+          </div>
+        );
+      })()}
+
+      {/* Media Delete Confirmation */}
+      {deleteConfirmation && (() => {
+        const impact = getMediaDeleteImpact(deleteConfirmation.mediaFiles, deleteConfirmation.usages);
+        const compositionNames = [...new Map(
+          deleteConfirmation.usages.flatMap(usage =>
+            usage.compositions.map(composition => [composition.compositionId, composition.compositionName] as const)
+          )
+        ).values()];
+
+        return (
+          <div
+            className="media-delete-dialog-backdrop"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !deleteConfirmationBusy) {
+                setDeleteConfirmation(null);
+              }
+            }}
+          >
+            <div
+              className="media-delete-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="media-delete-dialog-title"
+            >
+              <div className="media-delete-dialog-kicker">Delete media</div>
+              <h3 id="media-delete-dialog-title">Delete {impact.fileLabel}?</h3>
+              {impact.clipCount > 0 && (
+                <p>
+                  {impact.clipCount} clip{impact.clipCount === 1 ? '' : 's'} in {impact.compositionCount} composition{impact.compositionCount === 1 ? '' : 's'} will be removed from the timeline.
+                </p>
+              )}
+              {compositionNames.length > 0 && (
+                <div className="media-delete-dialog-comps">
+                  {compositionNames.slice(0, 4).join(', ')}
+                  {compositionNames.length > 4 ? `, +${compositionNames.length - 4} more` : ''}
+                </div>
+              )}
+              <div className="media-delete-dialog-warning">
+                This also deletes raw source files, proxies, analyses, transcripts, waveform caches, thumbnails, and related audio-analysis artifacts from the project folder.
+              </div>
+              <div className="media-delete-dialog-actions">
+                <button
+                  type="button"
+                  className="media-delete-dialog-button secondary"
+                  disabled={deleteConfirmationBusy}
+                  onClick={() => setDeleteConfirmation(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="media-delete-dialog-button danger"
+                  disabled={deleteConfirmationBusy}
+                  onClick={confirmMediaDelete}
+                >
+                  {deleteConfirmationBusy ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
           </div>
         );
       })()}

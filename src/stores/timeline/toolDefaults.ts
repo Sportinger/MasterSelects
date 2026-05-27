@@ -1,0 +1,173 @@
+import type { LastTimelineToolByGroup, TimelineToolGroupId, TimelineToolId } from './types';
+
+export const TIMELINE_TOOL_GROUP_IDS: TimelineToolGroupId[] = [
+  'selection',
+  'cut',
+  'trim',
+  'placement',
+  'navigation',
+];
+
+export const DEFAULT_TIMELINE_TOOL_BY_GROUP: LastTimelineToolByGroup = {
+  selection: 'select',
+  cut: 'blade',
+  trim: 'edge-trim',
+  placement: 'position-overwrite',
+  navigation: 'hand',
+};
+
+export const TIMELINE_TOOL_IDS: TimelineToolId[] = [
+  'select',
+  'track-select-forward',
+  'track-select-backward',
+  'track-select-forward-all',
+  'range-select',
+  'blade',
+  'blade-all-tracks',
+  'split-at-playhead',
+  'split-all-at-playhead',
+  'trim-start-to-playhead',
+  'trim-end-to-playhead',
+  'ripple-trim-start-to-playhead',
+  'ripple-trim-end-to-playhead',
+  'ripple-delete',
+  'delete-gap',
+  'lift-range',
+  'extract-range',
+  'edge-trim',
+  'ripple-trim',
+  'rolling-edit',
+  'slip',
+  'slide',
+  'rate-stretch',
+  'position-overwrite',
+  'insert',
+  'overwrite',
+  'replace',
+  'fit-to-fill',
+  'append-at-end',
+  'place-on-top',
+  'ripple-overwrite',
+  'hand',
+  'zoom',
+  'marker',
+  'in-point',
+  'out-point',
+  'pen-keyframe',
+];
+
+export const TIMELINE_TOOL_GROUP_BY_ID: Record<TimelineToolId, TimelineToolGroupId> = {
+  select: 'selection',
+  'track-select-forward': 'selection',
+  'track-select-backward': 'selection',
+  'track-select-forward-all': 'selection',
+  'range-select': 'selection',
+  blade: 'cut',
+  'blade-all-tracks': 'cut',
+  'split-at-playhead': 'cut',
+  'split-all-at-playhead': 'cut',
+  'trim-start-to-playhead': 'cut',
+  'trim-end-to-playhead': 'cut',
+  'ripple-trim-start-to-playhead': 'cut',
+  'ripple-trim-end-to-playhead': 'cut',
+  'ripple-delete': 'cut',
+  'delete-gap': 'cut',
+  'lift-range': 'cut',
+  'extract-range': 'cut',
+  'edge-trim': 'trim',
+  'ripple-trim': 'trim',
+  'rolling-edit': 'trim',
+  slip: 'trim',
+  slide: 'trim',
+  'rate-stretch': 'trim',
+  'position-overwrite': 'placement',
+  insert: 'placement',
+  overwrite: 'placement',
+  replace: 'placement',
+  'fit-to-fill': 'placement',
+  'append-at-end': 'placement',
+  'place-on-top': 'placement',
+  'ripple-overwrite': 'placement',
+  hand: 'navigation',
+  zoom: 'navigation',
+  marker: 'navigation',
+  'in-point': 'navigation',
+  'out-point': 'navigation',
+  'pen-keyframe': 'navigation',
+};
+
+export const TIMELINE_MODE_TOOL_IDS = new Set<TimelineToolId>([
+  'select',
+  'track-select-forward',
+  'track-select-backward',
+  'track-select-forward-all',
+  'range-select',
+  'blade',
+  'blade-all-tracks',
+  'edge-trim',
+  'ripple-trim',
+  'rolling-edit',
+  'slip',
+  'slide',
+  'rate-stretch',
+  'position-overwrite',
+  'hand',
+  'zoom',
+  'marker',
+  'in-point',
+  'out-point',
+  'pen-keyframe',
+]);
+
+export const AVAILABLE_TIMELINE_MODE_TOOL_IDS = new Set<TimelineToolId>([
+  'select',
+  'track-select-forward',
+  'track-select-backward',
+  'track-select-forward-all',
+  'range-select',
+  'blade',
+  'blade-all-tracks',
+  'edge-trim',
+  'ripple-trim',
+  'rolling-edit',
+  'slip',
+  'slide',
+  'rate-stretch',
+  'position-overwrite',
+  'hand',
+  'zoom',
+  'pen-keyframe',
+]);
+
+export const TIMELINE_TOOL_IDS_BY_GROUP: Record<TimelineToolGroupId, TimelineToolId[]> = {
+  selection: ['select', 'track-select-forward', 'track-select-backward', 'track-select-forward-all', 'range-select'],
+  cut: [
+    'blade',
+    'blade-all-tracks',
+    'split-at-playhead',
+    'split-all-at-playhead',
+    'trim-start-to-playhead',
+    'trim-end-to-playhead',
+    'ripple-trim-start-to-playhead',
+    'ripple-trim-end-to-playhead',
+    'ripple-delete',
+    'delete-gap',
+    'lift-range',
+    'extract-range',
+  ],
+  trim: ['edge-trim', 'ripple-trim', 'rolling-edit', 'slip', 'slide', 'rate-stretch'],
+  placement: ['position-overwrite', 'insert', 'overwrite', 'replace', 'fit-to-fill', 'append-at-end', 'place-on-top', 'ripple-overwrite'],
+  navigation: ['hand', 'zoom', 'marker', 'in-point', 'out-point', 'pen-keyframe'],
+};
+
+export function isTimelineToolId(value: string): value is TimelineToolId {
+  return (TIMELINE_TOOL_IDS as string[]).includes(value);
+}
+
+export function getLegacyToolMode(toolId: TimelineToolId) {
+  return toolId === 'blade' || toolId === 'blade-all-tracks' ? 'cut' as const : 'select' as const;
+}
+
+export function getDefaultLastTimelineToolByGroup(): LastTimelineToolByGroup {
+  return { ...DEFAULT_TIMELINE_TOOL_BY_GROUP };
+}

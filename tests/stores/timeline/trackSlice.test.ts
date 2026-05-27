@@ -208,6 +208,14 @@ describe('trackSlice', () => {
   });
 
   // ──────────────────────────────────────────────────
+  it('setTrackLabelColor: updates and clears track label color', () => {
+    store.getState().setTrackLabelColor('audio-1', 'aqua');
+    expect(store.getState().tracks.find(t => t.id === 'audio-1')!.labelColor).toBe('aqua');
+
+    store.getState().setTrackLabelColor('audio-1', 'none');
+    expect(store.getState().tracks.find(t => t.id === 'audio-1')!.labelColor).toBeUndefined();
+  });
+
   // setTrackMuted
   // ──────────────────────────────────────────────────
 
@@ -996,5 +1004,26 @@ describe('trackSlice', () => {
     store.getState().removeTrack('audio-1');
 
     expect(store.getState().runtimeAudioMeters.trackMeters['audio-1']).toBeUndefined();
+  });
+
+  it('setTargetTrack toggles the edit target track off and on', () => {
+    store.getState().setTargetTrack('video-1');
+    expect(store.getState().targetTrackIdByType.video).toBe('video-1');
+
+    store.getState().setTargetTrack('video-1');
+    expect(store.getState().targetTrackIdByType.video).toBeUndefined();
+  });
+
+  it('setTargetTrack stores independent video and audio edit targets', () => {
+    const videoId = store.getState().addTrack('video');
+    const audioId = store.getState().addTrack('audio');
+
+    store.getState().setTargetTrack(videoId);
+    store.getState().setTargetTrack(audioId);
+
+    expect(store.getState().targetTrackIdByType).toMatchObject({
+      video: videoId,
+      audio: audioId,
+    });
   });
 });

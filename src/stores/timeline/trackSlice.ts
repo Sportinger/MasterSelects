@@ -252,21 +252,32 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
 
     if (type === 'video') {
       // Insert at index 0 (top of timeline)
-      set({ tracks: [newTrack, ...tracks], expandedTracks: newExpanded });
+      set({
+        tracks: [newTrack, ...tracks],
+        expandedTracks: newExpanded,
+      });
     } else {
       // Audio: append at end (bottom of timeline)
-      set({ tracks: [...tracks, newTrack], expandedTracks: newExpanded });
+      set({
+        tracks: [...tracks, newTrack],
+        expandedTracks: newExpanded,
+      });
     }
 
     return newTrack.id;
   },
 
   removeTrack: (id) => {
-    const { tracks, clips } = get();
+    const { tracks, clips, targetTrackIdByType } = get();
     const track = tracks.find(t => t.id === id);
     if (track?.locked) {
       log.warn('Cannot remove locked track', { id });
       return;
+    }
+    const nextTracks = tracks.filter(t => t.id !== id);
+    const nextTargetTrackIdByType = { ...targetTrackIdByType };
+    if (track && nextTargetTrackIdByType[track.type] === id) {
+      delete nextTargetTrackIdByType[track.type];
     }
     const runtimeAudioMeters = updateRuntimeMeterState(
       get().runtimeAudioMeters.trackMeters,
@@ -274,9 +285,10 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
       performance.now(),
     );
     set({
-      tracks: tracks.filter(t => t.id !== id),
+      tracks: nextTracks,
       clips: clips.filter(c => c.trackId !== id),
       runtimeAudioMeters,
+      targetTrackIdByType: nextTargetTrackIdByType,
     });
   },
 
@@ -284,6 +296,18 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     const { tracks } = get();
     set({
       tracks: tracks.map(t => t.id === id ? { ...t, name } : t),
+    });
+  },
+
+  setTrackLabelColor: (id, labelColor) => {
+    const { tracks } = get();
+    set({
+      tracks: tracks.map(t => t.id === id
+        ? {
+            ...t,
+            labelColor: labelColor === 'none' ? undefined : labelColor,
+          }
+        : t),
     });
   },
 
@@ -304,11 +328,17 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
   },
 
   setTrackVisible: (id, visible) => {
-    const { tracks, invalidateCache } = get();
+    const { tracks, invalidateCache, targetTrackIdByType } = get();
     const track = tracks.find(t => t.id === id);
-    set({
+    const nextState: Partial<ReturnType<typeof get>> = {
       tracks: tracks.map(t => t.id === id ? { ...t, visible } : t),
-    });
+    };
+    if (track?.type === 'video' && visible === false && targetTrackIdByType.video === id) {
+      const nextTargetTrackIdByType = { ...targetTrackIdByType };
+      delete nextTargetTrackIdByType.video;
+      nextState.targetTrackIdByType = nextTargetTrackIdByType;
+    }
+    set(nextState);
     // Invalidate cache if video track visibility changed
     if (track?.type === 'video') {
       invalidateCache();
@@ -336,10 +366,17 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
   },
 
   setTrackLocked: (id, locked) => {
-    const { tracks } = get();
-    set({
+    const { tracks, targetTrackIdByType } = get();
+    const track = tracks.find(t => t.id === id);
+    const nextState: Partial<ReturnType<typeof get>> = {
       tracks: tracks.map(t => t.id === id ? { ...t, locked } : t),
-    });
+    };
+    if (track && locked === true && targetTrackIdByType[track.type] === id) {
+      const nextTargetTrackIdByType = { ...targetTrackIdByType };
+      delete nextTargetTrackIdByType[track.type];
+      nextState.targetTrackIdByType = nextTargetTrackIdByType;
+    }
+    set(nextState);
   },
 
   updateTrackAudioState: (id, patch) => {
@@ -689,6 +726,36 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
         ),
       });
     }
+  },
+
+  setTargetTrack: (trackId) => {
+    if (trackId === null) {
+      set({ targetTrackIdByType: {} });
+      return;
+    }
+
+    const { tracks, targetTrackIdByType } = get();
+    const track = tracks.find(candidate => candidate.id === trackId);
+    if (!track || track.locked === true) return;
+    if (track.type === 'video' && track.visible === false) return;
+
+    if (targetTrackIdByType[track.type] === track.id) {
+      const nextTargetTrackIdByType = { ...targetTrackIdByType };
+      delete nextTargetTrackIdByType[track.type];
+      set({ targetTrackIdByType: nextTargetTrackIdByType });
+      return;
+    }
+
+    set({
+      targetTrackIdByType: {
+        ...targetTrackIdByType,
+        [track.type]: track.id,
+      },
+    });
+  },
+
+  clearTargetTracks: () => {
+    set({ targetTrackIdByType: {} });
   },
 
   // Track parenting (layer linking) - like After Effects layer parenting

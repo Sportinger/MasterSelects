@@ -33,6 +33,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
         klingAccessKey: '',
         klingSecretKey: '',
       },
+      shouldUseApiKeyByDefault: (provider) => provider === 'elevenlabs',
     } as ReturnType<typeof useSettingsStore.getState>);
     elevenLabsMock.setApiKey.mockClear();
     elevenLabsMock.createSpeech.mockReset();

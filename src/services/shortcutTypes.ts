@@ -18,7 +18,12 @@ export type ShortcutActionId =
   // Markers
   | 'edit.addMarker'
   // Tools
+  | 'tool.select'
+  | 'tool.selectionGroup'
   | 'tool.cutToggle'
+  | 'tool.trimGroup'
+  | 'tool.placementGroup'
+  | 'tool.navigationGroup'
   | 'edit.splitAtPlayhead'
   // Selection operations
   | 'edit.delete'

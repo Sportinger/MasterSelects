@@ -1,6 +1,13 @@
 // TimelineHeader component - Track headers (left side)
 
 import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent, useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import {
+  IconEye,
+  IconEyeOff,
+  IconLock,
+  IconLockOpen,
+  IconVolume2,
+} from '@tabler/icons-react';
 import type { TimelineHeaderProps } from './types';
 import type { AnimatableProperty, AudioEffectParamValue, AudioSendState, ClipMask, ClipTransform, ColorCorrectionState, Keyframe, TimelineClip } from '../../types';
 import {
@@ -36,6 +43,7 @@ import {
   getAudioTrackHeaderDensity,
 } from './utils/audioTrackHeaderDensity';
 import { getAudioPanSliderStyle } from './utils/audioPanSliderStyle';
+import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from './trackColor';
 import {
   getCameraLookRotationAxis,
   resolveCameraLookAtFixedEyeUpdates,
@@ -74,33 +82,20 @@ type TrackHeaderIconName = 'speaker' | 'lock' | 'unlock' | 'eye' | 'eyeOff';
 
 function TrackHeaderIcon({ name }: { name: TrackHeaderIconName }) {
   if (name === 'speaker') {
-    return (
-      <svg className="track-header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M4 9h4l5-4v14l-5-4H4z" />
-        <path d="M16 8.5c1.1 1 1.7 2.2 1.7 3.5s-.6 2.5-1.7 3.5" />
-        <path d="M18.6 6c1.8 1.7 2.8 3.7 2.8 6s-1 4.3-2.8 6" />
-      </svg>
-    );
+    return <IconVolume2 className="track-header-icon" aria-hidden="true" focusable="false" />;
   }
 
-  if (name === 'lock' || name === 'unlock') {
-    return (
-      <svg className="track-header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <rect x="5" y="10" width="14" height="10" rx="2" />
-        {name === 'lock'
-          ? <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-          : <path d="M8 10V7a4 4 0 0 1 7.4-2.1" />}
-      </svg>
-    );
+  if (name === 'lock') {
+    return <IconLock className="track-header-icon" aria-hidden="true" focusable="false" />;
   }
 
-  return (
-    <svg className="track-header-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" />
-      <circle cx="12" cy="12" r="2.8" />
-      {name === 'eyeOff' && <path d="M4 4l16 16" />}
-    </svg>
-  );
+  if (name === 'unlock') {
+    return <IconLockOpen className="track-header-icon" aria-hidden="true" focusable="false" />;
+  }
+
+  return name === 'eyeOff'
+    ? <IconEyeOff className="track-header-icon" aria-hidden="true" focusable="false" />
+    : <IconEye className="track-header-icon" aria-hidden="true" focusable="false" />;
 }
 
 const usesCameraPropertyModel = (clip: KeyframeTrackClip | null | undefined): boolean => {
@@ -1223,6 +1218,8 @@ function TimelineHeaderComponent({
   onRenameTrack,
   onContextMenu,
   onWheel,
+  onResizeStart,
+  isResizeActive = false,
   clipKeyframes,
   getInterpolatedTransform,
   getInterpolatedEffects,
@@ -1239,8 +1236,6 @@ function TimelineHeaderComponent({
   // Get the first selected clip in this track
   const trackClips = clips.filter((c) => c.trackId === track.id);
   const selectedTrackClip = trackClips.find((c) => selectedClipIds.has(c.id));
-  const videoLayerIndex = tracks.filter((timelineTrack) => timelineTrack.type === 'video').findIndex((timelineTrack) => timelineTrack.id === track.id);
-  const layerDisplayId = videoLayerIndex >= 0 ? videoLayerIndex + 1 : null;
   const effectiveMuted = track.audioState?.muted ?? track.muted;
   const effectiveSolo = track.audioState?.solo ?? track.solo;
   const trackRecordArm = track.audioState?.recordArm === true;
@@ -1262,13 +1257,18 @@ function TimelineHeaderComponent({
   const audioHeaderFaderScale = showAdvancedAudioControls && audioHeaderDensity !== 'condensed'
     ? Math.max(0, Math.min(1, baseHeight / 96))
     : 1;
+  const trackTypeIndex = tracks.filter((timelineTrack) => timelineTrack.type === track.type).findIndex((timelineTrack) => timelineTrack.id === track.id);
+  const showTimelineTrackColor = audioLayerAdvancedMode !== false;
+  const trackColor = showTimelineTrackColor ? getTimelineTrackColor(track, trackTypeIndex) : TIMELINE_TRACK_COLOR_HIDDEN;
   const trackHeaderStyle = {
     height: dynamicHeight,
+    '--track-color': trackColor,
     ...(isAudioTrack ? {
       '--audio-strip-control-scale': audioHeaderControlScale.toFixed(3),
       '--audio-strip-fader-scale': audioHeaderFaderScale.toFixed(3),
     } : {}),
   } as CSSProperties & {
+    '--track-color'?: string;
     '--audio-strip-control-scale'?: string;
     '--audio-strip-fader-scale'?: string;
   };
@@ -1278,6 +1278,9 @@ function TimelineHeaderComponent({
   const collapsedAudioSummaryMeter = useTimelineStore(state => showAudioSummaryMeter
     ? state.runtimeAudioMeters.master
     : undefined);
+  const targetTrackId = useTimelineStore(state => state.targetTrackIdByType[track.type]);
+  const setTargetTrack = useTimelineStore(state => state.setTargetTrack);
+  const isTargeted = targetTrackId === track.id;
   const [audioFxOpen, setAudioFxOpen] = useState(false);
   const [audioSendsOpen, setAudioSendsOpen] = useState(false);
   const audioFxPopoverRef = useRef<HTMLDivElement>(null);
@@ -1355,17 +1358,13 @@ function TimelineHeaderComponent({
     }
   };
 
-  // Handle click on header main area (except buttons) to toggle expand
+  // Handle click on header main area (except buttons) to set the edit target track.
   const handleHeaderClick = (e: React.MouseEvent) => {
-    // Don't toggle if editing or if click was on a button
     if (isEditing) return;
     if ((e.target as HTMLElement).closest('.track-controls')) return;
     if ((e.target as HTMLElement).closest('.audio-track-faders')) return;
     if ((e.target as HTMLElement).closest('.audio-track-popover')) return;
-    // Both video and audio tracks can expand
-    if (track.type === 'video' || track.type === 'audio') {
-      onToggleExpand();
-    }
+    setTargetTrack(track.id);
   };
 
   const handleTrackVolumeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1398,6 +1397,10 @@ function TimelineHeaderComponent({
         showAdvancedAudioControls && (audioFxOpen || audioSendsOpen) ? 'popover-open' : ''
       } ${
         showAudioSummaryMeter ? 'audio-summary-meter-visible' : ''
+      } ${
+        isResizeActive ? 'resizing' : ''
+      } ${
+        isTargeted ? 'targeted' : ''
       }`}
       style={trackHeaderStyle}
       onWheel={onWheel}
@@ -1423,9 +1426,21 @@ function TimelineHeaderComponent({
                 hasKeyframes ? 'has-keyframes' : ''
               }`}
               title={isExpanded ? 'Collapse properties' : 'Expand properties'}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleExpand();
+              }}
             >
               {'\u25B6'}
             </span>
+          )}
+          {showTimelineTrackColor && (
+            <span
+              className="track-color-chip"
+              style={{ background: trackColor }}
+              title="Track color"
+              onClick={(event) => event.stopPropagation()}
+            />
           )}
           {isEditing ? (
             <input
@@ -1448,16 +1463,6 @@ function TimelineHeaderComponent({
               >
                 {track.name}
               </span>
-              {layerDisplayId !== null && (
-                <span
-                  className="track-layer-id"
-                  title={`Layer ${layerDisplayId}`}
-                  onClick={handleNameClick}
-                  onDoubleClick={handleNameDoubleClick}
-                >
-                  {`(id:${layerDisplayId})`}
-                </span>
-              )}
             </>
           )}
           {showAdvancedAudioControls && (
@@ -1629,18 +1634,18 @@ function TimelineHeaderComponent({
                 S
               </button>
               <button
-                className={`btn-icon ${track.locked ? 'locked-active' : ''}`}
-                onClick={(e) => { e.stopPropagation(); onToggleLocked?.(); }}
-                title={track.locked ? 'Unlock Track' : 'Lock Track'}
-              >
-                <TrackHeaderIcon name={track.locked ? 'lock' : 'unlock'} />
-              </button>
-              <button
                 className={`btn-icon ${!track.visible ? 'hidden' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onToggleVisible(); }}
                 title={track.visible ? 'Hide' : 'Show'}
               >
                 <TrackHeaderIcon name={track.visible ? 'eye' : 'eyeOff'} />
+              </button>
+              <button
+                className={`btn-icon ${track.locked ? 'locked-active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onToggleLocked?.(); }}
+                title={track.locked ? 'Unlock Track' : 'Lock Track'}
+              >
+                <TrackHeaderIcon name={track.locked ? 'lock' : 'unlock'} />
               </button>
             </>
           )}
@@ -1715,6 +1720,15 @@ function TimelineHeaderComponent({
               sends={track.audioState?.sends ?? []}
             />
           </div>
+        )}
+        {onResizeStart && (
+          <div
+            className={`track-resize-handle ${isResizeActive ? 'active' : ''}`}
+            role="separator"
+            aria-orientation="horizontal"
+            title="Drag to resize track height"
+            onPointerDown={(event) => onResizeStart(event, track.id)}
+          />
         )}
       </div>
       {/* Property labels - shown when track is expanded (for both video and audio with keyframes) */}

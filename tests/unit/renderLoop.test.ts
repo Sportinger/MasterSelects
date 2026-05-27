@@ -24,11 +24,16 @@ type RenderLoopTestAccess = {
   continuousRender: boolean;
   idleSuppressed: boolean;
   checkHealth: () => void;
+  stop: () => void;
 };
 
 function createLoop() {
+  const performanceStats = {
+    recordRafGap: vi.fn(),
+    resetPerSecondCounters: vi.fn(),
+  } as unknown as ConstructorParameters<typeof RenderLoop>[0];
   const loop = new RenderLoop(
-    {} as ConstructorParameters<typeof RenderLoop>[0],
+    performanceStats,
     {
       isRecovering: vi.fn(() => false),
       isExporting: vi.fn(() => false),
@@ -64,10 +69,14 @@ describe('RenderLoop watchdog', () => {
     const loop = createLoop();
     loop.isPlaying = true;
 
-    loop.checkHealth();
+    try {
+      loop.checkHealth();
 
-    expect(loop.isIdle).toBe(false);
-    expect(loop.renderRequested).toBe(true);
-    expect(loop.lastActivityTime).toBeGreaterThan(performance.now() - 1000);
+      expect(loop.isIdle).toBe(false);
+      expect(loop.renderRequested).toBe(true);
+      expect(loop.lastActivityTime).toBeGreaterThan(performance.now() - 1000);
+    } finally {
+      loop.stop();
+    }
   });
 });

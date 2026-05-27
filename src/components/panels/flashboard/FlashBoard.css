@@ -2607,6 +2607,81 @@
   color: #ffada7;
 }
 
+.fb-chat-message.is-error.has-cloud-actions {
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 12%, var(--bg-elevated, #252536));
+  color: #c9e4ff;
+}
+
+.fb-chat-message.is-error.has-cloud-actions .fb-chat-output-label {
+  color: color-mix(in srgb, var(--accent, #4aa3ff) 62%, white);
+}
+
+.fb-chat-error-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.fb-chat-error-actions button {
+  min-height: 25px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, rgba(255, 255, 255, 0.1));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, rgba(255, 255, 255, 0.04));
+  color: #d7edff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fb-chat-error-actions button:hover {
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 68%, white);
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, rgba(255, 255, 255, 0.04));
+  color: #ffffff;
+}
+
+.fb-audio-warning.compact.has-cloud-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 30%, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 11%, rgba(20, 20, 24, 0.94));
+  color: #c9e4ff;
+}
+
+.fb-cloud-warning-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fb-cloud-warning-actions button {
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent, #4aa3ff) 42%, rgba(255, 255, 255, 0.1));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, rgba(255, 255, 255, 0.04));
+  color: #d7edff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fb-cloud-warning-actions button:hover {
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 68%, white);
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 26%, rgba(255, 255, 255, 0.04));
+  color: #ffffff;
+}
+
 /* ─── Generate button ─── */
 
 .fb-generate {
@@ -2647,6 +2722,10 @@
   box-shadow:
     0 6px 20px rgba(0, 0, 0, 0.35),
     0 0 0 1px color-mix(in srgb, var(--accent, #4aa3ff) 20%, transparent);
+}
+
+.fb-chat-clear-pill {
+  color: var(--text-secondary, #bbb);
 }
 
 .fb-generate:disabled {

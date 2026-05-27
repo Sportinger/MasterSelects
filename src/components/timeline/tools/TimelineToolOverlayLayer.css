@@ -1,0 +1,250 @@
+.timeline-tool-overlay-layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  min-width: 100%;
+  pointer-events: none;
+  z-index: 35;
+}
+
+.timeline-tool-overlay-item {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.timeline-tool-overlay-track-selection {
+  border: 1px solid rgba(91, 176, 255, 0.52);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, rgba(91, 176, 255, 0.18), rgba(91, 176, 255, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.05) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.timeline-tool-overlay-track-selection::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  background: rgba(125, 199, 255, 0.95);
+  box-shadow: 0 0 8px rgba(91, 176, 255, 0.7);
+}
+
+.timeline-tool-overlay-track-selection.forward::before {
+  left: -1px;
+}
+
+.timeline-tool-overlay-track-selection.backward::before {
+  right: -1px;
+}
+
+.timeline-tool-overlay-blade-line {
+  background: rgba(248, 113, 113, 0.98);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.42),
+    0 0 12px rgba(248, 113, 113, 0.78);
+}
+
+.timeline-tool-overlay-blade-line::before,
+.timeline-tool-overlay-blade-line::after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+
+.timeline-tool-overlay-blade-line::before {
+  top: 0;
+  border-top: 6px solid rgba(248, 113, 113, 0.98);
+}
+
+.timeline-tool-overlay-blade-line::after {
+  bottom: 0;
+  border-bottom: 6px solid rgba(248, 113, 113, 0.98);
+}
+
+.timeline-tool-overlay-placement-ghost {
+  display: flex;
+  align-items: center;
+  min-width: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(74, 222, 128, 0.58);
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(74, 222, 128, 0.2), rgba(34, 197, 94, 0.1)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.07) 5px,
+      transparent 5px,
+      transparent 10px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 12px rgba(34, 197, 94, 0.2);
+}
+
+.timeline-tool-overlay-placement-ghost::before,
+.timeline-tool-overlay-placement-ghost::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  background: rgba(134, 239, 172, 0.95);
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.54);
+}
+
+.timeline-tool-overlay-placement-ghost::before {
+  left: -1px;
+}
+
+.timeline-tool-overlay-placement-ghost::after {
+  right: -1px;
+}
+
+.timeline-tool-overlay-placement-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+  padding: 0 7px;
+  color: rgba(236, 253, 245, 0.95);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
+}
+
+.timeline-tool-overlay-placement-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-tool-overlay-placement-range {
+  flex: 0 0 auto;
+  opacity: 0.78;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+}
+
+.timeline-tool-overlay-operation-ghost {
+  display: flex;
+  align-items: center;
+  min-width: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, 0.58);
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(56, 189, 248, 0.18), rgba(14, 165, 233, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.06) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 0 12px rgba(14, 165, 233, 0.18);
+}
+
+.timeline-tool-overlay-operation-ghost::before,
+.timeline-tool-overlay-operation-ghost::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  background: rgba(125, 211, 252, 0.95);
+}
+
+.timeline-tool-overlay-operation-ghost::before {
+  left: -1px;
+}
+
+.timeline-tool-overlay-operation-ghost::after {
+  right: -1px;
+}
+
+.timeline-tool-overlay-operation-ghost.variant-ripple-shift {
+  border-color: rgba(250, 204, 21, 0.62);
+  background:
+    linear-gradient(180deg, rgba(250, 204, 21, 0.18), rgba(202, 138, 4, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.06) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 0 12px rgba(250, 204, 21, 0.17);
+}
+
+.timeline-tool-overlay-operation-ghost.variant-ripple-shift::before,
+.timeline-tool-overlay-operation-ghost.variant-ripple-shift::after {
+  background: rgba(253, 224, 71, 0.95);
+}
+
+.timeline-tool-overlay-operation-ghost.variant-rolling-neighbor {
+  border-color: rgba(192, 132, 252, 0.58);
+  background:
+    linear-gradient(180deg, rgba(192, 132, 252, 0.17), rgba(126, 34, 206, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.055),
+      rgba(255, 255, 255, 0.055) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+}
+
+.timeline-tool-overlay-operation-ghost.variant-rolling-neighbor::before,
+.timeline-tool-overlay-operation-ghost.variant-rolling-neighbor::after {
+  background: rgba(216, 180, 254, 0.92);
+}
+
+.timeline-tool-overlay-operation-label {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  color: rgba(240, 249, 255, 0.93);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
+  white-space: nowrap;
+}
+
+.timeline-tool-overlay-blocked-message {
+  max-width: 180px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  border-radius: 3px;
+  background: rgba(31, 13, 15, 0.94);
+  color: #fecaca;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translateX(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
+}

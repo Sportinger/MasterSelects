@@ -1,14 +1,25 @@
 // TimelineControls component - Playback controls and toolbar
 
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import {
+  IconArrowsMaximize,
+  IconLayoutGrid,
+  IconList,
+  IconMagnet,
+  IconMinus,
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
+  IconPlayerRecordFilled,
+  IconPlayerStopFilled,
+  IconPlus,
+  IconRepeat,
+} from '@tabler/icons-react';
 import './TimelineControls.css';
 import type { TimelineControlsProps } from './types';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { engine } from '../../engine/WebGPUEngine';
-import { layerBuilder } from '../../services/layerBuilder';
 import { AudioEffectStackControl } from '../panels/properties/AudioEffectStackControl';
 import { AudioLevelMeter } from './components/AudioLevelMeter';
+import { TimelineToolPalette } from './tools/TimelineToolPalette';
 import { AudioExportPipeline } from '../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../services/audio/AudioRecordingService';
 import {
@@ -18,6 +29,7 @@ import {
 } from '../../services/audio/timelineRecordingWorkflow';
 
 function TimelineControlsComponent({
+  variant = 'full',
   isPlaying,
   loopPlayback,
   playheadPosition,
@@ -35,16 +47,12 @@ function TimelineControlsComponent({
   audioDisplayMode,
   audioFocusMode,
   trackFocusMode,
-  toolMode,
   onPlay,
   onPause,
   onStop,
   onToggleLoop,
   onSetZoom,
   onToggleSnapping,
-  onSetInPoint,
-  onSetOutPoint,
-  onClearInOut,
   onToggleProxy,
   onToggleTranscriptMarkers,
   onToggleThumbnails,
@@ -52,7 +60,6 @@ function TimelineControlsComponent({
   onSetAudioDisplayMode,
   onToggleAudioFocusMode,
   onSetTrackFocusMode,
-  onToggleCutTool,
   onFitToWindow,
   onToggleSlotGrid,
   slotGridActive,
@@ -112,6 +119,8 @@ function TimelineControlsComponent({
         ? `Punch record ${formatTime(recordingRange.startTime)} to ${formatTime(recordingRange.punchOutTime)}`
         : `Record armed audio track${armedAudioTracks.length === 1 ? '' : 's'} from ${formatTime(recordingRange.startTime)}`
       : 'Arm an audio track before recording';
+  const showMainControls = variant !== 'utility';
+  const showUtilityControls = variant !== 'main' && variant !== 'transport' && variant !== 'zoom';
 
   useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
 
@@ -190,44 +199,46 @@ function TimelineControlsComponent({
   }, [armedAudioTracks, duration, inPoint, isRecording, outPoint, playheadPosition, recordingBusy]);
 
   return (
-    <div className="timeline-toolbar">
-      <div className="timeline-slot-toggle">
-        <button
-          className={`btn btn-sm btn-icon ${slotGridActive ? 'btn-active' : ''}`}
-          onClick={onToggleSlotGrid}
-          title={slotGridActive ? 'Back to Timeline (Ctrl+Shift+Scroll)' : 'Slot Grid View (Ctrl+Shift+Scroll)'}
-        >
-          {slotGridActive
-            ? <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="0.5"/><rect x="1" y="7" width="14" height="2" rx="0.5"/><rect x="1" y="12" width="14" height="2" rx="0.5"/></svg>
-            : <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-          }
-        </button>
-      </div>
+    <div className={`timeline-toolbar timeline-toolbar-${variant}`}>
+      {showMainControls && (
+        <>
       <div className="timeline-controls">
-        <button className="btn btn-sm" onClick={onStop} title="Stop">
-          {'\u23F9'}
+        <button className="btn btn-sm btn-icon timeline-transport-button" onClick={onStop} title="Stop">
+          <IconPlayerStopFilled className="timeline-transport-icon" aria-hidden="true" />
         </button>
         <button
-          className={`btn btn-sm ${isPlaying ? 'btn-active' : ''}`}
+          className={`btn btn-sm btn-icon timeline-transport-button ${isPlaying ? 'btn-active' : ''}`}
           onClick={isPlaying ? onPause : onPlay}
           data-tutorial-id="play-btn"
+          title={isPlaying ? 'Pause' : 'Play'}
         >
-          {isPlaying ? '\u23F8' : '\u25B6'}
+          {isPlaying ? (
+            <IconPlayerPauseFilled className="timeline-transport-icon" aria-hidden="true" />
+          ) : (
+            <IconPlayerPlayFilled className="timeline-transport-icon" aria-hidden="true" />
+          )}
         </button>
         <button
-          className={`btn btn-sm ${loopPlayback ? 'btn-active' : ''}`}
+          className={`btn btn-sm btn-icon timeline-transport-button timeline-loop-button ${loopPlayback ? 'btn-active' : ''}`}
           onClick={onToggleLoop}
           title={loopPlayback ? 'Loop On (L)' : 'Loop Off (L)'}
         >
-          {'\uD83D\uDD01'}
+          <IconRepeat className="timeline-transport-icon timeline-loop-icon" stroke={2.8} aria-hidden="true" />
         </button>
         <button
-          className={`btn btn-sm timeline-record-button ${isRecording ? 'recording' : ''} ${armedAudioTracks.length > 0 ? 'armed' : ''}`}
+          className={`btn btn-sm btn-icon timeline-transport-button timeline-record-button ${isRecording ? 'recording' : ''} ${armedAudioTracks.length > 0 ? 'armed' : ''}`}
           onClick={handleRecordToggle}
           disabled={recordingBusy || (!isRecording && armedAudioTracks.length === 0)}
           title={recordButtonTitle}
         >
-          {isRecording ? '\u25A0' : '\u25CF'}
+          <IconPlayerRecordFilled className="timeline-transport-icon" aria-hidden="true" />
+        </button>
+        <button
+          className={`btn btn-sm timeline-proxy-button ${proxyEnabled ? 'btn-active' : ''}`}
+          onClick={onToggleProxy}
+          title={proxyTitle}
+        >
+          Proxy
         </button>
         {recoveryEntries.length > 0 && (
           <button
@@ -248,65 +259,31 @@ function TimelineControlsComponent({
           </span>
         )}
       </div>
-      <div className="timeline-zoom">
+      <div className="timeline-edit-tools">
+        <TimelineToolPalette />
         <button
-          className={`btn btn-sm btn-icon ${snappingEnabled ? 'btn-active' : ''}`}
-          onClick={onToggleSnapping}
+          type="button"
+          className={`timeline-tool-button timeline-snapping-button ${snappingEnabled ? 'active' : ''}`}
+          aria-label="Snapping"
+          aria-pressed={snappingEnabled}
+          onPointerUp={(event) => {
+            if (event.button !== 0) return;
+            onToggleSnapping();
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            onToggleSnapping();
+          }}
           title={snappingEnabled ? 'Snapping enabled - clips snap to edges' : 'Snapping disabled - free positioning'}
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2L12 6M12 18L12 22M2 12L6 12M18 12L22 12" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </button>
-        <button
-          className={`btn btn-sm btn-icon ${toolMode === 'cut' ? 'btn-active' : ''}`}
-          onClick={onToggleCutTool}
-          title={toolMode === 'cut' ? 'Cut Tool active (C) - click clips to split' : 'Cut Tool (C) - click to activate'}
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="6" cy="6" r="3" />
-            <circle cx="6" cy="18" r="3" />
-            <line x1="20" y1="4" x2="8.12" y2="15.88" />
-            <line x1="14.47" y1="14.48" x2="20" y2="20" />
-            <line x1="8.12" y1="8.12" x2="12" y2="12" />
-          </svg>
-        </button>
-        <button className="btn btn-sm" onClick={() => onSetZoom(zoom - 10)} title="Zoom out">
-          {'\u2212'}
-        </button>
-        <button className="btn btn-sm" onClick={() => onSetZoom(zoom + 10)} title="Zoom in">
-          +
-        </button>
-        <button className="btn btn-sm" onClick={onFitToWindow} title="Fit composition to window">
-          Fit
+          <IconMagnet className="timeline-tool-button-icon" size={18} stroke={2.2} aria-hidden="true" />
         </button>
       </div>
-      <div className="timeline-inout-controls">
-        <button
-          className={`btn btn-sm ${inPoint !== null ? 'btn-active' : ''}`}
-          onClick={onSetInPoint}
-          title="Set In point (I)"
-        >
-          I
-        </button>
-        <button
-          className={`btn btn-sm ${outPoint !== null ? 'btn-active' : ''}`}
-          onClick={onSetOutPoint}
-          title="Set Out point (O)"
-        >
-          O
-        </button>
-        {(inPoint !== null || outPoint !== null) && (
-          <button
-            className="btn btn-sm"
-            onClick={onClearInOut}
-            title="Clear In/Out (X)"
-          >
-            X
-          </button>
-        )}
-      </div>
+        </>
+      )}
+      {showUtilityControls && (
+        <>
       <div className="timeline-master-audio" ref={masterDropdownRef}>
         <button
           className={`btn btn-sm ${masterDropdownOpen || masterEffectCount > 0 || masterAudio.limiterEnabled ? 'btn-active' : ''} ${preflightIssueCount > 0 ? 'audio-preflight-alert' : ''}`}
@@ -437,14 +414,6 @@ function TimelineControlsComponent({
         )}
       </div>
       <div className="timeline-ram-preview">
-        <button
-          className={`btn btn-sm ${proxyEnabled ? 'btn-active' : ''}`}
-          onClick={onToggleProxy}
-          title={proxyTitle}
-        >
-          Proxy
-        </button>
-        <WebCodecsToggle />
         <div className="view-dropdown" ref={viewDropdownRef}>
           <button
             className={`btn btn-sm ${viewDropdownOpen ? 'btn-active' : ''}`}
@@ -537,29 +506,38 @@ function TimelineControlsComponent({
             </div>
           )}
         </div>
+        <div className="timeline-slot-toggle timeline-slot-toggle-view">
+          <button
+            type="button"
+            className={`timeline-tool-button ${slotGridActive ? 'active' : ''}`}
+            onClick={onToggleSlotGrid}
+            title={slotGridActive ? 'Back to Timeline (Ctrl+Shift+Scroll)' : 'Slot Grid View (Ctrl+Shift+Scroll)'}
+            aria-label={slotGridActive ? 'Back to Timeline' : 'Slot Grid View'}
+            aria-pressed={slotGridActive}
+          >
+            {slotGridActive
+              ? <IconList className="timeline-tool-button-icon" size={18} stroke={2.2} aria-hidden="true" />
+              : <IconLayoutGrid className="timeline-tool-button-icon" size={18} stroke={2.2} aria-hidden="true" />
+            }
+          </button>
+        </div>
       </div>
+        </>
+      )}
+      {showMainControls && (
+      <div className="timeline-zoom-controls">
+        <button className="btn btn-sm btn-icon timeline-zoom-button" onClick={() => onSetZoom(zoom - 10)} title="Zoom out">
+          <IconMinus size={14} stroke={2.4} aria-hidden="true" />
+        </button>
+        <button className="btn btn-sm btn-icon timeline-zoom-button" onClick={() => onSetZoom(zoom + 10)} title="Zoom in">
+          <IconPlus size={14} stroke={2.4} aria-hidden="true" />
+        </button>
+        <button className="btn btn-sm btn-icon timeline-zoom-button" onClick={onFitToWindow} title="Fit composition to window">
+          <IconArrowsMaximize size={14} stroke={2.2} aria-hidden="true" />
+        </button>
+      </div>
+      )}
     </div>
-  );
-}
-
-function WebCodecsToggle() {
-  const enabled = useSettingsStore((s) => s.webCodecsEnabled);
-  const setWebCodecsEnabled = useSettingsStore((s) => s.setWebCodecsEnabled);
-
-  const toggle = useCallback(() => {
-    setWebCodecsEnabled(!enabled);
-    layerBuilder.invalidateCache();
-    engine.requestRender();
-  }, [enabled, setWebCodecsEnabled]);
-
-  return (
-    <button
-      className={`btn btn-sm ${enabled ? 'btn-active' : ''}`}
-      onClick={toggle}
-      title={enabled ? 'WebCodecs mode active (click to switch to HTML Video)' : 'HTML Video mode active (click to switch to WebCodecs)'}
-    >
-      {enabled ? 'WC' : 'HTML'}
-    </button>
   );
 }
 

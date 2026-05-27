@@ -781,6 +781,18 @@ class ProjectDatabase {
     return !!thumbnail;
   }
 
+  // Delete thumbnail by file hash
+  async deleteThumbnail(fileHash: string): Promise<void> {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.THUMBNAILS, 'readwrite');
+      const store = transaction.objectStore(STORES.THUMBNAILS);
+      const request = store.delete(fileHash);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // ============ File System Handles ============
 
   // Store a FileSystemHandle (directory or file)

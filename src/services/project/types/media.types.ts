@@ -28,6 +28,8 @@ export interface ProjectMediaFile {
   fileSize?: number;
   hasAudio?: boolean;
   audioAnalysisRefs?: MediaFileAudioAnalysisRefs;
+  waveform?: number[];
+  waveformChannels?: number[][];
   splatCount?: number;
   totalSplatCount?: number;
   splatFrameCount?: number;

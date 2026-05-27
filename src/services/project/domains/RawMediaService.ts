@@ -122,6 +122,32 @@ export class RawMediaService {
   }
 
   /**
+   * Delete a file from the Raw/ folder by relative path.
+   */
+  async deleteFromRaw(
+    projectHandle: FileSystemDirectoryHandle,
+    relativePath: string
+  ): Promise<boolean> {
+    try {
+      const target = parseRawRelativePath(relativePath);
+      if (!target) {
+        return false;
+      }
+
+      const rawFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.RAW);
+      const targetFolder = await this.getRawTargetFolder(rawFolder, target.folderPath, false);
+      if (!targetFolder) {
+        return false;
+      }
+
+      await targetFolder.removeEntry(target.fileName);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Check if a file exists in the Raw/ folder by name
    */
   async hasFileInRaw(

@@ -30,6 +30,9 @@ export interface CompositionActions {
   assignMediaFileToSlot: (mediaFileId: string, slotIndex: number) => void;
   setPreviewComposition: (id: string | null) => void;
   setSourceMonitorFile: (id: string | null) => void;
+  setSourceMonitorInPoint: (time: number | null) => void;
+  setSourceMonitorOutPoint: (time: number | null) => void;
+  clearSourceMonitorInOut: () => void;
 }
 
 interface SlotDeckManagerLike {
@@ -570,10 +573,42 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
   setSourceMonitorFile: (id: string | null) => {
     set((state) => ({
       sourceMonitorFileId: id,
+      sourceMonitorInPoint: null,
+      sourceMonitorOutPoint: null,
       sourceMonitorPlaybackRequestId: id === null
         ? state.sourceMonitorPlaybackRequestId
         : state.sourceMonitorPlaybackRequestId + 1,
     }));
+  },
+
+  setSourceMonitorInPoint: (time: number | null) => {
+    set((state) => {
+      const inPoint = time === null ? null : Math.max(0, time);
+      const outPoint = inPoint !== null && state.sourceMonitorOutPoint !== null
+        ? Math.max(inPoint, state.sourceMonitorOutPoint)
+        : state.sourceMonitorOutPoint;
+      return {
+        sourceMonitorInPoint: inPoint,
+        sourceMonitorOutPoint: outPoint,
+      };
+    });
+  },
+
+  setSourceMonitorOutPoint: (time: number | null) => {
+    set((state) => {
+      const outPoint = time === null ? null : Math.max(0, time);
+      const inPoint = outPoint !== null && state.sourceMonitorInPoint !== null
+        ? Math.min(state.sourceMonitorInPoint, outPoint)
+        : state.sourceMonitorInPoint;
+      return {
+        sourceMonitorInPoint: inPoint,
+        sourceMonitorOutPoint: outPoint,
+      };
+    });
+  },
+
+  clearSourceMonitorInOut: () => {
+    set({ sourceMonitorInPoint: null, sourceMonitorOutPoint: null });
   },
 
 });

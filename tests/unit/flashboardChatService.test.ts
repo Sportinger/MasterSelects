@@ -37,7 +37,7 @@ describe('FlashBoardChatService', () => {
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body).toMatchObject({
-      input: 'Make this more cinematic',
+      input: [{ role: 'user', content: 'Make this more cinematic' }],
       max_output_tokens: 2048,
       model: 'gpt-5.5',
       reasoning: { effort: 'xhigh' },
@@ -65,7 +65,7 @@ describe('FlashBoardChatService', () => {
     });
 
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body.reasoning).toEqual({ effort: 'medium' });
+    expect(body.reasoning).toEqual({ effort: 'none' });
   });
 
   it('uses hosted OpenAI chat when a signed-in cloud session is available', async () => {

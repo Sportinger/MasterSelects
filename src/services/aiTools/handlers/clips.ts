@@ -2,11 +2,10 @@
 
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { createVideoElement, createAudioElement } from '../../../stores/timeline/helpers/webCodecsHelpers';
 import type { TimelineClip } from '../../../types';
 import type { ToolResult } from '../types';
 import { formatClipInfo } from '../utils';
-import { isAIExecutionActive, consumeStaggerDelay } from '../executionState';
+import { isAIExecutionActive } from '../executionState';
 import { activateDockPanel } from '../aiFeedback';
 import { Logger } from '../../../services/logger';
 import { getGaussianSplatGpuRenderer } from '../../../engine/gaussian/core/GaussianSplatGpuRenderer';
@@ -70,184 +69,23 @@ function logSplitCheckpoint(
 }
 
 /**
- * Deep clone serializable clip properties (effects, masks, transforms, etc.)
- * Same logic as deepCloneClipProps in clipSlice.ts
- */
-function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
-  return {
-    transform: structuredClone(clip.transform),
-    effects: clip.effects.map(e => structuredClone(e)),
-    ...(clip.masks ? { masks: clip.masks.map(m => structuredClone(m)) } : {}),
-    ...(clip.textProperties ? { textProperties: structuredClone(clip.textProperties) } : {}),
-    ...(clip.analysis ? { analysis: structuredClone(clip.analysis) } : {}),
-  };
-}
-
-function cloneVideoElementForSplit(clip: TimelineClip): HTMLVideoElement {
-  const existingSrc = clip.source?.videoElement?.src;
-  if (existingSrc) {
-    const video = document.createElement('video');
-    video.src = existingSrc;
-    video.preload = 'none';
-    video.muted = true;
-    video.playsInline = true;
-    video.crossOrigin = 'anonymous';
-    return video;
-  }
-
-  const video = createVideoElement(clip.file);
-  video.preload = 'none';
-  return video;
-}
-
-function cloneAudioElementForSplit(
-  clip: Pick<TimelineClip, 'file' | 'source'>
-): HTMLAudioElement {
-  const existingSrc = clip.source?.audioElement?.src;
-  if (existingSrc) {
-    const audio = document.createElement('audio');
-    audio.src = existingSrc;
-    audio.preload = 'none';
-    return audio;
-  }
-
-  const audio = createAudioElement(clip.file);
-  audio.preload = 'none';
-  return audio;
-}
-
-/**
- * Clone video/audio source for a new clip part.
- * Creates fresh HTMLMediaElements for independent seeking while reusing the
- * existing decoder/runtime state from the original source where possible.
- */
-function cloneSourceForPart(clip: TimelineClip): TimelineClip['source'] {
-  if (clip.source?.type === 'video' && clip.source.videoElement && clip.file) {
-    return {
-      ...clip.source,
-      videoElement: cloneVideoElementForSplit(clip),
-      webCodecsPlayer: clip.source.webCodecsPlayer,
-    };
-  } else if (clip.source?.type === 'audio' && clip.source.audioElement && clip.file) {
-    return {
-      ...clip.source,
-      audioElement: cloneAudioElementForSplit(clip),
-    };
-  }
-  return clip.source;
-}
-
-/**
- * Clone linked audio source for a new clip part.
- */
-function cloneLinkedSourceForPart(
-  linkedClip: TimelineClip,
-  partClipId: string
-): TimelineClip['source'] {
-  if (linkedClip.source?.type === 'audio' && linkedClip.source.audioElement) {
-    if (linkedClip.mixdownBuffer) {
-      // Async create audio from mixdown buffer
-      import('../../../services/compositionAudioMixer').then(({ compositionAudioMixer }) => {
-        const newAudio = compositionAudioMixer.createAudioElement(linkedClip.mixdownBuffer!);
-        newAudio.preload = 'none';
-        const { clips: currentClips } = useTimelineStore.getState();
-        useTimelineStore.setState({
-          clips: currentClips.map(c => {
-            if (c.id !== partClipId || !c.source) return c;
-            return { ...c, source: { ...c.source, audioElement: newAudio } };
-          }),
-        });
-      });
-      return { ...linkedClip.source };
-    } else if (linkedClip.file && linkedClip.file.size > 0) {
-      return {
-        ...linkedClip.source,
-        audioElement: cloneAudioElementForSplit(linkedClip),
-      };
-    }
-  }
-  return linkedClip.source;
-}
-
-/**
- * Split a clip into N parts at the given sorted split times (timeline-absolute).
- * Creates all clips at once and applies with a single setState() call.
- * Handles linked audio clips and source element cloning.
+ * Bulk split via the shared timeline operation kernel.
+ * The kernel owns clip cloning, linked-audio handling, export lock, and history.
  */
 function splitClipBatch(clip: TimelineClip, splitTimes: number[], withLinked = true): void {
-  const state = useTimelineStore.getState();
-  const allClips = state.clips;
-  const linkedClip = withLinked && clip.linkedClipId
-    ? allClips.find(c => c.id === clip.linkedClipId)
-    : undefined;
-
-  const timestamp = Date.now();
-  const randomSuffix = Math.random().toString(36).substr(2, 5);
-
-  // Build boundaries: [clipStart, split1, split2, ..., clipEnd]
-  const boundaries = [clip.startTime, ...splitTimes, clip.startTime + clip.duration];
-  const newParts: TimelineClip[] = [];
-  const newLinkedParts: TimelineClip[] = [];
-
-  for (let i = 0; i < boundaries.length - 1; i++) {
-    const partStart = boundaries[i];
-    const partEnd = boundaries[i + 1];
-    const partDuration = partEnd - partStart;
-    const partInPoint = clip.inPoint + (partStart - clip.startTime);
-    const partOutPoint = partInPoint + partDuration;
-    const partId = `clip-${timestamp}-${randomSuffix}-p${i}`;
-    const linkedPartId = linkedClip ? `clip-${timestamp}-${randomSuffix}-lp${i}` : undefined;
-
-    // First part keeps the original source; subsequent parts get cloned sources
-    const partSource = i === 0 ? clip.source : cloneSourceForPart(clip);
-
-    const partClip: TimelineClip = {
-      ...clip,
-      ...deepCloneClipProps(clip),
-      id: partId,
-      startTime: partStart,
-      duration: partDuration,
-      inPoint: partInPoint,
-      outPoint: partOutPoint,
-      linkedClipId: linkedClip ? linkedPartId : undefined,
-      source: partSource,
-      transitionIn: i === 0 ? clip.transitionIn : undefined,
-      transitionOut: i === boundaries.length - 2 ? clip.transitionOut : undefined,
-    };
-    newParts.push(partClip);
-
-    // Create matching linked audio part
-    if (linkedClip && linkedPartId) {
-      const linkedInPoint = linkedClip.inPoint + (partStart - clip.startTime);
-      const linkedSource = i === 0 ? linkedClip.source : cloneLinkedSourceForPart(linkedClip, linkedPartId);
-
-      const linkedPartClip: TimelineClip = {
-        ...linkedClip,
-        ...deepCloneClipProps(linkedClip),
-        id: linkedPartId,
-        startTime: partStart,
-        duration: partDuration,
-        inPoint: linkedInPoint,
-        outPoint: linkedInPoint + partDuration,
-        linkedClipId: partId,
-        source: linkedSource,
-      };
-      newLinkedParts.push(linkedPartClip);
-    }
-  }
-
-  // Remove original clip (and linked) and add all new parts
-  const removedIds = new Set([clip.id, ...(linkedClip ? [linkedClip.id] : [])]);
-  const remainingClips = allClips.filter(c => !removedIds.has(c.id));
-  const finalClips = [...remainingClips, ...newParts, ...newLinkedParts];
-
-  // Single setState() call — no stack overflow possible
-  useTimelineStore.setState({
-    clips: finalClips,
-    selectedClipIds: new Set([newParts[newParts.length - 1].id]),
+  const result = useTimelineStore.getState().applyTimelineEditOperation({
+    id: `ai-split-at-times:${clip.id}:${splitTimes.join(',')}`,
+    type: 'split-at-times',
+    clipId: clip.id,
+    times: splitTimes,
+    includeLinked: withLinked,
+  }, {
+    source: 'ai-tool',
+    historyLabel: 'AI: split clip at times',
   });
-  useTimelineStore.getState().updateDuration();
-  useTimelineStore.getState().invalidateCache();
+  if (!result.success) {
+    throw new Error(result.warnings.map((warning) => warning.message).join(' ') || 'Split operation failed');
+  }
 }
 
 export async function handleGetClipDetails(
@@ -369,8 +207,23 @@ export async function handleSplitClip(
     return { success: false, error: `Split time ${splitTime}s is outside clip range (${clip.startTime}s - ${clipEnd}s)` };
   }
 
-  // Use splitClipBatch to respect withLinked parameter
-  splitClipBatch(clip, [splitTime], withLinked);
+  const splitResult = timelineStore.applyTimelineEditOperation({
+    id: `ai-split-clip:${clipId}:${splitTime}`,
+    type: 'split-at-time',
+    clipIds: [clipId],
+    time: splitTime,
+    includeLinked: withLinked,
+  }, {
+    source: 'ai-tool',
+    historyLabel: 'AI: split clip',
+  });
+
+  if (!splitResult.success) {
+    return {
+      success: false,
+      error: splitResult.warnings.map((warning) => warning.message).join(' ') || 'Split clip operation failed',
+    };
+  }
 
   // Visual feedback: split glow at cut position
   if (isAIExecutionActive()) {
@@ -419,18 +272,22 @@ export async function handleDeleteClip(
     }
   }
 
-  // removeClip() only deletes linked clip if it's in selectedClipIds
-  // So we select the linked clip first when withLinked is true
-  if (withLinked && clip.linkedClipId) {
-    const linkedClip = timelineStore.clips.find(c => c.id === clip.linkedClipId);
-    if (linkedClip) {
-      useTimelineStore.setState({
-        selectedClipIds: new Set([clipId, clip.linkedClipId]),
-      });
-    }
+  const deleteResult = timelineStore.applyTimelineEditOperation({
+    id: `ai-delete-clip:${clipId}`,
+    type: 'delete-clips',
+    clipIds: [clipId],
+    includeLinked: withLinked,
+  }, {
+    source: 'ai-tool',
+    historyLabel: 'AI: delete clip',
+  });
+  if (!deleteResult.success) {
+    return {
+      success: false,
+      error: deleteResult.warnings.map((warning) => warning.message).join(' ') || 'Delete clip operation failed',
+    };
   }
 
-  timelineStore.removeClip(clipId);
   return { success: true, data: { deletedClipId: clipId, clipName: clip.name, withLinked } };
 }
 
@@ -440,24 +297,19 @@ export async function handleDeleteClips(
 ): Promise<ToolResult> {
   const clipIds = args.clipIds as string[];
   const withLinked = (args.withLinked as boolean | undefined) ?? true;
-  const deleted: string[] = [];
-  const notFound: string[] = [];
+  const currentClips = useTimelineStore.getState().clips;
+  const deleted = clipIds.filter((clipId) => currentClips.some((clip) => clip.id === clipId));
+  const notFound = clipIds.filter((clipId) => !currentClips.some((clip) => clip.id === clipId));
 
-  // When withLinked is true, collect all linked IDs and select them so removeClip deletes them
-  if (withLinked) {
-    const allLinkedIds = new Set<string>();
-    for (const clipId of clipIds) {
-      allLinkedIds.add(clipId);
-      const clip = useTimelineStore.getState().clips.find(c => c.id === clipId);
-      if (clip?.linkedClipId) {
-        allLinkedIds.add(clip.linkedClipId);
-      }
-    }
-    useTimelineStore.setState({ selectedClipIds: allLinkedIds });
+  if (deleted.length === 0) {
+    return {
+      success: true,
+      data: { deleted, notFound, deletedCount: 0, withLinked },
+    };
   }
 
-  for (const clipId of clipIds) {
-    const clip = useTimelineStore.getState().clips.find(c => c.id === clipId);
+  for (const clipId of deleted) {
+    const clip = currentClips.find(c => c.id === clipId);
     if (clip) {
       // Visual feedback: delete ghost
       if (isAIExecutionActive()) {
@@ -467,11 +319,23 @@ export async function handleDeleteClips(
           clipName: clip.name, clipColor: getClipColor(clip), duration: 350,
         });
       }
-      timelineStore.removeClip(clipId);
-      deleted.push(clipId);
-    } else {
-      notFound.push(clipId);
     }
+  }
+
+  const deleteResult = timelineStore.applyTimelineEditOperation({
+    id: `ai-delete-clips:${clipIds.join(',')}`,
+    type: 'delete-clips',
+    clipIds,
+    includeLinked: withLinked,
+  }, {
+    source: 'ai-tool',
+    historyLabel: 'AI: delete clips',
+  });
+  if (!deleteResult.success) {
+    return {
+      success: false,
+      error: deleteResult.warnings.map((warning) => warning.message).join(' ') || 'Delete clips operation failed',
+    };
   }
 
   return {
@@ -521,7 +385,23 @@ export async function handleCutRangesFromClip(
     try {
       // Split at the end of the range (if not at clip boundary)
       if (timelineEnd < clipEnd - 0.01) {
-        timelineStore.splitClip(targetClip.id, timelineEnd);
+        const splitEndResult = timelineStore.applyTimelineEditOperation({
+          id: `ai-cut-range-split-end:${targetClip.id}:${timelineEnd}`,
+          type: 'split-at-time',
+          clipIds: [targetClip.id],
+          time: timelineEnd,
+          includeLinked: true,
+        }, {
+          source: 'ai-tool',
+          historyLabel: 'AI: cut range split end',
+        });
+        if (!splitEndResult.success) {
+          results.push({
+            range: { start: timelineStart, end: timelineEnd },
+            status: `error - ${splitEndResult.warnings.map((warning) => warning.message).join(' ')}`,
+          });
+          continue;
+        }
       }
 
       // Find the clip again (it may have changed after the split)
@@ -539,7 +419,23 @@ export async function handleCutRangesFromClip(
 
       // Split at the start of the range (if not at clip boundary)
       if (timelineStart > clipForStartSplit.startTime + 0.01) {
-        timelineStore.splitClip(clipForStartSplit.id, timelineStart);
+        const splitStartResult = timelineStore.applyTimelineEditOperation({
+          id: `ai-cut-range-split-start:${clipForStartSplit.id}:${timelineStart}`,
+          type: 'split-at-time',
+          clipIds: [clipForStartSplit.id],
+          time: timelineStart,
+          includeLinked: true,
+        }, {
+          source: 'ai-tool',
+          historyLabel: 'AI: cut range split start',
+        });
+        if (!splitStartResult.success) {
+          results.push({
+            range: { start: timelineStart, end: timelineEnd },
+            status: `error - ${splitStartResult.warnings.map((warning) => warning.message).join(' ')}`,
+          });
+          continue;
+        }
       }
 
       // Find and delete the middle clip (the unwanted section)
@@ -550,8 +446,21 @@ export async function handleCutRangesFromClip(
       );
 
       if (clipToDelete) {
-        timelineStore.removeClip(clipToDelete.id);
-        results.push({ range: { start: timelineStart, end: timelineEnd }, status: 'removed' });
+        const deleteResult = timelineStore.applyTimelineEditOperation({
+          id: `ai-cut-range-delete:${clipToDelete.id}`,
+          type: 'delete-clips',
+          clipIds: [clipToDelete.id],
+          includeLinked: true,
+        }, {
+          source: 'ai-tool',
+          historyLabel: 'AI: cut range delete',
+        });
+        results.push({
+          range: { start: timelineStart, end: timelineEnd },
+          status: deleteResult.success
+            ? 'removed'
+            : `error - ${deleteResult.warnings.map((warning) => warning.message).join(' ')}`,
+        });
       } else {
         results.push({ range: { start: timelineStart, end: timelineEnd }, status: 'error - could not find section to delete' });
       }
@@ -608,8 +517,23 @@ export async function handleMoveClip(
     }
   }
 
-  // skipLinked is the inverse of withLinked
-  timelineStore.moveClip(clipId, newStartTime, newTrackId, !withLinked);
+  const moveResult = timelineStore.applyTimelineEditOperation({
+    id: `ai-move-clip:${clipId}:${newStartTime}:${newTrackId ?? clip.trackId}`,
+    type: 'move-clips',
+    moves: [{ clipId, startTime: newStartTime, trackId: newTrackId }],
+    includeLinked: withLinked,
+  }, {
+    source: 'ai-tool',
+    historyLabel: 'AI: move clip',
+  });
+
+  if (!moveResult.success) {
+    return {
+      success: false,
+      error: moveResult.warnings.map((warning) => warning.message).join(' '),
+    };
+  }
+
   return {
     success: true,
     data: {
@@ -640,7 +564,24 @@ export async function handleTrimClip(
 
   const oldInPoint = clip.inPoint;
   const oldOutPoint = clip.outPoint;
-  timelineStore.trimClip(clipId, inPoint, outPoint);
+  const trimResult = timelineStore.applyTimelineEditOperation({
+    id: `ai-trim-clip:${clipId}:${inPoint}:${outPoint}`,
+    type: 'trim-clip',
+    clipId,
+    inPoint,
+    outPoint,
+    includeLinked: true,
+  }, {
+    source: 'ai-tool',
+    historyLabel: 'AI: trim clip',
+  });
+
+  if (!trimResult.success) {
+    return {
+      success: false,
+      error: trimResult.warnings.map((warning) => warning.message).join(' '),
+    };
+  }
 
   // Visual feedback: trim highlight at the changed edge
   if (isAIExecutionActive()) {
@@ -766,7 +707,7 @@ export async function handleSplitClipAtTimes(
 
 export async function handleReorderClips(
   args: Record<string, unknown>,
-  _timelineStore: TimelineStore
+  timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const clipIds = args.clipIds as string[];
   const withLinked = (args.withLinked as boolean | undefined) ?? true;
@@ -811,24 +752,19 @@ export async function handleReorderClips(
     }
   }
 
-  // Staggered reorder: move clips one by one with visual feedback
+  // Reorder as one kernel operation so linked behavior, export lock, and history stay consistent.
   if (isAIExecutionActive()) {
-    // Build ordered list of moves (only clips that actually move)
-    const moves: { clipId: string; linkedId?: string; newStart: number; linkedNewStart?: number }[] = [];
+    const moves: { clipId: string; linkedId?: string }[] = [];
     for (const clip of orderedClips) {
       const newStart = newPositions.get(clip!.id)!;
       if (Math.abs(clip!.startTime - newStart) > 0.01) {
         const linkedId = withLinked && clip!.linkedClipId ? clip!.linkedClipId : undefined;
-        const linkedNewStart = linkedId ? newPositions.get(linkedId) : undefined;
-        moves.push({ clipId: clip!.id, linkedId, newStart, linkedNewStart });
+        moves.push({ clipId: clip!.id, linkedId });
       }
     }
 
-    for (let i = 0; i < moves.length; i++) {
-      const { clipId, linkedId, newStart, linkedNewStart } = moves[i];
+    for (const { clipId, linkedId } of moves) {
       const store = useTimelineStore.getState();
-
-      // Set FLIP animation data before moving
       const currentClip = store.clips.find(c => c.id === clipId);
       if (currentClip) {
         store.setAIMovingClip(clipId, currentClip.startTime, 200);
@@ -839,36 +775,25 @@ export async function handleReorderClips(
           store.setAIMovingClip(linkedId, linkedClip.startTime, 200);
         }
       }
-
-      // Move this clip (and linked) to new position
-      useTimelineStore.setState({
-        clips: store.clips.map(c => {
-          if (c.id === clipId) return { ...c, startTime: Math.max(0, newStart) };
-          if (c.id === linkedId && linkedNewStart !== undefined) return { ...c, startTime: Math.max(0, linkedNewStart) };
-          return c;
-        }),
-      });
-
-      if (i < moves.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, consumeStaggerDelay(moves.length - 1 - i)));
-      }
     }
-  } else {
-    // Non-AI: apply all at once
-    useTimelineStore.setState({
-      clips: allClips.map(c => {
-        const newStart = newPositions.get(c.id);
-        if (newStart !== undefined) {
-          return { ...c, startTime: Math.max(0, newStart) };
-        }
-        return c;
-      }),
-    });
   }
 
-  // Update duration and invalidate cache once
-  useTimelineStore.getState().updateDuration();
-  useTimelineStore.getState().invalidateCache();
+  const reorderResult = timelineStore.applyTimelineEditOperation({
+    id: `ai-reorder-clips:${clipIds.join(',')}`,
+    type: 'move-clips',
+    moves: [...newPositions].map(([clipId, startTime]) => ({ clipId, startTime })),
+    includeLinked: false,
+  }, {
+    source: 'ai-tool',
+    historyLabel: 'AI: reorder clips',
+  });
+
+  if (!reorderResult.success) {
+    return {
+      success: false,
+      error: reorderResult.warnings.map((warning) => warning.message).join(' '),
+    };
+  }
 
   return {
     success: true,

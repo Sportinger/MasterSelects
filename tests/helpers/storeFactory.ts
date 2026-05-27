@@ -8,6 +8,13 @@
 
 import { createStore } from 'zustand';
 import type { TimelineStore } from '../../src/stores/timeline/types';
+import {
+  AVAILABLE_TIMELINE_MODE_TOOL_IDS,
+  TIMELINE_TOOL_GROUP_BY_ID,
+  TIMELINE_TOOL_IDS_BY_GROUP,
+  getDefaultLastTimelineToolByGroup,
+  getLegacyToolMode,
+} from '../../src/stores/timeline/toolDefaults';
 import type { TimelineClip, Keyframe, Layer, AnimatableProperty } from '../../src/types';
 import type { TimelineMarker } from '../../src/stores/timeline/types';
 
@@ -26,6 +33,7 @@ import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSli
 import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipSlice';
 import { createAudioEditSlice } from '../../src/stores/timeline/audioEditSlice';
 import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
+import { createTimelineEditOperationSlice } from '../../src/stores/timeline/editOperations';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
 import { MAX_ZOOM, MIN_ZOOM } from '../../src/stores/timeline/constants';
 import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
@@ -48,6 +56,7 @@ function getInitialState(): Partial<TimelineStore> {
     isDraggingPlayhead: false,
     selectedClipIds: new Set<string>(),
     primarySelectedClipId: null,
+    targetTrackIdByType: {},
     layers: [] as Layer[],
     selectedLayerId: null,
     inPoint: null,
@@ -64,6 +73,13 @@ function getInitialState(): Partial<TimelineStore> {
     curveEditorHeight: 250,
     markers: [] as TimelineMarker[],
     toolMode: 'select' as const,
+    activeTimelineToolId: 'select' as const,
+    previousTimelineToolId: null,
+    lastTimelineToolByGroup: getDefaultLastTimelineToolByGroup(),
+    openTimelineToolGroupId: null,
+    momentaryTimelineToolId: null,
+    timelineRangeSelection: null,
+    timelineToolPreview: null,
     // Mask state
     maskEditMode: 'none' as const,
     activeMaskId: null,
@@ -125,6 +141,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const downloadClipActions = createDownloadClipSlice(set, get);
     const audioEditActions = createAudioEditSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
+    const timelineEditOperationActions = createTimelineEditOperationSlice(set, get);
     const positioningUtils = createPositioningUtils(set, get);
 
     // Simple playback actions (inlined to avoid importing playbackSlice which pulls in engine)
@@ -172,10 +189,52 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       setLoopPlayback: (loop: boolean) => set({ loopPlayback: loop }),
       toggleLoopPlayback: () => set({ loopPlayback: !get().loopPlayback }),
       setPlaybackSpeed: (speed: number) => set({ playbackSpeed: speed }),
-      setToolMode: (mode: TimelineStore['toolMode']) => set({ toolMode: mode }),
+      setActiveTimelineTool: (toolId: TimelineStore['activeTimelineToolId']) => {
+        const previousTimelineToolId = get().activeTimelineToolId;
+        set({
+          activeTimelineToolId: toolId,
+          previousTimelineToolId,
+          lastTimelineToolByGroup: {
+            ...get().lastTimelineToolByGroup,
+            [TIMELINE_TOOL_GROUP_BY_ID[toolId]]: toolId,
+          },
+          toolMode: getLegacyToolMode(toolId),
+        });
+      },
+      activateTimelineToolGroup: (groupId) => {
+        const toolId = get().lastTimelineToolByGroup[groupId];
+        if (AVAILABLE_TIMELINE_MODE_TOOL_IDS.has(toolId)) get().setActiveTimelineTool(toolId);
+      },
+      cycleTimelineToolGroup: (groupId, direction = 1) => {
+        const tools = TIMELINE_TOOL_IDS_BY_GROUP[groupId].filter((toolId) => AVAILABLE_TIMELINE_MODE_TOOL_IDS.has(toolId));
+        if (tools.length === 0) return;
+        const currentIndex = Math.max(0, tools.indexOf(get().activeTimelineToolId));
+        const nextIndex = (currentIndex + direction + tools.length) % tools.length;
+        get().setActiveTimelineTool(tools[nextIndex]);
+      },
+      setOpenTimelineToolGroup: (groupId) => set({ openTimelineToolGroupId: groupId }),
+      setMomentaryTimelineTool: (toolId) => set({
+        previousTimelineToolId: get().activeTimelineToolId,
+        activeTimelineToolId: toolId,
+        momentaryTimelineToolId: toolId,
+        toolMode: getLegacyToolMode(toolId),
+      }),
+      clearMomentaryTimelineTool: () => {
+        const nextToolId = get().previousTimelineToolId ?? 'select';
+        set({
+          activeTimelineToolId: nextToolId,
+          previousTimelineToolId: null,
+          momentaryTimelineToolId: null,
+          toolMode: getLegacyToolMode(nextToolId),
+        });
+      },
+      setTimelineRangeSelection: (selection) => set({ timelineRangeSelection: selection }),
+      clearTimelineRangeSelection: () => set({ timelineRangeSelection: null }),
+      setTimelineToolPreview: (preview) => set({ timelineToolPreview: preview }),
+      setToolMode: (mode: TimelineStore['toolMode']) => get().setActiveTimelineTool(mode === 'cut' ? 'blade' : 'select'),
       toggleCutTool: () => {
         const { toolMode } = get();
-        set({ toolMode: toolMode === 'cut' ? 'select' : 'cut' });
+        get().setActiveTimelineTool(toolMode === 'cut' ? 'select' : 'blade');
       },
       setClipAnimationPhase: (phase: TimelineStore['clipAnimationPhase']) => set({ clipAnimationPhase: phase }),
       setSlotGridProgress: (progress: number) => set({ slotGridProgress: Math.max(0, Math.min(1, progress)) }),
@@ -318,6 +377,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...nodeGraphActions,
       ...positioningUtils,
       ...playbackActions,
+      ...timelineEditOperationActions,
       ...stubActions,
     }, get);
 

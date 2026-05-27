@@ -209,10 +209,16 @@
   overflow-x: auto;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 
 .media-panel-table-wrapper .media-column-headers,
 .media-panel-table-wrapper .media-item-list {
+  width: max-content;
+  min-width: 100%;
+}
+
+.media-panel-table-wrapper .media-item {
   width: max-content;
   min-width: 100%;
 }
@@ -252,51 +258,9 @@
   overflow: hidden;
   position: relative;
   flex-shrink: 0;
-  width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 408px))) !important;
-  min-width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 408px))) !important;
-  max-width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 408px))) !important;
-}
-
-@container (max-width: 760px) {
-  .media-col-bitrate,
-  .media-col-size,
-  .media-col-container,
-  .media-col-codec {
-    display: none;
-  }
-
-  .media-col-name {
-    width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 218px))) !important;
-    min-width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 218px))) !important;
-    max-width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 218px))) !important;
-  }
-}
-
-@container (max-width: 560px) {
-  .media-col-resolution,
-  .media-col-fps,
-  .media-col-audio {
-    display: none;
-  }
-
-  .media-col-name {
-    width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 102px))) !important;
-    min-width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 102px))) !important;
-    max-width: min(var(--media-name-column-width, 250px), max(120px, calc(100cqw - 102px))) !important;
-  }
-}
-
-@container (max-width: 380px) {
-  .media-col-label,
-  .media-col-duration {
-    display: none;
-  }
-
-  .media-col-name {
-    width: calc(100cqw - 16px) !important;
-    min-width: calc(100cqw - 16px) !important;
-    max-width: calc(100cqw - 16px) !important;
-  }
+  width: var(--media-name-column-width, 250px) !important;
+  min-width: var(--media-name-column-width, 250px) !important;
+  max-width: var(--media-name-column-width, 250px) !important;
 }
 
 /* Resize handle for name column */
@@ -423,50 +387,50 @@
 }
 
 .media-col-duration {
-  width: 56px;
-  min-width: 56px;
+  width: 74px;
+  min-width: 74px;
   text-align: right;
 }
 
 .media-col-resolution {
-  width: 118px;
-  min-width: 118px;
+  width: 126px;
+  min-width: 126px;
   text-align: right;
 }
 
 .media-col-fps {
-  width: 40px;
-  min-width: 40px;
+  width: 48px;
+  min-width: 48px;
   text-align: right;
 }
 
 .media-col-container {
-  width: 72px;
-  min-width: 72px;
+  width: 86px;
+  min-width: 86px;
   text-align: center;
 }
 
 .media-col-codec {
-  width: 68px;
-  min-width: 68px;
+  width: 84px;
+  min-width: 84px;
   text-align: center;
 }
 
 .media-col-audio {
-  width: 44px;
-  min-width: 44px;
+  width: 62px;
+  min-width: 62px;
   text-align: center;
 }
 
 .media-col-bitrate {
-  width: 70px;
-  min-width: 70px;
+  width: 86px;
+  min-width: 86px;
   text-align: right;
 }
 
 .media-col-size {
-  width: 70px;
-  min-width: 70px;
+  width: 82px;
+  min-width: 82px;
   text-align: right;
   padding-right: 12px;
 }
@@ -1491,6 +1455,109 @@
 
 .add-dropdown-item.has-submenu:hover > .add-dropdown-submenu {
   display: block;
+}
+
+.media-delete-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.media-delete-dialog {
+  width: min(420px, calc(100vw - 48px));
+  padding: 18px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-tertiary) 94%, #000000);
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border-color));
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.52);
+}
+
+.media-delete-dialog-kicker {
+  margin-bottom: 6px;
+  color: var(--danger-light, #ff8f8f);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.media-delete-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.media-delete-dialog p {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.media-delete-dialog-comps {
+  margin-bottom: 12px;
+  padding: 7px 9px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.media-delete-dialog-warning {
+  margin-bottom: 16px;
+  padding: 10px;
+  color: color-mix(in srgb, var(--danger-light, #ff8f8f) 74%, var(--text-primary));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border-color));
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.media-delete-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.media-delete-dialog-button {
+  min-width: 84px;
+  height: 28px;
+  padding: 0 12px;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.media-delete-dialog-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-muted) 55%, var(--border-color));
+  background: color-mix(in srgb, var(--bg-hover) 78%, var(--text-muted));
+}
+
+.media-delete-dialog-button.danger {
+  color: #fff;
+  background: color-mix(in srgb, var(--danger) 78%, #1b0b0b);
+  border-color: color-mix(in srgb, var(--danger) 72%, var(--border-color));
+}
+
+.media-delete-dialog-button.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 90%, #1b0b0b);
+}
+
+.media-delete-dialog-button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* Context Menu */

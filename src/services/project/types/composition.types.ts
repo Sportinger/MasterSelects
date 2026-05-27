@@ -1,7 +1,7 @@
 // Composition-related types
 
 import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, ProjectTransform } from './timeline.types';
-import type { MeshPrimitiveType, SceneCameraSettings } from '../../../stores/mediaStore/types';
+import type { LabelColor, MeshPrimitiveType, SceneCameraSettings } from '../../../stores/mediaStore/types';
 import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
 import type { SplatEffectorSettings } from '../../../types/splatEffector';
 import type {
@@ -27,6 +27,7 @@ export interface ProjectTrack {
   name: string;
   type: 'video' | 'audio';
   height: number;
+  labelColor?: LabelColor;
   locked: boolean;
   visible: boolean;
   muted: boolean;

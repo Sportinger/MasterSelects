@@ -20,6 +20,55 @@ import { SUNO_PROVIDER_ID, sunoService } from '../sunoService';
 
 const log = Logger.create('FlashBoardJob');
 
+function shouldUsePersonalApiKey(provider: 'piapi' | 'kieai' | 'evolink' | 'elevenlabs'): boolean {
+  return useSettingsStore.getState().shouldUseApiKeyByDefault(provider);
+}
+
+function resolveEffectiveRequest(request: FlashBoardGenerationRequest): FlashBoardGenerationRequest {
+  if (request.service === 'kieai' && !shouldUsePersonalApiKey('kieai')) {
+    if (request.providerId === 'kling-3.0') {
+      return {
+        ...request,
+        providerId: 'cloud-kling',
+        service: 'cloud',
+        version: 'latest',
+      };
+    }
+
+    if (request.providerId === 'nano-banana-2') {
+      return {
+        ...request,
+        service: 'cloud',
+        version: 'latest',
+      };
+    }
+  }
+
+  return request;
+}
+
+function assertPersonalApiKeyAccess(request: FlashBoardGenerationRequest): void {
+  if (request.service === 'piapi' && !shouldUsePersonalApiKey('piapi')) {
+    throw new Error('Enable a PiAPI key as default in Settings to generate with PiAPI.');
+  }
+
+  if (request.service === 'kieai' && !shouldUsePersonalApiKey('kieai')) {
+    throw new Error('Enable a Kie.ai key as default in Settings to generate with Kie.ai.');
+  }
+
+  if (request.service === 'evolink' && !shouldUsePersonalApiKey('evolink')) {
+    throw new Error('Enable an EvoLink key as default in Settings to generate with EvoLink.');
+  }
+
+  if (request.service === 'elevenlabs' && !shouldUsePersonalApiKey('elevenlabs')) {
+    throw new Error('Enable an ElevenLabs key as default in Settings to generate speech with ElevenLabs.');
+  }
+
+  if (request.service === 'suno' && !shouldUsePersonalApiKey('kieai')) {
+    throw new Error('Enable a Kie.ai key as default in Settings to generate music with Suno.');
+  }
+}
+
 function sanitizeForFilename(value: string, maxLen = 32): string {
   return value
     .replace(/[^a-zA-Z0-9 -]/g, '')
@@ -230,10 +279,12 @@ class FlashBoardJobService {
   }
 
   private async startJob(entry: QueueEntry): Promise<void> {
-    const { nodeId, request, abortController } = entry;
+    const { nodeId, abortController } = entry;
+    const request = resolveEffectiveRequest(entry.request);
 
     try {
       this.onUpdate?.(nodeId, { status: 'processing' });
+      assertPersonalApiKeyAccess(request);
 
       const { piapi, kieai, evolink, elevenlabs } = useSettingsStore.getState().apiKeys;
       if (request.service === 'piapi') {

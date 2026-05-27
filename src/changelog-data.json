@@ -2,6 +2,14 @@
   {
     "date": "2026-05-27",
     "type": "new",
+    "title": "MasterSelects 2.0.1",
+    "description": "Timeline editing now includes a Premiere-style tool palette with icon cursors and operation previews, source-monitor in/out controls with compact transport, target-layer highlighting, slot-view access in the toolbar, and cached high-detail audio waveforms generated during import.",
+    "section": "Release",
+    "commits": ["bac30754"]
+  },
+  {
+    "date": "2026-05-27",
+    "type": "new",
     "title": "MasterSelects 2.0.0",
     "description": "The 2.0.0 release bundles the new FlashBoard chat workflow, provider/model controls, guided AI editing interactions, persistent dock layouts, and timeline UI refinements for keyframes, ruler alignment, timecode display, and split-pane visibility.",
     "section": "Release"

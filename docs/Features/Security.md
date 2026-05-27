@@ -46,6 +46,8 @@ API keys are stored encrypted in IndexedDB using the Web Crypto API:
 - Each browser instance generates a unique AES-256-GCM key
 - The encryption key is stored alongside the encrypted secrets in IndexedDB
 - This blocks casual inspection, but not same-origin scripts or browser extensions with storage access
+- The API-key settings panel is hidden by default. The internal shortcut `Ctrl+Shift+8`, then `Ctrl+Shift+7`, toggles visibility.
+- Stored personal keys do not replace hosted Cloud credits unless the key's provider is explicitly marked as the default.
 
 ### File Export
 
@@ -61,6 +63,8 @@ The `.keys.enc` export/import path remains disabled. The previous implementation
 | `deepgram` | Deepgram | Encrypted IndexedDB |
 | `piapi` | PiAPI gateway | Encrypted IndexedDB |
 | `kieai` | Kie.ai | Encrypted IndexedDB |
+| `evolink` | EvoLink | Encrypted IndexedDB |
+| `elevenlabs` | ElevenLabs | Encrypted IndexedDB |
 | `youtube` | YouTube Data API | Encrypted IndexedDB |
 | `klingAccessKey` | Kling AI | Encrypted IndexedDB |
 | `klingSecretKey` | Kling AI | Encrypted IndexedDB |

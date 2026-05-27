@@ -6,6 +6,7 @@ import type { TimelineClip, ClipTransform } from '../../../types';
 import type { Composition } from '../../../stores/mediaStore';
 import { ALL_BLEND_MODES } from '../constants';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
+import { useTimelineStore } from '../../../stores/timeline';
 
 interface UseTimelineKeyboardProps {
   // Playback
@@ -207,10 +208,41 @@ export function useTimelineKeyboard({
         return;
       }
 
+      // Timeline tool selection
+      if (registry.matches('tool.select', e)) {
+        e.preventDefault();
+        useTimelineStore.getState().setActiveTimelineTool('select');
+        return;
+      }
+
+      if (registry.matches('tool.selectionGroup', e)) {
+        e.preventDefault();
+        useTimelineStore.getState().cycleTimelineToolGroup('selection', e.shiftKey ? -1 : 1);
+        return;
+      }
+
       // Cut/Razor tool toggle
       if (registry.matches('tool.cutToggle', e)) {
         e.preventDefault();
         toggleCutTool();
+        return;
+      }
+
+      if (registry.matches('tool.trimGroup', e)) {
+        e.preventDefault();
+        useTimelineStore.getState().cycleTimelineToolGroup('trim', e.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (registry.matches('tool.placementGroup', e)) {
+        e.preventDefault();
+        useTimelineStore.getState().cycleTimelineToolGroup('placement', e.shiftKey ? -1 : 1);
+        return;
+      }
+
+      if (registry.matches('tool.navigationGroup', e)) {
+        e.preventDefault();
+        useTimelineStore.getState().cycleTimelineToolGroup('navigation', e.shiftKey ? -1 : 1);
         return;
       }
 

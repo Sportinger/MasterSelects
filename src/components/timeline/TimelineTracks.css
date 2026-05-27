@@ -11,7 +11,7 @@
 /* Track headers */
 .track-headers {
   box-sizing: border-box;
-  width: 210px;
+  width: var(--track-header-width, 210px);
   flex-shrink: 0;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
@@ -35,13 +35,27 @@
 }
 
 .track-header.video {
-  background: linear-gradient(90deg, rgba(61, 90, 128, 0.15), transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 24%, transparent), transparent 58%),
+    var(--bg-tertiary);
 }
 
 .track-header.audio {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
-    linear-gradient(90deg, rgba(21, 63, 54, 0.52), rgba(13, 19, 22, 0.96));
+    linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 18%, var(--bg-tertiary)), var(--bg-tertiary));
+}
+
+.track-header.targeted {
+  border-left: 3px solid var(--timeline-toggle-active-color, var(--accent));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--timeline-toggle-active-color, var(--accent)) 22%, transparent), transparent 64%),
+    linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 28%, var(--bg-tertiary)), var(--bg-tertiary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--timeline-toggle-active-color, var(--accent)) 30%, transparent);
+}
+
+.track-header.targeted .track-name {
+  color: #fff;
 }
 
 .track-header.locked {
@@ -71,10 +85,10 @@
   z-index: 2;
 }
 
-/* Green separator line between video and audio track sections */
+/* Neutral separator line between video and audio track sections */
 .track-header.video + .track-header.audio,
 .track-lane.video + .track-lane.audio {
-  border-top: 2px solid var(--success);
+  border-top: 2px solid color-mix(in srgb, var(--text-muted) 48%, var(--border-color));
 }
 
 /* Preview header shown when dragging media to create new track */
@@ -135,10 +149,20 @@
 }
 
 .track-layer-id {
+  display: none;
   flex-shrink: 0;
   font-size: 10px;
   color: var(--text-secondary);
   line-height: 1;
+}
+
+.track-color-chip {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.62);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
 .track-name-input {
@@ -179,6 +203,14 @@
   border-radius: 3px;
   font-size: 9px;
   line-height: 1;
+}
+
+.track-header.video .track-controls {
+  grid-template-columns: repeat(3, 16px);
+  grid-auto-rows: 15px;
+  right: 2px;
+  width: 56px;
+  justify-content: center;
 }
 
 .track-header-icon {
@@ -620,29 +652,79 @@
 }
 
 .track-header.audio.audio-layer-basic > .track-header-top {
-  padding-right: 76px;
-  padding-left: 4px;
+  padding-left: 8px;
+  padding-right: 60px;
 }
 
 .track-header.audio.audio-layer-basic .track-header-main {
   flex-wrap: nowrap;
   padding-left: 0;
+  gap: 4px;
 }
 
 .track-header.audio.audio-layer-basic .track-header-main > .track-name {
   max-width: 116px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
+.track-header.audio.audio-layer-basic .track-controls,
 .track-header.audio.audio-layer-basic.audio-strip-compact .track-controls {
   grid-template-columns: repeat(3, 16px);
+  grid-auto-rows: 15px;
+  gap: 2px;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  transform-origin: center;
+}
+
+.track-header.audio.audio-layer-basic .track-controls .btn-icon,
+.track-header.audio.audio-layer-basic.audio-strip-compact .track-controls .btn-icon,
+.track-header.audio.audio-layer-basic.audio-strip-condensed .track-controls .btn-icon {
+  width: 16px;
+  height: 15px;
+  min-width: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  box-shadow: none;
+  font-size: 9px;
+  font-weight: inherit;
+}
+
+.track-header.audio.audio-layer-basic .track-controls .btn-icon.solo-active {
+  color: var(--warning);
+  font-weight: bold;
+  opacity: 1;
+}
+
+.track-header.audio.audio-layer-basic .track-controls .btn-icon.locked-active {
+  color: var(--warning);
+  opacity: 1;
+}
+
+.track-header.audio.audio-layer-basic .track-controls .btn-icon:hover {
+  background: none;
+  border: 0;
 }
 
 .track-header.audio.audio-layer-basic.audio-strip-condensed > .track-header-top {
-  padding-right: 46px;
+  padding-left: 8px;
+  padding-right: 60px;
 }
 
 .track-header.audio.audio-layer-basic.audio-strip-condensed .track-controls {
-  grid-template-columns: repeat(3, 12px);
+  grid-template-columns: repeat(3, 16px);
+  grid-auto-rows: 15px;
+  gap: 2px;
+  right: 4px;
+}
+
+.track-header.audio.audio-layer-basic.audio-strip-condensed .track-header-main > .track-name {
+  max-width: 116px;
+  font-size: 11px;
 }
 
 .track-header.audio.audio-layer-basic .audio-track-faders,
@@ -1076,24 +1158,90 @@
   transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), background 160ms ease, border-color 160ms ease;
 }
 
+.timeline-container.is-track-resizing .track-header,
+.timeline-container.is-track-resizing .track-lane {
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.track-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 30;
+  background: transparent;
+  touch-action: none;
+}
+
+.track-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 1px;
+  background: transparent;
+  transition: background 120ms ease, box-shadow 120ms ease, height 120ms ease;
+}
+
+.track-resize-handle:hover::after,
+.track-resize-handle.active::after,
+.track-header.resizing .track-resize-handle::after,
+.track-lane.resizing .track-resize-handle::after {
+  height: 2px;
+  background: color-mix(in srgb, var(--accent-timeline) 78%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-timeline) 70%, transparent);
+}
+
+.track-lane::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--track-color, transparent);
+  opacity: 0.82;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .track-lane.video {
-  background: repeating-linear-gradient(
-    90deg,
-    var(--timeline-grid-video),
-    var(--timeline-grid-video) 1px,
-    var(--bg-secondary) 1px,
-    var(--bg-secondary) var(--grid-size, 50px)
-  );
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-video) var(--frame-grid-strength, 0%), transparent),
+      color-mix(in srgb, var(--timeline-grid-video) var(--frame-grid-strength, 0%), transparent) 1px,
+      transparent 1px,
+      transparent var(--frame-grid-size, 99999px)
+    ),
+    linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 12%, transparent), transparent 72px),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-video) var(--time-grid-strength, 100%), transparent),
+      color-mix(in srgb, var(--timeline-grid-video) var(--time-grid-strength, 100%), transparent) 1px,
+      var(--bg-secondary) 1px,
+      var(--bg-secondary) var(--grid-size, 50px)
+    );
 }
 
 .track-lane.audio {
-  background: repeating-linear-gradient(
-    90deg,
-    var(--timeline-grid-audio),
-    var(--timeline-grid-audio) 1px,
-    var(--bg-secondary) 1px,
-    var(--bg-secondary) var(--grid-size, 50px)
-  );
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent) 1px,
+      transparent 1px,
+      transparent var(--frame-grid-size, 99999px)
+    ),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012), transparent 72px),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-strength, 100%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-strength, 100%), transparent) 1px,
+      var(--bg-secondary) 1px,
+      var(--bg-secondary) var(--grid-size, 50px)
+    );
 }
 
 .timeline-track-section.collapsed .track-header,
@@ -1161,6 +1309,14 @@
   right: 3px;
 }
 
+.timeline-track-section.collapsed .track-header.video .track-controls {
+  grid-template-columns: repeat(3, 12px);
+  grid-auto-rows: 12px;
+  right: 2px;
+  width: 44px;
+  justify-content: center;
+}
+
 .timeline-track-section.collapsed .track-header.audio.audio-summary-meter-visible .track-controls {
   grid-template-columns: repeat(4, 12px);
 }
@@ -1181,18 +1337,40 @@
   font-size: 7px;
 }
 
+.timeline-track-section.collapsed .track-header.audio.audio-layer-basic .track-controls {
+  grid-template-columns: repeat(3, 16px);
+  grid-auto-rows: 15px;
+  gap: 2px;
+  right: 4px;
+}
+
+.timeline-track-section.collapsed .track-header.audio.audio-layer-basic .track-controls .btn-icon {
+  width: 16px;
+  height: 15px;
+  min-width: 16px;
+  font-size: 9px;
+}
+
 .timeline-container.audio-mode-detailed .track-header.audio,
 .timeline-container.audio-mode-detailed .track-lane.audio {
-  border-color: color-mix(in srgb, var(--success) 36%, var(--border-color));
+  border-color: color-mix(in srgb, var(--track-color, #303030) 42%, var(--border-color));
 }
 
 .timeline-container.audio-mode-detailed .track-lane.audio {
   background:
-    linear-gradient(180deg, rgba(28, 76, 60, 0.22), transparent 46%, rgba(4, 11, 18, 0.18)),
     repeating-linear-gradient(
       90deg,
-      var(--timeline-grid-audio),
-      var(--timeline-grid-audio) 1px,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent) 1px,
+      transparent 1px,
+      transparent var(--frame-grid-size, 99999px)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 46%, rgba(0, 0, 0, 0.08)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012), transparent 72px),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-strength, 100%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-strength, 100%), transparent) 1px,
       var(--bg-secondary) 1px,
       var(--bg-secondary) var(--grid-size, 50px)
     );
@@ -1200,17 +1378,24 @@
 
 .timeline-container.audio-mode-spectral .track-header.audio,
 .timeline-container.audio-mode-spectral .track-lane.audio {
-  border-color: color-mix(in srgb, #52beff 34%, var(--border-color));
+  border-color: color-mix(in srgb, var(--track-color, #303030) 42%, var(--border-color));
 }
 
 .timeline-container.audio-mode-spectral .track-lane.audio {
   background:
-    linear-gradient(180deg, rgba(26, 48, 82, 0.38), rgba(13, 28, 46, 0.16) 46%, rgba(45, 20, 51, 0.2)),
     repeating-linear-gradient(
       90deg,
-      rgba(82, 190, 255, 0.16),
-      rgba(82, 190, 255, 0.16) 1px,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent) 1px,
       transparent 1px,
+      transparent var(--frame-grid-size, 99999px)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 46%, rgba(0, 0, 0, 0.08)),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-strength, 100%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-strength, 100%), transparent) 1px,
+      var(--bg-secondary) 1px,
       transparent var(--grid-size, 50px)
     );
 }
@@ -1228,24 +1413,71 @@
 
 .timeline-container.audio-focus-mode .track-header.audio,
 .timeline-container.audio-focus-mode .track-lane.audio {
-  border-color: color-mix(in srgb, #52beff 46%, var(--success));
+  border-color: color-mix(in srgb, var(--track-color, #303030) 64%, var(--border-color));
 }
 
 .timeline-container.audio-focus-mode .track-header.audio {
   background:
-    linear-gradient(90deg, rgba(82, 190, 255, 0.18), rgba(45, 107, 74, 0.18) 56%, transparent);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent 68%),
+    var(--bg-tertiary);
 }
 
 .timeline-container.audio-focus-mode .track-lane.audio {
   background:
-    linear-gradient(180deg, rgba(82, 190, 255, 0.12), transparent 18%, rgba(45, 107, 74, 0.22) 50%, rgba(6, 10, 18, 0.24)),
     repeating-linear-gradient(
       90deg,
-      rgba(82, 190, 255, 0.18),
-      rgba(82, 190, 255, 0.18) 1px,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--frame-grid-strength, 0%), transparent) 1px,
+      transparent 1px,
+      transparent var(--frame-grid-size, 99999px)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 32%, rgba(0, 0, 0, 0.08)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.014), transparent 72px),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-muted-strength, 22%), transparent),
+      color-mix(in srgb, var(--timeline-grid-audio) var(--time-grid-muted-strength, 22%), transparent) 1px,
       transparent 1px,
       transparent var(--grid-size, 50px)
     );
+}
+
+.timeline-container.audio-layer-basic .track-header.audio {
+  background: var(--bg-tertiary);
+}
+
+.timeline-container.audio-layer-basic .track-lane.audio {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-video) var(--frame-grid-strength, 0%), transparent),
+      color-mix(in srgb, var(--timeline-grid-video) var(--frame-grid-strength, 0%), transparent) 1px,
+      transparent 1px,
+      transparent var(--frame-grid-size, 99999px)
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--timeline-grid-video) var(--time-grid-strength, 100%), transparent),
+      color-mix(in srgb, var(--timeline-grid-video) var(--time-grid-strength, 100%), transparent) 1px,
+      var(--bg-secondary) 1px,
+      var(--bg-secondary) var(--grid-size, 50px)
+    );
+}
+
+.timeline-container.audio-layer-basic .track-header.audio,
+.timeline-container.audio-layer-basic .track-lane.audio {
+  border-color: var(--border-color);
+}
+
+.timeline-container.audio-layer-basic .track-lane.audio::before {
+  background: transparent;
+}
+
+.timeline-container.audio-focus-mode .track-header.video + .track-header.audio,
+.timeline-container.audio-focus-mode .track-lane.video + .track-lane.audio,
+.timeline-container.video-focus-mode .track-header.video + .track-header.audio,
+.timeline-container.video-focus-mode .track-lane.video + .track-lane.audio {
+  border-top-color: color-mix(in srgb, var(--text-muted) 48%, var(--border-color));
 }
 
 .track-lane.locked {

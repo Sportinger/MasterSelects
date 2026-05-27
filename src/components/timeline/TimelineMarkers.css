@@ -154,60 +154,75 @@
   z-index: 95;
   pointer-events: none;
   --timeline-switch-base-x: 0px;
+  --timeline-ruler-height: 30px;
+  --timeline-flag-size: 18px;
+  --timeline-flag-pole-x: 3.75px;
 }
 
 .in-out-marker .marker-flag {
   position: absolute;
-  top: 0;
-  width: 16px;
-  height: 16px;
+  top: calc(var(--timeline-ruler-height) - var(--timeline-flag-size));
+  width: var(--timeline-flag-size);
+  height: var(--timeline-flag-size);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: bold;
-  color: var(--text-on-accent);
-  border-radius: 2px;
-  cursor: pointer;
+  color: var(--warning);
+  cursor: grab;
   pointer-events: auto;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+  transform-origin: var(--timeline-flag-pole-x) 50%;
 }
 
 .in-marker .marker-flag {
-  background: var(--amber-600);
-  left: 0;
-  border-radius: 0 2px 2px 0;
+  left: calc(var(--timeline-flag-pole-x) * -1);
 }
 
 .out-marker .marker-flag {
-  background: var(--amber-600);
-  right: 0;
-  border-radius: 2px 0 0 2px;
+  left: calc(var(--timeline-flag-pole-x) - var(--timeline-flag-size));
+  transform-origin: calc(var(--timeline-flag-size) - var(--timeline-flag-pole-x)) 50%;
 }
 
 .in-out-marker .marker-line {
   position: absolute;
-  top: 16px;
+  top: var(--timeline-ruler-height);
   bottom: 0;
   width: 2px;
-  background: var(--amber-600);
+  background: var(--warning);
+  opacity: var(--timeline-line-opacity, 0);
+  transition: opacity 80ms linear, box-shadow 80ms linear;
+}
+
+.in-out-marker .timeline-flag-icon {
+  width: var(--timeline-flag-size);
+  height: var(--timeline-flag-size);
+  display: block;
+  overflow: visible;
+}
+
+.in-out-marker .timeline-flag-icon.out-flag {
+  transform: scaleX(-1);
 }
 
 .in-marker .marker-line {
-  left: 0;
+  left: -1px;
 }
 
 .out-marker .marker-line {
-  right: 0;
+  left: -1px;
 }
 
 .in-out-marker .marker-flag:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+  color: color-mix(in srgb, var(--warning) 82%, white);
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.72));
 }
 
 .in-out-marker.dragging .marker-flag {
-  transform: scale(1.2);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+  color: color-mix(in srgb, var(--warning) 72%, white);
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.86));
+  cursor: grabbing;
 }
 
 .timeline-recording-punch-range {
@@ -226,13 +241,18 @@
   border-color: color-mix(in srgb, var(--warning) 70%, transparent);
 }
 
-.in-out-marker.recording-punch .marker-flag,
 .in-out-marker.recording-punch .marker-line {
   background: #ff5a4f;
 }
 
+.in-out-marker.recording-punch .marker-flag {
+  color: #ff5a4f;
+}
+
 .in-out-marker.dragging .marker-line {
   width: 3px;
+  left: -1.5px;
+  opacity: 1;
   box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
 }
 
@@ -248,18 +268,20 @@
   transform: translateX(-1px);
   --timeline-switch-base-x: -1px;
   --marker-color: var(--accent-timeline);
+  --timeline-ruler-height: 30px;
+  --timeline-marker-head-size: 14px;
 }
 
 .timeline-marker-head {
-  width: 14px;
-  height: 14px;
+  width: var(--timeline-marker-head-size);
+  height: var(--timeline-marker-head-size);
   background: var(--marker-color);
   border-radius: 3px;
   transform: translateX(-6px);
   cursor: grab;
   pointer-events: auto;
   position: sticky;
-  top: 4px;
+  top: calc(var(--timeline-ruler-height) - var(--timeline-marker-head-size));
   z-index: 35;
   display: flex;
   align-items: center;
@@ -294,8 +316,9 @@
   min-height: calc(100vh - 50px);
   height: 100%;
   background: var(--marker-color);
-  margin-top: -2px;
-  opacity: 0.7;
+  margin-top: calc(var(--timeline-ruler-height) - var(--timeline-marker-head-size));
+  opacity: var(--timeline-line-opacity, 0);
+  transition: opacity 80ms linear, box-shadow 80ms linear;
 }
 
 .timeline-marker.is-stop-marker .timeline-marker-line {
@@ -427,28 +450,34 @@
   width: 18px;
   height: 18px;
   padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  color: var(--text-secondary);
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.72);
   cursor: grab;
-  transition: all 0.15s ease;
+  transition: color 120ms ease, filter 120ms ease, transform 120ms ease;
   font-size: 10px;
   font-weight: bold;
+  box-shadow: none !important;
 }
 
 .add-marker-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-color);
-  color: var(--accent-timeline);
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #ffffff;
+}
+
+.add-marker-btn:hover svg {
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.55));
 }
 
 .add-marker-btn.dragging {
-  background: var(--accent-timeline);
-  border-color: var(--accent-timeline);
-  color: var(--text-on-accent);
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--accent-timeline);
   cursor: grabbing;
   transform: scale(1.1);
-  box-shadow: 0 0 12px var(--accent-timeline);
+  box-shadow: none !important;
+  filter: drop-shadow(0 0 8px var(--accent-timeline));
 }
 }

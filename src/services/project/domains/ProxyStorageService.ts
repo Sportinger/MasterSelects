@@ -341,4 +341,20 @@ export class ProxyStorageService {
       return false;
     }
   }
+
+  /**
+   * Delete all proxy artifacts for a media storage key.
+   */
+  async deleteProxy(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string
+  ): Promise<boolean> {
+    try {
+      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      await proxyFolder.removeEntry(mediaId, { recursive: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

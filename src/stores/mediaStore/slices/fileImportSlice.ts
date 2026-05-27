@@ -1,6 +1,6 @@
 // File import actions - unified import logic
 
-import type { FileImportResult, MediaFile, MediaSliceCreator, SignalAssetItem } from '../types';
+import type { FileImportResult, MediaFile, MediaSliceCreator, MediaState, SignalAssetItem } from '../types';
 import { generateId, processImport } from '../helpers/importPipeline';
 import { processGaussianSplatSequenceImport } from '../helpers/gaussianSplatSequenceImport';
 import { processModelSequenceImport } from '../helpers/modelSequenceImport';
@@ -30,6 +30,7 @@ import {
   type ModelSequenceImportEntry,
 } from '../../../utils/modelSequence';
 import { getGaussianSplatContainerLabelFromFileName } from '../helpers/gaussianSplatStats';
+import { startMediaFileWaveformGeneration } from '../helpers/mediaWaveformHelpers';
 
 const log = Logger.create('Import');
 const universalImportOrchestrator = createDefaultUniversalImportOrchestrator();
@@ -250,6 +251,35 @@ function updatePlaceholderImportProgress(
   };
 }
 
+function updateMediaFileWaveform(
+  set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
+  id: string,
+  updates: Partial<Pick<MediaFile, 'audioAnalysisRefs' | 'waveform' | 'waveformChannels' | 'waveformProgress' | 'waveformStatus'>>,
+): void {
+  set((state) => ({
+    files: state.files.map((file) => (
+      file.id === id
+        ? { ...file, ...updates }
+        : file
+    )),
+  }));
+}
+
+function finalizeImportedMediaFile(
+  set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
+  get: () => MediaState,
+  id: string,
+  result: MediaFile,
+): void {
+  set((state) => finalizePlaceholder(state, id, result));
+  const mediaFile = get().files.find((file) => file.id === id) ?? result;
+  startMediaFileWaveformGeneration(
+    mediaFile,
+    (mediaFileId, updates) => updateMediaFileWaveform(set, mediaFileId, updates),
+    (mediaFileId) => get().files.find((file) => file.id === mediaFileId),
+  );
+}
+
 function splitModelSequenceEntries(entries: ResolvedLegacyImportEntry[]): {
   modelSequences: GroupedModelSequence<ResolvedLegacyImportEntry>[];
   gaussianSplatSequences: GroupedGaussianSplatSequence<ResolvedLegacyImportEntry>[];
@@ -343,7 +373,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
         projectFileName: options?.projectFileName,
         typeOverride: type,
       });
-      set((state) => finalizePlaceholder(state, id, result.mediaFile));
+      finalizeImportedMediaFile(set, get, id, result.mediaFile);
       log.info('Complete:', result.mediaFile.name);
       return result.mediaFile;
     } catch (err) {
@@ -404,7 +434,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
             set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
           },
         });
-        set((state) => finalizePlaceholder(state, sequenceId, result));
+        finalizeImportedMediaFile(set, get, sequenceId, result);
         imported.push(result);
       } catch (err) {
         log.error(`Sequence import failed: ${sequence.displayName}`, err);
@@ -429,7 +459,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
             set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
           },
         });
-        set((state) => finalizePlaceholder(state, sequenceId, result));
+        finalizeImportedMediaFile(set, get, sequenceId, result);
         imported.push(result);
       } catch (err) {
         log.error(`Sequence import failed: ${sequence.displayName}`, err);
@@ -446,7 +476,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
         batch.map(async ({ file, id, type }) => {
           try {
             const result = await processImport({ file, id, parentId, typeOverride: type });
-            set((state) => finalizePlaceholder(state, id, result.mediaFile));
+            finalizeImportedMediaFile(set, get, id, result.mediaFile);
             return result.mediaFile;
           } catch (err) {
             log.error(`Import failed: ${file.name}`, err);
@@ -514,7 +544,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
             set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
           },
         });
-        set((state) => finalizePlaceholder(state, sequenceId, importResult));
+        finalizeImportedMediaFile(set, get, sequenceId, importResult);
         imported.push(importResult);
       } catch (err) {
         log.error(`Sequence import failed: ${sequence.displayName}`, err);
@@ -538,7 +568,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
             set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
           },
         });
-        set((state) => finalizePlaceholder(state, sequenceId, importResult));
+        finalizeImportedMediaFile(set, get, sequenceId, importResult);
         imported.push(importResult);
       } catch (err) {
         log.error(`Sequence import failed: ${sequence.displayName}`, err);
@@ -557,7 +587,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
 
       try {
         const importResult = await processImport({ file, id, handle, typeOverride: type });
-        set((state) => finalizePlaceholder(state, id, importResult.mediaFile));
+        finalizeImportedMediaFile(set, get, id, importResult.mediaFile);
         imported.push(importResult.mediaFile);
       } catch (err) {
         log.error(`Import failed: ${file.name}`, err);
@@ -620,7 +650,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
             set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
           },
         });
-        set((state) => finalizePlaceholder(state, sequenceId, importResult));
+        finalizeImportedMediaFile(set, get, sequenceId, importResult);
         imported.push(importResult);
       } catch (err) {
         log.error(`Sequence import failed: ${sequence.displayName}`, err);
@@ -645,7 +675,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
             set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
           },
         });
-        set((state) => finalizePlaceholder(state, sequenceId, importResult));
+        finalizeImportedMediaFile(set, get, sequenceId, importResult);
         imported.push(importResult);
       } catch (err) {
         log.error(`Sequence import failed: ${sequence.displayName}`, err);
@@ -664,7 +694,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
 
       try {
         const importResult = await processImport({ file, id, handle, absolutePath, parentId, typeOverride: type });
-        set((state) => finalizePlaceholder(state, id, importResult.mediaFile));
+        finalizeImportedMediaFile(set, get, id, importResult.mediaFile);
         imported.push(importResult.mediaFile);
       } catch (err) {
         log.error(`Import failed: ${file.name}`, err);
@@ -716,7 +746,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     // Phase 2: Full import in background with type override
     try {
       const result = await processImport({ file, id, parentId, typeOverride: 'gaussian-avatar' });
-      set((state) => finalizePlaceholder(state, id, result.mediaFile));
+      finalizeImportedMediaFile(set, get, id, result.mediaFile);
       log.info('Gaussian avatar import complete:', result.mediaFile.name);
       return result.mediaFile;
     } catch (err) {
@@ -759,7 +789,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
 
     try {
       const result = await processImport({ file, id, parentId, typeOverride: 'gaussian-splat' });
-      set((state) => finalizePlaceholder(state, id, result.mediaFile));
+      finalizeImportedMediaFile(set, get, id, result.mediaFile);
       log.info('Gaussian splat import complete:', result.mediaFile.name);
       return result.mediaFile;
     } catch (err) {

@@ -73,4 +73,14 @@ export class TranscriptService {
     const data = await this.getTranscript(projectHandle, mediaId);
     return data?.transcribedRanges ?? [];
   }
+
+  /**
+   * Delete transcript data for a media file.
+   */
+  async deleteTranscript(
+    projectHandle: FileSystemDirectoryHandle,
+    mediaId: string
+  ): Promise<boolean> {
+    return this.fileStorage.deleteFile(projectHandle, 'TRANSCRIPTS', `${mediaId}.json`);
+  }
 }

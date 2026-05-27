@@ -155,7 +155,7 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
   },
 
   pasteClips: () => {
-    const { clipboardData, playheadPosition, tracks, clips, clipKeyframes, updateDuration, invalidateCache } = get();
+    const { clipboardData, playheadPosition, tracks, clips, clipKeyframes, updateDuration, invalidateCache, targetTrackIdByType } = get();
 
     if (!clipboardData || clipboardData.length === 0) {
       log.debug('No clipboard data to paste');
@@ -203,12 +203,19 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         !isMotionClip;
 
       // Find a track of the same type as the original
-      let targetTrackId = clipData.trackId;
       const originalTrack = tracks.find(t => t.id === clipData.trackId);
+      const requestedTargetTrackId = targetTrackIdByType?.[clipData.trackType];
+      const targetedTrack = requestedTargetTrackId
+        ? tracks.find(t => t.id === requestedTargetTrackId)
+        : undefined;
+      const usableTargetedTrack = targetedTrack && targetedTrack.locked !== true && (targetedTrack.type !== 'video' || targetedTrack.visible !== false)
+        ? targetedTrack
+        : undefined;
+      let targetTrackId = usableTargetedTrack?.id ?? clipData.trackId;
 
-      if (!originalTrack) {
+      if (!usableTargetedTrack && !originalTrack) {
         // Original track doesn't exist, find another track of same type
-        const sameTypeTrack = tracks.find(t => t.type === clipData.trackType);
+        const sameTypeTrack = tracks.find(t => t.type === clipData.trackType && t.locked !== true && (t.type !== 'video' || t.visible !== false));
         if (sameTypeTrack) {
           targetTrackId = sameTypeTrack.id;
         } else {

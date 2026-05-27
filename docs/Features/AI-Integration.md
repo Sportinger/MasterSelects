@@ -140,6 +140,7 @@ The old dock-level AI Generative tab is deprecated and removed from default and 
 - Seedance 2.0 cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present
 - The wand button in the composer refines the current prompt with GPT-5.5 through the OpenAI Responses API. It sends the current draft plus prepared reference images, applies selected-model-specific prompt guidance, streams the returned English prompt into the prompt box, keeps a one-step restore button for the pre-AI prompt, and shows a rainbow active state while the refinement is running.
 - The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with OpenAI, Anthropic, and Lemonade providers, model selection as inline buttons, OpenAI reasoning effort for GPT-5.x models, and a temperature slider when the selected model accepts temperature.
+- Compact chat requests include the Media-chat system prompt, current timeline summary, and callable AI tools. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically.
 - Queued and running generations appear as Media Panel preview cards with output type, status, elapsed timer, prompt, metadata, and progress when the provider reports it
 - The tray reuses the FlashBoard queue/import runtime without showing the full node canvas
 
@@ -149,18 +150,19 @@ The current generator stack is no longer best described as "PiAPI as one unified
 
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
-| `Kie.ai` | FlashBoard | Current provider list comes from `getKieAiProviders()`; user-supplied key in Settings |
-| `EvoLink` | FlashBoard image generation | User-supplied key in Settings; Nano Banana 2 uses EvoLink's async `gemini-3.1-flash-image-preview` task flow with up to 14 reference images |
-| `MasterSelects Cloud` | FlashBoard when hosted access is available | Hosted credits/account flow; the tray resolves to hosted Kling when no local Kie key is present; FlashBoard can also use hosted ElevenLabs speech via `/api/ai/audio` |
-| `ElevenLabs` | FlashBoard audio generation | User-supplied key in Settings; text-to-speech output imports as durable audio media |
-| `Suno` | FlashBoard music generation | Uses Kie.ai's Suno API with the user-supplied Kie.ai key; generated music imports as durable audio media |
-| `OpenAI` | FlashBoard prompt refinement | User-supplied OpenAI key in Settings; reference images are resized in-browser and sent to the Responses API with `store: false` |
-| `Anthropic` | FlashBoard compact chat | User-supplied Anthropic key in Settings; used only for prompt discussion, not media generation |
+| `Kie.ai` | FlashBoard | Current provider list comes from `getKieAiProviders()`; user-supplied key must be unlocked and marked as default before it replaces Cloud credits |
+| `EvoLink` | FlashBoard image generation | User-supplied key must be unlocked and marked as default; Nano Banana 2 uses EvoLink's async `gemini-3.1-flash-image-preview` task flow with up to 14 reference images |
+| `MasterSelects Cloud` | FlashBoard when hosted access is available | Hosted credits/account flow; Cloud models are the default unless a matching personal API key is explicitly marked as default; FlashBoard can also use hosted ElevenLabs speech via `/api/ai/audio` |
+| `ElevenLabs` | FlashBoard audio generation | User-supplied key must be unlocked and marked as default; text-to-speech output imports as durable audio media |
+| `Suno` | FlashBoard music generation | Uses Kie.ai's Suno API only when the user's Kie.ai key is unlocked and marked as default; generated music imports as durable audio media |
+| `OpenAI` | FlashBoard prompt refinement and compact chat | User-supplied OpenAI key must be unlocked and marked as default before it replaces hosted OpenAI/Cloud; reference images are resized in-browser and sent to the Responses API with `store: false` |
+| `Anthropic` | FlashBoard compact chat | User-supplied Anthropic key must be unlocked and marked as default; used only for prompt discussion, not media generation |
 | `Lemonade` | FlashBoard compact chat | Local loopback Lemonade Server; model list is discovered from `/models` when the chat controls are opened |
 | `PiAPI` | Legacy compatibility and some catalog/pricing metadata | Still present in older history/key migration paths and FlashBoard pricing/catalog helpers, but not the primary runtime path the current panel describes |
 
 The practical rule for the current branch is:
-- The Media generator tray can select Kie.ai, EvoLink, hosted cloud, hosted ElevenLabs speech, BYO ElevenLabs, and Suno music from the compact FlashBoard composer.
+- The Media generator tray is Cloud-first. BYO providers are hidden until the API-key settings section is unlocked and the matching key is marked as default.
+- Cloud media pricing is shown in the Account dialog's price view only as MasterSelects Cloud credits. Hosted Kie.ai media uses a `6x` vendor-credit conversion for margin after VAT, Stripe, and FX; BYO API-key pricing is intentionally not shown in that Cloud price list.
 - Image generation providers implement the shared FlashBoard image-provider adapter, so adding another async image service is a catalog entry plus a provider adapter instead of another hardcoded job-service branch.
 - ElevenLabs-only access opens the composer on the audio text-to-speech target.
 - Service/provider labels in the tray reflect that active backend instead of a permanent PiAPI abstraction layer.

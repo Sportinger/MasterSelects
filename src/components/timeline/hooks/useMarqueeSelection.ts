@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack, AnimatableProperty } from '../../../types';
 import type { MarqueeState, ClipDragState, ClipTrimState, MarkerDragState } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
+import type { TimelineToolId } from '../../../stores/timeline/types';
 
 interface UseMarqueeSelectionProps {
   // Refs
@@ -17,6 +18,7 @@ interface UseMarqueeSelectionProps {
   selectedClipIds: Set<string>;
   selectedKeyframeIds: Set<string>;
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
+  activeTimelineToolId: TimelineToolId;
 
   // Drag states (to prevent marquee during other operations)
   clipDrag: ClipDragState | null;
@@ -28,6 +30,8 @@ interface UseMarqueeSelectionProps {
   selectClip: (clipId: string | null, addToSelection?: boolean) => void;
   selectKeyframe: (keyframeId: string, addToSelection?: boolean) => void;
   deselectAllKeyframes: () => void;
+  setTimelineRangeSelection: ReturnType<typeof useTimelineStore.getState>['setTimelineRangeSelection'];
+  clearTimelineRangeSelection: ReturnType<typeof useTimelineStore.getState>['clearTimelineRangeSelection'];
 
   // Helpers
   pixelToTime: (pixel: number) => number;
@@ -49,6 +53,7 @@ export function useMarqueeSelection({
   selectedClipIds,
   selectedKeyframeIds,
   clipKeyframes: _clipKeyframes,
+  activeTimelineToolId,
   clipDrag,
   clipTrim,
   markerDrag,
@@ -56,7 +61,9 @@ export function useMarqueeSelection({
   selectClip,
   selectKeyframe,
   deselectAllKeyframes,
-  pixelToTime: _pixelToTime,
+  setTimelineRangeSelection,
+  clearTimelineRangeSelection,
+  pixelToTime,
   isTrackExpanded: _isTrackExpanded,
   getTrackBaseHeight: _getTrackBaseHeight,
   getExpandedTrackHeight: _getExpandedTrackHeight,
@@ -124,15 +131,45 @@ export function useMarqueeSelection({
     [scrollX, trackLanesRef]
   );
 
+  const getTrackIdsInRect = useCallback(
+    (top: number, bottom: number): string[] => {
+      const container = trackLanesRef.current;
+      if (!container) return [];
+
+      const containerRect = container.getBoundingClientRect();
+      const trackIds: string[] = [];
+      container.querySelectorAll<HTMLElement>('.track-lane[data-track-id]').forEach((trackElement) => {
+        const trackId = trackElement.dataset.trackId;
+        if (!trackId) return;
+
+        const track = _tracks.find((candidate) => candidate.id === trackId);
+        if (!track || track.locked || track.visible === false) return;
+
+        const trackRect = trackElement.getBoundingClientRect();
+        const trackTop = trackRect.top - containerRect.top;
+        const trackBottom = trackRect.bottom - containerRect.top;
+        if (trackBottom > top && trackTop < bottom) {
+          trackIds.push(trackId);
+        }
+      });
+      return trackIds;
+    },
+    [_tracks, trackLanesRef],
+  );
+
   // Marquee selection: mouse down on empty area starts selection
   const handleMarqueeMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // Only start marquee on left mouse button and empty area
       if (e.button !== 0) return;
+
+      const isRangeSelectionTool = activeTimelineToolId === 'range-select';
+      if (activeTimelineToolId !== 'select' && !isRangeSelectionTool) return;
+
       // Don't start if clicking on a clip or interactive element
       const target = e.target as HTMLElement;
       if (
-        target.closest('.timeline-clip') ||
+        (!isRangeSelectionTool && target.closest('.timeline-clip')) ||
         target.closest('.playhead') ||
         target.closest('.in-out-marker') ||
         target.closest('.trim-handle') ||
@@ -158,9 +195,31 @@ export function useMarqueeSelection({
       // Check if we're starting in the keyframe area
       const isInKeyframeArea = target.closest('.keyframe-track-row') !== null;
 
+      if (isRangeSelectionTool) {
+        const startTime = Math.max(0, pixelToTime(startX));
+        setMarquee({
+          mode: 'range',
+          startX,
+          startY,
+          currentX: startX,
+          currentY: startY,
+          startScrollX: scrollX,
+          initialSelection: new Set(),
+          initialKeyframeSelection: new Set(),
+        });
+        setTimelineRangeSelection({
+          startTime,
+          endTime: startTime,
+          trackIds: getTrackIdsInRect(startY, startY + 1),
+        });
+        e.preventDefault();
+        return;
+      }
+
       // Clear selection unless shift is held
       // But if in keyframe area, keep clip selection to prevent keyframe rows from collapsing
       if (!e.shiftKey) {
+        clearTimelineRangeSelection();
         if (!isInKeyframeArea) {
           selectClip(null, false);
         }
@@ -173,6 +232,7 @@ export function useMarqueeSelection({
       const initialKeyframeSelection = e.shiftKey ? new Set(selectedKeyframeIds) : new Set<string>();
 
       setMarquee({
+        mode: 'marquee',
         startX,
         startY,
         currentX: startX,
@@ -184,7 +244,23 @@ export function useMarqueeSelection({
 
       e.preventDefault();
     },
-    [trackLanesRef, clipDrag, clipTrim, markerDrag, isDraggingPlayhead, scrollX, selectClip, selectedClipIds, deselectAllKeyframes, selectedKeyframeIds]
+    [
+      trackLanesRef,
+      clipDrag,
+      clipTrim,
+      markerDrag,
+      isDraggingPlayhead,
+      scrollX,
+      activeTimelineToolId,
+      pixelToTime,
+      setTimelineRangeSelection,
+      clearTimelineRangeSelection,
+      getTrackIdsInRect,
+      selectClip,
+      selectedClipIds,
+      deselectAllKeyframes,
+      selectedKeyframeIds,
+    ]
   );
 
   // Marquee selection: mouse move and mouse up handlers
@@ -211,6 +287,15 @@ export function useMarqueeSelection({
       const right = Math.max(m.startX, currentX);
       const top = Math.min(m.startY, currentY);
       const bottom = Math.max(m.startY, currentY);
+
+      if (m.mode === 'range') {
+        setTimelineRangeSelection({
+          startTime: Math.max(0, pixelToTime(left)),
+          endTime: Math.max(0, pixelToTime(right)),
+          trackIds: getTrackIdsInRect(top, bottom),
+        });
+        return;
+      }
 
       // Get clips that intersect with the rectangle
       const intersectingClips = getClipsInRect(left, right, top, bottom);
@@ -262,7 +347,7 @@ export function useMarqueeSelection({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [marquee, trackLanesRef, scrollX, selectClip, getClipsInRect, getKeyframesInRect, selectKeyframe, deselectAllKeyframes]);
+  }, [marquee, trackLanesRef, scrollX, pixelToTime, setTimelineRangeSelection, getTrackIdsInRect, selectClip, getClipsInRect, getKeyframesInRect, selectKeyframe, deselectAllKeyframes]);
 
   return {
     marquee,

@@ -463,6 +463,28 @@
   text-decoration: underline;
 }
 
+.api-key-row .api-key-default {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.api-key-row .api-key-default input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.api-key-row .api-key-default.disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* Footer */
 .settings-footer {
   display: flex;

@@ -1,14 +1,14 @@
 // TimelineClip component - Clip rendering within tracks
 
 import './TimelineClip.css';
-import { memo, useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { memo, type CSSProperties, useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { getLabelHex } from '../panels/media/labelColors';
+import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from './trackColor';
 // PickWhip disabled
-import { Logger } from '../../services/logger';
 import {
   isVectorAnimationSourceType,
   shouldLoopVectorAnimation,
@@ -43,13 +43,20 @@ import type {
   TimelineAudioRegionEditType,
   TimelineSpectralRegionEditType,
 } from '../../stores/timeline/types';
+import {
+  dispatchTimelineClipPointerClick,
+  dispatchTimelineClipPointerMove,
+  getTimelineToolCursor,
+  isTimelineBladeTool,
+  isTimelinePointerTool,
+} from './tools/pointer/timelineToolPointerDispatcher';
 
-const log = Logger.create('TimelineClip');
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
 const TIMELINE_VIEWPORT_MIN_PX = 1600;
 const TIMELINE_RENDER_OVERSCAN_PX = 512;
 const THUMBNAIL_RENDER_OVERSCAN_PX = THUMB_WIDTH * 3;
+const CLIP_RIGHT_STICKY_PADDING_PX = 8;
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_ZOOM = 250;
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_WIDTH = 16_384;
 const inFlightSourceWaveformPyramidUpgrades = new Set<string>();
@@ -71,6 +78,27 @@ function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
 
 function finiteNumberOr(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function getClipSourceDuration(clip: TimelineClipProps['clip']): number {
+  const naturalDuration = clip.source?.naturalDuration;
+  if (Number.isFinite(naturalDuration) && naturalDuration && naturalDuration > 0) {
+    return naturalDuration;
+  }
+  return Math.max(clip.outPoint, clip.inPoint + clip.duration, clip.duration, 0.1);
+}
+
+function getSlippedSourceWindow(
+  clip: TimelineClipProps['clip'],
+  sourceDelta: number,
+): { inPoint: number; outPoint: number } {
+  const visibleSourceDuration = clip.outPoint - clip.inPoint;
+  const maxInPoint = Math.max(0, getClipSourceDuration(clip) - visibleSourceDuration);
+  const inPoint = Math.max(0, Math.min(maxInPoint, clip.inPoint + sourceDelta));
+  return {
+    inPoint,
+    outPoint: inPoint + visibleSourceDuration,
+  };
 }
 
 type StaticClipIconKind = 'camera' | 'gaussian-splat' | 'model';
@@ -187,20 +215,17 @@ function TimelineClipComponent({
   clipFade: _clipFade,
   zoom,
   scrollX,
+  timelineViewportWidth,
   proxyEnabled,
   proxyStatus,
   proxyProgress,
   showTranscriptMarkers,
-  toolMode,
   snappingEnabled,
-  cutHoverInfo,
-  onCutHover,
   onMouseDown,
   onDoubleClick,
   onContextMenu,
   onTrimStart,
   onFadeStart,
-  onCutAtPosition,
   hasKeyframes,
   fadeInDuration,
   fadeOutDuration,
@@ -216,6 +241,12 @@ function TimelineClipComponent({
   const waveformsEnabled = useTimelineStore(s => s.waveformsEnabled);
   const audioDisplayMode = useTimelineStore(s => s.audioDisplayMode);
   const audioFocusMode = useTimelineStore(s => s.audioFocusMode);
+  const activeTimelineToolId = useTimelineStore(s => s.activeTimelineToolId);
+  const timelineToolPreview = useTimelineStore(s => s.timelineToolPreview);
+  const setTimelineToolPreview = useTimelineStore(s => s.setTimelineToolPreview);
+  const applyTimelineEditOperation = useTimelineStore(s => s.applyTimelineEditOperation);
+  const setActiveTimelineTool = useTimelineStore(s => s.setActiveTimelineTool);
+  const timelineTrackColorsVisible = useTimelineStore(s => s.audioLayerAdvancedMode !== false);
   const audioRegionSelection = useTimelineStore(s =>
     s.audioRegionSelection?.clipId === clip.id ? s.audioRegionSelection : null
   );
@@ -329,9 +360,21 @@ function TimelineClipComponent({
   const audioEditStack = clip.audioState?.editStack ?? [];
   const activeAudioEditCount = audioEditStack.filter(operation => operation.enabled !== false).length;
 
-  // Subscribe to playhead position only when cut tool is active (avoids re-renders during playback)
+  const isBladeToolActive = isTimelineBladeTool(activeTimelineToolId);
+  const isPointerToolActive = isTimelinePointerTool(activeTimelineToolId);
+  const timelineToolCursor = getTimelineToolCursor(activeTimelineToolId);
+  const canUseTrimHandles =
+    activeTimelineToolId === 'select' ||
+    activeTimelineToolId === 'edge-trim' ||
+    activeTimelineToolId === 'ripple-trim' ||
+    activeTimelineToolId === 'rolling-edit' ||
+    activeTimelineToolId === 'rate-stretch';
+  const canUseFadeHandles = activeTimelineToolId === 'select';
+  const canUseBodyToolGesture = activeTimelineToolId === 'slip' || activeTimelineToolId === 'slide';
+
+  // Subscribe to playhead position only when blade tool is active (avoids re-renders during playback)
   const playheadPosition = useTimelineStore((state) =>
-    toolMode === 'cut' ? state.playheadPosition : 0
+    isBladeToolActive ? state.playheadPosition : 0
   );
 
   // Look up media label color from mediaStore
@@ -453,14 +496,19 @@ function TimelineClipComponent({
     }
   }, [aiMoveDuration, aiMoveStartedAt]);
 
-  // Check if this clip should show cut indicator (either directly hovered or linked to hovered clip)
-  const isDirectlyHovered = cutHoverInfo?.clipId === clip.id;
+  // Check if this clip should show blade indicator (either directly hovered or linked to hovered clip)
+  const isDirectlyHovered = timelineToolPreview?.clipId === clip.id;
   const linkedClip = clip.linkedClipId ? clips.find(c => c.id === clip.linkedClipId) : null;
-  const isLinkedToHovered = linkedClip && cutHoverInfo?.clipId === linkedClip.id;
+  const isLinkedToHovered = linkedClip && timelineToolPreview?.clipId === linkedClip.id;
   // Also check reverse link - if another clip links to this one
   const reverseLinkedClip = clips.find(c => c.linkedClipId === clip.id);
-  const isReverseLinkedToHovered = reverseLinkedClip && cutHoverInfo?.clipId === reverseLinkedClip.id;
-  const shouldShowCutIndicator = toolMode === 'cut' && cutHoverInfo && (isDirectlyHovered || isLinkedToHovered || isReverseLinkedToHovered);
+  const isReverseLinkedToHovered = reverseLinkedClip && timelineToolPreview?.clipId === reverseLinkedClip.id;
+  const shouldShowCutIndicator = isBladeToolActive &&
+    timelineToolPreview &&
+    isTimelineBladeTool(timelineToolPreview.toolId) &&
+    timelineToolPreview.plane === 'clip-local' &&
+    !timelineToolPreview.blocked &&
+    (isDirectlyHovered || isLinkedToHovered || isReverseLinkedToHovered);
 
   // Determine if this is an audio clip (check source type, MIME type, or extension as fallback)
   const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
@@ -567,6 +615,16 @@ function TimelineClipComponent({
     }
   }
 
+  const isSlipPreview =
+    clipDrag?.toolGesture === 'slip' &&
+    clipDrag.sourceTimeDelta !== undefined &&
+    (isDragging || (!clipDrag.altKeyPressed && isLinkedToDragging));
+  if (isSlipPreview) {
+    const sourceWindow = getSlippedSourceWindow(clip, clipDrag.sourceTimeDelta ?? 0);
+    displayInPoint = sourceWindow.inPoint;
+    displayOutPoint = sourceWindow.outPoint;
+  }
+
   const width = timeToPixel(displayDuration);
 
   // Calculate position - if dragging, use the computed position (with snapping/resistance)
@@ -587,17 +645,21 @@ function TimelineClipComponent({
     // This clip is part of multi-select drag (but not the primary dragged clip)
     left = timeToPixel(Math.max(0, clip.startTime + clipDrag.multiSelectTimeDelta));
   }
-  const timelineViewportWidth = typeof window === 'undefined'
-    ? TIMELINE_VIEWPORT_FALLBACK_PX
-    : Math.max(TIMELINE_VIEWPORT_MIN_PX, window.innerWidth);
+  const visibleTimelineViewportWidth = timelineViewportWidth > 0
+    ? timelineViewportWidth
+    : TIMELINE_VIEWPORT_FALLBACK_PX;
+  const renderTimelineViewportWidth = Math.max(
+    TIMELINE_VIEWPORT_MIN_PX,
+    visibleTimelineViewportWidth
+  );
   const waveformRenderStartPx = Math.max(0, scrollX - left - TIMELINE_RENDER_OVERSCAN_PX);
-  const waveformRenderEndPx = Math.min(width, scrollX - left + timelineViewportWidth + TIMELINE_RENDER_OVERSCAN_PX);
+  const waveformRenderEndPx = Math.min(width, scrollX - left + renderTimelineViewportWidth + TIMELINE_RENDER_OVERSCAN_PX);
   const waveformRenderWindow = {
     startPx: waveformRenderStartPx,
     width: Math.max(0, waveformRenderEndPx - waveformRenderStartPx),
   };
   const thumbnailRenderStartPx = Math.max(0, scrollX - left - THUMBNAIL_RENDER_OVERSCAN_PX);
-  const thumbnailRenderEndPx = Math.min(width, scrollX - left + timelineViewportWidth + THUMBNAIL_RENDER_OVERSCAN_PX);
+  const thumbnailRenderEndPx = Math.min(width, scrollX - left + renderTimelineViewportWidth + THUMBNAIL_RENDER_OVERSCAN_PX);
   const thumbnailRenderWindow = {
     startPx: thumbnailRenderStartPx,
     width: Math.max(0, thumbnailRenderEndPx - thumbnailRenderStartPx),
@@ -850,6 +912,14 @@ function TimelineClipComponent({
         Math.max(0, scrollX - left),
         Math.max(0, width - 48)
       );
+  const clipRightOverflow = left + width - (scrollX + visibleTimelineViewportWidth);
+  const clipRightStickyOffset = Math.max(
+    0,
+    Math.min(
+      Math.max(0, width - 18),
+      clipRightOverflow > 0 ? clipRightOverflow + CLIP_RIGHT_STICKY_PADDING_PX : 0
+    )
+  );
 
   // Render only the visible filmstrip window. At deep zoom the full clip can be
   // hundreds of thousands of pixels wide, so tying thumbnails to full clip width
@@ -959,12 +1029,12 @@ function TimelineClipComponent({
   const canSelectAudioRegion = audioFocusMode &&
     isAudioClip &&
     audioDisplayMode === 'detailed' &&
-    toolMode === 'select' &&
+    activeTimelineToolId === 'select' &&
     track.locked !== true;
   const canSelectSpectralRegion = audioFocusMode &&
     isAudioClip &&
     audioDisplayMode === 'spectral' &&
-    toolMode === 'select' &&
+    activeTimelineToolId === 'select' &&
     track.locked !== true;
 
   const timelineTimeFromAudioRegionClientX = useCallback((
@@ -1163,12 +1233,19 @@ function TimelineClipComponent({
   // Check if this clip is part of a multi-select drag
   const isInMultiSelectDrag = clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined;
   const isTrackLocked = track.locked === true;
+  const trackTypeIndex = useMemo(
+    () => tracks.filter(candidate => candidate.type === track.type).findIndex(candidate => candidate.id === track.id),
+    [track.id, track.type, tracks],
+  );
+  const trackColor = timelineTrackColorsVisible ? getTimelineTrackColor(track, trackTypeIndex) : TIMELINE_TRACK_COLOR_HIDDEN;
 
   const clipClass = [
     'timeline-clip',
     isSelected ? 'selected' : '',
     isInLinkedGroup ? 'linked-group' : '',
     isDragging ? 'dragging' : '',
+    clipDrag?.toolGesture === 'slip' && (isDragging || isLinkedToDragging) ? 'slipping' : '',
+    clipDrag?.toolGesture === 'slide' && (isDragging || isLinkedToDragging) ? 'sliding' : '',
     isInMultiSelectDrag ? 'dragging multiselect-dragging' : '',
     isLinkedToDragging ? 'linked-dragging' : '',
     isTrimming ? 'trimming' : '',
@@ -1204,77 +1281,61 @@ function TimelineClipComponent({
     .filter(Boolean)
     .join(' ');
 
-  // Cut tool snapping helper
-  const snapCutTime = (rawTime: number, shouldSnap: boolean): number => {
-    log.debug('CUT SNAP', { shouldSnap, snappingEnabled, rawTime, zoom, playheadPosition });
-    if (!shouldSnap) return rawTime;
-
-    const snapThresholdPixels = 10;
-    const snapThresholdTime = snapThresholdPixels / zoom;
-
-    // Collect snap targets: playhead and all clip edges
-    const snapTargets: number[] = [playheadPosition];
-    clips.forEach(c => {
-      snapTargets.push(c.startTime);
-      snapTargets.push(c.startTime + c.duration);
-    });
-
-    log.debug('CUT SNAP targets:', { snapTargets, threshold: snapThresholdTime });
-
-    // Find nearest snap target
-    let nearestTarget = rawTime;
-    let nearestDistance = Infinity;
-    for (const target of snapTargets) {
-      const distance = Math.abs(target - rawTime);
-      if (distance < nearestDistance && distance <= snapThresholdTime) {
-        nearestDistance = distance;
-        nearestTarget = target;
-      }
-    }
-
-    log.debug('CUT SNAP result:', { nearestTarget, nearestDistance, snapped: nearestTarget !== rawTime });
-    return nearestTarget;
+  const getClipPointerContext = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      toolId: activeTimelineToolId,
+      clip,
+      track,
+      clips,
+      playheadPosition,
+      snappingEnabled,
+      displayStartTime,
+      displayDuration,
+      width,
+      clientX: e.clientX,
+      rectLeft: rect.left,
+      altKey: e.altKey,
+    };
   };
 
-  // Cut tool handlers
+  // Timeline tool pointer handlers
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (toolMode !== 'cut') {
-      if (cutHoverInfo?.clipId === clip.id) onCutHover(null, null);
+    const result = dispatchTimelineClipPointerMove(getClipPointerContext(e));
+    if (!result.handled) {
+      if (timelineToolPreview?.clipId === clip.id) setTimelineToolPreview(null);
       return;
     }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    // Convert pixel position to time
-    const rawCutTime = displayStartTime + (x / width) * displayDuration;
-    // When snapping enabled: snap by default, Alt temporarily disables
-    // When snapping disabled: don't snap, Alt temporarily enables
-    const shouldSnap = snappingEnabled !== e.altKey;
-    const cutTime = snapCutTime(rawCutTime, shouldSnap);
-    onCutHover(clip.id, cutTime);
+    setTimelineToolPreview(result.preview ?? null);
   };
 
   const handleMouseLeave = () => {
-    if (cutHoverInfo?.clipId === clip.id) onCutHover(null, null);
+    if (timelineToolPreview?.clipId === clip.id) setTimelineToolPreview(null);
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    if (toolMode !== 'cut') return;
+    const result = dispatchTimelineClipPointerClick(getClipPointerContext(e));
+    if (!result.handled) return;
+    e.preventDefault();
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    // Convert pixel position to time within clip
-    const rawCutTime = displayStartTime + (x / width) * displayDuration;
-    // When snapping enabled: snap by default, Alt temporarily disables
-    // When snapping disabled: don't snap, Alt temporarily enables
-    const shouldSnap = snappingEnabled !== e.altKey;
-    const cutTime = snapCutTime(rawCutTime, shouldSnap);
-    onCutAtPosition(clip.id, cutTime);
-    onCutHover(null, null);
+
+    if (result.operation) {
+      applyTimelineEditOperation(result.operation, {
+        source: 'ui',
+      historyLabel: result.operation.type === 'select-clips-from-time'
+        ? 'Track select'
+        : result.operation.type === 'split-all-at-time'
+          ? 'Blade all tracks'
+          : 'Blade clip',
+      });
+    }
+    if (result.nextToolId) setActiveTimelineTool(result.nextToolId);
+    setTimelineToolPreview(null);
   };
 
   // Calculate cut indicator position for this clip
-  const cutIndicatorX = shouldShowCutIndicator && cutHoverInfo
-    ? ((cutHoverInfo.time - displayStartTime) / displayDuration) * width
+  const cutIndicatorX = shouldShowCutIndicator && timelineToolPreview?.time !== undefined
+    ? ((timelineToolPreview.time - displayStartTime) / displayDuration) * width
     : null;
   const audioRegionOverlay = audioRegionSelection && audioRegionSelection.endTime - audioRegionSelection.startTime > 0.001
     ? (() => {
@@ -1521,33 +1582,42 @@ function TimelineClipComponent({
   if (clip.trackId !== trackId && !isDragging) {
     return null;
   }
+  const clipStyle = {
+    left,
+    width,
+    cursor: isTrackLocked ? 'not-allowed' : timelineToolCursor,
+    animationDelay: `${animationDelay}s`,
+    '--track-color': trackColor,
+    '--clip-right-sticky-offset': `${clipRightStickyOffset}px`,
+    // FLIP move animation: initial phase applies offset transform, animating phase transitions to 0
+    ...(aiMovePhase === 'initial' && aiMove ? {
+      transform: `translateX(${timeToPixel(aiMove.fromStartTime) - left}px)`,
+    } : aiMovePhase === 'animating' && aiMove ? {
+      transform: 'translateX(0)',
+      transition: `transform ${aiMove.animationDuration}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+    } : {}),
+    ...(isAudioClip && audioFocusMode ? {
+      background: `linear-gradient(180deg, color-mix(in srgb, ${trackColor} 72%, #202020), color-mix(in srgb, ${trackColor} 34%, #101010))`,
+      borderColor: trackColor,
+    } : isSolidClip && clip.solidColor ? {
+      background: clip.solidColor,
+      borderColor: clip.solidColor,
+    } : mediaLabelHex ? {
+      background: mediaLabelHex,
+      borderColor: mediaLabelHex,
+    } : {}),
+  } as CSSProperties & {
+    '--track-color'?: string;
+    '--clip-right-sticky-offset'?: string;
+  };
 
   return (
     <div
-      className={`${clipClass}${toolMode === 'cut' ? ' cut-mode' : ''} ${animationClass}`}
-      style={{
-        left,
-        width,
-        cursor: isTrackLocked ? 'not-allowed' : toolMode === 'cut' ? 'crosshair' : undefined,
-        animationDelay: `${animationDelay}s`,
-        // FLIP move animation: initial phase applies offset transform, animating phase transitions to 0
-        ...(aiMovePhase === 'initial' && aiMove ? {
-          transform: `translateX(${timeToPixel(aiMove.fromStartTime) - left}px)`,
-        } : aiMovePhase === 'animating' && aiMove ? {
-          transform: 'translateX(0)',
-          transition: `transform ${aiMove.animationDuration}ms cubic-bezier(0.22, 1, 0.36, 1)`,
-        } : {}),
-        ...(isSolidClip && clip.solidColor ? {
-          background: clip.solidColor,
-          borderColor: clip.solidColor,
-        } : mediaLabelHex ? {
-          background: mediaLabelHex,
-          borderColor: mediaLabelHex,
-        } : {}),
-      }}
+      className={`${clipClass}${isBladeToolActive ? ' cut-mode' : ''} ${animationClass}`}
+      style={clipStyle}
       data-clip-id={clip.id}
-      onMouseDown={isTrackLocked || toolMode === 'cut' ? undefined : onMouseDown}
-      onDoubleClick={toolMode === 'cut' ? undefined : onDoubleClick}
+      onMouseDown={isTrackLocked || (isPointerToolActive && !canUseBodyToolGesture) ? undefined : onMouseDown}
+      onDoubleClick={isPointerToolActive ? undefined : onDoubleClick}
       onContextMenu={onContextMenu}
       onMouseMove={isTrackLocked ? undefined : handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -2236,6 +2306,7 @@ function TimelineClipComponent({
             className={`fade-handle left${fadeInDuration > 0 ? ' active' : ''}`}
             style={fadeInDuration > 0 ? { left: timeToPixel(fadeInDuration) - 6 } : undefined}
             onMouseDown={(e) => {
+              if (!canUseFadeHandles) return;
               e.stopPropagation();
               onFadeStart(e, 'left');
             }}
@@ -2245,6 +2316,7 @@ function TimelineClipComponent({
             className={`fade-handle right${fadeOutDuration > 0 ? ' active' : ''}`}
             style={fadeOutDuration > 0 ? { right: timeToPixel(fadeOutDuration) - 6 } : undefined}
             onMouseDown={(e) => {
+              if (!canUseFadeHandles) return;
               e.stopPropagation();
               onFadeStart(e, 'right');
             }}
@@ -2254,6 +2326,7 @@ function TimelineClipComponent({
           <div
             className="trim-handle left"
             onMouseDown={(e) => {
+              if (!canUseTrimHandles) return;
               e.stopPropagation();
               onTrimStart(e, 'left');
             }}
@@ -2261,6 +2334,7 @@ function TimelineClipComponent({
           <div
             className="trim-handle right"
             onMouseDown={(e) => {
+              if (!canUseTrimHandles) return;
               e.stopPropagation();
               onTrimStart(e, 'right');
             }}

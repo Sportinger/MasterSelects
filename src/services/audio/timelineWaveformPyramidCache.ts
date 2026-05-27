@@ -29,6 +29,7 @@ export interface GenerateTimelineWaveformAnalysisOptions {
   includePyramid?: boolean;
   pyramidTimeoutMs?: number;
   samplesPerSecond?: number;
+  maxPreviewSamples?: number;
   signal?: AbortSignal;
   onProgress?: (progress: number, partialWaveform: number[]) => void;
   onPyramidProgress?: (progress: WaveformPyramidGenerationProgress) => void;
@@ -70,9 +71,10 @@ function generateLegacyWaveformPreviewFromBuffer(
   audioBuffer: AudioBuffer,
   samplesPerSecond: number,
   onProgress?: (progress: number, partialWaveform: number[]) => void,
+  maxSamples = 10000,
 ): LegacyWaveformPreview {
   const channelCount = Math.max(1, audioBuffer.numberOfChannels);
-  const sampleCount = Math.max(200, Math.min(10000, Math.floor(audioBuffer.duration * samplesPerSecond)));
+  const sampleCount = Math.max(200, Math.min(Math.max(200, maxSamples), Math.floor(audioBuffer.duration * samplesPerSecond)));
   const channelSamples: number[][] = Array.from({ length: channelCount }, () => []);
   const aggregateSamples: number[] = new Array(sampleCount).fill(0);
   let runningMax = 0;
@@ -266,6 +268,7 @@ export async function generateTimelineWaveformAnalysisForFile(
       audioBuffer,
       options.samplesPerSecond ?? DEFAULT_LEGACY_SAMPLES_PER_SECOND,
       options.onProgress,
+      options.maxPreviewSamples,
     );
     if (options.includePyramid === false) {
       options.onProgress?.(100, preview.waveform);

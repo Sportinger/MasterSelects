@@ -74,6 +74,17 @@ function App() {
   // Browser MIDI runtime
   useMIDIRuntime();
 
+  useEffect(() => {
+    const preventBrowserContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+    };
+
+    document.addEventListener('contextmenu', preventBrowserContextMenu, { capture: true });
+    return () => {
+      document.removeEventListener('contextmenu', preventBrowserContextMenu, { capture: true });
+    };
+  }, []);
+
   // Check if there's a stored project in IndexedDB (the only allowed browser storage)
   const [isChecking, setIsChecking] = useState(true);
   const [hasStoredProject, setHasStoredProject] = useState(false);
@@ -104,9 +115,59 @@ function App() {
 
   // Load API keys from encrypted storage on mount
   const loadApiKeys = useSettingsStore((s) => s.loadApiKeys);
+  const toggleApiKeysUnlocked = useSettingsStore((s) => s.toggleApiKeysUnlocked);
   useEffect(() => {
     loadApiKeys();
   }, [loadApiKeys]);
+
+  useEffect(() => {
+    let armed = false;
+    let resetTimer: number | null = null;
+
+    const reset = () => {
+      armed = false;
+      if (resetTimer !== null) {
+        window.clearTimeout(resetTimer);
+        resetTimer = null;
+      }
+    };
+
+    const arm = () => {
+      armed = true;
+      if (resetTimer !== null) {
+        window.clearTimeout(resetTimer);
+      }
+      resetTimer = window.setTimeout(reset, 1400);
+    };
+
+    const isShortcutDigit = (event: KeyboardEvent, digit: '7' | '8') => (
+      event.code === `Digit${digit}` || event.code === `Numpad${digit}` || event.key === digit
+    );
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) {
+        return;
+      }
+
+      if (isShortcutDigit(event, '8')) {
+        event.preventDefault();
+        arm();
+        return;
+      }
+
+      if (armed && isShortcutDigit(event, '7')) {
+        event.preventDefault();
+        reset();
+        toggleApiKeysUnlocked();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      reset();
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [toggleApiKeysUnlocked]);
 
   const accountDialog = useAccountStore((s) => s.dialog);
   const accountCreditBalance = useAccountStore((s) => s.creditBalance);

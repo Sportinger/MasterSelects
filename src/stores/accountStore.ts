@@ -36,9 +36,9 @@ function pickCheckoutPlanId(planId: BillingPlanId | string): BillingPlanId | str
 
 const DEV_PLAN_MOCKS: Record<string, { credits: number; entitlements: Record<string, string>; label: string }> = {
   free:    { credits: 25,   label: 'Free',    entitlements: { hosted_ai_chat: 'true' } },
-  starter: { credits: 250,  label: 'Starter', entitlements: { hosted_ai_chat: 'true' } },
-  pro:     { credits: 1000, label: 'Pro',     entitlements: { hosted_ai_chat: 'true', kling_generation: 'true', priority_queue: 'true' } },
-  studio:  { credits: 5000, label: 'Studio',  entitlements: { hosted_ai_chat: 'true', kling_generation: 'true', priority_queue: 'true', api_access: 'true' } },
+  starter: { credits: 4500, label: 'Starter', entitlements: { hosted_ai_chat: 'true' } },
+  pro:     { credits: 13500, label: 'Pro',     entitlements: { hosted_ai_chat: 'true', kling_generation: 'true', priority_queue: 'true' } },
+  studio:  { credits: 27000, label: 'Studio',  entitlements: { hosted_ai_chat: 'true', kling_generation: 'true', priority_queue: 'true', api_access: 'true' } },
 };
 
 function applyDevMock(set: (partial: Partial<AccountState>) => void, planId: string): void {

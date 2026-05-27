@@ -104,6 +104,37 @@ export class FileStorageService {
   }
 
   /**
+   * Delete a file or directory from a project subfolder
+   */
+  async deleteEntry(
+    projectHandle: FileSystemDirectoryHandle,
+    subFolder: ProjectFolderKey,
+    entryName: string,
+    options?: { recursive?: boolean }
+  ): Promise<boolean> {
+    try {
+      const folderPath = PROJECT_FOLDERS[subFolder];
+      const entryParts = entryName
+        .replace(/\\/g, '/')
+        .split('/')
+        .filter(Boolean);
+      const leafName = entryParts.pop();
+      if (!leafName || leafName === '.' || leafName === '..' || entryParts.some(part => part === '.' || part === '..')) {
+        return false;
+      }
+
+      const parentPath = [folderPath, ...entryParts].filter(Boolean).join('/');
+      const folder = await this.navigateToFolder(projectHandle, parentPath, false);
+      if (!folder) return false;
+
+      await folder.removeEntry(leafName, { recursive: options?.recursive ?? false });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * Delete a file from a project subfolder
    */
   async deleteFile(
@@ -111,16 +142,7 @@ export class FileStorageService {
     subFolder: ProjectFolderKey,
     fileName: string
   ): Promise<boolean> {
-    try {
-      const folderPath = PROJECT_FOLDERS[subFolder];
-      const folder = await this.navigateToFolder(projectHandle, folderPath, false);
-      if (!folder) return false;
-
-      await folder.removeEntry(fileName);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return this.deleteEntry(projectHandle, subFolder, fileName);
   }
 
   /**

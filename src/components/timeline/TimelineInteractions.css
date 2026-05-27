@@ -296,6 +296,37 @@
   z-index: 1000;
 }
 
+.range-selection-drag {
+  position: absolute;
+  background: rgba(20, 184, 166, 0.14);
+  border: 1px solid rgba(20, 184, 166, 0.62);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.timeline-range-selection-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(20, 184, 166, 0.09);
+  border-left: 1px solid rgba(20, 184, 166, 0.72);
+  border-right: 1px solid rgba(20, 184, 166, 0.72);
+  pointer-events: none;
+  z-index: 530;
+}
+
+.timeline-range-selection-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(20, 184, 166, 0.18),
+    rgba(20, 184, 166, 0.04)
+  );
+}
+
 /* Disable all text selection in timeline */
 .timeline-container,
 .timeline-container * {

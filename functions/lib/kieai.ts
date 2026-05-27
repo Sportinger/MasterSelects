@@ -2,8 +2,8 @@ import type { Env } from './env';
 
 const KIEAI_BASE_URL = 'https://api.kie.ai';
 const KIEAI_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
-// Hosted customer credits are priced at 5x vendor Kie credits for a small margin.
-const HOSTED_KIE_CREDIT_MULTIPLIER = 5;
+// Hosted customer credits are priced at 6x vendor Kie credits to keep margin after VAT, Stripe, and FX.
+const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
 const KIEAI_USD_PER_CREDIT = 0.005;
 const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
   'nano-banana-2': {

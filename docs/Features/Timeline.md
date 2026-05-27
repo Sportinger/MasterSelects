@@ -103,8 +103,15 @@ getTrackChildren()  // Query child tracks
 |--------|------------------|
 | Move | Drag a clip or a multi-selection. |
 | Trim | Drag clip edges. |
-| Cut tool | `C` toggles cut mode; click clips to split them. |
+| Cut tool | `C` toggles Blade mode through the timeline tool palette; click clips to split them. |
 | Split at playhead | `Shift+C` in MasterSelects, preset-specific alternatives elsewhere. |
+| Split all at playhead | Available in the Cut flyout; runs through the shared timeline edit operation kernel. |
+| Blade all tracks | Available in the Cut flyout as a mode; splits every unlocked visible clip crossing the click time. |
+| Trim start/end to playhead | Available in the Cut flyout; trims selected clips through the operation kernel and keeps linked audio aligned. |
+| Ripple delete | Available in the Cut flyout and clip context menu; deletes selected clips and closes the affected track gap through the operation kernel. |
+| Delete gap | Available in the Cut flyout and clip context menu; closes an empty gap through the operation kernel. |
+| Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
+| Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |
 | Copy | `Ctrl+C` copies selected keyframes first, otherwise selected clips. |
 | Paste | `Ctrl+V` pastes keyframes if the clipboard has them, otherwise pastes clips. |
 | Delete | `Delete` / `Backspace` removes selected keyframes first, then clips. |
@@ -119,10 +126,50 @@ getTrackChildren()  // Query child tracks
 - Copying keyframes stores them relative to the earliest copied keyframe.
 - Pasting keyframes targets the selected clip when exactly one clip is selected; otherwise it falls back to the original clip from the clipboard data.
 
+### Timeline Tool Palette
+- The ruler/header strip contains a compact grouped timeline tool palette.
+- Root groups are Selection, Cut, Trim, Placement, and Navigation/Marking.
+- Clicking a root button activates the last enabled child tool for that group.
+- Holding a root button, right-clicking it, or using its chevron opens an unclipped portal flyout.
+- The first enabled tools are Select, Track Select Forward/Backward/Forward All Tracks, Range Selection, Blade, Blade All Tracks, Split at Playhead, Split All at Playhead, Trim Start/End to Playhead, Ripple Trim Start/End to Playhead, Ripple Delete, Delete Gap, Edge Trim, Ripple Trim, Rolling Edit, Slip, Slide, Rate Stretch, Position/Overwrite, Hand/Pan, Zoom, Marker, In Point, Out Point, and Pen/Keyframe. Planned tools are visible but disabled until their operation-kernel migration exists.
+- Track Select Forward, Track Select Backward, and Track Select Forward All Tracks are enabled selection subtools; their clip clicks route through the shared pointer dispatcher and `select-clips-from-time` operation.
+- Range Selection is an enabled selection mode. Dragging on timeline space stores a timeline range with the affected unlocked visible track IDs and leaves a persistent range overlay for later lift/extract/copy commands.
+- Shared tool previews render through `TimelineToolOverlayLayer` for section-scrolled overlays such as Track Select highlights, Blade All Tracks cut lines, and blocked tool messages.
+- Active pointer tools set a matching icon cursor so the selected tool remains visible at the mouse pointer. Blade, Range, track-selection, trim modes, Hand, Zoom, Marker, In/Out, and Pen/Keyframe expose custom SVG cursor glyphs with normal CSS fallbacks.
+- Hand/Pan drags the timeline surface horizontally without moving clips. Zoom clicks around the pointer and uses `Alt` or `Shift` for zooming out.
+- Tool selection is treated as non-mutating and remains available during export; mutating commands are blocked while export is active.
+
 ### Cut Tool
-- `C` toggles the cut tool in the default preset.
+- `C` toggles Blade mode in the default preset.
 - `Escape` exits cut mode.
 - `Shift+C` performs a direct split at the playhead without entering cut mode.
+- Blade hover/click is handled by the timeline tool pointer dispatcher, which writes shared preview state and commits through `applyTimelineEditOperation`.
+- Split-at-playhead, AI single-clip split, AI bulk split-at-times/evenly, AI move, AI trim, and AI reorder all route through `applyTimelineEditOperation`.
+- Lift Range and Extract Range also route through `applyTimelineEditOperation`; they split clip boundaries at the selected range and clear the range overlay after commit.
+- Mutating operation-kernel commits and global undo/redo are blocked while export is active.
+- Timeline edit operations expose replay descriptors for Guided Action playback, so Blade, Track Select, Trim, Slip/Slide, Placement, Lift/Extract, and related operation-kernel edits can be represented as semantic timeline replay targets without DOM clicks as the execution source.
+
+### Trim Tools
+- Trim-to-playhead and ripple-trim-to-playhead commands run through the shared operation kernel and preserve linked audio/video timing.
+- Edge Trim, Ripple Trim, Rolling Edit, and Rate Stretch reuse the existing trim handles, but commit through `applyTimelineEditOperation` instead of direct clip mutations.
+- Slip and Slide are available as registered operation-kernel modes. Dragging a clip body with either tool previews the slip/slide and commits through `applyTimelineEditOperation`; `Alt` slips independently from linked audio/video.
+- Trim mode activation owns the edge handles before legacy clip drag, fade, and cut behaviors, so Blade/Hand/Zoom/Range clicks are no longer swallowed by trim/fade handles.
+
+### Placement Tools
+- Position/Overwrite is an enabled Placement mode. Dropping media in this mode uses the shared `place-timeline-range` operation to clear the target range before the new clip is created.
+- The placement operation supports insert-style space creation and overwrite-style range clearing, including split/trim/delete behavior and linked video/audio split preservation.
+- Normal Select-mode drops still use gap-aware placement. Position/Overwrite intentionally keeps the requested drop time and lets the kernel trim/delete the affected target range.
+- Insert, Overwrite, Replace, Fit to Fill, Append, Place on Top, and Ripple Overwrite are enabled when the Media Panel or Source Monitor exposes a current source item. The commands resolve the source, prepare the affected range through the placement operation, then create the new clip on the target track.
+- Replace, Fit to Fill, and Ripple Overwrite prefer the selected timeline range or selected compatible target clip. Insert and Overwrite use the playhead. Append uses the end of the compatible target track, and Place on Top uses a free upper video track or creates one.
+- Source Monitor In/Out marks constrain the placement source duration and source in point. Clearing the marks returns placement to the full source duration.
+- Source Monitor exposes a full-width source timeline with ruler, playhead, draggable In/Out handles, audio-file playback, and direct Insert, Overwrite, Replace, Fit, Append, and Top buttons, so source edit commands are available outside the timeline tool flyout.
+- Clicking a track header targets that video or audio track for source edits and clip paste. Clicking the same highlighted track again clears that target.
+- Hovering or focusing Placement commands in the timeline flyout or Source Monitor publishes a non-mutating placement preview. The shared overlay renders ghost clips on affected tracks and shows the source In/Out bounds used for the command.
+
+### Pen / Keyframe Tool
+- Pen/Keyframe is an enabled Navigation/Marking mode with a dedicated cursor.
+- Clicking a visible keyframe property lane adds or updates a keyframe at the clicked time.
+- The inserted keyframe value is sampled from the existing property lane by linear interpolation, so adding in-between keys preserves the current visible curve value before further edits.
 
 ---
 
@@ -222,12 +269,13 @@ The toolbar and wheel gestures still drive playback and navigation:
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.
 - Marker MIDI bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`.
 - Left/Right arrows step frame by frame.
-- The ruler and lane grid use the active composition frame rate at deep zoom, showing one line per frame when frames are visually resolvable; at wider zooms they collapse back to readable time ticks.
+- The ruler and lane grid use the active composition frame rate at deep zoom. The base time grid crossfades out while frame-accurate grid lines fade in with zoom before the ruler switches to frame timecode labels.
 - `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the playhead.
 - `Shift+Scroll` pans horizontally.
 - Vertical scroll snaps to track boundaries.
 - `Ctrl+Shift+Scroll` or `Cmd+Shift+Scroll` toggles slot-grid view.
 - The toolbar also exposes a dedicated slot-grid toggle button that flips between timeline bars and the 12x4 grid icon.
+- The Navigation/Marking tool flyout exposes Marker, In Point, and Out Point commands for the current playhead position.
 
 The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar.
 

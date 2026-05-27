@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.0.1';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.0',
-    message: 'AI chat, guided editing, dock persistence, and timeline interaction updates are now bundled for the 2.0.0 release.',
+    title: 'MasterSelects 2.0.1',
+    message: 'Timeline tool palettes, source monitor in/out workflows, cached audio waveforms, and slot-view controls are now bundled for the 2.0.1 release.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.0.0',
-  message: 'This release consolidates the new FlashBoard chat workflow, guided AI editing surfaces, persistent dock layouts, and refined timeline controls.',
+  title: 'MasterSelects 2.0.1',
+  message: 'This release consolidates the new Premiere-style timeline tools, compact source monitor transport, layer targeting, and background waveform generation.',
   animated: true,
 };
 

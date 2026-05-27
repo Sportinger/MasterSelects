@@ -8,7 +8,7 @@ import type {
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'audio-mixer' | 'color-workspace' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'scene-description' | 'youtube' | 'download' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'scene-description' | 'youtube' | 'download' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 
 // Scope panel types for filtering in View menu
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
@@ -95,9 +95,15 @@ export type SavedDockTimelineTrackFocusMode = 'balanced' | 'audio' | 'video';
 
 export interface SavedDockTimelineLayout {
   audioDisplayMode?: SavedDockTimelineAudioDisplayMode;
+  audioLayerAdvancedMode?: boolean;
   audioFocusMode?: boolean;
   trackFocusMode?: SavedDockTimelineTrackFocusMode;
+  trackHeaderWidth?: number;
+  timelineSplitRatio?: number | null;
   trackHeights?: Record<string, number>;
+  trackTypeHeights?: Partial<Record<'video' | 'audio', number>>;
+  trackVisibility?: Record<string, boolean>;
+  trackTypeVisibility?: Partial<Record<'video' | 'audio', boolean>>;
 }
 
 export interface SavedDockLayout {
@@ -107,6 +113,7 @@ export interface SavedDockLayout {
   createdAt: number;
   updatedAt: number;
   favorite?: boolean;
+  factory?: boolean;
   timeline?: SavedDockTimelineLayout;
 }
 
@@ -182,13 +189,6 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     title: 'Audio Mixer',
     minWidth: 420,
     minHeight: 280,
-    closable: false,
-  },
-  'color-workspace': {
-    type: 'color-workspace',
-    title: 'Color',
-    minWidth: 520,
-    minHeight: 360,
     closable: false,
   },
   'node-workspace': {

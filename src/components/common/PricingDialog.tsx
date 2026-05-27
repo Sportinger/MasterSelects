@@ -1,97 +1,29 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
+import { BILLING_PLANS as plans, formatBillingPlanLabel } from '../../services/billingPlans';
+import { CLOUD_AI_PRICE_ROWS, CLOUD_EUR_PER_CREDIT, CLOUD_PRICE_BASELINE_PLAN } from '../../services/cloudAiPricing';
 import './authBillingDialogs.css';
 
 interface PricingDialogProps {
   onClose: () => void;
 }
 
-const plans = [
-  {
-    id: 'free',
-    badge: 'Entry',
-    credits: 25,
-    description: 'A lightweight way to try the hosted workflow before subscribing.',
-    featured: false,
-    features: [
-      '25 credits every month',
-      'Good for chat and small image runs',
-      'No payment setup required',
-    ],
-    priceAmount: '0',
-    priceSuffix: 'EUR',
-  },
-  {
-    id: 'starter',
-    badge: 'Creator',
-    credits: 4500,
-    description: 'A practical monthly plan for image runs and short video work.',
-    featured: false,
-    features: [
-      '4.5K monthly credits',
-      'Built for images and short hosted videos',
-      'A strong default for regular use',
-    ],
-    priceAmount: '4,90',
-    priceSuffix: 'EUR / mo',
-  },
-  {
-    id: 'pro',
-    badge: 'Popular',
-    credits: 13500,
-    description: 'More headroom plus priority treatment when the hosted queue is busy.',
-    featured: true,
-    features: [
-      '13.5K monthly credits',
-      'Priority queue access',
-      'Best fit for frequent generation sessions',
-    ],
-    priceAmount: '14,90',
-    priceSuffix: 'EUR / mo',
-  },
-  {
-    id: 'studio',
-    badge: 'Production',
-    credits: 27000,
-    description: 'The largest monthly pool for teams or heavy production usage.',
-    featured: false,
-    features: [
-      '27K monthly credits',
-      'Highest credit volume',
-      'Best for sustained production workloads',
-    ],
-    priceAmount: '29,90',
-    priceSuffix: 'EUR / mo',
-  },
-] as const;
-
 function formatCredits(value: number): string {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
-function formatPlanLabel(planId: string): string {
-  return planId.charAt(0).toUpperCase() + planId.slice(1);
-}
-
-function formatBillingDate(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
+function formatEuro(value: number): string {
+  const fractionDigits = value < 0.1 ? 3 : 2;
+  return new Intl.NumberFormat('de-DE', {
+    currency: 'EUR',
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: fractionDigits,
+    style: 'currency',
+  }).format(value);
 }
 
 export function PricingDialog({ onClose }: PricingDialogProps) {
-  const { billingSummary, error, isLoading, startCheckout } = useAccountStore();
+  const { billingSummary, error, isLoading, openAuthDialog, session, startCheckout } = useAccountStore();
   const [isClosing, setIsClosing] = useState(false);
   const currentPlanId = billingSummary?.subscription?.planId ?? billingSummary?.plan.id ?? 'free';
   const [selectedPlanId, setSelectedPlanId] = useState(currentPlanId);
@@ -129,7 +61,7 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
   const currentPlan = plans.find((plan) => plan.id === currentPlanId) ?? plans[0];
   const selectedPlanIsCurrent = selectedPlan.id === currentPlanId;
   const cancelScheduled = Boolean(billingSummary?.subscription?.cancelAtPeriodEnd);
-  const currentPeriodEndLabel = formatBillingDate(billingSummary?.subscription?.currentPeriodEnd);
+  const isAuthenticated = Boolean(session?.authenticated);
   const hasManagedSubscription = Boolean(
     billingSummary?.stripeCustomerId
     && billingSummary.subscription
@@ -140,18 +72,7 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
   const isUpgradeSelection = hasManagedSubscription
     && selectedPlan.id !== 'free'
     && selectedPlan.credits > currentPlan.credits;
-  const canSubmitSelection = !(isLoading || selectedPlanIsCurrent);
-  const selectionNote = selectedPlanIsCurrent
-    ? cancelScheduled && currentPeriodEndLabel
-      ? `This subscription is set to end on ${currentPeriodEndLabel}.`
-      : 'You are viewing your active subscription.'
-    : isDowngradeSelection
-      ? 'Stripe will confirm the downgrade and keep your current plan active until the billing period ends.'
-      : isUpgradeSelection
-        ? 'Stripe will confirm the upgrade and charge the prorated difference immediately.'
-      : hasManagedSubscription
-        ? 'Stripe billing management opens so you can change this subscription.'
-        : 'You will continue to checkout for this plan.';
+  const canSubmitSelection = !isLoading && (!isAuthenticated || !selectedPlanIsCurrent);
   const submitLabel = selectedPlanIsCurrent
     ? cancelScheduled
       ? 'Canceled plan'
@@ -159,12 +80,13 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
     : isDowngradeSelection && selectedPlan.id === 'free'
       ? 'Downgrade to Free'
     : isDowngradeSelection
-      ? `Downgrade to ${formatPlanLabel(selectedPlan.id)}`
+      ? `Downgrade to ${formatBillingPlanLabel(selectedPlan.id)}`
       : isUpgradeSelection
-        ? `Upgrade to ${formatPlanLabel(selectedPlan.id)}`
+        ? `Upgrade to ${formatBillingPlanLabel(selectedPlan.id)}`
         : hasManagedSubscription
-          ? `Change to ${formatPlanLabel(selectedPlan.id)}`
-          : `Continue with ${formatPlanLabel(selectedPlan.id)}`;
+          ? `Change to ${formatBillingPlanLabel(selectedPlan.id)}`
+          : `Continue with ${formatBillingPlanLabel(selectedPlan.id)}`;
+  const primaryCtaLabel = isAuthenticated ? submitLabel : 'Sign up';
 
   const handleSelectPlan = (planId: string) => {
     if (isLoading) {
@@ -186,6 +108,11 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
 
   const handleContinue = () => {
     if (!canSubmitSelection) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      openAuthDialog();
       return;
     }
 
@@ -213,24 +140,18 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
         </div>
 
         <div className="auth-dialog-content pricing-dialog-content">
-          <div className="pricing-dialog-intro">
-            <div className="auth-dialog-intro">
-              <h3 className="auth-dialog-subtitle">Choose a plan</h3>
-              <p className="auth-dialog-description">
-                Hosted AI credits cover chat, image generation, and video generation.
-                <br />
-                Video spends more credits than chat or images.
-              </p>
-            </div>
-            <div className="pricing-dialog-current-plan">
-              <span className="pricing-dialog-current-label">Current subscription</span>
-              <strong className="pricing-dialog-current-value">
-                {billingSummary?.plan.label ?? 'Free'}
-              </strong>
-              {cancelScheduled && currentPeriodEndLabel && (
-                <span className="pricing-dialog-current-note">Canceled · ends on {currentPeriodEndLabel}</span>
-              )}
-            </div>
+          <div className="pricing-dialog-top-cta">
+            <span className="pricing-dialog-top-selection">
+              {formatBillingPlanLabel(selectedPlan.id)} selected
+            </span>
+            <button
+              className="auth-dialog-submit pricing-dialog-signup"
+              disabled={!canSubmitSelection}
+              onClick={handleContinue}
+              type="button"
+            >
+              {primaryCtaLabel}
+            </button>
           </div>
 
           <div className="pricing-plans-grid">
@@ -268,7 +189,7 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
                   </div>
 
                   <div className="pricing-plan-top">
-                    <h3 className="pricing-plan-name">{formatPlanLabel(plan.id)}</h3>
+                    <h3 className="pricing-plan-name">{formatBillingPlanLabel(plan.id)}</h3>
                     <div className="pricing-plan-price-block">
                       <span className="pricing-plan-price">{plan.priceAmount}</span>
                       <span className="pricing-plan-price-note">{plan.priceSuffix}</span>
@@ -294,22 +215,40 @@ export function PricingDialog({ onClose }: PricingDialogProps) {
             })}
           </div>
 
-          <div className="pricing-dialog-footer">
-            <div className="pricing-dialog-selection">
-              <span className="pricing-dialog-selection-label">Selected plan</span>
-              <strong className="pricing-dialog-selection-value">{formatPlanLabel(selectedPlan.id)}</strong>
-              <span className="pricing-dialog-selection-note">
-                {selectionNote}
-              </span>
-            </div>
-            <button
-              className="auth-dialog-submit pricing-dialog-submit"
-              disabled={!canSubmitSelection}
-              onClick={handleContinue}
-              type="button"
-            >
-              {submitLabel}
-            </button>
+          <div className="pricing-dialog-footer pricing-dialog-footer-prices">
+            <section className="pricing-cloud-prices" aria-label="Cloud AI prices">
+              <div className="pricing-cloud-prices-header">
+                <div>
+                  <span className="pricing-dialog-selection-label">Cloud AI prices</span>
+                  <strong className="pricing-dialog-selection-value">Price list</strong>
+                  <span className="pricing-dialog-selection-note">
+                    Euro estimates use {formatBillingPlanLabel(CLOUD_PRICE_BASELINE_PLAN.id)}:
+                    {' '}
+                    {formatEuro(CLOUD_PRICE_BASELINE_PLAN.priceEurMonthly)} / {formatCredits(CLOUD_PRICE_BASELINE_PLAN.credits)} credits
+                  </span>
+                </div>
+                <span className="pricing-cloud-credit-rate">
+                  {formatEuro(CLOUD_EUR_PER_CREDIT)} / credit
+                </span>
+              </div>
+
+              <div className="pricing-cloud-price-list">
+                {CLOUD_AI_PRICE_ROWS.map((row) => (
+                  <div key={`${row.category}-${row.name}-${row.note}`} className="pricing-cloud-price-entry">
+                    <div className="pricing-cloud-price-main">
+                      <span className="pricing-cloud-price-category">{row.category}</span>
+                      <strong className="pricing-cloud-price-name">{row.name}</strong>
+                      <span className="pricing-cloud-price-note">{row.note}</span>
+                    </div>
+                    <div className="pricing-cloud-price-values">
+                      <strong>{formatCredits(row.credits)} cr / {row.unit}</strong>
+                      <span>{formatEuro(row.credits * CLOUD_EUR_PER_CREDIT)} / {row.unit}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
           </div>
 
           {error && <div className="auth-dialog-notice auth-dialog-notice-error">{error}</div>}

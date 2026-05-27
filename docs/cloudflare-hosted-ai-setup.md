@@ -67,6 +67,8 @@ The hosted video route accepts:
 
 Video status is polled through `/api/ai/video?taskId=...`. Successful hosted requests return a task ID and the current credit balance, which the client syncs back into the account store.
 
+Hosted Kie.ai media charges MasterSelects Cloud credits at `6 * vendor Kie credits`, so the Cloud price list and backend deduction stay aligned while preserving margin after VAT, Stripe fees, and FX movement.
+
 Hosted ElevenLabs speech returns an MP3 response directly. The route estimates cost before calling ElevenLabs from text length and model pricing, then finalizes the credit charge from ElevenLabs' `x-character-count` header when it is present.
 
 ## Secrets

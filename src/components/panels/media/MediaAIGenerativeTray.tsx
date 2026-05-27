@@ -8,6 +8,7 @@ import { FlashBoardComposer } from '../flashboard/FlashBoardComposer';
 import { useFlashBoardRuntime } from '../flashboard/useFlashBoardRuntime';
 import { MediaAIGenerationQueue } from './MediaAIGenerationQueue';
 import { useAccountStore } from '../../../stores/accountStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import '../flashboard/FlashBoard.css';
 import './MediaAIGenerativeTray.css';
 
@@ -34,7 +35,11 @@ export function MediaAIGenerativeTray({
   const [trayMode, setTrayMode] = useState<MediaAITrayMode>('generate');
   const accountSession = useAccountStore((s) => s.session);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
-  const useHostedDefaults = Boolean(accountSession?.authenticated && hostedAIEnabled);
+  const apiKeys = useSettingsStore((s) => s.apiKeys);
+  const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
+  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
+  const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && apiKeys.kieai.trim());
+  const useHostedDefaults = Boolean(accountSession?.authenticated && hostedAIEnabled && !useKieAiKeyByDefault);
 
   const stopEvent = useCallback((event: SyntheticEvent) => {
     event.stopPropagation();
@@ -94,7 +99,7 @@ export function MediaAIGenerativeTray({
         </button>
         <FlashBoardComposer
           initialProviderId={DEFAULT_FLASHBOARD_PROVIDER_ID}
-          initialService={useHostedDefaults ? 'cloud' : DEFAULT_FLASHBOARD_SERVICE}
+          initialService={useKieAiKeyByDefault ? DEFAULT_FLASHBOARD_SERVICE : 'cloud'}
           initialVersion={useHostedDefaults ? 'latest' : DEFAULT_FLASHBOARD_MODEL_VERSION}
           initialMode={trayMode}
           allowedServices={MEDIA_GENERATIVE_SERVICES}

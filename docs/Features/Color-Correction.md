@@ -4,7 +4,7 @@
 
 Professional color correction for MasterSelects should become a dedicated clip tab that feels close to DaVinci Resolve's node page, while still offering a dense list/inspector mode for fast slider-based work. The important product decision is that node view and list view are not separate systems. They are two views over the same color-grade state.
 
-This document started as the implementation plan and now also records the first production slices. The current implementation ships the canonical clip color state, the Properties Color tab, the dockable Color workspace, two-mode List/Nodes switching where Nodes opens the right-side workspace, left-button node-canvas panning, a collapsible workspace inspector, keyframable/MIDI-ready primary controls, a dedicated Wheels node with RGB chroma wheels plus luma sliders, a toolbar action to enable all color stopwatches at the playhead, timeline context-menu copy/paste for grades with color keyframes, project persistence, preview/export layer wiring, and a realtime WebGPU fused primary/wheels pass that can apply serial Primary and Wheels nodes in one shader pass.
+This document started as the implementation plan and now also records the first production slices. The current implementation ships the canonical clip color state, the Properties Color tab, compact List/Nodes switching inside Properties, keyframable/MIDI-ready primary controls, a dedicated Wheels node with RGB chroma wheels plus luma sliders, a toolbar action to enable all color stopwatches at the playhead, timeline context-menu copy/paste for grades with color keyframes, project persistence, preview/export layer wiring, and a realtime WebGPU fused primary/wheels pass that can apply serial Primary and Wheels nodes in one shader pass. The former dockable Color Workspace panel has been retired and is no longer registered in the dock system.
 
 Remaining professional work includes advanced graph branches/mixers, qualifiers/windows, LUT management, still/reference workflows, selected-node scope routing, and higher precision intermediate textures.
 
@@ -59,7 +59,7 @@ The first version should feel professional and realtime, not like a generic effe
 
 ### View Mode Contract
 
-List in the Properties tab and Nodes in the expanded Color Workspace are different views of the same object:
+List and Nodes in the Properties Color tab are different views of the same object:
 
 ```text
 ColorCorrectionState
@@ -100,22 +100,19 @@ Transform | Color | Effects | Masks | Transcript | Analysis
 
 ### Two Editing Surfaces
 
-The Color design should not rely on one narrow panel to do everything. It needs two surfaces that edit the same state:
+The current Color design keeps the editing surface inside Properties:
 
 | Surface | Purpose |
 |---|---|
-| **Color tab in Properties** | Fast clip grading with list sliders, quick node/version management, bypass/compare, and presets |
-| **Color Workspace dock panel** | Professional node grading with large graph canvas, collapsible inspector, scopes, versions, and still/reference tools |
+| **Color tab in Properties** | Clip grading with list sliders, compact node view, quick node/version management, bypass/compare, and presets |
 
-The Properties tab is the everyday control surface. The Color Workspace is where serious node work happens. Both must read and write the same `ColorCorrectionState`; there is no import/export or conversion between them.
+The retired dockable Color Workspace must not be added back through `PANEL_CONFIGS` without a fresh product decision. The dock system intentionally filters legacy `color-workspace` panel entries from persisted layouts.
 
 Implementation implication:
 
-- Add `color-workspace` to `PanelType` and `PANEL_CONFIGS` in `src/types/dock.ts`.
-- Add a lazy `ColorWorkspacePanel` branch in `src/components/dock/DockPanelContent.tsx`.
-- Expose it from the View menu through existing `PANEL_CONFIGS` handling.
-- Use the Color tab's `Nodes` mode button to activate/focus the Color Workspace and keep the selected clip focused.
-- Returning from the workspace should put the Properties Color tab back in `List` mode.
+- Keep `color-workspace` out of `PanelType` and `PANEL_CONFIGS` in `src/types/dock.ts`.
+- Do not add a `ColorWorkspacePanel` branch in `src/components/dock/DockPanelContent.tsx`.
+- The Color tab's `Nodes` mode button switches to the compact node graph in place.
 
 ### Color Tab Layout
 
@@ -125,9 +122,9 @@ The tab has a compact toolbar at the top:
 [List] [Nodes]   Bypass  Add Node  Reset
 ```
 
-The Properties tab stays a dense List surface: a vertical sequence of editable grade nodes with grouped controls below the selected node. The `Nodes` button does not show a cramped mini-graph in the narrow Properties panel; it opens/focuses the Color Workspace on the right.
+The Properties tab stays a dense List surface by default: a vertical sequence of editable grade nodes with grouped controls below the selected node. The `Nodes` button now switches to the compact node graph in place.
 
-Reordering serial nodes can be done by drag handles or explicit move buttons. Branch editing, large pan/zoom, node thumbnails, and complex mixer wiring belong in the expanded Color Workspace.
+Reordering serial nodes can be done by drag handles or explicit move buttons. Branch editing, large pan/zoom, node thumbnails, and complex mixer wiring need a new surface if they are brought back.
 
 ### Node View
 
@@ -139,13 +136,13 @@ Node view should be practical, not decorative:
 - Node thumbnails should be optional and lazy, because preview decoding is already expensive.
 - Dragging nodes updates position only, not render order, unless the user reconnects edges or uses explicit reorder actions.
 - Keyboard interactions: delete node, duplicate node, bypass selected, add serial node after selected.
-- In the Color Workspace, use the full pan/zoom node canvas with branch wiring, mixers, node search, and larger hit targets.
+- If a full workspace returns, use the full pan/zoom node canvas with branch wiring, mixers, node search, and larger hit targets.
 
 Use the FlashBoard canvas patterns where they fit: pan/zoom viewport, marquee selection, virtualization, context menu, and stored viewport. Do not couple color nodes to FlashBoard's generation store.
 
-### Color Workspace Layout
+### Retired Color Workspace Layout
 
-The professional workspace should be a dock panel, not a modal:
+The following workspace concept is historical. The dock panel was removed from the active product surface:
 
 ```text
 top toolbar: clip/version selector, Nodes/List, bypass, compare, scopes, presets
@@ -155,7 +152,7 @@ right inspector: selected node controls
 bottom strip: grade versions, thumbnails, diagnostics, optional mini timeline context
 ```
 
-When maximized, the workspace should support a real grading posture:
+If a dedicated workspace is reintroduced later, it should support a real grading posture:
 
 - graph and inspector visible at the same time
 - right inspector collapsible so the graph can use the full workspace width
@@ -165,7 +162,7 @@ When maximized, the workspace should support a real grading posture:
 - copy grade, paste grade, reset node, reset grade, save preset
 - keyboard shortcuts for add serial node, bypass node, disable grade, duplicate node, frame graph
 
-The workspace must be useful even when the Properties panel is closed.
+Any new workspace surface must be useful even when the Properties panel is closed.
 
 ### List View
 
@@ -485,31 +482,22 @@ src/components/panels/color/
   ColorQualifierControl.tsx
   ColorPowerWindowControl.tsx
   colorTab.css
-src/components/panels/color-workspace/
-  ColorWorkspacePanel.tsx
-  ColorWorkspaceToolbar.tsx
-  ColorWorkspaceGraph.tsx
-  ColorWorkspaceInspector.tsx
-  ColorWorkspaceRail.tsx
-  ColorWorkspaceVersions.tsx
-  colorWorkspace.css
 src/stores/timeline/colorCorrectionSlice.ts
 ```
 
 Integration points:
 
 - Add `color` to `PropertiesTab` in `src/components/panels/properties/index.tsx`.
-- Add `color-workspace` to the dock panel system when the expanded workspace is implemented.
 - Insert the tab for visual clips, including text, solid, Lottie, Rive, image, video, model, gaussian avatar, and gaussian splat clips. Keep it hidden for audio-only clips and camera/controller clips.
 - Keep the active tab reset logic aware of `color` so switching selected clips does not bounce the user back to Transform.
 - Reuse existing `DraggableNumber`, `KeyframeToggle`, `MIDIParameterLabel`, and history batching patterns from `EffectsTab`.
-- Share list/inspector editing primitives between the Properties tab and workspace where practical. The workspace owns the large node graph layout.
+- Share list/inspector editing primitives inside the Properties Color tab where practical.
 
 The UI state should live in the color correction object only when it must persist with the clip:
 
 - View mode: nodes/list.
 - Node positions.
-- Last workspace viewport per grade version.
+- Last node viewport per grade version.
 - Active version.
 - Selected color node can remain transient UI state in component state or a small store field.
 
@@ -588,11 +576,11 @@ Avoid silently changing the render output of old projects.
 ### Phase 1: UI Skeleton
 
 - Add `ColorTab` to `PropertiesPanel` and tab reset logic.
-- Add a two-mode List/Nodes switch where List stays in Properties and Nodes opens the Color Workspace.
+- Add a two-mode List/Nodes switch inside Properties.
 - Implement default `Input -> Primary -> Output` graph.
 - Implement Primary controls using existing draggable numbers, keyframe toggles, and MIDI labels.
 - Add copy/paste/reset/bypass actions.
-- Add/focus the Color Workspace from the `Nodes` mode.
+- Switch the Properties tab to compact node view from the `Nodes` mode.
 
 ### Phase 2: GPU Primary Grade
 
@@ -606,12 +594,11 @@ Avoid silently changing the render output of old projects.
 
 ### Phase 3: Real Node Graph
 
-- Add `color-workspace` dock panel.
 - Add node canvas with pan, zoom, selection, serial node add/delete/duplicate.
 - Add graph compiler validation and diagnostics.
 - Add list view flattening for serial graphs.
 - Add branch/mixer representation for simple parallel graphs.
-- Keep branch/mixer editing in the workspace; the Properties tab remains the dense list control surface.
+- Keep branch/mixer editing out of the retired workspace until a new surface is defined; the Properties tab remains the dense list control surface.
 
 ### Phase 4: Pro Controls
 
@@ -678,7 +665,7 @@ Build this in the smallest useful professional slice:
 2. Ship one default Primary node in List view and compact Node Strip view.
 3. Wire preview, export, and nested compositions to the same interpolated grade helper.
 4. Render that node through a fused GPU color pass with cached uniforms.
-5. Add a minimal Color Workspace dock panel that opens from the Color tab and shows the same graph/inspector at a larger size.
+5. Retired: the old Color Workspace dock panel has been removed from the dock system.
 6. Keep existing Effects tab unchanged.
 7. Add Waveform/Histogram/Vectorscope focus buttons.
 8. Add grade versions and copy/paste once the base pass is stable.

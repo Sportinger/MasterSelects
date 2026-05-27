@@ -56,7 +56,7 @@ describe('TimelineHeader camera look controls', () => {
       />,
     );
 
-    expect(container.textContent).toContain('(id:1)');
+    expect(container.querySelector('.track-name')?.textContent).toBe('Video 1');
 
     fireEvent.click(container.querySelector('.track-name') as HTMLElement);
 

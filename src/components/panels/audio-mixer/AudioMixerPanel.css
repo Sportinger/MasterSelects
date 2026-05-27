@@ -10,58 +10,6 @@
   color: var(--text-primary);
 }
 
-.audio-mixer-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 46px;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--border-color);
-  background: #151617;
-}
-
-.audio-mixer-header h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.audio-mixer-header span,
-.audio-mixer-recording-state {
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.audio-mixer-header-actions,
-.audio-mixer-recording-state {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-}
-
-.audio-mixer-live-pill {
-  padding: 3px 7px;
-  border: 1px solid rgba(88, 197, 121, 0.54);
-  border-radius: 4px;
-  color: #8fe8a1;
-  background: rgba(34, 197, 94, 0.08);
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.audio-mixer-live-pill.recording {
-  border-color: rgba(255, 106, 95, 0.58);
-  color: #ff8b82;
-  background: rgba(255, 106, 95, 0.12);
-}
-
-.audio-mixer-record,
-.audio-mixer-header-actions button,
 .audio-mixer-strip button,
 .audio-mixer-preflight-actions button,
 .audio-mixer-floating-fx-header button {
@@ -74,85 +22,11 @@
   cursor: pointer;
 }
 
-.audio-mixer-record {
-  padding: 0 10px;
-  color: #ff6a5f;
-}
-
-.audio-mixer-record.armed {
-  border-color: rgba(255, 106, 95, 0.52);
-}
-
-.audio-mixer-record.recording {
-  background: #ff6a5f;
-  color: #170606;
-  border-color: #ff9a91;
-}
-
-.audio-mixer-record:disabled,
 .audio-mixer-strip button:disabled,
 .audio-mixer-preflight-actions button:disabled {
   color: var(--text-muted);
   cursor: default;
   opacity: 0.55;
-}
-
-.audio-mixer-status {
-  max-width: 120px;
-  padding: 2px 6px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audio-mixer-status.ok {
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 58%, var(--border-color));
-}
-
-.audio-mixer-status.warning {
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 60%, var(--border-color));
-}
-
-.audio-mixer-status.error {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 60%, var(--border-color));
-}
-
-.audio-mixer-recording-state {
-  flex: 0 0 auto;
-  min-height: 26px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--border-color);
-  background: #121416;
-}
-
-.audio-mixer-recording-state strong {
-  color: var(--text-primary);
-  font-size: 11px;
-}
-
-.audio-mixer-recording-state em {
-  min-width: 0;
-  color: var(--danger);
-  font-style: normal;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audio-mixer-recording-state em.storage {
-  color: var(--info);
-}
-
-.audio-mixer-recording-state em.storage.warning {
-  color: var(--warning);
 }
 
 .audio-mixer-recovery-list {
@@ -422,6 +296,14 @@
   border: 1px solid #050607;
   border-radius: 2px;
   background: var(--strip-color);
+}
+
+.audio-mixer-track-color-menu {
+  min-width: 168px;
+}
+
+.audio-mixer-track-color-grid {
+  padding: 6px 8px 8px;
 }
 
 .audio-mixer-strip-name {

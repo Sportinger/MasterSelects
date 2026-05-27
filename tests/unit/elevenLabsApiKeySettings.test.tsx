@@ -8,7 +8,11 @@ const mockedUseSettingsStore = useSettingsStore as unknown as Mock;
 
 describe('ElevenLabs API key settings UI', () => {
   beforeEach(() => {
-    mockedUseSettingsStore.mockImplementation((selector: (state: { apiKeys: Record<string, string> }) => unknown) => selector({
+    mockedUseSettingsStore.mockImplementation((selector: (state: {
+      apiKeys: Record<string, string>;
+      apiKeyDefaults: Record<string, boolean>;
+      setApiKeyDefault: (provider: string, enabled: boolean) => void;
+    }) => unknown) => selector({
       apiKeys: {
         openai: '',
         anthropic: '',
@@ -22,6 +26,15 @@ describe('ElevenLabs API key settings UI', () => {
         klingAccessKey: '',
         klingSecretKey: '',
       },
+      apiKeyDefaults: {
+        openai: false,
+        anthropic: false,
+        piapi: false,
+        kieai: false,
+        evolink: false,
+        elevenlabs: false,
+      },
+      setApiKeyDefault: vi.fn(),
     }));
   });
 

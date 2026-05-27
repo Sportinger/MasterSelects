@@ -940,7 +940,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   },
 
   splitClipAtPlayhead: () => {
-    const { clips, playheadPosition, selectedClipIds, splitClip } = get();
+    const { clips, playheadPosition, selectedClipIds, applyTimelineEditOperation } = get();
     const clipsAtPlayhead = clips.filter(c =>
       playheadPosition > c.startTime && playheadPosition < c.startTime + c.duration
     );
@@ -956,12 +956,16 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     if (clipsToSplit.length === 0) clipsToSplit = clipsAtPlayhead;
 
-    const linkedClipIds = new Set(clipsToSplit.map(c => c.linkedClipId).filter(Boolean));
-    const clipsToSplitFiltered = clipsToSplit.filter(c => !linkedClipIds.has(c.id));
-
-    for (const clip of clipsToSplitFiltered) {
-      splitClip(clip.id, playheadPosition);
-    }
+    applyTimelineEditOperation({
+      id: `split-at-playhead:${playheadPosition}`,
+      type: 'split-at-time',
+      clipIds: clipsToSplit.map((clip) => clip.id),
+      time: playheadPosition,
+      includeLinked: true,
+    }, {
+      source: 'shortcut',
+      historyLabel: 'Split at playhead',
+    });
   },
 
   updateClip: (id, updates) => {

@@ -7,7 +7,7 @@ This plan turns the current Color Correction foundation into a professional grad
 Current status, May 2026:
 
 - MasterSelects already has clip-local `ColorCorrectionState` with versions, nodes, edges, keyframe paths, and persistence.
-- The Color tab and Color Workspace edit the same state and currently expose scalar Primary controls plus a dedicated Wheels node.
+- The Properties Color tab edits the state and currently exposes scalar Primary controls plus a dedicated Wheels node. The old dockable Color Workspace has been retired from the active dock system.
 - Preview, nested composition rendering, and export already receive runtime color grades.
 - The runtime compiler currently supports serial `primary` and `wheels` nodes in the fused primary/wheels shader path.
 - The GPU path currently uses `rgba8unorm` temp targets and clamps output after the primary pass.
@@ -45,7 +45,7 @@ These constraints are specific to the current implementation and should guide th
 MasterSelects should feel closer to a real grading page than a generic effects stack:
 
 - fast Primary correction in the Properties Color tab
-- a dockable Color Workspace for nodes, scopes, versions, stills, and detailed controls
+- a future dedicated workspace or expanded surface for nodes, scopes, versions, stills, and detailed controls if the product brings that surface back
 - realtime playback for common grades
 - preview/export parity
 - non-destructive clip grades that can be copied, versioned, bypassed, compared, keyframed, and saved as presets
@@ -395,7 +395,7 @@ Acceptance criteria:
 
 - Presets are portable without embedding huge LUT payloads.
 - Applying a preset to multiple clips creates independent grade state.
-- Keyboard operations work from the Color Workspace without stealing timeline shortcuts unexpectedly.
+- Keyboard operations work from the active color surface without stealing timeline shortcuts unexpectedly.
 
 ## Suggested Build Order
 
@@ -464,4 +464,4 @@ The color system can be called professional when:
 - preview and export match within a documented tolerance
 - color passes can run in float precision when supported
 - unsupported graph constructs produce diagnostics instead of broken frames
-- the Properties Color tab remains fast for simple work and the Color Workspace handles serious grading without modal detours
+- the Properties Color tab remains fast for simple work and any future expanded grading surface handles serious grading without modal detours

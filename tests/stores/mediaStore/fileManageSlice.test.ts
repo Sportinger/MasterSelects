@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { create } from 'zustand';
 import type { MediaState, MediaFile, MediaFolder, TextItem, SolidItem, Composition } from '../../../src/stores/mediaStore/types';
+import type { CompositionTimelineData, SerializableClip, TimelineClip } from '../../../src/types';
 
 const thumbnailMocks = vi.hoisted(() => ({
   createThumbnail: vi.fn(async () => 'blob:http://localhost/refreshed-thumb'),
@@ -19,10 +20,13 @@ vi.mock('../../../src/stores/mediaStore/helpers/thumbnailHelpers', () => ({
   handleThumbnailDedup: thumbnailMocks.handleThumbnailDedup,
 }));
 
-import { createFileManageSlice, type FileManageActions } from '../../../src/stores/mediaStore/slices/fileManageSlice';
+import { createFileManageSlice, collectMediaFileUsages, type FileManageActions } from '../../../src/stores/mediaStore/slices/fileManageSlice';
 import { createFolderSlice, type FolderActions } from '../../../src/stores/mediaStore/slices/folderSlice';
 import { createSelectionSlice, type SelectionActions } from '../../../src/stores/mediaStore/slices/selectionSlice';
 import { createCompositionSlice, type CompositionActions } from '../../../src/stores/mediaStore/slices/compositionSlice';
+import { projectFileService } from '../../../src/services/projectFileService';
+import { projectDB } from '../../../src/services/projectDB';
+import { useTimelineStore } from '../../../src/stores/timeline';
 
 // ---- Minimal store factory ------------------------------------------------
 
@@ -219,6 +223,47 @@ function makeMediaFile(overrides: Partial<MediaFile> = {}): MediaFile {
   };
 }
 
+function makeSerializableClip(id: string, mediaFileId: string, overrides: Partial<SerializableClip> = {}): SerializableClip {
+  return {
+    id,
+    trackId: 'track-video-1',
+    name: id,
+    mediaFileId,
+    startTime: 0,
+    duration: 5,
+    inPoint: 0,
+    outPoint: 5,
+    sourceType: 'video',
+    transform: {} as SerializableClip['transform'],
+    effects: [],
+    ...overrides,
+  };
+}
+
+function makeTimelineData(clips: SerializableClip[]): CompositionTimelineData {
+  return {
+    tracks: [],
+    clips,
+    playheadPosition: 0,
+    duration: 10,
+    zoom: 1,
+    scrollX: 0,
+    inPoint: null,
+    outPoint: null,
+    loopPlayback: false,
+  };
+}
+
+function mockProjectArtifactCleanup() {
+  vi.spyOn(projectFileService, 'deleteMediaFileArtifacts').mockResolvedValue({ deleted: [], failed: [] });
+  vi.spyOn(projectDB, 'deleteMediaFile').mockResolvedValue(undefined);
+  vi.spyOn(projectDB, 'deleteAnalysis').mockResolvedValue(undefined);
+  vi.spyOn(projectDB, 'deleteSourceThumbnails').mockResolvedValue(undefined);
+  vi.spyOn(projectDB, 'deleteHandle').mockResolvedValue(undefined);
+  vi.spyOn(projectDB, 'deleteProxyFrames').mockResolvedValue(undefined);
+  vi.spyOn(projectDB, 'deleteThumbnail').mockResolvedValue(undefined);
+}
+
 // ---- Tests -----------------------------------------------------------------
 
 describe('MediaStore - File Management', () => {
@@ -226,6 +271,17 @@ describe('MediaStore - File Management', () => {
 
   beforeEach(() => {
     store = createTestStore();
+    useTimelineStore.setState({
+      clips: [],
+      layers: [],
+      selectedLayerId: null,
+      selectedClipIds: new Set<string>(),
+      primarySelectedClipId: null,
+      clipKeyframes: new Map(),
+      selectedKeyframeIds: new Set<string>(),
+      keyframeRecordingEnabled: new Set<string>(),
+      duration: 60,
+    });
     thumbnailMocks.createThumbnail.mockClear();
     thumbnailMocks.createThumbnail.mockResolvedValue('blob:http://localhost/refreshed-thumb');
     thumbnailMocks.handleThumbnailDedup.mockClear();
@@ -284,6 +340,135 @@ describe('MediaStore - File Management', () => {
 
       expect(store.getState().files).toHaveLength(1);
       expect(store.getState().files[0].id).toBe('f2');
+    });
+  });
+
+  describe('media file usage and deep delete', () => {
+    it('collects media usage across composition timelines', () => {
+      const file = makeMediaFile({ id: 'f1', name: 'clip.mp4' });
+      const compositions: Composition[] = [
+        store.getState().compositions[0],
+        {
+          id: 'comp-2',
+          name: 'Comp 2',
+          type: 'composition',
+          parentId: null,
+          createdAt: Date.now(),
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 10,
+          backgroundColor: '#000000',
+          timelineData: makeTimelineData([
+            makeSerializableClip('clip-1', 'f1'),
+            makeSerializableClip('clip-2', 'f1'),
+            makeSerializableClip('clip-3', 'other'),
+          ]),
+        },
+      ];
+
+      const usages = collectMediaFileUsages(['f1'], [file], compositions, 'comp-1', []);
+
+      expect(usages).toHaveLength(1);
+      expect(usages[0].clipCount).toBe(2);
+      expect(usages[0].compositions).toEqual([
+        { compositionId: 'comp-2', compositionName: 'Comp 2', clipCount: 2 },
+      ]);
+    });
+
+    it('deletes media files, removes their clips from saved compositions, and clears project artifacts', async () => {
+      mockProjectArtifactCleanup();
+      const file = makeMediaFile({
+        id: 'f1',
+        name: 'clip.mp4',
+        projectPath: 'Raw/clip.mp4',
+        fileHash: 'hash-1',
+      });
+      const linkedSurvivor = makeSerializableClip('clip-survivor', 'other', { linkedClipId: 'clip-delete' });
+      const comp2: Composition = {
+        id: 'comp-2',
+        name: 'Comp 2',
+        type: 'composition',
+        parentId: null,
+        createdAt: Date.now(),
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        duration: 10,
+        backgroundColor: '#000000',
+        timelineData: makeTimelineData([
+          makeSerializableClip('clip-delete', 'f1', { linkedClipId: 'clip-survivor' }),
+          linkedSurvivor,
+        ]),
+      };
+      store.setState({
+        files: [file],
+        compositions: [store.getState().compositions[0], comp2],
+        selectedIds: ['f1'],
+      });
+
+      const result = await store.getState().deleteMediaFilesEverywhere(['f1']);
+      const nextComp2 = store.getState().compositions.find(comp => comp.id === 'comp-2')!;
+
+      expect(result.deletedMediaFileIds).toEqual(['f1']);
+      expect(result.removedClipCount).toBe(1);
+      expect(store.getState().files).toHaveLength(0);
+      expect(store.getState().selectedIds).toEqual([]);
+      expect(nextComp2.timelineData?.clips).toHaveLength(1);
+      expect(nextComp2.timelineData?.clips[0].id).toBe('clip-survivor');
+      expect(nextComp2.timelineData?.clips[0].linkedClipId).toBeUndefined();
+      expect(projectFileService.deleteMediaFileArtifacts).toHaveBeenCalledWith(expect.objectContaining({
+        mediaId: 'f1',
+        projectPath: 'Raw/clip.mp4',
+        fileHash: 'hash-1',
+      }));
+      expect(projectDB.deleteMediaFile).toHaveBeenCalledWith('f1');
+      expect(projectDB.deleteProxyFrames).toHaveBeenCalledWith('hash-1');
+    });
+
+    it('removes active timeline clips that only reference the deleted browser File', async () => {
+      mockProjectArtifactCleanup();
+      const browserFile = new File([], 'clip.mp4', { type: 'video/mp4' });
+      const file = makeMediaFile({
+        id: 'f1',
+        name: 'clip.mp4',
+        file: browserFile,
+      });
+      const activeClip = {
+        id: 'active-clip',
+        trackId: 'video-1',
+        name: 'clip.mp4',
+        file: browserFile,
+        startTime: 0,
+        duration: 5,
+        inPoint: 0,
+        outPoint: 5,
+        source: {
+          type: 'video',
+          file: browserFile,
+          naturalDuration: 5,
+        },
+        transform: {},
+        effects: [],
+      } as TimelineClip;
+
+      store.setState({
+        files: [file],
+        selectedIds: ['f1'],
+      });
+      useTimelineStore.setState({
+        clips: [activeClip],
+        selectedClipIds: new Set(['active-clip']),
+        primarySelectedClipId: 'active-clip',
+      });
+
+      const result = await store.getState().deleteMediaFilesEverywhere(['f1']);
+
+      expect(result.removedClipCount).toBe(1);
+      expect(useTimelineStore.getState().clips).toEqual([]);
+      expect(useTimelineStore.getState().selectedClipIds).toEqual(new Set());
+      expect(useTimelineStore.getState().primarySelectedClipId).toBeNull();
+      expect(store.getState().compositions[0].timelineData?.clips).toEqual([]);
     });
   });
 

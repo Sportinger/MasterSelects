@@ -42,10 +42,18 @@ import type {
 } from '../../types';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
 import type { Composition } from '../mediaStore';
+import type { LabelColor } from '../mediaStore/types';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { MarkerMIDIBinding } from '../../types/midi';
 import type { AudioSilenceDetectionOptions, AudioSilenceRange } from '../../services/audio/audioSilenceDetection';
 import type { AudioTransientDetectionOptions, AudioTransientRange } from '../../services/audio/audioTransientDetection';
+import type {
+  ApplyTimelineEditOperationOptions,
+  TimelineEditOperation,
+  TimelineEditResult,
+  TimelineEditOperationSource,
+  TimelinePlacementMode,
+} from './editOperations/types';
 
 // Re-export imported types for convenience
 export type {
@@ -82,6 +90,97 @@ export type MaskEditMode = 'none' | 'drawing' | 'editing' | 'drawingRect' | 'dra
 
 // Timeline tool mode types
 export type TimelineToolMode = 'select' | 'cut';
+export type TimelineToolGroupId =
+  | 'selection'
+  | 'cut'
+  | 'trim'
+  | 'placement'
+  | 'navigation';
+
+export type TimelineToolKind = 'mode' | 'command';
+
+export type TimelineToolId =
+  | 'select'
+  | 'track-select-forward'
+  | 'track-select-backward'
+  | 'track-select-forward-all'
+  | 'range-select'
+  | 'blade'
+  | 'blade-all-tracks'
+  | 'split-at-playhead'
+  | 'split-all-at-playhead'
+  | 'trim-start-to-playhead'
+  | 'trim-end-to-playhead'
+  | 'ripple-trim-start-to-playhead'
+  | 'ripple-trim-end-to-playhead'
+  | 'ripple-delete'
+  | 'delete-gap'
+  | 'lift-range'
+  | 'extract-range'
+  | 'edge-trim'
+  | 'ripple-trim'
+  | 'rolling-edit'
+  | 'slip'
+  | 'slide'
+  | 'rate-stretch'
+  | 'position-overwrite'
+  | 'insert'
+  | 'overwrite'
+  | 'replace'
+  | 'fit-to-fill'
+  | 'append-at-end'
+  | 'place-on-top'
+  | 'ripple-overwrite'
+  | 'hand'
+  | 'zoom'
+  | 'marker'
+  | 'in-point'
+  | 'out-point'
+  | 'pen-keyframe';
+
+export type TimelineToolPreviewPlane = 'clip-local' | 'section-scrolled' | 'global-fixed';
+
+export interface TimelineRangeSelection {
+  startTime: number;
+  endTime: number;
+  trackIds: string[];
+  anchorTrackId?: string;
+}
+
+export type TimelineToolPreviewGhostVariant =
+  | 'trim-target'
+  | 'ripple-shift'
+  | 'rolling-neighbor'
+  | 'rate-stretch';
+
+export interface TimelineToolPreviewGhostRange {
+  id: string;
+  trackId: string;
+  startTime: number;
+  endTime: number;
+  label?: string;
+  variant?: TimelineToolPreviewGhostVariant;
+}
+
+export interface TimelineToolPreview {
+  toolId: TimelineToolId;
+  plane: TimelineToolPreviewPlane;
+  trackId?: string;
+  trackIds?: string[];
+  clipId?: string;
+  time?: number;
+  startTime?: number;
+  endTime?: number;
+  sourceInPoint?: number;
+  sourceOutPoint?: number;
+  label?: string;
+  blocked?: boolean;
+  message?: string;
+  ghostRanges?: TimelineToolPreviewGhostRange[];
+  zIndex?: number;
+}
+
+export type LastTimelineToolByGroup = Record<TimelineToolGroupId, TimelineToolId>;
 
 // Timeline audio display mode. Detailed remains waveform-backed today; spectral
 // reserves the inline image lane used by spectrogram tile artifacts.
@@ -190,12 +289,15 @@ export interface TimelineState {
   duration: number;
   zoom: number;
   scrollX: number;
+  trackHeaderWidth: number;
+  timelineSplitRatio: number | null;
   snappingEnabled: boolean;
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
   playbackWarmup: PlaybackWarmupState | null;
   selectedClipIds: Set<string>;
   primarySelectedClipId: string | null; // The clip the user actually clicked (for Properties panel)
+  targetTrackIdByType: Partial<Record<'video' | 'audio', string>>;
 
   // Render layers (populated by useLayerSync from timeline clips, used by engine)
   layers: Layer[];
@@ -262,6 +364,13 @@ export interface TimelineState {
 
   // Tool mode
   toolMode: TimelineToolMode;
+  activeTimelineToolId: TimelineToolId;
+  previousTimelineToolId: TimelineToolId | null;
+  lastTimelineToolByGroup: LastTimelineToolByGroup;
+  openTimelineToolGroupId: TimelineToolGroupId | null;
+  momentaryTimelineToolId: TimelineToolId | null;
+  timelineRangeSelection: TimelineRangeSelection | null;
+  timelineToolPreview: TimelineToolPreview | null;
 
   // Timeline markers
   markers: TimelineMarker[];
@@ -299,6 +408,7 @@ export interface TrackActions {
   addTrack: (type: 'video' | 'audio') => string;
   removeTrack: (id: string) => void;
   renameTrack: (id: string, name: string) => void;
+  setTrackLabelColor: (id: string, labelColor: LabelColor) => void;
   setTrackMuted: (id: string, muted: boolean) => void;
   setTrackVisible: (id: string, visible: boolean) => void;
   setTrackSolo: (id: string, solo: boolean) => void;
@@ -329,6 +439,8 @@ export interface TrackActions {
   setTrackLocked: (id: string, locked: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;
   scaleTracksOfType: (type: 'video' | 'audio', delta: number, baselineHeight?: number) => void;
+  setTargetTrack: (trackId: string | null) => void;
+  clearTargetTracks: () => void;
   // Track parenting (layer linking)
   setTrackParent: (trackId: string, parentTrackId: string | null) => void;
   getTrackChildren: (trackId: string) => TimelineTrack[];
@@ -518,6 +630,8 @@ export interface PlaybackActions {
   playForward: () => void;
   playReverse: () => void;
   setDuration: (duration: number) => void;
+  setTrackHeaderWidth: (width: number) => void;
+  setTimelineSplitRatio: (ratio: number | null) => void;
   // Tool mode
   setToolMode: (mode: TimelineToolMode) => void;
   toggleCutTool: () => void;
@@ -544,6 +658,53 @@ export interface PlaybackActions {
   clearAudioSpectralRegionSelection: () => void;
   toggleTranscriptMarkers: () => void;
   setShowTranscriptMarkers: (enabled: boolean) => void;
+}
+
+export interface TimelineToolActions {
+  setActiveTimelineTool: (toolId: TimelineToolId) => void;
+  activateTimelineToolGroup: (groupId: TimelineToolGroupId) => void;
+  cycleTimelineToolGroup: (groupId: TimelineToolGroupId, direction?: 1 | -1) => void;
+  setOpenTimelineToolGroup: (groupId: TimelineToolGroupId | null) => void;
+  setMomentaryTimelineTool: (toolId: TimelineToolId) => void;
+  clearMomentaryTimelineTool: () => void;
+  setTimelineRangeSelection: (selection: TimelineRangeSelection | null) => void;
+  clearTimelineRangeSelection: () => void;
+  setTimelineToolPreview: (preview: TimelineToolPreview | null) => void;
+}
+
+export interface TimelineEditOperationActions {
+  applyTimelineEditOperation: (
+    operation: TimelineEditOperation,
+    options: ApplyTimelineEditOperationOptions,
+  ) => TimelineEditResult;
+  splitAllClipsAtTime: (time: number, trackIds?: string[]) => TimelineEditResult;
+  selectClipsFromTime: (
+    time: number,
+    options?: {
+      direction?: 'forward' | 'backward';
+      trackIds?: string[];
+      includeLinked?: boolean;
+    },
+  ) => TimelineEditResult;
+  rippleDeleteSelection: (clipIds?: string[]) => TimelineEditResult;
+  deleteGapAtTime: (time: number, trackIds?: string[]) => TimelineEditResult;
+  trimSelectedClipEdgeToPlayhead: (edge: 'start' | 'end') => TimelineEditResult;
+  rippleTrimSelectedClipEdgeToPlayhead: (edge: 'start' | 'end') => TimelineEditResult;
+  prepareTimelinePlacementRange: (
+    mode: TimelinePlacementMode,
+    options: {
+      trackIds?: string[];
+      startTime?: number;
+      duration?: number;
+      targetClipId?: string;
+      includeLinked?: boolean;
+      rippleDelta?: number;
+      source?: TimelineEditOperationSource;
+      historyLabel?: string;
+    },
+  ) => TimelineEditResult;
+  liftTimelineRange: () => TimelineEditResult;
+  extractTimelineRange: () => TimelineEditResult;
 }
 
 export interface ApplyAudioRegionEditOptions {
@@ -911,6 +1072,8 @@ export interface TimelineStore extends
   TrackActions,
   ClipActions,
   PlaybackActions,
+  TimelineToolActions,
+  TimelineEditOperationActions,
   AudioEditActions,
   RamPreviewActions,
   ProxyCacheActions,

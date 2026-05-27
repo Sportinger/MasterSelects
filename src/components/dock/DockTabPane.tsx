@@ -16,6 +16,10 @@ const truncateText = (text: string, maxLength: number): string => {
   return text.slice(0, maxLength - 2) + '..';
 };
 
+const pluralize = (count: number, singular: string, plural = `${singular}s`): string => (
+  `${count} ${count === 1 ? singular : plural}`
+);
+
 const HOLD_DURATION = 500; // ms to hold before drag starts
 const TAB_INSERT_HOT_ZONE_PX = 36;
 const TAB_SLOT_SIZE_PX = 22;
@@ -81,10 +85,12 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closeCompositionTab: s.closeCompositionTab,
     reorderCompositionTabs: s.reorderCompositionTabs,
   })));
-  const { clips, selectedClipIds, slotGridProgress } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, slotGridProgress, tracks, masterAudioState } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     slotGridProgress: s.slotGridProgress,
+    tracks: s.tracks,
+    masterAudioState: s.masterAudioState,
   })));
 
   // Get selected clip name for dynamic tab titles (Properties/Audio panels)
@@ -101,6 +107,20 @@ export function DockTabPane({ group }: DockTabPaneProps) {
 
     return compositions.find((comp) => comp.id === selectedSlotCompositionId)?.name || null;
   }, [compositions, selectedSlotCompositionId, slotGridProgress]);
+  const audioMixerTabStats = useMemo(() => {
+    const audioTracks = tracks.filter((track) => track.type === 'audio');
+    const activeSends = audioTracks.reduce((count, track) => (
+      count + (track.audioState?.sends?.filter((send) => send.enabled !== false).length ?? 0)
+    ), 0);
+    const activeFx = audioTracks.reduce((count, track) => (
+      count + (track.audioState?.effectStack?.filter((effect) => effect.enabled !== false).length ?? 0)
+    ), masterAudioState?.effectStack?.filter((effect) => effect.enabled !== false).length ?? 0);
+
+    return {
+      label: `Audio Mixer ${audioTracks.length}T / ${activeSends}S / ${activeFx}FX`,
+      title: `Audio Mixer - ${pluralize(audioTracks.length, 'track')} / ${pluralize(activeSends, 'send')} / ${pluralize(activeFx, 'FX', 'FX')}`,
+    };
+  }, [masterAudioState, tracks]);
 
   // State for dragging composition tabs
   const [draggedCompIndex, setDraggedCompIndex] = useState<number | null>(null);
@@ -604,8 +624,13 @@ export function DockTabPane({ group }: DockTabPaneProps) {
 
             // Dynamic tab title for clip-properties panel
             let tabTitle = panel.title;
+            let tabTooltip = panel.title;
             if (panel.type === 'clip-properties' && (selectedSlotName || selectedClipName)) {
               tabTitle = truncateText(selectedSlotName || selectedClipName || panel.title, 18);
+              tabTooltip = selectedSlotName || selectedClipName || panel.title;
+            } else if (panel.type === 'audio-mixer') {
+              tabTitle = audioMixerTabStats.label;
+              tabTooltip = audioMixerTabStats.title;
             }
 
             return (
@@ -621,7 +646,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
                 onMouseUp={handleTabMouseUp}
                 onMouseEnter={() => handlePanelTabMouseEnter(panel)}
                 onMouseLeave={() => handlePanelTabMouseLeave(panel.id)}
-                title={panel.type === 'clip-properties' ? selectedSlotName || selectedClipName || panel.title : panel.title}
+                title={tabTooltip}
                 data-guided-panel-tab={panel.type}
                 data-guided-target={`panel-tab:${panel.type}`}
               >

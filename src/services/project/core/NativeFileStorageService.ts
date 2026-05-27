@@ -96,6 +96,23 @@ export class NativeFileStorageService {
   }
 
   /**
+   * Delete a file or directory from a project subfolder
+   */
+  async deleteEntry(
+    projectPath: string,
+    subFolder: ProjectFolderKey,
+    entryName: string,
+    options?: { recursive?: boolean }
+  ): Promise<boolean> {
+    try {
+      const fullPath = this.resolvePath(projectPath, subFolder, entryName);
+      return await this.client.deleteFile(fullPath, options?.recursive ?? false);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Delete a file from a project subfolder
    */
   async deleteFile(
@@ -103,12 +120,7 @@ export class NativeFileStorageService {
     subFolder: ProjectFolderKey,
     fileName: string
   ): Promise<boolean> {
-    try {
-      const fullPath = this.resolvePath(projectPath, subFolder, fileName);
-      return await this.client.deleteFile(fullPath);
-    } catch {
-      return false;
-    }
+    return this.deleteEntry(projectPath, subFolder, fileName);
   }
 
   /**
