@@ -595,6 +595,7 @@ export function FlashBoardComposer({
   const hasElevenLabsKey = elevenLabsApiKey.trim().length > 0;
   const accountSession = useAccountStore((s) => s.session);
   const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
+  const hasHostedSession = accountSession?.authenticated === true;
   const hasHostedAudioAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
 
   const catalog = useMemo(() => getCatalogEntries(), []);
@@ -800,6 +801,9 @@ export function FlashBoardComposer({
     return '';
   }, [multiShots, normalizedMultiPrompt, prompt]);
   const effectiveChatPrompt = chatPrompt.trim();
+  const canUseHostedKieFallback = hasHostedSession
+    && service === 'kieai'
+    && (providerId === 'nano-banana-2' || providerId === 'kling-3.0');
   const chatModelOptions = useMemo<FlashBoardChatModelOption[]>(() => {
     if (chatProvider !== 'lemonade') {
       return FLASHBOARD_CHAT_MODEL_OPTIONS[chatProvider];
@@ -955,7 +959,7 @@ export function FlashBoardComposer({
     voiceId,
   ]);
   const backendValidationError = useMemo(() => {
-    if (service === 'kieai' && !hasKieAiKey) {
+    if (service === 'kieai' && !hasKieAiKey && !canUseHostedKieFallback) {
       return 'Add a Kie.ai API key in Settings to generate with Kie.ai.';
     }
 
@@ -963,12 +967,12 @@ export function FlashBoardComposer({
       return 'Add an EvoLink API key in Settings to generate with EvoLink.';
     }
 
-    if (service === 'cloud' && !isHostedAudioMode && !accountSession?.authenticated) {
+    if (service === 'cloud' && !isHostedAudioMode && !hasHostedSession) {
       return 'Sign in to use MasterSelects Cloud generation.';
     }
 
     return null;
-  }, [accountSession?.authenticated, hasEvolinkKey, hasKieAiKey, isHostedAudioMode, service]);
+  }, [canUseHostedKieFallback, hasEvolinkKey, hasHostedSession, hasKieAiKey, isHostedAudioMode, service]);
   const currentPrice = useMemo(() => (
     selectedEntry
       ? getFlashBoardPriceEstimate({
@@ -1602,8 +1606,8 @@ export function FlashBoardComposer({
       return;
     }
 
-    if (chatProvider === 'openai' && !hasOpenAiKey) {
-      setChatError('Add an OpenAI API key in Settings to use compact chat.');
+    if (chatProvider === 'openai' && !hasOpenAiKey && !hasHostedSession) {
+      setChatError('Sign in or add an OpenAI API key in Settings to use compact chat.');
       openSettings();
       return;
     }
@@ -1642,6 +1646,7 @@ export function FlashBoardComposer({
     try {
       const response = await sendFlashBoardChatMessage({
         anthropicApiKey,
+        hostedAvailable: chatProvider === 'openai' && hasHostedSession,
         lemonadeEndpoint,
         model: activeChatModelId,
         openAiApiKey,
@@ -1681,6 +1686,7 @@ export function FlashBoardComposer({
     closePopover,
     effectiveChatPrompt,
     hasAnthropicKey,
+    hasHostedSession,
     hasOpenAiKey,
     isChatting,
     lemonadeEndpoint,
@@ -1814,8 +1820,9 @@ export function FlashBoardComposer({
     const requestIsAudio = selectedEntry.outputType === 'audio' || service === 'elevenlabs' || service === 'suno';
     const requestIsSuno = service === 'suno' || providerId === SUNO_PROVIDER_ID;
     const requestIsElevenLabs = requestIsAudio && !requestIsSuno;
+    const requestService = canUseHostedKieFallback && !hasKieAiKey ? 'cloud' : service;
     updateNodeRequest(node.id, {
-      service,
+      service: requestService,
       providerId,
       version,
       outputType: selectedEntry.outputType ?? 'video',
@@ -1851,6 +1858,7 @@ export function FlashBoardComposer({
     aspectRatio,
     board,
     canGenerate,
+    canUseHostedKieFallback,
     composer.endMediaFileId,
     composer.startMediaFileId,
     createDraftNode,
@@ -1858,6 +1866,7 @@ export function FlashBoardComposer({
     effectiveGenerateAudio,
     effectivePrompt,
     effectiveReferenceMediaFileIds,
+    hasKieAiKey,
     imageSize,
     languageCode,
     languageOverride,

@@ -68,6 +68,48 @@ describe('FlashBoardChatService', () => {
     expect(body.reasoning).toEqual({ effort: 'medium' });
   });
 
+  it('uses hosted OpenAI chat when a signed-in cloud session is available', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      kind: 'ai.chat',
+      mode: 'hosted',
+      ok: true,
+      provider: 'openai',
+      requestId: 'req-1',
+      status: 'completed',
+      data: {
+        choices: [{
+          message: {
+            content: 'Use softer backlight.',
+          },
+        }],
+      },
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await sendFlashBoardChatMessage({
+      hostedAvailable: true,
+      model: 'gpt-5.5',
+      prompt: 'Suggest lighting',
+      provider: 'openai',
+      temperature: 0.7,
+    });
+
+    expect(response).toBe('Use softer backlight.');
+    expect(fetchMock).toHaveBeenCalledWith('/api/ai/chat', expect.objectContaining({
+      method: 'POST',
+    }));
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body).toMatchObject({
+      max_completion_tokens: 2048,
+      model: 'gpt-5.5',
+      messages: [
+        expect.objectContaining({ role: 'system' }),
+        { role: 'user', content: 'Suggest lighting' },
+      ],
+    });
+  });
+
   it('uses documented Anthropic model ids and headers', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       content: [{ type: 'text', text: 'Try a lower angle.' }],

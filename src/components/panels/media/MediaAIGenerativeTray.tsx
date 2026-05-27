@@ -7,10 +7,12 @@ import {
 import { FlashBoardComposer } from '../flashboard/FlashBoardComposer';
 import { useFlashBoardRuntime } from '../flashboard/useFlashBoardRuntime';
 import { MediaAIGenerationQueue } from './MediaAIGenerationQueue';
+import { useAccountStore } from '../../../stores/accountStore';
 import '../flashboard/FlashBoard.css';
 import './MediaAIGenerativeTray.css';
 
-const MEDIA_GENERATIVE_SERVICES: Array<'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = [
+const MEDIA_GENERATIVE_SERVICES: Array<'cloud' | 'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = [
+  'cloud',
   'kieai',
   'evolink',
   'elevenlabs',
@@ -30,6 +32,9 @@ export function MediaAIGenerativeTray({
 }: MediaAIGenerativeTrayProps) {
   useFlashBoardRuntime({ enableKeyboardDelete: false });
   const [trayMode, setTrayMode] = useState<MediaAITrayMode>('generate');
+  const accountSession = useAccountStore((s) => s.session);
+  const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
+  const useHostedDefaults = Boolean(accountSession?.authenticated && hostedAIEnabled);
 
   const stopEvent = useCallback((event: SyntheticEvent) => {
     event.stopPropagation();
@@ -89,8 +94,8 @@ export function MediaAIGenerativeTray({
         </button>
         <FlashBoardComposer
           initialProviderId={DEFAULT_FLASHBOARD_PROVIDER_ID}
-          initialService={DEFAULT_FLASHBOARD_SERVICE}
-          initialVersion={DEFAULT_FLASHBOARD_MODEL_VERSION}
+          initialService={useHostedDefaults ? 'cloud' : DEFAULT_FLASHBOARD_SERVICE}
+          initialVersion={useHostedDefaults ? 'latest' : DEFAULT_FLASHBOARD_MODEL_VERSION}
           initialMode={trayMode}
           allowedServices={MEDIA_GENERATIVE_SERVICES}
         />

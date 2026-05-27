@@ -2,6 +2,7 @@ import {
   createLemonadeChatCompletionStream,
   DEFAULT_LEMONADE_MODEL,
 } from '../lemonadeProvider';
+import { cloudAiService } from '../cloudAiService';
 
 export type FlashBoardChatProvider = 'openai' | 'anthropic' | 'lemonade';
 export type FlashBoardOpenAiReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -23,6 +24,7 @@ export interface FlashBoardChatModelOption {
 
 export interface FlashBoardChatRequest {
   anthropicApiKey?: string;
+  hostedAvailable?: boolean;
   lemonadeEndpoint?: string;
   model: string;
   openAiApiKey?: string;
@@ -199,7 +201,45 @@ function readOpenAiResponseText(data: unknown): string {
     .trim() ?? '';
 }
 
+function readOpenAiChatCompletionText(data: unknown): string {
+  if (!data || typeof data !== 'object') {
+    return '';
+  }
+
+  const response = data as {
+    choices?: Array<{
+      message?: {
+        content?: unknown;
+      };
+    }>;
+  };
+  const content = response.choices?.[0]?.message?.content;
+  return typeof content === 'string' ? content.trim() : '';
+}
+
+async function sendHostedOpenAiChat(request: FlashBoardChatRequest): Promise<string> {
+  const body: Record<string, unknown> = {
+    model: request.model,
+    messages: [
+      { role: 'system', content: FLASHBOARD_CHAT_SYSTEM_PROMPT },
+      { role: 'user', content: request.prompt },
+    ],
+    max_completion_tokens: 2048,
+  };
+
+  if (isTemperatureSupported('openai', request.model)) {
+    body.temperature = clampTemperature(request.temperature);
+  }
+
+  const data = await cloudAiService.createChatCompletion(body);
+  return readOpenAiChatCompletionText(data) || readOpenAiResponseText(data) || 'OpenAI returned an empty response.';
+}
+
 async function sendOpenAiChat(request: FlashBoardChatRequest): Promise<string> {
+  if (request.hostedAvailable) {
+    return sendHostedOpenAiChat(request);
+  }
+
   const apiKey = request.openAiApiKey?.trim();
   if (!apiKey) {
     throw new Error('Add an OpenAI API key in Settings to use compact chat.');
