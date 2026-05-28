@@ -109,7 +109,7 @@ export class AudioSyncHandler {
         meterTrackId,
         element,
         ctx.now,
-        hasTailMeterCandidate(processors, masterRoute),
+        hasTailMeterCandidate(processors, masterRoute) || Boolean(meterTrackId),
       )) {
         this.publishMeter(meterTrackId, createSilentAudioMeterSnapshot(ctx.now));
       }
