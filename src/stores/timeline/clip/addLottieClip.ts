@@ -3,7 +3,6 @@ import {
   DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
   type VectorAnimationMetadata,
 } from '../../../types/vectorAnimation';
-import { lottieRuntimeManager } from '../../../services/vectorAnimation/LottieRuntimeManager';
 import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { generateClipId } from '../helpers/idGenerator';
 
@@ -56,6 +55,7 @@ export interface LoadLottieMediaParams {
 
 export async function loadLottieMedia(params: LoadLottieMediaParams): Promise<void> {
   const { clip, file, mediaFileId, metadata, updateClip } = params;
+  const { lottieRuntimeManager } = await import('../../../services/vectorAnimation/LottieRuntimeManager');
   const runtime = await lottieRuntimeManager.prepareClipSource(clip, file);
   const resolvedMetadata = metadata ?? runtime.metadata;
   const naturalDuration = resolvedMetadata.duration ?? clip.duration;

@@ -3,7 +3,6 @@ import {
   DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
   type VectorAnimationMetadata,
 } from '../../../types/vectorAnimation';
-import { riveRuntimeManager } from '../../../services/vectorAnimation/RiveRuntimeManager';
 import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { generateClipId } from '../helpers/idGenerator';
 
@@ -56,6 +55,7 @@ export interface LoadRiveMediaParams {
 
 export async function loadRiveMedia(params: LoadRiveMediaParams): Promise<void> {
   const { clip, file, mediaFileId, metadata, updateClip } = params;
+  const { riveRuntimeManager } = await import('../../../services/vectorAnimation/RiveRuntimeManager');
   const runtime = await riveRuntimeManager.prepareClipSource(clip, file);
   const resolvedMetadata = metadata ?? runtime.metadata;
   const naturalDuration = resolvedMetadata.duration ?? clip.duration;

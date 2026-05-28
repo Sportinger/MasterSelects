@@ -13,11 +13,11 @@ FlashBoard is the AI generation runtime behind the Media Panel's bottom-right pr
 FlashBoard is not a separate model backend. It is a composer/runtime layer on top of the existing AI services:
 
 - `piapi` for the PiAPI catalog
-- `kieai` for Kie.ai Kling 3.0, Seedance 2.0, and Nano Banana 2
-- `cloud` for hosted Kling 3.0, hosted Nano Banana 2, and hosted ElevenLabs speech
-- `elevenlabs` for user-key text-to-speech audio generation
-- `suno` for Kie.ai-backed Suno music generation using the user's Kie.ai key
-- compact chat for prompt discussion and editor actions through OpenAI, Anthropic, or local Lemonade without creating a generation node; requests include the Media-chat system prompt, current timeline summary, and callable AI tools routed through the shared chat dispatcher
+- `kieai` for Kie.ai Kling 3.0, Seedance 2.0, Seedance 2.0 Fast, and Nano Banana 2
+- `cloud` for hosted Kling 3.0, hosted Seedance 2.0 / Fast, hosted Nano Banana 2, hosted ElevenLabs speech, and hosted Suno music
+- `elevenlabs` for development/BYO text-to-speech audio generation
+- `suno` for development/BYO Kie.ai-backed Suno music generation
+- compact chat for prompt discussion and editor actions through hosted OpenAI/Cloud in production, with Anthropic or local Lemonade still available only in non-production development; requests include the Media-chat system prompt, current timeline summary, and callable AI tools routed through the shared chat dispatcher
 
 The Media Panel generator tray offers two collapsed launch actions: `Generate` opens the normal generation prompt, while `Chat` opens a separate chat prompt window with provider/model/temperature controls and OpenAI reasoning effort for GPT-5.x models. If only an ElevenLabs key is configured, the generation composer starts on the audio text-to-speech target. If Kie.ai or hosted cloud access is also available, the generation composer can still switch between video, image, and audio targets. `Generate` remains the only action that queues media generation.
 
@@ -73,13 +73,15 @@ The composer uses the shared catalog from `FlashBoardModelCatalog`:
 
 - PiAPI video providers from the shared PiAPI catalog
 - Kie.ai Kling 3.0 video
-- Kie.ai Seedance 2.0 video with image, video, and audio references, including audio-driven lip-sync reference mode
+- Kie.ai Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references, including audio-driven lip-sync reference mode
 - Kie.ai Nano Banana 2 image generation
 - Cloud Kling 3.0 video
+- Cloud Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references
 - Cloud Nano Banana 2 image generation
 - Cloud ElevenLabs text-to-speech audio generation
+- Cloud Suno music generation
 - BYO ElevenLabs text-to-speech audio generation
-- Suno music generation via Kie.ai
+- BYO Suno music generation via Kie.ai in development
 
 The compact composer exposes the richer FlashBoard catalog.
 
@@ -93,11 +95,15 @@ The compact composer exposes the richer FlashBoard catalog.
 4. The Media Panel queue renders a preview card with status and elapsed time while the job is queued or processing.
 5. Jobs run with a concurrency cap of 3 overall, but only 1 Kie.ai job at a time.
 6. The selected video/image service submits the remote task and polls until completion.
-7. ElevenLabs audio jobs create speech directly and return an audio `File` without remote polling. BYO jobs call ElevenLabs from the browser with the user's local key; Cloud jobs call `/api/ai/audio` and spend hosted credits.
-8. Suno music jobs call Kie.ai's Suno endpoints, poll the task until a generated audio URL is available, then import the downloaded audio.
+7. ElevenLabs audio jobs create speech directly and return an audio `File` without remote polling. BYO development jobs call ElevenLabs from the browser with the user's local key; Cloud jobs call `/api/ai/audio` and spend hosted credits.
+8. Suno music jobs use Cloudflare `/api/ai/audio` in production, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, polls the task until a generated audio URL is available, then imports the downloaded audio. Non-production BYO jobs can still call Kie.ai with the local default key.
 9. On success, `FlashBoardMediaBridge` imports the asset into the Media Pool and marks the node complete.
 
-Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer also accepts media-panel image, video, and audio references through right-click or drag-and-drop; Kie.ai jobs upload local files through Kie.ai file hosting and map them to provider-specific inputs such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 uses `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
+Kie.ai Market video/image tasks are asynchronous. A successful create call only returns a `taskId`; FlashBoard polls `GET /api/v1/jobs/recordInfo?taskId=...` and maps Kie states such as `waiting`, `queuing`, `generating`, `success`, and `fail` into local job states. The local `canceled` state only means MasterSelects stopped tracking the node; Kie.ai does not currently expose a documented Market task cancel endpoint, so the Kie logs page and `recordInfo` response remain the server-side source of truth.
+
+Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer also accepts media-panel image, video, and audio references through right-click or drag-and-drop; Kie.ai and Cloud Seedance jobs upload local files through Kie.ai file hosting and map them to provider-specific inputs such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Both use `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
+
+The composer wand has Seedance-specific prompt-refiner guidance. When Seedance is selected it asks the refiner to write concise cinematic motion, camera, continuity, and final-state instructions; preserve explicit REF labels; and treat audio references as performance, speech, mouth-shape, rhythm, or timing drivers rather than background music. Seedance reference-to-video mode sends `generate_audio: false` because Kie.ai treats multimodal reference audio as an input driver, not the native audio-generation switch. The composer therefore hides the `Sound` toggle for Seedance while REF media is attached; the audio card itself controls the timing. Seedance audio references are only valid when paired with at least one visual IN/REF image or video anchor.
 
 ---
 
@@ -125,13 +131,14 @@ The prompt tray is Cloud-first by default:
 
 - signed-in users see hosted Cloud models and hosted credit prices by default
 - personal API-key providers stay hidden until the API-key settings section is unlocked with the internal shortcut
-- a personal key is only used when the key exists and that provider is marked `Use as default instead of Cloud credits`
+- production ignores personal provider keys for hosted AI generation/chat and uses Cloudflare secrets only
+- in development, a personal key is only used when the key exists and that provider is marked `Use as default instead of Cloud credits`
 - if no personal key is marked as default, matching Cloud models are selected and priced in MasterSelects credits
-- BYO-only providers such as PiAPI, EvoLink, BYO ElevenLabs, and Suno are only exposed when their backing personal key is enabled as default
+- BYO-only providers such as PiAPI, EvoLink, BYO ElevenLabs, and BYO Suno are only exposed in development when their backing personal key is enabled as default
 
 Hosted generation requests are credit-backed and authenticated. There is no anonymous hosted generation path.
 Hosted ElevenLabs speech is metered by text length. The client shows a preflight credit estimate from the selected text/model, and the Cloudflare route finalizes the charge from the ElevenLabs `x-character-count` response header when available.
-Suno currently uses a Kie.ai key marked as default rather than a separate Suno key or hosted credit route.
+Hosted Suno music uses the Cloudflare `KIEAI_API_KEY` secret and is charged as MasterSelects credits through `/api/ai/audio`. Compact hosted chat shows the per-model-round credit estimate; tool follow-up model rounds are charged separately.
 
 ---
 

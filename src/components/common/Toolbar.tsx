@@ -54,7 +54,6 @@ const VIEW_CORE_PANEL_TYPE_ORDER: PanelType[] = [
   'media',
   'export',
   'midi-mapping',
-  'download',
 ];
 const VIEW_CORE_PANEL_TYPES = VIEW_CORE_PANEL_TYPE_ORDER.filter((type) => (
   !VIEW_HIDDEN_PANEL_TYPES.has(type)

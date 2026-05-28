@@ -41,6 +41,8 @@ import './AIVideoPanel.css';
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
 const AI_GENERATIVE_BOARD_SERVICES: Array<'cloud' | 'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = ['cloud', 'kieai', 'evolink', 'elevenlabs', 'suno'];
+const KIEAI_FIRST_LAST_FRAME_PROVIDER_IDS = new Set(['kling', 'kling-3.0', 'bytedance/seedance-2', 'bytedance/seedance-2-fast']);
+const KIEAI_GENERATED_AUDIO_PROVIDER_IDS = new Set(['kling', 'kling-3.0', 'bytedance/seedance-2', 'bytedance/seedance-2-fast']);
 
 interface FlashBoardErrorBoundaryProps {
   children: ReactNode;
@@ -175,6 +177,12 @@ function formatElapsed(startDate: Date): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+function formatProviderModeLabel(mode: string): string {
+  if (mode === 'std') return 'Standard';
+  if (mode === 'pro') return 'Professional';
+  return mode;
+}
+
 // Live timer component that updates every second
 function JobTimer({ startDate }: { startDate: Date }) {
   const [, setTick] = useState(0);
@@ -253,6 +261,8 @@ export function AIVideoPanel() {
 
   // Get current aspect ratio dimensions
   const aspectDimensions = useMemo(() => getAspectRatioDimensions(aspectRatio), [aspectRatio]);
+  const supportsEndFrameInput = KIEAI_FIRST_LAST_FRAME_PROVIDER_IDS.has(selectedProvider);
+  const supportsGeneratedAudio = KIEAI_GENERATED_AUDIO_PROVIDER_IDS.has(selectedProvider);
 
   // Timeline integration options
   const [addToTimeline, setAddToTimeline] = useState(true);
@@ -933,7 +943,7 @@ export function AIVideoPanel() {
                   onDrop={handleStartDrop}
                   onUseCurrentFrame={useCurrentFrameStart}
                 />
-                {(selectedProvider === 'kling' || selectedProvider === 'kling-3.0') && (
+                {supportsEndFrameInput && (
                   <ImageCropper
                     label="End Frame (optional)"
                     imageUrl={endImagePreview}
@@ -1019,7 +1029,7 @@ export function AIVideoPanel() {
                   disabled={isGenerating}
                 >
                   {currentProvider.supportedModes.map(m => (
-                    <option key={m} value={m}>{m === 'std' ? 'Standard' : 'Professional'}</option>
+                    <option key={m} value={m}>{formatProviderModeLabel(m)}</option>
                   ))}
                 </select>
               </div>
@@ -1029,7 +1039,7 @@ export function AIVideoPanel() {
 
           {/* Audio + Timeline Options */}
           <div className="generation-options">
-            {(selectedProvider === 'kling' || selectedProvider === 'kling-3.0') && (
+            {supportsGeneratedAudio && (
               <label className="timeline-option">
                 <input
                   type="checkbox"

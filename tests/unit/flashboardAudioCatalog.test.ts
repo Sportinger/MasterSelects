@@ -70,6 +70,71 @@ describe('FlashBoard audio catalog contract', () => {
     ).toBeNull();
   });
 
+  it('exposes Kie.ai Seedance 2.0 Fast as a video provider with current Kie credit estimates', () => {
+    const entry = getCatalogEntries().find((candidate) => candidate.providerId === 'bytedance/seedance-2-fast');
+    const cloudEntry = getCatalogEntries().find((candidate) => (
+      candidate.service === 'cloud' && candidate.providerId === 'bytedance/seedance-2-fast'
+    ));
+
+    expect(entry).toMatchObject({
+      service: 'kieai',
+      providerId: 'bytedance/seedance-2-fast',
+      outputType: 'video',
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsGenerateAudio: true,
+      modes: ['480p', '720p'],
+      maxReferenceMedia: 8,
+    });
+    expect(cloudEntry).toMatchObject({
+      service: 'cloud',
+      providerId: 'bytedance/seedance-2-fast',
+      outputType: 'video',
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsGenerateAudio: true,
+      modes: ['480p', '720p'],
+    });
+
+    expect(
+      getFlashBoardPriceEstimate({
+        duration: 10,
+        mode: '720p',
+        outputType: 'video',
+        providerId: 'bytedance/seedance-2-fast',
+        service: 'kieai',
+      })?.fullLabel,
+    ).toBe('330 Kie credits');
+
+    expect(
+      getFlashBoardPriceEstimate({
+        duration: 10,
+        hasVideoInput: true,
+        mode: '720p',
+        outputType: 'video',
+        providerId: 'bytedance/seedance-2-fast',
+        service: 'kieai',
+      })?.fullLabel,
+    ).toBe('200 Kie credits');
+  });
+
+  it('exposes hosted Suno music as a Cloud audio provider', () => {
+    const entry = getCatalogEntries().find((candidate) => (
+      candidate.service === 'cloud' && candidate.providerId === 'suno-music'
+    ));
+
+    expect(entry).toMatchObject({
+      service: 'cloud',
+      providerId: 'suno-music',
+      outputType: 'audio',
+      supportsTextToAudio: true,
+      supportsTextToVideo: false,
+      supportsImageToVideo: false,
+      supportsTextToImage: false,
+      versions: ['V5', 'V4_5PLUS', 'V4_5', 'V4'],
+    });
+  });
+
   it('creates default audio composer settings for every reset path', () => {
     expect(createDefaultFlashBoardComposer()).toMatchObject({
       languageOverride: false,

@@ -20,6 +20,7 @@ import type { AudioTransientRange } from '../../../services/audio/audioTransient
 const OPERATION_LABELS: Record<ClipAudioEditOperation['type'], string> = {
   trim: 'Trim',
   cut: 'Cut',
+  gain: 'Gain',
   silence: 'Silence',
   copy: 'Copy',
   paste: 'Paste',
@@ -31,6 +32,7 @@ const OPERATION_LABELS: Record<ClipAudioEditOperation['type'], string> = {
   'mono-sum': 'Mono Sum',
   'split-stereo': 'Split Stereo',
   repair: 'Repair',
+  effect: 'Region FX',
   'room-tone-fill': 'Room Tone Fill',
   'spectral-mask': 'Spectral Mask',
   'spectral-resynthesis': 'Spectral Resynthesis',
@@ -215,6 +217,7 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   const detectClipTransientRanges = useTimelineStore(state => state.detectClipTransientRanges);
   const applyDetectedTransientSoftening = useTimelineStore(state => state.applyDetectedTransientSoftening);
   const bakeClipAudioEditStack = useTimelineStore(state => state.bakeClipAudioEditStack);
+  const unbakeClipAudioEditStack = useTimelineStore(state => state.unbakeClipAudioEditStack);
   const updateClipSpectralImageLayer = useTimelineStore(state => state.updateClipSpectralImageLayer);
   const removeClipSpectralImageLayer = useTimelineStore(state => state.removeClipSpectralImageLayer);
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
@@ -252,6 +255,7 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
   );
   const spectralLayers = clip?.audioState?.spectralLayers ?? [];
   const bakeHistory = clip?.audioState?.bakeHistory ?? [];
+  const canUnbake = Boolean(bakeHistory.at(-1)?.restore);
   const activeOperationCount = editStack.filter(operation => operation.enabled !== false).length;
   const activeSpectralLayerCount = spectralLayers.filter(layer => layer.enabled !== false).length;
   const selectedOperation = editStack.find(operation => operation.id === selectedOperationId) ?? editStack[0] ?? null;
@@ -508,6 +512,13 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
     }
   };
 
+  const handleUnbake = () => {
+    if (baking || !canUnbake) return;
+    stopEditPreview();
+    stopRepairPreview();
+    unbakeClipAudioEditStack(clip.id);
+  };
+
   const handleApplyRepairSuggestion = (suggestion: AudioRepairSuggestion) => {
     if (repairPreview?.suggestionId === suggestion.id) {
       stopRepairPreview();
@@ -713,6 +724,9 @@ export function AudioEditStackTab({ clipId }: AudioEditStackTabProps) {
           </button>
           <button className="btn btn-sm" onClick={handleBake} disabled={baking || activeOperationCount === 0}>
             {baking ? 'Baking...' : 'Bake'}
+          </button>
+          <button className="btn btn-sm" onClick={handleUnbake} disabled={baking || !canUnbake}>
+            Unbake
           </button>
           <button className="btn btn-sm" onClick={handleClearEditStack} disabled={editStack.length === 0}>
             Clear

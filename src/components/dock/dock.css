@@ -26,12 +26,7 @@
 }
 
 .dock-container.layout-switch-animating .dock-split-child {
-  transition:
-    width 500ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 500ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-width 500ms cubic-bezier(0.22, 1, 0.36, 1),
-    min-height 500ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 360ms ease;
+  transition: opacity 180ms ease-in-out;
 }
 
 .dock-container.layout-switch-animating .dock-tab-pane,
@@ -40,27 +35,60 @@
   will-change: transform, opacity;
 }
 
-.dock-layout-transition-ghost {
+.dock-container.layout-switch-animating .timeline-track-section,
+.dock-container.layout-switch-animating .track-header,
+.dock-container.layout-switch-animating .track-header-top,
+.dock-container.layout-switch-animating .track-lane,
+.dock-container.layout-switch-animating .track-clip-row {
+  transition: none !important;
+}
+
+.dock-layout-transition-overlay {
   position: absolute;
-  z-index: 9000;
-  display: flex;
-  align-items: flex-start;
+  inset: 0;
+  z-index: 8500;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.dock-layout-transition-clone {
+  position: absolute !important;
+  box-sizing: border-box;
+  contain: layout paint style;
+  margin: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
   min-width: 0;
   min-height: 0;
-  padding: 8px 10px;
   overflow: hidden;
-  border: 1px solid rgba(92, 153, 255, 0.32);
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%),
-    var(--bg-secondary);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
-  color: var(--text-secondary);
-  font-size: var(--font-xs);
   pointer-events: none;
-  text-overflow: ellipsis;
+  transform: none !important;
   transform-origin: top left;
-  white-space: nowrap;
+  will-change: left, top, width, height;
+}
+
+.dock-layout-transition-clone--has-child-overlays [data-dock-layout-child-anim-id] {
+  visibility: hidden !important;
+}
+
+.dock-layout-child-transition-clone {
+  position: absolute !important;
+  box-sizing: border-box;
+  contain: layout paint style;
+  margin: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: none !important;
+  transform-origin: top left;
+  will-change: left, top, width, height;
+}
+
+.dock-layout-child-transition-clone [data-dock-layout-child-anim-id] {
+  visibility: hidden !important;
 }
 
 .dock-root {

@@ -30,6 +30,7 @@ export function getCatalogEntries(): CatalogEntry[] {
 
   for (const p of getKieAiProviders()) {
     const isImageOnly = !p.supportsTextToVideo && !p.supportsImageToVideo;
+    const isSeedance2 = p.id === 'bytedance/seedance-2' || p.id === 'bytedance/seedance-2-fast';
     entries.push({
       service: 'kieai',
       providerId: p.id,
@@ -41,9 +42,9 @@ export function getCatalogEntries(): CatalogEntry[] {
       aspectRatios: p.supportedAspectRatios,
       supportsTextToVideo: p.supportsTextToVideo,
       supportsImageToVideo: p.supportsImageToVideo,
-      supportsGenerateAudio: p.id === 'kling-3.0' || p.id === 'bytedance/seedance-2',
+      supportsGenerateAudio: p.id === 'kling-3.0' || isSeedance2,
       supportsMultiShot: p.id === 'kling-3.0',
-      maxReferenceMedia: p.id === 'kling-3.0' ? 3 : p.id === 'bytedance/seedance-2' ? 8 : undefined,
+      maxReferenceMedia: p.id === 'kling-3.0' ? 3 : isSeedance2 ? 8 : undefined,
       ...(isImageOnly ? { supportsTextToImage: true, outputType: 'image' as const } : { outputType: 'video' as const }),
     });
   }
@@ -144,6 +145,24 @@ export function getCatalogEntries(): CatalogEntry[] {
 
   entries.push({
     service: 'cloud',
+    providerId: SUNO_PROVIDER_ID,
+    name: 'Suno (Cloud)',
+    description: 'Hosted text-to-music generation via MasterSelects Cloud credits',
+    versions: [DEFAULT_SUNO_MODEL_ID, ...SUNO_MODEL_IDS.filter((model) => model !== DEFAULT_SUNO_MODEL_ID)],
+    modes: [],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: false,
+    supportsTextToAudio: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    outputType: 'audio',
+  });
+
+  entries.push({
+    service: 'cloud',
     providerId: 'cloud-kling',
     name: 'Kling (Cloud)',
     description: 'Hosted Kling via MasterSelects Cloud',
@@ -156,6 +175,40 @@ export function getCatalogEntries(): CatalogEntry[] {
     supportsGenerateAudio: true,
     supportsMultiShot: true,
     maxReferenceMedia: 3,
+    outputType: 'video',
+  });
+
+  entries.push({
+    service: 'cloud',
+    providerId: 'bytedance/seedance-2',
+    name: 'Seedance 2.0 (Cloud)',
+    description: 'Hosted Seedance 2.0 via MasterSelects Cloud',
+    versions: ['latest'],
+    modes: ['480p', '720p', '1080p'],
+    durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+    supportsTextToVideo: true,
+    supportsImageToVideo: true,
+    supportsGenerateAudio: true,
+    supportsMultiShot: false,
+    maxReferenceMedia: 8,
+    outputType: 'video',
+  });
+
+  entries.push({
+    service: 'cloud',
+    providerId: 'bytedance/seedance-2-fast',
+    name: 'Seedance 2.0 Fast (Cloud)',
+    description: 'Hosted Seedance 2.0 Fast via MasterSelects Cloud',
+    versions: ['latest'],
+    modes: ['480p', '720p'],
+    durations: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+    aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'],
+    supportsTextToVideo: true,
+    supportsImageToVideo: true,
+    supportsGenerateAudio: true,
+    supportsMultiShot: false,
+    maxReferenceMedia: 8,
     outputType: 'video',
   });
 

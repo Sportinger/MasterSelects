@@ -136,6 +136,7 @@ describe('scrub audio sync', () => {
     vi.runOnlyPendingTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    useTimelineStore.setState({ audioRegionGainPreview: null });
   });
 
   it('applies clip volume during fallback scrub playback instead of a fixed default', () => {
@@ -442,5 +443,69 @@ describe('scrub audio sync', () => {
 
     expect(syncAudioElement).not.toHaveBeenCalled();
     cacheStub.restore();
+  });
+
+  it('applies live region gain preview to normal audio-track playback', () => {
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerTestAccess;
+    const syncAudioElement = vi.fn();
+    manager.audioSyncHandler = { syncAudioElement, stopScrubAudio: vi.fn() };
+
+    const audioElement = {
+      paused: true,
+      src: 'blob:audio-src',
+      readyState: 4,
+    } as unknown as HTMLAudioElement;
+    const audioClip = makeClip({
+      id: 'audio-1',
+      trackId: 'audio-track',
+      source: { type: 'audio', audioElement },
+      audioState: {
+        editStack: [{
+          id: 'old-gain',
+          type: 'gain',
+          enabled: true,
+          params: { gainDb: -3, fadeInSeconds: 0, fadeOutSeconds: 0 },
+          timeRange: { start: 0, end: 10 },
+          createdAt: 1,
+        }],
+      },
+    });
+
+    useTimelineStore.setState({
+      audioRegionGainPreview: {
+        clipId: 'audio-1',
+        trackId: 'audio-track',
+        sourceInPoint: 0,
+        sourceOutPoint: 10,
+        gainDb: -12,
+        fadeInSeconds: 0,
+        fadeOutSeconds: 0,
+      },
+    });
+
+    const ctx = makeFrameContext({
+      clips: [audioClip],
+      clipsAtTime: [audioClip],
+      audioTracks: [{ id: 'audio-track', type: 'audio', muted: false }],
+      unmutedAudioTrackIds: new Set(['audio-track']),
+      isDraggingPlayhead: false,
+      isPlaying: true,
+      playheadPosition: 5,
+      frameNumber: 150,
+    });
+
+    manager.syncAudioTrackClips(
+      ctx,
+      { audioPlayingCount: 0, maxAudioDrift: 0, hasAudioError: false, masterSet: false }
+    );
+
+    expect(syncAudioElement).toHaveBeenCalledOnce();
+    const [target, passedCtx] = syncAudioElement.mock.calls[0];
+    expect(target).toEqual(expect.objectContaining({
+      element: audioElement,
+      clip: audioClip,
+    }));
+    expect(target.volume).toBeCloseTo(10 ** (-12 / 20), 4);
+    expect(passedCtx).toBe(ctx);
   });
 });

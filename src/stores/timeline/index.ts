@@ -20,6 +20,7 @@ import { createColorCorrectionSlice } from './colorCorrectionSlice';
 import { createLinkedGroupSlice } from './linkedGroupSlice';
 import { createDownloadClipSlice } from './downloadClipSlice';
 import { createAudioEditSlice } from './audioEditSlice';
+import { createVideoBakeSlice } from './videoBakeSlice';
 import { createToolSlice, getDefaultLastTimelineToolByGroup } from './toolSlice';
 import { createTimelineEditOperationSlice } from './editOperations';
 import { createPlaybackSlice } from './playbackSlice';
@@ -75,6 +76,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
     const audioEditActions = createAudioEditSlice(set, get);
+    const videoBakeActions = createVideoBakeSlice(set, get);
     const toolActions = createToolSlice(set, get);
     const timelineEditOperationActions = createTimelineEditOperationSlice(set, get);
     const playbackActions = createPlaybackSlice(set, get);
@@ -209,8 +211,12 @@ export const useTimelineStore = create<TimelineStore>()(
       audioFocusMode: false,
       trackFocusMode: 'balanced' as const,
       audioRegionSelection: null,
+      videoBakeRegionSelection: null,
+      videoBakeRegions: [] as import('../../types').VideoBakeRegion[],
+      audioRegionGainPreview: null,
       audioSpectralRegionSelection: null,
       audioRegionClipboard: null,
+      showAudioRegionEditMarkers: true,
       showTranscriptMarkers: true,
 
       // Keyframe animation state
@@ -346,6 +352,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...linkedGroupActions,
       ...downloadClipActions,
       ...audioEditActions,
+      ...videoBakeActions,
       ...toolActions,
       ...timelineEditOperationActions,
       ...playbackActions,

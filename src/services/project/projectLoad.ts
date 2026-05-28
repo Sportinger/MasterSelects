@@ -658,6 +658,7 @@ function convertProjectCompositionToStore(
         thumbnails: c.thumbnails,
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,
+        videoState: c.videoState ? structuredClone(c.videoState) : undefined,
         audioState: c.audioState ? structuredClone(c.audioState) : undefined,
         waveform: c.waveform,
         waveformChannels: c.waveformChannels,
@@ -770,6 +771,7 @@ function convertProjectCompositionToStore(
       inPoint: viewState?.inPoint ?? null,
       outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
+      videoBakeRegions: pc.videoBakeRegions ? structuredClone(pc.videoBakeRegions) : undefined,
       masterAudioState: pc.masterAudioState ? structuredClone(pc.masterAudioState) : undefined,
       markers: (pc.markers || []).map((marker) => ({
         id: marker.id,

@@ -7,6 +7,11 @@ const elevenLabsMock = vi.hoisted(() => ({
   createSpeech: vi.fn(),
 }));
 
+const cloudAiMock = vi.hoisted(() => ({
+  createSunoMusic: vi.fn(),
+  pollSunoMusicTaskUntilComplete: vi.fn(),
+}));
+
 vi.mock('../../src/services/elevenLabsService', () => ({
   DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT: 'mp3_44100_128',
   ELEVENLABS_MP3_MIME_TYPE: 'audio/mpeg',
@@ -14,6 +19,10 @@ vi.mock('../../src/services/elevenLabsService', () => ({
   isElevenLabsMp3OutputFormat: (value: string) => (
     ['mp3_44100_128', 'mp3_44100_192', 'mp3_22050_32'].includes(value)
   ),
+}));
+
+vi.mock('../../src/services/cloudAiService', () => ({
+  cloudAiService: cloudAiMock,
 }));
 
 describe('FlashBoardJobService ElevenLabs audio jobs', () => {
@@ -37,6 +46,8 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     } as ReturnType<typeof useSettingsStore.getState>);
     elevenLabsMock.setApiKey.mockClear();
     elevenLabsMock.createSpeech.mockReset();
+    cloudAiMock.createSunoMusic.mockReset();
+    cloudAiMock.pollSunoMusicTaskUntilComplete.mockReset();
   });
 
   it('returns a durable audio File completion for ElevenLabs speech', async () => {
@@ -94,5 +105,58 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     expect(update.assetFile).toBeInstanceOf(File);
     expect(update.assetFile?.type).toBe('audio/mpeg');
     expect(update.assetFile?.name).toMatch(/^ai_voice_narrator_hello_from_the_board_\d+\.mp3$/);
+  });
+
+  it('routes Suno music through hosted Cloud AI when Kie.ai BYO is not enabled', async () => {
+    cloudAiMock.createSunoMusic.mockResolvedValue('suno-task-1');
+    cloudAiMock.pollSunoMusicTaskUntilComplete.mockResolvedValue({
+      createdAt: new Date(),
+      id: 'suno-task-1',
+      progress: 1,
+      results: [{ audioUrl: 'https://cdn.example.com/song.mp3' }],
+      status: 'completed',
+    });
+
+    const completed = new Promise<Parameters<Parameters<typeof flashBoardJobService.setUpdateCallback>[0]>[1]>((resolve, reject) => {
+      flashBoardJobService.setUpdateCallback((_nodeId, update) => {
+        if (update.status === 'completed') {
+          resolve(update);
+        }
+        if (update.status === 'failed') {
+          reject(new Error(update.error));
+        }
+      });
+    });
+
+    flashBoardJobService.submit({
+      nodeId: 'node-suno',
+      request: {
+        service: 'suno',
+        providerId: 'suno-music',
+        version: 'V5',
+        outputType: 'audio',
+        prompt: 'A minimal synthwave intro',
+        sunoCustomMode: false,
+        sunoInstrumental: true,
+        referenceMediaFileIds: [],
+      },
+    });
+
+    const update = await completed;
+
+    expect(cloudAiMock.createSunoMusic).toHaveBeenCalledWith(expect.objectContaining({
+      instrumental: true,
+      model: 'V5',
+      prompt: 'A minimal synthwave intro',
+    }), expect.stringMatching(/^flashboard-suno:node-suno:/), expect.any(AbortSignal));
+    expect(cloudAiMock.pollSunoMusicTaskUntilComplete).toHaveBeenCalledWith(
+      'suno-task-1',
+      expect.any(Function),
+      10000,
+      900000,
+      expect.any(AbortSignal),
+    );
+    expect(update.mediaType).toBe('audio');
+    expect(update.assetUrl).toBe('https://cdn.example.com/song.mp3');
   });
 });

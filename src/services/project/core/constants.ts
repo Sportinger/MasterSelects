@@ -2,6 +2,7 @@
 
 export const PROJECT_FOLDERS = {
   RAW: 'Raw',
+  RAW_BAKED_AUDIO: 'Raw/Baked Audio',
   PROXY: 'Proxy',
   ANALYSIS: 'Analysis',
   TRANSCRIPTS: 'Transcripts',
@@ -23,6 +24,7 @@ export const MAX_BACKUPS = 20;
 // All folders to create when initializing a project
 export const PROJECT_FOLDER_PATHS = [
   PROJECT_FOLDERS.RAW,
+  PROJECT_FOLDERS.RAW_BAKED_AUDIO,
   PROJECT_FOLDERS.PROXY,
   PROJECT_FOLDERS.ANALYSIS,
   PROJECT_FOLDERS.TRANSCRIPTS,

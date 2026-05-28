@@ -8,7 +8,7 @@ declare const __SHOW_CHANGELOG__: boolean;
 const SHOW_CHANGELOG = typeof __SHOW_CHANGELOG__ !== 'undefined' ? __SHOW_CHANGELOG__ : true;
 
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
-import { Toolbar } from './components';
+import { Toolbar } from './components/common/Toolbar';
 import { DockContainer } from './components/dock';
 import { AccountDialog } from './components/common/AccountDialog';
 import { AuthDialog } from './components/common/AuthDialog';

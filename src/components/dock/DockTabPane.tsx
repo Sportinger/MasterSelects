@@ -649,6 +649,8 @@ export function DockTabPane({ group }: DockTabPaneProps) {
                 title={tabTooltip}
                 data-guided-panel-tab={panel.type}
                 data-guided-target={`panel-tab:${panel.type}`}
+                data-dock-layout-anim-id={`panel:${panel.id}`}
+                data-dock-layout-anim-title={panel.title}
               >
                 <span className="dock-tab-title">{tabTitle}{WIP_PANEL_TYPES.includes(panel.type) && <span className="menu-wip-badge">🐛</span>}</span>
               </div>

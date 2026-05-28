@@ -37,9 +37,11 @@ import {
 } from '../projectFileService';
 import { toProjectTransform } from './transformSerialization';
 import type {
+  ClipVideoState,
   SerializableClip,
   SerializableMarker,
   TimelineClip,
+  VideoBakeRegion,
 } from '../../types';
 import type {
   ProjectMediaBoardGroupOffsets,
@@ -66,6 +68,23 @@ type ProjectSaveClip = SerializableClip & {
 type ProjectSaveTrack = NonNullable<Composition['timelineData']>['tracks'][number] & {
   locked?: boolean;
 };
+
+function serializeProjectVideoBakeRegion(region: VideoBakeRegion): VideoBakeRegion {
+  const clone = structuredClone(region);
+  delete clone.bakedAt;
+  delete clone.error;
+  delete clone.progress;
+  clone.status = 'marked';
+  return clone;
+}
+
+function serializeProjectClipVideoState(videoState: ClipVideoState | undefined): ClipVideoState | undefined {
+  if (!videoState) return undefined;
+  return {
+    ...structuredClone(videoState),
+    bakeRegions: videoState.bakeRegions?.map(serializeProjectVideoBakeRegion),
+  };
+}
 
 export function isProjectStoreSyncInProgress(): boolean {
   return projectStoreSyncDepth > 0;
@@ -206,6 +225,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       thumbnails: c.thumbnails,
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,
+      videoState: serializeProjectClipVideoState(c.videoState),
       waveform: c.waveform,
       waveformChannels: c.waveformChannels,
       audioState: c.audioState ? structuredClone(c.audioState) : undefined,
@@ -306,6 +326,9 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       labelColor: comp.labelColor && comp.labelColor !== 'none' ? comp.labelColor : undefined,
       tracks,
       clips,
+      videoBakeRegions: timelineData?.videoBakeRegions
+        ? timelineData.videoBakeRegions.map(serializeProjectVideoBakeRegion)
+        : undefined,
       masterAudioState: timelineData?.masterAudioState
         ? structuredClone(timelineData.masterAudioState)
         : undefined,

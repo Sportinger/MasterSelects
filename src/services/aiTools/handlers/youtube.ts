@@ -42,7 +42,7 @@ interface YouTubeErrorResponse {
   error?: { message?: string };
 }
 
-// --- Helpers (replicated from DownloadPanel) ---
+// --- Helpers (shared with the Media downloads workflow) ---
 
 function parseISO8601Duration(duration: string): number {
   const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
@@ -126,7 +126,7 @@ export async function handleSearchYouTube(args: Record<string, unknown>): Promis
       };
     });
 
-    // Add results to YouTube store (appears in Downloads panel)
+    // Add results to the legacy YouTube store for project persistence and download tools.
     useYouTubeStore.getState().addVideos(videos);
     useYouTubeStore.getState().setLastQuery(query);
 

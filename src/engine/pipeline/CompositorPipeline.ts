@@ -474,8 +474,10 @@ export class CompositorPipeline {
   private layerUniformBuffers: Map<string, GPUBuffer> = new Map();
 
   // Bind group cache for static textures (images)
-  // Key format: "layerId:baseViewLabel:layerViewLabel:maskViewLabel"
+  // Key format: "layerId:baseViewId:layerViewId:maskViewId"
   private bindGroupCache: Map<string, GPUBindGroup> = new Map();
+  private textureViewIds = new WeakMap<GPUTextureView, number>();
+  private nextTextureViewId = 1;
 
   // Frame-scoped cache for external texture bind groups (cleared each frame)
   // Avoids creating duplicate bind groups for same video rendered to multiple outputs
@@ -765,7 +767,13 @@ export class CompositorPipeline {
   ): GPUBindGroup {
     // Try to use cache for static textures (images)
     if (layerId !== undefined && isPingBase !== undefined) {
-      const cacheKey = `${layerId}:${isPingBase ? 'ping' : 'pong'}`;
+      const cacheKey = [
+        layerId,
+        isPingBase ? 'ping' : 'pong',
+        this.getTextureViewId(baseView),
+        this.getTextureViewId(layerView),
+        this.getTextureViewId(maskTextureView),
+      ].join(':');
       let bindGroup = this.bindGroupCache.get(cacheKey);
       if (!bindGroup) {
         bindGroup = this.device.createBindGroup({
@@ -794,6 +802,15 @@ export class CompositorPipeline {
         { binding: 4, resource: maskTextureView },
       ],
     });
+  }
+
+  private getTextureViewId(view: GPUTextureView): number {
+    let id = this.textureViewIds.get(view);
+    if (id === undefined) {
+      id = this.nextTextureViewId++;
+      this.textureViewIds.set(view, id);
+    }
+    return id;
   }
 
   // Create bind group for external video textures (with frame-scoped caching)

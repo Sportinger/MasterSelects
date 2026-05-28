@@ -61,6 +61,14 @@ export class RenderLoop {
     this.callbacks = callbacks;
   }
 
+  setRenderCallback(onRender: () => void): void {
+    this.callbacks.onRender = onRender;
+  }
+
+  getIsRunning(): boolean {
+    return this.isRunning;
+  }
+
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
@@ -86,7 +94,7 @@ export class RenderLoop {
         log.info('Idle suppression lifted (warmup timeout)');
       }
 
-      if (this.continuousRender) {
+      if (this.continuousRender || this.isPlaying || this.isScrubbing) {
         this.isIdle = false;
         this.lastActivityTime = timestamp;
       } else if (!this.idleSuppressed) {

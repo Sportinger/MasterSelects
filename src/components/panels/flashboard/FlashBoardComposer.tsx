@@ -47,8 +47,13 @@ import {
 import { getCatalogEntries } from '../../../services/flashboard/FlashBoardModelCatalog';
 import { getCatalogEntryPriceEstimate, getFlashBoardPriceEstimate } from '../../../services/flashboard/FlashBoardPricing';
 import {
+  getSeedanceReferenceValidationError,
+  isSeedance2ProviderId,
+} from '../../../services/flashboard/seedanceReferenceRules';
+import {
   FLASHBOARD_PROMPT_REFINER_MODEL,
   parseSunoPromptRefinement,
+  refineFlashBoardPromptHosted,
   streamRefineFlashBoardPrompt,
 } from '../../../services/flashboard/FlashBoardPromptRefiner';
 import {
@@ -58,6 +63,7 @@ import {
   DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT,
   FLASHBOARD_CHAT_MODEL_OPTIONS,
   FLASHBOARD_CHAT_PROVIDERS,
+  getFlashBoardChatCreditLabel,
   getOpenAiReasoningEffortOptions,
   isOpenAiReasoningEffortSupported,
   sendFlashBoardChatMessage,
@@ -295,7 +301,7 @@ function getProviderDisplayName(entry: CatalogEntry): string {
     return 'ElevenLabs Speech';
   }
 
-  if (entry.service === 'suno') {
+  if (entry.service === 'suno' || entry.providerId === SUNO_PROVIDER_ID) {
     return 'Suno Music';
   }
 
@@ -598,6 +604,7 @@ export function FlashBoardComposer({
   const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && kieAiApiKey.trim());
   const useEvolinkKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.evolink && evolinkApiKey.trim());
   const useElevenLabsKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.elevenlabs && elevenLabsApiKey.trim());
+  const useHostedProductionProviders = import.meta.env.PROD;
   const hasOpenAiKey = useOpenAiKeyByDefault;
   const hasAnthropicKey = useAnthropicKeyByDefault;
   const hasKieAiKey = useKieAiKeyByDefault;
@@ -609,6 +616,8 @@ export function FlashBoardComposer({
   const openPricingDialog = useAccountStore((s) => s.openPricingDialog);
   const hasHostedSession = accountSession?.authenticated === true;
   const hasHostedAudioAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
+  const canUseHostedPromptRefiner = Boolean(accountSession?.authenticated && hostedAIEnabled);
+  const canUseByoPromptRefiner = !useHostedProductionProviders && hasOpenAiKey;
 
   const catalog = useMemo(() => getCatalogEntries(), []);
   const cloudFallbackAllowed = !serviceScope && (!allowedServices?.length || allowedServices.includes('cloud'));
@@ -627,13 +636,25 @@ export function FlashBoardComposer({
         if (!hasHostedSession) {
           return false;
         }
-        if ((entry.providerId === 'cloud-kling' || entry.providerId === 'nano-banana-2') && useKieAiKeyByDefault) {
+        if (
+          !useHostedProductionProviders
+          && (
+            entry.providerId === 'cloud-kling'
+            || entry.providerId === 'nano-banana-2'
+            || entry.providerId === 'bytedance/seedance-2'
+            || entry.providerId === 'bytedance/seedance-2-fast'
+          )
+          && useKieAiKeyByDefault
+        ) {
           return false;
         }
-        if (entry.providerId === 'cloud-elevenlabs-tts' && useElevenLabsKeyByDefault) {
+        if (!useHostedProductionProviders && entry.providerId === 'cloud-elevenlabs-tts' && useElevenLabsKeyByDefault) {
           return false;
         }
         return true;
+      }
+      if (useHostedProductionProviders) {
+        return false;
       }
       if (entry.service === 'piapi') {
         return usePiApiKeyByDefault;
@@ -657,6 +678,7 @@ export function FlashBoardComposer({
       catalog,
       hasHostedSession,
       serviceScope,
+      useHostedProductionProviders,
       useElevenLabsKeyByDefault,
       useEvolinkKeyByDefault,
       useKieAiKeyByDefault,
@@ -831,7 +853,30 @@ export function FlashBoardComposer({
     || sunoWeirdnessConstraint !== DEFAULT_SUNO_WEIRDNESS_CONSTRAINT
     || sunoAudioWeight !== DEFAULT_SUNO_AUDIO_WEIGHT
     || sunoVocalGender !== '';
-  const supportsAudio = !isAudioMode && selectedEntry?.supportsGenerateAudio === true;
+  const hasSeedanceAudioReferenceInput = useMemo(
+    () => (composer.referenceMediaFileIds ?? []).some((mediaFileId) => (
+      mediaFiles.find((file) => file.id === mediaFileId)?.type === 'audio'
+    )),
+    [composer.referenceMediaFileIds, mediaFiles],
+  );
+  const hasSeedanceVisualReferenceInput = useMemo(
+    () => Boolean(composer.startMediaFileId || composer.endMediaFileId)
+      || (composer.referenceMediaFileIds ?? []).some((mediaFileId) => {
+        const mediaType = mediaFiles.find((file) => file.id === mediaFileId)?.type;
+        return mediaType === 'image' || mediaType === 'video';
+      }),
+    [composer.endMediaFileId, composer.referenceMediaFileIds, composer.startMediaFileId, mediaFiles],
+  );
+  const seedanceReferenceModeActive = isSeedance2ProviderId(providerId)
+    && (composer.referenceMediaFileIds ?? []).length > 0;
+  const seedanceReferenceValidationError = getSeedanceReferenceValidationError({
+    hasAudioReference: hasSeedanceAudioReferenceInput,
+    hasVisualReference: hasSeedanceVisualReferenceInput,
+    providerId,
+  });
+  const supportsAudio = !isAudioMode
+    && selectedEntry?.supportsGenerateAudio === true
+    && !seedanceReferenceModeActive;
   const supportsMultiShot = !isAudioMode && selectedEntry?.supportsMultiShot === true;
   const normalizedMultiPrompt = useMemo(
     () => rebalanceMultiPrompts(multiPrompt, duration),
@@ -891,7 +936,25 @@ export function FlashBoardComposer({
     () => (chatReasoningSupported ? getOpenAiReasoningEffortOptions(activeChatModelId) : []),
     [activeChatModelId, chatReasoningSupported],
   );
-  const chatProviderLabel = FLASHBOARD_CHAT_PROVIDERS.find((provider) => provider.id === chatProvider)?.label ?? 'Chat';
+  const chatProviderOptions = useMemo(
+    () => useHostedProductionProviders
+      ? FLASHBOARD_CHAT_PROVIDERS.filter((provider) => provider.id === 'openai')
+      : FLASHBOARD_CHAT_PROVIDERS,
+    [useHostedProductionProviders],
+  );
+  const chatProviderLabel = chatProviderOptions.find((provider) => provider.id === chatProvider)?.label ?? 'Chat';
+  const canUseHostedChat = Boolean(chatProvider === 'openai' && accountSession?.authenticated && hostedAIEnabled);
+  const canUseByoChat = Boolean(chatProvider === 'openai' && !useHostedProductionProviders && hasOpenAiKey);
+  const shouldUseHostedChat = Boolean(canUseHostedChat && (useHostedProductionProviders || !useOpenAiKeyByDefault));
+  const chatCreditLabel = chatProvider === 'openai' && (useHostedProductionProviders || !useOpenAiKeyByDefault)
+    ? getFlashBoardChatCreditLabel(activeChatModelId)
+    : null;
+  const chatChargeTitle = chatCreditLabel
+    ? `${chatCreditLabel} per hosted model round. Tool follow-up rounds are charged separately.`
+    : undefined;
+  const chatButtonLabel = isChatting
+    ? 'Stop'
+    : chatCreditLabel ? `Chat - ${chatCreditLabel}` : 'Chat';
   const multiShotDurationTotal = useMemo(
     () => normalizedMultiPrompt.reduce((sum, shot) => sum + shot.duration, 0),
     [normalizedMultiPrompt],
@@ -932,7 +995,15 @@ export function FlashBoardComposer({
     }
 
     if (isSunoMode) {
-      if (!hasKieAiKey) {
+      if (service === 'cloud') {
+        if (!accountSession?.authenticated) {
+          return 'Sign in to use MasterSelects Cloud music.';
+        }
+
+        if (!hostedAIEnabled) {
+          return 'Enable hosted credits to generate cloud music.';
+        }
+      } else if (!hasKieAiKey) {
         return 'Add a Kie.ai API key in Settings to generate Suno music.';
       }
 
@@ -1001,6 +1072,7 @@ export function FlashBoardComposer({
     languageCode,
     languageOverride,
     selectedElevenLabsCharacterLimit,
+    service,
     sunoCustomMode,
     sunoStyle,
     version,
@@ -1029,6 +1101,12 @@ export function FlashBoardComposer({
 
     return null;
   }, [hasEvolinkKey, hasHostedSession, hasKieAiKey, isHostedAudioMode, service, usePiApiKeyByDefault]);
+  const hasVideoReferenceInput = useMemo(
+    () => (composer.referenceMediaFileIds ?? []).some((mediaFileId) => (
+      mediaFiles.find((file) => file.id === mediaFileId)?.type === 'video'
+    )),
+    [composer.referenceMediaFileIds, mediaFiles],
+  );
   const currentPrice = useMemo(() => (
     selectedEntry
       ? getFlashBoardPriceEstimate({
@@ -1043,12 +1121,14 @@ export function FlashBoardComposer({
         text: effectivePrompt,
         generateAudio: effectiveGenerateAudio,
         multiShots,
+        hasVideoInput: hasVideoReferenceInput,
       })
       : null
   ), [
     duration,
     effectiveGenerateAudio,
     effectivePrompt,
+    hasVideoReferenceInput,
     imageSize,
     mode,
     multiShots,
@@ -1070,6 +1150,7 @@ export function FlashBoardComposer({
   const canGenerate = Boolean(board && selectedEntry && effectivePrompt)
     && !multiShotValidationError
     && !audioValidationError
+    && !seedanceReferenceValidationError
     && !backendValidationError;
   const canAddShot = multiShots && normalizedMultiPrompt.length < Math.min(MAX_MULTI_SHOTS, Math.max(1, duration));
   const supportsTimelineReferenceRoles = !isAudioMode && selectedEntry?.supportsImageToVideo === true;
@@ -1137,15 +1218,17 @@ export function FlashBoardComposer({
   const hasPromptRefineInput = isSunoMode
     ? Boolean(prompt.trim() || sunoStyle.trim() || sunoNegativeTags.trim())
     : Boolean(prompt.trim() || composerReferenceBadges.length > 0);
-  const promptRefineTitle = !hasOpenAiKey
-    ? 'Add an OpenAI API key in Settings to refine prompts'
+  const promptRefineTitle = !canUseHostedPromptRefiner && !canUseByoPromptRefiner
+    ? hasHostedSession
+      ? 'Enable hosted credits to refine prompts'
+      : 'Sign in to refine prompts with MasterSelects Cloud'
     : !hasPromptRefineInput
       ? isSunoMode
         ? 'Add lyrics, style, or a song idea first'
         : 'Add a prompt or reference image first'
       : isSunoMode
-        ? `Write Suno lyrics and style with ${FLASHBOARD_PROMPT_REFINER_MODEL}`
-        : `Refine prompt with ${FLASHBOARD_PROMPT_REFINER_MODEL}`;
+        ? `Write Suno lyrics and style with Cloud ${FLASHBOARD_PROMPT_REFINER_MODEL}`
+        : `Refine prompt with Cloud ${FLASHBOARD_PROMPT_REFINER_MODEL}`;
 
   useEffect(() => {
     if (!promptRefineError?.startsWith('Add ')) {
@@ -1643,6 +1726,17 @@ export function FlashBoardComposer({
     }
   }, [lemonadeModels]);
 
+  useEffect(() => {
+    if (chatProviderOptions.some((provider) => provider.id === chatProvider)) {
+      return;
+    }
+
+    const fallbackProvider = chatProviderOptions[0]?.id;
+    if (fallbackProvider) {
+      handleChatProviderSelect(fallbackProvider);
+    }
+  }, [chatProvider, chatProviderOptions, handleChatProviderSelect]);
+
   const handleChatButtonClick = useCallback(async () => {
     closePopover();
 
@@ -1662,9 +1756,17 @@ export function FlashBoardComposer({
       return;
     }
 
-    if (chatProvider === 'openai' && !hasOpenAiKey && !hasHostedSession) {
-      setChatError('Sign in or add an OpenAI API key in Settings to use compact chat.');
-      openSettings();
+    if (chatProvider === 'openai' && !canUseHostedChat && !canUseByoChat) {
+      setChatError(useHostedProductionProviders
+        ? 'Sign in and enable hosted credits to use compact chat.'
+        : 'Sign in or add an OpenAI API key in Settings to use compact chat.');
+      if (useHostedProductionProviders || !hasHostedSession) {
+        openAuthDialog();
+      } else if (!hostedAIEnabled) {
+        openPricingDialog();
+      } else {
+        openSettings();
+      }
       return;
     }
 
@@ -1702,7 +1804,7 @@ export function FlashBoardComposer({
     try {
       const response = await sendFlashBoardChatMessage({
         anthropicApiKey,
-        hostedAvailable: chatProvider === 'openai' && hasHostedSession && !useOpenAiKeyByDefault,
+        hostedAvailable: shouldUseHostedChat,
         lemonadeEndpoint,
         model: activeChatModelId,
         openAiApiKey,
@@ -1740,16 +1842,21 @@ export function FlashBoardComposer({
     chatProvider,
     chatTemperature,
     closePopover,
+    canUseByoChat,
+    canUseHostedChat,
     effectiveChatPrompt,
     hasAnthropicKey,
+    hostedAIEnabled,
     hasHostedSession,
-    hasOpenAiKey,
     isChatting,
     lemonadeEndpoint,
     openAiApiKey,
     openAiReasoningEffort,
+    openAuthDialog,
+    openPricingDialog,
     openSettings,
-    useOpenAiKeyByDefault,
+    shouldUseHostedChat,
+    useHostedProductionProviders,
   ]);
 
   const handleClearChatHistory = useCallback(() => {
@@ -1970,9 +2077,17 @@ export function FlashBoardComposer({
 
     closePopover();
 
-    if (!hasOpenAiKey) {
-      setPromptRefineError('Add an OpenAI API key in Settings to refine prompts.');
-      openSettings();
+    if (!canUseHostedPromptRefiner && !canUseByoPromptRefiner) {
+      if (!hasHostedSession) {
+        setPromptRefineError('Sign in to refine prompts with MasterSelects Cloud.');
+        openAuthDialog();
+      } else if (!hostedAIEnabled) {
+        setPromptRefineError('Enable hosted credits to refine prompts.');
+        openPricingDialog();
+      } else {
+        setPromptRefineError('Add an OpenAI API key in Settings to refine prompts.');
+        openSettings();
+      }
       return;
     }
 
@@ -2016,42 +2131,46 @@ export function FlashBoardComposer({
     }
 
     try {
-      const refinedPrompt = await streamRefineFlashBoardPrompt(
-        {
-          apiKey: openAiApiKey,
-          prompt,
-          entry: selectedEntry,
-          service,
-          providerId,
-          version,
-          mode,
-          duration,
-          aspectRatio,
-          imageSize,
-          generateAudio: effectiveGenerateAudio,
-          multiShots,
-          sunoStyle,
-          sunoNegativeTags,
-          sunoInstrumental,
-          sunoCustomMode,
-          sunoVocalGender: sunoVocalGender || undefined,
-          sunoStyleWeight,
-          sunoWeirdnessConstraint,
-          sunoAudioWeight,
-          references: isSunoMode ? [] : composerReferenceBadges.map((badge) => {
-            const mediaFile = mediaFilesById.get(badge.mediaFileId);
-            return {
-              role: badge.role,
-              label: badge.role === 'start' ? 'START' : badge.role === 'end' ? 'END' : badge.roleLabel,
-              displayName: badge.displayName,
-              mediaType: mediaFile?.type ?? badge.mediaType,
-              file: mediaFile?.file,
-              url: badge.previewUrl ?? mediaFile?.url,
-              thumbnailUrl: badge.thumbnailUrl,
-            };
-          }),
-        },
-        {
+      const refinerInput = {
+        apiKey: openAiApiKey,
+        prompt,
+        entry: selectedEntry,
+        service,
+        providerId,
+        version,
+        mode,
+        duration,
+        aspectRatio,
+        imageSize,
+        generateAudio: effectiveGenerateAudio,
+        multiShots,
+        sunoStyle,
+        sunoNegativeTags,
+        sunoInstrumental,
+        sunoCustomMode,
+        sunoVocalGender: sunoVocalGender || undefined,
+        sunoStyleWeight,
+        sunoWeirdnessConstraint,
+        sunoAudioWeight,
+        references: isSunoMode ? [] : composerReferenceBadges.map((badge) => {
+          const mediaFile = mediaFilesById.get(badge.mediaFileId);
+          return {
+            role: badge.role,
+            label: badge.role === 'start' ? 'START' : badge.role === 'end' ? 'END' : badge.roleLabel,
+            displayName: badge.displayName,
+            mediaType: mediaFile?.type ?? badge.mediaType,
+            file: mediaFile?.file,
+            url: badge.previewUrl ?? mediaFile?.url,
+            thumbnailUrl: badge.thumbnailUrl,
+          };
+        }),
+      };
+
+      const refinedPrompt = canUseHostedPromptRefiner
+        ? await refineFlashBoardPromptHosted(refinerInput, {
+          signal: abortController.signal,
+        })
+        : await streamRefineFlashBoardPrompt(refinerInput, {
           signal: abortController.signal,
           onDelta: (_delta, fullText) => {
             streamedPrompt = fullText;
@@ -2073,8 +2192,7 @@ export function FlashBoardComposer({
               setPrompt(fullText);
             }
           },
-        },
-      );
+        });
 
       if (isSunoMode) {
         const parsed = parseSunoPromptRefinement(refinedPrompt);
@@ -2112,9 +2230,12 @@ export function FlashBoardComposer({
     aspectRatio,
     closePopover,
     composerReferenceBadges,
+    canUseByoPromptRefiner,
+    canUseHostedPromptRefiner,
     duration,
     effectiveGenerateAudio,
-    hasOpenAiKey,
+    hasHostedSession,
+    hostedAIEnabled,
     imageSize,
     isAudioMode,
     isSunoMode,
@@ -2122,6 +2243,8 @@ export function FlashBoardComposer({
     mode,
     multiShots,
     openAiApiKey,
+    openAuthDialog,
+    openPricingDialog,
     openSettings,
     prompt,
     providerId,
@@ -2950,6 +3073,10 @@ export function FlashBoardComposer({
         <div className="fb-audio-warning compact">{audioValidationError}</div>
       )}
 
+      {!chatPanelOpen && seedanceReferenceValidationError && (
+        <div className="fb-audio-warning compact">{seedanceReferenceValidationError}</div>
+      )}
+
       {!chatPanelOpen && backendValidationError && (
         <div className={`fb-audio-warning compact ${showGenerationCloudActions ? 'has-cloud-actions' : ''}`}>
           <span>{backendValidationError}</span>
@@ -3109,6 +3236,7 @@ export function FlashBoardComposer({
                       mode,
                       generateAudio: p.supportsGenerateAudio ? effectiveGenerateAudio : false,
                       multiShots: p.supportsMultiShot ? multiShots : false,
+                      hasVideoInput: hasVideoReferenceInput,
                     });
                     const sourceLabel = getModelSourceLabel(p);
                     const metaLabel = [sourceLabel, estimate?.compactLabel].filter(Boolean).join(' - ');
@@ -3476,6 +3604,7 @@ export function FlashBoardComposer({
                     imageSize,
                     generateAudio: effectiveGenerateAudio,
                     multiShots,
+                    hasVideoInput: hasVideoReferenceInput,
                   });
 
                   return (
@@ -3507,6 +3636,7 @@ export function FlashBoardComposer({
                     imageSize: size,
                     generateAudio: effectiveGenerateAudio,
                     multiShots,
+                    hasVideoInput: hasVideoReferenceInput,
                   });
 
                   return (
@@ -3538,6 +3668,7 @@ export function FlashBoardComposer({
                     imageSize,
                     generateAudio: effectiveGenerateAudio,
                     multiShots,
+                    hasVideoInput: hasVideoReferenceInput,
                   });
 
                   return (
@@ -3594,6 +3725,11 @@ export function FlashBoardComposer({
             >
               {chatTemperatureSupported ? `Temp ${chatTemperature.toFixed(1)}` : 'Fixed temp'}
             </button>
+            {chatCreditLabel && (
+              <span className="fb-pill fb-chat-cost-pill" title={chatChargeTitle}>
+                {chatCreditLabel}/round
+              </span>
+            )}
             <button
               className="fb-pill fb-chat-clear-pill"
               type="button"
@@ -3608,7 +3744,7 @@ export function FlashBoardComposer({
               <div className="fb-popover">
                 <div className="fb-popover-title">Provider</div>
                 <div className="fb-popover-pills">
-                  {FLASHBOARD_CHAT_PROVIDERS.map((provider) => (
+                  {chatProviderOptions.map((provider) => (
                     <button
                       key={provider.id}
                       className={`fb-popover-pill ${chatProvider === provider.id ? 'active' : ''}`}
@@ -3711,7 +3847,7 @@ export function FlashBoardComposer({
             <button
               className="fb-generate fb-chat-button active"
               onClick={handleChatButtonClick}
-              title="Send chat prompt"
+              title={chatChargeTitle ?? 'Send chat prompt'}
             >
               <svg
                 className="fb-generate-icon"
@@ -3726,7 +3862,7 @@ export function FlashBoardComposer({
                 <path d="M3.4 3.5h9.2a1.8 1.8 0 0 1 1.8 1.8v4.4a1.8 1.8 0 0 1-1.8 1.8H7.2L3.6 14v-2.5h-.2a1.8 1.8 0 0 1-1.8-1.8V5.3a1.8 1.8 0 0 1 1.8-1.8Z" />
                 <path d="M5 6.5h6M5 8.9h4" />
               </svg>
-              <span>{isChatting ? 'Stop' : 'Chat'}</span>
+              <span>{chatButtonLabel}</span>
             </button>
           ) : (
           <button

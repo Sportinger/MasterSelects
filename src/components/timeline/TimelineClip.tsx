@@ -2,6 +2,7 @@
 
 import './TimelineClip.css';
 import { memo, type CSSProperties, useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import { useTimelineStore } from '../../stores/timeline';
@@ -18,17 +19,25 @@ import { ClipWaveform } from './components/ClipWaveform';
 import { ClipAnalysisOverlay } from './components/ClipAnalysisOverlay';
 import { FadeCurve } from './components/FadeCurve';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
+import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
+import { Logger } from '../../services/logger';
 import { useTimelineSpectrogramTileSetState } from './hooks/useTimelineSpectrogramTileSet';
 import { useTimelineWaveformPyramidState } from './hooks/useTimelineWaveformPyramid';
 import {
   clipRequiresProcessedWaveformPyramid,
   createProcessedClipAudioStateHash,
 } from '../../services/audio/processedWaveformEligibility';
+import { canDeriveProcessedWaveformPyramid } from '../../services/audio/DerivedWaveformPyramidService';
 import {
   collectAudioEffectInstanceRouteSettings,
   collectLegacyAudioEffectRouteSettings,
 } from '../../services/audio/audioGraphRouteSettings';
-import { resolveTimelineAudioRegionSelection } from './utils/audioEditSelection';
+import { getAudioRegionEffectLabel } from '../../services/audio/audioRegionEffectOperation';
+import {
+  moveTimelineAudioRegionSelection,
+  resizeTimelineAudioRegionSelection,
+  resolveTimelineAudioRegionSelection,
+} from './utils/audioEditSelection';
 import { resolveProcessedAudioAnalysisDisplayStatus } from './utils/audioAnalysisDisplayStatus';
 import { resolveAudioWaveformDiagnostics } from './utils/audioWaveformDiagnostics';
 import { resolveAudioVolumeAutomationCurveKeyframes } from './utils/audioAutomationCurve';
@@ -40,8 +49,9 @@ import {
   spectralYFromFrequencyHz,
 } from './utils/spectralSelection';
 import type {
-  TimelineAudioRegionEditType,
+  TimelineAudioRegionSelection,
   TimelineSpectralRegionEditType,
+  TimelineVideoBakeRegionSelection,
 } from '../../stores/timeline/types';
 import {
   dispatchTimelineClipPointerClick,
@@ -50,6 +60,7 @@ import {
   isTimelineBladeTool,
   isTimelinePointerTool,
 } from './tools/pointer/timelineToolPointerDispatcher';
+import type { ClipAudioEditOperation, VideoBakeRegion } from '../../types';
 
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
@@ -59,10 +70,69 @@ const THUMBNAIL_RENDER_OVERSCAN_PX = THUMB_WIDTH * 3;
 const CLIP_RIGHT_STICKY_PADDING_PX = 8;
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_ZOOM = 250;
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_WIDTH = 16_384;
+const AUDIO_REGION_TIMELINE_EPSILON = 0.001;
+const AUDIO_REGION_GAIN_MIN_DB = -24;
+const AUDIO_REGION_GAIN_MAX_DB = 24;
+const AUDIO_REGION_GAIN_SILENCE_DB = -120;
+const AUDIO_REGION_GAIN_SILENCE_THRESHOLD_DB = -96;
+const AUDIO_REGION_GAIN_SILENCE_ZONE_PERCENT = 2;
+const AUDIO_REGION_GAIN_DEFAULT_FADE_SECONDS = 0.035;
+const VIDEO_BAKE_REGION_TIMELINE_EPSILON = 0.001;
+const log = Logger.create('TimelineClip');
+const AUDIO_REGION_FX_PRESETS: Array<{
+  key: string;
+  label: string;
+  descriptorId: string;
+  params: ClipAudioEditOperation['params'];
+}> = [
+  {
+    key: 'fx-high-pass',
+    label: 'High Pass',
+    descriptorId: 'audio-high-pass',
+    params: { frequencyHz: 80, q: 0.707 },
+  },
+  {
+    key: 'fx-low-pass',
+    label: 'Low Pass',
+    descriptorId: 'audio-low-pass',
+    params: { frequencyHz: 8000, q: 0.707 },
+  },
+  {
+    key: 'fx-presence',
+    label: 'Presence Boost',
+    descriptorId: 'audio-parametric-eq',
+    params: { frequencyHz: 3200, gainDb: 3, q: 1.15 },
+  },
+  {
+    key: 'fx-compressor',
+    label: 'Compressor',
+    descriptorId: 'audio-compressor',
+    params: { thresholdDb: -18, ratio: 3, kneeDb: 6, attackMs: 8, releaseMs: 120, makeupGainDb: 0 },
+  },
+  {
+    key: 'fx-de-esser',
+    label: 'De-esser',
+    descriptorId: 'audio-de-esser',
+    params: { frequencyHz: 6500, thresholdDb: -24, ratio: 4, kneeDb: 6, attackMs: 1, releaseMs: 90, makeupGainDb: 0 },
+  },
+  {
+    key: 'fx-noise-gate',
+    label: 'Noise Gate',
+    descriptorId: 'audio-noise-gate',
+    params: { thresholdDb: -48, floorDb: -80, attackMs: 4, releaseMs: 120 },
+  },
+  {
+    key: 'fx-saturation',
+    label: 'Saturation',
+    descriptorId: 'audio-saturation',
+    params: { driveDb: 6, toneHz: 12000, mix: 0.35 },
+  },
+];
 const inFlightSourceWaveformPyramidUpgrades = new Set<string>();
 const inFlightProcessedWaveformPyramidUpgrades = new Set<string>();
 const inFlightSpectrogramTileSetUpgrades = new Set<string>();
 const EMPTY_CLIP_KEYFRAMES = [] as const;
+const EMPTY_AUDIO_EDIT_STACK = [] as const;
 type LabelableMediaStoreItem = {
   id?: string;
   name?: string;
@@ -78,6 +148,159 @@ function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
 
 function finiteNumberOr(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function isAudioRegionModifierPressed(
+  event: Pick<MouseEvent | React.MouseEvent, 'ctrlKey' | 'metaKey'>,
+): boolean {
+  return event.ctrlKey || event.metaKey;
+}
+
+function isVideoBakeRegionModifierPressed(
+  event: Pick<MouseEvent | React.MouseEvent, 'ctrlKey' | 'metaKey'>,
+): boolean {
+  return event.ctrlKey || event.metaKey;
+}
+
+function isAudioRegionSilenceGainDb(gainDb: number): boolean {
+  return gainDb <= AUDIO_REGION_GAIN_SILENCE_THRESHOLD_DB;
+}
+
+function sourceTimeToAudioRegionTimelineTime(
+  clip: Pick<TimelineClipProps['clip'], 'startTime' | 'duration' | 'inPoint' | 'outPoint' | 'reversed'>,
+  sourceTime: number,
+): number {
+  const clipDuration = Math.max(AUDIO_REGION_TIMELINE_EPSILON, clip.duration);
+  const sourceStart = clip.inPoint ?? 0;
+  const sourceEnd = Math.max(sourceStart, clip.outPoint ?? sourceStart + clipDuration);
+  const sourceSpan = Math.max(AUDIO_REGION_TIMELINE_EPSILON, sourceEnd - sourceStart);
+  const sourceRatio = Math.max(0, Math.min(1, (sourceTime - sourceStart) / sourceSpan));
+  const timelineRatio = clip.reversed ? 1 - sourceRatio : sourceRatio;
+  return clip.startTime + timelineRatio * clipDuration;
+}
+
+function resolveAudioRegionTimelineRangeForClip(
+  clip: Pick<TimelineClipProps['clip'], 'startTime' | 'duration' | 'inPoint' | 'outPoint' | 'reversed'>,
+  selection: TimelineAudioRegionSelection,
+): { start: number; end: number; duration: number } | null {
+  const clipStart = clip.startTime;
+  const clipEnd = clip.startTime + Math.max(AUDIO_REGION_TIMELINE_EPSILON, clip.duration);
+  let start = Math.min(selection.startTime, selection.endTime);
+  let end = Math.max(selection.startTime, selection.endTime);
+  const overlapsClip = end > clipStart + AUDIO_REGION_TIMELINE_EPSILON &&
+    start < clipEnd - AUDIO_REGION_TIMELINE_EPSILON;
+
+  if (!overlapsClip) {
+    const sourceStart = Math.min(selection.sourceInPoint, selection.sourceOutPoint);
+    const sourceEnd = Math.max(selection.sourceInPoint, selection.sourceOutPoint);
+    start = Math.min(
+      sourceTimeToAudioRegionTimelineTime(clip, sourceStart),
+      sourceTimeToAudioRegionTimelineTime(clip, sourceEnd),
+    );
+    end = Math.max(
+      sourceTimeToAudioRegionTimelineTime(clip, sourceStart),
+      sourceTimeToAudioRegionTimelineTime(clip, sourceEnd),
+    );
+  }
+
+  const clampedStart = Math.max(clipStart, Math.min(clipEnd, start));
+  const clampedEnd = Math.max(clampedStart, Math.min(clipEnd, end));
+  const duration = clampedEnd - clampedStart;
+  return duration > AUDIO_REGION_TIMELINE_EPSILON
+    ? { start: clampedStart, end: clampedEnd, duration }
+    : null;
+}
+
+function formatAudioRegionGainLabel(gainDb: number): string {
+  if (isAudioRegionSilenceGainDb(gainDb)) return '-∞ dB';
+  return `${gainDb > 0 ? '+' : ''}${gainDb.toFixed(1)} dB`;
+}
+
+function getInlineAudioEditLabel(type: string, params: Record<string, unknown> | undefined): string {
+  if (typeof params?.label === 'string' && params.label.trim().length > 0) {
+    return params.label.trim();
+  }
+
+  switch (type) {
+    case 'gain':
+      return typeof params?.gainDb === 'number' ? formatAudioRegionGainLabel(params.gainDb) : 'Gain';
+    case 'silence':
+    case 'cut':
+      return 'Silence';
+    case 'insert-silence':
+      return 'Insert silence';
+    case 'delete-silence':
+      return 'Delete silence';
+    case 'reverse':
+      return 'Reverse';
+    case 'invert-polarity':
+      return 'Invert polarity';
+    case 'swap-channels':
+      return 'Swap L/R';
+    case 'mono-sum':
+      return 'Mono sum';
+    case 'split-stereo':
+      return params?.sourceChannel === 1 ? 'Right to mono' : 'Left to mono';
+    case 'paste':
+      return 'Paste';
+    case 'repair':
+      return 'Repair';
+    case 'effect':
+      return getAudioRegionEffectLabel({
+        type: 'effect',
+        params: (params ?? {}) as ClipAudioEditOperation['params'],
+      });
+    case 'room-tone-fill':
+      return 'Room tone';
+    case 'spectral-mask':
+      return 'Spectral mask';
+    case 'spectral-resynthesis':
+      return 'Resynthesis';
+    default:
+      return type;
+  }
+}
+
+function clampAudioRegionGainDb(value: number): number {
+  return Math.max(AUDIO_REGION_GAIN_SILENCE_DB, Math.min(AUDIO_REGION_GAIN_MAX_DB, value));
+}
+
+function audioRegionGainDbToYPercent(gainDb: number): number {
+  const clamped = clampAudioRegionGainDb(gainDb);
+  if (clamped <= AUDIO_REGION_GAIN_MIN_DB) {
+    const silenceRange = AUDIO_REGION_GAIN_MIN_DB - AUDIO_REGION_GAIN_SILENCE_DB;
+    const silenceProgress = silenceRange > 0
+      ? (AUDIO_REGION_GAIN_MIN_DB - clamped) / silenceRange
+      : 1;
+    return 100 - AUDIO_REGION_GAIN_SILENCE_ZONE_PERCENT +
+      Math.max(0, Math.min(1, silenceProgress)) * AUDIO_REGION_GAIN_SILENCE_ZONE_PERCENT;
+  }
+
+  const audibleRangePercent = 100 - AUDIO_REGION_GAIN_SILENCE_ZONE_PERCENT;
+  const normalized = (clamped - AUDIO_REGION_GAIN_MIN_DB) /
+    (AUDIO_REGION_GAIN_MAX_DB - AUDIO_REGION_GAIN_MIN_DB);
+  return (1 - normalized) * audibleRangePercent;
+}
+
+function audioRegionGainDbFromClientY(clientY: number, rect: Pick<DOMRect, 'top' | 'height'>): number {
+  const yPercent = Math.max(0, Math.min(100, ((clientY - rect.top) / Math.max(1, rect.height)) * 100));
+  const audibleRangePercent = 100 - AUDIO_REGION_GAIN_SILENCE_ZONE_PERCENT;
+  if (yPercent >= audibleRangePercent) {
+    const bottomProgress = Math.max(
+      0,
+      Math.min(1, (yPercent - audibleRangePercent) / AUDIO_REGION_GAIN_SILENCE_ZONE_PERCENT),
+    );
+    if (bottomProgress >= 0.995) return AUDIO_REGION_GAIN_SILENCE_DB;
+    const minGain = 10 ** (AUDIO_REGION_GAIN_MIN_DB / 20);
+    const silenceGain = 10 ** (AUDIO_REGION_GAIN_SILENCE_DB / 20);
+    const gain = minGain * ((silenceGain / minGain) ** bottomProgress);
+    return clampAudioRegionGainDb(20 * Math.log10(Math.max(silenceGain, gain)));
+  }
+
+  const normalized = 1 - (yPercent / audibleRangePercent);
+  return clampAudioRegionGainDb(
+    AUDIO_REGION_GAIN_MIN_DB + normalized * (AUDIO_REGION_GAIN_MAX_DB - AUDIO_REGION_GAIN_MIN_DB),
+  );
 }
 
 function getClipSourceDuration(clip: TimelineClipProps['clip']): number {
@@ -116,6 +339,33 @@ type AudioRegionDragState = {
   rectLeft: number;
   rectWidth: number;
 };
+type VideoBakeRegionDragState = {
+  anchorTimelineTime: number;
+  startClientX: number;
+  rectLeft: number;
+  rectWidth: number;
+};
+type ClipVideoBakeRegionOverlay = {
+  id: string;
+  left: number;
+  width: number;
+  status: VideoBakeRegion['status'];
+  selection?: boolean;
+};
+type AudioRegionMoveDragState = {
+  startClientX: number;
+  clipWidth: number;
+  clipDuration: number;
+  initialSelection: TimelineAudioRegionSelection;
+  operationIds: string[];
+};
+type AudioRegionResizeDragState = {
+  edge: 'left' | 'right';
+  rectLeft: number;
+  rectWidth: number;
+  initialSelection: TimelineAudioRegionSelection;
+  operationIds: string[];
+};
 type SpectralRegionDragState = AudioRegionDragState & {
   anchorFrequencyHz: number;
   startClientY: number;
@@ -125,6 +375,47 @@ type SpectralRegionDragState = AudioRegionDragState & {
   mode: 'rectangle' | 'brush';
   brushTimeRadiusSeconds?: number;
   brushFrequencyRadiusHz?: number;
+};
+type AudioRegionGainDragState = {
+  mode: 'gain' | 'fade-in' | 'fade-out';
+  regionLeft: number;
+  regionWidth: number;
+  regionTop: number;
+  regionHeight: number;
+  regionDuration: number;
+  startGainDb: number;
+  startFadeInSeconds: number;
+  startFadeOutSeconds: number;
+  currentGainDb: number;
+  currentFadeInSeconds: number;
+  currentFadeOutSeconds: number;
+};
+type AudioEditOperationOverlay = {
+  id: string;
+  left: number;
+  width: number;
+  top: number;
+  height: number;
+  label: string;
+  type: string;
+  selection: TimelineAudioRegionSelection;
+};
+type AudioRegionContextMenuCommand = {
+  key: string;
+  label: string;
+  action: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+};
+type AudioRegionContextMenuGroup = {
+  key: string;
+  label: string;
+  commands: AudioRegionContextMenuCommand[];
+};
+type AudioRegionContextMenuState = {
+  x: number;
+  y: number;
+  selection: TimelineAudioRegionSelection;
 };
 
 function StaticClipIcon({
@@ -241,6 +532,8 @@ function TimelineClipComponent({
   const waveformsEnabled = useTimelineStore(s => s.waveformsEnabled);
   const audioDisplayMode = useTimelineStore(s => s.audioDisplayMode);
   const audioFocusMode = useTimelineStore(s => s.audioFocusMode);
+  const trackFocusMode = useTimelineStore(s => s.trackFocusMode);
+  const showAudioRegionEditMarkers = useTimelineStore(s => s.showAudioRegionEditMarkers);
   const activeTimelineToolId = useTimelineStore(s => s.activeTimelineToolId);
   const timelineToolPreview = useTimelineStore(s => s.timelineToolPreview);
   const setTimelineToolPreview = useTimelineStore(s => s.setTimelineToolPreview);
@@ -250,23 +543,43 @@ function TimelineClipComponent({
   const audioRegionSelection = useTimelineStore(s =>
     s.audioRegionSelection?.clipId === clip.id ? s.audioRegionSelection : null
   );
+  const audioRegionGainPreview = useTimelineStore(s =>
+    s.audioRegionGainPreview?.clipId === clip.id ? s.audioRegionGainPreview : null
+  );
   const audioSpectralRegionSelection = useTimelineStore(s =>
     s.audioSpectralRegionSelection?.clipId === clip.id ? s.audioSpectralRegionSelection : null
   );
+  const videoBakeRegionSelection = useTimelineStore(s =>
+    s.videoBakeRegionSelection?.scope === 'clip' && s.videoBakeRegionSelection.clipId === clip.id
+      ? s.videoBakeRegionSelection
+      : null
+  );
   const setAudioRegionSelection = useTimelineStore(s => s.setAudioRegionSelection);
   const clearAudioRegionSelection = useTimelineStore(s => s.clearAudioRegionSelection);
+  const setVideoBakeRegionSelection = useTimelineStore(s => s.setVideoBakeRegionSelection);
+  const clearVideoBakeRegionSelection = useTimelineStore(s => s.clearVideoBakeRegionSelection);
+  const addClipVideoBakeRegion = useTimelineStore(s => s.addClipVideoBakeRegion);
+  const bakeClipVideoBakeRegion = useTimelineStore(s => s.bakeClipVideoBakeRegion);
+  const unbakeClipVideoBakeRegion = useTimelineStore(s => s.unbakeClipVideoBakeRegion);
+  const removeClipVideoBakeRegion = useTimelineStore(s => s.removeClipVideoBakeRegion);
   const setAudioSpectralRegionSelection = useTimelineStore(s => s.setAudioSpectralRegionSelection);
   const clearAudioSpectralRegionSelection = useTimelineStore(s => s.clearAudioSpectralRegionSelection);
   const hasAudioRegionClipboard = useTimelineStore(s => s.audioRegionClipboard !== null);
   const applyAudioRegionEdit = useTimelineStore(s => s.applyAudioRegionEdit);
+  const setAudioRegionGainPreview = useTimelineStore(s => s.setAudioRegionGainPreview);
+  const clearAudioRegionGainPreview = useTimelineStore(s => s.clearAudioRegionGainPreview);
+  const setAudioRegionGainEdit = useTimelineStore(s => s.setAudioRegionGainEdit);
   const applySpectralRegionEdit = useTimelineStore(s => s.applySpectralRegionEdit);
   const addClipSpectralImageLayer = useTimelineStore(s => s.addClipSpectralImageLayer);
   const copySelectedAudioRegion = useTimelineStore(s => s.copySelectedAudioRegion);
   const pasteAudioRegionToSelection = useTimelineStore(s => s.pasteAudioRegionToSelection);
   const setClipAudioEditOperationEnabled = useTimelineStore(s => s.setClipAudioEditOperationEnabled);
+  const setClipAudioEditOperationRange = useTimelineStore(s => s.setClipAudioEditOperationRange);
   const removeClipAudioEditOperation = useTimelineStore(s => s.removeClipAudioEditOperation);
   const clearClipAudioEditStack = useTimelineStore(s => s.clearClipAudioEditStack);
   const bakeClipAudioEditStack = useTimelineStore(s => s.bakeClipAudioEditStack);
+  const unbakeClipAudioEditStack = useTimelineStore(s => s.unbakeClipAudioEditStack);
+  const selectClip = useTimelineStore(s => s.selectClip);
   const clipAudioKeyframes = useTimelineStore(s => s.clipKeyframes.get(clip.id) ?? EMPTY_CLIP_KEYFRAMES);
   const processedWaveformPyramidRef = clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId;
   const sourceWaveformPyramidRef = clip.audioState?.sourceAnalysisRefs?.waveformPyramidId;
@@ -278,7 +591,16 @@ function TimelineClipComponent({
   const sourceSpectrogramState = useTimelineSpectrogramTileSetState(sourceSpectrogramTileSetRef);
   const processedWaveformPyramid = processedWaveformState.pyramid;
   const sourceWaveformPyramid = sourceWaveformState.pyramid;
-  const waveformPyramid = processedWaveformPyramid ?? sourceWaveformPyramid;
+  const audioEditStack = clip.audioState?.editStack ?? EMPTY_AUDIO_EDIT_STACK;
+  const activeAudioEditCount = audioEditStack.filter(operation => operation.enabled !== false).length;
+  const latestAudioBake = clip.audioState?.bakeHistory?.at(-1);
+  const canUnbakeAudioEditStack = Boolean(latestAudioBake?.restore);
+  const usePredictiveAudioWaveform = audioRegionGainPreview !== null || (!processedWaveformPyramid && audioEditStack.length > 0);
+  const waveformPyramid = usePredictiveAudioWaveform && sourceWaveformPyramid
+    ? sourceWaveformPyramid
+    : processedWaveformPyramid ?? sourceWaveformPyramid;
+  const waveformUsesProcessedPyramid = Boolean(waveformPyramid && processedWaveformPyramid && waveformPyramid === processedWaveformPyramid);
+  const waveformUsesSourcePyramid = Boolean(waveformPyramid && sourceWaveformPyramid && waveformPyramid === sourceWaveformPyramid);
   const processedSpectrogramTileSet = processedSpectrogramState.tileSet;
   const sourceSpectrogramTileSet = sourceSpectrogramState.tileSet;
   const spectrogramTileSet = processedSpectrogramTileSet ?? sourceSpectrogramTileSet;
@@ -301,9 +623,9 @@ function TimelineClipComponent({
   const selectedSpectralImageFile = selectedSpectralImageFileId
     ? spectralImageFilesById.get(selectedSpectralImageFileId) ?? null
     : null;
-  const waveformVariant = processedWaveformPyramid
+  const waveformVariant = waveformUsesProcessedPyramid
     ? 'processed'
-    : sourceWaveformPyramid
+    : waveformUsesSourcePyramid
       ? 'source'
       : 'legacy';
   const waveformDisplayGain = useMemo(() => {
@@ -312,7 +634,7 @@ function TimelineClipComponent({
     const legacySettings = collectLegacyAudioEffectRouteSettings(clip.effects, clipAudioEffectIds);
     return Math.max(0, Math.min(8, graphSettings.volume * legacySettings.volume));
   }, [clip.audioState?.effectStack, clip.effects]);
-  const waveformProcessingState = processedWaveformPyramidRef && !processedWaveformState.pyramid
+  const rawWaveformProcessingState = processedWaveformPyramidRef && !processedWaveformState.pyramid
     ? `waveform-processed-${processedWaveformState.status}`
     : '';
   const spectrogramProcessingState = audioDisplayMode === 'spectral'
@@ -324,26 +646,40 @@ function TimelineClipComponent({
     () => clipRequiresProcessedWaveformPyramid(clip, clipAudioKeyframes),
     [clip, clipAudioKeyframes],
   );
+  const canDeriveVisibleProcessedWaveform = useMemo(
+    () => canDeriveProcessedWaveformPyramid(clip, clipAudioKeyframes),
+    [clip, clipAudioKeyframes],
+  );
+  const hasWaveformDisplayFallback = Boolean(
+    sourceWaveformPyramid ||
+    (clip.waveform?.length ?? 0) > 0 ||
+    clip.waveformChannels?.some(channel => channel.length > 0),
+  );
+  const shouldSuppressBackgroundProcessedWaveformUi = audioDisplayMode !== 'spectral' &&
+    needsProcessedAudioAnalysis &&
+    hasWaveformDisplayFallback &&
+    (canDeriveVisibleProcessedWaveform || usePredictiveAudioWaveform);
+  const waveformProcessingState = shouldSuppressBackgroundProcessedWaveformUi
+    ? ''
+    : rawWaveformProcessingState;
   const canResolveAudioSourceForAnalysis = Boolean(
     clip.isComposition ||
     clip.file ||
     clip.mediaFileId ||
     clip.source?.mediaFileId,
   );
-  const processedWaveformStatus = resolveProcessedAudioAnalysisDisplayStatus({
-    artifactLabel: 'waveform',
-    needsProcessed: needsProcessedAudioAnalysis,
-    processedRef: processedWaveformPyramidRef,
-    processedReady: Boolean(processedWaveformPyramid),
-    fallbackAvailable: Boolean(
-      sourceWaveformPyramid ||
-      (clip.waveform?.length ?? 0) > 0 ||
-      clip.waveformChannels?.some(channel => channel.length > 0),
-    ),
-    loadStatus: processedWaveformState.status,
-    jobActive: clip.audioAnalysisJob?.artifactKinds.includes('processed-waveform-pyramid') === true,
-    autoGenerateEligible: canResolveAudioSourceForAnalysis,
-  });
+  const processedWaveformStatus = shouldSuppressBackgroundProcessedWaveformUi
+    ? null
+    : resolveProcessedAudioAnalysisDisplayStatus({
+        artifactLabel: 'waveform',
+        needsProcessed: needsProcessedAudioAnalysis,
+        processedRef: processedWaveformPyramidRef,
+        processedReady: Boolean(processedWaveformPyramid),
+        fallbackAvailable: hasWaveformDisplayFallback,
+        loadStatus: processedWaveformState.status,
+        jobActive: clip.audioAnalysisJob?.artifactKinds.includes('processed-waveform-pyramid') === true,
+        autoGenerateEligible: canResolveAudioSourceForAnalysis,
+      });
   const processedSpectrogramStatus = resolveProcessedAudioAnalysisDisplayStatus({
     artifactLabel: 'spectrogram',
     needsProcessed: needsProcessedAudioAnalysis,
@@ -357,9 +693,10 @@ function TimelineClipComponent({
   const audioAnalysisDisplayStatus = audioDisplayMode === 'spectral'
     ? processedSpectrogramStatus
     : processedWaveformStatus;
-  const audioEditStack = clip.audioState?.editStack ?? [];
-  const activeAudioEditCount = audioEditStack.filter(operation => operation.enabled !== false).length;
-
+  const isBackgroundProcessedWaveformJob = clip.audioAnalysisJob?.processed === true &&
+    clip.audioAnalysisJob.artifactKinds.includes('processed-waveform-pyramid');
+  const showWaveformGenerationIndicator = clip.waveformGenerating &&
+    !(isBackgroundProcessedWaveformJob && shouldSuppressBackgroundProcessedWaveformUi);
   const isBladeToolActive = isTimelineBladeTool(activeTimelineToolId);
   const isPointerToolActive = isTimelinePointerTool(activeTimelineToolId);
   const timelineToolCursor = getTimelineToolCursor(activeTimelineToolId);
@@ -959,8 +1296,96 @@ function TimelineClipComponent({
   }));
   const [keyframeGroupDrag, setKeyframeGroupDrag] = useState<KeyframeGroupDragState | null>(null);
   const [audioRegionDrag, setAudioRegionDrag] = useState<AudioRegionDragState | null>(null);
+  const [videoBakeRegionDrag, setVideoBakeRegionDrag] = useState<VideoBakeRegionDragState | null>(null);
+  const [audioRegionMoveDrag, setAudioRegionMoveDrag] = useState<AudioRegionMoveDragState | null>(null);
+  const [audioRegionResizeDrag, setAudioRegionResizeDrag] = useState<AudioRegionResizeDragState | null>(null);
   const [spectralRegionDrag, setSpectralRegionDrag] = useState<SpectralRegionDragState | null>(null);
+  const [audioRegionGainDrag, setAudioRegionGainDrag] = useState<AudioRegionGainDragState | null>(null);
+  const [audioRegionContextMenu, setAudioRegionContextMenu] = useState<AudioRegionContextMenuState | null>(null);
+  const audioRegionCommandHandledRef = useRef(false);
+  const { menuRef: audioRegionContextMenuRef, adjustedPosition: audioRegionContextMenuPosition } =
+    useContextMenuPosition(audioRegionContextMenu);
   const [audioBakePending, setAudioBakePending] = useState(false);
+
+  const getMatchingAudioRegionOperationIds = useCallback((selection: TimelineAudioRegionSelection): string[] => {
+    const start = Math.min(selection.sourceInPoint, selection.sourceOutPoint);
+    const end = Math.max(selection.sourceInPoint, selection.sourceOutPoint);
+    return audioEditStack
+      .filter(operation => {
+        if (!operation.timeRange) return false;
+        const operationStart = Math.min(operation.timeRange.start, operation.timeRange.end);
+        const operationEnd = Math.max(operation.timeRange.start, operation.timeRange.end);
+        return Math.abs(operationStart - start) <= 0.001 &&
+          Math.abs(operationEnd - end) <= 0.001;
+      })
+      .map(operation => operation.id);
+  }, [audioEditStack]);
+
+  const activeAudioRegionOperationDrag = audioRegionMoveDrag ?? audioRegionResizeDrag;
+  const displayAudioEditStack = useMemo(() => {
+    if (!audioRegionSelection || !activeAudioRegionOperationDrag?.operationIds.length) {
+      return audioEditStack;
+    }
+
+    const operationIds = new Set(activeAudioRegionOperationDrag.operationIds);
+    const start = Math.min(audioRegionSelection.sourceInPoint, audioRegionSelection.sourceOutPoint);
+    const end = Math.max(audioRegionSelection.sourceInPoint, audioRegionSelection.sourceOutPoint);
+    const timelineStart = Math.min(audioRegionSelection.startTime, audioRegionSelection.endTime);
+    const timelineEnd = Math.max(audioRegionSelection.startTime, audioRegionSelection.endTime);
+
+    return audioEditStack.map(operation => {
+      if (!operationIds.has(operation.id) || !operation.timeRange) return operation;
+      return {
+        ...operation,
+        params: {
+          ...operation.params,
+          timelineStart,
+          timelineEnd,
+        },
+        timeRange: { start, end },
+      };
+    });
+  }, [activeAudioRegionOperationDrag, audioEditStack, audioRegionSelection]);
+  const waveformPyramidForRender = activeAudioRegionOperationDrag?.operationIds.length && sourceWaveformPyramid
+    ? sourceWaveformPyramid
+    : waveformPyramid;
+  const waveformVariantForRender = activeAudioRegionOperationDrag?.operationIds.length && sourceWaveformPyramid
+    ? 'source'
+    : waveformVariant;
+  const waveformUsesProcessedPyramidForRender = Boolean(
+    waveformPyramidForRender &&
+    processedWaveformPyramid &&
+    waveformPyramidForRender === processedWaveformPyramid,
+  );
+  const processedWaveformPyramidForRender = waveformUsesProcessedPyramidForRender
+    ? processedWaveformPyramid
+    : null;
+  const waveformNaturalDurationForRender = processedWaveformPyramidForRender
+    ? Math.max(0.001, processedWaveformPyramidForRender.duration)
+    : (clip.source?.naturalDuration || clip.duration);
+  const waveformInPointForRender = processedWaveformPyramidForRender ? 0 : displayInPoint;
+  const waveformOutPointForRender = processedWaveformPyramidForRender
+    ? Math.max(0.001, processedWaveformPyramidForRender.duration)
+    : displayOutPoint;
+  const canApplyPredictiveAudioWaveform = waveformVariantForRender !== 'processed';
+  const predictiveAudioEditStack = canApplyPredictiveAudioWaveform
+    ? displayAudioEditStack
+    : EMPTY_AUDIO_EDIT_STACK;
+  const predictiveAudioRegionGainPreview = canApplyPredictiveAudioWaveform
+    ? audioRegionGainPreview
+    : null;
+
+  const commitAudioRegionOperationRange = useCallback((
+    operationIds: string[],
+    selection: TimelineAudioRegionSelection,
+    historyLabel: string,
+  ) => {
+    if (operationIds.length === 0) return;
+    setClipAudioEditOperationRange(clip.id, operationIds, selection, {
+      captureHistory: true,
+      historyLabel,
+    });
+  }, [clip.id, setClipAudioEditOperationRange]);
 
   const handleKeyframeTickMouseDown = (
     e: React.MouseEvent<HTMLButtonElement>,
@@ -1036,6 +1461,10 @@ function TimelineClipComponent({
     audioDisplayMode === 'spectral' &&
     activeTimelineToolId === 'select' &&
     track.locked !== true;
+  const canSelectVideoBakeRegion = trackFocusMode === 'video' &&
+    !isAudioClip &&
+    activeTimelineToolId === 'select' &&
+    track.locked !== true;
 
   const timelineTimeFromAudioRegionClientX = useCallback((
     clientX: number,
@@ -1044,6 +1473,53 @@ function TimelineClipComponent({
     const x = Math.max(0, Math.min(drag.rectWidth, clientX - drag.rectLeft));
     return displayStartTime + (x / Math.max(1, drag.rectWidth)) * Math.max(0.001, displayDuration);
   }, [displayDuration, displayStartTime]);
+
+  const timelineTimeFromVideoBakeClientX = useCallback((
+    clientX: number,
+    drag: Pick<VideoBakeRegionDragState, 'rectLeft' | 'rectWidth'>,
+  ): number => {
+    const x = Math.max(0, Math.min(drag.rectWidth, clientX - drag.rectLeft));
+    return displayStartTime + (x / Math.max(1, drag.rectWidth)) * Math.max(VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayDuration);
+  }, [displayDuration, displayStartTime]);
+
+  const sourceTimeFromVideoBakeTimelineTime = useCallback((timelineTime: number): number => {
+    const clipDuration = Math.max(VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayDuration);
+    const sourceStart = Math.max(0, displayInPoint ?? 0);
+    const sourceEnd = Math.max(sourceStart + VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayOutPoint ?? sourceStart + clipDuration);
+    const timelineRatio = Math.max(0, Math.min(1, (timelineTime - displayStartTime) / clipDuration));
+    const sourceRatio = clip.reversed ? 1 - timelineRatio : timelineRatio;
+    return sourceStart + sourceRatio * (sourceEnd - sourceStart);
+  }, [clip.reversed, displayDuration, displayInPoint, displayOutPoint, displayStartTime]);
+
+  const sourceTimeToVideoBakeTimelineTime = useCallback((sourceTime: number): number => {
+    const clipDuration = Math.max(VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayDuration);
+    const sourceStart = Math.max(0, displayInPoint ?? 0);
+    const sourceEnd = Math.max(sourceStart + VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayOutPoint ?? sourceStart + clipDuration);
+    const sourceRatio = Math.max(0, Math.min(1, (sourceTime - sourceStart) / (sourceEnd - sourceStart)));
+    const timelineRatio = clip.reversed ? 1 - sourceRatio : sourceRatio;
+    return displayStartTime + timelineRatio * clipDuration;
+  }, [clip.reversed, displayDuration, displayInPoint, displayOutPoint, displayStartTime]);
+
+  const resolveVideoBakeRegionDragSelection = useCallback((
+    drag: VideoBakeRegionDragState,
+    clientX: number,
+  ): TimelineVideoBakeRegionSelection => {
+    const focusTimelineTime = timelineTimeFromVideoBakeClientX(clientX, drag);
+    return {
+      scope: 'clip',
+      clipId: clip.id,
+      trackId: track.id,
+      startTime: drag.anchorTimelineTime,
+      endTime: focusTimelineTime,
+      sourceInPoint: sourceTimeFromVideoBakeTimelineTime(drag.anchorTimelineTime),
+      sourceOutPoint: sourceTimeFromVideoBakeTimelineTime(focusTimelineTime),
+    };
+  }, [
+    clip.id,
+    sourceTimeFromVideoBakeTimelineTime,
+    timelineTimeFromVideoBakeClientX,
+    track.id,
+  ]);
 
   const resolveAudioRegionDragSelection = useCallback((
     drag: AudioRegionDragState,
@@ -1058,6 +1534,58 @@ function TimelineClipComponent({
       waveform: clip.waveform,
     },
     anchorTimelineTime: drag.anchorTimelineTime,
+    focusTimelineTime: timelineTimeFromAudioRegionClientX(clientX, drag),
+    snapThresholdSeconds: Math.min(0.035, Math.max(0.002, 7 / Math.max(1, zoom))),
+  }), [
+    clip,
+    displayDuration,
+    displayInPoint,
+    displayOutPoint,
+    displayStartTime,
+    timelineTimeFromAudioRegionClientX,
+    zoom,
+  ]);
+
+  const resolveAudioRegionMoveSelection = useCallback((
+    drag: AudioRegionMoveDragState,
+    clientX: number,
+  ) => {
+    const deltaX = clientX - drag.startClientX;
+    const deltaTimelineSeconds = (deltaX / Math.max(1, drag.clipWidth)) * Math.max(0.001, drag.clipDuration);
+    return moveTimelineAudioRegionSelection({
+      clip: {
+        ...clip,
+        startTime: displayStartTime,
+        duration: displayDuration,
+        inPoint: displayInPoint,
+        outPoint: displayOutPoint,
+        waveform: clip.waveform,
+      },
+      selection: drag.initialSelection,
+      deltaTimelineSeconds,
+    });
+  }, [
+    clip,
+    displayDuration,
+    displayInPoint,
+    displayOutPoint,
+    displayStartTime,
+  ]);
+
+  const resolveAudioRegionResizeSelection = useCallback((
+    drag: AudioRegionResizeDragState,
+    clientX: number,
+  ) => resizeTimelineAudioRegionSelection({
+    clip: {
+      ...clip,
+      startTime: displayStartTime,
+      duration: displayDuration,
+      inPoint: displayInPoint,
+      outPoint: displayOutPoint,
+      waveform: clip.waveform,
+    },
+    selection: drag.initialSelection,
+    edge: drag.edge,
     focusTimelineTime: timelineTimeFromAudioRegionClientX(clientX, drag),
     snapThresholdSeconds: Math.min(0.035, Math.max(0.002, 7 / Math.max(1, zoom))),
   }), [
@@ -1115,7 +1643,7 @@ function TimelineClipComponent({
   ]);
 
   const handleAudioRegionMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!canSelectAudioRegion || e.button !== 0) return;
+    if (!canSelectAudioRegion || e.button !== 0 || !isAudioRegionModifierPressed(e)) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -1133,9 +1661,100 @@ function TimelineClipComponent({
     setAudioRegionDrag(drag);
     setAudioRegionSelection(resolveAudioRegionDragSelection(drag, e.clientX));
   };
+  const handleAudioRegionDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!canSelectAudioRegion || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setAudioRegionContextMenu(null);
+    setAudioRegionSelection(resolveTimelineAudioRegionSelection({
+      clip: {
+        ...clip,
+        startTime: displayStartTime,
+        duration: displayDuration,
+        inPoint: displayInPoint,
+        outPoint: displayOutPoint,
+        waveform: clip.waveform,
+      },
+      anchorTimelineTime: displayStartTime,
+      focusTimelineTime: displayStartTime + Math.max(0.001, displayDuration),
+      snapThresholdSeconds: 0,
+    }));
+  };
+
+  const handleVideoBakeRegionMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!canSelectVideoBakeRegion || e.button !== 0 || !isVideoBakeRegionModifierPressed(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const drag: VideoBakeRegionDragState = {
+      anchorTimelineTime: timelineTimeFromVideoBakeClientX(e.clientX, {
+        rectLeft: rect.left,
+        rectWidth: rect.width,
+      }),
+      startClientX: e.clientX,
+      rectLeft: rect.left,
+      rectWidth: rect.width,
+    };
+
+    setVideoBakeRegionDrag(drag);
+    setVideoBakeRegionSelection(resolveVideoBakeRegionDragSelection(drag, e.clientX));
+  };
+
+  const handleVideoBakeRegionDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!canSelectVideoBakeRegion || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    addClipVideoBakeRegion(clip.id, {
+      trackId: track.id,
+      startTime: displayStartTime,
+      endTime: displayStartTime + Math.max(VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayDuration),
+      sourceInPoint: displayInPoint,
+      sourceOutPoint: displayOutPoint,
+    });
+  };
+
+  const handleAudioRegionSelectionMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!canSelectAudioRegion || !audioRegionSelection || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setAudioRegionContextMenu(null);
+    setAudioRegionMoveDrag({
+      startClientX: e.clientX,
+      clipWidth: Math.max(1, width),
+      clipDuration: Math.max(0.001, displayDuration),
+      initialSelection: audioRegionSelection,
+      operationIds: getMatchingAudioRegionOperationIds(audioRegionSelection),
+    });
+  };
+
+  const handleAudioRegionEdgeMouseDown = useCallback((
+    edge: AudioRegionResizeDragState['edge'],
+  ) => (e: React.MouseEvent<HTMLSpanElement>) => {
+    if (!canSelectAudioRegion || !audioRegionSelection || e.button !== 0) return;
+    const clipElement = e.currentTarget.closest('.timeline-clip');
+    if (!clipElement) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setAudioRegionContextMenu(null);
+    const rect = clipElement.getBoundingClientRect();
+    setAudioRegionResizeDrag({
+      edge,
+      rectLeft: rect.left,
+      rectWidth: Math.max(1, rect.width),
+      initialSelection: audioRegionSelection,
+      operationIds: getMatchingAudioRegionOperationIds(audioRegionSelection),
+    });
+  }, [
+    audioRegionSelection,
+    canSelectAudioRegion,
+    getMatchingAudioRegionOperationIds,
+    setAudioRegionContextMenu,
+  ]);
 
   const handleSpectralRegionMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!canSelectSpectralRegion || e.button !== 0) return;
+    if (!canSelectSpectralRegion || e.button !== 0 || !isAudioRegionModifierPressed(e)) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -1167,6 +1786,10 @@ function TimelineClipComponent({
     if (!audioRegionDrag || !canSelectAudioRegion) return;
 
     const handleDocumentMouseMove = (e: MouseEvent) => {
+      if (!isAudioRegionModifierPressed(e)) {
+        setAudioRegionDrag(null);
+        return;
+      }
       e.preventDefault();
       setAudioRegionSelection(resolveAudioRegionDragSelection(audioRegionDrag, e.clientX));
     };
@@ -1194,9 +1817,143 @@ function TimelineClipComponent({
   ]);
 
   useEffect(() => {
+    if (!videoBakeRegionDrag || !canSelectVideoBakeRegion) return;
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      if (!isVideoBakeRegionModifierPressed(e)) {
+        setVideoBakeRegionDrag(null);
+        clearVideoBakeRegionSelection();
+        return;
+      }
+      e.preventDefault();
+      setVideoBakeRegionSelection(resolveVideoBakeRegionDragSelection(videoBakeRegionDrag, e.clientX));
+    };
+
+    const handleDocumentMouseUp = (e: MouseEvent) => {
+      const draggedFarEnough = Math.abs(e.clientX - videoBakeRegionDrag.startClientX) >= 3;
+      if (draggedFarEnough) {
+        const selection = resolveVideoBakeRegionDragSelection(videoBakeRegionDrag, e.clientX);
+        addClipVideoBakeRegion(clip.id, selection);
+      } else {
+        clearVideoBakeRegionSelection();
+      }
+      setVideoBakeRegionDrag(null);
+    };
+
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, [
+    addClipVideoBakeRegion,
+    canSelectVideoBakeRegion,
+    clearVideoBakeRegionSelection,
+    clip.id,
+    resolveVideoBakeRegionDragSelection,
+    setVideoBakeRegionSelection,
+    videoBakeRegionDrag,
+  ]);
+
+  useEffect(() => {
+    if (!audioRegionMoveDrag || !canSelectAudioRegion) return;
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      setAudioRegionSelection(resolveAudioRegionMoveSelection(audioRegionMoveDrag, e.clientX));
+    };
+
+    const handleDocumentMouseUp = (e: MouseEvent) => {
+      const nextSelection = resolveAudioRegionMoveSelection(audioRegionMoveDrag, e.clientX);
+      setAudioRegionSelection(nextSelection);
+      commitAudioRegionOperationRange(
+        audioRegionMoveDrag.operationIds,
+        nextSelection,
+        'Move audio region edit',
+      );
+      setAudioRegionMoveDrag(null);
+    };
+
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, [
+    audioRegionMoveDrag,
+    canSelectAudioRegion,
+    commitAudioRegionOperationRange,
+    resolveAudioRegionMoveSelection,
+    setAudioRegionSelection,
+  ]);
+
+  useEffect(() => {
+    if (!audioRegionResizeDrag || !canSelectAudioRegion) return;
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      setAudioRegionSelection(resolveAudioRegionResizeSelection(audioRegionResizeDrag, e.clientX));
+    };
+
+    const handleDocumentMouseUp = (e: MouseEvent) => {
+      const nextSelection = resolveAudioRegionResizeSelection(audioRegionResizeDrag, e.clientX);
+      setAudioRegionSelection(nextSelection);
+      commitAudioRegionOperationRange(
+        audioRegionResizeDrag.operationIds,
+        nextSelection,
+        'Resize audio region edit',
+      );
+      setAudioRegionResizeDrag(null);
+    };
+
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, [
+    audioRegionResizeDrag,
+    canSelectAudioRegion,
+    commitAudioRegionOperationRange,
+    resolveAudioRegionResizeSelection,
+    setAudioRegionSelection,
+  ]);
+
+  useEffect(() => {
+    if (!audioRegionSelection) return;
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('.clip-audio-region-selection')) return;
+      if (target.closest('.clip-audio-region-context-menu')) return;
+      if (target.closest('.clip-audio-edit-operation-overlay')) return;
+
+      setAudioRegionContextMenu(null);
+      clearAudioRegionSelection();
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown, true);
+
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown, true);
+    };
+  }, [audioRegionSelection, clearAudioRegionSelection]);
+
+  useEffect(() => {
     if (!spectralRegionDrag || !canSelectSpectralRegion) return;
 
     const handleDocumentMouseMove = (e: MouseEvent) => {
+      if (!isAudioRegionModifierPressed(e)) {
+        setSpectralRegionDrag(null);
+        return;
+      }
       e.preventDefault();
       setAudioSpectralRegionSelection(resolveSpectralRegionDragSelection(spectralRegionDrag, e.clientX, e.clientY));
     };
@@ -1257,6 +2014,8 @@ function TimelineClipComponent({
     isAudioClip && audioFocusMode ? 'audio-focus-active' : '',
     audioRegionSelection ? 'audio-region-selected' : '',
     audioSpectralRegionSelection ? 'spectral-region-selected' : '',
+    videoBakeRegionSelection ? 'video-bake-region-selected' : '',
+    clip.videoState?.bakeRegions?.length ? 'has-video-bake-regions' : '',
     clip.isLoading ? 'loading' : '',
     clip.needsReload ? 'needs-reload' : '',
     hasProxy ? 'has-proxy' : '',
@@ -1265,7 +2024,7 @@ function TimelineClipComponent({
     hasKeyframes(clip.id) ? 'has-keyframes' : '',
     clip.reversed ? 'reversed' : '',
     clip.transcriptStatus === 'ready' ? 'has-transcript' : '',
-    clip.waveformGenerating ? 'generating-waveform' : '',
+    showWaveformGenerationIndicator ? 'generating-waveform' : '',
     waveformProcessingState,
     spectrogramProcessingState,
     audioDisplayMode === 'spectral' ? '' : (processedWaveformStatus?.className ?? ''),
@@ -1348,6 +2107,215 @@ function TimelineClipComponent({
         };
       })()
     : null;
+  const selectedAudioRegionGainOperation = useMemo(() => {
+    if (!audioRegionSelection) return null;
+    const start = Math.min(audioRegionSelection.sourceInPoint, audioRegionSelection.sourceOutPoint);
+    const end = Math.max(audioRegionSelection.sourceInPoint, audioRegionSelection.sourceOutPoint);
+
+    for (let index = displayAudioEditStack.length - 1; index >= 0; index -= 1) {
+      const operation = displayAudioEditStack[index];
+      if (
+        operation?.type === 'gain' &&
+        operation.enabled !== false &&
+        operation.timeRange &&
+        Math.abs(Math.min(operation.timeRange.start, operation.timeRange.end) - start) <= 0.001 &&
+        Math.abs(Math.max(operation.timeRange.start, operation.timeRange.end) - end) <= 0.001
+      ) {
+        return operation;
+      }
+    }
+
+    return null;
+  }, [displayAudioEditStack, audioRegionSelection]);
+  const audioRegionGainControl = audioRegionOverlay && audioRegionSelection
+    ? (() => {
+        const regionDuration = Math.max(
+          0.001,
+          Math.abs(audioRegionSelection.sourceOutPoint - audioRegionSelection.sourceInPoint),
+        );
+        const gainDb = audioRegionGainDrag?.currentGainDb ??
+          finiteNumberOr(selectedAudioRegionGainOperation?.params.gainDb, 0);
+        const fadeInSeconds = audioRegionGainDrag?.currentFadeInSeconds ??
+          finiteNumberOr(selectedAudioRegionGainOperation?.params.fadeInSeconds, AUDIO_REGION_GAIN_DEFAULT_FADE_SECONDS);
+        const fadeOutSeconds = audioRegionGainDrag?.currentFadeOutSeconds ??
+          finiteNumberOr(selectedAudioRegionGainOperation?.params.fadeOutSeconds, AUDIO_REGION_GAIN_DEFAULT_FADE_SECONDS);
+        const maxFadeSeconds = regionDuration / 2;
+
+        return {
+          regionDuration,
+          gainDb: Number(clampAudioRegionGainDb(gainDb).toFixed(1)),
+          fadeInSeconds: Math.max(0, Math.min(maxFadeSeconds, fadeInSeconds)),
+          fadeOutSeconds: Math.max(0, Math.min(maxFadeSeconds, fadeOutSeconds)),
+          yPercent: audioRegionGainDbToYPercent(gainDb),
+          fadeInPx: Math.max(0, Math.min(audioRegionOverlay.width / 2, (fadeInSeconds / regionDuration) * audioRegionOverlay.width)),
+          fadeOutPx: Math.max(0, Math.min(audioRegionOverlay.width / 2, (fadeOutSeconds / regionDuration) * audioRegionOverlay.width)),
+        };
+      })()
+    : null;
+  const commitAudioRegionGainEdit = useCallback((input: {
+    gainDb: number;
+    fadeInSeconds: number;
+    fadeOutSeconds: number;
+  }) => {
+    setAudioRegionGainEdit({
+      gainDb: input.gainDb,
+      fadeInSeconds: input.fadeInSeconds,
+      fadeOutSeconds: input.fadeOutSeconds,
+      keepSelection: true,
+    });
+  }, [setAudioRegionGainEdit]);
+  const publishAudioRegionGainPreview = useCallback((input: {
+    gainDb: number;
+    fadeInSeconds: number;
+    fadeOutSeconds: number;
+  }) => {
+    if (!audioRegionSelection) return;
+    setAudioRegionGainPreview({
+      clipId: clip.id,
+      trackId: audioRegionSelection.trackId,
+      startTime: audioRegionSelection.startTime,
+      endTime: audioRegionSelection.endTime,
+      sourceInPoint: audioRegionSelection.sourceInPoint,
+      sourceOutPoint: audioRegionSelection.sourceOutPoint,
+      gainDb: input.gainDb,
+      fadeInSeconds: input.fadeInSeconds,
+      fadeOutSeconds: input.fadeOutSeconds,
+    });
+  }, [audioRegionSelection, clip.id, setAudioRegionGainPreview]);
+  const handleAudioRegionGainMouseDown = useCallback((
+    mode: AudioRegionGainDragState['mode'],
+  ) => (e: React.MouseEvent<HTMLButtonElement | HTMLDivElement>) => {
+    if (!audioRegionGainControl) return;
+    const regionElement = e.currentTarget.closest('.clip-audio-region-selection');
+    if (!regionElement) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = regionElement.getBoundingClientRect();
+    const startGainDb = mode === 'gain'
+      ? Number(audioRegionGainDbFromClientY(e.clientY, rect).toFixed(1))
+      : audioRegionGainControl.gainDb;
+    publishAudioRegionGainPreview({
+      gainDb: startGainDb,
+      fadeInSeconds: audioRegionGainControl.fadeInSeconds,
+      fadeOutSeconds: audioRegionGainControl.fadeOutSeconds,
+    });
+
+    setAudioRegionGainDrag({
+      mode,
+      regionLeft: rect.left,
+      regionWidth: rect.width,
+      regionTop: rect.top,
+      regionHeight: rect.height,
+      regionDuration: audioRegionGainControl.regionDuration,
+      startGainDb,
+      startFadeInSeconds: audioRegionGainControl.fadeInSeconds,
+      startFadeOutSeconds: audioRegionGainControl.fadeOutSeconds,
+      currentGainDb: startGainDb,
+      currentFadeInSeconds: audioRegionGainControl.fadeInSeconds,
+      currentFadeOutSeconds: audioRegionGainControl.fadeOutSeconds,
+    });
+  }, [audioRegionGainControl, publishAudioRegionGainPreview]);
+  const handleAudioRegionContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!audioRegionSelection) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const expectedExpandedHeight = 340;
+    const y = typeof window === 'undefined'
+      ? e.clientY
+      : Math.min(
+          e.clientY,
+          Math.max(8, window.innerHeight - expectedExpandedHeight - 8),
+        );
+    audioRegionCommandHandledRef.current = false;
+    setAudioRegionContextMenu({ x: e.clientX, y, selection: audioRegionSelection });
+  }, [audioRegionSelection, setAudioRegionContextMenu]);
+  const closeAudioRegionContextMenu = useCallback(() => {
+    setAudioRegionContextMenu(null);
+  }, [setAudioRegionContextMenu]);
+  useEffect(() => {
+    if (!audioRegionGainDrag) return;
+
+    const getNextDragState = (e: MouseEvent): AudioRegionGainDragState => {
+      if (audioRegionGainDrag.mode === 'gain') {
+        return {
+          ...audioRegionGainDrag,
+          currentGainDb: Number(audioRegionGainDbFromClientY(e.clientY, {
+            top: audioRegionGainDrag.regionTop,
+            height: audioRegionGainDrag.regionHeight,
+          }).toFixed(1)),
+        };
+      }
+
+      const localX = Math.max(0, Math.min(audioRegionGainDrag.regionWidth, e.clientX - audioRegionGainDrag.regionLeft));
+      const secondsAtPointer = (localX / Math.max(1, audioRegionGainDrag.regionWidth)) * audioRegionGainDrag.regionDuration;
+      const maxFadeSeconds = audioRegionGainDrag.regionDuration / 2;
+
+      return {
+        ...audioRegionGainDrag,
+        currentFadeInSeconds: audioRegionGainDrag.mode === 'fade-in'
+          ? Number(Math.max(0, Math.min(maxFadeSeconds, secondsAtPointer)).toFixed(4))
+          : audioRegionGainDrag.currentFadeInSeconds,
+        currentFadeOutSeconds: audioRegionGainDrag.mode === 'fade-out'
+          ? Number(Math.max(0, Math.min(maxFadeSeconds, audioRegionGainDrag.regionDuration - secondsAtPointer)).toFixed(4))
+          : audioRegionGainDrag.currentFadeOutSeconds,
+      };
+    };
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      const next = getNextDragState(e);
+      publishAudioRegionGainPreview({
+        gainDb: next.currentGainDb,
+        fadeInSeconds: next.currentFadeInSeconds,
+        fadeOutSeconds: next.currentFadeOutSeconds,
+      });
+      setAudioRegionGainDrag(next);
+    };
+
+    const handleDocumentMouseUp = (e: MouseEvent) => {
+      const next = getNextDragState(e);
+      commitAudioRegionGainEdit({
+        gainDb: next.currentGainDb,
+        fadeInSeconds: next.currentFadeInSeconds,
+        fadeOutSeconds: next.currentFadeOutSeconds,
+      });
+      clearAudioRegionGainPreview();
+      setAudioRegionGainDrag(null);
+    };
+
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, [audioRegionGainDrag, clearAudioRegionGainPreview, commitAudioRegionGainEdit, publishAudioRegionGainPreview]);
+
+  useEffect(() => () => {
+    const preview = useTimelineStore.getState().audioRegionGainPreview;
+    if (preview?.clipId === clip.id) {
+      useTimelineStore.getState().clearAudioRegionGainPreview();
+    }
+  }, [clip.id]);
+
+  useEffect(() => {
+    if (!audioRegionContextMenu) return;
+
+    const handlePointerDown = () => closeAudioRegionContextMenu();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeAudioRegionContextMenu();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [audioRegionContextMenu, closeAudioRegionContextMenu]);
   const spectralRegionOverlay = audioSpectralRegionSelection &&
     audioSpectralRegionSelection.endTime - audioSpectralRegionSelection.startTime > 0.001 &&
     audioSpectralRegionSelection.frequencyMaxHz - audioSpectralRegionSelection.frequencyMinHz > 1
@@ -1429,32 +2397,156 @@ function TimelineClipComponent({
     trackBaseHeight,
     width,
   ]);
-  const handleApplyAudioRegionEdit = (type: TimelineAudioRegionEditType) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    applyAudioRegionEdit(type);
-  };
-  const handleApplyAudioRegionEditWithParams = (
-    type: TimelineAudioRegionEditType,
-    params: Record<string, string | number | boolean | null>,
-  ) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    applyAudioRegionEdit(type, { params });
-  };
-  const handleApplyAudioRepairEdit = (
-    label: string,
-    params: Record<string, string | number | boolean | null>,
-  ) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    applyAudioRegionEdit('repair', {
-      params: {
-        label,
-        ...params,
-      },
+  const audioEditOperationOverlays = useMemo<AudioEditOperationOverlay[]>(() => {
+    if (!isAudioClip || !audioFocusMode || !showAudioRegionEditMarkers || displayAudioEditStack.length === 0) return [];
+
+    const baseOverlays = displayAudioEditStack.flatMap((operation) => {
+      if (operation.enabled === false || !operation.timeRange) return [];
+      const sourceStart = Math.min(operation.timeRange.start, operation.timeRange.end);
+      const sourceEnd = Math.max(operation.timeRange.start, operation.timeRange.end);
+      if (
+        audioRegionSelection &&
+        Math.abs(audioRegionSelection.sourceInPoint - sourceStart) <= 0.001 &&
+        Math.abs(audioRegionSelection.sourceOutPoint - sourceEnd) <= 0.001
+      ) {
+        return [];
+      }
+
+      const timelineStart = sourceTimeToDisplayTimelineTime(sourceStart);
+      const timelineEnd = sourceTimeToDisplayTimelineTime(sourceEnd);
+      const selectionStartTime = Math.min(timelineStart, timelineEnd);
+      const selectionEndTime = Math.max(timelineStart, timelineEnd);
+      const regionStart = Math.max(displayStartTime, Math.min(timelineStart, timelineEnd));
+      const regionEnd = Math.min(displayStartTime + displayDuration, Math.max(timelineStart, timelineEnd));
+      if (regionEnd <= regionStart && operation.type !== 'insert-silence') return [];
+
+      const nominalLeft = ((regionStart - displayStartTime) / Math.max(0.001, displayDuration)) * width;
+      const nominalWidth = ((regionEnd - regionStart) / Math.max(0.001, displayDuration)) * width;
+      const overlayWidth = Math.max(operation.type === 'insert-silence' ? 6 : 3, nominalWidth);
+      const left = Math.max(0, Math.min(width - overlayWidth, nominalLeft));
+
+      return [{
+        id: operation.id,
+        left,
+        width: overlayWidth,
+        top: 0,
+        height: 0,
+        label: getInlineAudioEditLabel(operation.type, operation.params as Record<string, unknown>),
+        type: operation.type,
+        selection: {
+          clipId: clip.id,
+          trackId: clip.trackId,
+          startTime: selectionStartTime,
+          endTime: selectionEndTime,
+          sourceInPoint: sourceStart,
+          sourceOutPoint: sourceEnd,
+        },
+      }];
     });
-  };
+
+    const laneRightEdges: number[] = [];
+    const laneHeight = Math.max(14, Math.min(18, Math.round(trackBaseHeight * 0.16)));
+    const laneGap = 2;
+    const topPadding = 4;
+    const bottomPadding = 4;
+    const maxTop = Math.max(topPadding, trackBaseHeight - bottomPadding - laneHeight);
+    const topForLane = (lane: number) => Math.min(maxTop, topPadding + lane * (laneHeight + laneGap));
+
+    return baseOverlays
+      .toSorted((a, b) => a.left - b.left || b.width - a.width || a.id.localeCompare(b.id))
+      .map((overlay) => {
+        let lane = 0;
+        while (lane < laneRightEdges.length && overlay.left < laneRightEdges[lane] - 1) {
+          lane += 1;
+        }
+        laneRightEdges[lane] = Math.max(laneRightEdges[lane] ?? 0, overlay.left + overlay.width);
+        return {
+          ...overlay,
+          top: topForLane(lane),
+          height: laneHeight,
+        };
+      });
+  }, [
+    audioRegionSelection,
+    clip.id,
+    clip.trackId,
+    displayAudioEditStack,
+    audioFocusMode,
+    displayDuration,
+    displayStartTime,
+    isAudioClip,
+    showAudioRegionEditMarkers,
+    sourceTimeToDisplayTimelineTime,
+    trackBaseHeight,
+    width,
+  ]);
+  const clipVideoBakeRegionOverlays = useMemo<ClipVideoBakeRegionOverlay[]>(() => {
+    if (isAudioClip) return [];
+
+    const buildOverlay = (
+      id: string,
+      startTime: number,
+      endTime: number,
+      status: VideoBakeRegion['status'],
+      selection = false,
+    ): ClipVideoBakeRegionOverlay | null => {
+      const timelineStart = Math.min(startTime, endTime);
+      const timelineEnd = Math.max(startTime, endTime);
+      const regionStart = Math.max(displayStartTime, timelineStart);
+      const regionEnd = Math.min(displayStartTime + displayDuration, timelineEnd);
+      if (regionEnd <= regionStart) return null;
+
+      return {
+        id,
+        status,
+        selection,
+        left: ((regionStart - displayStartTime) / Math.max(VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayDuration)) * width,
+        width: Math.max(3, ((regionEnd - regionStart) / Math.max(VIDEO_BAKE_REGION_TIMELINE_EPSILON, displayDuration)) * width),
+      };
+    };
+
+    const persistentOverlays = (clip.videoState?.bakeRegions ?? []).flatMap((region) => {
+      const hasSourceRange = Number.isFinite(region.sourceInPoint) && Number.isFinite(region.sourceOutPoint);
+      const startTime = hasSourceRange
+        ? sourceTimeToVideoBakeTimelineTime(region.sourceInPoint as number)
+        : region.startTime;
+      const endTime = hasSourceRange
+        ? sourceTimeToVideoBakeTimelineTime(region.sourceOutPoint as number)
+        : region.endTime;
+      const overlay = buildOverlay(region.id, startTime, endTime, region.status);
+      return overlay ? [overlay] : [];
+    });
+
+    if (videoBakeRegionSelection) {
+      const selectionOverlay = buildOverlay(
+        'clip-video-bake-selection',
+        videoBakeRegionSelection.startTime,
+        videoBakeRegionSelection.endTime,
+        'marked',
+        true,
+      );
+      if (selectionOverlay) persistentOverlays.push(selectionOverlay);
+    }
+
+    return persistentOverlays;
+  }, [
+    clip.videoState?.bakeRegions,
+    displayDuration,
+    displayStartTime,
+    isAudioClip,
+    sourceTimeToVideoBakeTimelineTime,
+    videoBakeRegionSelection,
+    width,
+  ]);
+  const handleAudioEditOperationOverlayMouseDown = useCallback((
+    overlay: AudioEditOperationOverlay,
+  ) => (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setAudioRegionContextMenu(null);
+    setAudioRegionSelection(overlay.selection);
+  }, [setAudioRegionContextMenu, setAudioRegionSelection]);
   const handleApplySpectralRegionEdit = (type: TimelineSpectralRegionEditType) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1542,16 +2634,6 @@ function TimelineClipComponent({
     });
     setAudioSpectralRegionSelection(selection);
   };
-  const handleCopyAudioRegion = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    copySelectedAudioRegion();
-  };
-  const handlePasteAudioRegion = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    pasteAudioRegionToSelection();
-  };
   const handleAudioEditStackMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1565,10 +2647,239 @@ function TimelineClipComponent({
       setAudioBakePending(false);
     });
   };
+  const handleUnbakeAudioEditStack = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (audioBakePending || !canUnbakeAudioEditStack) return;
+    unbakeClipAudioEditStack(clip.id);
+  };
   const handleClearAudioEditStack = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     clearClipAudioEditStack(clip.id);
+  };
+  const handleSplitAudioRegionAtSelection = (selectionSnapshot?: TimelineAudioRegionSelection | null) => {
+    const store = useTimelineStore.getState();
+    const selection = selectionSnapshot?.clipId === clip.id
+      ? selectionSnapshot
+      : store.audioRegionSelection?.clipId === clip.id
+      ? store.audioRegionSelection
+      : audioRegionSelection;
+    const currentClip = store.clips.find(candidate => candidate.id === clip.id) ?? clip;
+    if (!selection) {
+      log.warn('Cannot split audio region without an active selection', { clipId: clip.id });
+      return;
+    }
+
+    const range = resolveAudioRegionTimelineRangeForClip(currentClip, selection);
+    if (!range) {
+      log.warn('Cannot split audio region outside clip bounds', { clipId: clip.id, selection });
+      return;
+    }
+
+    const clipStart = currentClip.startTime;
+    const clipEnd = currentClip.startTime + Math.max(AUDIO_REGION_TIMELINE_EPSILON, currentClip.duration);
+    const splitTimes = [range.start, range.end].filter(time =>
+      time > clipStart + AUDIO_REGION_TIMELINE_EPSILON &&
+      time < clipEnd - AUDIO_REGION_TIMELINE_EPSILON
+    );
+    const result = splitTimes.length > 0
+      ? applyTimelineEditOperation({
+        id: `split-audio-region:${clip.id}:${range.start}:${range.end}`,
+        type: 'split-at-times',
+        clipId: currentClip.id,
+        times: splitTimes,
+        includeLinked: false,
+      }, {
+        source: 'context-menu',
+        historyLabel: 'Split audio region',
+      })
+      : { success: true };
+
+    if (result.success) {
+      const middleClip = useTimelineStore.getState().clips.find(candidate =>
+        candidate.trackId === currentClip.trackId &&
+        Math.abs(candidate.startTime - range.start) <= AUDIO_REGION_TIMELINE_EPSILON &&
+        Math.abs(candidate.duration - range.duration) <= AUDIO_REGION_TIMELINE_EPSILON
+      );
+      if (middleClip) {
+        selectClip(middleClip.id);
+      }
+    } else {
+      log.warn('Split audio region operation failed', { clipId: currentClip.id, range, result });
+    }
+    clearAudioRegionSelection();
+  };
+  const handleCutAudioRegion = (selectionSnapshot?: TimelineAudioRegionSelection | null) => {
+    const store = useTimelineStore.getState();
+    const selection = selectionSnapshot?.clipId === clip.id
+      ? selectionSnapshot
+      : store.audioRegionSelection?.clipId === clip.id
+      ? store.audioRegionSelection
+      : audioRegionSelection;
+    const currentClip = store.clips.find(candidate => candidate.id === clip.id) ?? clip;
+    if (!selection) {
+      log.warn('Cannot cut audio region without an active selection', { clipId: clip.id });
+      return;
+    }
+
+    const range = resolveAudioRegionTimelineRangeForClip(currentClip, selection);
+    if (!range) {
+      log.warn('Cannot cut audio region outside clip bounds', { clipId: clip.id, selection });
+      return;
+    }
+
+    if (store.audioRegionSelection?.clipId !== currentClip.id) {
+      setAudioRegionSelection(selection);
+    }
+    copySelectedAudioRegion();
+    const result = applyTimelineEditOperation({
+      id: `cut-audio-region:${clip.id}:${range.start}:${range.end}`,
+      type: 'lift-range',
+      range: {
+        startTime: range.start,
+        endTime: range.end,
+        trackIds: [currentClip.trackId],
+      },
+      includeLinked: false,
+    }, {
+      source: 'context-menu',
+      historyLabel: 'Cut audio region',
+    });
+    if (result.success) {
+      clearAudioRegionSelection();
+    } else {
+      log.warn('Cut audio region operation failed', { clipId: currentClip.id, range, result });
+    }
+  };
+  const contextMenuAudioRegionSelection = audioRegionContextMenu?.selection ?? audioRegionSelection;
+  const audioRegionDirectMenuCommands: AudioRegionContextMenuCommand[] = [
+    { key: 'split', label: 'Split', action: () => handleSplitAudioRegionAtSelection(contextMenuAudioRegionSelection) },
+    { key: 'cut', label: 'Cut', action: () => handleCutAudioRegion(contextMenuAudioRegionSelection), danger: true },
+    { key: 'copy', label: 'Copy', action: copySelectedAudioRegion },
+    { key: 'paste', label: 'Paste', action: pasteAudioRegionToSelection, disabled: !hasAudioRegionClipboard },
+  ];
+  const audioRegionContextMenuGroups: AudioRegionContextMenuGroup[] = [
+    {
+      key: 'clipboard',
+      label: 'Clipboard',
+      commands: [
+      { key: 'copy-region', label: 'Copy Region', action: copySelectedAudioRegion },
+      { key: 'paste-region', label: 'Paste Into Region', action: pasteAudioRegionToSelection, disabled: !hasAudioRegionClipboard },
+      ],
+    },
+    {
+      key: 'time',
+      label: 'Time',
+      commands: [
+      { key: 'silence', label: 'Silence', action: () => applyAudioRegionEdit('silence', { keepSelection: true }) },
+      { key: 'insert-silence', label: 'Insert Silence', action: () => applyAudioRegionEdit('insert-silence', { keepSelection: true }) },
+      { key: 'delete-silence', label: 'Delete Audio', action: () => applyAudioRegionEdit('delete-silence', { keepSelection: true }), danger: true },
+      ],
+    },
+    {
+      key: 'polarity',
+      label: 'Direction',
+      commands: [
+      { key: 'reverse', label: 'Reverse', action: () => applyAudioRegionEdit('reverse', { keepSelection: true }) },
+      { key: 'invert-polarity', label: 'Invert Polarity', action: () => applyAudioRegionEdit('invert-polarity', { keepSelection: true }) },
+      ],
+    },
+    {
+      key: 'channels',
+      label: 'Channels',
+      commands: [
+      { key: 'swap-channels', label: 'Swap L/R', action: () => applyAudioRegionEdit('swap-channels', { keepSelection: true }) },
+      { key: 'mono-sum', label: 'Mono Sum', action: () => applyAudioRegionEdit('mono-sum', { keepSelection: true }) },
+      {
+        key: 'left-mono',
+        label: 'Left To Mono',
+        action: () => applyAudioRegionEdit('split-stereo', { keepSelection: true, params: { sourceChannel: 0, label: 'Left to mono' } }),
+      },
+      {
+        key: 'right-mono',
+        label: 'Right To Mono',
+        action: () => applyAudioRegionEdit('split-stereo', { keepSelection: true, params: { sourceChannel: 1, label: 'Right to mono' } }),
+      },
+      ],
+    },
+    {
+      key: 'fx',
+      label: 'Region FX',
+      commands: AUDIO_REGION_FX_PRESETS.map(preset => ({
+        key: preset.key,
+        label: preset.label,
+        action: () => applyAudioRegionEdit('effect', {
+          keepSelection: true,
+          params: {
+            label: preset.label,
+            effectLabel: preset.label,
+            effectDescriptorId: preset.descriptorId,
+            featherTime: 0.015,
+            ...preset.params,
+          },
+        }),
+      })),
+    },
+    {
+      key: 'repair',
+      label: 'Repair',
+      commands: [
+      {
+        key: 'hum-notch',
+        label: '50 Hz Notch',
+        action: () => applyAudioRegionEdit('repair', {
+          keepSelection: true,
+          params: { label: '50 Hz notch', repairType: 'hum-notch', baseFrequencyHz: 50, harmonicCount: 6, q: 35, featherTime: 0.02 },
+        }),
+      },
+      {
+        key: 'de-click',
+        label: 'De-click',
+        action: () => applyAudioRegionEdit('repair', {
+          keepSelection: true,
+          params: { label: 'De-click', repairType: 'de-click', threshold: 0.35, ratio: 4 },
+        }),
+      },
+      {
+        key: 'splice-smooth',
+        label: 'Smooth Edge',
+        action: () => applyAudioRegionEdit('repair', {
+          keepSelection: true,
+          params: { label: 'Smooth edge', repairType: 'splice-smooth', edgeSeconds: 0.008 },
+        }),
+      },
+      {
+        key: 'loudness-match',
+        label: 'Match RMS',
+        action: () => applyAudioRegionEdit('repair', {
+          keepSelection: true,
+          params: { label: 'Match RMS', repairType: 'loudness-match', targetDb: -20, minGainDb: -24, maxGainDb: 24, featherTime: 0.01 },
+        }),
+      },
+      ],
+    },
+  ];
+  const findAudioRegionContextMenuCommand = (key: string): AudioRegionContextMenuCommand | undefined =>
+    audioRegionDirectMenuCommands.find(command => command.key === key) ??
+    audioRegionContextMenuGroups
+      .flatMap(group => group.commands)
+      .find(command => command.key === key);
+  const runAudioRegionContextMenuCommand = (
+    command: AudioRegionContextMenuCommand,
+    selection: TimelineAudioRegionSelection,
+  ) => {
+    if (audioRegionCommandHandledRef.current) return;
+    if (command.disabled) return;
+    audioRegionCommandHandledRef.current = true;
+    log.info('Audio region context command', {
+      command: command.key,
+      clipId: clip.id,
+      selection,
+    });
+    setAudioRegionSelection(selection);
+    command.action();
+    closeAudioRegionContextMenu();
   };
 
   // Track filtering must stay after all hooks so React sees a stable hook order
@@ -1610,12 +2921,16 @@ function TimelineClipComponent({
     '--track-color'?: string;
     '--clip-right-sticky-offset'?: string;
   };
+  const audioRegionContextMenuPortalTarget = typeof document === 'undefined'
+    ? null
+    : document.body;
 
   return (
     <div
       className={`${clipClass}${isBladeToolActive ? ' cut-mode' : ''} ${animationClass}`}
       style={clipStyle}
       data-clip-id={clip.id}
+      data-dock-layout-child-anim-id={`timeline-clip:${clip.id}`}
       onMouseDown={isTrackLocked || (isPointerToolActive && !canUseBodyToolGesture) ? undefined : onMouseDown}
       onDoubleClick={isPointerToolActive ? undefined : onDoubleClick}
       onContextMenu={onContextMenu}
@@ -1758,7 +3073,7 @@ function TimelineClipComponent({
         );
       })()}
       {/* Waveform generation progress indicator */}
-      {clip.waveformGenerating && (
+      {showWaveformGenerationIndicator && (
         <div
           className="clip-waveform-indicator"
           title={clip.audioAnalysisJob ? `${clip.audioAnalysisJob.label}: ${clip.audioAnalysisJob.phase}` : undefined}
@@ -1772,7 +3087,7 @@ function TimelineClipComponent({
       {/* Audio waveform / spectrogram */}
       {waveformsEnabled && isAudioClip && (
         audioDisplayMode === 'spectral'
-        || waveformPyramid
+        || waveformPyramidForRender
         || (clip.waveform && clip.waveform.length > 0)
         || clip.waveformChannels?.some(channel => channel.length > 0)
       ) && (
@@ -1793,18 +3108,21 @@ function TimelineClipComponent({
             <div className="spectrogram-pending" />
           ) : waveformPyramid || (clip.waveform && clip.waveform.length > 0) || clip.waveformChannels?.some(channel => channel.length > 0) ? (
             <ClipWaveform
+              clipId={clip.id}
               waveform={clip.waveform ?? []}
               waveformChannels={clip.waveformChannels}
               width={width}
               height={Math.max(20, trackBaseHeight - 12)}
-              inPoint={waveformInPoint}
-              outPoint={waveformOutPoint}
-              naturalDuration={waveformNaturalDuration}
+              inPoint={waveformInPointForRender}
+              outPoint={waveformOutPointForRender}
+              naturalDuration={waveformNaturalDurationForRender}
               displayMode={audioDisplayMode}
               pixelsPerSecond={zoom}
-              pyramid={waveformPyramid}
-              waveformVariant={waveformVariant}
+              pyramid={waveformPyramidForRender}
+              waveformVariant={waveformVariantForRender}
               displayGain={waveformDisplayGain}
+              audioEditStack={predictiveAudioEditStack}
+              audioRegionGainPreview={predictiveAudioRegionGainPreview}
               renderStartPx={waveformRenderWindow.startPx}
               renderWidth={waveformRenderWindow.width}
             />
@@ -1837,40 +3155,228 @@ function TimelineClipComponent({
       )}
       {audioRegionOverlay && (
         <div
-          className={`clip-audio-region-selection ${audioRegionSelection?.snappedToZeroCrossing ? 'snapped' : ''}`}
+          className={`clip-audio-region-selection ${audioRegionSelection?.snappedToZeroCrossing ? 'snapped' : ''} ${audioRegionMoveDrag ? 'moving' : ''} ${audioRegionResizeDrag ? 'resizing' : ''}`}
           style={{
             left: audioRegionOverlay.left,
             width: audioRegionOverlay.width,
           }}
+          onMouseDown={handleAudioRegionSelectionMouseDown}
+          onContextMenu={handleAudioRegionContextMenu}
+          title="Drag to move the selected audio region; drag edges to resize"
         >
-          <span className="clip-audio-region-edge left" />
-          <span className="clip-audio-region-edge right" />
+          <span
+            className="clip-audio-region-edge left"
+            onMouseDown={handleAudioRegionEdgeMouseDown('left')}
+            title="Drag to resize the selected audio region start"
+          />
+          <span
+            className="clip-audio-region-edge right"
+            onMouseDown={handleAudioRegionEdgeMouseDown('right')}
+            title="Drag to resize the selected audio region end"
+          />
+          {audioRegionGainControl && (
+            <div
+              className="clip-audio-region-gain-control"
+              style={{ top: `${audioRegionGainControl.yPercent}%` }}
+            >
+              <div
+                className="clip-audio-region-gain-line"
+                onMouseDown={handleAudioRegionGainMouseDown('gain')}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  commitAudioRegionGainEdit({
+                    gainDb: 0,
+                    fadeInSeconds: 0,
+                    fadeOutSeconds: 0,
+                  });
+                }}
+                title="Drag to set region gain; double-click to reset"
+              />
+              <button
+                type="button"
+                className="clip-audio-region-fade-handle fade-in"
+                style={{ left: audioRegionGainControl.fadeInPx }}
+                onMouseDown={handleAudioRegionGainMouseDown('fade-in')}
+                title={`Fade in gain change: ${audioRegionGainControl.fadeInSeconds.toFixed(2)}s`}
+              />
+              <button
+                type="button"
+                className="clip-audio-region-fade-handle fade-out"
+                style={{ right: audioRegionGainControl.fadeOutPx }}
+                onMouseDown={handleAudioRegionGainMouseDown('fade-out')}
+                title={`Fade out gain change: ${audioRegionGainControl.fadeOutSeconds.toFixed(2)}s`}
+              />
+              <span className="clip-audio-region-gain-value">
+                {formatAudioRegionGainLabel(audioRegionGainControl.gainDb)}
+              </span>
+            </div>
+          )}
         </div>
       )}
-      {audioRegionOverlay && canSelectAudioRegion && (
+      {clipVideoBakeRegionOverlays.map((overlay) => (
         <div
-          className="clip-audio-region-toolbar"
-          style={{ left: Math.max(4, audioRegionOverlay.left) }}
-          onMouseDown={handleAudioEditStackMouseDown}
-          onDoubleClick={(e) => e.stopPropagation()}
+          key={overlay.id}
+          className={`clip-video-bake-region ${overlay.selection ? 'selection' : ''} status-${overlay.status ?? 'marked'}`}
+          style={{
+            left: overlay.left,
+            width: overlay.width,
+          }}
+          title={overlay.selection ? 'Video bake selection' : 'Video bake region'}
         >
-          <button type="button" onClick={handleCopyAudioRegion} title="Copy selected audio region">Copy</button>
-          <button type="button" onClick={handlePasteAudioRegion} disabled={!hasAudioRegionClipboard} title="Paste copied audio into selected region">Paste</button>
-          <button type="button" onClick={handleApplyAudioRegionEdit('silence')} title="Replace selected region with silence">Sil</button>
-          <button type="button" onClick={handleApplyAudioRegionEdit('insert-silence')} title="Insert silence at selected region start while preserving clip duration">Ins</button>
-          <button type="button" onClick={handleApplyAudioRegionEdit('delete-silence')} title="Delete selected audio and fill the tail with silence">Del</button>
-          <button type="button" onClick={handleApplyAudioRegionEdit('reverse')} title="Reverse selected region">Rev</button>
-          <button type="button" onClick={handleApplyAudioRegionEdit('invert-polarity')} title="Invert selected region polarity">Inv</button>
-          <button type="button" onClick={handleApplyAudioRegionEdit('swap-channels')} title="Swap left and right channels">LR</button>
-          <button type="button" onClick={handleApplyAudioRegionEdit('mono-sum')} title="Sum selected channels to mono">Mono</button>
-          <button type="button" onClick={handleApplyAudioRegionEditWithParams('split-stereo', { sourceChannel: 0, label: 'Split stereo left' })} title="Copy left channel across selected channels">L-M</button>
-          <button type="button" onClick={handleApplyAudioRegionEditWithParams('split-stereo', { sourceChannel: 1, label: 'Split stereo right' })} title="Copy right channel across selected channels">R-M</button>
-          <button type="button" onClick={handleApplyAudioRepairEdit('Hum notch', { repairType: 'hum-notch', baseFrequencyHz: 50, harmonicCount: 6, q: 35, featherTime: 0.02 })} title="Apply 50 Hz hum notch repair">Hum</button>
-          <button type="button" onClick={handleApplyAudioRepairEdit('De-click', { repairType: 'de-click', threshold: 0.35, ratio: 4 })} title="Interpolate impulse clicks in the selected region">Click</button>
-          <button type="button" onClick={handleApplyAudioRepairEdit('Splice smooth', { repairType: 'splice-smooth', edgeSeconds: 0.008 })} title="Smooth selected region boundaries">Smth</button>
-          <button type="button" onClick={handleApplyAudioRepairEdit('Match loudness', { repairType: 'loudness-match', targetDb: -20, minGainDb: -24, maxGainDb: 24, featherTime: 0.01 })} title="Normalize selected region RMS toward -20 dBFS">LUFS</button>
+          {!overlay.selection && (
+            <div className="clip-video-bake-region-controls">
+              <button
+                type="button"
+                className="clip-video-bake-btn"
+                disabled={overlay.status === 'baking'}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (overlay.status === 'baked') {
+                    unbakeClipVideoBakeRegion(clip.id, overlay.id);
+                    return;
+                  }
+                  void bakeClipVideoBakeRegion(clip.id, overlay.id);
+                }}
+                title={overlay.status === 'baked' ? 'Unbake video region' : 'Bake video region'}
+              >
+                {overlay.status === 'baked' ? 'Unbake' : overlay.status === 'baking' ? '...' : 'Bake'}
+              </button>
+              <button
+                type="button"
+                className="clip-video-bake-btn remove"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  removeClipVideoBakeRegion(clip.id, overlay.id);
+                }}
+                title="Remove video bake region"
+              >
+                x
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      ))}
+      {audioEditOperationOverlays.map((overlay) => (
+        <div
+          key={overlay.id}
+          className="clip-audio-edit-operation-overlay"
+          data-audio-edit-type={overlay.type}
+          role="button"
+          tabIndex={0}
+          style={{
+            left: overlay.left,
+            width: overlay.width,
+            top: overlay.top,
+            height: overlay.height,
+          }}
+          onMouseDown={handleAudioEditOperationOverlayMouseDown(overlay)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            e.stopPropagation();
+            setAudioRegionContextMenu(null);
+            setAudioRegionSelection(overlay.selection);
+          }}
+          title={overlay.label}
+        >
+          <span>{overlay.label}</span>
+        </div>
+      ))}
+      {audioRegionContextMenu && audioRegionContextMenuPortalTarget && createPortal((
+        <div
+          ref={audioRegionContextMenuRef}
+          className="timeline-context-menu clip-audio-region-context-menu"
+          style={{
+            position: 'fixed',
+            left: audioRegionContextMenuPosition?.x ?? audioRegionContextMenu.x,
+            top: audioRegionContextMenuPosition?.y ?? audioRegionContextMenu.y,
+            zIndex: 10000,
+          }}
+          onPointerDownCapture={(e) => {
+            if (e.button !== 0) return;
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+            const commandElement = target.closest<HTMLElement>('[data-audio-region-command]');
+            const commandKey = commandElement?.dataset.audioRegionCommand;
+            if (!commandKey) return;
+            const command = findAudioRegionContextMenuCommand(commandKey);
+            if (!command) return;
+            e.preventDefault();
+            e.stopPropagation();
+            runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <div className="context-menu-title">Audio Region</div>
+          <div className="clip-audio-region-direct-actions">
+            {audioRegionDirectMenuCommands.map(command => (
+              <div
+                key={command.key}
+                data-audio-region-command={command.key}
+                className={`context-menu-item ${command.disabled ? 'disabled' : ''} ${command.danger ? 'danger' : ''}`}
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
+                }}
+              >
+                {command.label}
+              </div>
+            ))}
+          </div>
+          <div className="context-menu-separator" />
+          {audioRegionContextMenuGroups.map(group => (
+            <div
+              key={group.key}
+              className="context-menu-item has-submenu clip-audio-region-submenu-trigger"
+            >
+                <span>{group.label}</span>
+              <span className="submenu-arrow" aria-hidden="true">▶</span>
+              <div className="context-submenu clip-audio-region-submenu-panel">
+                {group.commands.map(command => (
+                <div
+                  key={command.key}
+                  data-audio-region-command={command.key}
+                  className={`context-menu-item ${command.disabled ? 'disabled' : ''} ${command.danger ? 'danger' : ''}`}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
+                  }}
+                >
+                  {command.label}
+                </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ), audioRegionContextMenuPortalTarget)}
       {spectralRegionOverlay && (
         <div
           className={`clip-spectral-region-selection ${audioSpectralRegionSelection?.selectionMode === 'brush' ? 'brush' : 'rectangle'}`}
@@ -1933,7 +3439,7 @@ function TimelineClipComponent({
           </button>
         </div>
       )}
-      {isAudioClip && audioFocusMode && audioEditStack.length > 0 && (
+      {isAudioClip && audioFocusMode && (audioEditStack.length > 0 || canUnbakeAudioEditStack) && (
         <div className="clip-audio-edit-stack" onMouseDown={handleAudioEditStackMouseDown}>
           <span className="clip-audio-edit-stack-count" title={`${activeAudioEditCount} active audio edits`}>
             {activeAudioEditCount}/{audioEditStack.length}
@@ -1960,6 +3466,9 @@ function TimelineClipComponent({
           <button type="button" onClick={handleBakeAudioEditStack} disabled={audioBakePending || activeAudioEditCount === 0} title="Bake active audio edits into a new WAV source">
             {audioBakePending ? '...' : 'Bake'}
           </button>
+          <button type="button" onClick={handleUnbakeAudioEditStack} disabled={audioBakePending || !canUnbakeAudioEditStack} title="Restore the source audio and region edits from the latest bake">
+            Unbake
+          </button>
           <button type="button" onClick={handleClearAudioEditStack} title="Clear audio edit stack">
             Clear
           </button>
@@ -1969,12 +3478,16 @@ function TimelineClipComponent({
         <div
           className="clip-audio-region-hitarea"
           onMouseDown={handleAudioRegionMouseDown}
-          onDoubleClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            clearAudioRegionSelection();
-          }}
-          title="Drag audio region"
+          onDoubleClick={handleAudioRegionDoubleClick}
+          title="Double-click to select the whole clip; hold Ctrl/Strg and drag to select an audio region"
+        />
+      )}
+      {canSelectVideoBakeRegion && (
+        <div
+          className="clip-video-bake-region-hitarea"
+          onMouseDown={handleVideoBakeRegionMouseDown}
+          onDoubleClick={handleVideoBakeRegionDoubleClick}
+          title="Double-click to mark the whole clip; hold Ctrl/Strg and drag to mark a video bake region"
         />
       )}
       {canSelectSpectralRegion && (
@@ -1984,11 +3497,12 @@ function TimelineClipComponent({
           onDragOver={handleSpectralImageLayerDragOver}
           onDrop={handleSpectralImageLayerDrop}
           onDoubleClick={(e) => {
+            if (!isAudioRegionModifierPressed(e)) return;
             e.preventDefault();
             e.stopPropagation();
             clearAudioSpectralRegionSelection();
           }}
-          title="Drag spectral region; hold Shift or Alt for brush"
+          title="Hold Ctrl/Strg and drag to select a spectral region; add Shift or Alt for brush"
         />
       )}
       {/* Nested composition mixdown waveform - shown overlaid on thumbnails */}

@@ -11,6 +11,7 @@ import { proxyFrameCache } from '../proxyFrameCache';
 import { layerPlaybackManager } from '../layerPlaybackManager';
 import { Logger } from '../logger';
 import { createLiveAudioRouteSettings, type LiveAudioRouteSettings } from '../audio/audioGraphRouteSettings';
+import { getClipAudioEditPreviewVolumeMultiplier } from '../audio/clipAudioEditPreview';
 import { useTimelineStore } from '../../stores/timeline';
 
 const log = Logger.create('CutTransition');
@@ -20,12 +21,14 @@ function getClipAudioRouteSettings(
   clip: TimelineClip,
   track: TimelineTrack | undefined,
   clipLocalTime: number,
+  clipSourceTime: number,
 ): LiveAudioRouteSettings {
   return createLiveAudioRouteSettings({
     clip,
     track,
     masterAudioState: ctx.masterAudioState,
     interpolatedClipEffects: ctx.getInterpolatedEffects(clip.id, clipLocalTime),
+    sourceTime: clipSourceTime,
   });
 }
 
@@ -121,6 +124,7 @@ export class AudioTrackSyncManager {
    * Sync audio track clips
    */
   private syncAudioTrackClips(ctx: FrameContext, state: AudioSyncState): void {
+    const regionGainPreview = useTimelineStore.getState().audioRegionGainPreview;
     for (const track of ctx.audioTracks) {
       const clip = getClipForTrack(ctx, track.id);
       if (!clip?.source?.audioElement) continue;
@@ -137,8 +141,10 @@ export class AudioTrackSyncManager {
       if (!audio.src && audio.readyState === 0) continue;
 
       const timeInfo = getClipTimeInfo(ctx, clip);
-      const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime);
-      const isMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted;
+      const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime, timeInfo.clipTime);
+      const editPreviewVolume = getClipAudioEditPreviewVolumeMultiplier(clip, timeInfo.clipTime, regionGainPreview);
+      const effectiveVolume = routeSettings.volume * editPreviewVolume;
+      const isMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01;
 
       // Use handoff element if available (seamless cut transition)
       const handoffAudio = this.audioHandoffs.get(clip.id);
@@ -150,7 +156,7 @@ export class AudioTrackSyncManager {
         isMuted,
         canBeMaster: true,
         type: 'audioTrack',
-        volume: routeSettings.volume,
+        volume: effectiveVolume,
         eqGains: routeSettings.eqGains,
         pan: routeSettings.pan,
         processors: routeSettings.processors,
@@ -166,6 +172,7 @@ export class AudioTrackSyncManager {
   private syncVideoClipAudio(ctx: FrameContext, state: AudioSyncState): void {
     const activeVideoClipIds = new Set<string>();
     let hasScrubAudioSource = false;
+    const regionGainPreview = useTimelineStore.getState().audioRegionGainPreview;
 
     for (const track of ctx.videoTracks) {
       const clip = getClipForTrack(ctx, track.id);
@@ -188,9 +195,16 @@ export class AudioTrackSyncManager {
         ctx,
         audioSettingsClip,
         audioSettingsTrack,
-        audioSettingsTimeInfo.clipLocalTime
+        audioSettingsTimeInfo.clipLocalTime,
+        audioSettingsTimeInfo.clipTime,
       );
-      let audioMuted = isMuted || routeSettings.muted || routeSettings.volume <= 0.01;
+      const editPreviewVolume = getClipAudioEditPreviewVolumeMultiplier(
+        audioSettingsClip,
+        audioSettingsTimeInfo.clipTime,
+        regionGainPreview,
+      );
+      const effectiveVolume = routeSettings.volume * editPreviewVolume;
+      let audioMuted = isMuted || routeSettings.muted || effectiveVolume <= 0.01;
 
       if (!audioMuted && linkedAudioClip) {
         const linkedTrackMuted = !ctx.unmutedAudioTrackIds.has(linkedAudioClip.trackId);
@@ -212,7 +226,7 @@ export class AudioTrackSyncManager {
           undefined,
           video.currentSrc || video.src,
           {
-            volume: routeSettings.volume,
+            volume: effectiveVolume,
             eqGains: routeSettings.eqGains,
             pan: routeSettings.pan,
             processors: routeSettings.processors,
@@ -254,7 +268,7 @@ export class AudioTrackSyncManager {
               isMuted,
               canBeMaster: !state.masterSet,
               type: 'audioProxy',
-              volume: routeSettings.volume,
+              volume: effectiveVolume,
               eqGains: routeSettings.eqGains,
               pan: routeSettings.pan,
               processors: routeSettings.processors,
@@ -295,7 +309,7 @@ export class AudioTrackSyncManager {
       const timeInfo = getClipTimeInfo(ctx, clip);
       const track = ctx.videoTracks.find(t => t.id === clip.trackId);
       const isMuted = track ? !isVideoTrackVisible(ctx, track.id) : false;
-      const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime);
+      const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime, timeInfo.clipTime);
 
       this.audioSyncHandler.syncAudioElement({
         element: clip.mixdownAudio,

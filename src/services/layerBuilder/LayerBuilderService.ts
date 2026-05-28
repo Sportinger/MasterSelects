@@ -1,7 +1,7 @@
 // LayerBuilderService - Main orchestrator for layer building
 // Delegates video sync to VideoSyncManager and audio sync to AudioTrackSyncManager
 
-import type { TimelineClip, Layer, NestedCompositionData, BlendMode, ClipTransform } from '../../types';
+import type { TimelineClip, Layer, NestedCompositionData, BlendMode, ClipTransform, VideoBakeRegion } from '../../types';
 import { compileRuntimeColorGrade } from '../../types';
 import type { FrameContext } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
@@ -36,6 +36,7 @@ import { getModelSequenceFrame, getModelSequenceFrameUrl, resolveModelSequenceDa
 import { resolveSceneEffectorsEnabled } from '../../engine/scene/SceneEffectorUtils';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { videoBakeProxyCache } from '../videoBakeProxyCache';
 import { renderClipAINodesToCanvas } from '../nodeGraph';
 import { textRenderer } from '../textRenderer';
 import type { MediaFile } from '../../stores/mediaStore/types';
@@ -303,6 +304,12 @@ export class LayerBuilderService {
 
     this.prewarmGaussianSplatClips(ctx);
 
+    const bakedLayer = this.buildActiveCompositionVideoBakeLayer(ctx);
+    if (bakedLayer) {
+      this.layerCache.invalidate();
+      return this.mergeBackgroundLayers([bakedLayer], ctx.playheadPosition);
+    }
+
     // Check cache (only for primary layers — background layers are cheap to rebuild)
     const cacheResult = this.layerCache.checkCache(ctx);
     let primaryLayers: Layer[];
@@ -360,6 +367,61 @@ export class LayerBuilderService {
     }
 
     return ids;
+  }
+
+  private getActiveCompositionVideoBakeRegion(ctx: FrameContext): VideoBakeRegion | undefined {
+    if (engine.getIsExporting()) return undefined;
+
+    return useTimelineStore.getState().videoBakeRegions.find(region =>
+      region.scope === 'composition' &&
+      region.status === 'baked' &&
+      ctx.playheadPosition >= region.startTime &&
+      ctx.playheadPosition < region.endTime &&
+      videoBakeProxyCache.has(region.id)
+    );
+  }
+
+  private buildActiveCompositionVideoBakeLayer(ctx: FrameContext): Layer | null {
+    const bakedCompositionRegion = this.getActiveCompositionVideoBakeRegion(ctx);
+    if (!bakedCompositionRegion) return null;
+
+    return videoBakeProxyCache.buildCompositionLayer(
+      bakedCompositionRegion,
+      ctx.activeCompId,
+      ctx.playheadPosition,
+      ctx.isPlaying,
+      ctx.playbackSpeed,
+    );
+  }
+
+  private pausePrimaryCompositionVideoSources(ctx: FrameContext): void {
+    const pauseClip = (clip: TimelineClip) => {
+      if (clip.source?.videoElement && !clip.source.videoElement.paused) {
+        clip.source.videoElement.pause();
+      }
+
+      const previewSource = getPreviewRuntimeSource(
+        clip.source,
+        clip.trackId,
+        canUseSharedPreviewRuntimeSession(clip, ctx.clipsAtTime),
+      );
+      const scrubSource = getScrubRuntimeSource(
+        clip.source,
+        clip.trackId,
+        canUseSharedPreviewRuntimeSession(clip, ctx.clipsAtTime),
+      );
+      getRuntimeFrameProvider(previewSource)?.pause();
+      getRuntimeFrameProvider(scrubSource)?.pause();
+      clip.source?.webCodecsPlayer?.pause();
+
+      for (const nestedClip of clip.nestedClips ?? []) {
+        pauseClip(nestedClip);
+      }
+    };
+
+    for (const clip of ctx.clips) {
+      pauseClip(clip);
+    }
   }
 
   private syncActiveVectorAnimationClips(ctx: FrameContext): void {
@@ -1863,6 +1925,13 @@ export class LayerBuilderService {
    * Sync video elements to current playhead
    */
   syncVideoElements(): void {
+    const ctx = createFrameContext();
+    if (this.getActiveCompositionVideoBakeRegion(ctx)) {
+      this.pausePrimaryCompositionVideoSources(ctx);
+      layerPlaybackManager.syncVideoElements(ctx.playheadPosition, ctx.isPlaying);
+      return;
+    }
+
     this.videoSyncManager.syncVideoElements();
   }
 

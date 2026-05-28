@@ -127,6 +127,7 @@ function hasEnabledSpectralEditOperation(clip: Pick<TimelineClip, 'audioState'>)
 }
 
 const RENDERABLE_CLIP_AUDIO_EDIT_TYPES = new Set<ClipAudioEditOperation['type']>([
+  'gain',
   'silence',
   'cut',
   'paste',
@@ -139,6 +140,7 @@ const RENDERABLE_CLIP_AUDIO_EDIT_TYPES = new Set<ClipAudioEditOperation['type']>
   'split-stereo',
   'repair',
   'room-tone-fill',
+  'effect',
   'spectral-mask',
   'spectral-resynthesis',
 ]);

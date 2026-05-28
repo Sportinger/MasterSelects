@@ -17,7 +17,7 @@ export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogra
 export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions'];
 
 // Deprecated panel types stay in the union only so persisted layouts can be migrated away.
-export const DEPRECATED_PANEL_TYPES: PanelType[] = ['ai-video'];
+export const DEPRECATED_PANEL_TYPES: PanelType[] = ['ai-video', 'youtube', 'download'];
 
 // AI panel types for View menu grouping
 export const AI_PANEL_TYPES: PanelType[] = ['ai-chat', 'ai-segment', 'scene-description'];

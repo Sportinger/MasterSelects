@@ -1,9 +1,15 @@
-import type { ClipAudioEditOperation, SpectralImageLayer } from '../../types';
+import type {
+  AudioBakeRestoreState,
+  ClipAudioEditOperation,
+  ClipAudioRegionGainPreview,
+  SpectralImageLayer,
+} from '../../types';
 import { encodeAudioBufferToWavBlob } from '../../engine/audio/AudioFileEncoder';
 import { AudioExtractor, audioExtractor } from '../../engine/audio/AudioExtractor';
 import { Logger } from '../../services/logger';
 import type {
   AudioEditActions,
+  ApplyAudioRegionGainEditOptions,
   ApplyDetectedSilenceRemovalOptions,
   ApplyDetectedTransientSofteningOptions,
   SliceCreator,
@@ -27,12 +33,14 @@ import {
   type AudioTransientRange,
 } from '../../services/audio/audioTransientDetection';
 import { generateTimelineWaveformAnalysisForFile } from '../../services/audio/timelineWaveformPyramidCache';
+import { PROJECT_FOLDERS } from '../../services/project/core/constants';
 import { useMediaStore } from '../mediaStore';
 import { createAudioElement } from './helpers/webCodecsHelpers';
 import { captureSnapshot } from '../historyStore';
 
 const log = Logger.create('TimelineAudioEdit');
 const clipAudioRenderer = new ClipAudioRenderService();
+const AUDIO_BAKE_MEDIA_FOLDER_NAME = 'Baked Audio';
 
 function isAudioClip(clip: TimelineClip): boolean {
   const fileName = clip.file?.name || clip.name || '';
@@ -48,6 +56,7 @@ function createAudioEditOperationId(): string {
 
 function operationLabel(type: TimelineAudioRegionEditType): string {
   switch (type) {
+    case 'gain': return 'Region gain';
     case 'silence': return 'Silence region';
     case 'cut': return 'Cut region';
     case 'paste': return 'Paste region';
@@ -59,8 +68,43 @@ function operationLabel(type: TimelineAudioRegionEditType): string {
     case 'mono-sum': return 'Mono sum';
     case 'split-stereo': return 'Split stereo';
     case 'repair': return 'Repair region';
+    case 'effect': return 'Region FX';
     case 'room-tone-fill': return 'Room tone fill';
   }
+}
+
+function clampRegionGainDb(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(-120, Math.min(24, value));
+}
+
+function clampRegionFadeSeconds(value: number | undefined, maxSeconds: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(Math.max(0, maxSeconds), value ?? 0));
+}
+
+function rangesMatch(
+  operation: ClipAudioEditOperation,
+  start: number,
+  end: number,
+): boolean {
+  if (!operation.timeRange) return false;
+  return Math.abs(Math.min(operation.timeRange.start, operation.timeRange.end) - start) <= 0.001 &&
+    Math.abs(Math.max(operation.timeRange.start, operation.timeRange.end) - end) <= 0.001;
+}
+
+function findMatchingRegionGainOperationIndex(
+  editStack: readonly ClipAudioEditOperation[],
+  start: number,
+  end: number,
+): number {
+  for (let index = editStack.length - 1; index >= 0; index -= 1) {
+    const operation = editStack[index];
+    if (operation?.type === 'gain' && rangesMatch(operation, start, end)) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function spectralOperationLabel(type: 'spectral-mask' | 'spectral-resynthesis'): string {
@@ -239,6 +283,54 @@ function getBaseFileName(fileName: string): string {
   return lastDot > 0 ? fileName.slice(0, lastDot) : fileName;
 }
 
+function getAudioBakeProjectFileName(fileName: string): string {
+  return `${PROJECT_FOLDERS.RAW_BAKED_AUDIO}/${fileName}`;
+}
+
+function getOrCreateAudioBakeMediaFolderId(mediaStore: ReturnType<typeof useMediaStore.getState>): string {
+  const existingFolder = mediaStore.folders.find(folder =>
+    folder.name === AUDIO_BAKE_MEDIA_FOLDER_NAME &&
+    folder.parentId === null
+  );
+  return existingFolder?.id ?? mediaStore.createFolder(AUDIO_BAKE_MEDIA_FOLDER_NAME, null).id;
+}
+
+function cloneAudioBakeRestoreState(state: AudioBakeRestoreState): AudioBakeRestoreState {
+  return {
+    ...state,
+    waveform: state.waveform ? [...state.waveform] : undefined,
+    waveformChannels: state.waveformChannels?.map(channel => [...channel]),
+    audioState: state.audioState ? structuredClone(state.audioState) : undefined,
+  };
+}
+
+function createAudioBakeRestoreState(clip: TimelineClip): AudioBakeRestoreState {
+  return {
+    name: clip.name,
+    mediaFileId: getClipMediaFileId(clip),
+    duration: clip.duration,
+    inPoint: clip.inPoint,
+    outPoint: clip.outPoint,
+    sourceNaturalDuration: clip.source?.naturalDuration,
+    waveform: clip.waveform ? [...clip.waveform] : undefined,
+    waveformChannels: clip.waveformChannels?.map(channel => [...channel]),
+    audioState: clip.audioState ? structuredClone(clip.audioState) : undefined,
+  };
+}
+
+function createAudioElementForRestoredSource(file: File | undefined, url: string | undefined): HTMLAudioElement | undefined {
+  if (file) return createAudioElement(file);
+  if (!url || typeof document === 'undefined') return undefined;
+  const audio = document.createElement('audio');
+  audio.src = url;
+  audio.preload = 'auto';
+  return audio;
+}
+
+function createPlaceholderAudioFile(name: string): File {
+  return new File([], name, { type: 'audio/wav' });
+}
+
 async function renderClipEditStackOnly(
   clip: TimelineClip,
   extractor: AudioExtractor = audioExtractor,
@@ -330,6 +422,189 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
     });
     get().invalidateCache();
     return operation.id;
+  },
+
+  setAudioRegionGainPreview: (preview: ClipAudioRegionGainPreview | null) => {
+    set({ audioRegionGainPreview: preview });
+  },
+
+  clearAudioRegionGainPreview: () => {
+    set({ audioRegionGainPreview: null });
+  },
+
+  setAudioRegionGainEdit: (options: ApplyAudioRegionGainEditOptions) => {
+    const { audioRegionSelection, clips, tracks } = get();
+    if (!audioRegionSelection) {
+      log.warn('Cannot set region gain without an active audio region selection');
+      return null;
+    }
+
+    const clip = clips.find(c => c.id === audioRegionSelection.clipId);
+    if (!clip || !isAudioClip(clip)) {
+      log.warn('Cannot set region gain on missing or non-audio clip', {
+        clipId: audioRegionSelection.clipId,
+      });
+      return null;
+    }
+
+    const track = tracks.find(t => t.id === audioRegionSelection.trackId);
+    if (track?.locked) {
+      log.warn('Cannot set region gain on locked track', {
+        clipId: clip.id,
+        trackId: audioRegionSelection.trackId,
+      });
+      return null;
+    }
+
+    const start = Math.max(0, Math.min(audioRegionSelection.sourceInPoint, audioRegionSelection.sourceOutPoint));
+    const end = Math.max(start, Math.max(audioRegionSelection.sourceInPoint, audioRegionSelection.sourceOutPoint));
+    const duration = end - start;
+    if (duration <= 0.0005) {
+      log.warn('Cannot set region gain on an empty region', { clipId: clip.id, start, end });
+      return null;
+    }
+
+    const gainDb = Number(clampRegionGainDb(options.gainDb).toFixed(2));
+    const fadeInSeconds = Number(clampRegionFadeSeconds(options.fadeInSeconds, duration / 2).toFixed(4));
+    const fadeOutSeconds = Number(clampRegionFadeSeconds(options.fadeOutSeconds, duration / 2).toFixed(4));
+    const isNoop = Math.abs(gainDb) <= 0.01;
+    const existingGainIndex = findMatchingRegionGainOperationIndex(clip.audioState?.editStack ?? [], start, end);
+    if (isNoop && existingGainIndex < 0) {
+      set({ audioRegionGainPreview: null });
+      return null;
+    }
+    let operationId: string | null = null;
+
+    captureSnapshot(isNoop ? 'Reset region gain' : 'Set region gain');
+    set({
+      clips: clips.map(currentClip => {
+        if (currentClip.id !== clip.id) return currentClip;
+        const audioState = currentClip.audioState ?? {};
+        const editStack = audioState.editStack ?? [];
+        const existingIndex = findMatchingRegionGainOperationIndex(editStack, start, end);
+
+        if (isNoop) {
+          if (existingIndex < 0) return currentClip;
+          return clearProcessedAudioAnalysisRefs({
+            ...currentClip,
+            audioState: {
+              ...audioState,
+              editStack: editStack.filter((_, index) => index !== existingIndex),
+            },
+          });
+        }
+
+        const nextOperation: ClipAudioEditOperation = {
+          id: existingIndex >= 0 ? editStack[existingIndex].id : createAudioEditOperationId(),
+          type: 'gain',
+          enabled: true,
+          params: {
+            label: 'Region gain',
+            timelineStart: audioRegionSelection.startTime,
+            timelineEnd: audioRegionSelection.endTime,
+            preserveClipDuration: true,
+            gainDb,
+            fadeInSeconds,
+            fadeOutSeconds,
+          },
+          timeRange: { start, end },
+          createdAt: existingIndex >= 0 ? editStack[existingIndex].createdAt : Date.now(),
+        };
+        operationId = nextOperation.id;
+
+        const nextEditStack = existingIndex >= 0
+          ? editStack.map((operation, index) => index === existingIndex ? nextOperation : operation)
+          : [...editStack, nextOperation];
+
+        return clearProcessedAudioAnalysisRefs({
+          ...currentClip,
+          audioState: {
+            ...audioState,
+            editStack: nextEditStack,
+          },
+        });
+      }),
+      ...(options.keepSelection ? {} : { audioRegionSelection: null }),
+      audioRegionGainPreview: null,
+    });
+    get().invalidateCache();
+    return operationId;
+  },
+
+  setClipAudioEditOperationRange: (clipId, operationIds, selection, options = {}) => {
+    if (operationIds.length === 0) return;
+
+    const { clips, tracks } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip) return;
+
+    const track = tracks.find(t => t.id === clip.trackId);
+    if (track?.locked) {
+      log.warn('Cannot move audio edit on locked track', { clipId, operationIds });
+      return;
+    }
+
+    const operationIdSet = new Set(operationIds);
+    const start = Math.max(0, Math.min(selection.sourceInPoint, selection.sourceOutPoint));
+    const end = Math.max(start, Math.max(selection.sourceInPoint, selection.sourceOutPoint));
+    if (end - start <= 0.0005) return;
+
+    let changed = false;
+    const nextClips = clips.map(currentClip => {
+      if (currentClip.id !== clipId || !currentClip.audioState?.editStack?.length) return currentClip;
+
+      const nextEditStack = currentClip.audioState.editStack.map(operation => {
+        if (!operationIdSet.has(operation.id) || !operation.timeRange) return operation;
+
+        const previousStart = Math.min(operation.timeRange.start, operation.timeRange.end);
+        const previousEnd = Math.max(operation.timeRange.start, operation.timeRange.end);
+        const previousTimelineStart = typeof operation.params.timelineStart === 'number'
+          ? operation.params.timelineStart
+          : null;
+        const previousTimelineEnd = typeof operation.params.timelineEnd === 'number'
+          ? operation.params.timelineEnd
+          : null;
+        const nextTimelineStart = Math.min(selection.startTime, selection.endTime);
+        const nextTimelineEnd = Math.max(selection.startTime, selection.endTime);
+
+        if (
+          Math.abs(previousStart - start) <= 0.0005 &&
+          Math.abs(previousEnd - end) <= 0.0005 &&
+          previousTimelineStart !== null &&
+          previousTimelineEnd !== null &&
+          Math.abs(previousTimelineStart - nextTimelineStart) <= 0.0005 &&
+          Math.abs(previousTimelineEnd - nextTimelineEnd) <= 0.0005
+        ) {
+          return operation;
+        }
+
+        changed = true;
+        return {
+          ...operation,
+          params: {
+            ...operation.params,
+            timelineStart: nextTimelineStart,
+            timelineEnd: nextTimelineEnd,
+          },
+          timeRange: { start, end },
+        };
+      });
+
+      return clearProcessedAudioAnalysisRefs({
+        ...currentClip,
+        audioState: {
+          ...currentClip.audioState,
+          editStack: nextEditStack,
+        },
+      });
+    });
+
+    if (!changed) return;
+    if (options.captureHistory) {
+      captureSnapshot(options.historyLabel ?? 'Move audio region edit');
+    }
+    set({ clips: nextClips });
+    get().invalidateCache();
   },
 
   applyAudioRepairSuggestion: (clipId, suggestion) => {
@@ -816,7 +1091,11 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
     });
 
     const mediaStore = useMediaStore.getState();
-    const imported = await mediaStore.importFile(bakedFile, null, { forceCopyToProject: true });
+    const audioBakeFolderId = getOrCreateAudioBakeMediaFolderId(mediaStore);
+    const imported = await mediaStore.importFile(bakedFile, audioBakeFolderId, {
+      forceCopyToProject: true,
+      projectFileName: getAudioBakeProjectFileName(bakedFileName),
+    });
     if (imported.type !== 'audio') {
       log.warn('Baked audio import did not produce an audio media file', { clipId, importedType: imported.type });
       return null;
@@ -828,6 +1107,7 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
     });
     const oldEditStack = clip.audioState.editStack ?? [];
     const oldSourceMediaFileId = getClipMediaFileId(clip);
+    const restore = createAudioBakeRestoreState(clip);
     const nextOutPoint = rendered.duration;
     const nextDuration = Math.max(0.001, Math.min(clip.duration, nextOutPoint));
 
@@ -874,6 +1154,7 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
                   operationCount: oldEditStack.length,
                   duration: nextOutPoint,
                 },
+                restore,
               },
             ],
           },
@@ -883,6 +1164,94 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
     get().updateDuration();
     get().invalidateCache();
     return imported.id;
+  },
+
+  unbakeClipAudioEditStack: (clipId) => {
+    const { clips, tracks } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || !isAudioClip(clip)) {
+      log.warn('Cannot unbake missing or non-audio clip', { clipId });
+      return false;
+    }
+
+    const track = tracks.find(t => t.id === clip.trackId);
+    if (track?.locked) {
+      log.warn('Cannot unbake audio edits on locked track', { clipId, trackId: clip.trackId });
+      return false;
+    }
+
+    const bakeHistory = clip.audioState?.bakeHistory ?? [];
+    const latestBake = bakeHistory[bakeHistory.length - 1];
+    const restore = latestBake?.restore;
+    if (!latestBake || !restore) {
+      log.warn('Cannot unbake clip without a reversible bake entry', { clipId });
+      return false;
+    }
+
+    const sourceMediaFileId = restore.mediaFileId ?? latestBake.sourceMediaFileId;
+    if (!sourceMediaFileId) {
+      log.warn('Cannot unbake clip without a source media reference', { clipId, bakeId: latestBake.id });
+      return false;
+    }
+
+    const mediaStore = useMediaStore.getState();
+    const sourceMediaFile = mediaStore.files.find(file => file.id === sourceMediaFileId);
+    if (!sourceMediaFile) {
+      log.warn('Cannot unbake clip because the source media is missing', {
+        clipId,
+        sourceMediaFileId,
+      });
+      return false;
+    }
+
+    const restoredFile = sourceMediaFile.file;
+    const restoredUrl = sourceMediaFile.url;
+    const audioElement = createAudioElementForRestoredSource(restoredFile, restoredUrl);
+    if (!restoredFile && !restoredUrl) {
+      log.warn('Cannot unbake clip because the source media has no file or URL', {
+        clipId,
+        sourceMediaFileId,
+      });
+      return false;
+    }
+
+    const restoredState = cloneAudioBakeRestoreState(restore);
+    const sourcePath = sourceMediaFile.absolutePath ?? sourceMediaFile.filePath ?? sourceMediaFile.projectPath;
+    const naturalDuration = restoredState.sourceNaturalDuration ?? sourceMediaFile.duration ?? restoredState.outPoint;
+
+    captureSnapshot('Unbake audio edit stack');
+    set({
+      clips: clips.map(currentClip => {
+        if (currentClip.id !== clipId) return currentClip;
+        return {
+          ...currentClip,
+          name: restoredState.name,
+          file: restoredFile ?? createPlaceholderAudioFile(restoredState.name),
+          mediaFileId: sourceMediaFileId,
+          duration: restoredState.duration,
+          inPoint: restoredState.inPoint,
+          outPoint: restoredState.outPoint,
+          waveform: restoredState.waveform ?? sourceMediaFile.waveform ?? [],
+          waveformChannels: restoredState.waveformChannels ?? sourceMediaFile.waveformChannels,
+          waveformGenerating: false,
+          waveformProgress: 100,
+          needsReload: false,
+          source: {
+            ...(currentClip.source ?? { type: 'audio' as const }),
+            type: 'audio' as const,
+            ...(audioElement ? { audioElement } : {}),
+            naturalDuration,
+            mediaFileId: sourceMediaFileId,
+            ...(restoredFile ? { file: restoredFile } : {}),
+            ...(sourcePath ? { filePath: sourcePath } : {}),
+          },
+          audioState: restoredState.audioState,
+        };
+      }),
+    });
+    get().updateDuration();
+    get().invalidateCache();
+    return true;
   },
 
   applySpectralRegionEdit: (type, options = {}) => {

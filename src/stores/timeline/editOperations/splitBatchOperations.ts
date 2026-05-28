@@ -238,7 +238,9 @@ export function applySplitAtTimesOperation(
     ...clips.filter(candidate => !removedIds.has(candidate.id)),
     ...newParts,
     ...newLinkedParts,
-  ];
+  ].map(candidate => candidate.linkedClipId && removedIds.has(candidate.linkedClipId)
+    ? { ...candidate, linkedClipId: undefined }
+    : candidate);
 
   return {
     clips: finalClips,

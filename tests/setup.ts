@@ -22,6 +22,7 @@ vi.mock('../src/engine/WebGPUEngine', () => ({
     cacheCompositeFrame: vi.fn(),
     requestRender: vi.fn(),
     requestNewFrameRender: vi.fn(),
+    getIsExporting: vi.fn().mockReturnValue(false),
     ensureVideoFrameCached: vi.fn(),
     cleanupVideo: vi.fn(),
     clearVideoCache: vi.fn(),

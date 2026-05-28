@@ -146,9 +146,9 @@ Current code matches these Kie rates:
 
 Conclusion: hosted Nano Banana 2 charges enough under the current 6x vendor-credit rule.
 
-### Seedance 2.0 Gap
+### Seedance 2.0 BYO Pricing
 
-The FlashBoard catalog exposes `bytedance/seedance-2` for BYO Kie.ai, but `src/services/kieAiService.ts` does not define rates for it. `calculateKieAiCost()` falls back to `duration * 14`, which severely under-displays cost for Seedance.
+Resolved in `src/services/kieAiService.ts`: FlashBoard exposes `bytedance/seedance-2` and `bytedance/seedance-2-fast` for BYO Kie.ai with explicit rates. `calculateKieAiCost()` now uses the model, resolution, and optional video-input pricing path instead of falling through to `duration * 14`.
 
 Current Kie.ai Seedance 2 rows:
 
@@ -165,7 +165,7 @@ Current Kie.ai Seedance 2 rows:
 | bytedance/seedance-2 fast, 720p no video input | 33 / second | $0.165 / second |
 | bytedance/seedance-2 fast, 720p with video input | 20 / second | $0.100 / second |
 
-Conclusion: Seedance needs explicit BYO estimate logic before the price list panel can be trusted. Hosted Seedance is not currently implemented in `functions/api/ai/video.ts`.
+Conclusion: BYO and hosted Seedance estimates are implemented for standard and Fast. Hosted Seedance is routed through `functions/api/ai/video.ts` for text-to-video, first/last-frame image-to-video, and multimodal image/video/audio references. Audio references upload through Kie.ai file hosting and are sent as `reference_audio_urls`.
 
 ### Kie.ai Image Candidates
 
@@ -192,7 +192,7 @@ Rounding rule recommendation: when multiplying fractional Kie credits by 6, use 
 ## Findings
 
 1. Hosted Kie.ai Kling 3.0 and Nano Banana 2 currently match Kie.ai public pricing and charge enough under the 6x vendor-credit rule.
-2. BYO Seedance 2.0 price estimates are wrong because they fall through to the generic `duration * 14` fallback.
+2. BYO Seedance 2.0 price estimates are explicit for standard and Fast instead of using the generic `duration * 14` fallback.
 3. BYO Kie account balance USD display has been corrected to use `credits * 0.005`.
 4. There are no one-time credit packs/top-ups implemented yet; users currently buy credits only through subscription plans.
 5. The server video route does not currently enforce the `kling_generation` entitlement even though the plan model defines it.
@@ -210,7 +210,7 @@ Rounding rule recommendation: when multiplying fractional Kie credits by 6, use 
    - Call OpenAI with explicit max output limits per tier.
    - Finalize credit deduction from provider `usage` fields.
    - Keep idempotency protection via the existing ledger source/idempotency key design.
-4. Add explicit Seedance 2.0 price estimate logic for BYO, including no-video-input vs video-input and fast vs standard variants.
+4. Keep Seedance 2.0 BYO price estimates synced with Kie.ai pricing when standard/Fast rates change.
 5. Keep BYO Kie account USD display covered by regression tests so it stays at `credits * 0.005`.
 6. Decide and implement the product rule for Starter:
    - If Starter should only get chat/image access, enforce `kling_generation` in `/api/ai/video`.

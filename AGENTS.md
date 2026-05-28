@@ -1,68 +1,68 @@
 # AGENTS.md
 
-Repo-Anweisungen fuer Codex und andere Coding Agents bei der Arbeit an MasterSelects.
+Repository instructions for Codex and other coding agents working on MasterSelects.
 
-Diese Datei ist das Codex-Pendant zu `CLAUDE.md`. Wenn sich Workflow, Branch-Regeln, Debug-Rezepte oder Projektkonventionen aendern, `AGENTS.md` und `CLAUDE.md` gemeinsam pflegen.
-
----
-
-## -1. Arbeitsprinzip / Top Memory
-
-MasterSelects wird nicht fuer kurzfristige Loesungen optimiert. Da das Projekt AI-powered sehr schnell entwickelt werden kann und aktuell keine externen User blockiert, sind grosse, richtige Architekturentscheidungen ausdruecklich erlaubt und bevorzugt.
-
-Default ist: langfristig denken, echte Zielarchitektur bauen, keine MVPs, keine Mocks, keine Wegwerf-Prototypen und keine kleinen Zwischenloesungen, wenn die robuste Loesung direkt erreichbar ist. Kurzfristige Hacks nur dann verwenden, wenn der User sie explizit verlangt oder ein harter technischer Blocker keine bessere Umsetzung erlaubt.
+This file is the Codex counterpart to `CLAUDE.md`. When workflow, branch rules, debug recipes, or project conventions change, keep `AGENTS.md` and `CLAUDE.md` in sync.
 
 ---
 
-## 0. Projektziel
+## -1. Working Principle / Top Memory
 
-MasterSelects soll bis Juni 2026 ALLE Media-Dateien unterstuetzen, nicht nur Video, Audio und Bilder, sondern wirklich alles:
+MasterSelects is not optimized for short-term fixes. Because this project can move very quickly with AI-powered development and currently has no external users blocked by changes, large and correct architectural decisions are explicitly allowed and preferred.
+
+Default behavior: think long term, build the real target architecture, do not build MVPs, mocks, throwaway prototypes, or small temporary solutions when the robust solution is directly reachable. Use short-term hacks only when the user explicitly requests them or when a hard technical blocker leaves no better implementation path.
+
+---
+
+## 0. Project Goal
+
+By June 2026, MasterSelects should support ALL media files, not only video, audio, and images, but genuinely everything:
 
 - 3D: OBJ, FBX, glTF
-- Dokumente: PDF, SVG
-- CAD / technische Daten: DXF, STEP
-- Datenformate: JSON, CSV, binaere Formate, Point Clouds und mehr
+- Documents: PDF, SVG
+- CAD / technical data: DXF, STEP
+- Data formats: JSON, CSV, binary formats, point clouds, and more
 
-Inspiration ist das TouchDesigner-Prinzip: Jede Datei wird zu einem visuellen Signal. Es gibt keine "nicht unterstuetzten" Dateien. Alles wird Textur, Geometrie oder Daten, kann auf der Timeline platziert, composited und exportiert werden.
+The inspiration is the TouchDesigner principle: every file becomes a visual signal. There are no "unsupported" files. Everything becomes texture, geometry, or data, can be placed on the timeline, composited, and exported.
 
 ## 0.1 Codex Skill Mapping
 
-Die alten Claude-Commands unter `C:\Users\admin\.claude\commands\` sollen in Codex ueber Skills abgebildet werden. Wenn die folgenden Skills verfuegbar sind, diese bevorzugen:
+The old Claude commands under `C:\Users\admin\.claude\commands\` should be represented in Codex through skills. If the following skills are available, prefer them:
 
-| Claude Command | Codex Skill | Zweck |
+| Claude Command | Codex Skill | Purpose |
 |---|---|---|
-| `/masterselects` | `masterselects` | Timeline-, Clip-, Preview- und Analyse-Aktionen ueber die lokale AI-Bridge |
+| `/masterselects` | `masterselects` | Timeline, clip, preview, and analysis actions through the local AI bridge |
 | `/cloudflare` | `cloudflare-api` | Cloudflare REST / Wrangler |
 | `/stripe` | `stripe-api` | Stripe REST API |
-| `/vazer` | `vazer-app-api` | Lokale VAZer App / XML / Analyse |
-| `/react-doctor` | `react-doctor` | React-Codebase-Analyse |
-| `/nano-banana` | `nano-banana` | Bildgenerierung via Gemini |
-| `/kie` | `kie-ai-api-route` | Kie.ai Bild- und Video-Generation |
-| `/kling` | `kling` | Kling Video Prompting / API |
-| `/tasks` | `tasks` | Aufgabenliste |
-| `/email` | `email` | Strato / OX Mail |
-| `/gmail` | `gmail` | Gmail per IMAP/SMTP |
-| `/dienstplan` | `dienstplan` | PDF-Dienstplan -> Kalender |
+| `/vazer` | `vazer-app-api` | Local VAZer app / XML / analysis |
+| `/react-doctor` | `react-doctor` | React codebase analysis |
+| `/nano-banana` | `nano-banana` | Image generation via Gemini |
+| `/kie` | `kie-ai-api-route` | Kie.ai image and video generation |
+| `/kling` | `kling` | Kling video prompting / API |
+| `/tasks` | `tasks` | Task list |
+| `/email` | `email` | Strato / OX mail |
+| `/gmail` | `gmail` | Gmail via IMAP/SMTP |
+| `/dienstplan` | `dienstplan` | Duty roster PDF -> calendar |
 
-Wenn ein Skill nicht verfuegbar ist, direkt ueber lokale Skripte, MCP-Tools, HTTP-Bridge oder API arbeiten. Nicht an Claude-Command-Dateien haengen bleiben.
+If a skill is not available, work directly through local scripts, MCP tools, the HTTP bridge, or APIs. Do not get stuck on Claude command files.
 
 ## 0.2 MasterSelects Debug Bridge
 
-Fuer App-Debugging existieren lokale AI-Tools hinter `POST http://localhost:5173/api/ai-tools`. Voraussetzung: Dev-Server laeuft und die App ist im Browser geoeffnet.
+For app debugging, local AI tools exist behind `POST http://localhost:5173/api/ai-tools`. Prerequisite: the dev server is running and the app is open in a browser.
 
-| Tool | Parameter | Zweck |
+| Tool | Parameters | Purpose |
 |---|---|---|
-| `getStats` | none | Engine-Snapshot: FPS, Timing, Decoder, Drops, Audio, GPU |
-| `getStatsHistory` | `samples?`, `intervalMs?` | Mehrere Snapshots mit min/max/avg |
-| `getLogs` | `limit?`, `level?`, `module?`, `search?` | Browser-Logs gefiltert abrufen |
-| `getPlaybackTrace` | `windowMs?`, `limit?` | WebCodecs- und VF-Pipeline-Events plus Health-State |
-| `debugExport` | `startTime?`, `endTime?`, `durationSeconds?`, `width?`, `height?`, `fps?`, `includeAudio?`, `exportMode?`, `download?`, `maxRuntimeMs?` | Dev-Bridge-only Exportprobe im echten Browser. Ruft `FrameExporter` auf und liefert Blob-Groesse, Progress, Engine-Status und Export-/GPU-Logs zurueck. |
+| `getStats` | none | Engine snapshot: FPS, timing, decoder, drops, audio, GPU |
+| `getStatsHistory` | `samples?`, `intervalMs?` | Multiple snapshots with min/max/avg |
+| `getLogs` | `limit?`, `level?`, `module?`, `search?` | Retrieve filtered browser logs |
+| `getPlaybackTrace` | `windowMs?`, `limit?` | WebCodecs and VF pipeline events plus health state |
+| `debugExport` | `startTime?`, `endTime?`, `durationSeconds?`, `width?`, `height?`, `fps?`, `includeAudio?`, `exportMode?`, `download?`, `maxRuntimeMs?` | Dev-bridge-only export probe in the real browser. Calls `FrameExporter` and returns blob size, progress, engine state, and export/GPU logs. |
 
-Der `masterselects`-Skill ist der bevorzugte Einstieg. Wenn der Skill nicht nutzbar ist, die HTTP-Bridge direkt per `curl` ansprechen.
+The `masterselects` skill is the preferred entry point. If the skill cannot be used, call the HTTP bridge directly with `curl` or PowerShell.
 
-### Export-Debug ueber Bridge
+### Export Debug Through Bridge
 
-Wenn Export im UI haengt oder fehlschlaegt, zuerst im echten Browser ueber die Bridge reproduzieren. Der lokale Dev-Bridge-POST braucht den Bearer-Token aus `.ai-bridge-token`:
+When export hangs or fails in the UI, first reproduce it in the real browser through the bridge. The local dev-bridge POST needs the bearer token from `.ai-bridge-token`:
 
 ```powershell
 $token = Get-Content -Path .ai-bridge-token -Raw
@@ -72,7 +72,7 @@ $body = @{ tool = 'getStats'; args = @{} } | ConvertTo-Json -Depth 4
 Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
 ```
 
-Smoke-Test ohne Download:
+Smoke test without download:
 
 ```powershell
 $body = @{
@@ -92,7 +92,7 @@ $body = @{
 Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
 ```
 
-Full-Timeline-Test mit aktuellen Exportdefaults:
+Full timeline test with current export defaults:
 
 ```powershell
 $body = @{ tool = 'debugExport'; args = @{ includeAudio = $true; exportMode = 'fast'; download = $false } } | ConvertTo-Json -Depth 6
@@ -101,58 +101,66 @@ Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Header
 
 Interpretation:
 
-- `debugExport` ist absichtlich kein Chat/Public-Tool, sondern ein selbstregistrierter Dev-Bridge-Handler mit Policy-Zugriff fuer `devBridge`, `console` und `internal`.
-- `maxRuntimeMs` bricht den Browser-Export sauber ab, bevor der Dev-Bridge-Request haengt; fuer lange Exporte gezielt hoeher setzen.
-- Wenn `debugExport` einen Blob mit `size > 0` liefert, funktioniert der Browser-Exportpfad grundsaetzlich. UI-Fehler dann in `ExportPanel`, Download, Preset-State oder Progress-State suchen.
-- Wenn Logs `WebGPU device lost during export` zeigen und `getStats` danach `renderLoop.isRunning=false`, `renderDispatcher=null` oder `targetCanvasCount=0` meldet, ist die Browser-Engine in einem stale Device-State. Erst `reloadApp`/Hard Reload ueber die Bridge oder Browser neu laden, dann erneut testen.
-- Windows-Warnungen zu `requestAdapter(powerPreference)` und NativeHelper-WebSocket-Fehler sind nicht automatisch Exportblocker. NativeHelper ist nur relevant, wenn der getestete Pfad ihn wirklich braucht.
-- Bei Timeline mit Video-only-Clips muss `FrameExporter` Audio ueberspringen; ein langer Start bei "Rendering audio" weist auf fehlerhafte Audio-Range-Erkennung hin.
+- `debugExport` is intentionally not a chat/public tool. It is a self-registered dev-bridge handler with policy access for `devBridge`, `console`, and `internal`.
+- `maxRuntimeMs` cleanly aborts browser export before the dev-bridge request hangs. Raise it deliberately for long exports.
+- If `debugExport` returns a blob with `size > 0`, the browser export path basically works. Then investigate UI issues in `ExportPanel`, download handling, preset state, or progress state.
+- If logs show `WebGPU device lost during export` and `getStats` afterwards reports `renderLoop.isRunning=false`, `renderDispatcher=null`, or `targetCanvasCount=0`, the browser engine is in a stale device state. First run `reloadApp`/hard reload through the bridge or reload the browser, then test again.
+- Windows warnings about `requestAdapter(powerPreference)` and NativeHelper WebSocket errors are not automatically export blockers. NativeHelper matters only when the tested path actually needs it.
+- For timelines with video-only clips, `FrameExporter` must skip audio. A long start at "Rendering audio" points to broken audio range detection.
 
 ## 0.3 Codex Session Usage Monitoring
 
-Fuer laengere Codex-/Agent-Arbeit soll nach Moeglichkeit der lokale Usage-Watcher mitlaufen:
+For longer Codex/agent work, run the local usage watcher when practical:
 
 ```bash
 npm run codex:usage:watch
 ```
 
-Einmalige Auswertung:
+One-time evaluation:
 
 ```bash
 npm run codex:usage
 ```
 
-Versteckten Watcher stoppen:
+Stop hidden watcher:
 
 ```bash
 npm run codex:usage:stop
 ```
 
-Der Watcher liest `~/.codex/sessions`, filtert auf dieses Repo, gruppiert `token_count`-Events pro User-Turn und schreibt lokale Reports nach `.codex-usage/`:
+The watcher reads `~/.codex/sessions`, filters to this repo, groups `token_count` events per user turn, and writes local reports to `.codex-usage/`:
 
-- `turns.jsonl`: maschinenlesbare Turn-Kosten, Fragen, Status, Tool-Nutzung und Git-Snapshots
-- `sessions.json`: Session-Summary
-- `report.md`: lesbarer Kosten-/Strategie-Report
-- `state.json`: Watcher-State fuer Commit-Zuordnung
+- `turns.jsonl`: machine-readable turn costs, questions, status, tool usage, and git snapshots
+- `sessions.json`: session summary
+- `report.md`: readable cost/strategy report
+- `state.json`: watcher state for commit attribution
 
-`.codex-usage/` bleibt lokal und ist in Git ignoriert. Exakte Commit-Zuordnung funktioniert nur fuer Turns, die beobachtet wurden, waehrend `codex:usage:watch` lief; historische Sessions bekommen nur den beim Report beobachteten Git-Stand.
+`.codex-usage/` stays local and is gitignored. Exact commit attribution only works for turns observed while `codex:usage:watch` was running; historical sessions only get the git state observed when the report was generated.
+
+## 0.4 Agent Check Budget / Repo Memory
+
+`AGENTS.md` and `CLAUDE.md` are the durable project memory for coding agents. Do not assume an agent has hidden persistent memory for this repo; important workflow rules belong here.
+
+During normal implementation, check sparingly: run targeted unit/smoke tests, individual builds, or lint only when risk and change scope justify it. Do not run full `npm run build`, `npm run lint`, and `npm run test` after every small edit. That full check chain is mandatory before commit, release, merge, or when the user explicitly asks for final commit readiness.
+
+Large command outputs are token- and time-expensive. For intermediate status, report short summaries and relevant error lines instead of repeating complete logs.
 
 ---
 
 ## 1. Workflow
 
-### Branch-Regeln
+### Branch Rules
 
-| Branch | Zweck |
+| Branch | Purpose |
 |---|---|
-| `staging` | Entwicklung, Standardziel fuer laufende Arbeit |
-| `master` | Production, nur via PR |
+| `staging` | Development, default target for ongoing work |
+| `master` | Production, only through PR |
 
-### Test-, Commit- und Push-Regeln
+### Test, Commit, and Push Rules
 
-Waehrend laufender Arbeit gezielt pruefen: passende Unit-/Smoke-Tests, Build oder Lint nach Risiko und Aenderungsumfang auswaehlen. Die volle Suite ist kein Pflichtschritt nach jedem kleinen Zwischenstand.
+During ongoing work, test deliberately: choose relevant unit/smoke tests, build, or lint according to risk and change scope. The full suite is not required after every small intermediate change and should not be run routinely because of time/token cost.
 
-Vor jedem Commit bleiben alle Checks Pflicht:
+Before every commit, all checks remain mandatory:
 
 ```bash
 npm run build
@@ -160,34 +168,34 @@ npm run lint
 npm run test
 ```
 
-Regeln:
+Rules:
 
-- Nie direkt auf `master` committen.
-- Nie selbststaendig nach `master` mergen.
-- Nie selbststaendig pushen, ausser der User verlangt es explizit.
-- Kleine, zusammenhaengende Aenderungen bevorzugen.
-- Nicht committen, wenn Build, Lint oder Tests fehlschlagen.
+- Never commit directly to `master`.
+- Never merge to `master` independently.
+- Never push independently unless the user explicitly asks for it.
+- Prefer small, coherent changes.
+- Do not commit if build, lint, or tests fail.
 
-### Merge zu Master
+### Merge To Master
 
-Nur wenn der User es explizit verlangt:
+Only when the user explicitly requests it:
 
-1. Version in `src/version.ts` erhoehen.
-2. CHANGELOG in `src/version.ts` aktualisieren.
-3. Commit und Push.
-4. PR von `staging` nach `master` erstellen und mergen.
-5. `staging` wieder auf den aktuellen `master`-Stand bringen.
+1. Bump version in `src/version.ts`.
+2. Update CHANGELOG in `src/version.ts`.
+3. Commit and push.
+4. Create and merge PR from `staging` to `master`.
+5. Bring `staging` back to the current `master` state.
 
 ### Version / Changelog
 
-- Datei: `src/version.ts`
-- Version nur bei Merge nach `master` erhoehen
-- CHANGELOG immer am Anfang erweitern
-- `KNOWN_ISSUES` aktuell halten
+- File: `src/version.ts`
+- Bump version only when merging to `master`
+- Always add CHANGELOG entries at the beginning
+- Keep `KNOWN_ISSUES` current
 
-### Dokumentation
+### Documentation
 
-Bei Feature-Aenderungen relevante Doku in `docs/Features/` aktualisieren.
+For feature changes, update relevant docs in `docs/Features/`.
 
 ---
 
@@ -207,11 +215,11 @@ npm run test:coverage
 npm run preview
 ```
 
-### Dev-Server Regeln
+### Dev Server Rules
 
-- Standard ist `npm run dev`
-- `npm run dev:changelog` nur, wenn der Changelog-Dialog gebraucht wird
-- Production-Builds zeigen den Changelog automatisch
+- Default is `npm run dev`
+- Use `npm run dev:changelog` only when the changelog dialog is needed
+- Production builds show the changelog automatically
 
 ### Native Helper
 
@@ -220,7 +228,7 @@ cd tools/native-helper
 cargo run --release
 ```
 
-Windows-MSI-Builds bundlen `yt-dlp.exe`; Source-Builds und nicht-Windows-Archive nutzen `yt-dlp` neben dem Helper-Binary oder aus `PATH`.
+Windows MSI builds bundle `yt-dlp.exe`; source builds and non-Windows archives use `yt-dlp` next to the helper binary or from `PATH`.
 
 Ports:
 
@@ -229,19 +237,19 @@ Ports:
 
 ---
 
-## 3. Architektur
+## 3. Architecture
 
-Wichtige Bereiche:
+Important areas:
 
-- `src/components/`: React-UI, Timeline, Panels, Preview, Docking, Export, Mobile
-- `src/stores/`: Zustand-Stores fuer Timeline, Media, History, Settings, Dock, Slice, Render Targets, SAM2, Multicam, YouTube
-- `src/engine/`: WebGPU Rendering, Render Dispatcher, Texture-, Audio-, Export- und Analysis-Pipeline
-- `src/effects/`: GPU-Effekte und gemeinsame Shader
-- `src/transitions/`: GPU-Transitions
-- `src/services/`: Business Logic wie Layer Builder, Media Runtime, Monitoring, Project Storage, AI Tools, Export
+- `src/components/`: React UI, Timeline, Panels, Preview, Docking, Export, Mobile
+- `src/stores/`: Zustand stores for Timeline, Media, History, Settings, Dock, Slice, Render Targets, SAM2, Multicam, YouTube
+- `src/engine/`: WebGPU rendering, Render Dispatcher, texture/audio/export/analysis pipeline
+- `src/effects/`: GPU effects and shared shaders
+- `src/transitions/`: GPU transitions
+- `src/services/`: business logic such as Layer Builder, Media Runtime, Monitoring, Project Storage, AI Tools, Export
 - `src/hooks/`, `src/utils/`, `src/types/`, `src/workers/`, `src/shaders/`
 
-Besonders zentrale Dateien:
+Especially central files:
 
 - `src/engine/WebGPUEngine.ts`
 - `src/engine/render/RenderDispatcher.ts`
@@ -252,15 +260,15 @@ Besonders zentrale Dateien:
 - `src/services/logger.ts`
 - `src/engine/featureFlags.ts`
 
-Mehr Kontext steht in `README.md` und `docs/Features/README.md`.
+More context is in `README.md` and `docs/Features/README.md`.
 
 ---
 
-## 4. Kritische Patterns
+## 4. Critical Patterns
 
-### HMR-Singletons
+### HMR Singletons
 
-Singletons wie Engine, FFmpegBridge oder SAM2 muessen HMR ueberleben.
+Singletons such as Engine, FFmpegBridge, or SAM2 must survive HMR.
 
 ```ts
 let instance: MyService | null = null;
@@ -276,9 +284,9 @@ if (import.meta.hot) {
 }
 ```
 
-### Stale Closures vermeiden
+### Avoid Stale Closures
 
-In async Callbacks immer frischen Zustand ueber `get()` oder funktionale Updates lesen.
+In async callbacks, always read fresh state through `get()` or functional updates.
 
 ```ts
 video.onload = () => {
@@ -289,7 +297,7 @@ video.onload = () => {
 
 ### Video Ready State
 
-Auf `canplaythrough` warten, nicht nur auf `loadeddata`.
+Wait for `canplaythrough`, not only `loadeddata`.
 
 ### Zustand Slice Pattern
 
@@ -304,19 +312,19 @@ export const createSlice: SliceCreator<Actions> = (set, get) => ({
 
 ### React State Updates
 
-- Funktionale `setState`-Updates bevorzugen
-- Lazy State Initialization fuer teure Initialisierung nutzen
-- `toSorted()` statt `sort()` verwenden, um Mutationen zu vermeiden
+- Prefer functional `setState` updates
+- Use lazy state initialization for expensive initialization
+- Use `toSorted()` instead of `sort()` to avoid mutation
 
 ### Zustand Middleware
 
-- Alle Stores nutzen `subscribeWithSelector`
-- `settingsStore` und `dockStore` nutzen zusaetzlich `persist`
-- `mediaStore` nutzt eine abweichende Slice-Creator-Signatur als Timeline
+- All stores use `subscribeWithSelector`
+- `settingsStore` and `dockStore` also use `persist`
+- `mediaStore` uses a slice-creator signature that differs from Timeline
 
 ---
 
-## 5. Debugging und Logging
+## 5. Debugging And Logging
 
 ### Logger
 
@@ -327,10 +335,10 @@ const log = Logger.create('ModuleName');
 log.debug('Verbose', { data });
 log.info('Event');
 log.warn('Warning', data);
-log.error('Fehler', error);
+log.error('Error', error);
 ```
 
-### Browser-Console Shortcuts
+### Browser Console Shortcuts
 
 ```js
 Logger.enable('WebGPU,FFmpeg')
@@ -344,24 +352,24 @@ Logger.dump(50)
 Logger.summary()
 ```
 
-### Haeufige Probleme
+### Common Problems
 
 | Problem | Check |
 |---|---|
-| Schwarzes Canvas | `readyState >= 2` pruefen |
-| Device mismatch | HMR kaputt, Seite neu laden |
-| Linux mit 15fps | Vulkan-Flag pruefen |
-| WebCodecs Fehler | Fallback auf HTMLVideoElement erwarten |
-| Schwarz nach Refresh | Cold-Start / Restore-Pfad, ggf. hard reload |
+| Black canvas | Check `readyState >= 2` |
+| Device mismatch | HMR broken, reload page |
+| Linux at 15fps | Check Vulkan flag |
+| WebCodecs error | Expect fallback to HTMLVideoElement |
+| Black after refresh | Cold-start / restore path, hard reload if needed |
 
 ### Playback Debugging
 
-Im Browser verfuegbar:
+Available in the browser:
 
 - `window.__WC_PIPELINE__`
 - `window.__VF_PIPELINE__`
 
-Hilfreiche Log-Module:
+Useful log modules:
 
 ```js
 Logger.enable('WebCodecsPlayer,PlaybackHealth,LayerCollector')
@@ -369,7 +377,7 @@ Logger.enable('VideoSyncManager,ParallelDecode,RenderLoop')
 Logger.setLevel('DEBUG')
 ```
 
-Wichtige Monitoring-Services in `src/services/monitoring/`:
+Important monitoring services in `src/services/monitoring/`:
 
 - `playbackHealthMonitor`
 - `playbackDebugStats`
@@ -378,9 +386,9 @@ Wichtige Monitoring-Services in `src/services/monitoring/`:
 - `vfPipelineMonitor`
 - `scrubSettleState`
 
-### Scripted Playback-Tests
+### Scripted Playback Tests
 
-Wenn der Dev-Server laeuft, fuer Repros bevorzugt die AI-Bridge nutzen:
+When the dev server is running, prefer the AI bridge for repros:
 
 - `simulateScrub`
 - `simulatePlayback`
@@ -389,23 +397,23 @@ Wenn der Dev-Server laeuft, fuer Repros bevorzugt die AI-Bridge nutzen:
 - `getClipDetails`
 - `reloadApp`
 
-Worauf in Traces achten:
+What to watch for in traces:
 
 - `stalePreviewWhileTargetMoved`
 - `decoderResets`
 - `previewFreezeEvents`
 - `previewPathCounts.empty`
 - `driftSeconds`
-- Health-Anomalien wie `FRAME_STALL`, `SEEK_STUCK`, `HIGH_DROP_RATE`, `GPU_SURFACE_COLD`
+- Health anomalies such as `FRAME_STALL`, `SEEK_STUCK`, `HIGH_DROP_RATE`, `GPU_SURFACE_COLD`
 - `firstPreviewUpdateMs`
 
-Weitere Details: `docs/Features/Debugging.md` und `docs/Features/Playback-Debugging.md`
+More details: `docs/Features/Debugging.md` and `docs/Features/Playback-Debugging.md`
 
 ---
 
-## 6. Render- und Datenfluss
+## 6. Render And Data Flow
 
-Grober Render-Pfad:
+Rough render path:
 
 ```text
 useEngine
@@ -419,23 +427,23 @@ useEngine
         -> SlicePipeline
 ```
 
-Texture-Typen:
+Texture types:
 
-| Quelle | GPU-Typ |
+| Source | GPU Type |
 |---|---|
 | HTMLVideoElement | `texture_external` via `importExternalTexture` |
-| Firefox HTMLVideo Fallback | `texture_2d<f32>` |
+| Firefox HTMLVideo fallback | `texture_2d<f32>` |
 | VideoFrame | `texture_external` |
 | HTMLImageElement | `texture_2d<f32>` |
 | Canvas / Text | `texture_2d<f32>` |
-| Native Decoder Frames | dynamische `texture_2d<f32>` |
+| Native decoder frames | dynamic `texture_2d<f32>` |
 
 ---
 
-## 7. Praktische Agent-Regeln fuer dieses Repo
+## 7. Practical Agent Rules For This Repo
 
-- Erst Kontext lesen, dann aendern.
-- Bei Timeline-, Playback-, Render- oder Export-Bugs zuerst Logs / Traces / Monitoring sichten.
-- Bei groesseren Feature-Aenderungen immer auch Auswirkungen auf `docs/Features/`, `src/version.ts` und Tests pruefen.
-- Fuer Editor-Automation bevorzugt den `masterselects`-Skill statt manuelle Browser-Spekulation.
-- Wenn ein Workflow aus `CLAUDE.md` und `AGENTS.md` auseinanderlaeuft, beide Dateien wieder synchronisieren.
+- Read context before editing.
+- For timeline, playback, render, or export bugs, inspect logs/traces/monitoring first.
+- For larger feature changes, always check impact on `docs/Features/`, `src/version.ts`, and tests.
+- For editor automation, prefer the `masterselects` skill instead of manual browser speculation.
+- If a workflow diverges between `CLAUDE.md` and `AGENTS.md`, synchronize both files again.

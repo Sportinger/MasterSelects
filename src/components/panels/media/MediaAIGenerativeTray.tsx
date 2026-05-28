@@ -1,26 +1,12 @@
-import { useCallback, useState, type SyntheticEvent } from 'react';
-import {
-  DEFAULT_FLASHBOARD_MODEL_VERSION,
-  DEFAULT_FLASHBOARD_PROVIDER_ID,
-  DEFAULT_FLASHBOARD_SERVICE,
-} from '../../../stores/flashboardStore/defaults';
-import { FlashBoardComposer } from '../flashboard/FlashBoardComposer';
+import { lazy, Suspense, useCallback, useState, type SyntheticEvent } from 'react';
 import { useFlashBoardRuntime } from '../flashboard/useFlashBoardRuntime';
-import { MediaAIGenerationQueue } from './MediaAIGenerationQueue';
-import { useAccountStore } from '../../../stores/accountStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
-import '../flashboard/FlashBoard.css';
 import './MediaAIGenerativeTray.css';
 
-const MEDIA_GENERATIVE_SERVICES: Array<'cloud' | 'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = [
-  'cloud',
-  'kieai',
-  'evolink',
-  'elevenlabs',
-  'suno',
-];
+const MediaAIGenerativeTrayExpanded = lazy(() =>
+  import('./MediaAIGenerativeTrayExpanded').then((m) => ({ default: m.MediaAIGenerativeTrayExpanded }))
+);
 
-type MediaAITrayMode = 'generate' | 'chat';
+type MediaAITrayMode = 'generate' | 'chat' | 'download';
 
 interface MediaAIGenerativeTrayProps {
   expanded: boolean;
@@ -33,13 +19,6 @@ export function MediaAIGenerativeTray({
 }: MediaAIGenerativeTrayProps) {
   useFlashBoardRuntime({ enableKeyboardDelete: false });
   const [trayMode, setTrayMode] = useState<MediaAITrayMode>('generate');
-  const accountSession = useAccountStore((s) => s.session);
-  const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
-  const apiKeys = useSettingsStore((s) => s.apiKeys);
-  const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
-  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
-  const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && apiKeys.kieai.trim());
-  const useHostedDefaults = Boolean(accountSession?.authenticated && hostedAIEnabled && !useKieAiKeyByDefault);
 
   const stopEvent = useCallback((event: SyntheticEvent) => {
     event.stopPropagation();
@@ -78,33 +57,35 @@ export function MediaAIGenerativeTray({
             </svg>
             <span>Generate</span>
           </button>
+          <button
+            className="media-ai-tray-launch media-ai-tray-launch-download"
+            type="button"
+            onClick={() => openTray('download')}
+            title="Open downloads"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+              <path d="M8 2v7" />
+              <path d="m4.8 6.5 3.2 3.2 3.2-3.2" />
+              <path d="M3 12.8h10" />
+            </svg>
+            <span>Downloads</span>
+          </button>
         </div>
       )}
-      <div
-        className={`media-ai-tray media-ai-tray-expanded ${expanded ? '' : 'is-collapsed'}`}
-        onMouseDown={stopEvent}
-        onClick={stopEvent}
-        aria-hidden={!expanded}
-      >
-        <MediaAIGenerationQueue />
-        <button
-          className="media-ai-tray-collapse"
-          type="button"
-          onClick={() => onExpandedChange(false)}
-          title="Collapse AI prompt"
+      {expanded && (
+        <div
+          className="media-ai-tray media-ai-tray-expanded"
+          onMouseDown={stopEvent}
+          onClick={stopEvent}
         >
-          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path d="M4 6h8" />
-          </svg>
-        </button>
-        <FlashBoardComposer
-          initialProviderId={DEFAULT_FLASHBOARD_PROVIDER_ID}
-          initialService={useKieAiKeyByDefault ? DEFAULT_FLASHBOARD_SERVICE : 'cloud'}
-          initialVersion={useHostedDefaults ? 'latest' : DEFAULT_FLASHBOARD_MODEL_VERSION}
-          initialMode={trayMode}
-          allowedServices={MEDIA_GENERATIVE_SERVICES}
-        />
-      </div>
+          <Suspense fallback={<div className="media-ai-tray-loading" />}>
+            <MediaAIGenerativeTrayExpanded
+              mode={trayMode}
+              onCollapse={() => onExpandedChange(false)}
+            />
+          </Suspense>
+        </div>
+      )}
     </>
   );
 }

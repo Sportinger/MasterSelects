@@ -682,6 +682,13 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
       isFullscreen: false,
     });
 
+    if (useTimelineStore.getState().isPlaying) {
+      engine.clearVideoCache();
+      engine.clearScrubbingCache();
+      engine.clearCompositeCache();
+      engine.requestRender();
+    }
+
     if (isIndependent) {
       renderScheduler.register(panelId);
       setCompReady(true);

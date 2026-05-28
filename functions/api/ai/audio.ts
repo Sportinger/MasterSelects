@@ -12,6 +12,13 @@ import {
   normalizeHostedElevenLabsVoiceSearchParams,
 } from '../../lib/providers/elevenlabs';
 import {
+  calculateHostedSunoCost,
+  createHostedSunoMusicTask,
+  getHostedSunoMusicTask,
+  normalizeHostedSunoParams,
+  type HostedSunoParams,
+} from '../../lib/providers/kieai';
+import {
   createGatewayError,
   createHostedGatewayEnvelope,
   type HostedGatewayEnvelope,
@@ -72,7 +79,15 @@ async function loadHostedContext(context: AppContext): Promise<HostedAiContext> 
 
 function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiContext): HostedGatewayEnvelope<Record<string, unknown>> {
   const requestId = context.data.requestId ?? null;
-  const capabilities = buildHostedElevenLabsCapabilities();
+  const capabilities = {
+    elevenlabs: buildHostedElevenLabsCapabilities(),
+    suno: {
+      byoExplicit: false,
+      models: ['V5', 'V4_5PLUS', 'V4_5', 'V4'],
+      pollingSupported: true,
+      provider: 'suno-music',
+    },
+  };
   const authenticated = Boolean(hostedContext.user);
 
   return buildRouteEnvelope({
@@ -103,7 +118,7 @@ function requireHostedAudioAccess(
   if (!hostedContext.user) {
     return json(
       buildRouteEnvelope({
-        error: createGatewayError('auth_required', 'Hosted ElevenLabs speech requires a signed-in account.', {
+        error: createGatewayError('auth_required', 'Hosted audio generation requires a signed-in account.', {
           requestId,
         }),
         next: 'auth',
@@ -126,7 +141,7 @@ function requireHostedAudioAccess(
         byoRequired: true,
         error: createGatewayError(
           'feature_not_enabled',
-          'Hosted ElevenLabs speech is not enabled for this account.',
+          'Hosted audio generation is not enabled for this account.',
           { requestId },
         ),
         next: 'pricing',
@@ -144,6 +159,157 @@ function requireHostedAudioAccess(
   }
 
   return null;
+}
+
+async function handleHostedSunoMusicRequest(
+  context: AppContext,
+  hostedContext: HostedAiContext,
+  params: HostedSunoParams,
+  idempotencyKey: string,
+  requestId: string,
+): Promise<Response> {
+  const creditsRequired = calculateHostedSunoCost();
+  const ledgerSource = 'hosted:suno_music';
+  const existingCharge = await getCreditLedgerEntryBySource(
+    context.env.DB,
+    hostedContext.user!.id,
+    ledgerSource,
+    idempotencyKey,
+  );
+
+  if (!existingCharge && (hostedContext.billing?.balance ?? 0) < creditsRequired) {
+    return json(
+      buildRouteEnvelope({
+        creditBalance: hostedContext.billing?.balance ?? 0,
+        error: createGatewayError(
+          'insufficient_credits',
+          'You need more credits to generate hosted Suno music.',
+          { creditsRequired, provider: 'suno-music', requestId },
+        ),
+        next: 'pricing',
+        ok: false,
+        provider: 'suno-music',
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user!.email,
+          provider: 'cookie_session',
+        },
+        status: 'requires_billing',
+      }),
+      { status: 402 },
+    );
+  }
+
+  await createUsageEvent(context.env.DB, {
+    creditCost: creditsRequired,
+    feature: 'suno_music_generation',
+    idempotencyKey,
+    metadata: {
+      customMode: Boolean(params.customMode),
+      instrumental: params.instrumental !== false,
+      model: params.model ?? 'V5',
+      provider: 'suno-music',
+      requestId,
+    },
+    model: params.model ?? 'V5',
+    provider: 'suno-music',
+    requestUnits: '1 song',
+    userId: hostedContext.user!.id,
+  });
+
+  try {
+    const { taskId } = await createHostedSunoMusicTask(context.env, params);
+    const charge = await spendCredits(
+      context.env.DB,
+      hostedContext.user!.id,
+      creditsRequired,
+      ledgerSource,
+      idempotencyKey,
+      'Hosted Suno music generation',
+      {
+        customMode: Boolean(params.customMode),
+        instrumental: params.instrumental !== false,
+        model: params.model ?? 'V5',
+        provider: 'suno-music',
+        requestId,
+        taskId,
+      },
+    );
+
+    if (charge.insufficient) {
+      await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
+      return json(
+        buildRouteEnvelope({
+          creditBalance: charge.balance,
+          error: createGatewayError(
+            'insufficient_credits',
+            'You need more credits to generate hosted Suno music.',
+            { creditsRequired, provider: 'suno-music', requestId },
+          ),
+          next: 'pricing',
+          ok: false,
+          provider: 'suno-music',
+          requestId,
+          session: {
+            authenticated: true,
+            email: hostedContext.user!.email,
+            provider: 'cookie_session',
+          },
+          status: 'requires_billing',
+        }),
+        { status: 402 },
+      );
+    }
+
+    await completeUsageEvent(context.env.DB, idempotencyKey, {
+      ledgerEntryId: charge.entry?.id ?? null,
+      status: 'completed',
+    });
+
+    return json(
+      buildRouteEnvelope({
+        creditBalance: charge.balance,
+        creditsCharged: charge.charged ? creditsRequired : 0,
+        data: {
+          outputType: 'audio',
+          provider: 'suno-music',
+          taskId,
+        },
+        ok: true,
+        provider: 'suno-music',
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user!.email,
+          provider: 'cookie_session',
+        },
+        status: 'accepted',
+      }),
+    );
+  } catch (error) {
+    await completeUsageEvent(context.env.DB, idempotencyKey, { status: 'failed' });
+
+    return json(
+      buildRouteEnvelope({
+        error: createGatewayError(
+          'provider_request_failed',
+          error instanceof Error ? error.message : 'Hosted Suno music generation failed.',
+          { requestId },
+        ),
+        ok: false,
+        provider: 'suno-music',
+        requestId,
+        session: {
+          authenticated: true,
+          email: hostedContext.user!.email,
+          provider: 'cookie_session',
+        },
+        status: 'error',
+      }),
+      { status: 502 },
+    );
+  }
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
@@ -211,6 +377,39 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
           }),
         );
       }
+
+      if (action === 'status') {
+        const taskId = url.searchParams.get('taskId')?.trim() ?? '';
+        if (!taskId) {
+          return json(
+            buildRouteEnvelope({
+              error: createGatewayError('invalid_task_id', 'A taskId is required.', { requestId }),
+              ok: false,
+              provider: 'suno-music',
+              requestId,
+              status: 'error',
+            }),
+            { status: 400 },
+          );
+        }
+
+        const task = await getHostedSunoMusicTask(context.env, taskId);
+        return json(
+          buildRouteEnvelope({
+            creditBalance: hostedContext.billing?.balance ?? 0,
+            data: task,
+            ok: true,
+            provider: 'suno-music',
+            requestId,
+            session: {
+              authenticated: true,
+              email: hostedContext.user?.email ?? null,
+              provider: 'cookie_session',
+            },
+            status: task.status === 'completed' ? 'completed' : task.status === 'failed' ? 'error' : 'processing',
+          }),
+        );
+      }
     } catch (error) {
       return json(
         buildRouteEnvelope({
@@ -247,6 +446,39 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
 
   const rawBody = (await parseJson<HostedAudioRouteBody>(context.request)) ?? null;
   const paramsInput = rawBody?.params ?? rawBody;
+
+  if (rawBody?.action === 'music') {
+    const musicParams = normalizeHostedSunoParams(paramsInput);
+
+    if (!musicParams) {
+      return json(
+        buildRouteEnvelope({
+          error: createGatewayError('invalid_request', 'Expected valid Suno music parameters.', {
+            requestId,
+          }),
+          ok: false,
+          provider: 'suno-music',
+          requestId,
+          status: 'error',
+        }),
+        { status: 400 },
+      );
+    }
+
+    const hostedContext = await loadHostedContext(context);
+    const accessError = requireHostedAudioAccess(hostedContext, requestId);
+    if (accessError) {
+      return accessError;
+    }
+
+    const idempotencyKey =
+      typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
+        ? rawBody.idempotencyKey.trim()
+        : `${requestId}:ai.audio.suno`;
+
+    return handleHostedSunoMusicRequest(context, hostedContext, musicParams, idempotencyKey, requestId);
+  }
+
   const speechParams = normalizeHostedElevenLabsSpeechParams(paramsInput);
 
   if (!speechParams) {

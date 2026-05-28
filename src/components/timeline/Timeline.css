@@ -640,4 +640,36 @@
 .timeline-ruler-cache-indicator.proxy {
   box-shadow: 0 0 5px rgba(251, 191, 36, 0.32);
 }
+
+.timeline-ruler-video-bake-region {
+  position: absolute;
+  top: 4px;
+  height: 8px;
+  border: 1px solid rgba(45, 212, 191, 0.78);
+  border-radius: 2px;
+  background: rgba(20, 184, 166, 0.24);
+  box-shadow: 0 0 8px rgba(20, 184, 166, 0.22);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.timeline-ruler-video-bake-region.status-baking {
+  border-color: rgba(251, 191, 36, 0.85);
+  background: rgba(251, 191, 36, 0.2);
+}
+
+.timeline-ruler-video-bake-region.status-baked {
+  border-color: rgba(52, 211, 153, 0.88);
+  background: rgba(16, 185, 129, 0.26);
+}
+
+.timeline-ruler-video-bake-region.status-error {
+  border-color: rgba(248, 113, 113, 0.9);
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.timeline-ruler-video-bake-region.selection {
+  border-style: dashed;
+  background: rgba(45, 212, 191, 0.16);
+}
 }

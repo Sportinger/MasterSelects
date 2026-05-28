@@ -3,13 +3,19 @@
 import type {
   TimelineClip,
   TimelineTrack,
+  VideoBakeRegion,
   AnimatableProperty,
   ClipTransform,
   BezierHandle,
   EasingType,
   RotationInterpolationMode,
 } from '../../types';
-import type { TimelineAudioDisplayMode, TimelineToolId, TimelineTrackFocusMode } from '../../stores/timeline/types';
+import type {
+  TimelineAudioDisplayMode,
+  TimelineToolId,
+  TimelineTrackFocusMode,
+  TimelineVideoBakeRegionSelection,
+} from '../../stores/timeline/types';
 
 // Clip drag state (Premiere-style)
 export interface ClipDragState {
@@ -118,6 +124,8 @@ export interface TimelineRulerProps {
   onRulerMouseDown: (e: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;
   cacheRanges?: TimelineRulerCacheRange[];
+  videoBakeRegions?: VideoBakeRegion[];
+  videoBakeRegionSelection?: TimelineVideoBakeRegionSelection | null;
 }
 
 // Props for TimelineControls component
@@ -139,6 +147,7 @@ export interface TimelineControlsProps {
   waveformsEnabled: boolean;
   audioDisplayMode: TimelineAudioDisplayMode;
   audioFocusMode: boolean;
+  showAudioRegionEditMarkers: boolean;
   trackFocusMode: TimelineTrackFocusMode;
   toolMode: 'select' | 'cut';
   onPlay: () => void;
@@ -153,6 +162,7 @@ export interface TimelineControlsProps {
   onToggleWaveforms: () => void;
   onSetAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
   onToggleAudioFocusMode: () => void;
+  onToggleAudioRegionEditMarkers: () => void;
   onSetTrackFocusMode: (mode: TimelineTrackFocusMode) => void;
   onToggleCutTool: () => void;
   onFitToWindow: () => void;

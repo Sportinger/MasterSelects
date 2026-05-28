@@ -2,6 +2,11 @@
 
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import {
+  FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
+  useDockStore,
+} from '../../../stores/dockStore';
 import type { ToolResult } from '../types';
 import type { CallerContext } from '../policy';
 
@@ -248,6 +253,8 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   createTortureProjectFixture: handleCreateTortureProjectFixture,
   getNodeWorkspaceDebugState: handleGetNodeWorkspaceDebugState,
   sendAINodePrompt: handleSendAINodePrompt,
+  getDockLayoutDebugState: handleGetDockLayoutDebugState,
+  switchDockLayout: handleSwitchDockLayout,
 };
 
 // YouTube handlers - self-contained, fetch their own stores
@@ -257,6 +264,93 @@ const youtubeHandlers: Record<string, (args: Record<string, unknown>, callerCont
   downloadAndImportVideo: handleDownloadAndImportVideo,
   getYouTubeVideos: handleGetYouTubeVideos,
 };
+
+function collectDockLayoutDebugState(): Record<string, unknown> {
+  const dockState = useDockStore.getState();
+  const previewElements = typeof document === 'undefined'
+    ? []
+    : Array.from(document.querySelectorAll<HTMLElement>(
+      '[data-dock-layout-anim-id="panel:preview"], [data-dock-layout-anim-id^="panel:preview-"], [data-dock-layout-anim-id="panel:multi-preview"], [data-dock-layout-anim-id^="panel:multi-preview-"]',
+    )).map((element) => {
+      const rect = element.getBoundingClientRect();
+      const canvases = Array.from(element.querySelectorAll<HTMLCanvasElement>('canvas')).map((canvas) => ({
+        width: canvas.width,
+        height: canvas.height,
+        clientWidth: canvas.clientWidth,
+        clientHeight: canvas.clientHeight,
+        display: window.getComputedStyle(canvas).display,
+        visibility: window.getComputedStyle(canvas).visibility,
+      }));
+
+      return {
+        id: element.dataset.dockLayoutAnimId,
+        rect: {
+          left: Math.round(rect.left),
+          top: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        },
+        visibility: window.getComputedStyle(element).visibility,
+        display: window.getComputedStyle(element).display,
+        canvasCount: canvases.length,
+        canvases,
+      };
+    });
+
+  return {
+    activeSavedLayoutId: dockState.activeSavedLayoutId,
+    savedLayouts: dockState.savedLayouts.map((layout) => ({
+      id: layout.id,
+      name: layout.name,
+      favorite: layout.favorite === true,
+      factory: layout.factory === true,
+    })),
+    previewElements,
+  };
+}
+
+function resolveDockLayoutDebugId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'video' || normalized === 'video edit' || normalized === 'video-edit') {
+    return FACTORY_VIDEO_EDIT_LAYOUT_ID;
+  }
+  if (normalized === 'audio' || normalized === 'audio edit' || normalized === 'audio-edit') {
+    return FACTORY_AUDIO_EDIT_LAYOUT_ID;
+  }
+
+  const dockState = useDockStore.getState();
+  return dockState.savedLayouts.find((layout) => (
+    layout.id === value || layout.name.trim().toLowerCase() === normalized
+  ))?.id ?? null;
+}
+
+async function handleGetDockLayoutDebugState(): Promise<ToolResult> {
+  return { success: true, data: collectDockLayoutDebugState() };
+}
+
+async function handleSwitchDockLayout(args: Record<string, unknown>): Promise<ToolResult> {
+  const layoutId = resolveDockLayoutDebugId(args.layoutId ?? args.id ?? args.name);
+  if (!layoutId) {
+    return {
+      success: false,
+      error: 'Unknown dock layout',
+      data: collectDockLayoutDebugState(),
+    };
+  }
+
+  useDockStore.getState().loadSavedLayout(layoutId);
+  const waitMs = Math.max(0, Math.min(Number(args.waitMs) || 0, 5000));
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+
+  return {
+    success: true,
+    data: collectDockLayoutDebugState(),
+  };
+}
 
 /**
  * Execute a tool by name

@@ -5,11 +5,14 @@ import {
   buildHostedKlingCapabilities,
   calculateHostedImageCost,
   calculateHostedKlingCost,
+  calculateHostedSeedanceCost,
   createHostedImageTask,
   createHostedKlingTask,
+  createHostedSeedanceTask,
   getHostedKlingTask,
   normalizeHostedImageParams,
   normalizeHostedKlingParams,
+  normalizeHostedSeedanceParams,
   type HostedImageParams,
   type HostedVideoParams,
 } from '../../lib/providers/kieai';
@@ -139,35 +142,70 @@ function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): H
   }
 
   const videoParams = normalizeHostedKlingParams(paramsInput);
-  if (!videoParams) {
+  if (videoParams) {
+    return {
+      creditsRequired: calculateHostedKlingCost(
+        videoParams.mode ?? 'std',
+        videoParams.duration,
+        Boolean(videoParams.sound),
+        Boolean(videoParams.multiShots),
+      ),
+      description: 'Hosted Kling 3.0 generation',
+      feature: 'kling_generation',
+      ledgerSource: 'hosted:kling_generation',
+      model: 'kling-3.0',
+      outputType: 'video',
+      params: videoParams,
+      provider: 'kling-3.0',
+      requestUnits: `${videoParams.duration}s`,
+      usageMetadata: {
+        aspectRatio: videoParams.aspectRatio,
+        duration: videoParams.duration,
+        hasEndImage: Boolean(videoParams.endImageUrl),
+        hasStartImage: Boolean(videoParams.startImageUrl),
+        mode: videoParams.mode,
+        multiShots: Boolean(videoParams.multiShots),
+        requestId,
+        shotCount: videoParams.multiPrompt?.length ?? 0,
+        sound: videoParams.multiShots ? true : Boolean(videoParams.sound),
+      },
+    };
+  }
+
+  const seedanceParams = normalizeHostedSeedanceParams(paramsInput);
+  if (!seedanceParams?.provider) {
     return null;
   }
 
+  const hasVideoInput = seedanceParams.referenceMedia?.some((reference) => reference.mediaType === 'video') === true;
+
   return {
-    creditsRequired: calculateHostedKlingCost(
-      videoParams.mode ?? 'std',
-      videoParams.duration,
-      Boolean(videoParams.sound),
-      Boolean(videoParams.multiShots),
+    creditsRequired: calculateHostedSeedanceCost(
+      seedanceParams.provider,
+      seedanceParams.mode,
+      seedanceParams.duration,
+      hasVideoInput,
     ),
-    description: 'Hosted Kling 3.0 generation',
-    feature: 'kling_generation',
-    ledgerSource: 'hosted:kling_generation',
-    model: 'kling-3.0',
+    description: `Hosted ${seedanceParams.provider === 'bytedance/seedance-2-fast' ? 'Seedance 2.0 Fast' : 'Seedance 2.0'} generation`,
+    feature: 'seedance_generation',
+    ledgerSource: `hosted:${seedanceParams.provider}`,
+    model: seedanceParams.provider,
     outputType: 'video',
-    params: videoParams,
-    provider: 'kling-3.0',
-    requestUnits: `${videoParams.duration}s`,
+    params: seedanceParams,
+    provider: seedanceParams.provider,
+    requestUnits: `${seedanceParams.duration}s`,
     usageMetadata: {
-      aspectRatio: videoParams.aspectRatio,
-      duration: videoParams.duration,
-      hasEndImage: Boolean(videoParams.endImageUrl),
-      hasStartImage: Boolean(videoParams.startImageUrl),
-      mode: videoParams.mode,
-      multiShots: Boolean(videoParams.multiShots),
+      aspectRatio: seedanceParams.aspectRatio,
+      duration: seedanceParams.duration,
+      hasEndImage: Boolean(seedanceParams.endImageUrl),
+      hasStartImage: Boolean(seedanceParams.startImageUrl),
+      hasVideoInput,
+      mode: seedanceParams.mode,
+      referenceAudioCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'audio').length ?? 0,
+      referenceImageCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'image').length ?? 0,
+      referenceVideoCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'video').length ?? 0,
       requestId,
-      shotCount: videoParams.multiPrompt?.length ?? 0,
-      sound: videoParams.multiShots ? true : Boolean(videoParams.sound),
+      sound: Boolean(seedanceParams.sound),
     },
   };
 }
@@ -400,7 +438,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   try {
     const { taskId } = generation.outputType === 'image'
       ? await createHostedImageTask(context.env, generation.params as HostedImageParams)
-      : await createHostedKlingTask(context.env, generation.params as HostedVideoParams);
+      : generation.provider === 'bytedance/seedance-2' || generation.provider === 'bytedance/seedance-2-fast'
+        ? await createHostedSeedanceTask(context.env, generation.params as HostedVideoParams)
+        : await createHostedKlingTask(context.env, generation.params as HostedVideoParams);
     const charge = await spendCredits(
       context.env.DB,
       hostedContext.user.id,

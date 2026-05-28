@@ -7,7 +7,7 @@ export const youtubeToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'searchVideos',
-      description: 'Search for videos by keyword using yt-dlp (no API key needed). Returns video results with title, channel, duration, views, and URL. Results also appear in the Downloads panel. Each result has a url ready for downloadAndImportVideo. Requires the Native Helper to be running.',
+      description: 'Search for videos by keyword using yt-dlp (no API key needed). Returns video results with title, channel, duration, views, and URL. Results are available to the Media downloads workflow. Each result has a url ready for downloadAndImportVideo. Requires the Native Helper to be running.',
       parameters: {
         type: 'object',
         properties: {
@@ -90,7 +90,7 @@ export const youtubeToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'getYouTubeVideos',
-      description: 'Get the list of videos currently in the Downloads panel (from previous searches or pasted URLs).',
+      description: 'Get the list of videos currently known to the Media downloads workflow (from previous searches or pasted URLs).',
       parameters: {
         type: 'object',
         properties: {},

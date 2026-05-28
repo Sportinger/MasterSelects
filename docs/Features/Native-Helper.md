@@ -258,5 +258,5 @@ No dedicated unit tests -- this is a Rust binary tested separately.
 
 ## Related Documents
 
-- [Download Panel](./Download-Panel.md) -- Download panel UI powered by the Native Helper
+- [Media Downloads](./Download-Panel.md) -- Media panel download UI powered by the Native Helper
 - [Project Persistence](./Project-Persistence.md) -- Firefox project persistence via Native Helper file system ops

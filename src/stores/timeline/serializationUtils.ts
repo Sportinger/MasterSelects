@@ -17,6 +17,7 @@ import { mediaNeedsRelink } from '../../services/project/relinkMedia';
 import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { videoBakeProxyCache } from '../../services/videoBakeProxyCache';
 import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClient';
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
@@ -29,6 +30,10 @@ import {
 import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
 import { readRiveMetadata } from '../../services/vectorAnimation/riveMetadata';
+import {
+  resetVolatileVideoBakeRegionStatuses,
+  serializeVideoBakeRegion,
+} from './videoBakeSlice';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { markDynamicCanvasUpdated } from '../../services/canvasVersion';
@@ -84,6 +89,15 @@ function restoreClipNodeGraph(serializedClip: SerializableClip) {
   return cloneClipNodeGraph(serializedClip.nodeGraph);
 }
 
+function restoreClipVideoState(serializedClip: SerializableClip) {
+  return serializedClip.videoState
+    ? {
+        ...structuredClone(serializedClip.videoState),
+        bakeRegions: serializedClip.videoState.bakeRegions?.map(serializeVideoBakeRegion),
+      }
+    : undefined;
+}
+
 type SerializationUtils = Pick<TimelineUtils, 'getSerializableState' | 'loadState' | 'clearTimeline'>;
 
 export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, get) => ({
@@ -102,6 +116,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       loopPlayback,
       clipKeyframes,
       markers,
+      videoBakeRegions,
       masterAudioState,
     } = get();
     const safePlayheadPosition = sanitizePlayheadPosition(playheadPosition, 0);
@@ -147,6 +162,12 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         thumbnails: clip.thumbnails,
         linkedClipId: clip.linkedClipId,
         linkedGroupId: clip.linkedGroupId,
+        videoState: clip.videoState
+          ? {
+              ...clip.videoState,
+              bakeRegions: clip.videoState.bakeRegions?.map(serializeVideoBakeRegion),
+            }
+          : undefined,
         audioState: clip.audioState ? structuredClone(clip.audioState) : undefined,
         waveform: clip.waveform,
         waveformChannels: clip.waveformChannels,
@@ -207,6 +228,9 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       outPoint,
       loopPlayback,
       markers: markers.length > 0 ? markers : undefined,  // Only save if there are markers
+      videoBakeRegions: videoBakeRegions.length > 0
+        ? videoBakeRegions.map(serializeVideoBakeRegion)
+        : undefined,
       masterAudioState: masterAudioState ? structuredClone(masterAudioState) : undefined,
     };
   },
@@ -276,6 +300,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     pause();
 
     // Clear current timeline
+    videoBakeProxyCache.clear();
     clearTimeline();
     const timelineSessionId = get().timelineSessionId;
     const isCurrentTimelineSession = () => get().timelineSessionId === timelineSessionId;
@@ -298,6 +323,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         primarySelectedClipId: null,
         targetTrackIdByType: {},
         markers: [],
+        videoBakeRegionSelection: null,
+        videoBakeRegions: [],
         masterAudioState: undefined,
       });
       return;
@@ -307,6 +334,11 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     // Increment animation key to trigger entrance animations on clips
     const { clipEntranceAnimationKey } = get();
     const safePlayheadPosition = sanitizePlayheadPosition(data.playheadPosition, 0);
+    const restoredVideoBakeState = resetVolatileVideoBakeRegionStatuses(
+      [],
+      data.videoBakeRegions ?? [],
+    );
+
     set({
       tracks: data.tracks.map(t => ({ ...t })),
       clips: [], // We'll restore clips separately
@@ -330,6 +362,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
       // Restore markers
       markers: data.markers || [],
+      videoBakeRegionSelection: null,
+      videoBakeRegions: restoredVideoBakeState.videoBakeRegions,
       masterAudioState: data.masterAudioState ? structuredClone(data.masterAudioState) : undefined,
       // Increment animation key for clip entrance animations
       clipEntranceAnimationKey: clipEntranceAnimationKey + 1,
@@ -382,6 +416,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         thumbnails: serializedClip.thumbnails,
         linkedClipId: serializedClip.linkedClipId,
         linkedGroupId: serializedClip.linkedGroupId,
+        videoState: restoreClipVideoState(serializedClip),
         audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
         transform: serializedClip.transform,
         effects: serializedClip.effects || [],
@@ -427,6 +462,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         thumbnails: serializedClip.thumbnails,
         linkedClipId: serializedClip.linkedClipId,
         linkedGroupId: serializedClip.linkedGroupId,
+        videoState: restoreClipVideoState(serializedClip),
         audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
         transform: serializedClip.transform,
         effects: serializedClip.effects || [],
@@ -462,6 +498,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
                 naturalDuration: serializedClip.duration,
               },
               linkedClipId: serializedClip.linkedClipId,
+              videoState: restoreClipVideoState(serializedClip),
               audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
               waveform: serializedClip.waveform || [],
               waveformChannels: serializedClip.waveformChannels,
@@ -544,6 +581,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             },
             thumbnails: serializedClip.thumbnails,
             linkedClipId: serializedClip.linkedClipId,
+            videoState: restoreClipVideoState(serializedClip),
             audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
             transform: serializedClip.transform,
             effects: serializedClip.effects || [],
@@ -1216,6 +1254,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             naturalDuration: serializedClip.duration,
           },
           mathScene: serializedClip.mathScene,
+          videoState: restoreClipVideoState(serializedClip),
           audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
@@ -1286,6 +1325,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             mediaFileId: serializedClip.mediaFileId || undefined,
             naturalDuration: serializedClip.duration,
           },
+          videoState: restoreClipVideoState(serializedClip),
           audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
@@ -1341,6 +1381,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             mediaFileId: serializedClip.mediaFileId || undefined,
             naturalDuration: serializedClip.duration,
           },
+          videoState: restoreClipVideoState(serializedClip),
           audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
@@ -1384,6 +1425,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             mediaFileId: serializedClip.mediaFileId || undefined,
             naturalDuration: Number.MAX_SAFE_INTEGER,
           },
+          videoState: restoreClipVideoState(serializedClip),
           audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
@@ -1425,6 +1467,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
             mediaFileId: serializedClip.mediaFileId || undefined,
             naturalDuration: Number.MAX_SAFE_INTEGER,
           },
+          videoState: restoreClipVideoState(serializedClip),
           audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
           transform: serializedClip.transform,
           effects: serializedClip.effects || [],
@@ -1521,6 +1564,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         thumbnails: serializedClip.thumbnails,
         linkedClipId: serializedClip.linkedClipId,
         linkedGroupId: serializedClip.linkedGroupId,
+        videoState: restoreClipVideoState(serializedClip),
         audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
         waveform: serializedClip.waveform,
         waveformChannels: serializedClip.waveformChannels,
@@ -1963,6 +2007,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       ramPreviewProgress: null,
       ramPreviewRange: null,
       isRamPreviewing: false,
+      videoBakeRegionSelection: null,
+      videoBakeRegions: [],
       clipKeyframes: new Map<string, Keyframe[]>(),
       keyframeRecordingEnabled: new Set<string>(),
       expandedTracks: new Set<string>(tracks.filter(t => t.type === 'video').map(t => t.id)),

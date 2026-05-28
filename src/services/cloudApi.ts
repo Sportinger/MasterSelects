@@ -175,13 +175,20 @@ export interface CloudAiVideoRequest {
     duration?: number;
     endImageUrl?: string;
     imageInputs?: string[];
-    mode?: 'pro' | 'std';
+    mode?: string;
     multiPrompt?: Array<{ index: number; prompt: string; duration: number }>;
     multiShots?: boolean;
     outputFormat?: 'jpeg' | 'png' | 'webp';
     outputType?: 'image' | 'video';
     provider?: string;
     prompt?: string;
+    referenceMedia?: Array<{
+      fileName?: string;
+      label?: string;
+      mediaType: 'audio' | 'image' | 'video';
+      mimeType?: string;
+      source: string;
+    }>;
     resolution?: string;
     sound?: boolean;
     startImageUrl?: string;
@@ -192,6 +199,32 @@ export interface CloudAiVideoRequest {
 export interface CloudAiAudioSpeechRequest {
   idempotencyKey?: string;
   params: ElevenLabsCreateSpeechParams;
+}
+
+export interface CloudAiAudioMusicRequest {
+  action: 'music';
+  idempotencyKey?: string;
+  params: {
+    audioWeight?: number;
+    customMode?: boolean;
+    instrumental?: boolean;
+    model?: string;
+    negativeTags?: string;
+    outputType?: 'audio';
+    prompt: string;
+    provider?: string;
+    style?: string;
+    styleWeight?: number;
+    title?: string;
+    vocalGender?: 'm' | 'f';
+    weirdnessConstraint?: number;
+  };
+}
+
+export interface CloudAiAudioMusicCreateResponse {
+  outputType: 'audio';
+  provider: string;
+  taskId: string;
 }
 
 export interface CloudAiAudioModelsResponse {
@@ -642,6 +675,19 @@ export const cloudApi = {
           method: 'POST',
           signal,
         });
+      },
+      music(body: CloudAiAudioMusicRequest, signal?: AbortSignal): Promise<CloudAiGatewayEnvelope<CloudAiAudioMusicCreateResponse>> {
+        return requestJson<CloudAiGatewayEnvelope<CloudAiAudioMusicCreateResponse>>('/api/ai/audio', {
+          body: JSON.stringify(body),
+          method: 'POST',
+          signal,
+        });
+      },
+      musicStatus(taskId: string): Promise<CloudAiGatewayEnvelope> {
+        const url = new URL('/api/ai/audio', window.location.origin);
+        url.searchParams.set('action', 'status');
+        url.searchParams.set('taskId', taskId);
+        return requestJson<CloudAiGatewayEnvelope>(url.toString(), { method: 'GET' });
       },
     },
     video: {

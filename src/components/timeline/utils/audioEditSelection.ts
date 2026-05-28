@@ -8,6 +8,20 @@ export interface AudioRegionSelectionInput {
   snapThresholdSeconds?: number;
 }
 
+export interface MoveAudioRegionSelectionInput {
+  clip: AudioRegionSelectionInput['clip'];
+  selection: TimelineAudioRegionSelection;
+  deltaTimelineSeconds: number;
+}
+
+export interface ResizeAudioRegionSelectionInput {
+  clip: AudioRegionSelectionInput['clip'];
+  selection: TimelineAudioRegionSelection;
+  edge: 'left' | 'right';
+  focusTimelineTime: number;
+  snapThresholdSeconds?: number;
+}
+
 interface SnapResult {
   timelineTime: number;
   sourceTime: number;
@@ -114,4 +128,35 @@ export function resolveTimelineAudioRegionSelection(
     sourceOutPoint: sourceEnd,
     snappedToZeroCrossing: anchor.snapped || focus.snapped,
   };
+}
+
+export function moveTimelineAudioRegionSelection(
+  input: MoveAudioRegionSelectionInput,
+): TimelineAudioRegionSelection {
+  const clipStart = input.clip.startTime;
+  const clipEnd = input.clip.startTime + Math.max(0.001, input.clip.duration);
+  const regionDuration = Math.max(0.001, input.selection.endTime - input.selection.startTime);
+  const maxStart = Math.max(clipStart, clipEnd - regionDuration);
+  const nextStart = clamp(input.selection.startTime + input.deltaTimelineSeconds, clipStart, maxStart);
+  const nextEnd = Math.min(clipEnd, nextStart + regionDuration);
+
+  return resolveTimelineAudioRegionSelection({
+    clip: input.clip,
+    anchorTimelineTime: nextStart,
+    focusTimelineTime: nextEnd,
+    snapThresholdSeconds: 0,
+  });
+}
+
+export function resizeTimelineAudioRegionSelection(
+  input: ResizeAudioRegionSelectionInput,
+): TimelineAudioRegionSelection {
+  return resolveTimelineAudioRegionSelection({
+    clip: input.clip,
+    anchorTimelineTime: input.edge === 'left'
+      ? input.selection.endTime
+      : input.selection.startTime,
+    focusTimelineTime: input.focusTimelineTime,
+    snapThresholdSeconds: input.snapThresholdSeconds,
+  });
 }

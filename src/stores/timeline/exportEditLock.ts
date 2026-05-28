@@ -52,10 +52,20 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'applyRoomToneFill',
   'applyDetectedTransientSoftening',
   'pasteAudioRegionToSelection',
+  'setClipAudioEditOperationRange',
   'setClipAudioEditOperationEnabled',
   'removeClipAudioEditOperation',
   'clearClipAudioEditStack',
   'bakeClipAudioEditStack',
+  'unbakeClipAudioEditStack',
+  'addCompositionVideoBakeRegion',
+  'bakeCompositionVideoBakeRegion',
+  'unbakeCompositionVideoBakeRegion',
+  'removeCompositionVideoBakeRegion',
+  'addClipVideoBakeRegion',
+  'bakeClipVideoBakeRegion',
+  'unbakeClipVideoBakeRegion',
+  'removeClipVideoBakeRegion',
   'applySpectralRegionEdit',
   'addClipSpectralImageLayer',
   'updateClipSpectralImageLayer',
@@ -201,6 +211,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
 
 const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'bakeClipAudioEditStack', 'applyRoomToneFill']);
 const ASYNC_ARRAY_ACTION_NAMES = new Set<string>(['applyDetectedSilenceRemoval', 'applyDetectedTransientSoftening']);
+const ASYNC_FALSE_ACTION_NAMES = new Set<string>(['bakeCompositionVideoBakeRegion', 'bakeClipVideoBakeRegion']);
 const ASYNC_VOID_ACTION_NAMES = new Set<string>(['addClip', 'addCompClip', 'completeDownload', 'loadState']);
 const STRING_FALLBACK_ACTION_NAMES = new Set<string>([
   'addTrack',
@@ -230,14 +241,24 @@ const NULL_FALLBACK_ACTION_NAMES = new Set<string>([
   'addClipAudioEffectInstance',
   'addTrackAudioEffectInstance',
   'addMasterAudioEffectInstance',
+  'addCompositionVideoBakeRegion',
+  'addClipVideoBakeRegion',
+]);
+const FALSE_FALLBACK_ACTION_NAMES = new Set<string>([
+  'unbakeCompositionVideoBakeRegion',
+  'removeCompositionVideoBakeRegion',
+  'unbakeClipVideoBakeRegion',
+  'removeClipVideoBakeRegion',
 ]);
 
 function getLockedReturnValue(actionName: string): unknown {
   if (ASYNC_NULL_ACTION_NAMES.has(actionName)) return Promise.resolve(null);
   if (ASYNC_ARRAY_ACTION_NAMES.has(actionName)) return Promise.resolve([]);
+  if (ASYNC_FALSE_ACTION_NAMES.has(actionName)) return Promise.resolve(false);
   if (ASYNC_VOID_ACTION_NAMES.has(actionName)) return Promise.resolve();
   if (STRING_FALLBACK_ACTION_NAMES.has(actionName)) return '';
   if (NULL_FALLBACK_ACTION_NAMES.has(actionName)) return null;
+  if (FALSE_FALLBACK_ACTION_NAMES.has(actionName)) return false;
   return undefined;
 }
 

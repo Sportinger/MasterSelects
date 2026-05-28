@@ -36,9 +36,11 @@ import type {
   ClipCustomNodeParamValue,
   SerializableClip,
   ClipAudioEditOperation,
+  ClipAudioRegionGainPreview,
   AudioEffectInstance,
   AudioSendState,
   SpectralImageLayer,
+  VideoBakeRegion,
 } from '../../types';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
 import type { Composition } from '../mediaStore';
@@ -227,9 +229,20 @@ export interface TimelineAudioRegionClipboard {
   copiedAt: number;
 }
 
+export interface TimelineVideoBakeRegionSelection {
+  scope: VideoBakeRegion['scope'];
+  startTime: number;
+  endTime: number;
+  clipId?: string;
+  trackId?: string;
+  sourceInPoint?: number;
+  sourceOutPoint?: number;
+}
+
 export type TimelineAudioRegionEditType = Extract<
   ClipAudioEditOperation['type'],
   | 'silence'
+  | 'gain'
   | 'cut'
   | 'paste'
   | 'insert-silence'
@@ -240,6 +253,7 @@ export type TimelineAudioRegionEditType = Extract<
   | 'mono-sum'
   | 'split-stereo'
   | 'repair'
+  | 'effect'
   | 'room-tone-fill'
 >;
 
@@ -350,8 +364,12 @@ export interface TimelineState {
   audioFocusMode: boolean;
   trackFocusMode: TimelineTrackFocusMode;
   audioRegionSelection: TimelineAudioRegionSelection | null;
+  videoBakeRegionSelection: TimelineVideoBakeRegionSelection | null;
+  videoBakeRegions: VideoBakeRegion[];
+  audioRegionGainPreview: ClipAudioRegionGainPreview | null;
   audioSpectralRegionSelection: TimelineSpectralRegionSelection | null;
   audioRegionClipboard: TimelineAudioRegionClipboard | null;
+  showAudioRegionEditMarkers: boolean;
   showTranscriptMarkers: boolean;
 
   // Keyframe animation state
@@ -666,6 +684,8 @@ export interface PlaybackActions {
   clearAudioRegionSelection: () => void;
   setAudioSpectralRegionSelection: (selection: TimelineSpectralRegionSelection | null) => void;
   clearAudioSpectralRegionSelection: () => void;
+  toggleAudioRegionEditMarkers: () => void;
+  setShowAudioRegionEditMarkers: (enabled: boolean) => void;
   toggleTranscriptMarkers: () => void;
   setShowTranscriptMarkers: (enabled: boolean) => void;
 }
@@ -723,6 +743,18 @@ export interface ApplyAudioRegionEditOptions {
   params?: ClipAudioEditOperation['params'];
 }
 
+export interface ApplyAudioRegionGainEditOptions {
+  gainDb: number;
+  fadeInSeconds?: number;
+  fadeOutSeconds?: number;
+  keepSelection?: boolean;
+}
+
+export interface SetClipAudioEditOperationRangeOptions {
+  captureHistory?: boolean;
+  historyLabel?: string;
+}
+
 export interface ApplyAudioRepairSuggestionInput {
   id: string;
   kind: string;
@@ -771,6 +803,15 @@ export type AddClipSpectralImageLayerInput = Omit<SpectralImageLayer, 'id'> & {
 
 export interface AudioEditActions {
   applyAudioRegionEdit: (type: TimelineAudioRegionEditType, options?: ApplyAudioRegionEditOptions) => string | null;
+  setAudioRegionGainPreview: (preview: ClipAudioRegionGainPreview | null) => void;
+  clearAudioRegionGainPreview: () => void;
+  setAudioRegionGainEdit: (options: ApplyAudioRegionGainEditOptions) => string | null;
+  setClipAudioEditOperationRange: (
+    clipId: string,
+    operationIds: string[],
+    selection: TimelineAudioRegionSelection,
+    options?: SetClipAudioEditOperationRangeOptions,
+  ) => void;
   applyAudioRepairSuggestion: (clipId: string, suggestion: ApplyAudioRepairSuggestionInput) => string | null;
   detectClipSilenceRanges: (clipId: string, options?: AudioSilenceDetectionOptions) => Promise<AudioSilenceRange[]>;
   applyDetectedSilenceRemoval: (clipId: string, options?: ApplyDetectedSilenceRemovalOptions) => Promise<string[]>;
@@ -783,6 +824,7 @@ export interface AudioEditActions {
   removeClipAudioEditOperation: (clipId: string, operationId: string) => void;
   clearClipAudioEditStack: (clipId: string) => void;
   bakeClipAudioEditStack: (clipId: string) => Promise<string | null>;
+  unbakeClipAudioEditStack: (clipId: string) => boolean;
   applySpectralRegionEdit: (type: TimelineSpectralRegionEditType, options?: ApplySpectralRegionEditOptions) => string | null;
   addClipSpectralImageLayer: (clipId: string, layer: AddClipSpectralImageLayerInput) => string | null;
   updateClipSpectralImageLayer: (clipId: string, layerId: string, patch: Partial<SpectralImageLayer>) => void;
@@ -793,10 +835,31 @@ export interface AudioEditActions {
 export interface RamPreviewActions {
   toggleRamPreviewEnabled: () => void;
   startRamPreview: () => Promise<void>;
+  startRamPreviewForRange: (
+    start: number,
+    end: number,
+    options?: { centerTime?: number; label?: string },
+  ) => Promise<boolean>;
   cancelRamPreview: () => void;
   clearRamPreview: () => void;
   addCachedFrame: (time: number) => void;
   getCachedRanges: () => Array<{ start: number; end: number }>;
+}
+
+export interface VideoBakeActions {
+  setVideoBakeRegionSelection: (selection: TimelineVideoBakeRegionSelection | null) => void;
+  clearVideoBakeRegionSelection: () => void;
+  addCompositionVideoBakeRegion: (startTime: number, endTime: number) => string | null;
+  bakeCompositionVideoBakeRegion: (regionId: string) => Promise<boolean>;
+  unbakeCompositionVideoBakeRegion: (regionId: string) => boolean;
+  removeCompositionVideoBakeRegion: (regionId: string) => boolean;
+  addClipVideoBakeRegion: (
+    clipId: string,
+    selection: Omit<TimelineVideoBakeRegionSelection, 'scope' | 'clipId'>,
+  ) => string | null;
+  bakeClipVideoBakeRegion: (clipId: string, regionId: string) => Promise<boolean>;
+  unbakeClipVideoBakeRegion: (clipId: string, regionId: string) => boolean;
+  removeClipVideoBakeRegion: (clipId: string, regionId: string) => boolean;
 }
 
 // Proxy cache actions interface
@@ -1085,6 +1148,7 @@ export interface TimelineStore extends
   TimelineToolActions,
   TimelineEditOperationActions,
   AudioEditActions,
+  VideoBakeActions,
   RamPreviewActions,
   ProxyCacheActions,
   ExportActions,

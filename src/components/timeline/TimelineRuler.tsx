@@ -16,6 +16,8 @@ function TimelineRulerComponent({
   onRulerMouseDown,
   formatTime,
   cacheRanges = [],
+  videoBakeRegions = [],
+  videoBakeRegionSelection = null,
 }: TimelineRulerProps) {
   // Time to pixel conversion
   const timeToPixel = (time: number) => time * zoom;
@@ -37,6 +39,32 @@ function TimelineRulerComponent({
       return { ...range, start, end };
     })
     .filter((range) => range.end > range.start && range.end >= visibleStartTime && range.start <= visibleEndTime);
+  const visibleVideoBakeRegions = [
+    ...videoBakeRegions
+      .filter(region => region.scope === 'composition')
+      .map(region => ({
+        key: region.id,
+        startTime: region.startTime,
+        endTime: region.endTime,
+        status: region.status,
+        transient: false,
+      })),
+    ...(videoBakeRegionSelection?.scope === 'composition'
+      ? [{
+          key: 'composition-video-bake-selection',
+          startTime: videoBakeRegionSelection.startTime,
+          endTime: videoBakeRegionSelection.endTime,
+          status: 'marked' as const,
+          transient: true,
+        }]
+      : []),
+  ]
+    .map((region) => {
+      const start = Math.max(0, Math.min(duration, Math.min(region.startTime, region.endTime)));
+      const end = Math.max(start, Math.min(duration, Math.max(region.startTime, region.endTime)));
+      return { ...region, start, end };
+    })
+    .filter((region) => region.end > region.start && region.end >= visibleStartTime && region.start <= visibleEndTime);
 
   const gridPlan = createTimelineGridPlan({ zoom, frameRate });
   const timeInterval = gridPlan.timeIntervalSeconds;
@@ -93,6 +121,17 @@ function TimelineRulerComponent({
       onMouseDown={onRulerMouseDown}
     >
       {markers}
+      {visibleVideoBakeRegions.map((region) => (
+        <div
+          key={region.key}
+          className={`timeline-ruler-video-bake-region status-${region.status ?? 'marked'} ${region.transient ? 'selection' : ''}`}
+          style={{
+            left: timeToPixel(region.start),
+            width: Math.max(2, timeToPixel(region.end - region.start)),
+          }}
+          title={`Video bake: ${formatTime(region.start)} - ${formatTime(region.end)}`}
+        />
+      ))}
       {visibleCacheRanges.map((range, index) => (
         <div
           key={`${range.type}-${index}-${range.start.toFixed(3)}`}

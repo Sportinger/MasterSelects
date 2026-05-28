@@ -38,7 +38,10 @@ export const selectAudioDisplayMode = (state: TimelineStore) => state.audioDispl
 export const selectAudioFocusMode = (state: TimelineStore) => state.audioFocusMode;
 export const selectTrackFocusMode = (state: TimelineStore) => state.trackFocusMode;
 export const selectAudioRegionSelection = (state: TimelineStore) => state.audioRegionSelection;
+export const selectVideoBakeRegionSelection = (state: TimelineStore) => state.videoBakeRegionSelection;
+export const selectVideoBakeRegions = (state: TimelineStore) => state.videoBakeRegions;
 export const selectAudioRegionClipboard = (state: TimelineStore) => state.audioRegionClipboard;
+export const selectShowAudioRegionEditMarkers = (state: TimelineStore) => state.showAudioRegionEditMarkers;
 export const selectIsDraggingPlayhead = (state: TimelineStore) => state.isDraggingPlayhead;
 
 // ===========================================
@@ -109,6 +112,7 @@ export const selectUISettings = (state: TimelineStore) => ({
   audioLayerAdvancedMode: state.audioLayerAdvancedMode,
   audioFocusMode: state.audioFocusMode,
   trackFocusMode: state.trackFocusMode,
+  showAudioRegionEditMarkers: state.showAudioRegionEditMarkers,
 });
 
 // Preview/export state (changes during preview/export operations)

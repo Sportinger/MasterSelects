@@ -1,4 +1,4 @@
-import { DotLottie } from '@lottiefiles/dotlottie-web';
+import type { DotLottie } from '@lottiefiles/dotlottie-web';
 
 import type {
   VectorAnimationMetadata,
@@ -16,6 +16,12 @@ import type { PreparedLottieAsset } from './types';
 const log = Logger.create('LottieMetadata');
 
 const preparedAssetCache = new Map<string, Promise<PreparedLottieAsset>>();
+let dotLottieConstructorPromise: Promise<typeof DotLottie> | null = null;
+
+function loadDotLottieConstructor(): Promise<typeof DotLottie> {
+  dotLottieConstructorPromise ??= import('@lottiefiles/dotlottie-web').then((module) => module.DotLottie);
+  return dotLottieConstructorPromise;
+}
 
 function getAssetCacheKey(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
@@ -253,8 +259,9 @@ function extractStateMachineDetailsFromData(
 }
 
 async function readDotLottieMetadata(buffer: ArrayBuffer): Promise<VectorAnimationMetadata> {
+  const DotLottieConstructor = await loadDotLottieConstructor();
   const canvas = createMetadataCanvas();
-  const player = new DotLottie({
+  const player = new DotLottieConstructor({
     canvas,
     data: buffer.slice(0),
     autoplay: false,

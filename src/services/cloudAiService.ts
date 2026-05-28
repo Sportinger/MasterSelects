@@ -1,6 +1,8 @@
 import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type CloudAiVideoRequest } from './cloudApi';
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
 import type { TextToImageParams } from './kieAiService';
+import type { SunoCreateMusicParams, SunoMusicTask } from './sunoService';
+import { SUNO_PROVIDER_ID } from './sunoService';
 import { useAccountStore } from '../stores/accountStore';
 import {
   DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT,
@@ -15,6 +17,7 @@ import {
 } from './elevenLabsService';
 import type {
   AccountInfo,
+  GenerationReferenceMedia,
   ImageToVideoParams,
   TaskStatus,
   TextToVideoParams,
@@ -135,6 +138,34 @@ function createHostedAudioIdempotencyKey(): string {
   return `hosted-audio:${Date.now()}:${crypto.randomUUID()}`;
 }
 
+function createHostedSunoIdempotencyKey(): string {
+  return `hosted-suno:${Date.now()}:${crypto.randomUUID()}`;
+}
+
+type CloudHostedReferenceMedia = NonNullable<NonNullable<CloudAiVideoRequest['params']>['referenceMedia']>;
+
+function serializeHostedReferenceMedia(
+  referenceMedia: GenerationReferenceMedia[] | undefined,
+): CloudHostedReferenceMedia | undefined {
+  const serialized = (referenceMedia ?? [])
+    .map((reference): CloudHostedReferenceMedia[number] | null => {
+      if (typeof reference.source !== 'string') {
+        return null;
+      }
+
+      return {
+        fileName: reference.fileName,
+        label: reference.label,
+        mediaType: reference.mediaType,
+        mimeType: reference.mimeType,
+        source: reference.source,
+      };
+    })
+    .filter((reference): reference is CloudHostedReferenceMedia[number] => Boolean(reference));
+
+  return serialized.length > 0 ? serialized : undefined;
+}
+
 export const cloudAiService = {
   async createChatCompletion(body: Record<string, unknown>): Promise<unknown> {
     const response = await cloudApi.ai.chat.create(body as unknown as CloudAiChatRequest);
@@ -148,16 +179,18 @@ export const cloudAiService = {
         aspectRatio: params.aspectRatio,
         duration: params.duration,
         endImageUrl: params.endImageUrl,
-        mode: params.mode as 'pro' | 'std' | undefined,
+        mode: params.mode,
         multiPrompt: params.multiPrompt,
         multiShots: params.multiShots,
         prompt: params.prompt,
+        provider: params.provider,
+        referenceMedia: serializeHostedReferenceMedia(params.referenceMedia),
         sound: params.sound,
         startImageUrl: params.startImageUrl,
       },
     });
     syncHostedCreditBalance(response);
-    return getHostedTaskId(response, 'Hosted Kling generation did not return a task id');
+    return getHostedTaskId(response, 'Hosted video generation did not return a task id');
   },
   async createTextToVideo(params: TextToVideoParams): Promise<string> {
     const response = await cloudApi.ai.video.create({
@@ -165,15 +198,17 @@ export const cloudAiService = {
       params: {
         aspectRatio: params.aspectRatio,
         duration: params.duration,
-        mode: params.mode as 'pro' | 'std' | undefined,
+        mode: params.mode,
         multiPrompt: params.multiPrompt,
         multiShots: params.multiShots,
         prompt: params.prompt,
+        provider: params.provider,
+        referenceMedia: serializeHostedReferenceMedia(params.referenceMedia),
         sound: params.sound,
       },
     });
     syncHostedCreditBalance(response);
-    return getHostedTaskId(response, 'Hosted Kling generation did not return a task id');
+    return getHostedTaskId(response, 'Hosted video generation did not return a task id');
   },
   async createTextToImage(params: TextToImageParams): Promise<string> {
     const response = await cloudApi.ai.video.create({
@@ -228,6 +263,81 @@ export const cloudAiService = {
       outputFormat,
       size: blob.size,
     };
+  },
+  async createSunoMusic(
+    params: SunoCreateMusicParams,
+    idempotencyKey = createHostedSunoIdempotencyKey(),
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await cloudApi.ai.audio.music({
+      action: 'music',
+      idempotencyKey,
+      params: {
+        audioWeight: params.audioWeight,
+        customMode: params.customMode,
+        instrumental: params.instrumental,
+        model: params.model,
+        negativeTags: params.negativeTags,
+        outputType: 'audio',
+        prompt: params.prompt,
+        provider: SUNO_PROVIDER_ID,
+        style: params.style,
+        styleWeight: params.styleWeight,
+        title: params.title,
+        vocalGender: params.vocalGender,
+        weirdnessConstraint: params.weirdnessConstraint,
+      },
+    }, signal);
+    syncHostedCreditBalance(response);
+    return getHostedTaskId(response, 'Hosted Suno generation did not return a task id');
+  },
+  async getSunoMusicTaskStatus(taskId: string): Promise<SunoMusicTask> {
+    const response = await cloudApi.ai.audio.musicStatus(taskId);
+    const task = response.data as {
+      completedAt?: string;
+      createdAt?: string;
+      error?: string;
+      id?: string;
+      progress?: number;
+      results?: SunoMusicTask['results'];
+      status?: SunoMusicTask['status'];
+    } | null;
+
+    return {
+      completedAt: task?.completedAt ? new Date(task.completedAt) : undefined,
+      createdAt: task?.createdAt ? new Date(task.createdAt) : new Date(),
+      error: task?.error,
+      id: task?.id ?? taskId,
+      progress: task?.progress,
+      results: task?.results,
+      status: task?.status ?? 'pending',
+    };
+  },
+  async pollSunoMusicTaskUntilComplete(
+    taskId: string,
+    onProgress?: (task: SunoMusicTask) => void,
+    pollInterval = 10000,
+    timeout = 900000,
+    signal?: AbortSignal,
+  ): Promise<SunoMusicTask> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      if (signal?.aborted) {
+        throw new Error('Canceled');
+      }
+
+      const task = await cloudAiService.getSunoMusicTaskStatus(taskId);
+      onProgress?.(task);
+
+      if (task.status === 'completed' || task.status === 'failed') {
+        return task;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('Suno task timed out after 15 minutes');
   },
   access: {
     resolve: resolveAiAccess,
@@ -332,10 +442,14 @@ export const cloudAiService = {
       error?: string;
       id?: string;
       imageUrl?: string;
+      progress?: number;
       status?: TaskStatus;
       taskId?: string;
       videoUrl?: string;
     } | null;
+    const progress = typeof task?.progress === 'number' && Number.isFinite(task.progress)
+      ? Math.max(0, Math.min(1, task.progress))
+      : undefined;
 
     return {
       completedAt: task?.completedAt ? new Date(task.completedAt) : undefined,
@@ -343,6 +457,7 @@ export const cloudAiService = {
       error: task?.error,
       id: task?.id ?? task?.taskId ?? taskId,
       imageUrl: task?.imageUrl ?? task?.videoUrl,
+      progress,
       status: task?.status ?? 'pending',
       videoUrl: task?.videoUrl ?? task?.imageUrl,
     };

@@ -440,6 +440,14 @@ export function useEngine() {
     // Running this inside RAF blocks the render path and causes frame drops.
     const statsInterval = setInterval(() => {
       try {
+        const timelineState = useTimelineStore.getState();
+        const renderLoop = engine.getRenderLoop();
+        if (timelineState.isPlaying && renderLoop?.getIsRunning?.() !== true) {
+          log.warn('Render loop was stopped during playback; restarting');
+          engine.start(renderFrame);
+          engine.setIsPlaying(true);
+          engine.requestRender();
+        }
         const stats = engine.getStats();
         useEngineStore.getState().setEngineStats({
           ...stats,
@@ -570,7 +578,7 @@ export function useEngine() {
         const cacheStart = performance.now();
         const { ramPreviewEnabled, addCachedFrame } = useTimelineStore.getState();
         const { isDraggingPlayhead } = useTimelineStore.getState();
-        if (ramPreviewEnabled && !isPlaying && !isDraggingPlayhead && !needsContinuousRender && !hasClipDragPreview) {
+        if (ramPreviewEnabled && !timelineState.isPlaying && !isDraggingPlayhead && !needsContinuousRender && !hasClipDragPreview) {
           engine.cacheCompositeFrame(currentPlayhead).then(() => {
             addCachedFrame(currentPlayhead);
           });
@@ -579,7 +587,7 @@ export function useEngine() {
         // Cache active comp output for parent preview texture sharing
         // This allows parent compositions to show the active comp without video conflicts
         const activeCompId = useMediaStore.getState().activeCompositionId;
-        if (activeCompId && !isPlaying && !isDraggingPlayhead && !needsContinuousRender && !hasClipDragPreview) {
+        if (activeCompId && !timelineState.isPlaying && !isDraggingPlayhead && !needsContinuousRender && !hasClipDragPreview) {
           engine.cacheActiveCompOutput(activeCompId);
         }
         cacheMs += performance.now() - cacheStart;
@@ -590,18 +598,16 @@ export function useEngine() {
       }
     };
 
-    // Always keep the engine running - it has idle detection to save power
-    // when nothing changes. Stopping the engine breaks scrubbing.
+    // The WebGPU engine is a singleton. Preview panels mount/unmount during dock
+    // layout changes, so stopping the render loop from this hook can black out a
+    // newly mounted preview while playback keeps running.
     engine.start(renderFrame);
     playbackHealthMonitor.start();
 
     return () => {
-      engine.setContinuousRender(false);
       clearInterval(statsInterval);
-      engine.stop();
-      playbackHealthMonitor.stop();
     };
-  }, [isEngineReady, isPlaying, updateMaskTextures]);
+  }, [isEngineReady, updateMaskTextures]);
 
   // Subscribe to state changes that require re-render (wake from idle)
   useEffect(() => {

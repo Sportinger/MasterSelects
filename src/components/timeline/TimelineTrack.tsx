@@ -291,6 +291,8 @@ function TimelineTrackComponent({
     height: dynamicHeight,
     ...(trackColor ? { '--track-color': trackColor } : {}),
   } as React.CSSProperties & { '--track-color'?: string };
+  const isMutedTrack = track.type === 'audio' && (track.audioState?.muted ?? track.muted) === true;
+  const isHiddenTrack = track.type === 'video' && track.visible === false;
   const renderExternalPreview = (
     className: string,
     left: number,
@@ -323,8 +325,11 @@ function TimelineTrackComponent({
         isExpanded ? 'expanded' : ''
       } ${isDragTarget ? 'drag-target' : ''} ${
         isExternalDragTarget ? 'external-drag-target' : ''
-      } ${track.locked ? 'locked' : ''} ${isResizeActive ? 'resizing' : ''}`}
+      } ${track.locked ? 'locked' : ''} ${isMutedTrack ? 'track-muted' : ''} ${
+        isHiddenTrack ? 'track-hidden' : ''
+      } ${isResizeActive ? 'resizing' : ''}`}
       data-track-id={track.id}
+      data-dock-layout-child-anim-id={`timeline-track-lane:${track.id}`}
       style={trackLaneStyle}
       onDrop={onDrop}
       onDragOver={onDragOver}

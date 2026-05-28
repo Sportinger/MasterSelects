@@ -9,6 +9,26 @@ const mocks = vi.hoisted(() => ({
   generateTimelineWaveformAnalysisForFile: vi.fn(),
   importFile: vi.fn(),
   createAudioElement: vi.fn(),
+  createFolder: vi.fn(),
+  mediaFolders: [] as Array<{
+    id: string;
+    name: string;
+    parentId: string | null;
+    isExpanded: boolean;
+    createdAt: number;
+  }>,
+  mediaFiles: [] as Array<{
+    id: string;
+    name: string;
+    type: string;
+    file?: File;
+    url: string;
+    parentId?: string | null;
+    createdAt?: number;
+    duration?: number;
+    waveform?: number[];
+    waveformChannels?: number[][];
+  }>,
 }));
 
 vi.mock('../../../src/engine/audio/AudioFileEncoder', () => ({
@@ -38,6 +58,9 @@ vi.mock('../../../src/stores/mediaStore', () => ({
   useMediaStore: {
     getState: () => ({
       importFile: mocks.importFile,
+      createFolder: mocks.createFolder,
+      folders: mocks.mediaFolders,
+      files: mocks.mediaFiles,
     }),
   },
 }));
@@ -49,6 +72,19 @@ vi.mock('../../../src/stores/timeline/helpers/webCodecsHelpers', () => ({
 describe('timeline audio edit baking', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mediaFiles.length = 0;
+    mocks.mediaFolders.length = 0;
+    mocks.createFolder.mockImplementation((name: string, parentId: string | null = null) => {
+      const folder = {
+        id: 'folder-baked-audio',
+        name,
+        parentId,
+        isExpanded: true,
+        createdAt: 1,
+      };
+      mocks.mediaFolders.push(folder);
+      return folder;
+    });
     mocks.encodeAudioBufferToWavBlob.mockReturnValue(new Blob(['wav'], { type: 'audio/wav' }));
     mocks.extractAudio.mockResolvedValue({ duration: 4 } as AudioBuffer);
     mocks.renderClipAudio.mockResolvedValue({ buffer: { duration: 2.5 } as AudioBuffer });
@@ -140,9 +176,13 @@ describe('timeline audio edit baking', () => {
     }));
     expect(mocks.importFile).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'dialog - baked audio.wav', type: 'audio/wav' }),
-      null,
-      { forceCopyToProject: true },
+      'folder-baked-audio',
+      {
+        forceCopyToProject: true,
+        projectFileName: 'Raw/Baked Audio/dialog - baked audio.wav',
+      },
     );
+    expect(mocks.createFolder).toHaveBeenCalledWith('Baked Audio', null);
     expect(mocks.generateTimelineWaveformAnalysisForFile).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'dialog - baked audio.wav' }),
       { mediaFileId: 'media-baked' },
@@ -171,6 +211,114 @@ describe('timeline audio edit baking', () => {
         operationCount: 2,
         duration: 2.5,
       }),
+      restore: expect.objectContaining({
+        name: 'dialog.wav',
+        mediaFileId: 'media-source',
+        duration: 4,
+        inPoint: 0,
+        outPoint: 4,
+        sourceNaturalDuration: 4,
+        audioState: expect.objectContaining({
+          sourceAnalysisRefs: { waveformPyramidId: 'waveform-source' },
+          processedAnalysisRefs: { processedWaveformPyramidId: 'waveform-processed' },
+          editStack: clip.audioState?.editStack,
+        }),
+      }),
     }));
+  });
+
+  it('unbakes the latest reversible bake back to the original source and edit stack', () => {
+    const sourceFile = new File(['source'], 'dialog.wav', { type: 'audio/wav' });
+    mocks.mediaFiles.push({
+      id: 'media-source',
+      name: 'dialog.wav',
+      type: 'audio',
+      file: sourceFile,
+      url: 'blob:source',
+      parentId: null,
+      createdAt: 1,
+      duration: 4,
+      waveform: [0.3, 0.1],
+      waveformChannels: [[0.3, 0.1]],
+    });
+
+    const restoredEditStack = [{
+      id: 'edit-invert',
+      type: 'invert-polarity' as const,
+      enabled: true,
+      params: {},
+      timeRange: { start: 0.5, end: 1.5 },
+      createdAt: 1,
+    }];
+    const bakedFile = new File(['baked'], 'dialog - baked audio.wav', { type: 'audio/wav' });
+    const clip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      name: 'dialog - baked audio.wav',
+      mediaFileId: 'media-baked',
+      file: bakedFile,
+      source: {
+        type: 'audio',
+        mediaFileId: 'media-baked',
+        naturalDuration: 2.5,
+      },
+      duration: 2.5,
+      inPoint: 0,
+      outPoint: 2.5,
+      audioState: {
+        sourceAudioRevisionId: 'media-baked',
+        sourceAnalysisRefs: { waveformPyramidId: 'waveform-baked' },
+        editStack: [],
+        bakeHistory: [{
+          id: 'audio-bake-1',
+          mediaFileId: 'media-baked',
+          sourceMediaFileId: 'media-source',
+          sourceClipId: 'audio-clip',
+          operationIds: ['edit-invert'],
+          createdAt: 10,
+          restore: {
+            name: 'dialog.wav',
+            mediaFileId: 'media-source',
+            duration: 4,
+            inPoint: 0,
+            outPoint: 4,
+            sourceNaturalDuration: 4,
+            waveform: [0.3, 0.1],
+            waveformChannels: [[0.3, 0.1]],
+            audioState: {
+              sourceAnalysisRefs: { waveformPyramidId: 'waveform-source' },
+              processedAnalysisRefs: { processedWaveformPyramidId: 'waveform-processed' },
+              editStack: restoredEditStack,
+            },
+          },
+        }],
+      },
+    });
+    const track = createMockTrack({
+      id: 'audio-1',
+      type: 'audio',
+      locked: false,
+    });
+    const store = createTestTimelineStore({ clips: [clip], tracks: [track] });
+
+    const didUnbake = store.getState().unbakeClipAudioEditStack('audio-clip');
+
+    expect(didUnbake).toBe(true);
+    expect(mocks.createAudioElement).toHaveBeenCalledWith(sourceFile);
+    const updated = store.getState().clips[0];
+    expect(updated.name).toBe('dialog.wav');
+    expect(updated.file).toBe(sourceFile);
+    expect(updated.mediaFileId).toBe('media-source');
+    expect(updated.duration).toBe(4);
+    expect(updated.inPoint).toBe(0);
+    expect(updated.outPoint).toBe(4);
+    expect(updated.waveform).toEqual([0.3, 0.1]);
+    expect(updated.waveformChannels).toEqual([[0.3, 0.1]]);
+    expect(updated.source?.mediaFileId).toBe('media-source');
+    expect(updated.source?.naturalDuration).toBe(4);
+    expect(updated.audioState?.editStack).toEqual(restoredEditStack);
+    expect(updated.audioState?.sourceAnalysisRefs).toEqual({ waveformPyramidId: 'waveform-source' });
+    expect(updated.audioState?.processedAnalysisRefs).toEqual({ processedWaveformPyramidId: 'waveform-processed' });
+    expect(updated.audioState?.bakeHistory).toBeUndefined();
   });
 });

@@ -48,6 +48,23 @@ const klingEntry: CatalogEntry = {
   outputType: 'video',
 };
 
+const seedanceEntry: CatalogEntry = {
+  service: 'cloud',
+  providerId: 'bytedance/seedance-2',
+  name: 'Seedance 2.0 (Cloud)',
+  description: 'Hosted Seedance video generation',
+  versions: ['latest'],
+  modes: ['480p', '720p', '1080p'],
+  durations: [4, 5, 10],
+  aspectRatios: ['16:9'],
+  supportsTextToVideo: true,
+  supportsImageToVideo: true,
+  supportsGenerateAudio: true,
+  supportsMultiShot: false,
+  maxReferenceMedia: 8,
+  outputType: 'video',
+};
+
 const sunoEntry: CatalogEntry = {
   service: 'suno',
   providerId: 'suno-music',
@@ -97,6 +114,39 @@ describe('FlashBoardPromptRefiner', () => {
     expect(instructions).toContain('Kling-style');
     expect(instructions).toContain('Multi-shot is enabled');
     expect(instructions).toContain('Sound generation is enabled');
+  });
+
+  it('builds Seedance 2 prompt guidance around multimodal and audio-driven references', () => {
+    const instructions = buildFlashBoardPromptRefinerInstructions({
+      entry: seedanceEntry,
+      service: seedanceEntry.service,
+      providerId: seedanceEntry.providerId,
+      version: 'latest',
+      generateAudio: true,
+      multiShots: false,
+    });
+    const userText = buildFlashBoardPromptRefinerUserText({
+      prompt: 'make her speak naturally to the beat',
+      entry: seedanceEntry,
+      service: seedanceEntry.service,
+      providerId: seedanceEntry.providerId,
+      mode: '720p',
+      duration: 8,
+      aspectRatio: '16:9',
+      imageSize: '2K',
+      generateAudio: true,
+      multiShots: false,
+    }, [
+      { role: 'reference', label: 'REF 1', displayName: 'voice-drive.wav', mediaType: 'audio' },
+      { role: 'reference', label: 'REF 2', displayName: 'gesture.mp4', mediaType: 'video' },
+    ]);
+
+    expect(instructions).toContain('ByteDance Seedance 2.0');
+    expect(instructions).toContain('REF audio');
+    expect(instructions).toContain('performance, speech, mouth-shape');
+    expect(instructions).toContain('multimodal reference mode');
+    expect(userText).toContain('REF 1 (reference audio): voice-drive.wav');
+    expect(userText).toContain('REF 2 (reference video): gesture.mp4');
   });
 
   it('includes selected generation settings and reference labels in user text', () => {

@@ -116,6 +116,50 @@ describe('cloudAiService billing sync', () => {
     expect(useAccountStore.getState().billingSummary?.creditBalance).toBe(160);
   });
 
+  it('forwards Seedance reference media to hosted video creation', async () => {
+    createVideoMock.mockResolvedValue({
+      creditBalance: 140,
+      data: { taskId: 'task_seedance' },
+      kind: 'ai.video',
+      mode: 'hosted',
+      ok: true,
+      provider: 'bytedance/seedance-2',
+      requestId: 'req_seedance',
+      status: 'accepted',
+    });
+
+    await cloudAiService.createTextToVideo({
+      aspectRatio: '16:9',
+      duration: 8,
+      mode: '720p',
+      prompt: 'A presenter speaks naturally on camera',
+      provider: 'bytedance/seedance-2',
+      referenceMedia: [
+        {
+          fileName: 'voice-drive.wav',
+          label: 'Voice drive',
+          mediaType: 'audio',
+          mimeType: 'audio/wav',
+          source: 'data:audio/wav;base64,UklGRg==',
+        },
+      ],
+      version: 'latest',
+    });
+
+    expect(createVideoMock).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({
+        provider: 'bytedance/seedance-2',
+        referenceMedia: [
+          expect.objectContaining({
+            fileName: 'voice-drive.wav',
+            mediaType: 'audio',
+            source: 'data:audio/wav;base64,UklGRg==',
+          }),
+        ],
+      }),
+    }));
+  });
+
   it('updates accountStore immediately after hosted chat completion', async () => {
     createChatMock.mockResolvedValue({
       creditBalance: 154,

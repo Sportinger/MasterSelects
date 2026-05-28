@@ -7,6 +7,7 @@ import type { SplatEffectorSettings } from '../../../types/splatEffector';
 import type {
   ClipAudioState,
   ClipAnalysis,
+  ClipVideoState,
   ColorCorrectionState,
   GaussianSplatSequenceData,
   MasterAudioState,
@@ -19,6 +20,7 @@ import type {
   Text3DProperties,
   TextClipProperties,
   TranscriptWord,
+  VideoBakeRegion,
 } from '../../../types';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 
@@ -69,6 +71,7 @@ export interface ProjectClip {
   // Audio
   volume: number;
   audioEnabled: boolean;
+  videoState?: ClipVideoState;
   audioState?: ClipAudioState;
 
   // Flags
@@ -143,6 +146,7 @@ export interface ProjectComposition {
   // Tracks and clips
   tracks: ProjectTrack[];
   clips: ProjectClip[];
+  videoBakeRegions?: VideoBakeRegion[];
   masterAudioState?: MasterAudioState;
 
   // Markers

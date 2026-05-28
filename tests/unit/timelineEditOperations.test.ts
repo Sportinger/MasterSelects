@@ -121,6 +121,53 @@ describe('timeline edit operations kernel', () => {
     expect([...useTimelineStore.getState().selectedClipIds]).toHaveLength(1);
   });
 
+  it('splits only the requested audio clip and clears the stale video link', () => {
+    const video = createMockClip({
+      id: 'video-1',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      linkedClipId: 'audio-1',
+    });
+    const audio = createMockClip({
+      id: 'audio-1',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      linkedClipId: 'video-1',
+      source: { type: 'audio' },
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'split-audio-only',
+      type: 'split-at-times',
+      clipId: 'audio-1',
+      times: [3, 7],
+      includeLinked: false,
+    }, { source: 'ui', historyLabel: 'Split audio region' });
+
+    const clips = useTimelineStore.getState().clips;
+    expect(result.success).toBe(true);
+    expect(clips.filter((clip) => clip.trackId === 'video-1')).toHaveLength(1);
+    expect(clips.find((clip) => clip.id === 'video-1')?.linkedClipId).toBeUndefined();
+    expect(clips.filter((clip) => clip.trackId === 'audio-1').map((clip) => [clip.startTime, clip.duration])).toEqual([
+      [0, 3],
+      [3, 4],
+      [7, 3],
+    ]);
+  });
+
   it('selects clips from time across unlocked visible tracks', () => {
     useTimelineStore.setState({
       tracks: [
@@ -605,6 +652,58 @@ describe('timeline edit operations kernel', () => {
     expect(result.success).toBe(true);
     expect(useTimelineStore.getState().timelineRangeSelection).toBeNull();
     expect(useTimelineStore.getState().clips.map((clip) => [clip.startTime, clip.duration, clip.inPoint, clip.outPoint])).toEqual([
+      [0, 3, 0, 3],
+      [7, 3, 7, 10],
+    ]);
+  });
+
+  it('lifts an explicit audio region range without cutting the linked video clip', () => {
+    const video = createMockClip({
+      id: 'video-1',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      linkedClipId: 'audio-1',
+    });
+    const audio = createMockClip({
+      id: 'audio-1',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      linkedClipId: 'video-1',
+      source: { type: 'audio' },
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'cut-audio-region-range',
+      type: 'lift-range',
+      range: { startTime: 3, endTime: 7, trackIds: ['audio-1'] },
+      includeLinked: false,
+    }, { source: 'ui', historyLabel: 'Cut audio region' });
+
+    const clips = useTimelineStore.getState().clips;
+    const videoClips = clips.filter((clip) => clip.trackId === 'video-1');
+    const audioClips = clips
+      .filter((clip) => clip.trackId === 'audio-1')
+      .toSorted((a, b) => a.startTime - b.startTime);
+
+    expect(result.success).toBe(true);
+    expect(videoClips).toHaveLength(1);
+    expect(videoClips[0]?.startTime).toBe(0);
+    expect(videoClips[0]?.duration).toBe(10);
+    expect(videoClips[0]?.linkedClipId).toBeUndefined();
+    expect(audioClips.map((clip) => [clip.startTime, clip.duration, clip.inPoint, clip.outPoint])).toEqual([
       [0, 3, 0, 3],
       [7, 3, 7, 10],
     ]);

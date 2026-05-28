@@ -243,6 +243,19 @@ export class VideoSyncManager {
     return Math.abs(clip.inPoint - prev.outPoint) <= 0.1;
   }
 
+  private shouldMuteVideoElementSourceAudio(ctx: FrameContext, clip: TimelineClip): boolean {
+    if (!clip.linkedClipId) return false;
+    return ctx.clips.some(candidate =>
+      candidate.id === clip.linkedClipId &&
+      candidate.source?.type === 'audio'
+    );
+  }
+
+  private muteLinkedVideoSourceAudio(ctx: FrameContext, clip: TimelineClip, video: HTMLVideoElement | null | undefined): void {
+    if (!video || !this.shouldMuteVideoElementSourceAudio(ctx, clip)) return;
+    if (!video.muted) video.muted = true;
+  }
+
   private getFastSeek(video: HTMLVideoElement): ((time: number) => void) | null {
     const fastSeek = (video as HTMLVideoElement & {
       fastSeek?: (time: number) => void;
@@ -2021,6 +2034,7 @@ export class VideoSyncManager {
       (settle?.reason === 'playback-stop' && scrubSettleState.isPending(clip.id))
     );
     const video = useHandoffVideo ? handoffVideo : clip.source.videoElement;
+    this.muteLinkedVideoSourceAudio(ctx, clip, video);
     const timeInfo = getClipTimeInfo(ctx, clip);
     const mediaFile = getMediaFileForClip(ctx, clip);
 
@@ -2893,6 +2907,7 @@ export class VideoSyncManager {
     // at the right position â€” reuse it instead of cold-starting clip B's element.
     const handoffVideo = this.activeHandoffs.get(clip.id);
     const audioVideo = handoffVideo ?? video;
+    this.muteLinkedVideoSourceAudio(ctx, clip, audioVideo);
 
     if (ctx.isPlaying) {
       const settle = scrubSettleState.get(clip.id);

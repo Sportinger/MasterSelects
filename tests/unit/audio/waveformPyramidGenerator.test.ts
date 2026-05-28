@@ -1,15 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ArtifactStore, MemoryArtifactStorageAdapter, blobToArrayBuffer } from '../../../src/artifacts';
+import { ArtifactStore, MemoryArtifactStorageAdapter } from '../../../src/artifacts';
 import { createAudioAnalysisRefsManifest } from '../../../src/services/audio/audioAnalysisManifestKeys';
 import { AudioArtifactStore } from '../../../src/services/audio/AudioArtifactStore';
-import type { AudioArtifactRef } from '../../../src/services/audio/audioArtifactTypes';
 import {
   WaveformPyramidGenerator,
-  WAVEFORM_STAT_PAYLOAD_MIME_TYPE,
+  WAVEFORM_PACKED_PAYLOAD_MIME_TYPE,
   createWaveformPyramidAnalyzerVersion,
   type WaveformPyramidGenerationProgress,
 } from '../../../src/services/audio/WaveformPyramidGenerator';
-import { decodeWaveformStatPayload } from '../../../src/services/audio/waveformPyramidManifest';
+import { readTimelineWaveformPyramid } from '../../../src/services/audio/timelineWaveformPyramidCache';
 
 const FIXED_TIME = '2026-05-25T10:00:00.000Z';
 
@@ -32,13 +31,6 @@ function createMockAudioBuffer(channels: number[][], sampleRate = 8): AudioBuffe
   } as unknown as AudioBuffer;
 }
 
-async function decodePayload(store: AudioArtifactStore, ref: AudioArtifactRef) {
-  const payload = await store.getPayload(ref.artifactId);
-  expect(payload).not.toBeNull();
-
-  return decodeWaveformStatPayload(await blobToArrayBuffer(payload!));
-}
-
 function expectFloatArrayClose(actual: Float32Array, expected: number[]): void {
   expect(actual.length).toBe(expected.length);
   expected.forEach((value, index) => {
@@ -47,7 +39,7 @@ function expectFloatArrayClose(actual: Float32Array, expected: number[]): void {
 }
 
 describe('WaveformPyramidGenerator', () => {
-  it('generates sorted multi-channel waveform levels and stores encoded Float32 payloads', async () => {
+  it('generates sorted multi-channel waveform levels and stores a packed Float32 payload', async () => {
     const store = createStore();
     const generator = new WaveformPyramidGenerator({
       artifactStore: store,
@@ -90,26 +82,18 @@ describe('WaveformPyramidGenerator', () => {
         },
       ],
     });
-    expect(result.payloadRefs).toHaveLength(16);
-    expect(result.payloadRefs.every((ref) => ref.mimeType === WAVEFORM_STAT_PAYLOAD_MIME_TYPE)).toBe(true);
+    expect(result.manifest.payloadLayout).toBe('packed-pyramid');
+    expect(result.manifest.packedPayload?.artifactId).toBe(result.payloadRefs[0]?.artifactId);
+    expect(result.payloadRefs).toHaveLength(1);
+    expect(result.payloadRefs[0]?.mimeType).toBe(WAVEFORM_PACKED_PAYLOAD_MIME_TYPE);
 
-    const firstLevelLeft = result.manifest.levels[0].channels[0];
-    const decodedMin = await decodePayload(store, firstLevelLeft.min);
-    const decodedMax = await decodePayload(store, firstLevelLeft.max);
-    const decodedRms = await decodePayload(store, firstLevelLeft.rms);
-    const decodedPeak = await decodePayload(store, firstLevelLeft.peak);
+    const pyramid = await readTimelineWaveformPyramid(result.manifest, store);
+    const firstLevelLeft = pyramid.levels[0].channels[0];
 
-    expect(decodedMin.header).toMatchObject({
-      schemaVersion: 1,
-      statistic: 'min',
-      samplesPerBucket: 2,
-      channelIndex: 0,
-      bucketCount: 3,
-    });
-    expectFloatArrayClose(decodedMin.values, [0, -1, 0.25]);
-    expectFloatArrayClose(decodedMax.values, [1, 0.5, 0.25]);
-    expectFloatArrayClose(decodedRms.values, [Math.sqrt(0.5), Math.sqrt(0.625), 0.25]);
-    expectFloatArrayClose(decodedPeak.values, [1, 1, 0.25]);
+    expectFloatArrayClose(firstLevelLeft.min, [0, -1, 0.25]);
+    expectFloatArrayClose(firstLevelLeft.max, [1, 0.5, 0.25]);
+    expectFloatArrayClose(firstLevelLeft.rms, [Math.sqrt(0.5), Math.sqrt(0.625), 0.25]);
+    expectFloatArrayClose(firstLevelLeft.peak, [1, 1, 0.25]);
   });
 
   it('emits deterministic cache keys, compact refs, and manifests without raw payload values', async () => {
@@ -201,10 +185,46 @@ describe('WaveformPyramidGenerator', () => {
       artifactId: result.artifact.id,
       cacheKey: result.cacheKey,
     });
-    expect(result.payloadRefs.every((ref) => (
-      ref.metadata?.cacheKey === result.cacheKey
-      && ref.metadata?.statistic
-    ))).toBe(true);
+    expect(result.payloadRefs).toHaveLength(1);
+    expect(result.payloadRefs[0]).toMatchObject({
+      mimeType: WAVEFORM_PACKED_PAYLOAD_MIME_TYPE,
+      metadata: {
+        cacheKey: result.cacheKey,
+        payloadLayout: 'packed-pyramid',
+      },
+    });
+  });
+
+  it('derives divisible pyramid levels from the finest PCM pass', async () => {
+    const store = createStore();
+    const generator = new WaveformPyramidGenerator({
+      artifactStore: store,
+      bucketSizes: [2, 4, 8],
+      now: () => FIXED_TIME,
+      createJobId: () => 'waveform-job-derived-levels',
+    });
+    const buffer = createMockAudioBuffer([[0, 1, -1, 0.5, 0.25, -0.25, 0.75, -0.5]], 8);
+
+    const result = await generator.generate({
+      mediaFileId: 'media-a',
+      sourceFingerprint: 'sha256:source-a',
+      buffer,
+      decoderId: 'mock.decode',
+      decoderVersion: '1.0.0',
+    });
+
+    expect(buffer.getChannelData).toHaveBeenCalledTimes(1);
+    expect(result.manifest.levels.map(level => level.samplesPerBucket)).toEqual([2, 4, 8]);
+
+    const pyramid = await readTimelineWaveformPyramid(result.manifest, store);
+    const secondLevel = pyramid.levels[1].channels[0];
+    const thirdLevel = pyramid.levels[2].channels[0];
+    expectFloatArrayClose(secondLevel.min, [-1, -0.5]);
+    expectFloatArrayClose(secondLevel.max, [1, 0.75]);
+    expectFloatArrayClose(secondLevel.peak, [1, 0.75]);
+    expectFloatArrayClose(thirdLevel.min, [-1]);
+    expectFloatArrayClose(thirdLevel.max, [1]);
+    expectFloatArrayClose(thirdLevel.peak, [1]);
   });
 
   it('supports progress hooks and cancellation before payload storage', async () => {

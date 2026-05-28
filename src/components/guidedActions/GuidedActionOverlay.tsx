@@ -6,6 +6,7 @@ import {
   guidedTargetRegistry,
   registerDomGuidedTargetResolvers,
   type GuidedRect,
+  type GuidedSessionSnapshot,
   type GuidedTargetRef,
 } from '../../services/guidedActions';
 import { GuidedCallout } from './GuidedCallout';
@@ -28,7 +29,24 @@ export function GuidedActionOverlay() {
 
   useEffect(() => registerDomGuidedTargetResolvers(guidedTargetRegistry), []);
 
+  const shouldTrackPointer = activeSession ? shouldTrackUserPointer(activeSession) : false;
+
   useEffect(() => {
+    if (!shouldTrackPointer) {
+      return;
+    }
+
+    let frameId: number | null = null;
+    let latestPosition: { x: number; y: number } | null = null;
+
+    const flushPointerPosition = () => {
+      frameId = null;
+      if (!latestPosition) {
+        return;
+      }
+      useGuidedActionStore.getState().setLastUserPointerPosition(latestPosition);
+    };
+
     const recordPointerPosition = (event: PointerEvent | MouseEvent) => {
       if (!event.isTrusted) {
         return;
@@ -39,17 +57,22 @@ export function GuidedActionOverlay() {
         return;
       }
 
-      useGuidedActionStore.getState().setLastUserPointerPosition(position);
+      latestPosition = position;
+      if (frameId === null) {
+        frameId = window.requestAnimationFrame(flushPointerPosition);
+      }
     };
 
-    window.addEventListener('pointermove', recordPointerPosition, { capture: true, passive: true });
-    window.addEventListener('mousemove', recordPointerPosition, { capture: true, passive: true });
+    const eventName = 'PointerEvent' in window ? 'pointermove' : 'mousemove';
+    window.addEventListener(eventName, recordPointerPosition, { capture: true, passive: true });
 
     return () => {
-      window.removeEventListener('pointermove', recordPointerPosition, true);
-      window.removeEventListener('mousemove', recordPointerPosition, true);
+      window.removeEventListener(eventName, recordPointerPosition, true);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
     };
-  }, []);
+  }, [shouldTrackPointer]);
 
   useEffect(() => {
     if (
@@ -412,4 +435,22 @@ function containsPoint(rect: GuidedRect, point: { x: number; y: number }): boole
 function uniqueSorted(values: number[]): number[] {
   return [...new Set(values.filter((value) => Number.isFinite(value)))]
     .toSorted((a, b) => a - b);
+}
+
+function shouldTrackUserPointer(session: GuidedSessionSnapshot): boolean {
+  if (session.status !== 'running') {
+    return false;
+  }
+
+  if (session.context.visualizationMode === 'off' || session.context.animationBudget.disabled) {
+    return false;
+  }
+
+  return session.plan.actions.some(({ action }) => (
+    action.type === 'moveCursorTo'
+    || action.type === 'dragCursor'
+    || action.type === 'clickVisual'
+    || action.type === 'doubleClickVisual'
+    || action.type === 'showInputGesture'
+  ));
 }

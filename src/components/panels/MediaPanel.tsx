@@ -3891,21 +3891,44 @@ export function MediaPanel() {
                   <span className="add-dropdown-icon"><FileTypeIcon type="text" /></span>
                   <span>Text</span>
                 </div>
-                <div className="add-dropdown-item" onClick={() => { handleNewText3D(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="text-3d" /></span>
-                  <span>3D Text</span>
-                </div>
                 <div className="add-dropdown-item" onClick={() => { handleNewSolid(); setAddDropdownOpen(false); }}>
                   <span className="add-dropdown-icon"><FileTypeIcon type="solid" /></span>
                   <span>Solid</span>
                 </div>
-                <div className="add-dropdown-item" onClick={() => { handleNewCamera(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="camera" /></span>
-                  <span>Camera</span>
-                </div>
-                <div className="add-dropdown-item" onClick={() => { handleNewSplatEffector(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="splat-effector" /></span>
-                  <span>3D Effector</span>
+                <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                  <span className="add-dropdown-icon"><FileTypeIcon type="mesh" /></span>
+                  <span>3D</span>
+                  <span className="submenu-arrow">&#9654;</span>
+                  <div className="add-dropdown-submenu">
+                    <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                      <span className="add-dropdown-icon"><FileTypeIcon type="mesh" /></span>
+                      <span>Mesh</span>
+                      <span className="submenu-arrow">&#9654;</span>
+                      <div className="add-dropdown-submenu">
+                        {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
+                          <div key={meshType} className="add-dropdown-item" onClick={() => { handleNewMesh(meshType); setAddDropdownOpen(false); }}>
+                            <span>{meshType.charAt(0).toUpperCase() + meshType.slice(1)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="add-dropdown-item" onClick={() => { handleNewText3D(); setAddDropdownOpen(false); }}>
+                      <span className="add-dropdown-icon"><FileTypeIcon type="text-3d" /></span>
+                      <span>3D Text</span>
+                    </div>
+                    <div className="add-dropdown-item" onClick={() => { handleNewCamera(); setAddDropdownOpen(false); }}>
+                      <span className="add-dropdown-icon"><FileTypeIcon type="camera" /></span>
+                      <span>Camera</span>
+                    </div>
+                    <div className="add-dropdown-item" onClick={() => { handleNewSplatEffector(); setAddDropdownOpen(false); }}>
+                      <span className="add-dropdown-icon"><FileTypeIcon type="splat-effector" /></span>
+                      <span>3D Effector</span>
+                    </div>
+                    <div className="add-dropdown-item" onClick={() => { handleImportGaussianSplat(); setAddDropdownOpen(false); }}>
+                      <span className="add-dropdown-icon"><FileTypeIcon type="gaussian-splat" /></span>
+                      <span>Gaussian Splat</span>
+                    </div>
+                  </div>
                 </div>
                 <div className="add-dropdown-separator" />
                 <div className="add-dropdown-item" onClick={() => { handleNewMathScene(); setAddDropdownOpen(false); }}>
@@ -3924,22 +3947,6 @@ export function MediaPanel() {
                       <span>Ellipse</span>
                     </div>
                   </div>
-                </div>
-                <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="mesh" /></span>
-                  <span>Mesh</span>
-                  <span className="submenu-arrow">&#9654;</span>
-                  <div className="add-dropdown-submenu">
-                    {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
-                      <div key={meshType} className="add-dropdown-item" onClick={() => { handleNewMesh(meshType); setAddDropdownOpen(false); }}>
-                        <span>{meshType.charAt(0).toUpperCase() + meshType.slice(1)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="add-dropdown-item" onClick={() => { handleImportGaussianSplat(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="gaussian-splat" /></span>
-                  <span>Gaussian Splat</span>
                 </div>
                 <div className="add-dropdown-separator" />
                 <div className="add-dropdown-item" onClick={() => { /* TODO: Add adjustment layer */ setAddDropdownOpen(false); }}>
@@ -4190,21 +4197,44 @@ export function MediaPanel() {
                   <span className="context-menu-icon"><FileTypeIcon type="text" /></span>
                   <span>Text</span>
                 </div>
-                <div className="context-menu-item" onClick={() => { handleNewText3D(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="text-3d" /></span>
-                  <span>3D Text</span>
-                </div>
                 <div className="context-menu-item" onClick={() => { handleNewSolid(); closeContextMenu(); }}>
                   <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
                   <span>Solid</span>
                 </div>
-                <div className="context-menu-item" onClick={() => { handleNewCamera(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="camera" /></span>
-                  <span>Camera</span>
-                </div>
-                <div className="context-menu-item" onClick={() => { handleNewSplatEffector(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="splat-effector" /></span>
-                  <span>3D Effector</span>
+                <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                  <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
+                  <span>3D</span>
+                  <span className="submenu-arrow">&#9654;</span>
+                  <div className="context-submenu">
+                    <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                      <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
+                      <span>Mesh</span>
+                      <span className="submenu-arrow">&#9654;</span>
+                      <div className="context-submenu">
+                        {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
+                          <div key={meshType} className="context-menu-item" onClick={() => { handleNewMesh(meshType); closeContextMenu(); }}>
+                            {meshType.charAt(0).toUpperCase() + meshType.slice(1)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="context-menu-item" onClick={() => { handleNewText3D(); closeContextMenu(); }}>
+                      <span className="context-menu-icon"><FileTypeIcon type="text-3d" /></span>
+                      <span>3D Text</span>
+                    </div>
+                    <div className="context-menu-item" onClick={() => { handleNewCamera(); closeContextMenu(); }}>
+                      <span className="context-menu-icon"><FileTypeIcon type="camera" /></span>
+                      <span>Camera</span>
+                    </div>
+                    <div className="context-menu-item" onClick={() => { handleNewSplatEffector(); closeContextMenu(); }}>
+                      <span className="context-menu-icon"><FileTypeIcon type="splat-effector" /></span>
+                      <span>3D Effector</span>
+                    </div>
+                    <div className="context-menu-item" onClick={() => { handleImportGaussianSplat(); closeContextMenu(); }}>
+                      <span className="context-menu-icon"><FileTypeIcon type="gaussian-splat" /></span>
+                      <span>Gaussian Splat</span>
+                    </div>
+                  </div>
                 </div>
                 <div className="context-menu-separator" />
                 <div className="context-menu-item" onClick={() => { handleNewMathScene(); closeContextMenu(); }}>
@@ -4223,22 +4253,6 @@ export function MediaPanel() {
                       Ellipse
                     </div>
                   </div>
-                </div>
-                <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                  <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
-                  <span>Mesh</span>
-                  <span className="submenu-arrow">&#9654;</span>
-                  <div className="context-submenu">
-                    {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
-                      <div key={meshType} className="context-menu-item" onClick={() => { handleNewMesh(meshType); closeContextMenu(); }}>
-                        {meshType.charAt(0).toUpperCase() + meshType.slice(1)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="context-menu-item" onClick={() => { handleImportGaussianSplat(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="gaussian-splat" /></span>
-                  <span>Gaussian Splat</span>
                 </div>
                 <div className="context-menu-separator" />
                 <div className="context-menu-item disabled" onClick={closeContextMenu}>

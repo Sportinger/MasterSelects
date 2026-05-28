@@ -635,7 +635,16 @@ export class WebGPUEngine {
   start(renderCallback: () => void): void {
     if (!this.performanceStats) return;
 
-    // Stop any existing loop first to prevent multiple RAF loops accumulating
+    if (this.renderLoop?.getIsRunning()) {
+      this.renderLoop.setRenderCallback(renderCallback);
+      if (this._isPlaying) {
+        this.renderLoop.setIsPlaying(true);
+      }
+      this.requestRender();
+      return;
+    }
+
+    // Stop a stale loop before replacing it.
     this.renderLoop?.stop();
 
     // Create new loop with the callback

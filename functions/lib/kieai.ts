@@ -2,9 +2,13 @@ import type { Env } from './env';
 
 const KIEAI_BASE_URL = 'https://api.kie.ai';
 const KIEAI_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
+const DEFAULT_SUNO_CALLBACK_URL = 'https://masterselects.app/api/ai/suno/callback';
 // Hosted customer credits are priced at 6x vendor Kie credits to keep margin after VAT, Stripe, and FX.
 const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
 const KIEAI_USD_PER_CREDIT = 0.005;
+const HOSTED_SUNO_VENDOR_CREDITS = 12;
+const SEEDANCE_2_PROVIDER_ID = 'bytedance/seedance-2';
+const SEEDANCE_2_FAST_PROVIDER_ID = 'bytedance/seedance-2-fast';
 const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
   'nano-banana-2': {
     '1K': 0.04,
@@ -12,8 +16,21 @@ const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
     '4K': 0.09,
   },
 };
+const SEEDANCE_CREDITS_PER_SECOND: Record<string, Record<string, { normal: number; videoInput: number }>> = {
+  [SEEDANCE_2_PROVIDER_ID]: {
+    '480p': { normal: 19, videoInput: 11.5 },
+    '720p': { normal: 41, videoInput: 25 },
+    '1080p': { normal: 102, videoInput: 62 },
+  },
+  [SEEDANCE_2_FAST_PROVIDER_ID]: {
+    '480p': { normal: 15.5, videoInput: 9 },
+    '720p': { normal: 33, videoInput: 20 },
+  },
+};
 
 export type HostedVideoTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type HostedSunoModelId = 'V5' | 'V4_5PLUS' | 'V4_5' | 'V4';
+export type HostedSunoVocalGender = 'm' | 'f';
 
 export interface HostedVideoParams {
   aspectRatio?: string;
@@ -24,8 +41,19 @@ export interface HostedVideoParams {
   multiShots?: boolean;
   prompt: string;
   provider?: string;
+  referenceMedia?: HostedReferenceMedia[];
   sound?: boolean;
   startImageUrl?: string;
+}
+
+export type HostedReferenceMediaType = 'audio' | 'image' | 'video';
+
+export interface HostedReferenceMedia {
+  fileName?: string;
+  label?: string;
+  mediaType: HostedReferenceMediaType;
+  mimeType?: string;
+  source: string;
 }
 
 export interface HostedVideoTask {
@@ -34,6 +62,7 @@ export interface HostedVideoTask {
   error?: string;
   id: string;
   imageUrl?: string;
+  progress?: number;
   status: HostedVideoTaskStatus;
   videoUrl?: string;
 }
@@ -47,6 +76,42 @@ export interface HostedImageParams {
   resolution?: string;
 }
 
+export interface HostedSunoParams {
+  audioWeight?: number;
+  callBackUrl?: string;
+  customMode?: boolean;
+  instrumental?: boolean;
+  model?: string;
+  negativeTags?: string;
+  prompt: string;
+  style?: string;
+  styleWeight?: number;
+  title?: string;
+  vocalGender?: HostedSunoVocalGender;
+  weirdnessConstraint?: number;
+}
+
+export interface HostedSunoResult {
+  audioUrl: string;
+  duration?: number;
+  id?: string;
+  imageUrl?: string;
+  prompt?: string;
+  streamAudioUrl?: string;
+  tags?: string;
+  title?: string;
+}
+
+export interface HostedSunoTask {
+  completedAt?: string;
+  createdAt: string;
+  error?: string;
+  id: string;
+  progress?: number;
+  results?: HostedSunoResult[];
+  status: HostedVideoTaskStatus;
+}
+
 interface KieAiCreateTaskResponse {
   code: number;
   data?: {
@@ -58,6 +123,7 @@ interface KieAiCreateTaskResponse {
 interface KieAiUploadResponse {
   data?: {
     downloadUrl?: string;
+    fileUrl?: string;
   };
   success?: boolean;
 }
@@ -65,10 +131,39 @@ interface KieAiUploadResponse {
 interface KieAiStatusResponse {
   code: number;
   data?: {
+    completeTime?: number;
+    createTime?: number;
+    failCode?: string;
     failMsg?: string;
+    progress?: number;
     resultJson?: string;
     resultUrls?: string[];
     state?: string;
+    taskId?: string;
+    updateTime?: number;
+  };
+  msg?: string;
+}
+
+interface KieSunoCreateResponse {
+  code?: number;
+  data?: {
+    taskId?: string;
+  };
+  msg?: string;
+}
+
+interface KieSunoRecordResponse {
+  code?: number;
+  data?: {
+    completeTime?: number;
+    createTime?: number;
+    errorCode?: string;
+    errorMessage?: string;
+    response?: {
+      sunoData?: unknown[];
+    };
+    status?: string;
     taskId?: string;
   };
   msg?: string;
@@ -101,6 +196,91 @@ function dataUrlToBlob(dataUrl: string): Blob {
   }
 
   return new Blob([bytes], { type: mimeType });
+}
+
+function getExtensionFromMimeType(mimeType: string | undefined, fallback: string): string {
+  switch ((mimeType ?? '').toLowerCase()) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return 'jpg';
+    case 'image/png':
+      return 'png';
+    case 'image/webp':
+      return 'webp';
+    case 'image/gif':
+      return 'gif';
+    case 'video/mp4':
+      return 'mp4';
+    case 'video/webm':
+      return 'webm';
+    case 'video/quicktime':
+      return 'mov';
+    case 'audio/mpeg':
+    case 'audio/mp3':
+      return 'mp3';
+    case 'audio/wav':
+    case 'audio/wave':
+    case 'audio/x-wav':
+      return 'wav';
+    case 'audio/ogg':
+      return 'ogg';
+    case 'audio/aac':
+      return 'aac';
+    case 'audio/flac':
+      return 'flac';
+    default:
+      return fallback;
+  }
+}
+
+function getReferenceUploadPath(mediaType: HostedReferenceMediaType): string {
+  switch (mediaType) {
+    case 'audio':
+      return 'audios';
+    case 'video':
+      return 'videos';
+    case 'image':
+    default:
+      return 'images';
+  }
+}
+
+function getReferenceFallbackExtension(mediaType: HostedReferenceMediaType): string {
+  switch (mediaType) {
+    case 'audio':
+      return 'mp3';
+    case 'video':
+      return 'mp4';
+    case 'image':
+    default:
+      return 'jpg';
+  }
+}
+
+function hasFileExtension(value: string | undefined): boolean {
+  return Boolean(value && /\.[a-z0-9]{1,8}$/i.test(value));
+}
+
+function sanitizeUploadBaseName(value: string | undefined, fallback: string): string {
+  const trimmed = (value ?? '').trim();
+  const withoutExtension = trimmed.replace(/\.[a-z0-9]{1,8}$/i, '');
+  const sanitized = withoutExtension
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 48);
+
+  return sanitized || fallback;
+}
+
+function createReferenceUploadFileName(reference: HostedReferenceMedia, blob: Blob): string {
+  const fallbackExtension = getReferenceFallbackExtension(reference.mediaType);
+  const extension = hasFileExtension(reference.fileName)
+    ? reference.fileName!.split('.').pop()!.toLowerCase()
+    : getExtensionFromMimeType(reference.mimeType || blob.type, fallbackExtension);
+  const baseName = sanitizeUploadBaseName(reference.fileName || reference.label, reference.mediaType);
+
+  return `${baseName}_${Date.now()}.${extension}`;
 }
 
 async function kieAiJsonRequest<T>(
@@ -143,15 +323,23 @@ async function kieAiJsonRequest<T>(
 }
 
 async function uploadImage(env: Env, imageUrl: string): Promise<string> {
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl;
+  return uploadReferenceMedia(env, {
+    fileName: `image_${Date.now()}.jpg`,
+    mediaType: 'image',
+    source: imageUrl,
+  });
+}
+
+async function uploadReferenceMedia(env: Env, reference: HostedReferenceMedia): Promise<string> {
+  if (reference.source.startsWith('http://') || reference.source.startsWith('https://')) {
+    return reference.source;
   }
 
-  const blob = dataUrlToBlob(imageUrl);
-  const filename = `image_${Date.now()}.jpg`;
+  const blob = dataUrlToBlob(reference.source);
+  const filename = createReferenceUploadFileName(reference, blob);
   const formData = new FormData();
   formData.append('file', blob, filename);
-  formData.append('uploadPath', 'images');
+  formData.append('uploadPath', getReferenceUploadPath(reference.mediaType));
   formData.append('fileName', filename);
 
   const response = await fetch(KIEAI_UPLOAD_URL, {
@@ -163,27 +351,70 @@ async function uploadImage(env: Env, imageUrl: string): Promise<string> {
   });
 
   const payload = (await response.json().catch(() => null)) as KieAiUploadResponse | null;
-  const downloadUrl = payload?.data?.downloadUrl;
+  const uploadedUrl = payload?.data?.fileUrl ?? payload?.data?.downloadUrl;
 
-  if (!response.ok || !payload?.success || !downloadUrl) {
+  if (!response.ok || !payload?.success || !uploadedUrl) {
     throw new Error(`Kie.ai upload failed with status ${response.status}`);
   }
 
-  return downloadUrl;
+  return uploadedUrl;
+}
+
+async function uploadReferenceMediaList(
+  env: Env,
+  references: HostedReferenceMedia[] | undefined,
+): Promise<Array<HostedReferenceMedia & { url: string }>> {
+  const validReferences = (references ?? []).filter((reference) => (
+    reference.mediaType === 'image' || reference.mediaType === 'video' || reference.mediaType === 'audio'
+  ));
+
+  if (validReferences.length === 0) {
+    return [];
+  }
+
+  return Promise.all(validReferences.map(async (reference) => ({
+    ...reference,
+    url: await uploadReferenceMedia(env, reference),
+  })));
 }
 
 function normalizeTaskStatus(state: string | undefined): HostedVideoTaskStatus {
-  switch ((state ?? '').toLowerCase()) {
+  switch ((state ?? '').trim().toLowerCase()) {
     case 'success':
+    case 'completed':
       return 'completed';
-    case 'processing':
-      return 'processing';
+    case 'fail':
     case 'failed':
+    case 'failure':
+    case 'error':
       return 'failed';
+    case 'generating':
+    case 'processing':
+    case 'running':
+      return 'processing';
+    case 'queued':
+    case 'queuing':
+    case 'waiting':
     case 'pending':
     default:
       return 'pending';
   }
+}
+
+function normalizeKieProgress(progress: number | undefined, status: HostedVideoTaskStatus): number | undefined {
+  if (status === 'completed') {
+    return 1;
+  }
+
+  if (typeof progress !== 'number' || !Number.isFinite(progress)) {
+    return undefined;
+  }
+
+  if (progress > 1) {
+    return Math.max(0, Math.min(1, progress / 100));
+  }
+
+  return Math.max(0, Math.min(1, progress));
 }
 
 function normalizeImageResolution(resolution?: string): '1K' | '2K' | '4K' {
@@ -210,6 +441,90 @@ function getResultUrl(data: KieAiStatusResponse['data'] | undefined): string | u
   }
 
   return resultUrl;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function clampWeight(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(1, value));
+}
+
+function normalizeSunoModel(model: string | undefined): HostedSunoModelId {
+  switch (model) {
+    case 'V4':
+    case 'V4_5':
+    case 'V4_5PLUS':
+    case 'V5':
+      return model;
+    default:
+      return 'V5';
+  }
+}
+
+function normalizeSunoStatus(status: string | undefined): HostedVideoTaskStatus {
+  switch ((status ?? '').toUpperCase()) {
+    case 'SUCCESS':
+      return 'completed';
+    case 'CREATE_TASK_FAILED':
+    case 'GENERATE_AUDIO_FAILED':
+    case 'CALLBACK_EXCEPTION':
+    case 'SENSITIVE_WORD_ERROR':
+      return 'failed';
+    case 'PENDING':
+      return 'pending';
+    case 'TEXT_SUCCESS':
+    case 'FIRST_SUCCESS':
+    default:
+      return 'processing';
+  }
+}
+
+function normalizeSunoProgress(status: string | undefined): number | undefined {
+  switch ((status ?? '').toUpperCase()) {
+    case 'PENDING':
+      return 0.05;
+    case 'TEXT_SUCCESS':
+      return 0.35;
+    case 'FIRST_SUCCESS':
+      return 0.75;
+    case 'SUCCESS':
+      return 1;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeSunoMusicResult(value: unknown): HostedSunoResult | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const audioUrl = asString(record.audioUrl ?? record.audio_url ?? record.sourceAudioUrl ?? record.source_audio_url);
+  if (!audioUrl) {
+    return null;
+  }
+
+  return {
+    audioUrl,
+    duration: asNumber(record.duration),
+    id: asString(record.id),
+    imageUrl: asString(record.imageUrl ?? record.image_url),
+    prompt: asString(record.prompt),
+    streamAudioUrl: asString(record.streamAudioUrl ?? record.stream_audio_url),
+    tags: asString(record.tags),
+    title: asString(record.title),
+  };
 }
 
 function resolveResultType(url: string | undefined): { imageUrl?: string; videoUrl?: string } {
@@ -246,6 +561,33 @@ function normalizeMultiPrompt(
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function isSeedanceProvider(provider: string | undefined): provider is typeof SEEDANCE_2_PROVIDER_ID | typeof SEEDANCE_2_FAST_PROVIDER_ID {
+  return provider === SEEDANCE_2_PROVIDER_ID || provider === SEEDANCE_2_FAST_PROVIDER_ID;
+}
+
+function normalizeSeedanceProvider(provider: string | undefined): typeof SEEDANCE_2_PROVIDER_ID | typeof SEEDANCE_2_FAST_PROVIDER_ID {
+  return isSeedanceProvider(provider) ? provider : SEEDANCE_2_PROVIDER_ID;
+}
+
+function normalizeSeedanceResolution(
+  provider: string | undefined,
+  mode: string | undefined,
+): '480p' | '720p' | '1080p' {
+  if (mode === '480p') {
+    return '480p';
+  }
+
+  if (mode === '1080p' && provider !== SEEDANCE_2_FAST_PROVIDER_ID) {
+    return '1080p';
+  }
+
+  return '720p';
+}
+
+function normalizeSeedanceDuration(duration: number): number {
+  return Math.max(4, Math.min(15, Math.floor(duration)));
+}
+
 export function calculateHostedKlingCost(
   mode: string,
   duration: number,
@@ -263,6 +605,21 @@ export function calculateHostedKlingCost(
   return baseCost * HOSTED_KIE_CREDIT_MULTIPLIER;
 }
 
+export function calculateHostedSeedanceCost(
+  provider: string,
+  mode: string | undefined,
+  duration: number,
+  hasVideoInput = false,
+): number {
+  const normalizedProvider = normalizeSeedanceProvider(provider);
+  const normalizedMode = normalizeSeedanceResolution(normalizedProvider, mode);
+  const durationSeconds = normalizeSeedanceDuration(duration);
+  const rates = SEEDANCE_CREDITS_PER_SECOND[normalizedProvider]?.[normalizedMode];
+  const vendorCredits = durationSeconds * (hasVideoInput ? rates.videoInput : rates.normal);
+
+  return Math.ceil(vendorCredits * HOSTED_KIE_CREDIT_MULTIPLIER);
+}
+
 export function calculateHostedImageCost(provider: string, resolution?: string): number {
   const normalizedResolution = normalizeImageResolution(resolution);
   const usd =
@@ -273,6 +630,10 @@ export function calculateHostedImageCost(provider: string, resolution?: string):
   const vendorCredits = Math.round(usd / KIEAI_USD_PER_CREDIT);
 
   return vendorCredits * HOSTED_KIE_CREDIT_MULTIPLIER;
+}
+
+export function calculateHostedSunoCost(): number {
+  return HOSTED_SUNO_VENDOR_CREDITS * HOSTED_KIE_CREDIT_MULTIPLIER;
 }
 
 export async function createHostedKlingTask(
@@ -321,6 +682,107 @@ export async function createHostedKlingTask(
   return { taskId };
 }
 
+export async function createHostedSeedanceTask(
+  env: Env,
+  params: HostedVideoParams,
+): Promise<{ taskId: string }> {
+  const provider = normalizeSeedanceProvider(params.provider);
+  const uploadedReferences = await uploadReferenceMediaList(env, params.referenceMedia);
+  const hasReferenceMedia = uploadedReferences.length > 0;
+  const firstFrameUrl = !hasReferenceMedia && params.startImageUrl
+    ? await uploadImage(env, params.startImageUrl)
+    : undefined;
+  const lastFrameUrl = !hasReferenceMedia && params.endImageUrl
+    ? await uploadImage(env, params.endImageUrl)
+    : undefined;
+  const referenceImageUrls = uploadedReferences
+    .filter((reference) => reference.mediaType === 'image')
+    .map((reference) => reference.url)
+    .slice(0, 9);
+  const referenceVideoUrls = uploadedReferences
+    .filter((reference) => reference.mediaType === 'video')
+    .map((reference) => reference.url)
+    .slice(0, 3);
+  const referenceAudioUrls = uploadedReferences
+    .filter((reference) => reference.mediaType === 'audio')
+    .map((reference) => reference.url)
+    .slice(0, 3);
+  const promptGuidance: string[] = [];
+
+  const input: Record<string, unknown> = {
+    aspect_ratio: params.aspectRatio ?? '16:9',
+    duration: normalizeSeedanceDuration(params.duration),
+    generate_audio: hasReferenceMedia ? false : Boolean(params.sound),
+    prompt: params.prompt,
+    resolution: normalizeSeedanceResolution(provider, params.mode),
+    return_last_frame: false,
+    web_search: false,
+  };
+
+  if (hasReferenceMedia) {
+    const startReferenceUrl = params.startImageUrl ? await uploadImage(env, params.startImageUrl) : undefined;
+    const endReferenceUrl = params.endImageUrl ? await uploadImage(env, params.endImageUrl) : undefined;
+    const anchorImageUrls = [startReferenceUrl, endReferenceUrl].filter((url): url is string => Boolean(url));
+
+    if (anchorImageUrls.length > 0) {
+      referenceImageUrls.unshift(...anchorImageUrls);
+      referenceImageUrls.length = Math.min(referenceImageUrls.length, 9);
+    }
+
+    if (startReferenceUrl) {
+      promptGuidance.push('Use the first reference image as the opening image.');
+    }
+
+    if (endReferenceUrl) {
+      promptGuidance.push(
+        startReferenceUrl
+          ? 'Use the second reference image as the final image.'
+          : 'Use the first reference image as the final image.',
+      );
+    }
+  }
+
+  if (referenceAudioUrls.length > 0) {
+    promptGuidance.push('Synchronize visible speech, mouth shapes, and performance timing to the reference audio.');
+  }
+
+  if (promptGuidance.length > 0) {
+    input.prompt = `${params.prompt.trim()}\n\n${promptGuidance.join(' ')}`.trim();
+  }
+
+  if (firstFrameUrl) {
+    input.first_frame_url = firstFrameUrl;
+  }
+
+  if (lastFrameUrl) {
+    input.last_frame_url = lastFrameUrl;
+  }
+
+  if (referenceImageUrls.length > 0) {
+    input.reference_image_urls = referenceImageUrls;
+  }
+
+  if (referenceVideoUrls.length > 0) {
+    input.reference_video_urls = referenceVideoUrls;
+  }
+
+  if (referenceAudioUrls.length > 0) {
+    input.reference_audio_urls = referenceAudioUrls;
+  }
+
+  const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
+    input,
+    model: provider,
+  });
+  const taskId = payload.data?.taskId;
+
+  if (payload.code !== 200 || !taskId) {
+    throw new Error(payload.msg ?? 'Failed to create Seedance 2.0 task');
+  }
+
+  return { taskId };
+}
+
 export async function createHostedImageTask(
   env: Env,
   params: HostedImageParams,
@@ -348,6 +810,57 @@ export async function createHostedImageTask(
   return { taskId };
 }
 
+export async function createHostedSunoMusicTask(
+  env: Env,
+  params: HostedSunoParams,
+): Promise<{ taskId: string }> {
+  const prompt = params.prompt.trim();
+  if (!prompt) {
+    throw new Error('Describe the music before generating with Suno.');
+  }
+
+  const customMode = params.customMode ?? false;
+  const instrumental = params.instrumental ?? true;
+  const body: Record<string, unknown> = {
+    callBackUrl: params.callBackUrl?.trim() || DEFAULT_SUNO_CALLBACK_URL,
+    customMode,
+    instrumental,
+    model: normalizeSunoModel(params.model),
+    prompt,
+  };
+
+  if (customMode) {
+    const style = params.style?.trim();
+    const title = params.title?.trim();
+    if (!style || !title) {
+      throw new Error('Custom Suno mode needs a title and style.');
+    }
+
+    body.style = style;
+    body.title = title;
+  }
+
+  if (params.negativeTags?.trim()) {
+    body.negativeTags = params.negativeTags.trim();
+  }
+  if (params.vocalGender) {
+    body.vocalGender = params.vocalGender;
+  }
+
+  body.styleWeight = clampWeight(params.styleWeight, 0.65);
+  body.weirdnessConstraint = clampWeight(params.weirdnessConstraint, 0.65);
+  body.audioWeight = clampWeight(params.audioWeight, 0.65);
+
+  const payload = await kieAiJsonRequest<KieSunoCreateResponse>(env, '/api/v1/generate', 'POST', body);
+  const taskId = payload.data?.taskId;
+
+  if (payload.code !== 200 || !taskId) {
+    throw new Error(payload.msg ?? 'Failed to create hosted Suno music task');
+  }
+
+  return { taskId };
+}
+
 export async function getHostedKlingTask(
   env: Env,
   taskId: string,
@@ -362,12 +875,43 @@ export async function getHostedKlingTask(
   const { imageUrl, videoUrl } = resolveResultType(resultUrl);
 
   return {
-    completedAt: status === 'completed' ? new Date().toISOString() : undefined,
-    createdAt: new Date().toISOString(),
-    error: payload.data?.failMsg ?? payload.msg,
+    completedAt: payload.data?.completeTime
+      ? new Date(payload.data.completeTime).toISOString()
+      : status === 'completed' ? new Date().toISOString() : undefined,
+    createdAt: payload.data?.createTime ? new Date(payload.data.createTime).toISOString() : new Date().toISOString(),
+    error: status === 'failed' ? payload.data?.failMsg ?? payload.msg : undefined,
     id: payload.data?.taskId ?? taskId,
     imageUrl,
+    progress: normalizeKieProgress(payload.data?.progress, status),
     status,
     videoUrl,
+  };
+}
+
+export async function getHostedSunoMusicTask(
+  env: Env,
+  taskId: string,
+): Promise<HostedSunoTask> {
+  const payload = await kieAiJsonRequest<KieSunoRecordResponse>(
+    env,
+    `/api/v1/generate/record-info?taskId=${encodeURIComponent(taskId)}`,
+    'GET',
+  );
+  const providerStatus = payload.data?.status;
+  const status = normalizeSunoStatus(providerStatus);
+  const results = payload.data?.response?.sunoData
+    ?.map(normalizeSunoMusicResult)
+    .filter((item): item is HostedSunoResult => item !== null);
+
+  return {
+    completedAt: payload.data?.completeTime
+      ? new Date(payload.data.completeTime).toISOString()
+      : status === 'completed' ? new Date().toISOString() : undefined,
+    createdAt: payload.data?.createTime ? new Date(payload.data.createTime).toISOString() : new Date().toISOString(),
+    error: status === 'failed' ? payload.data?.errorMessage ?? payload.msg : undefined,
+    id: payload.data?.taskId ?? taskId,
+    progress: normalizeSunoProgress(providerStatus),
+    results,
+    status,
   };
 }

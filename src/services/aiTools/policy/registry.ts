@@ -124,6 +124,13 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getStatsHistory', bridgeTelemetry()],
   ['getLogs', bridgeTelemetry()],
   ['getRuntimeDiagnostics', bridgeTelemetry()],
+  ['getDockLayoutDebugState', bridgeTelemetry()],
+  ['switchDockLayout', {
+    ...bridgeTelemetry(),
+    readOnly: false,
+    riskLevel: 'low',
+    allowedCallers: ['devBridge', 'console', 'internal'],
+  }],
   ['clearRuntimeDiagnostics', {
     ...bridgeTelemetry(),
     readOnly: false,

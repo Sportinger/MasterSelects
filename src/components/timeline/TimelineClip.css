@@ -1045,6 +1045,17 @@
   overflow: hidden;
 }
 
+.timeline-clip.audio .clip-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: auto;
+  min-height: 20px;
+  padding-bottom: 7px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.52) 0%, rgba(0, 0, 0, 0.18) 66%, transparent 100%);
+}
+
 .clip-meta {
   display: flex;
   flex-direction: column;
@@ -1524,18 +1535,33 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 18px;
+  top: 0;
   bottom: 0;
   z-index: 12;
-  cursor: text;
+  cursor: inherit;
+}
+
+.clip-audio-region-hitarea:active {
+  cursor: crosshair;
+}
+
+.clip-video-bake-region-hitarea {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  cursor: inherit;
+}
+
+.clip-video-bake-region-hitarea:active {
+  cursor: crosshair;
 }
 
 .clip-audio-region-selection {
   position: absolute;
-  top: 18px;
-  bottom: 4px;
-  z-index: 11;
-  pointer-events: none;
+  top: 0;
+  bottom: 0;
+  z-index: 16;
+  pointer-events: auto;
   background:
     linear-gradient(180deg, rgba(82, 190, 255, 0.2), rgba(82, 190, 255, 0.07)),
     repeating-linear-gradient(
@@ -1548,6 +1574,7 @@
   border: 1px solid rgba(82, 190, 255, 0.74);
   border-radius: 2px;
   box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.35), 0 0 9px rgba(82, 190, 255, 0.16);
+  cursor: grab;
 }
 
 .clip-audio-region-selection.snapped {
@@ -1555,8 +1582,131 @@
   box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.35), 0 0 10px rgba(254, 211, 106, 0.2);
 }
 
+.clip-audio-region-selection.moving {
+  cursor: grabbing;
+}
+
+.clip-audio-region-selection.resizing {
+  cursor: ew-resize;
+}
+
+.clip-video-bake-region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 17;
+  min-width: 3px;
+  pointer-events: auto;
+  border: 1px solid rgba(45, 212, 191, 0.78);
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(20, 184, 166, 0.24), rgba(20, 184, 166, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.12) 0,
+      rgba(255, 255, 255, 0.12) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  box-shadow: inset 0 0 0 1px rgba(8, 16, 24, 0.35), 0 0 9px rgba(45, 212, 191, 0.16);
+}
+
+.clip-video-bake-region.status-marked:not(.selection) {
+  background: transparent;
+  border-top: 1px dashed rgba(45, 212, 191, 0.52);
+  border-bottom: 1px dashed rgba(45, 212, 191, 0.26);
+  box-shadow: none;
+}
+
+.clip-video-bake-region.status-marked:not(.selection)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: rgba(45, 212, 191, 0.34);
+  pointer-events: none;
+}
+
+.clip-video-bake-region.selection {
+  border-style: dashed;
+  background: rgba(45, 212, 191, 0.16);
+}
+
+.clip-video-bake-region.status-baking {
+  border-color: rgba(251, 191, 36, 0.9);
+  background:
+    linear-gradient(180deg, rgba(251, 191, 36, 0.22), rgba(245, 158, 11, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.1) 0,
+      rgba(255, 255, 255, 0.1) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+}
+
+.clip-video-bake-region.status-baked {
+  border-color: rgba(52, 211, 153, 0.92);
+  background:
+    linear-gradient(180deg, rgba(52, 211, 153, 0.24), rgba(16, 185, 129, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.1) 0,
+      rgba(255, 255, 255, 0.1) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+}
+
+.clip-video-bake-region.status-error {
+  border-color: rgba(248, 113, 113, 0.92);
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.clip-video-bake-region-controls {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  z-index: 2;
+  display: inline-flex;
+  gap: 3px;
+  pointer-events: auto;
+}
+
+.clip-video-bake-btn {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+  border: 1px solid rgba(45, 212, 191, 0.52);
+  border-radius: 3px;
+  background: rgba(8, 13, 16, 0.86);
+  color: rgba(236, 253, 245, 0.96);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.clip-video-bake-btn:hover {
+  border-color: rgba(94, 234, 212, 0.78);
+  background: rgba(15, 23, 28, 0.96);
+}
+
+.clip-video-bake-btn:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.clip-video-bake-btn.remove {
+  width: 18px;
+  padding: 0;
+  color: rgba(254, 226, 226, 0.95);
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
 .clip-spectral-region-hitarea {
-  cursor: crosshair;
+  cursor: inherit;
 }
 
 .clip-spectral-region-selection {
@@ -1699,33 +1849,181 @@
   position: absolute;
   top: -1px;
   bottom: -1px;
+  z-index: 4;
+  width: 10px;
+  pointer-events: auto;
+  cursor: ew-resize;
+}
+
+.clip-audio-region-edge.left {
+  left: -5px;
+}
+
+.clip-audio-region-edge.right {
+  right: -5px;
+}
+
+.clip-audio-region-edge::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
   width: 2px;
   background: rgba(232, 246, 255, 0.92);
 }
 
-.clip-audio-region-edge.left {
-  left: -1px;
+.clip-audio-region-edge.left::after {
+  left: 4px;
 }
 
-.clip-audio-region-edge.right {
-  right: -1px;
+.clip-audio-region-edge.right::after {
+  right: 4px;
 }
 
-.clip-audio-region-toolbar {
+.clip-audio-region-gain-control {
   position: absolute;
-  top: 20px;
+  right: 0;
+  left: 0;
+  z-index: 5;
+  height: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.clip-audio-region-gain-line {
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: -8px;
+  height: 16px;
+  pointer-events: auto;
+  cursor: ns-resize;
+}
+
+.clip-audio-region-gain-line::before {
+  content: "";
+  position: absolute;
+  right: 6px;
+  left: 6px;
+  top: 7px;
+  height: 2px;
+  background: rgba(248, 253, 255, 0.94);
+  border-radius: 2px;
+  box-shadow:
+    0 0 0 1px rgba(4, 12, 18, 0.72),
+    0 0 8px rgba(82, 190, 255, 0.28);
+}
+
+.clip-audio-region-fade-handle {
+  position: absolute;
+  top: -7px;
+  width: 11px;
+  height: 14px;
+  padding: 0;
+  pointer-events: auto;
+  cursor: ew-resize;
+  background: rgba(9, 20, 28, 0.94);
+  border: 1px solid rgba(236, 250, 255, 0.88);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(82, 190, 255, 0.28), 0 2px 7px rgba(0, 0, 0, 0.28);
+}
+
+.clip-audio-region-fade-handle.fade-in {
+  transform: translateX(-50%);
+}
+
+.clip-audio-region-fade-handle.fade-out {
+  transform: translateX(50%);
+}
+
+.clip-audio-region-fade-handle::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-right: 1px solid rgba(236, 250, 255, 0.78);
+  border-left: 1px solid rgba(236, 250, 255, 0.78);
+}
+
+.clip-audio-region-fade-handle:hover,
+.clip-audio-region-gain-line:hover + .clip-audio-region-fade-handle {
+  border-color: rgba(255, 224, 120, 0.95);
+}
+
+.clip-audio-region-gain-value {
+  position: absolute;
+  right: 7px;
+  bottom: 4px;
+  padding: 1px 5px;
+  color: rgba(238, 250, 255, 0.95);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 14px;
+  pointer-events: none;
+  background: rgba(4, 12, 18, 0.72);
+  border: 1px solid rgba(132, 221, 255, 0.28);
+  border-radius: 2px;
+}
+
+.clip-audio-edit-operation-overlay {
+  position: absolute;
+  top: auto;
+  height: 18px;
   z-index: 14;
   display: flex;
-  max-width: calc(100% - 8px);
-  gap: 3px;
-  padding: 3px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  align-items: center;
+  min-width: 3px;
+  max-width: calc(100% - 4px);
+  overflow: hidden;
   pointer-events: auto;
-  background: rgba(8, 14, 20, 0.86);
-  border: 1px solid rgba(113, 214, 255, 0.46);
-  border-radius: 3px;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+  background:
+    linear-gradient(180deg, rgba(43, 201, 143, 0.1), rgba(43, 201, 143, 0.035)),
+    rgba(6, 14, 12, 0.38);
+  border: 1px solid rgba(93, 232, 176, 0.26);
+  border-radius: 2px;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(5, 16, 12, 0.22);
+}
+
+.clip-audio-edit-operation-overlay:hover {
+  background:
+    linear-gradient(180deg, rgba(43, 201, 143, 0.17), rgba(43, 201, 143, 0.07)),
+    rgba(6, 14, 12, 0.5);
+  border-color: rgba(93, 232, 176, 0.44);
+}
+
+.clip-audio-edit-operation-overlay span {
+  max-width: 100%;
+  padding: 0 5px;
+  overflow: hidden;
+  color: rgba(230, 255, 246, 0.78);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip-audio-edit-operation-overlay[data-audio-edit-type="effect"] {
+  background:
+    linear-gradient(180deg, rgba(167, 139, 250, 0.13), rgba(167, 139, 250, 0.045)),
+    rgba(13, 10, 24, 0.38);
+  border-color: rgba(196, 181, 253, 0.3);
+}
+
+.clip-audio-edit-operation-overlay[data-audio-edit-type="repair"] {
+  background:
+    linear-gradient(180deg, rgba(255, 194, 92, 0.12), rgba(255, 194, 92, 0.04)),
+    rgba(18, 13, 6, 0.42);
+  border-color: rgba(255, 211, 112, 0.32);
+}
+
+.clip-audio-edit-operation-overlay[data-audio-edit-type="delete-silence"],
+.clip-audio-edit-operation-overlay[data-audio-edit-type="silence"],
+.clip-audio-edit-operation-overlay[data-audio-edit-type="cut"] {
+  background:
+    linear-gradient(180deg, rgba(82, 190, 255, 0.11), rgba(82, 190, 255, 0.04)),
+    rgba(5, 12, 18, 0.4);
+  border-color: rgba(107, 214, 255, 0.3);
 }
 
 .clip-spectral-region-toolbar {
@@ -1744,35 +2042,67 @@
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.32);
 }
 
-.clip-audio-region-toolbar button,
 .clip-spectral-region-toolbar button,
 .clip-audio-edit-stack button {
-  height: 18px;
-  min-width: 22px;
-  padding: 0 5px;
+  height: 22px;
+  min-width: 34px;
+  padding: 0 7px;
   color: rgba(231, 246, 255, 0.94);
   font-size: 10px;
-  line-height: 16px;
+  font-weight: 700;
+  line-height: 20px;
   white-space: nowrap;
   background: rgba(45, 75, 92, 0.86);
   border: 1px solid rgba(134, 224, 255, 0.35);
   border-radius: 2px;
 }
 
-.clip-audio-region-toolbar button:hover,
 .clip-spectral-region-toolbar button:hover,
 .clip-audio-edit-stack button:hover {
   background: rgba(65, 111, 134, 0.95);
   border-color: rgba(160, 235, 255, 0.68);
 }
 
-.clip-audio-region-toolbar button:disabled,
 .clip-spectral-region-toolbar button:disabled,
 .clip-audio-edit-stack button:disabled {
   cursor: default;
   opacity: 0.42;
   background: rgba(31, 45, 53, 0.72);
   border-color: rgba(104, 130, 142, 0.26);
+}
+
+.clip-audio-region-context-menu {
+  min-width: 184px;
+  overflow: visible;
+}
+
+.clip-audio-region-context-menu .context-menu-title {
+  padding: 6px 10px 5px;
+  color: rgba(183, 220, 235, 0.86);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.clip-audio-region-direct-actions .context-menu-item {
+  font-weight: 700;
+}
+
+.clip-audio-region-submenu-trigger {
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.clip-audio-region-submenu-panel {
+  min-width: 170px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.clip-audio-region-submenu-panel .context-menu-item {
+  white-space: nowrap;
 }
 
 .clip-audio-edit-stack {

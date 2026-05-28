@@ -19,6 +19,10 @@
  *   o3-mini:        $1.10 in / $4.40 out   → ~$0.003/req  → 3 credits
  *   o3:             $2.00 in / $8.00 out   → ~$0.006/req  → 5 credits (+ reasoning tokens)
  *   gpt-5.1-codex:  ~$2 in / ~$8 out      → ~$0.006/req  → 5 credits
+ *   gpt-5.4-nano:   fast/instant tier     → base chat route → 1 credit
+ *   gpt-5.4-mini:   fast tier             → base chat route → 1 credit
+ *   gpt-5.4:        high tier             → base chat route → 5 credits
+ *   gpt-5.5:        high tier             → base chat route → 5 credits
  *   gpt-5.2:        ~$3 in / ~$12 out     → ~$0.008/req  → 8 credits
  *   gpt-5.2-pro:    ~$5 in / ~$20 out     → ~$0.013/req  → 10 credits
  *   o3-pro:         $20 in / $80 out       → ~$0.06/req   → 50 credits
@@ -39,6 +43,8 @@ const MODEL_PRICING: Record<string, ModelPricingEntry> = {
   'gpt-5-nano':         { creditCost: 1,  tier: 'low' },
   'gpt-5-mini':         { creditCost: 1,  tier: 'low' },
   'gpt-5.1-codex-mini': { creditCost: 1,  tier: 'low' },
+  'gpt-5.4-nano':       { creditCost: 1,  tier: 'low' },
+  'gpt-5.4-mini':       { creditCost: 1,  tier: 'low' },
 
   // --- Tier: mid (3 credits) ---
   'o4-mini':            { creditCost: 3,  tier: 'mid' },
@@ -50,6 +56,8 @@ const MODEL_PRICING: Record<string, ModelPricingEntry> = {
   'gpt-5':              { creditCost: 5,  tier: 'high' },
   'gpt-5.1':            { creditCost: 5,  tier: 'high' },
   'gpt-5.1-codex':      { creditCost: 5,  tier: 'high' },
+  'gpt-5.4':            { creditCost: 5,  tier: 'high' },
+  'gpt-5.5':            { creditCost: 5,  tier: 'high' },
   'o3':                 { creditCost: 5,  tier: 'high' },
 
   // --- Tier: premium (8-50 credits) ---

@@ -112,6 +112,14 @@ Der Watcher liest `~/.codex/sessions`, filtert auf dieses Repo, gruppiert `token
 
 `.codex-usage/` bleibt lokal und ist in Git ignoriert. Exakte Commit-Zuordnung funktioniert nur fuer Turns, die beobachtet wurden, waehrend `codex:usage:watch` lief; historische Sessions bekommen nur den beim Report beobachteten Git-Stand.
 
+## 0.3 Agent Check Budget / Repo Memory
+
+`AGENTS.md` und `CLAUDE.md` sind die dauerhafte Projekt-Memory fuer Coding Agents. Nicht davon ausgehen, dass ein Agent versteckte persistente Memory fuer dieses Repo hat; wichtige Workflow-Regeln hier pflegen.
+
+Waehrend normaler Implementierung sparsam pruefen: gezielte Unit-/Smoke-Tests, einzelne Builds oder Lint nur dann ausfuehren, wenn Risiko und Aenderungsumfang es rechtfertigen. Full `npm run build`, `npm run lint` und `npm run test` nicht nach jedem kleinen Edit laufen lassen; diese volle Check-Kette ist Pflicht vor Commit, Release, Merge oder wenn der User explizit nach finaler Commit-Readiness fragt.
+
+Grosse Kommandoausgaben sind token- und zeitintensiv. Bei Zwischenstaenden kurze Zusammenfassungen und relevante Fehlerzeilen berichten statt komplette Logs zu wiederholen.
+
 ---
 
 ## 1. Workflow (WICHTIG!)
@@ -130,7 +138,7 @@ npm run lint           # 2. Lint: 0 Errors (Warnings OK)
 npm run test           # 3. ALLE Tests müssen grün sein
 ```
 
-Während laufender Arbeit gezielt prüfen: passende Unit-/Smoke-Tests, Build oder Lint nach Risiko und Änderungsumfang auswählen. Die volle Suite ist kein Pflichtschritt nach jedem kleinen Zwischenstand.
+Während laufender Arbeit gezielt prüfen: passende Unit-/Smoke-Tests, Build oder Lint nach Risiko und Änderungsumfang auswählen. Die volle Suite ist kein Pflichtschritt nach jedem kleinen Zwischenstand und soll wegen Zeit-/Token-Kosten nicht routinemäßig laufen.
 
 **IMMER vor Commit:**
 - `npm run build` ausführen — muss fehlerfrei sein

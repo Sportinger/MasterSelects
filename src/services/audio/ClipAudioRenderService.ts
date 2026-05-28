@@ -9,6 +9,7 @@ import {
   collectRenderableClipAudioEditOperations,
   collectRenderableClipAudioEffectInstances,
 } from './processedWaveformEligibility';
+import { createAudioRegionEffectInstance } from './audioRegionEffectOperation';
 
 export type ClipAudioRenderPhase =
   | 'trimming'
@@ -698,6 +699,42 @@ function fillRangeWithSilence(
   }
 }
 
+function getRegionFadeEnvelope(
+  sample: number,
+  range: { start: number; end: number },
+  fadeInSamples: number,
+  fadeOutSamples: number,
+): number {
+  const length = Math.max(1, range.end - range.start);
+  const local = Math.max(0, Math.min(length - 1, sample - range.start));
+  const fadeIn = fadeInSamples > 0 ? Math.min(1, local / fadeInSamples) : 1;
+  const fadeOut = fadeOutSamples > 0 ? Math.min(1, (length - 1 - local) / fadeOutSamples) : 1;
+  return Math.max(0, Math.min(1, Math.min(fadeIn, fadeOut)));
+}
+
+function applyGainRange(
+  buffer: AudioBuffer,
+  range: { start: number; end: number },
+  channels: readonly number[],
+  operation: ClipAudioEditOperation,
+): void {
+  const gainDb = Math.max(-120, Math.min(24, finiteNumber(operation.params.gainDb, 0)));
+  if (Math.abs(gainDb) <= 0.01) return;
+
+  const targetGain = gainDb <= -96 ? 0 : dbToLinearGain(gainDb);
+  const fadeInSamples = Math.max(0, Math.round(finiteNumber(operation.params.fadeInSeconds, 0) * buffer.sampleRate));
+  const fadeOutSamples = Math.max(0, Math.round(finiteNumber(operation.params.fadeOutSeconds, 0) * buffer.sampleRate));
+
+  for (const channel of channels) {
+    const data = buffer.getChannelData(channel);
+    for (let sample = range.start; sample < range.end; sample += 1) {
+      const envelope = getRegionFadeEnvelope(sample, range, fadeInSamples, fadeOutSamples);
+      const gain = 1 + (targetGain - 1) * envelope;
+      data[sample] = (data[sample] ?? 0) * gain;
+    }
+  }
+}
+
 function reverseRange(
   buffer: AudioBuffer,
   range: { start: number; end: number },
@@ -1025,6 +1062,45 @@ function pasteRangePreservingDuration(
       data.fill(0, destinationRange.start, destinationRange.end);
     }
     data.set(sourceCopy, destinationRange.start);
+  }
+}
+
+function copyAudioRangeToBuffer(
+  buffer: AudioBuffer,
+  range: { start: number; end: number },
+): AudioBuffer {
+  const length = Math.max(1, range.end - range.start);
+  const copied = createAudioBuffer(buffer.numberOfChannels, length, buffer.sampleRate);
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    copied.getChannelData(channel).set(
+      buffer.getChannelData(channel).subarray(range.start, Math.min(buffer.length, range.end)),
+    );
+  }
+
+  return copied;
+}
+
+function blendRenderedRegionIntoBuffer(
+  target: AudioBuffer,
+  renderedRegion: AudioBuffer,
+  range: { start: number; end: number },
+  channels: readonly number[],
+  featherSamples: number,
+): void {
+  const length = Math.min(renderedRegion.length, Math.max(0, range.end - range.start), target.length - range.start);
+  if (length <= 0) return;
+
+  for (const channel of channels) {
+    if (channel >= renderedRegion.numberOfChannels) continue;
+    const targetData = target.getChannelData(channel);
+    const renderedData = renderedRegion.getChannelData(channel);
+
+    for (let localIndex = 0; localIndex < length; localIndex += 1) {
+      const targetIndex = range.start + localIndex;
+      const blend = rangeFeatherFactor(targetIndex, range, featherSamples);
+      targetData[targetIndex] = targetData[targetIndex] * (1 - blend) + (renderedData[localIndex] ?? 0) * blend;
+    }
   }
 }
 
@@ -1647,7 +1723,7 @@ export class ClipAudioRenderService {
     const { clip, sourceBuffer, keyframes = [], effectMode = 'output', effectTailSeconds = 0, onProgress } = request;
 
     let processedBuffer = this.trimClipBuffer(clip, sourceBuffer, onProgress);
-    processedBuffer = this.renderEditStack(clip, processedBuffer, onProgress);
+    processedBuffer = await this.renderEditStack(clip, processedBuffer, onProgress);
     processedBuffer = await this.renderSpectralImageLayers(clip, processedBuffer, onProgress);
 
     if (clip.reversed) {
@@ -1708,11 +1784,11 @@ export class ClipAudioRenderService {
     return edited;
   }
 
-  private renderEditStack(
+  private async renderEditStack(
     clip: TimelineClip,
     buffer: AudioBuffer,
     onProgress?: (progress: ClipAudioRenderProgress) => void,
-  ): AudioBuffer {
+  ): Promise<AudioBuffer> {
     const operations = collectRenderableClipAudioEditOperations(clip);
     if (operations.length === 0) return buffer;
 
@@ -1722,7 +1798,7 @@ export class ClipAudioRenderService {
       message: 'Rendering clip audio edit stack',
     });
 
-    const edited = cloneAudioBuffer(buffer);
+    let edited = cloneAudioBuffer(buffer);
     const compactDeleteRanges: Array<{ start: number; end: number }> = [];
     for (const operation of operations) {
       const range = getOperationSampleRange(operation, clip, edited);
@@ -1731,6 +1807,9 @@ export class ClipAudioRenderService {
       if (channels.length === 0) continue;
 
       switch (operation.type) {
+        case 'gain':
+          applyGainRange(edited, range, channels, operation);
+          break;
         case 'silence':
         case 'cut':
           fillRangeWithSilence(edited, range, channels);
@@ -1766,6 +1845,9 @@ export class ClipAudioRenderService {
         case 'repair':
           applyRepairRange(edited, range, channels, operation);
           break;
+        case 'effect':
+          edited = await this.applyRegionEffect(edited, range, channels, operation, onProgress);
+          break;
         case 'room-tone-fill':
           fillRangeWithRoomTone(edited, clip, range, channels, operation);
           break;
@@ -1782,6 +1864,46 @@ export class ClipAudioRenderService {
       return deleteRangesCompactingDuration(edited, compactDeleteRanges);
     }
 
+    return edited;
+  }
+
+  private async applyRegionEffect(
+    buffer: AudioBuffer,
+    range: { start: number; end: number },
+    channels: readonly number[],
+    operation: ClipAudioEditOperation,
+    onProgress?: (progress: ClipAudioRenderProgress) => void,
+  ): Promise<AudioBuffer> {
+    const effect = createAudioRegionEffectInstance(operation);
+    if (!effect || effect.enabled === false) return buffer;
+
+    const regionBuffer = copyAudioRangeToBuffer(buffer, range);
+    const featherSamples = Math.max(0, Math.min(
+      Math.floor((range.end - range.start) / 2),
+      Math.round(finiteNumber(operation.params.featherTime, 0.015) * buffer.sampleRate),
+    ));
+
+    emitProgress(onProgress, {
+      phase: 'edit-stack',
+      percent: 18,
+      message: `Rendering ${operation.params.label ?? 'region FX'}`,
+    });
+
+    const renderedRegion = await this.effectRenderer.renderEffectInstances(
+      regionBuffer,
+      [effect],
+      [],
+      regionBuffer.duration,
+      effectsProgress => emitProgress(onProgress, {
+        phase: 'edit-stack',
+        percent: 18 + Math.round(effectsProgress.percent * 0.18),
+        effects: effectsProgress,
+        message: `Rendering ${operation.params.label ?? 'region FX'}`,
+      }),
+    );
+
+    const edited = cloneAudioBuffer(buffer);
+    blendRenderedRegionIntoBuffer(edited, renderedRegion, range, channels, featherSamples);
     return edited;
   }
 

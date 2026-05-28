@@ -5,13 +5,14 @@ import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
 import { Logger } from '../logger';
 import { AudioArtifactStore } from './AudioArtifactStore';
-import type { AudioArtifactRef } from './audioArtifactTypes';
+import type { AudioAnalysisArtifact, AudioArtifactRef } from './audioArtifactTypes';
 import {
   WaveformPyramidGenerator,
   createWaveformPyramidAnalyzerVersion,
   type WaveformPyramidGenerationProgress,
 } from './WaveformPyramidGenerator';
 import {
+  decodeWaveformPyramidPackedPayload,
   decodeWaveformStatPayload,
   type WaveformPyramidManifest,
   type WaveformStatistic,
@@ -259,9 +260,13 @@ function createPyramidTimeoutSignal(
 
 async function decodeStatPayload(
   store: AudioArtifactStore,
-  ref: AudioArtifactRef,
+  ref: AudioArtifactRef | undefined,
   statistic: WaveformStatistic,
 ): Promise<Float32Array> {
+  if (!ref) {
+    throw new Error(`Missing waveform ${statistic} payload ref.`);
+  }
+
   const payload = await store.getPayload(ref.artifactId);
   if (!payload) {
     throw new Error(`Missing waveform ${statistic} payload: ${ref.artifactId}`);
@@ -273,6 +278,27 @@ async function decodeStatPayload(
   }
 
   return decoded.values;
+}
+
+async function readPackedTimelineWaveformPyramid(
+  manifest: WaveformPyramidManifest,
+  store: AudioArtifactStore,
+): Promise<TimelineWaveformPyramid | null> {
+  if (!manifest.packedPayload) {
+    return null;
+  }
+
+  const payload = await store.getPayload(manifest.packedPayload.artifactId);
+  if (!payload) {
+    throw new Error(`Missing packed waveform pyramid payload: ${manifest.packedPayload.artifactId}`);
+  }
+
+  const decoded = decodeWaveformPyramidPackedPayload(await blobToArrayBuffer(payload));
+  return {
+    sampleRate: manifest.sampleRate,
+    duration: manifest.duration,
+    levels: decoded.levels,
+  };
 }
 
 export function primeTimelineWaveformPyramidCache(
@@ -296,6 +322,11 @@ export async function readTimelineWaveformPyramid(
   manifest: WaveformPyramidManifest,
   store: AudioArtifactStore,
 ): Promise<TimelineWaveformPyramid> {
+  const packed = await readPackedTimelineWaveformPyramid(manifest, store);
+  if (packed) {
+    return packed;
+  }
+
   const levels = await Promise.all(manifest.levels.map(async (level) => ({
     samplesPerBucket: level.samplesPerBucket,
     bucketDuration: level.bucketDuration,
@@ -321,6 +352,17 @@ export async function loadTimelineWaveformPyramid(
 ): Promise<TimelineWaveformPyramid | null> {
   const cached = getCachedTimelineWaveformPyramid(refId);
   if (cached || !refId) return cached;
+  return (await loadTimelineWaveformPyramidArtifact(refId))?.pyramid ?? null;
+}
+
+export async function loadTimelineWaveformPyramidArtifact(
+  refId: string | undefined,
+): Promise<{
+  pyramid: TimelineWaveformPyramid;
+  artifact: AudioAnalysisArtifact;
+} | null> {
+  const cached = getCachedTimelineWaveformPyramid(refId);
+  if (!refId) return null;
 
   const store = createCurrentAudioArtifactStore();
   const artifact = await store.getAnalysisArtifact(refId);
@@ -329,9 +371,9 @@ export async function loadTimelineWaveformPyramid(
   const manifest = artifact.metadata?.waveformManifest as WaveformPyramidManifest | undefined;
   if (!manifest) return null;
 
-  const pyramid = await readTimelineWaveformPyramid(manifest, store);
+  const pyramid = cached ?? await readTimelineWaveformPyramid(manifest, store);
   primeTimelineWaveformPyramidCache([refId, artifact.id, artifact.manifestRef.artifactId], pyramid);
-  return pyramid;
+  return { pyramid, artifact };
 }
 
 export async function generateTimelineWaveformAnalysisForFile(

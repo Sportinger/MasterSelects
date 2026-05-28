@@ -10,6 +10,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
 import { getCatalogEntry } from './FlashBoardModelCatalog';
 import { getFlashBoardImageProvider } from './FlashBoardImageProviders';
+import { getSeedanceReferenceValidationError } from './seedanceReferenceRules';
 import {
   DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT,
   ELEVENLABS_MP3_MIME_TYPE,
@@ -21,6 +22,10 @@ import { SUNO_PROVIDER_ID, sunoService } from '../sunoService';
 const log = Logger.create('FlashBoardJob');
 
 function shouldUsePersonalApiKey(provider: 'piapi' | 'kieai' | 'evolink' | 'elevenlabs'): boolean {
+  if (import.meta.env.PROD) {
+    return false;
+  }
+
   return useSettingsStore.getState().shouldUseApiKeyByDefault(provider);
 }
 
@@ -35,6 +40,14 @@ function resolveEffectiveRequest(request: FlashBoardGenerationRequest): FlashBoa
       };
     }
 
+    if (request.providerId === 'bytedance/seedance-2' || request.providerId === 'bytedance/seedance-2-fast') {
+      return {
+        ...request,
+        service: 'cloud',
+        version: 'latest',
+      };
+    }
+
     if (request.providerId === 'nano-banana-2') {
       return {
         ...request,
@@ -42,6 +55,21 @@ function resolveEffectiveRequest(request: FlashBoardGenerationRequest): FlashBoa
         version: 'latest',
       };
     }
+  }
+
+  if (request.service === 'elevenlabs' && !shouldUsePersonalApiKey('elevenlabs')) {
+    return {
+      ...request,
+      providerId: 'cloud-elevenlabs-tts',
+      service: 'cloud',
+    };
+  }
+
+  if (request.service === 'suno' && !shouldUsePersonalApiKey('kieai')) {
+    return {
+      ...request,
+      service: 'cloud',
+    };
   }
 
   return request;
@@ -210,6 +238,19 @@ class FlashBoardJobService {
     return blobToDataUrl(await response.blob());
   }
 
+  private async normalizeMediaSourceForHostedUpload(url: string): Promise<string> {
+    if (url.startsWith('data:') || /^https?:\/\//i.test(url)) {
+      return url;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to read reference media: ${response.status}`);
+    }
+
+    return blobToDataUrl(await response.blob());
+  }
+
   private async resolveReferenceImage(mediaFileId: string | undefined): Promise<string | undefined> {
     if (!mediaFileId) {
       return undefined;
@@ -278,6 +319,37 @@ class FlashBoardJobService {
     };
   }
 
+  private async resolveHostedReferenceMedia(mediaFileId: string): Promise<GenerationReferenceMedia> {
+    const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
+
+    if (!mediaFile) {
+      throw new Error('Reference media not found');
+    }
+
+    if (mediaFile.type !== 'image' && mediaFile.type !== 'video' && mediaFile.type !== 'audio') {
+      throw new Error('Reference media must be an image, video, or audio file');
+    }
+
+    const source = mediaFile.file
+      ? await blobToDataUrl(mediaFile.file)
+      : mediaFile.url
+        ? await this.normalizeMediaSourceForHostedUpload(mediaFile.url)
+        : undefined;
+
+    if (!source) {
+      throw new Error('Reference media has no readable file source');
+    }
+
+    return {
+      id: mediaFile.id,
+      mediaType: mediaFile.type,
+      source,
+      fileName: mediaFile.file?.name ?? mediaFile.name,
+      label: mediaFile.name,
+      mimeType: mediaFile.file?.type,
+    };
+  }
+
   private async startJob(entry: QueueEntry): Promise<void> {
     const { nodeId, abortController } = entry;
     const request = resolveEffectiveRequest(entry.request);
@@ -309,19 +381,33 @@ class FlashBoardJobService {
           throw new Error('Describe the music before generating with Suno.');
         }
 
-        const remoteTaskId = await sunoService.createMusic({
-          audioWeight: request.sunoAudioWeight,
-          customMode: request.sunoCustomMode,
-          instrumental: request.sunoInstrumental,
-          model: request.version,
-          negativeTags: request.sunoNegativeTags,
-          prompt: request.prompt,
-          style: request.sunoStyle,
-          styleWeight: request.sunoStyleWeight,
-          title: request.sunoTitle,
-          vocalGender: request.sunoVocalGender,
-          weirdnessConstraint: request.sunoWeirdnessConstraint,
-        }, abortController.signal);
+        const remoteTaskId = request.service === 'cloud'
+          ? await cloudAiService.createSunoMusic({
+              audioWeight: request.sunoAudioWeight,
+              customMode: request.sunoCustomMode,
+              instrumental: request.sunoInstrumental,
+              model: request.version,
+              negativeTags: request.sunoNegativeTags,
+              prompt: request.prompt,
+              style: request.sunoStyle,
+              styleWeight: request.sunoStyleWeight,
+              title: request.sunoTitle,
+              vocalGender: request.sunoVocalGender,
+              weirdnessConstraint: request.sunoWeirdnessConstraint,
+            }, `flashboard-suno:${nodeId}:${Date.now()}`, abortController.signal)
+          : await sunoService.createMusic({
+              audioWeight: request.sunoAudioWeight,
+              customMode: request.sunoCustomMode,
+              instrumental: request.sunoInstrumental,
+              model: request.version,
+              negativeTags: request.sunoNegativeTags,
+              prompt: request.prompt,
+              style: request.sunoStyle,
+              styleWeight: request.sunoStyleWeight,
+              title: request.sunoTitle,
+              vocalGender: request.sunoVocalGender,
+              weirdnessConstraint: request.sunoWeirdnessConstraint,
+            }, abortController.signal);
 
         this.running.push({
           nodeId,
@@ -331,20 +417,35 @@ class FlashBoardJobService {
         });
         this.onUpdate?.(nodeId, { status: 'processing', progress: 0.05, remoteTaskId });
 
-        const task = await sunoService.pollMusicTaskUntilComplete(
-          remoteTaskId,
-          (currentTask) => {
-            if (abortController.signal.aborted) throw new Error('Canceled');
-            this.onUpdate?.(nodeId, {
-              status: 'processing',
-              progress: currentTask.progress,
+        const task = request.service === 'cloud'
+          ? await cloudAiService.pollSunoMusicTaskUntilComplete(
+            remoteTaskId,
+            (currentTask) => {
+              if (abortController.signal.aborted) throw new Error('Canceled');
+              this.onUpdate?.(nodeId, {
+                status: 'processing',
+                progress: currentTask.progress,
+                remoteTaskId,
+              });
+            },
+            10000,
+            900000,
+            abortController.signal,
+          )
+          : await sunoService.pollMusicTaskUntilComplete(
               remoteTaskId,
-            });
-          },
-          10000,
-          900000,
-          abortController.signal,
-        );
+              (currentTask) => {
+                if (abortController.signal.aborted) throw new Error('Canceled');
+                this.onUpdate?.(nodeId, {
+                  status: 'processing',
+                  progress: currentTask.progress,
+                  remoteTaskId,
+                });
+              },
+              10000,
+              900000,
+              abortController.signal,
+            );
 
         this.running = this.running.filter(r => r.nodeId !== nodeId);
         const audioUrl = task.results?.[0]?.audioUrl;
@@ -495,9 +596,25 @@ class FlashBoardJobService {
       const effectiveVideoReferenceMediaFileIds = typeof videoCatalogEntry?.maxReferenceMedia === 'number'
         ? (request.referenceMediaFileIds ?? []).slice(0, videoCatalogEntry.maxReferenceMedia)
         : (request.referenceMediaFileIds ?? []);
+      const isHostedSeedanceRequest = request.service === 'cloud'
+        && (request.providerId === 'bytedance/seedance-2' || request.providerId === 'bytedance/seedance-2-fast');
       const referenceMedia = request.service === 'kieai'
         ? effectiveVideoReferenceMediaFileIds.map((mediaFileId) => this.resolveReferenceMedia(mediaFileId))
-        : undefined;
+        : isHostedSeedanceRequest
+          ? await Promise.all(
+              effectiveVideoReferenceMediaFileIds.map((mediaFileId) => this.resolveHostedReferenceMedia(mediaFileId)),
+            )
+          : undefined;
+      const seedanceReferenceValidationError = getSeedanceReferenceValidationError({
+        hasAudioReference: referenceMedia?.some((reference) => reference.mediaType === 'audio') === true,
+        hasVisualReference: Boolean(request.startMediaFileId || request.endMediaFileId)
+          || referenceMedia?.some((reference) => reference.mediaType === 'image' || reference.mediaType === 'video') === true,
+        providerId: request.providerId,
+      });
+
+      if (seedanceReferenceValidationError) {
+        throw new Error(seedanceReferenceValidationError);
+      }
 
       let remoteTaskId: string;
 

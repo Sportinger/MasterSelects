@@ -258,6 +258,71 @@ describe('ClipAudioRenderService', () => {
     expect(effectRenderer.renderEffectInstances).not.toHaveBeenCalled();
   });
 
+  it('renders region FX edit operations only inside their selected source range', async () => {
+    installAudioContextMock();
+    const sourceBuffer = createMockAudioBuffer([
+      [1, 2, 3, 4],
+      [10, 20, 30, 40],
+    ], 1);
+    const effectRenderer = {
+      renderEffectInstances: vi.fn(async (buffer: AudioBuffer) => createMockAudioBuffer(
+        Array.from({ length: buffer.numberOfChannels }, (_, channel) =>
+          Array.from(buffer.getChannelData(channel), sample => sample * 10)
+        ),
+        buffer.sampleRate,
+      )),
+    };
+    const service = new ClipAudioRenderService({
+      extractor: { trimBuffer: vi.fn((buffer: AudioBuffer) => buffer) },
+      timeStretchProcessor: {
+        processConstantSpeed: vi.fn(),
+        processWithKeyframes: vi.fn(),
+      },
+      effectRenderer,
+    });
+    const clip = createMockClip({
+      id: 'clip-region-fx',
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      audioState: {
+        editStack: [
+          {
+            id: 'region-fx',
+            type: 'effect',
+            enabled: true,
+            params: {
+              label: 'Presence Boost',
+              effectDescriptorId: 'audio-parametric-eq',
+              frequencyHz: 3200,
+              gainDb: 3,
+              q: 1.15,
+              featherTime: 0,
+            },
+            timeRange: { start: 1, end: 3 },
+            createdAt: 1,
+          },
+        ],
+      },
+    });
+
+    const result = await service.render({ clip, sourceBuffer });
+
+    expect(effectRenderer.renderEffectInstances).toHaveBeenCalledWith(
+      expect.objectContaining({ length: 2, sampleRate: 1 }),
+      [expect.objectContaining({
+        id: 'region-fx',
+        descriptorId: 'audio-parametric-eq',
+        params: expect.objectContaining({ frequencyHz: 3200, gainDb: 3, q: 1.15 }),
+      })],
+      [],
+      2,
+      expect.any(Function),
+    );
+    expect(Array.from(result.buffer.getChannelData(0))).toEqual([1, 20, 30, 4]);
+    expect(Array.from(result.buffer.getChannelData(1))).toEqual([10, 200, 300, 40]);
+  });
+
   it('renders split-stereo edit operations by copying the selected source channel to selected channels', async () => {
     installAudioContextMock();
     const sourceBuffer = createMockAudioBuffer([
@@ -295,6 +360,46 @@ describe('ClipAudioRenderService', () => {
 
     expect(Array.from(result.buffer.getChannelData(0))).toEqual([0, 11, 12, 3]);
     expect(Array.from(result.buffer.getChannelData(1))).toEqual([10, 11, 12, 13]);
+  });
+
+  it('renders region gain edit operations with gain fade handles', async () => {
+    installAudioContextMock();
+    const sourceBuffer = createMockAudioBuffer([[1, 1, 1, 1, 1]], 1);
+    const service = new ClipAudioRenderService({
+      extractor: { trimBuffer: vi.fn((buffer: AudioBuffer) => buffer) },
+      timeStretchProcessor: {
+        processConstantSpeed: vi.fn(),
+        processWithKeyframes: vi.fn(),
+      },
+      effectRenderer: { renderEffectInstances: vi.fn(async (buffer: AudioBuffer) => buffer) },
+    });
+    const clip = createMockClip({
+      id: 'clip-region-gain',
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      audioState: {
+        editStack: [
+          {
+            id: 'gain-region',
+            type: 'gain',
+            enabled: true,
+            params: { gainDb: -6, fadeInSeconds: 1, fadeOutSeconds: 1 },
+            timeRange: { start: 0, end: 5 },
+            createdAt: 1,
+          },
+        ],
+      },
+    });
+
+    const result = await service.render({ clip, sourceBuffer });
+    const samples = Array.from(result.buffer.getChannelData(0));
+
+    expect(samples[0]).toBeCloseTo(1, 6);
+    expect(samples[1]).toBeCloseTo(10 ** (-6 / 20), 6);
+    expect(samples[2]).toBeCloseTo(10 ** (-6 / 20), 6);
+    expect(samples[3]).toBeCloseTo(10 ** (-6 / 20), 6);
+    expect(samples[4]).toBeCloseTo(1, 6);
   });
 
   it('keeps insert and delete silence operations clip-duration preserving', async () => {

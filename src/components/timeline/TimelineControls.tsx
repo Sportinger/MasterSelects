@@ -46,6 +46,7 @@ function TimelineControlsComponent({
   waveformsEnabled,
   audioDisplayMode,
   audioFocusMode,
+  showAudioRegionEditMarkers,
   trackFocusMode,
   onPlay,
   onPause,
@@ -59,6 +60,7 @@ function TimelineControlsComponent({
   onToggleWaveforms,
   onSetAudioDisplayMode,
   onToggleAudioFocusMode,
+  onToggleAudioRegionEditMarkers,
   onSetTrackFocusMode,
   onFitToWindow,
   onToggleSlotGrid,
@@ -495,6 +497,13 @@ function TimelineControlsComponent({
               >
                 <span className={`view-check ${audioDisplayMode === 'spectral' ? 'checked' : ''}`}>✓</span>
                 <span>Spectral Audio</span>
+              </div>
+              <div
+                className="view-dropdown-item"
+                onClick={onToggleAudioRegionEditMarkers}
+              >
+                <span className={`view-check ${showAudioRegionEditMarkers ? 'checked' : ''}`}>âœ“</span>
+                <span>Audio Region Markers</span>
               </div>
               <div
                 className="view-dropdown-item"

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   FLASHBOARD_CHAT_MODEL_OPTIONS,
+  getFlashBoardChatCreditCost,
+  getFlashBoardChatCreditLabel,
   sendFlashBoardChatMessage,
 } from '../../src/services/flashboard/FlashBoardChatService';
 
@@ -102,12 +104,83 @@ describe('FlashBoardChatService', () => {
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body).toMatchObject({
       max_completion_tokens: 2048,
+      idempotencyKey: expect.stringMatching(/^flashboard-chat:/),
       model: 'gpt-5.5',
       messages: [
         expect.objectContaining({ role: 'system' }),
         { role: 'user', content: 'Suggest lighting' },
       ],
     });
+  });
+
+  it('uses a fresh hosted charge key for each tool-followup model round', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        kind: 'ai.chat',
+        mode: 'hosted',
+        ok: true,
+        provider: 'openai',
+        requestId: 'req-1',
+        status: 'completed',
+        data: {
+          choices: [{
+            message: {
+              content: null,
+              tool_calls: [{
+                id: 'tool-call-1',
+                type: 'function',
+                function: {
+                  name: 'unknownCompactChatTool',
+                  arguments: '{}',
+                },
+              }],
+            },
+          }],
+        },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        kind: 'ai.chat',
+        mode: 'hosted',
+        ok: true,
+        provider: 'openai',
+        requestId: 'req-2',
+        status: 'completed',
+        data: {
+          choices: [{
+            message: {
+              content: 'Tool result handled.',
+            },
+          }],
+        },
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await sendFlashBoardChatMessage({
+      hostedAvailable: true,
+      model: 'gpt-5.4-nano',
+      prompt: 'Inspect this',
+      provider: 'openai',
+      temperature: 0.7,
+    });
+
+    expect(response).toBe('Tool result handled.');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(firstBody.idempotencyKey).toMatch(/^flashboard-chat:/);
+    expect(secondBody.idempotencyKey).toMatch(/^flashboard-chat:/);
+    expect(secondBody.idempotencyKey).not.toBe(firstBody.idempotencyKey);
+    expect(secondBody.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'tool', tool_call_id: 'tool-call-1' }),
+    ]));
+  });
+
+  it('labels hosted compact chat credit prices per model round', () => {
+    expect(getFlashBoardChatCreditCost('gpt-5.4-nano')).toBe(1);
+    expect(getFlashBoardChatCreditLabel('gpt-5.4-nano')).toBe('1 cr');
+    expect(getFlashBoardChatCreditCost('gpt-5.5')).toBe(5);
+    expect(getFlashBoardChatCreditLabel('unknown-chat-model')).toBe('5 cr');
   });
 
   it('uses documented Anthropic model ids and headers', async () => {

@@ -3,20 +3,20 @@
 
 import { lazy, Suspense } from 'react';
 import type { DockPanel, PreviewPanelData, MultiPreviewPanelData } from '../../types/dock';
-import { Preview } from '../preview';
-import { PropertiesPanel, MediaPanel } from '../panels';
-import { Timeline } from '../timeline';
+import { Preview } from '../preview/Preview';
+import { PropertiesPanel } from '../panels/properties';
+import { MediaPanel } from '../panels/MediaPanel';
+import { Timeline } from '../timeline/Timeline';
 import { normalizePreviewPanelSource } from '../../utils/previewPanelSource';
 
 // Lazy-loaded panels: only loaded when the user opens them
 // This keeps the initial bundle small by deferring export pipeline,
-// AI services, YouTube API, and multicam analysis code
+// AI services and multicam analysis code
 const ExportPanel = lazy(() => import('../export/ExportPanel').then(m => ({ default: m.ExportPanel })));
 const AudioMixerPanel = lazy(() => import('../panels/audio-mixer/AudioMixerPanel').then(m => ({ default: m.AudioMixerPanel })));
 const NodeWorkspacePanel = lazy(() => import('../panels/nodes/NodeWorkspacePanel').then(m => ({ default: m.NodeWorkspacePanel })));
 const MultiCamPanel = lazy(() => import('../panels/MultiCamPanel').then(m => ({ default: m.MultiCamPanel })));
 const AIChatPanel = lazy(() => import('../panels/AIChatPanel').then(m => ({ default: m.AIChatPanel })));
-const DownloadPanel = lazy(() => import('../panels/DownloadPanel').then(m => ({ default: m.DownloadPanel })));
 const MIDIMappingPanel = lazy(() => import('../panels/MIDIMappingPanel').then(m => ({ default: m.MIDIMappingPanel })));
 const TransitionsPanel = lazy(() => import('../panels/TransitionsPanel').then(m => ({ default: m.TransitionsPanel })));
 const SAM2Panel = lazy(() => import('../panels/SAM2Panel').then(m => ({ default: m.SAM2Panel })));
@@ -79,9 +79,6 @@ export function DockPanelContent({ panel }: DockPanelContentProps) {
       return <Suspense fallback={<PanelLoading />}><AIChatPanel /></Suspense>;
     case 'ai-segment':
       return <Suspense fallback={<PanelLoading />}><SAM2Panel /></Suspense>;
-    case 'youtube':
-    case 'download':
-      return <Suspense fallback={<PanelLoading />}><DownloadPanel /></Suspense>;
     case 'transitions':
       return <Suspense fallback={<PanelLoading />}><TransitionsPanel /></Suspense>;
     case 'scene-description':

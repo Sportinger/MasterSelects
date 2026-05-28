@@ -803,10 +803,10 @@ function compileDownloadAndImportVideo(
   const family: GuidedActionFamily = 'media';
   const title = readString(toolCall.args.title);
   const startTime = readNumber(toolCall.args.startTime) ?? 0;
-  const downloadPanelTarget: GuidedTargetRef = { kind: 'panel', panel: 'download' };
+  const downloadPanelTarget: GuidedTargetRef = { kind: 'panel', panel: 'media' };
   const timelineTarget = timelineTimeTarget(startTime);
   const actions: GuidedAction[] = [
-    { type: 'focusPanel', panel: 'download', family, label: 'Open Downloads' },
+    { type: 'focusPanel', panel: 'media', family, label: 'Open Media' },
     {
       type: 'callout',
       title: 'Download video',
@@ -814,7 +814,7 @@ function compileDownloadAndImportVideo(
       target: downloadPanelTarget,
       family,
     },
-    { type: 'moveCursorTo', target: downloadPanelTarget, durationMs: 380, optional: true, family, label: 'Move to Downloads' },
+    { type: 'moveCursorTo', target: downloadPanelTarget, durationMs: 380, optional: true, family, label: 'Move to Media downloads' },
     { type: 'focusPanel', panel: 'timeline', family, label: 'Open timeline' },
     { type: 'scrollIntoView', target: timelineTarget, block: 'center', family, label: `Reveal ${startTime}s` },
     { type: 'dragCursor', from: downloadPanelTarget, to: timelineTarget, durationMs: 720, optional: true, family, label: 'Drag download to timeline' },

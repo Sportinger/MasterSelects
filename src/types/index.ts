@@ -682,6 +682,29 @@ export interface ClipSegment {
   thumbnails: string[]; // Thumbnails from this clip's content
 }
 
+export type VideoBakeRegionScope = 'composition' | 'clip';
+export type VideoBakeRegionStatus = 'marked' | 'baking' | 'baked' | 'error';
+
+export interface VideoBakeRegion {
+  id: string;
+  scope: VideoBakeRegionScope;
+  startTime: number;
+  endTime: number;
+  createdAt: number;
+  status?: VideoBakeRegionStatus;
+  progress?: number;
+  bakedAt?: number;
+  error?: string;
+  clipId?: string;
+  trackId?: string;
+  sourceInPoint?: number;
+  sourceOutPoint?: number;
+}
+
+export interface ClipVideoState {
+  bakeRegions?: VideoBakeRegion[];
+}
+
 export interface TimelineClip {
   id: string;
   trackId: string;
@@ -733,6 +756,7 @@ export interface TimelineClip {
   linkedClipId?: string;  // ID of linked clip (e.g., audio linked to video)
   linkedGroupId?: string; // ID of multicam group (clips synced together)
   parentClipId?: string;  // ID of parent clip for transform inheritance (like AE parenting)
+  videoState?: ClipVideoState; // Video bake/cache regions and future clip-side video derivations
   audioState?: ClipAudioState; // Advanced audio workstation state (optional, legacy-safe)
   audioAnalysisJob?: ClipAudioAnalysisJobState; // Transient current audio-analysis job state
   waveform?: number[];    // Array of normalized aggregate amplitude values (0-1) for audio waveform
@@ -842,6 +866,7 @@ export interface SerializableClip {
   thumbnails?: string[];
   linkedClipId?: string;
   linkedGroupId?: string;  // Multicam group ID
+  videoState?: ClipVideoState;
   audioState?: ClipAudioState;
   waveform?: number[];
   waveformChannels?: number[][];
@@ -916,6 +941,7 @@ export interface CompositionTimelineData {
   outPoint: number | null;
   loopPlayback: boolean;
   markers?: SerializableMarker[];  // Timeline markers
+  videoBakeRegions?: VideoBakeRegion[];
   masterAudioState?: MasterAudioState;
 }
 

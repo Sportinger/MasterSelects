@@ -137,6 +137,19 @@ export interface AudioDerivedAssetRef {
   operationIds: string[];
   createdAt: number;
   provenance?: Record<string, string | number | boolean | null>;
+  restore?: AudioBakeRestoreState;
+}
+
+export interface AudioBakeRestoreState {
+  name: string;
+  mediaFileId?: string;
+  duration: number;
+  inPoint: number;
+  outPoint: number;
+  sourceNaturalDuration?: number;
+  waveform?: number[];
+  waveformChannels?: number[][];
+  audioState?: ClipAudioState;
 }
 
 export type AudioRecordingPhase =
@@ -276,6 +289,7 @@ export interface ClipAudioEditOperation {
   type:
     | 'trim'
     | 'cut'
+    | 'gain'
     | 'silence'
     | 'copy'
     | 'paste'
@@ -287,6 +301,7 @@ export interface ClipAudioEditOperation {
     | 'mono-sum'
     | 'split-stereo'
     | 'repair'
+    | 'effect'
     | 'room-tone-fill'
     | 'spectral-mask'
     | 'spectral-resynthesis';
@@ -295,6 +310,18 @@ export interface ClipAudioEditOperation {
   timeRange?: { start: number; end: number };
   channelMask?: number[];
   createdAt: number;
+}
+
+export interface ClipAudioRegionGainPreview {
+  clipId: string;
+  trackId?: string;
+  startTime?: number;
+  endTime?: number;
+  sourceInPoint: number;
+  sourceOutPoint: number;
+  gainDb: number;
+  fadeInSeconds?: number;
+  fadeOutSeconds?: number;
 }
 
 export interface ClipAudioState {

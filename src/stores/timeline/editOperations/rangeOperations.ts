@@ -190,10 +190,15 @@ export function applyRangeEditOperation(
   }
 
   const partClips = reconnectLinkedParts(partDrafts);
+  const cleanedUntouchedClips = untouchedClips.map((clip) => (
+    clip.linkedClipId && changedClipIds.has(clip.linkedClipId)
+      ? { ...clip, linkedClipId: undefined }
+      : clip
+  ));
   const nextSelectedClipIds = new Set(selectedClipIds);
   for (const clipId of changedClipIds) nextSelectedClipIds.delete(clipId);
 
-  let nextClips = [...untouchedClips, ...partClips];
+  let nextClips = [...cleanedUntouchedClips, ...partClips];
   if (operation.type === 'extract-range') {
     nextClips = nextClips.map((clip) => {
       if (!eligibleTrackIds.has(clip.trackId) || clip.startTime < range.endTime - EPSILON) return clip;

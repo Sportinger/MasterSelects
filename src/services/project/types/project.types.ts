@@ -35,6 +35,8 @@ export interface ProjectYouTubeVideo {
   duration?: string;
   durationSeconds?: number;
   viewCount?: string;
+  platform?: string;
+  sourceUrl?: string;
 }
 
 export interface ProjectYouTubeState {

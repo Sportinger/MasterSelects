@@ -85,6 +85,27 @@
   z-index: 2;
 }
 
+.track-header.track-muted,
+.track-header.track-hidden {
+  filter: saturate(0.42) brightness(0.72);
+}
+
+.track-header.track-muted:not(.locked)::after,
+.track-header.track-hidden:not(.locked)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.track-header.track-muted > *,
+.track-header.track-hidden > * {
+  position: relative;
+  z-index: 2;
+}
+
 /* Neutral separator line between video and audio track sections */
 .track-header.video + .track-header.audio,
 .track-lane.video + .track-lane.audio {
@@ -211,6 +232,26 @@
   right: 2px;
   width: 56px;
   justify-content: center;
+}
+
+.track-header.video .track-controls .btn-icon {
+  color: rgba(246, 248, 250, 0.82);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.track-header.video .track-controls .btn-icon:hover {
+  color: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.track-header.video .track-controls .btn-icon.solo-active,
+.track-header.video .track-controls .btn-icon.locked-active {
+  color: var(--warning);
+  background: rgba(255, 170, 0, 0.14);
+  border-color: rgba(255, 170, 0, 0.34);
+  opacity: 1;
 }
 
 .track-header-icon {
@@ -1148,6 +1189,134 @@
   position: relative;
 }
 
+.timeline-video-bake-region-layer {
+  position: absolute;
+  inset: 0 auto auto 0;
+  min-width: 100%;
+  pointer-events: none;
+  z-index: 18;
+}
+
+.timeline-video-bake-region {
+  position: absolute;
+  top: 0;
+  min-width: 3px;
+  border-left: 2px solid rgba(45, 212, 191, 0.9);
+  border-right: 2px solid rgba(45, 212, 191, 0.9);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(45, 212, 191, 0.16) 0,
+      rgba(45, 212, 191, 0.16) 6px,
+      rgba(20, 184, 166, 0.08) 6px,
+      rgba(20, 184, 166, 0.08) 12px
+    );
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.18);
+  pointer-events: auto;
+}
+
+.timeline-video-bake-region-progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 2px;
+  max-width: 100%;
+  background: rgba(52, 211, 153, 0.22);
+  pointer-events: none;
+}
+
+.timeline-video-bake-region.status-marked:not(.selection) {
+  background: transparent;
+  border-top: 1px dashed rgba(45, 212, 191, 0.5);
+  border-bottom: 1px dashed rgba(45, 212, 191, 0.26);
+  box-shadow: none;
+}
+
+.timeline-video-bake-region.status-marked:not(.selection)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: rgba(45, 212, 191, 0.34);
+  pointer-events: none;
+}
+
+.timeline-video-bake-region.status-baking {
+  border-color: rgba(251, 191, 36, 0.92);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(251, 191, 36, 0.17) 0,
+      rgba(251, 191, 36, 0.17) 6px,
+      rgba(245, 158, 11, 0.08) 6px,
+      rgba(245, 158, 11, 0.08) 12px
+    );
+}
+
+.timeline-video-bake-region.status-baked {
+  border-color: rgba(52, 211, 153, 0.95);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(52, 211, 153, 0.16) 0,
+      rgba(52, 211, 153, 0.16) 6px,
+      rgba(16, 185, 129, 0.08) 6px,
+      rgba(16, 185, 129, 0.08) 12px
+    );
+}
+
+.timeline-video-bake-region.status-error {
+  border-color: rgba(248, 113, 113, 0.95);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.timeline-video-bake-region.selection {
+  border-style: dashed;
+  background: rgba(45, 212, 191, 0.12);
+}
+
+.timeline-video-bake-region-controls {
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  pointer-events: auto;
+}
+
+.timeline-video-bake-btn {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+  border: 1px solid rgba(45, 212, 191, 0.52);
+  border-radius: 3px;
+  background: rgba(12, 18, 22, 0.86);
+  color: rgba(236, 253, 245, 0.95);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.timeline-video-bake-btn:hover {
+  border-color: rgba(94, 234, 212, 0.78);
+  background: rgba(15, 23, 28, 0.96);
+}
+
+.timeline-video-bake-btn:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.timeline-video-bake-btn.remove {
+  width: 18px;
+  padding: 0;
+  color: rgba(254, 226, 226, 0.95);
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
 /* Track lanes */
 .track-lane {
   position: relative;
@@ -1478,6 +1647,22 @@
 .timeline-container.video-focus-mode .track-header.video + .track-header.audio,
 .timeline-container.video-focus-mode .track-lane.video + .track-lane.audio {
   border-top-color: color-mix(in srgb, var(--text-muted) 48%, var(--border-color));
+}
+
+.track-lane.track-muted,
+.track-lane.track-hidden {
+  background-color: color-mix(in srgb, var(--bg-secondary) 86%, #666 14%);
+  filter: saturate(0.28) brightness(0.68);
+}
+
+.track-lane.track-muted:not(.locked)::after,
+.track-lane.track-hidden:not(.locked)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 28;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.24);
 }
 
 .track-lane.locked {

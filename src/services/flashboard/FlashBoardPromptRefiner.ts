@@ -1,5 +1,6 @@
 import type { MediaFile } from '../../stores/mediaStore/types';
 import type { FlashBoardComposerReferenceRole } from '../../stores/flashboardStore/types';
+import { cloudAiService } from '../cloudAiService';
 import type { CatalogEntry } from './types';
 
 export const FLASHBOARD_PROMPT_REFINER_MODEL = 'gpt-5.5';
@@ -19,7 +20,7 @@ export interface FlashBoardPromptRefinerReference {
 }
 
 export interface RefineFlashBoardPromptInput {
-  apiKey: string;
+  apiKey?: string;
   prompt: string;
   entry: CatalogEntry;
   service: CatalogEntry['service'];
@@ -53,6 +54,13 @@ interface PreparedPromptReference {
   label: string;
   displayName: string;
   dataUrl: string;
+}
+
+interface PromptReferenceDescriptor {
+  role: FlashBoardComposerReferenceRole;
+  label: string;
+  displayName: string;
+  mediaType?: MediaFile['type'];
 }
 
 interface OpenAIOutputContent {
@@ -162,8 +170,12 @@ function getTargetModelGuidance(
 
     if (providerId.includes('seedance')) {
       return [
-        'Optimize for Seedance-style cinematic video generation.',
-        'Use concise visual direction with motion, camera, composition, lighting, and continuity. Keep the request achievable for the selected duration.',
+        'Optimize for ByteDance Seedance 2.0 video generation.',
+        'Seedance responds best to concise cinematic direction: subject identity, action, scene progression, camera motion, composition, lighting, style, and a clear final state.',
+        'When REF audio is supplied, treat it as the performance, speech, mouth-shape, rhythm, or timing driver. Do not describe it as background music unless the user asks for that. Audio references must be paired with at least one visual IN/REF image or video anchor.',
+        'When REF image or video media is supplied, preserve the requested identity, pose, costume, object, motion, or scene cues and name the relevant REF labels explicitly.',
+        'Seedance first/last-frame mode and multimodal reference mode are separate. If multiple REF media are present, write natural reference guidance instead of relying on strict first-frame wording.',
+        'Avoid long shot lists, unsupported parameter names, negative prompts, or soundtrack instructions.',
         multiShotGuidance,
         audioGuidance,
       ].join('\n');
@@ -259,11 +271,14 @@ export function buildFlashBoardPromptRefinerUserText(
     | 'sunoWeirdnessConstraint'
     | 'sunoAudioWeight'
   >,
-  references: Pick<PreparedPromptReference, 'role' | 'label' | 'displayName'>[],
+  references: PromptReferenceDescriptor[],
 ): string {
   const outputType = getOutputTypeLabel(input.entry);
   const referenceLines = references.length > 0
-    ? references.map((reference) => `- ${reference.label} (${reference.role}): ${reference.displayName}`).join('\n')
+    ? references.map((reference) => {
+        const mediaType = reference.mediaType ? ` ${reference.mediaType}` : '';
+        return `- ${reference.label} (${reference.role}${mediaType}): ${reference.displayName}`;
+      }).join('\n')
     : '- none';
 
   if (isSunoTarget(input)) {
@@ -334,7 +349,7 @@ export function buildFlashBoardPromptRefinerStreamingUserText(
     | 'sunoWeirdnessConstraint'
     | 'sunoAudioWeight'
   >,
-  references: Pick<PreparedPromptReference, 'role' | 'label' | 'displayName'>[],
+  references: PromptReferenceDescriptor[],
 ): string {
   if (isSunoTarget(input)) {
     return buildFlashBoardPromptRefinerUserText(input, references);
@@ -637,8 +652,8 @@ function buildOpenAIRefinerContent(
     {
       type: 'input_text',
       text: streamed
-        ? buildFlashBoardPromptRefinerStreamingUserText(input, preparedReferences)
-        : buildFlashBoardPromptRefinerUserText(input, preparedReferences),
+        ? buildFlashBoardPromptRefinerStreamingUserText(input, input.references)
+        : buildFlashBoardPromptRefinerUserText(input, input.references),
     },
   ];
 
@@ -680,11 +695,127 @@ function buildOpenAIRefinerBaseBody(
   };
 }
 
+function buildHostedChatRefinerContent(
+  input: RefineFlashBoardPromptInput,
+  preparedReferences: PreparedPromptReference[],
+): Array<Record<string, unknown>> {
+  const content: Array<Record<string, unknown>> = [
+    {
+      type: 'text',
+      text: buildFlashBoardPromptRefinerStreamingUserText(input, input.references),
+    },
+  ];
+
+  for (const reference of preparedReferences) {
+    content.push(
+      {
+        type: 'text',
+        text: `${reference.label}: ${reference.displayName}`,
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          detail: 'high',
+          url: reference.dataUrl,
+        },
+      },
+    );
+  }
+
+  return content;
+}
+
+function readHostedChatText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') {
+    return '';
+  }
+
+  const record = payload as Record<string, unknown>;
+  if (typeof record.output_text === 'string') {
+    return record.output_text.trim();
+  }
+
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  for (const choice of choices) {
+    if (!choice || typeof choice !== 'object') {
+      continue;
+    }
+
+    const message = (choice as Record<string, unknown>).message;
+    if (!message || typeof message !== 'object') {
+      continue;
+    }
+
+    const content = (message as Record<string, unknown>).content;
+    if (typeof content === 'string') {
+      return content.trim();
+    }
+
+    if (Array.isArray(content)) {
+      const text = content
+        .map((part) => {
+          if (!part || typeof part !== 'object') {
+            return '';
+          }
+
+          const partRecord = part as Record<string, unknown>;
+          return typeof partRecord.text === 'string' ? partRecord.text : '';
+        })
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+
+      if (text) {
+        return text;
+      }
+    }
+  }
+
+  return '';
+}
+
+export async function refineFlashBoardPromptHosted(
+  input: RefineFlashBoardPromptInput,
+  options: Pick<RefineFlashBoardPromptStreamOptions, 'signal'> = {},
+): Promise<string> {
+  if (options.signal?.aborted) {
+    throw new DOMException('Prompt refinement was canceled.', 'AbortError');
+  }
+
+  const preparedReferences = await prepareReferenceImages(input.references);
+  const payload = await cloudAiService.createChatCompletion({
+    idempotencyKey: `prompt-refine:${Date.now()}:${crypto.randomUUID()}`,
+    max_completion_tokens: isSunoTarget(input) ? 1800 : 900,
+    messages: [
+      {
+        role: 'system',
+        content: buildFlashBoardPromptRefinerInstructions(input),
+      },
+      {
+        role: 'user',
+        content: buildHostedChatRefinerContent(input, preparedReferences),
+      },
+    ],
+    model: FLASHBOARD_PROMPT_REFINER_MODEL,
+  });
+
+  if (options.signal?.aborted) {
+    throw new DOMException('Prompt refinement was canceled.', 'AbortError');
+  }
+
+  const refinedPrompt = readHostedChatText(payload);
+  if (!refinedPrompt) {
+    throw new Error('Cloud prompt refinement returned an empty response.');
+  }
+
+  return refinedPrompt;
+}
+
 export async function streamRefineFlashBoardPrompt(
   input: RefineFlashBoardPromptInput,
   options: RefineFlashBoardPromptStreamOptions = {},
 ): Promise<string> {
-  const apiKey = input.apiKey.trim();
+  const apiKey = input.apiKey?.trim() ?? '';
   if (!apiKey) {
     throw new Error('Add an OpenAI API key in Settings to refine prompts.');
   }
@@ -743,7 +874,7 @@ export async function streamRefineFlashBoardPrompt(
 }
 
 export async function refineFlashBoardPrompt(input: RefineFlashBoardPromptInput): Promise<string> {
-  const apiKey = input.apiKey.trim();
+  const apiKey = input.apiKey?.trim() ?? '';
   if (!apiKey) {
     throw new Error('Add an OpenAI API key in Settings to refine prompts.');
   }

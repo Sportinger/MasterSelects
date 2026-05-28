@@ -2,10 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { useMediaStore, type MediaFile } from '../../../stores/mediaStore';
 import type { FlashBoardGenerationRequest, FlashBoardNode } from '../../../stores/flashboardStore/types';
+import { useMediaDownloadStore, type MediaDownloadJob } from '../../../stores/mediaDownloadStore';
 
 const VISIBLE_QUEUE_STATUSES = new Set(['queued', 'processing', 'completed', 'failed', 'canceled']);
 const MAX_VISIBLE_GENERATIONS = 6;
 const MEDIA_QUEUE_FLY_MS = 620;
+
+type MediaQueueItem =
+  | { kind: 'generation'; id: string; createdAt: number; node: FlashBoardNode }
+  | { kind: 'download'; id: string; createdAt: number; job: MediaDownloadJob };
 
 function formatElapsedDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
@@ -19,12 +24,15 @@ function formatElapsedRange(startedAt: number, endedAt: number): string {
   return formatElapsedDuration(endedAt - startedAt);
 }
 
-function getStatusLabel(status: NonNullable<FlashBoardNode['job']>['status'] | undefined): string {
+function getStatusLabel(
+  status: NonNullable<FlashBoardNode['job']>['status'] | MediaDownloadJob['status'] | undefined,
+  kind: MediaQueueItem['kind'] = 'generation',
+): string {
   switch (status) {
     case 'queued':
       return 'Queued';
     case 'processing':
-      return 'Generating';
+      return kind === 'download' ? 'Downloading' : 'Generating';
     case 'completed':
       return 'Ready';
     case 'failed':
@@ -52,6 +60,31 @@ function getServiceLabel(request: FlashBoardGenerationRequest): string {
       return 'Suno';
     default:
       return request.service;
+  }
+}
+
+function getPlatformLabel(platform: string): string {
+  switch (platform) {
+    case 'youtube':
+      return 'YouTube';
+    case 'tiktok':
+      return 'TikTok';
+    case 'instagram':
+      return 'Instagram';
+    case 'twitter':
+      return 'X/Twitter';
+    case 'facebook':
+      return 'Facebook';
+    case 'reddit':
+      return 'Reddit';
+    case 'vimeo':
+      return 'Vimeo';
+    case 'twitch':
+      return 'Twitch';
+    case 'dailymotion':
+      return 'Dailymotion';
+    default:
+      return 'Download';
   }
 }
 
@@ -104,6 +137,24 @@ function getMetaLabel(request: FlashBoardGenerationRequest): string {
   }
 
   return parts.join(' · ');
+}
+
+function getDownloadMetaLabel(job: MediaDownloadJob): string {
+  const parts = [getPlatformLabel(job.platform)];
+  if (job.formatLabel) {
+    parts.push(job.formatLabel);
+  }
+  if (job.durationSeconds > 0) {
+    parts.push(formatElapsedDuration(job.durationSeconds * 1000));
+  }
+  if (job.speed && job.status === 'processing') {
+    parts.push(job.speed);
+  }
+  if (job.fileName && job.status === 'completed') {
+    parts.push(job.fileName);
+  }
+
+  return parts.join(' - ');
 }
 
 function getMediaPanelTarget(mediaFileId: string): HTMLElement | null {
@@ -201,102 +252,140 @@ async function animateCardToMediaTarget(source: HTMLElement, mediaFileId: string
 export function MediaAIGenerationQueue() {
   const boards = useFlashBoardStore((state) => state.boards);
   const removeNode = useFlashBoardStore((state) => state.removeNode);
+  const downloadJobs = useMediaDownloadStore((state) => state.jobs);
+  const dismissDownloadJob = useMediaDownloadStore((state) => state.dismissJob);
+  const retryDownloadJob = useMediaDownloadStore((state) => state.retryJob);
   const mediaFiles = useMediaStore((state) => state.files);
   const [now, setNow] = useState(() => Date.now());
-  const [flyingNodeIds, setFlyingNodeIds] = useState<Set<string>>(() => new Set());
-  const flyingNodeIdsRef = useRef<Set<string>>(new Set());
+  const [flyingItemIds, setFlyingItemIds] = useState<Set<string>>(() => new Set());
+  const flyingItemIdsRef = useRef<Set<string>>(new Set());
 
-  const nodes = useMemo(() => boards
+  const generationItems = useMemo<MediaQueueItem[]>(() => boards
     .flatMap((board) => board.nodes)
     .filter((node) => (
       node.kind === 'generation'
       && node.request
       && VISIBLE_QUEUE_STATUSES.has(node.job?.status ?? '')
     ))
-    .toSorted((left, right) => right.createdAt - left.createdAt)
-    .slice(0, MAX_VISIBLE_GENERATIONS), [boards]);
+    .map((node) => ({
+      kind: 'generation' as const,
+      id: node.id,
+      createdAt: node.createdAt,
+      node,
+    })), [boards]);
 
-  const hasRunningGeneration = nodes.some((node) => {
-    const status = node.job?.status;
+  const downloadItems = useMemo<MediaQueueItem[]>(() => downloadJobs
+    .filter((job) => VISIBLE_QUEUE_STATUSES.has(job.status))
+    .map((job) => ({
+      kind: 'download' as const,
+      id: job.id,
+      createdAt: job.createdAt,
+      job,
+    })), [downloadJobs]);
+
+  const items = useMemo(() => [...generationItems, ...downloadItems]
+    .toSorted((left, right) => right.createdAt - left.createdAt)
+    .slice(0, MAX_VISIBLE_GENERATIONS), [downloadItems, generationItems]);
+
+  const hasRunningItem = items.some((item) => {
+    const status = item.kind === 'generation' ? item.node.job?.status : item.job.status;
     return status === 'queued' || status === 'processing';
   });
 
   useEffect(() => {
-    if (!hasRunningGeneration) {
+    if (!hasRunningItem) {
       return undefined;
     }
 
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [hasRunningGeneration]);
+  }, [hasRunningItem]);
 
-  const handleCompletedLocate = useCallback(async (node: FlashBoardNode, source: HTMLElement) => {
-    const mediaFileId = node.result?.mediaFileId;
-    if (node.job?.status !== 'completed' || !mediaFileId || flyingNodeIdsRef.current.has(node.id)) {
+  const handleCompletedLocate = useCallback(async (
+    itemId: string,
+    mediaFileId: string | undefined,
+    source: HTMLElement,
+    removeAfterLocate: () => void,
+  ) => {
+    if (!mediaFileId || flyingItemIdsRef.current.has(itemId)) {
       return;
     }
 
-    flyingNodeIdsRef.current.add(node.id);
-    setFlyingNodeIds((current) => new Set(current).add(node.id));
+    flyingItemIdsRef.current.add(itemId);
+    setFlyingItemIds((current) => new Set(current).add(itemId));
     try {
       await animateCardToMediaTarget(source, mediaFileId);
-      removeNode(node.id);
+      removeAfterLocate();
     } finally {
-      flyingNodeIdsRef.current.delete(node.id);
-      setFlyingNodeIds((current) => {
+      flyingItemIdsRef.current.delete(itemId);
+      setFlyingItemIds((current) => {
         const next = new Set(current);
-        next.delete(node.id);
+        next.delete(itemId);
         return next;
       });
     }
-  }, [removeNode]);
+  }, []);
 
-  if (nodes.length === 0) {
+  if (items.length === 0) {
     return null;
   }
 
   return (
-    <div className="media-ai-generation-queue" aria-label="AI generation queue">
-      {nodes.map((node) => {
-        const request = node.request;
-        if (!request) {
-          return null;
-        }
+    <div className="media-ai-generation-queue" aria-label="Media task queue">
+      {items.map((item) => {
+        const isDownload = item.kind === 'download';
+        const node = item.kind === 'generation' ? item.node : null;
+        const job = item.kind === 'download' ? item.job : null;
+        const request = node?.request;
+        if (!isDownload && !request) return null;
 
-        const status = node.job?.status;
-        const progress = typeof node.job?.progress === 'number'
-          ? Math.max(0, Math.min(1, node.job.progress))
+        const status = isDownload ? job!.status : node!.job?.status;
+        const rawProgress = isDownload ? job!.progress : node!.job?.progress;
+        const progress = typeof rawProgress === 'number'
+          ? Math.max(0, Math.min(1, rawProgress))
           : null;
-        const generatedMedia = node.result?.mediaFileId
-          ? mediaFiles.find((file) => file.id === node.result?.mediaFileId)
+        const mediaFileId = isDownload ? job!.mediaFileId : node!.result?.mediaFileId;
+        const generatedMedia = mediaFileId
+          ? mediaFiles.find((file) => file.id === mediaFileId)
           : undefined;
-        const generatedPreviewUrl = status === 'completed'
-          ? getGeneratedPreviewUrl(generatedMedia)
-          : undefined;
-        const startedAt = node.job?.startedAt;
-        const completedAt = node.job?.completedAt;
+        const previewUrl = isDownload
+          ? (job!.thumbnail || getGeneratedPreviewUrl(generatedMedia))
+          : status === 'completed'
+            ? getGeneratedPreviewUrl(generatedMedia)
+            : undefined;
+        const startedAt = isDownload ? job!.startedAt : node!.job?.startedAt;
+        const completedAt = isDownload ? job!.completedAt : node!.job?.completedAt;
         const hasGenerationTimer = (status === 'processing' || status === 'completed') && Boolean(startedAt);
-        const queueTimerLabel = formatElapsedRange(node.createdAt, hasGenerationTimer && startedAt ? startedAt : now);
+        const queueTimerLabel = formatElapsedRange(item.createdAt, hasGenerationTimer && startedAt ? startedAt : now);
         const generationTimerLabel = hasGenerationTimer && startedAt
           ? formatElapsedRange(startedAt, completedAt ?? now)
           : null;
         const progressLabel = progress !== null ? `${Math.round(progress * 100)}%` : null;
-        const canFlyToMedia = status === 'completed' && Boolean(node.result?.mediaFileId);
+        const canFlyToMedia = status === 'completed' && Boolean(mediaFileId);
         const canDismiss = status === 'failed' || status === 'canceled' || (status === 'completed' && !canFlyToMedia);
+        const itemId = item.id;
         const cardClassName = [
           'media-ai-generation-card',
+          isDownload ? 'download' : 'generation',
           status ?? 'pending',
           canFlyToMedia ? 'can-locate' : '',
-          flyingNodeIds.has(node.id) ? 'is-flying' : '',
+          flyingItemIds.has(itemId) ? 'is-flying' : '',
         ].filter(Boolean).join(' ');
+        const removeItem = () => {
+          if (isDownload) {
+            dismissDownloadJob(itemId);
+          } else {
+            removeNode(itemId);
+          }
+        };
         const handleClick = (event: MouseEvent<HTMLDivElement>) => {
           if (canFlyToMedia) {
-            void handleCompletedLocate(node, event.currentTarget);
+            void handleCompletedLocate(itemId, mediaFileId, event.currentTarget, removeItem);
           }
         };
         const handleMouseEnter = (event: MouseEvent<HTMLDivElement>) => {
           if (canFlyToMedia) {
-            void handleCompletedLocate(node, event.currentTarget);
+            void handleCompletedLocate(itemId, mediaFileId, event.currentTarget, removeItem);
           }
         };
         const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -305,28 +394,33 @@ export function MediaAIGenerationQueue() {
           }
 
           event.preventDefault();
-          void handleCompletedLocate(node, event.currentTarget);
+          void handleCompletedLocate(itemId, mediaFileId, event.currentTarget, removeItem);
         };
+        const title = isDownload ? job!.title : request!.prompt;
+        const outputLabel = isDownload ? 'Download' : getOutputLabel(request!);
+        const metaLabel = isDownload ? getDownloadMetaLabel(job!) : getMetaLabel(request!);
+        const aspectRatio = isDownload ? '16 / 9' : getPreviewAspectRatio(request!);
+        const error = isDownload ? job!.error : node!.job?.error;
 
         return (
           <div
-            key={node.id}
+            key={itemId}
             className={cardClassName}
             onClick={canFlyToMedia ? handleClick : undefined}
             onMouseEnter={canFlyToMedia ? handleMouseEnter : undefined}
             onKeyDown={canFlyToMedia ? handleKeyDown : undefined}
             role={canFlyToMedia ? 'button' : undefined}
             tabIndex={canFlyToMedia ? 0 : undefined}
-            title={canFlyToMedia ? 'Show generated media in Media panel' : undefined}
+            title={canFlyToMedia ? 'Show media in Media panel' : undefined}
           >
             <div
-              className={`media-ai-generation-preview ${generatedPreviewUrl ? 'has-thumbnail' : ''}`}
-              style={{ aspectRatio: getPreviewAspectRatio(request) }}
+              className={`media-ai-generation-preview ${previewUrl ? 'has-thumbnail' : ''}`}
+              style={{ aspectRatio }}
             >
-              {generatedPreviewUrl ? (
-                <img src={generatedPreviewUrl} alt="" draggable={false} />
+              {previewUrl ? (
+                <img src={previewUrl} alt="" draggable={false} />
               ) : null}
-              <span>{getOutputLabel(request)}</span>
+              <span>{outputLabel}</span>
               {(status === 'queued' || status === 'processing') && (
                 <span className="media-ai-generation-pulse" aria-hidden="true" />
               )}
@@ -334,7 +428,7 @@ export function MediaAIGenerationQueue() {
             <div className="media-ai-generation-body">
               <div className="media-ai-generation-status-row">
                 <span className={`media-ai-generation-status ${status ?? 'pending'}`}>
-                  {getStatusLabel(status)}
+                  {getStatusLabel(status, item.kind)}
                 </span>
                 <div
                   className={`media-ai-generation-timers ${generationTimerLabel ? 'has-generation' : 'pending-only'}`}
@@ -352,32 +446,48 @@ export function MediaAIGenerationQueue() {
                   </span>
                 </div>
               </div>
-              <div className="media-ai-generation-prompt" title={request.prompt}>
-                {request.prompt || 'Untitled generation'}
+              <div className="media-ai-generation-prompt" title={title}>
+                {title || (isDownload ? job!.url : 'Untitled generation')}
               </div>
               <div className="media-ai-generation-meta">
-                {getMetaLabel(request)}
+                {metaLabel}
               </div>
               {progress !== null && (
-                <div className="media-ai-generation-progress" aria-label={`Generation progress ${progressLabel}`}>
+                <div className="media-ai-generation-progress" aria-label={`${outputLabel} progress ${progressLabel}`}>
                   <span style={{ width: progressLabel ?? '0%' }} />
                 </div>
               )}
-              {status === 'failed' && node.job?.error && (
-                <div className="media-ai-generation-error" title={node.job.error}>
-                  {node.job.error}
+              {status === 'failed' && error && (
+                <div className="media-ai-generation-error" title={error}>
+                  {error}
                 </div>
               )}
             </div>
+            {status === 'failed' && isDownload && (
+              <button
+                className="media-ai-generation-dismiss media-ai-generation-retry"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  retryDownloadJob(itemId);
+                }}
+                title="Retry download"
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+                  <path d="M12.2 6.3A4.4 4.4 0 1 0 13 9" />
+                  <path d="M12.2 2.8v3.5H8.7" />
+                </svg>
+              </button>
+            )}
             {canDismiss && (
               <button
                 className="media-ai-generation-dismiss"
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  removeNode(node.id);
+                  removeItem();
                 }}
-                title="Dismiss generation"
+                title={isDownload ? 'Dismiss download' : 'Dismiss generation'}
               >
                 &times;
               </button>

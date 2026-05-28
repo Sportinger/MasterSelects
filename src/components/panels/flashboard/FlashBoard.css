@@ -2728,6 +2728,30 @@
   color: var(--text-secondary, #bbb);
 }
 
+.fb-chat-cost-pill {
+  cursor: default;
+  border-color: color-mix(in srgb, var(--accent, #4aa3ff) 46%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--accent, #4aa3ff) 16%, rgba(255, 255, 255, 0.06));
+  color: color-mix(in srgb, var(--accent, #4aa3ff) 34%, var(--text-primary, #fff));
+}
+
+.fb-bubble-bar.has-inline-submenu .fb-pill-group > .fb-chat-cost-pill {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  z-index: 42;
+  pointer-events: none;
+}
+
+.fb-bubble-bar.is-inline-submenu-opening .fb-pill-group > .fb-chat-cost-pill,
+.fb-bubble-bar.is-inline-submenu-closing .fb-pill-group > .fb-chat-cost-pill {
+  opacity: 1;
+  visibility: visible;
+  filter: none;
+  transform: none;
+  animation: none;
+}
+
 .fb-generate:disabled {
   opacity: 0.42;
   cursor: not-allowed;

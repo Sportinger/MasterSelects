@@ -391,7 +391,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
   setAudioRegionSelection: (selection) => {
     if (!selection) {
-      set({ audioRegionSelection: null });
+      set({ audioRegionSelection: null, audioRegionGainPreview: null });
       return;
     }
 
@@ -408,11 +408,12 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
         sourceInPoint,
         sourceOutPoint,
       },
+      audioRegionGainPreview: null,
     });
   },
 
   clearAudioRegionSelection: () => {
-    set({ audioRegionSelection: null });
+    set({ audioRegionSelection: null, audioRegionGainPreview: null });
   },
 
   setAudioSpectralRegionSelection: (selection) => {
@@ -443,6 +444,14 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
   clearAudioSpectralRegionSelection: () => {
     set({ audioSpectralRegionSelection: null });
+  },
+
+  toggleAudioRegionEditMarkers: () => {
+    set({ showAudioRegionEditMarkers: !get().showAudioRegionEditMarkers });
+  },
+
+  setShowAudioRegionEditMarkers: (enabled) => {
+    set({ showAudioRegionEditMarkers: enabled });
   },
 
   toggleTranscriptMarkers: () => {

@@ -5,7 +5,9 @@ import { Logger } from '../../services/logger';
 import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
+import { videoBakeProxyCache } from '../../services/videoBakeProxyCache';
 import { useMediaStore } from '../mediaStore';
+import { resetVolatileVideoBakeRegionStatuses } from './videoBakeSlice';
 
 const log = Logger.create('ProxyCacheSlice');
 
@@ -206,9 +208,17 @@ export const createProxyCacheSlice: SliceCreator<ProxyCacheActions> = (set, get)
   // Invalidate cache when content changes (clip moved, trimmed, etc.)
   invalidateCache: () => {
     // Cancel any ongoing RAM preview
-    set({ isRamPreviewing: false, cachedFrameTimes: new Set(), ramPreviewRange: null, ramPreviewProgress: null });
+    const resetVideoBakeState = resetVolatileVideoBakeRegionStatuses(get().clips, get().videoBakeRegions);
+    set({
+      ...resetVideoBakeState,
+      isRamPreviewing: false,
+      cachedFrameTimes: new Set(),
+      ramPreviewRange: null,
+      ramPreviewProgress: null,
+    });
     // Immediately clear all caches and request render
     layerBuilder.invalidateCache(); // Force layer rebuild
+    videoBakeProxyCache.clear();
     engine.setGeneratingRamPreview(false);
     engine.clearCompositeCache();
     engine.requestRender(); // Wake up render loop to show changes immediately

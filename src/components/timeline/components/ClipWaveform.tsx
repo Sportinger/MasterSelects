@@ -3,6 +3,12 @@
 
 import { memo, useRef, useEffect } from 'react';
 import type { TimelineAudioDisplayMode } from '../../../stores/timeline/types';
+import type { ClipAudioEditOperation, ClipAudioRegionGainPreview } from '../../../types';
+import {
+  doesRegionGainPreviewMatchOperation,
+  getAudioEditOperationPreviewVolumeMultiplier,
+  getRegionGainPreviewVolumeMultiplier,
+} from '../../../services/audio/clipAudioEditPreview';
 import {
   buildWaveformLod,
   normalizeWaveformColumnsForDisplay,
@@ -275,6 +281,60 @@ function applyDisplayGain(
   });
 }
 
+function applyMultiplierToColumn(column: WaveformColumn, multiplier: number): WaveformColumn {
+  if (Math.abs(multiplier - 1) < 0.001) return { ...column };
+  const gain = Math.max(0, Math.min(4, multiplier));
+  const min = Math.max(-1, Math.min(1, column.min * gain));
+  const max = Math.max(-1, Math.min(1, column.max * gain));
+  const rms = Math.max(0, Math.min(1, column.rms * gain));
+  const peak = Math.max(
+    Math.max(0, Math.min(1, column.peak * gain)),
+    Math.abs(min),
+    Math.abs(max),
+  );
+  return { min, max, rms, peak };
+}
+
+function applyAudioEditPreviewToColumns(
+  columns: readonly WaveformColumn[],
+  options: {
+    clipId?: string;
+    channelIndex?: number;
+    sourceStart: number;
+    sourceEnd: number;
+    editStack?: readonly ClipAudioEditOperation[];
+    regionGainPreview?: ClipAudioRegionGainPreview | null;
+  },
+): WaveformColumn[] {
+  const clipId = options.clipId;
+  const previewApplies = Boolean(clipId && options.regionGainPreview?.clipId === clipId);
+  const editStack = options.editStack ?? [];
+  if (!clipId || (!previewApplies && editStack.length === 0)) {
+    return columns.map(column => ({ ...column }));
+  }
+
+  const sourceDuration = Math.max(0.001, options.sourceEnd - options.sourceStart);
+  const count = Math.max(1, columns.length);
+
+  return columns.map((column, index) => {
+    const ratio = (index + 0.5) / count;
+    const sourceTime = options.sourceStart + ratio * sourceDuration;
+    let multiplier = 1;
+
+    for (const operation of editStack) {
+      if (doesRegionGainPreviewMatchOperation(options.regionGainPreview, operation)) continue;
+      multiplier *= getAudioEditOperationPreviewVolumeMultiplier(operation, sourceTime, options.channelIndex);
+      if (multiplier <= 0) break;
+    }
+
+    if (multiplier > 0) {
+      multiplier *= getRegionGainPreviewVolumeMultiplier(options.regionGainPreview, clipId, sourceTime);
+    }
+
+    return applyMultiplierToColumn(column, multiplier);
+  });
+}
+
 function getLegacySmoothingRadius(
   pixelsPerSecond: number,
   sourceSamplesPerSecond: number | undefined,
@@ -322,6 +382,7 @@ function drawWaveformColumns(
 }
 
 export const ClipWaveform = memo(function ClipWaveform({
+  clipId,
   waveform,
   waveformChannels,
   width,
@@ -334,9 +395,12 @@ export const ClipWaveform = memo(function ClipWaveform({
   pyramid,
   waveformVariant = 'legacy',
   displayGain = 1,
+  audioEditStack,
+  audioRegionGainPreview,
   renderStartPx = 0,
   renderWidth,
 }: {
+  clipId?: string;
   waveform: number[];
   waveformChannels?: number[][];
   width: number;
@@ -349,6 +413,8 @@ export const ClipWaveform = memo(function ClipWaveform({
   pyramid?: TimelineWaveformPyramid | null;
   waveformVariant?: 'legacy' | 'source' | 'processed';
   displayGain?: number;
+  audioEditStack?: readonly ClipAudioEditOperation[];
+  audioRegionGainPreview?: ClipAudioRegionGainPreview | null;
   renderStartPx?: number;
   renderWidth?: number;
 }) {
@@ -436,11 +502,20 @@ export const ClipWaveform = memo(function ClipWaveform({
               getLegacySmoothingRadius(lod.pixelsPerSecond, lod.sourceSamplesPerSecond),
               0.78,
             );
-        const columns = applyDisplayGain(normalizeWaveformColumnsForDisplay(smoothedColumns, {
+        const normalizedColumns = normalizeWaveformColumnsForDisplay(smoothedColumns, {
           targetPeak: displayMode === 'compact' ? 0.52 : 0.66,
           minReferencePeak: displayMode === 'spectral' ? 0.025 : 0.032,
           maxGain: displayMode === 'spectral' ? 20 : 16,
-        }), displayGain);
+        });
+        const editedColumns = applyAudioEditPreviewToColumns(normalizedColumns, {
+          clipId,
+          channelIndex,
+          sourceStart: visibleInPoint,
+          sourceEnd: visibleOutPoint,
+          editStack: audioEditStack,
+          regionGainPreview: audioRegionGainPreview,
+        });
+        const columns = applyDisplayGain(editedColumns, displayGain);
 
         ctx.save();
         ctx.translate(0, laneTop);
@@ -454,7 +529,7 @@ export const ClipWaveform = memo(function ClipWaveform({
       cancelled = true;
       cancel(frameId);
     };
-  }, [waveform, waveformChannels, width, height, inPoint, outPoint, naturalDuration, displayMode, pixelsPerSecond, pyramid, waveformVariant, displayGain, renderStartPx, renderWidth]);
+  }, [waveform, waveformChannels, width, height, inPoint, outPoint, naturalDuration, displayMode, pixelsPerSecond, pyramid, waveformVariant, displayGain, audioEditStack, audioRegionGainPreview, clipId, renderStartPx, renderWidth]);
 
   if ((!pyramid && (!waveform?.length && !waveformChannels?.some(channel => channel.length > 0))) || width <= 0 || renderWidth === 0) return null;
 

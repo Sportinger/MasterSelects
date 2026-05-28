@@ -19,6 +19,10 @@ const BASE_URL = 'https://api.kie.ai';
 const UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
 const BYO_PROXY_REQUEST_URL = '/api/kieai/byo/request';
 const BYO_PROXY_UPLOAD_URL = '/api/kieai/byo/upload';
+const SEEDANCE_2_PROVIDER_ID = 'bytedance/seedance-2';
+const SEEDANCE_2_FAST_PROVIDER_ID = 'bytedance/seedance-2-fast';
+const SEEDANCE_2_ASPECT_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9'];
+const SEEDANCE_2_DURATIONS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
 // Kie.ai providers
 const KIEAI_PROVIDERS: VideoProvider[] = [
@@ -34,29 +38,59 @@ const KIEAI_PROVIDERS: VideoProvider[] = [
     supportsTextToVideo: true,
   },
   {
-    id: 'bytedance/seedance-2',
+    id: SEEDANCE_2_PROVIDER_ID,
     name: 'Seedance 2.0',
     description: 'Multimodal reference-to-video via Kie.ai',
     versions: ['2.0'],
-    supportedModes: ['720p', '1080p'],
-    supportedDurations: [5, 10, 15],
-    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    supportedModes: ['480p', '720p', '1080p'],
+    supportedDurations: SEEDANCE_2_DURATIONS,
+    supportedAspectRatios: SEEDANCE_2_ASPECT_RATIOS,
+    supportsImageToVideo: true,
+    supportsTextToVideo: true,
+  },
+  {
+    id: SEEDANCE_2_FAST_PROVIDER_ID,
+    name: 'Seedance 2.0 Fast',
+    description: 'Faster multimodal reference-to-video via Kie.ai',
+    versions: ['2.0-fast'],
+    supportedModes: ['480p', '720p'],
+    supportedDurations: SEEDANCE_2_DURATIONS,
+    supportedAspectRatios: SEEDANCE_2_ASPECT_RATIOS,
     supportsImageToVideo: true,
     supportsTextToVideo: true,
   },
 ];
 
-// Kie.ai Kling 3.0 pricing in CREDITS per second
-// Source: current Kie.ai pricing shared by the user
+interface KieAiCreditRate {
+  normal: number;
+  audio?: number;
+  videoInput?: number;
+}
+
+export interface KieAiCostOptions {
+  hasVideoInput?: boolean;
+}
+
+// Kie.ai pricing in vendor CREDITS per second
+// Source: Kie.ai public pricing API, checked 2026-05-28
 // std no-audio (720p): 14 credits/s ($0.07/s)
 // std audio (720p):    20 credits/s ($0.10/s)
 // pro no-audio (1080p): 18 credits/s ($0.09/s)
 // pro audio (1080p):    27 credits/s ($0.135/s)
 // 1 credit = $0.005
-const KIEAI_CREDITS_PER_SECOND: Record<string, Record<string, { normal: number; audio: number }>> = {
+const KIEAI_CREDITS_PER_SECOND: Record<string, Record<string, KieAiCreditRate>> = {
   'kling-3.0': {
     'std': { normal: 14, audio: 20 },
     'pro': { normal: 18, audio: 27 },
+  },
+  [SEEDANCE_2_PROVIDER_ID]: {
+    '480p': { normal: 19, videoInput: 11.5 },
+    '720p': { normal: 41, videoInput: 25 },
+    '1080p': { normal: 102, videoInput: 62 },
+  },
+  [SEEDANCE_2_FAST_PROVIDER_ID]: {
+    '480p': { normal: 15.5, videoInput: 9 },
+    '720p': { normal: 33, videoInput: 20 },
   },
 };
 
@@ -69,12 +103,22 @@ export function getKieAiProvider(providerId: string): VideoProvider | undefined 
 }
 
 // Calculate cost in credits for Kie.ai
-export function calculateKieAiCost(provider: string, mode: string, duration: number, sound = false): number {
+export function calculateKieAiCost(
+  provider: string,
+  mode: string,
+  duration: number,
+  sound = false,
+  options: KieAiCostOptions = {},
+): number {
   const providerRates = KIEAI_CREDITS_PER_SECOND[provider];
   if (!providerRates) return duration * 14; // fallback
   const modeRates = providerRates[mode];
   if (!modeRates) return duration * 14;
-  const ratePerSecond = sound ? modeRates.audio : modeRates.normal;
+  const ratePerSecond = options.hasVideoInput && modeRates.videoInput != null
+    ? modeRates.videoInput
+    : sound && modeRates.audio != null
+      ? modeRates.audio
+      : modeRates.normal;
   return duration * ratePerSecond;
 }
 
@@ -137,6 +181,7 @@ interface KieAiStatusResponse {
 interface KieAiUploadResponse {
   data?: {
     downloadUrl?: string;
+    fileUrl?: string;
   };
   msg?: string;
   success?: boolean;
@@ -267,8 +312,28 @@ function withSeedanceReferenceGuidance(prompt: string, guidance: string[]): stri
   return suffix ? `${basePrompt} ${suffix}`.trim() : basePrompt;
 }
 
+function isSeedance2Provider(provider: string): boolean {
+  return provider === SEEDANCE_2_PROVIDER_ID || provider === SEEDANCE_2_FAST_PROVIDER_ID;
+}
+
+function normalizeSeedanceResolution(provider: string, mode: string | undefined): '480p' | '720p' | '1080p' {
+  if (mode === '480p') {
+    return '480p';
+  }
+
+  if (mode === '1080p' && provider !== SEEDANCE_2_FAST_PROVIDER_ID) {
+    return '1080p';
+  }
+
+  return '720p';
+}
+
+function normalizeSeedanceDuration(duration: number | undefined): number {
+  return Math.max(4, Math.min(15, Math.floor(duration || 5)));
+}
+
 function normalizeKieTaskStatus(state: string | undefined): TaskStatus {
-  switch ((state ?? '').toLowerCase()) {
+  switch ((state ?? '').trim().toLowerCase()) {
     case 'success':
       return 'completed';
     case 'processing':
@@ -393,12 +458,13 @@ class KieAiService {
     }
 
     const result = await response.json() as KieAiUploadResponse;
-    if (!result.success || !result.data?.downloadUrl) {
+    const uploadedUrl = result.data?.fileUrl ?? result.data?.downloadUrl;
+    if (!result.success || !uploadedUrl) {
       throw new Error('Kie.ai upload failed: no download URL returned');
     }
 
-    log.debug('Uploaded to Kie.ai:', result.data.downloadUrl);
-    return result.data.downloadUrl;
+    log.debug('Uploaded to Kie.ai:', uploadedUrl);
+    return uploadedUrl;
   }
 
   // Upload image to Kie.ai file hosting
@@ -510,7 +576,7 @@ class KieAiService {
   }
 
   async createTextToVideo(params: TextToVideoParams): Promise<string> {
-    if (params.provider === 'bytedance/seedance-2') {
+    if (isSeedance2Provider(params.provider)) {
       return this.createSeedanceVideo(params);
     }
 
@@ -606,7 +672,7 @@ class KieAiService {
   }
 
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
-    if (params.provider === 'bytedance/seedance-2') {
+    if (isSeedance2Provider(params.provider)) {
       return this.createSeedanceVideo(params);
     }
 
@@ -755,10 +821,10 @@ class KieAiService {
 
     const input: Record<string, unknown> = {
       prompt: withSeedanceReferenceGuidance(params.prompt, seedancePromptGuidance),
-      duration: Math.max(1, Math.floor(params.duration || 5)),
-      resolution: params.mode === '1080p' ? '1080p' : '720p',
+      duration: normalizeSeedanceDuration(params.duration),
+      resolution: normalizeSeedanceResolution(params.provider, params.mode),
       aspect_ratio: params.aspectRatio || '16:9',
-      generate_audio: Boolean(params.sound),
+      generate_audio: useMultimodalReferenceMode ? false : Boolean(params.sound),
       return_last_frame: false,
       web_search: false,
     };
@@ -784,7 +850,7 @@ class KieAiService {
     }
 
     const body = {
-      model: 'bytedance/seedance-2',
+      model: params.provider,
       input,
     };
 

@@ -15,7 +15,13 @@ import {
   selectPreviewExportState,
   selectKeyframeState,
 } from '../../stores/timeline/selectors';
-import type { AnimatableProperty, Keyframe, TimelineClip as TimelineClipType, TimelineTrack as TimelineTrackType } from '../../types';
+import type {
+  AnimatableProperty,
+  Keyframe,
+  TimelineClip as TimelineClipType,
+  TimelineTrack as TimelineTrackType,
+  VideoBakeRegion,
+} from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
 
 import { TimelineRuler } from './TimelineRuler';
@@ -80,6 +86,7 @@ const SPLIT_DIVIDER_HEIGHT = 2;
 const COLLAPSED_TRACK_HEIGHT = 32;
 const MIN_SPLIT_SECTION_HEIGHT = 48;
 const SPLIT_FOCUS_EDGE_THRESHOLD_PX = 44;
+const MIN_VIDEO_BAKE_DRAG_PX = 3;
 
 type TrackSectionKind = 'video' | 'audio';
 
@@ -117,6 +124,19 @@ type TimelineSurfaceDragState = {
   startScrollX: number;
   maxScrollX: number;
 };
+
+type VideoBakeRulerDragState = {
+  startTime: number;
+  startClientX: number;
+};
+
+type CompositionVideoBakeOverlayRegion = Pick<VideoBakeRegion, 'id' | 'startTime' | 'endTime' | 'status' | 'progress'> & {
+  selection?: boolean;
+};
+
+function isVideoBakeModifierPressed(event: Pick<MouseEvent | React.MouseEvent, 'ctrlKey' | 'metaKey'>): boolean {
+  return event.ctrlKey || event.metaKey;
+}
 
 function clampValue(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -295,10 +315,12 @@ export function Timeline() {
   const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
 
   // UI settings (rarely changes)
-  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, activeTimelineToolId, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioLayerAdvancedMode, audioFocusMode, trackFocusMode } =
+  const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, activeTimelineToolId, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioLayerAdvancedMode, audioFocusMode, trackFocusMode, showAudioRegionEditMarkers } =
     useTimelineStore(useShallow(selectUISettings));
   const timelineRangeSelection = useTimelineStore(state => state.timelineRangeSelection);
   const timelineToolPreview = useTimelineStore(state => state.timelineToolPreview);
+  const videoBakeRegions = useTimelineStore(state => state.videoBakeRegions);
+  const videoBakeRegionSelection = useTimelineStore(state => state.videoBakeRegionSelection);
   const timelineToolCursor = getTimelineToolCursor(activeTimelineToolId);
   const effectiveAudioLayerAdvancedMode = audioLayerAdvancedMode !== false;
   const timelineTrackColorsVisible = effectiveAudioLayerAdvancedMode;
@@ -310,6 +332,13 @@ export function Timeline() {
   const effectiveRamPreviewProgress = RAM_PREVIEW_FEATURE_ENABLED ? ramPreviewProgress : null;
   const effectiveRamPreviewRange = RAM_PREVIEW_FEATURE_ENABLED ? ramPreviewRange : null;
   const effectiveIsRamPreviewing = RAM_PREVIEW_FEATURE_ENABLED && isRamPreviewing;
+  const hasActiveVideoBakeCache = useMemo(() => {
+    const isActiveBakeRegion = (region: VideoBakeRegion) =>
+      region.status === 'baking' || region.status === 'baked';
+
+    return videoBakeRegions.some(isActiveBakeRegion) ||
+      clips.some(clip => clip.videoState?.bakeRegions?.some(isActiveBakeRegion));
+  }, [clips, videoBakeRegions]);
 
   // Keyframe state
   const { selectedKeyframeIds, clipKeyframes, expandedCurveProperties } =
@@ -374,6 +403,16 @@ export function Timeline() {
     cancelRamPreview, clearRamPreview, getCachedRanges, getProxyCachedRanges, getScrubCachedRanges,
   } = store;
 
+  // Video bake region actions
+  const {
+    setVideoBakeRegionSelection,
+    clearVideoBakeRegionSelection,
+    addCompositionVideoBakeRegion,
+    bakeCompositionVideoBakeRegion,
+    unbakeCompositionVideoBakeRegion,
+    removeCompositionVideoBakeRegion,
+  } = store;
+
   // Tool actions
   const {
     toggleCutTool,
@@ -382,6 +421,7 @@ export function Timeline() {
     setAudioDisplayMode,
     toggleAudioLayerAdvancedMode,
     toggleAudioFocusMode,
+    toggleAudioRegionEditMarkers,
     setTrackFocusMode,
     setTimelineRangeSelection,
     clearTimelineRangeSelection,
@@ -420,6 +460,7 @@ export function Timeline() {
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
   const [scrubCacheRevision, setScrubCacheRevision] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(TIMELINE_VIEWPORT_FALLBACK_PX);
+  const [videoBakeRulerDrag, setVideoBakeRulerDrag] = useState<VideoBakeRulerDragState | null>(null);
 
   useEffect(() => {
     const handleScrubCacheUpdated = () => {
@@ -477,6 +518,7 @@ export function Timeline() {
   }, [slotGridProgress]);
   useEffect(() => {
     if (RAM_PREVIEW_FEATURE_ENABLED) return;
+    if (hasActiveVideoBakeCache) return;
 
     if (isRamPreviewing) {
       cancelRamPreview();
@@ -493,6 +535,7 @@ export function Timeline() {
     ramPreviewProgress,
     ramPreviewRange,
     isRamPreviewing,
+    hasActiveVideoBakeCache,
     toggleRamPreviewEnabled,
     cancelRamPreview,
     clearRamPreview,
@@ -691,6 +734,98 @@ export function Timeline() {
     pause,
     pixelToTime,
   });
+
+  const canMarkCompositionVideoBakeRegion =
+    trackFocusMode === 'video' &&
+    activeTimelineToolId === 'select' &&
+    !isExporting;
+
+  const getRulerTimeFromClientX = useCallback((clientX: number) => {
+    if (!timelineRef.current) return null;
+    const rect = timelineRef.current.getBoundingClientRect();
+    const x = clientX - rect.left + scrollX;
+    return Math.max(0, Math.min(duration, pixelToTime(x)));
+  }, [duration, pixelToTime, scrollX]);
+
+  const handleTimelineRulerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 0 && canMarkCompositionVideoBakeRegion && isVideoBakeModifierPressed(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const startTime = getRulerTimeFromClientX(e.clientX);
+      if (startTime === null) return;
+      setVideoBakeRulerDrag({
+        startTime,
+        startClientX: e.clientX,
+      });
+      clearVideoBakeRegionSelection();
+      return;
+    }
+
+    handleRulerMouseDown(e);
+  }, [
+    canMarkCompositionVideoBakeRegion,
+    clearVideoBakeRegionSelection,
+    getRulerTimeFromClientX,
+    handleRulerMouseDown,
+  ]);
+
+  useEffect(() => {
+    if (!videoBakeRulerDrag) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const currentTime = getRulerTimeFromClientX(event.clientX);
+      if (currentTime === null) return;
+      setVideoBakeRegionSelection({
+        scope: 'composition',
+        startTime: videoBakeRulerDrag.startTime,
+        endTime: currentTime,
+      });
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      const currentTime = getRulerTimeFromClientX(event.clientX);
+      const draggedFarEnough = Math.abs(event.clientX - videoBakeRulerDrag.startClientX) >= MIN_VIDEO_BAKE_DRAG_PX;
+      if (currentTime !== null && draggedFarEnough) {
+        addCompositionVideoBakeRegion(videoBakeRulerDrag.startTime, currentTime);
+      }
+      clearVideoBakeRegionSelection();
+      setVideoBakeRulerDrag(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp, { once: true });
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [
+    addCompositionVideoBakeRegion,
+    clearVideoBakeRegionSelection,
+    getRulerTimeFromClientX,
+    setVideoBakeRegionSelection,
+    videoBakeRulerDrag,
+  ]);
+
+  useEffect(() => {
+    if (!videoBakeRegionSelection) return;
+
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('.clip-video-bake-region')) return;
+      if (target.closest('.clip-video-bake-region-hitarea')) return;
+      if (target.closest('.timeline-video-bake-region')) return;
+      if (target.closest('.timeline-ruler-video-bake-region')) return;
+      if (target.closest('.time-ruler')) return;
+
+      clearVideoBakeRegionSelection();
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown, true);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown, true);
+    };
+  }, [clearVideoBakeRegionSelection, videoBakeRegionSelection]);
 
   // External file drag & drop - extracted to hook
   const {
@@ -2027,6 +2162,32 @@ export function Timeline() {
         ? 'phase-entering'
         : '';
     const audioPreviewHeight = getTimelineTrackBaseHeight({ type: 'audio', height: 40 }, audioDisplayMode, audioFocusMode);
+    const videoBakeOverlayHeight = isVideoSection && !sectionCollapsed
+      ? sectionTracks.reduce((total, track) => total + getSectionTrackHeight(track, sectionKind), 0)
+      : 0;
+    const compositionVideoBakeOverlayRegions: CompositionVideoBakeOverlayRegion[] = isVideoSection && !sectionCollapsed
+      ? [
+          ...videoBakeRegions
+            .filter(region => region.scope === 'composition')
+            .map(region => ({
+              id: region.id,
+              startTime: region.startTime,
+              endTime: region.endTime,
+              status: region.status,
+              progress: region.progress,
+            })),
+          ...(videoBakeRegionSelection?.scope === 'composition'
+            ? [{
+                id: 'composition-video-bake-selection',
+                startTime: videoBakeRegionSelection.startTime,
+                endTime: videoBakeRegionSelection.endTime,
+                status: 'marked' as const,
+                progress: undefined,
+                selection: true,
+              }]
+            : []),
+        ]
+      : [];
 
     const renderClipForSection = (clip: TimelineClipType, trackId: string) => {
       const track = allSectionTracks.find(candidate => candidate.id === trackId)
@@ -2048,6 +2209,77 @@ export function Timeline() {
 
     const getSectionTrackHeightForOverlay = (track: TimelineTrackType) =>
       getSectionTrackHeight(track, sectionKind);
+
+    const renderCompositionVideoBakeRegion = (region: CompositionVideoBakeOverlayRegion) => {
+      const start = Math.max(0, Math.min(duration, Math.min(region.startTime, region.endTime)));
+      const end = Math.max(start, Math.min(duration, Math.max(region.startTime, region.endTime)));
+      if (end <= start) return null;
+
+      return (
+        <div
+          key={region.id}
+          className={`timeline-video-bake-region status-${region.status ?? 'marked'} ${region.selection ? 'selection' : ''}`}
+          style={{
+            left: timeToPixel(start),
+            width: Math.max(3, timeToPixel(end - start)),
+            height: Math.max(1, videoBakeOverlayHeight),
+          }}
+          title={`Video bake: ${formatTime(start)} - ${formatTime(end)}${region.status === 'baking' && region.progress !== undefined ? ` (${Math.round(region.progress)}%)` : ''}`}
+        >
+          {region.status === 'baking' && region.progress !== undefined && (
+            <div
+              className="timeline-video-bake-region-progress"
+              style={{ width: `${Math.max(0, Math.min(100, region.progress))}%` }}
+            />
+          )}
+          {!region.selection && (
+            <div className="timeline-video-bake-region-controls">
+              <button
+                type="button"
+                className="timeline-video-bake-btn"
+                disabled={region.status === 'baking'}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (region.status === 'baked') {
+                    unbakeCompositionVideoBakeRegion(region.id);
+                    return;
+                  }
+                  void bakeCompositionVideoBakeRegion(region.id);
+                }}
+                title={region.status === 'baked' ? 'Unbake video region' : 'Bake video region'}
+              >
+                {region.status === 'baked'
+                  ? 'Unbake'
+                  : region.status === 'baking'
+                    ? `${Math.round(region.progress ?? 0)}%`
+                    : 'Bake'}
+              </button>
+              <button
+                type="button"
+                className="timeline-video-bake-btn remove"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  removeCompositionVideoBakeRegion(region.id);
+                }}
+                title="Remove video bake region"
+              >
+                x
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    };
 
     return (
       <div
@@ -2263,6 +2495,15 @@ export function Timeline() {
                   );
                 })}
 
+                {compositionVideoBakeOverlayRegions.length > 0 && (
+                  <div
+                    className="timeline-video-bake-region-layer"
+                    style={{ height: Math.max(1, videoBakeOverlayHeight) }}
+                  >
+                    {compositionVideoBakeOverlayRegions.map(renderCompositionVideoBakeRegion)}
+                  </div>
+                )}
+
                 {isCompositionTrackMorphing && (
                   <div className="composition-exit-clips-overlay">
                     {allSectionTracks.map((track) => {
@@ -2424,6 +2665,7 @@ export function Timeline() {
     waveformsEnabled,
     audioDisplayMode,
     audioFocusMode,
+    showAudioRegionEditMarkers,
     trackFocusMode,
     toolMode,
     onPlay: play,
@@ -2438,6 +2680,7 @@ export function Timeline() {
     onToggleWaveforms: toggleWaveformsEnabled,
     onSetAudioDisplayMode: setAudioDisplayMode,
     onToggleAudioFocusMode: toggleAudioFocusMode,
+    onToggleAudioRegionEditMarkers: toggleAudioRegionEditMarkers,
     onSetTrackFocusMode: setTrackFocusMode,
     onToggleCutTool: toggleCutTool,
     onFitToWindow: handleFitToWindow,
@@ -2575,9 +2818,11 @@ export function Timeline() {
                 zoom={zoom}
                 frameRate={compositionFrameRate}
                 scrollX={scrollX}
-                onRulerMouseDown={handleRulerMouseDown}
+                onRulerMouseDown={handleTimelineRulerMouseDown}
                 formatTime={formatTime}
                 cacheRanges={timelineRulerCacheRanges}
+                videoBakeRegions={videoBakeRegions}
+                videoBakeRegionSelection={videoBakeRegionSelection?.scope === 'composition' ? videoBakeRegionSelection : null}
               />
             </div>
           </div>

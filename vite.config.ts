@@ -1126,6 +1126,7 @@ export default defineConfig(({ command, mode }) => {
     '/api/billing',
     '/api/stripe',
     '/api/ai/chat',
+    '/api/ai/audio',
     '/api/ai/video',
     '/api/visits',
   ];

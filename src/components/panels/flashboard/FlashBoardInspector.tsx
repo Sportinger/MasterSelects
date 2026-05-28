@@ -19,6 +19,11 @@ export function FlashBoardInspector() {
   const request = node?.request;
 
   const status = node?.job?.status ?? 'draft';
+  const hasVideoReferenceInput = useMediaStore((s) =>
+    (request?.referenceMediaFileIds ?? []).some((mediaFileId) => (
+      s.files.find((file) => file.id === mediaFileId)?.type === 'video'
+    ))
+  );
   const priceEstimate = request
     ? getFlashBoardPriceEstimate({
       service: request.service,
@@ -29,6 +34,7 @@ export function FlashBoardInspector() {
       imageSize: request.imageSize,
       generateAudio: request.generateAudio,
       multiShots: request.multiShots,
+      hasVideoInput: hasVideoReferenceInput,
     })
     : null;
   const startReferenceName = useMediaStore((s) =>

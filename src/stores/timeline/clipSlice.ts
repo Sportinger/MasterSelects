@@ -16,6 +16,7 @@ import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import {
   createCurrentAudioArtifactStore,
   generateTimelineWaveformAnalysisForFile,
+  loadTimelineWaveformPyramidArtifact,
   mapSourceWaveformPreviewProgress,
   mapSourceWaveformPyramidProgress,
 } from '../../services/audio/timelineWaveformPyramidCache';
@@ -26,6 +27,10 @@ import {
   createFileAudioSourceFingerprint,
   createProcessedClipAudioStateHash,
 } from '../../services/audio/ProcessedWaveformPyramidService';
+import {
+  DerivedProcessedWaveformPyramidService,
+  canDeriveProcessedWaveformPyramid,
+} from '../../services/audio/DerivedWaveformPyramidService';
 import { SpectrogramTileSetGenerator } from '../../services/audio/SpectrogramTileSetGenerator';
 import {
   primeTimelineSpectrogramTileSetCache,
@@ -1176,6 +1181,81 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         set({
           clips: updateAudioAnalysisJobProgress(get().clips, clipId, 1, 'preparing', 'Preparing processed waveform'),
         });
+
+        const sourceWaveformPyramidId = clip.audioState?.sourceAnalysisRefs?.waveformPyramidId;
+        if (sourceWaveformPyramidId && canDeriveProcessedWaveformPyramid(clip, keyframes)) {
+          set({
+            clips: updateAudioAnalysisJobProgress(
+              get().clips,
+              clipId,
+              5,
+              'preparing',
+              'Loading source waveform pyramid',
+            ),
+          });
+          const loadedSource = await loadTimelineWaveformPyramidArtifact(sourceWaveformPyramidId);
+          if (signal.aborted) throw signal.reason;
+
+          if (loadedSource) {
+            const derivedService = new DerivedProcessedWaveformPyramidService();
+            const result = await derivedService.generate({
+              clip,
+              sourcePyramid: loadedSource.pyramid,
+              sourceFingerprint: loadedSource.artifact.sourceFingerprint,
+              mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId ?? loadedSource.artifact.mediaFileId,
+              keyframes,
+              signal,
+              onProgress: (progress) => {
+                const phase: ClipAudioAnalysisJobPhase = progress.phase === 'deriving'
+                  ? 'analyzing'
+                  : progress.phase;
+                set({
+                  clips: updateAudioAnalysisJobProgress(
+                    get().clips,
+                    clipId,
+                    progress.percent,
+                    phase,
+                    progress.message,
+                  ),
+                });
+              },
+            });
+
+            const currentClip = get().clips.find(c => c.id === clipId);
+            if (!currentClip) return;
+            if (createProcessedClipAudioStateHash(currentClip, { keyframes }) !== result.clipAudioStateHash) {
+              log.debug('Discarding stale derived processed waveform result', { clipId });
+              set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
+              return;
+            }
+
+            set({
+              clips: updateClipById(get().clips, clipId, {
+                ...(currentClip.waveform?.length ? {} : { waveform: result.waveform }),
+                audioState: {
+                  ...(currentClip.audioState ?? {}),
+                  processedAnalysisRefs: {
+                    ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+                    ...result.audioAnalysisRefs,
+                  },
+                },
+                ...clearAudioAnalysisJobUpdate(),
+                waveformProgress: 100,
+              }),
+            });
+            log.debug('Derived processed waveform complete', {
+              clip: clip.name,
+              artifactId: result.artifact.id,
+            });
+            return;
+          }
+
+          log.debug('Source waveform pyramid unavailable; falling back to rendered processed waveform', {
+            clipId,
+            sourceWaveformPyramidId,
+          });
+        }
+
         let sourceBuffer: AudioBuffer | null = null;
         let sourceFingerprint = '';
         let mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;

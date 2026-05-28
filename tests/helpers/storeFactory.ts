@@ -32,6 +32,7 @@ import { createColorCorrectionSlice } from '../../src/stores/timeline/colorCorre
 import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSlice';
 import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipSlice';
 import { createAudioEditSlice } from '../../src/stores/timeline/audioEditSlice';
+import { createVideoBakeSlice } from '../../src/stores/timeline/videoBakeSlice';
 import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
 import { createTimelineEditOperationSlice } from '../../src/stores/timeline/editOperations';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
@@ -91,7 +92,10 @@ function getInitialState(): Partial<TimelineStore> {
     waveformsEnabled: false,
     audioDisplayMode: 'detailed',
     audioFocusMode: false,
+    trackFocusMode: 'balanced',
     audioRegionSelection: null,
+    videoBakeRegionSelection: null,
+    videoBakeRegions: [],
     audioRegionClipboard: null,
     runtimeAudioMeters: { trackMeters: {} },
     showTranscriptMarkers: false,
@@ -140,6 +144,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
     const audioEditActions = createAudioEditSlice(set, get);
+    const videoBakeActions = createVideoBakeSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
     const timelineEditOperationActions = createTimelineEditOperationSlice(set, get);
     const positioningUtils = createPositioningUtils(set, get);
@@ -285,6 +290,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       setAudioDisplayMode: (mode: TimelineStore['audioDisplayMode']) => set({ audioDisplayMode: mode }),
       setAudioFocusMode: (enabled: boolean) => set({ audioFocusMode: enabled }),
       toggleAudioFocusMode: () => set({ audioFocusMode: !get().audioFocusMode }),
+      setTrackFocusMode: (mode: TimelineStore['trackFocusMode']) => set({ trackFocusMode: mode, audioFocusMode: mode === 'audio' }),
       setAudioRegionSelection: (selection: TimelineStore['audioRegionSelection']) => {
         if (!selection) {
           set({ audioRegionSelection: null });
@@ -314,8 +320,13 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
           set({ ramPreviewEnabled: true });
         }
       },
+      startRamPreview: async () => {},
+      startRamPreviewForRange: async () => true,
       cancelRamPreview: () => {
         set({ isRamPreviewing: false, ramPreviewProgress: null });
+      },
+      clearRamPreview: () => {
+        set({ ramPreviewRange: null, ramPreviewProgress: null, cachedFrameTimes: new Set() });
       },
       addCachedFrame: (time: number) => {
         const quantized = Math.round(time * 30) / 30;
@@ -374,6 +385,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...linkedGroupActions,
       ...downloadClipActions,
       ...audioEditActions,
+      ...videoBakeActions,
       ...nodeGraphActions,
       ...positioningUtils,
       ...playbackActions,

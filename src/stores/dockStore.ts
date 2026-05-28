@@ -756,7 +756,12 @@ function isLegacyFactoryDefaultLayout(layout: DockLayout): boolean {
   const previewGroup = findTabGroupById(layout.root, 'preview-group');
   const rightGroup = findTabGroupById(layout.root, 'right-group');
   const timelineGroup = findTabGroupById(layout.root, 'timeline-group');
-  return arePanelTypeListsEqual(panelTypesForGroup(layout, 'left-group'), ['media', 'ai-chat', 'download'])
+  const leftPanelTypes = panelTypesForGroup(layout, 'left-group');
+  return (
+    (
+      arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat', 'download'])
+      || arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat'])
+    )
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'preview-group'), ['preview'])
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'timeline-group'), ['timeline'])
     && leftGroup?.activeIndex === 0
@@ -770,7 +775,8 @@ function isLegacyFactoryDefaultLayout(layout: DockLayout): boolean {
       'scope-waveform',
       'scope-histogram',
       'scope-vectorscope',
-    ]);
+    ])
+  );
 }
 
 function cleanupRestoredCurrentLayout(layout: DockLayout): DockLayout {

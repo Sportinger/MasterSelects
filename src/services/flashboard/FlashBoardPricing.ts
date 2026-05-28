@@ -2,11 +2,13 @@ import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/t
 import { calculateKieAiCost } from '../kieAiService';
 import { calculateCost as calculatePiApiCost } from '../piApiService';
 import { estimateHostedElevenLabsSpeechCredits, type ElevenLabsModelRates } from '../elevenLabsService';
+import { SUNO_PROVIDER_ID } from '../sunoService';
 import type { CatalogEntry } from './types';
 
 export const KIEAI_USD_PER_CREDIT = 0.005;
 // Hosted customer credits are priced at 6x vendor Kie credits to keep margin after VAT, Stripe, and FX.
 export const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
+export const KIEAI_SUNO_VENDOR_CREDITS = 12;
 
 export const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
   'nano-banana-2': {
@@ -35,18 +37,19 @@ export interface FlashBoardPricingInput {
   providerId: string;
   service: PricingService;
   text?: string;
+  hasVideoInput?: boolean;
 }
 
 function formatUsd(value: number): string {
   return `~$${value.toFixed(2)}`;
 }
 
-function normalizeVideoDuration(value: number | undefined): number {
+function normalizeVideoDuration(value: number | undefined, min = 3): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return 5;
+    return Math.max(min, 5);
   }
 
-  return Math.max(3, Math.min(15, Math.floor(value)));
+  return Math.max(min, Math.min(15, Math.floor(value)));
 }
 
 function normalizeMode(value: string | undefined): string {
@@ -104,10 +107,43 @@ function buildHostedElevenLabsEstimate(input: FlashBoardPricingInput): FlashBoar
   };
 }
 
+function buildHostedSeedanceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
+  const duration = normalizeVideoDuration(input.duration, 4);
+  const kieCredits = calculateKieAiCost(input.providerId, input.mode ?? '720p', duration, false, {
+    hasVideoInput: input.hasVideoInput,
+  });
+  const hostedCredits = Math.ceil(kieCredits * HOSTED_KIE_CREDIT_MULTIPLIER);
+
+  return {
+    compactLabel: `${hostedCredits} cr`,
+    fullLabel: `${hostedCredits} credits`,
+  };
+}
+
+function buildHostedSunoEstimate(): FlashBoardPriceEstimate {
+  const hostedCredits = KIEAI_SUNO_VENDOR_CREDITS * HOSTED_KIE_CREDIT_MULTIPLIER;
+
+  return {
+    compactLabel: `${hostedCredits} cr`,
+    fullLabel: `${hostedCredits} credits`,
+  };
+}
+
+function buildKieSunoEstimate(): FlashBoardPriceEstimate {
+  return {
+    compactLabel: `${KIEAI_SUNO_VENDOR_CREDITS} cr`,
+    fullLabel: `${KIEAI_SUNO_VENDOR_CREDITS} Kie credits`,
+  };
+}
+
 function buildKieVideoEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate {
-  const duration = normalizeVideoDuration(input.duration);
+  const isSeedance2 = input.providerId.includes('seedance-2');
+  const duration = normalizeVideoDuration(input.duration, isSeedance2 ? 4 : 3);
   const mode = normalizeMode(input.mode);
-  const kieCredits = calculateKieAiCost(input.providerId, mode, duration, resolveEffectiveAudio(input));
+  const effectiveMode = isSeedance2 ? input.mode ?? '720p' : mode;
+  const kieCredits = calculateKieAiCost(input.providerId, effectiveMode, duration, resolveEffectiveAudio(input), {
+    hasVideoInput: input.hasVideoInput,
+  });
 
   return {
     compactLabel: `${kieCredits} cr`,
@@ -144,6 +180,10 @@ function buildPiApiEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstim
 
 export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
   if (input.outputType === 'audio') {
+    if (input.providerId === SUNO_PROVIDER_ID) {
+      return input.service === 'cloud' ? buildHostedSunoEstimate() : buildKieSunoEstimate();
+    }
+
     return input.service === 'cloud' ? buildHostedElevenLabsEstimate(input) : null;
   }
 
@@ -158,6 +198,10 @@ export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): Flash
   if (input.service === 'cloud') {
     if (input.outputType === 'image' || input.providerId === 'nano-banana-2') {
       return buildHostedImageEstimate(input);
+    }
+
+    if (input.providerId.includes('seedance-2')) {
+      return buildHostedSeedanceEstimate(input);
     }
 
     return buildHostedKlingEstimate(input);

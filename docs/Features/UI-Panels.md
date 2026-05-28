@@ -109,7 +109,7 @@ All docked panels can be:
 
 ## Available Panels
 
-MasterSelects currently exposes 16 active dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline. The old `ai-video` panel type is treated as a deprecated saved-layout migration target; generation now lives inside the Media Panel.
+MasterSelects currently exposes 18 active dockable panel types, plus the Slot Grid overlay that sits on top of the Timeline. The old `ai-video`, `youtube`, and `download` panel types are treated as deprecated saved-layout migration targets; generation and downloads now live inside the Media Panel.
 
 | Panel | Type ID | Surface |
 |-------|---------|---------|
@@ -118,12 +118,14 @@ MasterSelects currently exposes 16 active dockable panel types, plus the Slot Gr
 | **Timeline** | `timeline` | Multi-track editor and playback surface |
 | **Media** | `media` | Media browser, folders, and project items |
 | **Properties** | `clip-properties` | Unified clip inspector |
+| **History** | `history` | Undo/redo history |
+| **Audio Mixer** | `audio-mixer` | Track and master audio controls |
+| **Node Workspace** | `node-workspace` | AI-assisted node workspace |
 | **Export** | `export` | Render and export controls |
 | **MIDI Mapping** | `midi-mapping` | Editable list of assigned MIDI notes and trigger previews |
 | **AI Chat** | `ai-chat` | Editing assistant chat |
 | **AI Segment** | `ai-segment` | Local SAM2 segmentation tools |
 | **AI Scene Description** | `scene-description` | Scene list with playback sync |
-| **Downloads** | `download` | URL search/download surface |
 | **Multi-Cam** | `multicam` | Multicam sync and EDL tools |
 | **Transitions** | `transitions` | Transition library |
 | **Waveform** | `scope-waveform` | Waveform scope |
@@ -218,11 +220,11 @@ MasterSelects currently exposes 16 active dockable panel types, plus the Slot Gr
 ### Media Generator Tray
 
 - Compact bottom-right prompt entry point inside the Media Panel
-- Expanded tray embeds only the compact FlashBoard prompt composer for video, image, hosted ElevenLabs audio, BYO ElevenLabs audio, and Suno music generation
+- Expanded tray embeds only the compact FlashBoard prompt composer for video, image, hosted ElevenLabs audio, hosted Suno music, and non-production BYO audio/music generation
 - Active generation jobs render as compact preview cards above the prompt, including queued/processing state, elapsed timer, progress, prompt, and failed-job dismissal
 - Service and provider selection reflect the active backend through the FlashBoard composer
 - Image, video, and audio media can be attached as ordered prompt references from the Media Panel context menu or by dragging them onto the expanded composer
-- Current generation backends are Kie.ai, MasterSelects Cloud, ElevenLabs, and Kie.ai-backed Suno; hosted ElevenLabs speech uses Cloud credits while BYO ElevenLabs still uses the local settings key. PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current generator
+- Current generation backends are MasterSelects Cloud in production, plus Kie.ai, ElevenLabs, EvoLink, and PiAPI BYO paths for non-production development. Hosted ElevenLabs speech and hosted Suno music use Cloud credits; PiAPI remains primarily as legacy compatibility/catalog metadata rather than the main runtime description for the current generator
 
 #### FlashBoard Prompt Composer
 
@@ -230,13 +232,13 @@ MasterSelects currently exposes 16 active dockable panel types, plus the Slot Gr
 - Completed generations are imported back into the media store and can be sent to the timeline; ElevenLabs and Suno audio imports under `AI Gen / Audio`
 - The tray reuses the FlashBoard queue/import runtime without showing the full node canvas
 
-### Downloads Panel
+#### Media Downloads
 
-- Paste URLs from major platforms
-- Search YouTube videos via the YouTube Data API
-- Preview thumbnails, titles, channels, and duration
-- Download via Native Helper and yt-dlp
-- The old `youtube` dock panel is now treated as a legacy alias and old layouts are normalized to `download`
+- Downloads open from the bottom of the Media panel beside Generate and Chat
+- Paste one or more URLs from major platforms
+- Downloads use the same Media tray queue as generated media
+- Completed downloads are imported back into the Media panel under Downloads/platform folders
+- The old `youtube` and `download` dock panels are deprecated and removed from restored layouts
 
 ### Multi-Cam Panel
 
@@ -381,12 +383,12 @@ The unified Properties panel adapts its tabs to the selected clip type and to sl
 
 The built-in desktop layout is a three-column dock:
 
-- Left column: Media, AI Chat, Downloads
+- Left column: Media
 - Center: Preview
-- Right column: Export, Properties, Waveform, Histogram, Vectorscope
+- Right column: Properties, History
 - Bottom: Timeline
 
-Multi Preview is available from the View menu and can be floated or docked, but it is not pinned in the default layout.
+Export, Multi Preview, scopes, and other panels are available from the View menu and can be floated or docked, but they are not pinned in the default layout.
 
 ### Layout Persistence
 
@@ -495,9 +497,9 @@ Edit menu -> Settings
 
 The current Media generator-relevant keys are:
 
-- `Kie.ai` for the current local-provider FlashBoard generation flow
-- `Kie.ai` also powers FlashBoard Suno music generation
-- `ElevenLabs` for FlashBoard text-to-speech audio generation
+- `Kie.ai` for non-production local-provider FlashBoard generation flows
+- `Kie.ai` also powers hosted FlashBoard Suno music through the Cloudflare `KIEAI_API_KEY` secret in production
+- `ElevenLabs` for non-production BYO text-to-speech; production hosted speech uses the Cloudflare `ELEVENLABS_API_KEY` secret
 - `PiAPI` for legacy compatibility and older catalog/pricing paths
 
 Hosted cloud access is account/session based and does not depend on a user-entered API key in this dialog.

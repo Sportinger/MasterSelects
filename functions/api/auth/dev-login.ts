@@ -1,7 +1,13 @@
 import { ensureUserRecord, isLocalDevelopmentRequest, issueSessionCookie } from '../../lib/auth';
+import { grantPlanCredits } from '../../lib/credits';
 import { json, methodNotAllowed } from '../../lib/db';
-import { isBillingPlanId, upsertEntitlementsForPlan, type BillingPlanId } from '../../lib/entitlements';
-import type { AppContext, AppRouteHandler } from '../../lib/env';
+import {
+  getBillingPlan,
+  isBillingPlanId,
+  upsertEntitlementsForPlan,
+  type BillingPlanId,
+} from '../../lib/entitlements';
+import type { AppContext, AppD1Database, AppRouteHandler } from '../../lib/env';
 
 /**
  * POST /api/auth/dev-login
@@ -11,10 +17,84 @@ import type { AppContext, AppRouteHandler } from '../../lib/env';
  */
 
 const DEV_EMAIL = 'dev@masterselects.local';
+const DEV_SUBSCRIPTION_PREFIX = 'dev-login:subscription:';
+const DEV_CREDIT_GRANT_SOURCE = 'dev:plan_monthly_grant';
 
 interface DevLoginBody {
   email?: string;
   plan?: string;
+}
+
+function getMonthKey(date = new Date()): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+async function upsertDevSubscription(db: AppD1Database, userId: string, plan: BillingPlanId): Promise<void> {
+  const now = new Date();
+  const currentPeriodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const currentPeriodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+  const updatedAt = now.toISOString();
+  const stripeSubscriptionId = `${DEV_SUBSCRIPTION_PREFIX}${userId}`;
+
+  await db
+    .prepare(
+      `
+        INSERT INTO subscriptions (
+          id,
+          user_id,
+          stripe_subscription_id,
+          plan_id,
+          status,
+          current_period_start,
+          current_period_end,
+          cancel_at_period_end,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, 'active', ?, ?, 0, ?)
+        ON CONFLICT(stripe_subscription_id) DO UPDATE SET
+          user_id = excluded.user_id,
+          plan_id = excluded.plan_id,
+          status = 'active',
+          current_period_start = excluded.current_period_start,
+          current_period_end = excluded.current_period_end,
+          cancel_at_period_end = 0,
+          updated_at = excluded.updated_at
+      `,
+    )
+    .bind(
+      crypto.randomUUID(),
+      userId,
+      stripeSubscriptionId,
+      plan,
+      currentPeriodStart,
+      currentPeriodEnd,
+      updatedAt,
+    )
+    .run();
+}
+
+async function grantDevPlanCredits(db: AppD1Database, userId: string, plan: BillingPlanId): Promise<void> {
+  const billingPlan = getBillingPlan(plan);
+  const monthlyCredits = billingPlan.monthlyCredits;
+
+  if (monthlyCredits <= 0) {
+    return;
+  }
+
+  const monthKey = getMonthKey();
+
+  await grantPlanCredits(
+    db,
+    userId,
+    monthlyCredits,
+    DEV_CREDIT_GRANT_SOURCE,
+    `${plan}:${monthKey}`,
+    {
+      grant_month: monthKey,
+      grant_type: 'dev-login',
+      plan_id: plan,
+    },
+  );
 }
 
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
@@ -46,7 +126,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     providerUserId: email,
   });
 
+  await upsertDevSubscription(context.env.DB, user.id, plan);
   await upsertEntitlementsForPlan(context.env.DB, user.id, plan, 'dev-login');
+  await grantDevPlanCredits(context.env.DB, user.id, plan);
 
   const headers = new Headers();
   const session = await issueSessionCookie(context.env, headers, context.request, {

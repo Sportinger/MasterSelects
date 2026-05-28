@@ -45,14 +45,24 @@ getTrackChildren()  // Query child tracks
 ### Video / Image
 - Imported from the media panel or by dropping files on the timeline.
 - Thumbnails and proxies are supported.
+- In Video Focus, holding Ctrl/Strg while dragging inside a visual clip marks a clip-scoped video bake region. Double-click marks the full visible clip. Clip-scoped regions currently use the transient preview cache path and can be unbaked or removed from the clip overlay.
+- Holding Ctrl/Strg while dragging on the ruler marks a composition-scoped video bake region. Baking a ruler region renders the visible composition into a compressed WebCodecs proxy and substitutes that single proxy layer during preview playback, so the generic RAM cache indicator is not the durable bake source.
 
 ### Audio
 - Can exist alone or as linked audio for video clips.
 - Fades are authored through `audio-volume` keyframes.
-- In Audio Focus with detailed or spectral display, dragging inside the waveform creates an inline audio region selection.
-- The region toolbar can copy/paste region metadata and add non-destructive audio edit-stack operations such as silence, insert silence, delete silence, reverse, invert polarity, channel swap, and mono sum.
-- Audio edit-stack chips appear on edited audio clips for quick state, while the selected clip Properties panel exposes an `Audio Edits` tab for inspection, bypass, removal, clear, bake, and bake history.
-- Bake renders active region edits into a new WAV media source and resets the clip edit stack.
+- In Audio Focus with detailed or spectral display, holding Ctrl/Strg while dragging inside the waveform creates an inline audio region selection. Plain left-drag keeps the normal clip move behavior.
+- Double-clicking a detailed audio clip in Audio Focus highlights the full visible clip as an editable audio region.
+- Left-dragging an already selected audio region moves that highlighted region along the clip without changing its duration; left-dragging outside the selected region keeps moving the whole clip.
+- Dragging the selected audio region's left or right edge resizes the highlighted region.
+- Matching audio edit operations move/resize in place with the highlighted region instead of being duplicated.
+- The selected region exposes a horizontal gain line for direct level edits and side handles for fading that gain change in and out.
+- Existing audio-region edit markers are displayed from the top of the clip downward when ranges overlap, and `Audio Region Markers` in the View menu hides/shows those markers without changing edit processing.
+- Right-clicking the selected region opens direct Split/Cut/Copy/Paste actions first, then secondary non-destructive audio edit-stack operations in compact submenus such as silence, insert silence, delete silence, reverse, invert polarity, channel swap, mono sum, and Region FX presets. Split isolates the selected region as its own middle clip and selects that new clip. Cut removes the selected region from the track and leaves the original audio as left/right clip parts.
+- Region FX presets are stored as region edit-stack operations, not ordinary whole-clip effects, so they stay attached to the selected source range when that region is moved or resized. Their exact waveform cache renders in the background while live playback routes the effect only when the playhead is inside the region.
+- Simple detailed-waveform updates for those non-destructive region edits derive from the source waveform pyramid when possible, and region gain/silence preview is applied directly to the visible waveform columns while dragging. The lane keeps high-resolution detail without waiting for a full processed-audio render, and derivable processed-waveform refreshes run as background cache updates without showing the red waveform-generation border or progress bar. Scrub and playback preview also follow simple region gain/silence changes instead of always using the raw source level.
+- Audio edit-stack chips appear on edited audio clips for quick state, while the selected clip Properties panel exposes an `Audio Edits` tab for inspection, bypass, removal, clear, bake, unbake, and bake history.
+- Bake renders active region edits into a new WAV media source in the Media Panel `Baked Audio` folder, stores the project-local file under `Raw/Baked Audio/`, and resets the clip edit stack. Unbake restores the latest reversible bake to the original source media and the pre-bake region edit stack when that source media is still present in the project.
 
 ### Text
 - Created through the timeline text slice.
@@ -285,6 +295,8 @@ The timeline navigator below the tracks provides the same scroll and zoom contro
 
 - Thumbnails, waveforms, and transcript markers can each be toggled from the toolbar.
 - RAM preview caches 30 fps frames.
+- Composition video bake regions render a compressed preview proxy through the export pipeline and use it as a single layer during editor preview playback. Clip-scoped video bake regions still use the transient RAM preview path until per-layer alpha-capable bake artifacts are added.
+- Video bake proxy artifacts are runtime-only; project persistence keeps the region marks and resets volatile bake status after reload or timeline cache invalidation.
 - Proxy caching keeps proxy frame ranges warm in the background.
 - Export progress is shown directly on the timeline.
 - Slot-grid view is animated through the same `slotGridProgress` state that drives the timeline/grid transition.
@@ -294,19 +306,25 @@ The timeline navigator below the tracks provides the same scroll and zoom contro
 
 ## Store Architecture
 
-The timeline store in `src/stores/timeline/index.ts` combines 20 slices plus 2 utility modules:
+The timeline store in `src/stores/timeline/index.ts` combines modular slices plus utility modules:
 
 - `trackSlice`
 - `clipSlice`
 - `textClipSlice`
 - `solidClipSlice`
+- `mathSceneClipSlice`
 - `motionClipSlice`
 - `meshClipSlice`
 - `cameraClipSlice`
 - `splatEffectorClipSlice`
 - `clipEffectSlice`
+- `colorCorrectionSlice`
 - `linkedGroupSlice`
 - `downloadClipSlice`
+- `audioEditSlice`
+- `videoBakeSlice`
+- `toolSlice`
+- `editOperations`
 - `playbackSlice`
 - `ramPreviewSlice`
 - `proxyCacheSlice`
@@ -315,6 +333,7 @@ The timeline store in `src/stores/timeline/index.ts` combines 20 slices plus 2 u
 - `maskSlice`
 - `markerSlice`
 - `transitionSlice`
+- `nodeGraphSlice`
 - `clipboardSlice`
 - `aiActionFeedbackSlice`
 

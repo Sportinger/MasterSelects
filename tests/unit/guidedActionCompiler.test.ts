@@ -737,12 +737,12 @@ describe('guided action compiler', () => {
     expect(compiled.diagnostics.executionActionCount).toBe(1);
     expect(actions).toContainEqual(expect.objectContaining({
       type: 'focusPanel',
-      panel: 'download',
+      panel: 'media',
       family: 'media',
     }));
     expect(actions).toContainEqual(expect.objectContaining({
       type: 'dragCursor',
-      from: { kind: 'panel', panel: 'download' },
+      from: { kind: 'panel', panel: 'media' },
       to: { kind: 'timelineTime', time: 3 },
       family: 'media',
     }));

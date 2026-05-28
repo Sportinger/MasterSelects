@@ -293,6 +293,11 @@ function FlashBoardNodeComponent({
   const startReferenceLabel = node.request?.startMediaFileId ? 'Start ref' : null;
   const endReferenceLabel = node.request?.endMediaFileId ? 'End ref' : null;
   const referenceFrameLabel = node.request?.referenceMediaFileIds?.length ? 'Reference frame' : null;
+  const hasVideoReferenceInput = useMediaStore((s) =>
+    (node.request?.referenceMediaFileIds ?? []).some((mediaFileId) => (
+      s.files.find((file) => file.id === mediaFileId)?.type === 'video'
+    ))
+  );
   const priceLabel = node.request
     ? getFlashBoardPriceEstimate({
       service: node.request.service,
@@ -303,6 +308,7 @@ function FlashBoardNodeComponent({
       imageSize: node.request.imageSize,
       generateAudio: node.request.generateAudio,
       multiShots: node.request.multiShots,
+      hasVideoInput: hasVideoReferenceInput,
     })?.compactLabel ?? null
     : null;
   const detailTokens = [

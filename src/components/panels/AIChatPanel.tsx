@@ -159,7 +159,7 @@ YOUTUBE / DOWNLOADS:
 - Search YouTube for videos by keyword (requires YouTube API key)
 - List available download formats/qualities for any video URL
 - Download videos and import them directly into the timeline
-- View videos already in the Downloads panel
+- View downloaded videos in the Media panel
 - Supported platforms: YouTube, TikTok, Instagram, Twitter/X, Vimeo, and more (via yt-dlp)
 - Downloads require the Native Helper application to be running
 - When the user asks for a video on a TOPIC (e.g. "download a jungle video"), ALWAYS use searchYouTube first to find real videos, then download from the results. NEVER make up or guess URLs.
@@ -549,7 +549,10 @@ export function AIChatPanel() {
 
   const hasHostedAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
   const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && apiKeys.openai.trim());
-  const openAiAccessMode: 'hosted' | 'byo' | 'none' = useOpenAiKeyByDefault ? 'byo' : hasHostedAccess ? 'hosted' : 'none';
+  const useHostedProductionProviders = import.meta.env.PROD;
+  const openAiAccessMode: 'hosted' | 'byo' | 'none' = !useHostedProductionProviders && useOpenAiKeyByDefault
+    ? 'byo'
+    : hasHostedAccess ? 'hosted' : 'none';
   const accessMode: 'hosted' | 'byo' | 'lemonade' | 'none' =
     aiProvider === 'lemonade'
       ? (lemonadeStatus === 'online' ? 'lemonade' : 'none')
@@ -829,7 +832,10 @@ export function AIChatPanel() {
             )));
           }
         } else {
-          const result = await callOpenAI(apiMessages, hostedPromptIdempotencyKey);
+          const result = await callOpenAI(
+            apiMessages,
+            hostedPromptIdempotencyKey ? `${hostedPromptIdempotencyKey}:round:${iterationCount}` : undefined,
+          );
           content = result.content;
           toolCalls = result.toolCalls;
         }

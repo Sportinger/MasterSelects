@@ -103,6 +103,12 @@ export const FLASHBOARD_CHAT_MODEL_OPTIONS: Record<FlashBoardChatProvider, Flash
 export const DEFAULT_FLASHBOARD_CHAT_PROVIDER: FlashBoardChatProvider = 'openai';
 export const DEFAULT_FLASHBOARD_CHAT_MODEL = 'gpt-5.4-nano';
 export const DEFAULT_FLASHBOARD_OPENAI_REASONING_EFFORT: FlashBoardOpenAiReasoningEffort = 'none';
+const FLASHBOARD_CHAT_MODEL_CREDIT_COSTS: Record<string, number> = {
+  'gpt-5.5': 5,
+  'gpt-5.4': 5,
+  'gpt-5.4-mini': 1,
+  'gpt-5.4-nano': 1,
+};
 export const FLASHBOARD_OPENAI_REASONING_EFFORT_OPTIONS: Array<{
   id: FlashBoardOpenAiReasoningEffort;
   label: string;
@@ -257,6 +263,19 @@ function buildFlashBoardChatSystemPrompt(): string {
     '',
     `Current MasterSelects context: ${timelineSummary}`,
   ].join('\n');
+}
+
+export function getFlashBoardChatCreditCost(model: string): number {
+  return FLASHBOARD_CHAT_MODEL_CREDIT_COSTS[model] ?? 5;
+}
+
+export function getFlashBoardChatCreditLabel(model: string): string {
+  const cost = getFlashBoardChatCreditCost(model);
+  return `${cost} cr`;
+}
+
+function createHostedChatRoundIdempotencyKey(): string {
+  return `flashboard-chat:${Date.now()}:${crypto.randomUUID()}`;
 }
 
 function clampTemperature(value: number): number {
@@ -703,6 +722,8 @@ async function sendHostedOpenAiChat(request: FlashBoardChatRequest, systemPrompt
     if (isTemperatureSupported('openai', request.model)) {
       body.temperature = clampTemperature(request.temperature);
     }
+
+    body.idempotencyKey = createHostedChatRoundIdempotencyKey();
 
     const data = await cloudAiService.createChatCompletion(body);
     const parsed = parseOpenAiChatCompletion(data);

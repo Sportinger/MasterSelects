@@ -1,9 +1,7 @@
-import {
-  DataType,
+import type {
   Rive,
-  StateMachineInputType,
-  type ViewModel,
-  type ViewModelInstance,
+  ViewModel,
+  ViewModelInstance,
 } from '@rive-app/canvas';
 
 import type {
@@ -19,6 +17,16 @@ import type { PreparedRiveAsset } from './types';
 const log = Logger.create('RiveMetadata');
 
 const preparedAssetCache = new Map<string, Promise<PreparedRiveAsset>>();
+type RiveModule = typeof import('@rive-app/canvas');
+type RiveConstructor = RiveModule['Rive'];
+type RiveDataType = RiveModule['DataType'];
+type RiveStateMachineInputType = RiveModule['StateMachineInputType'];
+let riveModulePromise: Promise<RiveModule> | null = null;
+
+function loadRiveModule(): Promise<RiveModule> {
+  riveModulePromise ??= import('@rive-app/canvas');
+  return riveModulePromise;
+}
 
 function getAssetCacheKey(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
@@ -31,12 +39,12 @@ function createMetadataCanvas(): HTMLCanvasElement {
   return canvas;
 }
 
-function waitForRiveLoad(params: ConstructorParameters<typeof Rive>[0]): Promise<Rive> {
+function waitForRiveLoad(params: ConstructorParameters<RiveConstructor>[0], RiveConstructor: RiveConstructor): Promise<Rive> {
   let player: Rive | null = null;
 
   return new Promise<Rive>((resolve, reject) => {
     try {
-      player = new Rive({
+      player = new RiveConstructor({
         ...params,
         onLoad: () => {
           if (player) {
@@ -55,9 +63,9 @@ function waitForRiveLoad(params: ConstructorParameters<typeof Rive>[0]): Promise
 
 function normalizeStateMachineInput(input: {
   name: string;
-  type: StateMachineInputType;
+  type: number;
   initialValue?: boolean | number;
-}): VectorAnimationStateMachineInput | null {
+}, StateMachineInputType: RiveStateMachineInputType): VectorAnimationStateMachineInput | null {
   if (!input.name.trim()) {
     return null;
   }
@@ -90,7 +98,7 @@ function normalizeStateMachineInput(input: {
   return null;
 }
 
-function mapDataBindingType(type: DataType): VectorAnimationDataBindingType | null {
+function mapDataBindingType(type: unknown, DataType: RiveDataType): VectorAnimationDataBindingType | null {
   if (type === DataType.boolean) return 'boolean';
   if (type === DataType.number) return 'number';
   if (type === DataType.integer || type === DataType.listIndex) return 'integer';
@@ -137,7 +145,7 @@ function getDataBindingDefaultValue(
   return {};
 }
 
-function readViewModelMetadata(viewModel: ViewModel): {
+function readViewModelMetadata(viewModel: ViewModel, DataType: RiveDataType): {
   name: string;
   instanceNames?: string[];
   properties: VectorAnimationDataBindingProperty[];
@@ -147,7 +155,7 @@ function readViewModelMetadata(viewModel: ViewModel): {
   try {
     const properties = viewModel.properties
       .map((property): VectorAnimationDataBindingProperty | null => {
-        const type = mapDataBindingType(property.type as DataType);
+        const type = mapDataBindingType(property.type, DataType);
         if (!type || !property.name.trim()) {
           return null;
         }
@@ -174,7 +182,8 @@ function readViewModelMetadata(viewModel: ViewModel): {
   }
 }
 
-function buildMetadata(player: Rive): VectorAnimationMetadata {
+function buildMetadata(player: Rive, riveModule: RiveModule): VectorAnimationMetadata {
+  const { DataType, StateMachineInputType } = riveModule;
   const contents = player.contents;
   const artboards = contents.artboards ?? [];
   const activeArtboardName = player.activeArtboard;
@@ -186,7 +195,7 @@ function buildMetadata(player: Rive): VectorAnimationMetadata {
   const stateMachineInputs: Record<string, VectorAnimationStateMachineInput[]> = {};
   activeArtboard?.stateMachines.forEach((stateMachine) => {
     const inputs = stateMachine.inputs
-      .map(normalizeStateMachineInput)
+      .map((input) => normalizeStateMachineInput(input, StateMachineInputType))
       .filter((input): input is VectorAnimationStateMachineInput => Boolean(input))
       .sort((a, b) => a.name.localeCompare(b.name));
     if (inputs.length > 0) {
@@ -196,7 +205,7 @@ function buildMetadata(player: Rive): VectorAnimationMetadata {
 
   const viewModels = Array.from({ length: player.viewModelCount }, (_, index) => player.viewModelByIndex(index))
     .filter((viewModel): viewModel is ViewModel => Boolean(viewModel))
-    .map(readViewModelMetadata)
+    .map((viewModel) => readViewModelMetadata(viewModel, DataType))
     .filter((viewModel) => viewModel.properties.length > 0);
   const defaultViewModelName = player.defaultViewModel()?.name;
   const dataBindingProperties = viewModels.flatMap((viewModel) => viewModel.properties);
@@ -223,6 +232,7 @@ function buildMetadata(player: Rive): VectorAnimationMetadata {
 }
 
 async function readRiveMetadataFromBuffer(buffer: ArrayBuffer): Promise<VectorAnimationMetadata> {
+  const riveModule = await loadRiveModule();
   const canvas = createMetadataCanvas();
   const player = await waitForRiveLoad({
     canvas,
@@ -232,11 +242,11 @@ async function readRiveMetadataFromBuffer(buffer: ArrayBuffer): Promise<VectorAn
     enableRiveAssetCDN: true,
     shouldDisableRiveListeners: true,
     automaticallyHandleEvents: false,
-  });
+  }, riveModule.Rive);
 
   try {
     player.pause();
-    return buildMetadata(player);
+    return buildMetadata(player, riveModule);
   } finally {
     player.cleanup();
   }

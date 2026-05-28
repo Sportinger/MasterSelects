@@ -9,7 +9,78 @@ import { useMediaStore } from '../mediaStore';
 
 const log = Logger.create('RamPreviewSlice');
 
-export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get) => ({
+export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get) => {
+  const generateRange = async (
+    start: number,
+    end: number,
+    centerTime: number,
+    label: string,
+  ): Promise<boolean> => {
+    const { clips, tracks, isRamPreviewing, addCachedFrame } = get();
+    if (isRamPreviewing) return false;
+
+    const rangeStart = Math.max(0, Math.min(start, end));
+    const rangeEnd = Math.max(rangeStart, Math.max(start, end));
+    if (rangeEnd <= rangeStart) return false;
+
+    log.debug(`${label} starting generation`, {
+      start: rangeStart.toFixed(3),
+      end: rangeEnd.toFixed(3),
+    });
+
+    const { engine } = await import('../../engine/WebGPUEngine');
+    engine.setGeneratingRamPreview(true);
+    set({ isRamPreviewing: true, ramPreviewProgress: 0, ramPreviewRange: null });
+
+    let completed = false;
+
+    try {
+      const preview = new RamPreviewEngine(engine);
+      const result = await preview.generate(
+        {
+          start: rangeStart,
+          end: rangeEnd,
+          centerTime: Math.max(rangeStart, Math.min(rangeEnd, centerTime)),
+          clips,
+          tracks,
+        },
+        {
+          isCancelled: () => !get().isRamPreviewing,
+          isFrameCached: (qt) => get().cachedFrameTimes.has(qt),
+          getSourceTimeForClip: (id, t) => get().getSourceTimeForClip(id, t),
+          getInterpolatedSpeed: (id, t) => get().getInterpolatedSpeed(id, t),
+          getCompositionDimensions: (compId) => {
+            const comp = useMediaStore.getState().compositions.find(c => c.id === compId);
+            return { width: comp?.width || 1920, height: comp?.height || 1080 };
+          },
+          onFrameCached: (time) => addCachedFrame(time),
+          onProgress: (percent) => set({ ramPreviewProgress: percent }),
+        }
+      );
+
+      completed = result.completed;
+      if (completed) {
+        set({ ramPreviewRange: { start: rangeStart, end: rangeEnd }, ramPreviewProgress: null });
+        log.debug(`${label} complete`, {
+          totalFrames: result.frameCount,
+          start: rangeStart.toFixed(1),
+          end: rangeEnd.toFixed(1),
+        });
+      } else {
+        log.debug(`${label} cancelled`);
+      }
+    } catch (error) {
+      log.error(`${label} error`, error);
+      completed = false;
+    } finally {
+      engine.setGeneratingRamPreview(false);
+      set({ isRamPreviewing: false, ramPreviewProgress: null });
+    }
+
+    return completed;
+  };
+
+  return {
   toggleRamPreviewEnabled: () => {
     const { ramPreviewEnabled } = get();
     if (ramPreviewEnabled) {
@@ -27,10 +98,8 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
   },
 
   startRamPreview: async () => {
-    const { inPoint, outPoint, duration, clips, tracks, isRamPreviewing, playheadPosition, addCachedFrame, ramPreviewEnabled } = get();
-    if (!ramPreviewEnabled || isRamPreviewing) return;
-
-    log.debug('RAM Preview starting generation');
+    const { inPoint, outPoint, duration, clips, playheadPosition, ramPreviewEnabled } = get();
+    if (!ramPreviewEnabled) return;
 
     const start = inPoint ?? 0;
     const end = outPoint ?? (clips.length > 0
@@ -38,40 +107,16 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
       : duration);
     if (end <= start) return;
 
-    const { engine } = await import('../../engine/WebGPUEngine');
-    engine.setGeneratingRamPreview(true);
-    set({ isRamPreviewing: true, ramPreviewProgress: 0, ramPreviewRange: null });
+    await generateRange(start, end, playheadPosition, 'RAM Preview');
+  },
 
-    try {
-      const preview = new RamPreviewEngine(engine);
-      const result = await preview.generate(
-        { start, end, centerTime: playheadPosition, clips, tracks },
-        {
-          isCancelled: () => !get().isRamPreviewing,
-          isFrameCached: (qt) => get().cachedFrameTimes.has(qt),
-          getSourceTimeForClip: (id, t) => get().getSourceTimeForClip(id, t),
-          getInterpolatedSpeed: (id, t) => get().getInterpolatedSpeed(id, t),
-          getCompositionDimensions: (compId) => {
-            const comp = useMediaStore.getState().compositions.find(c => c.id === compId);
-            return { width: comp?.width || 1920, height: comp?.height || 1080 };
-          },
-          onFrameCached: (time) => addCachedFrame(time),
-          onProgress: (percent) => set({ ramPreviewProgress: percent }),
-        }
-      );
-
-      if (result.completed) {
-        set({ ramPreviewRange: { start, end }, ramPreviewProgress: null });
-        log.debug('RAM Preview complete', { totalFrames: result.frameCount, start: start.toFixed(1), end: end.toFixed(1) });
-      } else {
-        log.debug('RAM Preview cancelled');
-      }
-    } catch (error) {
-      log.error('RAM Preview error', error);
-    } finally {
-      engine.setGeneratingRamPreview(false);
-      set({ isRamPreviewing: false, ramPreviewProgress: null });
-    }
+  startRamPreviewForRange: async (start, end, options = {}) => {
+    return generateRange(
+      start,
+      end,
+      options.centerTime ?? (start + end) / 2,
+      options.label ?? 'RAM Preview range',
+    );
   },
 
   cancelRamPreview: () => {
@@ -131,4 +176,5 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
 
     return ranges;
   },
-});
+  };
+};

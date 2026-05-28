@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Compositor } from '../../src/engine/render/Compositor';
 import type { LayerRenderData } from '../../src/engine/core/types';
-import type { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
+import { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../src/effects/EffectsPipeline';
 import type { MaskTextureManager } from '../../src/engine/texture/MaskTextureManager';
 
@@ -141,5 +141,58 @@ describe('Compositor scrub fast path', () => {
       invert: false,
     });
     expect(applyEffects).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CompositorPipeline bind group cache', () => {
+  it('does not reuse a static image bind group for a different source texture view in the same layer slot', () => {
+    let bindGroupId = 0;
+    const createBindGroup = vi.fn(() => ({ id: ++bindGroupId }));
+    const pipeline = new CompositorPipeline({
+      createBindGroup,
+    } as unknown as GPUDevice);
+
+    (pipeline as unknown as { compositeBindGroupLayout: GPUBindGroupLayout }).compositeBindGroupLayout = {
+      label: 'composite-layout',
+    } as unknown as GPUBindGroupLayout;
+
+    const sampler = { label: 'sampler' } as unknown as GPUSampler;
+    const baseView = { label: 'ping' } as unknown as GPUTextureView;
+    const imageAView = { label: 'image-a' } as unknown as GPUTextureView;
+    const imageBView = { label: 'image-b' } as unknown as GPUTextureView;
+    const maskView = { label: 'mask' } as unknown as GPUTextureView;
+    const uniformBuffer = { label: 'ubo' } as unknown as GPUBuffer;
+
+    const firstImageBindGroup = pipeline.createCompositeBindGroup(
+      sampler,
+      baseView,
+      imageAView,
+      uniformBuffer,
+      maskView,
+      'activeComp_layer_0',
+      true
+    );
+    const repeatedFirstImageBindGroup = pipeline.createCompositeBindGroup(
+      sampler,
+      baseView,
+      imageAView,
+      uniformBuffer,
+      maskView,
+      'activeComp_layer_0',
+      true
+    );
+    const secondImageBindGroup = pipeline.createCompositeBindGroup(
+      sampler,
+      baseView,
+      imageBView,
+      uniformBuffer,
+      maskView,
+      'activeComp_layer_0',
+      true
+    );
+
+    expect(createBindGroup).toHaveBeenCalledTimes(2);
+    expect(repeatedFirstImageBindGroup).toBe(firstImageBindGroup);
+    expect(secondImageBindGroup).not.toBe(firstImageBindGroup);
   });
 });

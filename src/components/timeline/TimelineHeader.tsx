@@ -1249,6 +1249,8 @@ function TimelineHeaderComponent({
     ? getAudioTrackHeaderDensity(baseHeight)
     : null;
   const isAudioTrack = track.type === 'audio';
+  const isMutedTrack = isAudioTrack && effectiveMuted;
+  const isHiddenTrack = track.type === 'video' && track.visible === false;
   const showAudioSummaryMeter = isAudioTrack && audioLayerAdvancedMode && showCollapsedAudioSummaryMeter;
   const showAdvancedAudioControls = isAudioTrack && audioLayerAdvancedMode && !showCollapsedAudioSummaryMeter;
   const audioHeaderControlScale = showAdvancedAudioControls && audioHeaderDensity === 'full'
@@ -1392,6 +1394,10 @@ function TimelineHeaderComponent({
       className={`track-header ${track.type} ${isDimmed ? 'dimmed' : ''} ${
         isExpanded ? 'expanded' : ''
       } ${track.locked ? 'locked' : ''} ${
+        isMutedTrack ? 'track-muted' : ''
+      } ${
+        isHiddenTrack ? 'track-hidden' : ''
+      } ${
         audioHeaderDensity ? `audio-strip-${audioHeaderDensity}` : ''
       } ${isAudioTrack ? (audioLayerAdvancedMode ? 'audio-layer-advanced' : 'audio-layer-basic') : ''} ${
         showAdvancedAudioControls && (audioFxOpen || audioSendsOpen) ? 'popover-open' : ''
@@ -1403,6 +1409,7 @@ function TimelineHeaderComponent({
         isTargeted ? 'targeted' : ''
       }`}
       style={trackHeaderStyle}
+      data-dock-layout-child-anim-id={`timeline-track-header:${track.id}`}
       onWheel={onWheel}
       onContextMenu={onContextMenu}
     >

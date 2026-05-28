@@ -21,6 +21,8 @@ export async function handleGetTimelineState(
     selectedClipIds,
     waveformsEnabled,
     audioDisplayMode,
+    audioFocusMode,
+    audioRegionSelection,
   } = timelineStore;
 
   const videoTracks = tracks.filter(t => t.type === 'video').map(t => formatTrackInfo(t, clips));
@@ -55,6 +57,8 @@ export async function handleGetTimelineState(
       zoom,
       waveformsEnabled,
       audioDisplayMode,
+      audioFocusMode,
+      audioRegionSelection,
       totalClips: clips.length,
       // Selected clips info
       selectedClipIds: selectedClipIdsArray,

@@ -48,7 +48,7 @@ That summary feeds the visible plan, credit balance, entitlements, hosted AI ava
 Hosted AI uses two different server routes:
 
 - `/api/ai/chat` is OpenAI-backed and credit-gated
-- `/api/ai/audio` is ElevenLabs-backed for hosted FlashBoard text-to-speech, also credit-gated
+- `/api/ai/audio` is ElevenLabs-backed for hosted FlashBoard text-to-speech and Kie.ai/Suno-backed for hosted music generation, also credit-gated
 - `/api/ai/video` is Kie.ai-backed for Kling 3.0 and Nano Banana 2, also credit-gated
 
 Hosted chat requests are also logged best-effort into D1:
@@ -58,6 +58,7 @@ Hosted chat requests are also logged best-effort into D1:
 - authenticated users can inspect that history through `/api/ai/chat-history`
 
 Chat streaming is not enabled in phase 1. If the client asks for streaming, the route returns a `501` response.
+Each hosted chat model round is charged separately. A chat request that calls tools and then asks the model to summarize the tool results will spend one credit charge for the initial model round plus another charge for the follow-up model round. Local tool execution is not separately metered unless the tool itself calls another hosted media route.
 
 The hosted video route accepts:
 
@@ -70,6 +71,7 @@ Video status is polled through `/api/ai/video?taskId=...`. Successful hosted req
 Hosted Kie.ai media charges MasterSelects Cloud credits at `6 * vendor Kie credits`, so the Cloud price list and backend deduction stay aligned while preserving margin after VAT, Stripe fees, and FX movement.
 
 Hosted ElevenLabs speech returns an MP3 response directly. The route estimates cost before calling ElevenLabs from text length and model pricing, then finalizes the credit charge from ElevenLabs' `x-character-count` header when it is present.
+Hosted Suno music creates a Kie.ai Suno task through `/api/ai/audio`, charges MasterSelects credits up front, then polls status through the same audio route until the generated audio URL is available.
 
 ## Secrets
 
@@ -86,7 +88,7 @@ wrangler secret put KIEAI_API_KEY
 wrangler secret put ELEVENLABS_API_KEY
 ```
 
-`OPENAI_API_KEY` is used by hosted chat. `KIEAI_API_KEY` is used by hosted video and hosted image generation. `ELEVENLABS_API_KEY` is used by hosted FlashBoard text-to-speech.
+`OPENAI_API_KEY` is used by hosted chat and prompt refinement. `KIEAI_API_KEY` is used by hosted video, hosted image generation, and hosted Suno music. `ELEVENLABS_API_KEY` is used by hosted FlashBoard text-to-speech.
 
 ## Non-Secret Vars
 
@@ -107,6 +109,8 @@ Important:
 - Production deployments must use `ENVIRONMENT=production`.
 - Keep the split explicit in `wrangler.toml` with `[vars]`, `[env.preview.vars]`, and `[env.production.vars]`.
 - If `STRIPE_SECRET_KEY` or `STRIPE_WEBHOOK_SECRET` is missing in production, pricing and billing sync will fail.
+
+On the local dev server, hosted secrets are available only through Wrangler/Cloudflare Pages Functions. Use `npm run dev:full` or run `npm run dev:api` beside `npm run dev`; plain Vite alone cannot read `.dev.vars` for `/api/ai/*`.
 
 ## Auth And Billing
 
