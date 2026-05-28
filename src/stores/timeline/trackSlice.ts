@@ -200,6 +200,21 @@ function updateRuntimeMeterState(
   };
 }
 
+function isSilentRuntimeMeter(snapshot: AudioMeterSnapshot | undefined): boolean {
+  return !snapshot || (snapshot.peakLinear === 0 && snapshot.rmsLinear === 0);
+}
+
+function areRuntimeMeterStatesEqual(
+  current: { trackMeters: Record<string, AudioMeterSnapshot>; master?: AudioMeterSnapshot },
+  next: { trackMeters: Record<string, AudioMeterSnapshot>; master?: AudioMeterSnapshot },
+): boolean {
+  if (!Object.is(current.master, next.master)) return false;
+  const currentKeys = Object.keys(current.trackMeters);
+  const nextKeys = Object.keys(next.trackMeters);
+  if (currentKeys.length !== nextKeys.length) return false;
+  return currentKeys.every((trackId) => Object.is(current.trackMeters[trackId], next.trackMeters[trackId]));
+}
+
 function withAudioExportPreflightMeasurementHistory(
   current: AudioExportPreflightState | undefined,
   next: AudioExportPreflightState,
@@ -652,16 +667,26 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
 
   updateRuntimeAudioMeter: (trackId, snapshot, masterSnapshot) => {
     const { runtimeAudioMeters } = get();
-    set({
-      runtimeAudioMeters: updateRuntimeMeterState(
-        runtimeAudioMeters.trackMeters,
-        { [trackId]: snapshot },
-        snapshot.updatedAt,
-        RUNTIME_AUDIO_METER_MAX_AGE_MS,
-        undefined,
-        masterSnapshot,
-      ),
-    });
+    const currentTrackSnapshot = runtimeAudioMeters.trackMeters[trackId];
+    if (
+      isSilentRuntimeMeter(snapshot) &&
+      isSilentRuntimeMeter(currentTrackSnapshot) &&
+      isSilentRuntimeMeter(masterSnapshot) &&
+      isSilentRuntimeMeter(runtimeAudioMeters.master)
+    ) {
+      return;
+    }
+
+    const next = updateRuntimeMeterState(
+      runtimeAudioMeters.trackMeters,
+      { [trackId]: snapshot },
+      snapshot.updatedAt,
+      RUNTIME_AUDIO_METER_MAX_AGE_MS,
+      undefined,
+      masterSnapshot,
+    );
+    if (areRuntimeMeterStatesEqual(runtimeAudioMeters, next)) return;
+    set({ runtimeAudioMeters: next });
   },
 
   clearStaleRuntimeAudioMeters: (maxAgeMs = RUNTIME_AUDIO_METER_MAX_AGE_MS, now = performance.now()) => {
@@ -682,6 +707,7 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
       return;
     }
 
+    if (areRuntimeMeterStatesEqual(runtimeAudioMeters, next)) return;
     set({ runtimeAudioMeters: next });
   },
 

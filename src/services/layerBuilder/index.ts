@@ -20,6 +20,7 @@ export {
   playheadState,
   getPlayheadPosition,
   setMasterAudio,
+  setMasterAudioClock,
   clearMasterAudio,
   holdInternalPlaybackPosition,
   clearInternalPlaybackHold,

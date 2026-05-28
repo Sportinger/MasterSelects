@@ -5,16 +5,27 @@ import { useEffect, useCallback } from 'react';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore';
-import type { GenerateClipAudioAnalysisOptions, TimelineAudioDisplayMode } from '../../stores/timeline/types';
+import type { ClipStemSeparationJobState, GenerateClipAudioAnalysisOptions, TimelineAudioDisplayMode } from '../../stores/timeline/types';
 import type { ContextMenuState } from './types';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { useMediaStore } from '../../stores/mediaStore';
 import { projectFileService } from '../../services/projectFileService';
+import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { Logger } from '../../services/logger';
 import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
 import type { LabelColor } from '../../stores/mediaStore/types';
+import { resolveAudibleAudioClip } from '../../services/audio/audioClipResolution';
+import { isManualLinkedGroupId } from '../../stores/timeline/helpers/idGenerator';
 
 const log = Logger.create('TimelineContextMenu');
+const ACTIVE_STEM_JOB_PHASES = new Set<ClipStemSeparationJobState['phase']>([
+  'queued',
+  'preparing',
+  'downloading-model',
+  'loading-model',
+  'separating',
+  'storing',
+]);
 
 interface TimelineContextMenuProps {
   contextMenu: ContextMenuState | null;
@@ -27,6 +38,7 @@ interface TimelineContextMenuProps {
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
   audioDisplayMode: TimelineAudioDisplayMode;
+  clipStemSeparationJobs: Record<string, ClipStemSeparationJobState>;
 
   // Actions
   selectClip: (clipId: string) => void;
@@ -36,7 +48,11 @@ interface TimelineContextMenuProps {
   deleteGapAtTime: (time: number) => void;
   toggleClipReverse: (clipId: string) => void;
   unlinkGroup: (clipId: string) => void;
+  linkClips: (clipIds: string[]) => void;
+  unlinkClips: (clipIds: string[]) => void;
   generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
+  generateSpectrogramForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
+  startClipStemSeparation: (clipId: string, options?: { force?: boolean }) => Promise<string | null>;
   toggleThumbnailsEnabled: () => void;
   toggleWaveformsEnabled: () => void;
   setAudioDisplayMode: (mode: TimelineAudioDisplayMode) => void;
@@ -63,6 +79,7 @@ export function TimelineContextMenu({
   thumbnailsEnabled,
   waveformsEnabled,
   audioDisplayMode,
+  clipStemSeparationJobs,
   selectClip: _selectClip,
   removeClip,
   splitClipAtPlayhead,
@@ -70,7 +87,11 @@ export function TimelineContextMenu({
   deleteGapAtTime,
   toggleClipReverse,
   unlinkGroup,
+  linkClips,
+  unlinkClips,
   generateWaveformForClip,
+  generateSpectrogramForClip,
+  startClipStemSeparation,
   toggleThumbnailsEnabled,
   toggleWaveformsEnabled,
   setAudioDisplayMode,
@@ -97,6 +118,7 @@ export function TimelineContextMenu({
       return mediaStore.files.find(
         (f) =>
           f.id === clip.mediaFileId ||
+          f.id === clip.source?.mediaFileId ||
           f.name === clip.name ||
           f.name === clip.name.replace(' (Audio)', '')
       ) || null;
@@ -166,7 +188,7 @@ export function TimelineContextMenu({
   };
 
   // Handle Start/Stop Proxy Generation
-  const handleProxyGeneration = (action: 'start' | 'stop') => {
+  const handleProxyGeneration = (action: 'start' | 'stop', options: { force?: boolean } = {}) => {
     if (!contextMenu) return;
 
     const mediaFile = getMediaFileForClip(contextMenu.clipId);
@@ -178,11 +200,87 @@ export function TimelineContextMenu({
     const mediaStore = useMediaStore.getState();
 
     if (action === 'start') {
-      mediaStore.generateProxy(mediaFile.id);
+      mediaStore.generateProxy(mediaFile.id, options);
       log.debug('Starting proxy generation for:', mediaFile.name);
     } else {
       mediaStore.cancelProxyGeneration(mediaFile.id);
       log.debug('Cancelled proxy generation for:', mediaFile.name);
+    }
+
+    setContextMenu(null);
+  };
+
+  const handleThumbnailRegeneration = () => {
+    if (!contextMenu) return;
+
+    const mediaFile = getMediaFileForClip(contextMenu.clipId);
+    if (!mediaFile) {
+      setContextMenu(null);
+      return;
+    }
+
+    const videoClip = [...clipMap.values()].find((candidate) =>
+      (candidate.mediaFileId === mediaFile.id || candidate.source?.mediaFileId === mediaFile.id) &&
+      candidate.source?.type === 'video' &&
+      candidate.source.videoElement
+    );
+    const sourceVideo = videoClip?.source?.type === 'video'
+      ? videoClip.source.videoElement
+      : null;
+
+    if (!sourceVideo) {
+      log.warn('No video element available for thumbnail regeneration', {
+        mediaFileId: mediaFile.id,
+        name: mediaFile.name,
+      });
+      setContextMenu(null);
+      return;
+    }
+
+    const duration = mediaFile.duration ||
+      videoClip?.source?.naturalDuration ||
+      sourceVideo.duration ||
+      videoClip?.duration ||
+      0;
+
+    void (async () => {
+      await thumbnailCacheService.clearSource(mediaFile.id);
+      await thumbnailCacheService.generateForSource(mediaFile.id, sourceVideo, duration, mediaFile.fileHash);
+    })().catch((error) => {
+      log.warn('Thumbnail regeneration failed', { mediaFileId: mediaFile.id, error });
+    });
+
+    setContextMenu(null);
+  };
+
+  const handleAudioProxyRegeneration = (force: boolean) => {
+    if (!contextMenu) return;
+
+    const mediaFile = getMediaFileForClip(contextMenu.clipId);
+    if (mediaFile) {
+      void useMediaStore.getState().generateAudioProxy(mediaFile.id, { force });
+    }
+
+    setContextMenu(null);
+  };
+
+  const handleWaveformRegeneration = () => {
+    if (!contextMenu) return;
+
+    const resolved = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
+    if (resolved?.audioClip.id) {
+      generateWaveformForClip(resolved.audioClip.id, { force: true });
+    }
+
+    setContextMenu(null);
+  };
+
+  const handleSpectralRegeneration = () => {
+    if (!contextMenu) return;
+
+    const resolved = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
+    if (resolved?.audioClip.id) {
+      generateSpectrogramForClip(resolved.audioClip.id, { force: true });
     }
 
     setContextMenu(null);
@@ -195,8 +293,32 @@ export function TimelineContextMenu({
   const isVideo = clip?.source?.type === 'video';
   const isAudio = clip?.source?.type === 'audio';
   const isSolid = clip?.source?.type === 'solid';
+  const isVideoMedia = mediaFile?.type === 'video' || isVideo;
+  const audibleAudioResolution = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
+  const audibleAudioClip = audibleAudioResolution?.audioClip ?? null;
+  const stemSeparationJob = audibleAudioClip ? clipStemSeparationJobs[audibleAudioClip.id] : undefined;
+  const isStemSeparationActive = ACTIVE_STEM_JOB_PHASES.has(stemSeparationJob?.phase ?? 'failed');
+  const stemProgressPercent = Math.round(Math.max(0, Math.min(1, stemSeparationJob?.progress ?? 0)) * 100);
+  const hasStemSeparation = Boolean(audibleAudioClip?.audioState?.stemSeparation);
   const isGenerating = mediaFile?.proxyStatus === 'generating';
   const hasProxy = mediaFile?.proxyStatus === 'ready';
+  const thumbnailStatus = mediaFile ? thumbnailCacheService.getStatus(mediaFile.id) : 'none';
+  const hasSourceAudio = Boolean(
+    audibleAudioClip ||
+    mediaFile?.type === 'audio' ||
+    (mediaFile?.type === 'video' && (mediaFile.hasAudio !== false || Boolean(mediaFile.audioCodec)))
+  );
+  const isAudioProxyGenerating = mediaFile?.audioProxyStatus === 'generating';
+  const hasAudioProxy = mediaFile?.audioProxyStatus === 'ready' || mediaFile?.hasProxyAudio === true;
+  const audioAnalysisJob = audibleAudioClip?.audioAnalysisJob;
+  const isAudioAnalysisGenerating = Boolean(audibleAudioClip?.waveformGenerating || audioAnalysisJob);
+  const audioAnalysisProgress = Math.round(Math.max(0, Math.min(100,
+    audioAnalysisJob?.progress ?? audibleAudioClip?.waveformProgress ?? 0
+  )));
+  const hasSpectrogram = Boolean(
+    audibleAudioClip?.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0] ||
+    audibleAudioClip?.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0]
+  );
   const canPasteEffects = hasClipboardEffects();
   const canPasteColor = hasClipboardColor();
   const getPasteTargetClipIds = (): string[] => {
@@ -206,8 +328,45 @@ export function TimelineContextMenu({
       : [contextMenu.clipId];
   };
   const targetClipIds = getPasteTargetClipIds();
+  const getClipLinkAffectedIds = (): Set<string> => {
+    const affectedIds = new Set(targetClipIds);
+    const targetIdSet = new Set(targetClipIds);
+    const manualGroupIds = new Set<string>();
+
+    for (const clipId of targetClipIds) {
+      const targetClip = clipMap.get(clipId);
+      if (!targetClip) continue;
+      if (targetClip.linkedClipId) affectedIds.add(targetClip.linkedClipId);
+      const groupId = targetClip.linkedGroupId;
+      if (groupId && isManualLinkedGroupId(groupId)) {
+        manualGroupIds.add(groupId);
+      }
+    }
+
+    for (const candidate of clipMap.values()) {
+      if (candidate.linkedClipId && targetIdSet.has(candidate.linkedClipId)) {
+        affectedIds.add(candidate.id);
+      }
+      if (candidate.linkedGroupId && manualGroupIds.has(candidate.linkedGroupId)) {
+        affectedIds.add(candidate.id);
+      }
+    }
+
+    return affectedIds;
+  };
+  const clipLinkAffectedIds = getClipLinkAffectedIds();
+  const hasClipLinkTarget = targetClipIds.some((clipId) => {
+    const targetClip = clipMap.get(clipId);
+    if (!targetClip) return false;
+    return Boolean(targetClip.linkedClipId) ||
+      isManualLinkedGroupId(targetClip.linkedGroupId) ||
+      [...clipMap.values()].some((candidate) => candidate.linkedClipId === clipId);
+  });
   const hasLockedTarget = targetClipIds.some(isClipLocked);
+  const hasLockedClipLinkTarget = [...clipLinkAffectedIds].some(isClipLocked);
   const canModifyTargets = !hasLockedTarget;
+  const canLinkClips = targetClipIds.length >= 2 && !hasLockedClipLinkTarget;
+  const canUnlinkClips = hasClipLinkTarget && !hasLockedClipLinkTarget;
 
   // Resolve the media item ID and current label color for the clip
   const resolveMediaItemColor = (): { mediaItemId: string | null; currentColor: LabelColor } => {
@@ -301,26 +460,92 @@ export function TimelineContextMenu({
         </div>
       )}
 
-      {isVideo && (
+      {(isVideoMedia || hasSourceAudio || audibleAudioClip) && (
         <>
           <div className="context-menu-separator" />
-          {isGenerating ? (
-            <div
-              className="context-menu-item"
-              onClick={() => handleProxyGeneration('stop')}
-            >
-              Stop Proxy Generation ({mediaFile?.proxyProgress || 0}%)
+          <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+            <span>Regenerate</span>
+            <span className="submenu-arrow">{'\u25B6'}</span>
+            <div className="context-submenu">
+              {isVideoMedia && (
+                <div
+                  className={`context-menu-item ${!mediaFile || (!isGenerating && !mediaFile.file) ? 'disabled' : ''}`}
+                  onClick={() => {
+                    if (!mediaFile || (!isGenerating && !mediaFile.file)) return;
+                    handleProxyGeneration(isGenerating ? 'stop' : 'start', { force: hasProxy });
+                  }}
+                >
+                  {isGenerating
+                    ? `Stop Proxy Generation (${mediaFile?.proxyProgress || 0}%)`
+                    : `Proxy${hasProxy ? ' (ready)' : ''}`}
+                </div>
+              )}
+              {isVideoMedia && (
+                <div
+                  className={`context-menu-item ${thumbnailStatus === 'generating' ? 'disabled' : ''}`}
+                  onClick={() => {
+                    if (thumbnailStatus === 'generating') return;
+                    handleThumbnailRegeneration();
+                  }}
+                >
+                  Thumbnails
+                  {thumbnailStatus === 'ready'
+                    ? ' (ready)'
+                    : thumbnailStatus === 'generating'
+                    ? ' (generating)'
+                    : ''}
+                </div>
+              )}
+              {hasSourceAudio && (
+                <div
+                  className={`context-menu-item ${!mediaFile || isAudioProxyGenerating ? 'disabled' : ''}`}
+                  onClick={() => {
+                    if (!mediaFile || isAudioProxyGenerating) return;
+                    handleAudioProxyRegeneration(hasAudioProxy);
+                  }}
+                >
+                  WAV Audio Proxy
+                  {isAudioProxyGenerating
+                    ? ` (${mediaFile?.audioProxyProgress || 0}%)`
+                    : hasAudioProxy
+                    ? ' (ready)'
+                    : ''}
+                </div>
+              )}
+              {audibleAudioClip && (
+                <div
+                  className={`context-menu-item ${isAudioAnalysisGenerating ? 'disabled' : ''}`}
+                  onClick={() => {
+                    if (isAudioAnalysisGenerating) return;
+                    handleWaveformRegeneration();
+                  }}
+                >
+                  Waveform
+                  {isAudioAnalysisGenerating
+                    ? ` (${audioAnalysisProgress}%)`
+                    : audibleAudioClip.waveform?.length
+                    ? ' (ready)'
+                    : ''}
+                </div>
+              )}
+              {audibleAudioClip && (
+                <div
+                  className={`context-menu-item ${isAudioAnalysisGenerating ? 'disabled' : ''}`}
+                  onClick={() => {
+                    if (isAudioAnalysisGenerating) return;
+                    handleSpectralRegeneration();
+                  }}
+                >
+                  Spectral
+                  {isAudioAnalysisGenerating
+                    ? ` (${audioAnalysisProgress}%)`
+                    : hasSpectrogram
+                    ? ' (ready)'
+                    : ''}
+                </div>
+              )}
             </div>
-          ) : hasProxy ? (
-            <div className="context-menu-item disabled">Proxy Ready</div>
-          ) : (
-            <div
-              className="context-menu-item"
-              onClick={() => handleProxyGeneration('start')}
-            >
-              Generate Proxy
-            </div>
-          )}
+          </div>
         </>
       )}
 
@@ -453,6 +678,36 @@ export function TimelineContextMenu({
         Delete Gap at Clip Start
       </div>
 
+      {(targetClipIds.length >= 2 || hasClipLinkTarget) && (
+        <>
+          <div className="context-menu-separator" />
+          {targetClipIds.length >= 2 && (
+            <div
+              className={`context-menu-item ${!canLinkClips ? 'disabled' : ''}`}
+              onClick={() => {
+                if (!canLinkClips) return;
+                linkClips(targetClipIds);
+                setContextMenu(null);
+              }}
+            >
+              Link Clips
+            </div>
+          )}
+          {hasClipLinkTarget && (
+            <div
+              className={`context-menu-item ${!canUnlinkClips ? 'disabled' : ''}`}
+              onClick={() => {
+                if (!canUnlinkClips) return;
+                unlinkClips(targetClipIds);
+                setContextMenu(null);
+              }}
+            >
+              Unlink Clips
+            </div>
+          )}
+        </>
+      )}
+
       {isSolid && (
         <>
           <div className="context-menu-separator" />
@@ -484,7 +739,7 @@ export function TimelineContextMenu({
           Combine Multicam ({selectedClipIds.size} clips)
         </div>
       )}
-      {clip?.linkedGroupId && (
+      {clip?.linkedGroupId && !isManualLinkedGroupId(clip.linkedGroupId) && (
         <div
           className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
           onClick={() => {
@@ -525,24 +780,22 @@ export function TimelineContextMenu({
         Create Subcomposition
       </div>
 
-      {/* Generate Waveform option for audio clips */}
-      {isAudio && (
+      {audibleAudioClip && (
         <>
           <div className="context-menu-separator" />
           <div
-            className={`context-menu-item ${clip?.waveformGenerating ? 'disabled' : ''}`}
+            className={`context-menu-item ${isStemSeparationActive || !canModifyTargets ? 'disabled' : ''}`}
             onClick={() => {
-              if (contextMenu.clipId && !clip?.waveformGenerating) {
-                generateWaveformForClip(contextMenu.clipId, { previewOnly: true });
-              }
+              if (!contextMenu.clipId || isStemSeparationActive || !canModifyTargets) return;
+              void startClipStemSeparation(contextMenu.clipId, { force: hasStemSeparation });
               setContextMenu(null);
             }}
           >
-            {clip?.waveformGenerating
-              ? `Generating Waveform... ${clip?.waveformProgress || 0}%`
-              : clip?.waveform && clip.waveform.length > 0
-              ? 'Regenerate Waveform'
-              : 'Generate Waveform'}
+            {isStemSeparationActive
+              ? `Separating Stems... ${stemProgressPercent}%`
+              : hasStemSeparation
+              ? 'Regenerate Stems...'
+              : 'Stem Separation...'}
           </div>
         </>
       )}

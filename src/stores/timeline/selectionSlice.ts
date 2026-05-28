@@ -1,6 +1,7 @@
 // Selection-related actions slice
 
 import type { SelectionActions, SliceCreator, Keyframe } from './types';
+import { isManualLinkedGroupId } from './helpers/idGenerator';
 
 export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) => ({
   // Clip selection (multi-select support)
@@ -60,8 +61,22 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
         return;
       }
       const clip = clips.find(c => c.id === id);
-      const linkedId = clip?.linkedClipId;
-      const newSelection = linkedId ? new Set([id, linkedId]) : new Set([id]);
+      const newSelection = new Set([id]);
+      if (clip?.linkedClipId) {
+        newSelection.add(clip.linkedClipId);
+      }
+      for (const candidate of clips) {
+        if (candidate.linkedClipId === id) {
+          newSelection.add(candidate.id);
+        }
+        if (
+          clip?.linkedGroupId &&
+          isManualLinkedGroupId(clip.linkedGroupId) &&
+          candidate.linkedGroupId === clip.linkedGroupId
+        ) {
+          newSelection.add(candidate.id);
+        }
+      }
       set({ selectedClipIds: newSelection, primarySelectedClipId: id });
     }
   },

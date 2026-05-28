@@ -6,10 +6,15 @@ import {
   createFileAudioSourceFingerprint,
   createProcessedClipAudioStateHash,
 } from './ProcessedWaveformPyramidService';
+import { projectFileService } from '../projectFileService';
+import { getStoredProjectFileHandle } from '../project/mediaSourceResolver';
+import { Logger } from '../logger';
 
 export const SOURCE_AUDIO_ANALYSIS_DECODER_ID = 'masterselects.audio-extractor';
 export const PROCESSED_AUDIO_ANALYSIS_DECODER_ID = 'masterselects.processed-audio-graph';
 export const CLIP_AUDIO_ANALYSIS_DECODER_VERSION = '1.0.0';
+
+const log = Logger.create('ClipAudioAnalysisOrchestrator');
 
 export interface PreparedClipAudioAnalysisInput {
   mediaFileId: string;
@@ -57,9 +62,109 @@ function createAnalysisMetadata(clip: TimelineClip, processed: boolean): SignalM
   };
 }
 
+interface SourceFileCandidate {
+  file: File;
+  mediaFileId?: string;
+  label: string;
+}
+
+function isFileLike(value: unknown): value is File {
+  return typeof File !== 'undefined' && value instanceof File;
+}
+
+function addSourceFileCandidate(
+  candidates: SourceFileCandidate[],
+  seen: Set<string>,
+  file: unknown,
+  mediaFileId: string | undefined,
+  label: string,
+): void {
+  if (!isFileLike(file)) return;
+  const key = `${file.name}:${file.size}:${file.lastModified}:${label}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  candidates.push({ file, mediaFileId, label });
+}
+
+async function getReadableFileFromHandle(handle: FileSystemFileHandle): Promise<File | null> {
+  try {
+    let permission: PermissionState = 'granted';
+    if (typeof handle.queryPermission === 'function') {
+      permission = await handle.queryPermission({ mode: 'read' });
+    }
+    if (permission !== 'granted' && typeof handle.requestPermission === 'function') {
+      permission = await handle.requestPermission({ mode: 'read' });
+    }
+    if (permission !== 'granted') {
+      return null;
+    }
+    return await handle.getFile();
+  } catch (error) {
+    log.debug('Unable to read stored project media handle', error);
+    return null;
+  }
+}
+
+async function collectSourceFileCandidates(clip: TimelineClip): Promise<SourceFileCandidate[]> {
+  const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+  const candidates: SourceFileCandidate[] = [];
+  const seen = new Set<string>();
+
+  addSourceFileCandidate(candidates, seen, clip.file, mediaFileId, 'clip');
+  addSourceFileCandidate(candidates, seen, clip.source?.file, mediaFileId, 'clip-source');
+
+  const mediaStoreFile = mediaFileId
+    ? await import('../../stores/mediaStore')
+      .then(({ useMediaStore }) => useMediaStore.getState().files.find((file) => file.id === mediaFileId))
+      .catch(() => undefined)
+    : undefined;
+
+  addSourceFileCandidate(candidates, seen, mediaStoreFile?.file, mediaFileId, 'media-library');
+
+  if (mediaStoreFile?.projectPath && projectFileService.isProjectOpen()) {
+    try {
+      const projectFile = await projectFileService.getFileFromRaw(mediaStoreFile.projectPath);
+      addSourceFileCandidate(candidates, seen, projectFile?.file, mediaFileId, 'project-raw');
+    } catch (error) {
+      log.debug('Unable to read project RAW media file for audio analysis', {
+        mediaFileId,
+        projectPath: mediaStoreFile.projectPath,
+        error,
+      });
+    }
+  }
+
+  const projectHandle = await getStoredProjectFileHandle(mediaFileId);
+  if (projectHandle) {
+    addSourceFileCandidate(
+      candidates,
+      seen,
+      await getReadableFileFromHandle(projectHandle),
+      mediaFileId,
+      'project-handle',
+    );
+  }
+
+  return candidates;
+}
+
+async function extractSourceBufferFromCandidate(
+  candidate: SourceFileCandidate,
+): Promise<{
+  sourceBuffer: AudioBuffer;
+  sourceFingerprint: string;
+  mediaFileId: string;
+}> {
+  const mediaFileId = candidate.mediaFileId ?? `file:${candidate.file.name}:${candidate.file.size}:${candidate.file.lastModified}`;
+  const sourceFingerprint = await createFileAudioSourceFingerprint(candidate.file);
+  const sourceBuffer = await audioExtractor.extractAudio(candidate.file, mediaFileId);
+  return { sourceBuffer, sourceFingerprint, mediaFileId };
+}
+
 async function resolveSourceBuffer(
   clip: TimelineClip,
   onMixdownReady?: (buffer: AudioBuffer) => void,
+  signal?: AbortSignal,
 ): Promise<{
   sourceBuffer: AudioBuffer | null;
   sourceFingerprint: string;
@@ -85,10 +190,36 @@ async function resolveSourceBuffer(
       sourceFingerprint = compositionMixdownFingerprint(clip, sourceBuffer);
       mediaFileId = mediaFileId ?? clip.compositionId;
     }
-  } else if (clip.file) {
-    mediaFileId = mediaFileId ?? `file:${clip.file.name}:${clip.file.size}:${clip.file.lastModified}`;
-    sourceFingerprint = await createFileAudioSourceFingerprint(clip.file);
-    sourceBuffer = await audioExtractor.extractAudio(clip.file, mediaFileId);
+  } else {
+    const candidates = await collectSourceFileCandidates(clip);
+    let lastError: unknown = null;
+
+    for (const candidate of candidates) {
+      if (signal?.aborted) {
+        throw new DOMException('Clip audio analysis preparation was cancelled.', 'AbortError');
+      }
+
+      try {
+        const extracted = await extractSourceBufferFromCandidate(candidate);
+        sourceBuffer = extracted.sourceBuffer;
+        sourceFingerprint = extracted.sourceFingerprint;
+        mediaFileId = extracted.mediaFileId;
+        break;
+      } catch (error) {
+        lastError = error;
+        log.debug('Audio source candidate could not be read', {
+          clipId: clip.id,
+          clipName: clip.name,
+          candidate: candidate.label,
+          error,
+        });
+      }
+    }
+
+    if (!sourceBuffer && lastError) {
+      const message = lastError instanceof Error ? lastError.message : String(lastError);
+      throw new Error(`Source audio file could not be read: ${message}`);
+    }
   }
 
   return { sourceBuffer, sourceFingerprint, mediaFileId };
@@ -105,7 +236,7 @@ export async function prepareClipAudioAnalysisInput(
     onMixdownReady,
     onRenderProgress,
   } = request;
-  const source = await resolveSourceBuffer(clip, onMixdownReady);
+  const source = await resolveSourceBuffer(clip, onMixdownReady, signal);
 
   if (!source.sourceBuffer) {
     return null;

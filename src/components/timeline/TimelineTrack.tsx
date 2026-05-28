@@ -1,15 +1,37 @@
 // TimelineTrack component - Individual track row
 
 import React, { memo, useMemo, useRef, useEffect, useState } from 'react';
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconHeadphones,
+  IconVolume,
+  IconVolumeOff,
+} from '@tabler/icons-react';
 import type { TimelineTrackProps } from './types';
 import type { AnimatableProperty, BezierHandle, ClipMask, Keyframe } from '../../types';
 import { CurveEditor } from './CurveEditor';
 import { parseVectorAnimationInputProperty, parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
+import { useMediaStore } from '../../stores/mediaStore';
+import { useTimelineStore } from '../../stores/timeline';
+import { STEM_LAYER_HEADER_ROW_HEIGHT, STEM_LAYER_ROW_HEIGHT } from '../../stores/timeline/constants';
+import {
+  STEM_SOURCE_LAYER_ID,
+} from '../../services/audio/stemSeparation';
+import { proxyFrameCache } from '../../services/proxyFrameCache';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_VIEWPORT_MIN_PX = 1600;
 const TRACK_RENDER_OVERSCAN_PX = 1200;
 const EPSILON = 0.0001;
+const ACTIVE_STEM_JOB_PHASES = new Set([
+  'queued',
+  'preparing',
+  'downloading-model',
+  'loading-model',
+  'separating',
+  'storing',
+]);
 
 type KeyframeTrackClip = {
   id: string;
@@ -220,6 +242,296 @@ function TrackPropertyTracks({
   );
 }
 
+function formatStemGainDb(gainDb: number): string {
+  if (!Number.isFinite(gainDb) || Math.abs(gainDb) < 0.05) return '0 dB';
+  return `${gainDb > 0 ? '+' : ''}${gainDb.toFixed(1)} dB`;
+}
+
+function formatStemJobPhase(phase: string): string {
+  switch (phase) {
+    case 'queued':
+      return 'Queued';
+    case 'preparing':
+      return 'Preparing audio';
+    case 'downloading-model':
+      return 'Downloading model';
+    case 'loading-model':
+      return 'Loading model';
+    case 'separating':
+      return 'Separating stems';
+    case 'storing':
+      return 'Storing stems';
+    default:
+      return 'Stem separation';
+  }
+}
+
+function hasUsableAudioProxy(mediaFile: { hasProxyAudio?: boolean; audioProxyStatus?: string } | undefined): boolean {
+  return mediaFile?.hasProxyAudio === true || mediaFile?.audioProxyStatus === 'ready';
+}
+
+function buildStemWaveformPath(waveform: readonly number[], width: number, height: number): string {
+  if (waveform.length === 0) return '';
+
+  const maxPoints = Math.min(160, waveform.length);
+  const midY = height / 2;
+  const top: string[] = [];
+  const bottom: string[] = [];
+
+  for (let pointIndex = 0; pointIndex < maxPoints; pointIndex += 1) {
+    const sourceIndex = Math.min(
+      waveform.length - 1,
+      Math.floor((pointIndex / Math.max(1, maxPoints - 1)) * (waveform.length - 1)),
+    );
+    const x = maxPoints === 1 ? 0 : (pointIndex / (maxPoints - 1)) * width;
+    const amp = Math.max(0, Math.min(1, waveform[sourceIndex] ?? 0));
+    const y = Math.max(1, amp * (height / 2 - 1));
+    top.push(`${x.toFixed(2)},${(midY - y).toFixed(2)}`);
+    bottom.push(`${x.toFixed(2)},${(midY + y).toFixed(2)}`);
+  }
+
+  return `M ${top.join(' L ')} L ${bottom.reverse().join(' L ')} Z`;
+}
+
+const StemWaveformPreview = memo(function StemWaveformPreview({
+  waveform,
+  label,
+}: {
+  waveform?: readonly number[];
+  label: string;
+}) {
+  const path = useMemo(() => buildStemWaveformPath(waveform ?? [], 160, 18), [waveform]);
+  return (
+    <span className={`clip-stem-layer-waveform ${path ? '' : 'empty'}`} title={`${label} waveform`}>
+      {path && (
+        <svg viewBox="0 0 160 18" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <path d={path} />
+        </svg>
+      )}
+    </span>
+  );
+});
+
+function ClipStemLayerTracks({
+  clips,
+  selectedClipIds,
+  expandedClipStemLayerIds,
+  timeToPixel,
+}: {
+  clips: TimelineTrackProps['clips'];
+  selectedClipIds: Set<string>;
+  expandedClipStemLayerIds: Set<string>;
+  timeToPixel: (time: number) => number;
+}) {
+  const clipStemSeparationJobs = useTimelineStore(state => state.clipStemSeparationJobs);
+  const {
+    toggleClipStemLayerDropdown,
+    setClipStemMixMode,
+    setClipStemSourceGain,
+    setClipStemSolo,
+    setClipStemEnabled,
+    setClipStemGain,
+  } = useTimelineStore.getState();
+  const mediaFiles = useMediaStore(state => state.files);
+  const mediaWaveformsById = useMemo(() => {
+    const waveforms = new Map<string, number[]>();
+    mediaFiles.forEach((file) => {
+      if (file.waveform?.length) {
+        waveforms.set(file.id, file.waveform);
+      }
+    });
+    return waveforms;
+  }, [mediaFiles]);
+  const stemClips = useMemo(() => clips.filter((clip) => {
+    const job = clipStemSeparationJobs[clip.id];
+    const isActiveJob = ACTIVE_STEM_JOB_PHASES.has(job?.phase ?? 'failed');
+    return isActiveJob || (
+      selectedClipIds.has(clip.id)
+      && Boolean(clip.audioState?.stemSeparation?.stems.length)
+    );
+  }), [clipStemSeparationJobs, clips, selectedClipIds]);
+  const stemPreloadIdsKey = useMemo(() => {
+    const mediaFileById = new Map(mediaFiles.map(file => [file.id, file]));
+    const ids = new Set<string>();
+    for (const clip of clips) {
+      if (!clip.audioState?.stemSeparation?.stems.length) continue;
+      const sourceMediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+      if (sourceMediaFileId && hasUsableAudioProxy(mediaFileById.get(sourceMediaFileId))) {
+        ids.add(sourceMediaFileId);
+      }
+      for (const stem of clip.audioState?.stemSeparation?.stems ?? []) {
+        if (stem.mediaFileId && hasUsableAudioProxy(mediaFileById.get(stem.mediaFileId))) {
+          ids.add(stem.mediaFileId);
+        }
+      }
+    }
+    return Array.from(ids).sort().join('|');
+  }, [mediaFiles, clips]);
+
+  useEffect(() => {
+    if (!stemPreloadIdsKey) return;
+    for (const mediaFileId of stemPreloadIdsKey.split('|')) {
+      if (!mediaFileId) continue;
+      void proxyFrameCache.preloadAudioProxy(mediaFileId);
+      void proxyFrameCache.getAudioBuffer(mediaFileId);
+    }
+  }, [stemPreloadIdsKey]);
+
+  if (stemClips.length === 0) return null;
+
+  return (
+    <div className="clip-stem-layer-tracks">
+      {stemClips.map((clip) => {
+        const stemSeparation = clip.audioState?.stemSeparation;
+        const job = clipStemSeparationJobs[clip.id];
+        const isActiveJob = ACTIVE_STEM_JOB_PHASES.has(job?.phase ?? 'failed');
+        if (!stemSeparation && !isActiveJob) return null;
+
+        const isOpen = expandedClipStemLayerIds.has(clip.id);
+        const width = Math.max(72, timeToPixel(clip.duration));
+        const stemRows = stemSeparation ? stemSeparation.stems.length + 1 : 0;
+        const jobRowHeight = isActiveJob ? STEM_LAYER_ROW_HEIGHT : 0;
+        const blockHeight = STEM_LAYER_HEADER_ROW_HEIGHT + jobRowHeight + (isOpen ? stemRows * STEM_LAYER_ROW_HEIGHT : 0);
+        const sourceSolo = stemSeparation?.soloStemId === STEM_SOURCE_LAYER_ID || stemSeparation?.mixMode === 'original';
+        const sourceEnabled = sourceSolo || stemSeparation?.mixMode === 'hybrid';
+        const sourceOnly = sourceSolo;
+        const sourceGainDb = stemSeparation?.sourceGainDb ?? 0;
+        const sourceWaveform = clip.waveform?.length
+          ? clip.waveform
+          : (clip.mediaFileId ? mediaWaveformsById.get(clip.mediaFileId) : undefined);
+        const progressPercent = Math.round(Math.max(0, Math.min(1, job?.progress ?? 0)) * 100);
+
+        return (
+          <div key={clip.id} className="clip-stem-layer-block" style={{ height: blockHeight }}>
+            <div
+              className="clip-stem-layer-panel"
+              style={{
+                left: timeToPixel(clip.startTime),
+                width,
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="clip-stem-layer-header"
+                onClick={() => toggleClipStemLayerDropdown(clip.id)}
+                title={isOpen ? 'Collapse stems' : 'Expand stems'}
+                aria-label={isOpen ? 'Collapse stems' : 'Expand stems'}
+              >
+                {isOpen
+                  ? <IconChevronDown className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />
+                  : <IconChevronRight className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />}
+                <span className="clip-stem-layer-title">{isActiveJob ? formatStemJobPhase(job?.phase ?? 'queued') : 'Stems'}</span>
+                <span className="clip-stem-layer-count">{isActiveJob ? `${progressPercent}%` : stemRows}</span>
+              </button>
+
+              {isActiveJob && (
+                <div className="clip-stem-layer-row progress" title={job?.message ?? formatStemJobPhase(job?.phase ?? 'queued')}>
+                  <div className="clip-stem-layer-progress-track">
+                    <div
+                      className="clip-stem-layer-progress-fill"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <span className="clip-stem-layer-progress-label">
+                    {job?.message ?? formatStemJobPhase(job?.phase ?? 'queued')}
+                  </span>
+                </div>
+              )}
+
+              {isOpen && stemSeparation && (
+                <div className={`clip-stem-layer-row source ${sourceEnabled ? '' : 'muted'} ${sourceSolo ? 'solo' : ''}`}>
+                  <button
+                    type="button"
+                    className={`clip-stem-layer-button ${sourceSolo ? 'active' : ''}`}
+                    onClick={() => sourceSolo
+                      ? setClipStemMixMode(clip.id, 'hybrid')
+                      : setClipStemSolo(clip.id, STEM_SOURCE_LAYER_ID)}
+                    title="Solo Source"
+                    aria-label="Solo Source"
+                  >
+                    <IconHeadphones className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />
+                  </button>
+                  <button
+                    type="button"
+                    className={`clip-stem-layer-button ${sourceEnabled ? 'active' : ''}`}
+                    onClick={() => setClipStemMixMode(clip.id, sourceEnabled ? 'stems' : 'hybrid')}
+                    title={sourceEnabled ? 'Mute Source' : 'Enable Source'}
+                    aria-label={sourceEnabled ? 'Mute Source' : 'Enable Source'}
+                  >
+                    {sourceEnabled
+                      ? <IconVolume className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />
+                      : <IconVolumeOff className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />}
+                  </button>
+                  <span className="clip-stem-layer-label" title="Source">Source</span>
+                  <StemWaveformPreview waveform={sourceWaveform} label="Source" />
+                  <input
+                    className="clip-stem-layer-gain"
+                    type="range"
+                    min={-24}
+                    max={12}
+                    step={0.5}
+                    value={Math.max(-24, Math.min(12, sourceGainDb))}
+                    onChange={(event) => setClipStemSourceGain(clip.id, Number(event.currentTarget.value))}
+                    aria-label="Source gain"
+                    title="Source gain"
+                  />
+                  <span className="clip-stem-layer-gain-value">{formatStemGainDb(sourceGainDb)}</span>
+                </div>
+              )}
+
+              {isOpen && stemSeparation?.stems.map((stem) => {
+                const isSolo = stemSeparation.soloStemId === stem.id;
+                const waveform = stem.waveform
+                  ?? (stem.mediaFileId ? mediaWaveformsById.get(stem.mediaFileId) : undefined);
+                return (
+                  <div key={stem.id} className={`clip-stem-layer-row ${stem.enabled ? '' : 'muted'} ${sourceOnly ? 'bypassed' : ''} ${isSolo ? 'solo' : ''}`}>
+                    <button
+                      type="button"
+                      className={`clip-stem-layer-button ${isSolo ? 'active' : ''}`}
+                      onClick={() => setClipStemSolo(clip.id, isSolo ? null : stem.id)}
+                      title={`Solo ${stem.label}`}
+                      aria-label={`Solo ${stem.label}`}
+                    >
+                      <IconHeadphones className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`clip-stem-layer-button ${stem.enabled ? 'active' : ''}`}
+                      onClick={() => setClipStemEnabled(clip.id, stem.id, !stem.enabled)}
+                      title={stem.enabled ? `Mute ${stem.label}` : `Enable ${stem.label}`}
+                      aria-label={stem.enabled ? `Mute ${stem.label}` : `Enable ${stem.label}`}
+                    >
+                      {stem.enabled
+                        ? <IconVolume className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />
+                        : <IconVolumeOff className="clip-stem-layer-icon" aria-hidden="true" focusable="false" />}
+                    </button>
+                    <span className="clip-stem-layer-label" title={stem.label}>{stem.label}</span>
+                    <StemWaveformPreview waveform={waveform} label={stem.label} />
+                    <input
+                      className="clip-stem-layer-gain"
+                      type="range"
+                      min={-24}
+                      max={12}
+                      step={0.5}
+                      value={Math.max(-24, Math.min(12, stem.gainDb))}
+                      onChange={(event) => setClipStemGain(clip.id, stem.id, Number(event.currentTarget.value))}
+                      aria-label={`${stem.label} gain`}
+                      title={`${stem.label} gain`}
+                    />
+                    <span className="clip-stem-layer-gain-value">{formatStemGainDb(stem.gainDb)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TimelineTrackComponent({
   track,
   trackColor,
@@ -287,6 +599,7 @@ function TimelineTrackComponent({
   }, [allTrackClips, clipDrag, clipTrim?.clipId, selectedClipIds, visibleEndTime, visibleStartTime]);
   const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
+  const expandedClipStemLayerIds = useTimelineStore(state => state.expandedClipStemLayerIds);
   const trackLaneStyle = {
     height: dynamicHeight,
     ...(trackColor ? { '--track-color': trackColor } : {}),
@@ -373,6 +686,14 @@ function TimelineTrackComponent({
             externalDrag.thumbnailUrl,
           )}
       </div>
+      {(track.type === 'video' || track.type === 'audio') && isExpanded && (
+        <ClipStemLayerTracks
+          clips={allTrackClips}
+          selectedClipIds={selectedClipIds}
+          expandedClipStemLayerIds={expandedClipStemLayerIds}
+          timeToPixel={timeToPixel}
+        />
+      )}
       {/* Property rows - only shown when track is expanded (for both video and audio) */}
       {(track.type === 'video' || track.type === 'audio') && isExpanded && (
         <TrackPropertyTracks

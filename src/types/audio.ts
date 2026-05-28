@@ -27,7 +27,19 @@ export type AudioAnalysisArtifactKind =
   | 'onset-map'
   | 'phase-correlation'
   | 'transcript-timing'
-  | 'frequency-summary';
+  | 'frequency-summary'
+  | 'stem-separation';
+
+export type AudioStemKind =
+  | 'mix'
+  | 'vocals'
+  | 'drums'
+  | 'bass'
+  | 'other'
+  | 'instrumental'
+  | 'dialogue'
+  | 'music'
+  | 'sfx';
 
 export type AudioChannelLayoutKind =
   | 'mono'
@@ -284,6 +296,37 @@ export interface SpectralImageLayer {
   keyframes?: SpectralImageLayerKeyframe[];
 }
 
+export interface ClipAudioStemLayer {
+  id: string;
+  kind: AudioStemKind;
+  label: string;
+  analysisArtifactId: string;
+  manifestArtifactId: string;
+  payloadRef: AudioSignalArtifactRef;
+  mediaFileId?: string;
+  waveform?: number[];
+  enabled: boolean;
+  gainDb: number;
+  phaseAligned: boolean;
+  modelId: string;
+  sourceFingerprint: string;
+}
+
+export interface ClipAudioStemState {
+  activeSetId: string;
+  modelId: string;
+  modelVersion: string;
+  createdAt: number;
+  sourceFingerprint: string;
+  range: { start: number; end: number };
+  sampleRate: number;
+  channelCount: number;
+  stems: ClipAudioStemLayer[];
+  soloStemId?: string;
+  sourceGainDb?: number;
+  mixMode: 'original' | 'stems' | 'hybrid';
+}
+
 export interface ClipAudioEditOperation {
   id: string;
   type:
@@ -329,6 +372,7 @@ export interface ClipAudioState {
   editStack?: ClipAudioEditOperation[];
   effectStack?: AudioEffectInstance[];
   spectralLayers?: SpectralImageLayer[];
+  stemSeparation?: ClipAudioStemState;
   sourceAnalysisRefs?: MediaFileAudioAnalysisRefs;
   processedAnalysisRefs?: MediaFileAudioAnalysisRefs;
   bakeHistory?: AudioDerivedAssetRef[];

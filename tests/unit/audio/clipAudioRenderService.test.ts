@@ -124,6 +124,114 @@ describe('ClipAudioRenderService', () => {
     );
   });
 
+  it('replaces the source buffer with the resolved stem mix before trim and edit rendering', async () => {
+    const sourceBuffer = createMockAudioBuffer([[9, 9, 9, 9]], 4);
+    const stemMixBuffer = createMockAudioBuffer([[1, 2, 3, 4]], 4);
+    const trimmedBuffer = createMockAudioBuffer([[2, 3]], 4);
+    const stemAudioSourceResolver = {
+      resolveStemMix: vi.fn(async () => ({
+        mode: 'stems' as const,
+        buffer: stemMixBuffer,
+        usedStemIds: ['stem-vocals'],
+        missingStems: [],
+      })),
+    };
+    const extractor = {
+      trimBuffer: vi.fn(() => trimmedBuffer),
+    };
+    const service = new ClipAudioRenderService({
+      extractor,
+      stemAudioSourceResolver,
+      effectRenderer: { renderEffectInstances: vi.fn(async (buffer: AudioBuffer) => buffer) },
+    });
+    const clip = createMockClip({
+      id: 'clip-stems',
+      duration: 0.5,
+      inPoint: 0.25,
+      outPoint: 0.75,
+      audioState: {
+        stemSeparation: {
+          activeSetId: 'stem-set-a',
+          modelId: 'demucs-htdemucs-web',
+          modelVersion: 'test-v1',
+          createdAt: 1,
+          sourceFingerprint: 'source-a',
+          range: { start: 0, end: 1 },
+          sampleRate: 4,
+          channelCount: 1,
+          mixMode: 'stems',
+          stems: [{
+            id: 'stem-vocals',
+            kind: 'vocals',
+            label: 'Vocals',
+            analysisArtifactId: 'analysis-vocals',
+            manifestArtifactId: 'manifest-vocals',
+            payloadRef: { artifactId: 'payload-vocals' },
+            enabled: true,
+            gainDb: 0,
+            phaseAligned: true,
+            modelId: 'demucs-htdemucs-web',
+            sourceFingerprint: 'source-a',
+          }],
+        },
+      },
+    });
+
+    const result = await service.render({ clip, sourceBuffer });
+
+    expect(stemAudioSourceResolver.resolveStemMix).toHaveBeenCalledWith(clip.audioState?.stemSeparation);
+    expect(extractor.trimBuffer).toHaveBeenCalledWith(stemMixBuffer, 0.25, 0.75);
+    expect(result.buffer).toBe(trimmedBuffer);
+  });
+
+  it('does not fall back to source audio when requested stem artifacts are missing', async () => {
+    const sourceBuffer = createMockAudioBuffer([[9, 9]], 2);
+    const stemAudioSourceResolver = {
+      resolveStemMix: vi.fn(async () => ({
+        mode: 'stems' as const,
+        buffer: null,
+        usedStemIds: [],
+        missingStems: [{
+          id: 'stem-vocals',
+          kind: 'vocals',
+          label: 'Vocals',
+          analysisArtifactId: 'analysis-vocals',
+          manifestArtifactId: 'manifest-vocals',
+          payloadRef: { artifactId: 'payload-vocals' },
+          enabled: true,
+          gainDb: 0,
+          phaseAligned: true,
+          modelId: 'demucs-htdemucs-web',
+          sourceFingerprint: 'source-a',
+        }],
+      })),
+    };
+    const service = new ClipAudioRenderService({
+      stemAudioSourceResolver,
+      extractor: { trimBuffer: vi.fn((buffer: AudioBuffer) => buffer) },
+    });
+    const clip = createMockClip({
+      id: 'clip-stem-missing',
+      duration: 1,
+      audioState: {
+        stemSeparation: {
+          activeSetId: 'stem-set-a',
+          modelId: 'demucs-htdemucs-web',
+          modelVersion: 'test-v1',
+          createdAt: 1,
+          sourceFingerprint: 'source-a',
+          range: { start: 0, end: 1 },
+          sampleRate: 2,
+          channelCount: 1,
+          mixMode: 'stems',
+          stems: [],
+        },
+      },
+    });
+
+    await expect(service.render({ clip, sourceBuffer })).rejects.toThrow('Missing stem artifacts: Vocals');
+  });
+
   it('renders muted clips after speed processing and skips effects', async () => {
     installAudioContextMock();
     const sourceBuffer = createMockAudioBuffer([[1, -1, 0.5, -0.5]], 8);

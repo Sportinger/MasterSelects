@@ -60,6 +60,7 @@ import {
   isTimelineBladeTool,
   isTimelinePointerTool,
 } from './tools/pointer/timelineToolPointerDispatcher';
+import { getTrimHandleArrowDirections } from './utils/trimHandleDirections';
 import type { ClipAudioEditOperation, VideoBakeRegion } from '../../types';
 
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
@@ -79,6 +80,33 @@ const AUDIO_REGION_GAIN_SILENCE_ZONE_PERCENT = 2;
 const AUDIO_REGION_GAIN_DEFAULT_FADE_SECONDS = 0.035;
 const VIDEO_BAKE_REGION_TIMELINE_EPSILON = 0.001;
 const log = Logger.create('TimelineClip');
+const ACTIVE_STEM_JOB_PHASES = new Set([
+  'queued',
+  'preparing',
+  'downloading-model',
+  'loading-model',
+  'separating',
+  'storing',
+]);
+
+function formatStemJobPhase(phase: string): string {
+  switch (phase) {
+    case 'queued':
+      return 'Queued';
+    case 'preparing':
+      return 'Preparing audio';
+    case 'downloading-model':
+      return 'Downloading stem model';
+    case 'loading-model':
+      return 'Loading stem model';
+    case 'separating':
+      return 'Separating stems';
+    case 'storing':
+      return 'Storing stems';
+    default:
+      return 'Stem separation';
+  }
+}
 const AUDIO_REGION_FX_PRESETS: Array<{
   key: string;
   label: string;
@@ -418,6 +446,15 @@ type AudioRegionContextMenuState = {
   selection: TimelineAudioRegionSelection;
 };
 
+function TrimHandleArrows({ directions }: { directions: Array<'left' | 'right'> }) {
+  return (
+    <span className="trim-handle-arrows" aria-hidden="true">
+      {directions.includes('left') && <span className="trim-handle-arrow left" />}
+      {directions.includes('right') && <span className="trim-handle-arrow right" />}
+    </span>
+  );
+}
+
 function StaticClipIcon({
   kind,
   className,
@@ -510,6 +547,8 @@ function TimelineClipComponent({
   proxyEnabled,
   proxyStatus,
   proxyProgress,
+  audioProxyStatus,
+  audioProxyProgress,
   showTranscriptMarkers,
   snappingEnabled,
   onMouseDown,
@@ -536,6 +575,19 @@ function TimelineClipComponent({
   const showAudioRegionEditMarkers = useTimelineStore(s => s.showAudioRegionEditMarkers);
   const activeTimelineToolId = useTimelineStore(s => s.activeTimelineToolId);
   const timelineToolPreview = useTimelineStore(s => s.timelineToolPreview);
+  const clipStemSeparationJob = useTimelineStore(s => {
+    const directJob = s.clipStemSeparationJobs[clip.id];
+    if (directJob && (directJob.clipId === clip.id || directJob.requestedClipId === clip.id)) {
+      return directJob;
+    }
+
+    const linkedJob = clip.linkedClipId ? s.clipStemSeparationJobs[clip.linkedClipId] : undefined;
+    if (linkedJob && (linkedJob.clipId === clip.id || linkedJob.requestedClipId === clip.id)) {
+      return linkedJob;
+    }
+
+    return null;
+  });
   const setTimelineToolPreview = useTimelineStore(s => s.setTimelineToolPreview);
   const applyTimelineEditOperation = useTimelineStore(s => s.applyTimelineEditOperation);
   const setActiveTimelineTool = useTimelineStore(s => s.setActiveTimelineTool);
@@ -708,6 +760,8 @@ function TimelineClipComponent({
     activeTimelineToolId === 'rate-stretch';
   const canUseFadeHandles = activeTimelineToolId === 'select';
   const canUseBodyToolGesture = activeTimelineToolId === 'slip' || activeTimelineToolId === 'slide';
+  const leftTrimHandleDirections = getTrimHandleArrowDirections(clip, 'left');
+  const rightTrimHandleDirections = getTrimHandleArrowDirections(clip, 'right');
 
   // Subscribe to playhead position only when blade tool is active (avoids re-renders during playback)
   const playheadPosition = useTimelineStore((state) =>
@@ -882,6 +936,25 @@ function TimelineClipComponent({
   const isGeneratingProxy = proxyStatus === 'generating';
   const hasProxy = proxyStatus === 'ready';
   const hasProxyError = proxyStatus === 'error';
+  const isGeneratingAudioProxy = audioProxyStatus === 'generating';
+  const hasAudioProxy = audioProxyStatus === 'ready';
+  const hasAudioProxyError = audioProxyStatus === 'error';
+  const hasStemSeparation = Boolean(clip.audioState?.stemSeparation?.stems.length);
+  const activeStemSeparationJob = clipStemSeparationJob && ACTIVE_STEM_JOB_PHASES.has(clipStemSeparationJob.phase)
+    ? clipStemSeparationJob
+    : null;
+  const failedStemSeparationJob = clipStemSeparationJob?.phase === 'failed'
+    ? clipStemSeparationJob
+    : null;
+  const activeStemProgressPercent = activeStemSeparationJob
+    ? Math.round(Math.max(0, Math.min(1, activeStemSeparationJob.progress)) * 100)
+    : 0;
+  const activeStemStatusLabel = activeStemSeparationJob
+    ? activeStemSeparationJob.message ?? formatStemJobPhase(activeStemSeparationJob.phase)
+    : '';
+  const activeStemStatusTitle = activeStemSeparationJob
+    ? `${activeStemStatusLabel}: ${activeStemProgressPercent}%`
+    : undefined;
 
   // Check if this clip is linked to the dragging/trimming clip
   const draggedClip = clipDrag
@@ -2021,10 +2094,15 @@ function TimelineClipComponent({
     hasProxy ? 'has-proxy' : '',
     isGeneratingProxy ? 'generating-proxy' : '',
     hasProxyError ? 'proxy-error' : '',
+    hasAudioProxy ? 'has-audio-proxy' : '',
+    isGeneratingAudioProxy ? 'generating-audio-proxy' : '',
+    hasAudioProxyError ? 'audio-proxy-error' : '',
+    hasStemSeparation ? 'has-stems' : '',
     hasKeyframes(clip.id) ? 'has-keyframes' : '',
     clip.reversed ? 'reversed' : '',
     clip.transcriptStatus === 'ready' ? 'has-transcript' : '',
     showWaveformGenerationIndicator ? 'generating-waveform' : '',
+    activeStemSeparationJob ? 'separating-stems' : '',
     waveformProcessingState,
     spectrogramProcessingState,
     audioDisplayMode === 'spectral' ? '' : (processedWaveformStatus?.className ?? ''),
@@ -2924,6 +3002,59 @@ function TimelineClipComponent({
   const audioRegionContextMenuPortalTarget = typeof document === 'undefined'
     ? null
     : document.body;
+  const sourceExtensionGhosts = (() => {
+    if ((!isTrimming && !isLinkedToTrimming) || !clipTrim || width <= 0) return [];
+
+    const originalStart = clip.startTime;
+    const originalEnd = clip.startTime + clip.duration;
+    const displayEnd = displayStartTime + displayDuration;
+    const ghosts: Array<{ edge: 'left' | 'right'; left: number; width: number }> = [];
+
+    const visibleStartPx = scrollX - left - TIMELINE_RENDER_OVERSCAN_PX;
+    const visibleEndPx = scrollX - left + renderTimelineViewportWidth + TIMELINE_RENDER_OVERSCAN_PX;
+    const pushVisibleGhost = (edge: 'left' | 'right', startTime: number, endTime: number) => {
+      const ghostStartTime = Math.max(0, Math.min(startTime, endTime));
+      const ghostEndTime = Math.max(ghostStartTime, Math.max(startTime, endTime));
+      if (ghostEndTime - ghostStartTime <= 0.001) return;
+
+      const rawLeft = timeToPixel(ghostStartTime - displayStartTime);
+      const rawRight = timeToPixel(ghostEndTime - displayStartTime);
+      const clippedLeft = Math.max(rawLeft, visibleStartPx);
+      const clippedRight = Math.min(rawRight, visibleEndPx);
+      if (clippedRight - clippedLeft < 1) return;
+
+      ghosts.push({
+        edge,
+        left: clippedLeft,
+        width: Math.max(1, clippedRight - clippedLeft),
+      });
+    };
+
+    const sourceDuration = getClipSourceDuration(clip);
+    if (clipTrim.edge === 'left') {
+      const availableLeftDuration = Math.min(Math.max(0, displayInPoint), Math.max(0, displayStartTime));
+      if (availableLeftDuration > 0.001) {
+        pushVisibleGhost('left', displayStartTime - availableLeftDuration, displayStartTime);
+      }
+    }
+
+    if (clipTrim.edge === 'right') {
+      const availableRightDuration = Math.max(0, sourceDuration - displayOutPoint);
+      if (availableRightDuration > 0.001) {
+        pushVisibleGhost('right', displayEnd, displayEnd + availableRightDuration);
+      }
+    }
+
+    if (ghosts.length === 0 && clipTrim.edge === 'left' && Math.abs(displayStartTime - originalStart) > 0.001) {
+      pushVisibleGhost('left', Math.min(displayStartTime, originalStart), Math.max(displayStartTime, originalStart));
+    }
+
+    if (ghosts.length === 0 && clipTrim.edge === 'right' && Math.abs(displayEnd - originalEnd) > 0.001) {
+      pushVisibleGhost('right', Math.min(displayEnd, originalEnd), Math.max(displayEnd, originalEnd));
+    }
+
+    return ghosts;
+  })();
 
   return (
     <div
@@ -2945,6 +3076,13 @@ function TimelineClipComponent({
           style={{ left: cutIndicatorX }}
         />
       )}
+      {sourceExtensionGhosts.map((ghost) => (
+        <div
+          key={ghost.edge}
+          className={`clip-source-extension-ghost ${ghost.edge}`}
+          style={{ left: ghost.left, width: ghost.width }}
+        />
+      ))}
       {/* YouTube pending download preview */}
       {clip.isPendingDownload && clip.youtubeThumbnail && (
         <div
@@ -2986,6 +3124,44 @@ function TimelineClipComponent({
           <span className="proxy-percent">{proxyProgress}%</span>
         </div>
       )}
+      {isGeneratingAudioProxy && (
+        <div className="clip-audio-proxy-generating" title={`Preparing WAV audio proxy: ${audioProxyProgress}%`}>
+          <span className="audio-proxy-fill-badge">
+            <span className="audio-proxy-fill-bg">A</span>
+            <span
+              className="audio-proxy-fill-progress"
+              style={{ height: `${audioProxyProgress}%` }}
+            >A</span>
+          </span>
+          <span className="audio-proxy-percent">{audioProxyProgress}%</span>
+        </div>
+      )}
+      {/* Stem separation indicator - fill badge */}
+      {activeStemSeparationJob && (
+        <div className="clip-stem-generating" title={activeStemStatusTitle}>
+          <span className="stem-fill-badge">
+            <span className="stem-fill-bg">S</span>
+            <span
+              className="stem-fill-progress"
+              style={{ height: `${activeStemProgressPercent}%` }}
+            >S</span>
+          </span>
+          <span className="stem-percent">{activeStemProgressPercent}%</span>
+        </div>
+      )}
+      {hasStemSeparation && !activeStemSeparationJob && (
+        <div className="clip-stem-badge" title="Stems ready">
+          S
+        </div>
+      )}
+      {failedStemSeparationJob && !activeStemSeparationJob && (
+        <div
+          className="clip-stem-error"
+          title={failedStemSeparationJob.error ?? failedStemSeparationJob.message ?? 'Stem separation failed'}
+        >
+          S!
+        </div>
+      )}
       {/* Proxy ready indicator */}
       {hasProxy && proxyEnabled && !isGeneratingProxy && (
         <div className="clip-proxy-badge" title="Proxy ready">
@@ -2995,6 +3171,16 @@ function TimelineClipComponent({
       {hasProxyError && (
         <div className="clip-proxy-error" title="Proxy generation failed">
           P!
+        </div>
+      )}
+      {hasAudioProxy && !isGeneratingAudioProxy && (
+        <div className="clip-audio-proxy-badge" title="WAV audio proxy ready">
+          A
+        </div>
+      )}
+      {hasAudioProxyError && (
+        <div className="clip-audio-proxy-error" title="WAV audio proxy failed">
+          A!
         </div>
       )}
       {/* Reversed indicator */}
@@ -3084,6 +3270,22 @@ function TimelineClipComponent({
           />
         </div>
       )}
+      {/* Stem separation progress indicator */}
+      {activeStemSeparationJob && (
+        <div
+          className={`clip-stem-progress phase-${activeStemSeparationJob.phase}`}
+          title={activeStemSeparationJob.message ?? formatStemJobPhase(activeStemSeparationJob.phase)}
+        >
+          <div
+            className="clip-stem-progress-bar"
+            style={{ width: `${activeStemProgressPercent}%` }}
+          />
+          <div className="clip-stem-progress-label">
+            <span>{activeStemStatusLabel}</span>
+            <strong>{activeStemProgressPercent}%</strong>
+          </div>
+        </div>
+      )}
       {/* Audio waveform / spectrogram */}
       {waveformsEnabled && isAudioClip && (
         audioDisplayMode === 'spectral'
@@ -3116,11 +3318,13 @@ function TimelineClipComponent({
               inPoint={waveformInPointForRender}
               outPoint={waveformOutPointForRender}
               naturalDuration={waveformNaturalDurationForRender}
+              clipDuration={displayDuration}
               displayMode={audioDisplayMode}
               pixelsPerSecond={zoom}
               pyramid={waveformPyramidForRender}
               waveformVariant={waveformVariantForRender}
               displayGain={waveformDisplayGain}
+              volumeAutomationKeyframes={audioVolumeAutomationKeyframes}
               audioEditStack={predictiveAudioEditStack}
               audioRegionGainPreview={predictiveAudioRegionGainPreview}
               renderStartPx={waveformRenderWindow.startPx}
@@ -3838,21 +4042,25 @@ function TimelineClipComponent({
           />
           {/* Trim handles */}
           <div
-            className="trim-handle left"
+            className={`trim-handle left arrows-${leftTrimHandleDirections.length}`}
             onMouseDown={(e) => {
               if (!canUseTrimHandles) return;
               e.stopPropagation();
               onTrimStart(e, 'left');
             }}
-          />
+          >
+            <TrimHandleArrows directions={leftTrimHandleDirections} />
+          </div>
           <div
-            className="trim-handle right"
+            className={`trim-handle right arrows-${rightTrimHandleDirections.length}`}
             onMouseDown={(e) => {
               if (!canUseTrimHandles) return;
               e.stopPropagation();
               onTrimStart(e, 'right');
             }}
-          />
+          >
+            <TrimHandleArrows directions={rightTrimHandleDirections} />
+          </div>
         </>
       )}
     </div>

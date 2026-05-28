@@ -21,7 +21,9 @@ const mocks = vi.hoisted(() => ({
   getFileFromRaw: vi.fn(),
   getTranscript: vi.fn(async () => null),
   getAnalysisRanges: vi.fn(async () => []),
+  hasProxyAudio: vi.fn(async () => false),
   scanRawFolder: vi.fn(async () => new Map()),
+  scanProjectFolder: vi.fn(async () => new Map()),
   isProjectOpen: vi.fn(() => true),
   saveProject: vi.fn(async () => true),
   getStoredHandle: vi.fn(async () => null),
@@ -126,7 +128,9 @@ vi.mock('../../src/services/projectFileService', () => ({
     getFileFromRaw: mocks.getFileFromRaw,
     getTranscript: mocks.getTranscript,
     getAnalysisRanges: mocks.getAnalysisRanges,
+    hasProxyAudio: mocks.hasProxyAudio,
     scanRawFolder: mocks.scanRawFolder,
+    scanProjectFolder: mocks.scanProjectFolder,
     isProjectOpen: mocks.isProjectOpen,
     saveProject: mocks.saveProject,
   },
@@ -187,6 +191,12 @@ describe('project media persistence', () => {
     mocks.midiState.parameterBindings = {};
     mocks.timelineState.clips = [];
     mocks.timelineState.audioDisplayMode = 'detailed';
+    mocks.getFileFromRaw.mockResolvedValue(null);
+    mocks.getTranscript.mockResolvedValue(null);
+    mocks.getAnalysisRanges.mockResolvedValue([]);
+    mocks.hasProxyAudio.mockResolvedValue(false);
+    mocks.scanRawFolder.mockResolvedValue(new Map());
+    mocks.scanProjectFolder.mockResolvedValue(new Map());
     mocks.getProjectData.mockReturnValue({
       media: [],
       compositions: [],
@@ -249,6 +259,54 @@ describe('project media persistence', () => {
         projectPath: 'Raw/clip.mp4',
       }),
     ]);
+  }, 10_000);
+
+  it('restores existing WAV audio proxies from disk even when the project manifest was not resaved yet', async () => {
+    const sourceFile = new File(['clip'], 'clip.mp4', { type: 'video/mp4' });
+    mocks.getFileFromRaw.mockResolvedValue({ file: sourceFile });
+    mocks.hasProxyAudio.mockImplementation(async (storageKey: string) => storageKey === 'hash-clip-1');
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-1',
+        name: 'clip.mp4',
+        type: 'video',
+        sourcePath: 'C:/capture/clip.mp4',
+        projectPath: 'Raw/clip.mp4',
+        fileHash: 'hash-clip-1',
+        duration: 12,
+        frameRate: 30,
+        audioCodec: 'aac',
+        hasAudio: true,
+        hasProxy: false,
+        hasAudioProxy: false,
+        folderId: null,
+        importedAt: new Date(1).toISOString(),
+      }],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    for (let attempt = 0; attempt < 10 && mocks.mediaState.files[0]?.audioProxyStatus !== 'ready'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(mocks.hasProxyAudio).toHaveBeenCalledWith('hash-clip-1');
+    expect(mocks.mediaState.files[0]).toEqual(expect.objectContaining({
+      id: 'media-1',
+      hasProxyAudio: true,
+      audioProxyStatus: 'ready',
+      audioProxyProgress: 100,
+      audioProxyStorageKey: 'hash-clip-1',
+    }));
   }, 10_000);
 
   it('persists advanced audio refs and state without embedding payload bytes', async () => {

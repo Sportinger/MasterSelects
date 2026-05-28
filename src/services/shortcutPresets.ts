@@ -145,8 +145,8 @@ const BASE_MAP: ShortcutMap = {
   'tool.trackSelectBackward': [],
   'tool.trackSelectForwardAll': [],
   'tool.rangeSelect': [],
-  'tool.cutToggle': [{ key: 'c' }],
-  'tool.blade': [],
+  'tool.cutToggle': [],
+  'tool.blade': [{ key: 'c' }],
   'tool.bladeAllTracks': [],
   'tool.trimGroup': [{ key: 't' }],
   'tool.edgeTrim': [],
@@ -223,7 +223,8 @@ const premiere = createPreset('premiere', 'Premiere Pro', {
   'edit.clearInOut': [{ key: 'x', ctrl: true, shift: true }],
   // C = Razor tool
   'tool.select': [{ key: 'v' }],
-  'tool.cutToggle': [{ key: 'c' }],
+  'tool.cutToggle': [],
+  'tool.blade': [{ key: 'c' }],
   // Ctrl+K = Add Edit (split at playhead)
   'edit.splitAtPlayhead': [{ key: 'k', ctrl: true }],
   // Ctrl+Alt+N = New Project (Ctrl+N is New Sequence in Premiere)
@@ -240,7 +241,8 @@ const davinci = createPreset('davinci', 'DaVinci Resolve', {
   'edit.clearInOut': [{ key: 'x', alt: true }],
   // B = Blade tool
   'tool.select': [{ key: 'a' }],
-  'tool.cutToggle': [{ key: 'b' }],
+  'tool.cutToggle': [],
+  'tool.blade': [{ key: 'b' }],
   // Ctrl+B = Split at playhead
   'edit.splitAtPlayhead': [{ key: 'b', ctrl: true }],
   // Backspace = lift, Delete = ripple delete (both remove clips)
@@ -260,7 +262,8 @@ const finalcut = createPreset('finalcut', 'Final Cut Pro', {
   'edit.clearInOut': [{ key: 'x', alt: true }],
   // B = Blade tool
   'tool.select': [{ key: 'a' }],
-  'tool.cutToggle': [{ key: 'b' }],
+  'tool.cutToggle': [],
+  'tool.blade': [{ key: 'b' }],
   // Cmd+B = Blade at playhead
   'edit.splitAtPlayhead': [{ key: 'b', ctrl: true }],
   // Delete = ripple delete (FCP default)

@@ -415,8 +415,26 @@
   font-weight: bold;
 }
 
-/* Proxy fill badge - shared styles */
-.proxy-fill-badge {
+.clip-audio-proxy-generating {
+  position: absolute;
+  top: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 74px);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 10;
+}
+
+.clip-audio-proxy-generating .audio-proxy-percent {
+  font-size: 8px;
+  color: #7dd3fc;
+  font-weight: bold;
+}
+
+/* Proxy/stem fill badges */
+.proxy-fill-badge,
+.audio-proxy-fill-badge,
+.stem-fill-badge {
   position: relative;
   width: 14px;
   height: 14px;
@@ -428,22 +446,38 @@
   text-align: center;
 }
 
-.proxy-fill-bg {
+.proxy-fill-bg,
+.audio-proxy-fill-bg,
+.stem-fill-bg {
   position: absolute;
   inset: 0;
-  background: rgba(251, 191, 36, 0.2);
-  color: rgba(251, 191, 36, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.proxy-fill-progress {
+.proxy-fill-bg {
+  background: rgba(251, 191, 36, 0.2);
+  color: rgba(251, 191, 36, 0.4);
+}
+
+.audio-proxy-fill-bg {
+  background: rgba(14, 165, 233, 0.2);
+  color: rgba(14, 165, 233, 0.45);
+}
+
+.stem-fill-bg {
+  background: rgba(56, 189, 248, 0.2);
+  color: rgba(56, 189, 248, 0.44);
+}
+
+.proxy-fill-progress,
+.audio-proxy-fill-progress,
+.stem-fill-progress {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  background: var(--warning-light);
   color: var(--text-inverse);
   display: flex;
   align-items: flex-end;
@@ -452,14 +486,98 @@
   transition: height 0.3s ease-out;
 }
 
+.proxy-fill-progress {
+  background: var(--warning-light);
+}
+
+.audio-proxy-fill-progress {
+  background: #0ea5e9;
+}
+
+.stem-fill-progress {
+  background: #38bdf8;
+}
+
+.clip-stem-generating {
+  position: absolute;
+  top: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 56px);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 10;
+}
+
+.clip-stem-generating .stem-percent {
+  font-size: 8px;
+  color: #7dd3fc;
+  font-weight: bold;
+}
+
+.clip-stem-badge {
+  position: absolute;
+  top: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 56px);
+  background: #0284c7;
+  color: var(--text-inverse);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.clip-audio-proxy-badge,
+.clip-audio-proxy-error {
+  position: absolute;
+  top: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 74px);
+  color: var(--text-inverse);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.clip-audio-proxy-badge {
+  background: #0ea5e9;
+}
+
+.clip-audio-proxy-error {
+  background: var(--danger);
+}
+
+.clip-stem-error {
+  position: absolute;
+  top: 2px;
+  right: calc(var(--clip-right-sticky-offset, 0px) + 56px);
+  background: var(--danger);
+  color: var(--text-inverse);
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 10;
+  cursor: help;
+}
+
 /* Loading state takes visual priority over proxy states */
 .timeline-clip.loading.has-proxy,
-.timeline-clip.loading.generating-proxy {
+.timeline-clip.loading.generating-proxy,
+.timeline-clip.loading.generating-audio-proxy,
+.timeline-clip.loading.separating-stems {
   border-color: var(--accent) !important;
 }
 
 .timeline-clip.loading .clip-proxy-generating,
-.timeline-clip.loading .clip-proxy-badge {
+.timeline-clip.loading .clip-proxy-badge,
+.timeline-clip.loading .clip-audio-proxy-generating,
+.timeline-clip.loading .clip-audio-proxy-badge,
+.timeline-clip.loading .clip-audio-proxy-error,
+.timeline-clip.loading .clip-stem-generating,
+.timeline-clip.loading .clip-stem-badge,
+.timeline-clip.loading .clip-stem-error {
   display: none;
 }
 
@@ -887,6 +1005,66 @@
   box-shadow: 0 0 4px rgba(239, 68, 68, 0.6);
 }
 
+/* Stem separation progress shown directly on the clip while the model downloads/runs. */
+.clip-stem-progress {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 5px;
+  height: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+  background: rgba(4, 9, 14, 0.74);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.32);
+  z-index: 7;
+  pointer-events: none;
+}
+
+.clip-stem-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  min-width: 2px;
+  background: linear-gradient(90deg, #22c55e, #38bdf8);
+  opacity: 0.82;
+  transition: width 0.18s ease;
+}
+
+.clip-stem-progress.phase-downloading-model .clip-stem-progress-bar,
+.clip-stem-progress.phase-loading-model .clip-stem-progress-bar {
+  background: linear-gradient(90deg, #f59e0b, #38bdf8);
+}
+
+.clip-stem-progress-label {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  height: 100%;
+  gap: 5px;
+  padding: 0 5px;
+  color: rgba(248, 250, 252, 0.96);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.82);
+}
+
+.clip-stem-progress-label span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.clip-stem-progress-label strong {
+  font-size: 9px;
+  font-weight: 700;
+}
+
 @keyframes waveform-progress-pulse {
   0%, 100% {
     background-position: 0% 50%;
@@ -1163,14 +1341,22 @@
 /* Trim handles */
 .trim-handle {
   position: absolute;
-  top: 0;
+  top: var(--clip-trim-handle-top, 0);
   bottom: 0;
-  width: 10px;
-  cursor: ew-resize;
+  width: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: ew-resize !important;
   background: rgba(255, 255, 255, 0.2);
   opacity: 0;
   transition: opacity 0.15s, background 0.15s;
-  z-index: 10;
+  z-index: 32;
+}
+
+.trim-handle::before {
+  display: none;
 }
 
 .trim-handle:hover {
@@ -1187,10 +1373,45 @@
   border-radius: 0 4px 4px 0;
 }
 
+.trim-handle-arrows {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.trim-handle-arrow {
+  width: 0;
+  height: 0;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+
+.trim-handle-arrow.left {
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-right: 4px solid rgba(255, 255, 255, 0.94);
+}
+
+.trim-handle-arrow.right {
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 4px solid rgba(255, 255, 255, 0.94);
+}
+
+.trim-handle.arrows-1 .trim-handle-arrows {
+  gap: 0;
+}
+
 /* Trimming state */
 .timeline-clip.trimming,
 .timeline-clip.linked-trimming {
   z-index: 100;
+  overflow: visible;
   box-shadow: 0 0 0 2px var(--warning);
 }
 
@@ -1198,6 +1419,20 @@
 .timeline-clip.linked-trimming .trim-handle {
   opacity: 1;
   background: var(--warning);
+}
+
+.timeline-clip.trimming .trim-handle::before,
+.timeline-clip.linked-trimming .trim-handle::before,
+.timeline-clip:hover .trim-handle::before,
+.trim-handle:hover::before {
+  opacity: 1;
+}
+
+.timeline-clip.trimming .trim-handle-arrows,
+.timeline-clip.linked-trimming .trim-handle-arrows,
+.timeline-clip:hover .trim-handle-arrows,
+.trim-handle:hover .trim-handle-arrows {
+  opacity: 1;
 }
 
 .timeline-clip:hover .trim-handle {
@@ -1209,18 +1444,73 @@
   cursor: inherit;
 }
 
+.timeline-body-content[class*="timeline-tool-active-"] .trim-handle {
+  cursor: ew-resize !important;
+}
+
+.timeline-body-content.timeline-tool-active-select .trim-handle,
+.timeline-body-content.timeline-tool-active-edge-trim .trim-handle,
+.timeline-body-content.timeline-tool-active-ripple-trim .trim-handle,
+.timeline-body-content.timeline-tool-active-rolling-edit .trim-handle,
+.timeline-body-content.timeline-tool-active-rate-stretch .trim-handle {
+  cursor: ew-resize !important;
+}
+
+.timeline-body-content.timeline-tool-active-select .trim-handle {
+  --clip-trim-handle-top: min(14px, 38%);
+}
+
+.timeline-body-content:not(.timeline-tool-active-select) .fade-handle {
+  pointer-events: none;
+}
+
+.timeline-body-content.timeline-tool-active-select .fade-handle {
+  pointer-events: auto;
+  cursor: ew-resize !important;
+}
+
+.clip-source-extension-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 1px;
+  pointer-events: none;
+  z-index: 4;
+  border: 1px dashed rgba(255, 255, 255, 0.46);
+  background:
+    linear-gradient(180deg, rgba(251, 191, 36, 0.24), rgba(251, 191, 36, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.09),
+      rgba(255, 255, 255, 0.09) 5px,
+      transparent 5px,
+      transparent 10px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 12px rgba(251, 191, 36, 0.24);
+}
+
+.clip-source-extension-ghost.left {
+  border-right-color: rgba(251, 191, 36, 0.92);
+}
+
+.clip-source-extension-ghost.right {
+  border-left-color: rgba(251, 191, 36, 0.92);
+}
+
 /* Fade handles - corner handles for fade-in/out */
 .fade-handle {
   position: absolute;
   top: 0;
   width: 12px;
   height: 12px;
-  cursor: ew-resize;
+  cursor: ew-resize !important;
   background: rgba(251, 191, 36, 0.8);
   border-radius: 0 0 4px 0;
   opacity: 0;
   transition: opacity 0.15s, background 0.15s, transform 0.15s;
-  z-index: 15;
+  z-index: 36;
 }
 
 .fade-handle:hover {

@@ -1,10 +1,9 @@
 // AudioTrackSyncManager - Handles audio element synchronization with playhead
 // Extracted from LayerBuilderService for separation of concerns
 
-import type { TimelineClip, TimelineTrack } from '../../types';
-import type { FrameContext, AudioSyncState } from './types';
+import type { ClipAudioStemLayer, TimelineClip, TimelineTrack } from '../../types';
+import type { FrameContext, AudioSyncState, AudioSyncTarget, ClipTimeInfo } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
-import { playheadState } from './PlayheadState';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip, getClipForTrack, isVideoTrackVisible } from './FrameContext';
 import { AudioSyncHandler, createAudioSyncState, finalizeAudioSync, resumeAudioContextIfNeeded } from './AudioSyncHandler';
 import { proxyFrameCache } from '../proxyFrameCache';
@@ -13,8 +12,197 @@ import { Logger } from '../logger';
 import { createLiveAudioRouteSettings, type LiveAudioRouteSettings } from '../audio/audioGraphRouteSettings';
 import { getClipAudioEditPreviewVolumeMultiplier } from '../audio/clipAudioEditPreview';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
+import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
+import { StemAudioSourceResolver, STEM_SOURCE_LAYER_ID } from '../audio/stemSeparation';
+import { calculateAudioMeterSnapshot, createSilentAudioMeterSnapshot } from '../audio/audioMetering';
+import { registerTimelineAudioPlaybackStopper } from '../audio/timelineAudioPlaybackStopper';
+import { vfPipelineMonitor } from '../vfPipelineMonitor';
+import { clearMasterAudio, playheadState, setMasterAudioClock } from './PlayheadState';
 
 const log = Logger.create('CutTransition');
+
+interface StemAudioElementEntry {
+  key: string;
+  element: HTMLAudioElement | null;
+  loading: boolean;
+  error?: string;
+  url?: string;
+}
+
+interface StemAudioElementSet {
+  key: string;
+  entries: Map<string, StemAudioElementEntry>;
+}
+
+interface StemBufferMixerLayer {
+  id: string;
+  mediaFileId: string;
+  gain: number;
+  required: boolean;
+}
+
+interface StemBufferMixerSession {
+  key: string;
+  clipId: string;
+  context: AudioContext;
+  masterGain: GainNode;
+  analyser: AnalyserNode;
+  meterSamples: Float32Array<ArrayBuffer>;
+  meterTrackId: string;
+  getSourceTime: () => number | null;
+  sources: AudioBufferSourceNode[];
+  gains: Map<string, GainNode>;
+  startedAtContextTime: number;
+  startedClipTime: number;
+  sourceCount: number;
+}
+
+type ClipStemSeparationState = NonNullable<NonNullable<TimelineClip['audioState']>['stemSeparation']>;
+
+interface StemBufferMixerSyncOptions {
+  clip: TimelineClip;
+  stemSeparation: ClipStemSeparationState;
+  audibleStemLayers: ClipAudioStemLayer[];
+  shouldUseSourceAudio: boolean;
+  sourceGain: number;
+  routeSettings: LiveAudioRouteSettings;
+  timeInfo: ClipTimeInfo;
+  effectiveVolume: number;
+  trackMuted: boolean;
+  meterTrackId: string;
+  canBeMaster: boolean;
+}
+
+const STEM_MIXER_START_DELAY_SECONDS = 0.035;
+const STEM_MIXER_RESTART_DRIFT_SECONDS = 0.2;
+
+function createStemLayerSetKey(clip: TimelineClip): string | null {
+  const stemSeparation = clip.audioState?.stemSeparation;
+  if (!stemSeparation || stemSeparation.stems.length === 0) return null;
+
+  return JSON.stringify({
+    clipId: clip.id,
+    activeSetId: stemSeparation.activeSetId,
+    modelId: stemSeparation.modelId,
+    modelVersion: stemSeparation.modelVersion,
+    sourceFingerprint: stemSeparation.sourceFingerprint,
+    stems: stemSeparation.stems.map(stem => ({
+      id: stem.id,
+      payloadArtifactId: stem.payloadRef.artifactId,
+      manifestArtifactId: stem.manifestArtifactId,
+      mediaFileId: stem.mediaFileId,
+    })),
+  });
+}
+
+function getAudibleStemLayers(stemSeparation: NonNullable<TimelineClip['audioState']>['stemSeparation']): ClipAudioStemLayer[] {
+  if (!stemSeparation || stemSeparation.mixMode === 'original' || stemSeparation.soloStemId === STEM_SOURCE_LAYER_ID) {
+    return [];
+  }
+  if (stemSeparation.soloStemId) {
+    return stemSeparation.stems.filter(stem => stem.id === stemSeparation.soloStemId);
+  }
+  return stemSeparation.stems.filter(stem => stem.enabled !== false);
+}
+
+function usesSourceAudioLayer(stemSeparation: NonNullable<TimelineClip['audioState']>['stemSeparation']): boolean {
+  return !stemSeparation ||
+    stemSeparation.mixMode === 'original' ||
+    stemSeparation.mixMode === 'hybrid' ||
+    stemSeparation.soloStemId === STEM_SOURCE_LAYER_ID;
+}
+
+function hasUsableAudioProxy(mediaFile: { hasProxyAudio?: boolean; audioProxyStatus?: string } | undefined): boolean {
+  return mediaFile?.hasProxyAudio === true || mediaFile?.audioProxyStatus === 'ready';
+}
+
+function dbToLinearGain(db: number | undefined): number {
+  return Number.isFinite(db) ? 10 ** ((db ?? 0) / 20) : 1;
+}
+
+function routeHasEq(eqGains: readonly number[] | undefined): boolean {
+  return eqGains?.some(gain => Math.abs(gain) > 0.01) ?? false;
+}
+
+function canUseStemBufferMixer(
+  routeSettings: LiveAudioRouteSettings,
+  absSpeed: number,
+): boolean {
+  return Math.abs(absSpeed - 1) <= 0.001 &&
+    Math.abs(routeSettings.pan) <= 0.001 &&
+    !routeHasEq(routeSettings.eqGains) &&
+    !routeHasEq(routeSettings.master.eqGains) &&
+    routeSettings.processors.length === 0 &&
+    routeSettings.master.processors.length === 0;
+}
+
+function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
+  const channelCount = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const frameCount = buffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = channelCount * bytesPerSample;
+  const dataSize = frameCount * blockAlign;
+  const output = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(output);
+
+  const writeString = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channelCount, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bytesPerSample * 8, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channels = Array.from({ length: channelCount }, (_, channelIndex) =>
+    buffer.getChannelData(channelIndex)
+  );
+  let offset = 44;
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
+      const sample = Math.max(-1, Math.min(1, channels[channelIndex]?.[frame] ?? 0));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += bytesPerSample;
+    }
+  }
+
+  return new Blob([output], { type: 'audio/wav' });
+}
+
+function createAudioElementFromBuffer(buffer: AudioBuffer): { element: HTMLAudioElement; url: string } {
+  const url = URL.createObjectURL(audioBufferToWavBlob(buffer));
+  const element = document.createElement('audio');
+  element.src = url;
+  element.preload = 'auto';
+  return { element, url };
+}
+
+function createAudioElementFromUrl(url: string): HTMLAudioElement {
+  const element = document.createElement('audio');
+  element.src = url;
+  element.preload = 'auto';
+  return element;
+}
+
+function pauseAudioElement(element: HTMLAudioElement | HTMLVideoElement | null | undefined): void {
+  if (!element) return;
+  if (!element.paused) {
+    element.pause();
+  }
+}
 
 function getClipAudioRouteSettings(
   ctx: FrameContext,
@@ -42,6 +230,10 @@ export class AudioTrackSyncManager {
 
   // Active audio proxies tracking
   private activeAudioProxies = new Map<string, HTMLAudioElement>();
+  private activeAudioTrackProxies = new Map<string, HTMLAudioElement>();
+  private stemAudioElements = new Map<string, StemAudioElementSet>();
+  private stemBufferMixerContext: AudioContext | null = null;
+  private stemBufferMixers = new Map<string, StemBufferMixerSession>();
 
   // Seamless audio cut transition: keep old audio element playing through cuts
   // (same approach as video handoff in VideoSyncManager)
@@ -54,6 +246,41 @@ export class AudioTrackSyncManager {
   }>();
   private audioHandoffs = new Map<string, HTMLAudioElement>();
   private audioHandoffElements = new Set<HTMLAudioElement>();
+
+  constructor() {
+    registerTimelineAudioPlaybackStopper(() => this.stopAllAudioPlayback());
+  }
+
+  stopAllAudioPlayback(): void {
+    clearMasterAudio();
+    const timelineState = useTimelineStore.getState();
+    for (const clip of timelineState.clips) {
+      pauseAudioElement(clip.source?.audioElement);
+      pauseAudioElement(clip.mixdownAudio);
+    }
+
+    for (const set of this.stemAudioElements.values()) {
+      for (const entry of set.entries.values()) {
+        pauseAudioElement(entry.element);
+      }
+    }
+
+    for (const audioProxy of this.activeAudioTrackProxies.values()) {
+      pauseAudioElement(audioProxy);
+    }
+    this.activeAudioTrackProxies.clear();
+
+    for (const audioProxy of this.activeAudioProxies.values()) {
+      pauseAudioElement(audioProxy);
+    }
+    this.activeAudioProxies.clear();
+
+    this.stopAllStemBufferMixers();
+    if (this.stemBufferMixerContext?.state === 'running') {
+      void this.stemBufferMixerContext.suspend();
+    }
+    timelineState.clearStaleRuntimeAudioMeters(0, performance.now());
+  }
 
   /**
    * Sync audio elements to current playhead
@@ -87,6 +314,9 @@ export class AudioTrackSyncManager {
 
     // Resume audio context if needed
     resumeAudioContextIfNeeded(ctx.isPlaying, ctx.isDraggingPlayhead);
+    if (!ctx.isPlaying || ctx.isDraggingPlayhead || ctx.playbackSpeed !== 1) {
+      this.stopAllStemBufferMixers();
+    }
 
     // Compute audio handoffs for seamless cut transitions
     this.computeAudioHandoffs(ctx);
@@ -120,6 +350,14 @@ export class AudioTrackSyncManager {
     useTimelineStore.getState().clearStaleRuntimeAudioMeters(650, ctx.now);
   }
 
+  private syncPreviewAudioElement(
+    target: AudioSyncTarget,
+    ctx: FrameContext,
+    state: AudioSyncState,
+  ): void {
+    this.audioSyncHandler.syncAudioElement(target, ctx, state);
+  }
+
   /**
    * Sync audio track clips
    */
@@ -127,42 +365,135 @@ export class AudioTrackSyncManager {
     const regionGainPreview = useTimelineStore.getState().audioRegionGainPreview;
     for (const track of ctx.audioTracks) {
       const clip = getClipForTrack(ctx, track.id);
-      if (!clip?.source?.audioElement) continue;
+      if (!clip?.source) continue;
+
+      const sourceAudioProxy = this.getAudioProxyElementForClip(clip);
+      const sourceAudioElement = sourceAudioProxy ?? clip.source.audioElement;
+      if (!sourceAudioElement) continue;
 
       if (this.shouldSuppressLinkedAudioClipScrub(ctx, clip)) {
-        if (!clip.source.audioElement.paused) {
-          clip.source.audioElement.pause();
+        if (!sourceAudioElement.paused) {
+          sourceAudioElement.pause();
         }
         continue;
       }
 
       // Skip audio elements without a valid source (e.g., empty audio from nested comps without audio)
-      const audio = clip.source.audioElement;
+      const audio = sourceAudioElement;
       if (!audio.src && audio.readyState === 0) continue;
 
       const timeInfo = getClipTimeInfo(ctx, clip);
       const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime, timeInfo.clipTime);
       const editPreviewVolume = getClipAudioEditPreviewVolumeMultiplier(clip, timeInfo.clipTime, regionGainPreview);
       const effectiveVolume = routeSettings.volume * editPreviewVolume;
-      const isMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01;
+      const trackMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01;
+      const stemSeparation = clip.audioState?.stemSeparation;
+      const audibleStemLayers = getAudibleStemLayers(stemSeparation);
+      const shouldUseStemAudio = audibleStemLayers.length > 0;
+      const shouldUseSourceAudio = usesSourceAudioLayer(stemSeparation);
+      const sourceGain = dbToLinearGain(stemSeparation?.sourceGainDb);
+      if (stemSeparation) {
+        const canBeStemMaster = !state.masterSet;
+        const mixerSourceCount = this.syncStemBufferMixer({
+          clip,
+          stemSeparation,
+          audibleStemLayers,
+          shouldUseSourceAudio,
+          sourceGain,
+          routeSettings,
+          timeInfo,
+          effectiveVolume,
+          trackMuted,
+          meterTrackId: track.id,
+          canBeMaster: canBeStemMaster,
+        });
+        if (mixerSourceCount > 0) {
+          pauseAudioElement(sourceAudioElement);
+          this.activeAudioTrackProxies.delete(clip.id);
+          this.pauseStemAudioElements(clip.id);
+          state.audioPlayingCount += mixerSourceCount;
+          if (canBeStemMaster) state.masterSet = true;
+          continue;
+        }
+      } else {
+        this.stopStemBufferMixer(clip.id);
+      }
+
+      const stemAudioElements = stemSeparation ? this.getStemAudioElements(clip) : null;
+      const stemAudioReady = audibleStemLayers.every(stem => Boolean(stemAudioElements?.get(stem.id)?.element));
+      if (shouldUseStemAudio && !stemAudioReady && !shouldUseSourceAudio) {
+        if (!sourceAudioElement.paused) {
+          sourceAudioElement.pause();
+        }
+        this.publishSilentStemMeter(track.id, ctx.now);
+        continue;
+      }
+      if (sourceAudioProxy) {
+        this.activeAudioTrackProxies.set(clip.id, sourceAudioProxy);
+        if (clip.source.audioElement && !clip.source.audioElement.paused) {
+          clip.source.audioElement.pause();
+        }
+      }
+      if (!shouldUseSourceAudio) {
+        pauseAudioElement(sourceAudioElement);
+        this.activeAudioTrackProxies.delete(clip.id);
+      }
 
       // Use handoff element if available (seamless cut transition)
       const handoffAudio = this.audioHandoffs.get(clip.id);
-      this.audioSyncHandler.syncAudioElement({
-        element: handoffAudio ?? clip.source.audioElement,
-        clip,
-        clipTime: timeInfo.clipTime,
-        absSpeed: timeInfo.absSpeed,
-        isMuted,
-        canBeMaster: true,
-        type: 'audioTrack',
-        volume: effectiveVolume,
-        eqGains: routeSettings.eqGains,
-        pan: routeSettings.pan,
-        processors: routeSettings.processors,
-        masterRoute: routeSettings.master,
-        meterTrackId: track.id,
-      }, ctx, state);
+      if (shouldUseSourceAudio) {
+        this.syncPreviewAudioElement({
+          element: handoffAudio ?? sourceAudioElement,
+          clip,
+          clipTime: timeInfo.clipTime,
+          absSpeed: timeInfo.absSpeed,
+          isMuted: trackMuted,
+          canBeMaster: true,
+          type: 'audioTrack',
+          volume: effectiveVolume * sourceGain,
+          eqGains: routeSettings.eqGains,
+          pan: routeSettings.pan,
+          processors: routeSettings.processors,
+          masterRoute: routeSettings.master,
+          meterTrackId: track.id,
+        }, ctx, state);
+      }
+
+      if (stemAudioElements && stemSeparation) {
+        const audibleStemIds = new Set(audibleStemLayers.map(stem => stem.id));
+        let stemMeterAssigned = shouldUseSourceAudio;
+        let stemMasterAssigned = shouldUseSourceAudio;
+        for (const stem of stemSeparation.stems) {
+          const stemAudio = stemAudioElements.get(stem.id)?.element;
+          if (!stemAudio) continue;
+          const stemIsAudible = audibleStemIds.has(stem.id);
+          if (!stemIsAudible) {
+            pauseAudioElement(stemAudio);
+            continue;
+          }
+
+          const canBeStemMaster = !stemMasterAssigned && stemIsAudible;
+          if (canBeStemMaster) stemMasterAssigned = true;
+          const meterTrackId = !stemMeterAssigned ? track.id : undefined;
+          if (meterTrackId) stemMeterAssigned = true;
+
+          this.syncPreviewAudioElement({
+            element: stemAudio,
+            clip,
+            clipTime: timeInfo.clipTime,
+            absSpeed: timeInfo.absSpeed,
+            isMuted: trackMuted || !stemIsAudible,
+            canBeMaster: canBeStemMaster,
+            type: 'stemAudioTrack',
+            volume: stemIsAudible ? effectiveVolume * dbToLinearGain(stem.gainDb) : 0,
+            eqGains: routeSettings.eqGains,
+            pan: routeSettings.pan,
+            processors: routeSettings.processors,
+            masterRoute: routeSettings.master,
+            meterTrackId,
+          }, ctx, state);
+        }
+      }
     }
   }
 
@@ -239,12 +570,15 @@ export class AudioTrackSyncManager {
         }
       }
 
-      // Audio proxy handling
-      const shouldUseAudioProxy = ctx.proxyEnabled &&
-        mediaFile?.hasProxyAudio &&
-        (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
+      if (mediaFile && (mediaFile.audioProxyStatus === 'generating' || hasUsableAudioProxy(mediaFile))) {
+        void proxyFrameCache.getAudioBuffer(mediaFile.id);
+      }
 
-      if (shouldUseAudioProxy && mediaFile) {
+      // Audio proxy handling. Audio proxies are independent from the video
+      // proxy switch because they make timeline playback/scrubbing predictable.
+      const shouldUseAudioProxy = hasUsableAudioProxy(mediaFile);
+
+      if (shouldUseAudioProxy && mediaFile && !linkedAudioClip) {
         activeVideoClipIds.add(clip.id);
 
         const video = clip.source.videoElement;
@@ -260,12 +594,12 @@ export class AudioTrackSyncManager {
             !useVarispeedScrubAudio;
 
           if (!ctx.isDraggingPlayhead || shouldUseAudioProxyScrubFallback) {
-            this.audioSyncHandler.syncAudioElement({
+            this.syncPreviewAudioElement({
               element: audioProxy,
               clip,
               clipTime: timeInfo.clipTime,
               absSpeed: timeInfo.absSpeed,
-              isMuted,
+              isMuted: audioMuted,
               canBeMaster: !state.masterSet,
               type: 'audioProxy',
               volume: effectiveVolume,
@@ -311,7 +645,7 @@ export class AudioTrackSyncManager {
       const isMuted = track ? !isVideoTrackVisible(ctx, track.id) : false;
       const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime, timeInfo.clipTime);
 
-      this.audioSyncHandler.syncAudioElement({
+      this.syncPreviewAudioElement({
         element: clip.mixdownAudio,
         clip,
         clipTime: timeInfo.clipTime,
@@ -333,16 +667,53 @@ export class AudioTrackSyncManager {
    * Pause audio not at playhead
    */
   private pauseInactiveAudio(ctx: FrameContext): void {
+    const activeClipIds = new Set(ctx.clipsAtTime.map(clip => clip.id));
+    const knownClipIds = new Set(ctx.clips.map(clip => clip.id));
     for (const clip of ctx.clips) {
-      const isAtPlayhead = ctx.clipsAtTime.some(c => c.id === clip.id);
+      const isAtPlayhead = activeClipIds.has(clip.id);
 
       if (clip.source?.audioElement && !isAtPlayhead && !clip.source.audioElement.paused
           && !this.audioHandoffElements.has(clip.source.audioElement)) {
         clip.source.audioElement.pause();
       }
 
+      const audioTrackProxy = this.activeAudioTrackProxies.get(clip.id);
+      if (audioTrackProxy && !isAtPlayhead) {
+        if (!audioTrackProxy.paused && !this.audioHandoffElements.has(audioTrackProxy)) {
+          audioTrackProxy.pause();
+        }
+        this.activeAudioTrackProxies.delete(clip.id);
+      }
+
       if (clip.mixdownAudio && !isAtPlayhead && !clip.mixdownAudio.paused) {
         clip.mixdownAudio.pause();
+      }
+    }
+
+    for (const [clipId, set] of this.stemAudioElements) {
+      if (!knownClipIds.has(clipId)) {
+        this.disposeStemAudioSet(clipId);
+        this.stopStemBufferMixer(clipId);
+        continue;
+      }
+      if (!activeClipIds.has(clipId)) {
+        for (const entry of set.entries.values()) {
+          pauseAudioElement(entry.element);
+        }
+        this.stopStemBufferMixer(clipId);
+      }
+    }
+
+    for (const clipId of Array.from(this.stemBufferMixers.keys())) {
+      if (!knownClipIds.has(clipId) || !activeClipIds.has(clipId) || !ctx.isPlaying) {
+        this.stopStemBufferMixer(clipId);
+      }
+    }
+
+    for (const [clipId, audioProxy] of this.activeAudioTrackProxies) {
+      if (!knownClipIds.has(clipId)) {
+        if (!audioProxy.paused) audioProxy.pause();
+        this.activeAudioTrackProxies.delete(clipId);
       }
     }
   }
@@ -361,7 +732,9 @@ export class AudioTrackSyncManager {
 
     for (const track of ctx.audioTracks) {
       const clip = getClipForTrack(ctx, track.id);
-      if (!clip?.source?.audioElement) continue;
+      if (!clip?.source) continue;
+      const currentAudioElement = this.getAudioProxyElementForClip(clip) ?? clip.source.audioElement;
+      if (!currentAudioElement) continue;
 
       const prev = this.lastAudioTrackState.get(track.id);
       if (!prev) continue;
@@ -370,7 +743,7 @@ export class AudioTrackSyncManager {
         // Same clip as last frame - persist handoff if we were using one.
         // Without this, the handoff only lasts 1 frame and then the clip's
         // cold element takes over (causing an audio click/gap).
-        if (prev.audioElement !== clip.source.audioElement) {
+        if (prev.audioElement !== currentAudioElement) {
           this.audioHandoffs.set(clip.id, prev.audioElement);
           this.audioHandoffElements.add(prev.audioElement);
         }
@@ -420,10 +793,13 @@ export class AudioTrackSyncManager {
   private updateLastAudioTrackState(ctx: FrameContext): void {
     for (const track of ctx.audioTracks) {
       const clip = getClipForTrack(ctx, track.id);
-      if (!clip?.source?.audioElement) continue;
+      if (!clip?.source) continue;
+
+      const currentAudioElement = this.getAudioProxyElementForClip(clip) ?? clip.source.audioElement;
+      if (!currentAudioElement) continue;
 
       const handoffElement = this.audioHandoffs.get(clip.id);
-      const audio = handoffElement ?? clip.source.audioElement;
+      const audio = handoffElement ?? currentAudioElement;
       const fileId = clip.source.mediaFileId || clip.mediaFileId || '';
 
       this.lastAudioTrackState.set(track.id, {
@@ -453,27 +829,35 @@ export class AudioTrackSyncManager {
 
     for (const clip of ctx.clips) {
       // Only audio clips with audio elements
-      if (!clip.source?.audioElement) continue;
+      if (!clip.source) continue;
 
-      const audio = clip.source.audioElement;
       const clipStart = clip.startTime;
 
       // Is this clip about to become active? (starts within lookahead, not yet active)
       if (clipStart <= ctx.playheadPosition || clipStart > lookaheadEnd) continue;
 
-      // Skip if already pre-buffered
-      if (this.preBufferedAudio.has(audio)) continue;
+      const stemElements = this.getStemAudioElements(clip);
+      const sourceAudioElement = this.getAudioProxyElementForClip(clip) ?? clip.source.audioElement;
+      const audioElements = stemElements
+        ? Array.from(stemElements.values()).map(entry => entry.element).filter((element): element is HTMLAudioElement => Boolean(element))
+        : sourceAudioElement ? [sourceAudioElement] : [];
+      if (audioElements.length === 0) continue;
 
-      // Skip if no source loaded
-      if (!audio.src && audio.readyState === 0) continue;
+      for (const audio of audioElements) {
+        // Skip if already pre-buffered
+        if (this.preBufferedAudio.has(audio)) continue;
 
-      // Pre-seek to inPoint so audio data is buffered and ready
-      const targetTime = clip.inPoint;
-      if (Math.abs(audio.currentTime - targetTime) > 0.1) {
-        audio.currentTime = targetTime;
+        // Skip if no source loaded
+        if (!audio.src && audio.readyState === 0) continue;
+
+        // Pre-seek to inPoint so audio data is buffered and ready
+        const targetTime = clip.inPoint;
+        if (Math.abs(audio.currentTime - targetTime) > 0.1) {
+          audio.currentTime = targetTime;
+        }
+
+        this.preBufferedAudio.add(audio);
       }
-
-      this.preBufferedAudio.add(audio);
     }
   }
 
@@ -483,8 +867,7 @@ export class AudioTrackSyncManager {
    */
   private muteAllAudio(ctx: FrameContext): void {
     // Clear master audio since we're not using audio sync
-    playheadState.hasMasterAudio = false;
-    playheadState.masterAudioElement = null;
+    clearMasterAudio();
 
     // Pause all audio elements
     for (const clip of ctx.clips) {
@@ -498,6 +881,22 @@ export class AudioTrackSyncManager {
         clip.mixdownAudio.pause();
       }
     }
+    for (const set of this.stemAudioElements.values()) {
+      for (const entry of set.entries.values()) {
+        pauseAudioElement(entry.element);
+      }
+    }
+    for (const audioProxy of this.activeAudioTrackProxies.values()) {
+      if (!audioProxy.paused) {
+        audioProxy.pause();
+      }
+    }
+    for (const audioProxy of this.activeAudioProxies.values()) {
+      if (!audioProxy.paused) {
+        audioProxy.pause();
+      }
+    }
+    this.stopAllStemBufferMixers();
   }
 
   private getLinkedAudioClipAtPlayhead(ctx: FrameContext, clip: TimelineClip): TimelineClip | undefined {
@@ -514,6 +913,23 @@ export class AudioTrackSyncManager {
     return linkedClip?.source?.videoElement && !linkedClip.isComposition ? linkedClip : undefined;
   }
 
+  private getAudioProxyElementForClip(clip: TimelineClip): HTMLAudioElement | null {
+    const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
+    if (!mediaFileId) return null;
+
+    const mediaFile = useMediaStore.getState().files.find(file => file.id === mediaFileId);
+    if (!hasUsableAudioProxy(mediaFile)) return null;
+
+    const audioProxy = proxyFrameCache.getCachedAudioProxy(mediaFileId);
+    if (audioProxy) {
+      return audioProxy;
+    }
+
+    void proxyFrameCache.preloadAudioProxy(mediaFileId);
+    void proxyFrameCache.getAudioBuffer(mediaFileId);
+    return null;
+  }
+
   private shouldSuppressLinkedAudioClipScrub(ctx: FrameContext, clip: TimelineClip): boolean {
     if (!ctx.isDraggingPlayhead || !clip.linkedClipId) {
       return false;
@@ -527,5 +943,412 @@ export class AudioTrackSyncManager {
     const mediaFile = getMediaFileForClip(ctx, linkedVideoClip);
     const mediaFileId = mediaFile?.id || linkedVideoClip.mediaFileId || linkedVideoClip.id;
     return proxyFrameCache.hasAudioBuffer(mediaFileId);
+  }
+
+  private syncStemBufferMixer(options: StemBufferMixerSyncOptions): number {
+    const {
+      clip,
+      stemSeparation,
+      audibleStemLayers,
+      shouldUseSourceAudio,
+      sourceGain,
+      routeSettings,
+      timeInfo,
+      effectiveVolume,
+      trackMuted,
+      meterTrackId,
+      canBeMaster,
+    } = options;
+
+    if (
+      !canUseStemBufferMixer(routeSettings, timeInfo.absSpeed) ||
+      timeInfo.speed <= 0
+    ) {
+      this.stopStemBufferMixer(clip.id);
+      return 0;
+    }
+
+    const sourceMediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
+    const audibleStemIds = new Set(audibleStemLayers.map(stem => stem.id));
+    const desiredLayers: StemBufferMixerLayer[] = [];
+    if (sourceMediaFileId) {
+      const sourceIsAudible = shouldUseSourceAudio && !trackMuted;
+      desiredLayers.push({
+        id: STEM_SOURCE_LAYER_ID,
+        mediaFileId: sourceMediaFileId,
+        gain: sourceIsAudible ? effectiveVolume * sourceGain : 0,
+        required: sourceIsAudible,
+      });
+    }
+    for (const stem of stemSeparation.stems) {
+      if (!stem.mediaFileId) continue;
+      const stemIsAudible = audibleStemIds.has(stem.id) && !trackMuted;
+      desiredLayers.push({
+        id: stem.id,
+        mediaFileId: stem.mediaFileId,
+        gain: stemIsAudible ? effectiveVolume * dbToLinearGain(stem.gainDb) : 0,
+        required: stemIsAudible,
+      });
+    }
+
+    if (desiredLayers.length <= 1) {
+      this.stopStemBufferMixer(clip.id);
+      return 0;
+    }
+
+    const buffers = new Map<string, AudioBuffer>();
+    const layers: StemBufferMixerLayer[] = [];
+    let missingRequiredLayer = false;
+    const current = this.stemBufferMixers.get(clip.id);
+    for (const layer of desiredLayers) {
+      const buffer = this.getCachedStemBuffer(layer.mediaFileId);
+      if (!buffer) {
+        void proxyFrameCache.getAudioBuffer(layer.mediaFileId);
+        if (layer.required) {
+          missingRequiredLayer = true;
+        }
+        continue;
+      }
+      if (current && !layer.required && !current.gains.has(layer.id)) {
+        continue;
+      }
+      buffers.set(layer.id, buffer);
+      layers.push(layer);
+    }
+
+    if (missingRequiredLayer || layers.length <= 1) {
+      this.stopStemBufferMixer(clip.id);
+      return 0;
+    }
+
+    const key = JSON.stringify({
+      clipId: clip.id,
+      activeSetId: stemSeparation.activeSetId,
+      layers: layers.map(layer => [layer.id, layer.mediaFileId]),
+    });
+    const context = this.getStemBufferMixerContext();
+    if (context.state === 'suspended') {
+      void context.resume();
+    }
+
+    let restartDriftSeconds: number | null = null;
+    if (current?.key === key && current.context === context) {
+      const expectedClipTime = current.getSourceTime() ?? timeInfo.clipTime;
+      restartDriftSeconds = expectedClipTime - timeInfo.clipTime;
+      if (Math.abs(restartDriftSeconds) <= STEM_MIXER_RESTART_DRIFT_SECONDS) {
+        this.updateStemBufferMixerGains(current, layers, routeSettings.master.volume);
+        if (canBeMaster) {
+          this.setStemBufferMixerMasterClock(current, clip, timeInfo);
+        }
+        this.publishStemBufferMixerMeter(current);
+        return current.sourceCount;
+      }
+    }
+
+    this.stopStemBufferMixer(clip.id);
+    const startAt = context.currentTime + STEM_MIXER_START_DELAY_SECONDS;
+    const startOffset = Math.max(0, timeInfo.clipTime + STEM_MIXER_START_DELAY_SECONDS);
+    const masterGain = context.createGain();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    masterGain.gain.value = Math.max(0, Math.min(4, routeSettings.master.volume));
+    masterGain.connect(analyser);
+    analyser.connect(context.destination);
+
+    const gains = new Map<string, GainNode>();
+    const sources: AudioBufferSourceNode[] = [];
+    const getSourceTime = () => {
+      if (context.state === 'closed') return null;
+      const sourceTime = startOffset + (context.currentTime - startAt);
+      return Number.isFinite(sourceTime) ? Math.max(0, sourceTime) : null;
+    };
+    for (const layer of layers) {
+      const buffer = buffers.get(layer.id);
+      if (!buffer) continue;
+      const source = context.createBufferSource();
+      const gain = context.createGain();
+      gain.gain.value = Math.max(0, Math.min(4, layer.gain));
+      source.buffer = buffer;
+      source.playbackRate.value = 1;
+      source.connect(gain);
+      gain.connect(masterGain);
+      source.start(startAt, Math.min(startOffset, Math.max(0, buffer.duration - 0.02)));
+      gains.set(layer.id, gain);
+      sources.push(source);
+    }
+
+    if (sources.length === 0) {
+      masterGain.disconnect();
+      return 0;
+    }
+
+    this.stemBufferMixers.set(clip.id, {
+      key,
+      clipId: clip.id,
+      context,
+      masterGain,
+      analyser,
+      meterSamples: new Float32Array(analyser.fftSize) as Float32Array<ArrayBuffer>,
+      meterTrackId,
+      getSourceTime,
+      sources,
+      gains,
+      startedAtContextTime: startAt,
+      startedClipTime: startOffset,
+      sourceCount: sources.length,
+    });
+    const session = this.stemBufferMixers.get(clip.id)!;
+    if (canBeMaster) {
+      this.setStemBufferMixerMasterClock(session, clip, timeInfo);
+    }
+    vfPipelineMonitor.record('audio_stem_mixer', {
+      action: current ? 'restart' : 'start',
+      clipId: clip.id,
+      sources: sources.length,
+      driftMs: restartDriftSeconds === null ? 0 : Math.round(restartDriftSeconds * 1000),
+    });
+    this.publishStemBufferMixerMeter(session);
+
+    return sources.length;
+  }
+
+  private getCachedStemBuffer(mediaFileId: string): AudioBuffer | null {
+    const cache = proxyFrameCache as unknown as { audioBufferCache?: Map<string, AudioBuffer> };
+    return cache.audioBufferCache?.get(mediaFileId) ?? null;
+  }
+
+  private setStemBufferMixerMasterClock(
+    session: StemBufferMixerSession,
+    clip: TimelineClip,
+    timeInfo: ClipTimeInfo,
+  ): void {
+    setMasterAudioClock(
+      session.getSourceTime,
+      clip.startTime,
+      clip.inPoint,
+      timeInfo.absSpeed,
+    );
+  }
+
+  private getStemBufferMixerContext(): AudioContext {
+    if (!this.stemBufferMixerContext || this.stemBufferMixerContext.state === 'closed') {
+      this.stemBufferMixerContext = new AudioContext();
+    }
+    return this.stemBufferMixerContext;
+  }
+
+  private updateStemBufferMixerGains(
+    session: StemBufferMixerSession,
+    layers: StemBufferMixerLayer[],
+    masterVolume: number,
+  ): void {
+    const now = session.context.currentTime;
+    session.masterGain.gain.setTargetAtTime(Math.max(0, Math.min(4, masterVolume)), now, 0.01);
+    const targetGains = new Map(layers.map(layer => [layer.id, Math.max(0, Math.min(4, layer.gain))]));
+    for (const [layerId, gain] of session.gains) {
+      gain.gain.setTargetAtTime(targetGains.get(layerId) ?? 0, now, 0.01);
+    }
+  }
+
+  private publishStemBufferMixerMeter(session: StemBufferMixerSession): void {
+    session.analyser.getFloatTimeDomainData(session.meterSamples);
+    const snapshot = calculateAudioMeterSnapshot(session.meterSamples, performance.now());
+    useTimelineStore.getState().updateRuntimeAudioMeter(session.meterTrackId, snapshot, snapshot);
+  }
+
+  private pauseStemAudioElements(clipId: string): void {
+    const set = this.stemAudioElements.get(clipId);
+    if (!set) return;
+    for (const entry of set.entries.values()) {
+      pauseAudioElement(entry.element);
+    }
+  }
+
+  private stopStemBufferMixer(clipId: string): void {
+    const session = this.stemBufferMixers.get(clipId);
+    if (!session) return;
+    if (playheadState.masterAudioClock === session.getSourceTime) {
+      clearMasterAudio();
+    }
+    for (const source of session.sources) {
+      try {
+        source.stop();
+      } catch {
+        // Source nodes may already have ended.
+      }
+      try {
+        source.disconnect();
+      } catch {
+        // Ignore cleanup errors.
+      }
+    }
+    for (const gain of session.gains.values()) {
+      try {
+        gain.disconnect();
+      } catch {
+        // Ignore cleanup errors.
+      }
+    }
+    try {
+      session.masterGain.disconnect();
+    } catch {
+      // Ignore cleanup errors.
+    }
+    try {
+      session.analyser.disconnect();
+    } catch {
+      // Ignore cleanup errors.
+    }
+    this.stemBufferMixers.delete(clipId);
+    vfPipelineMonitor.record('audio_stem_mixer', {
+      action: 'stop',
+      clipId,
+      sources: session.sourceCount,
+    });
+  }
+
+  private stopAllStemBufferMixers(): void {
+    for (const clipId of Array.from(this.stemBufferMixers.keys())) {
+      this.stopStemBufferMixer(clipId);
+    }
+  }
+
+  private getStemAudioElements(clip: TimelineClip): Map<string, StemAudioElementEntry> | null {
+    const key = createStemLayerSetKey(clip);
+    const stemSeparation = clip.audioState?.stemSeparation;
+    if (!key || !stemSeparation) {
+      this.disposeStemAudioSet(clip.id);
+      return null;
+    }
+
+    const existing = this.stemAudioElements.get(clip.id);
+    if (existing?.key === key) {
+      return existing.entries;
+    }
+
+    this.disposeStemAudioSet(clip.id);
+    const entries = new Map<string, StemAudioElementEntry>();
+    for (const stem of stemSeparation.stems) {
+      entries.set(stem.id, {
+        key,
+        element: null,
+        loading: true,
+      });
+      void this.loadStemAudioElement(clip.id, key, stem);
+    }
+
+    this.stemAudioElements.set(clip.id, { key, entries });
+    return entries;
+  }
+
+  private async loadStemAudioElement(
+    clipId: string,
+    key: string,
+    stem: ClipAudioStemLayer,
+  ): Promise<void> {
+    try {
+      const mediaFile = stem.mediaFileId
+        ? useMediaStore.getState().files.find(file => file.id === stem.mediaFileId)
+        : undefined;
+      if (stem.mediaFileId && mediaFile && hasUsableAudioProxy(mediaFile)) {
+        const element = await proxyFrameCache.getAudioProxy(stem.mediaFileId);
+        const current = this.stemAudioElements.get(clipId);
+        if (!current || current.key !== key) return;
+
+        if (element) {
+          this.disposeStemAudioElementEntry(current.entries.get(stem.id));
+          current.entries.set(stem.id, {
+            key,
+            element,
+            loading: false,
+          });
+          return;
+        }
+      }
+
+      if (mediaFile?.url) {
+        const current = this.stemAudioElements.get(clipId);
+        if (!current || current.key !== key) return;
+
+        this.disposeStemAudioElementEntry(current.entries.get(stem.id));
+        const element = createAudioElementFromUrl(mediaFile.url);
+        current.entries.set(stem.id, {
+          key,
+          element,
+          loading: false,
+        });
+        void element.load();
+        return;
+      }
+
+      const resolver = new StemAudioSourceResolver({
+        artifactStore: createCurrentAudioArtifactStore(),
+      });
+      const buffer = await resolver.resolveStemLayerBuffer(stem);
+      if (!buffer) {
+        const current = this.stemAudioElements.get(clipId);
+        if (current?.key === key) {
+          current.entries.set(stem.id, {
+            key,
+            element: null,
+            loading: false,
+            error: `Missing stem artifact: ${stem.label}`,
+          });
+        }
+        return;
+      }
+
+      const { element, url } = createAudioElementFromBuffer(buffer);
+      const current = this.stemAudioElements.get(clipId);
+      if (!current || current.key !== key) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      this.disposeStemAudioElementEntry(current.entries.get(stem.id));
+      current.entries.set(stem.id, {
+        key,
+        element,
+        loading: false,
+        url,
+      });
+      void element.load();
+    } catch (error) {
+      const current = this.stemAudioElements.get(clipId);
+      if (current?.key === key) {
+        current.entries.set(stem.id, {
+          key,
+          element: null,
+          loading: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      log.warn('Failed to prepare stem preview audio', { clipId, stemId: stem.id, error });
+    }
+  }
+
+  private disposeStemAudioElementEntry(entry: StemAudioElementEntry | undefined): void {
+    if (!entry) return;
+
+    pauseAudioElement(entry.element);
+    if (entry.url) {
+      URL.revokeObjectURL(entry.url);
+    }
+  }
+
+  private disposeStemAudioSet(clipId: string): void {
+    const set = this.stemAudioElements.get(clipId);
+    this.stopStemBufferMixer(clipId);
+    if (!set) return;
+
+    for (const entry of set.entries.values()) {
+      this.disposeStemAudioElementEntry(entry);
+    }
+    this.stemAudioElements.delete(clipId);
+  }
+
+  private publishSilentStemMeter(trackId: string, now: number): void {
+    const silent = createSilentAudioMeterSnapshot(now);
+    useTimelineStore.getState().updateRuntimeAudioMeter(trackId, silent, silent);
   }
 }

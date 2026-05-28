@@ -1,5 +1,7 @@
 import type {
   AudioEffectInstance,
+  ClipAudioStemLayer,
+  ClipAudioStemState,
   ClipAudioEditOperation,
   ClipAudioState,
   SpectralImageLayer,
@@ -20,7 +22,7 @@ type CanonicalJsonValue = JsonPrimitive | CanonicalJsonValue[] | { [key: string]
 export interface ClipAudioAnalysisIdentityInput {
   audioState?: Pick<
     ClipAudioState,
-    'sourceAudioRevisionId' | 'editStack' | 'effectStack' | 'spectralLayers' | 'muted' | 'soloSafe'
+    'sourceAudioRevisionId' | 'editStack' | 'effectStack' | 'spectralLayers' | 'stemSeparation' | 'muted' | 'soloSafe'
   > | null;
   automationKeyframes?: readonly {
     property: string;
@@ -181,6 +183,53 @@ function normalizeSpectralLayer(layer: SpectralImageLayer & { enabled?: boolean 
   }) ?? {};
 }
 
+function normalizeStemLayer(layer: ClipAudioStemLayer): CanonicalJsonValue {
+  return normalizeJsonValue({
+    id: layer.id,
+    kind: layer.kind,
+    analysisArtifactId: layer.analysisArtifactId,
+    manifestArtifactId: layer.manifestArtifactId,
+    payloadArtifactId: layer.payloadRef.artifactId,
+    payloadHash: layer.payloadRef.hash,
+    payloadSize: layer.payloadRef.size,
+    payloadMimeType: layer.payloadRef.mimeType,
+    payloadEncoding: layer.payloadRef.encoding,
+    enabled: layer.enabled !== false,
+    gainDb: layer.gainDb,
+    phaseAligned: layer.phaseAligned === true,
+    modelId: layer.modelId,
+    sourceFingerprint: layer.sourceFingerprint,
+  }) ?? {};
+}
+
+function normalizeStemSeparation(stemSeparation: ClipAudioStemState): CanonicalJsonValue {
+  if (stemSeparation.mixMode === 'original') {
+    return normalizeJsonValue({
+      mixMode: 'original',
+      soloStemId: stemSeparation.soloStemId,
+      sourceGainDb: stemSeparation.sourceGainDb,
+    }) ?? {};
+  }
+
+  const stems = stemSeparation.stems
+    .map(normalizeStemLayer)
+    .toSorted((first, second) => canonicalizeJson(first).localeCompare(canonicalizeJson(second)));
+
+  return normalizeJsonValue({
+    activeSetId: stemSeparation.activeSetId,
+    modelId: stemSeparation.modelId,
+    modelVersion: stemSeparation.modelVersion,
+    sourceFingerprint: stemSeparation.sourceFingerprint,
+    range: stemSeparation.range,
+    sampleRate: stemSeparation.sampleRate,
+    channelCount: stemSeparation.channelCount,
+    soloStemId: stemSeparation.soloStemId,
+    sourceGainDb: stemSeparation.sourceGainDb,
+    mixMode: stemSeparation.mixMode,
+    stems,
+  }) ?? {};
+}
+
 export function createClipAudioStateIdentityPayload(
   input: ClipAudioAnalysisIdentityInput,
 ): CanonicalJsonValue {
@@ -190,6 +239,9 @@ export function createClipAudioStateIdentityPayload(
   const spectralLayers = enabledOperations(
     audioState?.spectralLayers as (SpectralImageLayer & { enabled?: boolean })[] | undefined,
   )?.map(normalizeSpectralLayer);
+  const stemSeparation = audioState?.stemSeparation
+    ? normalizeStemSeparation(audioState.stemSeparation)
+    : undefined;
 
   return normalizeJsonValue({
     version: AUDIO_ANALYSIS_IDENTITY_VERSION,
@@ -207,6 +259,7 @@ export function createClipAudioStateIdentityPayload(
     editStack,
     effectStack,
     spectralLayers,
+    stemSeparation,
     automationKeyframes: input.automationKeyframes,
     trackGraphIdentity: input.trackGraphIdentity || undefined,
     masterGraphIdentity: input.masterGraphIdentity || undefined,

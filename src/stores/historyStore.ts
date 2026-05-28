@@ -5,6 +5,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { Logger } from '../services/logger';
 import { flashBoardMediaBridge } from '../services/flashboard/FlashBoardMediaBridge';
+import { clonePersistedClipAudioState } from '../services/audio/clipAudioStatePersistence';
 import type {
   ClipAudioState,
   MasterAudioState,
@@ -336,6 +337,7 @@ function isAudioPayloadKey(key: string): boolean {
     normalized === 'buffer' ||
     normalized === 'blob' ||
     normalized === 'file' ||
+    normalized === 'waveform' ||
     normalized === 'samples' ||
     normalized === 'sampledata' ||
     normalized === 'audiobuffer' ||
@@ -424,7 +426,7 @@ function cloneAudioAnalysisRefs(
 }
 
 function cloneClipAudioState(audioState: ClipAudioState | undefined): ClipAudioState | undefined {
-  const cloned = cloneJsonSafeAudioValue(audioState) as ClipAudioState | undefined;
+  const cloned = clonePersistedClipAudioState(cloneJsonSafeAudioValue(audioState) as ClipAudioState | undefined);
   if (!cloned) return undefined;
 
   const sourceAnalysisRefs = cloneAudioAnalysisRefs(audioState?.sourceAnalysisRefs);
@@ -452,7 +454,15 @@ function cloneMasterAudioState(audioState: MasterAudioState | undefined): Master
 }
 
 function cloneClipForHistory<T extends { audioState?: ClipAudioState }>(clip: T): T {
-  const { audioState, ...rest } = clip;
+  const {
+    audioState,
+    waveform: _waveform,
+    waveformChannels: _waveformChannels,
+    ...rest
+  } = clip as T & {
+    waveform?: unknown;
+    waveformChannels?: unknown;
+  };
   const cloned = deepClone(rest) as T;
   const clonedAudioState = cloneClipAudioState(audioState);
   if (clonedAudioState !== undefined) {
@@ -497,7 +507,12 @@ function cloneCompositionForHistory(composition: Composition): Composition {
 }
 
 function cloneMediaFileForHistory(file: MediaFile): MediaFile {
-  const { audioAnalysisRefs, ...rest } = file;
+  const {
+    audioAnalysisRefs,
+    waveform: _waveform,
+    waveformChannels: _waveformChannels,
+    ...rest
+  } = file;
   const cloned = deepClone(rest) as MediaFile;
   const clonedAudioAnalysisRefs = cloneAudioAnalysisRefs(audioAnalysisRefs);
   if (clonedAudioAnalysisRefs !== undefined) {

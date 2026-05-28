@@ -29,6 +29,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
       playheadState.isUsingInternalPosition = false;
       playheadState.hasMasterAudio = false;
       playheadState.masterAudioElement = null;
+      playheadState.masterAudioClock = null;
       return;
     }
 
@@ -50,6 +51,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
       playheadState.isUsingInternalPosition = false;
       playheadState.hasMasterAudio = false;
       playheadState.masterAudioElement = null;
+      playheadState.masterAudioClock = null;
       useTimelineStore.setState({
         playheadPosition: position,
         playbackSpeed: 1,
@@ -98,6 +100,18 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
             const cappedDelta = Math.min(deltaTime, 0.1);
             newPosition = playheadState.position + cappedDelta * playbackSpeed;
           }
+        } else if (playheadState.hasMasterAudio && playheadState.masterAudioClock && playbackSpeed === 1) {
+          const audioTime = playheadState.masterAudioClock();
+          if (audioTime !== null && Number.isFinite(audioTime)) {
+            const speed = playheadState.masterClipSpeed || 1;
+            newPosition =
+              playheadState.masterClipStartTime +
+              (audioTime - playheadState.masterClipInPoint) / speed;
+          } else {
+            const deltaTime = (currentTime - lastTime) / 1000;
+            const cappedDelta = Math.min(deltaTime, 0.1);
+            newPosition = playheadState.position + cappedDelta * playbackSpeed;
+          }
         } else {
           // No audio master or non-standard speed - use system time with playback speed
           const deltaTime = (currentTime - lastTime) / 1000;
@@ -119,6 +133,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
             // Reset audio master - will be re-established by syncAudioElements
             playheadState.hasMasterAudio = false;
             playheadState.masterAudioElement = null;
+            playheadState.masterAudioClock = null;
             // Seek all audio/video to start
             clips.forEach((clip) => {
               if (clip.source?.audioElement) {
@@ -145,6 +160,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
             // Reset audio master
             playheadState.hasMasterAudio = false;
             playheadState.masterAudioElement = null;
+            playheadState.masterAudioClock = null;
             // Seek all audio/video to end
             clips.forEach((clip) => {
               if (clip.source?.audioElement) {
@@ -200,6 +216,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
       playheadState.isUsingInternalPosition = false;
       playheadState.hasMasterAudio = false;
       playheadState.masterAudioElement = null;
+      playheadState.masterAudioClock = null;
     };
   }, [isPlaying]);
 }

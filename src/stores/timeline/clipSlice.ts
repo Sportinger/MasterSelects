@@ -149,6 +149,23 @@ function isPlaneClip(clip: TimelineClip): boolean {
   return clip.source?.type === 'video' || clip.source?.type === 'image';
 }
 
+function isVisualClipSourceType(sourceType: string | undefined): boolean {
+  return sourceType === 'video' ||
+    sourceType === 'image' ||
+    sourceType === 'text' ||
+    sourceType === 'solid' ||
+    sourceType === 'model' ||
+    sourceType === 'camera' ||
+    sourceType === 'gaussian-avatar' ||
+    sourceType === 'gaussian-splat' ||
+    sourceType === 'splat-effector' ||
+    sourceType === 'math-scene' ||
+    sourceType === 'motion-shape' ||
+    sourceType === 'motion-null' ||
+    sourceType === 'motion-adjustment' ||
+    isVectorAnimationSourceType(sourceType);
+}
+
 function isTrackLocked(tracks: TimelineTrack[], trackId: string | undefined): boolean {
   return !!trackId && tracks.find(t => t.id === trackId)?.locked === true;
 }
@@ -725,7 +742,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       const targetTrack = tracks.find(t => t.id === newTrackId);
       const sourceType = movingClip.source?.type;
       if (targetTrack && sourceType) {
-        if ((sourceType === 'video' || sourceType === 'image' || sourceType === 'lottie' || sourceType === 'rive' || sourceType === 'camera' || sourceType === 'math-scene') && targetTrack.type !== 'video') return;
+        if (isVisualClipSourceType(sourceType) && targetTrack.type !== 'video') return;
         if (sourceType === 'audio' && targetTrack.type !== 'audio') return;
       }
     }

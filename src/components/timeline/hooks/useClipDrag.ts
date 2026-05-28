@@ -3,12 +3,22 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
-import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import type { ClipDragState } from '../types';
 import { Logger } from '../../../services/logger';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useDockStore } from '../../../stores/dockStore';
+import { requestMediaSourceReveal } from '../../../services/mediaSourceReveal';
 import type { TimelineClipDragPreview, TimelineToolId } from '../../../stores/timeline/types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
+import {
+  findNearestCompatibleClipDragTrackId,
+  getClipDragNewTrackId,
+  getClipDragNewTrackType,
+  getClipDragTrackRequirement,
+  isClipDragTrackCompatible,
+  resolveCompatibleClipDragTrackId,
+} from '../utils/clipDragTrackTargeting';
+import { findSweptClipSnap } from '../utils/clipDragSnapping';
 
 const log = Logger.create('useClipDrag');
 const MIN_TOOL_GESTURE_DURATION = 0.1;
@@ -30,6 +40,7 @@ interface UseClipDragProps {
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean, setPrimaryOnly?: boolean) => void;
+  addTrack: (type: TimelineTrack['type']) => string;
   moveClip: (clipId: string, newStartTime: number, trackId: string, skipLinked?: boolean, skipGroup?: boolean, skipTrim?: boolean, excludeClipIds?: string[]) => void;
   applyTimelineEditOperation: (
     operation: TimelineEditOperation,
@@ -40,7 +51,7 @@ interface UseClipDragProps {
   // Helpers
   pixelToTime: (pixel: number) => number;
   getRenderedTrackHeight: (track: TimelineTrack) => number;
-  getSnappedPosition: (clipId: string, rawTime: number, trackId: string) => { startTime: number; snapped: boolean };
+  getSnappedPosition: (clipId: string, rawTime: number, trackId: string) => { startTime: number; snapped: boolean; snapEdgeTime: number };
   getPositionWithResistance: (clipId: string, rawTime: number, trackId: string, duration: number, zoom?: number, excludeClipIds?: string[]) => { startTime: number; forcingOverlap: boolean; noFreeSpace?: boolean };
 }
 
@@ -169,6 +180,7 @@ export function useClipDrag({
   isExporting,
   activeTimelineToolId,
   selectClip,
+  addTrack,
   moveClip,
   applyTimelineEditOperation,
   openCompositionTab,
@@ -263,6 +275,7 @@ export function useClipDrag({
         snapIndicatorTime: null,
         isSnapping: false,
         trackChangeGuideTime: null,
+        newTrackType: null,
         altKeyPressed: e.altKey, // Capture Alt state for independent drag
         forcingOverlap: false,
         dragStartTime: Date.now(), // Track when drag started for track-change delay
@@ -296,6 +309,7 @@ export function useClipDrag({
             snapIndicatorTime: null,
             isSnapping: false,
             trackChangeGuideTime: null,
+            newTrackType: null,
             altKeyPressed: moveEvent.altKey,
             forcingOverlap: false,
             multiSelectTimeDelta: drag.toolGesture === 'slide' ? clampedDelta : undefined,
@@ -316,15 +330,14 @@ export function useClipDrag({
         const trackChangeAllowed = Date.now() - drag.dragStartTime >= TRACK_CHANGE_DELAY_MS
           && Math.abs(mouseY - drag.grabY) >= TRACK_CHANGE_RESISTANCE_PX;
 
-        // Determine the required track type from the dragged clip's source
         const clipForTrackCheck = clipMap.get(drag.clipId);
-        const sourceType = clipForTrackCheck?.source?.type;
-        const requiredTrackType: 'video' | 'audio' | null =
-          sourceType === 'audio' ? 'audio' :
-          (sourceType === 'video' || sourceType === 'image' || isVectorAnimationSourceType(sourceType) || sourceType === 'text' || sourceType === 'solid' || sourceType === 'model' || sourceType === 'gaussian-splat' || sourceType === 'camera' || sourceType === 'splat-effector' || sourceType === 'math-scene') ? 'video' :
-          null;
-
-        let newTrackId = drag.currentTrackId; // Keep current track by default
+        const requiredTrackType = getClipDragTrackRequirement(clipForTrackCheck, tracks);
+        let newTrackId = resolveCompatibleClipDragTrackId(
+          drag.currentTrackId,
+          drag.originalTrackId,
+          clipForTrackCheck,
+          tracks,
+        );
         const targetTrackId = document
           .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
           ?.closest<HTMLElement>('.track-lane[data-track-id]')
@@ -333,27 +346,67 @@ export function useClipDrag({
           ? tracks.find(track => track.id === targetTrackId)
           : undefined;
 
-        if (hoveredTrack) {
-          const trackTypeMatches = !requiredTrackType || hoveredTrack.type === requiredTrackType;
-          if ((trackChangeAllowed || hoveredTrack.id === drag.originalTrackId) && trackTypeMatches && !hoveredTrack.locked) {
-            newTrackId = hoveredTrack.id;
-          }
-        } else {
+        let trackAtMouse = hoveredTrack;
+        if (!trackAtMouse) {
           let currentY = 24;
           for (const track of tracks) {
             const trackHeight = getRenderedTrackHeight(track);
             if (mouseY >= currentY && mouseY < currentY + trackHeight) {
-              const trackTypeMatches = !requiredTrackType || track.type === requiredTrackType;
-              if ((trackChangeAllowed || track.id === drag.originalTrackId) && trackTypeMatches && !track.locked) {
-                newTrackId = track.id;
-              }
+              trackAtMouse = track;
               break;
             }
             currentY += trackHeight;
           }
         }
 
+        const newTrackType = trackChangeAllowed && !hoveredTrack
+          ? getClipDragNewTrackType(
+              tracks,
+              mouseY,
+              getRenderedTrackHeight,
+              requiredTrackType,
+              24,
+              drag.newTrackType ?? null,
+            )
+          : null;
+
+        if (newTrackType) {
+          newTrackId = getClipDragNewTrackId(newTrackType);
+        } else {
+          if (hoveredTrack) {
+            if (
+              (trackChangeAllowed || hoveredTrack.id === drag.originalTrackId) &&
+              isClipDragTrackCompatible(hoveredTrack, requiredTrackType)
+            ) {
+              newTrackId = hoveredTrack.id;
+            }
+          } else if (
+            trackAtMouse &&
+            (trackChangeAllowed || trackAtMouse.id === drag.originalTrackId) &&
+            isClipDragTrackCompatible(trackAtMouse, requiredTrackType)
+          ) {
+            newTrackId = trackAtMouse.id;
+          }
+
+          if (
+            trackChangeAllowed &&
+            trackAtMouse &&
+            !isClipDragTrackCompatible(trackAtMouse, requiredTrackType)
+          ) {
+            const nearestCompatibleTrackId = findNearestCompatibleClipDragTrackId(
+              tracks,
+              mouseY,
+              getRenderedTrackHeight,
+              requiredTrackType,
+            );
+            if (nearestCompatibleTrackId) {
+              newTrackId = nearestCompatibleTrackId;
+            }
+          }
+        }
+
         const rect = timelineRef.current.getBoundingClientRect();
+        const previousX = drag.currentX - rect.left + scrollX - drag.grabOffsetX;
         const x = moveEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
         const rawTime = Math.max(0, pixelToTime(x));
 
@@ -391,10 +444,26 @@ export function useClipDrag({
 
           // If not held by hysteresis, check for new snap points
           if (!snapped) {
-            const snapResult = getSnappedPosition(drag.clipId, rawTime, newTrackId) as { startTime: number; snapped: boolean; snapEdgeTime: number };
+            const snapResult = getSnappedPosition(drag.clipId, rawTime, newTrackId);
             snapped = snapResult.snapped;
             snappedTime = snapResult.startTime;
             snapEdgeTime = snapResult.snapEdgeTime;
+
+            if (!snapped) {
+              const sweptSnapResult = findSweptClipSnap({
+                clipId: drag.clipId,
+                previousX,
+                currentX: x,
+                trackId: newTrackId,
+                pixelToTime,
+                getSnappedPosition,
+              });
+              if (sweptSnapResult) {
+                snapped = true;
+                snappedTime = sweptSnapResult.startTime;
+                snapEdgeTime = sweptSnapResult.snapEdgeTime;
+              }
+            }
 
             // When moving to a different track, also snap to original position
             // so the user can precisely move clips up/down without horizontal drift
@@ -545,6 +614,7 @@ export function useClipDrag({
           snapIndicatorTime: snapped && !forcingOverlap ? snapEdgeTime : null,
           isSnapping: snapped && !forcingOverlap,
           trackChangeGuideTime: newTrackId !== drag.originalTrackId ? drag.originalStartTime : null,
+          newTrackType,
           altKeyPressed: moveEvent.altKey, // Update Alt state dynamically
           forcingOverlap,
           multiSelectTimeDelta,
@@ -599,20 +669,32 @@ export function useClipDrag({
           // Use refs to get current values (avoid stale closures)
           const currentSelectedIds = selectedClipIdsRef.current;
           const currentClipMap = clipMapRef.current;
+          const draggedClipForDrop = currentClipMap.get(drag.clipId);
+          const finalTrackId = drag.newTrackType
+            ? addTrack(drag.newTrackType)
+            : resolveCompatibleClipDragTrackId(
+                drag.currentTrackId,
+                drag.originalTrackId,
+                draggedClipForDrop,
+                tracks,
+              );
 
-          // For multi-select: use the already-calculated snappedTime and timeDelta from drag state
-          // This ensures we use the same constrained position shown in the preview
+          // Commit the already-calculated drag preview position. This keeps
+          // snap hysteresis honest: if the clip is still visually held at a
+          // snap point on mouseup, the saved position must be that snap point.
           const isMultiSelect = currentSelectedIds.size > 1 && currentSelectedIds.has(drag.clipId);
 
           let finalStartTime: number;
           let timeDelta: number;
 
-          if (isMultiSelect && drag.snappedTime !== null && drag.multiSelectTimeDelta !== undefined) {
-            // Use the pre-calculated constrained position from the drag preview
+          if (drag.snappedTime !== null) {
+            const draggedClip = currentClipMap.get(drag.clipId);
             finalStartTime = drag.snappedTime;
-            timeDelta = drag.multiSelectTimeDelta;
+            timeDelta = isMultiSelect && drag.multiSelectTimeDelta !== undefined
+              ? drag.multiSelectTimeDelta
+              : finalStartTime - (draggedClip?.startTime ?? drag.originalStartTime);
           } else {
-            // Single clip or no snapped position - calculate from mouse
+            // Fallback for incomplete drag state.
             const rect = timelineRef.current.getBoundingClientRect();
             const x = upEvent.clientX - rect.left + scrollX - drag.grabOffsetX;
             finalStartTime = Math.max(0, pixelToTime(x));
@@ -627,7 +709,8 @@ export function useClipDrag({
             hasDragClip: currentSelectedIds.has(drag.clipId),
             timeDelta,
             finalStartTime,
-            usedSnappedTime: isMultiSelect && drag.snappedTime !== null,
+            finalTrackId,
+            usedDragPreviewPosition: drag.snappedTime !== null,
           });
 
           // If multiple clips are selected, move them all by the same delta
@@ -650,7 +733,7 @@ export function useClipDrag({
             // skipLinked depends on whether linked clip is also selected
             const draggedClip = currentClipMap.get(drag.clipId);
             const draggedLinkedInSelection = !!(draggedClip?.linkedClipId && currentSelectedIds.has(draggedClip.linkedClipId));
-            moveClip(drag.clipId, finalStartTime, drag.currentTrackId, draggedLinkedInSelection, drag.altKeyPressed, false, allExcludedIds);
+            moveClip(drag.clipId, finalStartTime, finalTrackId, draggedLinkedInSelection, drag.altKeyPressed, false, allExcludedIds);
             movedClipIds.add(drag.clipId);
             // If linked clip was moved via skipLinked=false, mark it as moved
             if (draggedClip?.linkedClipId && !draggedLinkedInSelection && !drag.altKeyPressed) {
@@ -676,7 +759,7 @@ export function useClipDrag({
             }
           } else {
             // Single clip drag - normal behavior
-            moveClip(drag.clipId, finalStartTime, drag.currentTrackId, false, drag.altKeyPressed);
+            moveClip(drag.clipId, finalStartTime, finalTrackId, false, drag.altKeyPressed);
           }
         }
         setClipDrag(null);
@@ -689,7 +772,7 @@ export function useClipDrag({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [activeTimelineToolId, applyTimelineEditOperation, trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, getRenderedTrackHeight, selectClip, getSnappedPosition, getPositionWithResistance, moveClip]
+    [activeTimelineToolId, applyTimelineEditOperation, trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, getRenderedTrackHeight, selectClip, getSnappedPosition, getPositionWithResistance, addTrack, moveClip]
   );
 
   // Handle double-click on clip - open composition if it's a nested comp
@@ -701,13 +784,28 @@ export function useClipDrag({
       const clip = clipMap.get(clipId);
       if (!clip) return;
 
-      // If this clip is a composition, open it in a new tab and switch to it
+      // If this clip is a composition, open it in a new tab and switch to it.
       if (clip.isComposition && clip.compositionId) {
         log.debug('Double-click on composition clip, opening:', clip.compositionId);
         openCompositionTab(clip.compositionId);
+        return;
+      }
+
+      const track = tracks.find((candidate) => candidate.id === clip.trackId);
+      const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
+      const sourceType = clip.source?.type;
+      const isMediaLayerClip =
+        track?.type === 'video' ||
+        track?.type === 'audio' ||
+        sourceType === 'video' ||
+        sourceType === 'audio';
+
+      if (mediaFileId && isMediaLayerClip) {
+        useDockStore.getState().activatePanelType('media');
+        requestMediaSourceReveal(mediaFileId, 'timeline');
       }
     },
-    [clipMap, openCompositionTab]
+    [clipMap, openCompositionTab, tracks]
   );
 
   return {

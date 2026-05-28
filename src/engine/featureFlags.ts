@@ -20,6 +20,10 @@ export const flags = {
   waveformPyramid: false,  // Artifact-backed multi-resolution waveform data
   audioEffectRegistry: false,  // Registry-backed audio effect descriptors
   audioMixer: false,  // Track/send/master mixer controls
+  stemSeparation: false,  // Browser-side clip stem separation UI and jobs
+  stemSeparationWebGPU: true,  // Prefer WebGPU for supported stem separation models
+  stemSeparationClipLayers: true,  // Render completed stems as clip-local Audio Layers
+  stemSeparationExperimentalModels: false,  // Show unvalidated stem model candidates
   guidedActionsRuntime: true,  // Shared guided action contracts, scheduler, and transient session store
   guidedActionsAIReplay: true,  // Visual replay for AI tool calls
   guidedActionsTutorials: true,  // Tutorial scenarios using guided actions

@@ -41,6 +41,7 @@ import type {
   AudioSendState,
   SpectralImageLayer,
   VideoBakeRegion,
+  ClipAudioStemState,
 } from '../../types';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
 import type { Composition } from '../mediaStore';
@@ -49,6 +50,7 @@ import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { MarkerMIDIBinding } from '../../types/midi';
 import type { AudioSilenceDetectionOptions, AudioSilenceRange } from '../../services/audio/audioSilenceDetection';
 import type { AudioTransientDetectionOptions, AudioTransientRange } from '../../services/audio/audioTransientDetection';
+import type { StemSeparationBackend } from '../../services/audio/stemSeparation';
 import type {
   ApplyTimelineEditOperationOptions,
   TimelineEditOperation,
@@ -372,6 +374,10 @@ export interface TimelineState {
   showAudioRegionEditMarkers: boolean;
   showTranscriptMarkers: boolean;
 
+  // Stem separation transient UI/job state. Persistent stem state lives on clips.
+  clipStemSeparationJobs: Record<string, ClipStemSeparationJobState>;
+  expandedClipStemLayerIds: Set<string>;
+
   // Keyframe animation state
   clipKeyframes: Map<string, Keyframe[]>;
   keyframeRecordingEnabled: Set<string>;
@@ -570,6 +576,8 @@ export interface ColorCorrectionActions {
 export interface LinkedGroupActions {
   createLinkedGroup: (clipIds: string[], offsets: Map<string, number>) => void;
   unlinkGroup: (clipId: string) => void;
+  linkClips: (clipIds: string[]) => void;
+  unlinkClips: (clipIds: string[]) => void;
 }
 
 // YouTube download clip actions (extracted to downloadClipSlice)
@@ -801,6 +809,58 @@ export type AddClipSpectralImageLayerInput = Omit<SpectralImageLayer, 'id'> & {
   id?: string;
 };
 
+export type ClipStemSeparationJobPhase =
+  | 'queued'
+  | 'preparing'
+  | 'downloading-model'
+  | 'loading-model'
+  | 'separating'
+  | 'storing'
+  | 'complete'
+  | 'cancelled'
+  | 'failed';
+
+export interface ClipStemSeparationJobState {
+  jobId: string;
+  clipId: string;
+  requestedClipId: string;
+  modelId: string;
+  phase: ClipStemSeparationJobPhase;
+  progress: number;
+  backend?: StemSeparationBackend;
+  message?: string;
+  error?: string;
+  startedAt: number;
+  updatedAt: number;
+}
+
+export interface StartClipStemSeparationOptions {
+  modelId?: string;
+  force?: boolean;
+  range?: { start: number; end: number };
+}
+
+export interface ClipStemSeparationProgressUpdate {
+  phase?: ClipStemSeparationJobPhase;
+  progress?: number;
+  backend?: StemSeparationBackend;
+  message?: string;
+  error?: string;
+}
+
+export interface ClipStemSeparationRunnerRequest {
+  jobId: string;
+  clip: TimelineClip;
+  requestedClip: TimelineClip;
+  options: StartClipStemSeparationOptions;
+  signal: AbortSignal;
+  updateProgress: (update: ClipStemSeparationProgressUpdate) => void;
+}
+
+export type ClipStemSeparationRunner = (
+  request: ClipStemSeparationRunnerRequest,
+) => Promise<ClipAudioStemState | null>;
+
 export interface AudioEditActions {
   applyAudioRegionEdit: (type: TimelineAudioRegionEditType, options?: ApplyAudioRegionEditOptions) => string | null;
   setAudioRegionGainPreview: (preview: ClipAudioRegionGainPreview | null) => void;
@@ -829,6 +889,22 @@ export interface AudioEditActions {
   addClipSpectralImageLayer: (clipId: string, layer: AddClipSpectralImageLayerInput) => string | null;
   updateClipSpectralImageLayer: (clipId: string, layerId: string, patch: Partial<SpectralImageLayer>) => void;
   removeClipSpectralImageLayer: (clipId: string, layerId: string) => void;
+}
+
+export interface StemSeparationActions {
+  startClipStemSeparation: (
+    clipId: string,
+    options?: StartClipStemSeparationOptions,
+  ) => Promise<string | null>;
+  cancelClipStemSeparation: (clipId: string) => void;
+  setClipStemMixMode: (clipId: string, mixMode: ClipAudioStemState['mixMode']) => void;
+  setClipStemSourceGain: (clipId: string, gainDb: number) => void;
+  setClipStemSolo: (clipId: string, stemId: string | null) => void;
+  setClipStemEnabled: (clipId: string, stemId: string, enabled: boolean) => void;
+  setClipStemGain: (clipId: string, stemId: string, gainDb: number) => void;
+  clearClipStemSeparation: (clipId: string) => void;
+  toggleClipStemLayerDropdown: (clipId: string) => void;
+  setClipStemLayerDropdownOpen: (clipId: string, open: boolean) => void;
 }
 
 // RAM Preview actions interface
@@ -1148,6 +1224,7 @@ export interface TimelineStore extends
   TimelineToolActions,
   TimelineEditOperationActions,
   AudioEditActions,
+  StemSeparationActions,
   VideoBakeActions,
   RamPreviewActions,
   ProxyCacheActions,

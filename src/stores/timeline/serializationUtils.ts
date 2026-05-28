@@ -22,6 +22,7 @@ import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClie
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
+import { clonePersistedClipAudioState } from '../../services/audio/clipAudioStatePersistence';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import {
   DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
@@ -41,6 +42,10 @@ import { resolveGaussianSplatSequenceData } from '../../utils/gaussianSplatSeque
 import { resolveModelSequenceData } from '../../utils/modelSequence';
 
 const log = Logger.create('Timeline');
+
+function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
+  return tracks.map(track => track.id);
+}
 
 // Global WebCodecsPlayer cache — persists across composition switches.
 // Each player holds the parsed MP4 samples (~fileSize of memory via file.arrayBuffer()).
@@ -168,9 +173,15 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
               bakeRegions: clip.videoState.bakeRegions?.map(serializeVideoBakeRegion),
             }
           : undefined,
-        audioState: clip.audioState ? structuredClone(clip.audioState) : undefined,
-        waveform: clip.waveform,
-        waveformChannels: clip.waveformChannels,
+        audioState: clonePersistedClipAudioState(clip.audioState),
+        waveform: clip.audioState?.sourceAnalysisRefs?.waveformPyramidId ||
+          clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId
+          ? undefined
+          : clip.waveform,
+        waveformChannels: clip.audioState?.sourceAnalysisRefs?.waveformPyramidId ||
+          clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId
+          ? undefined
+          : clip.waveformChannels,
         transform: clip.transform,
         effects: clip.effects,
         colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
@@ -326,6 +337,8 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         videoBakeRegionSelection: null,
         videoBakeRegions: [],
         masterAudioState: undefined,
+        clipStemSeparationJobs: {},
+        expandedClipStemLayerIds: new Set<string>(),
       });
       return;
     }
@@ -356,10 +369,12 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       // Clear keyframe state
       clipKeyframes: new Map<string, Keyframe[]>(),
       keyframeRecordingEnabled: new Set<string>(),
-      expandedTracks: new Set<string>(data.tracks.filter(t => t.type === 'video').map(t => t.id)),
+      expandedTracks: new Set<string>(getDefaultExpandedTrackIds(data.tracks)),
       expandedTrackPropertyGroups: new Map<string, Set<string>>(),
       selectedKeyframeIds: new Set<string>(),
       expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
+      clipStemSeparationJobs: {},
+      expandedClipStemLayerIds: new Set<string>(),
       // Restore markers
       markers: data.markers || [],
       videoBakeRegionSelection: null,
@@ -2011,11 +2026,13 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       videoBakeRegions: [],
       clipKeyframes: new Map<string, Keyframe[]>(),
       keyframeRecordingEnabled: new Set<string>(),
-      expandedTracks: new Set<string>(tracks.filter(t => t.type === 'video').map(t => t.id)),
+      expandedTracks: new Set<string>(getDefaultExpandedTrackIds(tracks)),
       expandedTrackPropertyGroups: new Map<string, Set<string>>(),
       selectedKeyframeIds: new Set<string>(),
       expandedCurveProperties: new Map<string, Set<import('../../types').AnimatableProperty>>(),
       runtimeAudioMeters: { trackMeters: {} },
+      clipStemSeparationJobs: {},
+      expandedClipStemLayerIds: new Set<string>(),
       timelineSessionId: nextTimelineSessionId,
     });
 

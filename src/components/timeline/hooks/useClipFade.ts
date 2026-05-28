@@ -31,7 +31,7 @@ interface UseClipFadeProps {
   getClipKeyframes: (clipId: string) => KeyframeData[];
 
   // Audio effect management
-  addClipEffect: (clipId: string, effectType: string) => void;
+  addClipEffect: (clipId: string, effectType: string) => string | null | undefined;
 
   // Helpers
   pixelToTime: (pixel: number) => number;
@@ -102,17 +102,14 @@ export function useClipFade({
 
     if (!isAudioClip(clipId)) return 'opacity';
 
-    let volumeEffect = clip.effects?.find(e => e.type === 'audio-volume');
-    if (!volumeEffect) {
-      // Add the audio-volume effect
-      addClipEffect(clipId, 'audio-volume');
-      // Get the updated clip with the new effect
-      const updatedClip = clipMap.get(clipId);
-      volumeEffect = updatedClip?.effects?.find(e => e.type === 'audio-volume');
-    }
-
+    const volumeEffect = clip.effects?.find(e => e.type === 'audio-volume');
     if (volumeEffect) {
       return createEffectProperty(volumeEffect.id, 'volume');
+    }
+
+    const volumeEffectId = addClipEffect(clipId, 'audio-volume');
+    if (volumeEffectId) {
+      return createEffectProperty(volumeEffectId, 'volume');
     }
 
     return 'opacity';

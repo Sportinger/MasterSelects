@@ -74,6 +74,7 @@ import type {
   MediaBoardViewportSize,
 } from './media/board/types';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
+import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 
 const log = Logger.create('MediaPanel');
 import { useMediaStore } from '../../stores/mediaStore';
@@ -83,6 +84,7 @@ import type {
   Composition,
   MathSceneItem,
   MediaFile,
+  MediaFolder,
   MeshItem,
   MotionShapeItem,
   ProjectItem,
@@ -98,6 +100,12 @@ import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { RelinkDialog } from '../common/RelinkDialog';
 import { mediaNeedsRelink } from '../../services/project/relinkMedia';
 import {
+  getLastMediaSourceRevealRequest,
+  isMediaSourceRevealEvent,
+  MEDIA_SOURCE_REVEAL_EVENT,
+  type MediaSourceRevealRequest,
+} from '../../services/mediaSourceReveal';
+import {
   applyExternalDragPayloadToDataTransfer,
   clearExternalDragPayload,
   createExternalDragPayloadForProjectItem,
@@ -106,11 +114,17 @@ import {
 } from '../timeline/utils/externalDragSession';
 
 // Column definitions
-type ColumnId = 'label' | 'name' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
+type ColumnId = 'label' | 'name' | 'badges' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
 type MediaPanelViewMode = 'classic' | 'icons' | 'board';
 
 const CLASSIC_ROW_HEIGHT = 20;
 const CLASSIC_OVERSCAN_ROWS = 12;
+const MEDIA_STATUS_BADGE_COLUMN_MIN_WIDTH = 58;
+const MEDIA_STATUS_BADGE_COLUMN_MAX_WIDTH = 220;
+const MEDIA_STATUS_BADGE_COLUMN_PADDING_X = 12;
+const MEDIA_STATUS_BADGE_GAP = 4;
+const MEDIA_COLUMN_TEXT_PADDING_X = 16;
+const MEDIA_COLUMN_TEXT_CHAR_WIDTH = 6.2;
 const EMPTY_TEXT_ITEMS: TextItem[] = [];
 const EMPTY_SOLID_ITEMS: SolidItem[] = [];
 const EMPTY_MESH_ITEMS: MeshItem[] = [];
@@ -129,12 +143,32 @@ type MediaPanelContextMenu = {
   x: number;
   y: number;
   itemId?: string;
+  annotationId?: string;
   parentId?: string | null;
+  boardPosition?: { x: number; y: number };
 };
+
+type MediaBoardAnnotationColor = string | 'transparent';
+
+interface MediaBoardAnnotation {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  fontSize: number;
+  backgroundColor: MediaBoardAnnotationColor;
+  textColor: MediaBoardAnnotationColor;
+  editing: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
 
 const COLUMN_LABELS_MAP: Record<ColumnId, string> = {
   label: '●',
   name: 'Name',
+  badges: 'Status',
   duration: 'Duration',
   resolution: 'Resolution',
   fps: 'FPS',
@@ -145,11 +179,56 @@ const COLUMN_LABELS_MAP: Record<ColumnId, string> = {
   size: 'Size',
 };
 
-const DEFAULT_COLUMN_ORDER: ColumnId[] = ['name', 'label', 'duration', 'resolution', 'fps', 'container', 'codec', 'audio', 'bitrate', 'size'];
+const DEFAULT_COLUMN_ORDER: ColumnId[] = ['name', 'badges', 'label', 'duration', 'resolution', 'fps', 'container', 'codec', 'audio', 'bitrate', 'size'];
 const STORAGE_KEY = 'media-panel-column-order';
 const VIEW_MODE_STORAGE_KEY = 'media-panel-view-mode';
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
 const MEDIA_PANEL_VIEW_TRANSITION_MS = 500;
+const MEDIA_PANEL_REVEAL_PULSE_MS = 1200;
+const MEDIA_PANEL_REVEAL_REQUEST_MAX_AGE_MS = 10000;
+const MEDIA_BOARD_ANNOTATIONS_STORAGE_KEY = 'media-panel-board-annotations';
+const DEFAULT_MEDIA_BOARD_ANNOTATION_FONT_SIZE = 18;
+const MEDIA_BOARD_ANNOTATION_FONT_SIZE_MIN = 12;
+const MEDIA_BOARD_ANNOTATION_FONT_SIZE_MAX = 64;
+const DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE = { width: 300, height: 190 };
+const MEDIA_BOARD_ANNOTATION_MIN_SIZE = { width: 120, height: 74 };
+const MEDIA_BOARD_ANNOTATION_MAX_SIZE = { width: 1100, height: 760 };
+const DEFAULT_MEDIA_BOARD_ANNOTATION_BACKGROUND: MediaBoardAnnotationColor = '#f1dfa1';
+const DEFAULT_MEDIA_BOARD_ANNOTATION_TEXT: MediaBoardAnnotationColor = '#2f2612';
+const MEDIA_BOARD_ANNOTATION_COLOR_OPTIONS: Array<{ label: string; value: MediaBoardAnnotationColor }> = [
+  { label: 'Yellow', value: '#f1dfa1' },
+  { label: 'White', value: '#f6f6f2' },
+  { label: 'Black', value: '#151515' },
+  { label: 'Blue', value: '#4f7bea' },
+  { label: 'Red', value: '#e15353' },
+  { label: 'Green', value: '#53b86f' },
+  { label: 'Transparent', value: 'transparent' },
+];
+
+const DYNAMIC_MEDIA_COLUMN_IDS: Exclude<ColumnId, 'name'>[] = [
+  'badges',
+  'label',
+  'duration',
+  'resolution',
+  'fps',
+  'container',
+  'codec',
+  'audio',
+  'bitrate',
+  'size',
+];
+
+const MEDIA_COLUMN_WIDTH_LIMITS: Record<Exclude<ColumnId, 'name' | 'badges'>, { min: number; max: number }> = {
+  label: { min: 24, max: 30 },
+  duration: { min: 42, max: 100 },
+  resolution: { min: 58, max: 140 },
+  fps: { min: 36, max: 72 },
+  container: { min: 48, max: 120 },
+  codec: { min: 44, max: 128 },
+  audio: { min: 42, max: 72 },
+  bitrate: { min: 52, max: 110 },
+  size: { min: 48, max: 96 },
+};
 
 interface MediaPanelTransitionBox {
   left: number;
@@ -196,7 +275,15 @@ function loadColumnOrder(): ColumnId[] {
       if (missingColumns.length > 0) {
         // Filter out any invalid columns and add missing ones
         const validColumns = parsed.filter(col => DEFAULT_COLUMN_ORDER.includes(col));
-        return [...validColumns, ...missingColumns];
+        missingColumns.forEach((columnId) => {
+          if (columnId === 'badges') {
+            const nameIndex = validColumns.indexOf('name');
+            validColumns.splice(nameIndex >= 0 ? nameIndex + 1 : 0, 0, columnId);
+            return;
+          }
+          validColumns.push(columnId);
+        });
+        return validColumns;
       }
     }
   } catch {
@@ -231,6 +318,206 @@ function isAiReferenceMediaFile(item: ProjectItem | null | undefined): item is M
   );
 }
 
+function clampMediaStatusBadgeColumnWidth(width: number): number {
+  return Math.max(
+    MEDIA_STATUS_BADGE_COLUMN_MIN_WIDTH,
+    Math.min(MEDIA_STATUS_BADGE_COLUMN_MAX_WIDTH, Math.ceil(width)),
+  );
+}
+
+function getMediaStatusBadgeWidths(item: ProjectItem): number[] {
+  const mediaFile = isImportedMediaFileItem(item) ? item : null;
+  const importProgress = getItemImportProgress(item);
+  const waveformProgress = getItemWaveformProgress(item);
+  const widths: number[] = [];
+
+  if (importProgress !== null) {
+    widths.push(Math.max(30, String(importProgress).length * 6 + 18));
+  }
+  if (importProgress === null && (waveformProgress !== null || Boolean(mediaFile?.waveform?.length || mediaFile?.audioAnalysisRefs?.waveformPyramidId))) {
+    widths.push(waveformProgress !== null ? 44 : 20);
+  }
+  if (mediaFile?.audioProxyStatus === 'ready') widths.push(20);
+  if (mediaFile?.audioProxyStatus === 'error') widths.push(28);
+  if (mediaFile?.audioProxyStatus === 'generating') widths.push(46);
+  if (
+    mediaFile?.proxyStatus === 'ready' &&
+    isProxyFrameCountComplete(
+      mediaFile.proxyFrameCount,
+      mediaFile.duration,
+      mediaFile.proxyFps ?? mediaFile.fps,
+    )
+  ) widths.push(20);
+  if (mediaFile?.proxyStatus === 'error') widths.push(28);
+  if (mediaFile?.proxyStatus === 'generating') widths.push(46);
+  if (mediaFile?.transcriptStatus === 'ready') widths.push(20);
+  if (mediaFile?.analysisStatus === 'ready') widths.push(20);
+
+  return widths;
+}
+
+function getMediaStatusBadgeColumnWidth(items: ProjectItem[]): number {
+  const maxContentWidth = items.reduce((maxWidth, item) => {
+    const widths = getMediaStatusBadgeWidths(item);
+    if (widths.length === 0) return maxWidth;
+    const contentWidth = widths.reduce((sum, width) => sum + width, 0) +
+      Math.max(0, widths.length - 1) * MEDIA_STATUS_BADGE_GAP +
+      MEDIA_STATUS_BADGE_COLUMN_PADDING_X;
+    return Math.max(maxWidth, contentWidth);
+  }, 0);
+
+  return clampMediaStatusBadgeColumnWidth(maxContentWidth);
+}
+
+function formatMediaPanelFileSize(bytes?: number): string {
+  if (!bytes) return '–';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatMediaPanelBitrate(bps?: number): string {
+  if (!bps) return '–';
+  if (bps < 1000) return `${bps} bps`;
+  if (bps < 1000 * 1000) return `${(bps / 1000).toFixed(0)} kbps`;
+  return `${(bps / (1000 * 1000)).toFixed(1)} Mbps`;
+}
+
+function getClassicMediaColumnText(item: ProjectItem, colId: Exclude<ColumnId, 'name' | 'badges'>): string {
+  const mediaFile = isImportedMediaFileItem(item) ? item : null;
+  switch (colId) {
+    case 'label':
+      return '●';
+    case 'duration': {
+      const importProgress = getItemImportProgress(item);
+      return importProgress !== null
+        ? `Import ${importProgress}%`
+        : ('duration' in item && item.duration ? formatDuration(item.duration) : '–');
+    }
+    case 'resolution':
+      return getGaussianSplatResolutionLabel(item) ??
+        ('width' in item && 'height' in item && item.width && item.height ? `${item.width}×${item.height}` : '–');
+    case 'fps':
+      return mediaFile?.fps
+        ? `${mediaFile.fps}`
+        : ('type' in item && item.type === 'composition' ? `${(item as Composition).frameRate}` : '–');
+    case 'container':
+      return getMediaFileContainerLabel(mediaFile) || '–';
+    case 'codec':
+      return getMediaFileCodecLabel(mediaFile) || '–';
+    case 'audio':
+      return mediaFile?.type === 'audio' ? 'Yes' :
+        mediaFile?.type === 'image' ? '–' :
+        mediaFile?.hasAudio === true ? 'Yes' :
+        mediaFile?.hasAudio === false ? 'No' : '–';
+    case 'bitrate':
+      return formatMediaPanelBitrate(mediaFile?.bitrate);
+    case 'size':
+      return mediaFile
+        ? formatMediaPanelFileSize(mediaFile.fileSize)
+        : (isSignalAssetItem(item) ? formatMediaPanelFileSize(item.fileSize) : '–');
+    default:
+      return '';
+  }
+}
+
+function estimateClassicMediaColumnWidth(text: string): number {
+  const weightedLength = Array.from(text).reduce((sum, char) => {
+    if (char === '–' || char === '●') return sum + 1.4;
+    if (char === ' ' || char === '.' || char === ':' || char === '/') return sum + 0.55;
+    if (/[MW@#%]/.test(char)) return sum + 1.2;
+    if (/[ilI1|]/.test(char)) return sum + 0.55;
+    return sum + 1;
+  }, 0);
+  return weightedLength * MEDIA_COLUMN_TEXT_CHAR_WIDTH + MEDIA_COLUMN_TEXT_PADDING_X;
+}
+
+function getClassicMediaColumnWidths(items: ProjectItem[]): Record<Exclude<ColumnId, 'name'>, number> {
+  return DYNAMIC_MEDIA_COLUMN_IDS.reduce((widths, colId) => {
+    if (colId === 'badges') {
+      widths.badges = getMediaStatusBadgeColumnWidth(items);
+      return widths;
+    }
+
+    const limits = MEDIA_COLUMN_WIDTH_LIMITS[colId];
+    const headerWidth = estimateClassicMediaColumnWidth(COLUMN_LABELS_MAP[colId]);
+    const contentWidth = items.reduce((maxWidth, item) => (
+      Math.max(maxWidth, estimateClassicMediaColumnWidth(getClassicMediaColumnText(item, colId)))
+    ), headerWidth);
+    widths[colId] = Math.max(limits.min, Math.min(limits.max, Math.ceil(contentWidth)));
+    return widths;
+  }, {} as Record<Exclude<ColumnId, 'name'>, number>);
+}
+
+function mediaFileHasAudio(mediaFile: MediaFile | null): boolean {
+  if (!mediaFile) return false;
+  if (mediaFile.type === 'audio') return true;
+  if (mediaFile.type !== 'video') return false;
+  return mediaFile.hasAudio !== false || Boolean(mediaFile.audioCodec);
+}
+
+async function regenerateTimelineSourceThumbnails(mediaFile: MediaFile): Promise<void> {
+  if (mediaFile.type !== 'video') return;
+
+  const createdUrl = mediaFile.file ? URL.createObjectURL(mediaFile.file) : null;
+  const sourceUrl = createdUrl ?? mediaFile.url;
+  if (!sourceUrl) return;
+
+  const video = document.createElement('video');
+  video.src = sourceUrl;
+  video.preload = 'auto';
+  video.muted = true;
+  video.playsInline = true;
+  video.crossOrigin = 'anonymous';
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        cleanup();
+        reject(new Error('Video metadata timeout'));
+      }, 5000);
+
+      const cleanup = () => {
+        window.clearTimeout(timeoutId);
+        video.removeEventListener('loadedmetadata', onReady);
+        video.removeEventListener('error', onError);
+      };
+
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+
+      const onError = () => {
+        cleanup();
+        reject(new Error('Video metadata failed'));
+      };
+
+      video.addEventListener('loadedmetadata', onReady, { once: true });
+      video.addEventListener('error', onError, { once: true });
+      video.load();
+    });
+
+    const duration = mediaFile.duration || video.duration || 0;
+    if (duration > 0) {
+      await thumbnailCacheService.clearSource(mediaFile.id);
+      await thumbnailCacheService.generateForSource(mediaFile.id, video, duration, mediaFile.fileHash);
+    }
+  } finally {
+    video.pause();
+    video.removeAttribute('src');
+    try {
+      video.load();
+    } catch {
+      // Ignore detached video cleanup errors.
+    }
+    if (createdUrl) {
+      URL.revokeObjectURL(createdUrl);
+    }
+  }
+}
+
 function appendUniqueIds(current: string[], next: string[]): string[] {
   const seen = new Set(current);
   const result = [...current];
@@ -243,6 +530,98 @@ function appendUniqueIds(current: string[], next: string[]): string[] {
   }
 
   return result;
+}
+
+function getAncestorFolderIds(item: ProjectItem, folders: MediaFolder[]): string[] {
+  const ancestors: string[] = [];
+  const seen = new Set<string>();
+  let parentId = item.parentId ?? null;
+
+  while (parentId && !seen.has(parentId)) {
+    seen.add(parentId);
+    ancestors.push(parentId);
+    parentId = folders.find((folder) => folder.id === parentId)?.parentId ?? null;
+  }
+
+  return ancestors;
+}
+
+function getMediaPanelAnimatedTarget(root: HTMLElement | null, itemId: string): HTMLElement | null {
+  if (!root || typeof CSS === 'undefined' || typeof CSS.escape !== 'function') {
+    return null;
+  }
+
+  return root.querySelector<HTMLElement>(`[data-media-panel-anim-id="${CSS.escape(itemId)}"]`);
+}
+
+function clampMediaBoardAnnotationFontSize(value: unknown): number {
+  const size = typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : DEFAULT_MEDIA_BOARD_ANNOTATION_FONT_SIZE;
+  return Math.min(
+    MEDIA_BOARD_ANNOTATION_FONT_SIZE_MAX,
+    Math.max(MEDIA_BOARD_ANNOTATION_FONT_SIZE_MIN, size),
+  );
+}
+
+function normalizeMediaBoardAnnotationColor(
+  value: unknown,
+  fallback: MediaBoardAnnotationColor,
+): MediaBoardAnnotationColor {
+  if (value === 'transparent') return 'transparent';
+  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim())) {
+    return value.trim();
+  }
+  return fallback;
+}
+
+function loadMediaBoardAnnotations(): MediaBoardAnnotation[] {
+  try {
+    const stored = localStorage.getItem(MEDIA_BOARD_ANNOTATIONS_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as Array<Partial<MediaBoardAnnotation>>;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((annotation): MediaBoardAnnotation | null => {
+        if (!annotation || typeof annotation !== 'object' || typeof annotation.id !== 'string') {
+          return null;
+        }
+        const x = Number(annotation.x);
+        const y = Number(annotation.y);
+        const width = Number(annotation.width);
+        const height = Number(annotation.height);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return {
+          id: annotation.id,
+          x,
+          y,
+          width: Number.isFinite(width)
+            ? Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.width, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.width, width))
+            : DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.width,
+          height: Number.isFinite(height)
+            ? Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.height, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.height, height))
+            : DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.height,
+          text: typeof annotation.text === 'string' ? annotation.text : '',
+          fontSize: clampMediaBoardAnnotationFontSize(annotation.fontSize),
+          backgroundColor: normalizeMediaBoardAnnotationColor(
+            annotation.backgroundColor,
+            DEFAULT_MEDIA_BOARD_ANNOTATION_BACKGROUND,
+          ),
+          textColor: normalizeMediaBoardAnnotationColor(annotation.textColor, DEFAULT_MEDIA_BOARD_ANNOTATION_TEXT),
+          editing: Boolean(annotation.editing),
+          createdAt: typeof annotation.createdAt === 'number' ? annotation.createdAt : Date.now(),
+          updatedAt: typeof annotation.updatedAt === 'number' ? annotation.updatedAt : Date.now(),
+        };
+      })
+      .filter((annotation): annotation is MediaBoardAnnotation => annotation !== null);
+  } catch {
+    return [];
+  }
+}
+
+function saveMediaBoardAnnotations(annotations: MediaBoardAnnotation[]): void {
+  localStorage.setItem(MEDIA_BOARD_ANNOTATIONS_STORAGE_KEY, JSON.stringify(annotations));
 }
 
 function isSignalAssetItem(item: ProjectItem): item is SignalAssetItem {
@@ -501,6 +880,9 @@ export function MediaPanel() {
     openCompositionTab,
     updateComposition,
     generateProxy,
+    generateAudioProxy,
+    generateMediaWaveform,
+    generateMediaSpectrogram,
     cancelProxyGeneration,
     pickProxyFolder,
     showInExplorer,
@@ -544,6 +926,13 @@ export function MediaPanel() {
   const boardOverviewImageCacheRef = useRef(new Map<string, { src: string; image: HTMLImageElement; status: 'loading' | 'loaded' | 'error' }>());
   const pendingViewTransitionRef = useRef<PendingMediaPanelViewTransition | null>(null);
   const activeViewTransitionRef = useRef<ActiveMediaPanelViewTransition | null>(null);
+  const lastHandledRevealRequestIdRef = useRef(0);
+  const mediaRevealPulseTimerRef = useRef<number | null>(null);
+  const classicListScrollTopRef = useRef(0);
+  const classicListScrollLeftRef = useRef(0);
+  const classicListScrollSnapTimerRef = useRef<number | null>(null);
+  const classicListHorizontalSnapTimerRef = useRef<number | null>(null);
+  const classicListScrollSettledTimerRef = useRef<number | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameTimerRef = useRef<number | null>(null);
@@ -562,6 +951,8 @@ export function MediaPanel() {
   const [internalDragId, setInternalDragId] = useState<string | null>(null);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
   const [classicListViewport, setClassicListViewport] = useState({ scrollTop: 0, height: 0 });
+  const [isClassicListVerticalScrolling, setClassicListVerticalScrolling] = useState(false);
+  const [isClassicListHorizontallyScrolled, setClassicListHorizontallyScrolled] = useState(false);
   const [labelPickerItemId, setLabelPickerItemId] = useState<string | null>(null);
   const [labelPickerPos, setLabelPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [viewMode, setViewMode] = useState<MediaPanelViewMode>(loadMediaPanelViewMode);
@@ -582,6 +973,9 @@ export function MediaPanel() {
   const [mediaBoardOverviewImageVersion, setMediaBoardOverviewImageVersion] = useState(0);
   const [mediaBoardMarquee, setMediaBoardMarquee] = useState<MediaBoardMarquee | null>(null);
   const [mediaBoardInsertionPreview, setMediaBoardInsertionPreview] = useState<MediaBoardInsertionPreview | null>(null);
+  const [pendingMediaReveal, setPendingMediaReveal] = useState<MediaSourceRevealRequest | null>(null);
+  const [mediaBoardAnnotations, setMediaBoardAnnotations] = useState<MediaBoardAnnotation[]>(loadMediaBoardAnnotations);
+  const [selectedMediaBoardAnnotationId, setSelectedMediaBoardAnnotationId] = useState<string | null>(null);
   const suppressMediaBoardContextMenuRef = useRef(false);
   const suppressMediaBoardContextMenuTimerRef = useRef<number | null>(null);
 
@@ -627,6 +1021,10 @@ export function MediaPanel() {
     saveMediaBoardLayouts(mediaBoardLayouts);
   }, [mediaBoardLayouts]);
 
+  useEffect(() => {
+    saveMediaBoardAnnotations(mediaBoardAnnotations);
+  }, [mediaBoardAnnotations]);
+
   useLayoutEffect(() => {
     if (viewMode !== 'board') return;
 
@@ -663,6 +1061,9 @@ export function MediaPanel() {
     if (!list) return;
 
     const updateViewport = () => {
+      classicListScrollTopRef.current = list.scrollTop;
+      classicListScrollLeftRef.current = list.scrollLeft;
+      setClassicListHorizontallyScrolled(list.scrollLeft > 0.5);
       setClassicListViewport((current) => {
         const next = {
           scrollTop: list.scrollTop,
@@ -696,6 +1097,22 @@ export function MediaPanel() {
     }
     if (suppressMediaBoardContextMenuTimerRef.current !== null) {
       window.clearTimeout(suppressMediaBoardContextMenuTimerRef.current);
+    }
+    if (mediaRevealPulseTimerRef.current !== null) {
+      window.clearTimeout(mediaRevealPulseTimerRef.current);
+      mediaRevealPulseTimerRef.current = null;
+    }
+    if (classicListScrollSnapTimerRef.current !== null) {
+      window.clearTimeout(classicListScrollSnapTimerRef.current);
+      classicListScrollSnapTimerRef.current = null;
+    }
+    if (classicListHorizontalSnapTimerRef.current !== null) {
+      window.clearTimeout(classicListHorizontalSnapTimerRef.current);
+      classicListHorizontalSnapTimerRef.current = null;
+    }
+    if (classicListScrollSettledTimerRef.current !== null) {
+      window.clearTimeout(classicListScrollSettledTimerRef.current);
+      classicListScrollSettledTimerRef.current = null;
     }
   }, []);
 
@@ -1046,6 +1463,17 @@ export function MediaPanel() {
     const mediaFile = isImportedMediaFileItem(item) ? item : null;
     switch (colId) {
       case 'name': return item.name.toLowerCase();
+      case 'badges': {
+        if (!mediaFile) return 0;
+        return [
+          getItemImportProgress(item) !== null,
+          getItemWaveformProgress(item) !== null || Boolean(mediaFile.waveform?.length || mediaFile.audioAnalysisRefs?.waveformPyramidId),
+          mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating' || mediaFile.proxyStatus === 'error',
+          mediaFile.audioProxyStatus === 'ready' || mediaFile.audioProxyStatus === 'generating' || mediaFile.audioProxyStatus === 'error',
+          mediaFile.transcriptStatus === 'ready',
+          mediaFile.analysisStatus === 'ready',
+        ].filter(Boolean).length;
+      }
       case 'label': {
         const labelColor = 'labelColor' in item ? (item as MediaFile).labelColor : undefined;
         const idx = LABEL_COLORS.findIndex(c => c.key === (labelColor || 'none'));
@@ -1092,9 +1520,92 @@ export function MediaPanel() {
 
   const handleClassicListScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
+    const nextScrollTop = target.scrollTop;
+    const nextScrollLeft = target.scrollLeft;
+    const verticalScrollChanged = Math.abs(nextScrollTop - classicListScrollTopRef.current) > 0.5;
+    const horizontalScrollChanged = Math.abs(nextScrollLeft - classicListScrollLeftRef.current) > 0.5;
+    classicListScrollTopRef.current = nextScrollTop;
+    classicListScrollLeftRef.current = nextScrollLeft;
+
+    if (horizontalScrollChanged) {
+      setClassicListHorizontallyScrolled(nextScrollLeft > 0.5);
+      if (classicListHorizontalSnapTimerRef.current !== null) {
+        window.clearTimeout(classicListHorizontalSnapTimerRef.current);
+      }
+
+      classicListHorizontalSnapTimerRef.current = window.setTimeout(() => {
+        classicListHorizontalSnapTimerRef.current = null;
+        const list = itemListRef.current;
+        const header = list?.querySelector<HTMLElement>('.media-column-headers');
+        if (!list || !header) return;
+
+        const maxScrollLeft = Math.max(0, list.scrollWidth - list.clientWidth);
+        if (maxScrollLeft <= 0) return;
+
+        const nameColumn = header.querySelector<HTMLElement>('.media-col-name');
+        const stickyWidth = nameColumn?.offsetWidth ?? 0;
+        const candidates = new Set<number>([0, maxScrollLeft]);
+        header.querySelectorAll<HTMLElement>('.media-col').forEach((column) => {
+          if (column.classList.contains('media-col-name')) return;
+          const alignedStart = Math.max(0, Math.min(maxScrollLeft, column.offsetLeft - stickyWidth));
+          const alignedEnd = Math.max(0, Math.min(maxScrollLeft, column.offsetLeft + column.offsetWidth - stickyWidth));
+          candidates.add(alignedStart);
+          candidates.add(alignedEnd);
+        });
+
+        const snappedScrollLeft = [...candidates].reduce((best, candidate) => (
+          Math.abs(candidate - list.scrollLeft) < Math.abs(best - list.scrollLeft) ? candidate : best
+        ), 0);
+        if (Math.abs(list.scrollLeft - snappedScrollLeft) > 0.5) {
+          list.scrollTo({
+            left: snappedScrollLeft,
+            top: list.scrollTop,
+            behavior: 'smooth',
+          });
+        }
+      }, 90);
+    }
+
+    if (verticalScrollChanged) {
+      setClassicListVerticalScrolling(true);
+      if (classicListScrollSnapTimerRef.current !== null) {
+        window.clearTimeout(classicListScrollSnapTimerRef.current);
+      }
+      if (classicListScrollSettledTimerRef.current !== null) {
+        window.clearTimeout(classicListScrollSettledTimerRef.current);
+      }
+
+      classicListScrollSnapTimerRef.current = window.setTimeout(() => {
+        classicListScrollSnapTimerRef.current = null;
+        const list = itemListRef.current;
+        if (!list) {
+          setClassicListVerticalScrolling(false);
+          return;
+        }
+
+        const maxScrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+        const snappedScrollTop = Math.max(
+          0,
+          Math.min(maxScrollTop, Math.round(list.scrollTop / CLASSIC_ROW_HEIGHT) * CLASSIC_ROW_HEIGHT),
+        );
+        if (Math.abs(list.scrollTop - snappedScrollTop) > 0.5) {
+          list.scrollTo({
+            left: list.scrollLeft,
+            top: snappedScrollTop,
+            behavior: 'smooth',
+          });
+        }
+      }, 90);
+
+      classicListScrollSettledTimerRef.current = window.setTimeout(() => {
+        classicListScrollSettledTimerRef.current = null;
+        setClassicListVerticalScrolling(false);
+      }, 260);
+    }
+
     setClassicListViewport((current) => {
       const next = {
-        scrollTop: target.scrollTop,
+        scrollTop: nextScrollTop,
         height: target.clientHeight,
       };
       return current.scrollTop === next.scrollTop && current.height === next.height ? current : next;
@@ -1273,6 +1784,7 @@ export function MediaPanel() {
 
   // Handle item selection
   const handleItemClick = useCallback((id: string, e: React.MouseEvent) => {
+    setSelectedMediaBoardAnnotationId(null);
     if (e.ctrlKey || e.metaKey) {
       // Toggle: add or remove
       if (selectedIds.includes(id)) {
@@ -1313,7 +1825,12 @@ export function MediaPanel() {
   }, [toggleFolderExpanded, openCompositionTab, reloadFile, viewMode]);
 
   // Context menu
-  const handleContextMenu = useCallback((e: React.MouseEvent, itemId?: string, parentId?: string | null) => {
+  const handleContextMenu = useCallback((
+    e: React.MouseEvent,
+    itemId?: string,
+    parentId?: string | null,
+    boardPosition?: { x: number; y: number },
+  ) => {
     e.preventDefault();
     if (itemId && !selectedIds.includes(itemId)) {
       // If right-clicking an unselected item, select only it (unless Ctrl held)
@@ -1323,7 +1840,10 @@ export function MediaPanel() {
         setSelection([itemId]);
       }
     }
-    setContextMenu({ x: e.clientX, y: e.clientY, itemId, parentId });
+    if (itemId) {
+      setSelectedMediaBoardAnnotationId(null);
+    }
+    setContextMenu({ x: e.clientX, y: e.clientY, itemId, parentId, boardPosition });
   }, [selectedIds, setSelection, addToSelection]);
 
   const suppressNextMediaBoardContextMenu = useCallback(() => {
@@ -1367,6 +1887,35 @@ export function MediaPanel() {
     setGenerativeTrayExpanded(true);
     closeContextMenu();
   }, [closeContextMenu, updateFlashBoardComposer]);
+
+  const handleRegenerateMediaThumbnails = useCallback((mediaFile: MediaFile) => {
+    void (async () => {
+      await ensureFileThumbnail(mediaFile.id, { force: true });
+      await regenerateTimelineSourceThumbnails(mediaFile);
+    })().catch((error) => {
+      log.warn('Failed to regenerate media thumbnails', {
+        id: mediaFile.id,
+        name: mediaFile.name,
+        error,
+      });
+    });
+    closeContextMenu();
+  }, [closeContextMenu, ensureFileThumbnail]);
+
+  const handleRegenerateMediaAudioProxy = useCallback((mediaFile: MediaFile, force: boolean) => {
+    void generateAudioProxy(mediaFile.id, { force });
+    closeContextMenu();
+  }, [closeContextMenu, generateAudioProxy]);
+
+  const handleRegenerateMediaWaveform = useCallback((mediaFile: MediaFile) => {
+    void generateMediaWaveform(mediaFile.id, { force: true });
+    closeContextMenu();
+  }, [closeContextMenu, generateMediaWaveform]);
+
+  const handleRegenerateMediaSpectrogram = useCallback((mediaFile: MediaFile) => {
+    void generateMediaSpectrogram(mediaFile.id, { force: true });
+    closeContextMenu();
+  }, [closeContextMenu, generateMediaSpectrogram]);
 
   // Rename handling
   const startRename = useCallback((id: string, currentName: string) => {
@@ -1466,6 +2015,8 @@ export function MediaPanel() {
           file.fileHash ||
           file.audioAnalysisRefs ||
           file.proxyStatus ||
+          file.audioProxyStatus ||
+          file.hasProxyAudio ||
           file.proxyFrameCount ||
           file.thumbnailUrl ||
           file.transcriptStatus ||
@@ -1796,6 +2347,8 @@ export function MediaPanel() {
       setMediaBoardOrder(loadMediaBoardOrder());
       setMediaBoardGroupOffsets(loadMediaBoardGroupOffsets());
       setMediaBoardLayouts(loadMediaBoardLayouts());
+      setMediaBoardAnnotations(loadMediaBoardAnnotations());
+      setSelectedMediaBoardAnnotationId(null);
       const storedNameWidth = localStorage.getItem('media-panel-name-width');
       setNameColumnWidth(storedNameWidth ? parseInt(storedNameWidth, 10) : 250);
       setGridFolderId(null);
@@ -1849,6 +2402,9 @@ export function MediaPanel() {
     isSelected: boolean,
     mediaFile: MediaFile | null
   ) => {
+    const importProgress = getItemImportProgress(item);
+    const waveformProgress = getItemWaveformProgress(item);
+
     switch (colId) {
       case 'label': {
         const labelColor = 'labelColor' in item ? (item as MediaFile).labelColor : undefined;
@@ -1874,8 +2430,6 @@ export function MediaPanel() {
         );
       }
       case 'name': {
-        const importProgress = getItemImportProgress(item);
-        const waveformProgress = getItemWaveformProgress(item);
         return (
           <div
             className="media-col media-col-name"
@@ -1939,6 +2493,21 @@ export function MediaPanel() {
                   <span className="waveform-fill-progress" style={{ height: `${waveformProgress}%` }}>W</span>
                 </span>
                 <span className="waveform-percent">{waveformProgress}%</span>
+              </span>
+            )}
+            {'audioProxyStatus' in item && item.audioProxyStatus === 'ready' && (
+              <span className="media-item-audio-proxy-badge" title="WAV audio proxy ready">A</span>
+            )}
+            {'audioProxyStatus' in item && item.audioProxyStatus === 'error' && (
+              <span className="media-item-audio-proxy-error" title="WAV audio proxy failed">A!</span>
+            )}
+            {'audioProxyStatus' in item && item.audioProxyStatus === 'generating' && (
+              <span className="media-item-audio-proxy-generating" title={`Preparing WAV audio proxy: ${(item as MediaFile).audioProxyProgress || 0}%`}>
+                <span className="audio-proxy-fill-badge">
+                  <span className="audio-proxy-fill-bg">A</span>
+                  <span className="audio-proxy-fill-progress" style={{ height: `${(item as MediaFile).audioProxyProgress || 0}%` }}>A</span>
+                </span>
+                <span className="audio-proxy-percent">{(item as MediaFile).audioProxyProgress || 0}%</span>
               </span>
             )}
             {'proxyStatus' in item &&
@@ -2011,6 +2580,105 @@ export function MediaPanel() {
           </div>
         );
       }
+      case 'badges':
+        return (
+          <div className="media-col media-col-badges">
+            {importProgress !== null && (
+              <span className="media-item-import-progress" title={`Importing: ${importProgress}%`}>
+                {importProgress}%
+              </span>
+            )}
+            {importProgress === null && waveformProgress !== null && (
+              <span className="media-item-waveform-generating" title={`Generating waveform: ${waveformProgress}%`}>
+                <span className="waveform-fill-badge" aria-hidden="true">
+                  <span className="waveform-fill-bg">W</span>
+                  <span className="waveform-fill-progress" style={{ height: `${waveformProgress}%` }}>W</span>
+                </span>
+                <span className="waveform-percent">{waveformProgress}%</span>
+              </span>
+            )}
+            {importProgress === null && waveformProgress === null && Boolean(mediaFile?.waveform?.length || mediaFile?.audioAnalysisRefs?.waveformPyramidId) && (
+              <span className="media-item-waveform-badge" title="Waveform ready">W</span>
+            )}
+            {mediaFile?.audioProxyStatus === 'ready' && (
+              <span className="media-item-audio-proxy-badge" title="WAV audio proxy ready">A</span>
+            )}
+            {mediaFile?.audioProxyStatus === 'error' && (
+              <span className="media-item-audio-proxy-error" title="WAV audio proxy failed">A!</span>
+            )}
+            {mediaFile?.audioProxyStatus === 'generating' && (
+              <span className="media-item-audio-proxy-generating" title={`Preparing WAV audio proxy: ${mediaFile.audioProxyProgress || 0}%`}>
+                <span className="audio-proxy-fill-badge">
+                  <span className="audio-proxy-fill-bg">A</span>
+                  <span className="audio-proxy-fill-progress" style={{ height: `${mediaFile.audioProxyProgress || 0}%` }}>A</span>
+                </span>
+                <span className="audio-proxy-percent">{mediaFile.audioProxyProgress || 0}%</span>
+              </span>
+            )}
+            {mediaFile?.proxyStatus === 'ready' &&
+              isProxyFrameCountComplete(
+                mediaFile.proxyFrameCount,
+                mediaFile.duration,
+                mediaFile.proxyFps ?? mediaFile.fps
+              ) && (
+              <span className="media-item-proxy-badge" title="Proxy generated">P</span>
+            )}
+            {mediaFile?.proxyStatus === 'error' && (
+              <span className="media-item-proxy-error" title="Proxy generation failed. Right-click to retry.">P!</span>
+            )}
+            {mediaFile?.proxyStatus === 'generating' && (
+              <span className="media-item-proxy-generating" title={`Generating proxy: ${mediaFile.proxyProgress || 0}%`}>
+                <span className="proxy-fill-badge">
+                  <span className="proxy-fill-bg">P</span>
+                  <span className="proxy-fill-progress" style={{ height: `${mediaFile.proxyProgress || 0}%` }}>P</span>
+                </span>
+                <span className="proxy-percent">{mediaFile.proxyProgress || 0}%</span>
+              </span>
+            )}
+            {mediaFile?.transcriptStatus === 'ready' && (() => {
+              const pct = Math.round((mediaFile.transcriptCoverage ?? 0) * 100);
+              return pct >= 100 ? (
+                <span
+                  className="media-item-transcript-badge"
+                  title="Fully transcribed - click to open"
+                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'transcript'); }}
+                >T</span>
+              ) : (
+                <span
+                  className="media-item-transcript-fill"
+                  title={`${pct}% transcribed - click to open`}
+                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'transcript'); }}
+                >
+                  <span className="coverage-fill-badge transcript-fill">
+                    <span className="coverage-fill-bg">T</span>
+                    <span className="coverage-fill-progress" style={{ height: `${pct}%` }}>T</span>
+                  </span>
+                </span>
+              );
+            })()}
+            {mediaFile?.analysisStatus === 'ready' && (() => {
+              const pct = Math.round((mediaFile.analysisCoverage ?? 0) * 100);
+              return pct >= 100 ? (
+                <span
+                  className="media-item-analysis-badge"
+                  title="Fully analyzed - click to open"
+                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'analysis'); }}
+                >A</span>
+              ) : (
+                <span
+                  className="media-item-analysis-fill"
+                  title={`${pct}% analyzed - click to open`}
+                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'analysis'); }}
+                >
+                  <span className="coverage-fill-badge analysis-fill">
+                    <span className="coverage-fill-bg">A</span>
+                    <span className="coverage-fill-progress" style={{ height: `${pct}%` }}>A</span>
+                  </span>
+                </span>
+              );
+            })()}
+          </div>
+        );
       case 'duration': {
         const importProgress = getItemImportProgress(item);
         return (
@@ -2300,6 +2968,10 @@ export function MediaPanel() {
     classicExpandedFolderIdSet,
     isMediaSearchActive,
   ]);
+  const dynamicMediaColumnWidths = useMemo(
+    () => getClassicMediaColumnWidths(classicRows.map((row) => row.item)),
+    [classicRows],
+  );
 
   const classicVisibleRange = useMemo(() => {
     const height = Math.max(classicListViewport.height, CLASSIC_ROW_HEIGHT);
@@ -2476,6 +3148,172 @@ export function MediaPanel() {
       || mediaBoardNodeIntersectsVisibleRect(placement.layout, mediaBoardVisibleRect)
     ))
   ), [mediaBoardLayout.placements, mediaBoardVisibleRect, selectedIdSet]);
+
+  const pulseMediaPanelRevealTarget = useCallback((itemId: string, scrollIntoView: boolean): boolean => {
+    const target = getMediaPanelAnimatedTarget(mediaPanelContentRef.current, itemId);
+    if (!target) {
+      return false;
+    }
+
+    if (scrollIntoView) {
+      target.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
+
+    target.classList.remove('media-panel-reveal-pulse');
+    void target.offsetWidth;
+    target.classList.add('media-panel-reveal-pulse');
+
+    if (mediaRevealPulseTimerRef.current !== null) {
+      window.clearTimeout(mediaRevealPulseTimerRef.current);
+    }
+    mediaRevealPulseTimerRef.current = window.setTimeout(() => {
+      target.classList.remove('media-panel-reveal-pulse');
+      mediaRevealPulseTimerRef.current = null;
+    }, MEDIA_PANEL_REVEAL_PULSE_MS);
+
+    return true;
+  }, []);
+
+  const prepareMediaSourceReveal = useCallback((request: MediaSourceRevealRequest) => {
+    if (request.requestId <= lastHandledRevealRequestIdRef.current) {
+      return;
+    }
+
+    const item = allProjectItemsById.get(request.mediaFileId);
+    if (!item) {
+      return;
+    }
+
+    lastHandledRevealRequestIdRef.current = request.requestId;
+    setSelection([request.mediaFileId]);
+    setMediaSearchQuery('');
+
+    const ancestorFolderIds = getAncestorFolderIds(item, folders);
+    if (viewMode === 'classic' && ancestorFolderIds.length > 0) {
+      useMediaStore.setState((state) => ({
+        expandedFolderIds: [...new Set([...state.expandedFolderIds, ...ancestorFolderIds])],
+      }));
+    } else if (viewMode === 'icons') {
+      setGridFolderId(item.parentId ?? null);
+    }
+
+    setPendingMediaReveal(request);
+  }, [allProjectItemsById, folders, setSelection, viewMode]);
+
+  useEffect(() => {
+    const handleMediaSourceReveal = (event: Event) => {
+      if (!isMediaSourceRevealEvent(event)) {
+        return;
+      }
+      prepareMediaSourceReveal(event.detail);
+    };
+
+    window.addEventListener(MEDIA_SOURCE_REVEAL_EVENT, handleMediaSourceReveal);
+
+    const lastRequest = getLastMediaSourceRevealRequest();
+    if (
+      lastRequest
+      && Date.now() - lastRequest.createdAt <= MEDIA_PANEL_REVEAL_REQUEST_MAX_AGE_MS
+    ) {
+      prepareMediaSourceReveal(lastRequest);
+    }
+
+    return () => window.removeEventListener(MEDIA_SOURCE_REVEAL_EVENT, handleMediaSourceReveal);
+  }, [prepareMediaSourceReveal]);
+
+  useLayoutEffect(() => {
+    if (!pendingMediaReveal) {
+      return;
+    }
+
+    const item = allProjectItemsById.get(pendingMediaReveal.mediaFileId);
+    if (!item) {
+      setPendingMediaReveal(null);
+      return;
+    }
+
+    if (viewMode === 'classic') {
+      const list = itemListRef.current;
+      const rowIndex = classicRows.findIndex((row) => row.item.id === pendingMediaReveal.mediaFileId);
+      if (!list || rowIndex < 0) {
+        return;
+      }
+
+      const targetTop = rowIndex * CLASSIC_ROW_HEIGHT;
+      const targetScrollTop = Math.max(0, targetTop - Math.max(0, (list.clientHeight - CLASSIC_ROW_HEIGHT) / 2));
+      if (Math.abs(list.scrollTop - targetScrollTop) > 1) {
+        list.scrollTop = targetScrollTop;
+        setClassicListViewport({
+          scrollTop: targetScrollTop,
+          height: list.clientHeight,
+        });
+      }
+    } else if (viewMode === 'icons') {
+      if ((item.parentId ?? null) !== gridFolderId) {
+        return;
+      }
+    } else if (viewMode === 'board') {
+      const placement = mediaBoardPlacementsById.get(pendingMediaReveal.mediaFileId);
+      const canvas = boardCanvasRef.current;
+      if (!placement || !canvas) {
+        return;
+      }
+
+      const zoom = Math.max(MEDIA_BOARD_PAN_ZOOM_MIN, Math.min(MEDIA_BOARD_PAN_ZOOM_MAX, mediaBoardViewport.zoom || 1));
+      const centerX = placement.layout.x + (placement.layout.width / 2);
+      const centerY = placement.layout.y + (placement.layout.height / 2);
+      const nextViewport = {
+        zoom,
+        panX: (canvas.clientWidth / 2) - (centerX * zoom),
+        panY: (canvas.clientHeight / 2) - (centerY * zoom),
+      };
+
+      if (
+        Math.abs(mediaBoardViewport.panX - nextViewport.panX) > 1
+        || Math.abs(mediaBoardViewport.panY - nextViewport.panY) > 1
+        || Math.abs(mediaBoardViewport.zoom - nextViewport.zoom) > 0.0001
+      ) {
+        setMediaBoardViewport(nextViewport);
+      }
+    }
+
+    let secondFrameId: number | null = null;
+    let retryTimerId: number | null = null;
+    const frameId = window.requestAnimationFrame(() => {
+      secondFrameId = window.requestAnimationFrame(() => {
+        const pulsed = pulseMediaPanelRevealTarget(pendingMediaReveal.mediaFileId, viewMode !== 'board');
+        if (pulsed) {
+          setPendingMediaReveal(null);
+          return;
+        }
+
+        retryTimerId = window.setTimeout(() => {
+          if (pulseMediaPanelRevealTarget(pendingMediaReveal.mediaFileId, viewMode !== 'board')) {
+            setPendingMediaReveal(null);
+          }
+        }, 120);
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (secondFrameId !== null) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+      if (retryTimerId !== null) {
+        window.clearTimeout(retryTimerId);
+      }
+    };
+  }, [
+    allProjectItemsById,
+    classicRows,
+    gridFolderId,
+    mediaBoardPlacementsById,
+    mediaBoardViewport,
+    pendingMediaReveal,
+    pulseMediaPanelRevealTarget,
+    viewMode,
+  ]);
 
   const getMediaBoardPlacementAtPoint = useCallback((point: { x: number; y: number }) => {
     for (let index = mediaBoardLayout.placements.length - 1; index >= 0; index -= 1) {
@@ -2657,6 +3495,303 @@ export function MediaPanel() {
     closeContextMenu();
   }, [closeContextMenu]);
 
+  const handleNewMediaBoardAnnotation = useCallback(() => {
+    const point = contextMenu?.boardPosition;
+    if (!point) {
+      closeContextMenu();
+      return;
+    }
+
+    const now = Date.now();
+    const annotation: MediaBoardAnnotation = {
+      id: `media-board-annotation-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      x: point.x,
+      y: point.y,
+      width: DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.width,
+      height: DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.height,
+      text: '',
+      fontSize: DEFAULT_MEDIA_BOARD_ANNOTATION_FONT_SIZE,
+      backgroundColor: DEFAULT_MEDIA_BOARD_ANNOTATION_BACKGROUND,
+      textColor: DEFAULT_MEDIA_BOARD_ANNOTATION_TEXT,
+      editing: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setMediaBoardAnnotations((current) => [...current, annotation]);
+    setSelection([]);
+    setSelectedMediaBoardAnnotationId(annotation.id);
+    closeContextMenu();
+  }, [closeContextMenu, contextMenu?.boardPosition, setSelection]);
+
+  const updateMediaBoardAnnotation = useCallback((id: string, patch: Partial<Pick<
+    MediaBoardAnnotation,
+    'text' | 'fontSize' | 'x' | 'y' | 'width' | 'height' | 'backgroundColor' | 'textColor' | 'editing'
+  >>) => {
+    setMediaBoardAnnotations((current) => current.map((annotation) => (
+      annotation.id === id
+        ? {
+          ...annotation,
+          ...patch,
+          width: patch.width === undefined
+            ? annotation.width
+            : Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.width, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.width, patch.width)),
+          height: patch.height === undefined
+            ? annotation.height
+            : Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.height, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.height, patch.height)),
+          fontSize: patch.fontSize === undefined
+            ? annotation.fontSize
+            : clampMediaBoardAnnotationFontSize(patch.fontSize),
+          backgroundColor: patch.backgroundColor === undefined
+            ? annotation.backgroundColor
+            : normalizeMediaBoardAnnotationColor(patch.backgroundColor, annotation.backgroundColor),
+          textColor: patch.textColor === undefined
+            ? annotation.textColor
+            : normalizeMediaBoardAnnotationColor(patch.textColor, annotation.textColor),
+          updatedAt: Date.now(),
+        }
+        : annotation
+    )));
+  }, []);
+
+  const startMediaBoardAnnotationDrag = useCallback((e: React.MouseEvent, annotation: MediaBoardAnnotation) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('input, button')) {
+      return;
+    }
+
+    if (e.button === 0) {
+      setSelection([]);
+      setSelectedMediaBoardAnnotationId(annotation.id);
+      return;
+    }
+
+    if (e.button !== 2) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    closeContextMenu();
+    setSelection([]);
+    setSelectedMediaBoardAnnotationId(annotation.id);
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startAnnotation = { x: annotation.x, y: annotation.y };
+    const startZoom = Math.max(MEDIA_BOARD_PAN_ZOOM_MIN, mediaBoardViewportRef.current.zoom);
+    let didDrag = false;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (!didDrag && distance < MEDIA_BOARD_DRAG_START_DISTANCE) return;
+      if (!didDrag) {
+        didDrag = true;
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+      }
+      moveEvent.preventDefault();
+      updateMediaBoardAnnotation(annotation.id, {
+        x: startAnnotation.x + ((moveEvent.clientX - startX) / startZoom),
+        y: startAnnotation.y + ((moveEvent.clientY - startY) / startZoom),
+      });
+    };
+
+    const handleMouseUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (didDrag) {
+        suppressNextMediaBoardContextMenu();
+      }
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+  }, [closeContextMenu, setSelection, suppressNextMediaBoardContextMenu, updateMediaBoardAnnotation]);
+
+  const startMediaBoardAnnotationResize = useCallback((
+    e: React.MouseEvent,
+    annotation: MediaBoardAnnotation,
+    corner: 'nw' | 'ne' | 'sw' | 'se',
+  ) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeContextMenu();
+    setSelection([]);
+    setSelectedMediaBoardAnnotationId(annotation.id);
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startZoom = Math.max(MEDIA_BOARD_PAN_ZOOM_MIN, mediaBoardViewportRef.current.zoom);
+    const start = {
+      x: annotation.x,
+      y: annotation.y,
+      width: annotation.width,
+      height: annotation.height,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault();
+      const dx = (moveEvent.clientX - startX) / startZoom;
+      const dy = (moveEvent.clientY - startY) / startZoom;
+      const fromLeft = corner.includes('w');
+      const fromTop = corner.includes('n');
+      const requestedWidth = fromLeft ? start.width - dx : start.width + dx;
+      const requestedHeight = fromTop ? start.height - dy : start.height + dy;
+      const width = Math.max(
+        MEDIA_BOARD_ANNOTATION_MIN_SIZE.width,
+        Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.width, requestedWidth),
+      );
+      const height = Math.max(
+        MEDIA_BOARD_ANNOTATION_MIN_SIZE.height,
+        Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.height, requestedHeight),
+      );
+
+      updateMediaBoardAnnotation(annotation.id, {
+        width,
+        height,
+        x: fromLeft ? start.x + (start.width - width) : start.x,
+        y: fromTop ? start.y + (start.height - height) : start.y,
+      });
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+  }, [closeContextMenu, setSelection, updateMediaBoardAnnotation]);
+
+  const visibleMediaBoardAnnotations = useMemo(() => (
+    mediaBoardAnnotations.filter((annotation) => (
+      selectedMediaBoardAnnotationId === annotation.id
+      || (
+        annotation.x + annotation.width > mediaBoardVisibleRect.left
+        && annotation.x < mediaBoardVisibleRect.right
+        && annotation.y + annotation.height > mediaBoardVisibleRect.top
+        && annotation.y < mediaBoardVisibleRect.bottom
+      )
+    ))
+  ), [mediaBoardAnnotations, mediaBoardVisibleRect, selectedMediaBoardAnnotationId]);
+
+  const mediaBoardAnnotationNodes = useMemo(() => (
+    visibleMediaBoardAnnotations.map((annotation) => {
+      const isSelected = selectedMediaBoardAnnotationId === annotation.id;
+      const handleEditToggle = () => {
+        const editing = !annotation.editing;
+        updateMediaBoardAnnotation(annotation.id, { editing });
+        if (editing) {
+          window.requestAnimationFrame(() => {
+            boardCanvasRef.current
+              ?.querySelector<HTMLTextAreaElement>(`[data-media-board-annotation-text="${annotation.id}"]`)
+              ?.focus();
+          });
+        }
+      };
+
+      return (
+        <div
+          key={annotation.id}
+          className={`media-board-annotation ${isSelected ? 'selected' : ''} ${annotation.editing ? 'editing' : ''}`}
+          style={{
+            left: annotation.x,
+            top: annotation.y,
+            width: annotation.width,
+            height: annotation.height,
+            background: annotation.backgroundColor,
+            color: annotation.textColor,
+          }}
+          onMouseDown={(event) => startMediaBoardAnnotationDrag(event, annotation)}
+          onContextMenu={(event) => {
+            if (consumeSuppressedMediaBoardContextMenu()) {
+              event.preventDefault();
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            setSelection([]);
+            setSelectedMediaBoardAnnotationId(annotation.id);
+            setContextMenu({ x: event.clientX, y: event.clientY, annotationId: annotation.id });
+          }}
+        >
+          <div className="media-board-annotation-controls">
+            <input
+              className="media-board-annotation-size"
+              type="range"
+              min={MEDIA_BOARD_ANNOTATION_FONT_SIZE_MIN}
+              max={MEDIA_BOARD_ANNOTATION_FONT_SIZE_MAX}
+              step={1}
+              value={annotation.fontSize}
+              onMouseDown={(event) => event.stopPropagation()}
+              onChange={(event) => updateMediaBoardAnnotation(annotation.id, { fontSize: Number(event.currentTarget.value) })}
+              title={`${annotation.fontSize}px`}
+              aria-label="Annotation text size"
+            />
+          </div>
+          <textarea
+            data-media-board-annotation-text={annotation.id}
+            className="media-board-annotation-text"
+            value={annotation.text}
+            placeholder="Annotation"
+            readOnly={!annotation.editing}
+            autoFocus={isSelected && annotation.editing && annotation.text.length === 0}
+            onMouseDown={(event) => {
+              if (annotation.editing) {
+                event.stopPropagation();
+              } else {
+                event.preventDefault();
+              }
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onFocus={() => {
+              setSelection([]);
+              setSelectedMediaBoardAnnotationId(annotation.id);
+            }}
+            onChange={(event) => updateMediaBoardAnnotation(annotation.id, { text: event.currentTarget.value })}
+            style={{
+              color: annotation.textColor,
+              fontSize: annotation.fontSize,
+            }}
+            spellCheck
+          />
+          <button
+            type="button"
+            className={`media-board-annotation-edit ${annotation.editing ? 'active' : ''}`}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={handleEditToggle}
+            title={annotation.editing ? 'Lock text' : 'Edit text'}
+          >
+            Edit
+          </button>
+          {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+            <div
+              key={corner}
+              className={`media-board-annotation-resize ${corner}`}
+              onMouseDown={(event) => startMediaBoardAnnotationResize(event, annotation, corner)}
+            />
+          ))}
+        </div>
+      );
+    })
+  ), [
+    consumeSuppressedMediaBoardContextMenu,
+    selectedMediaBoardAnnotationId,
+    setSelection,
+    startMediaBoardAnnotationDrag,
+    startMediaBoardAnnotationResize,
+    updateMediaBoardAnnotation,
+    visibleMediaBoardAnnotations,
+  ]);
+
   const setMediaBoardPerformanceMode = useCallback((enabled: boolean) => {
     boardWrapperRef.current?.classList.toggle('board-interacting', enabled);
   }, []);
@@ -2826,7 +3961,7 @@ export function MediaPanel() {
     if (consumeSuppressedMediaBoardContextMenu()) return;
     const point = screenToMediaBoard(e.clientX, e.clientY);
     const targetGroup = getMediaBoardGroupAtPoint(point);
-    handleContextMenu(e, undefined, targetGroup?.id ?? null);
+    handleContextMenu(e, undefined, targetGroup?.id ?? null, point);
   }, [consumeSuppressedMediaBoardContextMenu, getMediaBoardGroupAtPoint, handleContextMenu, screenToMediaBoard]);
 
   const getMediaBoardInsertTarget = useCallback((
@@ -3456,6 +4591,7 @@ export function MediaPanel() {
 
   const handleMediaBoardMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
+    const annotationTarget = target.closest('.media-board-annotation');
     if (target.closest('.media-board-node, .media-board-group.folder-group, button, input, .context-menu')) return;
 
     if (mediaBoardRenderLod.overviewCanvas) {
@@ -3490,7 +4626,7 @@ export function MediaPanel() {
     }
 
     if (e.button !== 0 && e.button !== 1) return;
-    startMediaBoardPanGesture(e, { clearSelectionOnTap: e.button === 0 && !e.ctrlKey && !e.metaKey });
+    startMediaBoardPanGesture(e, { clearSelectionOnTap: !annotationTarget && e.button === 0 && !e.ctrlKey && !e.metaKey });
   }, [
     getMediaBoardPlacementAtPoint,
     handleItemClick,
@@ -3506,7 +4642,7 @@ export function MediaPanel() {
   const handleMediaBoardDoubleClick = useCallback((e: React.MouseEvent) => {
     if (!mediaBoardRenderLod.overviewCanvas) return;
     const target = e.target as HTMLElement;
-    if (target.closest('.media-board-node, .media-board-group.folder-group, button, input, .context-menu')) return;
+    if (target.closest('.media-board-node, .media-board-group.folder-group, .media-board-annotation, button, input, .context-menu')) return;
     const hitPlacement = getMediaBoardPlacementAtPoint(screenToMediaBoard(e.clientX, e.clientY));
     if (!hitPlacement || isMediaBoardFolder(hitPlacement.item)) return;
     e.preventDefault();
@@ -3521,7 +4657,7 @@ export function MediaPanel() {
 
   const handleMediaBoardContextMenu = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('.media-board-node, .media-board-group.folder-group, button, input, .context-menu')) return;
+    if (target.closest('.media-board-node, .media-board-group.folder-group, .media-board-annotation, button, input, .context-menu')) return;
 
     if (mediaBoardRenderLod.overviewCanvas) {
       const hitPlacement = getMediaBoardPlacementAtPoint(screenToMediaBoard(e.clientX, e.clientY));
@@ -3761,7 +4897,9 @@ export function MediaPanel() {
       getGaussianSplatResolutionLabel={getGaussianSplatResolutionLabel}
       getMediaFileContainerLabel={getMediaFileContainerLabel}
       getMediaFileCodecLabel={getMediaFileCodecLabel}
-    />
+    >
+      {mediaBoardAnnotationNodes}
+    </MediaBoardView>
   );
   // Grid view: items for current folder, or flattened matches while searching.
   const gridItems = isMediaSearchActive
@@ -3799,10 +4937,6 @@ export function MediaPanel() {
     >
       {/* Header */}
       <div className="media-panel-header">
-        <span className="media-panel-title">Project</span>
-        <span className="media-panel-count">
-          {isMediaSearchActive ? `${mediaSearchResultCount} of ${totalItems} items` : `${totalItems} items`}
-        </span>
         <div className="media-panel-search">
           <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
             <circle cx="7" cy="7" r="4.4" />
@@ -3829,7 +4963,19 @@ export function MediaPanel() {
             </button>
           ) : null}
         </div>
+        <span className="media-panel-count">
+          {isMediaSearchActive ? `${mediaSearchResultCount} of ${totalItems} items` : `${totalItems} items`}
+        </span>
         <div className="media-panel-actions">
+          {filesNeedReload && (
+            <button
+              className="btn btn-sm btn-reload-all"
+              onClick={() => setShowRelinkDialog(true)}
+              title={`Restore access to ${filesNeedReloadCount} file${filesNeedReloadCount > 1 ? 's' : ''}`}
+            >
+              Relink ({filesNeedReloadCount})
+            </button>
+          )}
           <div className="media-view-segment" role="tablist" aria-label="Media view mode">
             <button
               className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'classic' ? 'active' : ''}`}
@@ -3856,16 +5002,7 @@ export function MediaPanel() {
               <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2 2h5v4H2V2Zm7 0h5v6H9V2ZM2 8h5v6H2V8Zm7 2h5v4H9v-4Z"/></svg>
             </button>
           </div>
-          {filesNeedReload && (
-            <button
-              className="btn btn-sm btn-reload-all"
-              onClick={() => setShowRelinkDialog(true)}
-              title={`Restore access to ${filesNeedReloadCount} file${filesNeedReloadCount > 1 ? 's' : ''}`}
-            >
-              Relink ({filesNeedReloadCount})
-            </button>
-          )}
-          <button className="btn btn-sm" onClick={handleImport} title="Import Media">
+          <button className="btn btn-sm media-panel-import-button" onClick={handleImport} title="Import Media">
             Import
           </button>
           <div className="add-dropdown-container">
@@ -3991,7 +5128,11 @@ export function MediaPanel() {
           </div>
         ) : viewMode === 'classic' ? (
           <div
-            className="media-panel-table-wrapper"
+            className={[
+              'media-panel-table-wrapper',
+              isClassicListVerticalScrolling ? 'is-vertical-scrolling' : '',
+              isClassicListHorizontallyScrolled ? 'is-horizontal-scrolled' : '',
+            ].filter(Boolean).join(' ')}
             ref={itemListRef}
             onScroll={handleClassicListScroll}
             onMouseDown={handleMarqueeMouseDown}
@@ -4002,6 +5143,16 @@ export function MediaPanel() {
             style={{
               position: 'relative',
               '--media-name-column-width': `${nameColumnWidth}px`,
+              '--media-label-column-width': `${dynamicMediaColumnWidths.label}px`,
+              '--media-badge-column-width': `${dynamicMediaColumnWidths.badges}px`,
+              '--media-duration-column-width': `${dynamicMediaColumnWidths.duration}px`,
+              '--media-resolution-column-width': `${dynamicMediaColumnWidths.resolution}px`,
+              '--media-fps-column-width': `${dynamicMediaColumnWidths.fps}px`,
+              '--media-container-column-width': `${dynamicMediaColumnWidths.container}px`,
+              '--media-codec-column-width': `${dynamicMediaColumnWidths.codec}px`,
+              '--media-audio-column-width': `${dynamicMediaColumnWidths.audio}px`,
+              '--media-bitrate-column-width': `${dynamicMediaColumnWidths.bitrate}px`,
+              '--media-size-column-width': `${dynamicMediaColumnWidths.size}px`,
             } as React.CSSProperties}
           >
             {/* Column headers */}
@@ -4146,10 +5297,13 @@ export function MediaPanel() {
             motionShapeItems.find(m => m.id === contextMenu.itemId) ||
             signalAssets.find(item => item.id === contextMenu.itemId)
           : null;
-        const isVideoFile = selectedItem && 'type' in selectedItem && selectedItem.type === 'video';
+        const isMediaFile = selectedItem ? isImportedMediaFileItem(selectedItem) : false;
+        const mediaFile = isMediaFile ? (selectedItem as MediaFile) : null;
+        const isVideoFile = mediaFile?.type === 'video';
+        const isAudioFile = mediaFile?.type === 'audio';
+        const isImageFile = mediaFile?.type === 'image';
         const isComposition = selectedItem && 'type' in selectedItem && selectedItem.type === 'composition';
         const isSolidItem = selectedItem && 'type' in selectedItem && selectedItem.type === 'solid';
-        const mediaFile = isVideoFile ? (selectedItem as MediaFile) : null;
         const composition = isComposition ? (selectedItem as Composition) : null;
         const solidItem = isSolidItem ? (selectedItem as SolidItem) : null;
         const contextSelectionIds = multiSelect && contextMenu.itemId && selectedIds.includes(contextMenu.itemId)
@@ -4165,8 +5319,75 @@ export function MediaPanel() {
           && aiReferenceMediaFileIds.every((id) => composerReferenceMediaFileIds.includes(id));
         const isGenerating = mediaFile?.proxyStatus === 'generating';
         const hasProxy = mediaFile?.proxyStatus === 'ready';
+        const hasAudio = mediaFileHasAudio(mediaFile);
+        const isAudioProxyGenerating = mediaFile?.audioProxyStatus === 'generating';
+        const hasAudioProxy = mediaFile?.audioProxyStatus === 'ready' || mediaFile?.hasProxyAudio === true;
+        const isSourceAudioAnalysisGenerating = mediaFile?.waveformStatus === 'generating';
+        const hasSourceWaveform = Boolean(mediaFile?.waveform?.length || mediaFile?.audioAnalysisRefs?.waveformPyramidId);
+        const hasSourceSpectrogram = Boolean(mediaFile?.audioAnalysisRefs?.spectrogramTileSetIds?.[0]);
+        const canRegenerateMediaArtifacts = Boolean(
+          mediaFile && (
+            isVideoFile ||
+            isAudioFile ||
+            isImageFile ||
+            hasAudio
+          )
+        );
         // Available folders for "Move to Folder" submenu
         const availableFolders = folders.filter(f => !selectedIds.includes(f.id));
+        const contextAnnotation = contextMenu.annotationId
+          ? mediaBoardAnnotations.find((annotation) => annotation.id === contextMenu.annotationId) ?? null
+          : null;
+
+        if (contextAnnotation) {
+          const renderAnnotationColorSubmenu = (
+            label: string,
+            target: 'backgroundColor' | 'textColor',
+          ) => (
+            <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+              <span>{label}</span>
+              <span className="submenu-arrow">&#9654;</span>
+              <div className="context-submenu media-board-annotation-color-submenu">
+                {MEDIA_BOARD_ANNOTATION_COLOR_OPTIONS.map((option) => {
+                  const selected = contextAnnotation[target] === option.value;
+                  return (
+                    <div
+                      key={`${target}-${option.value}`}
+                      className="context-menu-item media-board-annotation-color-item"
+                      onClick={() => {
+                        updateMediaBoardAnnotation(contextAnnotation.id, { [target]: option.value });
+                        closeContextMenu();
+                      }}
+                    >
+                      <span
+                        className="media-board-annotation-color-swatch"
+                        style={{ '--swatch-color': option.value } as React.CSSProperties}
+                      />
+                      <span>{option.label}{selected ? ' (current)' : ''}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+
+          return (
+            <div
+              ref={contextMenuRef}
+              className="media-context-menu"
+              style={{
+                position: 'fixed',
+                left: contextMenuPosition?.x ?? contextMenu.x,
+                top: contextMenuPosition?.y ?? contextMenu.y,
+                zIndex: 10000,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {renderAnnotationColorSubmenu('Background', 'backgroundColor')}
+              {renderAnnotationColorSubmenu('Text', 'textColor')}
+            </div>
+          );
+        }
 
         return (
           <div
@@ -4180,6 +5401,14 @@ export function MediaPanel() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {viewMode === 'board' && contextMenu.boardPosition && !contextMenu.itemId && (
+              <>
+                <div className="context-menu-item" onClick={handleNewMediaBoardAnnotation}>
+                  <span>Annotation</span>
+                </div>
+                <div className="context-menu-separator" />
+              </>
+            )}
             <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
               <span>Add</span>
               <span className="submenu-arrow">&#9654;</span>
@@ -4342,35 +5571,85 @@ export function MediaPanel() {
                   </div>
                 )}
 
-                {/* Proxy Generation - only for single video */}
-                {!multiSelect && isVideoFile && mediaFile && (
+                {/* Regenerate cached artifacts - only for single media files */}
+                {!multiSelect && canRegenerateMediaArtifacts && mediaFile && (
                   <>
                     <div className="context-menu-separator" />
-                    {isGenerating ? (
-                      <div
-                        className="context-menu-item"
-                        onClick={() => {
-                          cancelProxyGeneration(mediaFile.id);
-                          closeContextMenu();
-                        }}
-                      >
-                        Stop Proxy Generation ({mediaFile.proxyProgress || 0}%)
+                    <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
+                      <span>Regenerate</span>
+                      <span className="submenu-arrow">â–¶</span>
+                      <div className="context-submenu">
+                        {isVideoFile && (
+                          <div
+                            className={`context-menu-item ${!mediaFile.file && !isGenerating ? 'disabled' : ''}`}
+                            onClick={() => {
+                              if (!mediaFile.file && !isGenerating) return;
+                              if (isGenerating) {
+                                cancelProxyGeneration(mediaFile.id);
+                              } else {
+                                generateProxy(mediaFile.id, { force: hasProxy });
+                              }
+                              closeContextMenu();
+                            }}
+                          >
+                            {isGenerating
+                              ? `Stop Proxy Generation (${mediaFile.proxyProgress || 0}%)`
+                              : `Proxy${hasProxy ? ' (ready)' : ''}`}
+                          </div>
+                        )}
+                        {(isVideoFile || isImageFile) && (
+                          <div
+                            className="context-menu-item"
+                            onClick={() => handleRegenerateMediaThumbnails(mediaFile)}
+                          >
+                            Thumbnails{mediaFile.thumbnailUrl ? ' (ready)' : ''}
+                          </div>
+                        )}
+                        {hasAudio && (
+                          <div
+                            className={`context-menu-item ${isAudioProxyGenerating ? 'disabled' : ''}`}
+                            onClick={() => {
+                              if (isAudioProxyGenerating) return;
+                              handleRegenerateMediaAudioProxy(mediaFile, hasAudioProxy);
+                            }}
+                          >
+                            WAV Audio Proxy
+                            {isAudioProxyGenerating
+                              ? ` (${mediaFile.audioProxyProgress || 0}%)`
+                              : hasAudioProxy
+                              ? ' (ready)'
+                              : ''}
+                          </div>
+                        )}
+                        {hasAudio && (
+                          <div
+                            className={`context-menu-item ${isSourceAudioAnalysisGenerating ? 'disabled' : ''}`}
+                            onClick={() => {
+                              if (isSourceAudioAnalysisGenerating) return;
+                              handleRegenerateMediaWaveform(mediaFile);
+                            }}
+                          >
+                            Waveform
+                            {isSourceAudioAnalysisGenerating
+                              ? ` (${Math.round(mediaFile.waveformProgress || 0)}%)`
+                              : hasSourceWaveform
+                              ? ' (ready)'
+                              : ''}
+                          </div>
+                        )}
+                        {hasAudio && (
+                          <div
+                            className={`context-menu-item ${isSourceAudioAnalysisGenerating ? 'disabled' : ''}`}
+                            onClick={() => {
+                              if (isSourceAudioAnalysisGenerating) return;
+                              handleRegenerateMediaSpectrogram(mediaFile);
+                            }}
+                          >
+                            Spectral{hasSourceSpectrogram ? ' (ready)' : ''}
+                          </div>
+                        )}
                       </div>
-                    ) : hasProxy ? (
-                      <div className="context-menu-item disabled">
-                        Proxy Ready
-                      </div>
-                    ) : (
-                      <div
-                        className="context-menu-item"
-                        onClick={() => {
-                          generateProxy(mediaFile.id);
-                          closeContextMenu();
-                        }}
-                      >
-                        Generate Proxy
-                      </div>
-                    )}
+                    </div>
                   </>
                 )}
 

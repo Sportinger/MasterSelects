@@ -4,6 +4,8 @@ import { AudioExtractor, audioExtractor } from '../../engine/audio/AudioExtracto
 import { TimeStretchProcessor, timeStretchProcessor, type TimeStretchProgress } from '../../engine/audio/TimeStretchProcessor';
 import type { ClipAudioEditOperation, Keyframe, SpectralImageLayer, TimelineClip } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
+import { createCurrentAudioArtifactStore } from './timelineWaveformPyramidCache';
+import { StemAudioSourceResolver, STEM_SOURCE_LAYER_ID, type StemAudioSourceResolution } from './stemSeparation';
 import {
   collectProcessedAnalysisClipAudioEffectInstances,
   collectRenderableClipAudioEditOperations,
@@ -12,6 +14,7 @@ import {
 import { createAudioRegionEffectInstance } from './audioRegionEffectOperation';
 
 export type ClipAudioRenderPhase =
+  | 'stem-mix'
   | 'trimming'
   | 'edit-stack'
   | 'spectral-layers'
@@ -59,6 +62,7 @@ export interface ClipAudioRenderServiceOptions {
   timeStretchProcessor?: Pick<TimeStretchProcessor, 'processConstantSpeed' | 'processWithKeyframes'>;
   extractor?: Pick<AudioExtractor, 'trimBuffer'>;
   spectralImageLayerMaskProvider?: SpectralImageLayerMaskProvider;
+  stemAudioSourceResolver?: Pick<StemAudioSourceResolver, 'resolveStemMix'>;
 }
 
 type AudioContextConstructor = new () => AudioContext;
@@ -116,6 +120,66 @@ function cloneAudioBuffer(buffer: AudioBuffer): AudioBuffer {
     cloned.getChannelData(channel).set(buffer.getChannelData(channel));
   }
   return cloned;
+}
+
+function createGainAdjustedBuffer(buffer: AudioBuffer, gain: number): AudioBuffer {
+  if (Math.abs(gain - 1) < 0.0001) return buffer;
+
+  const adjusted = createAudioBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const source = buffer.getChannelData(channel);
+    const target = adjusted.getChannelData(channel);
+    for (let sample = 0; sample < buffer.length; sample += 1) {
+      target[sample] = (source[sample] ?? 0) * gain;
+    }
+  }
+  return adjusted;
+}
+
+function resampleAudioBuffer(buffer: AudioBuffer, targetSampleRate: number): AudioBuffer {
+  if (Math.abs(buffer.sampleRate - targetSampleRate) < 1) return buffer;
+
+  const outputLength = Math.max(1, Math.round((buffer.length * targetSampleRate) / buffer.sampleRate));
+  const output = createAudioBuffer(buffer.numberOfChannels, outputLength, targetSampleRate);
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+    const source = buffer.getChannelData(channel);
+    const target = output.getChannelData(channel);
+    for (let index = 0; index < outputLength; index += 1) {
+      const sourcePosition = (index * buffer.sampleRate) / targetSampleRate;
+      const leftIndex = Math.min(source.length - 1, Math.floor(sourcePosition));
+      const rightIndex = Math.min(source.length - 1, leftIndex + 1);
+      const mix = sourcePosition - leftIndex;
+      target[index] = (source[leftIndex] ?? 0) * (1 - mix) + (source[rightIndex] ?? 0) * mix;
+    }
+  }
+
+  return output;
+}
+
+function getBufferChannel(buffer: AudioBuffer, channel: number): Float32Array {
+  if (channel < buffer.numberOfChannels) return buffer.getChannelData(channel);
+  if (buffer.numberOfChannels === 1) return buffer.getChannelData(0);
+  return new Float32Array(buffer.length);
+}
+
+function mixAudioBuffers(first: AudioBuffer, second: AudioBuffer): AudioBuffer {
+  const sampleRate = second.sampleRate;
+  const firstAtRate = resampleAudioBuffer(first, sampleRate);
+  const length = Math.max(firstAtRate.length, second.length);
+  const channelCount = Math.max(firstAtRate.numberOfChannels, second.numberOfChannels);
+  const output = createAudioBuffer(channelCount, length, sampleRate);
+
+  for (let channel = 0; channel < channelCount; channel += 1) {
+    const target = output.getChannelData(channel);
+    const firstSource = getBufferChannel(firstAtRate, channel);
+    const secondSource = getBufferChannel(second, channel);
+    for (let sample = 0; sample < length; sample += 1) {
+      target[sample] = (firstSource[sample] ?? 0) + (secondSource[sample] ?? 0);
+    }
+  }
+
+  return output;
 }
 
 function appendSilence(buffer: AudioBuffer, tailSeconds: number): AudioBuffer {
@@ -1711,18 +1775,21 @@ export class ClipAudioRenderService {
   private readonly timeStretchProcessor: Pick<TimeStretchProcessor, 'processConstantSpeed' | 'processWithKeyframes'>;
   private readonly extractor: Pick<AudioExtractor, 'trimBuffer'>;
   private readonly spectralImageLayerMaskProvider: SpectralImageLayerMaskProvider;
+  private readonly stemAudioSourceResolver?: Pick<StemAudioSourceResolver, 'resolveStemMix'>;
 
   constructor(options: ClipAudioRenderServiceOptions = {}) {
     this.effectRenderer = options.effectRenderer ?? audioEffectRenderer;
     this.timeStretchProcessor = options.timeStretchProcessor ?? timeStretchProcessor;
     this.extractor = options.extractor ?? audioExtractor;
     this.spectralImageLayerMaskProvider = options.spectralImageLayerMaskProvider ?? defaultSpectralImageLayerMaskProvider;
+    this.stemAudioSourceResolver = options.stemAudioSourceResolver;
   }
 
   async render(request: ClipAudioRenderRequest): Promise<ClipAudioRenderResult> {
     const { clip, sourceBuffer, keyframes = [], effectMode = 'output', effectTailSeconds = 0, onProgress } = request;
 
-    let processedBuffer = this.trimClipBuffer(clip, sourceBuffer, onProgress);
+    const resolvedSourceBuffer = await this.resolveStemSourceBuffer(clip, sourceBuffer, onProgress);
+    let processedBuffer = this.trimClipBuffer(clip, resolvedSourceBuffer, onProgress);
     processedBuffer = await this.renderEditStack(clip, processedBuffer, onProgress);
     processedBuffer = await this.renderSpectralImageLayers(clip, processedBuffer, onProgress);
 
@@ -1756,6 +1823,56 @@ export class ClipAudioRenderService {
     });
 
     return { buffer: processedBuffer };
+  }
+
+  private getStemAudioSourceResolver(): Pick<StemAudioSourceResolver, 'resolveStemMix'> {
+    return this.stemAudioSourceResolver ?? new StemAudioSourceResolver({
+      artifactStore: createCurrentAudioArtifactStore(),
+    });
+  }
+
+  private async resolveStemSourceBuffer(
+    clip: TimelineClip,
+    sourceBuffer: AudioBuffer,
+    onProgress?: (progress: ClipAudioRenderProgress) => void,
+  ): Promise<AudioBuffer> {
+    const stemSeparation = clip.audioState?.stemSeparation;
+    if (!stemSeparation) {
+      return sourceBuffer;
+    }
+
+    const sourceBufferWithGain = createGainAdjustedBuffer(sourceBuffer, dbToLinearGain(stemSeparation.sourceGainDb ?? 0));
+    if (stemSeparation.mixMode === 'original' || stemSeparation.soloStemId === STEM_SOURCE_LAYER_ID) {
+      return sourceBufferWithGain;
+    }
+
+    emitProgress(onProgress, {
+      phase: 'stem-mix',
+      percent: 2,
+      message: 'Resolving clip stem mix',
+    });
+
+    const resolution: StemAudioSourceResolution = await this.getStemAudioSourceResolver().resolveStemMix(stemSeparation);
+    if (resolution.missingStems.length > 0) {
+      const labels = resolution.missingStems.map((stem) => stem.label || stem.kind).join(', ');
+      throw new Error(`Missing stem artifacts: ${labels}`);
+    }
+
+    if (!resolution.buffer) {
+      return stemSeparation.mixMode === 'hybrid'
+        ? sourceBufferWithGain
+        : createSilentLike(sourceBuffer);
+    }
+
+    emitProgress(onProgress, {
+      phase: 'stem-mix',
+      percent: 6,
+      message: 'Clip stem mix ready',
+    });
+
+    return stemSeparation.mixMode === 'hybrid'
+      ? mixAudioBuffers(sourceBufferWithGain, resolution.buffer)
+      : resolution.buffer;
   }
 
   private async renderSpectralImageLayers(

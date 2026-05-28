@@ -16,14 +16,73 @@ import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMeta
 import { readRiveMetadata } from '../../../services/vectorAnimation/riveMetadata';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { createThumbnail, handleThumbnailDedup } from '../helpers/thumbnailHelpers';
+import {
+  startMediaFileWaveformGeneration,
+} from '../helpers/mediaWaveformHelpers';
 import { resolveGaussianSplatSequenceData } from '../../../utils/gaussianSplatSequence';
 import { compositionRenderer } from '../../../services/compositionRenderer';
 import { collectAudioAnalysisArtifactIdsFromRefs } from '../../../services/audio/projectAudioState';
 import { blobUrlManager } from '../../timeline/helpers/blobUrlManager';
+import { audioExtractor } from '../../../engine/audio/AudioExtractor';
+import {
+  createFileAudioSourceFingerprint,
+} from '../../../services/audio/ProcessedWaveformPyramidService';
+import { SpectrogramTileSetGenerator } from '../../../services/audio/SpectrogramTileSetGenerator';
+import { createCurrentAudioArtifactStore } from '../../../services/audio/timelineWaveformPyramidCache';
+import {
+  primeTimelineSpectrogramTileSetCache,
+  readTimelineSpectrogramTileSet,
+} from '../../../services/audio/timelineSpectrogramCache';
 
 const log = Logger.create('Reload');
 const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
 const activeThumbnailRequests = new Map<string, Promise<boolean>>();
+const activeMediaSpectrogramJobs = new Map<string, Promise<void>>();
+
+function mediaFileCanHaveAudio(mediaFile: MediaFile): boolean {
+  if (mediaFile.type === 'audio') return true;
+  if (mediaFile.type !== 'video') return false;
+  return mediaFile.hasAudio !== false || Boolean(mediaFile.audioCodec);
+}
+
+async function resolveMediaFileSourceFile(mediaFile: MediaFile): Promise<File | null> {
+  if (mediaFile.file && mediaFile.file.size > 0) {
+    return mediaFile.file;
+  }
+
+  if (mediaFile.projectPath && projectFileService.isProjectOpen()) {
+    const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
+    if (result?.file) return result.file;
+  }
+
+  if (mediaFile.url) {
+    try {
+      const response = await fetch(mediaFile.url);
+      if (response.ok) {
+        const blob = await response.blob();
+        return new File([blob], mediaFile.name, { type: blob.type || mediaFile.file?.type || '' });
+      }
+    } catch (error) {
+      log.warn('Failed to resolve media source URL', { id: mediaFile.id, name: mediaFile.name, error });
+    }
+  }
+
+  return null;
+}
+
+function updateMediaFileWaveform(
+  set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
+  id: string,
+  updates: Partial<Pick<MediaFile, 'audioAnalysisRefs' | 'waveform' | 'waveformChannels' | 'waveformProgress' | 'waveformStatus'>>,
+): void {
+  set((state) => ({
+    files: state.files.map((file) => (
+      file.id === id
+        ? { ...file, ...updates }
+        : file
+    )),
+  }));
+}
 
 export interface FileManageActions {
   removeFile: (id: string) => void;
@@ -32,7 +91,9 @@ export interface FileManageActions {
   renameFile: (id: string, name: string) => void;
   removeSignalAsset: (id: string) => void;
   renameSignalAsset: (id: string, name: string) => void;
-  ensureFileThumbnail: (id: string) => Promise<boolean>;
+  ensureFileThumbnail: (id: string, options?: { force?: boolean }) => Promise<boolean>;
+  generateMediaWaveform: (id: string, options?: { force?: boolean }) => Promise<void>;
+  generateMediaSpectrogram: (id: string, options?: { force?: boolean }) => Promise<void>;
   refreshFileUrls: (id: string, options?: { refreshThumbnail?: boolean }) => Promise<boolean>;
   reloadFile: (id: string) => Promise<boolean>;
   reloadAllFiles: () => Promise<number>;
@@ -292,6 +353,14 @@ function revokeMediaFileUrls(file: MediaFile): void {
   }
   if (isBlobUrl(file.proxyVideoUrl) && file.proxyVideoUrl !== file.url && file.proxyVideoUrl !== file.thumbnailUrl) {
     URL.revokeObjectURL(file.proxyVideoUrl);
+  }
+  if (
+    isBlobUrl(file.audioProxyUrl) &&
+    file.audioProxyUrl !== file.url &&
+    file.audioProxyUrl !== file.thumbnailUrl &&
+    file.audioProxyUrl !== file.proxyVideoUrl
+  ) {
+    URL.revokeObjectURL(file.audioProxyUrl);
   }
 }
 
@@ -605,13 +674,14 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
     }));
   },
 
-  ensureFileThumbnail: async (id: string) => {
-    const existingRequest = activeThumbnailRequests.get(id);
+  ensureFileThumbnail: async (id: string, options: { force?: boolean } = {}) => {
+    const requestKey = options.force ? `${id}:force` : id;
+    const existingRequest = activeThumbnailRequests.get(requestKey);
     if (existingRequest) return existingRequest;
 
     const request = (async () => {
       const mediaFile = get().files.find((f) => f.id === id);
-      if (!mediaFile?.id || mediaFile.thumbnailUrl || mediaFile.isImporting) {
+      if (!mediaFile?.id || (!options.force && mediaFile.thumbnailUrl) || mediaFile.isImporting) {
         return Boolean(mediaFile?.thumbnailUrl);
       }
       if (mediaFile.type !== 'image' && mediaFile.type !== 'video') {
@@ -621,7 +691,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
       let thumbnailUrl: string | undefined;
 
       try {
-        if (mediaFile.fileHash && projectFileService.isProjectOpen()) {
+        if (!options.force && mediaFile.fileHash && projectFileService.isProjectOpen()) {
           const existingBlob = await projectFileService.getThumbnail(mediaFile.fileHash);
           if (existingBlob && existingBlob.size > 0) {
             thumbnailUrl = URL.createObjectURL(existingBlob);
@@ -633,7 +703,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
           }
         }
 
-        if (!thumbnailUrl && mediaFile.fileHash) {
+        if (!options.force && !thumbnailUrl && mediaFile.fileHash) {
           const storedThumbnail = await projectDB.getThumbnail(mediaFile.fileHash);
           if (storedThumbnail?.blob && storedThumbnail.blob.size > 0) {
             thumbnailUrl = URL.createObjectURL(storedThumbnail.blob);
@@ -643,15 +713,36 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
           }
         }
 
-        let sourceFile = mediaFile.file;
-        if (!thumbnailUrl && !sourceFile && mediaFile.projectPath && projectFileService.isProjectOpen()) {
-          const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
-          sourceFile = result?.file;
-        }
+        const sourceFile = !thumbnailUrl ? await resolveMediaFileSourceFile(mediaFile) : null;
 
         if (!thumbnailUrl && sourceFile) {
           const generatedThumbnail = await createThumbnail(sourceFile, mediaFile.type);
-          thumbnailUrl = await handleThumbnailDedup(mediaFile.fileHash, generatedThumbnail);
+          thumbnailUrl = options.force
+            ? generatedThumbnail
+            : await handleThumbnailDedup(mediaFile.fileHash, generatedThumbnail);
+
+          if (options.force && generatedThumbnail && mediaFile.fileHash) {
+            try {
+              const response = await fetch(generatedThumbnail);
+              const blob = await response.blob();
+              if (blob.size > 0) {
+                await projectDB.saveThumbnail({
+                  fileHash: mediaFile.fileHash,
+                  blob,
+                  createdAt: Date.now(),
+                });
+                if (projectFileService.isProjectOpen()) {
+                  await projectFileService.saveThumbnail(mediaFile.fileHash, blob);
+                }
+              }
+            } catch (error) {
+              log.warn('Failed to persist regenerated thumbnail', {
+                id,
+                name: mediaFile.name,
+                error,
+              });
+            }
+          }
         }
 
         if (!thumbnailUrl) {
@@ -659,15 +750,19 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
         }
 
         let applied = false;
+        const oldThumbnailUrl = mediaFile.thumbnailUrl;
         set((state) => ({
           files: state.files.map((file) => {
             if (file.id !== id) return file;
-            if (file.thumbnailUrl) return file;
+            if (!options.force && file.thumbnailUrl) return file;
             applied = true;
             return { ...file, thumbnailUrl };
           }),
         }));
 
+        if (applied && options.force && isBlobUrl(oldThumbnailUrl) && oldThumbnailUrl !== thumbnailUrl) {
+          URL.revokeObjectURL(oldThumbnailUrl);
+        }
         if (!applied && isBlobUrl(thumbnailUrl)) {
           URL.revokeObjectURL(thumbnailUrl);
         }
@@ -685,11 +780,134 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
         return false;
       }
     })().finally(() => {
-      activeThumbnailRequests.delete(id);
+      activeThumbnailRequests.delete(requestKey);
     });
 
-    activeThumbnailRequests.set(id, request);
+    activeThumbnailRequests.set(requestKey, request);
     return request;
+  },
+
+  generateMediaWaveform: async (id: string, options: { force?: boolean } = {}) => {
+    const mediaFile = get().files.find((file) => file.id === id);
+    if (!mediaFile || !mediaFileCanHaveAudio(mediaFile)) return;
+
+    const sourceFile = await resolveMediaFileSourceFile(mediaFile);
+    if (!sourceFile) {
+      updateMediaFileWaveform(set, id, {
+        waveformStatus: 'error',
+        waveformProgress: 0,
+      });
+      return;
+    }
+
+    startMediaFileWaveformGeneration(
+      {
+        ...mediaFile,
+        file: sourceFile,
+      },
+      (mediaFileId, updates) => updateMediaFileWaveform(set, mediaFileId, updates),
+      (mediaFileId) => get().files.find((file) => file.id === mediaFileId),
+      options,
+    );
+  },
+
+  generateMediaSpectrogram: async (id: string, options: { force?: boolean } = {}) => {
+    const mediaFile = get().files.find((file) => file.id === id);
+    if (!mediaFile || !mediaFileCanHaveAudio(mediaFile)) return;
+
+    const existingSpectrogramId = mediaFile.audioAnalysisRefs?.spectrogramTileSetIds?.[0];
+    if (!options.force && existingSpectrogramId) return;
+
+    const existingJob = activeMediaSpectrogramJobs.get(id);
+    if (existingJob) {
+      await existingJob;
+      return;
+    }
+
+    const previousWaveformStatus = mediaFile.waveformStatus;
+    const previousWaveformProgress = mediaFile.waveformProgress;
+
+    const job = (async () => {
+      try {
+        updateMediaFileWaveform(set, id, {
+          waveformStatus: 'generating',
+          waveformProgress: 1,
+        });
+
+        const sourceFile = await resolveMediaFileSourceFile(mediaFile);
+        if (!sourceFile) {
+          updateMediaFileWaveform(set, id, {
+            waveformStatus: 'error',
+            waveformProgress: 0,
+          });
+          return;
+        }
+
+        const sourceFingerprint = await createFileAudioSourceFingerprint(sourceFile);
+        updateMediaFileWaveform(set, id, { waveformProgress: 12 });
+
+        const sourceBuffer = await audioExtractor.extractAudio(sourceFile, id);
+        updateMediaFileWaveform(set, id, { waveformProgress: 35 });
+
+        const store = createCurrentAudioArtifactStore();
+        const generator = new SpectrogramTileSetGenerator({ artifactStore: store });
+        const generated = await generator.generate({
+          mediaFileId: id,
+          sourceFingerprint,
+          buffer: sourceBuffer,
+          decoderId: 'masterselects.audio-extractor',
+          decoderVersion: '1.0.0',
+          metadata: {
+            analysisKind: 'spectrogram-tiles',
+            mediaFileName: mediaFile.name,
+          },
+        }, {
+          onProgress: (progress) => {
+            updateMediaFileWaveform(set, id, {
+              waveformProgress: Math.min(99, Math.max(35, Math.round(35 + progress.percent * 0.64))),
+            });
+          },
+        });
+
+        const tileSet = await readTimelineSpectrogramTileSet(generated.manifest, store);
+        primeTimelineSpectrogramTileSetCache([
+          generated.artifact.id,
+          generated.artifact.manifestRef.artifactId,
+          generated.analysisRef.artifactId,
+        ], tileSet);
+
+        const refId = generated.artifact.manifestRef.artifactId;
+        set((state) => ({
+          files: state.files.map((file) => {
+            if (file.id !== id) return file;
+            return {
+              ...file,
+              audioAnalysisRefs: {
+                ...(file.audioAnalysisRefs ?? {}),
+                spectrogramTileSetIds: [refId],
+              },
+              waveformStatus: file.waveform?.length ? 'ready' : (previousWaveformStatus ?? 'idle'),
+              waveformProgress: file.waveform?.length ? 100 : (previousWaveformProgress ?? 0),
+            };
+          }),
+        }));
+      } catch (error) {
+        updateMediaFileWaveform(set, id, {
+          waveformStatus: 'error',
+          waveformProgress: 0,
+        });
+        log.warn('Failed to generate media spectrogram', {
+          id,
+          name: mediaFile.name,
+          error,
+        });
+      }
+    })().finally(() => {
+      activeMediaSpectrogramJobs.delete(id);
+    });
+
+    activeMediaSpectrogramJobs.set(id, job);
+    await job;
   },
 
   refreshFileUrls: async (id: string, options) => {

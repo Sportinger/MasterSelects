@@ -20,6 +20,7 @@ import { createColorCorrectionSlice } from './colorCorrectionSlice';
 import { createLinkedGroupSlice } from './linkedGroupSlice';
 import { createDownloadClipSlice } from './downloadClipSlice';
 import { createAudioEditSlice } from './audioEditSlice';
+import { createStemSeparationSlice } from './stemSeparationSlice';
 import { createVideoBakeSlice } from './videoBakeSlice';
 import { createToolSlice, getDefaultLastTimelineToolByGroup } from './toolSlice';
 import { createTimelineEditOperationSlice } from './editOperations';
@@ -55,6 +56,7 @@ function closeExportPreviewFrame(frame: ImageBitmap | null): void {
 export type { TimelineStore, TimelineClip, Keyframe } from './types';
 export { DEFAULT_TRANSFORM, DEFAULT_TRACKS, SNAP_THRESHOLD_SECONDS } from './constants';
 export { seekVideo, getDefaultEffectParams } from './utils';
+export { setClipStemSeparationRunner } from './stemSeparationSlice';
 
 // Re-export selectors for optimized store subscriptions
 export * from './selectors';
@@ -76,6 +78,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
     const audioEditActions = createAudioEditSlice(set, get);
+    const stemSeparationActions = createStemSeparationSlice(set, get);
     const videoBakeActions = createVideoBakeSlice(set, get);
     const toolActions = createToolSlice(set, get);
     const timelineEditOperationActions = createTimelineEditOperationSlice(set, get);
@@ -218,6 +221,8 @@ export const useTimelineStore = create<TimelineStore>()(
       audioRegionClipboard: null,
       showAudioRegionEditMarkers: true,
       showTranscriptMarkers: true,
+      clipStemSeparationJobs: {},
+      expandedClipStemLayerIds: new Set<string>(),
 
       // Keyframe animation state
       clipKeyframes: new Map<string, Keyframe[]>(),
@@ -352,6 +357,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...linkedGroupActions,
       ...downloadClipActions,
       ...audioEditActions,
+      ...stemSeparationActions,
       ...videoBakeActions,
       ...toolActions,
       ...timelineEditOperationActions,

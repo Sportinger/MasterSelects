@@ -122,6 +122,10 @@ export interface MediaFile extends MediaItem {
   proxyFrameCount?: number;
   proxyFps?: number;
   hasProxyAudio?: boolean;
+  audioProxyStatus?: ProxyStatus;
+  audioProxyProgress?: number;
+  audioProxyStorageKey?: string;
+  audioProxyUrl?: string;
   proxyVideoUrl?: string;
   // Transcript support
   transcriptStatus?: TranscriptStatus;

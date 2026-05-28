@@ -1,9 +1,10 @@
-import { useTimelineStore } from './stores/timeline';
+import { setClipStemSeparationRunner, useTimelineStore } from './stores/timeline';
 import { AI_TOOLS, executeAITool, getQuickTimelineSummary } from './services/aiTools';
 import { isFileSystemAccessSupported } from './services/fileSystemService';
 import { NativeHelperClient } from './services/nativeHelper/NativeHelperClient';
 import { useSettingsStore } from './stores/settingsStore';
 import { installRuntimeDiagnostics } from './services/runtimeDiagnostics';
+import { getStemSeparationService } from './services/audio/stemSeparation';
 
 installRuntimeDiagnostics();
 
@@ -33,6 +34,8 @@ function warmNativeHelperForProjectBackend(): void {
 }
 
 warmNativeHelperForProjectBackend();
+
+setClipStemSeparationRunner((request) => getStemSeparationService().separateClip(request));
 
 // Expose AI tools API for browser console, Claude skills, and external agents
 // Only available in development mode to prevent production exposure

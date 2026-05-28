@@ -17,6 +17,7 @@ import { recordHistoryEvent, serializeHistoryStateForProject } from '../../store
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 import { buildProjectAudioStateIndex } from '../audio/projectAudioState';
 import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
+import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import type {
   FlashBoardGenerationMetadata,
@@ -84,6 +85,15 @@ function serializeProjectClipVideoState(videoState: ClipVideoState | undefined):
     ...structuredClone(videoState),
     bakeRegions: videoState.bakeRegions?.map(serializeProjectVideoBakeRegion),
   };
+}
+
+function shouldPersistMediaWaveform(file: MediaFile): boolean {
+  return !file.audioAnalysisRefs?.waveformPyramidId;
+}
+
+function shouldPersistClipWaveform(clip: ProjectSaveClip): boolean {
+  return !clip.audioState?.sourceAnalysisRefs?.waveformPyramidId &&
+    !clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId;
 }
 
 export function isProjectStoreSyncInProgress(): boolean {
@@ -164,9 +174,13 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     hasProxy:
       file.proxyStatus === 'ready' &&
       isProxyFrameCountComplete(file.proxyFrameCount, file.duration, file.proxyFps ?? file.fps),
+    hasAudioProxy: file.hasProxyAudio === true || file.audioProxyStatus === 'ready',
+    audioProxyStorageKey: file.audioProxyStorageKey || file.fileHash || file.id,
     audioAnalysisRefs: file.audioAnalysisRefs ? structuredClone(file.audioAnalysisRefs) : undefined,
-    waveform: file.waveformStatus === 'ready' && file.waveform ? [...file.waveform] : undefined,
-    waveformChannels: file.waveformStatus === 'ready'
+    waveform: shouldPersistMediaWaveform(file) && file.waveformStatus === 'ready' && file.waveform
+      ? [...file.waveform]
+      : undefined,
+    waveformChannels: shouldPersistMediaWaveform(file) && file.waveformStatus === 'ready'
       ? file.waveformChannels?.map(channel => [...channel])
       : undefined,
     vectorAnimation: file.vectorAnimation,
@@ -226,9 +240,9 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,
       videoState: serializeProjectClipVideoState(c.videoState),
-      waveform: c.waveform,
-      waveformChannels: c.waveformChannels,
-      audioState: c.audioState ? structuredClone(c.audioState) : undefined,
+      waveform: shouldPersistClipWaveform(c) ? c.waveform : undefined,
+      waveformChannels: shouldPersistClipWaveform(c) ? c.waveformChannels : undefined,
+      audioState: clonePersistedClipAudioState(c.audioState),
       modelSequence: serializeModelSequence(c.source?.modelSequence || c.modelSequence),
       gaussianSplatSequence: serializeGaussianSplatSequence(c.source?.gaussianSplatSequence || c.gaussianSplatSequence),
       meshType: c.source?.meshType || c.meshType,

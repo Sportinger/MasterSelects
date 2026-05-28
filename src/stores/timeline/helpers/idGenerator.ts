@@ -127,6 +127,17 @@ export function generateLinkedGroupId(): string {
 }
 
 /**
+ * Generate a unique ID for manually linked timeline clip groups.
+ */
+export function generateManualLinkedGroupId(): string {
+  return generateClipId('clip-link');
+}
+
+export function isManualLinkedGroupId(groupId: string | undefined): boolean {
+  return typeof groupId === 'string' && groupId.startsWith('clip-link-');
+}
+
+/**
  * Generate a unique ID for tracks.
  */
 export function generateTrackId(type: 'video' | 'audio'): string {

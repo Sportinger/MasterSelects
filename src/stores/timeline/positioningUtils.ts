@@ -10,8 +10,8 @@ type PositioningUtils = Pick<
 >;
 
 export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get) => ({
-  getSnappedPosition: (clipId: string, desiredStartTime: number, trackId: string) => {
-    const { clips, tracks } = get();
+  getSnappedPosition: (clipId: string, desiredStartTime: number, _trackId: string) => {
+    const { clips, playheadPosition } = get();
     const movingClip = clips.find(c => c.id === clipId);
     if (!movingClip) return { startTime: desiredStartTime, snapped: false, snapEdgeTime: 0 };
 
@@ -21,17 +21,12 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     const clipDuration = movingClip.duration;
     const desiredEndTime = desiredStartTime + clipDuration;
 
-    // Get the track type for cross-track snapping (snap to clips on same-type tracks)
-    const currentTrack = tracks.find(t => t.id === trackId);
-    const trackType = currentTrack?.type;
-
-    // Get clips from ALL tracks of the same type (cross-track snapping)
-    // Exclude the moving clip and its linked clip
+    // Get clips from all timeline tracks so video and audio layers can snap to
+    // each other's edges. Exclude the moving clip and its linked partner.
     const otherClips = clips.filter(c =>
       c.id !== clipId &&
       c.id !== movingClip.linkedClipId &&
-      c.linkedClipId !== clipId &&
-      (trackType ? tracks.find(t => t.id === c.trackId)?.type === trackType : c.trackId === trackId)
+      c.linkedClipId !== clipId
     );
 
     let snappedStart = desiredStartTime;
@@ -39,51 +34,41 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
     let snapEdgeTime = 0; // The actual edge time where the snap occurs (for indicator)
     let minSnapDistance = SNAP_THRESHOLD_SECONDS;
 
+    const trySnapToTime = (edgeTime: number) => {
+      const distStart = Math.abs(desiredStartTime - edgeTime);
+      if (distStart < minSnapDistance) {
+        snappedStart = edgeTime;
+        snapEdgeTime = edgeTime;
+        minSnapDistance = distStart;
+        snapped = true;
+      }
+
+      const distEnd = Math.abs(desiredEndTime - edgeTime);
+      if (distEnd < minSnapDistance) {
+        snappedStart = edgeTime - clipDuration;
+        snapEdgeTime = edgeTime;
+        minSnapDistance = distEnd;
+        snapped = true;
+      }
+    };
+
     // Check snap points
     for (const clip of otherClips) {
       const clipEnd = clip.startTime + clip.duration;
 
-      // Snap start of moving clip to end of other clip
-      const distToEnd = Math.abs(desiredStartTime - clipEnd);
-      if (distToEnd < minSnapDistance) {
-        snappedStart = clipEnd;
-        snapEdgeTime = clipEnd;
-        minSnapDistance = distToEnd;
-        snapped = true;
-      }
-
-      // Snap start of moving clip to start of other clip
-      const distToStart = Math.abs(desiredStartTime - clip.startTime);
-      if (distToStart < minSnapDistance) {
-        snappedStart = clip.startTime;
-        snapEdgeTime = clip.startTime;
-        minSnapDistance = distToStart;
-        snapped = true;
-      }
-
-      // Snap end of moving clip to start of other clip
-      const distEndToStart = Math.abs(desiredEndTime - clip.startTime);
-      if (distEndToStart < minSnapDistance) {
-        snappedStart = clip.startTime - clipDuration;
-        snapEdgeTime = clip.startTime;
-        minSnapDistance = distEndToStart;
-        snapped = true;
-      }
-
-      // Snap end of moving clip to end of other clip
-      const distEndToEnd = Math.abs(desiredEndTime - clipEnd);
-      if (distEndToEnd < minSnapDistance) {
-        snappedStart = clipEnd - clipDuration;
-        snapEdgeTime = clipEnd;
-        minSnapDistance = distEndToEnd;
-        snapped = true;
-      }
+      trySnapToTime(clipEnd);
+      trySnapToTime(clip.startTime);
     }
 
+    // Snap start/end of moving clip to playhead
+    trySnapToTime(playheadPosition);
+
     // Also snap to timeline start (0)
-    if (Math.abs(desiredStartTime) < SNAP_THRESHOLD_SECONDS) {
+    const distToTimelineStart = Math.abs(desiredStartTime);
+    if (distToTimelineStart < minSnapDistance) {
       snappedStart = 0;
       snapEdgeTime = 0;
+      minSnapDistance = distToTimelineStart;
       snapped = true;
     }
 

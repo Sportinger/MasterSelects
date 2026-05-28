@@ -70,6 +70,11 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'addClipSpectralImageLayer',
   'updateClipSpectralImageLayer',
   'removeClipSpectralImageLayer',
+  'startClipStemSeparation',
+  'setClipStemSolo',
+  'setClipStemEnabled',
+  'setClipStemGain',
+  'clearClipStemSeparation',
 
   'addTextClip',
   'updateTextProperties',
@@ -127,6 +132,8 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
 
   'createLinkedGroup',
   'unlinkGroup',
+  'linkClips',
+  'unlinkClips',
   'addPendingDownloadClip',
   'completeDownload',
   'setDownloadError',
@@ -209,7 +216,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'clearTimeline',
 ]);
 
-const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'bakeClipAudioEditStack', 'applyRoomToneFill']);
+const ASYNC_NULL_ACTION_NAMES = new Set<string>(['addTextClip', 'bakeClipAudioEditStack', 'applyRoomToneFill', 'startClipStemSeparation']);
 const ASYNC_ARRAY_ACTION_NAMES = new Set<string>(['applyDetectedSilenceRemoval', 'applyDetectedTransientSoftening']);
 const ASYNC_FALSE_ACTION_NAMES = new Set<string>(['bakeCompositionVideoBakeRegion', 'bakeClipVideoBakeRegion']);
 const ASYNC_VOID_ACTION_NAMES = new Set<string>(['addClip', 'addCompClip', 'completeDownload', 'loadState']);

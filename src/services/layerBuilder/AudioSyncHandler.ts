@@ -27,6 +27,13 @@ function hasActiveRouteEffects(route: AudioSyncTarget['masterRoute']): boolean {
   );
 }
 
+function hasTailMeterCandidate(
+  processors: AudioSyncTarget['processors'] = [],
+  masterRoute?: AudioSyncTarget['masterRoute'],
+): boolean {
+  return processors.length > 0 || (masterRoute?.processors.length ?? 0) > 0;
+}
+
 function isTailMeterSilent(snapshot: AudioMeterSnapshot | null | undefined): boolean {
   if (!snapshot) return true;
   return Math.max(snapshot.peakLinear, snapshot.rmsLinear) <= TAIL_METER_SILENCE_LINEAR;
@@ -79,8 +86,8 @@ export class AudioSyncHandler {
     element.muted = effectivelyMuted;
     if (effectivelyMuted) {
       this.cancelTailMeterPolling(meterTrackId);
-      this.pauseIfPlaying(element);
       this.publishMeter(meterTrackId, createSilentAudioMeterSnapshot(ctx.now));
+      this.pauseIfPlaying(element);
       return;
     }
 
@@ -98,7 +105,12 @@ export class AudioSyncHandler {
       this.handlePlayback(element, clipTime, absSpeed, clip, canBeMaster, type, state, volume, eqGains, pan, processors, masterRoute, meterTrackId);
     } else {
       this.pauseIfPlaying(element);
-      if (!this.startTailMeterPolling(meterTrackId, element, ctx.now)) {
+      if (!this.startTailMeterPolling(
+        meterTrackId,
+        element,
+        ctx.now,
+        hasTailMeterCandidate(processors, masterRoute),
+      )) {
         this.publishMeter(meterTrackId, createSilentAudioMeterSnapshot(ctx.now));
       }
     }
@@ -148,8 +160,9 @@ export class AudioSyncHandler {
     const hasProcessors = (processors?.length ?? 0) > 0;
     const hasMasterRoute = hasActiveRouteEffects(masterRoute);
     const needsMeter = Boolean(meterTrackId);
+    const hasExistingRoute = audioRoutingManager.hasRoute(element);
 
-    if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter) {
+    if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter || hasExistingRoute) {
       void audioRoutingManager
         .applyEffects(element, volume, eqGains ?? new Array(10).fill(0), pan, processors, masterRoute)
         .then((routed) => this.publishRouteMeter(meterTrackId, routed ? element : null));
@@ -213,8 +226,9 @@ export class AudioSyncHandler {
     const hasProcessors = (processors?.length ?? 0) > 0;
     const hasMasterRoute = hasActiveRouteEffects(masterRoute);
     const needsMeter = Boolean(meterTrackId);
+    const hasExistingRoute = audioRoutingManager.hasRoute(element);
 
-    if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter) {
+    if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter || hasExistingRoute) {
       // Use Web Audio routing for volume + EQ
       // This handles both volume and EQ through the audio graph
       audioRoutingManager
@@ -245,8 +259,9 @@ export class AudioSyncHandler {
       });
     }
 
-    // Set as master audio if eligible
-    if (!state.masterSet && canBeMaster && !element.paused) {
+    // Set as master audio if eligible. The master may still be settling after
+    // play(); the playback loop falls back to system time until it is running.
+    if (!state.masterSet && canBeMaster) {
       setMasterAudio(element, clip.startTime, clip.inPoint, absSpeed);
       state.masterSet = true;
     }
@@ -254,7 +269,8 @@ export class AudioSyncHandler {
     // Audio drift correction: if audio drifts > 0.3s from expected position, re-sync.
     // Without this, audio can drift indefinitely (user reported 1300ms delay).
     const timeDiff = element.currentTime - clipTime;
-    if (Math.abs(timeDiff) > 0.3) {
+    const isCurrentMaster = playheadState.masterAudioElement === element && canBeMaster;
+    if (!isCurrentMaster && Math.abs(timeDiff) > 0.3) {
       vfPipelineMonitor.record('audio_drift_correct', {
         type,
         driftMs: Math.round(timeDiff * 1000),
@@ -301,8 +317,9 @@ export class AudioSyncHandler {
     trackId: string | undefined,
     element: HTMLMediaElement,
     now: number,
+    allowTailMeter: boolean,
   ): boolean {
-    if (!trackId || !audioRoutingManager.hasRoute(element)) return false;
+    if (!allowTailMeter || !trackId || !audioRoutingManager.hasRoute(element)) return false;
 
     const firstSnapshot = this.publishRouteMeter(trackId, element);
     if (!firstSnapshot) return false;
@@ -418,6 +435,7 @@ export function finalizeAudioSync(state: AudioSyncState, isPlaying: boolean): vo
   if (!state.masterSet && isPlaying) {
     playheadState.hasMasterAudio = false;
     playheadState.masterAudioElement = null;
+    playheadState.masterAudioClock = null;
   }
 
   // Update audio status tracker

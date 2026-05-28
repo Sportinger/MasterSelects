@@ -81,6 +81,8 @@ export const OVERLAP_RESISTANCE_PIXELS = 100;
 // Property row heights for expanded tracks
 export const PROPERTY_ROW_HEIGHT = 18;
 export const GROUP_HEADER_HEIGHT = 20;
+export const STEM_LAYER_HEADER_ROW_HEIGHT = 22;
+export const STEM_LAYER_ROW_HEIGHT = 22;
 
 // Curve editor constants
 export const CURVE_EDITOR_HEIGHT = 250;

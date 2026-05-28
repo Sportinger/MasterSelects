@@ -213,6 +213,12 @@ function calcRangeCoverage(ranges: [number, number][], totalDuration: number): n
   return Math.min(1, covered / totalDuration);
 }
 
+function projectMediaCanHaveAudio(mediaFile: ProjectMediaFile): boolean {
+  if (mediaFile.type === 'audio') return true;
+  if (mediaFile.type !== 'video') return false;
+  return mediaFile.hasAudio !== false || Boolean(mediaFile.audioCodec);
+}
+
 function getSequenceFrameHandleCacheKey(mediaFileId: string, frameIndex: number): string {
   return `${mediaFileId}_frame_${frameIndex}`;
 }
@@ -557,6 +563,25 @@ async function convertProjectMediaToStore(
       }
     }
 
+    const audioProxyStorageKey = pm.audioProxyStorageKey || pm.fileHash || pm.id;
+    let audioProxyStatus: MediaFile['audioProxyStatus'] = 'none';
+    let audioProxyProgress = 0;
+    let hasProxyAudio = false;
+    const shouldRestoreAudioProxy = pm.hasAudioProxy || projectMediaCanHaveAudio(pm);
+    if (shouldRestoreAudioProxy && projectFileService.isProjectOpen()) {
+      if (deferCacheChecks) {
+        if (pm.hasAudioProxy) {
+          audioProxyStatus = 'ready';
+          audioProxyProgress = 100;
+          hasProxyAudio = true;
+        }
+      } else {
+        hasProxyAudio = await projectFileService.hasProxyAudio(audioProxyStorageKey);
+        audioProxyStatus = hasProxyAudio ? 'ready' : 'none';
+        audioProxyProgress = hasProxyAudio ? 100 : 0;
+      }
+    }
+
     files.push({
       id: pm.id,
       name: pm.name,
@@ -585,6 +610,10 @@ async function convertProjectMediaToStore(
       proxyFrameCount,
       proxyFps: proxyStatus === 'ready' ? proxyFps : undefined,
       proxyProgress,
+      hasProxyAudio,
+      audioProxyStatus,
+      audioProxyProgress,
+      audioProxyStorageKey,
       hasFileHandle: !!handle || (!!representativeAbsolutePath && projectFileService.activeBackend === 'native'),
       filePath: pm.sourcePath,
       absolutePath: representativeAbsolutePath,
@@ -956,7 +985,6 @@ function hydrateFlashBoardFromProject(data: ProjectFlashBoardState): void {
           error: interrupted && !node.job.error ? 'Job interrupted by reload' : node.job.error,
         };
       }
-
       return {
         id: node.id,
         kind: node.kind,
@@ -1647,6 +1675,22 @@ async function restoreDeferredMediaCacheState(
         updates.proxyFrameCount = undefined;
         updates.proxyFps = undefined;
         updates.proxyProgress = 0;
+      }
+    }
+
+    if (pm.hasAudioProxy || projectMediaCanHaveAudio(pm)) {
+      const audioProxyStorageKey = pm.audioProxyStorageKey || pm.fileHash || pm.id;
+      try {
+        const hasProxyAudio = await projectFileService.hasProxyAudio(audioProxyStorageKey);
+        updates.hasProxyAudio = hasProxyAudio;
+        updates.audioProxyStatus = hasProxyAudio ? 'ready' : 'none';
+        updates.audioProxyProgress = hasProxyAudio ? 100 : 0;
+        updates.audioProxyStorageKey = audioProxyStorageKey;
+      } catch {
+        updates.hasProxyAudio = false;
+        updates.audioProxyStatus = 'none';
+        updates.audioProxyProgress = 0;
+        updates.audioProxyStorageKey = audioProxyStorageKey;
       }
     }
 

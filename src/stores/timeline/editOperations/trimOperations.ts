@@ -66,11 +66,16 @@ function pushLinkedTrim(
   const linkedClip = clips.find((candidate) => candidate.id === clip.linkedClipId);
   if (!linkedClip) return;
 
+  const inPointDelta = updates.inPoint !== undefined ? updates.inPoint - clip.inPoint : undefined;
+  const outPointDelta = updates.outPoint !== undefined ? updates.outPoint - clip.outPoint : undefined;
+  const startTimeDelta = updates.startTime !== undefined ? updates.startTime - clip.startTime : undefined;
+  const durationDelta = updates.duration !== undefined ? updates.duration - clip.duration : undefined;
+
   updatesByClipId.set(linkedClip.id, {
-    ...(updates.inPoint !== undefined ? { inPoint: updates.inPoint } : {}),
-    ...(updates.outPoint !== undefined ? { outPoint: updates.outPoint } : {}),
-    ...(updates.startTime !== undefined ? { startTime: updates.startTime } : {}),
-    ...(updates.duration !== undefined ? { duration: updates.duration } : {}),
+    ...(inPointDelta !== undefined ? { inPoint: linkedClip.inPoint + inPointDelta } : {}),
+    ...(outPointDelta !== undefined ? { outPoint: linkedClip.outPoint + outPointDelta } : {}),
+    ...(startTimeDelta !== undefined ? { startTime: linkedClip.startTime + startTimeDelta } : {}),
+    ...(durationDelta !== undefined ? { duration: linkedClip.duration + durationDelta } : {}),
     ...(updates.speed !== undefined ? { speed: updates.speed } : {}),
     ...(updates.preservesPitch !== undefined ? { preservesPitch: updates.preservesPitch } : {}),
   });

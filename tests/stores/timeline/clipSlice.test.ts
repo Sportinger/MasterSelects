@@ -28,6 +28,66 @@ describe('clipSlice', () => {
     vi.restoreAllMocks();
   });
 
+  describe('clip linking', () => {
+    it('links exactly two clips with reciprocal linkedClipId values', () => {
+      const first = createMockClip({ id: 'clip-1', trackId: 'video-1' });
+      const second = createMockClip({ id: 'clip-2', trackId: 'audio-1', source: { type: 'audio' } });
+      store = createTestTimelineStore({ clips: [first, second] });
+
+      store.getState().linkClips(['clip-1', 'clip-2']);
+
+      const clips = store.getState().clips;
+      expect(clips.find(c => c.id === 'clip-1')?.linkedClipId).toBe('clip-2');
+      expect(clips.find(c => c.id === 'clip-2')?.linkedClipId).toBe('clip-1');
+      expect([...store.getState().selectedClipIds]).toEqual(['clip-1', 'clip-2']);
+    });
+
+    it('links more than two clips as a manual clip group', () => {
+      const clips = [
+        createMockClip({ id: 'clip-1', trackId: 'video-1' }),
+        createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 2 }),
+        createMockClip({ id: 'clip-3', trackId: 'audio-1', source: { type: 'audio' } }),
+      ];
+      store = createTestTimelineStore({ clips });
+
+      store.getState().linkClips(['clip-1', 'clip-2', 'clip-3']);
+
+      const linkedClips = store.getState().clips;
+      const groupId = linkedClips.find(c => c.id === 'clip-1')?.linkedGroupId;
+      expect(groupId).toMatch(/^clip-link-/);
+      expect(linkedClips.map(c => c.linkedGroupId)).toEqual([groupId, groupId, groupId]);
+    });
+
+    it('unlinks pairs and manual clip groups', () => {
+      const clips = [
+        createMockClip({ id: 'clip-1', trackId: 'video-1' }),
+        createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 2 }),
+        createMockClip({ id: 'clip-3', trackId: 'audio-1', source: { type: 'audio' } }),
+      ];
+      store = createTestTimelineStore({ clips });
+      store.getState().linkClips(['clip-1', 'clip-2', 'clip-3']);
+
+      store.getState().unlinkClips(['clip-1']);
+
+      expect(store.getState().clips.every(c => !c.linkedGroupId && !c.linkedClipId)).toBe(true);
+    });
+
+    it('selects all manually linked clips when one group member is selected', () => {
+      const clips = [
+        createMockClip({ id: 'clip-1', trackId: 'video-1' }),
+        createMockClip({ id: 'clip-2', trackId: 'video-1', startTime: 2 }),
+        createMockClip({ id: 'clip-3', trackId: 'audio-1', source: { type: 'audio' } }),
+      ];
+      store = createTestTimelineStore({ clips });
+      store.getState().linkClips(['clip-1', 'clip-2', 'clip-3']);
+      store.setState({ selectedClipIds: new Set(), primarySelectedClipId: null });
+
+      store.getState().selectClip('clip-2');
+
+      expect([...store.getState().selectedClipIds].sort()).toEqual(['clip-1', 'clip-2', 'clip-3']);
+    });
+  });
+
   // ========== updateClip ==========
 
   describe('updateClip', () => {

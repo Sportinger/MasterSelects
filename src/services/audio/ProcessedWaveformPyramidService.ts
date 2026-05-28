@@ -43,6 +43,7 @@ const PROCESSED_WAVEFORM_DECODER_VERSION = '1.0.0';
 
 export type ProcessedWaveformGenerationPhase =
   | 'preparing'
+  | 'stem-mix'
   | 'trimming'
   | 'edit-stack'
   | 'spectral-layers'

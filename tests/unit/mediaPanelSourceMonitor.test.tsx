@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MediaPanel } from '../../src/components/panels/MediaPanel';
@@ -89,6 +89,9 @@ function createMediaState(): MockMediaState {
     openCompositionTab: vi.fn(),
     updateComposition: vi.fn(),
     generateProxy: vi.fn(),
+    generateAudioProxy: vi.fn(),
+    generateMediaWaveform: vi.fn(),
+    generateMediaSpectrogram: vi.fn(),
     cancelProxyGeneration: vi.fn(),
     pickProxyFolder: vi.fn(),
     showInExplorer: vi.fn(),
@@ -162,5 +165,36 @@ describe('MediaPanel source monitor opening', () => {
     const { container } = render(<MediaPanel />);
 
     expect(container.querySelectorAll('.media-board-node')).toHaveLength(0);
+  });
+
+  it('shows regenerate artifact actions in the media item context menu', () => {
+    mediaState.files[0] = {
+      ...mediaState.files[0],
+      hasAudio: true,
+      audioCodec: 'aac',
+      thumbnailUrl: 'blob:thumb',
+      proxyStatus: 'ready',
+      audioProxyStatus: 'ready',
+      hasProxyAudio: true,
+      waveform: [0.1, 0.4, 0.2],
+      waveformStatus: 'ready',
+      audioAnalysisRefs: {
+        waveformPyramidId: 'waveform-1',
+        spectrogramTileSetIds: ['spectral-1'],
+      },
+    };
+
+    const { container } = render(<MediaPanel />);
+    const node = container.querySelector('.media-board-node');
+
+    expect(node).toBeInstanceOf(HTMLElement);
+    fireEvent.contextMenu(node!, { clientX: 96, clientY: 96 });
+
+    expect(screen.getByText('Regenerate')).toBeTruthy();
+    expect(screen.getAllByText(/^Proxy/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Thumbnails/)).toBeTruthy();
+    expect(screen.getByText(/WAV Audio Proxy/)).toBeTruthy();
+    expect(screen.getByText(/Waveform/)).toBeTruthy();
+    expect(screen.getByText(/Spectral/)).toBeTruthy();
   });
 });

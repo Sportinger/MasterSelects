@@ -27,6 +27,7 @@ export type VFPipelineEventType =
   | 'audio_status'       // status transition (sync/drift/silent/error)
   | 'audio_master_change'// master audio element changed
   | 'audio_rate_change'  // playbackRate changed
+  | 'audio_stem_mixer'   // WebAudio stem buffer mixer lifecycle
   // Health
   | 'vf_stall'           // frame delivery gap > threshold during play
   | 'vf_readystate_drop';// video.readyState < 2 during playback

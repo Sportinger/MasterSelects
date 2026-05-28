@@ -36,6 +36,8 @@ export interface ProjectMediaFile {
 
   // Proxy status
   hasProxy: boolean;
+  hasAudioProxy?: boolean;
+  audioProxyStorageKey?: string;
 
   vectorAnimation?: VectorAnimationMetadata;
   modelSequence?: ModelSequenceData;

@@ -36,7 +36,7 @@ function getPropertyDefaults(property: AnimatableProperty): { min: number; max: 
   if (parseVectorAnimationStateProperty(property)) {
     return { min: 0, max: 1, fallbackPad: 0 };
   }
-  if (property === 'opacity') {
+  if (property === 'opacity' || property.includes('.volume')) {
     return { min: 0, max: 1, fallbackPad: 0.05 };
   }
   const cameraProperty = parseCameraProperty(property);
@@ -115,7 +115,7 @@ function formatValue(value: number, property: AnimatableProperty, stateNames: re
   if (parseVectorAnimationStateProperty(property)) {
     return getVectorAnimationStateLabelAtIndex(stateNames, value) ?? `State ${Math.round(value)}`;
   }
-  if (property === 'opacity') {
+  if (property === 'opacity' || property.includes('.volume')) {
     return `${(value * 100).toFixed(0)}%`;
   }
   const cameraProperty = parseCameraProperty(property);

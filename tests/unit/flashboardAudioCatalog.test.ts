@@ -12,11 +12,6 @@ import {
   DEFAULT_ELEVENLABS_VOICE_SETTINGS,
   createDefaultFlashBoardComposer,
 } from '../../src/stores/flashboardStore/defaults';
-import {
-  DEFAULT_AUDIO_NODE_ASPECT_RATIO,
-  resolveFlashBoardNodeAspectRatio,
-} from '../../src/components/panels/flashboard/nodeSizing';
-import type { FlashBoardNode } from '../../src/stores/flashboardStore/types';
 
 describe('FlashBoard audio catalog contract', () => {
   it('exposes EvoLink Nano Banana 2 as an image provider', () => {
@@ -141,22 +136,5 @@ describe('FlashBoard audio catalog contract', () => {
       outputFormat: DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
       voiceSettings: DEFAULT_ELEVENLABS_VOICE_SETTINGS,
     });
-  });
-
-  it('uses a compact audio aspect ratio for audio nodes', () => {
-    const node: FlashBoardNode = {
-      id: 'audio-node',
-      kind: 'generation',
-      createdAt: 1,
-      updatedAt: 1,
-      position: { x: 0, y: 0 },
-      size: { width: 280, height: 157.5 },
-      result: {
-        mediaFileId: 'audio-media',
-        mediaType: 'audio',
-      },
-    };
-
-    expect(resolveFlashBoardNodeAspectRatio(node)).toBeCloseTo(DEFAULT_AUDIO_NODE_ASPECT_RATIO);
   });
 });

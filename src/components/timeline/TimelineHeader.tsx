@@ -12,6 +12,7 @@ import type { TimelineHeaderProps } from './types';
 import type { AnimatableProperty, AudioEffectParamValue, AudioSendState, ClipMask, ClipTransform, ColorCorrectionState, Keyframe, TimelineClip } from '../../types';
 import {
   PRIMARY_COLOR_PARAM_DEFS,
+  createEffectProperty,
   ensureColorCorrectionState,
   getActiveColorVersion,
   getColorNodeParamValue,
@@ -247,7 +248,7 @@ function getColorPropertyMeta(prop: string, clip?: KeyframeTrackClip | null) {
 }
 
 // Get friendly names for properties
-const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string => {
+const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null, isAudioTrack = false): string => {
   const maskProperty = parseMaskProperty(prop);
   if (maskProperty) {
     const maskName = clip?.masks?.find(mask => mask.id === maskProperty.maskId)?.name ?? 'Mask';
@@ -291,6 +292,10 @@ const getPropertyLabel = (prop: string, clip?: KeyframeTrackClip | null): string
     if (prop === 'position.z') return 'Pos Z';
     if (prop === 'rotation.x') return 'Pitch';
     if (prop === 'rotation.y') return 'Yaw';
+  }
+
+  if (isAudioTrack && prop === 'opacity') {
+    return 'Volume';
   }
 
   const labels: Record<string, string> = {
@@ -598,6 +603,7 @@ function PropertyRow({
   clipId,
   trackId,
   clip,
+  isAudioTrack,
   keyframes,
   playheadPosition,
   getInterpolatedTransform,
@@ -614,6 +620,7 @@ function PropertyRow({
   clipId: string;
   trackId: string;
   clip: KeyframeTrackClip;
+  isAudioTrack: boolean;
   keyframes: Array<{ id: string; time: number; property: string; value: number; easing: string }>;
   playheadPosition: number;
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
@@ -926,7 +933,7 @@ function PropertyRow({
         onDoubleClick={handleDoubleClick}
         title="Double-click to toggle curve editor"
       >
-        <span className="property-label">{getPropertyLabel(prop, clip)}</span>
+        <span className="property-label">{getPropertyLabel(prop, clip, isAudioTrack)}</span>
         <div className="property-keyframe-controls">
           <button
             className={`kf-nav-btn ${prevKeyframe ? '' : 'disabled'}`}
@@ -982,6 +989,7 @@ function PropertyRow({
 function TrackPropertyLabels({
   trackId,
   selectedClip,
+  isAudioTrack,
   clipKeyframes,
   playheadPosition,
   getInterpolatedTransform,
@@ -996,6 +1004,7 @@ function TrackPropertyLabels({
 }: {
   trackId: string;
   selectedClip: KeyframeTrackClip | null;
+  isAudioTrack: boolean;
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   playheadPosition: number;
   getInterpolatedTransform: (clipId: string, clipLocalTime: number) => ClipTransform;
@@ -1013,6 +1022,40 @@ function TrackPropertyLabels({
     () => (clipId ? clipKeyframes.get(clipId) || [] : []),
     [clipId, clipKeyframes],
   );
+
+  useEffect(() => {
+    if (!isAudioTrack || !selectedClip || !keyframes.some((keyframe) => keyframe.property === 'opacity')) {
+      return;
+    }
+
+    const store = useTimelineStore.getState();
+    const currentClip = store.clips.find((clip) => clip.id === selectedClip.id);
+    if (!currentClip) return;
+    const currentTrack = store.tracks.find((track) => track.id === currentClip.trackId);
+    if (currentTrack?.type !== 'audio') return;
+
+    const volumeEffectId = currentClip.effects?.find((effect) => effect.type === 'audio-volume')?.id
+      ?? store.addClipEffect(currentClip.id, 'audio-volume');
+    if (!volumeEffectId) return;
+
+    const volumeProperty = createEffectProperty(volumeEffectId, 'volume');
+    const currentKeyframes = store.clipKeyframes.get(currentClip.id) ?? [];
+    currentKeyframes
+      .filter((keyframe) => keyframe.property === 'opacity')
+      .forEach((keyframe) => {
+        const hasVolumeKeyframeAtTime = currentKeyframes.some((candidate) =>
+          candidate.property === volumeProperty &&
+          Math.abs(candidate.time - keyframe.time) < 0.01
+        );
+
+        if (hasVolumeKeyframeAtTime) {
+          store.removeKeyframe(keyframe.id);
+          return;
+        }
+
+        store.updateKeyframe(keyframe.id, { property: volumeProperty });
+      });
+  }, [isAudioTrack, keyframes, selectedClip]);
 
   // Get keyframes for this clip - use clipKeyframes map to trigger re-render when keyframes change
   const keyframeProperties = useMemo(() => {
@@ -1107,6 +1150,7 @@ function TrackPropertyLabels({
             clipId={selectedClip.id}
             trackId={trackId}
             clip={selectedClip}
+            isAudioTrack={isAudioTrack}
             keyframes={keyframes}
             playheadPosition={playheadPosition}
             getInterpolatedTransform={getInterpolatedTransform}
@@ -1743,6 +1787,7 @@ function TimelineHeaderComponent({
         <TrackPropertyLabels
           trackId={track.id}
           selectedClip={selectedTrackClip || null}
+          isAudioTrack={isAudioTrack}
           clipKeyframes={clipKeyframes}
           playheadPosition={playheadPosition}
           getInterpolatedTransform={getInterpolatedTransform}

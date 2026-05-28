@@ -17,6 +17,7 @@ export const AUDIO_ANALYSIS_ARTIFACT_KINDS = [
   'phase-correlation',
   'transcript-timing',
   'frequency-summary',
+  'stem-separation',
 ] as const;
 
 export type AudioAnalysisArtifactKind = typeof AUDIO_ANALYSIS_ARTIFACT_KINDS[number];

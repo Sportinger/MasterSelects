@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AudioAnalysisCacheKeyInput } from '../../../src/services/audio/audioAnalysisManifestKeys';
-import type { SpectralImageLayer } from '../../../src/types/audio';
+import type { ClipAudioStemState, SpectralImageLayer } from '../../../src/types/audio';
 import {
   createAudioAnalysisManifestRef,
   createAudioAnalysisRefsManifest,
@@ -72,6 +72,58 @@ const BASE_CLIP_STATE = {
       },
     ],
   },
+};
+
+const BASE_STEM_STATE: ClipAudioStemState = {
+  activeSetId: 'stem-set-a',
+  modelId: 'demucs-htdemucs-web',
+  modelVersion: 'test-v1',
+  createdAt: 1_770_000_000_000,
+  sourceFingerprint: 'sha256:source-a',
+  range: { start: 0, end: 6 },
+  sampleRate: 48_000,
+  channelCount: 2,
+  mixMode: 'stems',
+  stems: [
+    {
+      id: 'stem-vocals',
+      kind: 'vocals',
+      label: 'Vocals',
+      analysisArtifactId: 'analysis-vocals',
+      manifestArtifactId: 'manifest-vocals',
+      payloadRef: {
+        artifactId: 'payload-vocals',
+        hash: 'sha256:vocals',
+        size: 1024,
+        mimeType: 'audio/vnd.masterselects.pcm-f32',
+        encoding: 'raw',
+      },
+      enabled: true,
+      gainDb: 0,
+      phaseAligned: true,
+      modelId: 'demucs-htdemucs-web',
+      sourceFingerprint: 'sha256:source-a',
+    },
+    {
+      id: 'stem-drums',
+      kind: 'drums',
+      label: 'Drums',
+      analysisArtifactId: 'analysis-drums',
+      manifestArtifactId: 'manifest-drums',
+      payloadRef: {
+        artifactId: 'payload-drums',
+        hash: 'sha256:drums',
+        size: 1024,
+        mimeType: 'audio/vnd.masterselects.pcm-f32',
+        encoding: 'raw',
+      },
+      enabled: true,
+      gainDb: 0,
+      phaseAligned: true,
+      modelId: 'demucs-htdemucs-web',
+      sourceFingerprint: 'sha256:source-a',
+    },
+  ],
 };
 
 describe('audio analysis identity', () => {
@@ -228,6 +280,72 @@ describe('audio analysis identity', () => {
     expect(createClipAudioStateHash({
       ...BASE_CLIP_STATE,
       audioState: { ...BASE_CLIP_STATE.audioState, muted: true },
+    })).not.toBe(baseline);
+  });
+
+  it('includes audible stem separation state in processed identity', () => {
+    const withStems = {
+      ...BASE_CLIP_STATE,
+      audioState: {
+        ...BASE_CLIP_STATE.audioState,
+        stemSeparation: BASE_STEM_STATE,
+      },
+    };
+    const baseline = createClipAudioStateHash(withStems);
+
+    expect(createClipAudioStateHash({
+      ...withStems,
+      audioState: {
+        ...withStems.audioState,
+        stemSeparation: {
+          ...BASE_STEM_STATE,
+          soloStemId: 'stem-vocals',
+        },
+      },
+    })).not.toBe(baseline);
+
+    expect(createClipAudioStateHash({
+      ...withStems,
+      audioState: {
+        ...withStems.audioState,
+        stemSeparation: {
+          ...BASE_STEM_STATE,
+          stems: BASE_STEM_STATE.stems.map(stem => stem.id === 'stem-drums'
+            ? { ...stem, gainDb: -6, enabled: false }
+            : stem),
+        },
+      },
+    })).not.toBe(baseline);
+
+    expect(createClipAudioStateHash({
+      ...withStems,
+      audioState: {
+        ...withStems.audioState,
+        stemSeparation: {
+          ...BASE_STEM_STATE,
+          stems: BASE_STEM_STATE.stems.map(stem => stem.id === 'stem-vocals'
+            ? {
+                ...stem,
+                payloadRef: {
+                  ...stem.payloadRef,
+                  artifactId: 'payload-vocals-new',
+                  hash: 'sha256:vocals-new',
+                },
+              }
+            : stem),
+        },
+      },
+    })).not.toBe(baseline);
+
+    expect(createClipAudioStateHash({
+      ...withStems,
+      audioState: {
+        ...withStems.audioState,
+        stemSeparation: {
+          ...BASE_STEM_STATE,
+          mixMode: 'original',
+        },
+      },
     })).not.toBe(baseline);
   });
 

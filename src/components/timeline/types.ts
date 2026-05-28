@@ -28,10 +28,11 @@ export interface ClipDragState {
   gestureStartX?: number;   // Mouse X at gesture start for body tools like Slip/Slide
   currentX: number;         // Current mouse X position
   currentTrackId: string;
-  snappedTime: number | null;  // Snapped position (if snapping) - used for clip positioning
+  snappedTime: number | null;  // Preview/commit position with snapping and resistance applied
   snapIndicatorTime: number | null; // The actual edge time where snap occurs - used for snap line indicator
   isSnapping: boolean;         // Whether currently snapping to an edge
   trackChangeGuideTime: number | null; // Guide line at original position when dragging across tracks
+  newTrackType?: 'video' | 'audio' | null; // Ghost target when dragging beyond video/audio track stacks
   altKeyPressed: boolean;      // If true, skip linked group movement (independent drag)
   forcingOverlap: boolean;     // If true, user has pushed through resistance and is forcing overlap
   dragStartTime: number;       // Timestamp when drag started (for track-change delay)
@@ -306,6 +307,8 @@ export interface TimelineClipProps {
   proxyEnabled: boolean;
   proxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
   proxyProgress: number;
+  audioProxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
+  audioProxyProgress: number;
   showTranscriptMarkers: boolean;
   snappingEnabled: boolean;
   onMouseDown: (e: React.MouseEvent) => void;

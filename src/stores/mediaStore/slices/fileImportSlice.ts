@@ -31,6 +31,11 @@ import {
 } from '../../../utils/modelSequence';
 import { getGaussianSplatContainerLabelFromFileName } from '../helpers/gaussianSplatStats';
 import { startMediaFileWaveformGeneration } from '../helpers/mediaWaveformHelpers';
+import {
+  ensureAudioProxyForMediaFile,
+  shouldGenerateAudioProxy,
+  type AudioProxyGenerationUpdate,
+} from '../../../services/audio/AudioProxyService';
 
 const log = Logger.create('Import');
 const universalImportOrchestrator = createDefaultUniversalImportOrchestrator();
@@ -265,6 +270,54 @@ function updateMediaFileWaveform(
   }));
 }
 
+function updateMediaFileAudioProxy(
+  set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
+  id: string,
+  update: AudioProxyGenerationUpdate,
+): void {
+  set((state) => ({
+    files: state.files.map((file) => {
+      if (file.id !== id) return file;
+
+      const nextUrl = update.url ?? file.audioProxyUrl;
+      if (
+        update.url &&
+        file.audioProxyUrl &&
+        file.audioProxyUrl !== update.url &&
+        file.audioProxyUrl.startsWith('blob:')
+      ) {
+        URL.revokeObjectURL(file.audioProxyUrl);
+      }
+
+      return {
+        ...file,
+        audioProxyStatus: update.status,
+        audioProxyProgress: update.progress,
+        audioProxyStorageKey: update.storageKey,
+        audioProxyUrl: nextUrl,
+        hasProxyAudio: update.status === 'ready' ? true : file.hasProxyAudio,
+      };
+    }),
+  }));
+}
+
+function startMediaFileAudioProxyGeneration(
+  set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
+  get: () => MediaState,
+  id: string,
+): void {
+  const mediaFile = get().files.find((file) => file.id === id);
+  if (!mediaFile || !shouldGenerateAudioProxy(mediaFile)) return;
+
+  void ensureAudioProxyForMediaFile(mediaFile, {
+    onUpdate: (update) => {
+      updateMediaFileAudioProxy(set, id, update);
+    },
+  }).catch((error) => {
+    log.warn('Audio proxy generation failed', { mediaFileId: id, error });
+  });
+}
+
 function finalizeImportedMediaFile(
   set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
   get: () => MediaState,
@@ -278,6 +331,7 @@ function finalizeImportedMediaFile(
     (mediaFileId, updates) => updateMediaFileWaveform(set, mediaFileId, updates),
     (mediaFileId) => get().files.find((file) => file.id === mediaFileId),
   );
+  startMediaFileAudioProxyGeneration(set, get, id);
 }
 
 function splitModelSequenceEntries(entries: ResolvedLegacyImportEntry[]): {
@@ -328,6 +382,7 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
     );
     if (existing) {
       log.info(`Skipping duplicate: ${file.name} (${file.size} bytes) - already exists as ${existing.id}`);
+      startMediaFileAudioProxyGeneration(set, get, existing.id);
       return existing;
     }
 

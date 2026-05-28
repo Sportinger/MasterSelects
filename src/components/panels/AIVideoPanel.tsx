@@ -1,12 +1,7 @@
-// AI Generative panel - AI generation via Kie.ai, EvoLink, MasterSelects Cloud, ElevenLabs, and Suno.
-// Classic mode supports video. Board mode is the shared video/image/audio workspace.
+// AI Generative panel - video generation via Kie.ai and MasterSelects Cloud.
 
-import { Component, type ReactNode, useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Logger } from '../../services/logger';
-
-const FlashBoardWorkspace = lazy(() =>
-  import('./flashboard/FlashBoardWorkspace').then((m) => ({ default: m.FlashBoardWorkspace }))
-);
 
 const log = Logger.create('AIVideoPanel');
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -26,13 +21,7 @@ import {
   getKieAiProviders,
   getKieAiProvider,
 } from '../../services/kieAiService';
-import {
-  EVOLINK_NANO_BANANA_2_MODEL,
-  EVOLINK_NANO_BANANA_2_PROVIDER_ID,
-  evolinkService,
-} from '../../services/evolinkService';
 import { getFlashBoardPriceEstimate } from '../../services/flashboard/FlashBoardPricing';
-import { DEFAULT_ELEVENLABS_MODEL_ID } from '../../stores/flashboardStore/defaults';
 import { captureCurrentPreviewFrameDataUrl } from '../../services/previewFrameCapture';
 import { ImageCropper, type CropData } from './ImageCropper';
 import { exportCroppedImage } from './imageCropperUtils';
@@ -40,60 +29,8 @@ import './AIVideoPanel.css';
 
 type GenerationType = 'text-to-video' | 'image-to-video';
 type PanelTab = 'generate' | 'history';
-const AI_GENERATIVE_BOARD_SERVICES: Array<'cloud' | 'kieai' | 'evolink' | 'elevenlabs' | 'suno'> = ['cloud', 'kieai', 'evolink', 'elevenlabs', 'suno'];
 const KIEAI_FIRST_LAST_FRAME_PROVIDER_IDS = new Set(['kling', 'kling-3.0', 'bytedance/seedance-2', 'bytedance/seedance-2-fast']);
 const KIEAI_GENERATED_AUDIO_PROVIDER_IDS = new Set(['kling', 'kling-3.0', 'bytedance/seedance-2', 'bytedance/seedance-2-fast']);
-
-interface FlashBoardErrorBoundaryProps {
-  children: ReactNode;
-  onRetry: () => void;
-  onUseClassic: () => void;
-}
-
-interface FlashBoardErrorBoundaryState {
-  error: Error | null;
-}
-
-class FlashBoardErrorBoundary extends Component<FlashBoardErrorBoundaryProps, FlashBoardErrorBoundaryState> {
-  state: FlashBoardErrorBoundaryState = { error: null };
-
-  static getDerivedStateFromError(error: Error): FlashBoardErrorBoundaryState {
-    return { error };
-  }
-
-  componentDidCatch(error: Error) {
-    log.error('FlashBoard workspace failed to load', error);
-  }
-
-  render() {
-    if (this.state.error) {
-      const isDynamicImportError = this.state.error.message.includes('Failed to fetch dynamically imported module');
-      const message = isDynamicImportError
-        ? 'Das ist meist ein Vite-/Browser-Cachefehler nach HMR. Board neu laden oder auf Classic wechseln.'
-        : this.state.error.message;
-
-      return (
-        <div className="ai-video-error ai-video-error-panel">
-          <span className="error-icon">!</span>
-          <div className="ai-video-error-copy">
-            <strong>FlashBoard konnte nicht geladen werden.</strong>
-            <span>{message}</span>
-          </div>
-          <div className="ai-video-error-actions">
-            <button className="btn btn-sm" onClick={this.props.onRetry}>
-              Retry Board
-            </button>
-            <button className="btn btn-sm" onClick={this.props.onUseClassic}>
-              Use Classic
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
 
 interface GenerationJob {
   id: string;
@@ -204,9 +141,6 @@ export function AIVideoPanel() {
   const { tracks, addClip, addTrack } = useTimelineStore();
   const hasHostedCloudAccess = Boolean(accountSession?.authenticated);
 
-  const [workspaceMode, setWorkspaceMode] = useState<'classic' | 'board'>('board');
-  const [boardRetryKey, setBoardRetryKey] = useState(0);
-
   // Panel tab state
   const [activeTab, setActiveTab] = useState<PanelTab>('generate');
 
@@ -219,29 +153,6 @@ export function AIVideoPanel() {
   // Get current provider config
   const currentProvider = getKieAiProvider(selectedProvider) || providers[0];
   const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && apiKeys.kieai.trim());
-  const useEvolinkKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.evolink && apiKeys.evolink.trim());
-  const useElevenLabsKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.elevenlabs && apiKeys.elevenlabs.trim());
-  const boardService = useKieAiKeyByDefault
-    ? 'kieai'
-    : useEvolinkKeyByDefault
-      ? 'evolink'
-      : useElevenLabsKeyByDefault
-        ? 'elevenlabs'
-        : 'cloud';
-  const boardProviderId =
-    boardService === 'cloud'
-      ? 'cloud-kling'
-      : boardService === 'evolink'
-      ? EVOLINK_NANO_BANANA_2_PROVIDER_ID
-      : boardService === 'elevenlabs'
-        ? 'elevenlabs-tts'
-        : selectedProvider;
-  const boardVersion =
-    boardService === 'evolink'
-      ? EVOLINK_NANO_BANANA_2_MODEL
-      : boardService === 'elevenlabs'
-        ? DEFAULT_ELEVENLABS_MODEL_ID
-        : selectedVersion;
 
   // Generation type (default to image-to-video)
   const [generationType, setGenerationType] = useState<GenerationType>('image-to-video');
@@ -283,18 +194,15 @@ export function AIVideoPanel() {
 
   // Check if API credentials are available for the selected service
   const hasClassicGenerationAccess = Boolean(useKieAiKeyByDefault || hasHostedCloudAccess);
-  const hasGenerationAccess = Boolean(useKieAiKeyByDefault || useEvolinkKeyByDefault || useElevenLabsKeyByDefault || hasHostedCloudAccess);
 
   // Fetch account balance
   const fetchAccountBalance = useCallback(async () => {
     setIsLoadingBalance(true);
     try {
-      let service: typeof cloudAiService | typeof kieAiService | typeof evolinkService | null = null;
+      let service: typeof cloudAiService | typeof kieAiService | null = null;
 
       if (useKieAiKeyByDefault) {
         service = kieAiService;
-      } else if (useEvolinkKeyByDefault) {
-        service = evolinkService;
       } else if (hasHostedCloudAccess) {
         service = cloudAiService;
       }
@@ -311,18 +219,15 @@ export function AIVideoPanel() {
     } finally {
       setIsLoadingBalance(false);
     }
-  }, [hasHostedCloudAccess, useEvolinkKeyByDefault, useKieAiKeyByDefault]);
+  }, [hasHostedCloudAccess, useKieAiKeyByDefault]);
 
   // Set API key when it changes and fetch balance
   useEffect(() => {
     if (useKieAiKeyByDefault) {
       kieAiService.setApiKey(apiKeys.kieai);
     }
-    if (useEvolinkKeyByDefault) {
-      evolinkService.setApiKey(apiKeys.evolink);
-    }
     fetchAccountBalance();
-  }, [apiKeys.evolink, apiKeys.kieai, fetchAccountBalance, useEvolinkKeyByDefault, useKieAiKeyByDefault]);
+  }, [apiKeys.kieai, fetchAccountBalance, useKieAiKeyByDefault]);
 
   // Update version when provider changes
   useEffect(() => {
@@ -344,15 +249,6 @@ export function AIVideoPanel() {
   useEffect(() => {
     saveHistory(history);
   }, [history]);
-
-  const handleRetryBoard = useCallback(() => {
-    setBoardRetryKey((current) => current + 1);
-  }, []);
-
-  const handleUseClassicMode = useCallback(() => {
-    setWorkspaceMode('classic');
-    setBoardRetryKey((current) => current + 1);
-  }, []);
 
   // Handle file drop for start image
   const handleStartDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -681,25 +577,26 @@ export function AIVideoPanel() {
     await importVideoToProject({ ...job });
   }, [importVideoToProject]);
 
+  const pricingService = useKieAiKeyByDefault ? 'kieai' : 'cloud';
   const currentPriceEstimate = getFlashBoardPriceEstimate({
-    service: boardService,
-    providerId: boardProviderId,
-    outputType: boardService === 'elevenlabs' ? 'audio' : boardService === 'evolink' ? 'image' : 'video',
+    service: pricingService,
+    providerId: selectedProvider,
+    outputType: 'video',
     mode,
     duration,
     generateAudio,
   });
 
   return (
-    <div className={`ai-video-panel ${!hasGenerationAccess ? 'no-api-key' : ''}`}>
+    <div className={`ai-video-panel ${!hasClassicGenerationAccess ? 'no-api-key' : ''}`}>
       {/* Access Overlay */}
-      {!hasGenerationAccess && (
+      {!hasClassicGenerationAccess && (
         <div className="ai-video-overlay">
           <div className="ai-video-overlay-content">
             <span className="no-key-icon">🎬</span>
             <p>Sign in or add an API key to use AI Generative</p>
             <span className="no-key-hint">
-              Board mode supports Kie.ai, EvoLink, MasterSelects Cloud, ElevenLabs speech, and Suno music generation.
+              Video generation supports Kie.ai and MasterSelects Cloud here. Image and audio generation live in the Media panel.
             </span>
             <div className="no-key-actions">
               <button className="btn-settings" onClick={openAuthDialog}>
@@ -728,66 +625,20 @@ export function AIVideoPanel() {
             History ({history.length})
           </button>
         </div>
-        {workspaceMode === 'classic' && (
-          <div className="service-provider-selects">
-            <select
-              className="provider-select"
-              value={selectedProvider}
-              onChange={(e) => setSelectedProvider(e.target.value)}
-              disabled={isGenerating}
-            >
-              {providers.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div className="ai-video-mode-toggle">
-          <button
-            className={`ai-video-mode-btn ${workspaceMode === 'classic' ? 'active' : ''}`}
-            onClick={() => setWorkspaceMode('classic')}
+        <div className="service-provider-selects">
+          <select
+            className="provider-select"
+            value={selectedProvider}
+            onChange={(e) => setSelectedProvider(e.target.value)}
+            disabled={isGenerating}
           >
-            Classic
-          </button>
-          <button
-            className={`ai-video-mode-btn ${workspaceMode === 'board' ? 'active' : ''}`}
-            onClick={() => setWorkspaceMode('board')}
-          >
-            Board
-          </button>
+            {providers.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {workspaceMode === 'board' ? (
-        <FlashBoardErrorBoundary
-          key={boardRetryKey}
-          onRetry={handleRetryBoard}
-          onUseClassic={handleUseClassicMode}
-        >
-          <Suspense
-            fallback={
-              <div
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                Loading FlashBoard...
-              </div>
-            }
-          >
-            <FlashBoardWorkspace
-              initialProviderId={boardProviderId}
-              initialService={boardService}
-              initialVersion={boardVersion}
-              allowedServices={AI_GENERATIVE_BOARD_SERVICES}
-            />
-          </Suspense>
-        </FlashBoardErrorBoundary>
-      ) : (
       <>
       {/* Jobs Queue - shown at top when not empty */}
       {jobs.length > 0 && (
@@ -857,7 +708,7 @@ export function AIVideoPanel() {
       )}
 
       {/* Balance bar + Generate button - always visible at top */}
-      {workspaceMode === 'classic' && hasClassicGenerationAccess && (
+      {hasClassicGenerationAccess && (
         <div className="balance-bar">
           <div className="credit-balance">
             {accountInfo ? (
@@ -1154,7 +1005,6 @@ export function AIVideoPanel() {
         </div>
       )}
       </>
-      )}
     </div>
   );
 }

@@ -32,6 +32,7 @@ import { createColorCorrectionSlice } from '../../src/stores/timeline/colorCorre
 import { createLinkedGroupSlice } from '../../src/stores/timeline/linkedGroupSlice';
 import { createDownloadClipSlice } from '../../src/stores/timeline/downloadClipSlice';
 import { createAudioEditSlice } from '../../src/stores/timeline/audioEditSlice';
+import { createStemSeparationSlice } from '../../src/stores/timeline/stemSeparationSlice';
 import { createVideoBakeSlice } from '../../src/stores/timeline/videoBakeSlice';
 import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
 import { createTimelineEditOperationSlice } from '../../src/stores/timeline/editOperations';
@@ -97,6 +98,11 @@ function getInitialState(): Partial<TimelineStore> {
     videoBakeRegionSelection: null,
     videoBakeRegions: [],
     audioRegionClipboard: null,
+    audioRegionGainPreview: null,
+    audioSpectralRegionSelection: null,
+    showAudioRegionEditMarkers: true,
+    clipStemSeparationJobs: {},
+    expandedClipStemLayerIds: new Set<string>(),
     runtimeAudioMeters: { trackMeters: {} },
     showTranscriptMarkers: false,
     // Clip animation / slot grid
@@ -144,6 +150,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const linkedGroupActions = createLinkedGroupSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
     const audioEditActions = createAudioEditSlice(set, get);
+    const stemSeparationActions = createStemSeparationSlice(set, get);
     const videoBakeActions = createVideoBakeSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
     const timelineEditOperationActions = createTimelineEditOperationSlice(set, get);
@@ -385,6 +392,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...linkedGroupActions,
       ...downloadClipActions,
       ...audioEditActions,
+      ...stemSeparationActions,
       ...videoBakeActions,
       ...nodeGraphActions,
       ...positioningUtils,

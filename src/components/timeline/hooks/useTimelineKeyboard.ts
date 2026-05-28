@@ -18,6 +18,54 @@ const GROUP_SHORTCUT_ACTIONS = new Set([
   'tool.navigationGroup',
 ]);
 
+const BLURRABLE_SHORTCUT_CONTROL_ROLES = new Set([
+  'button',
+  'checkbox',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'option',
+  'radio',
+  'switch',
+  'tab',
+]);
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLInputElement &&
+      target.type !== 'range' &&
+      target.type !== 'checkbox' &&
+      target.type !== 'radio') ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
+function blurFocusedShortcutControl(target: EventTarget | null): void {
+  const activeElement = document.activeElement;
+  const element =
+    activeElement instanceof HTMLElement
+      ? activeElement
+      : target instanceof HTMLElement
+        ? target
+        : null;
+
+  if (!element || isTextEntryTarget(element)) {
+    return;
+  }
+
+  const role = element.getAttribute('role');
+  const isShortcutControl =
+    element instanceof HTMLButtonElement ||
+    element instanceof HTMLSelectElement ||
+    element instanceof HTMLInputElement ||
+    (role !== null && BLURRABLE_SHORTCUT_CONTROL_ROLES.has(role));
+
+  if (isShortcutControl) {
+    element.blur();
+  }
+}
+
 interface UseTimelineKeyboardProps {
   // Playback
   isPlaying: boolean;
@@ -99,22 +147,13 @@ export function useTimelineKeyboard({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if not typing in a text input
-      const isTextInput =
-        e.target instanceof HTMLTextAreaElement ||
-        (e.target instanceof HTMLInputElement &&
-          e.target.type !== 'range' &&
-          e.target.type !== 'checkbox' &&
-          e.target.type !== 'radio');
-
-      if (isTextInput) {
+      if (isTextEntryTarget(e.target)) {
         return;
       }
 
-      // Play/Pause (also blur any focused slider/checkbox)
+      // Play/Pause (also blur any focused control that was last clicked)
       if (registry.matches('playback.playPause', e)) {
-        if (e.target instanceof HTMLInputElement) {
-          e.target.blur();
-        }
+        blurFocusedShortcutControl(e.target);
         e.preventDefault();
         if (isPlaying) {
           pause();
@@ -231,11 +270,12 @@ export function useTimelineKeyboard({
         return;
       }
 
-      // Cut/Razor group cycling. The legacy toggleCutTool API stays available for
-      // older callers, but the keyboard shortcut follows the grouped-tool model.
+      // Legacy cut/razor shortcut. Keep old custom bindings working, but make
+      // the shortcut land on the single Blade/Razor tool instead of cycling to
+      // Blade All Tracks.
       if (registry.matches('tool.cutToggle', e)) {
         e.preventDefault();
-        useTimelineStore.getState().cycleTimelineToolGroup('cut', e.shiftKey ? -1 : 1);
+        useTimelineStore.getState().setActiveTimelineTool('blade');
         return;
       }
 

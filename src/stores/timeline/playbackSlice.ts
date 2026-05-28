@@ -9,6 +9,7 @@ import { playheadState, sanitizePlayheadPosition } from '../../services/layerBui
 import { resolvePlaybackStartPosition } from './playbackRange';
 import { prewarmProxyFramesForTimelinePosition } from '../../services/proxyFramePrewarm';
 import { persistAudioLayerAdvancedMode } from './viewPreferences';
+import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
 
 function createPlaybackWarmupRequestId(): string {
   return `playback-warmup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -188,12 +189,14 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   },
 
   pause: () => {
+    stopTimelineAudioPlayback();
     // Reset playback speed to normal when pausing
     // So that Space (play/pause toggle) plays forward again
     set({ isPlaying: false, playbackSpeed: 1, playbackWarmup: null });
   },
 
   stop: () => {
+    stopTimelineAudioPlayback();
     set({ isPlaying: false, playheadPosition: 0, playbackWarmup: null });
   },
 

@@ -416,6 +416,10 @@
   transition: none !important;
 }
 
+.timeline-container.is-split-dragging.is-split-drag-smoothing .timeline-track-section {
+  transition: height 200ms cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
 .timeline-section-viewport {
   flex: 1;
   min-width: 0;

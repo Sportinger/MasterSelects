@@ -90,6 +90,10 @@ interface ScrubProcessorNode {
   gainReductionDb?: number;
 }
 
+function hasUsableAudioProxy(mediaFile: { hasProxyAudio?: boolean; audioProxyStatus?: string } | undefined): boolean {
+  return mediaFile?.hasProxyAudio === true || mediaFile?.audioProxyStatus === 'ready';
+}
+
 interface ScrubGrain {
   source: AudioBufferSourceNode;
   gain: GainNode;
@@ -639,6 +643,7 @@ class ProxyFrameCache {
   // Audio proxy cache
   private audioCache: Map<string, HTMLAudioElement> = new Map();
   private audioLoadingPromises: Map<string, Promise<HTMLAudioElement | null>> = new Map();
+  private ownedAudioUrls = new Set<string>();
 
   // Audio buffer cache for instant scrubbing (Web Audio API)
   private audioBufferCache: Map<string, AudioBuffer> = new Map();
@@ -1057,17 +1062,22 @@ class ProxyFrameCache {
       // Get storage key (prefer fileHash for deduplication)
       const mediaStore = useMediaStore.getState();
       const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
-      const storageKey = mediaFile?.fileHash || mediaFileId;
+      const storageKey = mediaFile?.audioProxyStorageKey || mediaFile?.fileHash || mediaFileId;
 
       // Load audio file from project folder
-      const audioFile = await projectFileService.getProxyAudio(storageKey);
-      if (!audioFile) {
-        return null;
+      let audioSrc = mediaFile?.audioProxyUrl;
+      if (!audioSrc) {
+        const audioFile = await projectFileService.getProxyAudio(storageKey);
+        if (!audioFile) {
+          return null;
+        }
+        audioSrc = URL.createObjectURL(audioFile);
+        this.ownedAudioUrls.add(audioSrc);
       }
 
       // Create audio element with object URL
       const audio = new Audio();
-      audio.src = URL.createObjectURL(audioFile);
+      audio.src = audioSrc;
       audio.preload = 'auto';
 
       // Wait for audio to be ready
@@ -1174,8 +1184,11 @@ class ProxyFrameCache {
     const cached = this.audioBufferCache.get(mediaFileId);
     if (cached) return cached;
 
+    const mediaStore = useMediaStore.getState();
+    const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
+
     // Skip files that have no audio (failed decoding = audio doesn't exist)
-    if (this.audioBufferFailed.has(mediaFileId)) {
+    if (this.audioBufferFailed.has(mediaFileId) && !hasUsableAudioProxy(mediaFile)) {
       return null;
     }
 
@@ -1193,20 +1206,31 @@ class ProxyFrameCache {
     this.audioBufferLoading.add(mediaFileId);
 
     try {
-      const mediaStore = useMediaStore.getState();
-      const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
-      const storageKey = mediaFile?.fileHash || mediaFileId;
+      const storageKey = mediaFile?.audioProxyStorageKey || mediaFile?.fileHash || mediaFileId;
 
       let arrayBuffer: ArrayBuffer | null = null;
 
-      // Try 1: Proxy audio file (fastest, smallest)
-      const audioFile = await projectFileService.getProxyAudio(storageKey);
-      if (audioFile) {
-        log.debug(`Loading from proxy audio: ${mediaFileId}`);
-        arrayBuffer = await audioFile.arrayBuffer();
+      // Try 1: Session audio proxy URL (used before a project exists)
+      if (mediaFile?.audioProxyUrl) {
+        log.debug(`Loading from session audio proxy: ${mediaFileId}`);
+        try {
+          const response = await fetch(mediaFile.audioProxyUrl);
+          arrayBuffer = await response.arrayBuffer();
+        } catch (e) {
+          log.warn('Failed to fetch session audio proxy URL', e);
+        }
       }
 
-      // Try 2: Project-local RAW media file
+      // Try 2: Project audio proxy file (PCM WAV for predictable scrubbing)
+      if (!arrayBuffer) {
+        const audioFile = await projectFileService.getProxyAudio(storageKey);
+        if (audioFile) {
+          log.debug(`Loading from proxy audio: ${mediaFileId}`);
+          arrayBuffer = await audioFile.arrayBuffer();
+        }
+      }
+
+      // Try 3: Project-local RAW media file
       if (!arrayBuffer) {
         const projectHandle = await getStoredProjectFileHandle(mediaFileId);
         if (projectHandle) {
@@ -1240,7 +1264,7 @@ class ProxyFrameCache {
         }
       }
 
-      // Try 3: Original video file URL (extract audio from video)
+      // Try 4: Original video file URL (extract audio from video)
       if (!arrayBuffer && mediaFile?.url) {
         log.debug(`Loading from video URL: ${mediaFileId}`);
         try {
@@ -1251,7 +1275,7 @@ class ProxyFrameCache {
         }
       }
 
-      // Try 4: File handle (if available)
+      // Try 5: File handle (if available)
       if (!arrayBuffer) {
         const fileHandle = fileSystemService.getFileHandle(mediaFileId);
         if (fileHandle) {
@@ -1265,7 +1289,7 @@ class ProxyFrameCache {
         }
       }
 
-      // Try 5: Direct File object from media store (e.g. YouTube downloads)
+      // Try 6: Direct File object from media store (e.g. YouTube downloads)
       if (!arrayBuffer && mediaFile?.file) {
         log.debug(`Loading from File object: ${mediaFileId}`);
         try {
@@ -1275,7 +1299,7 @@ class ProxyFrameCache {
         }
       }
 
-      // Try 6: Video element's current source URL (guaranteed valid if video is playing)
+      // Try 7: Video element's current source URL (guaranteed valid if video is playing)
       if (!arrayBuffer && videoElementSrc) {
         log.debug(`Loading from video element src: ${mediaFileId}`);
         try {
@@ -1300,6 +1324,7 @@ class ProxyFrameCache {
 
       // Cache it
       this.audioBufferCache.set(mediaFileId, audioBuffer);
+      this.audioBufferFailed.delete(mediaFileId);
       this.audioBufferLoading.delete(mediaFileId);
       this.audioBufferRetryTime.delete(mediaFileId);
       log.debug(`Decoded ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch`);
@@ -1980,11 +2005,16 @@ class ProxyFrameCache {
     const audio = this.audioCache.get(mediaFileId);
     if (audio) {
       audio.pause();
-      URL.revokeObjectURL(audio.src);
+      if (this.ownedAudioUrls.has(audio.src)) {
+        URL.revokeObjectURL(audio.src);
+        this.ownedAudioUrls.delete(audio.src);
+      }
       this.audioCache.delete(mediaFileId);
     }
 
     this.audioBufferCache.delete(mediaFileId);
+    this.audioBufferFailed.delete(mediaFileId);
+    this.audioBufferRetryTime.delete(mediaFileId);
   }
 
   // Clear entire cache
@@ -1995,9 +2025,12 @@ class ProxyFrameCache {
     // Clear audio cache
     for (const [, audio] of this.audioCache) {
       audio.pause();
-      URL.revokeObjectURL(audio.src);
+      if (this.ownedAudioUrls.has(audio.src)) {
+        URL.revokeObjectURL(audio.src);
+      }
     }
     this.audioCache.clear();
+    this.ownedAudioUrls.clear();
 
     this.audioBufferCache.clear();
 

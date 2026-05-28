@@ -425,6 +425,16 @@
   position: relative;
 }
 
+.track-lane.clip-drag-new-track-preview {
+  background: rgba(37, 99, 235, 0.15);
+  border-color: rgba(37, 99, 235, 0.8);
+}
+
+.track-lane.clip-drag-new-track-preview.audio {
+  background: rgba(22, 163, 74, 0.15);
+  border-color: rgba(22, 163, 74, 0.8);
+}
+
 /* New track drop zones - appear when dragging media */
 .new-track-drop-zone {
   height: 36px;

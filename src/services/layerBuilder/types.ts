@@ -96,7 +96,7 @@ export interface AudioSyncTarget {
   absSpeed: number;
   isMuted: boolean;
   canBeMaster: boolean;
-  type: 'audioTrack' | 'audioProxy' | 'videoElement' | 'mixdown';
+  type: 'audioTrack' | 'stemAudioTrack' | 'audioProxy' | 'videoElement' | 'mixdown';
   volume?: number; // 0-2, from audio-volume effect (default 1)
   eqGains?: number[]; // 10-band EQ gains in dB, from audio-eq effect
   pan?: number; // Stereo pan -1..1, from track audio graph

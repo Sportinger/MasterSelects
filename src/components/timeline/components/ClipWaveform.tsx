@@ -3,12 +3,13 @@
 
 import { memo, useRef, useEffect } from 'react';
 import type { TimelineAudioDisplayMode } from '../../../stores/timeline/types';
-import type { ClipAudioEditOperation, ClipAudioRegionGainPreview } from '../../../types';
+import type { AnimatableProperty, ClipAudioEditOperation, ClipAudioRegionGainPreview, EasingType, Keyframe } from '../../../types';
 import {
   doesRegionGainPreviewMatchOperation,
   getAudioEditOperationPreviewVolumeMultiplier,
   getRegionGainPreviewVolumeMultiplier,
 } from '../../../services/audio/clipAudioEditPreview';
+import { interpolateKeyframeProgress } from '../../../utils/keyframeInterpolation';
 import {
   buildWaveformLod,
   normalizeWaveformColumnsForDisplay,
@@ -18,6 +19,16 @@ import {
 } from '../utils/waveformLod';
 
 const MAX_RENDERED_WAVEFORM_CHANNELS = 8;
+const WAVEFORM_AUTOMATION_PROPERTY = 'opacity' as AnimatableProperty;
+
+type WaveformAutomationKeyframe = {
+  id?: string;
+  time: number;
+  value: number;
+  easing?: string;
+  handleIn?: { x: number; y: number };
+  handleOut?: { x: number; y: number };
+};
 
 function drawCenterLine(ctx: CanvasRenderingContext2D, width: number, height: number): void {
   const midY = height / 2;
@@ -335,6 +346,83 @@ function applyAudioEditPreviewToColumns(
   });
 }
 
+function toInterpolationKeyframe(keyframe: WaveformAutomationKeyframe, fallbackId: string): Keyframe {
+  return {
+    id: keyframe.id ?? fallbackId,
+    clipId: '',
+    time: keyframe.time,
+    property: WAVEFORM_AUTOMATION_PROPERTY,
+    value: Math.max(0, Math.min(4, keyframe.value)),
+    easing: (keyframe.easing ?? 'linear') as EasingType,
+    handleIn: keyframe.handleIn,
+    handleOut: keyframe.handleOut,
+  };
+}
+
+function sampleAutomationMultiplier(
+  keyframes: readonly WaveformAutomationKeyframe[],
+  clipLocalTime: number,
+): number {
+  if (keyframes.length === 0) return 1;
+
+  if (keyframes.length === 1 || clipLocalTime <= keyframes[0].time) {
+    return Math.max(0, Math.min(4, keyframes[0].value));
+  }
+
+  const last = keyframes[keyframes.length - 1];
+  if (clipLocalTime >= last.time) {
+    return Math.max(0, Math.min(4, last.value));
+  }
+
+  let previous = keyframes[0];
+  let next = keyframes[1];
+  for (let index = 1; index < keyframes.length; index += 1) {
+    if (keyframes[index].time >= clipLocalTime) {
+      previous = keyframes[index - 1];
+      next = keyframes[index];
+      break;
+    }
+  }
+
+  const duration = Math.max(0.0001, next.time - previous.time);
+  const progress = Math.max(0, Math.min(1, (clipLocalTime - previous.time) / duration));
+  const easedProgress = interpolateKeyframeProgress(
+    toInterpolationKeyframe(previous, 'automation-prev'),
+    toInterpolationKeyframe(next, 'automation-next'),
+    progress,
+  );
+
+  return Math.max(0, Math.min(4, previous.value + (next.value - previous.value) * easedProgress));
+}
+
+function applyVolumeAutomationToColumns(
+  columns: readonly WaveformColumn[],
+  options: {
+    clipStart: number;
+    clipEnd: number;
+    keyframes?: readonly WaveformAutomationKeyframe[];
+  },
+): WaveformColumn[] {
+  const keyframes = options.keyframes ?? [];
+  if (keyframes.length === 0) {
+    return columns.map(column => ({ ...column }));
+  }
+  const sortedKeyframes = keyframes
+    .filter(keyframe => Number.isFinite(keyframe.time) && Number.isFinite(keyframe.value))
+    .toSorted((a, b) => a.time - b.time);
+  if (sortedKeyframes.length === 0) {
+    return columns.map(column => ({ ...column }));
+  }
+
+  const clipDuration = Math.max(0.001, options.clipEnd - options.clipStart);
+  const count = Math.max(1, columns.length);
+  return columns.map((column, index) => {
+    const ratio = (index + 0.5) / count;
+    const clipLocalTime = options.clipStart + ratio * clipDuration;
+    return applyMultiplierToColumn(column, sampleAutomationMultiplier(sortedKeyframes, clipLocalTime));
+  });
+}
+
 function getLegacySmoothingRadius(
   pixelsPerSecond: number,
   sourceSamplesPerSecond: number | undefined,
@@ -390,11 +478,13 @@ export const ClipWaveform = memo(function ClipWaveform({
   inPoint,
   outPoint,
   naturalDuration,
+  clipDuration,
   displayMode = 'detailed',
   pixelsPerSecond,
   pyramid,
   waveformVariant = 'legacy',
   displayGain = 1,
+  volumeAutomationKeyframes,
   audioEditStack,
   audioRegionGainPreview,
   renderStartPx = 0,
@@ -408,11 +498,13 @@ export const ClipWaveform = memo(function ClipWaveform({
   inPoint: number;
   outPoint: number;
   naturalDuration: number;
+  clipDuration?: number;
   displayMode?: TimelineAudioDisplayMode;
   pixelsPerSecond?: number;
   pyramid?: TimelineWaveformPyramid | null;
   waveformVariant?: 'legacy' | 'source' | 'processed';
   displayGain?: number;
+  volumeAutomationKeyframes?: readonly WaveformAutomationKeyframe[];
   audioEditStack?: readonly ClipAudioEditOperation[];
   audioRegionGainPreview?: ClipAudioRegionGainPreview | null;
   renderStartPx?: number;
@@ -455,6 +547,16 @@ export const ClipWaveform = memo(function ClipWaveform({
       const sourceSpan = Math.max(0, outPoint - inPoint);
       const visibleInPoint = inPoint + sourceSpan * (startPx / clipWidth);
       const visibleOutPoint = inPoint + sourceSpan * ((startPx + canvasWidth) / clipWidth);
+      const resolvedClipDuration = Math.max(
+        0.001,
+        Number.isFinite(clipDuration)
+          ? clipDuration ?? 0
+          : pixelsPerSecond && pixelsPerSecond > 0
+            ? width / pixelsPerSecond
+            : sourceSpan,
+      );
+      const visibleClipStart = resolvedClipDuration * (startPx / clipWidth);
+      const visibleClipEnd = resolvedClipDuration * ((startPx + canvasWidth) / clipWidth);
 
       // Set canvas size (account for device pixel ratio for sharpness)
       const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
@@ -507,7 +609,12 @@ export const ClipWaveform = memo(function ClipWaveform({
           minReferencePeak: displayMode === 'spectral' ? 0.025 : 0.032,
           maxGain: displayMode === 'spectral' ? 20 : 16,
         });
-        const editedColumns = applyAudioEditPreviewToColumns(normalizedColumns, {
+        const automatedColumns = applyVolumeAutomationToColumns(normalizedColumns, {
+          clipStart: visibleClipStart,
+          clipEnd: visibleClipEnd,
+          keyframes: volumeAutomationKeyframes,
+        });
+        const editedColumns = applyAudioEditPreviewToColumns(automatedColumns, {
           clipId,
           channelIndex,
           sourceStart: visibleInPoint,
@@ -529,7 +636,7 @@ export const ClipWaveform = memo(function ClipWaveform({
       cancelled = true;
       cancel(frameId);
     };
-  }, [waveform, waveformChannels, width, height, inPoint, outPoint, naturalDuration, displayMode, pixelsPerSecond, pyramid, waveformVariant, displayGain, audioEditStack, audioRegionGainPreview, clipId, renderStartPx, renderWidth]);
+  }, [waveform, waveformChannels, width, height, inPoint, outPoint, naturalDuration, clipDuration, displayMode, pixelsPerSecond, pyramid, waveformVariant, displayGain, volumeAutomationKeyframes, audioEditStack, audioRegionGainPreview, clipId, renderStartPx, renderWidth]);
 
   if ((!pyramid && (!waveform?.length && !waveformChannels?.some(channel => channel.length > 0))) || width <= 0 || renderWidth === 0) return null;
 

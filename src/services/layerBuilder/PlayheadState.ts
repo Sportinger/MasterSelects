@@ -21,6 +21,9 @@ export interface PlayheadStateData {
   /** The audio/video element driving the playhead */
   masterAudioElement: HTMLAudioElement | HTMLVideoElement | null;
 
+  /** Optional WebAudio/source clock driving the playhead. Returns source time in seconds. */
+  masterAudioClock: (() => number | null) | null;
+
   /** clip.startTime in timeline */
   masterClipStartTime: number;
 
@@ -49,6 +52,7 @@ export const playheadState: PlayheadStateData = {
   isUsingInternalPosition: false,
   playbackJustStarted: false,
   masterAudioElement: null,
+  masterAudioClock: null,
   masterClipStartTime: 0,
   masterClipInPoint: 0,
   masterClipSpeed: 1,
@@ -85,6 +89,7 @@ export function setMasterAudio(
   const prevElement = playheadState.masterAudioElement;
   playheadState.hasMasterAudio = true;
   playheadState.masterAudioElement = element;
+  playheadState.masterAudioClock = null;
   playheadState.masterClipStartTime = clipStartTime;
   playheadState.masterClipInPoint = clipInPoint;
   playheadState.masterClipSpeed = speed;
@@ -97,11 +102,37 @@ export function setMasterAudio(
 }
 
 /**
+ * Set a custom source-time clock for WebAudio playback paths.
+ */
+export function setMasterAudioClock(
+  getSourceTime: () => number | null,
+  clipStartTime: number,
+  clipInPoint: number,
+  speed: number
+): void {
+  const prevClock = playheadState.masterAudioClock;
+  playheadState.hasMasterAudio = true;
+  playheadState.masterAudioElement = null;
+  playheadState.masterAudioClock = getSourceTime;
+  playheadState.masterClipStartTime = clipStartTime;
+  playheadState.masterClipInPoint = clipInPoint;
+  playheadState.masterClipSpeed = speed;
+  if (prevClock !== getSourceTime) {
+    vfPipelineMonitor.record('audio_master_change', {
+      clipStartTime: Math.round(clipStartTime * 1000) / 1000,
+      speed: Math.round(speed * 100) / 100,
+      source: 'webaudio',
+    });
+  }
+}
+
+/**
  * Clear the master audio element
  */
 export function clearMasterAudio(): void {
   playheadState.hasMasterAudio = false;
   playheadState.masterAudioElement = null;
+  playheadState.masterAudioClock = null;
 }
 
 export function holdInternalPlaybackPosition(position: number, clipId?: string): void {

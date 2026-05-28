@@ -18,6 +18,9 @@ type MediaWaveformUpdate = Partial<Pick<
 
 type UpdateMediaWaveform = (id: string, updates: MediaWaveformUpdate) => void;
 type ResolveMediaFile = (id: string) => MediaFile | undefined;
+interface StartMediaFileWaveformGenerationOptions {
+  force?: boolean;
+}
 
 const activeMediaWaveformJobs = new Map<string, Promise<void>>();
 
@@ -39,11 +42,14 @@ function getWaveformJobKey(mediaFile: MediaFile): string {
   ].join(':');
 }
 
-export function shouldPrepareMediaWaveform(mediaFile: MediaFile): boolean {
+export function shouldPrepareMediaWaveform(
+  mediaFile: MediaFile,
+  options: StartMediaFileWaveformGenerationOptions = {},
+): boolean {
   if (!canHaveSourceWaveform(mediaFile)) return false;
   if (!mediaFile.file) return false;
-  if (hasReadyWaveform(mediaFile)) return false;
   if (mediaFile.waveformStatus === 'generating') return false;
+  if (!options.force && hasReadyWaveform(mediaFile)) return false;
   return true;
 }
 
@@ -51,8 +57,9 @@ export function startMediaFileWaveformGeneration(
   mediaFile: MediaFile,
   updateMediaFile: UpdateMediaWaveform,
   resolveMediaFile?: ResolveMediaFile,
+  options: StartMediaFileWaveformGenerationOptions = {},
 ): void {
-  if (!shouldPrepareMediaWaveform(mediaFile)) return;
+  if (!shouldPrepareMediaWaveform(mediaFile, options)) return;
 
   const file = mediaFile.file;
   if (!file) return;

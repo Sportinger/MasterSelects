@@ -115,6 +115,11 @@ function collectClipAudioAnalysisRefIds(clip: ProjectAudioIndexClip, ids: Set<st
   for (const refId of collectAudioAnalysisArtifactIdsFromRefs(clip.audioState?.processedAnalysisRefs)) {
     ids.add(refId);
   }
+  for (const stem of clip.audioState?.stemSeparation?.stems ?? []) {
+    addArtifactId(ids, stem.analysisArtifactId);
+    addArtifactId(ids, stem.manifestArtifactId);
+    addArtifactId(ids, stem.payloadRef);
+  }
   for (const nestedClip of clip.nestedClips ?? []) {
     collectClipAudioAnalysisRefIds(nestedClip, ids);
   }

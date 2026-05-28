@@ -65,6 +65,7 @@ interface MediaBoardViewProps {
   getGaussianSplatResolutionLabel: (item: ProjectItem) => string | null;
   getMediaFileContainerLabel: (mediaFile: MediaFile | null) => string | undefined;
   getMediaFileCodecLabel: (mediaFile: MediaFile | null) => string | undefined;
+  children?: React.ReactNode;
 }
 
 function MediaBoardNode({
@@ -281,6 +282,7 @@ export function MediaBoardView({
   getGaussianSplatResolutionLabel,
   getMediaFileContainerLabel,
   getMediaFileCodecLabel,
+  children,
 }: MediaBoardViewProps) {
   return (
     <div
@@ -449,6 +451,7 @@ export function MediaBoardView({
               getMediaFileCodecLabel={getMediaFileCodecLabel}
             />
           ))}
+          {children}
           {marquee && (() => {
             const left = Math.min(marquee.startX, marquee.currentX);
             const top = Math.min(marquee.startY, marquee.currentY);

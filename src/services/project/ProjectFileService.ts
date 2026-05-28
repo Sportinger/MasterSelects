@@ -14,7 +14,7 @@ import { ProjectCoreService } from './core/ProjectCoreService';
 import { AnalysisService } from './domains/AnalysisService';
 import { TranscriptService } from './domains/TranscriptService';
 import { CacheService } from './domains/CacheService';
-import { ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFrameWriter } from './domains/ProxyStorageService';
+import { getAudioProxyFileName, ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFrameWriter } from './domains/ProxyStorageService';
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS, type ProjectFolderKey } from './core/constants';
 import {
@@ -1021,6 +1021,21 @@ class ProjectFileService {
   }
 
   async saveProxyAudio(mediaId: string, blob: Blob): Promise<boolean> {
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      const projectPath = this.nativeCoreService.getProjectPath();
+      if (!projectPath) {
+        log.error('No native project path for audio proxy save!');
+        return false;
+      }
+
+      const folderPath = this.joinPath(projectPath, PROJECT_FOLDERS.AUDIO_PROXIES);
+      await NativeHelperClient.createDir(folderPath);
+      return NativeHelperClient.writeFileBinary(
+        this.joinPath(folderPath, getAudioProxyFileName(mediaId)),
+        blob,
+      );
+    }
+
     const handle = this.coreService.getProjectHandle();
     if (!handle) {
       log.error('No project handle for audio proxy save!');
@@ -1030,12 +1045,31 @@ class ProjectFileService {
   }
 
   async getProxyAudio(mediaId: string): Promise<File | null> {
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      const projectPath = this.nativeCoreService.getProjectPath();
+      if (!projectPath) return null;
+      const fileName = getAudioProxyFileName(mediaId);
+      const fullPath = this.joinPath(projectPath, PROJECT_FOLDERS.AUDIO_PROXIES, fileName);
+      const buffer = await NativeHelperClient.getDownloadedFile(fullPath);
+      return buffer
+        ? new File([buffer], fileName, { type: 'audio/wav' })
+        : null;
+    }
+
     const handle = this.coreService.getProjectHandle();
     if (!handle) return null;
     return this.proxyStorageService.getProxyAudio(handle, mediaId);
   }
 
   async hasProxyAudio(mediaId: string): Promise<boolean> {
+    if (this._activeBackend === 'native' && this.nativeCoreService) {
+      const projectPath = this.nativeCoreService.getProjectPath();
+      if (!projectPath) return false;
+      const fullPath = this.joinPath(projectPath, PROJECT_FOLDERS.AUDIO_PROXIES, getAudioProxyFileName(mediaId));
+      const result = await NativeHelperClient.exists(fullPath);
+      return result.exists && result.kind === 'file';
+    }
+
     const handle = this.coreService.getProjectHandle();
     if (!handle) return false;
     return this.proxyStorageService.hasProxyAudio(handle, mediaId);
@@ -1043,7 +1077,9 @@ class ProjectFileService {
 
   async deleteProxy(mediaId: string): Promise<boolean> {
     if (this._activeBackend === 'native') {
-      return this.deleteEntry('PROXY', mediaId, { recursive: true });
+      const deletedVideoProxy = await this.deleteEntry('PROXY', mediaId, { recursive: true });
+      const deletedAudioProxy = await this.deleteFile('AUDIO_PROXIES', getAudioProxyFileName(mediaId));
+      return deletedVideoProxy || deletedAudioProxy;
     }
 
     const handle = this.coreService.getProjectHandle();

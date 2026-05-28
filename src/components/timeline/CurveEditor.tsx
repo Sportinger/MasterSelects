@@ -75,7 +75,7 @@ function getPropertyDefaults(property: AnimatableProperty): { min: number; max: 
   if (parseVectorAnimationStateProperty(property)) {
     return { min: 0, max: 1, fallbackPad: 0 };
   }
-  if (property === 'opacity') {
+  if (property === 'opacity' || property.includes('.volume')) {
     return { min: 0, max: 1, fallbackPad: 0.05 };
   }
   if (property.startsWith('scale.')) {
@@ -569,7 +569,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
               fill="var(--text-secondary)"
             >
               {line.label ? line.label :
-               property === 'opacity' ? `${(line.value * 100).toFixed(0)}%` :
+               (property === 'opacity' || property.includes('.volume')) ? `${(line.value * 100).toFixed(0)}%` :
                parseCameraProperty(property) === 'fov' ? `${line.value.toFixed(0)}Â°` :
                property.startsWith('scale.') ? `${(line.value * 100).toFixed(0)}%` :
                property.startsWith('rotation.') ? `${line.value.toFixed(0)}°` :

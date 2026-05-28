@@ -57,6 +57,37 @@ describe('project audio state', () => {
       truePeakCeilingDb: -1,
       targetLufs: -14,
     };
+    const stemPayloadRef = await store.putPayload(new Uint8Array([1, 2, 3, 4]).buffer, {
+      mediaFileId: 'media-a',
+      kind: 'stem-separation',
+      sourceFingerprint: 'sha256:source',
+      mimeType: 'audio/vnd.masterselects.pcm-f32',
+      encoding: 'raw',
+      analyzerVersion: 'stem-test',
+      metadata: {
+        stemPayloadEncoding: 'planar-f32',
+        sampleRate: 48_000,
+        channelCount: 1,
+        frameCount: 1,
+        duration: 1 / 48_000,
+      },
+    });
+    const storedStem = await store.putAnalysisArtifact({
+      id: 'audio:stem-separation:media-a:source:vocals',
+      kind: 'stem-separation',
+      mediaFileId: 'media-a',
+      sourceFingerprint: 'sha256:source',
+      decoderId: 'test-decoder',
+      decoderVersion: '1.0.0',
+      analyzerVersion: 'stem-test',
+      sampleRate: 48_000,
+      channelLayout: CHANNEL_LAYOUT,
+      duration: 1,
+      payloadRefs: [stemPayloadRef],
+      createdAt: CREATED_AT_MS,
+      stale: false,
+      metadata: { stemKind: 'vocals' },
+    });
 
     const state = await buildProjectAudioStateIndex({
       media: [{
@@ -72,6 +103,30 @@ describe('project audio state', () => {
           audioState: {
             processedAnalysisRefs: {
               frequencySummaryId: 'artifact:missing-frequency',
+            },
+            stemSeparation: {
+              activeSetId: 'stem-set-a',
+              modelId: 'demucs-htdemucs-web',
+              modelVersion: 'test-v1',
+              createdAt: CREATED_AT_MS,
+              sourceFingerprint: 'sha256:source',
+              range: { start: 0, end: 1 },
+              sampleRate: 48_000,
+              channelCount: 2,
+              mixMode: 'stems',
+              stems: [{
+                id: 'stem-vocals',
+                kind: 'vocals',
+                label: 'Vocals',
+                analysisArtifactId: 'audio:stem-separation:media-a:source:vocals',
+                manifestArtifactId: storedStem.artifact.manifestRef.artifactId,
+                payloadRef: stemPayloadRef,
+                enabled: true,
+                gainDb: 0,
+                phaseAligned: true,
+                modelId: 'demucs-htdemucs-web',
+                sourceFingerprint: 'sha256:source',
+              }],
             },
             bakeHistory: [{
               id: 'derived-a',
@@ -96,6 +151,9 @@ describe('project audio state', () => {
         stored.artifact.manifestRef.artifactId,
         'artifact:missing-loudness',
         'artifact:missing-frequency',
+        'audio:stem-separation:media-a:source:vocals',
+        storedStem.artifact.manifestRef.artifactId,
+        stemPayloadRef.artifactId,
       ],
       derivedAssets: [
         expect.objectContaining({ id: 'derived-a' }),
@@ -109,6 +167,11 @@ describe('project audio state', () => {
           artifactId: stored.artifact.manifestRef.artifactId,
           mimeType: 'application/vnd.masterselects.audio-analysis+json',
         }),
+      }),
+      expect.objectContaining({
+        id: 'audio:stem-separation:media-a:source:vocals',
+        kind: 'stem-separation',
+        payloadRefs: [expect.objectContaining({ artifactId: stemPayloadRef.artifactId })],
       }),
     ]);
     expect(JSON.stringify(state)).not.toContain('Float32Array');

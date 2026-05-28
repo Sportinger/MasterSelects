@@ -422,6 +422,7 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
       playheadState.position = playStartTime;
       playheadState.hasMasterAudio = false;
       playheadState.masterAudioElement = null;
+      playheadState.masterAudioClock = null;
       playheadState.playbackJustStarted = true;
       // Seek all video/audio elements back to their in-points
       for (const clip of ts.clips) {

@@ -12,6 +12,7 @@ import {
 } from '../../../src/types';
 import { normalizeAudioEqParams } from '../../../src/engine/audio';
 import { createDefaultAudioEqParams } from '../../../src/engine/audio/eq/AudioEqDefaults';
+import { STEM_LAYER_HEADER_ROW_HEIGHT, STEM_LAYER_ROW_HEIGHT } from '../../../src/stores/timeline/constants';
 
 describe('keyframeSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -757,6 +758,36 @@ describe('keyframeSlice', () => {
   it('getExpandedTrackHeight: returns baseHeight when no clip selected in track', () => {
     // Track is expanded by default, but no clip is selected
     expect(store.getState().getExpandedTrackHeight('video-1', 60)).toBe(60);
+  });
+
+  it('getExpandedTrackHeight: reserves space for active stem progress rows', () => {
+    const audioClip = createMockClip({
+      id: 'audio-clip',
+      trackId: 'audio-1',
+      source: { type: 'audio', naturalDuration: 10 },
+      startTime: 0,
+      duration: 10,
+    });
+    store = createTestTimelineStore({
+      clips: [audioClip],
+      clipStemSeparationJobs: {
+        'audio-clip': {
+          jobId: 'stem-job-1',
+          clipId: 'audio-clip',
+          requestedClipId: 'audio-clip',
+          modelId: 'demucs-htdemucs-web',
+          phase: 'downloading-model',
+          progress: 0.25,
+          message: 'Downloading stem model 50 MB / 200 MB',
+          startedAt: 1,
+          updatedAt: 2,
+        },
+      },
+    });
+
+    expect(store.getState().getExpandedTrackHeight('audio-1', 40)).toBe(
+      40 + STEM_LAYER_HEADER_ROW_HEIGHT + STEM_LAYER_ROW_HEIGHT,
+    );
   });
 
   it('getExpandedTrackHeight: returns baseHeight when selected clip has no keyframes', () => {

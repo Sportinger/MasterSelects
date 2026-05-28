@@ -6,6 +6,7 @@ import { useTimelineStore } from '../timeline';
 import { fileSystemService } from '../../services/fileSystemService';
 import { isProjectStoreSyncInProgress } from '../../services/project/projectSave';
 import type { Composition, MediaFile, MediaState } from './types';
+import type { CompositionTimelineData } from '../../types';
 import { Logger } from '../../services/logger';
 import { audioManager } from '../../services/audioManager';
 import { audioRoutingManager } from '../../services/audioRoutingManager';
@@ -19,10 +20,30 @@ const log = Logger.create('MediaStore');
 type MediaStore = typeof import('./index').useMediaStore;
 type MediaStoreGlobal = typeof globalThis & {
   __mediaStoreModule?: { useMediaStore: MediaStore };
+  __masterselectsMediaStoreAutoSaveIntervalId?: ReturnType<typeof setInterval>;
+  __masterselectsMediaStoreBeforeUnloadHandler?: () => void;
+  __masterselectsTimelineCompositionSaveSignatures?: Map<string, string>;
 };
 
 // Cached store reference - populated after first access
 let cachedMediaStore: MediaStore | null = null;
+
+function getTimelineSaveSignatures(): Map<string, string> {
+  const globalState = globalThis as MediaStoreGlobal;
+  globalState.__masterselectsTimelineCompositionSaveSignatures ??= new Map<string, string>();
+  return globalState.__masterselectsTimelineCompositionSaveSignatures;
+}
+
+function createTimelineSaveSignature(timelineData: CompositionTimelineData | undefined): string {
+  if (!timelineData) return '';
+  const {
+    playheadPosition: _playheadPosition,
+    scrollX: _scrollX,
+    zoom: _zoom,
+    ...content
+  } = timelineData;
+  return JSON.stringify(content);
+}
 
 // Lazy getter to avoid circular dependency
 const getMediaStore = (): MediaStore | null => {
@@ -58,11 +79,34 @@ function saveTimelineToActiveComposition(): void {
   if (activeCompositionId) {
     const timelineStore = useTimelineStore.getState();
     const timelineData = timelineStore.getSerializableState();
-    useMediaStore.setState((state: MediaState) => ({
-      compositions: state.compositions.map((c: Composition) =>
-        c.id === activeCompositionId ? { ...c, timelineData } : c
-      ),
-    }));
+    const nextSignature = createTimelineSaveSignature(timelineData);
+    const signatures = getTimelineSaveSignatures();
+    const previousSignature = signatures.get(activeCompositionId);
+    if (previousSignature === nextSignature) return;
+
+    let didUpdate = false;
+    useMediaStore.setState((state: MediaState) => {
+      const activeComposition = state.compositions.find((c: Composition) => c.id === activeCompositionId);
+      if (!activeComposition) return state;
+
+      const currentSignature = createTimelineSaveSignature(activeComposition.timelineData);
+      if (currentSignature === nextSignature) {
+        signatures.set(activeCompositionId, nextSignature);
+        return state;
+      }
+
+      didUpdate = true;
+      signatures.set(activeCompositionId, nextSignature);
+      return {
+        compositions: state.compositions.map((c: Composition) =>
+          c.id === activeCompositionId ? { ...c, timelineData } : c
+        ),
+      };
+    });
+
+    if (!didUpdate) {
+      signatures.set(activeCompositionId, nextSignature);
+    }
   }
 }
 
@@ -296,7 +340,12 @@ function setupItemPersistence(): void {
  * Set up auto-save interval.
  */
 function setupAutoSave(): void {
-  setInterval(() => {
+  const globalState = globalThis as MediaStoreGlobal;
+  if (globalState.__masterselectsMediaStoreAutoSaveIntervalId) {
+    clearInterval(globalState.__masterselectsMediaStoreAutoSaveIntervalId);
+  }
+
+  globalState.__masterselectsMediaStoreAutoSaveIntervalId = setInterval(() => {
     if ((window as unknown as { __CLEARING_CACHE__?: boolean }).__CLEARING_CACHE__) return;
     saveTimelineToActiveComposition();
   }, 30000); // Every 30 seconds
@@ -324,11 +373,17 @@ function disposeAllAudio(): void {
  * Set up beforeunload handler.
  */
 function setupBeforeUnload(): void {
-  window.addEventListener('beforeunload', () => {
+  const globalState = globalThis as MediaStoreGlobal;
+  if (globalState.__masterselectsMediaStoreBeforeUnloadHandler) {
+    window.removeEventListener('beforeunload', globalState.__masterselectsMediaStoreBeforeUnloadHandler);
+  }
+
+  globalState.__masterselectsMediaStoreBeforeUnloadHandler = () => {
     if ((window as unknown as { __CLEARING_CACHE__?: boolean }).__CLEARING_CACHE__) return;
     saveTimelineToActiveComposition();
     disposeAllAudio();
-  });
+  };
+  window.addEventListener('beforeunload', globalState.__masterselectsMediaStoreBeforeUnloadHandler);
 }
 
 // Auto-initialize on app load

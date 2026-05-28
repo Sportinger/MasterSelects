@@ -56,4 +56,9 @@ describe('timeline tool registry', () => {
       expect(baseShortcutMap[definition.shortcutActionId!], `${definition.id} default shortcut entry`).toBeDefined();
     }
   });
+
+  it('binds the default cut shortcut to the single blade tool', () => {
+    expect(PRESETS.masterselects.map['tool.blade']).toEqual([{ key: 'c' }]);
+    expect(PRESETS.masterselects.map['tool.cutToggle']).toEqual([]);
+  });
 });

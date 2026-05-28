@@ -11,6 +11,8 @@ type IterableDirectoryHandle = FileSystemDirectoryHandle & {
 
 const PROXY_FRAME_EXTENSION = 'jpg';
 const PROXY_FRAME_MATCH = /^frame_(\d+)\.(?:jpe?g|webp)$/i;
+const AUDIO_PROXY_EXTENSION = 'wav';
+const LEGACY_AUDIO_PROXY_FILE_NAME = 'audio.m4a';
 
 export interface ProxyFrameWriter {
   saveFrame: (frameIndex: number, blob: Blob) => Promise<boolean>;
@@ -27,6 +29,17 @@ export type ProxyFrameScanProgressCallback = (progress: ProxyFrameScanProgress) 
 
 function getProxyFrameFileName(frameIndex: number, extension = PROXY_FRAME_EXTENSION): string {
   return `frame_${frameIndex.toString().padStart(6, '0')}.${extension}`;
+}
+
+export function getAudioProxyFileName(mediaId: string): string {
+  const safeId = mediaId
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .join('_')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(0, 180) || 'audio';
+  return `${safeId}.${AUDIO_PROXY_EXTENSION}`;
 }
 
 export class ProxyStorageService {
@@ -290,17 +303,14 @@ export class ProxyStorageService {
     blob: Blob
   ): Promise<boolean> {
     try {
-      // Get or create media subfolder in Proxy/
-      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create: true });
-      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId, { create: true });
-
-      const fileName = 'audio.m4a';
-      const fileHandle = await mediaFolder.getFileHandle(fileName, { create: true });
+      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES, { create: true });
+      const fileName = getAudioProxyFileName(mediaId);
+      const fileHandle = await audioProxyFolder.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(blob);
       await writable.close();
 
-      log.debug(`Saved audio proxy to ${projectHandle.name}/${PROJECT_FOLDERS.PROXY}/${mediaId}/${fileName} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+      log.debug(`Saved audio proxy to ${projectHandle.name}/${PROJECT_FOLDERS.AUDIO_PROXIES}/${fileName} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
       return true;
     } catch (e) {
       log.error('Failed to save audio proxy:', e);
@@ -316,9 +326,26 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<File | null> {
     try {
+      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES);
+      const fileHandle = await audioProxyFolder.getFileHandle(getAudioProxyFileName(mediaId));
+      return await fileHandle.getFile();
+    } catch (e) {
+      // Fall through to legacy proxy files.
+    }
+
+    try {
       const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
-      const fileHandle = await mediaFolder.getFileHandle('audio.m4a');
+      const fileHandle = await mediaFolder.getFileHandle('audio.wav');
+      return await fileHandle.getFile();
+    } catch (e) {
+      // Fall through to older AAC proxy files.
+    }
+
+    try {
+      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
+      const fileHandle = await mediaFolder.getFileHandle(LEGACY_AUDIO_PROXY_FILE_NAME);
       return await fileHandle.getFile();
     } catch (e) {
       return null;
@@ -333,9 +360,26 @@ export class ProxyStorageService {
     mediaId: string
   ): Promise<boolean> {
     try {
+      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES);
+      await audioProxyFolder.getFileHandle(getAudioProxyFileName(mediaId));
+      return true;
+    } catch (e) {
+      // Fall through to legacy proxy files.
+    }
+
+    try {
       const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
-      await mediaFolder.getFileHandle('audio.m4a');
+      await mediaFolder.getFileHandle('audio.wav');
+      return true;
+    } catch (e) {
+      // Fall through to older AAC proxy files.
+    }
+
+    try {
+      const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
+      const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
+      await mediaFolder.getFileHandle(LEGACY_AUDIO_PROXY_FILE_NAME);
       return true;
     } catch (e) {
       return false;
@@ -349,12 +393,24 @@ export class ProxyStorageService {
     projectHandle: FileSystemDirectoryHandle,
     mediaId: string
   ): Promise<boolean> {
+    let deleted = false;
+
+    try {
+      const audioProxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.AUDIO_PROXIES);
+      await audioProxyFolder.removeEntry(getAudioProxyFileName(mediaId));
+      deleted = true;
+    } catch {
+      // Audio proxy may not exist.
+    }
+
     try {
       const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
       await proxyFolder.removeEntry(mediaId, { recursive: true });
-      return true;
+      deleted = true;
     } catch {
-      return false;
+      // Video proxy may not exist.
     }
+
+    return deleted;
   }
 }
