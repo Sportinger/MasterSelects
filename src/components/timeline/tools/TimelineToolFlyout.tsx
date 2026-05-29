@@ -94,7 +94,9 @@ export function TimelineToolFlyout({
   useEffect(() => {
     if (!initialHighlightedToolId) return;
     const index = tools.findIndex((tool) => tool.id === initialHighlightedToolId);
-    if (index >= 0) setHighlightedIndex(index);
+    if (index < 0) return;
+    const rafId = window.requestAnimationFrame(() => setHighlightedIndex(index));
+    return () => window.cancelAnimationFrame(rafId);
   }, [initialHighlightedToolId, tools]);
 
   useEffect(() => {

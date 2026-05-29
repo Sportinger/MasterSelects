@@ -49,7 +49,6 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     if (isResizing) return;
     liveRatioRef.current = split.ratio;
     pendingLiveRatioRef.current = null;
-    setLiveRatio(split.ratio);
   }, [isResizing, split.ratio]);
 
   useEffect(() => {

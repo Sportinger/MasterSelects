@@ -1,4 +1,4 @@
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClipWaveform } from '../../src/components/timeline/components/ClipWaveform';
 import type { TimelineWaveformPyramid } from '../../src/components/timeline/utils/waveformLod';
@@ -98,7 +98,9 @@ describe('ClipWaveform', () => {
 
     const pending = Array.from(scheduledFrames.values());
     scheduledFrames.clear();
-    pending.forEach((callback) => callback(0));
+    act(() => {
+      pending.forEach((callback) => callback(0));
+    });
 
     expect(getContextSpy).toHaveBeenCalledTimes(1);
   });
@@ -145,7 +147,9 @@ describe('ClipWaveform', () => {
 
     const pending = Array.from(scheduledFrames.values());
     scheduledFrames.clear();
-    pending.forEach((callback) => callback(0));
+    act(() => {
+      pending.forEach((callback) => callback(0));
+    });
 
     expect(canvasContext.translate).toHaveBeenCalledWith(0, 0);
     expect(canvasContext.translate).toHaveBeenCalledWith(0, 41);

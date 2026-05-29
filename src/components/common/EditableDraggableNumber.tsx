@@ -137,12 +137,6 @@ export function EditableDraggableNumber({
   }, [effectiveDefaultValue]);
 
   useEffect(() => {
-    if (!isEditing) {
-      setDraftValue(formatEditableValue(value, decimals));
-    }
-  }, [decimals, isEditing, value]);
-
-  useEffect(() => {
     if (!isEditing) return;
     const rafId = window.requestAnimationFrame(() => {
       inputRef.current?.focus();
@@ -164,16 +158,9 @@ export function EditableDraggableNumber({
   const openBoundsPopover = useCallback(() => {
     setIsEditing(false);
     syncBoundsDraft();
+    setPopoverPlacement((current) => ({ ...current, visibility: 'hidden' }));
     setShowBoundsPopover(true);
   }, [syncBoundsDraft]);
-
-  useEffect(() => {
-    setDraftDefaultValue(
-      effectiveDefaultValue !== undefined
-        ? formatEditableValue(effectiveDefaultValue, decimals)
-        : '',
-    );
-  }, [decimals, effectiveDefaultValue]);
 
   useEffect(() => {
     if (!showBoundsPopover) return;
@@ -232,7 +219,6 @@ export function EditableDraggableNumber({
   useEffect(() => {
     if (!showBoundsPopover) return;
 
-    setPopoverPlacement((current) => ({ ...current, visibility: 'hidden' }));
     const rafId = window.requestAnimationFrame(updatePopoverPlacement);
 
     const handleViewportChange = () => {

@@ -178,7 +178,10 @@ export function useRuntimeAudioMeterSnapshot(
 
   useEffect(() => {
     if (!kind) {
-      setSnapshot(undefined);
+      if (frameRef.current !== null && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
       latestRef.current = undefined;
       return undefined;
     }
@@ -230,5 +233,5 @@ export function useRuntimeAudioMeterSnapshot(
     };
   }, [kind, trackId, featuresKey, dynamicsKey, intervalMs]);
 
-  return snapshot;
+  return kind ? snapshot : undefined;
 }

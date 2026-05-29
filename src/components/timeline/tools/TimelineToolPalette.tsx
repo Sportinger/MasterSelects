@@ -58,7 +58,7 @@ function isPlacementCommandToolId(toolId: TimelineToolId): toolId is TimelinePla
 }
 
 export function TimelineToolPalette() {
-  const ownerIdRef = useRef(createToolFlyoutOwnerId());
+  const [ownerId] = useState(createToolFlyoutOwnerId);
   const {
     activeTimelineToolId,
     lastTimelineToolByGroup,
@@ -98,7 +98,7 @@ export function TimelineToolPalette() {
   const toolButtonRefs = useRef(new Map<TimelineToolGroupId, HTMLButtonElement>());
   const shortcutRegistry = getShortcutRegistry();
   const hasPlacementSource = hasCurrentTimelinePlacementSource();
-  const ownsFlyout = flyoutOwnerId === ownerIdRef.current;
+  const ownsFlyout = flyoutOwnerId === ownerId;
 
   const openGroup = openTimelineToolGroupId
     ? TIMELINE_TOOL_GROUPS.find((group) => group.id === openTimelineToolGroupId) ?? null
@@ -117,21 +117,21 @@ export function TimelineToolPalette() {
   );
 
   const closeFlyout = useCallback(() => {
-    if (getToolFlyoutOwner() === ownerIdRef.current) {
+    if (getToolFlyoutOwner() === ownerId) {
       setToolFlyoutOwner(null);
     }
     setOpenTimelineToolGroup(null);
     setFlyoutAnchorRect(null);
     setGuidedHighlightedToolId(null);
     clearTimelinePlacementCommandPreview();
-  }, [setOpenTimelineToolGroup]);
+  }, [ownerId, setOpenTimelineToolGroup]);
 
   const openFlyout = useCallback((groupId: TimelineToolGroupId, anchor: HTMLButtonElement, highlightedToolId?: TimelineToolId | null) => {
-    setToolFlyoutOwner(ownerIdRef.current);
+    setToolFlyoutOwner(ownerId);
     setFlyoutAnchorRect(anchor.getBoundingClientRect());
     setGuidedHighlightedToolId(highlightedToolId ?? null);
     setOpenTimelineToolGroup(groupId);
-  }, [setOpenTimelineToolGroup]);
+  }, [ownerId, setOpenTimelineToolGroup]);
 
   const registerToolButton = useCallback((groupId: TimelineToolGroupId, button: HTMLButtonElement | null) => {
     if (button) {
@@ -144,9 +144,9 @@ export function TimelineToolPalette() {
   useEffect(() => {
     const handleFlyoutOwnerChange = (event: Event) => {
       const detail = (event as CustomEvent<{ ownerId?: string | null }>).detail;
-      const ownerId = detail?.ownerId ?? null;
-      setFlyoutOwnerId(ownerId);
-      if (ownerId !== ownerIdRef.current) {
+      const nextOwnerId = detail?.ownerId ?? null;
+      setFlyoutOwnerId(nextOwnerId);
+      if (nextOwnerId !== ownerId) {
         setFlyoutAnchorRect(null);
         setGuidedHighlightedToolId(null);
         clearTimelinePlacementCommandPreview();
@@ -156,11 +156,11 @@ export function TimelineToolPalette() {
     window.addEventListener(TOOL_FLYOUT_OWNER_EVENT, handleFlyoutOwnerChange);
     return () => {
       window.removeEventListener(TOOL_FLYOUT_OWNER_EVENT, handleFlyoutOwnerChange);
-      if (getToolFlyoutOwner() === ownerIdRef.current) {
+      if (getToolFlyoutOwner() === ownerId) {
         setToolFlyoutOwner(null);
       }
     };
-  }, []);
+  }, [ownerId]);
 
   useEffect(() => {
     const handleGuidedOpenToolGroup = (event: Event) => {

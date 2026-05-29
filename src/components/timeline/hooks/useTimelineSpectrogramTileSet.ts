@@ -40,8 +40,6 @@ export function useTimelineSpectrogramTileSetState(
   useEffect(() => {
     let cancelled = false;
 
-    setLoaded(createInitialState(refId));
-
     if (!refId || cached) {
       return () => {
         cancelled = true;
