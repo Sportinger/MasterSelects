@@ -16,7 +16,6 @@ import {
   type TimelineWaveformPyramid,
   type WaveformColumn,
 } from '../utils/waveformLod';
-
 const MAX_RENDERED_WAVEFORM_CHANNELS = 8;
 
 function drawCenterLine(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -439,9 +438,15 @@ export const ClipWaveform = memo(function ClipWaveform({
 
       const canvas = canvasRef.current;
       const hasLegacyWaveform = Boolean(waveform?.length || waveformChannels?.some(channel => channel.length > 0));
-      if (!canvas || (!pyramid && !hasLegacyWaveform) || width <= 0 || naturalDuration <= 0) return;
+      if (!canvas || (!pyramid && !hasLegacyWaveform) || width <= 0 || naturalDuration <= 0) {
+        return;
+      }
 
-      const ctx = canvas.getContext('2d');
+      // willReadFrequently forces Chromium onto the CPU raster path for this canvas,
+      // which avoids a Linux GPU-accelerated-2D-canvas present bug where the layer
+      // intermittently renders blank after a per-zoom backing-store resize (#171).
+      // These canvases only redraw on zoom/scroll/edit, so CPU raster is negligible.
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) return;
 
       const clipWidth = Math.max(1, width);
