@@ -121,6 +121,7 @@ export interface TimelineRulerProps {
   duration: number;
   zoom: number;
   frameRate?: number | null;
+  displayMode?: 'time' | 'frames';
   scrollX: number;
   onRulerMouseDown: (e: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;

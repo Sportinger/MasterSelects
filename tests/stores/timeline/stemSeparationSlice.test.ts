@@ -5,6 +5,7 @@ import type { ClipAudioStemState, TimelineClip } from '../../../src/types';
 import {
   setClipStemSeparationRunner,
 } from '../../../src/stores/timeline/stemSeparationSlice';
+import { STEM_SOURCE_LAYER_ID } from '../../../src/services/audio/stemSeparation';
 
 const SOURCE_REFS = { waveformPyramidId: 'source-waveform' };
 const PROCESSED_REFS = { processedWaveformPyramidId: 'processed-waveform' };
@@ -176,6 +177,18 @@ describe('timeline stem separation slice', () => {
   it('starts separation through the runner for a linked video and commits returned stems to audio', async () => {
     const audioClip = createAudioClip({
       linkedClipId: 'video-clip',
+      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'media-dialog' },
+      audioState: {
+        sourceAnalysisRefs: SOURCE_REFS,
+        processedAnalysisRefs: PROCESSED_REFS,
+      },
+    });
+    const copiedAudioClip = createAudioClip({
+      id: 'audio-copy',
+      startTime: 12,
+      inPoint: 2,
+      outPoint: 8,
+      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'media-dialog' },
       audioState: {
         sourceAnalysisRefs: SOURCE_REFS,
         processedAnalysisRefs: PROCESSED_REFS,
@@ -188,7 +201,7 @@ describe('timeline stem separation slice', () => {
       return stemState;
     });
     setClipStemSeparationRunner(runner);
-    const store = createTestTimelineStore({ clips: [videoClip, audioClip] });
+    const store = createTestTimelineStore({ clips: [videoClip, audioClip, copiedAudioClip] });
 
     const jobId = await store.getState().startClipStemSeparation('video-clip');
     await flushPromises();
@@ -209,9 +222,66 @@ describe('timeline stem separation slice', () => {
     });
     expect(store.getState().expandedClipStemLayerIds.has('audio-clip')).toBe(true);
     const updatedAudioClip = store.getState().clips.find(clip => clip.id === 'audio-clip');
+    const updatedCopiedAudioClip = store.getState().clips.find(clip => clip.id === 'audio-copy');
     expect(updatedAudioClip?.audioState?.stemSeparation).toEqual(stemState);
     expect(updatedAudioClip?.audioState?.sourceAnalysisRefs).toBe(SOURCE_REFS);
     expect(updatedAudioClip?.audioState?.processedAnalysisRefs).toBeUndefined();
+    expect(updatedCopiedAudioClip?.audioState?.stemSeparation).toMatchObject({
+      activeSetId: 'stem-set-generated',
+      mixMode: 'original',
+      soloStemId: STEM_SOURCE_LAYER_ID,
+      sourceGainDb: 0,
+    });
+    expect(updatedCopiedAudioClip?.audioState?.stemSeparation?.stems).toEqual(stemState.stems);
+    expect(updatedCopiedAudioClip?.audioState?.sourceAnalysisRefs).toBe(SOURCE_REFS);
+    expect(updatedCopiedAudioClip?.audioState?.processedAnalysisRefs).toBeUndefined();
+  });
+
+  it('shares an existing stem separation with same-source clip copies', () => {
+    const stemState = createStemState({ activeSetId: 'stem-set-existing' });
+    const audioClip = createAudioClip({
+      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'media-dialog' },
+      audioState: {
+        sourceAnalysisRefs: SOURCE_REFS,
+        processedAnalysisRefs: PROCESSED_REFS,
+        stemSeparation: stemState,
+      },
+    });
+    const copiedAudioClip = createAudioClip({
+      id: 'audio-copy',
+      startTime: 4,
+      inPoint: 1,
+      outPoint: 5,
+      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'media-dialog' },
+      audioState: {
+        sourceAnalysisRefs: SOURCE_REFS,
+        processedAnalysisRefs: PROCESSED_REFS,
+      },
+    });
+    const unrelatedStemState = createStemState({ activeSetId: 'stem-set-unrelated' });
+    const unrelatedAudioClip = createAudioClip({
+      id: 'audio-unrelated',
+      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'other-media' },
+      audioState: {
+        sourceAnalysisRefs: SOURCE_REFS,
+        processedAnalysisRefs: PROCESSED_REFS,
+        stemSeparation: unrelatedStemState,
+      },
+    });
+    const store = createTestTimelineStore({ clips: [audioClip, copiedAudioClip, unrelatedAudioClip] });
+
+    expect(store.getState().syncClipStemSeparationCopies('audio-clip')).toBe(1);
+
+    const copiedStemState = store.getState().clips.find(clip => clip.id === 'audio-copy')?.audioState?.stemSeparation;
+    expect(copiedStemState).toMatchObject({
+      activeSetId: 'stem-set-existing',
+      mixMode: 'original',
+      soloStemId: STEM_SOURCE_LAYER_ID,
+      sourceGainDb: 0,
+    });
+    expect(copiedStemState?.stems).toEqual(stemState.stems);
+    expect(store.getState().clips.find(clip => clip.id === 'audio-copy')?.audioState?.processedAnalysisRefs).toBeUndefined();
+    expect(store.getState().clips.find(clip => clip.id === 'audio-unrelated')?.audioState?.stemSeparation).toEqual(unrelatedStemState);
   });
 
   it('cancels active separation jobs without changing persistent clip audio state', async () => {

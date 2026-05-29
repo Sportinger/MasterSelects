@@ -13,6 +13,7 @@ import {
   IconPlayerStopFilled,
   IconPlus,
   IconRepeat,
+  IconTools,
 } from '@tabler/icons-react';
 import './TimelineControls.css';
 import type { TimelineControlsProps } from './types';
@@ -75,8 +76,10 @@ function TimelineControlsComponent({
   const viewDropdownRef = useRef<HTMLDivElement>(null);
   const masterDropdownRef = useRef<HTMLDivElement>(null);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
+  const openTimelineToolGroupId = useTimelineStore(state => state.openTimelineToolGroupId);
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
   const timelineTracks = useTimelineStore(state => state.tracks);
+  const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const armedAudioTracks = useMemo(
     () => timelineTracks.filter(track => track.type === 'audio' && track.audioState?.recordArm === true),
     [timelineTracks],
@@ -90,6 +93,7 @@ function TimelineControlsComponent({
     exportPreflight: undefined,
   };
   const masterEffectCount = masterAudio.effectStack?.length ?? 0;
+  const masterPropertiesSelected = propertiesSelection?.kind === 'master';
   const preflightWarnings = masterAudio.exportPreflight?.warnings ?? [];
   const preflightMeasurement = masterAudio.exportPreflight?.measurement;
   const preflightIssueCount = preflightWarnings.filter(item => item.severity !== 'info').length;
@@ -260,26 +264,31 @@ function TimelineControlsComponent({
           </span>
         )}
       </div>
-      <div className="timeline-edit-tools">
-        <TimelineToolPalette />
-        <button
-          type="button"
-          className={`timeline-tool-button timeline-snapping-button ${snappingEnabled ? 'active' : ''}`}
-          aria-label="Snapping"
-          aria-pressed={snappingEnabled}
-          onPointerUp={(event) => {
-            if (event.button !== 0) return;
-            onToggleSnapping();
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            onToggleSnapping();
-          }}
-          title={snappingEnabled ? 'Snapping enabled - clips snap to edges' : 'Snapping disabled - free positioning'}
-        >
-          <IconMagnet className="timeline-tool-button-icon" size={18} stroke={2.2} aria-hidden="true" />
-        </button>
+      <div className={`timeline-edit-tools ${openTimelineToolGroupId ? 'timeline-edit-tools-open' : ''}`}>
+        <span className="timeline-edit-tools-hub" aria-hidden="true">
+          <IconTools className="timeline-edit-tools-hub-icon" size={18} stroke={2.15} />
+        </span>
+        <div className="timeline-edit-tools-items">
+          <TimelineToolPalette />
+          <button
+            type="button"
+            className={`timeline-tool-button timeline-snapping-button ${snappingEnabled ? 'active' : ''}`}
+            aria-label="Snapping"
+            aria-pressed={snappingEnabled}
+            onPointerUp={(event) => {
+              if (event.button !== 0) return;
+              onToggleSnapping();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              onToggleSnapping();
+            }}
+            title={snappingEnabled ? 'Snapping enabled - clips snap to edges' : 'Snapping disabled - free positioning'}
+          >
+            <IconMagnet className="timeline-tool-button-icon" size={18} stroke={2.2} aria-hidden="true" />
+          </button>
+        </div>
       </div>
         </>
       )}
@@ -287,8 +296,11 @@ function TimelineControlsComponent({
         <>
       <div className="timeline-master-audio" ref={masterDropdownRef}>
         <button
-          className={`btn btn-sm ${masterDropdownOpen || masterEffectCount > 0 || masterAudio.limiterEnabled ? 'btn-active' : ''} ${preflightIssueCount > 0 ? 'audio-preflight-alert' : ''}`}
-          onClick={() => setMasterDropdownOpen(open => !open)}
+          className={`btn btn-sm ${masterPropertiesSelected || masterDropdownOpen || masterEffectCount > 0 || masterAudio.limiterEnabled ? 'btn-active' : ''} ${preflightIssueCount > 0 ? 'audio-preflight-alert' : ''}`}
+          onClick={() => {
+            useTimelineStore.getState().selectMasterProperties();
+            setMasterDropdownOpen(open => !open);
+          }}
           title="Master audio bus"
         >
           Master {masterAudio.volumeDb.toFixed(1)} dB

@@ -298,7 +298,7 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
   },
 
   removeTrack: (id) => {
-    const { tracks, clips, targetTrackIdByType } = get();
+    const { tracks, clips, targetTrackIdByType, propertiesSelection } = get();
     const track = tracks.find(t => t.id === id);
     if (track?.locked) {
       log.warn('Cannot remove locked track', { id });
@@ -317,6 +317,9 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
       clips: clips.filter(c => c.trackId !== id),
       runtimeAudioMeters: runtimeAudioMeterBus.getState(),
       targetTrackIdByType: nextTargetTrackIdByType,
+      ...(propertiesSelection?.kind === 'track' && propertiesSelection.trackId === id
+        ? { propertiesSelection: null }
+        : {}),
     });
   },
 

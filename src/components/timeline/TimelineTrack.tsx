@@ -18,7 +18,6 @@ import { STEM_LAYER_HEADER_ROW_HEIGHT, STEM_LAYER_ROW_HEIGHT } from '../../store
 import {
   STEM_SOURCE_LAYER_ID,
 } from '../../services/audio/stemSeparation';
-import { proxyFrameCache } from '../../services/proxyFrameCache';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_VIEWPORT_MIN_PX = 1600;
@@ -266,10 +265,6 @@ function formatStemJobPhase(phase: string): string {
   }
 }
 
-function hasUsableAudioProxy(mediaFile: { hasProxyAudio?: boolean; audioProxyStatus?: string } | undefined): boolean {
-  return mediaFile?.hasProxyAudio === true || mediaFile?.audioProxyStatus === 'ready';
-}
-
 function buildStemWaveformPath(waveform: readonly number[], width: number, height: number): string {
   if (waveform.length === 0) return '';
 
@@ -342,6 +337,50 @@ function ClipStemLayerTracks({
     });
     return waveforms;
   }, [mediaFiles]);
+  const stemMenuWaveformMediaIdsKey = useMemo(() => {
+    const mediaFileById = new Map(mediaFiles.map(file => [file.id, file]));
+    const ids = new Set<string>();
+    const needsMediaWaveform = (mediaFileId: string | undefined, inlineWaveform?: readonly number[]) => {
+      if (!mediaFileId || inlineWaveform?.length) return false;
+      const mediaFile = mediaFileById.get(mediaFileId);
+      if (!mediaFile || mediaFile.waveform?.length || mediaFile.waveformStatus === 'generating') return false;
+      return mediaFile.type === 'audio' || (mediaFile.type === 'video' && mediaFile.hasAudio !== false);
+    };
+
+    for (const clip of clips) {
+      if (!selectedClipIds.has(clip.id) || !expandedClipStemLayerIds.has(clip.id)) continue;
+      const stemSeparation = clip.audioState?.stemSeparation;
+      if (!stemSeparation?.stems.length) continue;
+
+      const sourceMediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
+      if (needsMediaWaveform(sourceMediaFileId, clip.waveform)) {
+        ids.add(sourceMediaFileId!);
+      }
+
+      for (const stem of stemSeparation.stems) {
+        if (needsMediaWaveform(stem.mediaFileId, stem.waveform)) {
+          ids.add(stem.mediaFileId!);
+        }
+      }
+    }
+
+    return Array.from(ids).sort().join('|');
+  }, [clips, expandedClipStemLayerIds, mediaFiles, selectedClipIds]);
+  const requestedStemMenuWaveformIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!stemMenuWaveformMediaIdsKey) return;
+    const mediaStore = useMediaStore.getState() as {
+      generateMediaWaveform?: (id: string, options?: { force?: boolean }) => Promise<void>;
+    };
+    if (typeof mediaStore.generateMediaWaveform !== 'function') return;
+
+    for (const mediaFileId of stemMenuWaveformMediaIdsKey.split('|')) {
+      if (!mediaFileId || requestedStemMenuWaveformIdsRef.current.has(mediaFileId)) continue;
+      requestedStemMenuWaveformIdsRef.current.add(mediaFileId);
+      void mediaStore.generateMediaWaveform(mediaFileId);
+    }
+  }, [stemMenuWaveformMediaIdsKey]);
   const stemClips = useMemo(() => clips.filter((clip) => {
     const job = clipStemSeparationJobs[clip.id];
     const isActiveJob = ACTIVE_STEM_JOB_PHASES.has(job?.phase ?? 'failed');
@@ -350,33 +389,6 @@ function ClipStemLayerTracks({
       && Boolean(clip.audioState?.stemSeparation?.stems.length)
     );
   }), [clipStemSeparationJobs, clips, selectedClipIds]);
-  const stemPreloadIdsKey = useMemo(() => {
-    const mediaFileById = new Map(mediaFiles.map(file => [file.id, file]));
-    const ids = new Set<string>();
-    for (const clip of clips) {
-      if (!clip.audioState?.stemSeparation?.stems.length) continue;
-      const sourceMediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
-      if (sourceMediaFileId && hasUsableAudioProxy(mediaFileById.get(sourceMediaFileId))) {
-        ids.add(sourceMediaFileId);
-      }
-      for (const stem of clip.audioState?.stemSeparation?.stems ?? []) {
-        if (stem.mediaFileId && hasUsableAudioProxy(mediaFileById.get(stem.mediaFileId))) {
-          ids.add(stem.mediaFileId);
-        }
-      }
-    }
-    return Array.from(ids).sort().join('|');
-  }, [mediaFiles, clips]);
-
-  useEffect(() => {
-    if (!stemPreloadIdsKey) return;
-    for (const mediaFileId of stemPreloadIdsKey.split('|')) {
-      if (!mediaFileId) continue;
-      void proxyFrameCache.preloadAudioProxy(mediaFileId);
-      void proxyFrameCache.getAudioBuffer(mediaFileId);
-    }
-  }, [stemPreloadIdsKey]);
-
   if (stemClips.length === 0) return null;
 
   return (
@@ -396,9 +408,10 @@ function ClipStemLayerTracks({
         const sourceEnabled = sourceSolo || stemSeparation?.mixMode === 'hybrid';
         const sourceOnly = sourceSolo;
         const sourceGainDb = stemSeparation?.sourceGainDb ?? 0;
+        const sourceMediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
         const sourceWaveform = clip.waveform?.length
           ? clip.waveform
-          : (clip.mediaFileId ? mediaWaveformsById.get(clip.mediaFileId) : undefined);
+          : (sourceMediaFileId ? mediaWaveformsById.get(sourceMediaFileId) : undefined);
         const progressPercent = Math.round(Math.max(0, Math.min(1, job?.progress ?? 0)) * 100);
 
         return (
@@ -483,8 +496,9 @@ function ClipStemLayerTracks({
 
               {isOpen && stemSeparation?.stems.map((stem) => {
                 const isSolo = stemSeparation.soloStemId === stem.id;
-                const waveform = stem.waveform
-                  ?? (stem.mediaFileId ? mediaWaveformsById.get(stem.mediaFileId) : undefined);
+                const waveform = stem.waveform?.length
+                  ? stem.waveform
+                  : (stem.mediaFileId ? mediaWaveformsById.get(stem.mediaFileId) : undefined);
                 return (
                   <div key={stem.id} className={`clip-stem-layer-row ${stem.enabled ? '' : 'muted'} ${sourceOnly ? 'bypassed' : ''} ${isSolo ? 'solo' : ''}`}>
                     <button
@@ -600,6 +614,8 @@ function TimelineTrackComponent({
   const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
   const expandedClipStemLayerIds = useTimelineStore(state => state.expandedClipStemLayerIds);
+  const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
+  const isPropertiesSelected = propertiesSelection?.kind === 'track' && propertiesSelection.trackId === track.id;
   const trackLaneStyle = {
     height: dynamicHeight,
     ...(trackColor ? { '--track-color': trackColor } : {}),
@@ -640,7 +656,7 @@ function TimelineTrackComponent({
         isExternalDragTarget ? 'external-drag-target' : ''
       } ${track.locked ? 'locked' : ''} ${isMutedTrack ? 'track-muted' : ''} ${
         isHiddenTrack ? 'track-hidden' : ''
-      } ${isResizeActive ? 'resizing' : ''}`}
+      } ${isResizeActive ? 'resizing' : ''} ${isPropertiesSelected ? 'properties-selected' : ''}`}
       data-track-id={track.id}
       data-dock-layout-child-anim-id={`timeline-track-lane:${track.id}`}
       style={trackLaneStyle}

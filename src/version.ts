@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.0.4';
+export const APP_VERSION = '2.0.5';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.0.4',
-    message: 'History capture is now less aggressive during live editor interactions, so timeline and dock edits stay responsive while still creating undo points after release.',
+    title: 'MasterSelects 2.0.5',
+    message: 'Dock resizing now follows raw mouse movement at the frame loop, while audio track and master selections open scoped Properties controls without breaking timeline focus.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.0.4',
-  message: 'This release improves editor responsiveness by batching realtime history updates and reducing unnecessary snapshot work.',
+  title: 'MasterSelects 2.0.5',
+  message: 'This release makes live dock resizing snappier, adds scoped audio bus Properties tabs, and improves debug bridge measurements for panel and timeline interactions.',
   animated: true,
 };
 

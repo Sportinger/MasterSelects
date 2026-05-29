@@ -22,6 +22,7 @@ import { compileGuidedToolCall, inspectGuidedToolCall } from '../guidedActions';
 import { getRuntimeDiagnostics } from '../runtimeDiagnostics';
 import { runtimeAudioMeterBus } from '../audio/runtimeAudioMeterBus';
 import { DEFAULT_STEM_MODEL_ID, getStemModelManager } from '../audio/stemSeparation';
+import { proxyFrameCache } from '../proxyFrameCache';
 
 const tabId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
   ? crypto.randomUUID()
@@ -314,6 +315,7 @@ async function collectStemDebugState(args: Record<string, unknown> = {}) {
     ...Array.from(timelineState.selectedClipIds),
     ...Object.keys(timelineState.clipStemSeparationJobs),
   ]);
+  const includeAllClips = args.includeAll === true || args.all === true;
   if (timelineState.primarySelectedClipId) {
     interestingClipIds.add(timelineState.primarySelectedClipId);
   }
@@ -327,6 +329,7 @@ async function collectStemDebugState(args: Record<string, unknown> = {}) {
 
   const clips = timelineState.clips
     .filter((clip) =>
+      includeAllClips ||
       interestingClipIds.has(clip.id) ||
       (typeof clip.linkedClipId === 'string' && interestingClipIds.has(clip.linkedClipId))
     )
@@ -347,6 +350,8 @@ async function collectStemDebugState(args: Record<string, unknown> = {}) {
       hasProcessedAnalysisRefs: Boolean(clip.audioState?.processedAnalysisRefs),
       hasStemSeparation: Boolean(clip.audioState?.stemSeparation),
       stemCount: clip.audioState?.stemSeparation?.stems.length ?? 0,
+      waveformLength: clip.waveform?.length ?? 0,
+      waveformChannelLengths: clip.waveformChannels?.map(channel => channel.length) ?? [],
       stemSeparation: clip.audioState?.stemSeparation
         ? {
             mixMode: clip.audioState.stemSeparation.mixMode,
@@ -360,6 +365,7 @@ async function collectStemDebugState(args: Record<string, unknown> = {}) {
               gainDb: stem.gainDb,
               mediaFileId: stem.mediaFileId ?? null,
               hasWaveform: Boolean(stem.waveform?.length),
+              waveformLength: stem.waveform?.length ?? 0,
             })),
           }
         : null,
@@ -460,6 +466,638 @@ function summarizeMediaWaveformPayloads() {
       };
     })
     .filter((entry) => entry.totalLength > 0 || entry.audioAnalysisRefs);
+}
+
+function summarizeProxyAudioCache() {
+  const cache = proxyFrameCache as unknown as {
+    audioCache?: Map<string, HTMLAudioElement>;
+    audioLoadingPromises?: Map<string, Promise<HTMLAudioElement | null>>;
+    audioBufferCache?: Map<string, AudioBuffer>;
+    audioBufferFailed?: Set<string>;
+  };
+  const mediaFileById = new Map(useMediaStore.getState().files.map((file) => [file.id, file]));
+  const audioBuffers = Array.from(cache.audioBufferCache?.entries() ?? []).map(([mediaFileId, buffer]) => {
+    const mediaFile = mediaFileById.get(mediaFileId);
+    const approximateBytes = buffer.length * buffer.numberOfChannels * Float32Array.BYTES_PER_ELEMENT;
+    return {
+      mediaFileId,
+      name: mediaFile?.name ?? mediaFileId,
+      duration: Math.round(buffer.duration * 100) / 100,
+      sampleRate: buffer.sampleRate,
+      channels: buffer.numberOfChannels,
+      frames: buffer.length,
+      approximateBytes,
+      approximateMb: Math.round((approximateBytes / 1024 / 1024) * 100) / 100,
+    };
+  });
+  const totalAudioBufferBytes = audioBuffers.reduce((sum, entry) => sum + entry.approximateBytes, 0);
+  return {
+    audioElementCount: cache.audioCache?.size ?? 0,
+    audioLoadingCount: cache.audioLoadingPromises?.size ?? 0,
+    audioBufferCount: cache.audioBufferCache?.size ?? 0,
+    audioBufferFailedCount: cache.audioBufferFailed?.size ?? 0,
+    totalAudioBufferApproximateBytes: totalAudioBufferBytes,
+    totalAudioBufferApproximateMb: Math.round((totalAudioBufferBytes / 1024 / 1024) * 100) / 100,
+    audioBuffers,
+  };
+}
+
+function summarizePerformanceMemory() {
+  const memory = (performance as unknown as {
+    memory?: {
+      usedJSHeapSize: number;
+      totalJSHeapSize: number;
+      jsHeapSizeLimit: number;
+    };
+  }).memory;
+  if (!memory) return null;
+  return {
+    usedJSHeapMb: Math.round((memory.usedJSHeapSize / 1024 / 1024) * 100) / 100,
+    totalJSHeapMb: Math.round((memory.totalJSHeapSize / 1024 / 1024) * 100) / 100,
+    jsHeapLimitMb: Math.round((memory.jsHeapSizeLimit / 1024 / 1024) * 100) / 100,
+  };
+}
+
+async function measureUiFrameLoop(args: Record<string, unknown> = {}) {
+  const durationMs = typeof args.durationMs === 'number' && Number.isFinite(args.durationMs)
+    ? Math.max(500, Math.min(60000, Math.round(args.durationMs)))
+    : 5000;
+  const expectedFrameMs = 1000 / 60;
+  const startedAt = performance.now();
+  const frames: Array<{ elapsedMs: number; deltaMs: number }> = [];
+  const longTasks: Array<Record<string, unknown>> = [];
+  const longAnimationFrames: Array<Record<string, unknown>> = [];
+  const beforeCache = summarizeProxyAudioCache();
+  const beforeMemory = summarizePerformanceMemory();
+  let observer: PerformanceObserver | null = null;
+  let animationFrameObserver: PerformanceObserver | null = null;
+  let frameId: number | null = null;
+  let previousFrameAt: number | null = null;
+
+  if (typeof PerformanceObserver !== 'undefined') {
+    try {
+      observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longTasks.push({
+            name: entry.name,
+            startTime: Math.round(entry.startTime * 100) / 100,
+            durationMs: Math.round(entry.duration * 100) / 100,
+            entryType: entry.entryType,
+          });
+        }
+      });
+      observer.observe({ entryTypes: ['longtask'] });
+    } catch {
+      observer = null;
+    }
+
+    try {
+      animationFrameObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longAnimationFrames.push({
+            name: entry.name,
+            startTime: Math.round(entry.startTime * 100) / 100,
+            durationMs: Math.round(entry.duration * 100) / 100,
+            entryType: entry.entryType,
+          });
+        }
+      });
+      animationFrameObserver.observe({ entryTypes: ['long-animation-frame'] });
+    } catch {
+      animationFrameObserver = null;
+    }
+  }
+
+  try {
+    await new Promise<void>((resolve) => {
+      const tick = (timestamp: number) => {
+        if (previousFrameAt !== null) {
+          frames.push({
+            elapsedMs: Math.round(timestamp - startedAt),
+            deltaMs: Math.round((timestamp - previousFrameAt) * 100) / 100,
+          });
+        }
+        previousFrameAt = timestamp;
+        if (timestamp - startedAt >= durationMs) {
+          resolve();
+          return;
+        }
+        frameId = window.requestAnimationFrame(tick);
+      };
+      frameId = window.requestAnimationFrame(tick);
+    });
+  } finally {
+    if (frameId !== null) window.cancelAnimationFrame(frameId);
+    observer?.disconnect();
+    animationFrameObserver?.disconnect();
+  }
+
+  const deltas = frames.map(frame => frame.deltaMs);
+  const droppedFrameEstimate = deltas.reduce((sum, delta) => (
+    sum + Math.max(0, Math.round(delta / expectedFrameMs) - 1)
+  ), 0);
+  const slowFrames = frames.filter(frame => frame.deltaMs > expectedFrameMs * 1.75);
+  const timelineState = useTimelineStore.getState();
+  return {
+    success: true,
+    data: {
+      durationMs,
+      frameCount: frames.length,
+      estimatedFps: Math.round((frames.length / Math.max(1, durationMs / 1000)) * 100) / 100,
+      frameDeltaMs: summarizeNumberList(deltas),
+      slowFrameCount: slowFrames.length,
+      droppedFrameEstimate,
+      longTaskCount: longTasks.length,
+      longAnimationFrameCount: longAnimationFrames.length,
+      longTasks,
+      longAnimationFrames,
+      beforeMemory,
+      afterMemory: summarizePerformanceMemory(),
+      beforeCache,
+      afterCache: summarizeProxyAudioCache(),
+      page: {
+        visibilityState: document.visibilityState,
+        hidden: document.hidden,
+        hasFocus: document.hasFocus(),
+      },
+      stemClipCount: timelineState.clips.filter((clip) => clip.audioState?.stemSeparation?.stems.length).length,
+      selectedClipIds: Array.from(timelineState.selectedClipIds),
+      expandedClipStemLayerIds: Array.from(timelineState.expandedClipStemLayerIds),
+      frames: frames.slice(-240),
+    },
+  };
+}
+
+function summarizeElementForDebug(element: Element | null) {
+  if (!element) return null;
+  const htmlElement = element as HTMLElement;
+  const rect = htmlElement.getBoundingClientRect();
+  return {
+    tagName: htmlElement.tagName.toLowerCase(),
+    className: htmlElement.className,
+    dataAiId: htmlElement.getAttribute('data-ai-id'),
+    dataSectionKind: htmlElement.getAttribute('data-section-kind'),
+    clientWidth: htmlElement.clientWidth,
+    clientHeight: htmlElement.clientHeight,
+    scrollWidth: htmlElement.scrollWidth,
+    scrollHeight: htmlElement.scrollHeight,
+    scrollLeft: htmlElement.scrollLeft,
+    scrollTop: htmlElement.scrollTop,
+    transform: getComputedStyle(htmlElement).transform,
+    rect: {
+      x: Math.round(rect.x * 100) / 100,
+      y: Math.round(rect.y * 100) / 100,
+      width: Math.round(rect.width * 100) / 100,
+      height: Math.round(rect.height * 100) / 100,
+    },
+  };
+}
+
+function collectTimelineInteractionSnapshot() {
+  const tracks = document.querySelector<HTMLElement>('[data-ai-id="timeline-tracks"]');
+  const bodyContent = document.querySelector<HTMLElement>('.timeline-body-content');
+  const audioSection = document.querySelector<HTMLElement>('.timeline-track-section[data-section-kind="audio"]');
+  const videoSection = document.querySelector<HTMLElement>('.timeline-track-section[data-section-kind="video"]');
+  const audioViewport = audioSection?.querySelector<HTMLElement>('.timeline-section-viewport') ?? null;
+  const videoViewport = videoSection?.querySelector<HTMLElement>('.timeline-section-viewport') ?? null;
+  const audioContent = audioSection?.querySelector<HTMLElement>('.timeline-section-content-row') ?? null;
+  const videoContent = videoSection?.querySelector<HTMLElement>('.timeline-section-content-row') ?? null;
+  const audioLanes = audioSection?.querySelector<HTMLElement>('.track-lanes-scroll') ?? null;
+  const videoLanes = videoSection?.querySelector<HTMLElement>('.track-lanes-scroll') ?? null;
+  return {
+    tracks: summarizeElementForDebug(tracks),
+    bodyContent: summarizeElementForDebug(bodyContent),
+    audioSection: summarizeElementForDebug(audioSection),
+    videoSection: summarizeElementForDebug(videoSection),
+    audioViewport: summarizeElementForDebug(audioViewport),
+    videoViewport: summarizeElementForDebug(videoViewport),
+    audioContent: summarizeElementForDebug(audioContent),
+    videoContent: summarizeElementForDebug(videoContent),
+    audioLanes: summarizeElementForDebug(audioLanes),
+    videoLanes: summarizeElementForDebug(videoLanes),
+    guidedScrollX: tracks?.getAttribute('data-guided-timeline-scroll-x') ?? null,
+    zoom: tracks?.getAttribute('data-guided-timeline-zoom') ?? null,
+  };
+}
+
+function getTimelineInteractionTarget(kind: string, sectionKind: 'audio' | 'video') {
+  const section = document.querySelector<HTMLElement>(`.timeline-track-section[data-section-kind="${sectionKind}"]`);
+  const bodyContent = document.querySelector<HTMLElement>('.timeline-body-content');
+  if (kind === 'vertical-wheel') {
+    return section?.querySelector<HTMLElement>('.timeline-section-viewport') ?? section ?? bodyContent;
+  }
+  if (kind === 'pointer-move') {
+    return bodyContent ?? section?.querySelector<HTMLElement>('.timeline-section-tracks') ?? section;
+  }
+  return section?.querySelector<HTMLElement>('.timeline-section-tracks') ?? bodyContent ?? section;
+}
+
+function dispatchTimelineInteractionEvent(
+  target: HTMLElement,
+  kind: string,
+  iteration: number,
+  deltaMagnitude: number,
+) {
+  const rect = target.getBoundingClientRect();
+  const direction = Math.floor(iteration / 8) % 2 === 0 ? 1 : -1;
+  const clientX = rect.left + Math.max(4, Math.min(rect.width - 4, rect.width * (0.2 + (iteration % 7) * 0.1)));
+  const clientY = rect.top + Math.max(4, Math.min(rect.height - 4, rect.height * 0.5));
+
+  if (kind === 'pointer-move') {
+    const pointerEvent = new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+      pointerId: 997,
+      pointerType: 'mouse',
+      isPrimary: true,
+    });
+    target.dispatchEvent(pointerEvent);
+    return;
+  }
+
+  const horizontal = kind === 'horizontal-wheel' || kind === 'horizontal-trackpad';
+  const wheelEvent = new WheelEvent('wheel', {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY,
+    deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+    deltaX: kind === 'horizontal-trackpad' ? direction * deltaMagnitude : 0,
+    deltaY: kind === 'horizontal-wheel' || kind === 'vertical-wheel' ? direction * deltaMagnitude : 0,
+    shiftKey: kind === 'horizontal-wheel',
+  });
+  target.dispatchEvent(wheelEvent);
+  if (horizontal && !wheelEvent.defaultPrevented && kind === 'horizontal-trackpad') {
+    target.dispatchEvent(new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+      deltaMode: WheelEvent.DOM_DELTA_PIXEL,
+      deltaX: direction * deltaMagnitude,
+      deltaY: 0,
+    }));
+  }
+}
+
+async function measureTimelineInteraction(args: Record<string, unknown> = {}) {
+  const durationMs = typeof args.durationMs === 'number' && Number.isFinite(args.durationMs)
+    ? Math.max(500, Math.min(60000, Math.round(args.durationMs)))
+    : 5000;
+  const eventIntervalMs = typeof args.eventIntervalMs === 'number' && Number.isFinite(args.eventIntervalMs)
+    ? Math.max(16, Math.min(500, Math.round(args.eventIntervalMs)))
+    : 50;
+  const deltaMagnitude = typeof args.delta === 'number' && Number.isFinite(args.delta)
+    ? Math.max(1, Math.min(2000, Math.round(Math.abs(args.delta))))
+    : 140;
+  const kind = typeof args.kind === 'string' && args.kind.trim()
+    ? args.kind.trim()
+    : 'horizontal-wheel';
+  const sectionKind = args.sectionKind === 'video' ? 'video' : 'audio';
+  const target = getTimelineInteractionTarget(kind, sectionKind);
+  if (!target) {
+    return {
+      success: false,
+      error: 'Timeline interaction target not found.',
+      data: {
+        kind,
+        sectionKind,
+        snapshot: collectTimelineInteractionSnapshot(),
+      },
+    };
+  }
+
+  const expectedFrameMs = 1000 / 60;
+  const startedAt = performance.now();
+  const frames: Array<{ elapsedMs: number; deltaMs: number }> = [];
+  const longTasks: Array<Record<string, unknown>> = [];
+  const longAnimationFrames: Array<Record<string, unknown>> = [];
+  const beforeCache = summarizeProxyAudioCache();
+  const beforeMemory = summarizePerformanceMemory();
+  const beforeSnapshot = collectTimelineInteractionSnapshot();
+  let observer: PerformanceObserver | null = null;
+  let animationFrameObserver: PerformanceObserver | null = null;
+  let frameId: number | null = null;
+  let timerId: number | null = null;
+  let previousFrameAt: number | null = null;
+  let eventCount = 0;
+
+  if (typeof PerformanceObserver !== 'undefined') {
+    try {
+      observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longTasks.push({
+            name: entry.name,
+            startTime: Math.round(entry.startTime * 100) / 100,
+            durationMs: Math.round(entry.duration * 100) / 100,
+            entryType: entry.entryType,
+          });
+        }
+      });
+      observer.observe({ entryTypes: ['longtask'] });
+    } catch {
+      observer = null;
+    }
+
+    try {
+      animationFrameObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longAnimationFrames.push({
+            name: entry.name,
+            startTime: Math.round(entry.startTime * 100) / 100,
+            durationMs: Math.round(entry.duration * 100) / 100,
+            entryType: entry.entryType,
+          });
+        }
+      });
+      animationFrameObserver.observe({ entryTypes: ['long-animation-frame'] });
+    } catch {
+      animationFrameObserver = null;
+    }
+  }
+
+  try {
+    timerId = window.setInterval(() => {
+      dispatchTimelineInteractionEvent(target, kind, eventCount, deltaMagnitude);
+      eventCount += 1;
+    }, eventIntervalMs);
+
+    await new Promise<void>((resolve) => {
+      const tick = (timestamp: number) => {
+        if (previousFrameAt !== null) {
+          frames.push({
+            elapsedMs: Math.round(timestamp - startedAt),
+            deltaMs: Math.round((timestamp - previousFrameAt) * 100) / 100,
+          });
+        }
+        previousFrameAt = timestamp;
+        if (timestamp - startedAt >= durationMs) {
+          resolve();
+          return;
+        }
+        frameId = window.requestAnimationFrame(tick);
+      };
+      frameId = window.requestAnimationFrame(tick);
+    });
+  } finally {
+    if (timerId !== null) window.clearInterval(timerId);
+    if (frameId !== null) window.cancelAnimationFrame(frameId);
+    observer?.disconnect();
+    animationFrameObserver?.disconnect();
+  }
+
+  const deltas = frames.map(frame => frame.deltaMs);
+  const droppedFrameEstimate = deltas.reduce((sum, delta) => (
+    sum + Math.max(0, Math.round(delta / expectedFrameMs) - 1)
+  ), 0);
+  const slowFrames = frames.filter(frame => frame.deltaMs > expectedFrameMs * 1.75);
+  const timelineState = useTimelineStore.getState();
+  return {
+    success: true,
+    data: {
+      kind,
+      sectionKind,
+      durationMs,
+      eventIntervalMs,
+      deltaMagnitude,
+      eventCount,
+      frameCount: frames.length,
+      estimatedFps: Math.round((frames.length / Math.max(1, durationMs / 1000)) * 100) / 100,
+      frameDeltaMs: summarizeNumberList(deltas),
+      slowFrameCount: slowFrames.length,
+      droppedFrameEstimate,
+      longTaskCount: longTasks.length,
+      longAnimationFrameCount: longAnimationFrames.length,
+      longTasks,
+      longAnimationFrames,
+      beforeMemory,
+      afterMemory: summarizePerformanceMemory(),
+      beforeCache,
+      afterCache: summarizeProxyAudioCache(),
+      beforeSnapshot,
+      afterSnapshot: collectTimelineInteractionSnapshot(),
+      stemClipCount: timelineState.clips.filter((clip) => clip.audioState?.stemSeparation?.stems.length).length,
+      selectedClipIds: Array.from(timelineState.selectedClipIds),
+      expandedClipStemLayerIds: Array.from(timelineState.expandedClipStemLayerIds),
+      target: summarizeElementForDebug(target),
+      frames: frames.slice(-240),
+    },
+  };
+}
+
+function collectDockResizeSnapshot() {
+  const audioMixer = document.querySelector<HTMLElement>('.audio-mixer-panel');
+  const handles = Array.from(document.querySelectorAll<HTMLElement>('.dock-resize-handle'));
+  const splits = Array.from(document.querySelectorAll<HTMLElement>('.dock-split')).map((split) => ({
+    splitId: split.dataset.splitId ?? null,
+    className: split.className,
+    rect: summarizeElementForDebug(split)?.rect ?? null,
+  }));
+  return {
+    audioMixer: summarizeElementForDebug(audioMixer),
+    handles: handles.map((handle) => summarizeElementForDebug(handle)),
+    splits,
+    dockLayout: useDockStore.getState().layout,
+  };
+}
+
+function findDockResizeHandleForDebug(args: Record<string, unknown> = {}): HTMLElement | null {
+  const splitId = typeof args.splitId === 'string' && args.splitId.trim()
+    ? args.splitId.trim()
+    : '';
+  if (splitId) {
+    const split = document.querySelector<HTMLElement>(`.dock-split[data-split-id="${CSS.escape(splitId)}"]`);
+    const handle = split?.querySelector<HTMLElement>(':scope > .dock-resize-handle');
+    if (handle) return handle;
+  }
+
+  const direction = args.direction === 'horizontal' ? 'horizontal' : 'vertical';
+  const handles = Array.from(document.querySelectorAll<HTMLElement>(`.dock-resize-handle.${direction}`));
+  if (handles.length === 0) return null;
+
+  const audioMixer = document.querySelector<HTMLElement>('.audio-mixer-panel');
+  const audioRect = audioMixer?.getBoundingClientRect();
+  if (!audioRect) return handles[0] ?? null;
+
+  return handles
+    .map((handle) => {
+      const rect = handle.getBoundingClientRect();
+      const edgeDistance = direction === 'vertical'
+        ? Math.abs(rect.top + rect.height / 2 - audioRect.top)
+        : Math.abs(rect.left + rect.width / 2 - audioRect.left);
+      return { handle, edgeDistance };
+    })
+    .sort((left, right) => left.edgeDistance - right.edgeDistance)[0]?.handle ?? null;
+}
+
+async function measureDockResizeInteraction(args: Record<string, unknown> = {}) {
+  const durationMs = typeof args.durationMs === 'number' && Number.isFinite(args.durationMs)
+    ? Math.max(500, Math.min(60000, Math.round(args.durationMs)))
+    : 3500;
+  const eventIntervalMs = typeof args.eventIntervalMs === 'number' && Number.isFinite(args.eventIntervalMs)
+    ? Math.max(16, Math.min(500, Math.round(args.eventIntervalMs)))
+    : 33;
+  const deltaMagnitude = typeof args.delta === 'number' && Number.isFinite(args.delta)
+    ? Math.max(1, Math.min(800, Math.round(Math.abs(args.delta))))
+    : 90;
+  const handle = findDockResizeHandleForDebug(args);
+  if (!handle) {
+    return {
+      success: false,
+      error: 'Dock resize handle not found.',
+      data: {
+        snapshot: collectDockResizeSnapshot(),
+      },
+    };
+  }
+
+  const expectedFrameMs = 1000 / 60;
+  const startedAt = performance.now();
+  const frames: Array<{ elapsedMs: number; deltaMs: number }> = [];
+  const longTasks: Array<Record<string, unknown>> = [];
+  const longAnimationFrames: Array<Record<string, unknown>> = [];
+  const beforeCache = summarizeProxyAudioCache();
+  const beforeMemory = summarizePerformanceMemory();
+  const beforeSnapshot = collectDockResizeSnapshot();
+  const handleRect = handle.getBoundingClientRect();
+  const handleIsHorizontal = handle.classList.contains('horizontal');
+  const startX = handleRect.left + handleRect.width / 2;
+  const startY = handleRect.top + handleRect.height / 2;
+  let observer: PerformanceObserver | null = null;
+  let animationFrameObserver: PerformanceObserver | null = null;
+  let frameId: number | null = null;
+  let timerId: number | null = null;
+  let previousFrameAt: number | null = null;
+  let eventCount = 0;
+
+  if (typeof PerformanceObserver !== 'undefined') {
+    try {
+      observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longTasks.push({
+            name: entry.name,
+            startTime: Math.round(entry.startTime * 100) / 100,
+            durationMs: Math.round(entry.duration * 100) / 100,
+            entryType: entry.entryType,
+          });
+        }
+      });
+      observer.observe({ entryTypes: ['longtask'] });
+    } catch {
+      observer = null;
+    }
+
+    try {
+      animationFrameObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longAnimationFrames.push({
+            name: entry.name,
+            startTime: Math.round(entry.startTime * 100) / 100,
+            durationMs: Math.round(entry.duration * 100) / 100,
+            entryType: entry.entryType,
+          });
+        }
+      });
+      animationFrameObserver.observe({ entryTypes: ['long-animation-frame'] });
+    } catch {
+      animationFrameObserver = null;
+    }
+  }
+
+  const dispatchWindowMouseMove = (clientX: number, clientY: number) => {
+    window.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY,
+      button: 0,
+    }));
+  };
+
+  try {
+    handle.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: startX,
+      clientY: startY,
+      button: 0,
+    }));
+
+    timerId = window.setInterval(() => {
+      const progress = (eventCount % 24) / 24;
+      const wave = Math.sin(progress * Math.PI * 2);
+      dispatchWindowMouseMove(
+        handleIsHorizontal ? startX + wave * deltaMagnitude : startX,
+        handleIsHorizontal ? startY : startY + wave * deltaMagnitude,
+      );
+      eventCount += 1;
+    }, eventIntervalMs);
+
+    await new Promise<void>((resolve) => {
+      const tick = (timestamp: number) => {
+        if (previousFrameAt !== null) {
+          frames.push({
+            elapsedMs: Math.round(timestamp - startedAt),
+            deltaMs: Math.round((timestamp - previousFrameAt) * 100) / 100,
+          });
+        }
+        previousFrameAt = timestamp;
+        if (timestamp - startedAt >= durationMs) {
+          resolve();
+          return;
+        }
+        frameId = window.requestAnimationFrame(tick);
+      };
+      frameId = window.requestAnimationFrame(tick);
+    });
+  } finally {
+    if (timerId !== null) window.clearInterval(timerId);
+    dispatchWindowMouseMove(startX, startY);
+    window.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      clientX: startX,
+      clientY: startY,
+      button: 0,
+    }));
+    if (frameId !== null) window.cancelAnimationFrame(frameId);
+    observer?.disconnect();
+    animationFrameObserver?.disconnect();
+  }
+
+  const deltas = frames.map(frame => frame.deltaMs);
+  const droppedFrameEstimate = deltas.reduce((sum, delta) => (
+    sum + Math.max(0, Math.round(delta / expectedFrameMs) - 1)
+  ), 0);
+  const slowFrames = frames.filter(frame => frame.deltaMs > expectedFrameMs * 1.75);
+  return {
+    success: true,
+    data: {
+      durationMs,
+      eventIntervalMs,
+      deltaMagnitude,
+      eventCount,
+      frameCount: frames.length,
+      estimatedFps: Math.round((frames.length / Math.max(1, durationMs / 1000)) * 100) / 100,
+      frameDeltaMs: summarizeNumberList(deltas),
+      slowFrameCount: slowFrames.length,
+      droppedFrameEstimate,
+      longTaskCount: longTasks.length,
+      longAnimationFrameCount: longAnimationFrames.length,
+      longTasks,
+      longAnimationFrames,
+      beforeMemory,
+      afterMemory: summarizePerformanceMemory(),
+      beforeCache,
+      afterCache: summarizeProxyAudioCache(),
+      beforeSnapshot,
+      afterSnapshot: collectDockResizeSnapshot(),
+      handle: summarizeElementForDebug(handle),
+      frames: frames.slice(-240),
+    },
+  };
 }
 
 async function measureIdleMainThread(args: Record<string, unknown> = {}) {
@@ -1130,6 +1768,32 @@ async function runDebugAction(action: string, args: Record<string, unknown> = {}
       return measureIdleMainThread(args);
     case 'measure-store-churn':
       return measureStoreChurn(args);
+    case 'measure-ui-frame-loop':
+      return measureUiFrameLoop(args);
+    case 'measure-timeline-interaction':
+      return measureTimelineInteraction(args);
+    case 'measure-dock-resize-interaction':
+      return measureDockResizeInteraction(args);
+    case 'get-proxy-audio-cache-state':
+      return {
+        success: true,
+        data: {
+          memory: summarizePerformanceMemory(),
+          proxyAudioCache: summarizeProxyAudioCache(),
+        },
+      };
+    case 'clear-proxy-audio-buffer-cache': {
+      const before = summarizeProxyAudioCache();
+      proxyFrameCache.clearAudioBufferCache();
+      return {
+        success: true,
+        data: {
+          before,
+          after: summarizeProxyAudioCache(),
+          memory: summarizePerformanceMemory(),
+        },
+      };
+    }
     case 'run-audio-element-benchmark':
       return runAudioElementBenchmark(args);
     case 'get-audio-proxy-state':
@@ -1214,6 +1878,25 @@ async function runDebugAction(action: string, args: Record<string, unknown> = {}
       }
       timelineState.setClipStemLayerDropdownOpen(clipId, args.open !== false);
       return collectStemDebugState({ ...args, clipId });
+    }
+    case 'sync-clip-stem-copies': {
+      const clipId = typeof args.clipId === 'string' && args.clipId.trim()
+        ? args.clipId.trim()
+        : timelineState.primarySelectedClipId ?? Array.from(timelineState.selectedClipIds)[0] ?? '';
+      if (!clipId) {
+        return { success: false, error: 'No clipId provided and no clip is selected.' };
+      }
+      const copyCount = timelineState.syncClipStemSeparationCopies(clipId);
+      const debugState = await collectStemDebugState({ ...args, clipId });
+      return {
+        success: true,
+        data: {
+          action,
+          clipId,
+          copyCount,
+          debugState: debugState.success ? debugState.data : null,
+        },
+      };
     }
     case 'set-slot-view': {
       const progress = typeof args.progress === 'number' ? args.progress : 1;

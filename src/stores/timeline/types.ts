@@ -200,6 +200,12 @@ export interface TimelineClipDragPreview {
 export type TimelineAudioDisplayMode = 'compact' | 'detailed' | 'spectral';
 export type TimelineTrackFocusMode = 'balanced' | 'audio' | 'video';
 
+export type TimelinePropertiesSelection =
+  | { kind: 'clip'; clipId: string }
+  | { kind: 'track'; trackId: string }
+  | { kind: 'master' }
+  | null;
+
 export interface TimelineAudioRegionSelection {
   clipId: string;
   trackId: string;
@@ -322,6 +328,7 @@ export interface TimelineState {
   playbackWarmup: PlaybackWarmupState | null;
   selectedClipIds: Set<string>;
   primarySelectedClipId: string | null; // The clip the user actually clicked (for Properties panel)
+  propertiesSelection: TimelinePropertiesSelection;
   targetTrackIdByType: Partial<Record<'video' | 'audio', string>>;
 
   // Render layers (populated by useLayerSync from timeline clips, used by engine)
@@ -903,6 +910,7 @@ export interface StemSeparationActions {
   setClipStemSolo: (clipId: string, stemId: string | null) => void;
   setClipStemEnabled: (clipId: string, stemId: string, enabled: boolean) => void;
   setClipStemGain: (clipId: string, stemId: string, gainDb: number) => void;
+  syncClipStemSeparationCopies: (clipId: string) => number;
   clearClipStemSeparation: (clipId: string) => void;
   toggleClipStemLayerDropdown: (clipId: string) => void;
   setClipStemLayerDropdownOpen: (clipId: string, open: boolean) => void;
@@ -964,6 +972,9 @@ export interface SelectionActions {
   addClipToSelection: (id: string) => void;
   removeClipFromSelection: (id: string) => void;
   clearClipSelection: () => void;
+  selectTrackProperties: (trackId: string) => void;
+  selectMasterProperties: () => void;
+  clearPropertiesSelection: () => void;
   // Keyframe selection
   selectKeyframe: (keyframeId: string, addToSelection?: boolean) => void;
   deselectAllKeyframes: () => void;

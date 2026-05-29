@@ -312,24 +312,32 @@ See [Slot Grid](./Slot-Grid.md) for the current live/deck behavior, slot-clip tr
 
 ## Properties Panel
 
-The unified Properties panel adapts its tabs to the selected clip type and to slot-grid mode.
+The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Tab labels are scoped with `CLIP`, `TRACK`, or `MASTER`; transcript tabs are shown only for clip targets.
 
 ### Standard Video Clip Tabs
 
 | Tab | Contents |
 |-----|----------|
-| **Transform** | Position, scale, rotation, opacity, blend mode, and speed |
-| **Effects** | GPU effects list with parameters |
-| **Masks** | Mask shapes with mode and feather controls |
-| **Transcript** | Speech-to-text transcript with playback sync |
-| **Analysis** | Focus, motion, face, and AI scene metadata |
+| **CLIP Transform** | Position, scale, rotation, opacity, blend mode, and speed |
+| **CLIP Effects** | GPU effects list with parameters |
+| **CLIP Masks** | Mask shapes with mode and feather controls |
+| **CLIP Transcript** | Speech-to-text transcript with playback sync |
+| **CLIP Analysis** | Focus, motion, face, and AI scene metadata |
 
 ### Audio Clip Tabs
 
 | Tab | Contents |
 |-----|----------|
-| **Effects** | Audio effects and linked audio controls |
-| **Transcript** | Speech-to-text transcript |
+| **CLIP Effects** | Audio effects and linked audio controls |
+| **CLIP Audio Edits** | Non-destructive edit-stack operations |
+| **CLIP Transcript** | Speech-to-text transcript |
+
+### Audio Track And Master Tabs
+
+| Target | Tabs |
+|--------|------|
+| **Audio track/layer** | TRACK Controls, TRACK Effects, TRACK Sends |
+| **Master bus** | MASTER Controls, MASTER Effects |
 
 ### Text and 3D Text Tabs
 
@@ -371,6 +379,8 @@ The unified Properties panel adapts its tabs to the selected clip type and to sl
 ### Tab Behavior
 
 - Tabs switch automatically based on clip type
+- Clicking an audio track/layer in the Timeline or a strip in the Audio Mixer selects the same `TRACK` Properties target, highlights both surfaces, and smoothly reveals off-screen timeline audio layers
+- Clicking the master bus selects the `MASTER` Properties target
 - Badge counts appear for effects, masks, transcripts, and analysis readiness
 - Slot grid mode switches the panel to the Slot Clip tab
 - The Slot Clip tab shows the slotted composition tracks, the configured trim window, and the current live layer playhead on one range timeline

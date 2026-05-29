@@ -1,6 +1,6 @@
 import type { ClipAudioState, ClipAudioStemState } from '../../types';
 import { DEFAULT_STEM_MODEL_ID, STEM_SOURCE_LAYER_ID } from '../../services/audio/stemSeparation';
-import { resolveAudibleAudioClip } from '../../services/audio/audioClipResolution';
+import { isAudioCapableTimelineClip, resolveAudibleAudioClip } from '../../services/audio/audioClipResolution';
 import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
 import type {
@@ -32,7 +32,7 @@ export function setClipStemSeparationRunner(runner: ClipStemSeparationRunner | n
   stemSeparationRunner = runner;
 }
 
-function isTrackLocked(tracks: TimelineTrack[], trackId: string | undefined): boolean {
+function isTrackLocked(tracks: readonly TimelineTrack[], trackId: string | undefined): boolean {
   return !!trackId && tracks.find(track => track.id === trackId)?.locked === true;
 }
 
@@ -72,6 +72,106 @@ function applyStemStateToClip(
     ...clip,
     audioState: compactAudioState(audioState),
   };
+}
+
+function getClipStemShareMediaFileId(clip: TimelineClip): string | null {
+  return clip.source?.mediaFileId ?? clip.mediaFileId ?? null;
+}
+
+function getClipStemShareFileKey(clip: TimelineClip): string | null {
+  const file = clip.file ?? clip.source?.file;
+  if (!(file instanceof File)) return null;
+  return [
+    file.name,
+    file.type,
+    file.size,
+    file.lastModified,
+  ].join(':');
+}
+
+function clipsShareStemSource(sourceClip: TimelineClip, candidate: TimelineClip): boolean {
+  if (!isAudioCapableTimelineClip(candidate)) return false;
+
+  const sourceMediaFileId = getClipStemShareMediaFileId(sourceClip);
+  const candidateMediaFileId = getClipStemShareMediaFileId(candidate);
+  if (sourceMediaFileId && candidateMediaFileId) {
+    return sourceMediaFileId === candidateMediaFileId;
+  }
+
+  const sourceFileKey = getClipStemShareFileKey(sourceClip);
+  const candidateFileKey = getClipStemShareFileKey(candidate);
+  return Boolean(sourceFileKey && candidateFileKey && sourceFileKey === candidateFileKey);
+}
+
+function cloneStemSeparationState(stemSeparation: ClipAudioStemState): ClipAudioStemState {
+  return structuredClone(stemSeparation);
+}
+
+function createSharedStemAvailabilityState(
+  stemSeparation: ClipAudioStemState,
+  existing: ClipAudioStemState | undefined,
+): ClipAudioStemState {
+  const shared = cloneStemSeparationState(stemSeparation);
+
+  if (!existing || existing.sourceFingerprint !== stemSeparation.sourceFingerprint) {
+    return {
+      ...shared,
+      mixMode: 'original',
+      soloStemId: STEM_SOURCE_LAYER_ID,
+      sourceGainDb: 0,
+    };
+  }
+
+  const existingStemByKind = new Map(existing.stems.map(stem => [stem.kind, stem]));
+  const existingSoloKind = existing.soloStemId === STEM_SOURCE_LAYER_ID
+    ? null
+    : existing.stems.find(stem => stem.id === existing.soloStemId)?.kind;
+  const nextSoloStem = existingSoloKind
+    ? shared.stems.find(stem => stem.kind === existingSoloKind)
+    : null;
+
+  return {
+    ...shared,
+    mixMode: existing.mixMode,
+    soloStemId: existing.soloStemId === STEM_SOURCE_LAYER_ID
+      ? STEM_SOURCE_LAYER_ID
+      : nextSoloStem?.id,
+    sourceGainDb: existing.sourceGainDb ?? 0,
+    stems: shared.stems.map(stem => {
+      const existingStem = existingStemByKind.get(stem.kind);
+      return existingStem
+        ? {
+            ...stem,
+            enabled: existingStem.enabled,
+            gainDb: existingStem.gainDb,
+          }
+        : stem;
+    }),
+  };
+}
+
+function applyStemStateToSourceCopies(
+  clips: readonly TimelineClip[],
+  tracks: readonly TimelineTrack[],
+  sourceClipId: string,
+  stemSeparation: ClipAudioStemState,
+): { clips: TimelineClip[]; changedCount: number } {
+  const sourceClip = clips.find(clip => clip.id === sourceClipId);
+  if (!sourceClip) return { clips: [...clips], changedCount: 0 };
+
+  let changedCount = 0;
+  const nextClips = clips.map((clip) => {
+    if (!clipsShareStemSource(sourceClip, clip)) return clip;
+    if (clip.id !== sourceClipId && isTrackLocked(tracks, clip.trackId)) return clip;
+
+    changedCount += 1;
+    const nextStemState = clip.id === sourceClipId
+      ? cloneStemSeparationState(stemSeparation)
+      : createSharedStemAvailabilityState(stemSeparation, clip.audioState?.stemSeparation);
+    return applyStemStateToClip(clip, nextStemState);
+  });
+
+  return { clips: nextClips, changedCount };
 }
 
 function updateStemJob(
@@ -265,12 +365,15 @@ async function runStemSeparationJob(
     }
 
     captureSnapshot('Separate stems');
-    set({
-      clips: clips.map(clip =>
-        clip.id === audioClipId ? applyStemStateToClip(clip, stemSeparation) : clip
-      ),
-    });
+    const applied = applyStemStateToSourceCopies(clips, tracks, audioClipId, stemSeparation);
+    set({ clips: applied.clips });
     get().invalidateCache();
+    if (applied.changedCount > 1) {
+      log.info('Shared stem separation with source copies', {
+        audioClipId,
+        copyCount: applied.changedCount - 1,
+      });
+    }
     updateStemJob(set, get, audioClipId, jobId, {
       phase: 'complete',
       progress: 1,
@@ -457,6 +560,23 @@ export const createStemSeparationSlice: SliceCreator<StemSeparationActions> = (s
         ),
       { skipHistoryWhilePlaying: true }
     );
+  },
+
+  syncClipStemSeparationCopies: (clipId) => {
+    const { clips, tracks } = get();
+    const resolved = resolveAudibleAudioClip(clips, clipId);
+    const audioClip = resolved?.audioClip;
+    const stemSeparation = audioClip?.audioState?.stemSeparation;
+    if (!audioClip || !stemSeparation) return 0;
+
+    const applied = applyStemStateToSourceCopies(clips, tracks, audioClip.id, stemSeparation);
+    const copyCount = Math.max(0, applied.changedCount - 1);
+    if (copyCount === 0) return 0;
+
+    captureSnapshot('Share stems with copies');
+    set({ clips: applied.clips });
+    get().invalidateCache();
+    return copyCount;
   },
 
   clearClipStemSeparation: (clipId) => {

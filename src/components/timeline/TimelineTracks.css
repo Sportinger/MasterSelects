@@ -58,6 +58,17 @@
   color: #fff;
 }
 
+.track-header.properties-selected {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-color));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent),
+    inset 4px 0 0 color-mix(in srgb, var(--accent) 84%, transparent);
+}
+
+.track-header.properties-selected .track-name {
+  color: var(--text-primary);
+}
+
 .track-header.locked {
   border-left: 2px solid var(--warning);
   filter: saturate(0.78) brightness(0.86);
@@ -382,6 +393,32 @@
 .audio-track-faders .audio-level-meter {
   width: 100%;
   height: 100%;
+}
+
+.audio-track-faders .audio-track-level-meter.stereo {
+  gap: 2px;
+  padding: 1px;
+  border-radius: 4px;
+}
+
+.audio-track-faders .audio-track-level-meter.stereo .audio-level-meter-stereo-channel {
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 22%),
+    rgba(3, 12, 13, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.audio-track-faders .audio-track-level-meter.stereo.vertical .audio-level-meter-scale {
+  background:
+    linear-gradient(0deg, rgba(67, 205, 139, 0.16) 0 60%, rgba(255, 219, 92, 0.14) 69% 86%, rgba(255, 87, 72, 0.18) 88%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.11) 0 1px, transparent 1px 10px);
+  opacity: 0.6;
+}
+
+.audio-track-faders .audio-track-level-meter.stereo .audio-level-meter-rms,
+.audio-track-faders .audio-track-level-meter.stereo .audio-level-meter-peak {
+  display: none;
 }
 
 .audio-track-fader-column {
@@ -1375,6 +1412,13 @@
   z-index: 2;
 }
 
+.track-lane.properties-selected {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-color));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    inset 4px 0 0 color-mix(in srgb, var(--accent) 78%, transparent);
+}
+
 .track-lane.video {
   background:
     repeating-linear-gradient(
@@ -1417,7 +1461,7 @@
   position: relative;
   width: 100%;
   box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.33);
+  background: rgba(24, 26, 28, 0.72);
   border-top: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
 }
 
@@ -1437,8 +1481,8 @@
   border-left: 1px solid color-mix(in srgb, var(--accent-timeline) 40%, var(--border-color));
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   background:
-    linear-gradient(90deg, rgba(31, 41, 55, 0.82), rgba(19, 28, 36, 0.78)),
-    color-mix(in srgb, var(--bg-secondary) 82%, black);
+    linear-gradient(90deg, rgba(47, 50, 54, 0.9), rgba(34, 36, 39, 0.88)),
+    color-mix(in srgb, var(--bg-secondary) 80%, #333);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -1511,11 +1555,11 @@
 }
 
 .clip-stem-layer-row.solo {
-  background: color-mix(in srgb, var(--accent-timeline) 13%, transparent);
+  background: rgba(148, 163, 184, 0.12);
 }
 
 .clip-stem-layer-row.source {
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(148, 163, 184, 0.1);
 }
 
 .clip-stem-layer-row.mix {
@@ -1636,13 +1680,13 @@
 }
 
 .clip-stem-layer-waveform path {
-  fill: color-mix(in srgb, var(--accent-timeline) 68%, #f8fafc);
-  opacity: 0.72;
+  fill: rgba(203, 213, 225, 0.76);
+  opacity: 0.78;
 }
 
 .clip-stem-layer-row.muted .clip-stem-layer-waveform path,
 .clip-stem-layer-row.bypassed .clip-stem-layer-waveform path {
-  opacity: 0.34;
+  opacity: 0.36;
 }
 
 .clip-stem-layer-gain {

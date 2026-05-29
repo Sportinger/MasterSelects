@@ -41,6 +41,7 @@ import {
 import { resolveProcessedAudioAnalysisDisplayStatus } from './utils/audioAnalysisDisplayStatus';
 import { resolveAudioWaveformDiagnostics } from './utils/audioWaveformDiagnostics';
 import { resolveAudioVolumeAutomationCurveKeyframes } from './utils/audioAutomationCurve';
+import { STEM_SOURCE_LAYER_ID } from '../../services/audio/stemSeparation';
 import {
   frequencyHzFromSpectralY,
   getSpectralMaxFrequencyHz,
@@ -635,14 +636,40 @@ function TimelineClipComponent({
   const clipAudioKeyframes = useTimelineStore(s => s.clipKeyframes.get(clip.id) ?? EMPTY_CLIP_KEYFRAMES);
   const processedWaveformPyramidRef = clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId;
   const sourceWaveformPyramidRef = clip.audioState?.sourceAnalysisRefs?.waveformPyramidId;
+  const stemSeparationState = clip.audioState?.stemSeparation;
+  const soloStemLayer = stemSeparationState
+    && stemSeparationState.mixMode !== 'original'
+    && stemSeparationState.soloStemId
+    && stemSeparationState.soloStemId !== STEM_SOURCE_LAYER_ID
+    ? stemSeparationState.stems.find(stem => stem.id === stemSeparationState.soloStemId) ?? null
+    : null;
+  const soloStemMediaFileId = soloStemLayer?.mediaFileId;
+  const soloStemMediaFile = useMediaStore(s => (
+    soloStemMediaFileId ? s.files.find(file => file.id === soloStemMediaFileId) : undefined
+  ));
+  const soloStemWaveformPyramidRef = soloStemMediaFile?.audioAnalysisRefs?.waveformPyramidId;
   const processedSpectrogramTileSetRef = clip.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0];
   const sourceSpectrogramTileSetRef = clip.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0];
   const processedWaveformState = useTimelineWaveformPyramidState(processedWaveformPyramidRef);
   const sourceWaveformState = useTimelineWaveformPyramidState(sourceWaveformPyramidRef);
+  const soloStemWaveformState = useTimelineWaveformPyramidState(soloStemWaveformPyramidRef);
   const processedSpectrogramState = useTimelineSpectrogramTileSetState(processedSpectrogramTileSetRef);
   const sourceSpectrogramState = useTimelineSpectrogramTileSetState(sourceSpectrogramTileSetRef);
   const processedWaveformPyramid = processedWaveformState.pyramid;
   const sourceWaveformPyramid = sourceWaveformState.pyramid;
+  const soloStemWaveformPyramid = soloStemWaveformState.pyramid;
+  const soloStemWaveform = soloStemMediaFile?.waveform?.length
+    ? soloStemMediaFile.waveform
+    : soloStemLayer?.waveform ?? [];
+  const soloStemWaveformChannels = soloStemMediaFile?.waveformChannels;
+  const hasSoloStemWaveform = Boolean(
+    soloStemLayer &&
+    (
+      soloStemWaveformPyramid ||
+      soloStemWaveform.length > 0 ||
+      soloStemWaveformChannels?.some(channel => channel.length > 0)
+    ),
+  );
   const audioEditStack = clip.audioState?.editStack ?? EMPTY_AUDIO_EDIT_STACK;
   const activeAudioEditCount = audioEditStack.filter(operation => operation.enabled !== false).length;
   const latestAudioBake = clip.audioState?.bakeHistory?.at(-1);
@@ -1422,10 +1449,14 @@ function TimelineClipComponent({
       };
     });
   }, [activeAudioRegionOperationDrag, audioEditStack, audioRegionSelection]);
-  const waveformPyramidForRender = activeAudioRegionOperationDrag?.operationIds.length && sourceWaveformPyramid
+  const preferSourceWaveformForAudioRegionDrag = Boolean(activeAudioRegionOperationDrag?.operationIds.length && sourceWaveformPyramid);
+  const preferSoloStemWaveform = Boolean(!preferSourceWaveformForAudioRegionDrag && hasSoloStemWaveform);
+  const waveformPyramidForRender = preferSourceWaveformForAudioRegionDrag
     ? sourceWaveformPyramid
-    : waveformPyramid;
-  const waveformVariantForRender = activeAudioRegionOperationDrag?.operationIds.length && sourceWaveformPyramid
+    : preferSoloStemWaveform
+      ? soloStemWaveformPyramid
+      : waveformPyramid;
+  const waveformVariantForRender = preferSourceWaveformForAudioRegionDrag || preferSoloStemWaveform
     ? 'source'
     : waveformVariant;
   const waveformUsesProcessedPyramidForRender = Boolean(
@@ -1436,14 +1467,51 @@ function TimelineClipComponent({
   const processedWaveformPyramidForRender = waveformUsesProcessedPyramidForRender
     ? processedWaveformPyramid
     : null;
-  const waveformNaturalDurationForRender = processedWaveformPyramidForRender
+  const soloStemRangeDuration = stemSeparationState
+    ? Math.max(0.001, stemSeparationState.range.end - stemSeparationState.range.start)
+    : 0;
+  const soloStemNaturalDurationForRender = Math.max(
+    0.001,
+    soloStemWaveformPyramid?.duration ||
+      soloStemMediaFile?.duration ||
+      soloStemRangeDuration ||
+      clip.source?.naturalDuration ||
+      clip.duration,
+  );
+  const soloStemRangeStart = stemSeparationState?.range.start ?? 0;
+  const soloStemInPointForRender = Math.min(
+    soloStemNaturalDurationForRender,
+    Math.max(0, displayInPoint - soloStemRangeStart),
+  );
+  const soloStemOutPointForRender = Math.max(
+    soloStemInPointForRender,
+    Math.min(soloStemNaturalDurationForRender, Math.max(0.001, displayOutPoint - soloStemRangeStart)),
+  );
+  const waveformNaturalDurationForRender = preferSoloStemWaveform
+    ? soloStemNaturalDurationForRender
+    : processedWaveformPyramidForRender
     ? Math.max(0.001, processedWaveformPyramidForRender.duration)
     : (clip.source?.naturalDuration || clip.duration);
-  const waveformInPointForRender = processedWaveformPyramidForRender ? 0 : displayInPoint;
-  const waveformOutPointForRender = processedWaveformPyramidForRender
+  const waveformInPointForRender = preferSoloStemWaveform
+    ? soloStemInPointForRender
+    : processedWaveformPyramidForRender ? 0 : displayInPoint;
+  const waveformOutPointForRender = preferSoloStemWaveform
+    ? soloStemOutPointForRender
+    : processedWaveformPyramidForRender
     ? Math.max(0.001, processedWaveformPyramidForRender.duration)
     : displayOutPoint;
-  const canApplyPredictiveAudioWaveform = waveformVariantForRender !== 'processed';
+  const waveformLegacyForRender = preferSoloStemWaveform ? soloStemWaveform : (clip.waveform ?? []);
+  const waveformChannelsForRender = preferSoloStemWaveform ? soloStemWaveformChannels : clip.waveformChannels;
+  const hasWaveformForRender = Boolean(
+    waveformPyramidForRender ||
+    waveformLegacyForRender.length > 0 ||
+    waveformChannelsForRender?.some(channel => channel.length > 0)
+  );
+  const soloStemGainMultiplier = preferSoloStemWaveform
+    ? 10 ** ((soloStemLayer?.gainDb ?? 0) / 20)
+    : 1;
+  const waveformDisplayGainForRender = Math.max(0, Math.min(8, waveformDisplayGain * soloStemGainMultiplier));
+  const canApplyPredictiveAudioWaveform = waveformVariantForRender !== 'processed' && !preferSoloStemWaveform;
   const predictiveAudioEditStack = canApplyPredictiveAudioWaveform
     ? displayAudioEditStack
     : EMPTY_AUDIO_EDIT_STACK;
@@ -3292,9 +3360,7 @@ function TimelineClipComponent({
       {/* Audio waveform / spectrogram */}
       {waveformsEnabled && isAudioClip && (
         audioDisplayMode === 'spectral'
-        || waveformPyramidForRender
-        || (clip.waveform && clip.waveform.length > 0)
-        || clip.waveformChannels?.some(channel => channel.length > 0)
+        || hasWaveformForRender
       ) && (
         <div className="clip-waveform">
           {audioDisplayMode === 'spectral' && spectrogramTileSet ? (
@@ -3311,11 +3377,11 @@ function TimelineClipComponent({
             />
           ) : audioDisplayMode === 'spectral' ? (
             <div className="spectrogram-pending" />
-          ) : waveformPyramid || (clip.waveform && clip.waveform.length > 0) || clip.waveformChannels?.some(channel => channel.length > 0) ? (
+          ) : hasWaveformForRender ? (
             <ClipWaveform
               clipId={clip.id}
-              waveform={clip.waveform ?? []}
-              waveformChannels={clip.waveformChannels}
+              waveform={waveformLegacyForRender}
+              waveformChannels={waveformChannelsForRender}
               width={width}
               height={Math.max(20, trackBaseHeight - 12)}
               inPoint={waveformInPointForRender}
@@ -3326,7 +3392,7 @@ function TimelineClipComponent({
               pixelsPerSecond={zoom}
               pyramid={waveformPyramidForRender}
               waveformVariant={waveformVariantForRender}
-              displayGain={waveformDisplayGain}
+              displayGain={waveformDisplayGainForRender}
               volumeAutomationKeyframes={audioVolumeAutomationKeyframes}
               audioEditStack={predictiveAudioEditStack}
               audioRegionGainPreview={predictiveAudioRegionGainPreview}

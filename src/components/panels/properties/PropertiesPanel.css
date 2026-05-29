@@ -432,11 +432,14 @@
   border-bottom: 1px solid var(--border-color);
   min-height: 32px;
   flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .properties-tabs .tab-btn {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: var(--sp-1-5);
   padding: 0 16px;
   height: 32px;
@@ -482,6 +485,129 @@
 
 .properties-tab-content {
   padding: var(--sp-2);
+}
+
+.audio-bus-properties-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.audio-bus-properties-tab .properties-section {
+  margin-bottom: 0;
+}
+
+.audio-bus-meter-section {
+  display: grid;
+  gap: var(--sp-1-5);
+}
+
+.audio-bus-inline-meter {
+  min-height: 18px;
+}
+
+.audio-bus-meter-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+}
+
+.audio-bus-control-row {
+  display: grid;
+  grid-template-columns: minmax(68px, 90px) minmax(0, 1fr) 68px;
+  align-items: center;
+  gap: var(--sp-1-5);
+  min-width: 0;
+  margin-bottom: var(--sp-1);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.audio-bus-control-row-compact {
+  grid-template-columns: minmax(68px, 90px) minmax(0, 1fr);
+}
+
+.audio-bus-control-row input[type="range"],
+.audio-bus-control-row select {
+  min-width: 0;
+}
+
+.audio-bus-control-row input[type="number"],
+.audio-bus-send-header input {
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+
+.audio-bus-control-row input[type="number"] {
+  padding: 0 var(--sp-1);
+  text-align: right;
+}
+
+.audio-bus-control-row select {
+  height: 26px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.audio-bus-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+.audio-bus-toggle-grid label,
+.audio-bus-inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+}
+
+.audio-bus-send-list {
+  display: grid;
+  gap: var(--sp-1-5);
+}
+
+.audio-bus-send-item {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-1-5);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.audio-bus-send-item.bypassed {
+  opacity: 0.62;
+}
+
+.audio-bus-send-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--sp-1);
+  align-items: center;
+}
+
+.audio-bus-send-header input {
+  padding: 0 var(--sp-1-5);
+}
+
+.audio-bus-telemetry-note {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
 }
 
 .lottie-tab {

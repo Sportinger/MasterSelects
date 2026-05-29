@@ -7,29 +7,43 @@ import { useDockStore } from '../stores/dockStore';
 
 export function useClipPanelSync() {
   const clips = useTimelineStore(state => state.clips);
+  const tracks = useTimelineStore(state => state.tracks);
   const selectedClipIds = useTimelineStore(state => state.selectedClipIds);
+  const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const activatePanelType = useDockStore(state => state.activatePanelType);
 
   // Track previous selection to only activate on new selections
-  const prevSelectedId = useRef<string | null>(null);
+  const prevSelectionKey = useRef<string | null>(null);
 
   useEffect(() => {
-    // Get first selected clip
-    const selectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
+    let selectionKey: string | null = null;
+
+    if (propertiesSelection?.kind === 'clip') {
+      selectionKey = clips.some(clip => clip.id === propertiesSelection.clipId)
+        ? `clip:${propertiesSelection.clipId}`
+        : null;
+    } else if (propertiesSelection?.kind === 'track') {
+      selectionKey = tracks.some(track => track.id === propertiesSelection.trackId)
+        ? `track:${propertiesSelection.trackId}`
+        : null;
+    } else if (propertiesSelection?.kind === 'master') {
+      selectionKey = 'master';
+    } else {
+      const selectedId = selectedClipIds.size > 0 ? [...selectedClipIds][0] : null;
+      selectionKey = selectedId && clips.some(clip => clip.id === selectedId)
+        ? `clip:${selectedId}`
+        : null;
+    }
 
     // Only react to new selections (not deselections or same selection)
-    if (!selectedId || selectedId === prevSelectedId.current) {
-      prevSelectedId.current = selectedId;
+    if (!selectionKey || selectionKey === prevSelectionKey.current) {
+      prevSelectionKey.current = selectionKey;
       return;
     }
 
-    prevSelectedId.current = selectedId;
+    prevSelectionKey.current = selectionKey;
 
-    // Find the selected clip
-    const selectedClip = clips.find(c => c.id === selectedId);
-    if (!selectedClip) return;
-
-    // Activate Properties panel (handles both audio and video clips with appropriate tabs)
+    // Activate Properties panel for clip, audio track, and master bus targets.
     activatePanelType('clip-properties');
-  }, [selectedClipIds, clips, activatePanelType]);
+  }, [selectedClipIds, propertiesSelection, clips, tracks, activatePanelType]);
 }

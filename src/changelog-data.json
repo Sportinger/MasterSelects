@@ -2,6 +2,13 @@
   {
     "date": "2026-05-29",
     "type": "improve",
+    "title": "MasterSelects 2.0.5",
+    "description": "Dock split dragging now coalesces raw mouse movement into animation-frame updates and commits the final layout once on release, making Audio Mixer and Properties resizing feel much more responsive. Audio track and master selections also open scoped Properties tabs, with synchronized mixer/timeline focus and expanded debug bridge profiling for dock and timeline interactions.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-05-29",
+    "type": "improve",
     "title": "MasterSelects 2.0.4",
     "description": "History capture is less aggressive during realtime editor interactions: dock resizing and floating panel moves are batched until release, debug history disabling is available for profiling, and locked preview tracks no longer spam transform updates.",
     "section": "Release",

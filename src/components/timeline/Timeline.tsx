@@ -97,12 +97,28 @@ const VIDEO_NEW_TRACK_PREVIEW_HEIGHT = 60;
 const NEW_TRACK_PREVIEW_MARGIN_PX = 4;
 const MIN_VIDEO_BAKE_DRAG_PX = 3;
 const TRACK_SCROLL_SNAP_EPSILON_PX = 1;
-const TRACK_SCROLL_SNAP_ANIMATION_MS = 150;
+const TRACK_SCROLL_SNAP_ANIMATION_MS = 70;
+const TRACK_SCROLL_RELEASE_SETTLE_MS = 55;
+const TRACK_SCROLL_GLIDE_MIN_MS = 110;
+const TRACK_SCROLL_GLIDE_MAX_MS = 230;
+const TRACK_SCROLL_GLIDE_PX_PER_MS = 1.35;
+const TRACK_SCROLL_STEP_DELTA_PX = 160;
+const TRACK_SCROLL_MAX_STEPS_PER_GESTURE = 8;
+const TRACK_SCROLL_LIVE_TARGET_APPROACH = 0.68;
 
 type TrackSectionKind = 'video' | 'audio';
 
 type TrackSectionMetrics = {
   contentHeight: number;
+};
+
+type SectionScrollGestureState = {
+  startScrollY: number;
+  accumulatedDeltaY: number;
+  settleTimerId: number | null;
+  snapPositions: number[];
+  contentHeight: number;
+  viewportHeight: number;
 };
 
 type KeyframeAreaRevealSnapshot = {
@@ -163,6 +179,23 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
+function getSectionScrollGlideDuration(distancePx: number): number {
+  return clampValue(
+    Math.abs(distancePx) / TRACK_SCROLL_GLIDE_PX_PER_MS,
+    TRACK_SCROLL_GLIDE_MIN_MS,
+    TRACK_SCROLL_GLIDE_MAX_MS,
+  );
+}
+
+function getSectionScrollGestureStepCount(accumulatedDeltaY: number): number {
+  if (accumulatedDeltaY === 0) return 0;
+  return clampValue(
+    Math.ceil(Math.abs(accumulatedDeltaY) / TRACK_SCROLL_STEP_DELTA_PX),
+    1,
+    TRACK_SCROLL_MAX_STEPS_PER_GESTURE,
+  );
+}
+
 function buildSectionScrollSnapPositions(
   tracks: TimelineTrackType[],
   sectionKind: TrackSectionKind,
@@ -194,30 +227,56 @@ function buildSectionScrollSnapPositions(
   )).sort((a, b) => a - b);
 }
 
-function getNextSectionScrollSnapPosition(
-  currentScrollY: number,
-  deltaY: number,
+function getSettledSectionScrollSnapPosition(
+  startScrollY: number,
+  accumulatedDeltaY: number,
   snapPositions: number[],
   contentHeight: number,
   viewportHeight: number,
 ): number {
-  const current = clampScrollY(currentScrollY, contentHeight, viewportHeight);
-  if (snapPositions.length <= 1) {
-    return clampScrollY(current + deltaY, contentHeight, viewportHeight);
-  }
+  const start = clampScrollY(startScrollY, contentHeight, viewportHeight);
+  const stepCount = getSectionScrollGestureStepCount(accumulatedDeltaY);
+  if (snapPositions.length <= 1 || stepCount === 0) return start;
 
-  if (deltaY > 0) {
-    return snapPositions.find((position) => position > current + TRACK_SCROLL_SNAP_EPSILON_PX) ?? snapPositions[snapPositions.length - 1];
-  }
-
-  for (let index = snapPositions.length - 1; index >= 0; index--) {
-    const position = snapPositions[index];
-    if (position < current - TRACK_SCROLL_SNAP_EPSILON_PX) {
-      return position;
+  if (accumulatedDeltaY > 0) {
+    let startIndex = 0;
+    for (let index = snapPositions.length - 1; index >= 0; index--) {
+      if (snapPositions[index] <= start + TRACK_SCROLL_SNAP_EPSILON_PX) {
+        startIndex = index;
+        break;
+      }
     }
+
+    return snapPositions[Math.min(snapPositions.length - 1, startIndex + stepCount)];
   }
 
-  return snapPositions[0];
+  let startIndex = snapPositions.length - 1;
+  for (let index = snapPositions.length - 1; index >= 0; index--) {
+    if (snapPositions[index] < start - TRACK_SCROLL_SNAP_EPSILON_PX) {
+      break;
+    }
+    startIndex = index;
+  }
+
+  return snapPositions[Math.max(0, startIndex - stepCount)];
+}
+
+function getLiveSectionScrollY(
+  currentScrollY: number,
+  rawNextScrollY: number,
+  targetScrollY: number,
+  direction: number,
+): number {
+  const targetDistance = targetScrollY - currentScrollY;
+  if (direction > 0 && targetDistance > 0 && rawNextScrollY > targetScrollY) {
+    return currentScrollY + Math.max(1, targetDistance * TRACK_SCROLL_LIVE_TARGET_APPROACH);
+  }
+
+  if (direction < 0 && targetDistance < 0 && rawNextScrollY < targetScrollY) {
+    return currentScrollY - Math.max(1, Math.abs(targetDistance) * TRACK_SCROLL_LIVE_TARGET_APPROACH);
+  }
+
+  return rawNextScrollY;
 }
 
 function shouldIgnoreTimelineSurfaceToolTarget(target: EventTarget | null): boolean {
@@ -386,6 +445,7 @@ export function Timeline() {
   // Slot grid progress - direct selector for reliable reactivity
   const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
   const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
+  const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
 
   // UI settings (rarely changes)
   const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, activeTimelineToolId, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioLayerAdvancedMode, audioFocusMode, trackFocusMode, showAudioRegionEditMarkers } =
@@ -692,7 +752,6 @@ export function Timeline() {
   const timelineFpsValue = Number.isInteger(timelineFrameRate)
     ? timelineFrameRate.toString()
     : timelineFrameRate.toFixed(2).replace(/\.?0+$/, '');
-  const timelineFpsLabel = `${timelineFpsValue} fps`;
 
   useEffect(() => {
     if (isEditingTimelineDuration && timelineDurationInputRef.current) {
@@ -1018,6 +1077,10 @@ export function Timeline() {
     video: null,
     audio: null,
   });
+  const sectionScrollGestureRef = useRef<Record<TrackSectionKind, SectionScrollGestureState | null>>({
+    video: null,
+    audio: null,
+  });
   const keyframeAreaRevealSnapshotRef = useRef<KeyframeAreaRevealSnapshot | null>(null);
   const splitDragAnchorVideoBottomRef = useRef(false);
   const splitDragStartedInAudioFocusRef = useRef(false);
@@ -1080,12 +1143,23 @@ export function Timeline() {
     }
   }, []);
 
+  const cancelSectionScrollGesture = useCallback((sectionKind: TrackSectionKind) => {
+    const gesture = sectionScrollGestureRef.current[sectionKind];
+    if (gesture?.settleTimerId !== null && gesture?.settleTimerId !== undefined) {
+      window.clearTimeout(gesture.settleTimerId);
+    }
+    sectionScrollGestureRef.current[sectionKind] = null;
+  }, []);
+
   const animateSectionScrollTo = useCallback((
     sectionKind: TrackSectionKind,
     targetScrollY: number,
     contentHeight: number,
     viewportHeight: number,
+    durationMs = TRACK_SCROLL_SNAP_ANIMATION_MS,
   ) => {
+    cancelSectionScrollGesture(sectionKind);
+
     const startScrollY = sectionKind === 'video'
       ? videoScrollYRef.current
       : audioScrollYRef.current;
@@ -1102,7 +1176,7 @@ export function Timeline() {
 
     const startTime = window.performance.now();
     const step = (now: number) => {
-      const progress = Math.min(1, (now - startTime) / TRACK_SCROLL_SNAP_ANIMATION_MS);
+      const progress = Math.min(1, (now - startTime) / Math.max(1, durationMs));
       const easedProgress = easeOutCubic(progress);
       const nextScrollY = startScrollY + (target - startScrollY) * easedProgress;
 
@@ -1119,12 +1193,14 @@ export function Timeline() {
     };
 
     sectionScrollAnimationFrameRef.current[sectionKind] = window.requestAnimationFrame(step);
-  }, [cancelSectionScrollAnimation, setSectionScrollY]);
+  }, [cancelSectionScrollAnimation, cancelSectionScrollGesture, setSectionScrollY]);
 
   useEffect(() => () => {
+    cancelSectionScrollGesture('video');
+    cancelSectionScrollGesture('audio');
     cancelSectionScrollAnimation('video');
     cancelSectionScrollAnimation('audio');
-  }, [cancelSectionScrollAnimation]);
+  }, [cancelSectionScrollAnimation, cancelSectionScrollGesture]);
 
   // Context menu state for clip right-click
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -1727,35 +1803,131 @@ export function Timeline() {
     const snapPositions = sectionKind === 'video'
       ? videoScrollSnapPositions
       : audioScrollSnapPositions;
-    const currentScrollY = sectionScrollAnimationTargetRef.current[sectionKind] ?? (
-      sectionKind === 'video'
-        ? videoScrollYRef.current
-        : audioScrollYRef.current
+
+    if (sectionKind === 'video') {
+      setForceVideoBottomScroll(false);
+    }
+
+    const previousGesture = sectionScrollGestureRef.current[sectionKind];
+    if (previousGesture?.settleTimerId !== null && previousGesture?.settleTimerId !== undefined) {
+      window.clearTimeout(previousGesture.settleTimerId);
+    }
+    const previousDirection = previousGesture ? Math.sign(previousGesture.accumulatedDeltaY) : 0;
+    const nextDirection = Math.sign(deltaY);
+    const continuingGesture = previousGesture && previousDirection === nextDirection
+      ? previousGesture
+      : null;
+
+    cancelSectionScrollAnimation(sectionKind);
+
+    const currentScrollY = sectionKind === 'video'
+      ? videoScrollYRef.current
+      : audioScrollYRef.current;
+    const rawNextScrollY = clampScrollY(
+      currentScrollY + deltaY,
+      scrollableContentHeight,
+      measuredViewportHeight,
     );
-    const nextScrollY = getNextSectionScrollSnapPosition(
-      currentScrollY,
-      deltaY,
+    const startScrollY = continuingGesture?.startScrollY ?? currentScrollY;
+    const accumulatedDeltaY = (continuingGesture?.accumulatedDeltaY ?? 0) + deltaY;
+    const targetScrollY = getSettledSectionScrollSnapPosition(
+      startScrollY,
+      accumulatedDeltaY,
       snapPositions,
       scrollableContentHeight,
       measuredViewportHeight,
     );
+    const nextScrollY = getLiveSectionScrollY(
+      currentScrollY,
+      rawNextScrollY,
+      targetScrollY,
+      nextDirection,
+    );
 
-    if (sectionKind === 'video') {
-      setForceVideoBottomScroll(false);
-      animateSectionScrollTo('video', nextScrollY, scrollableContentHeight, measuredViewportHeight);
-    } else {
-      animateSectionScrollTo('audio', nextScrollY, scrollableContentHeight, measuredViewportHeight);
-    }
+    setSectionScrollY(sectionKind, nextScrollY);
+
+    const settleTimerId = window.setTimeout(() => {
+      const activeGesture = sectionScrollGestureRef.current[sectionKind];
+      if (!activeGesture || activeGesture.settleTimerId !== settleTimerId) return;
+
+      const latestScrollY = sectionKind === 'video'
+        ? videoScrollYRef.current
+        : audioScrollYRef.current;
+      const settledScrollY = getSettledSectionScrollSnapPosition(
+        activeGesture.startScrollY,
+        activeGesture.accumulatedDeltaY,
+        activeGesture.snapPositions,
+        activeGesture.contentHeight,
+        activeGesture.viewportHeight,
+      );
+
+      sectionScrollGestureRef.current[sectionKind] = null;
+      const glideDurationMs = getSectionScrollGlideDuration(settledScrollY - latestScrollY);
+      animateSectionScrollTo(
+        sectionKind,
+        settledScrollY,
+        activeGesture.contentHeight,
+        activeGesture.viewportHeight,
+        glideDurationMs,
+      );
+    }, TRACK_SCROLL_RELEASE_SETTLE_MS);
+
+    sectionScrollGestureRef.current[sectionKind] = {
+      startScrollY,
+      accumulatedDeltaY,
+      settleTimerId,
+      snapPositions,
+      contentHeight: scrollableContentHeight,
+      viewportHeight: measuredViewportHeight,
+    };
   }, [
     animateSectionScrollTo,
     audioScrollSnapPositions,
     audioScrollableContentHeight,
     audioSectionMetrics,
     audioViewportHeight,
+    cancelSectionScrollAnimation,
     isSectionCollapsed,
+    setSectionScrollY,
     videoScrollSnapPositions,
     videoSectionMetrics,
     videoViewportHeight,
+  ]);
+
+  useEffect(() => {
+    if (propertiesSelection?.kind !== 'track') return;
+    if (isAudioSectionCollapsed || audioViewportHeight <= 1) return;
+
+    const trackIndex = displayedAudioTracks.findIndex(track => track.id === propertiesSelection.trackId);
+    if (trackIndex < 0) return;
+
+    const trackTop = displayedAudioTracks
+      .slice(0, trackIndex)
+      .reduce((sum, track) => sum + getSectionTrackHeight(track, 'audio'), 0);
+    const trackHeight = getSectionTrackHeight(displayedAudioTracks[trackIndex], 'audio');
+    const trackBottom = trackTop + trackHeight;
+    const currentScrollY = sectionScrollAnimationTargetRef.current.audio ?? audioScrollYRef.current;
+    const revealPadding = 12;
+    const viewportTop = currentScrollY + revealPadding;
+    const viewportBottom = currentScrollY + audioViewportHeight - revealPadding;
+
+    if (trackTop >= viewportTop && trackBottom <= viewportBottom) {
+      return;
+    }
+
+    const nextScrollY = trackTop < viewportTop
+      ? trackTop - revealPadding
+      : trackBottom - audioViewportHeight + revealPadding;
+
+    animateSectionScrollTo('audio', nextScrollY, audioScrollableContentHeight, audioViewportHeight);
+  }, [
+    animateSectionScrollTo,
+    audioScrollableContentHeight,
+    audioViewportHeight,
+    displayedAudioTracks,
+    getSectionTrackHeight,
+    isAudioSectionCollapsed,
+    propertiesSelection,
   ]);
 
   const handleTrackFocusStep = useCallback((direction: 'up' | 'down') => {
@@ -3248,6 +3420,12 @@ export function Timeline() {
             className={`timeline-ruler-timecode ${timelineTimeDisplayMode === 'frames' ? 'frames' : 'time'}`}
             title="Current time / composition duration"
           >
+            {timelineTimeDisplayMode === 'frames' && (
+              <span className="timeline-ruler-fps-value" title={`Composition frame rate: ${timelineFpsValue} fps`}>
+                <span className="timeline-ruler-fps-number">{timelineFpsValue}</span>
+                <span className="timeline-ruler-fps-unit">fps</span>
+              </span>
+            )}
             <span
               className="timeline-ruler-current-time"
               onDoubleClick={handleTimelineTimeDoubleClick}
@@ -3261,9 +3439,6 @@ export function Timeline() {
             </span>
             <span className="timeline-ruler-separator-wrap" aria-hidden="true">
               <span className="timeline-ruler-time-separator">/</span>
-              {timelineTimeDisplayMode === 'frames' && (
-                <span className="timeline-ruler-fps-label">{timelineFpsLabel}</span>
-              )}
             </span>
             {isEditingTimelineDuration && !hasInOutDisplayRange ? (
               <input
@@ -3355,6 +3530,7 @@ export function Timeline() {
                 duration={duration}
                 zoom={zoom}
                 frameRate={compositionFrameRate}
+                displayMode={timelineTimeDisplayMode}
                 scrollX={scrollX}
                 onRulerMouseDown={handleTimelineRulerMouseDown}
                 formatTime={formatTime}

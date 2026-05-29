@@ -16,6 +16,7 @@ export const selectZoom = (state: TimelineStore) => state.zoom;
 export const selectScrollX = (state: TimelineStore) => state.scrollX;
 export const selectIsPlaying = (state: TimelineStore) => state.isPlaying;
 export const selectSelectedClipIds = (state: TimelineStore) => state.selectedClipIds;
+export const selectPropertiesSelection = (state: TimelineStore) => state.propertiesSelection;
 export const selectMarkers = (state: TimelineStore) => state.markers;
 
 // ===========================================

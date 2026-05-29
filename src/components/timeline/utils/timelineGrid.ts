@@ -146,3 +146,8 @@ export function formatTimelineTimecode(seconds: number, frameRate: number): stri
 
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
 }
+
+export function formatTimelineFrameNumber(seconds: number, frameRate: number): string {
+  const safeFrameRate = sanitizePositiveNumber(frameRate, DEFAULT_FRAME_RATE);
+  return Math.max(0, Math.round(seconds * safeFrameRate)).toString();
+}

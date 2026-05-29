@@ -1319,8 +1319,10 @@ function TimelineHeaderComponent({
     '--audio-strip-fader-scale'?: string;
   };
   const targetTrackId = useTimelineStore(state => state.targetTrackIdByType[track.type]);
+  const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const setTargetTrack = useTimelineStore(state => state.setTargetTrack);
   const isTargeted = targetTrackId === track.id;
+  const isPropertiesSelected = propertiesSelection?.kind === 'track' && propertiesSelection.trackId === track.id;
   const [audioFxOpen, setAudioFxOpen] = useState(false);
   const [audioSendsOpen, setAudioSendsOpen] = useState(false);
   const audioFxPopoverRef = useRef<HTMLDivElement>(null);
@@ -1405,6 +1407,9 @@ function TimelineHeaderComponent({
     if ((e.target as HTMLElement).closest('.audio-track-faders')) return;
     if ((e.target as HTMLElement).closest('.audio-track-popover')) return;
     setTargetTrack(track.id);
+    if (isAudioTrack) {
+      useTimelineStore.getState().selectTrackProperties(track.id);
+    }
   };
 
   const handleTrackVolumeChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1445,6 +1450,8 @@ function TimelineHeaderComponent({
         isResizeActive ? 'resizing' : ''
       } ${
         isTargeted ? 'targeted' : ''
+      } ${
+        isPropertiesSelected ? 'properties-selected' : ''
       }`}
       style={trackHeaderStyle}
       data-dock-layout-child-anim-id={`timeline-track-header:${track.id}`}
@@ -1704,10 +1711,11 @@ function TimelineHeaderComponent({
           >
             <AudioLevelMeter
               streamScope={{ kind: 'track', trackId: track.id }}
-              streamFeatures={['level', 'stereo', 'phase']}
+              streamFeatures={['level', 'stereo']}
               label={`${track.name} level`}
+              className="audio-track-level-meter"
               orientation="vertical"
-              display="auto"
+              display="stereo"
             />
             <div className="audio-track-fader-column">
               <div

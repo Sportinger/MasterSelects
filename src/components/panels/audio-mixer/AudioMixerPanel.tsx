@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import './AudioMixerPanel.css';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useRuntimeAudioMeterSnapshot } from '../../../services/audio/runtimeAudioMeterHooks';
-import type { RuntimeAudioMeterScope } from '../../../services/audio/runtimeAudioMeterBus';
+import type { RuntimeAudioMeterFeature, RuntimeAudioMeterScope } from '../../../services/audio/runtimeAudioMeterBus';
 import type { LabelColor } from '../../../stores/mediaStore/types';
 import type {
   AudioMeterSnapshot,
@@ -35,8 +35,10 @@ const DEFAULT_MASTER_AUDIO_STATE: MasterAudioState = {
 };
 
 const MASTER_FOCUS_ID = '__master__';
-const MIXER_METER_FEATURES = ['level', 'stereo', 'phase', 'dynamics'] as const;
-const MIXER_METER_MAX_FPS = 30;
+const MIXER_METER_VISUAL_FEATURES = ['level', 'stereo', 'phase'] as const;
+const MIXER_METER_READOUT_FEATURES = ['level'] as const;
+const MIXER_METER_DYNAMICS_FEATURES = ['dynamics'] as const;
+const MIXER_METER_READOUT_MAX_FPS = 4;
 
 type MixerCssProperties = CSSProperties & {
   '--strip-color'?: string;
@@ -118,18 +120,26 @@ function stopPropagation(event: { stopPropagation: () => void }) {
   event.stopPropagation();
 }
 
-function useMixerRuntimeAudioMeter(
+function getMixerRuntimeAudioMeterScope(
   scope: FxWindowTarget['scope'] | undefined,
   trackId?: string,
-): AudioMeterSnapshot | undefined {
-  const busScope: RuntimeAudioMeterScope | undefined = scope === 'track' && trackId
+): RuntimeAudioMeterScope | undefined {
+  return scope === 'track' && trackId
     ? { kind: 'track', trackId }
     : scope === 'master'
       ? { kind: 'master' }
       : undefined;
+}
+
+function useMixerRuntimeAudioMeter(
+  scope: FxWindowTarget['scope'] | undefined,
+  trackId?: string,
+  features: readonly RuntimeAudioMeterFeature[] = MIXER_METER_READOUT_FEATURES,
+): AudioMeterSnapshot | undefined {
+  const busScope = getMixerRuntimeAudioMeterScope(scope, trackId);
   return useRuntimeAudioMeterSnapshot(busScope, {
-    features: MIXER_METER_FEATURES,
-    maxFps: MIXER_METER_MAX_FPS,
+    features,
+    maxFps: MIXER_METER_READOUT_MAX_FPS,
   });
 }
 
@@ -226,6 +236,7 @@ function TrackMixerStripComponent({
   onOpenFx: (target: FxWindowTarget) => void;
   onOpenColorMenu: (event: ReactMouseEvent, trackId: string) => void;
 }) {
+  const meterScope = getMixerRuntimeAudioMeterScope('track', track.id);
   const meter = useMixerRuntimeAudioMeter('track', track.id);
   const audioState = getTrackAudioState(track);
   const effectiveMuted = audioState.muted;
@@ -345,7 +356,8 @@ function TrackMixerStripComponent({
           onDoubleClick={resetTrackVolume}
         />
         <AudioLevelMeter
-          meter={meter}
+          streamScope={meterScope}
+          streamFeatures={MIXER_METER_VISUAL_FEATURES}
           label={`${track.name} level`}
           className="audio-mixer-meter"
           orientation="vertical"
@@ -387,6 +399,7 @@ function MasterMixerStripComponent({
   onStaticPreflight: () => void;
   onRenderedPreflight: () => void;
 }) {
+  const meterScope = getMixerRuntimeAudioMeterScope('master');
   const meter = useMixerRuntimeAudioMeter('master');
   const status = getPreflightStatus(masterAudio.exportPreflight);
   const measurement = masterAudio.exportPreflight?.measurement;
@@ -461,7 +474,8 @@ function MasterMixerStripComponent({
           onDoubleClick={resetMasterVolume}
         />
         <AudioLevelMeter
-          meter={meter}
+          streamScope={meterScope}
+          streamFeatures={MIXER_METER_VISUAL_FEATURES}
           label="Master level"
           className="audio-mixer-meter"
           orientation="vertical"
@@ -501,6 +515,7 @@ function MixerFxWindow({
   const runtimeMeter = useMixerRuntimeAudioMeter(
     target?.scope,
     target?.scope === 'track' ? target.trackId : undefined,
+    MIXER_METER_DYNAMICS_FEATURES,
   );
   const runtimeDynamics = runtimeMeter?.dynamics;
   if (!target) return null;
@@ -687,6 +702,7 @@ export function AudioMixerPanel() {
   const inPoint = useTimelineStore(state => state.inPoint);
   const outPoint = useTimelineStore(state => state.outPoint);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
+  const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
   const [recordingState, setRecordingState] = useState(audioRecordingService.getSnapshot());
   const [preflightMeasuring, setPreflightMeasuring] = useState(false);
@@ -706,6 +722,18 @@ export function AudioMixerPanel() {
       setFocusedStripId(audioTracks[0]?.id ?? MASTER_FOCUS_ID);
     }
   }, [audioTracks, focusedStripId]);
+
+  useEffect(() => {
+    if (propertiesSelection?.kind === 'track') {
+      if (audioTracks.some(track => track.id === propertiesSelection.trackId)) {
+        setFocusedStripId(propertiesSelection.trackId);
+      }
+      return;
+    }
+    if (propertiesSelection?.kind === 'master') {
+      setFocusedStripId(MASTER_FOCUS_ID);
+    }
+  }, [audioTracks, propertiesSelection]);
 
   useEffect(() => {
     if (fxWindowTarget?.scope === 'track' && !audioTracks.some(track => track.id === fxWindowTarget.trackId)) {
@@ -753,19 +781,35 @@ export function AudioMixerPanel() {
   const handleJumpToEqInstance = useCallback((instance: AudioEqInstanceDescriptor) => {
     if (instance.scope === 'clip') {
       selectClip(instance.ownerId);
+    } else if (instance.scope === 'track') {
+      setFocusedStripId(instance.ownerId);
+      useTimelineStore.getState().selectTrackProperties(instance.ownerId);
+    } else if (instance.scope === 'master') {
+      setFocusedStripId(MASTER_FOCUS_ID);
+      useTimelineStore.getState().selectMasterProperties();
     }
   }, [selectClip]);
+
+  const handleFocusTrack = useCallback((trackId: string) => {
+    setFocusedStripId(trackId);
+    useTimelineStore.getState().selectTrackProperties(trackId);
+  }, []);
+
+  const handleFocusMaster = useCallback(() => {
+    setFocusedStripId(MASTER_FOCUS_ID);
+    useTimelineStore.getState().selectMasterProperties();
+  }, []);
 
   const handleOpenTrackColorMenu = useCallback((event: ReactMouseEvent, trackId: string) => {
     event.preventDefault();
     event.stopPropagation();
-    setFocusedStripId(trackId);
+    handleFocusTrack(trackId);
     setTrackColorMenuTarget({
       x: event.clientX,
       y: event.clientY,
       trackId,
     });
-  }, []);
+  }, [handleFocusTrack]);
 
   const handleCommitRecovery = useCallback(async (sessionId: string) => {
     try {
@@ -836,7 +880,7 @@ export function AudioMixerPanel() {
                   track={track}
                   index={index}
                   focused={focusedStripId === track.id}
-                  onFocus={() => setFocusedStripId(track.id)}
+                  onFocus={() => handleFocusTrack(track.id)}
                   onOpenFx={setFxWindowTarget}
                   onOpenColorMenu={handleOpenTrackColorMenu}
                 />
@@ -849,7 +893,7 @@ export function AudioMixerPanel() {
               masterAudio={masterAudio}
               focused={focusedIsMaster}
               preflightMeasuring={preflightMeasuring}
-              onFocus={() => setFocusedStripId(MASTER_FOCUS_ID)}
+              onFocus={handleFocusMaster}
               onOpenFx={setFxWindowTarget}
               onStaticPreflight={handleStaticPreflight}
               onRenderedPreflight={handleRenderedPreflight}

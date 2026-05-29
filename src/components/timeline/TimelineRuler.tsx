@@ -2,7 +2,11 @@
 
 import React, { memo } from 'react';
 import type { TimelineRulerProps } from './types';
-import { createTimelineGridPlan, formatTimelineTimecode } from './utils/timelineGrid';
+import {
+  createTimelineGridPlan,
+  formatTimelineFrameNumber,
+  formatTimelineTimecode,
+} from './utils/timelineGrid';
 
 const RULER_VIEWPORT_FALLBACK_PX = 1600;
 const RULER_VIEWPORT_MIN_PX = 1600;
@@ -12,6 +16,7 @@ function TimelineRulerComponent({
   duration,
   zoom,
   frameRate,
+  displayMode = 'time',
   scrollX,
   onRulerMouseDown,
   formatTime,
@@ -67,6 +72,7 @@ function TimelineRulerComponent({
     .filter((region) => region.end > region.start && region.end >= visibleStartTime && region.start <= visibleEndTime);
 
   const gridPlan = createTimelineGridPlan({ zoom, frameRate });
+  const showFrameLabels = displayMode === 'frames';
   const timeInterval = gridPlan.timeIntervalSeconds;
   const firstTimeMarkerIndex = Math.max(0, Math.floor(visibleStartTime / timeInterval));
   const lastTimeMarkerIndex = Math.max(firstTimeMarkerIndex, Math.ceil(visibleEndTime / timeInterval));
@@ -83,7 +89,11 @@ function TimelineRulerComponent({
         className={`time-marker time ${isMainMarker ? 'main' : 'sub'}`}
         style={{ left: x, opacity: gridPlan.timeGridOpacity }}
       >
-        {gridPlan.mode === 'time' && isMainMarker && <span className="time-label">{formatTime(t)}</span>}
+        {gridPlan.mode === 'time' && isMainMarker && (
+          <span className={`time-label ${showFrameLabels ? 'frame-label' : ''}`}>
+            {showFrameLabels ? formatTimelineFrameNumber(t, gridPlan.frameRate) : formatTime(t)}
+          </span>
+        )}
       </div>
     );
   }
@@ -106,7 +116,9 @@ function TimelineRulerComponent({
           style={{ left: x, opacity: gridPlan.frameGridOpacity }}
         >
           {gridPlan.mode === 'frame' && isMainMarker && (
-            <span className="time-label">{formatTimelineTimecode(t, gridPlan.frameRate)}</span>
+            <span className={`time-label ${showFrameLabels ? 'frame-label' : ''}`}>
+              {showFrameLabels ? formatTimelineFrameNumber(t, gridPlan.frameRate) : formatTimelineTimecode(t, gridPlan.frameRate)}
+            </span>
           )}
         </div>
       );

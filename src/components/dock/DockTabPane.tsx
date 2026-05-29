@@ -85,21 +85,35 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closeCompositionTab: s.closeCompositionTab,
     reorderCompositionTabs: s.reorderCompositionTabs,
   })));
-  const { clips, selectedClipIds, slotGridProgress, tracks, masterAudioState } = useTimelineStore(useShallow(s => ({
+  const { clips, selectedClipIds, slotGridProgress, tracks, masterAudioState, propertiesSelection } = useTimelineStore(useShallow(s => ({
     clips: s.clips,
     selectedClipIds: s.selectedClipIds,
     slotGridProgress: s.slotGridProgress,
     tracks: s.tracks,
     masterAudioState: s.masterAudioState,
+    propertiesSelection: s.propertiesSelection,
   })));
 
   // Get selected clip name for dynamic tab titles (Properties/Audio panels)
   const selectedClipName = useMemo(() => {
+    if (propertiesSelection?.kind === 'clip') {
+      return clips.find(c => c.id === propertiesSelection.clipId)?.name || null;
+    }
     if (selectedClipIds.size === 0) return null;
     const clipId = [...selectedClipIds][0];
     const clip = clips.find(c => c.id === clipId);
     return clip?.name || null;
-  }, [clips, selectedClipIds]);
+  }, [clips, propertiesSelection, selectedClipIds]);
+  const selectedPropertiesName = useMemo(() => {
+    if (propertiesSelection?.kind === 'track') {
+      const track = tracks.find(item => item.id === propertiesSelection.trackId);
+      return track ? `TRACK ${track.name}` : null;
+    }
+    if (propertiesSelection?.kind === 'master') {
+      return 'MASTER Master';
+    }
+    return selectedClipName ? `CLIP ${selectedClipName}` : null;
+  }, [propertiesSelection, selectedClipName, tracks]);
   const selectedSlotName = useMemo(() => {
     if (slotGridProgress <= 0.5 || !selectedSlotCompositionId) {
       return null;
@@ -625,9 +639,9 @@ export function DockTabPane({ group }: DockTabPaneProps) {
             // Dynamic tab title for clip-properties panel
             let tabTitle = panel.title;
             let tabTooltip = panel.title;
-            if (panel.type === 'clip-properties' && (selectedSlotName || selectedClipName)) {
-              tabTitle = truncateText(selectedSlotName || selectedClipName || panel.title, 18);
-              tabTooltip = selectedSlotName || selectedClipName || panel.title;
+            if (panel.type === 'clip-properties' && (selectedSlotName || selectedPropertiesName)) {
+              tabTitle = truncateText(selectedSlotName || selectedPropertiesName || panel.title, 18);
+              tabTooltip = selectedSlotName || selectedPropertiesName || panel.title;
             } else if (panel.type === 'audio-mixer') {
               tabTitle = audioMixerTabStats.label;
               tabTooltip = audioMixerTabStats.title;

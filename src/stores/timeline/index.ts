@@ -181,6 +181,7 @@ export const useTimelineStore = create<TimelineStore>()(
       playbackWarmup: null,
       selectedClipIds: new Set<string>(),
       primarySelectedClipId: null,
+      propertiesSelection: null,
       targetTrackIdByType: {},
 
       // Render layers (populated by useLayerSync, used by engine)

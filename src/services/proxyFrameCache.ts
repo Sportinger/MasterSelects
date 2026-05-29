@@ -44,6 +44,8 @@ const SCRUB_RESYNC_POSITION_DELTA_SECONDS = 0.045;
 const SCRUB_FAST_VELOCITY_SECONDS_PER_SECOND = 2.5;
 const SCRUB_PENDING_GRAIN_KEEP_AHEAD_SECONDS = 0.012;
 const SCRUB_REVERSE_THRESHOLD_SECONDS_PER_SECOND = -0.04;
+const MAX_AUDIO_BUFFER_CACHE_BYTES = 192 * 1024 * 1024;
+const MAX_AUDIO_BUFFER_CACHE_ENTRIES = 3;
 const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const HUM_NOTCH_MAX_HARMONICS = 8;
 
@@ -92,6 +94,10 @@ interface ScrubProcessorNode {
 
 function hasUsableAudioProxy(mediaFile: { hasProxyAudio?: boolean; audioProxyStatus?: string } | undefined): boolean {
   return mediaFile?.hasProxyAudio === true || mediaFile?.audioProxyStatus === 'ready';
+}
+
+function estimateAudioBufferBytes(buffer: AudioBuffer): number {
+  return buffer.length * buffer.numberOfChannels * Float32Array.BYTES_PER_ELEMENT;
 }
 
 interface ScrubGrain {
@@ -664,6 +670,29 @@ class ProxyFrameCache {
     return `${mediaFileId}_${frameIndex}`;
   }
 
+  private touchAudioBufferCacheEntry(mediaFileId: string, buffer: AudioBuffer): void {
+    this.audioBufferCache.delete(mediaFileId);
+    this.audioBufferCache.set(mediaFileId, buffer);
+  }
+
+  private enforceAudioBufferCacheLimit(): void {
+    let totalBytes = 0;
+    for (const buffer of this.audioBufferCache.values()) {
+      totalBytes += estimateAudioBufferBytes(buffer);
+    }
+
+    while (
+      this.audioBufferCache.size > 1 &&
+      (this.audioBufferCache.size > MAX_AUDIO_BUFFER_CACHE_ENTRIES || totalBytes > MAX_AUDIO_BUFFER_CACHE_BYTES)
+    ) {
+      const oldest = this.audioBufferCache.entries().next().value as [string, AudioBuffer] | undefined;
+      if (!oldest) break;
+      this.audioBufferCache.delete(oldest[0]);
+      totalBytes -= estimateAudioBufferBytes(oldest[1]);
+      log.debug(`Evicted decoded audio buffer from cache: ${oldest[0]}`);
+    }
+  }
+
   // Synchronously get a frame if it's already in memory cache
   // Also triggers preloading of upcoming frames (even if current frame not cached)
   getCachedFrame(mediaFileId: string, frameIndex: number, fps: number = 30): HTMLImageElement | null {
@@ -1182,7 +1211,10 @@ class ProxyFrameCache {
   async getAudioBuffer(mediaFileId: string, videoElementSrc?: string): Promise<AudioBuffer | null> {
     // Check cache
     const cached = this.audioBufferCache.get(mediaFileId);
-    if (cached) return cached;
+    if (cached) {
+      this.touchAudioBufferCacheEntry(mediaFileId, cached);
+      return cached;
+    }
 
     const mediaStore = useMediaStore.getState();
     const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
@@ -1323,7 +1355,8 @@ class ProxyFrameCache {
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0)); // Clone to avoid detached buffer
 
       // Cache it
-      this.audioBufferCache.set(mediaFileId, audioBuffer);
+      this.touchAudioBufferCacheEntry(mediaFileId, audioBuffer);
+      this.enforceAudioBufferCacheLimit();
       this.audioBufferFailed.delete(mediaFileId);
       this.audioBufferLoading.delete(mediaFileId);
       this.audioBufferRetryTime.delete(mediaFileId);
@@ -2036,6 +2069,13 @@ class ProxyFrameCache {
 
     // Clean up audio context
     this.disposeAudioContext();
+  }
+
+  clearAudioBufferCache(): void {
+    this.audioBufferCache.clear();
+    this.audioBufferFailed.clear();
+    this.audioBufferRetryTime.clear();
+    this.audioBufferLoading.clear();
   }
 
   /**

@@ -10,7 +10,7 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
 
     // setPrimaryOnly: just update which clip is "focused" for Properties panel
     if (setPrimaryOnly && id !== null) {
-      set({ primarySelectedClipId: id });
+      set({ primarySelectedClipId: id, propertiesSelection: { kind: 'clip', clipId: id } });
       return;
     }
 
@@ -39,7 +39,7 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
     if (id === null) {
       // Don't clear selection if curve editor is open
       if (hasAnyCurveEditorOpen()) return;
-      set({ selectedClipIds: new Set(), primarySelectedClipId: null });
+      set({ selectedClipIds: new Set(), primarySelectedClipId: null, propertiesSelection: null });
       return;
     }
 
@@ -53,7 +53,12 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       } else {
         newSet.add(id);
       }
-      set({ selectedClipIds: newSet, primarySelectedClipId: id });
+      const nextPropertiesClipId = newSet.has(id) ? id : ([...newSet][0] ?? null);
+      set({
+        selectedClipIds: newSet,
+        primarySelectedClipId: id,
+        propertiesSelection: nextPropertiesClipId ? { kind: 'clip', clipId: nextPropertiesClipId } : null,
+      });
     } else {
       // Normal click: select clip + its linked clip
       // Prevent if any curve editor is open (unless clicking on already selected clip)
@@ -77,7 +82,11 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
           newSelection.add(candidate.id);
         }
       }
-      set({ selectedClipIds: newSelection, primarySelectedClipId: id });
+      set({
+        selectedClipIds: newSelection,
+        primarySelectedClipId: id,
+        propertiesSelection: { kind: 'clip', clipId: id },
+      });
     }
   },
 
@@ -105,14 +114,18 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       if (wouldDeselect) return;
     }
 
-    set({ selectedClipIds: new Set(ids), primarySelectedClipId: ids.length > 0 ? ids[0] : null });
+    set({
+      selectedClipIds: new Set(ids),
+      primarySelectedClipId: ids.length > 0 ? ids[0] : null,
+      propertiesSelection: ids.length > 0 ? { kind: 'clip', clipId: ids[0] } : null,
+    });
   },
 
   addClipToSelection: (id) => {
     const { selectedClipIds } = get();
     const newSet = new Set(selectedClipIds);
     newSet.add(id);
-    set({ selectedClipIds: newSet, primarySelectedClipId: id });
+    set({ selectedClipIds: newSet, primarySelectedClipId: id, propertiesSelection: { kind: 'clip', clipId: id } });
   },
 
   removeClipFromSelection: (id) => {
@@ -129,7 +142,15 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
 
     const newSet = new Set(selectedClipIds);
     newSet.delete(id);
-    set({ selectedClipIds: newSet });
+    const { propertiesSelection, primarySelectedClipId } = get();
+    const nextPrimaryId = primarySelectedClipId === id ? ([...newSet][0] ?? null) : primarySelectedClipId;
+    set({
+      selectedClipIds: newSet,
+      primarySelectedClipId: nextPrimaryId,
+      propertiesSelection: propertiesSelection?.kind === 'clip' && propertiesSelection.clipId === id
+        ? (nextPrimaryId ? { kind: 'clip', clipId: nextPrimaryId } : null)
+        : propertiesSelection,
+    });
   },
 
   clearClipSelection: () => {
@@ -146,7 +167,33 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
       }
     }
 
-    set({ selectedClipIds: new Set(), primarySelectedClipId: null });
+    set({ selectedClipIds: new Set(), primarySelectedClipId: null, propertiesSelection: null });
+  },
+
+  selectTrackProperties: (trackId) => {
+    const { tracks } = get();
+    if (!tracks.some(track => track.id === trackId)) return;
+    set({
+      selectedClipIds: new Set(),
+      primarySelectedClipId: null,
+      propertiesSelection: { kind: 'track', trackId },
+    });
+  },
+
+  selectMasterProperties: () => {
+    set({
+      selectedClipIds: new Set(),
+      primarySelectedClipId: null,
+      propertiesSelection: { kind: 'master' },
+    });
+  },
+
+  clearPropertiesSelection: () => {
+    set({
+      selectedClipIds: new Set(),
+      primarySelectedClipId: null,
+      propertiesSelection: null,
+    });
   },
 
   // Keyframe selection

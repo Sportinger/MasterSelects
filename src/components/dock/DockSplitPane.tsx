@@ -19,8 +19,14 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
   const setSplitRatio = useDockStore((state) => state.setSplitRatio);
   const maximizedPanelId = useDockStore((state) => state.maximizedPanelId);
   const [isResizing, setIsResizing] = useState(false);
+  const [liveRatio, setLiveRatio] = useState(split.ratio);
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
+  const liveRatioRef = useRef(split.ratio);
+  const pendingLiveRatioRef = useRef<number | null>(null);
+  const liveRatioFrameRef = useRef<number | null>(null);
+  const resizeBatchActiveRef = useRef(false);
+  const pendingPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
 
   const isHorizontal = split.direction === 'horizontal';
   const maximizedChildIndex = maximizedPanelId
@@ -32,24 +38,35 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     e.preventDefault();
     e.stopPropagation();
     startBatch('Resize dock split');
+    resizeBatchActiveRef.current = true;
+    liveRatioRef.current = split.ratio;
+    pendingLiveRatioRef.current = null;
+    setLiveRatio(split.ratio);
     setIsResizing(true);
-  }, []);
+  }, [split.ratio]);
+
+  useEffect(() => {
+    if (isResizing) return;
+    liveRatioRef.current = split.ratio;
+    pendingLiveRatioRef.current = null;
+    setLiveRatio(split.ratio);
+  }, [isResizing, split.ratio]);
 
   useEffect(() => {
     if (!isResizing) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const readRatioFromPointer = (pointer: { clientX: number; clientY: number }): number | null => {
       const container = containerRef.current;
-      if (!container) return;
+      if (!container) return null;
 
       const rect = container.getBoundingClientRect();
       const dimension = isHorizontal ? rect.width : rect.height;
       let ratio: number;
 
       if (isHorizontal) {
-        ratio = (e.clientX - rect.left) / rect.width;
+        ratio = (pointer.clientX - rect.left) / rect.width;
       } else {
-        ratio = (e.clientY - rect.top) / rect.height;
+        ratio = (pointer.clientY - rect.top) / rect.height;
       }
 
       // Calculate min ratios based on pixel constraints
@@ -58,14 +75,53 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       const maxRatio = 1 - (MIN_PANEL_SIZE / dimension);
 
       // Clamp ratio to respect minimum sizes
-      ratio = Math.max(minRatio, Math.min(maxRatio, ratio));
+      return Math.max(minRatio, Math.min(maxRatio, ratio));
+    };
 
-      setSplitRatio(split.id, ratio);
+    const commitLiveRatioFrame = () => {
+      liveRatioFrameRef.current = null;
+      const pointer = pendingPointerRef.current;
+      pendingPointerRef.current = null;
+      const nextRatio = pointer ? readRatioFromPointer(pointer) : pendingLiveRatioRef.current;
+      if (nextRatio === null) return;
+      pendingLiveRatioRef.current = null;
+      liveRatioRef.current = nextRatio;
+      setLiveRatio(nextRatio);
+    };
+
+    const scheduleLiveRatio = (ratio: number) => {
+      pendingLiveRatioRef.current = ratio;
+      if (liveRatioFrameRef.current !== null) return;
+      liveRatioFrameRef.current = window.requestAnimationFrame(commitLiveRatioFrame);
+    };
+
+    const flushLiveRatio = (): number => {
+      if (liveRatioFrameRef.current !== null) {
+        window.cancelAnimationFrame(liveRatioFrameRef.current);
+        liveRatioFrameRef.current = null;
+      }
+      const pointer = pendingPointerRef.current;
+      const finalRatio = (pointer ? readRatioFromPointer(pointer) : pendingLiveRatioRef.current) ?? liveRatioRef.current;
+      pendingPointerRef.current = null;
+      pendingLiveRatioRef.current = null;
+      liveRatioRef.current = finalRatio;
+      setLiveRatio(finalRatio);
+      return finalRatio;
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      pendingPointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+      scheduleLiveRatio(liveRatioRef.current);
     };
 
     const handleMouseUp = () => {
+      const finalRatio = flushLiveRatio();
+      setSplitRatio(split.id, finalRatio);
       setIsResizing(false);
-      endBatch();
+      if (resizeBatchActiveRef.current) {
+        resizeBatchActiveRef.current = false;
+        endBatch();
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -74,10 +130,19 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
-      endBatch();
+      if (liveRatioFrameRef.current !== null) {
+        window.cancelAnimationFrame(liveRatioFrameRef.current);
+        liveRatioFrameRef.current = null;
+      }
+      pendingPointerRef.current = null;
+      if (resizeBatchActiveRef.current) {
+        resizeBatchActiveRef.current = false;
+        endBatch();
+      }
     };
   }, [isResizing, isHorizontal, split.id, setSplitRatio]);
 
+  const effectiveRatio = isResizing ? liveRatio : split.ratio;
   const firstChildStyle = isMaximizedPath
     ? {
       [isHorizontal ? 'width' : 'height']: maximizedChildIndex === 0 ? '100%' : '0px',
@@ -86,7 +151,7 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       pointerEvents: maximizedChildIndex === 0 ? 'auto' as const : 'none' as const,
     }
     : {
-      [isHorizontal ? 'width' : 'height']: `calc(${split.ratio * 100}% - 2px)`,
+      [isHorizontal ? 'width' : 'height']: `calc(${effectiveRatio * 100}% - 2px)`,
       [isHorizontal ? 'minWidth' : 'minHeight']: isHorizontal ? MIN_PANEL_SIZE : MIN_PREVIEW_HEIGHT,
     };
 
@@ -98,7 +163,7 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       pointerEvents: maximizedChildIndex === 1 ? 'auto' as const : 'none' as const,
     }
     : {
-      [isHorizontal ? 'width' : 'height']: `calc(${(1 - split.ratio) * 100}% - 2px)`,
+      [isHorizontal ? 'width' : 'height']: `calc(${(1 - effectiveRatio) * 100}% - 2px)`,
       [isHorizontal ? 'minWidth' : 'minHeight']: MIN_PANEL_SIZE,
     };
 

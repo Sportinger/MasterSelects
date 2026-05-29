@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createTimelineGridPlan, formatTimelineTimecode } from '../../src/components/timeline/utils/timelineGrid';
+import {
+  createTimelineGridPlan,
+  formatTimelineFrameNumber,
+  formatTimelineTimecode,
+} from '../../src/components/timeline/utils/timelineGrid';
 
 describe('timeline grid planner', () => {
   it('uses independent frame lines when frames are visually resolvable', () => {
@@ -46,5 +50,9 @@ describe('timeline grid planner', () => {
 
   it('formats frame-mode labels as timeline timecode', () => {
     expect(formatTimelineTimecode(1 + 5 / 30, 30)).toBe('00:01:05');
+  });
+
+  it('formats ruler labels as absolute frame numbers', () => {
+    expect(formatTimelineFrameNumber(1 + 5 / 30, 30)).toBe('35');
   });
 });
