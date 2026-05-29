@@ -3,6 +3,7 @@ import { flags } from '../../../engine/featureFlags';
 import { requireStemModel } from './modelCatalog';
 import type {
   StemModelCatalogEntry,
+  StemSeparationWorkerBackendPreference,
   StemSeparationBackend,
   StemSeparationInput,
   StemSeparationWorkerRequest,
@@ -20,6 +21,9 @@ const TRAINING_SAMPLES = 343_980;
 const MODEL_SPEC_BINS = 2048;
 const MODEL_SPEC_FRAMES = 336;
 const SEGMENT_OVERLAP = 0.25;
+
+ort.env.wasm.proxy = false;
+ort.env.wasm.numThreads = 1;
 
 interface Spectrogram {
   real: Float32Array;
@@ -57,6 +61,16 @@ function getErrorMessage(error: unknown): string {
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
   return `${Math.round(bytes / 1_000_000)} MB`;
+}
+
+function concatChunksToArrayBuffer(chunks: readonly Uint8Array[], totalBytes: number): ArrayBuffer {
+  const output = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output.buffer;
 }
 
 function getNavigatorGpu(): GPU | undefined {
@@ -434,9 +448,17 @@ async function createOrtSession(
   return ort.InferenceSession.create(source, options);
 }
 
-async function loadModelFromSource(modelId: string, source: string | ArrayBuffer): Promise<void> {
+async function loadModelFromSource(
+  modelId: string,
+  source: string | ArrayBuffer,
+  backendPreference: StemSeparationWorkerBackendPreference = 'auto',
+): Promise<void> {
   const model = requireStemModel(modelId);
-  const preferWebGpu = flags.stemSeparationWebGPU && model.supportedBackends.includes('webgpu') && Boolean(getNavigatorGpu());
+  const canUseWebGpu = model.supportedBackends.includes('webgpu') && Boolean(getNavigatorGpu());
+  const preferWebGpu = canUseWebGpu && (
+    backendPreference === 'webgpu' ||
+    (backendPreference === 'auto' && flags.stemSeparationWebGPU)
+  );
   const baseOptions: ort.InferenceSession.SessionOptions = {
     graphOptimizationLevel: 'basic',
     enableCpuMemArena: false,
@@ -461,16 +483,38 @@ async function loadModelFromSource(modelId: string, source: string | ArrayBuffer
   loadedModel = model;
 }
 
-async function loadModel(modelId: string, modelBuffers: readonly { buffer: ArrayBuffer }[]): Promise<void> {
+async function loadModel(
+  modelId: string,
+  modelBuffers: readonly { buffer: ArrayBuffer }[],
+  backendPreference: StemSeparationWorkerBackendPreference = 'auto',
+): Promise<void> {
   const firstBuffer = modelBuffers[0]?.buffer;
   if (!firstBuffer) {
     throw new Error(`Stem separation model ${modelId} did not provide an ONNX file.`);
   }
 
-  await loadModelFromSource(modelId, firstBuffer);
+  post({
+    type: 'model-load-progress',
+    modelId,
+    phase: 'loading-model',
+    progress: 0.2,
+    message: 'Cached stem model reached worker. Opening runtime session.',
+  });
+  post({
+    type: 'model-load-progress',
+    modelId,
+    phase: 'loading-model',
+    progress: 0.9,
+    message: 'Creating stem model runtime session.',
+  });
+  await loadModelFromSource(modelId, firstBuffer, backendPreference);
 }
 
-async function loadModelFromUrl(modelId: string, modelUrl: string): Promise<void> {
+async function loadModelFromUrl(
+  modelId: string,
+  modelUrl: string,
+  backendPreference: StemSeparationWorkerBackendPreference = 'auto',
+): Promise<void> {
   if (!modelUrl) {
     throw new Error(`Stem separation model ${modelId} did not provide a URL.`);
   }
@@ -482,8 +526,7 @@ async function loadModelFromUrl(modelId: string, modelUrl: string): Promise<void
   }
 
   const expectedBytes = Number(response.headers.get('content-length')) || model.files[0]?.sizeBytes || 0;
-  let sessionSourceUrl = modelUrl;
-  let revokeSessionSourceUrl: (() => void) | null = null;
+  let sessionSource: string | ArrayBuffer = modelUrl;
   if (response.body) {
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -507,14 +550,7 @@ async function loadModelFromUrl(modelId: string, modelUrl: string): Promise<void
       reader.releaseLock();
     }
 
-    const blobParts = chunks.map((chunk) => {
-      const copy = new Uint8Array(chunk.byteLength);
-      copy.set(chunk);
-      return copy.buffer;
-    });
-    const blobUrl = URL.createObjectURL(new Blob(blobParts, { type: 'application/octet-stream' }));
-    sessionSourceUrl = blobUrl;
-    revokeSessionSourceUrl = () => URL.revokeObjectURL(blobUrl);
+    sessionSource = concatChunksToArrayBuffer(chunks, downloadedBytes);
     post({
       type: 'model-load-progress',
       modelId,
@@ -523,10 +559,7 @@ async function loadModelFromUrl(modelId: string, modelUrl: string): Promise<void
       message: `Stem model downloaded ${formatBytes(downloadedBytes)}. Opening runtime session.`,
     });
   } else {
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    sessionSourceUrl = blobUrl;
-    revokeSessionSourceUrl = () => URL.revokeObjectURL(blobUrl);
+    sessionSource = await response.arrayBuffer();
     post({
       type: 'model-load-progress',
       modelId,
@@ -543,11 +576,7 @@ async function loadModelFromUrl(modelId: string, modelUrl: string): Promise<void
     progress: 0.9,
     message: 'Creating stem model runtime session.',
   });
-  try {
-    await loadModelFromSource(modelId, sessionSourceUrl);
-  } finally {
-    revokeSessionSourceUrl?.();
-  }
+  await loadModelFromSource(modelId, sessionSource, backendPreference);
 }
 
 async function separate(jobId: string, input: StemSeparationInput): Promise<StemSeparationWorkerStemResult[]> {
@@ -664,7 +693,7 @@ self.onmessage = async (event: MessageEvent<StemSeparationWorkerRequest>) => {
   try {
     switch (message.type) {
       case 'load-model':
-        await loadModel(message.modelId, message.modelBuffers);
+        await loadModel(message.modelId, message.modelBuffers, message.backendPreference);
         post({
           type: 'model-ready',
           modelId: message.modelId,
@@ -673,7 +702,7 @@ self.onmessage = async (event: MessageEvent<StemSeparationWorkerRequest>) => {
         break;
 
       case 'load-model-url':
-        await loadModelFromUrl(message.modelId, message.modelUrl);
+        await loadModelFromUrl(message.modelId, message.modelUrl, message.backendPreference);
         post({
           type: 'model-ready',
           modelId: message.modelId,

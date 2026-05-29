@@ -1,12 +1,15 @@
 import type {
   StemModelCatalogEntry,
   StemModelFileBuffer,
+  StemSeparationWorkerBackendPreference,
   StemSeparationBackend,
   StemSeparationInput,
   StemSeparationWorkerRequest,
   StemSeparationWorkerResponse,
   StemSeparationWorkerStemResult,
 } from './types';
+
+const MODEL_LOAD_IDLE_TIMEOUT_MS = 180_000;
 
 export interface StemSeparationWorkerLoadResult {
   modelId: string;
@@ -23,12 +26,12 @@ export interface StemSeparationWorkerClientLike {
   loadModel: (
     model: StemModelCatalogEntry,
     modelBuffers: StemModelFileBuffer[],
-    options?: { signal?: AbortSignal; onProgress?: (progress: StemSeparationWorkerProgress) => void },
+    options?: StemSeparationWorkerModelLoadOptions,
   ) => Promise<StemSeparationWorkerLoadResult>;
   loadModelFromUrl: (
     model: StemModelCatalogEntry,
     modelUrl: string,
-    options?: { signal?: AbortSignal; onProgress?: (progress: StemSeparationWorkerProgress) => void },
+    options?: StemSeparationWorkerModelLoadOptions,
   ) => Promise<StemSeparationWorkerLoadResult>;
   separate: (
     jobId: string,
@@ -42,11 +45,20 @@ export interface StemSeparationWorkerClientLike {
   dispose: () => void;
 }
 
+export interface StemSeparationWorkerModelLoadOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: StemSeparationWorkerProgress) => void;
+  backendPreference?: StemSeparationWorkerBackendPreference;
+  idleTimeoutMs?: number;
+}
+
 interface PendingModelLoad {
   modelId: string;
   resolve: (result: StemSeparationWorkerLoadResult) => void;
   reject: (error: Error) => void;
   onProgress?: (progress: StemSeparationWorkerProgress) => void;
+  resetIdleTimeout: () => void;
+  clearIdleTimeout: () => void;
 }
 
 interface PendingSeparation {
@@ -96,32 +108,36 @@ export class StemSeparationWorkerClient implements StemSeparationWorkerClientLik
   async loadModel(
     model: StemModelCatalogEntry,
     modelBuffers: StemModelFileBuffer[],
-    options: { signal?: AbortSignal; onProgress?: (progress: StemSeparationWorkerProgress) => void } = {},
+    options: StemSeparationWorkerModelLoadOptions = {},
   ): Promise<StemSeparationWorkerLoadResult> {
     return this.postModelLoadRequest(model, {
       type: 'load-model',
       modelId: model.id,
       modelBuffers,
+      backendPreference: options.backendPreference,
     }, {
       signal: options.signal,
       transfer: modelBuffers.map(file => file.buffer),
       onProgress: options.onProgress,
+      idleTimeoutMs: options.idleTimeoutMs,
     });
   }
 
   async loadModelFromUrl(
     model: StemModelCatalogEntry,
     modelUrl: string,
-    options: { signal?: AbortSignal; onProgress?: (progress: StemSeparationWorkerProgress) => void } = {},
+    options: StemSeparationWorkerModelLoadOptions = {},
   ): Promise<StemSeparationWorkerLoadResult> {
     return this.postModelLoadRequest(model, {
       type: 'load-model-url',
       modelId: model.id,
       modelUrl,
+      backendPreference: options.backendPreference,
     }, {
       signal: options.signal,
       transfer: [],
       onProgress: options.onProgress,
+      idleTimeoutMs: options.idleTimeoutMs,
     });
   }
 
@@ -132,17 +148,48 @@ export class StemSeparationWorkerClient implements StemSeparationWorkerClientLik
       signal?: AbortSignal;
       transfer: Transferable[];
       onProgress?: (progress: StemSeparationWorkerProgress) => void;
+      idleTimeoutMs?: number;
     },
   ): Promise<StemSeparationWorkerLoadResult> {
     throwIfAborted(options.signal);
-    if (this.loadedModelId === model.id && this.loadedBackend) {
+    const requestedBackend = message.backendPreference;
+    const loadedBackendMatchesRequest = !requestedBackend ||
+      requestedBackend === 'auto' ||
+      requestedBackend === this.loadedBackend;
+    if (this.loadedModelId === model.id && this.loadedBackend && loadedBackendMatchesRequest) {
       return { modelId: model.id, backend: this.loadedBackend };
     }
 
     await this.ensureWorker();
 
     return new Promise((resolve, reject) => {
-      const abort = () => {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+      let abort: (() => void) | null = null;
+      const clearIdleTimeout = () => {
+        if (!idleTimer) return;
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      };
+      const removeAbortListener = () => {
+        if (abort) {
+          options.signal?.removeEventListener('abort', abort);
+        }
+      };
+      const resetIdleTimeout = () => {
+        clearIdleTimeout();
+        const timeoutMs = options.idleTimeoutMs ?? MODEL_LOAD_IDLE_TIMEOUT_MS;
+        idleTimer = setTimeout(() => {
+          removeAbortListener();
+          this.pendingModelLoad = null;
+          this.dispose();
+          const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
+          reject(errorFromMessage(
+            `Stem model runtime did not respond for ${timeoutSeconds}s while loading ${model.label}.`,
+          ));
+        }, timeoutMs);
+      };
+      abort = () => {
+        clearIdleTimeout();
         this.pendingModelLoad = null;
         this.dispose();
         reject(getSignalAbortError(options.signal));
@@ -153,17 +200,28 @@ export class StemSeparationWorkerClient implements StemSeparationWorkerClientLik
         modelId: model.id,
         onProgress: options.onProgress,
         resolve: (result) => {
-          options.signal?.removeEventListener('abort', abort);
+          removeAbortListener();
+          clearIdleTimeout();
           resolve(result);
         },
         reject: (error) => {
-          options.signal?.removeEventListener('abort', abort);
+          removeAbortListener();
+          clearIdleTimeout();
           reject(error);
         },
+        resetIdleTimeout,
+        clearIdleTimeout,
       };
-      this.worker?.postMessage(message, {
-        transfer: options.transfer,
-      });
+      resetIdleTimeout();
+      try {
+        this.worker?.postMessage(message, {
+          transfer: options.transfer,
+        });
+      } catch (error) {
+        const pending = this.pendingModelLoad;
+        this.pendingModelLoad = null;
+        pending?.reject(error instanceof Error ? error : errorFromMessage(String(error)));
+      }
     });
   }
 
@@ -246,6 +304,10 @@ export class StemSeparationWorkerClient implements StemSeparationWorkerClientLik
       this.rejectAll(errorFromMessage(event.message || 'Stem separation worker failed.'));
       this.dispose();
     };
+    this.worker.onmessageerror = () => {
+      this.rejectAll(errorFromMessage('Stem separation worker message could not be deserialized.'));
+      this.dispose();
+    };
   }
 
   private handleMessage(message: StemSeparationWorkerResponse): void {
@@ -262,6 +324,7 @@ export class StemSeparationWorkerClient implements StemSeparationWorkerClientLik
 
       case 'model-load-progress':
         if (this.pendingModelLoad?.modelId === message.modelId) {
+          this.pendingModelLoad.resetIdleTimeout();
           this.pendingModelLoad.onProgress?.({
             phase: message.phase,
             progress: message.progress,

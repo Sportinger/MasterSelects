@@ -77,16 +77,20 @@ export interface StemSeparationWorkerStemResult {
   channels: Float32Array[];
 }
 
+export type StemSeparationWorkerBackendPreference = 'auto' | 'wasm' | 'webgpu';
+
 export type StemSeparationWorkerRequest =
   | {
     type: 'load-model';
     modelId: string;
     modelBuffers: StemModelFileBuffer[];
+    backendPreference?: StemSeparationWorkerBackendPreference;
   }
   | {
     type: 'load-model-url';
     modelId: string;
     modelUrl: string;
+    backendPreference?: StemSeparationWorkerBackendPreference;
   }
   | { type: 'separate'; jobId: string; input: StemSeparationInput }
   | { type: 'cancel'; jobId: string }

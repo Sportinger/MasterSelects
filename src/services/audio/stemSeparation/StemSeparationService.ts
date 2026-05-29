@@ -553,8 +553,8 @@ export class StemSeparationService {
       });
     };
     return source.kind === 'url'
-      ? worker.loadModelFromUrl(model, source.url, { signal: request.signal, onProgress })
-      : worker.loadModel(model, source.buffers, { signal: request.signal, onProgress });
+      ? worker.loadModelFromUrl(model, source.url, { signal: request.signal, onProgress, backendPreference: 'wasm' })
+      : worker.loadModel(model, source.buffers, { signal: request.signal, onProgress, backendPreference: 'wasm' });
   }
 
   private async storeStemResults(input: {
