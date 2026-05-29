@@ -101,9 +101,9 @@ export interface SavedDockTimelineLayout {
   trackHeaderWidth?: number;
   timelineSplitRatio?: number | null;
   trackHeights?: Record<string, number>;
-  trackTypeHeights?: Partial<Record<'video' | 'audio', number>>;
+  trackTypeHeights?: Partial<Record<'video' | 'audio' | 'midi', number>>;
   trackVisibility?: Record<string, boolean>;
-  trackTypeVisibility?: Partial<Record<'video' | 'audio', boolean>>;
+  trackTypeVisibility?: Partial<Record<'video' | 'audio' | 'midi', boolean>>;
 }
 
 export interface SavedDockLayout {

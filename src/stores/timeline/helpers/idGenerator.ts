@@ -57,6 +57,20 @@ export function generateSolidClipId(): string {
 }
 
 /**
+ * Generate a unique ID for MIDI clips (issue #182).
+ */
+export function generateMidiClipId(): string {
+  return generateClipId('clip-midi');
+}
+
+/**
+ * Generate a unique ID for MIDI notes (issue #182).
+ */
+export function generateMidiNoteId(): string {
+  return generateClipId('midi-note');
+}
+
+/**
  * Generate a unique ID for math scene clips.
  */
 export function generateMathSceneClipId(): string {
@@ -140,7 +154,7 @@ export function isManualLinkedGroupId(groupId: string | undefined): boolean {
 /**
  * Generate a unique ID for tracks.
  */
-export function generateTrackId(type: 'video' | 'audio'): string {
+export function generateTrackId(type: 'video' | 'audio' | 'midi'): string {
   return generateClipId(`track-${type}`);
 }
 

@@ -27,7 +27,7 @@ import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation
 export interface ProjectTrack {
   id: string;
   name: string;
-  type: 'video' | 'audio';
+  type: 'video' | 'audio' | 'midi';
   height: number;
   labelColor?: LabelColor;
   locked: boolean;
@@ -35,6 +35,8 @@ export interface ProjectTrack {
   muted: boolean;
   solo: boolean;
   audioState?: TrackAudioState;
+  // MIDI track instrument (issue #182)
+  midiInstrument?: import('../../../types/midiClip').MidiInstrument;
 }
 
 export interface ProjectClip {
@@ -87,7 +89,9 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
+  // MIDI clip note data (issue #182); wired into save/load in the persistence phase
+  midiData?: import('../../../types/midiClip').MidiClipData;
   naturalDuration?: number;
   linkedClipId?: string;
   linkedGroupId?: string;

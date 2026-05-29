@@ -8,6 +8,7 @@ import { Logger } from '../../../services/logger';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useDockStore } from '../../../stores/dockStore';
 import { requestMediaSourceReveal } from '../../../services/mediaSourceReveal';
+import { openPianoRoll } from '../../pianoRoll/PianoRollBoot';
 import type { TimelineClipDragPreview, TimelineToolId } from '../../../stores/timeline/types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 import {
@@ -783,6 +784,12 @@ export function useClipDrag({
 
       const clip = clipMap.get(clipId);
       if (!clip) return;
+
+      // MIDI clips open the detached piano-roll editor (issue #182).
+      if (clip.source?.type === 'midi') {
+        openPianoRoll(clip.id);
+        return;
+      }
 
       // If this clip is a composition, open it in a new tab and switch to it.
       if (clip.isComposition && clip.compositionId) {

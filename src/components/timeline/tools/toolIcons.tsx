@@ -16,6 +16,7 @@ import {
   IconLayersIntersect,
   IconLayersSelected,
   IconMapPin,
+  IconPencil,
   IconPlayerTrackNext,
   IconPointer,
   IconReplace,
@@ -90,6 +91,7 @@ export const TIMELINE_TOOL_ICONS: Record<TimelineToolId, TimelineToolIcon> = {
   'in-point': MarkInIcon,
   'out-point': MarkOutIcon,
   'pen-keyframe': IconKeyframe,
+  'midi-draw': IconPencil,
 };
 
 export const TIMELINE_TOOL_FALLBACK_ICON = IconAdjustmentsHorizontal;

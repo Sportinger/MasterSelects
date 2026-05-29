@@ -54,6 +54,7 @@ export const TIMELINE_TOOL_IDS: TimelineToolId[] = [
   'in-point',
   'out-point',
   'pen-keyframe',
+  'midi-draw',
 ];
 
 export const TIMELINE_TOOL_GROUP_BY_ID: Record<TimelineToolId, TimelineToolGroupId> = {
@@ -94,6 +95,7 @@ export const TIMELINE_TOOL_GROUP_BY_ID: Record<TimelineToolId, TimelineToolGroup
   'in-point': 'navigation',
   'out-point': 'navigation',
   'pen-keyframe': 'navigation',
+  'midi-draw': 'navigation',
 };
 
 export const TIMELINE_MODE_TOOL_IDS = new Set<TimelineToolId>([
@@ -117,6 +119,7 @@ export const TIMELINE_MODE_TOOL_IDS = new Set<TimelineToolId>([
   'in-point',
   'out-point',
   'pen-keyframe',
+  'midi-draw',
 ]);
 
 export const AVAILABLE_TIMELINE_MODE_TOOL_IDS = new Set<TimelineToolId>([
@@ -137,6 +140,7 @@ export const AVAILABLE_TIMELINE_MODE_TOOL_IDS = new Set<TimelineToolId>([
   'hand',
   'zoom',
   'pen-keyframe',
+  'midi-draw',
 ]);
 
 export const TIMELINE_TOOL_IDS_BY_GROUP: Record<TimelineToolGroupId, TimelineToolId[]> = {
@@ -157,7 +161,7 @@ export const TIMELINE_TOOL_IDS_BY_GROUP: Record<TimelineToolGroupId, TimelineToo
   ],
   trim: ['edge-trim', 'ripple-trim', 'rolling-edit', 'slip', 'slide', 'rate-stretch'],
   placement: ['position-overwrite', 'insert', 'overwrite', 'replace', 'fit-to-fill', 'append-at-end', 'place-on-top', 'ripple-overwrite'],
-  navigation: ['hand', 'zoom', 'marker', 'in-point', 'out-point', 'pen-keyframe'],
+  navigation: ['hand', 'zoom', 'marker', 'in-point', 'out-point', 'pen-keyframe', 'midi-draw'],
 };
 
 export function isTimelineToolId(value: string): value is TimelineToolId {

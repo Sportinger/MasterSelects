@@ -13,6 +13,7 @@ import type { TrackActions, SliceCreator } from './types';
 import { MIN_TRACK_HEIGHT, MAX_TRACK_HEIGHT } from './constants';
 import { Logger } from '../../services/logger';
 import { generateClipId, generateEffectId } from './helpers/idGenerator';
+import { createDefaultMidiInstrument } from '../../types/midiClip';
 import { runtimeAudioMeterBus } from '../../services/audio/runtimeAudioMeterBus';
 import {
   getAudioEffect,
@@ -264,14 +265,17 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
   addTrack: (type) => {
     const { tracks, expandedTracks } = get();
     const typeCount = tracks.filter(t => t.type === type).length + 1;
+    const typeLabel = type === 'video' ? 'Video' : type === 'midi' ? 'MIDI' : 'Audio';
     const newTrack: TimelineTrack = {
       id: `${type}-${Date.now()}`,
-      name: `${type === 'video' ? 'Video' : 'Audio'} ${typeCount}`,
+      name: `${typeLabel} ${typeCount}`,
       type,
       height: type === 'video' ? 60 : 40,
       muted: false,
       visible: true,
       solo: false,
+      // MIDI tracks carry the instrument that renders their clips (issue #182)
+      ...(type === 'midi' ? { midiInstrument: createDefaultMidiInstrument() } : {}),
     };
 
     // Video tracks: insert at TOP (before all existing video tracks)

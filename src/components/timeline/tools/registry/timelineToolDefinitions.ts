@@ -441,6 +441,17 @@ export const TIMELINE_TOOL_DEFINITIONS: TimelineToolDefinition[] = [
     mutatesTimeline: true,
     shortcutActionId: 'tool.penKeyframe',
   }),
+  tool({
+    id: 'midi-draw',
+    groupId: 'navigation',
+    kind: 'mode',
+    label: 'MIDI Pencil',
+    description: 'Draw MIDI clip regions on a MIDI track by click-dragging on empty lane space.',
+    priority: 'P1',
+    availability: 'enabled',
+    mutatesTimeline: true,
+    shortcutActionId: 'tool.midiDraw',
+  }),
 ];
 
 export const TIMELINE_TOOL_DEFINITION_BY_ID = Object.fromEntries(
