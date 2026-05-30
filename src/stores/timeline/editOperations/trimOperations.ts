@@ -165,6 +165,21 @@ export function applyTrimClipOperation(
   ]);
   pushLinkedTrim(updatesByClipId, clips, clip, updates, operation.includeLinked);
 
+  // Multi-select trim: fold in the other selected clips, each already clamped to
+  // its own bounds by the caller, so they all commit in one history batch.
+  for (const extra of operation.extraClips ?? []) {
+    if (updatesByClipId.has(extra.clipId)) continue;
+    const extraClip = clips.find((candidate) => candidate.id === extra.clipId);
+    if (!extraClip) continue;
+    const extraUpdates: ClipTrimUpdate = {
+      inPoint: extra.inPoint,
+      outPoint: extra.outPoint,
+      ...(extra.startTime !== undefined ? { startTime: extra.startTime } : {}),
+    };
+    updatesByClipId.set(extra.clipId, extraUpdates);
+    pushLinkedTrim(updatesByClipId, clips, extraClip, extraUpdates, operation.includeLinked);
+  }
+
   return applyTrimUpdates(clips, tracks, updatesByClipId);
 }
 

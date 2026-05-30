@@ -873,6 +873,10 @@ export function Timeline() {
     tracks,
     isExporting,
     activeTimelineToolId,
+    selectedClipIds,
+    snappingEnabled,
+    playheadPosition,
+    markers,
     selectClip,
     applyTimelineEditOperation: store.applyTimelineEditOperation,
     setTimelineToolPreview: store.setTimelineToolPreview,
@@ -2750,6 +2754,16 @@ export function Timeline() {
         trimmedClip &&
         (clip.linkedClipId === clipTrim.clipId ||
           trimmedClip.linkedClipId === clip.id);
+      // Multi-select trim: a selected clip (not the dragged one) that should resize
+      // live alongside it. Only the default edge-trim drives a multi-clip trim.
+      const isTrimFollower =
+        !!clipTrim &&
+        !isTrimming &&
+        !isLinkedToTrimming &&
+        (activeTimelineToolId === 'select' || activeTimelineToolId === 'edge-trim') &&
+        selectedClipIds.size > 1 &&
+        selectedClipIds.has(clipTrim.clipId) &&
+        selectedClipIds.has(clip.id);
 
       // Use mediaFiles from hook state instead of getState() for render-time lookups
       const mediaFile = mediaFiles.find(
@@ -2786,6 +2800,7 @@ export function Timeline() {
           isFading={isFading}
           isLinkedToDragging={!!isLinkedToDragging}
           isLinkedToTrimming={!!isLinkedToTrimming}
+          isTrimFollower={isTrimFollower}
           isClipDragActive={clipDrag !== null}
           clipDrag={clipDragForClip}
           clipTrim={clipTrim}
@@ -3913,6 +3928,7 @@ export function Timeline() {
                   switchMotionClass={timelineSwitchMotionClass}
                   renderMode="trackOverlays"
                   clipDrag={clipDrag}
+                  clipTrim={clipTrim}
                   isRamPreviewing={effectiveIsRamPreviewing}
                   ramPreviewProgress={effectiveRamPreviewProgress}
                   playheadPosition={playheadPosition}

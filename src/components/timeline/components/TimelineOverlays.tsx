@@ -3,7 +3,7 @@
 import '../TimelineInteractions.css';
 import React, { useEffect, useState } from 'react';
 import { IconFlag3Filled } from '@tabler/icons-react';
-import type { ClipDragState } from '../types';
+import type { ClipDragState, ClipTrimState } from '../types';
 import { audioRecordingService } from '../../../services/audio/AudioRecordingService';
 import { isAudioRecordingActivePhase } from '../../../services/audio/timelineRecordingWorkflow';
 
@@ -27,6 +27,9 @@ interface TimelineOverlaysProps {
 
   // Clip drag
   clipDrag: ClipDragState | null;
+
+  // Clip trim (for the snap line while trimming an edge)
+  clipTrim?: ClipTrimState | null;
 
   // RAM preview
   isRamPreviewing: boolean;
@@ -57,6 +60,7 @@ export function TimelineOverlays({
   inLineOpacity = 1,
   outLineOpacity = 1,
   clipDrag,
+  clipTrim,
   isRamPreviewing,
   ramPreviewProgress,
   playheadPosition,
@@ -84,6 +88,10 @@ export function TimelineOverlays({
       {/* Snap line */}
       {renderTrackOverlays && clipDrag?.isSnapping && clipDrag.snapIndicatorTime !== null && (
         <div className="snap-line" style={{ left: timeToViewportPixel(clipDrag.snapIndicatorTime) }} />
+      )}
+      {/* Snap line while trimming a clip edge */}
+      {renderTrackOverlays && clipTrim?.isSnapping && clipTrim.snapIndicatorTime !== null && clipTrim.snapIndicatorTime !== undefined && (
+        <div className="snap-line" style={{ left: timeToViewportPixel(clipTrim.snapIndicatorTime) }} />
       )}
       {/* Guide line at original position when dragging across tracks (dimmer when not snapped) */}
       {renderTrackOverlays && clipDrag && !clipDrag.isSnapping && clipDrag.trackChangeGuideTime !== null && (

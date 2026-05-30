@@ -7,6 +7,7 @@ import type { Composition } from '../../../stores/mediaStore';
 import { ALL_BLEND_MODES } from '../constants';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { TIMELINE_TOOL_DEFINITIONS } from '../tools/registry';
 import { runTimelineToolCommand } from '../tools/timelineToolCommands';
 
@@ -149,6 +150,31 @@ export function useTimelineKeyboard({
       // Only handle if not typing in a text input
       if (isTextEntryTarget(e.target)) {
         return;
+      }
+
+      // Select all — scoped to whichever panel the mouse is over. Over the media
+      // panel it selects all media items; over the timeline it selects all clips.
+      // Over neither (e.g. mask editing in the preview) it falls through so other
+      // select-all handlers still run.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'a' || e.key === 'A')) {
+        if (typeof document !== 'undefined') {
+          if (document.querySelector('.media-panel:hover')) {
+            e.preventDefault();
+            const mediaState = useMediaStore.getState();
+            const ids = [
+              ...mediaState.files.map((file) => file.id),
+              ...mediaState.compositions.map((composition) => composition.id),
+            ];
+            mediaState.setSelection(ids);
+            return;
+          }
+          if (document.querySelector('.timeline-container:hover')) {
+            e.preventDefault();
+            const timelineState = useTimelineStore.getState();
+            timelineState.selectClips(timelineState.clips.map((clip) => clip.id));
+            return;
+          }
+        }
       }
 
       // Play/Pause (also blur any focused control that was last clicked)

@@ -570,6 +570,7 @@ function TimelineClipComponent({
   isFading,
   isLinkedToDragging,
   isLinkedToTrimming,
+  isTrimFollower,
   isClipDragActive,
   clipDrag,
   clipTrim,
@@ -597,7 +598,6 @@ function TimelineClipComponent({
   keyframeTimeGroups,
   onMoveKeyframeGroup,
   timeToPixel,
-  pixelToTime,
   formatTime,
 }: TimelineClipProps) {
   const thumbnailsEnabled = useTimelineStore(s => s.thumbnailsEnabled);
@@ -1032,8 +1032,9 @@ function TimelineClipComponent({
   let displayOutPoint = clip.outPoint;
 
   if (isTrimming && clipTrim) {
-    const deltaX = clipTrim.currentX - clipTrim.startX;
-    const deltaTime = pixelToTime(deltaX);
+    // Use the resolved (snapped/frame-quantized) delta so the live resize lands
+    // exactly where the trim will commit.
+    const deltaTime = clipTrim.appliedDelta;
     const sourceType = clip.source?.type;
     const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera' || sourceType === 'splat-effector' || sourceType === 'math-scene';
     const canLoopExtendRight = canLoopExtendVectorClip(clip);
@@ -1061,10 +1062,10 @@ function TimelineClipComponent({
       // Update outPoint when trimming right edge
       displayOutPoint = clipTrim.originalOutPoint + clampedDelta;
     }
-  } else if (isLinkedToTrimming && clipTrim && trimmedClip) {
-    // Apply same trim to linked clip visually
-    const deltaX = clipTrim.currentX - clipTrim.startX;
-    const deltaTime = pixelToTime(deltaX);
+  } else if (clipTrim && (isTrimFollower || (isLinkedToTrimming && trimmedClip))) {
+    // Resize this clip live too: a linked clip, or a selected clip following a
+    // multi-trim. Each clamps the shared (snapped) delta to its own bounds.
+    const deltaTime = clipTrim.appliedDelta;
     const canLoopExtendRight = canLoopExtendVectorClip(clip);
     const maxDuration = clip.source?.naturalDuration || clip.duration;
 

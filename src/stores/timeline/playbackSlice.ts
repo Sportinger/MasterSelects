@@ -19,7 +19,6 @@ import {
   persistTimelineTrackHeaderWidth,
 } from './viewPreferences';
 import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
-import { hasTimelineVisualRenderDemand } from '../../services/timeline/timelineVisualDemand';
 
 function createPlaybackWarmupRequestId(): string {
   return `playback-warmup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -46,16 +45,12 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     }
 
     const latestState = get();
-    if (
-      !latestState.isPlaying &&
-      !latestState.isDraggingPlayhead &&
-      hasTimelineVisualRenderDemand({
-        clips: latestState.clips,
-        tracks: latestState.tracks,
-        playheadPosition: clampedPosition,
-        clipDragPreview: latestState.clipDragPreview,
-      })
-    ) {
+    if (!latestState.isPlaying && !latestState.isDraggingPlayhead) {
+      // Always refresh the preview on a paused, non-drag playhead move: on a clip
+      // it shows that frame, on an empty position (gap / past the last clip) it
+      // clears to black instead of retaining a stale frame. Previously this was
+      // gated on there being a clip at the position, which left the last frame on
+      // screen when jumping into empty space.
       engine.requestNewFrameRender();
     }
 

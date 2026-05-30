@@ -136,6 +136,14 @@ export interface TrimClipOperation extends TimelineEditOperationBase {
   outPoint: number;
   startTime?: number;
   includeLinked?: boolean;
+  // Additional clips trimmed in the same gesture (multi-select trim). Each is
+  // clamped to its own bounds by the caller; applied in the same history batch.
+  extraClips?: Array<{
+    clipId: string;
+    inPoint: number;
+    outPoint: number;
+    startTime?: number;
+  }>;
 }
 
 export interface TrimEdgeToTimeOperation extends TimelineEditOperationBase {

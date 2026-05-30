@@ -54,6 +54,14 @@ export interface ClipTrimState {
   startX: number;
   currentX: number;
   altKey: boolean;  // If true, don't trim linked clip
+  // Snap feedback: the timeline time the edge snapped to (clip/playhead/marker),
+  // or null when frame-snapped or not snapped. Drives the green snap line.
+  snapIndicatorTime: number | null;
+  isSnapping: boolean;
+  // The resolved (snapped/frame-quantized) trim delta in seconds. Shared so the
+  // live clip resize matches where the trim commits, and so multi-selected
+  // followers can apply the same delta clamped to their own bounds.
+  appliedDelta: number;
 }
 
 // Clip fade state (for fade-in/out handles)
@@ -311,6 +319,7 @@ export interface TimelineClipProps {
   isFading: boolean;  // True if this clip is being fade-adjusted
   isLinkedToDragging: boolean;
   isLinkedToTrimming: boolean;
+  isTrimFollower?: boolean;  // Selected clip resizing live alongside a multi-trim
   isClipDragActive: boolean;
   clipDrag: ClipDragState | null;
   clipTrim: ClipTrimState | null;
