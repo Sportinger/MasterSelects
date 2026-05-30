@@ -865,6 +865,37 @@
   cursor: not-allowed;
 }
 
+/* Auto-approval toggle (left of Send) */
+.btn-approval-toggle {
+  align-self: flex-end;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--font-md);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.btn-approval-toggle:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.btn-approval-toggle.auto-on {
+  background: rgba(250, 204, 21, 0.16);
+  border-color: rgba(250, 204, 21, 0.6);
+  color: rgb(250, 204, 21);
+}
+
+.btn-approval-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Editor Mode Toggle */
 .editor-mode-toggle {
   display: flex;

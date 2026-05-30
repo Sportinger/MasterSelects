@@ -435,6 +435,7 @@ export function AIChatPanel() {
     apiKeysUnlocked,
     openSettings,
     aiApprovalMode,
+    setAiApprovalMode,
     aiProvider,
     aiSystemPromptOverrides,
     lemonadeEndpoint,
@@ -1651,6 +1652,18 @@ export function AIChatPanel() {
           disabled={!hasAccess}
           rows={2}
         />
+        <button
+          type="button"
+          className={`btn-approval-toggle ${aiApprovalMode === 'auto' ? 'auto-on' : ''}`}
+          onClick={() => setAiApprovalMode(aiApprovalMode === 'auto' ? 'confirm-destructive' : 'auto')}
+          disabled={!hasAccess}
+          title={aiApprovalMode === 'auto'
+            ? 'Auto-approval ON — the AI runs actions without asking. Click to require confirmation.'
+            : 'Auto-approval OFF — destructive actions need your confirmation. Click to let the AI run them automatically.'}
+          aria-pressed={aiApprovalMode === 'auto'}
+        >
+          {aiApprovalMode === 'auto' ? '⚡ Auto' : '🔒 Confirm'}
+        </button>
         <button
           className="btn-send"
           onClick={sendMessage}

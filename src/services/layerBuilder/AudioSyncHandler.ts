@@ -213,16 +213,9 @@ export class AudioSyncHandler {
   ): void {
     this.clearScrubAudioTimeout(element);
 
-    // Set playback rate
+    // Base rate from clip speed. The final rate — including a gentle drift
+    // correction for non-master elements — is applied below once drift is known.
     const targetRate = absSpeed > 0.1 ? absSpeed : 1;
-    if (Math.abs(element.playbackRate - targetRate) > 0.01) {
-      element.playbackRate = Math.max(0.25, Math.min(4, targetRate));
-      vfPipelineMonitor.record('audio_rate_change', {
-        type,
-        rate: Math.round(targetRate * 100) / 100,
-        clipId: clip.id,
-      });
-    }
 
     // Check if we have EQ to apply (any non-zero gain)
     const hasEQ = eqGains && eqGains.some(g => Math.abs(g) > 0.01);
@@ -280,26 +273,45 @@ export class AudioSyncHandler {
       state.masterSet = true;
     }
 
-    // Audio drift correction: if audio drifts > 0.3s from expected position, re-sync.
-    // Without this, audio can drift indefinitely (user reported 1300ms delay).
-    const timeDiff = element.currentTime - clipTime;
+    // Drift handling + final playback rate.
+    // The master element drives the clock, so it is never corrected. Non-master
+    // elements converge back to the timeline:
+    //   - large drift (> 0.3s): a hard re-sync seek (rare; may briefly click)
+    //   - moderate drift: a proportional playbackRate nudge (pitch preserved, so
+    //     inaudible) that pulls the element back without a seek — this keeps
+    //     stacked audio clips tightly lip-synced instead of drifting toward 0.3s.
+    const timeDiff = element.currentTime - clipTime; // + = ahead, - = behind
+    const absDrift = Math.abs(timeDiff);
     const isCurrentMaster = playheadState.masterAudioElement === element && canBeMaster;
-    if (!isCurrentMaster && Math.abs(timeDiff) > 0.3) {
-      vfPipelineMonitor.record('audio_drift_correct', {
-        type,
-        driftMs: Math.round(timeDiff * 1000),
-        clipId: clip.id,
-      });
-      element.currentTime = clipTime;
-    } else if (Math.abs(timeDiff) > 0.05) {
-      vfPipelineMonitor.record('audio_drift', {
-        type,
-        driftMs: Math.round(timeDiff * 1000),
-        clipId: clip.id,
-      });
+    let finalRate = targetRate;
+
+    if (!isCurrentMaster && !element.paused && absSpeed > 0.1) {
+      if (absDrift > 0.3) {
+        vfPipelineMonitor.record('audio_drift_correct', {
+          type,
+          driftMs: Math.round(timeDiff * 1000),
+          clipId: clip.id,
+        });
+        element.currentTime = clipTime;
+      } else if (absDrift > 0.045) {
+        // Proportional convergence, capped at ±5% (≈ inaudible with pitch
+        // preserved). Ahead → slow down; behind → speed up.
+        const correction = Math.max(-0.05, Math.min(0.05, -timeDiff * 0.5));
+        finalRate = targetRate + correction;
+        vfPipelineMonitor.record('audio_drift', {
+          type,
+          driftMs: Math.round(timeDiff * 1000),
+          clipId: clip.id,
+        });
+      }
     }
-    if (Math.abs(timeDiff) > state.maxAudioDrift) {
-      state.maxAudioDrift = Math.abs(timeDiff);
+
+    if (Math.abs(element.playbackRate - finalRate) > 0.004) {
+      element.playbackRate = Math.max(0.25, Math.min(4, finalRate));
+    }
+
+    if (absDrift > state.maxAudioDrift) {
+      state.maxAudioDrift = absDrift;
     }
 
     // Count playing audio

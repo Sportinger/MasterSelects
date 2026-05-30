@@ -2843,6 +2843,7 @@ export function Timeline() {
       clipMap,
       clips,
       selectedClipIds,
+      activeTimelineToolId,
       clipDrag,
       clipTrim,
       clipFade,
