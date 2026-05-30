@@ -165,6 +165,10 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         outPoint: clip.outPoint,
         sourceType: clip.source?.type || 'video',
         naturalDuration: clip.source?.naturalDuration,
+        // MIDI note data (issue #182) — instrument lives on the track, notes on the clip.
+        midiData: clip.source?.type === 'midi' && clip.midiData
+          ? structuredClone(clip.midiData)
+          : undefined,
         thumbnails: clip.thumbnails,
         linkedClipId: clip.linkedClipId,
         linkedGroupId: clip.linkedGroupId,
@@ -1515,6 +1519,40 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         }));
 
         log.debug('Restored mesh clip', { clip: serializedClip.name, meshType: serializedClip.meshType });
+        continue;
+      }
+
+      // MIDI clips - data-only (no media file); notes restored from midiData,
+      // rendered by the track instrument (issue #182). Mirrors addMidiClip's shape.
+      if (serializedClip.sourceType === 'midi') {
+        const midiClip: TimelineClip = {
+          id: serializedClip.id,
+          trackId: serializedClip.trackId,
+          name: serializedClip.name || 'MIDI Clip',
+          file: new File([], 'midi-clip.dat', { type: 'application/octet-stream' }),
+          startTime: serializedClip.startTime,
+          duration: serializedClip.duration,
+          inPoint: serializedClip.inPoint,
+          outPoint: serializedClip.outPoint,
+          source: {
+            type: 'midi',
+            naturalDuration: serializedClip.naturalDuration ?? serializedClip.duration,
+          },
+          transform: serializedClip.transform,
+          effects: serializedClip.effects || [],
+          colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
+          nodeGraph: restoreClipNodeGraph(serializedClip),
+          audioState: serializedClip.audioState ? structuredClone(serializedClip.audioState) : undefined,
+          midiData: serializedClip.midiData ? structuredClone(serializedClip.midiData) : { notes: [] },
+          masks: serializedClip.masks,
+          isLoading: false,
+        };
+
+        set(state => ({
+          clips: [...state.clips, midiClip],
+        }));
+
+        log.debug('Restored MIDI clip', { clip: serializedClip.name, noteCount: midiClip.midiData?.notes.length ?? 0 });
         continue;
       }
 
