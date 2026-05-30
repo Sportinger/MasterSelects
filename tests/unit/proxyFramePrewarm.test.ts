@@ -9,8 +9,8 @@ import type { TimelineClip } from '../../src/types';
 
 vi.mock('../../src/services/proxyFrameCache', () => ({
   proxyFrameCache: {
-    getCachedFrame: vi.fn(() => null),
-    getFrame: vi.fn(() => Promise.resolve(null)),
+    getCachedVideoFrame: vi.fn(() => null),
+    getVideoFrame: vi.fn(() => Promise.resolve(null)),
   },
 }));
 
@@ -103,7 +103,7 @@ describe('proxy frame prewarm', () => {
     prewarmProxyFramesForTimelinePosition(state, [createMedia()], 13.25);
     prewarmProxyFramesForTimelinePosition(state, [createMedia()], 13.26);
 
-    expect(proxyFrameCache.getCachedFrame).toHaveBeenCalledTimes(1);
-    expect(proxyFrameCache.getFrame).toHaveBeenCalledTimes(1);
+    expect(proxyFrameCache.getCachedVideoFrame).toHaveBeenCalledTimes(1);
+    expect(proxyFrameCache.getVideoFrame).toHaveBeenCalledTimes(1);
   });
 });

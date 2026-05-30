@@ -2,8 +2,8 @@
 
 import { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import type { DockTabGroup, DockPanel } from '../../types/dock';
-import { WIP_PANEL_TYPES } from '../../types/dock';
+import type { DockTabGroup, DockPanel, PanelType } from '../../types/dock';
+import { DEPRECATED_PANEL_TYPES, PANEL_CONFIGS, WIP_PANEL_TYPES } from '../../types/dock';
 import { useDockStore } from '../../stores/dockStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -24,6 +24,14 @@ const HOLD_DURATION = 500; // ms to hold before drag starts
 const TAB_INSERT_HOT_ZONE_PX = 36;
 const TAB_SLOT_SIZE_PX = 22;
 const TAB_SLOT_GAP_PX = 7;
+const CHANGE_TO_PANEL_TYPES = (Object.keys(PANEL_CONFIGS) as PanelType[])
+  .filter((type) => !DEPRECATED_PANEL_TYPES.includes(type));
+
+interface DockTabContextMenuState {
+  x: number;
+  y: number;
+  panel: DockPanel;
+}
 
 interface DockTabPaneProps {
   group: DockTabGroup;
@@ -32,6 +40,7 @@ interface DockTabPaneProps {
 export function DockTabPane({ group }: DockTabPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<number | null>(null);
   const holdStartRef = useRef<{
     panel: DockPanel;
@@ -40,6 +49,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   } | null>(null);
   const [holdingTabId, setHoldingTabId] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState<'idle' | 'holding' | 'ready' | 'fading'>('idle');
+  const [tabContextMenu, setTabContextMenu] = useState<DockTabContextMenuState | null>(null);
 
   const {
     setActiveTab,
@@ -49,6 +59,8 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     setPanelZoom,
     layout,
     activatePanelType,
+    closePanelById,
+    changePanelType,
     hoveredTabTarget,
     setHoveredTabTarget,
     clearHoveredTabTarget,
@@ -62,6 +74,8 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     setPanelZoom: s.setPanelZoom,
     layout: s.layout,
     activatePanelType: s.activatePanelType,
+    closePanelById: s.closePanelById,
+    changePanelType: s.changePanelType,
     hoveredTabTarget: s.hoveredTabTarget,
     setHoveredTabTarget: s.setHoveredTabTarget,
     clearHoveredTabTarget: s.clearHoveredTabTarget,
@@ -274,6 +288,19 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   }, [holdProgress, cancelHold]);
   void _handleCompTabMouseLeave; // Silence unused warning
 
+  const openTabContextMenu = useCallback((event: React.MouseEvent, panel: DockPanel) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cancelHold();
+    const maxMenuX = Math.max(8, window.innerWidth - 430);
+    const maxMenuY = Math.max(8, window.innerHeight - 120);
+    setTabContextMenu({
+      x: Math.max(8, Math.min(event.clientX, maxMenuX)),
+      y: Math.max(8, Math.min(event.clientY, maxMenuY)),
+      panel,
+    });
+  }, [cancelHold]);
+
   const handleTabClick = useCallback((index: number) => {
     setActiveTab(group.id, index);
     if (groupContainsMaximizedPanel) {
@@ -315,6 +342,14 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       }
     }, HOLD_DURATION);
   }, [group.id, setActiveTab, startDrag]);
+
+  const handleTabContextMenu = useCallback((event: React.MouseEvent, panel: DockPanel, index: number) => {
+    setActiveTab(group.id, index);
+    if (groupContainsMaximizedPanel) {
+      setMaximizedPanel(panel.id);
+    }
+    openTabContextMenu(event, panel);
+  }, [group.id, groupContainsMaximizedPanel, openTabContextMenu, setActiveTab, setMaximizedPanel]);
 
   const handleTabMouseUp = useCallback(() => {
     // Only cancel if we're still in holding phase (not yet dragging)
@@ -377,6 +412,71 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       });
     }
   }, [activeCompositionId, activePanel, group.id, hasTimelinePanel, setHoveredTabTarget, timelinePanel]);
+
+  const handleTabBarContextMenu = useCallback((event: React.MouseEvent) => {
+    if (!hasTimelinePanel || !timelinePanel) return;
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.dock-tab')) {
+      return;
+    }
+
+    const timelinePanelIndex = group.panels.findIndex((panel) => panel.id === timelinePanel.id);
+    if (timelinePanelIndex >= 0) {
+      setActiveTab(group.id, timelinePanelIndex);
+    }
+    if (groupContainsMaximizedPanel) {
+      setMaximizedPanel(timelinePanel.id);
+    }
+    openTabContextMenu(event, timelinePanel);
+  }, [
+    group.id,
+    group.panels,
+    groupContainsMaximizedPanel,
+    hasTimelinePanel,
+    openTabContextMenu,
+    setActiveTab,
+    setMaximizedPanel,
+    timelinePanel,
+  ]);
+
+  const handleHideContextPanel = useCallback(() => {
+    if (!tabContextMenu) return;
+    closePanelById(tabContextMenu.panel.id);
+    setTabContextMenu(null);
+  }, [closePanelById, tabContextMenu]);
+
+  const handleChangeContextPanelType = useCallback((type: PanelType) => {
+    if (!tabContextMenu) return;
+    changePanelType(tabContextMenu.panel.id, type);
+    setTabContextMenu(null);
+  }, [changePanelType, tabContextMenu]);
+
+  useEffect(() => {
+    if (!tabContextMenu) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) return;
+      setTabContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setTabContextMenu(null);
+      }
+    };
+    const handleWindowChange = () => setTabContextMenu(null);
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleWindowChange);
+    window.addEventListener('scroll', handleWindowChange, true);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleWindowChange);
+      window.removeEventListener('scroll', handleWindowChange, true);
+    };
+  }, [tabContextMenu]);
 
   // Clean up timer on unmount and handle global mouse events during hold
   useEffect(() => {
@@ -545,6 +645,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         className={`dock-tab-bar ${isMiddleDragging ? 'middle-dragging' : ''} ${groupContainsMaximizedPanel ? 'is-maximized-bar' : ''}`}
         title="Ctrl+Scroll to zoom | Hold to drag | Middle-click drag to scroll"
         onMouseDown={handleTabBarMouseDown}
+        onContextMenu={handleTabBarContextMenu}
         style={hasTimelinePanel && openCompositions.length > 0 && slotGridProgress > 0 ? {
           height: `${Math.round((1 - slotGridProgress) * 26)}px`,
           minHeight: 0,
@@ -657,6 +758,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
                 } ${maximizedPanelId === panel.id ? 'maximized-target' : ''}`}
                 onClick={() => handleTabClick(index)}
                 onMouseDown={(e) => handleTabMouseDown(e, panel, index)}
+                onContextMenu={(e) => handleTabContextMenu(e, panel, index)}
                 onMouseUp={handleTabMouseUp}
                 onMouseEnter={() => handlePanelTabMouseEnter(panel)}
                 onMouseLeave={() => handlePanelTabMouseLeave(panel.id)}
@@ -672,6 +774,49 @@ export function DockTabPane({ group }: DockTabPaneProps) {
           })
         )}
       </div>
+
+      {tabContextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="dock-tab-context-menu"
+          style={{
+            left: tabContextMenu.x,
+            top: tabContextMenu.y,
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            className="dock-tab-context-menu-item"
+            type="button"
+            onClick={handleHideContextPanel}
+          >
+            <span>Hide</span>
+          </button>
+          <div className="dock-tab-context-menu-item dock-tab-context-menu-item--submenu">
+            <span>Change to</span>
+            <span className="dock-tab-context-menu-chevron">&gt;</span>
+            <div className="dock-tab-context-submenu">
+              {CHANGE_TO_PANEL_TYPES.map((type) => {
+                const config = PANEL_CONFIGS[type];
+                const isCurrentType = tabContextMenu.panel.type === type;
+                const isWip = WIP_PANEL_TYPES.includes(type);
+                return (
+                  <button
+                    key={type}
+                    className={`dock-tab-context-menu-item ${isCurrentType ? 'is-current' : ''}`}
+                    type="button"
+                    disabled={isCurrentType || isWip}
+                    onClick={() => handleChangeContextPanelType(type)}
+                  >
+                    <span>{config.title}</span>
+                    {isWip && <span className="dock-tab-context-menu-hint">WIP</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Panel content with zoom */}
       <div

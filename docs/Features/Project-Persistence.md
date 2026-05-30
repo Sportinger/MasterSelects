@@ -476,20 +476,25 @@ Each composition stores its own resolution (width/height) in the project file:
 
 ### Actions
 ```typescript
-saveNamedLayout()          // View -> Layouts; stores dock layout, timeline focus, and track heights
+saveNamedLayout()          // View -> Layouts; stores dock layout, timeline focus, track slots, heights, and visibility
 saveCurrentNamedLayout()   // View -> Layouts; overwrites the active named layout
 loadSavedLayout()          // View -> Layouts; restores layout with a 500ms dock transition
 setDefaultSavedLayout()    // View -> Layouts
 toggleFavoriteSavedLayout()// View -> Layouts, center header quick switcher
-saveLayoutAsDefault()      // View -> Layouts; stores dock layout, timeline focus, and track heights
+saveLayoutAsDefault()      // View -> Layouts; stores dock layout, timeline focus, track slots, heights, and visibility
 resetLayout()              // View -> Layouts
 ```
 
 The hardcoded factory layouts are `VIDEO EDIT` and `AUDIO EDIT`. `VIDEO EDIT` is the default
 layout with Media on the left, Preview in the center, Properties/History on the right, and
-Timeline at the bottom. It stores balanced timeline focus with 70 px video tracks and 48 px
-compact audio tracks. `AUDIO EDIT` stores audio focus with Timeline above Media, Audio Mixer,
-and Properties/History, using 40 px video context tracks and 96 px audio tracks.
+Timeline at the bottom. It stores balanced timeline focus with two visible 70 px video tracks
+and one visible 48 px compact audio track, and first empty loads mark it as the active named
+layout. `AUDIO EDIT` stores audio focus with Timeline above
+Media, Audio Mixer, and Properties/History, using two visible 40 px video context tracks and
+one visible 96 px audio track. Saved layouts keep per-type track slot counts, per-slot height
+and visibility, and legacy per-track-id height/visibility for exact project restores. Loading
+a layout creates missing tracks to satisfy the saved slot count, but it does not delete extra
+existing tracks because that could remove clips.
 
 ---
 

@@ -45,6 +45,7 @@ export type MediaType =
 
 // Proxy status for video files
 export type ProxyStatus = 'none' | 'generating' | 'ready' | 'error';
+export type ProxyFormat = 'mp4-all-intra';
 
 export type SlotDeckStatus =
   | 'cold'
@@ -123,6 +124,7 @@ export interface MediaFile extends MediaItem {
   proxyProgress?: number;
   proxyFrameCount?: number;
   proxyFps?: number;
+  proxyFormat?: ProxyFormat;
   hasProxyAudio?: boolean;
   audioProxyStatus?: ProxyStatus;
   audioProxyProgress?: number;

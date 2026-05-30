@@ -65,9 +65,9 @@ export function calculateNativeScale(sourceWidth: number, sourceHeight: number):
 // Note: Video tracks are numbered so that the highest number is at the top (first in array)
 // This matches compositing order where higher layers render on top
 export const DEFAULT_TRACKS: TimelineTrack[] = [
-  { id: 'video-2', name: 'Video 2', type: 'video', height: 60, muted: false, visible: true, solo: false },
-  { id: 'video-1', name: 'Video 1', type: 'video', height: 60, muted: false, visible: true, solo: false },
-  { id: 'audio-1', name: 'Audio', type: 'audio', height: 40, muted: false, visible: true, solo: false },
+  { id: 'video-2', name: 'Video 2', type: 'video', height: 70, muted: false, visible: true, solo: false },
+  { id: 'video-1', name: 'Video 1', type: 'video', height: 70, muted: false, visible: true, solo: false },
+  { id: 'audio-1', name: 'Audio', type: 'audio', height: 48, muted: false, visible: true, solo: false },
 ];
 
 // Snap threshold in seconds (clips will snap when within this distance)

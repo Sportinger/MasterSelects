@@ -320,6 +320,21 @@ function startMediaFileAudioProxyGeneration(
   });
 }
 
+function startVideoProxyGenerationIfNeeded(get: () => MediaState, id: string): void {
+  const state = get() as MediaState & { startProxyGenerationQueue?: () => void };
+  if (!state.proxyEnabled) return;
+
+  const mediaFile = state.files.find((file) => file.id === id);
+  if (mediaFile?.type !== 'video' || mediaFile.isImporting) return;
+
+  queueMicrotask(() => {
+    const latestState = get() as MediaState & { startProxyGenerationQueue?: () => void };
+    if (latestState.proxyEnabled) {
+      latestState.startProxyGenerationQueue?.();
+    }
+  });
+}
+
 function finalizeImportedMediaFile(
   set: (partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)) => void,
   get: () => MediaState,
@@ -334,6 +349,7 @@ function finalizeImportedMediaFile(
     (mediaFileId) => get().files.find((file) => file.id === mediaFileId),
   );
   startMediaFileAudioProxyGeneration(set, get, id);
+  startVideoProxyGenerationIfNeeded(get, id);
 }
 
 function splitModelSequenceEntries(entries: ResolvedLegacyImportEntry[]): {
@@ -390,9 +406,11 @@ export const createFileImportSlice: MediaSliceCreator<FileImportActions> = (set,
           files: state.files.map((candidate) => candidate.id === existing.id ? updatedExisting : candidate),
         }));
         startMediaFileAudioProxyGeneration(set, get, existing.id);
+        startVideoProxyGenerationIfNeeded(get, existing.id);
         return updatedExisting;
       }
       startMediaFileAudioProxyGeneration(set, get, existing.id);
+      startVideoProxyGenerationIfNeeded(get, existing.id);
       return existing;
     }
 

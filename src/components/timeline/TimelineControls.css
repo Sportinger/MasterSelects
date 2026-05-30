@@ -200,10 +200,20 @@
 }
 
 .timeline-proxy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 22px;
   min-height: 22px;
+  min-width: 44px;
   padding: 0 7px;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
+  white-space: nowrap;
+}
+
+.timeline-proxy-button.is-generating {
+  min-width: 92px;
 }
 
 .timeline-loop-icon {

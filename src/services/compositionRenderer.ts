@@ -846,18 +846,23 @@ class CompositionRendererService {
         if (shouldUseProxy && nestedMediaFile) {
           const proxyFps = nestedMediaFile.proxyFps || 30;
           const frameIndex = Math.floor(nestedClipTime * proxyFps);
-          const cachedFrame = proxyFrameCache.getCachedFrame(nestedMediaFile.id, frameIndex, proxyFps);
+          const cachedFrame = proxyFrameCache.getCachedVideoFrame(nestedMediaFile.id, frameIndex);
 
           if (cachedFrame) {
             nestedLayers.push({
               ...baseLayer,
               source: {
-                type: 'image',
-                imageElement: cachedFrame,
+                type: 'video',
+                videoFrame: cachedFrame,
+                mediaTime: frameIndex / proxyFps,
+                targetMediaTime: nestedClipTime,
+                previewPath: 'nested-proxy-video-frame',
+                proxyFrameIndex: frameIndex,
               },
             } as Layer);
             continue;
           }
+          void proxyFrameCache.getVideoFrame(nestedMediaFile.id, nestedClipTime, proxyFps);
         }
 
         nestedLayers.push({

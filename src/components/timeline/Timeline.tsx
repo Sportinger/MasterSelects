@@ -2362,11 +2362,23 @@ export function Timeline() {
     videoSectionMetrics.contentHeight,
   ]);
 
-  // Performance: Memoize proxy-ready file count
-  const mediaFilesWithProxyCount = useMemo(
-    () => mediaFiles.filter((f) => f.proxyStatus === 'ready').length,
-    [mediaFiles]
-  );
+  // Performance: Memoize proxy batch status for the toolbar.
+  const proxyBatchStatus = useMemo(() => {
+    const proxyableFiles = mediaFiles.filter((file) => file.type === 'video' && Boolean(file.file));
+    const readyCount = proxyableFiles.filter((file) =>
+      file.proxyStatus === 'ready' &&
+      isProxyFrameCountComplete(file.proxyFrameCount, file.duration, file.proxyFps ?? file.fps)
+    ).length;
+    const generatingIndex = currentlyGeneratingProxyId
+      ? proxyableFiles.findIndex((file) => file.id === currentlyGeneratingProxyId) + 1
+      : 0;
+
+    return {
+      readyCount,
+      totalCount: proxyableFiles.length,
+      generatingIndex: generatingIndex > 0 ? generatingIndex : 0,
+    };
+  }, [currentlyGeneratingProxyId, mediaFiles]);
 
   // Keyboard shortcuts - extracted to hook
   useTimelineKeyboard({
@@ -3604,7 +3616,9 @@ export function Timeline() {
     outPoint,
     proxyEnabled,
     currentlyGeneratingProxyId,
-    mediaFilesWithProxy: mediaFilesWithProxyCount,
+    mediaFilesWithProxy: proxyBatchStatus.readyCount,
+    mediaFilesProxyTotal: proxyBatchStatus.totalCount,
+    generatingProxyIndex: proxyBatchStatus.generatingIndex,
     showTranscriptMarkers,
     thumbnailsEnabled,
     waveformsEnabled,

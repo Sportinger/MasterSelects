@@ -11,6 +11,8 @@ type IterableDirectoryHandle = FileSystemDirectoryHandle & {
 
 const PROXY_FRAME_EXTENSION = 'jpg';
 const PROXY_FRAME_MATCH = /^frame_(\d+)\.(?:jpe?g|webp)$/i;
+const LEGACY_JPEG_PROXY_FRAMES_ENABLED = false;
+const PROXY_VIDEO_FILE_NAME = 'proxy.mp4';
 const AUDIO_PROXY_EXTENSION = 'wav';
 const LEGACY_AUDIO_PROXY_FILE_NAME = 'audio.m4a';
 
@@ -84,6 +86,11 @@ export class ProxyStorageService {
     projectHandle: FileSystemDirectoryHandle,
     mediaId: string
   ): Promise<ProxyFrameWriter | null> {
+    if (!LEGACY_JPEG_PROXY_FRAMES_ENABLED) {
+      log.warn('Legacy JPEG proxy frame writer is disabled; use proxy.mp4 video proxies instead', { mediaId });
+      return null;
+    }
+
     try {
       const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, true);
       return {
@@ -105,6 +112,11 @@ export class ProxyStorageService {
     frameIndex: number,
     blob: Blob
   ): Promise<boolean> {
+    if (!LEGACY_JPEG_PROXY_FRAMES_ENABLED) {
+      log.warn('Legacy JPEG proxy frame save is disabled; use proxy.mp4 video proxies instead', { mediaId, frameIndex });
+      return false;
+    }
+
     try {
       const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, true);
       return this.writeProxyFrameToFolder(projectHandle.name, mediaId, mediaFolder, frameIndex, blob);
@@ -122,6 +134,10 @@ export class ProxyStorageService {
     mediaId: string,
     frameIndex: number
   ): Promise<Blob | null> {
+    if (!LEGACY_JPEG_PROXY_FRAMES_ENABLED) {
+      return null;
+    }
+
     try {
       const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, false);
       const fileNames = [
@@ -167,6 +183,10 @@ export class ProxyStorageService {
     projectHandle: FileSystemDirectoryHandle,
     mediaId: string
   ): Promise<number> {
+    if (!LEGACY_JPEG_PROXY_FRAMES_ENABLED) {
+      return 0;
+    }
+
     try {
       const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, false);
       const indices = new Set<number>();
@@ -204,6 +224,11 @@ export class ProxyStorageService {
         done,
       });
     };
+
+    if (!LEGACY_JPEG_PROXY_FRAMES_ENABLED) {
+      emit(true);
+      return indices;
+    }
 
     try {
       const mediaFolder = await this.getProxyMediaFolder(projectHandle, mediaId, false);
@@ -243,12 +268,12 @@ export class ProxyStorageService {
       const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY, { create: true });
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId, { create: true });
 
-      const fileHandle = await mediaFolder.getFileHandle('proxy.mp4', { create: true });
+      const fileHandle = await mediaFolder.getFileHandle(PROXY_VIDEO_FILE_NAME, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(blob);
       await writable.close();
 
-      log.debug(`Saved proxy video to ${projectHandle.name}/${PROJECT_FOLDERS.PROXY}/${mediaId}/proxy.mp4 (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+      log.debug(`Saved proxy video to ${projectHandle.name}/${PROJECT_FOLDERS.PROXY}/${mediaId}/${PROXY_VIDEO_FILE_NAME} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
       return true;
     } catch (e) {
       log.error('Failed to save proxy video:', e);
@@ -266,7 +291,7 @@ export class ProxyStorageService {
     try {
       const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
-      const fileHandle = await mediaFolder.getFileHandle('proxy.mp4');
+      const fileHandle = await mediaFolder.getFileHandle(PROXY_VIDEO_FILE_NAME);
       return await fileHandle.getFile();
     } catch (e) {
       return null;
@@ -283,7 +308,7 @@ export class ProxyStorageService {
     try {
       const proxyFolder = await projectHandle.getDirectoryHandle(PROJECT_FOLDERS.PROXY);
       const mediaFolder = await proxyFolder.getDirectoryHandle(mediaId);
-      await mediaFolder.getFileHandle('proxy.mp4');
+      await mediaFolder.getFileHandle(PROXY_VIDEO_FILE_NAME);
       return true;
     } catch (e) {
       return false;

@@ -103,9 +103,9 @@ export function prewarmProxyFramesForTimelinePosition(
     }
     lastPrewarmFrameByMediaId.set(request.mediaFileId, request.frameIndex);
 
-    proxyFrameCache.getCachedFrame(request.mediaFileId, request.frameIndex, request.fps);
+    proxyFrameCache.getCachedVideoFrame(request.mediaFileId, request.frameIndex);
     void proxyFrameCache
-      .getFrame(request.mediaFileId, request.mediaTime, request.fps)
+      .getVideoFrame(request.mediaFileId, request.mediaTime, request.fps)
       .catch(() => {
         // Proxy prewarm is opportunistic; the render path still has normal fallbacks.
       });

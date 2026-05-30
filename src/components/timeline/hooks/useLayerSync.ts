@@ -85,7 +85,7 @@ export function useLayerSync({
 
   // Track current proxy frames for each clip (for smooth proxy playback)
   const proxyFramesRef = useRef<
-    Map<string, { frameIndex: number; image: HTMLImageElement }>
+    Map<string, { frameIndex: number; frame: VideoFrame }>
   >(new Map());
   const proxyLoadingRef = useRef<Set<string>>(new Set());
 
@@ -526,11 +526,7 @@ export function useLayerSync({
           // Video element sync (mute/play/pause/seek) handled by LayerBuilderService
 
           const loadKey = `${mediaFile.id}_${frameIndex}`;
-          const cachedInService = proxyFrameCache.getCachedFrame(
-            mediaFile.id,
-            frameIndex,
-            proxyFps
-          );
+          const cachedInService = proxyFrameCache.getCachedVideoFrame(mediaFile.id, frameIndex);
           const interpolatedEffectsForProxy = getInterpolatedEffects(
             clip.id,
             keyframeLocalTime
@@ -539,7 +535,7 @@ export function useLayerSync({
           if (cachedInService) {
             proxyFramesRef.current.set(cacheKey, {
               frameIndex,
-              image: cachedInService,
+              frame: cachedInService,
             });
 
             const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
@@ -551,8 +547,12 @@ export function useLayerSync({
               opacity: transform.opacity,
               blendMode: transform.blendMode,
               source: {
-                type: 'image',
-                imageElement: cachedInService,
+                type: 'video',
+                videoFrame: cachedInService,
+                mediaTime: frameIndex / proxyFps,
+                targetMediaTime: clipTime,
+                previewPath: 'proxy-video-frame',
+                proxyFrameIndex: frameIndex,
               },
               effects: interpolatedEffectsForProxy,
               position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
@@ -579,11 +579,11 @@ export function useLayerSync({
               const capturedEffects = interpolatedEffectsForProxy;
 
               proxyFrameCache
-                .getFrame(mediaFile.id, clipTime, proxyFps)
-                .then((image) => {
+                .getVideoFrame(mediaFile.id, clipTime, proxyFps)
+                .then((frame) => {
                   proxyLoadingRef.current.delete(loadKey);
-                  if (image) {
-                    proxyFramesRef.current.set(cacheKey, { frameIndex, image });
+                  if (frame) {
+                    proxyFramesRef.current.set(cacheKey, { frameIndex, frame });
 
                     const currentLayers2 = useTimelineStore.getState().layers;
                     const updatedLayers = [...currentLayers2];
@@ -595,8 +595,12 @@ export function useLayerSync({
                       opacity: capturedTransform.opacity,
                       blendMode: capturedTransform.blendMode,
                       source: {
-                        type: 'image',
-                        imageElement: image,
+                        type: 'video',
+                        videoFrame: frame,
+                        mediaTime: frameIndex / proxyFps,
+                        targetMediaTime: clipTime,
+                        previewPath: 'proxy-video-frame',
+                        proxyFrameIndex: frameIndex,
                       },
                       effects: capturedEffects,
                       position: {
@@ -617,8 +621,8 @@ export function useLayerSync({
             }
 
             // Try nearest cached frame for smooth scrubbing, then fall back to previous frame
-            const nearestOrCachedImage = proxyFrameCache.getNearestCachedFrame(mediaFile.id, frameIndex, 30) || cached?.image;
-            if (nearestOrCachedImage) {
+            const nearestFrame = proxyFrameCache.getNearestCachedVideoFrameEntry(mediaFile.id, frameIndex, 30)?.frame || cached?.frame;
+            if (nearestFrame) {
               const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
               newLayers[layerIndex] = {
                 id: `timeline_layer_${layerIndex}`,
@@ -628,8 +632,12 @@ export function useLayerSync({
                 opacity: transform.opacity,
                 blendMode: transform.blendMode,
                 source: {
-                  type: 'image',
-                  imageElement: nearestOrCachedImage,
+                  type: 'video',
+                  videoFrame: nearestFrame,
+                  mediaTime: frameIndex / proxyFps,
+                  targetMediaTime: clipTime,
+                  previewPath: 'proxy-video-frame-nearest',
+                  proxyFrameIndex: frameIndex,
                 },
                 effects: interpolatedEffectsForProxy,
                 position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },
@@ -642,14 +650,14 @@ export function useLayerSync({
               };
               layersChanged = true;
             }
-          } else if (cached?.image) {
+          } else if (cached?.frame) {
             const transform = getInterpolatedTransform(clip.id, keyframeLocalTime);
             const trackVisible = isVideoTrackVisible(track);
             const needsUpdate =
               !layer ||
               layer.visible !== trackVisible ||
-              layer.source?.imageElement !== cached.image ||
-              layer.source?.type !== 'image' ||
+              layer.source?.videoFrame !== cached.frame ||
+              layer.source?.type !== 'video' ||
               effectsChanged(layer.effects, interpolatedEffectsForProxy);
 
             if (needsUpdate) {
@@ -661,8 +669,12 @@ export function useLayerSync({
                 opacity: transform.opacity,
                 blendMode: transform.blendMode,
                 source: {
-                  type: 'image',
-                  imageElement: cached.image,
+                  type: 'video',
+                  videoFrame: cached.frame,
+                  mediaTime: cached.frameIndex / proxyFps,
+                  targetMediaTime: clipTime,
+                  previewPath: 'proxy-video-frame-hold',
+                  proxyFrameIndex: cached.frameIndex,
                 },
                 effects: interpolatedEffectsForProxy,
                 position: { x: transform.position.x, y: transform.position.y, z: transform.position.z },

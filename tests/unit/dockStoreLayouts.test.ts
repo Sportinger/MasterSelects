@@ -76,6 +76,7 @@ describe('dock store saved layouts', () => {
     expect(timeline.trackFocusMode).toBe('balanced');
     expect(timeline.tracks.find((track) => track.type === 'video')?.height).toBe(70);
     expect(timeline.tracks.find((track) => track.type === 'audio')?.height).toBe(48);
+    expect(useDockStore.getState().activeSavedLayoutId).toBe(FACTORY_VIDEO_EDIT_LAYOUT_ID);
   });
 
   it('activates the history tab when requested from the panels menu', () => {
@@ -97,6 +98,24 @@ describe('dock store saved layouts', () => {
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
     expect(rightGroup?.panels.map((panel) => panel.type)).toContain('history');
     expect(rightGroup?.panels[rightGroup.activeIndex]?.type).toBe('history');
+  });
+
+  it('changes a dock tab to another panel type in the same slot', () => {
+    useDockStore.getState().changePanelType('clip-properties', 'audio-mixer');
+
+    const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
+    expect(panelTypes(rightGroup)).toEqual(['audio-mixer', 'history']);
+    expect(rightGroup?.activeIndex).toBe(0);
+    expect(useDockStore.getState().isPanelTypeVisible('clip-properties')).toBe(false);
+    expect(useDockStore.getState().isPanelTypeVisible('audio-mixer')).toBe(true);
+  });
+
+  it('changes a dock tab by moving an already visible panel instead of duplicating it', () => {
+    useDockStore.getState().changePanelType('clip-properties', 'history');
+
+    const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
+    expect(panelTypes(rightGroup)).toEqual(['history']);
+    expect(rightGroup?.activeIndex).toBe(0);
   });
 
   it('loads the hardcoded audio editing layout with the timeline above mixer panels', () => {
@@ -233,6 +252,19 @@ describe('dock store saved layouts', () => {
         video: false,
         audio: false,
       },
+      trackTypeCounts: {
+        video: 2,
+        audio: 1,
+      },
+      trackTypeLayouts: {
+        video: [
+          { height: 132, visible: false },
+          { height: 120, visible: false },
+        ],
+        audio: [
+          { height: 88, visible: false },
+        ],
+      },
     });
 
     timeline.setAudioDisplayMode('compact');
@@ -256,7 +288,7 @@ describe('dock store saved layouts', () => {
     expect(restoredTimeline.tracks.find((track) => track.id === 'audio-1')?.visible).toBe(false);
   });
 
-  it('uses the first saved video and audio track layout for tracks with different ids', () => {
+  it('uses indexed track type layouts for tracks with different ids and falls back for extras', () => {
     const timeline = useTimelineStore.getState();
     timeline.setTrackHeight('video-2', 132);
     timeline.setTrackHeight('audio-1', 76);
@@ -279,6 +311,7 @@ describe('dock store saved layouts', () => {
       tracks: [
         { ...videoTemplate, id: 'other-video-1', name: 'Other Video 1', height: 20, visible: true },
         { ...videoTemplate, id: 'other-video-2', name: 'Other Video 2', height: 40, visible: true },
+        { ...videoTemplate, id: 'other-video-3', name: 'Other Video 3', height: 60, visible: true },
         { ...audioTemplate, id: 'other-audio-1', name: 'Other Audio 1', height: 24, visible: true },
         { ...audioTemplate, id: 'other-audio-2', name: 'Other Audio 2', height: 36, visible: true },
       ],
@@ -287,10 +320,55 @@ describe('dock store saved layouts', () => {
     useDockStore.getState().loadSavedLayout(savedLayout!.id);
 
     const restoredTracks = useTimelineStore.getState().tracks;
-    expect(restoredTracks.filter((track) => track.type === 'video').map((track) => track.height)).toEqual([132, 132]);
+    expect(restoredTracks.filter((track) => track.type === 'video').map((track) => track.height)).toEqual([132, 70, 132]);
     expect(restoredTracks.filter((track) => track.type === 'audio').map((track) => track.height)).toEqual([76, 76]);
-    expect(restoredTracks.filter((track) => track.type === 'video').map((track) => track.visible)).toEqual([false, false]);
+    expect(restoredTracks.filter((track) => track.type === 'video').map((track) => track.visible)).toEqual([false, true, false]);
     expect(restoredTracks.filter((track) => track.type === 'audio').map((track) => track.visible)).toEqual([false, false]);
+  });
+
+  it('creates missing tracks when a saved layout has more track slots', () => {
+    const timeline = useTimelineStore.getState();
+    timeline.addTrack('video');
+    timeline.addTrack('audio');
+
+    const savedVideoHeights = [110, 90, 70];
+    const savedAudioHeights = [80, 100];
+    const savedVideoVisibility = [false, true, false];
+    const savedAudioVisibility = [false, true];
+    useTimelineStore.getState().tracks
+      .filter((track) => track.type === 'video')
+      .forEach((track, index) => {
+        timeline.setTrackHeight(track.id, savedVideoHeights[index]);
+        timeline.setTrackVisible(track.id, savedVideoVisibility[index]);
+      });
+    useTimelineStore.getState().tracks
+      .filter((track) => track.type === 'audio')
+      .forEach((track, index) => {
+        timeline.setTrackHeight(track.id, savedAudioHeights[index]);
+        timeline.setTrackVisible(track.id, savedAudioVisibility[index]);
+      });
+
+    const savedLayout = useDockStore.getState().saveNamedLayout('Track Slots');
+    expect(savedLayout?.timeline?.trackTypeCounts).toEqual({ video: 3, audio: 2 });
+
+    const videoTemplate = DEFAULT_TRACKS.find((track) => track.type === 'video')!;
+    const audioTemplate = DEFAULT_TRACKS.find((track) => track.type === 'audio')!;
+    useTimelineStore.setState({
+      tracks: [
+        { ...videoTemplate, id: 'fresh-video-1', name: 'Fresh Video 1', height: 20, visible: true },
+        { ...audioTemplate, id: 'fresh-audio-1', name: 'Fresh Audio 1', height: 24, visible: true },
+      ],
+    });
+
+    useDockStore.getState().loadSavedLayout(savedLayout!.id);
+
+    const restoredTracks = useTimelineStore.getState().tracks;
+    expect(restoredTracks.filter((track) => track.type === 'video')).toHaveLength(3);
+    expect(restoredTracks.filter((track) => track.type === 'audio')).toHaveLength(2);
+    expect(restoredTracks.filter((track) => track.type === 'video').map((track) => track.height)).toEqual(savedVideoHeights);
+    expect(restoredTracks.filter((track) => track.type === 'audio').map((track) => track.height)).toEqual(savedAudioHeights);
+    expect(restoredTracks.filter((track) => track.type === 'video').map((track) => track.visible)).toEqual(savedVideoVisibility);
+    expect(restoredTracks.filter((track) => track.type === 'audio').map((track) => track.visible)).toEqual(savedAudioVisibility);
   });
 
   it('saves over the current named layout without prompting for a new name', () => {

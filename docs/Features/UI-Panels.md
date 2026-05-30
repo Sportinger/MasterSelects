@@ -398,9 +398,10 @@ The built-in `VIDEO EDIT` layout is the default desktop layout:
 - Right column: Properties, History
 - Bottom: Timeline
 
-Its timeline defaults to balanced video/audio focus with 70 px video tracks and 48 px compact audio tracks, so audio headers keep the bottom pan rail visible without showing the inline volume fader.
+Its timeline defaults to balanced video/audio focus with two visible 70 px video tracks and one visible 48 px compact audio track, so audio headers keep the bottom pan rail visible without showing the inline volume fader.
+On a first empty load, `VIDEO EDIT` is also the active named layout, so the header switcher and Layouts menu show it as current.
 
-The built-in `AUDIO EDIT` layout keeps Timeline above Media, Audio Mixer, and Properties/History. Its timeline defaults to audio focus with 40 px video context tracks and 96 px full-height audio tracks.
+The built-in `AUDIO EDIT` layout keeps Timeline above Media, Audio Mixer, and Properties/History. Its timeline defaults to audio focus with two visible 40 px video context tracks and one visible 96 px full-height audio track.
 
 Export, Multi Preview, scopes, and other panels are available from the View menu and can be floated or docked, but they are not pinned in the built-in Video/Audio layouts.
 
@@ -411,9 +412,18 @@ Export, Multi Preview, scopes, and other panels are available from the View menu
 - Invalid panel types are cleaned up on load
 - Named layouts can be stored in the View menu and reused later
 - The active named layout can be overwritten directly with `Save to Current Layout`
-- Named layouts also store the timeline audio focus/display mode and track heights
+- Named layouts also store the timeline audio focus/display mode, track slot counts, per-slot heights, and track visibility
 - Loading a saved layout animates panel movement, resizing, and reflow over 500ms
 - A saved layout can be marked as the default layout
+- Loading a layout creates missing tracks for saved slots without deleting extra existing tracks
+
+### Tab Context Menu
+
+Right-clicking a dock tab opens a tab menu. `Hide` removes that tab, and `Change to` replaces
+the tab slot with another panel. If the target panel is already open elsewhere, it is moved
+into the clicked slot instead of creating a duplicate. The Timeline panel uses composition tabs
+instead of a normal panel tab; right-click the empty part of its tab bar next to the composition
+tabs to open the Timeline panel menu.
 
 ### Layout Actions
 

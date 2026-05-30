@@ -1,16 +1,10 @@
-// Auto-start features: RAM preview and proxy generation after idle
+// Auto-start features: RAM preview after idle and proxy generation on demand
 
 import { useEffect, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import {
-  RAM_PREVIEW_IDLE_DELAY,
-  PROXY_IDLE_DELAY,
-} from '../constants';
+import { RAM_PREVIEW_IDLE_DELAY } from '../constants';
 import type { TimelineClip } from '../../../types';
-import { Logger } from '../../../services/logger';
-
-const log = Logger.create('useAutoFeatures');
 
 interface UseAutoFeaturesProps {
   ramPreviewEnabled: boolean;
@@ -29,7 +23,7 @@ interface UseAutoFeaturesProps {
 
 /**
  * Auto-start RAM Preview after idle (like After Effects)
- * Auto-generate proxies after idle
+ * Keep proxy generation moving while proxy mode is enabled.
  */
 export function useAutoFeatures({
   ramPreviewEnabled,
@@ -46,7 +40,6 @@ export function useAutoFeatures({
   cancelRamPreview,
 }: UseAutoFeaturesProps) {
   const ramIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const proxyIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cancel RAM preview when user starts playing or scrubbing (keep cached frames)
   useEffect(() => {
@@ -113,39 +106,16 @@ export function useAutoFeatures({
     startRamPreview,
   ]);
 
-  // Auto-generate proxies after idle
+  // Auto-generate proxies immediately when proxy mode is active.
   useEffect(() => {
-    if (proxyIdleTimerRef.current) {
-      clearTimeout(proxyIdleTimerRef.current);
-      proxyIdleTimerRef.current = null;
-    }
-
-    if (!proxyEnabled || isPlaying || currentlyGeneratingProxyId || isDraggingPlayhead) {
+    if (!proxyEnabled || currentlyGeneratingProxyId) {
       return;
     }
 
-    proxyIdleTimerRef.current = setTimeout(() => {
-      const mediaStore = useMediaStore.getState();
-      if (mediaStore.proxyEnabled && !mediaStore.currentlyGeneratingProxyId) {
-        const nextFile = mediaStore.getNextFileNeedingProxy();
-        if (nextFile) {
-          log.debug('Auto-starting proxy generation for:', nextFile.name);
-          mediaStore.generateProxy(nextFile.id);
-        }
-      }
-    }, PROXY_IDLE_DELAY);
-
-    return () => {
-      if (proxyIdleTimerRef.current) {
-        clearTimeout(proxyIdleTimerRef.current);
-        proxyIdleTimerRef.current = null;
-      }
-    };
+    useMediaStore.getState().startProxyGenerationQueue();
   }, [
     proxyEnabled,
-    isPlaying,
     currentlyGeneratingProxyId,
-    isDraggingPlayhead,
     clips,
   ]);
 }

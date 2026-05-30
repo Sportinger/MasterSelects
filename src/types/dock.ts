@@ -104,6 +104,13 @@ export interface SavedDockTimelineLayout {
   trackTypeHeights?: Partial<Record<'video' | 'audio', number>>;
   trackVisibility?: Record<string, boolean>;
   trackTypeVisibility?: Partial<Record<'video' | 'audio', boolean>>;
+  trackTypeCounts?: Partial<Record<'video' | 'audio', number>>;
+  trackTypeLayouts?: Partial<Record<'video' | 'audio', SavedDockTimelineTrackSlotLayout[]>>;
+}
+
+export interface SavedDockTimelineTrackSlotLayout {
+  height?: number;
+  visible?: boolean;
 }
 
 export interface SavedDockLayout {

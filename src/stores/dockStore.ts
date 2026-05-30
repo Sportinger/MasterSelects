@@ -16,6 +16,7 @@ import type {
   HoveredDockTabTarget,
   SavedDockLayout,
   SavedDockTimelineLayout,
+  SavedDockTimelineTrackSlotLayout,
   PanelConfig,
 } from '../types/dock';
 import { DEPRECATED_PANEL_TYPES, PANEL_CONFIGS } from '../types/dock';
@@ -63,6 +64,9 @@ const VALID_PANEL_TYPES = new Set(BUILT_IN_PANEL_TYPES.filter((type) => !DEPRECA
 const PANEL_CONFIG_LOOKUP = PANEL_CONFIGS as Partial<Record<PanelType, PanelConfig>>;
 const VALID_TIMELINE_AUDIO_DISPLAY_MODES = new Set(['compact', 'detailed', 'spectral']);
 const VALID_TIMELINE_TRACK_FOCUS_MODES = new Set(['balanced', 'audio', 'video']);
+const TIMELINE_TRACK_TYPES = ['video', 'audio'] as const;
+type TimelineTrackType = (typeof TIMELINE_TRACK_TYPES)[number];
+const MAX_SAVED_TIMELINE_TRACKS_PER_TYPE = 64;
 const LEGACY_PANEL_TYPE_ALIASES: Partial<Record<PanelType, PanelType>> = {
   youtube: 'download',
 };
@@ -233,6 +237,14 @@ function requestDockLayoutTransition(durationMs = DOCK_LAYOUT_TRANSITION_DURATIO
   }));
 }
 
+function cleanupSavedTrackTypeCount(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(MAX_SAVED_TIMELINE_TRACKS_PER_TYPE, Math.floor(value)));
+}
+
 function cleanupSavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined): SavedDockTimelineLayout | undefined {
   if (!timeline || typeof timeline !== 'object') {
     return undefined;
@@ -328,14 +340,74 @@ function cleanupSavedTimelineLayout(timeline: SavedDockTimelineLayout | undefine
       cleaned.trackTypeVisibility = trackTypeVisibility;
     }
   }
+  if (
+    timeline.trackTypeCounts
+    && typeof timeline.trackTypeCounts === 'object'
+    && !Array.isArray(timeline.trackTypeCounts)
+  ) {
+    const trackTypeCounts: Partial<Record<TimelineTrackType, number>> = {};
+    for (const type of TIMELINE_TRACK_TYPES) {
+      const count = cleanupSavedTrackTypeCount(timeline.trackTypeCounts[type]);
+      if (count !== null) {
+        trackTypeCounts[type] = count;
+      }
+    }
+    if (Object.keys(trackTypeCounts).length > 0) {
+      cleaned.trackTypeCounts = trackTypeCounts;
+    }
+  }
+  if (
+    timeline.trackTypeLayouts
+    && typeof timeline.trackTypeLayouts === 'object'
+    && !Array.isArray(timeline.trackTypeLayouts)
+  ) {
+    const trackTypeLayouts: Partial<Record<TimelineTrackType, SavedDockTimelineTrackSlotLayout[]>> = {};
+    for (const type of TIMELINE_TRACK_TYPES) {
+      const slots = timeline.trackTypeLayouts[type];
+      if (!Array.isArray(slots)) {
+        continue;
+      }
+
+      const cleanedSlots = slots
+        .slice(0, MAX_SAVED_TIMELINE_TRACKS_PER_TYPE)
+        .map((slot): SavedDockTimelineTrackSlotLayout => {
+          const cleanedSlot: SavedDockTimelineTrackSlotLayout = {};
+          if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+            return cleanedSlot;
+          }
+          if (typeof slot.height === 'number' && Number.isFinite(slot.height)) {
+            cleanedSlot.height = slot.height;
+          }
+          if (typeof slot.visible === 'boolean') {
+            cleanedSlot.visible = slot.visible;
+          }
+          return cleanedSlot;
+        });
+
+      if (cleanedSlots.length > 0) {
+        trackTypeLayouts[type] = cleanedSlots;
+      }
+    }
+    if (Object.keys(trackTypeLayouts).length > 0) {
+      cleaned.trackTypeLayouts = trackTypeLayouts;
+    }
+  }
 
   return Object.keys(cleaned).length > 0 ? cleaned : undefined;
 }
 
 function captureTimelineLayout(): SavedDockTimelineLayout {
   const timelineState = useTimelineStore.getState();
-  const firstVideoTrack = timelineState.tracks.find((track) => track.type === 'video');
-  const firstAudioTrack = timelineState.tracks.find((track) => track.type === 'audio');
+  const videoTracks = timelineState.tracks.filter((track) => track.type === 'video');
+  const audioTracks = timelineState.tracks.filter((track) => track.type === 'audio');
+  const firstVideoTrack = videoTracks[0];
+  const firstAudioTrack = audioTracks[0];
+  const toTrackSlotLayouts = (tracks: typeof timelineState.tracks): SavedDockTimelineTrackSlotLayout[] => (
+    tracks.map((track) => ({
+      height: track.height,
+      visible: track.visible !== false,
+    }))
+  );
 
   return {
     audioDisplayMode: timelineState.audioDisplayMode,
@@ -358,7 +430,44 @@ function captureTimelineLayout(): SavedDockTimelineLayout {
       ...(firstVideoTrack ? { video: firstVideoTrack.visible !== false } : {}),
       ...(firstAudioTrack ? { audio: firstAudioTrack.visible !== false } : {}),
     },
+    trackTypeCounts: {
+      video: videoTracks.length,
+      audio: audioTracks.length,
+    },
+    trackTypeLayouts: {
+      video: toTrackSlotLayouts(videoTracks),
+      audio: toTrackSlotLayouts(audioTracks),
+    },
   };
+}
+
+function getTimelineTrackTypeTargetCount(
+  timeline: SavedDockTimelineLayout,
+  type: TimelineTrackType,
+): number {
+  return Math.max(
+    timeline.trackTypeCounts?.[type] ?? 0,
+    timeline.trackTypeLayouts?.[type]?.length ?? 0,
+  );
+}
+
+function ensureTimelineTrackTypeCounts(timeline: SavedDockTimelineLayout): void {
+  for (const type of TIMELINE_TRACK_TYPES) {
+    const targetCount = getTimelineTrackTypeTargetCount(timeline, type);
+    if (targetCount <= 0) {
+      continue;
+    }
+
+    let currentCount = useTimelineStore.getState().tracks.filter((track) => track.type === type).length;
+    while (currentCount < targetCount) {
+      useTimelineStore.getState().addTrack(type);
+      const nextCount = useTimelineStore.getState().tracks.filter((track) => track.type === type).length;
+      if (nextCount <= currentCount) {
+        break;
+      }
+      currentCount = nextCount;
+    }
+  }
 }
 
 function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined): void {
@@ -366,6 +475,8 @@ function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined)
   if (!cleaned) {
     return;
   }
+
+  ensureTimelineTrackTypeCounts(cleaned);
 
   const timelineStore = useTimelineStore.getState();
   if (cleaned.audioDisplayMode) {
@@ -386,6 +497,7 @@ function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined)
     timelineStore.setTimelineSplitRatio(cleaned.timelineSplitRatio ?? null);
   }
 
+  const exactTrackHeightIds = new Set(Object.keys(cleaned.trackHeights ?? {}));
   if (cleaned.trackHeights) {
     const currentTrackIds = new Set(useTimelineStore.getState().tracks.map((track) => track.id));
     for (const [trackId, height] of Object.entries(cleaned.trackHeights)) {
@@ -395,11 +507,30 @@ function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined)
     }
   }
 
+  const indexedTrackHeightIds = new Set<string>();
+  if (cleaned.trackTypeLayouts) {
+    for (const type of TIMELINE_TRACK_TYPES) {
+      const slots = cleaned.trackTypeLayouts[type] ?? [];
+      if (slots.length === 0) {
+        continue;
+      }
+
+      const currentTracks = useTimelineStore.getState().tracks.filter((track) => track.type === type);
+      slots.forEach((slot, index) => {
+        const track = currentTracks[index];
+        if (!track || exactTrackHeightIds.has(track.id) || typeof slot.height !== 'number') {
+          return;
+        }
+        useTimelineStore.getState().setTrackHeight(track.id, slot.height);
+        indexedTrackHeightIds.add(track.id);
+      });
+    }
+  }
+
   if (cleaned.trackTypeHeights) {
-    const exactTrackHeightIds = new Set(Object.keys(cleaned.trackHeights ?? {}));
     const currentTracks = useTimelineStore.getState().tracks;
     for (const track of currentTracks) {
-      if (exactTrackHeightIds.has(track.id)) {
+      if (exactTrackHeightIds.has(track.id) || indexedTrackHeightIds.has(track.id)) {
         continue;
       }
       const typeHeight = cleaned.trackTypeHeights[track.type];
@@ -409,6 +540,7 @@ function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined)
     }
   }
 
+  const exactTrackVisibilityIds = new Set(Object.keys(cleaned.trackVisibility ?? {}));
   if (cleaned.trackVisibility) {
     const currentTrackIds = new Set(useTimelineStore.getState().tracks.map((track) => track.id));
     for (const [trackId, visible] of Object.entries(cleaned.trackVisibility)) {
@@ -418,11 +550,30 @@ function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined)
     }
   }
 
+  const indexedTrackVisibilityIds = new Set<string>();
+  if (cleaned.trackTypeLayouts) {
+    for (const type of TIMELINE_TRACK_TYPES) {
+      const slots = cleaned.trackTypeLayouts[type] ?? [];
+      if (slots.length === 0) {
+        continue;
+      }
+
+      const currentTracks = useTimelineStore.getState().tracks.filter((track) => track.type === type);
+      slots.forEach((slot, index) => {
+        const track = currentTracks[index];
+        if (!track || exactTrackVisibilityIds.has(track.id) || typeof slot.visible !== 'boolean') {
+          return;
+        }
+        useTimelineStore.getState().setTrackVisible(track.id, slot.visible);
+        indexedTrackVisibilityIds.add(track.id);
+      });
+    }
+  }
+
   if (cleaned.trackTypeVisibility) {
-    const exactTrackVisibilityIds = new Set(Object.keys(cleaned.trackVisibility ?? {}));
     const currentTracks = useTimelineStore.getState().tracks;
     for (const track of currentTracks) {
-      if (exactTrackVisibilityIds.has(track.id)) {
+      if (exactTrackVisibilityIds.has(track.id) || indexedTrackVisibilityIds.has(track.id)) {
         continue;
       }
       const typeVisible = cleaned.trackTypeVisibility[track.type];
@@ -611,6 +762,19 @@ const VIDEO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
     video: true,
     audio: true,
   },
+  trackTypeCounts: {
+    video: 2,
+    audio: 1,
+  },
+  trackTypeLayouts: {
+    video: [
+      { height: 70, visible: true },
+      { height: 70, visible: true },
+    ],
+    audio: [
+      { height: 48, visible: true },
+    ],
+  },
 };
 
 const AUDIO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
@@ -627,6 +791,19 @@ const AUDIO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
   trackTypeVisibility: {
     video: true,
     audio: true,
+  },
+  trackTypeCounts: {
+    video: 2,
+    audio: 1,
+  },
+  trackTypeLayouts: {
+    video: [
+      { height: 40, visible: true },
+      { height: 40, visible: true },
+    ],
+    audio: [
+      { height: 96, visible: true },
+    ],
   },
 };
 
@@ -820,6 +997,7 @@ interface DockState {
   movePanel: (panelId: string, sourceGroupId: string, target: DropTarget) => void;
   closePanel: (panelId: string, groupId: string) => void;
   closePanelById: (panelId: string) => void;
+  changePanelType: (panelId: string, type: PanelType) => void;
 
   // Floating panel actions
   floatPanel: (panelId: string, groupId: string, position: { x: number; y: number }) => void;
@@ -881,7 +1059,7 @@ export const useDockStore = create<DockState>()(
         maximizedPanelId: null,
         savedLayouts: getFactoryDockLayouts(),
         defaultSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
-        activeSavedLayoutId: null,
+        activeSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
 
         setActiveTab: (groupId, index) => {
           set((state) => ({
@@ -970,6 +1148,60 @@ export const useDockStore = create<DockState>()(
               maximizedPanelId: state.maximizedPanelId === panelId ? null : state.maximizedPanelId,
             }));
           }
+        },
+
+        changePanelType: (panelId, type) => {
+          const resolvedType = resolvePanelType(type);
+          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
+
+          const { layout } = get();
+          const sourceGroupId = findGroupIdByPanelId(layout.root, panelId);
+          if (!sourceGroupId) return;
+          const sourcePanel = findPanelById(layout, panelId);
+          if (!sourcePanel || resolvePanelType(sourcePanel.type) === resolvedType) return;
+
+          let nextLayout = layout;
+          let replacementPanel: DockPanel | null = null;
+
+          const existingDockedPanel = findPanelAndGroup(nextLayout.root, resolvedType);
+          if (existingDockedPanel && existingDockedPanel.panel.id !== panelId) {
+            replacementPanel = existingDockedPanel.panel;
+            nextLayout = removePanel(nextLayout, existingDockedPanel.panel.id, existingDockedPanel.groupId);
+            nextLayout = {
+              ...nextLayout,
+              root: collapseSingleChildSplits(nextLayout.root),
+            };
+          }
+
+          if (!replacementPanel) {
+            const floatingPanel = nextLayout.floatingPanels.find((floating) => resolvePanelType(floating.panel.type) === resolvedType);
+            if (floatingPanel && floatingPanel.panel.id !== panelId) {
+              replacementPanel = floatingPanel.panel;
+              nextLayout = {
+                ...nextLayout,
+                floatingPanels: nextLayout.floatingPanels.filter((floating) => floating.id !== floatingPanel.id),
+              };
+            }
+          }
+
+          if (!replacementPanel) {
+            const config = getPanelConfig(resolvedType);
+            replacementPanel = {
+              id: resolvedType,
+              type: resolvedType,
+              title: config.title,
+            };
+          }
+
+          nextLayout = replacePanelInLayout(nextLayout, panelId, replacementPanel);
+          const nextPanelId = replacementPanel.id;
+          set((state) => ({
+            layout: nextLayout,
+            hoveredTabTarget: state.hoveredTabTarget?.panelId === panelId || state.hoveredTabTarget?.panelId === nextPanelId
+              ? null
+              : state.hoveredTabTarget,
+            maximizedPanelId: state.maximizedPanelId === panelId ? nextPanelId : state.maximizedPanelId,
+          }));
         },
 
         floatPanel: (panelId, groupId, position) => {
@@ -1552,12 +1784,14 @@ export const useDockStore = create<DockState>()(
           )
             ? persisted.defaultSavedLayoutId
             : FACTORY_VIDEO_EDIT_LAYOUT_ID;
-          const activeSavedLayoutId = (
+          const persistedActiveSavedLayoutId = (
             typeof persisted?.activeSavedLayoutId === 'string'
             && savedLayouts.some((savedLayout) => savedLayout.id === persisted.activeSavedLayoutId)
           )
             ? persisted.activeSavedLayoutId
             : null;
+          const activeSavedLayoutId = persistedActiveSavedLayoutId
+            ?? (persisted?.layout ? null : FACTORY_VIDEO_EDIT_LAYOUT_ID);
 
           if (persisted?.layout) {
             // Clean up any invalid panel types from persisted layout
@@ -1634,6 +1868,38 @@ function findPanelInNode(node: DockNode, panelId: string): DockPanel | null {
   const left = findPanelInNode(node.children[0], panelId);
   if (left) return left;
   return findPanelInNode(node.children[1], panelId);
+}
+
+function replacePanelInLayout(layout: DockLayout, panelId: string, replacementPanel: DockPanel): DockLayout {
+  return {
+    ...layout,
+    root: replacePanelInNode(layout.root, panelId, replacementPanel),
+  };
+}
+
+function replacePanelInNode(node: DockNode, panelId: string, replacementPanel: DockPanel): DockNode {
+  if (node.kind === 'tab-group') {
+    const panelIndex = node.panels.findIndex((panel) => panel.id === panelId);
+    if (panelIndex < 0) {
+      return node;
+    }
+
+    const panels = [...node.panels];
+    panels[panelIndex] = replacementPanel;
+    return {
+      ...node,
+      panels,
+      activeIndex: panelIndex,
+    };
+  }
+
+  return {
+    ...node,
+    children: [
+      replacePanelInNode(node.children[0], panelId, replacementPanel),
+      replacePanelInNode(node.children[1], panelId, replacementPanel),
+    ] as [DockNode, DockNode],
+  };
 }
 
 // Helper: Collect all panel types in a node

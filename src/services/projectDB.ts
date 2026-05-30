@@ -13,7 +13,7 @@ const DB_VERSION = 8; // Upgraded for content-addressed artifact manifests and b
 const STORES = {
   MEDIA_FILES: 'mediaFiles',
   PROJECTS: 'projects',
-  PROXY_FRAMES: 'proxyFrames', // New store for proxy frame sequences
+  PROXY_FRAMES: 'proxyFrames', // Legacy proxy-frame store kept for cleanup/migration
   FS_HANDLES: 'fsHandles', // Store for FileSystemHandles (directories, files)
   ANALYSIS_CACHE: 'analysisCache', // Cache for clip analysis data
   THUMBNAILS: 'thumbnails', // Deduplicated thumbnails by file hash

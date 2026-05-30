@@ -253,6 +253,15 @@ export class VideoEncoderWrapper {
     }
   }
 
+  getEncodeQueueSize(): number {
+    return this.encoder?.encodeQueueSize ?? 0;
+  }
+
+  async flushPendingVideo(): Promise<void> {
+    if (!this.encoder || this.isClosed) return;
+    await this.encoder.flush();
+  }
+
   addAudioChunks(audioResult: EncodedAudioResult): void {
     if (!this.muxer || !this.hasAudio) {
       log.warn('Cannot add audio: muxer not ready or audio not enabled');

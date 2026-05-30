@@ -1,13 +1,10 @@
 // Proxy generation slice
 
-import type { MediaFile, MediaSliceCreator, ProxyStatus } from '../types';
+import type { MediaFile, MediaSliceCreator, MediaState, ProxyStatus } from '../types';
 import {
   getExpectedProxyFps,
   getExpectedProxyFrameCount,
-  getProxyProgressFromFrameCount,
-  getProxyProgressFromFrameIndices,
   isProxyFrameCountComplete,
-  isProxyFrameIndexSetComplete,
 } from '../helpers/proxyCompleteness';
 import { projectFileService } from '../../../services/projectFileService';
 import { useTimelineStore } from '../../timeline';
@@ -27,6 +24,7 @@ export interface ProxyActions {
   proxyEnabled: boolean;
   setProxyEnabled: (enabled: boolean) => void;
   toggleProxyEnabled: () => void;
+  startProxyGenerationQueue: () => void;
   generateProxy: (mediaFileId: string, options?: { force?: boolean }) => Promise<void>;
   generateAudioProxy: (mediaFileId: string, options?: { force?: boolean }) => Promise<void>;
   cancelProxyGeneration: (mediaFileId: string) => void;
@@ -53,6 +51,9 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         }
       });
       log.info('Mode enabled - muted all videos');
+      queueMicrotask(() => {
+        (get() as MediaState & ProxyActions).startProxyGenerationQueue();
+      });
     }
   },
 
@@ -71,7 +72,27 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         }
       });
       log.info('Mode enabled - muted all videos');
+      queueMicrotask(() => {
+        (get() as MediaState & ProxyActions).startProxyGenerationQueue();
+      });
     }
+  },
+
+  startProxyGenerationQueue: () => {
+    const state = get();
+    if (!state.proxyEnabled || state.currentlyGeneratingProxyId) {
+      return;
+    }
+
+    const nextFile = (state as MediaState & ProxyActions).getNextFileNeedingProxy();
+    if (!nextFile) {
+      return;
+    }
+
+    log.debug('Starting queued proxy generation:', nextFile.name);
+    void (state as MediaState & ProxyActions).generateProxy(nextFile.id).catch((error) => {
+      log.warn('Queued proxy generation failed:', error);
+    });
   },
 
   updateProxyProgress: (mediaFileId: string, progress: number) => {
@@ -140,7 +161,6 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     set({ currentlyGeneratingProxyId: mediaFileId });
     log.info(`Starting generation for ${mediaFile.name}...`);
 
-    // Check existing frames on disk
     const storageKey = mediaFile.fileHash || mediaFileId;
     const proxyFps = getExpectedProxyFps(mediaFile.proxyFps ?? mediaFile.fps);
     let controller: { cancelled: boolean } | null = null;
@@ -148,11 +168,10 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       if (options.force) {
         await projectFileService.deleteEntry('PROXY', storageKey, { recursive: true });
       }
-      const existingIndices = options.force
-        ? new Set<number>()
-        : await projectFileService.getProxyFrameIndices(storageKey);
-      const existingCount = existingIndices.size;
-      if (existingCount > 0 && isProxyFrameIndexSetComplete(existingIndices, mediaFile.duration, proxyFps)) {
+
+      const hasExistingProxyVideo = !options.force && await projectFileService.hasProxyVideo(storageKey);
+      if (hasExistingProxyVideo && isProxyComplete(mediaFile, getExpectedProxyFrameCount(mediaFile.duration, proxyFps) ?? undefined)) {
+        const frameCount = getExpectedProxyFrameCount(mediaFile.duration, proxyFps) ?? mediaFile.proxyFrameCount;
         log.debug('Already complete:', mediaFile.name);
         set((s) => ({
           files: s.files.map((f) =>
@@ -161,8 +180,9 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
                   ...f,
                   proxyStatus: 'ready' as ProxyStatus,
                   proxyProgress: 100,
-                  proxyFrameCount: existingCount,
+                  proxyFrameCount: frameCount,
                   proxyFps,
+                  proxyFormat: 'mp4-all-intra' as const,
                 }
               : f
           ),
@@ -170,26 +190,21 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
         return;
       }
 
-      // Log resume info if partial proxy exists
-      if (existingCount > 0) {
-        const expectedFrames = getExpectedProxyFrameCount(mediaFile.duration, proxyFps) ?? 0;
-        log.info(`Resuming proxy for ${mediaFile.name}: ${existingCount}/${expectedFrames} frames on disk`);
-      }
-
       // Set up cancellation
       controller = { cancelled: false };
       activeProxyGenerations.set(mediaFileId, controller);
-
-      // Calculate initial progress for resume
-      const initialProgress = existingCount > 0 && mediaFile.duration
-        ? getProxyProgressFromFrameIndices(existingIndices, mediaFile.duration, proxyFps)
-        : 0;
 
       // Inline setProxyStatus and updateProxyProgress
       set((state) => ({
         files: state.files.map((f) =>
           f.id === mediaFileId
-            ? { ...f, proxyStatus: 'generating' as ProxyStatus, proxyProgress: initialProgress, proxyFps }
+            ? {
+                ...f,
+                proxyStatus: 'generating' as ProxyStatus,
+                proxyProgress: 0,
+                proxyFps,
+                proxyFormat: 'mp4-all-intra' as const,
+              }
             : f
         ),
       }));
@@ -204,35 +219,15 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
       };
 
       // Generate video proxy
-      let result = await generateVideoProxy(
+      const result = await generateVideoProxy(
         mediaFile,
         storageKey,
         controller,
-        updateProgress,
-        existingIndices
+        updateProgress
       );
 
       if (result && !controller.cancelled) {
-        let resultComplete = isProxyFrameIndexSetComplete(result.frameIndices, mediaFile.duration, result.fps);
-        if (!resultComplete && existingIndices.size > 0) {
-          log.warn('Resume produced an incomplete proxy; rebuilding from source frames', {
-            name: mediaFile.name,
-            frameCount: result.frameCount,
-            expected: getExpectedProxyFrameCount(mediaFile.duration, result.fps),
-            fps: result.fps,
-          });
-
-          updateProgress(0);
-          result = await generateVideoProxy(
-            mediaFile,
-            storageKey,
-            controller,
-            updateProgress,
-            new Set<number>()
-          );
-          resultComplete = !!result && isProxyFrameIndexSetComplete(result.frameIndices, mediaFile.duration, result.fps);
-        }
-
+        const resultComplete = isProxyFrameCountComplete(result.frameCount, mediaFile.duration, result.fps);
         if (!result || !resultComplete) {
           log.error('Generation incomplete:', {
             name: mediaFile.name,
@@ -261,12 +256,13 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
                   proxyProgress: 100,
                   proxyFrameCount: completeResult.frameCount,
                   proxyFps: completeResult.fps,
+                  proxyFormat: 'mp4-all-intra' as const,
                 }
               : f
           ),
         }));
 
-        log.info(`Complete: ${completeResult.frameCount} frames for ${mediaFile.name}`);
+        log.info(`Complete: ${completeResult.frameCount} all-intra MP4 proxy frames for ${mediaFile.name}`);
 
         // Extract audio proxy in background (non-blocking)
         if (mediaFile.hasAudio === true || mediaFile.audioCodec) {
@@ -349,6 +345,9 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
     } finally {
       activeProxyGenerations.delete(mediaFileId);
       set({ currentlyGeneratingProxyId: null });
+      queueMicrotask(() => {
+        (get() as MediaState & ProxyActions).startProxyGenerationQueue();
+      });
     }
   },
 
@@ -371,8 +370,9 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
             ? {
                 ...f,
                 proxyStatus: (hasCompleteProxy ? 'ready' : 'none') as ProxyStatus,
-                proxyProgress: hasCompleteProxy ? 100 : getProxyProgressFromFrameCount(f.proxyFrameCount, f.duration, f.proxyFps ?? f.fps),
+                proxyProgress: hasCompleteProxy ? 100 : 0,
                 proxyFps: hasCompleteProxy ? f.proxyFps : undefined,
+                proxyFormat: hasCompleteProxy ? f.proxyFormat : undefined,
               }
             : f
         ),
@@ -462,30 +462,28 @@ async function generateVideoProxy(
   mediaFile: MediaFile,
   storageKey: string,
   controller: { cancelled: boolean },
-  updateProgress: (progress: number) => void,
-  existingIndices: Set<number>
-): Promise<{ frameCount: number; fps: number; frameIndices: Set<number> } | null> {
+  updateProgress: (progress: number) => void
+): Promise<{ frameCount: number; fps: number } | null> {
   const { getProxyGenerator } = await import('../../../services/proxyGenerator');
   const generator = getProxyGenerator();
-  const writer = await projectFileService.createProxyFrameWriter(storageKey);
 
-  const saveFrame = async (frame: { frameIndex: number; blob: Blob }) => {
-    const saved = writer
-      ? await writer.saveFrame(frame.frameIndex, frame.blob)
-      : await projectFileService.saveProxyFrame(storageKey, frame.frameIndex, frame.blob);
-    if (!saved) {
-      throw new Error(`Failed to save proxy frame ${frame.frameIndex}`);
-    }
-  };
-
-  return generator.generate(
+  const result = await generator.generateAllIntraVideo(
     mediaFile.file!,
     mediaFile.id,
     updateProgress,
-    () => controller.cancelled,
-    saveFrame,
-    existingIndices.size > 0 ? existingIndices : undefined
+    () => controller.cancelled
   );
+  if (!result) return null;
+
+  const saved = await projectFileService.saveProxyVideo(storageKey, result.blob);
+  if (!saved) {
+    throw new Error('Failed to save all-intra MP4 proxy');
+  }
+
+  return {
+    frameCount: result.frameCount,
+    fps: result.fps,
+  };
 }
 
 async function extractAudioProxy(

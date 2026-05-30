@@ -2,7 +2,7 @@
 
 [Back to Index](./README.md)
 
-Proxy generation and playback for smoother editing of large video files.
+All-intra MP4 proxy generation and playback for smoother editing of large video files.
 
 ---
 
@@ -13,9 +13,10 @@ Proxies are stored inside the project folder and are used only when proxy mode i
 ### Current Behavior
 
 - Proxy mode mutes and pauses the original video elements when enabled.
-- Proxy frames are loaded from the project folder when they exist.
+- Video proxies are stored as `proxy.mp4` files in the project folder.
 - The editor falls back to the original media when proxy data is missing.
 - Audio proxy files are optional and non-fatal.
+- The legacy `frame_000000.jpg` / `.webp` proxy-frame sequence path is disabled.
 
 ---
 
@@ -26,31 +27,35 @@ Proxy generation is handled by `ProxyGeneratorWebCodecs`.
 ### Current Pipeline
 
 1. MP4Box parses the source file.
-2. WebCodecs `VideoDecoder` decodes frames.
-3. A pool of 8 `OffscreenCanvas` instances resizes and encodes frames in parallel.
-4. Each frame is encoded to a JPEG blob.
-5. The frame is saved to the project proxy folder.
+2. Codec configuration is extracted from the sample entry (`avcC`, `hvcC`, `vpcC`, or `av1C`) and passed to WebCodecs.
+3. WebCodecs `VideoDecoder` decodes frames.
+4. A single `OffscreenCanvas` resizes frames to the proxy resolution.
+5. WebCodecs `VideoEncoder` encodes every proxy frame as a H.264 keyframe.
+6. MediaBunny muxes the encoded frames into `proxy.mp4`.
+7. The MP4 proxy is saved to the project proxy folder.
 
 ### Current Settings
 
 - Maximum width: 1280 px
 - Proxy frame rate: 30 fps
-- JPEG quality: 0.82
 - Decode batch size: 30 samples
+- Video codec: H.264 in MP4
+- Keyframe interval: every frame
 
-### Resume Support
+### Queue Support
 
-- Existing frame indices are read from disk before generation starts.
-- Already-saved frames are skipped.
-- Generation can resume after interruption instead of starting over.
+- Enabling proxy mode starts the next missing video proxy immediately.
+- When proxy mode is already enabled, newly imported videos are added to the proxy generation flow as soon as import finishes.
+- The timeline proxy button shows the active queue position while generating, for example `Generating 1/5`.
 
 ### Completion Rule
 
-- A proxy is marked ready when it reaches at least 98 percent of the expected frame count.
+- A proxy is marked ready when the generated all-intra MP4 reaches at least 98 percent of the expected frame count.
 
 ### Resource Limit
 
 - Only one proxy generation runs at a time.
+- Additional videos are processed sequentially by the proxy generation queue.
 
 ---
 
@@ -60,13 +65,13 @@ Proxies are stored in the project folder under `Proxy/{mediaId}/`.
 
 ### Current On-Disk Layout
 
-- Proxy frames are written as `frame_000000.jpg`, `frame_000001.jpg`, and so on. Older `.webp` frame names are still read for compatibility.
+- Video proxies are written as `Proxy/{mediaId}/proxy.mp4`.
+- Legacy `frame_000000.jpg`, `frame_000001.jpg`, and `.webp` frame sequences are not generated or read by the active proxy path.
 - Audio proxies are written as WAV files under the project audio-proxy folder, using a sanitized storage-key filename such as `<mediaId>.wav`. Older `Proxy/{mediaId}/audio.wav` and `Proxy/{mediaId}/audio.m4a` files are still read for compatibility.
-- A `proxy.mp4` file is supported by the storage facade, but this branch does not use that path in the active generation flow.
 
 ### Backend Caveat
 
-- Video proxy frame storage currently uses the File System Access project handle path. Native Helper-backed projects can persist audio proxies through the native backend, but video proxy frames are not written through the same native path yet.
+- Video proxy MP4 storage currently uses the File System Access project handle path. Native Helper-backed projects can persist audio proxies through the native backend, but video proxy MP4 files are not written through the same native path yet.
 
 ### Deduplication
 
@@ -77,24 +82,24 @@ Proxies are stored in the project folder under `Proxy/{mediaId}/`.
 
 ## Proxy Playback
 
-`proxyFrameCache` loads frames from the project folder and keeps them in memory for fast scrubbing.
+`proxyFrameCache` loads `proxy.mp4`, demuxes the all-intra samples, decodes requested frames through WebCodecs, and keeps a small `VideoFrame` cache for scrubbing.
 
 ### Current Behavior
 
-- Exact frame lookups are cached in memory.
-- The cache also preloads nearby frames to smooth playback and scrubbing.
+- Exact all-intra frame lookups are cached in memory.
+- The cache decodes frames directly from MP4 samples instead of loading JPEG files.
 - Playback can use proxy audio when it exists.
 - Missing proxy frames fall back to the original source media.
 
 ### Cache Limits
 
-- Frame cache size: 900 frames
+- VideoFrame cache size: 120 frames
 - Scrubbing preload window: 90 frames around the scrub position in active scrubs
 - Parallel preload batch size: 16
 
 ### Limitation
 
-- The proxy cache only reads from the project folder. It does not use IndexedDB as an alternate store.
+- The proxy cache only reads `proxy.mp4` from the project folder. It does not use IndexedDB as an alternate store.
 
 ---
 
@@ -133,8 +138,7 @@ After the video frames finish, the code attempts to extract audio in the backgro
 
 ## Current Limitations
 
-- `proxy.mp4` storage support exists but is not part of the active generation flow.
-- Native Helper-backed projects do not currently persist video proxy frames through the same frame writer path.
+- Native Helper-backed projects do not currently persist video proxy MP4 files through the same native path.
 - Proxy generation is browser-session based and relies on WebCodecs and OffscreenCanvas support.
 - Only one generation can run at a time.
 

@@ -42,6 +42,8 @@ function TimelineControlsComponent({
   proxyEnabled,
   currentlyGeneratingProxyId,
   mediaFilesWithProxy,
+  mediaFilesProxyTotal,
+  generatingProxyIndex,
   showTranscriptMarkers,
   thumbnailsEnabled,
   waveformsEnabled,
@@ -112,11 +114,21 @@ function TimelineControlsComponent({
   const recordingElapsed = recordingState.startedAt
     ? Math.max(0, ((recordingState.phase === 'recording' ? Date.now() : (recordingState.lastCompletedAt ?? Date.now())) - recordingState.startedAt) / 1000)
     : 0;
+  const isProxyGenerating = Boolean(currentlyGeneratingProxyId);
+  const hasProxyBatchCount = isProxyGenerating && generatingProxyIndex > 0 && mediaFilesProxyTotal > 0;
+  const proxyGenerationLabel = hasProxyBatchCount
+    ? `Generating ${generatingProxyIndex}/${mediaFilesProxyTotal}`
+    : 'Generating';
+  const proxyReadyLabel = mediaFilesProxyTotal > 0
+    ? `${mediaFilesWithProxy}/${mediaFilesProxyTotal}`
+    : '';
   const proxyTitle = proxyEnabled
-    ? 'Proxy ON - Click to disable proxy playback'
-    : currentlyGeneratingProxyId
-    ? 'Proxy OFF - Proxy generation is running. Click to enable proxy playback'
-    : 'Proxy OFF - Click to enable proxy playback and proxy generation';
+    ? isProxyGenerating
+      ? `Proxy ON - Generating proxy${hasProxyBatchCount ? ` ${generatingProxyIndex}/${mediaFilesProxyTotal}` : ''}. Click to disable proxy playback`
+      : 'Proxy ON - Click to disable proxy playback'
+    : isProxyGenerating
+      ? `Proxy OFF - Generating proxy${hasProxyBatchCount ? ` ${generatingProxyIndex}/${mediaFilesProxyTotal}` : ''}. Click to enable proxy playback`
+      : 'Proxy OFF - Click to enable proxy playback and proxy generation';
   const recordButtonTitle = isRecording
     ? `Stop audio recording${recordingElapsed > 0 ? ` (${recordingElapsed.toFixed(1)}s)` : ''}`
     : armedAudioTracks.length > 0
@@ -239,11 +251,11 @@ function TimelineControlsComponent({
           <IconPlayerRecordFilled className="timeline-transport-icon" aria-hidden="true" />
         </button>
         <button
-          className={`btn btn-sm timeline-proxy-button ${proxyEnabled ? 'btn-active' : ''}`}
+          className={`btn btn-sm timeline-proxy-button ${proxyEnabled ? 'btn-active' : ''} ${isProxyGenerating ? 'is-generating' : ''}`}
           onClick={onToggleProxy}
           title={proxyTitle}
         >
-          Proxy
+          {isProxyGenerating ? proxyGenerationLabel : 'Proxy'}
         </button>
         {recoveryEntries.length > 0 && (
           <button
@@ -448,8 +460,8 @@ function TimelineControlsComponent({
                 <span className={`view-check ${proxyEnabled ? 'checked' : ''}`}>✓</span>
                 <span>
                   Proxy
-                  {currentlyGeneratingProxyId && ' (Generating...)'}
-                  {!currentlyGeneratingProxyId && mediaFilesWithProxy > 0 && ` (${mediaFilesWithProxy})`}
+                  {isProxyGenerating && ` (${proxyGenerationLabel})`}
+                  {!isProxyGenerating && proxyReadyLabel && ` (${proxyReadyLabel})`}
                 </span>
               </div>
               <div

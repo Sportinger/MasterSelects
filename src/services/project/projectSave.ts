@@ -173,7 +173,9 @@ function convertMediaFiles(files: MediaFile[]): ProjectMediaFile[] {
     splatFrameCount: file.splatFrameCount ?? file.gaussianSplatSequence?.frameCount,
     hasProxy:
       file.proxyStatus === 'ready' &&
+      file.proxyFormat === 'mp4-all-intra' &&
       isProxyFrameCountComplete(file.proxyFrameCount, file.duration, file.proxyFps ?? file.fps),
+    proxyFormat: file.proxyStatus === 'ready' ? file.proxyFormat : undefined,
     hasAudioProxy: file.hasProxyAudio === true || file.audioProxyStatus === 'ready',
     audioProxyStorageKey: file.audioProxyStorageKey || file.fileHash || file.id,
     audioAnalysisRefs: file.audioAnalysisRefs ? structuredClone(file.audioAnalysisRefs) : undefined,

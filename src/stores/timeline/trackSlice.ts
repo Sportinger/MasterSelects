@@ -260,12 +260,16 @@ function withAudioExportPreflightMeasurementHistory(
   };
 }
 
+function createTrackId(type: 'video' | 'audio'): string {
+  return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
   addTrack: (type) => {
     const { tracks, expandedTracks } = get();
     const typeCount = tracks.filter(t => t.type === type).length + 1;
     const newTrack: TimelineTrack = {
-      id: `${type}-${Date.now()}`,
+      id: createTrackId(type),
       name: `${type === 'video' ? 'Video' : 'Audio'} ${typeCount}`,
       type,
       height: type === 'video' ? 60 : 40,

@@ -152,6 +152,8 @@ export interface TimelineControlsProps {
   proxyEnabled: boolean;
   currentlyGeneratingProxyId: string | null;
   mediaFilesWithProxy: number;
+  mediaFilesProxyTotal: number;
+  generatingProxyIndex: number;
   showTranscriptMarkers: boolean;
   thumbnailsEnabled: boolean;
   waveformsEnabled: boolean;
