@@ -258,6 +258,31 @@
   border-color: var(--text-secondary);
 }
 
+.settings-range {
+  width: 150px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.shortcut-display-size-row {
+  gap: 12px;
+}
+
+.shortcut-display-size-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 210px;
+}
+
+.shortcut-display-size-value {
+  width: 42px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-align: right;
+}
+
 .settings-row-actions {
   display: flex;
   align-items: center;

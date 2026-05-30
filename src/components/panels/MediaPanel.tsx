@@ -22,6 +22,8 @@ import {
   MEDIA_BOARD_EMPTY_SLOT_HEIGHT,
   MEDIA_BOARD_EMPTY_SLOT_WIDTH,
   MEDIA_BOARD_NODE_GAP,
+  MEDIA_BOARD_ORIGINAL_FOCUS_MARGIN_RATIO,
+  MEDIA_BOARD_ORIGINAL_FOCUS_ZOOM,
   MEDIA_BOARD_OVERVIEW_CANVAS_ZOOM,
   MEDIA_BOARD_OVERVIEW_THUMBNAIL_REQUEST_LIMIT,
   MEDIA_BOARD_PAN_ZOOM_MAX,
@@ -34,6 +36,8 @@ import {
   MEDIA_BOARD_THUMBNAIL_REQUEST_MIN_ZOOM,
   MEDIA_BOARD_THUMBNAIL_WORKER_COUNT,
   MEDIA_BOARD_TIMELINE_HANDOFF_DISTANCE_PX,
+  MEDIA_BOARD_VIDEO_POSTER_FALLBACK_LIMIT,
+  getMediaBoardUiScale,
 } from './media/board/constants';
 import {
   buildMediaBoardLayoutGeometry,
@@ -3149,6 +3153,104 @@ export function MediaPanel() {
     ))
   ), [mediaBoardLayout.placements, mediaBoardVisibleRect, selectedIdSet]);
 
+  const mediaBoardVideoPosterFallbackIds = useMemo(() => {
+    if (viewMode !== 'board') {
+      return new Set<string>();
+    }
+
+    const centerX = (mediaBoardVisibleRect.left + mediaBoardVisibleRect.right) / 2;
+    const centerY = (mediaBoardVisibleRect.top + mediaBoardVisibleRect.bottom) / 2;
+
+    const ids = visibleMediaBoardPlacements
+      .map((placement) => {
+        const { item, layout } = placement;
+        if (
+          placement.isDraggingPreview
+          || !isImportedMediaFileItem(item)
+          || item.type !== 'video'
+          || item.isImporting
+          || !item.url
+          || mediaNeedsRelink(item)
+          || layout.width * mediaBoardViewport.zoom < 4
+          || layout.height * mediaBoardViewport.zoom < 4
+          || (mediaSearchVisibleItemIds && !mediaSearchVisibleItemIds.has(item.id))
+        ) {
+          return null;
+        }
+
+        const itemCenterX = layout.x + layout.width / 2;
+        const itemCenterY = layout.y + layout.height / 2;
+        return {
+          id: item.id,
+          area: layout.width * layout.height,
+          distance: Math.hypot(itemCenterX - centerX, itemCenterY - centerY),
+        };
+      })
+      .filter((entry): entry is { id: string; area: number; distance: number } => entry !== null)
+      .toSorted((a, b) => (a.distance - b.distance) || (b.area - a.area))
+      .slice(0, MEDIA_BOARD_VIDEO_POSTER_FALLBACK_LIMIT)
+      .map((entry) => entry.id);
+
+    return new Set(ids);
+  }, [
+    mediaBoardVisibleRect,
+    mediaBoardViewport.zoom,
+    mediaSearchVisibleItemIds,
+    viewMode,
+    visibleMediaBoardPlacements,
+  ]);
+
+  const focusedMediaBoardOriginalId = useMemo(() => {
+    if (mediaBoardViewport.zoom < MEDIA_BOARD_ORIGINAL_FOCUS_ZOOM) return null;
+
+    const centerX = (mediaBoardVisibleRect.left + mediaBoardVisibleRect.right) / 2;
+    const centerY = (mediaBoardVisibleRect.top + mediaBoardVisibleRect.bottom) / 2;
+    let bestId: string | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    visibleMediaBoardPlacements.forEach((placement) => {
+      const { item, layout } = placement;
+      if (
+        placement.isDraggingPreview
+        || !isImportedMediaFileItem(item)
+        || item.type !== 'image'
+        || !item.url
+        || item.isImporting
+        || mediaNeedsRelink(item)
+        || (mediaSearchVisibleItemIds && !mediaSearchVisibleItemIds.has(item.id))
+        || !mediaBoardNodeIntersectsVisibleRect(layout, mediaBoardVisibleRect)
+      ) {
+        return;
+      }
+
+      const marginX = layout.width * MEDIA_BOARD_ORIGINAL_FOCUS_MARGIN_RATIO;
+      const marginY = layout.height * MEDIA_BOARD_ORIGINAL_FOCUS_MARGIN_RATIO;
+      if (
+        centerX < layout.x - marginX
+        || centerX > layout.x + layout.width + marginX
+        || centerY < layout.y - marginY
+        || centerY > layout.y + layout.height + marginY
+      ) {
+        return;
+      }
+
+      const itemCenterX = layout.x + layout.width / 2;
+      const itemCenterY = layout.y + layout.height / 2;
+      const distance = Math.hypot(
+        (itemCenterX - centerX) / Math.max(1, layout.width),
+        (itemCenterY - centerY) / Math.max(1, layout.height),
+      );
+
+      if (distance < bestDistance) {
+        bestId = item.id;
+        bestDistance = distance;
+      }
+    });
+
+    return bestId;
+  }, [mediaBoardViewport.zoom, mediaBoardVisibleRect, mediaSearchVisibleItemIds, visibleMediaBoardPlacements]);
+  const isMediaBoardDeepZoomActive = viewMode === 'board' && mediaBoardViewport.zoom >= MEDIA_BOARD_ORIGINAL_FOCUS_ZOOM;
+
   const pulseMediaPanelRevealTarget = useCallback((itemId: string, scrollIntoView: boolean): boolean => {
     const target = getMediaPanelAnimatedTarget(mediaPanelContentRef.current, itemId);
     if (!target) {
@@ -3800,6 +3902,7 @@ export function MediaPanel() {
     const inner = boardCanvasInnerRef.current;
     if (!inner) return;
     inner.style.transform = `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`;
+    inner.style.setProperty('--media-board-ui-scale', String(getMediaBoardUiScale(viewport.zoom)));
   }, []);
 
   const startMediaBoardPanGesture = useCallback((e: React.MouseEvent, options?: { clearSelectionOnTap?: boolean }) => {
@@ -4683,7 +4786,7 @@ export function MediaPanel() {
 
   const handleMediaBoardNodeMouseDown = useCallback((e: React.MouseEvent, item: MediaBoardItem) => {
     const target = e.target as HTMLElement;
-    if (target.closest('.media-board-node-timeline-drag, button, input')) return;
+    if (target.closest('button, input')) return;
 
     if (e.button === 2) {
       e.stopPropagation();
@@ -4846,6 +4949,10 @@ export function MediaPanel() {
     height: Math.max(1, mediaBoardVisibleRect.bottom - mediaBoardVisibleRect.top),
   }), [mediaBoardVisibleRect]);
 
+  const requestMediaBoardThumbnail = useCallback((id: string) => {
+    void ensureFileThumbnail(id);
+  }, [ensureFileThumbnail]);
+
   const renderMediaBoardView = () => (
     <MediaBoardView
       wrapperRef={boardWrapperRef}
@@ -4864,6 +4971,9 @@ export function MediaPanel() {
       visibleGroups={visibleMediaBoardGroups}
       visibleInsertGaps={visibleMediaBoardInsertGaps}
       visiblePlacements={visibleMediaBoardPlacements}
+      visibleRect={mediaBoardVisibleRect}
+      focusedOriginalMediaId={focusedMediaBoardOriginalId}
+      videoPosterFallbackIds={mediaBoardVideoPosterFallbackIds}
       marquee={mediaBoardMarquee}
       selectedIdSet={selectedIdSet}
       mediaSearchVisibleItemIds={mediaSearchVisibleItemIds}
@@ -4888,8 +4998,7 @@ export function MediaPanel() {
       consumeSuppressedContextMenu={consumeSuppressedMediaBoardContextMenu}
       onGroupDragOver={handleMediaBoardGroupDragOver}
       onGroupDrop={handleMediaBoardGroupDrop}
-      onTimelineDragStart={handleDragStart}
-      onTimelineDragEnd={handleDragEnd}
+      onRequestThumbnail={requestMediaBoardThumbnail}
       refreshFileUrls={refreshFileUrls}
       buildTooltip={buildGridTooltip}
       formatDuration={formatDuration}
@@ -5262,10 +5371,12 @@ export function MediaPanel() {
         )}
       </div>
 
-      <MediaAIGenerativeTray
-        expanded={isGenerativeTrayExpanded}
-        onExpandedChange={setGenerativeTrayExpanded}
-      />
+      {isMediaBoardDeepZoomActive && !isGenerativeTrayExpanded ? null : (
+        <MediaAIGenerativeTray
+          expanded={isGenerativeTrayExpanded}
+          onExpandedChange={setGenerativeTrayExpanded}
+        />
+      )}
 
       {/* Drop overlay - shown when dragging files from outside */}
       {isExternalDragOver && (

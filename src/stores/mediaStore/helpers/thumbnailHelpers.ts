@@ -26,51 +26,107 @@ export async function createThumbnail(
     }
 
     if (type === 'video') {
-      const video = document.createElement('video');
-      const url = URL.createObjectURL(file);
-      video.src = url;
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = 'metadata';
-
-      const timeout = setTimeout(() => {
-        log.warn('Timeout:', file.name);
-        URL.revokeObjectURL(url);
-        resolve(undefined);
-      }, THUMBNAIL_TIMEOUT);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        URL.revokeObjectURL(url);
-      };
-
-      video.onloadedmetadata = () => {
-        const targetTime = Number.isFinite(video.duration) && video.duration > 0
-          ? Math.min(1, video.duration * 0.1)
-          : 0;
-        try {
-          video.currentTime = targetTime;
-        } catch {
-          cleanup();
-          resolve(undefined);
-        }
-      };
-
-      video.onseeked = () => {
-        void drawThumbnailFromSource(video, video.videoWidth || 16, video.videoHeight || 9)
-          .then(resolve)
-          .finally(cleanup);
-      };
-
-      video.onerror = () => {
-        cleanup();
-        resolve(undefined);
-      };
-
-      video.load();
+      void createVideoThumbnail(file).then(resolve);
     } else {
       resolve(undefined);
     }
+  });
+}
+
+function getVideoThumbnailTargetTime(duration: number): number {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return 0;
+  }
+
+  const safeEnd = Math.max(0, duration - 0.05);
+  const preferred = Math.max(0.12, duration * 0.5);
+  return Math.min(safeEnd, preferred);
+}
+
+function createVideoThumbnail(file: File): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    let resolved = false;
+    let targetTime = 0;
+    let seekFallbackId: number | null = null;
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (seekFallbackId !== null) {
+        window.clearTimeout(seekFallbackId);
+      }
+      video.pause();
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+      video.removeEventListener('loadeddata', onLoadedData);
+      video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('error', onError);
+      video.removeAttribute('src');
+      try {
+        video.load();
+      } catch {
+        // Ignore detached video cleanup errors.
+      }
+      URL.revokeObjectURL(url);
+    };
+
+    const finish = (thumbnailUrl: string | undefined) => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      resolve(thumbnailUrl);
+    };
+
+    const drawCurrentFrame = () => {
+      if (video.readyState < 2) return;
+      void drawThumbnailFromSource(video, video.videoWidth || 16, video.videoHeight || 9)
+        .then(finish, () => finish(undefined));
+    };
+
+    const onLoadedMetadata = () => {
+      targetTime = getVideoThumbnailTargetTime(video.duration);
+      if (targetTime <= 0) {
+        drawCurrentFrame();
+        return;
+      }
+
+      try {
+        video.currentTime = targetTime;
+      } catch {
+        drawCurrentFrame();
+      }
+
+      seekFallbackId = window.setTimeout(drawCurrentFrame, 1200);
+    };
+
+    const onLoadedData = () => {
+      if (targetTime <= 0 || Math.abs(video.currentTime - targetTime) < 0.12) {
+        drawCurrentFrame();
+      }
+    };
+
+    const onSeeked = () => {
+      drawCurrentFrame();
+    };
+
+    const onError = () => {
+      finish(undefined);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      log.warn('Video thumbnail timeout:', file.name);
+      finish(undefined);
+    }, THUMBNAIL_TIMEOUT);
+
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+    video.addEventListener('loadeddata', onLoadedData);
+    video.addEventListener('seeked', onSeeked);
+    video.addEventListener('error', onError, { once: true });
+    video.src = url;
+    video.load();
   });
 }
 

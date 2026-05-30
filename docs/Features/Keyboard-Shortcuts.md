@@ -146,6 +146,20 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 ---
 
+## Input Display
+
+Preferences -> General -> Input Display can show recent key presses, mouse clicks, mouse drags, and wheel gestures as a large overlay near the bottom-left of the app.
+
+- The overlay can be toggled on or off.
+- The size slider persists locally.
+- Moving the size slider shows a live mock overlay in the real screen position.
+- Mouse clicks show the mouse icon without a click text label.
+- Drag input is distinguished from a simple click after the pointer moves past a small threshold and remains visible until the drag ends.
+- Wheel input shows scroll up, down, left, or right and stays as one continuous overlay while scrolling continues.
+- Held keys are combined with pointer input, so combinations such as `Shift + Left Drag` or `Ctrl + Scroll Up` are visible.
+
+---
+
 ## Related Docs
 
 - [Timeline](./Timeline.md)

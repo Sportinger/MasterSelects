@@ -498,7 +498,7 @@ Edit menu -> Settings
 | Category | Contents |
 |----------|----------|
 | **Appearance** | Theme selection and custom theme controls |
-| **General** | Save mode, autosave interval/enable state, import copy behavior, timeline zoom anchor, and mobile/desktop view mode |
+| **General** | Save mode, autosave interval/enable state, import copy behavior, timeline zoom anchor, shortcut/mouse input display, and mobile/desktop view mode |
 | **MIDI** | Browser MIDI permission state, transport learning, and device list |
 | **Previews** | Preview resolution quality and transparency grid info |
 | **Import** | Copy media to project folder toggle |

@@ -160,10 +160,13 @@ The panel supports three view modes through the header mode control. The selecte
 - Folder groups accept dropped items and folders from the other Media Panel views, while drops outside the root area are ignored
 - Ctrl/right-drag starts a marquee selection; right-clicking opens the normal Media Panel context menu
 - Media, compositions, text, solids, meshes, cameras, and splat effectors appear as board nodes with hover-only name and metadata overlays
+- Video board nodes request missing thumbnails lazily like images, use a middle-frame thumbnail as the poster frame, and skim while hovered: horizontal mouse position maps to video time with a full-height white scrub indicator line like editor thumbnail scrubbing instead of always starting playback at 0:00; the board also loads a capped set of visible video nodes as poster fallbacks, including in the zoomed-out overview canvas mode, so missing or black cached thumbnails do not leave the board blank
+- Board zoom supports deep inspection up to 6400%; from 250% zoom upward, board UI text, badges, and metadata overlays counter-scale so they stop growing while media content keeps magnifying
+- At 400% zoom and higher, the image node closest to the viewport center is promoted from its thumbnail to the original source URL; other nodes stay on thumbnails so high-resolution files are lazy-loaded one at a time
+- During deep board zoom, the focused node's existing name, metadata, and duration overlays stay visible and slide inward when their normal positions would run beyond the Media Panel edges; the collapsed Chat/Generate/Downloads launcher is hidden so it does not cover the inspected media
 - Board order, folder group offsets, and viewport are saved into the project UI state, with `localStorage` as the live-session fallback
 - Drag files or folders from the OS onto a group to import directly into that folder
 - Drag existing Media Panel items onto groups to move them between folders
-- Use the small handle on a node to drag that item to the timeline with the same drag payloads as Classic and Icons view
 - Switching to or from Board view morphs folder groups from/to their Classic rows or Icons thumbnails using the same 500ms view transition as media items
 - The board uses the same Add dropdown and context menu as Classic view; new folders appear immediately in Classic, Icons, and Board view
 - The **Generate** board action expands the Media Panel's bottom-right AI generator tray; generated results still import through the normal Media Store path

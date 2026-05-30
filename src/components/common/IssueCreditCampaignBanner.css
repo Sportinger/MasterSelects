@@ -6,23 +6,22 @@
   z-index: 12050;
   width: min(760px, calc(100vw - 24px));
   transform: translateX(-50%);
+  contain: layout style;
+  isolation: isolate;
   pointer-events: none;
 }
 
 .issue-credit-campaign::before {
   position: absolute;
-  inset: -10px -14px -10px;
+  inset: -8px -10px -8px;
   z-index: 0;
-  border-radius: 18px;
+  border-radius: 16px;
   background:
     linear-gradient(122deg, #ffcc33 0%, #ff5f6d 22%, #8b5cf6 48%, #22d3ee 72%, #34d399 100%);
-  background-size: 260% 260%;
   content: '';
-  filter: blur(12px);
-  opacity: 0.46;
+  opacity: 0.30;
   pointer-events: none;
   transform: translateZ(0);
-  animation: issue-credit-rainbow-flow 18s linear infinite;
 }
 
 .issue-credit-campaign::after {
@@ -35,9 +34,9 @@
     radial-gradient(circle at 50% 10%, rgba(139, 92, 246, 0.62), transparent 34%),
     radial-gradient(circle at 82% 30%, rgba(34, 211, 238, 0.70), transparent 32%);
   content: '';
-  filter: blur(8px);
-  opacity: 0.32;
+  opacity: 0.20;
   pointer-events: none;
+  transform: translateZ(0);
 }
 
 .issue-credit-campaign-confetti {
@@ -45,8 +44,10 @@
   inset: -42px -20px auto;
   z-index: 2;
   height: 160px;
+  contain: layout paint style;
   overflow: hidden;
   pointer-events: none;
+  transform: translateZ(0);
 }
 
 .issue-credit-campaign-confetti-piece {
@@ -59,7 +60,8 @@
   background: var(--issue-confetti-color);
   opacity: 0;
   transform: translate3d(-50%, -18px, 0) rotate(var(--issue-confetti-rotate));
-  animation: issue-credit-confetti-fall var(--issue-confetti-duration) ease-in var(--issue-confetti-delay) 2 both;
+  will-change: transform, opacity;
+  animation: issue-credit-confetti-fall var(--issue-confetti-duration) ease-in var(--issue-confetti-delay) 1 both;
 }
 
 .issue-credit-campaign-banner {
@@ -71,12 +73,14 @@
   gap: 12px;
   min-height: 72px;
   padding: 10px 10px 10px 12px;
+  contain: layout style;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 8px;
   background:
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.20), transparent 30%),
+    radial-gradient(circle at 92% 8%, rgba(255, 255, 255, 0.14), transparent 30%),
     linear-gradient(122deg, #ffcc33 0%, #ff5f6d 28%, #8b5cf6 58%, #22d3ee 78%, #34d399 100%);
-  background-size: 260% 260%;
   box-shadow:
     0 18px 44px rgba(0, 0, 0, 0.36),
     0 0 20px rgba(34, 211, 238, 0.24),
@@ -84,19 +88,34 @@
     0 0 0 1px rgba(255, 255, 255, 0.24) inset;
   color: #ffffff;
   pointer-events: auto;
-  animation:
-    issue-credit-banner-enter 280ms ease-out both,
-    issue-credit-rainbow-flow 18s linear 280ms infinite;
+  transform: translateZ(0);
+  animation: issue-credit-banner-enter 240ms ease-out both;
 }
 
 .issue-credit-campaign-banner::before {
   position: absolute;
   inset: 1px;
+  z-index: 0;
   border-radius: 7px;
   background:
     radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.18), transparent 28%),
     linear-gradient(90deg, rgba(9, 12, 20, 0.74), rgba(9, 12, 20, 0.46));
   content: '';
+}
+
+.issue-credit-campaign-banner::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 7px;
+  background:
+    linear-gradient(100deg, transparent 0%, transparent 36%, rgba(255, 255, 255, 0.23) 48%, transparent 62%, transparent 100%);
+  content: '';
+  opacity: 0.75;
+  pointer-events: none;
+  transform: translate3d(-120%, 0, 0);
+  will-change: transform;
+  animation: issue-credit-banner-sheen 950ms ease-out 360ms both;
 }
 
 .issue-credit-campaign-version,
@@ -229,6 +248,12 @@
   }
 }
 
+@keyframes issue-credit-banner-sheen {
+  to {
+    transform: translate3d(120%, 0, 0);
+  }
+}
+
 @keyframes issue-credit-confetti-fall {
   0% {
     opacity: 0;
@@ -240,18 +265,6 @@
   100% {
     opacity: 0;
     transform: translate3d(calc(-50% + var(--issue-confetti-drift)), 154px, 0) rotate(calc(var(--issue-confetti-rotate) + 560deg));
-  }
-}
-
-@keyframes issue-credit-rainbow-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
   }
 }
 
@@ -273,6 +286,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .issue-credit-campaign::before,
+  .issue-credit-campaign-banner::after,
   .issue-credit-campaign-banner,
   .issue-credit-campaign-confetti-piece {
     animation: none;

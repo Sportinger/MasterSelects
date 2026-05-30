@@ -1,0 +1,252 @@
+@layer overlays {
+.shortcut-display-overlay {
+  position: fixed;
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 10019;
+  max-width: calc(100vw - 36px);
+  pointer-events: none;
+  transform: scale(var(--shortcut-display-scale));
+  transform-origin: left bottom;
+}
+
+.shortcut-display-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(560px, calc(100vw - 36px));
+  min-height: 56px;
+  color: #fff;
+  animation: shortcut-display-enter 120ms ease-out forwards;
+}
+
+.shortcut-display-card--held {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.shortcut-display-card--exiting,
+.shortcut-display-card--held.shortcut-display-card--exiting {
+  animation: shortcut-display-fade-out 150ms ease-in forwards;
+}
+
+.shortcut-display-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.shortcut-display-key-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.shortcut-display-key-part--joined {
+  animation: shortcut-display-part-enter 150ms ease-out both;
+}
+
+.shortcut-display-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 230px;
+  padding: 0 0 3px;
+  overflow: visible;
+  color: #fff;
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  text-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.95),
+    0 0 12px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+}
+
+.shortcut-display-plus {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.95),
+    0 0 12px rgba(0, 0, 0, 0.7);
+}
+
+.shortcut-display-mouse {
+  display: grid;
+  grid-template-columns: repeat(3, 16px);
+  grid-template-rows: 24px 30px;
+  flex: 0 0 auto;
+  width: 50px;
+  height: 56px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px 16px 22px 22px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
+  animation: shortcut-display-mouse-enter 100ms ease-out both;
+}
+
+.shortcut-display-mouse-button {
+  border-right: 1px solid rgba(255, 255, 255, 0.48);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.shortcut-display-mouse-button:nth-child(3) {
+  border-right: none;
+}
+
+.shortcut-display-mouse-button--held {
+  background: var(--accent);
+  box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.24);
+}
+
+.shortcut-display-mouse-button--click {
+  animation: shortcut-display-mouse-click 200ms ease-out both;
+}
+
+.shortcut-display-mouse-body {
+  grid-column: 1 / 4;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.shortcut-display-wheel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 50px;
+  height: 56px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px 16px 22px 22px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.22);
+}
+
+.shortcut-display-wheel-track {
+  position: relative;
+  width: 16px;
+  height: 25px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.shortcut-display-wheel-dot {
+  position: absolute;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
+  transform: translateX(-50%);
+}
+
+.shortcut-display-wheel--up .shortcut-display-wheel-dot {
+  top: 3px;
+}
+
+.shortcut-display-wheel--down .shortcut-display-wheel-dot {
+  bottom: 3px;
+}
+
+.shortcut-display-wheel--left .shortcut-display-wheel-dot {
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.shortcut-display-wheel--right .shortcut-display-wheel-dot {
+  left: auto;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.shortcut-display-wheel-label {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+@keyframes shortcut-display-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shortcut-display-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes shortcut-display-part-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes shortcut-display-mouse-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shortcut-display-mouse-click {
+  0% {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+
+  24% {
+    background: var(--accent);
+    box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.28);
+  }
+
+  72% {
+    background: var(--accent);
+    box-shadow: inset 0 0 16px rgba(255, 255, 255, 0.24);
+  }
+
+  100% {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+}
+}

@@ -1,7 +1,17 @@
-import { useCallback } from 'react';
-import { useSettingsStore, type AutosaveInterval, type SaveMode, type PreviewQuality, type GPUPowerPreference, type TimelineZoomAnchor } from '../../../stores/settingsStore';
+import { useCallback, type ChangeEvent } from 'react';
+import {
+  MAX_SHORTCUT_DISPLAY_SCALE,
+  MIN_SHORTCUT_DISPLAY_SCALE,
+  useSettingsStore,
+  type AutosaveInterval,
+  type SaveMode,
+  type PreviewQuality,
+  type GPUPowerPreference,
+  type TimelineZoomAnchor,
+} from '../../../stores/settingsStore';
 // AutosaveInterval used in interval select onChange cast
 import { useIsMobile } from '../../../hooks/useIsMobile';
+import { requestShortcutDisplayPreview } from '../shortcutDisplayPreview';
 import { OutputSettings } from './OutputSettings';
 import { AIFeaturesSettings } from './AIFeaturesSettings';
 
@@ -12,6 +22,8 @@ export function GeneralSettings() {
     copyMediaToProject,
     forceDesktopMode,
     timelineZoomAnchor,
+    showShortcutDisplay,
+    shortcutDisplayScale,
     previewQuality,
     gpuPowerPreference,
     setSaveMode,
@@ -19,15 +31,30 @@ export function GeneralSettings() {
     setCopyMediaToProject,
     setForceDesktopMode,
     setTimelineZoomAnchor,
+    setShowShortcutDisplay,
+    setShortcutDisplayScale,
     setPreviewQuality,
     setGpuPowerPreference,
   } = useSettingsStore();
 
   const isMobileDevice = useIsMobile();
+
   const handleSwitchToMobile = useCallback(() => {
     setForceDesktopMode(false);
     window.location.reload();
   }, [setForceDesktopMode]);
+
+  const handleShortcutDisplayToggle = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setShowShortcutDisplay(event.target.checked);
+    requestShortcutDisplayPreview();
+  }, [setShowShortcutDisplay]);
+
+  const handleShortcutDisplayScaleChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setShortcutDisplayScale(Number(event.target.value));
+    requestShortcutDisplayPreview();
+  }, [setShortcutDisplayScale]);
+
+  const shortcutDisplayScalePercent = Math.round(shortcutDisplayScale * 100);
 
   return (
     <div className="settings-category-content">
@@ -121,6 +148,43 @@ export function GeneralSettings() {
         <p className="settings-hint">
           Controls whether Ctrl/Alt+scroll zooms toward the cursor or the playhead.
         </p>
+      </div>
+
+      {/* Input Display */}
+      <div className="settings-group">
+        <div className="settings-group-title">Input Display</div>
+
+        <label className="settings-row">
+          <span className="settings-label">Show shortcuts and mouse clicks</span>
+          <input
+            type="checkbox"
+            checked={showShortcutDisplay}
+            onChange={handleShortcutDisplayToggle}
+            className="settings-checkbox"
+          />
+        </label>
+        <p className="settings-hint">
+          Recent key presses, clicks, drags, and wheel gestures appear near the bottom-left of the app.
+        </p>
+
+        <label className="settings-row shortcut-display-size-row">
+          <span className="settings-label">Size</span>
+          <span className="shortcut-display-size-control">
+            <input
+              type="range"
+              min={MIN_SHORTCUT_DISPLAY_SCALE}
+              max={MAX_SHORTCUT_DISPLAY_SCALE}
+              step={0.05}
+              value={shortcutDisplayScale}
+              onChange={handleShortcutDisplayScaleChange}
+              onFocus={() => requestShortcutDisplayPreview()}
+              onPointerDown={() => requestShortcutDisplayPreview(5000)}
+              onPointerUp={() => requestShortcutDisplayPreview()}
+              className="settings-range"
+            />
+            <span className="shortcut-display-size-value">{shortcutDisplayScalePercent}%</span>
+          </span>
+        </label>
       </div>
 
       {/* Output */}
