@@ -36,6 +36,7 @@ export interface FrameContext {
   tracks: TimelineTrack[];
   isPlaying: boolean;
   isDraggingPlayhead: boolean;
+  hasClipDragPreview: boolean;
   playheadPosition: number;
   playbackSpeed: number;
   masterAudioState?: MasterAudioState;

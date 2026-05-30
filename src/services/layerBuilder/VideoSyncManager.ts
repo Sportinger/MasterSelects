@@ -927,7 +927,8 @@ export class VideoSyncManager {
       return;
     }
 
-    const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+    const timelineState = useTimelineStore.getState();
+    const isDragging = timelineState.isDraggingPlayhead || timelineState.clipDragPreview != null;
     const fastSeek = this.getFastSeek(video);
     const supportsFastSeek = fastSeek !== null;
     const presentedTime = engine.getLastPresentedVideoTime(video);
@@ -1064,7 +1065,8 @@ export class VideoSyncManager {
       engine.cacheFrameAtTime(video, presentedTime);
       engine.requestNewFrameRender();
 
-      const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      const timelineState = useTimelineStore.getState();
+      const isDragging = timelineState.isDraggingPlayhead || timelineState.clipDragPreview != null;
       if (isDragging && this.queuedSeekTargets[clipId] !== undefined) {
         const flush = () => this.flushQueuedSeekTarget(clipId, video, 'seeked');
         if (typeof requestAnimationFrame === 'function') {
@@ -1408,7 +1410,7 @@ export class VideoSyncManager {
    * and syncVideoElements() (for sync + pause prevention).
    */
   computeHandoffs(ctx: FrameContext): void {
-    if (ctx.isDraggingPlayhead) {
+    if (ctx.isDraggingPlayhead || ctx.hasClipDragPreview) {
       this.activeHandoffs.clear();
       this.handoffElements.clear();
       return;
@@ -1570,6 +1572,7 @@ export class VideoSyncManager {
    */
   syncVideoElements(): void {
     const ctx = createFrameContext();
+    const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
 
     // Skip if same frame during playback
     if (ctx.isPlaying && !ctx.isDraggingPlayhead &&
@@ -1587,7 +1590,7 @@ export class VideoSyncManager {
 
     // Proactively warm upcoming clips before sync so boundary crossings during
     // playback or drag scrubbing are less likely to hit a cold decoder surface.
-    if (ctx.isPlaying || ctx.isDraggingPlayhead) {
+    if (ctx.isPlaying || isInteractivePreview) {
       this.lastPausedJumpPreloadPosition = Number.NaN;
       this.lastPausedJumpPreloadActiveKey = '';
       this.warmupUpcomingClips(ctx);
@@ -1659,6 +1662,7 @@ export class VideoSyncManager {
   private syncNestedCompVideos(compClip: TimelineClip, ctx: FrameContext, depth: number = 0): void {
     if (!compClip.nestedClips || !compClip.nestedTracks) return;
     if (depth >= MAX_NESTING_DEPTH) return;
+    const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
 
     // Calculate time within the composition
     const compLocalTime = ctx.playheadPosition - compClip.startTime;
@@ -1716,7 +1720,7 @@ export class VideoSyncManager {
           }
         } else {
           if (!video.paused) video.pause();
-          if (ctx.isDraggingPlayhead) {
+          if (isInteractivePreview) {
             scrubSettleState.resolve(nestedClip.id);
           }
 
@@ -1726,7 +1730,7 @@ export class VideoSyncManager {
             true
           );
           updateRuntimePlaybackTime(scrubRuntimeSource, nestedClipTime);
-          if (ctx.isDraggingPlayhead) {
+          if (isInteractivePreview) {
             void ensureRuntimeFrameProvider(scrubRuntimeSource, 'interactive', nestedClipTime);
           }
 
@@ -1735,7 +1739,7 @@ export class VideoSyncManager {
             nestedClip.source,
             scrubProvider,
             nestedClipTime,
-            { preferFreshRuntime: ctx.isDraggingPlayhead }
+            { preferFreshRuntime: isInteractivePreview }
           ) ?? webCodecsPlayer;
 
           if (pausedProvider?.isFullMode()) {
@@ -1743,13 +1747,13 @@ export class VideoSyncManager {
               pausedProvider,
               `${nestedClip.id}:nested`,
               nestedClipTime,
-              ctx.isDraggingPlayhead,
+              isInteractivePreview,
               true,
               true
             );
           }
 
-          if (!ctx.isDraggingPlayhead && timeDiff > 0.05) {
+          if (!isInteractivePreview && timeDiff > 0.05) {
             video.currentTime = this.safeSeekTime(video, nestedClipTime);
           }
         }
@@ -1774,7 +1778,7 @@ export class VideoSyncManager {
       } else {
         // When paused: pause video and seek to exact time
         if (!video.paused) video.pause();
-        if (ctx.isDraggingPlayhead) {
+        if (isInteractivePreview) {
           scrubSettleState.resolve(nestedClip.id);
         }
 
@@ -1783,11 +1787,11 @@ export class VideoSyncManager {
           this.forceVideoFrameDecode(nestedClip.id, video);
         }
 
-        const seekThreshold = ctx.isDraggingPlayhead
+        const seekThreshold = isInteractivePreview
           ? 0.1
           : VideoSyncManager.PAUSED_PRECISE_SEEK_THRESHOLD;
         if (timeDiff > seekThreshold) {
-          if (!ctx.isDraggingPlayhead) {
+          if (!isInteractivePreview) {
             scrubSettleState.begin(
               nestedClip.id,
               nestedClipTime,
@@ -1805,7 +1809,7 @@ export class VideoSyncManager {
           this.forceVideoFrameDecode(nestedClip.id, video);
         }
 
-        if (!ctx.isDraggingPlayhead) {
+        if (!isInteractivePreview) {
           this.maybeRecoverScrubSettle(nestedClip.id, video, nestedClipTime);
         }
       }
@@ -2036,6 +2040,7 @@ export class VideoSyncManager {
     const video = useHandoffVideo ? handoffVideo : clip.source.videoElement;
     this.muteLinkedVideoSourceAudio(ctx, clip, video);
     const timeInfo = getClipTimeInfo(ctx, clip);
+    const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
     const mediaFile = getMediaFileForClip(ctx, clip);
 
     // Check proxy mode
@@ -2054,12 +2059,12 @@ export class VideoSyncManager {
     // to activate Chrome's GPU decoder. During drag, the active scrub target
     // must keep seeking instead of waiting on/retargeting warmup.
     if (this.warmingUpVideos.has(video)) {
-      if (ctx.isDraggingPlayhead) {
+      if (isInteractivePreview) {
         this.clearWarmupState(video);
       } else {
         this.maybeRetargetActiveWarmup(clip.id, video, timeInfo.clipTime, ctx.now, {
           isPlaying: ctx.isPlaying,
-          isDragging: ctx.isDraggingPlayhead,
+          isDragging: isInteractivePreview,
           requestRender: true,
         });
         return;
@@ -2074,7 +2079,7 @@ export class VideoSyncManager {
     const hasSrc = !!(video.src || video.currentSrc);
     const warmupCooldown = this.warmupRetryCooldown.get(video);
     const cooldownOk = !warmupCooldown || performance.now() - warmupCooldown > 2000;
-    if (!ctx.isDraggingPlayhead && !ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
+    if (!isInteractivePreview && !ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
         (video.played?.length ?? 0) === 0 && !this.warmingUpVideos.has(video)) {
       vfPipelineMonitor.record('vf_gpu_cold', { clipId: clip.id });
       this.startTargetedWarmup(clip.id, video, timeInfo.clipTime, {
@@ -2092,7 +2097,7 @@ export class VideoSyncManager {
       engine.ensureVideoFrameCached(video, clip.id);
     }
 
-    if (ctx.isPlaying || ctx.isDraggingPlayhead) {
+    if (ctx.isPlaying || isInteractivePreview) {
       scrubSettleState.resolve(clip.id);
     }
 
@@ -2113,7 +2118,7 @@ export class VideoSyncManager {
     if (isReversePlayback) {
       // For reverse: pause video and seek to each frame
       if (!video.paused) video.pause();
-      if (ctx.isDraggingPlayhead) {
+      if (isInteractivePreview) {
         this.clipWasDragging.add(clip.id);
       } else if (this.clipWasDragging.has(clip.id)) {
         // Settle-seek on scrub stop for reverse playback
@@ -2128,18 +2133,18 @@ export class VideoSyncManager {
         }
         return;
       }
-      const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.02;
+      const seekThreshold = isInteractivePreview ? 0.04 : 0.02;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       }
-      if (!ctx.isDraggingPlayhead) {
+      if (!isInteractivePreview) {
         this.maybeRecoverScrubSettle(clip.id, video, timeInfo.clipTime);
       }
     } else if (ctx.playbackSpeed !== 1) {
       // Non-standard forward transport speed (2x, 4x, etc.): seek frame-by-frame
       if (!video.paused) video.pause();
       this.clipWasPlaying.delete(clip.id);
-      if (ctx.isDraggingPlayhead) {
+      if (isInteractivePreview) {
         this.clipWasDragging.add(clip.id);
       } else if (this.clipWasDragging.has(clip.id)) {
         this.clipWasDragging.delete(clip.id);
@@ -2153,11 +2158,11 @@ export class VideoSyncManager {
         }
         return;
       }
-      const seekThreshold = ctx.isDraggingPlayhead ? 0.04 : 0.03;
+      const seekThreshold = isInteractivePreview ? 0.04 : 0.03;
       if (timeDiff > seekThreshold) {
         this.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       }
-      if (!ctx.isDraggingPlayhead) {
+      if (!isInteractivePreview) {
         this.maybeRecoverScrubSettle(clip.id, video, timeInfo.clipTime);
       }
     } else {
@@ -2282,7 +2287,7 @@ export class VideoSyncManager {
         // Detect scrub-stop transition: user just released the playhead.
         // Force a precise seek to the exact position + RVFC so the correct
         // frame is displayed once the seek completes.
-        const justStoppedDragging = this.clipWasDragging.has(clip.id) && !ctx.isDraggingPlayhead;
+        const justStoppedDragging = this.clipWasDragging.has(clip.id) && !isInteractivePreview;
         if (justStoppedDragging) {
           this.clipWasDragging.delete(clip.id);
           // Cancel any pending deferred precise seek from the drag phase
@@ -2303,7 +2308,7 @@ export class VideoSyncManager {
         } else {
           // 0.04s â‰ˆ slightly more than 1 frame at 30fps.
           // Previous 0.1s threshold skipped up to 3 frames during slow scrubbing.
-          const seekThreshold = ctx.isDraggingPlayhead
+          const seekThreshold = isInteractivePreview
             ? 0.04
             : VideoSyncManager.PAUSED_PRECISE_SEEK_THRESHOLD;
           if (timeDiff > seekThreshold) {
@@ -2317,7 +2322,7 @@ export class VideoSyncManager {
             );
             if (recoveredPendingSeek) {
               this.lastSeekRef[clip.id] = ctx.now;
-            } else if (ctx.isDraggingPlayhead) {
+            } else if (isInteractivePreview) {
               this.maybeRecoverDraggingDisplayedDrift(
                 clip.id,
                 video,
@@ -2329,7 +2334,7 @@ export class VideoSyncManager {
         }
 
         // Track dragging state for next frame
-        if (ctx.isDraggingPlayhead) {
+        if (isInteractivePreview) {
           this.clipWasDragging.add(clip.id);
         }
 
@@ -2341,7 +2346,7 @@ export class VideoSyncManager {
           });
           this.forceVideoFrameDecode(clip.id, video);
         }
-        if (!ctx.isDraggingPlayhead) {
+        if (!isInteractivePreview) {
           this.maybeRecoverScrubSettle(clip.id, video, timeInfo.clipTime);
         }
       }
@@ -2366,6 +2371,7 @@ export class VideoSyncManager {
    * actually presented to the compositor â€” more accurate than the 'seeked' event.
    */
   private throttledSeek(clipId: string, video: HTMLVideoElement, time: number, ctx: FrameContext): void {
+    const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
     const fastSeek = this.getFastSeek(video);
     const supportsFastSeek = fastSeek !== null;
     const presentedTime = engine.getLastPresentedVideoTime(video);
@@ -2374,15 +2380,15 @@ export class VideoSyncManager {
     const displayedDriftSeconds = Math.abs(effectiveDisplayedTime - time);
 
     if (this.hasPendingDuplicateSeek(clipId, video, time)) {
-      if (ctx.isDraggingPlayhead) {
+      if (isInteractivePreview) {
         this.latestSeekTargets[clipId] = time;
       }
       return;
     }
 
     if ((video.seeking || this.rvfcHandles[clipId] !== undefined) && this.pendingSeekTargets[clipId] !== undefined) {
-      const allowInFlightRetarget = ctx.isDraggingPlayhead && supportsFastSeek;
-      if (ctx.isDraggingPlayhead && !allowInFlightRetarget) {
+      const allowInFlightRetarget = isInteractivePreview && supportsFastSeek;
+      if (isInteractivePreview && !allowInFlightRetarget) {
         const pendingTarget = this.pendingSeekTargets[clipId];
         const pendingAge = ctx.now - (this.pendingSeekStartedAt[clipId] ?? ctx.now);
         const pendingTargetDrift =
@@ -2421,17 +2427,17 @@ export class VideoSyncManager {
         clipId,
         time,
         ctx.now,
-        ctx.isDraggingPlayhead,
+        isInteractivePreview,
         allowInFlightRetarget,
         displayedDriftSeconds
       )) {
         this.pendingSeekTargets[clipId] = time;
         this.pendingSeekStartedAt[clipId] = ctx.now;
-        if (ctx.isDraggingPlayhead) {
+        if (isInteractivePreview) {
           this.latestSeekTargets[clipId] = time;
         }
 
-        if (ctx.isDraggingPlayhead && supportsFastSeek) {
+        if (isInteractivePreview && supportsFastSeek) {
           fastSeek(this.safeSeekTime(video, time));
           this.armSeekedFlush(clipId, video);
           vfPipelineMonitor.record('vf_seek_fast', {
@@ -2473,7 +2479,7 @@ export class VideoSyncManager {
       }
 
       this.queuedSeekTargets[clipId] = time;
-      if (ctx.isDraggingPlayhead) {
+      if (isInteractivePreview) {
         this.latestSeekTargets[clipId] = time;
       }
       this.armSeekedFlush(clipId, video);
@@ -2485,7 +2491,7 @@ export class VideoSyncManager {
 
     const lastSeek = this.lastSeekRef[clipId] || 0;
     const dragDrift = Math.abs(effectiveDisplayedTime - time);
-    const threshold = ctx.isDraggingPlayhead
+    const threshold = isInteractivePreview
       ? supportsFastSeek
         ? dragDrift >= 1
           ? 16
@@ -2499,7 +2505,7 @@ export class VideoSyncManager {
             : 110
       : 33;
     if (ctx.now - lastSeek > threshold) {
-      if (ctx.isDraggingPlayhead && supportsFastSeek) {
+      if (isInteractivePreview && supportsFastSeek) {
         // Phase 1: Instant keyframe feedback via fastSeek.
         // For all-intra codecs this IS the exact frame. For long-GOP codecs
         // this shows the nearest keyframe â€” better than a stale cached frame.
@@ -2538,7 +2544,7 @@ export class VideoSyncManager {
       } else {
         // Fallback path for precise seeks: manual seeks when paused, or a
         // rate-limited drag seek when the browser has no usable fastSeek().
-        if (!ctx.isDraggingPlayhead) {
+        if (!isInteractivePreview) {
           scrubSettleState.begin(clipId, time, VideoSyncManager.SCRUB_SETTLE_TIMEOUT_MS, 'manual-seek');
         }
         this.pendingSeekTargets[clipId] = time;
@@ -2621,11 +2627,12 @@ export class VideoSyncManager {
    * instead of relying on blind pre-seeks.
    */
   private warmupUpcomingClips(ctx: FrameContext): void {
-    const windowStart = ctx.isDraggingPlayhead
+    const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
+    const windowStart = isInteractivePreview
       ? Math.max(0, ctx.playheadPosition - VideoSyncManager.SCRUB_WARMUP_LOOKBEHIND)
       : ctx.playheadPosition;
     const windowEnd = ctx.playheadPosition + (
-      ctx.isDraggingPlayhead
+      isInteractivePreview
         ? VideoSyncManager.SCRUB_WARMUP_LOOKAHEAD
         : VideoSyncManager.LOOKAHEAD_TIME
     );
@@ -2633,10 +2640,12 @@ export class VideoSyncManager {
     for (const clip of ctx.clips) {
       const clipStart = clip.startTime;
       const clipEnd = clip.startTime + clip.duration;
-      const clipTime = this.getWarmupClipTime(ctx, clip);
+      const clipTime = isInteractivePreview
+        ? this.getClipSampleTimeNearPlayhead(ctx, clip)
+        : this.getWarmupClipTime(ctx, clip);
       const isCurrentlyActive = clipStart <= ctx.playheadPosition && clipEnd > ctx.playheadPosition;
 
-      if (ctx.isDraggingPlayhead) {
+      if (isInteractivePreview) {
         // While dragging, warm clips near the playhead on both sides so boundary
         // crossings do not cold-start the GPU surface.
         if (isCurrentlyActive || clipEnd <= windowStart || clipStart > windowEnd) continue;
@@ -2900,6 +2909,7 @@ export class VideoSyncManager {
     const timeInfo = getClipTimeInfo(ctx, clip);
     const playbackRuntimeSource = this.getPlaybackRuntimeSourceForClip(ctx, clip);
     const scrubRuntimeSource = this.getScrubRuntimeSourceForClip(ctx, clip);
+    const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
 
     // Use handoff video element for audio continuity at cut points.
     // In full WebCodecs mode, the HTMLVideoElement is only used for audio.
@@ -3028,8 +3038,8 @@ export class VideoSyncManager {
         clearInternalPlaybackHold(clip.id);
       }
       // Detect scrub-stop transition for WebCodecs path
-      const justStoppedDraggingWc = this.clipWasDragging.has(clip.id) && !ctx.isDraggingPlayhead;
-      if (ctx.isDraggingPlayhead) {
+      const justStoppedDraggingWc = this.clipWasDragging.has(clip.id) && !isInteractivePreview;
+      if (isInteractivePreview) {
         this.clipWasDragging.add(clip.id);
       } else if (justStoppedDraggingWc) {
         this.clipWasDragging.delete(clip.id);
@@ -3049,7 +3059,7 @@ export class VideoSyncManager {
         );
       }
 
-      const useDedicatedScrubProvider = ctx.isDraggingPlayhead;
+      const useDedicatedScrubProvider = isInteractivePreview;
       const pausedRuntimeSource = useDedicatedScrubProvider
         ? scrubRuntimeSource
         : playbackRuntimeSource;
@@ -3124,7 +3134,7 @@ export class VideoSyncManager {
           dedicatedScrubProvider,
           `${clip.id}:scrub`,
           timeInfo.clipTime,
-          ctx.isDraggingPlayhead,
+          isInteractivePreview,
           true,
           true
         );
@@ -3135,7 +3145,7 @@ export class VideoSyncManager {
           pausedProvider,
           `${clip.id}:fallback`,
           timeInfo.clipTime,
-          ctx.isDraggingPlayhead,
+          isInteractivePreview,
           true,
           true
         );
@@ -3144,7 +3154,7 @@ export class VideoSyncManager {
           fallbackProvider,
           `${clip.id}:fallback`,
           timeInfo.clipTime,
-          ctx.isDraggingPlayhead,
+          isInteractivePreview,
           false,
           false
         );
@@ -3157,7 +3167,7 @@ export class VideoSyncManager {
       // video.currentTime triggers the browser's internal decoder (heavy for long-GOP).
       // During scrubbing, audio feedback is handled by proxyFrameCache.playScrubAudio()
       // via Web Audio API, so the video element seek is wasted work.
-      if (video && !ctx.isDraggingPlayhead) {
+      if (video && !isInteractivePreview) {
         const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
         if (timeDiff > 0.05) {
           video.currentTime = this.safeSeekTime(video, timeInfo.clipTime);
@@ -3215,7 +3225,7 @@ export class VideoSyncManager {
       state.lastSeekFrame = targetFrame;
       state.isPending = true;
 
-      nativeDecoder.seekToFrame(targetFrame, ctx.isDraggingPlayhead)
+      nativeDecoder.seekToFrame(targetFrame, ctx.isDraggingPlayhead || ctx.hasClipDragPreview)
         .then(() => { state!.isPending = false; })
         .catch((err: unknown) => { state!.isPending = false; console.warn('[NH] seek failed frame', targetFrame, err); });
     }

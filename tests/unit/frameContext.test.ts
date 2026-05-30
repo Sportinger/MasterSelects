@@ -23,7 +23,7 @@ vi.mock('../../src/stores/mediaStore', () => ({
   },
 }));
 
-import { createFrameContext } from '../../src/services/layerBuilder/FrameContext';
+import { createFrameContext, getClipTimeInfo } from '../../src/services/layerBuilder/FrameContext';
 import { playheadState } from '../../src/services/layerBuilder/PlayheadState';
 
 function createTimelineState(overrides: Record<string, unknown> = {}) {
@@ -215,5 +215,40 @@ describe('FrameContext clipsAtTime', () => {
 
     expect(ctx.clipsAtTime).toEqual([]);
     expect(clip.startTime).toBe(8);
+  });
+
+  it('recomputes clip time when a drag preview changes clip start at the same playhead frame', () => {
+    const clip = createMockClip({
+      id: 'clip-a',
+      trackId: 'video-1',
+      startTime: 8,
+      duration: 20,
+      inPoint: 0,
+      outPoint: 20,
+    });
+
+    hoisted.timelineState = createTimelineState({
+      clips: [clip],
+      playheadPosition: 10,
+    });
+
+    const initialCtx = createFrameContext();
+    expect(getClipTimeInfo(initialCtx, initialCtx.clipsAtTime[0]).clipLocalTime).toBe(2);
+
+    hoisted.timelineState = createTimelineState({
+      clips: [clip],
+      playheadPosition: 10,
+      clipDragPreview: {
+        patches: {
+          'clip-a': { startTime: 6 },
+        },
+      },
+    });
+
+    const dragCtx = createFrameContext();
+    const dragTime = getClipTimeInfo(dragCtx, dragCtx.clipsAtTime[0]);
+
+    expect(dragTime.clipLocalTime).toBe(4);
+    expect(dragTime.clipTime).toBe(4);
   });
 });

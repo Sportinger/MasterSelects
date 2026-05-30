@@ -101,6 +101,7 @@ export function createFrameContext(): FrameContext {
 
   const playheadPosition = getPlayheadPosition(storePlayheadPosition);
   const clips = applyClipDragPreview(storeClips, clipDragPreview);
+  const hasClipDragPreview = clipDragPreview != null;
   const activeCompId = mediaState.activeCompositionId || 'default';
   const proxyEnabled = mediaState.proxyEnabled;
   const frameNumber = Math.floor(playheadPosition * LAYER_BUILDER_CONSTANTS.FRAME_RATE);
@@ -126,6 +127,7 @@ export function createFrameContext(): FrameContext {
     tracks,
     isPlaying,
     isDraggingPlayhead,
+    hasClipDragPreview,
     playheadPosition,
     playbackSpeed,
     masterAudioState,
@@ -306,21 +308,20 @@ export function getClipForTrack(ctx: FrameContext, trackId: string): TimelineCli
 
 // === CLIP TIME CALCULATION MEMOIZATION ===
 
-const clipTimeCache = new Map<string, ClipTimeInfo>();
-let lastCacheFrame = -1;
+const clipTimeCacheByContext = new WeakMap<FrameContext, Map<string, ClipTimeInfo>>();
 
 /**
  * Get clip time info with memoization
  * Eliminates repeated calculations of the same clip time
  */
 export function getClipTimeInfo(ctx: FrameContext, clip: TimelineClip): ClipTimeInfo {
-  // Clear cache on new frame
-  if (ctx.frameNumber !== lastCacheFrame) {
-    clipTimeCache.clear();
-    lastCacheFrame = ctx.frameNumber;
+  let clipTimeCache = clipTimeCacheByContext.get(ctx);
+
+  if (!clipTimeCache) {
+    clipTimeCache = new Map<string, ClipTimeInfo>();
+    clipTimeCacheByContext.set(ctx, clipTimeCache);
   }
 
-  // Check cache
   const cached = clipTimeCache.get(clip.id);
   if (cached) return cached;
 
