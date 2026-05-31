@@ -1029,6 +1029,8 @@ interface DockState {
   showPanelType: (type: PanelType) => void;
   hidePanelType: (type: PanelType) => void;
   activatePanelType: (type: PanelType) => void;
+  // Add a panel type as a tab into a specific group (used by the per-panel "+" button)
+  addPanelTypeToGroup: (type: PanelType, groupId: string) => void;
 
   // Multiple preview panels
   addPreviewPanel: (compositionId: string | null) => void;
@@ -1509,6 +1511,38 @@ export const useDockStore = create<DockState>()(
           if (floatingPanel) {
             bringToFront(floatingPanel.id);
           }
+        },
+
+        addPanelTypeToGroup: (type, groupId) => {
+          const resolvedType = resolvePanelType(type);
+          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
+          const { layout, isPanelTypeVisible, activatePanelType } = get();
+
+          // Built-in panels are singletons (id === type). If already visible,
+          // just focus it instead of trying to create a duplicate.
+          if (isPanelTypeVisible(resolvedType)) {
+            activatePanelType(resolvedType);
+            return;
+          }
+
+          const config = getPanelConfig(resolvedType);
+          const newPanel: DockPanel = {
+            id: resolvedType,
+            type: resolvedType,
+            title: config.title,
+          };
+
+          // Insert into the requested group, falling back to any group.
+          const targetGroupId = findTabGroupById(layout.root, groupId)
+            ? groupId
+            : findFirstTabGroup(layout.root)?.id;
+          if (!targetGroupId) return;
+
+          const newLayout = insertPanelAtTarget(layout, newPanel, {
+            groupId: targetGroupId,
+            position: 'center',
+          });
+          set({ layout: newLayout });
         },
 
         addPreviewPanel: (compositionId) => {

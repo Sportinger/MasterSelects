@@ -41,6 +41,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
   const holdTimerRef = useRef<number | null>(null);
   const holdStartRef = useRef<{
     panel: DockPanel;
@@ -50,6 +51,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
   const [holdingTabId, setHoldingTabId] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState<'idle' | 'holding' | 'ready' | 'fading'>('idle');
   const [tabContextMenu, setTabContextMenu] = useState<DockTabContextMenuState | null>(null);
+  const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
 
   const {
     setActiveTab,
@@ -61,6 +63,8 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     activatePanelType,
     closePanelById,
     changePanelType,
+    addPanelTypeToGroup,
+    getVisiblePanelTypes,
     hoveredTabTarget,
     setHoveredTabTarget,
     clearHoveredTabTarget,
@@ -76,6 +80,8 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     activatePanelType: s.activatePanelType,
     closePanelById: s.closePanelById,
     changePanelType: s.changePanelType,
+    addPanelTypeToGroup: s.addPanelTypeToGroup,
+    getVisiblePanelTypes: s.getVisiblePanelTypes,
     hoveredTabTarget: s.hoveredTabTarget,
     setHoveredTabTarget: s.setHoveredTabTarget,
     clearHoveredTabTarget: s.clearHoveredTabTarget,
@@ -452,6 +458,42 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     setTabContextMenu(null);
   }, [changePanelType, tabContextMenu]);
 
+  // "+" button on the tab bar: open a menu of panels that can be added (#190)
+  const handleAddButtonClick = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    setAddMenu((prev) => (prev ? null : { x: rect.left, y: rect.bottom + 2 }));
+  }, []);
+
+  const handleAddPanelType = useCallback((type: PanelType) => {
+    addPanelTypeToGroup(type, group.id);
+    setAddMenu(null);
+  }, [addPanelTypeToGroup, group.id]);
+
+  useEffect(() => {
+    if (!addMenu) return undefined;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (addMenuRef.current?.contains(event.target as Node)) return;
+      setAddMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setAddMenu(null);
+    };
+    const handleWindowChange = () => setAddMenu(null);
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleWindowChange);
+    window.addEventListener('scroll', handleWindowChange, true);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleWindowChange);
+      window.removeEventListener('scroll', handleWindowChange, true);
+    };
+  }, [addMenu]);
+
   useEffect(() => {
     if (!tabContextMenu) return undefined;
 
@@ -773,7 +815,48 @@ export function DockTabPane({ group }: DockTabPaneProps) {
             );
           })
         )}
+        <button
+          className={`dock-tab-add ${addMenu ? 'is-open' : ''}`}
+          type="button"
+          title="Add panel"
+          aria-label="Add panel"
+          onClick={handleAddButtonClick}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          +
+        </button>
       </div>
+
+      {addMenu && (
+        <div
+          ref={addMenuRef}
+          className="dock-tab-add-menu"
+          style={{ left: addMenu.x, top: addMenu.y }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {(() => {
+            const visibleTypes = new Set(getVisiblePanelTypes());
+            return CHANGE_TO_PANEL_TYPES.map((type) => {
+              const config = PANEL_CONFIGS[type];
+              const isVisible = visibleTypes.has(type);
+              const isWip = WIP_PANEL_TYPES.includes(type);
+              return (
+                <button
+                  key={type}
+                  className={`dock-tab-add-menu-item ${isVisible ? 'is-current' : ''}`}
+                  type="button"
+                  onClick={() => handleAddPanelType(type)}
+                  title={isVisible ? `${config.title} (focus existing)` : `Add ${config.title}`}
+                >
+                  <span>{config.title}</span>
+                  {isWip && <span className="dock-tab-context-menu-hint">WIP</span>}
+                  {isVisible && <span className="dock-tab-context-menu-hint">open</span>}
+                </button>
+              );
+            });
+          })()}
+        </div>
+      )}
 
       {tabContextMenu && (
         <div

@@ -189,24 +189,43 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
     records.push(record);
   };
 
+  // Synchronous snapshot phase. A DataTransfer's items/files are only valid
+  // during the drop event dispatch — after the first `await` they get neutered,
+  // so capturing them one-at-a-time inside the async loop drops every file but
+  // the first. Grab all handle promises / entries / files up front instead.
+  interface ItemSnapshot {
+    handlePromise?: Promise<FileSystemHandle | null>;
+    entry: FileSystemEntryLike | null;
+    file: File | null;
+  }
+  const itemSnapshots: ItemSnapshot[] = [];
   for (const item of Array.from(dataTransfer.items ?? [])) {
     if (item.kind !== 'file') {
       continue;
     }
 
     const itemWithHandle = item as DataTransferItemWithHandle;
+    itemSnapshots.push({
+      handlePromise: typeof itemWithHandle.getAsFileSystemHandle === 'function'
+        ? itemWithHandle.getAsFileSystemHandle()
+        : undefined,
+      entry: typeof itemWithHandle.webkitGetAsEntry === 'function'
+        ? itemWithHandle.webkitGetAsEntry()
+        : null,
+      file: item.getAsFile(),
+    });
+  }
+  const looseFiles = Array.from(dataTransfer.files ?? []);
 
-    if (typeof itemWithHandle.getAsFileSystemHandle === 'function') {
+  // Async processing phase — safe to await now that everything is captured.
+  for (const snapshot of itemSnapshots) {
+    if (snapshot.handlePromise) {
       try {
-        const handle = await itemWithHandle.getAsFileSystemHandle();
+        const handle = await snapshot.handlePromise;
         if (handle?.kind === 'file') {
           const fileHandle = handle as FileSystemFileHandle;
           const file = await fileHandle.getFile();
-          pushRecord({
-            file,
-            handle: fileHandle,
-            folderSegments: [],
-          });
+          pushRecord({ file, handle: fileHandle, folderSegments: [] });
           continue;
         }
 
@@ -222,38 +241,28 @@ export async function collectDroppedMediaFiles(dataTransfer: DataTransfer): Prom
       }
     }
 
-    if (typeof itemWithHandle.webkitGetAsEntry === 'function') {
-      const entry = itemWithHandle.webkitGetAsEntry();
-      if (entry?.isFile) {
-        const file = await getFileFromEntry(entry as unknown as FileSystemFileEntryLike);
-        pushRecord({
-          file,
-          folderSegments: [],
-        });
-        continue;
-      }
-
-      if (entry?.isDirectory) {
-        for (const record of await collectFromDirectoryEntry(
-          entry as unknown as FileSystemDirectoryEntryLike,
-          [entry.name],
-        )) {
-          pushRecord(record);
-        }
-        continue;
-      }
+    if (snapshot.entry?.isFile) {
+      const file = await getFileFromEntry(snapshot.entry as unknown as FileSystemFileEntryLike);
+      pushRecord({ file, folderSegments: [] });
+      continue;
     }
 
-    const file = item.getAsFile();
-    if (file) {
-      pushRecord({
-        file,
-        folderSegments: [],
-      });
+    if (snapshot.entry?.isDirectory) {
+      for (const record of await collectFromDirectoryEntry(
+        snapshot.entry as unknown as FileSystemDirectoryEntryLike,
+        [snapshot.entry.name],
+      )) {
+        pushRecord(record);
+      }
+      continue;
+    }
+
+    if (snapshot.file) {
+      pushRecord({ file: snapshot.file, folderSegments: [] });
     }
   }
 
-  for (const file of Array.from(dataTransfer.files ?? [])) {
+  for (const file of looseFiles) {
     if (seenLooseFileKeys.has(buildLooseFileKey(file))) {
       continue;
     }

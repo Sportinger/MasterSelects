@@ -4,7 +4,7 @@ import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { FileTypeIcon } from '../FileTypeIcon';
 import { getItemImportProgress, getItemWaveformProgress, isImportedMediaFileItem } from '../itemTypeGuards';
 import { getLabelHex } from '../labelColors';
-import { MEDIA_BOARD_GRID_PARALLAX, getMediaBoardUiScale } from './constants';
+import { MEDIA_BOARD_GRID_PARALLAX, getMediaBoardGridSize, getMediaBoardUiScale } from './constants';
 import { getMediaBoardOrderKey, getMediaBoardTypeLabel, isMediaBoardFolder } from './layout';
 import type {
   MediaBoardGroupLayout,
@@ -545,6 +545,7 @@ export function MediaBoardView({
       style={{
         '--media-board-grid-x': `${viewport.panX * MEDIA_BOARD_GRID_PARALLAX}px`,
         '--media-board-grid-y': `${viewport.panY * MEDIA_BOARD_GRID_PARALLAX}px`,
+        '--media-board-grid-size': `${getMediaBoardGridSize(viewport.zoom)}px`,
       } as React.CSSProperties}
     >
       <div className="media-board-toolbar">

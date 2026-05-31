@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-05-31",
+    "type": "improve",
+    "title": "MasterSelects 2.0.8",
+    "description": "UI polish batch: drag & drop several files at once into the media panel or straight onto the timeline (both now share the same import path), copy/paste/duplicate media items via right-click or Ctrl+C/V/D with floating action feedback, add panels from a new \"+\" button on every tab bar, scroll the mouse wheel over any dropdown to change its value instantly, the layer-edit backdrop now follows the active color scheme, and the media board's background grid stays visible while zooming with a subtle parallax instead of disappearing.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-05-31",
     "type": "new",
     "title": "MasterSelects 2.0.7",
     "description": "DAW-style MIDI tracks: right-click the timeline's audio section to add a MIDI track, paint clip regions with the new pencil tool, and double-click a clip to open a detached piano-roll editor where you draw, move, resize, and delete notes freely. A built-in triangle-wave synth with ADSR makes clips audible during playback, with full mixer parity and export support.",

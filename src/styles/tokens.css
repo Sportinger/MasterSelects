@@ -287,6 +287,9 @@
   --preview-overlay-bg: rgba(0, 0, 0, 0.6);
   --preview-overlay-bg-hover: rgba(0, 0, 0, 0.8);
 
+  /* Preview edit-mode pasteboard (area around the composition while editing layers) */
+  --preview-pasteboard-bg: #2a2a2a;
+
   /* Chat bubble (user message) */
   --chat-user-bg: var(--gray-500);
   --chat-user-border: var(--gray-450);
@@ -377,6 +380,9 @@
   --preview-overlay-bg: rgba(255, 255, 255, 0.2);
   --preview-overlay-bg-hover: rgba(255, 255, 255, 0.35);
 
+  /* Preview edit-mode pasteboard */
+  --preview-pasteboard-bg: #cdcdcd;
+
   /* Chat bubble */
   --chat-user-bg: #d0d8e8;
   --chat-user-border: #b8c4d8;
@@ -434,6 +440,9 @@
   /* Timeline grid - deeper black tinted lines */
   --timeline-grid-video: #101018;
   --timeline-grid-audio: #101010;
+
+  /* Preview edit-mode pasteboard */
+  --preview-pasteboard-bg: #151515;
 }
 
 }

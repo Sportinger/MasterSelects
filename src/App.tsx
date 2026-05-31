@@ -32,6 +32,7 @@ import { getCampaignById } from './components/common/tutorialCampaigns';
 import type { CampaignStep } from './components/common/tutorialCampaigns';
 import { MobileApp } from './components/mobile';
 import { useTheme } from './hooks/useTheme';
+import { useGlobalSelectWheel } from './hooks/useGlobalSelectWheel';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
 import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
@@ -67,6 +68,9 @@ function App() {
 
   // Apply theme to document root
   useTheme();
+
+  // Scroll the mouse wheel over any native <select> to change its value instantly (#174)
+  useGlobalSelectWheel();
 
   // Initialize global undo/redo system
   const { historyNotice, clearHistoryNotice } = useGlobalHistory();
