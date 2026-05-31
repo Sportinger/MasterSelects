@@ -28,6 +28,7 @@ export const flags = {
   guidedActionsAIReplay: true,  // Visual replay for AI tool calls
   guidedActionsTutorials: true,  // Tutorial scenarios using guided actions
   guidedActionsRecorder: false,  // Future guided action authoring/recording layer
+  timelineCanvasClips: false,  // issue #228: draw timeline clip bodies on a canvas (LOD) instead of one DOM node per clip; React/DOM keeps chrome + active-clip overlay
 };
 
 // Expose for runtime toggling from devtools

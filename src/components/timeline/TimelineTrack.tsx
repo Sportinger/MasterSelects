@@ -6,6 +6,8 @@ import type { AnimatableProperty, BezierHandle, ClipMask, Keyframe } from '../..
 import { CurveEditor } from './CurveEditor';
 import { parseVectorAnimationInputProperty, parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 import { useTimelineStore } from '../../stores/timeline';
+import { flags } from '../../engine/featureFlags';
+import { TimelineClipCanvas, MAX_CANVAS_WIDTH_PX } from './TimelineClipCanvas';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_VIEWPORT_MIN_PX = 1600;
@@ -294,6 +296,21 @@ function TimelineTrackComponent({
     });
   }, [allTrackClips, clipDrag, clipTrim?.clipId, visibleEndTime, visibleStartTime]);
   const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
+  // issue #228 Phase 1: when the flag is on, draw clip bodies on a single canvas
+  // per track instead of one DOM node per clip. Content width is the furthest
+  // clip end in px; at extreme zoom it can exceed the browser canvas limit, in
+  // which case we fall back to the DOM clip path. Display-only (no interaction).
+  const trackContentWidth = useMemo(() => {
+    let max = 0;
+    for (const clip of allTrackClips) {
+      const end = timeToPixel(clip.startTime + clip.duration);
+      if (end > max) max = end;
+    }
+    return max;
+  }, [allTrackClips, timeToPixel]);
+  const useCanvasClips = flags.timelineCanvasClips &&
+    !clipDrag && !clipTrim &&
+    trackContentWidth <= MAX_CANVAS_WIDTH_PX;
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const isPropertiesSelected = propertiesSelection?.kind === 'track' && propertiesSelection.trackId === track.id;
@@ -367,7 +384,18 @@ function TimelineTrackComponent({
         }}
       >
         {/* Render clips belonging to this track */}
-        {trackClips.map((clip) => renderClip(clip, track.id))}
+        {useCanvasClips ? (
+          <TimelineClipCanvas
+            clips={allTrackClips}
+            height={baseHeight}
+            contentWidth={trackContentWidth}
+            timeToPixel={timeToPixel}
+            selectedClipIds={selectedClipIds}
+            trackColor={trackColor ?? 'rgba(120, 160, 200, 1)'}
+          />
+        ) : (
+          trackClips.map((clip) => renderClip(clip, track.id))
+        )}
         {/* Render clip being dragged TO this track */}
         {clipDrag &&
           clipDrag.currentTrackId === track.id &&
