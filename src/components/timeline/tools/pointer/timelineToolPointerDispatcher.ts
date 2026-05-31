@@ -214,6 +214,7 @@ const TIMELINE_TOOL_CURSOR_ICONS = {
   'in-point': { paths: CURSOR_PATHS.trim, hotspotX: 9, hotspotY: 16 },
   'out-point': { paths: CURSOR_PATHS.trim, hotspotX: 19, hotspotY: 16 },
   'pen-keyframe': { paths: CURSOR_PATHS.pen, hotspotX: 5, hotspotY: 20 },
+  'midi-draw': { paths: CURSOR_PATHS.pen, hotspotX: 5, hotspotY: 20 },
 } satisfies Record<TimelineToolId, TimelineToolCursorIconDefinition | undefined>;
 
 const TIMELINE_TOOL_ICON_CURSORS = {
@@ -254,6 +255,7 @@ const TIMELINE_TOOL_ICON_CURSORS = {
   'in-point': createIconCursor(CURSOR_PATHS.trim, 'crosshair', 9, 16),
   'out-point': createIconCursor(CURSOR_PATHS.trim, 'crosshair', 19, 16),
   'pen-keyframe': createIconCursor(CURSOR_PATHS.pen, 'crosshair', 5, 20),
+  'midi-draw': createIconCursor(CURSOR_PATHS.pen, 'crosshair', 5, 20),
 } satisfies Record<TimelineToolId, string | undefined>;
 
 export function getTimelineToolCursor(toolId: TimelineToolId): string | undefined {

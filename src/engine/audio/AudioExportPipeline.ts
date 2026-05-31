@@ -21,6 +21,7 @@ import { AudioEffectRenderer } from './AudioEffectRenderer';
 import { getAudioEffect } from './AudioEffectRegistry';
 import { dbToLinearGain, finiteNumber } from './audioMath';
 import { ClipAudioRenderService, type ClipAudioRenderProgress } from '../../services/audio/ClipAudioRenderService';
+import { renderMidiClipToBuffer } from './MidiClipRenderer';
 import {
   audioGraphPlanStepsToEffectInstances,
 } from '../../services/audio/audioGraphRouteSettings';
@@ -212,7 +213,7 @@ export class AudioExportPipeline {
     try {
       // 2. Extract audio from all clips
       onProgress?.({ phase: 'extracting', percent: 0, message: 'Extracting audio...' });
-      const extractedBuffers = await this.extractAllAudio(audioClips, onProgress);
+      const extractedBuffers = await this.extractAllAudio(audioClips, tracks, onProgress);
 
       if (this.cancelled) return null;
 
@@ -298,7 +299,7 @@ export class AudioExportPipeline {
     try {
       // 2. Extract audio from all clips
       onProgress?.({ phase: 'extracting', percent: 0, message: 'Extracting audio...' });
-      const extractedBuffers = await this.extractAllAudio(audioClips, onProgress);
+      const extractedBuffers = await this.extractAllAudio(audioClips, tracks, onProgress);
 
       if (this.cancelled) return null;
 
@@ -387,6 +388,13 @@ export class AudioExportPipeline {
         return true;
       }
 
+      // MIDI clips are rendered to audio by the track instrument (issue #182).
+      // They carry only note data (a placeholder File), so check that explicitly
+      // before the media-source check below would reject them.
+      if (clip.source?.type === 'midi') {
+        return (clip.midiData?.notes?.length ?? 0) > 0;
+      }
+
       // Check if clip has audio source
       if (!clip.source?.audioElement && !clip.source?.videoElement && !clip.file) {
         return false;
@@ -433,6 +441,7 @@ export class AudioExportPipeline {
    */
   private async extractAllAudio(
     clips: TimelineClip[],
+    tracks: TimelineTrack[],
     onProgress?: AudioExportProgressCallback
   ): Promise<Map<string, AudioBuffer>> {
     const buffers = new Map<string, AudioBuffer>();
@@ -451,6 +460,18 @@ export class AudioExportPipeline {
 
       try {
         let buffer: AudioBuffer;
+
+        // MIDI clips: render the track instrument's synth into a buffer (no file
+        // to decode). Flows through the rest of the pipeline like any audio clip.
+        if (clip.source?.type === 'midi') {
+          const track = tracks.find(t => t.id === clip.trackId);
+          const midiBuffer = await renderMidiClipToBuffer(clip, track, this.settings.sampleRate);
+          buffers.set(
+            clip.id,
+            midiBuffer ?? this.extractor.createSilentBuffer(Math.max(clip.duration, 0.001)),
+          );
+          continue;
+        }
 
         // Prefer audio the app already has decoded (in-memory cache) or a fast
         // PCM-WAV audio proxy on disk, instead of re-decoding the full source.

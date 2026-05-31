@@ -40,7 +40,7 @@
     var(--bg-tertiary);
 }
 
-.track-header.audio {
+.track-header.mixer {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
     linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 18%, var(--bg-tertiary)), var(--bg-tertiary));
@@ -118,7 +118,7 @@
 }
 
 /* Neutral separator line between video and audio track sections */
-.track-header.video + .track-header.audio,
+.track-header.video + .track-header.mixer,
 .track-lane.video + .track-lane.audio {
   border-top: 2px solid color-mix(in srgb, var(--text-muted) 48%, var(--border-color));
 }
@@ -195,6 +195,63 @@
   border: 1px solid rgba(0, 0, 0, 0.62);
   border-radius: 2px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* Track-type identifier glyph (waveform / piano-roll bars) sits on its own line
+   above the track name on mixer tracks. */
+.track-type-icon-badge {
+  display: flex;
+  align-items: center;
+  flex: 0 0 100%;
+  color: #fff;
+  line-height: 0;
+}
+
+.track-type-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+
+/* MIDI instrument picker — full-width row at the bottom of the header (after the
+   name and pan row). flex:0 0 100% forces it onto its own wrapped line and
+   min-width:0 lets the select shrink instead of pushing the header wider. */
+.midi-instrument-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 0;
+  margin-top: 2px;
+  box-sizing: border-box;
+}
+
+.midi-instrument-icon {
+  flex-shrink: 0;
+  color: var(--track-color, var(--accent-timeline));
+  font-size: 11px;
+  line-height: 1;
+}
+
+.midi-instrument-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 4px;
+  border: 1px solid color-mix(in srgb, var(--track-color, var(--accent-timeline)) 45%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--track-color, var(--accent-timeline)) 18%, var(--bg-primary));
+  color: var(--text-primary);
+  font-size: 10px;
+  line-height: 14px;
+  cursor: pointer;
+  outline: none;
+}
+
+.midi-instrument-select:hover {
+  border-color: color-mix(in srgb, var(--track-color, var(--accent-timeline)) 70%, transparent);
 }
 
 .track-name-input {
@@ -275,7 +332,7 @@
   stroke-linejoin: round;
 }
 
-.track-header.audio .track-controls {
+.track-header.mixer .track-controls {
   grid-template-columns: repeat(3, 22px);
   grid-auto-rows: 22px;
   gap: 3px;
@@ -285,7 +342,7 @@
   transform-origin: right center;
 }
 
-.track-header.audio .track-controls .btn-icon {
+.track-header.mixer .track-controls .btn-icon {
   width: 22px;
   height: 22px;
   min-width: 22px;
@@ -302,7 +359,7 @@
     0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-.track-header.audio .track-controls .btn-icon:hover {
+.track-header.mixer .track-controls .btn-icon:hover {
   border-color: rgba(255, 255, 255, 0.24);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
@@ -331,7 +388,7 @@
   display: none;
 }
 
-.track-header.audio.audio-strip-compact .track-controls {
+.track-header.mixer.audio-strip-compact .track-controls {
   --audio-strip-control-scale: 1;
   grid-template-columns: repeat(4, 16px);
   grid-auto-rows: 16px;
@@ -339,7 +396,7 @@
   right: 4px;
 }
 
-.track-header.audio.audio-strip-compact .track-controls .btn-icon {
+.track-header.mixer.audio-strip-compact .track-controls .btn-icon {
   width: 16px;
   height: 16px;
   min-width: 16px;
@@ -364,17 +421,17 @@
   font-size: 8px;
 }
 
-.track-header.audio.audio-strip-compact .audio-button-label-wide,
-.track-header.audio.audio-strip-condensed .audio-button-label-wide {
+.track-header.mixer.audio-strip-compact .audio-button-label-wide,
+.track-header.mixer.audio-strip-condensed .audio-button-label-wide {
   display: none;
 }
 
-.track-header.audio.audio-strip-compact .audio-button-label-short,
-.track-header.audio.audio-strip-condensed .audio-button-label-short {
+.track-header.mixer.audio-strip-compact .audio-button-label-short,
+.track-header.mixer.audio-strip-condensed .audio-button-label-short {
   display: inline;
 }
 
-.track-header.audio.audio-strip-condensed .track-controls {
+.track-header.mixer.audio-strip-condensed .track-controls {
   --audio-strip-control-scale: 1;
   grid-template-columns: repeat(7, 12px);
   grid-auto-rows: 12px;
@@ -383,7 +440,7 @@
   top: 50%;
 }
 
-.track-header.audio.audio-strip-condensed .track-controls .btn-icon {
+.track-header.mixer.audio-strip-condensed .track-controls .btn-icon {
   width: 12px;
   height: 12px;
   min-width: 12px;
@@ -681,7 +738,7 @@
   white-space: nowrap;
 }
 
-.track-header.audio > .track-header-top {
+.track-header.mixer > .track-header-top {
   padding-right: max(66px, calc(84px * var(--audio-strip-control-scale, 1)));
   padding-left: 4px;
 }
@@ -692,11 +749,11 @@
   padding-bottom: 22px;
 }
 
-.track-header.audio.audio-strip-condensed > .track-header-top {
+.track-header.mixer.audio-strip-condensed > .track-header-top {
   padding-right: 96px;
 }
 
-.track-header.audio .track-header-main {
+.track-header.mixer .track-header-main {
   flex-wrap: wrap;
   align-items: center;
   align-content: center;
@@ -707,7 +764,7 @@
   width: 100%;
 }
 
-.track-header.audio .track-header-main > .track-name {
+.track-header.mixer .track-header-main > .track-name {
   max-width: 100%;
   font-size: 12px;
   font-weight: 600;
@@ -734,15 +791,47 @@
   width: 20px;
 }
 
-.track-header.audio.audio-strip-compact .track-header-main {
+.track-header.mixer.audio-strip-compact .track-header-main {
   row-gap: 0;
   padding-left: 22px;
 }
 
-.track-header.audio.audio-strip-compact .track-header-main > .track-name {
+.track-header.mixer.audio-strip-compact .track-header-main > .track-name {
   font-size: 11px;
 }
 
+/* MIDI mixer tracks keep the original two-column compact fader layout that the
+   #182 mixer-parity work was built against (audio adopts staging's redesign below). */
+.track-header.midi.audio-strip-compact .audio-track-pan-row,
+.track-header.midi.audio-strip-condensed .audio-track-pan-row {
+  display: none;
+}
+
+.track-header.midi.audio-strip-compact .audio-track-faders {
+  top: 7px;
+  bottom: 7px;
+  width: 29px;
+  grid-template-columns: 12px 13px;
+  gap: 3px;
+}
+
+.track-header.midi.audio-strip-compact .audio-track-fader-column {
+  grid-template-rows: 1fr;
+}
+
+.track-header.midi.audio-strip-compact .audio-track-fader-control {
+  width: 12px;
+}
+
+.track-header.midi.audio-strip-compact .audio-track-fader {
+  inset: -5px;
+}
+
+.track-header.midi.audio-strip-compact .audio-track-fader-value {
+  display: none;
+}
+
+/* Audio tracks: staging's refined single-column compact layout. */
 .track-header.audio.audio-strip-condensed .audio-track-pan-row {
   display: none;
 }
@@ -782,45 +871,45 @@
   gap: 0;
 }
 
-.track-header.audio.audio-strip-condensed .track-header-main {
+.track-header.mixer.audio-strip-condensed .track-header-main {
   flex-wrap: nowrap;
   padding-left: 0;
 }
 
-.track-header.audio.audio-strip-condensed .track-header-icon {
+.track-header.mixer.audio-strip-condensed .track-header-icon {
   width: 10px;
   height: 10px;
 }
 
-.track-header.audio.audio-strip-condensed .track-header-main > .track-name {
+.track-header.mixer.audio-strip-condensed .track-header-main > .track-name {
   font-size: 9px;
   max-width: 78px;
 }
 
-.track-header.audio.audio-strip-condensed .track-layer-id,
-.track-header.audio.audio-strip-condensed .audio-track-faders {
+.track-header.mixer.audio-strip-condensed .track-layer-id,
+.track-header.mixer.audio-strip-condensed .audio-track-faders {
   display: none;
 }
 
-.track-header.audio.audio-layer-basic > .track-header-top {
+.track-header.mixer.audio-layer-basic > .track-header-top {
   padding-left: 8px;
   padding-right: 60px;
 }
 
-.track-header.audio.audio-layer-basic .track-header-main {
+.track-header.mixer.audio-layer-basic .track-header-main {
   flex-wrap: nowrap;
   padding-left: 0;
   gap: 4px;
 }
 
-.track-header.audio.audio-layer-basic .track-header-main > .track-name {
+.track-header.mixer.audio-layer-basic .track-header-main > .track-name {
   max-width: 116px;
   font-size: 11px;
   font-weight: 500;
 }
 
-.track-header.audio.audio-layer-basic .track-controls,
-.track-header.audio.audio-layer-basic.audio-strip-compact .track-controls {
+.track-header.mixer.audio-layer-basic .track-controls,
+.track-header.mixer.audio-layer-basic.audio-strip-compact .track-controls {
   grid-template-columns: repeat(3, 16px);
   grid-auto-rows: 15px;
   gap: 2px;
@@ -830,9 +919,9 @@
   transform-origin: center;
 }
 
-.track-header.audio.audio-layer-basic .track-controls .btn-icon,
-.track-header.audio.audio-layer-basic.audio-strip-compact .track-controls .btn-icon,
-.track-header.audio.audio-layer-basic.audio-strip-condensed .track-controls .btn-icon {
+.track-header.mixer.audio-layer-basic .track-controls .btn-icon,
+.track-header.mixer.audio-layer-basic.audio-strip-compact .track-controls .btn-icon,
+.track-header.mixer.audio-layer-basic.audio-strip-condensed .track-controls .btn-icon {
   width: 16px;
   height: 15px;
   min-width: 16px;
@@ -845,42 +934,42 @@
   font-weight: inherit;
 }
 
-.track-header.audio.audio-layer-basic .track-controls .btn-icon.solo-active {
+.track-header.mixer.audio-layer-basic .track-controls .btn-icon.solo-active {
   color: var(--warning);
   font-weight: bold;
   opacity: 1;
 }
 
-.track-header.audio.audio-layer-basic .track-controls .btn-icon.locked-active {
+.track-header.mixer.audio-layer-basic .track-controls .btn-icon.locked-active {
   color: var(--warning);
   opacity: 1;
 }
 
-.track-header.audio.audio-layer-basic .track-controls .btn-icon:hover {
+.track-header.mixer.audio-layer-basic .track-controls .btn-icon:hover {
   background: none;
   border: 0;
 }
 
-.track-header.audio.audio-layer-basic.audio-strip-condensed > .track-header-top {
+.track-header.mixer.audio-layer-basic.audio-strip-condensed > .track-header-top {
   padding-left: 8px;
   padding-right: 60px;
 }
 
-.track-header.audio.audio-layer-basic.audio-strip-condensed .track-controls {
+.track-header.mixer.audio-layer-basic.audio-strip-condensed .track-controls {
   grid-template-columns: repeat(3, 16px);
   grid-auto-rows: 15px;
   gap: 2px;
   right: 4px;
 }
 
-.track-header.audio.audio-layer-basic.audio-strip-condensed .track-header-main > .track-name {
+.track-header.mixer.audio-layer-basic.audio-strip-condensed .track-header-main > .track-name {
   max-width: 116px;
   font-size: 11px;
 }
 
-.track-header.audio.audio-layer-basic .audio-track-faders,
-.track-header.audio.audio-layer-basic .audio-track-pan-row,
-.track-header.audio.audio-layer-basic .audio-summary-background-meter {
+.track-header.mixer.audio-layer-basic .audio-track-faders,
+.track-header.mixer.audio-layer-basic .audio-track-pan-row,
+.track-header.mixer.audio-layer-basic .audio-summary-background-meter {
   display: none;
 }
 
@@ -1639,17 +1728,17 @@
   display: none !important;
 }
 
-.timeline-track-section.collapsed .track-header.audio .track-header-main {
+.timeline-track-section.collapsed .track-header.mixer .track-header-main {
   position: relative;
   padding-left: 6px;
   z-index: 2;
 }
 
-.timeline-track-section.collapsed .track-header.audio.audio-summary-meter-visible > .track-header-top {
+.timeline-track-section.collapsed .track-header.mixer.audio-summary-meter-visible > .track-header-top {
   position: relative;
 }
 
-.timeline-track-section.collapsed .track-header.audio .audio-summary-background-meter {
+.timeline-track-section.collapsed .track-header.mixer .audio-summary-background-meter {
   position: absolute;
   left: 6px;
   right: 66px;
@@ -1664,23 +1753,23 @@
   z-index: 1;
 }
 
-.timeline-track-section.collapsed .track-header.audio .audio-summary-background-meter .audio-level-meter-scale {
+.timeline-track-section.collapsed .track-header.mixer .audio-summary-background-meter .audio-level-meter-scale {
   opacity: 0.22;
 }
 
-.timeline-track-section.collapsed .track-header.audio .audio-summary-background-meter .audio-level-meter-peak-fill {
+.timeline-track-section.collapsed .track-header.mixer .audio-summary-background-meter .audio-level-meter-peak-fill {
   opacity: 0.54 !important;
 }
 
-.timeline-track-section.collapsed .track-header.audio .audio-summary-background-meter .audio-level-meter-rms {
+.timeline-track-section.collapsed .track-header.mixer .audio-summary-background-meter .audio-level-meter-rms {
   opacity: 0.74 !important;
 }
 
-.timeline-track-section.collapsed .track-header.audio.audio-summary-meter-visible .track-name {
+.timeline-track-section.collapsed .track-header.mixer.audio-summary-meter-visible .track-name {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.86);
 }
 
-.timeline-track-section.collapsed .track-header.audio .track-controls {
+.timeline-track-section.collapsed .track-header.mixer .track-controls {
   grid-template-columns: repeat(7, 12px);
   grid-auto-rows: 12px;
   gap: 1px;
@@ -1695,19 +1784,19 @@
   justify-content: center;
 }
 
-.timeline-track-section.collapsed .track-header.audio.audio-summary-meter-visible .track-controls {
+.timeline-track-section.collapsed .track-header.mixer.audio-summary-meter-visible .track-controls {
   grid-template-columns: repeat(4, 12px);
 }
 
-.timeline-track-section.collapsed .track-header.audio.audio-summary-meter-visible .audio-button-label-wide {
+.timeline-track-section.collapsed .track-header.mixer.audio-summary-meter-visible .audio-button-label-wide {
   display: none;
 }
 
-.timeline-track-section.collapsed .track-header.audio.audio-summary-meter-visible .audio-button-label-short {
+.timeline-track-section.collapsed .track-header.mixer.audio-summary-meter-visible .audio-button-label-short {
   display: inline;
 }
 
-.timeline-track-section.collapsed .track-header.audio .track-controls .btn-icon,
+.timeline-track-section.collapsed .track-header.mixer .track-controls .btn-icon,
 .timeline-track-section.collapsed .track-header.video .track-controls .btn-icon {
   width: 12px;
   height: 12px;
@@ -1715,21 +1804,21 @@
   font-size: 7px;
 }
 
-.timeline-track-section.collapsed .track-header.audio.audio-layer-basic .track-controls {
+.timeline-track-section.collapsed .track-header.mixer.audio-layer-basic .track-controls {
   grid-template-columns: repeat(3, 16px);
   grid-auto-rows: 15px;
   gap: 2px;
   right: 4px;
 }
 
-.timeline-track-section.collapsed .track-header.audio.audio-layer-basic .track-controls .btn-icon {
+.timeline-track-section.collapsed .track-header.mixer.audio-layer-basic .track-controls .btn-icon {
   width: 16px;
   height: 15px;
   min-width: 16px;
   font-size: 9px;
 }
 
-.timeline-container.audio-mode-detailed .track-header.audio,
+.timeline-container.audio-mode-detailed .track-header.mixer,
 .timeline-container.audio-mode-detailed .track-lane.audio {
   border-color: color-mix(in srgb, var(--track-color, #303030) 42%, var(--border-color));
 }
@@ -1754,7 +1843,7 @@
     );
 }
 
-.timeline-container.audio-mode-spectral .track-header.audio,
+.timeline-container.audio-mode-spectral .track-header.mixer,
 .timeline-container.audio-mode-spectral .track-lane.audio {
   border-color: color-mix(in srgb, var(--track-color, #303030) 42%, var(--border-color));
 }
@@ -1798,12 +1887,12 @@
   opacity: 1;
 }
 
-.timeline-container.audio-focus-mode .track-header.audio,
+.timeline-container.audio-focus-mode .track-header.mixer,
 .timeline-container.audio-focus-mode .track-lane.audio {
   border-color: color-mix(in srgb, var(--track-color, #303030) 64%, var(--border-color));
 }
 
-.timeline-container.audio-focus-mode .track-header.audio {
+.timeline-container.audio-focus-mode .track-header.mixer {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent 68%),
     var(--bg-tertiary);
@@ -1829,7 +1918,7 @@
     );
 }
 
-.timeline-container.audio-layer-basic .track-header.audio {
+.timeline-container.audio-layer-basic .track-header.mixer {
   background: var(--bg-tertiary);
 }
 
@@ -1851,7 +1940,7 @@
     );
 }
 
-.timeline-container.audio-layer-basic .track-header.audio,
+.timeline-container.audio-layer-basic .track-header.mixer,
 .timeline-container.audio-layer-basic .track-lane.audio {
   border-color: var(--border-color);
 }
@@ -1860,9 +1949,9 @@
   background: transparent;
 }
 
-.timeline-container.audio-focus-mode .track-header.video + .track-header.audio,
+.timeline-container.audio-focus-mode .track-header.video + .track-header.mixer,
 .timeline-container.audio-focus-mode .track-lane.video + .track-lane.audio,
-.timeline-container.video-focus-mode .track-header.video + .track-header.audio,
+.timeline-container.video-focus-mode .track-header.video + .track-header.mixer,
 .timeline-container.video-focus-mode .track-lane.video + .track-lane.audio {
   border-top-color: color-mix(in srgb, var(--text-muted) 48%, var(--border-color));
 }

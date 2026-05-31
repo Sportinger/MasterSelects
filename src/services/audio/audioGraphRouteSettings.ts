@@ -750,6 +750,37 @@ export function audioGraphPlanStepsToEffectInstances(
     });
 }
 
+/**
+ * Track-level live route settings (no clip), used to route a generated per-track
+ * source — the MIDI synth bus — through the same gain/EQ/FX/pan/sends/master path
+ * as media tracks (issue #182, Phase 4b Step 2). Mirrors the track + master parts
+ * of createLiveAudioRouteSettings.
+ */
+export function createTrackLiveAudioRouteSettings(input: {
+  track: TimelineTrack;
+  masterAudioState?: MasterAudioState;
+}): LiveAudioRouteSettings {
+  const trackEffectSettings = collectAudioEffectInstanceRouteSettings(input.track.audioState?.effectStack);
+  const masterEffectSettings = collectAudioEffectInstanceRouteSettings(input.masterAudioState?.effectStack);
+
+  const route = createNeutralEffectSettings();
+  mergeEffectSettings(route, trackEffectSettings);
+
+  const trackVolume = dbToLinearGain(getTrackVolumeDb(input.track));
+  const sendReturnGain = getTrackSendReturnGain(input.track, trackVolume);
+  const masterVolume = dbToLinearGain(input.masterAudioState?.volumeDb);
+
+  route.volume *= trackVolume + sendReturnGain;
+  masterEffectSettings.volume *= masterVolume;
+
+  return {
+    ...route,
+    master: masterEffectSettings,
+    muted: getTrackAudioMuted(input.track),
+    pan: getTrackPan(input.track),
+  };
+}
+
 export function createLiveAudioRouteSettings(input: {
   clip: TimelineClip;
   track?: TimelineTrack;

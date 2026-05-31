@@ -101,11 +101,11 @@ export interface SavedDockTimelineLayout {
   trackHeaderWidth?: number;
   timelineSplitRatio?: number | null;
   trackHeights?: Record<string, number>;
-  trackTypeHeights?: Partial<Record<'video' | 'audio', number>>;
+  trackTypeHeights?: Partial<Record<'video' | 'audio' | 'midi', number>>;
   trackVisibility?: Record<string, boolean>;
-  trackTypeVisibility?: Partial<Record<'video' | 'audio', boolean>>;
-  trackTypeCounts?: Partial<Record<'video' | 'audio', number>>;
-  trackTypeLayouts?: Partial<Record<'video' | 'audio', SavedDockTimelineTrackSlotLayout[]>>;
+  trackTypeVisibility?: Partial<Record<'video' | 'audio' | 'midi', boolean>>;
+  trackTypeCounts?: Partial<Record<'video' | 'audio' | 'midi', number>>;
+  trackTypeLayouts?: Partial<Record<'video' | 'audio' | 'midi', SavedDockTimelineTrackSlotLayout[]>>;
 }
 
 export interface SavedDockTimelineTrackSlotLayout {

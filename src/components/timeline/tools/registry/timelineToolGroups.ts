@@ -68,7 +68,7 @@ export const TIMELINE_TOOL_GROUPS: TimelineToolGroupDefinition[] = [
     tooltipLabel: 'Navigate and mark tools',
     icon: TIMELINE_TOOL_GROUP_ICONS.navigation,
     defaultToolId: 'hand',
-    tools: ['hand', 'zoom', 'marker', 'in-point', 'out-point', 'pen-keyframe'],
+    tools: ['hand', 'zoom', 'marker', 'in-point', 'out-point', 'pen-keyframe', 'midi-draw'],
     shortcutActionId: 'tool.navigationGroup',
   },
 ];

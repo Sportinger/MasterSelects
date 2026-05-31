@@ -80,6 +80,9 @@ describe('timeline tool slice compatibility', () => {
     expect(store.getState().activeTimelineToolId).toBe('pen-keyframe');
 
     store.getState().cycleTimelineToolGroup('navigation');
+    expect(store.getState().activeTimelineToolId).toBe('midi-draw');
+
+    store.getState().cycleTimelineToolGroup('navigation');
     expect(store.getState().activeTimelineToolId).toBe('hand');
   });
 });

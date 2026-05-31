@@ -14,7 +14,7 @@ export interface TrackContextMenuState {
   x: number;
   y: number;
   trackId: string;
-  trackType: 'video' | 'audio';
+  trackType: 'video' | 'audio' | 'midi';
   trackName: string;
 }
 
@@ -82,6 +82,11 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
     onClose();
   };
 
+  const handleAddMidiTrack = () => {
+    useTimelineStore.getState().addTrack('midi');
+    onClose();
+  };
+
   const handleDeleteTrack = () => {
     useTimelineStore.getState().removeTrack(menu.trackId);
     onClose();
@@ -115,6 +120,9 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
       </div>
       <div className="context-menu-item" onClick={handleAddAudioTrack}>
         + Add Audio Track
+      </div>
+      <div className="context-menu-item" onClick={handleAddMidiTrack}>
+        + Add MIDI Track
       </div>
       <div className="context-menu-separator" />
       <div className="context-menu-item" onClick={handleDuplicateTrack}>

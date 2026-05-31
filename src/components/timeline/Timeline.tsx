@@ -2,6 +2,7 @@
 // Composes TimelineRuler, TimelineControls, TimelineHeader, TimelineTrack, TimelineClip, TimelineKeyframes
 
 import { useRef, useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import './Timeline.css';
 import './TimelineTracks.css';
 import { useShallow } from 'zustand/react/shallow';
@@ -50,6 +51,7 @@ import { TimelineEmptyContextMenu } from './TimelineEmptyContextMenu';
 import { InOutContextMenu, type InOutContextMenuState, type InOutPointType } from './InOutContextMenu';
 import { useClipContextMenu } from './useClipContextMenu';
 import { useMarqueeSelection } from './hooks/useMarqueeSelection';
+import { useMidiClipDraw } from './hooks/useMidiClipDraw';
 import { useClipTrim } from './hooks/useClipTrim';
 import { useClipDrag } from './hooks/useClipDrag';
 import { useClipFade } from './hooks/useClipFade';
@@ -63,6 +65,7 @@ import { useTimelineHelpers } from './hooks/useTimelineHelpers';
 import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { getTimelineToolCursor } from './tools/pointer/timelineToolPointerDispatcher';
+import { isAudioSectionTrackType } from './utils/trackSection';
 import {
   MIN_ZOOM,
   MAX_ZOOM,
@@ -388,12 +391,13 @@ function buildCompositionSwitchTracks(
   if (!targetTracks || targetTracks.length === 0) return currentTracks;
 
   const currentById = new Map(currentTracks.map((track) => [track.id, track]));
-  const currentByType = {
+  const currentByType: Record<TimelineTrackType['type'], TimelineTrackType[]> = {
     video: currentTracks.filter((track) => track.type === 'video'),
     audio: currentTracks.filter((track) => track.type === 'audio'),
+    midi: currentTracks.filter((track) => track.type === 'midi'),
   };
   const usedCurrentIds = new Set<string>();
-  const typeCursor: Record<TimelineTrackType['type'], number> = { video: 0, audio: 0 };
+  const typeCursor: Record<TimelineTrackType['type'], number> = { video: 0, audio: 0, midi: 0 };
 
   const mappedTargetTracks = targetTracks.map((targetTrack) => {
     const sameIdTrack = currentById.get(targetTrack.id);
@@ -1533,6 +1537,24 @@ export function Timeline() {
     getExpandedTrackHeight: getRenderedTrackHeight,
   });
 
+  // MIDI pencil tool: draw MIDI clip regions on MIDI track lanes (issue #182)
+  const { midiDrawGhost, handleMidiDrawMouseDown } = useMidiClipDraw({
+    trackLanesRef,
+    scrollX,
+    tracks,
+    activeTimelineToolId,
+    pixelToTime,
+  });
+
+  const handleSectionTracksMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      handleMidiDrawMouseDown(e);
+      if (e.defaultPrevented) return;
+      handleMarqueeMouseDown(e);
+    },
+    [handleMidiDrawMouseDown, handleMarqueeMouseDown],
+  );
+
   // Pick whip drag - extracted to hook
   const {
     pickWhipDrag,
@@ -1546,7 +1568,7 @@ export function Timeline() {
   // Performance: Memoize video/audio track filtering and solo state
   const { videoTracks, audioTracks, anyVideoSolo, anyAudioSolo } = useMemo(() => {
     const vTracks = tracks.filter(t => t.type === 'video');
-    const aTracks = tracks.filter(t => t.type === 'audio');
+    const aTracks = tracks.filter(t => isAudioSectionTrackType(t.type));
     return {
       videoTracks: vTracks,
       audioTracks: aTracks,
@@ -1557,7 +1579,7 @@ export function Timeline() {
 
   const { anyViewVideoSolo, anyViewAudioSolo } = useMemo(() => {
     const vTracks = timelineViewTracks.filter(t => t.type === 'video');
-    const aTracks = timelineViewTracks.filter(t => t.type === 'audio');
+    const aTracks = timelineViewTracks.filter(t => isAudioSectionTrackType(t.type));
     return {
       anyViewVideoSolo: vTracks.some(t => t.solo),
       anyViewAudioSolo: aTracks.some(t => t.solo),
@@ -1584,7 +1606,7 @@ export function Timeline() {
     [timelineViewTracks],
   );
   const timelineViewAudioTracks = useMemo(
-    () => timelineViewTracks.filter(track => track.type === 'audio'),
+    () => timelineViewTracks.filter(track => isAudioSectionTrackType(track.type)),
     [timelineViewTracks],
   );
   const displayedVideoTracks = useMemo(
@@ -3356,7 +3378,7 @@ export function Timeline() {
 
             <div
               className={`timeline-section-tracks ${clipDrag ? 'dragging-clip' : ''} ${marquee ? 'marquee-selecting' : ''} ${isExporting ? 'export-locked' : ''}`}
-              onMouseDown={handleMarqueeMouseDown}
+              onMouseDown={handleSectionTracksMouseDown}
             >
               <div
                 className={`track-lanes-scroll ${sectionPhaseClass} timeline-grid-${gridPlan.mode}`}
@@ -3901,6 +3923,24 @@ export function Timeline() {
                     height: Math.abs(marquee.currentY - marquee.startY),
                   }}
                 />
+              )}
+              {midiDrawGhost && createPortal(
+                <div
+                  className="midi-draw-ghost"
+                  style={{
+                    position: 'fixed',
+                    left: midiDrawGhost.left,
+                    top: midiDrawGhost.top,
+                    width: Math.max(1, midiDrawGhost.width),
+                    height: midiDrawGhost.height,
+                    background: 'rgba(120, 170, 255, 0.25)',
+                    border: '1px solid rgba(150, 190, 255, 0.9)',
+                    borderRadius: 3,
+                    pointerEvents: 'none',
+                    zIndex: 10000,
+                  }}
+                />,
+                document.body,
               )}
               {timelineRangeSelection && timelineRangeSelection.endTime > timelineRangeSelection.startTime && (
                 <div

@@ -40,6 +40,7 @@ export type ShortcutActionId =
   | 'tool.hand'
   | 'tool.zoom'
   | 'tool.penKeyframe'
+  | 'tool.midiDraw'
   | 'edit.splitAtPlayhead'
   | 'edit.splitAllAtPlayhead'
   | 'edit.trimStartToPlayhead'

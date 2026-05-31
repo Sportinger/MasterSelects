@@ -688,6 +688,8 @@ function convertProjectCompositionToStore(
         signalRenderAdapterId: c.signalRenderAdapterId,
         sourceType: c.sourceType || 'video',
         naturalDuration: c.naturalDuration,
+        // MIDI note data (issue #182) — restored into loadState's MIDI clip path.
+        midiData: c.midiData ? structuredClone(c.midiData) : undefined,
         thumbnails: c.thumbnails,
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,

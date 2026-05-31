@@ -44,6 +44,7 @@ import type {
   ClipAudioStemState,
   AudioStemKind,
 } from '../../types';
+import type { MidiNote, MidiInstrument } from '../../types/midiClip';
 import type { MotionColor, MotionLayerDefinition, ShapePrimitive } from '../../types/motionDesign';
 import type { Composition } from '../mediaStore';
 import type { LabelColor } from '../mediaStore/types';
@@ -141,7 +142,8 @@ export type TimelineToolId =
   | 'marker'
   | 'in-point'
   | 'out-point'
-  | 'pen-keyframe';
+  | 'pen-keyframe'
+  | 'midi-draw';
 
 export type TimelineToolPreviewPlane = 'clip-local' | 'section-scrolled' | 'global-fixed';
 
@@ -330,7 +332,7 @@ export interface TimelineState {
   selectedClipIds: Set<string>;
   primarySelectedClipId: string | null; // The clip the user actually clicked (for Properties panel)
   propertiesSelection: TimelinePropertiesSelection;
-  targetTrackIdByType: Partial<Record<'video' | 'audio', string>>;
+  targetTrackIdByType: Partial<Record<'video' | 'audio' | 'midi', string>>;
 
   // Render layers (populated by useLayerSync from timeline clips, used by engine)
   layers: Layer[];
@@ -446,7 +448,7 @@ export interface TimelineState {
 
 // Track actions interface
 export interface TrackActions {
-  addTrack: (type: 'video' | 'audio') => string;
+  addTrack: (type: 'video' | 'audio' | 'midi') => string;
   removeTrack: (id: string) => void;
   renameTrack: (id: string, name: string) => void;
   setTrackLabelColor: (id: string, labelColor: LabelColor) => void;
@@ -479,12 +481,14 @@ export interface TrackActions {
   clearStaleRuntimeAudioMeters: (maxAgeMs?: number, now?: number) => void;
   setTrackLocked: (id: string, locked: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;
-  scaleTracksOfType: (type: 'video' | 'audio', delta: number, baselineHeight?: number) => void;
+  scaleTracksOfType: (type: 'video' | 'audio' | 'midi', delta: number, baselineHeight?: number) => void;
   setTargetTrack: (trackId: string | null) => void;
   clearTargetTracks: () => void;
   // Track parenting (layer linking)
   setTrackParent: (trackId: string, parentTrackId: string | null) => void;
   getTrackChildren: (trackId: string) => TimelineTrack[];
+  // MIDI instrument (issue #182): patch the synth/instrument on a MIDI track.
+  setTrackMidiInstrument: (trackId: string, patch: Partial<MidiInstrument>) => void;
 }
 
 // Clip actions interface
@@ -501,6 +505,20 @@ export interface TextClipActions {
 export interface SolidClipActions {
   addSolidClip: (trackId: string, startTime: number, color?: string, duration?: number, skipMediaItem?: boolean) => string | null;
   updateSolidColor: (clipId: string, color: string) => void;
+}
+
+// MIDI clip actions (issue #182, extracted to midiClipSlice).
+export interface MidiClipActions {
+  addMidiClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  // Note CRUD for the piano-roll editor. `start`/`duration` are seconds relative to clip start.
+  addMidiNote: (clipId: string, note: { pitch: number; start: number; duration: number; velocity?: number }) => string | null;
+  updateMidiNote: (
+    clipId: string,
+    noteId: string,
+    patch: Partial<Pick<MidiNote, 'pitch' | 'start' | 'duration' | 'velocity'>>,
+    options?: { captureHistory?: boolean },
+  ) => void;
+  removeMidiNote: (clipId: string, noteId: string) => void;
 }
 
 export interface MathSceneClipActions {
@@ -650,7 +668,7 @@ export interface CoreClipActions {
 }
 
 // Combined ClipActions = all sub-interfaces
-export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MathSceneClipActions & MotionClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & ColorCorrectionActions & LinkedGroupActions & DownloadClipActions;
+export type ClipActions = CoreClipActions & TextClipActions & SolidClipActions & MidiClipActions & MathSceneClipActions & MotionClipActions & MeshClipActions & CameraClipActions & SplatEffectorClipActions & ClipEffectActions & ColorCorrectionActions & LinkedGroupActions & DownloadClipActions;
 
 // Playback actions interface
 export interface PlaybackActions {
@@ -1091,7 +1109,7 @@ export interface ClipboardClipData {
   // Serializable clip data (without DOM elements)
   id: string;
   trackId: string;
-  trackType: 'video' | 'audio';
+  trackType: 'video' | 'audio' | 'midi';
   name: string;
   mediaFileId?: string;
   signalAssetId?: string;

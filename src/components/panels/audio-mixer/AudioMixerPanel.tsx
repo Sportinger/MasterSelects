@@ -712,8 +712,10 @@ export function AudioMixerPanel() {
 
   useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
 
+  // MIDI tracks appear as mixer channel strips too (issue #182): their synth is
+  // routed through a per-track volume/pan/meter bus, so they behave like audio.
   const audioTracks = useMemo(
-    () => tracks.filter(track => track.type === 'audio'),
+    () => tracks.filter(track => track.type === 'audio' || track.type === 'midi'),
     [tracks],
   );
   useEffect(() => {

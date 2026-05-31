@@ -14,6 +14,7 @@ import {
   MasterAudioControlsTab,
   MasterAudioEffectsTab,
 } from './AudioBusPropertiesTabs';
+import { MidiInstrumentTab } from './MidiInstrumentTab';
 import { DEFAULT_MASTER_AUDIO_STATE } from './audioBusDefaults';
 import './PropertiesPanel.css';
 import './EffectsTab.css';
@@ -22,7 +23,7 @@ import './TextTab.css';
 import './VolumeBlendshapeTabs.css';
 
 // Tab type
-type PropertiesTab = 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip' | 'track-controls' | 'track-effects' | 'track-sends' | 'master-controls' | 'master-effects';
+type PropertiesTab = 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip' | 'track-controls' | 'track-effects' | 'track-sends' | 'track-instrument' | 'master-controls' | 'master-effects';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
@@ -293,17 +294,32 @@ export function PropertiesPanel() {
   if (selectedPropertiesTrack) {
     const trackEffectCount = selectedPropertiesTrack.audioState?.effectStack?.length ?? 0;
     const trackSendCount = selectedPropertiesTrack.audioState?.sends?.length ?? 0;
+    const isAudioTrack = selectedPropertiesTrack.type === 'audio';
+    const isMidiTrack = selectedPropertiesTrack.type === 'midi';
+    // Audio + MIDI tracks share the full bus controls (volume/pan/mute/solo/meter,
+    // EQ, the effect stack and sends); MIDI tracks additionally expose Instrument.
+    const hasBusControls = isAudioTrack || isMidiTrack;
 
     return (
       <div className="properties-panel">
         <div className="properties-tabs">
-          <button
-            className={`tab-btn ${activeTab === 'track-controls' ? 'active' : ''}`}
-            onClick={() => setActiveTab('track-controls')}
-          >
-            {scopedTabLabel('TRACK', 'Controls')}
-          </button>
-          {selectedPropertiesTrack.type === 'audio' && (
+          {hasBusControls && (
+            <button
+              className={`tab-btn ${activeTab === 'track-controls' ? 'active' : ''}`}
+              onClick={() => setActiveTab('track-controls')}
+            >
+              {scopedTabLabel('TRACK', 'Controls')}
+            </button>
+          )}
+          {isMidiTrack && (
+            <button
+              className={`tab-btn ${activeTab === 'track-instrument' ? 'active' : ''}`}
+              onClick={() => setActiveTab('track-instrument')}
+            >
+              {scopedTabLabel('TRACK', 'Instrument')}
+            </button>
+          )}
+          {hasBusControls && (
             <>
               <button
                 className={`tab-btn ${activeTab === 'track-effects' ? 'active' : ''}`}
@@ -322,14 +338,15 @@ export function PropertiesPanel() {
         </div>
 
         <div className="properties-content">
-          {selectedPropertiesTrack.type === 'audio' ? (
+          {hasBusControls ? (
             <>
               {activeTab === 'track-controls' && <AudioTrackControlsTab track={selectedPropertiesTrack} />}
-              {activeTab === 'track-effects' && <AudioTrackEffectsTab track={selectedPropertiesTrack} />}
-              {activeTab === 'track-sends' && <AudioTrackSendsTab track={selectedPropertiesTrack} />}
+              {isMidiTrack && activeTab === 'track-instrument' && <MidiInstrumentTab track={selectedPropertiesTrack} />}
+              {hasBusControls && activeTab === 'track-effects' && <AudioTrackEffectsTab track={selectedPropertiesTrack} />}
+              {hasBusControls && activeTab === 'track-sends' && <AudioTrackSendsTab track={selectedPropertiesTrack} />}
             </>
           ) : (
-            <div className="panel-empty"><p>Track properties are available for audio tracks.</p></div>
+            <div className="panel-empty"><p>Track properties are available for audio and MIDI tracks.</p></div>
           )}
         </div>
       </div>

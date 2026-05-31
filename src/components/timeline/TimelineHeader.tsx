@@ -56,6 +56,7 @@ import {
 } from '../../engine/audio/eq/AudioEqDefaults';
 import { normalizeAudioEqParams } from '../../engine/audio/eq/AudioEqLegacy';
 import { getAudioEffectParamPathValue } from '../../utils/audioEffectParamPath';
+import { MIDI_INSTRUMENT_OPTIONS, type MidiInstrument } from '../../types/midiClip';
 
 type KeyframeTrackClip = {
   id: string;
@@ -97,6 +98,53 @@ function TrackHeaderIcon({ name }: { name: TrackHeaderIconName }) {
   return name === 'eyeOff'
     ? <IconEyeOff className="track-header-icon" aria-hidden="true" focusable="false" />
     : <IconEye className="track-header-icon" aria-hidden="true" focusable="false" />;
+}
+
+// Track-type identifier glyphs shown above the name on mixer tracks, so audio vs
+// MIDI is recognizable at a glance (Cubase-style): a waveform for audio, and
+// piano-roll note bars for MIDI.
+function MidiTrackTypeIcon() {
+  return (
+    <svg
+      className="track-type-icon"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="1" y="2.6" width="6.5" height="2.6" rx="1.3" fill="currentColor" />
+      <rect x="6" y="6.7" width="9" height="2.6" rx="1.3" fill="currentColor" />
+      <rect x="2.5" y="10.8" width="5.5" height="2.6" rx="1.3" fill="currentColor" />
+    </svg>
+  );
+}
+
+function AudioTrackTypeIcon() {
+  // Symmetric waveform bars (mirrored around the vertical center).
+  const bars = [3, 6, 11, 7, 13, 5, 9, 4];
+  return (
+    <svg
+      className="track-type-icon"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {bars.map((h, i) => (
+        <rect
+          key={i}
+          x={1 + i * 1.85}
+          y={(16 - h) / 2}
+          width="1.1"
+          height={h}
+          rx="0.55"
+          fill="currentColor"
+        />
+      ))}
+    </svg>
+  );
 }
 
 const usesCameraPropertyModel = (clip: KeyframeTrackClip | null | undefined): boolean => {
@@ -1289,14 +1337,22 @@ function TimelineHeaderComponent({
   const trackVolumeLabel = formatAudioTrackVolumeDb(trackVolumeDb);
   const trackPanLabel = formatAudioTrackPan(trackPan);
   const trackVolumeUnit = Math.max(0, Math.min(1, (trackVolumeDb + 60) / 78));
-  const audioHeaderDensity = track.type === 'audio'
+  const isAudioTrack = track.type === 'audio';
+  const isMidiTrack = track.type === 'midi';
+  // Audio and MIDI tracks share the same mixer strip (fader, pan, solo/mute/rec,
+  // FX, sends, meter). MIDI additionally gets an instrument picker (issue #182).
+  const isMixerTrack = isAudioTrack || isMidiTrack;
+  // Instrument selection for MIDI tracks. The dropdown is driven by the
+  // `MidiInstrument` `kind` discriminator, so future instruments (sampler, FM, …)
+  // appear here automatically once added to MIDI_INSTRUMENT_OPTIONS (issue #182).
+  const midiInstrumentKind = (isMidiTrack ? track.midiInstrument?.kind : undefined) ?? 'simple-synth';
+  const audioHeaderDensity = isMixerTrack
     ? getAudioTrackHeaderDensity(baseHeight)
     : null;
-  const isAudioTrack = track.type === 'audio';
-  const isMutedTrack = isAudioTrack && effectiveMuted;
+  const isMutedTrack = isMixerTrack && effectiveMuted;
   const isHiddenTrack = track.type === 'video' && track.visible === false;
   const showAudioSummaryMeter = isAudioTrack && audioLayerAdvancedMode && showCollapsedAudioSummaryMeter;
-  const showAdvancedAudioControls = isAudioTrack && audioLayerAdvancedMode && !showCollapsedAudioSummaryMeter;
+  const showAdvancedAudioControls = isMixerTrack && audioLayerAdvancedMode && !showCollapsedAudioSummaryMeter;
   const audioHeaderControlScale = showAdvancedAudioControls && audioHeaderDensity === 'full'
     ? Math.max(0.78, Math.min(1, baseHeight / 96))
     : 1;
@@ -1310,7 +1366,7 @@ function TimelineHeaderComponent({
   const trackHeaderStyle = {
     height: dynamicHeight,
     '--track-color': trackColor,
-    ...(isAudioTrack ? {
+    ...(isMixerTrack ? {
       '--audio-strip-control-scale': audioHeaderControlScale.toFixed(3),
       '--audio-strip-fader-scale': audioHeaderFaderScale.toFixed(3),
     } : {}),
@@ -1408,7 +1464,7 @@ function TimelineHeaderComponent({
     if ((e.target as HTMLElement).closest('.audio-track-faders')) return;
     if ((e.target as HTMLElement).closest('.audio-track-popover')) return;
     setTargetTrack(track.id);
-    if (isAudioTrack) {
+    if (isMixerTrack) {
       useTimelineStore.getState().selectTrackProperties(track.id);
     }
   };
@@ -1435,7 +1491,7 @@ function TimelineHeaderComponent({
 
   return (
     <div
-      className={`track-header ${track.type} ${isDimmed ? 'dimmed' : ''} ${
+      className={`track-header ${track.type} ${isMixerTrack ? 'mixer' : ''} ${isDimmed ? 'dimmed' : ''} ${
         isExpanded ? 'expanded' : ''
       } ${track.locked ? 'locked' : ''} ${
         isMutedTrack ? 'track-muted' : ''
@@ -1443,7 +1499,7 @@ function TimelineHeaderComponent({
         isHiddenTrack ? 'track-hidden' : ''
       } ${
         audioHeaderDensity ? `audio-strip-${audioHeaderDensity}` : ''
-      } ${isAudioTrack ? (audioLayerAdvancedMode ? 'audio-layer-advanced' : 'audio-layer-basic') : ''} ${
+      } ${isMixerTrack ? (audioLayerAdvancedMode ? 'audio-layer-advanced' : 'audio-layer-basic') : ''} ${
         showAdvancedAudioControls && (audioFxOpen || audioSendsOpen) ? 'popover-open' : ''
       } ${
         showAudioSummaryMeter ? 'audio-summary-meter-visible' : ''
@@ -1461,7 +1517,7 @@ function TimelineHeaderComponent({
     >
       <div
         className="track-header-top"
-        style={{ height: baseHeight, cursor: (track.type === 'video' || track.type === 'audio') ? 'pointer' : 'default' }}
+        style={{ height: baseHeight, cursor: (track.type === 'video' || isMixerTrack) ? 'pointer' : 'default' }}
         onClick={handleHeaderClick}
       >
         {showAudioSummaryMeter && (
@@ -1473,8 +1529,17 @@ function TimelineHeaderComponent({
           />
         )}
         <div className="track-header-main">
+          {/* MIDI identifier glyph sits above the name (piano-roll bars). */}
+          {isMixerTrack && (
+            <span
+              className="track-type-icon-badge"
+              title={isMidiTrack ? 'MIDI track' : 'Audio track'}
+            >
+              {isMidiTrack ? <MidiTrackTypeIcon /> : <AudioTrackTypeIcon />}
+            </span>
+          )}
           {/* Video and audio tracks always get expand arrow */}
-          {(track.type === 'video' || track.type === 'audio') && (
+          {(track.type === 'video' || isMixerTrack) && (
             <span
               className={`track-expand-arrow ${isExpanded ? 'expanded' : ''} ${
                 hasKeyframes ? 'has-keyframes' : ''
@@ -1543,9 +1608,33 @@ function TimelineHeaderComponent({
               <span className="audio-track-pan-value" aria-hidden="true">{trackPanLabel}</span>
             </div>
           )}
+          {isMidiTrack && (
+            <div
+              className="midi-instrument-row"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <span className="midi-instrument-icon" aria-hidden="true">{'♪'}</span>
+              <select
+                className="midi-instrument-select"
+                value={midiInstrumentKind}
+                aria-label={`${track.name} instrument`}
+                title="MIDI instrument"
+                onChange={(event) =>
+                  useTimelineStore.getState().setTrackMidiInstrument(track.id, {
+                    kind: event.currentTarget.value as MidiInstrument['kind'],
+                  })
+                }
+              >
+                {MIDI_INSTRUMENT_OPTIONS.map((option) => (
+                  <option key={option.kind} value={option.kind}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
-        <div className={`track-controls ${track.type === 'audio' ? 'audio-strip-controls' : ''}`}>
-          {track.type === 'audio' ? (
+        <div className={`track-controls ${isMixerTrack ? 'audio-strip-controls' : ''}`}>
+          {isMixerTrack ? (
             showAudioSummaryMeter ? (
               <>
                 <button
@@ -1792,7 +1881,7 @@ function TimelineHeaderComponent({
         )}
       </div>
       {/* Property labels - shown when track is expanded (for both video and audio with keyframes) */}
-      {(track.type === 'video' || track.type === 'audio') && isExpanded && (
+      {(track.type === 'video' || isMixerTrack) && isExpanded && (
         <TrackPropertyLabels
           trackId={track.id}
           selectedClip={selectedTrackClip || null}

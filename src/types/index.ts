@@ -38,6 +38,7 @@ export type TimelineSourceType =
   | 'motion-shape'
   | 'motion-null'
   | 'motion-adjustment'
+  | 'midi'
   | VectorAnimationProvider;
 
 export type ModelSequencePlaybackMode = 'clamp' | 'loop';
@@ -807,6 +808,8 @@ export interface TimelineClip {
   text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
+  // MIDI clip support (issue #182): note data; instrument lives on the track
+  midiData?: import('./midiClip').MidiClipData;
   // YouTube download support
   isPendingDownload?: boolean;  // True if clip is being downloaded
   downloadProgress?: number;    // 0-100 download progress
@@ -826,7 +829,7 @@ export interface TimelineClip {
 export interface TimelineTrack {
   id: string;
   name: string;
-  type: 'video' | 'audio';
+  type: 'video' | 'audio' | 'midi';
   height: number;
   labelColor?: import('../stores/mediaStore/types').LabelColor;
   muted: boolean;
@@ -835,6 +838,8 @@ export interface TimelineTrack {
   locked?: boolean;
   parentTrackId?: string;  // ID of parent track for layer parenting (like AE parenting)
   audioState?: TrackAudioState;
+  // MIDI track support: instrument that renders this track's MIDI clips (issue #182)
+  midiInstrument?: import('./midiClip').MidiInstrument;
 }
 
 export interface TimelineState {
@@ -898,6 +903,8 @@ export interface SerializableClip {
   text3DProperties?: Text3DProperties;
   // Solid clip support
   solidColor?: string;
+  // MIDI clip support (issue #182)
+  midiData?: import('./midiClip').MidiClipData;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   mathScene?: MathSceneDefinition;
   motion?: MotionLayerDefinition;

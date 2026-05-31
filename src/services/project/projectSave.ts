@@ -243,6 +243,10 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       signalRenderAdapterId: c.signalRenderAdapterId,
       sourceType: c.source?.type || c.sourceType || 'video',
       naturalDuration: c.source?.naturalDuration || c.naturalDuration,
+      // MIDI note data (issue #182) — notes on the clip, instrument on the track.
+      midiData: (c.source?.type === 'midi' || c.sourceType === 'midi') && c.midiData
+        ? structuredClone(c.midiData)
+        : undefined,
       thumbnails: c.thumbnails,
       linkedClipId: c.linkedClipId,
       linkedGroupId: c.linkedGroupId,

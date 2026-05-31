@@ -51,7 +51,10 @@ const audioRoutingDebugCounters = {
 const reverbImpulseCache = new Map<string, AudioBuffer>();
 
 interface AudioRoute {
-  sourceNode: MediaElementAudioSourceNode;
+  // AudioNode (not just MediaElementAudioSourceNode) so the same chain machinery
+  // can route a generated source — e.g. the MIDI synth bus — through track
+  // gain/FX/EQ/pan/meter into the shared master bus (issue #182, Phase 4b Step 2).
+  sourceNode: AudioNode;
   gainNode: GainNode;
   panNode: StereoPannerNode;
   analyserNode: AnalyserNode;
@@ -912,6 +915,10 @@ class AudioRoutingManager {
   private audioContext: AudioContext | null = null;
   private masterRoute: MasterAudioRoute | null = null;
   private routes = new Map<HTMLMediaElement, AudioRoute>();
+  // Routes whose source is an arbitrary AudioNode (e.g. the per-track MIDI synth
+  // bus), keyed by a stable string id (the track id). They reuse the exact same
+  // gain/FX/EQ/pan/meter chain as media routes and feed the shared master bus.
+  private nodeRoutes = new Map<string, AudioRoute>();
   private routeCreateFailures = new WeakMap<HTMLMediaElement, { retryAt: number; lastLoggedAt: number }>();
   private contextResumePromise: Promise<void> | null = null;
 
@@ -1147,6 +1154,184 @@ class AudioRoutingManager {
   }
 
   /**
+   * Ensure the shared AudioContext + master bus exist and return the context.
+   * Synchronous (creates the context if needed and kicks a background resume) so
+   * generated sources like the MIDI synth can build nodes in the same context and
+   * route into the same master bus that media tracks use. Mirrors getContext()
+   * without awaiting the resume.
+   */
+  ensureSharedContext(): AudioContext {
+    if (!this.audioContext || this.audioContext.state === 'closed') {
+      this.audioContext = new AudioContext();
+      this.masterRoute = null;
+      log.info('Created new AudioContext (shared)');
+    }
+    if (this.audioContext.state === 'suspended' && !this.contextResumePromise) {
+      this.contextResumePromise = this.audioContext
+        .resume()
+        .then(() => {
+          this.contextResumePromise = null;
+        })
+        .catch(() => {
+          this.contextResumePromise = null;
+        });
+    }
+    this.getOrCreateMasterRoute(this.audioContext);
+    return this.audioContext;
+  }
+
+  /** The active shared AudioContext, or null before one is created. */
+  getActiveContext(): AudioContext | null {
+    return this.audioContext;
+  }
+
+  /**
+   * Apply volume/EQ/pan/FX/master to an arbitrary node source (e.g. the MIDI
+   * synth bus), keyed by a stable id. Builds/maintains a full per-track chain
+   * identical to a media route and feeds the shared master bus. Returns false if
+   * no context exists yet (call ensureSharedContext() first).
+   */
+  applyNodeEffects(
+    key: string,
+    sourceNode: AudioNode,
+    volume: number,
+    eqGains: number[],
+    pan = 0,
+    processors: readonly LiveAudioRouteProcessor[] = [],
+    masterRoute?: AudioRouteEffectSettings,
+  ): boolean {
+    const ctx = this.audioContext;
+    if (!ctx) return false;
+    const route = this.getOrCreateNodeRoute(key, sourceNode, ctx);
+    this.updateMasterRoute(ctx, masterRoute);
+    this.updateRouteProcessors(route, ctx, processors);
+
+    if (Math.abs(route.lastVolume - volume) > 0.001) {
+      route.gainNode.gain.value = Math.max(0, Math.min(4, volume));
+      route.lastVolume = volume;
+    }
+
+    const clampedPan = clampAudioPan(pan);
+    if (Math.abs(route.lastPan - clampedPan) > 0.001) {
+      route.panNode.pan.value = clampedPan;
+      route.lastPan = clampedPan;
+    }
+
+    for (let i = 0; i < 10; i++) {
+      const gain = eqGains[i] ?? 0;
+      if (Math.abs(route.lastEQGains[i] - gain) > 0.01) {
+        route.eqFilters[i].gain.value = gain;
+        route.lastEQGains[i] = gain;
+      }
+    }
+
+    return true;
+  }
+
+  getNodeMeterSnapshot(key: string, updatedAt = performance.now()): AudioMeterSnapshot | null {
+    const route = this.nodeRoutes.get(key);
+    if (!route) return null;
+
+    route.analyserNode.getFloatTimeDomainData(route.meterBuffer);
+    route.analyserNode.getFloatFrequencyData(route.frequencyBuffer);
+    route.leftAnalyserNode.getFloatTimeDomainData(route.leftMeterBuffer);
+    route.rightAnalyserNode.getFloatTimeDomainData(route.rightMeterBuffer);
+    return calculateAudioMeterSnapshot(
+      route.meterBuffer,
+      updatedAt,
+      this.getRouteDynamicsSnapshot(route, updatedAt),
+      { left: route.leftMeterBuffer, right: route.rightMeterBuffer },
+      new Float32Array(route.frequencyBuffer),
+    );
+  }
+
+  /** Tear down a node route. Does not disconnect the source node (caller owns it). */
+  removeNodeRoute(key: string): void {
+    const route = this.nodeRoutes.get(key);
+    if (!route) return;
+    try {
+      route.gainNode.disconnect();
+      route.panNode.disconnect();
+      route.analyserNode.disconnect();
+      route.stereoSplitterNode.disconnect();
+      route.leftAnalyserNode.disconnect();
+      route.rightAnalyserNode.disconnect();
+      route.eqFilters.forEach(filter => filter.disconnect());
+      route.processorNodes.forEach(processor => processor.nodes.forEach(node => node.disconnect()));
+    } catch {
+      // Ignore disconnect errors
+    }
+    this.nodeRoutes.delete(key);
+  }
+
+  private getOrCreateNodeRoute(key: string, sourceNode: AudioNode, ctx: AudioContext): AudioRoute {
+    const existing = this.nodeRoutes.get(key);
+    if (existing) {
+      // Re-wire if the source node was rebuilt (e.g. synth recreated).
+      if (existing.sourceNode !== sourceNode) {
+        try {
+          existing.sourceNode.disconnect();
+        } catch {
+          // ignore
+        }
+        existing.sourceNode = sourceNode;
+        this.reconnectRouteChain(existing);
+      }
+      return existing;
+    }
+
+    this.getOrCreateMasterRoute(ctx);
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = 1;
+    const panNode = ctx.createStereoPanner();
+    panNode.pan.value = 0;
+    const analyserNode = ctx.createAnalyser();
+    analyserNode.fftSize = 1024;
+    analyserNode.smoothingTimeConstant = 0.2;
+    const stereoSplitterNode = ctx.createChannelSplitter(2);
+    const leftAnalyserNode = ctx.createAnalyser();
+    const rightAnalyserNode = ctx.createAnalyser();
+    leftAnalyserNode.fftSize = analyserNode.fftSize;
+    rightAnalyserNode.fftSize = analyserNode.fftSize;
+    leftAnalyserNode.smoothingTimeConstant = analyserNode.smoothingTimeConstant;
+    rightAnalyserNode.smoothingTimeConstant = analyserNode.smoothingTimeConstant;
+
+    const eqFilters: BiquadFilterNode[] = EQ_FREQUENCIES.map(freq => {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'peaking';
+      filter.frequency.value = freq;
+      filter.Q.value = 1.4;
+      filter.gain.value = 0;
+      return filter;
+    });
+
+    const route: AudioRoute = {
+      sourceNode,
+      gainNode,
+      panNode,
+      analyserNode,
+      stereoSplitterNode,
+      leftAnalyserNode,
+      rightAnalyserNode,
+      eqFilters,
+      processorNodes: [],
+      meterBuffer: new Float32Array(analyserNode.fftSize),
+      leftMeterBuffer: new Float32Array(leftAnalyserNode.fftSize),
+      rightMeterBuffer: new Float32Array(rightAnalyserNode.fftSize),
+      frequencyBuffer: new Float32Array(analyserNode.frequencyBinCount),
+      isConnected: true,
+      lastVolume: 1,
+      lastPan: 0,
+      lastEQGains: new Array(10).fill(0),
+      lastProcessorSignature: '',
+    };
+    this.reconnectRouteChain(route);
+    this.nodeRoutes.set(key, route);
+    return route;
+  }
+
+  /**
    * Check if an element has an active audio route
    */
   hasRoute(element: HTMLMediaElement): boolean {
@@ -1229,6 +1414,9 @@ class AudioRoutingManager {
   dispose(): void {
     for (const element of Array.from(this.routes.keys())) {
       this.disposeRoute(element);
+    }
+    for (const key of [...this.nodeRoutes.keys()]) {
+      this.removeNodeRoute(key);
     }
     this.disconnectMasterRoute();
     if (this.audioContext && this.audioContext.state !== 'closed') {

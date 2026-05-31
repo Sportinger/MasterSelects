@@ -193,6 +193,19 @@ class AudioManager {
     return this.audioContext?.currentTime ?? 0;
   }
 
+  // Get the shared AudioContext (e.g. for the MIDI synth to schedule against the
+  // live transport clock). May be null before init().
+  getContext(): AudioContext | null {
+    return this.audioContext;
+  }
+
+  // Input node of the master chain (input -> EQ -> master gain -> destination).
+  // Connect generated audio (e.g. the MIDI synth) here so it is shaped by the
+  // EQ and master volume like media element audio. Null before init().
+  getMixerInput(): AudioNode | null {
+    return this.eqFilters[0] ?? this.masterGain;
+  }
+
   // Resume audio context if suspended
   async resume(): Promise<void> {
     if (this.audioContext?.state === 'suspended') {
