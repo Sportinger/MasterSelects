@@ -431,6 +431,8 @@ function TimelineTrackComponent({
               selectedClipIds={selectedClipIds}
               trackColor={trackColor ?? 'rgba(120, 160, 200, 1)'}
               excludeIds={domClipIds}
+              scrollX={scrollX}
+              viewportWidth={viewportWidth}
             />
             {domOverlayClips.map((clip) => renderClip(clip, track.id))}
           </>

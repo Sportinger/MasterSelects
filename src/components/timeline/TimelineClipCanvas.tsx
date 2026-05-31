@@ -57,7 +57,16 @@ interface TimelineClipCanvasProps {
   trackColor: string;
   /** Clip ids currently rendered as interactive DOM overlays — skipped here to avoid double-draw. */
   excludeIds?: ReadonlySet<string>;
+  /** Current horizontal scroll offset in px (absolute timeline space). */
+  scrollX: number;
+  /** Visible viewport width in px — thumbnails are only loaded/drawn for clips inside it. */
+  viewportWidth: number;
 }
+
+// Only decode/draw thumbnails for clips within the visible window (+ overscan).
+// Without this, opening a 100-clip comp kicks off 100+ ImageBitmap decodes at
+// once and freezes the tab (issue #228).
+const THUMBNAIL_VIEWPORT_OVERSCAN_PX = 600;
 
 function withAlpha(color: string, alpha: number): string {
   if (color.startsWith('#') && (color.length === 7 || color.length === 4)) {
@@ -137,8 +146,11 @@ function drawClips(
   cssWidth: number,
   requestRedraw: () => void,
 ): void {
-  const { clips, height, timeToPixel, selectedClipIds, trackColor, excludeIds } = props;
+  const { clips, height, timeToPixel, selectedClipIds, trackColor, excludeIds, scrollX, viewportWidth } = props;
   ctx.clearRect(0, 0, cssWidth, height);
+
+  const thumbVisibleLeft = scrollX - THUMBNAIL_VIEWPORT_OVERSCAN_PX;
+  const thumbVisibleRight = scrollX + viewportWidth + THUMBNAIL_VIEWPORT_OVERSCAN_PX;
 
   const radius = Math.min(4, height / 4);
   const fill = withAlpha(trackColor, 0.55);
@@ -169,8 +181,10 @@ function drawClips(
     ctx.fillStyle = selected ? fillSelected : fill;
     ctx.fill();
 
-    // Filmstrip thumbnails clipped to the body.
-    const mediaFileId = w >= LOD_THUMB_PX ? clipShowsThumbnails(clip) : null;
+    // Filmstrip thumbnails clipped to the body — only for clips in the viewport,
+    // so opening a large comp doesn't decode every clip's thumbnails at once.
+    const inThumbWindow = x + w > thumbVisibleLeft && x < thumbVisibleRight;
+    const mediaFileId = (w >= LOD_THUMB_PX && inThumbWindow) ? clipShowsThumbnails(clip) : null;
     if (mediaFileId) {
       ctx.save();
       ctx.beginPath();
@@ -210,8 +224,12 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const [redrawNonce, bumpRedraw] = useReducer((n: number) => n + 1, 0);
-  const { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor, excludeIds } = props;
+  const { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor, excludeIds, scrollX, viewportWidth } = props;
   const cssWidth = Math.max(1, Math.min(contentWidth, MAX_CANVAS_WIDTH_PX));
+  // Quantize scroll so we only redraw (to load newly-visible thumbnails) every
+  // ~200px scrolled, not every pixel; the THUMBNAIL_VIEWPORT_OVERSCAN_PX covers
+  // the gap. The draw still uses the exact scrollX for the window.
+  const scrollBucket = Math.round(scrollX / 200);
 
   // Phase 4: optionally render in an OffscreenCanvas worker (off main thread).
   const workerMode = flags.timelineCanvasWorker;
@@ -284,7 +302,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawClips(
         ctx,
-        { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor, excludeIds },
+        { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor, excludeIds, scrollX, viewportWidth },
         cssWidth,
         bumpRedraw,
       );
@@ -296,7 +314,9 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
         rafRef.current = null;
       }
     };
-  }, [workerMode, clips, height, contentWidth, cssWidth, timeToPixel, selectedClipIds, trackColor, excludeIds, redrawNonce]);
+    // scrollX intentionally excluded; scrollBucket drives viewport-thumbnail redraws.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workerMode, clips, height, contentWidth, cssWidth, timeToPixel, selectedClipIds, trackColor, excludeIds, scrollBucket, viewportWidth, redrawNonce]);
 
   return (
     <canvas
