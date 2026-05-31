@@ -1748,7 +1748,13 @@ export function Timeline() {
     }
 
     if (trackFocusMode === 'balanced' && timelineSplitRatio !== null) {
-      const videoHeight = clampSplitDragVideoHeight(availableHeight * timelineSplitRatio, availableHeight);
+      const ratioVideoHeight = clampSplitDragVideoHeight(availableHeight * timelineSplitRatio, availableHeight);
+      // Don't let the ratio grow the video section past its actual content — when
+      // the timeline is maximized this would otherwise push the divider to the
+      // middle and leave an empty gap. Hug the content instead (#215).
+      const videoHeight = videoContentHeight > 0
+        ? Math.min(ratioVideoHeight, videoContentHeight)
+        : ratioVideoHeight;
       return {
         videoSectionHeight: videoHeight,
         audioSectionHeight: Math.max(0, availableHeight - videoHeight),

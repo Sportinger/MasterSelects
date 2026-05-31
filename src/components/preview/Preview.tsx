@@ -583,8 +583,11 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     [source, compositions, activeCompositionId, activeCompositionVideoTracks],
   );
 
-  // Source monitor: show raw media file instead of composition
-  const sourceMonitorActive = source.type === 'activeComp' && sourceMonitorFile !== null;
+  // Source monitor: show raw media file instead of composition. Only the first
+  // editable preview hosts it, so it never opens in multiple previews at once.
+  const sourceMonitorActive = source.type === 'activeComp'
+    && sourceMonitorFile !== null
+    && getFirstEditablePreviewPanelId() === panelId;
 
   const closeSourceMonitor = useCallback(() => {
     useMediaStore.getState().setSourceMonitorFile(null);

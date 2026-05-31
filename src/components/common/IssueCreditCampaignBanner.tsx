@@ -1,10 +1,19 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { IconExternalLink, IconX } from '@tabler/icons-react';
 import './IssueCreditCampaignBanner.css';
 
 const ISSUE_CAMPAIGN_URL = 'https://github.com/Sportinger/MasterSelects/issues/new';
 const CONFETTI_VISIBLE_MS = 3600;
 const CONFETTI_IDLE_TIMEOUT_MS = 1400;
+// Show the banner 10s after the splash screen closes, then auto-dismiss after
+// 10s so it isn't intrusive (#195).
+const APPEAR_DELAY_MS = 10000;
+const AUTO_HIDE_MS = 10000;
+
+interface IssueCreditCampaignBannerProps {
+  /** Becomes true once the splash screen is gone; starts the appear delay. */
+  armed: boolean;
+}
 
 const CONFETTI_COLORS = [
   '#ffcc33',
@@ -33,9 +42,27 @@ type IdleWindow = typeof window & {
   cancelIdleCallback?: (handle: number) => void;
 };
 
-export function IssueCreditCampaignBanner() {
-  const [isVisible, setIsVisible] = useState(true);
+export function IssueCreditCampaignBanner({ armed }: IssueCreditCampaignBannerProps) {
+  const [isVisible, setIsVisible] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const hasShownRef = useRef(false);
+
+  // Appear once, 10s after the splash is gone.
+  useEffect(() => {
+    if (!armed || hasShownRef.current) return undefined;
+    const timer = window.setTimeout(() => {
+      hasShownRef.current = true;
+      setIsVisible(true);
+    }, APPEAR_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+
+  // Auto-dismiss 10s after appearing.
+  useEffect(() => {
+    if (!isVisible) return undefined;
+    const timer = window.setTimeout(() => setIsVisible(false), AUTO_HIDE_MS);
+    return () => window.clearTimeout(timer);
+  }, [isVisible]);
 
   useEffect(() => {
     if (!isVisible) return undefined;

@@ -10,6 +10,7 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
+import { getAudioWaveformStatus, getSourceWaveformChannels, drawSourceAudioWaveformCanvas } from './sourceAudioWaveform';
 import {
   clearTimelinePlacementCommandPreview,
   runTimelinePlacementCommand,
@@ -42,10 +43,8 @@ const SOURCE_MONITOR_PLACEMENT_COMMANDS: Array<{
 
 const DEFAULT_STILL_DURATION = 5;
 const MIN_MARK_GAP_SECONDS = 0.001;
-const SOURCE_WAVEFORM_FILL = '#020403';
 
 type SourceTimelineDragKind = 'playhead' | 'in' | 'out';
-type AudioWaveformStatus = NonNullable<MediaFile['waveformStatus']>;
 
 function normalizeDuration(value: number | undefined, fallback = 0): number {
   return Number.isFinite(value) && value !== undefined && value > 0 ? value : fallback;
@@ -101,21 +100,6 @@ function createTimelineTicks(duration: number, fps: number): Array<{ time: numbe
   return ticks;
 }
 
-function getAudioWaveformStatus(file: MediaFile, isAudio: boolean): AudioWaveformStatus {
-  if (!isAudio) return 'idle';
-  if ((file.waveform?.length ?? 0) > 0) {
-    return file.waveformStatus ?? 'ready';
-  }
-  return file.waveformStatus ?? 'idle';
-}
-
-function getSourceWaveformChannels(file: MediaFile): readonly (readonly number[])[] {
-  const channels = file.waveformChannels?.filter((channel) => channel.length > 0) ?? [];
-  if (channels.length > 0) return channels;
-  if (file.waveform?.length) return [file.waveform, file.waveform];
-  return [];
-}
-
 function updateMediaFileWaveformCache(
   id: string,
   updates: Partial<Pick<MediaFile, 'audioAnalysisRefs' | 'waveform' | 'waveformChannels' | 'waveformProgress' | 'waveformStatus'>>,
@@ -127,83 +111,6 @@ function updateMediaFileWaveformCache(
         : entry
     )),
   }));
-}
-
-function drawSourceAudioWaveformCanvas(
-  canvas: HTMLCanvasElement,
-  channels: readonly (readonly number[])[],
-  status: AudioWaveformStatus,
-): void {
-  const container = canvas.parentElement;
-  const rect = container?.getBoundingClientRect();
-  const cssWidth = Math.round(rect?.width || container?.clientWidth || canvas.clientWidth || 0);
-  const cssHeight = Math.round(rect?.height || container?.clientHeight || canvas.clientHeight || 0);
-  if (cssWidth <= 1 || cssHeight <= 1) return;
-
-  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  const pixelWidth = Math.max(1, Math.round(cssWidth * dpr));
-  const pixelHeight = Math.max(1, Math.round(cssHeight * dpr));
-
-  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-    canvas.width = pixelWidth;
-    canvas.height = pixelHeight;
-  }
-
-  const context = canvas.getContext('2d');
-  if (!context) return;
-
-  context.setTransform(dpr, 0, 0, dpr, 0, 0);
-  context.clearRect(0, 0, cssWidth, cssHeight);
-
-  const renderChannels = channels.length > 0 ? channels.slice(0, 2) : [];
-  if (renderChannels.length === 0) {
-    if (status === 'generating') {
-      context.fillStyle = 'rgba(2, 4, 3, 0.22)';
-      for (let channelIndex = 0; channelIndex < 2; channelIndex += 1) {
-        const laneTop = (cssHeight / 2) * channelIndex;
-        const laneHeight = cssHeight / 2;
-        const centerY = laneTop + laneHeight / 2;
-        for (let x = 0; x < cssWidth; x += 4) {
-          const amplitude = 0.08 + ((x / 4) % 7) * 0.015;
-          const halfHeight = Math.max(1, laneHeight * amplitude);
-          context.fillRect(x, centerY - halfHeight, 2, halfHeight * 2);
-        }
-      }
-    }
-    return;
-  }
-
-  context.fillStyle = SOURCE_WAVEFORM_FILL;
-  context.globalAlpha = status === 'skipped' || status === 'error'
-    ? 0.32
-    : status === 'generating'
-      ? 0.74
-      : 0.98;
-
-  for (let channelIndex = 0; channelIndex < 2; channelIndex += 1) {
-    const channel = renderChannels[channelIndex] ?? renderChannels[0];
-    if (!channel || channel.length === 0) continue;
-
-    const laneTop = (cssHeight / 2) * channelIndex;
-    const laneHeight = cssHeight / 2;
-    const centerY = laneTop + laneHeight / 2;
-    const maxHalfHeight = Math.max(1, laneHeight * 0.46);
-
-    for (let x = 0; x < cssWidth; x += 1) {
-      const start = Math.floor((x / cssWidth) * channel.length);
-      const end = Math.max(start + 1, Math.ceil(((x + 1) / cssWidth) * channel.length));
-      let peak = 0;
-
-      for (let sampleIndex = start; sampleIndex < end && sampleIndex < channel.length; sampleIndex += 1) {
-        peak = Math.max(peak, Math.abs(channel[sampleIndex] ?? 0));
-      }
-
-      const halfHeight = Math.max(0.6, Math.min(1, peak) * maxHalfHeight);
-      context.fillRect(x, centerY - halfHeight, 1, halfHeight * 2);
-    }
-  }
-
-  context.globalAlpha = 1;
 }
 
 export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMonitorProps) {
@@ -271,6 +178,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
     if (!canvas || !container) return undefined;
 
     let frameId = 0;
+    let debounceTimer = 0;
     const render = () => {
       frameId = 0;
       drawSourceAudioWaveformCanvas(canvas, audioWaveformChannels, audioWaveformStatus);
@@ -283,22 +191,31 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
         render();
       }
     };
+    // Resize fires every frame of a view-switch animation; debounce so the
+    // expensive waveform repaints once after the transition settles instead of
+    // stuttering through it (the canvas just stretches smoothly meanwhile).
+    const scheduleDebouncedRender = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(scheduleRender, 140);
+    };
 
     scheduleRender();
 
     if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(scheduleRender);
+      const observer = new ResizeObserver(scheduleDebouncedRender);
       observer.observe(container);
       return () => {
         if (frameId) window.cancelAnimationFrame(frameId);
+        if (debounceTimer) window.clearTimeout(debounceTimer);
         observer.disconnect();
       };
     }
 
-    window.addEventListener('resize', scheduleRender);
+    window.addEventListener('resize', scheduleDebouncedRender);
     return () => {
       if (frameId) window.cancelAnimationFrame(frameId);
-      window.removeEventListener('resize', scheduleRender);
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      window.removeEventListener('resize', scheduleDebouncedRender);
     };
   }, [audioWaveformChannels, audioWaveformStatus, isAudio]);
 
@@ -395,6 +312,18 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
     return () => window.cancelAnimationFrame(frameId);
   }, [isPlayable, isPlaying, isScrubbing, outPoint]);
 
+  // On a same-type switch (audio→audio / video→video) the same media element is
+  // reused, so changing `src` alone doesn't reload it — explicitly reload the new
+  // source. (Must NOT strip the src here, or the freshly selected file can't play
+  // until the monitor is reopened.)
+  useEffect(() => {
+    const media = mediaRef.current;
+    if (!media) return;
+    media.pause();
+    media.load();
+  }, [file.id]);
+
+  // Release the media element only when the source monitor actually closes.
   useEffect(() => {
     const media = mediaRef.current;
     return () => {
@@ -403,7 +332,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
       media.removeAttribute('src');
       media.load();
     };
-  }, [file.id]);
+  }, []);
 
   const seekSourceMonitor = useCallback((time: number) => {
     const clampedTime = clampTime(time, timelineDuration || time);

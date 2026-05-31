@@ -29,6 +29,34 @@ export function AppearanceSettings() {
       <h2>Appearance</h2>
 
       <div className="settings-group">
+        <div className="settings-group-title">Interface Zoom</div>
+        <p className="settings-group-hint" style={{ color: 'var(--text-secondary)', fontSize: 12, margin: '0 0 8px' }}>
+          Ctrl + Scroll zoom is disabled across the app to avoid accidental zoom. To scale the whole
+          interface, hold <strong>Ctrl</strong> and scroll inside the box below — it uses your browser's
+          native page zoom.
+        </p>
+        <div
+          data-browser-zoom-area
+          tabIndex={0}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 84,
+            borderRadius: 8,
+            border: '1px dashed var(--border-strong, #555)',
+            background: 'var(--bg-secondary)',
+            color: 'var(--text-secondary)',
+            fontSize: 13,
+            userSelect: 'none',
+            cursor: 'ns-resize',
+          }}
+        >
+          Ctrl + Scroll here to zoom the interface
+        </div>
+      </div>
+
+      <div className="settings-group">
         <div className="settings-group-title">Theme</div>
         <div className="theme-selector">
           {themeOptions.map((opt) => {

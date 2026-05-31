@@ -1,14 +1,28 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueCreditCampaignBanner } from '../../src/components/common/IssueCreditCampaignBanner';
 
+// The banner appears 10s after it is armed (splash closed) and auto-hides 10s
+// later (#195), so the tests arm it and advance fake timers past the delay.
 describe('IssueCreditCampaignBanner', () => {
-  afterEach(() => {
-    cleanup();
+  beforeEach(() => {
+    vi.useFakeTimers();
   });
 
-  it('renders the issue credit campaign and GitHub issue action', () => {
-    render(<IssueCreditCampaignBanner />);
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('renders the issue credit campaign and GitHub issue action after the appear delay', () => {
+    render(<IssueCreditCampaignBanner armed />);
+
+    // Hidden until the appear delay elapses.
+    expect(screen.queryByRole('region', { name: 'MasterSelects issue credit campaign' })).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
 
     expect(screen.getByRole('region', { name: 'MasterSelects issue credit campaign' })).toBeInTheDocument();
     expect(screen.getByText('Completed Issue = 1000 AI Credits')).toBeInTheDocument();
@@ -19,7 +33,11 @@ describe('IssueCreditCampaignBanner', () => {
   });
 
   it('can be dismissed for the current session', () => {
-    render(<IssueCreditCampaignBanner />);
+    render(<IssueCreditCampaignBanner armed />);
+
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss issue credit campaign' }));
 

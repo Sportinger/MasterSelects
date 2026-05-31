@@ -34,6 +34,7 @@ import { MobileApp } from './components/mobile';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalSelectWheel } from './hooks/useGlobalSelectWheel';
 import { useBackNavigationGuard } from './hooks/useBackNavigationGuard';
+import { usePageZoom } from './hooks/usePageZoom';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
 import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
@@ -75,6 +76,9 @@ function App() {
 
   // Trap browser back/swipe so it never leaves the app (#200)
   useBackNavigationGuard();
+
+  // Overall UI zoom slider + block browser Ctrl+wheel page zoom (#209)
+  usePageZoom();
 
   // Initialize global undo/redo system
   const { historyNotice, clearHistoryNotice } = useGlobalHistory();
@@ -290,6 +294,10 @@ function App() {
   const shouldShowChangelogOnStartup = SHOW_CHANGELOG
     && shouldAutoShowChangelog(showChangelogOnStartup, lastSeenChangelogVersion, APP_VERSION);
 
+  // Arm the issue-credit banner only once the startup overlays (splash/welcome/
+  // changelog) are gone — it then appears after a delay and auto-hides (#195).
+  const creditBannerArmed = !isChecking && !showWelcome && !showSplash && !showChangelog;
+
   // Show Splash screen after initial check (when no welcome overlay)
   // This effect intentionally sets state based on derived conditions
   useEffect(() => {
@@ -438,7 +446,7 @@ function App() {
     <div className="app">
       <LinuxVulkanWarning />
       <Toolbar onOpenChangelog={() => setShowChangelog(true)} onOpenSplash={() => setShowSplash(true)} />
-      <IssueCreditCampaignBanner />
+      <IssueCreditCampaignBanner armed={creditBannerArmed} />
       <DockContainer />
       <GuidedActionOverlay />
       <ShortcutDisplayOverlay />

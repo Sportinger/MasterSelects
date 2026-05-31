@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.0.9';
+export const APP_VERSION = '2.1.0';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.0.9',
-    message: 'Editing batch: text clips edit inside the layer mode (double-click to type, normal handles + Ctrl for free corners), Del removes media items, source player replays audio, the slot view previews videos, and you can drag-reorder video layers / audio tracks plus nudge clips with arrow keys.',
+    title: 'MasterSelects 2.1.0',
+    message: 'Polish batch: audio waveform previews in the slot & board views, the source monitor opens once and replays consecutive same-type files, the fullscreen timeline divider hugs its content, list-column dragging no longer marquee-selects, badges hide only on horizontal scroll, idle audio scrubbing stays quiet, and Appearance has an interface-zoom area.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.0.9',
-  message: 'This release improves editing: integrated text-clip editing, drag-reorder of video layers / audio tracks, arrow-key clip nudging, media Delete/scroll fixes, source audio replay, slot-view video previews, and a back-navigation guard.',
+  title: 'MasterSelects 2.1.0',
+  message: 'Polish batch: audio waveform previews in the slot/board views, source monitor opens once and replays consecutive same-type files, timeline divider hugs content on fullscreen, list-column drag no longer marquee-selects, badges only hide on horizontal scroll, audio scrub no longer repeats when idle, and an interface zoom area in Appearance.',
   animated: true,
 };
 

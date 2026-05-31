@@ -2,6 +2,7 @@ import React from 'react';
 import type { Composition, MediaFile, MediaFolder, ProjectItem, SolidItem, TextItem } from '../../../../stores/mediaStore';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { FileTypeIcon } from '../FileTypeIcon';
+import { MediaWaveformThumb } from '../MediaWaveformThumb';
 import { getItemImportProgress, getItemWaveformProgress, isImportedMediaFileItem } from '../itemTypeGuards';
 import { getLabelHex } from '../labelColors';
 import { MEDIA_BOARD_GRID_PARALLAX, getMediaBoardGridSize, getMediaBoardUiScale } from './constants';
@@ -456,6 +457,8 @@ function MediaBoardNode({
               />
             ) : null}
           </>
+        ) : mediaFile?.type === 'audio' ? (
+          <MediaWaveformThumb mediaFile={mediaFile} />
         ) : (
           <div className="media-board-node-placeholder">
             <FileTypeIcon type={isComp ? 'composition' : getProjectItemIconType(item)} large />

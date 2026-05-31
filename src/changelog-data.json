@@ -2,6 +2,13 @@
   {
     "date": "2026-05-31",
     "type": "improve",
+    "title": "MasterSelects 2.1.0",
+    "description": "Media & preview polish: audio files now show a detailed waveform preview in the slot and board views (reusing the source-monitor renderer). The source monitor opens in only one preview and reliably replays consecutive same-type files (audio→audio, video→video). On a fullscreen timeline the video/audio divider now hugs its content instead of jumping to the centre. Dragging media-panel list columns no longer starts a marquee selection, badges hide only on horizontal scroll, and audio scrubbing no longer repeats a fragment while the pointer is held still. Appearance gains an interface-zoom area (Ctrl+scroll uses real browser zoom there) while Ctrl+scroll zoom is blocked elsewhere, and the credit banner now appears 10s after the splash and auto-hides.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-05-31",
+    "type": "improve",
     "title": "MasterSelects 2.0.9",
     "description": "Editing batch: text-clip editing is now part of the layer-edit mode — enter edit mode to move/scale a text layer, double-click to type, with normal resize handles and Ctrl for free corners (no more Shift to align). Edit-mode clicks now select the topmost video, arrow keys nudge the selected clip (Alt = larger, Ctrl = finer, zoom-aware), and you can left-drag a grip on track headers to reorder video layers (z-order) and audio/MIDI tracks. Also: Delete removes selected media-panel items, the source player replays audio files, the slot/grid view scrubs video previews on hover, the panel \"Change to\" menu scrolls, newly created text fills the composition, and browser back no longer leaves the app.",
     "section": "Release"

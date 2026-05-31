@@ -711,6 +711,21 @@
   pointer-events: none;
 }
 
+/* Detailed waveform preview for audio files (#202) */
+.media-waveform-thumb {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.media-waveform-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .media-grid-thumb-placeholder {
   position: absolute;
   inset: 0;
@@ -1705,7 +1720,7 @@
   will-change: opacity, transform, max-width;
 }
 
-.media-panel-table-wrapper.is-vertical-scrolling .media-col-badges :is(
+.media-panel-table-wrapper.is-horizontal-scrolled .media-col-badges :is(
   .media-item-import-progress,
   .media-item-waveform-badge,
   .media-item-waveform-generating,

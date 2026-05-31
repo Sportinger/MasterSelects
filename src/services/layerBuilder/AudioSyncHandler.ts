@@ -52,7 +52,7 @@ interface TailMeterPoll {
  */
 export class AudioSyncHandler {
   // Scrub audio state
-  private scrubStates = new WeakMap<HTMLMediaElement, { lastPosition: number; lastTime: number }>();
+  private scrubStates = new WeakMap<HTMLMediaElement, { lastPosition: number; lastTime: number; lastSeenPosition: number }>();
   private scrubAudioTimeouts = new Map<HTMLMediaElement, ReturnType<typeof setTimeout>>();
   private tailMeterPolls = new Map<string, TailMeterPoll>();
 
@@ -129,18 +129,27 @@ export class AudioSyncHandler {
     masterRoute?: AudioSyncTarget['masterRoute'],
     meterTrackId?: string
   ): void {
-    const scrubState = this.scrubStates.get(element) ?? { lastPosition: -1, lastTime: 0 };
+    const scrubState = this.scrubStates.get(element) ?? { lastPosition: -1, lastTime: 0, lastSeenPosition: -1 };
     const timeSinceLastScrub = ctx.now - scrubState.lastTime;
     const positionChanged = Math.abs(ctx.playheadPosition - scrubState.lastPosition) > 0.005;
+    // Only play while the playhead is actually moving frame-to-frame. A held
+    // (stationary) pointer must not keep replaying the same fragment (#213).
+    const movedSinceLastFrame = scrubState.lastSeenPosition < 0
+      || Math.abs(ctx.playheadPosition - scrubState.lastSeenPosition) > 0.0005;
 
-    if (positionChanged && timeSinceLastScrub > LAYER_BUILDER_CONSTANTS.SCRUB_TRIGGER_INTERVAL) {
+    if (movedSinceLastFrame && positionChanged && timeSinceLastScrub > LAYER_BUILDER_CONSTANTS.SCRUB_TRIGGER_INTERVAL) {
       this.scrubStates.set(element, {
         lastPosition: ctx.playheadPosition,
         lastTime: ctx.now,
+        lastSeenPosition: ctx.playheadPosition,
       });
       element.playbackRate = 1;
       this.applyScrubEffects(element, volume, eqGains, pan, processors, masterRoute, meterTrackId);
       this.playScrubAudio(element, clipTime);
+    } else {
+      // Keep tracking position even when we don't trigger, so the next frame can
+      // tell whether the pointer actually moved.
+      this.scrubStates.set(element, { ...scrubState, lastSeenPosition: ctx.playheadPosition });
     }
   }
 
@@ -434,7 +443,7 @@ export class AudioSyncHandler {
    * Reset scrub state (call when not scrubbing)
    */
   resetScrubState(): void {
-    this.scrubStates = new WeakMap<HTMLMediaElement, { lastPosition: number; lastTime: number }>();
+    this.scrubStates = new WeakMap<HTMLMediaElement, { lastPosition: number; lastTime: number; lastSeenPosition: number }>();
   }
 
   /**

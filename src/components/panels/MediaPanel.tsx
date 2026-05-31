@@ -6,6 +6,7 @@ import './MediaPanel.css';
 import { Logger } from '../../services/logger';
 import { FileTypeIcon } from './media/FileTypeIcon';
 import { MediaGridVideoThumb } from './media/MediaGridVideoThumb';
+import { MediaWaveformThumb } from './media/MediaWaveformThumb';
 import { LABEL_COLORS, getLabelHex } from './media/labelColors';
 import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
@@ -1730,8 +1731,9 @@ export function MediaPanel() {
   const handleMarqueeMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    // Ignore clicks on buttons, inputs, context menus
-    if (target.closest('button, input, .context-menu')) return;
+    // Ignore clicks on buttons, inputs, context menus, and the list column
+    // headers / resize handles (dragging a column must not start a marquee, #214)
+    if (target.closest('button, input, .context-menu, .media-column-headers, .media-col-resize-handle')) return;
 
     // Don't start marquee when clicking on an item — let item drag handle it
     const clickedOnItem = !!target.closest('.media-item, .media-grid-item');
@@ -2944,6 +2946,8 @@ export function MediaPanel() {
                 thumbUrl={thumbUrl}
                 onError={() => { void refreshFileUrls(mediaFile.id); }}
               />
+            ) : mediaFile?.type === 'audio' ? (
+              <MediaWaveformThumb mediaFile={mediaFile} />
             ) : thumbUrl ? (
               <img
                 src={thumbUrl}
