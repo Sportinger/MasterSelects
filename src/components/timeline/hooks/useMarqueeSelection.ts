@@ -48,7 +48,7 @@ interface UseMarqueeSelectionReturn {
 export function useMarqueeSelection({
   trackLanesRef,
   scrollX,
-  clips: _clips,
+  clips,
   tracks: _tracks,
   selectedClipIds,
   selectedKeyframeIds,
@@ -75,7 +75,14 @@ export function useMarqueeSelection({
     marqueeRef.current = marquee;
   }, [marquee]);
 
-  // Helper: Calculate which clips intersect with a rectangle
+  // Helper: Calculate which clips intersect with a rectangle.
+  //
+  // Computed from clip DATA, not from clip DOM elements: in canvas mode (issue
+  // #228) clips are drawn on a canvas and have no per-clip DOM node, so a DOM
+  // query would find nothing. We take each clip's X from its time geometry
+  // (x = startTime * pxPerSecond, the same basis as the canvas/DOM clips) and
+  // its Y from the track's still-DOM clip-row element. This also fixes the old
+  // DOM path, where viewport-culled off-screen clips couldn't be marquee-selected.
   const getClipsInRect = useCallback(
     (left: number, right: number, top: number, bottom: number): Set<string> => {
       const result = new Set<string>();
@@ -83,24 +90,32 @@ export function useMarqueeSelection({
       if (!container) return result;
 
       const containerRect = container.getBoundingClientRect();
-      container.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]').forEach((clipElement) => {
-        const clipId = clipElement.dataset.clipId;
-        if (!clipId) return;
+      const timeUnitPx = pixelToTime(1);
+      const pxPerSecond = timeUnitPx !== 0 ? 1 / timeUnitPx : 0; // inverse of pixelToTime (linear)
 
-        const clipRect = clipElement.getBoundingClientRect();
-        const clipLeft = clipRect.left - containerRect.left + scrollX;
-        const clipRight = clipRect.right - containerRect.left + scrollX;
-        const clipTop = clipRect.top - containerRect.top;
-        const clipBottom = clipRect.bottom - containerRect.top;
+      container.querySelectorAll<HTMLElement>('.track-lane[data-track-id]').forEach((laneEl) => {
+        const trackId = laneEl.dataset.trackId;
+        if (!trackId) return;
 
-        if (clipRight > left && clipLeft < right && clipBottom > top && clipTop < bottom) {
-          result.add(clipId);
+        const rowEl = laneEl.querySelector<HTMLElement>('.track-clip-row') ?? laneEl;
+        const rowRect = rowEl.getBoundingClientRect();
+        const rowTop = rowRect.top - containerRect.top;
+        const rowBottom = rowRect.bottom - containerRect.top;
+        if (!(rowBottom > top && rowTop < bottom)) return; // track outside vertical band
+
+        for (const clip of clips) {
+          if (clip.trackId !== trackId) continue;
+          const clipLeft = clip.startTime * pxPerSecond;
+          const clipRight = (clip.startTime + clip.duration) * pxPerSecond;
+          if (clipRight > left && clipLeft < right) {
+            result.add(clip.id);
+          }
         }
       });
 
       return result;
     },
-    [scrollX, trackLanesRef]
+    [pixelToTime, trackLanesRef, clips]
   );
 
   // Helper: Calculate which keyframes intersect with a rectangle
