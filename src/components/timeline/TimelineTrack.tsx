@@ -296,10 +296,10 @@ function TimelineTrackComponent({
     });
   }, [allTrackClips, clipDrag, clipTrim?.clipId, visibleEndTime, visibleStartTime]);
   const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
-  // issue #228 Phase 1: when the flag is on, draw clip bodies on a single canvas
-  // per track instead of one DOM node per clip. Content width is the furthest
-  // clip end in px; at extreme zoom it can exceed the browser canvas limit, in
-  // which case we fall back to the DOM clip path. Display-only (no interaction).
+  // issue #228 Phase 1/2: when the flag is on, draw clip bodies on a single
+  // canvas per track instead of one DOM node per clip. Content width is the
+  // furthest clip end in px; at extreme zoom it can exceed the browser canvas
+  // limit, in which case we fall back to the DOM clip path.
   const trackContentWidth = useMemo(() => {
     let max = 0;
     for (const clip of allTrackClips) {
@@ -309,8 +309,38 @@ function TimelineTrackComponent({
     return max;
   }, [allTrackClips, timeToPixel]);
   const useCanvasClips = flags.timelineCanvasClips &&
-    !clipDrag && !clipTrim &&
     trackContentWidth <= MAX_CANVAS_WIDTH_PX;
+  // Phase 2 interaction: the canvas is display-only. The clips the user is
+  // currently acting on — selected, hovered, dragged, trimmed — are rendered as
+  // real interactive DOM clips on top, and the canvas skips them (excludeIds) so
+  // there is no double-draw/ghost. Hover is resolved by hit-testing the row.
+  const [hoveredClipId, setHoveredClipId] = useState<string | null>(null);
+  const domClipIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!useCanvasClips) return ids;
+    for (const clip of allTrackClips) {
+      if (selectedClipIds.has(clip.id)) ids.add(clip.id);
+    }
+    if (hoveredClipId) ids.add(hoveredClipId);
+    if (clipDrag) {
+      ids.add(clipDrag.clipId);
+      clipDrag.multiSelectClipIds?.forEach((id) => ids.add(id));
+    }
+    if (clipTrim?.clipId) ids.add(clipTrim.clipId);
+    return ids;
+  }, [useCanvasClips, allTrackClips, selectedClipIds, hoveredClipId, clipDrag, clipTrim]);
+  const domOverlayClips = useMemo(
+    () => (useCanvasClips ? allTrackClips.filter((clip) => domClipIds.has(clip.id)) : []),
+    [useCanvasClips, allTrackClips, domClipIds],
+  );
+  const hitTestClipAtClientX = (clientX: number, rowEl: HTMLElement): string | null => {
+    const rect = rowEl.getBoundingClientRect();
+    const time = pixelToTime(clientX - rect.left);
+    for (const clip of allTrackClips) {
+      if (time >= clip.startTime && time < clip.startTime + clip.duration) return clip.id;
+    }
+    return null;
+  };
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const isPropertiesSelected = propertiesSelection?.kind === 'track' && propertiesSelection.trackId === track.id;
@@ -367,6 +397,13 @@ function TimelineTrackComponent({
       <div
         className="track-clip-row"
         style={{ height: baseHeight }}
+        onMouseMove={useCanvasClips ? (event) => {
+          // Canvas mode: hit-test under the cursor so the hovered clip mounts as
+          // a real interactive DOM clip on top of the canvas.
+          const hit = hitTestClipAtClientX(event.clientX, event.currentTarget);
+          setHoveredClipId((prev) => (prev === hit ? prev : hit));
+        } : undefined}
+        onMouseLeave={useCanvasClips ? () => setHoveredClipId(null) : undefined}
         onMouseDown={(event) => {
           if (event.button !== 2) return;
           const target = event.target as HTMLElement;
@@ -385,14 +422,18 @@ function TimelineTrackComponent({
       >
         {/* Render clips belonging to this track */}
         {useCanvasClips ? (
-          <TimelineClipCanvas
-            clips={allTrackClips}
-            height={baseHeight}
-            contentWidth={trackContentWidth}
-            timeToPixel={timeToPixel}
-            selectedClipIds={selectedClipIds}
-            trackColor={trackColor ?? 'rgba(120, 160, 200, 1)'}
-          />
+          <>
+            <TimelineClipCanvas
+              clips={allTrackClips}
+              height={baseHeight}
+              contentWidth={trackContentWidth}
+              timeToPixel={timeToPixel}
+              selectedClipIds={selectedClipIds}
+              trackColor={trackColor ?? 'rgba(120, 160, 200, 1)'}
+              excludeIds={domClipIds}
+            />
+            {domOverlayClips.map((clip) => renderClip(clip, track.id))}
+          </>
         ) : (
           trackClips.map((clip) => renderClip(clip, track.id))
         )}

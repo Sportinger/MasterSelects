@@ -54,6 +54,8 @@ interface TimelineClipCanvasProps {
   selectedClipIds: ReadonlySet<string>;
   /** Base track color (CSS color string) used for clip fills. */
   trackColor: string;
+  /** Clip ids currently rendered as interactive DOM overlays — skipped here to avoid double-draw. */
+  excludeIds?: ReadonlySet<string>;
 }
 
 function withAlpha(color: string, alpha: number): string {
@@ -134,7 +136,7 @@ function drawClips(
   cssWidth: number,
   requestRedraw: () => void,
 ): void {
-  const { clips, height, timeToPixel, selectedClipIds, trackColor } = props;
+  const { clips, height, timeToPixel, selectedClipIds, trackColor, excludeIds } = props;
   ctx.clearRect(0, 0, cssWidth, height);
 
   const radius = Math.min(4, height / 4);
@@ -147,6 +149,7 @@ function drawClips(
   ctx.textBaseline = 'middle';
 
   for (const clip of clips) {
+    if (excludeIds?.has(clip.id)) continue; // rendered as an interactive DOM overlay
     const x = timeToPixel(clip.startTime);
     const w = timeToPixel(clip.duration);
     if (w < LOD_BAR_PX) {
@@ -206,7 +209,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const [redrawNonce, bumpRedraw] = useReducer((n: number) => n + 1, 0);
-  const { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor } = props;
+  const { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor, excludeIds } = props;
   const cssWidth = Math.max(1, Math.min(contentWidth, MAX_CANVAS_WIDTH_PX));
 
   // Redraw when the thumbnail cache gains frames for any of our media files.
@@ -230,7 +233,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       drawClips(
         ctx,
-        { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor },
+        { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor, excludeIds },
         cssWidth,
         bumpRedraw,
       );
@@ -242,7 +245,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
         rafRef.current = null;
       }
     };
-  }, [clips, height, contentWidth, cssWidth, timeToPixel, selectedClipIds, trackColor, redrawNonce]);
+  }, [clips, height, contentWidth, cssWidth, timeToPixel, selectedClipIds, trackColor, excludeIds, redrawNonce]);
 
   return (
     <canvas
