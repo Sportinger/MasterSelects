@@ -15,6 +15,7 @@ import type { TimelineClipProps } from './types';
 import { THUMB_WIDTH } from './constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { indexById } from '../../stores/mediaStore/mediaIndex';
 import { getLabelHex } from '../panels/media/labelColors';
 import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from './trackColor';
 // PickWhip disabled
@@ -812,11 +813,11 @@ function TimelineClipComponent({
   const mediaLabelHex = useMediaStore(s => {
     const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
     if (clip.compositionId) {
-      const comp = s.compositions.find(c => c.id === clip.compositionId);
+      const comp = indexById(s.compositions).get(clip.compositionId);
       if (comp?.labelColor && comp.labelColor !== 'none') return getLabelHex(comp.labelColor);
     }
     if (mediaFileId) {
-      const file = s.files.find(f => f.id === mediaFileId);
+      const file = indexById(s.files).get(mediaFileId);
       if (file?.labelColor && file.labelColor !== 'none') return getLabelHex(file.labelColor);
     }
     // Check special item types — by mediaFileId first, then fallback by name/type

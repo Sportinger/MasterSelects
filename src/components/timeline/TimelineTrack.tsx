@@ -280,14 +280,19 @@ function TimelineTrackComponent({
     }
 
     return allTrackClips.filter((clip) => {
-      if (selectedClipIds.has(clip.id) || draggedClipIds.has(clip.id) || clipTrim?.clipId === clip.id) {
+      // Only clips in an active drag/trim gesture bypass viewport culling — they
+      // move beyond their static viewport position while the gesture is in flight.
+      // Selection alone must NOT force-render: an off-screen selected clip needs no
+      // DOM (its selection is restored when scrolled into view). Forcing selected
+      // clips defeated culling entirely on select-all of a large comp (issue #228).
+      if (draggedClipIds.has(clip.id) || clipTrim?.clipId === clip.id) {
         return true;
       }
       const clipStart = clip.startTime;
       const clipEnd = clip.startTime + clip.duration;
       return clipEnd >= visibleStartTime && clipStart <= visibleEndTime;
     });
-  }, [allTrackClips, clipDrag, clipTrim?.clipId, selectedClipIds, visibleEndTime, visibleStartTime]);
+  }, [allTrackClips, clipDrag, clipTrim?.clipId, visibleEndTime, visibleStartTime]);
   const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
@@ -462,7 +467,18 @@ function areTimelineTrackPropsEqual(
       previous.expandedCurveProperties === next.expandedCurveProperties;
   }
 
-  return false;
+  // General case: shallow-compare ALL props. Previously this returned `false`
+  // unconditionally, so every track re-rendered on every parent (Timeline) render
+  // — including playhead updates that don't touch a track's props. With a real
+  // shallow compare we skip those unrelated re-renders while still updating
+  // whenever any prop reference changes (renderClip, clips, selection, callbacks…).
+  const prevKeys = Object.keys(previous) as Array<keyof TimelineTrackProps>;
+  const nextKeys = Object.keys(next) as Array<keyof TimelineTrackProps>;
+  if (prevKeys.length !== nextKeys.length) return false;
+  for (const key of prevKeys) {
+    if (previous[key] !== next[key]) return false;
+  }
+  return true;
 }
 
 export const TimelineTrack = memo(TimelineTrackComponent, areTimelineTrackPropsEqual);
