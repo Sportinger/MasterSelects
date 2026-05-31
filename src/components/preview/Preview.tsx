@@ -771,6 +771,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
 
   // Edit mode state
   const [editMode, setEditMode] = useState(false);
+  // #206: while editing a text clip inside the layer-edit mode, this toggles
+  // between layer transform (move/scale handles) and text typing. Double-click
+  // enters typing; Escape returns to transform.
+  const [textTyping, setTextTyping] = useState(false);
   const [editCameraViewMode, setEditCameraViewMode] = useState<EditCameraViewMode>('camera');
   const [editCameraOrthoFrame, setEditCameraOrthoFrame] = useState<EditCameraOrthoFrame | null>(null);
   const [isEditCameraOrthoPanning, setIsEditCameraOrthoPanning] = useState(false);
@@ -933,7 +937,10 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const maskTabActive = isEditableSource && maskPanelActive;
   const maskNavigationMode = layerEditMode && maskTabActive;
   const textClipEditMode = Boolean(layerEditMode && !maskTabActive && selectedClip?.textProperties && selectedTextLayer);
-  const layerTransformMode = layerEditMode && !maskNavigationMode && !textClipEditMode;
+  // #206: a text clip lives inside the layer-edit mode. Show the layer move/scale
+  // handles unless the user is actively typing (entered via double-click).
+  const textTypingActive = textClipEditMode && textTyping;
+  const layerTransformMode = layerEditMode && !maskNavigationMode && (!textClipEditMode || !textTypingActive);
   const freeCanvasNavigationMode = layerTransformMode || maskNavigationMode || textClipEditMode;
   const effectiveSceneNavFpsMode = sceneNavFpsMode && !editCameraModeActive;
   const editCameraClipSelected = Boolean(
@@ -2455,6 +2462,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     !sourceMonitorActive &&
     !isPlaying &&
     textClipEditMode &&
+    textTypingActive &&
     !sceneNavEnabled &&
     selectedClip?.textProperties &&
     selectedTextLayer,
@@ -2478,6 +2486,25 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const playbackWaiterDetail = playbackWaiterVideoCount > 0
     ? `${playbackWaiterVideoCount} video${playbackWaiterVideoCount === 1 ? '' : 's'}`
     : '';
+
+  // #206: leave text typing when the selection changes or edit mode is exited.
+  useEffect(() => {
+    setTextTyping(false);
+  }, [selectedClipId, editMode]);
+
+  // #206: Escape returns from text typing to the layer transform handles.
+  useEffect(() => {
+    if (!textTyping) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setTextTyping(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [textTyping]);
 
   return (
     <div
@@ -2671,6 +2698,23 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           </div>
         )}
 
+        {/* #206: grey pasteboard backdrop behind the text editor so typing mode
+            matches the layer/video edit look (grey surround, comp cut out). */}
+        {textPreviewEditorEnabled && isEngineReady && (
+          <div
+            className="preview-text-edit-backdrop"
+            style={{
+              position: 'absolute',
+              left: canvasInContainer.x,
+              top: canvasInContainer.y,
+              width: canvasInContainer.width,
+              height: canvasInContainer.height,
+              boxShadow: '0 0 0 9999px var(--preview-pasteboard-bg)',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
+
         {textPreviewEditorEnabled && selectedClip?.textProperties && selectedTextLayer && (
           <TextPreviewEditor
             clip={selectedClip}
@@ -2721,6 +2765,7 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
             onMouseMove={handleOverlayMouseMove}
             onMouseUp={handleOverlayMouseUp}
             onMouseLeave={handleOverlayMouseUp}
+            onDoubleClick={textClipEditMode ? () => setTextTyping(true) : undefined}
             style={{
               position: 'absolute',
               top: 0,
@@ -2735,14 +2780,19 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
           />
         )}
 
-        {layerTransformMode && isEditableSource && (
+        {layerTransformMode && !textClipEditMode && isEditableSource && (
           <div className="preview-edit-hint">
             Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
           </div>
         )}
-        {textClipEditMode && isEditableSource && (
+        {textClipEditMode && !textTypingActive && isEditableSource && (
           <div className="preview-edit-hint">
-            Text Edit: Type in bounds | Drag edges: Area | Shift+Drag edge: Rectify | Double-click edge: Straighten | Ctrl+Drag: Move
+            Text Layer: Drag Move | Handles Scale | Double-click: Edit text
+          </div>
+        )}
+        {textTypingActive && isEditableSource && (
+          <div className="preview-edit-hint">
+            Text Edit: Type in bounds | Drag handles: Resize | Ctrl+Drag handle: Free corner | Double-click edge: Straighten | Esc: Done
           </div>
         )}
         {maskNavigationMode && isEditableSource && (

@@ -249,6 +249,59 @@ export function useLayerDrag({
     draw();
   }, [editMode, layers, selectedLayerId, selectedClipId, clips, canvasSize, canvasInContainer, viewZoom, calculateLayerBounds, isDragging, dragMode, dragLayerId, overlayRef]);
 
+  // Arrow keys nudge the selected layer while in edit mode. Step is sized in
+  // screen pixels then converted to canvas space (divided by viewZoom) so the
+  // on-screen movement stays consistent across zoom levels. Alt = bigger steps,
+  // Ctrl/Cmd = finer steps.
+  useEffect(() => {
+    if (!editMode) return undefined;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+
+      const selectedLayer = selectedLayerId ? layers.find((l) => l?.id === selectedLayerId) : null;
+      if (!selectedLayer) return;
+
+      // Don't hijack arrows while typing (e.g. text editor).
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) return;
+
+      // Scope to the preview this overlay belongs to (hovered or focused).
+      const container = overlayRef.current?.closest('.preview-container') as HTMLElement | null;
+      if (!container || !(container.matches(':hover') || container.contains(active))) return;
+
+      const clip = findClipForLayer(clips, selectedLayer);
+      if (isClipOnLockedTrack(clip, tracks)) return;
+
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const screenStep = e.altKey ? 50 : (e.ctrlKey || e.metaKey) ? 2 : 12;
+      const canvasStep = screenStep / Math.max(0.0001, viewZoom);
+      let canvasDx = 0;
+      let canvasDy = 0;
+      if (e.key === 'ArrowLeft') canvasDx = -canvasStep;
+      else if (e.key === 'ArrowRight') canvasDx = canvasStep;
+      else if (e.key === 'ArrowUp') canvasDy = -canvasStep;
+      else if (e.key === 'ArrowDown') canvasDy = canvasStep;
+
+      const pos = selectedLayer.position;
+      const baseBounds = calculateLayerBounds(selectedLayer, canvasSize.width, canvasSize.height, { x: pos.x, y: pos.y });
+      const xPlusBounds = calculateLayerBounds(selectedLayer, canvasSize.width, canvasSize.height, { x: pos.x + 1, y: pos.y });
+      const yPlusBounds = calculateLayerBounds(selectedLayer, canvasSize.width, canvasSize.height, { x: pos.x, y: pos.y + 1 });
+      const delta = resolvePositionDeltaForCanvasDelta(baseBounds, xPlusBounds, yPlusBounds, { x: canvasDx, y: canvasDy });
+
+      const newPosition = { x: pos.x + delta.x, y: pos.y + delta.y, z: pos.z };
+      updateLayer(selectedLayer.id, { position: newPosition });
+      if (clip) {
+        updateClipTransform(clip.id, { position: newPosition });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [editMode, selectedLayerId, layers, clips, tracks, canvasSize, viewZoom, calculateLayerBounds, updateLayer, updateClipTransform, overlayRef]);
+
   // Handle mouse down on overlay
   const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
     if (!editMode || !overlayRef.current || e.altKey) return;

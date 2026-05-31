@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.0.8';
+export const APP_VERSION = '2.0.9';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.0.8',
-    message: 'UI polish batch: drop multiple files at once into the media panel or timeline, copy/paste/duplicate media items, add panels with a new "+" on every tab bar, scroll any dropdown to change it instantly, and a smoother themed board grid.',
+    title: 'MasterSelects 2.0.9',
+    message: 'Editing batch: text clips edit inside the layer mode (double-click to type, normal handles + Ctrl for free corners), Del removes media items, source player replays audio, the slot view previews videos, and you can drag-reorder video layers / audio tracks plus nudge clips with arrow keys.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.0.8',
-  message: 'This release bundles a set of UI fixes: multi-file drag & drop, media copy/paste/duplicate, per-panel "+" add button, scroll-through dropdowns, theme-aware edit backdrop, and a parallax board grid.',
+  title: 'MasterSelects 2.0.9',
+  message: 'This release improves editing: integrated text-clip editing, drag-reorder of video layers / audio tracks, arrow-key clip nudging, media Delete/scroll fixes, source audio replay, slot-view video previews, and a back-navigation guard.',
   animated: true,
 };
 

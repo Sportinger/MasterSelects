@@ -173,12 +173,12 @@ function registerChild(child, onSuccess) {
   });
 }
 
-function spawnNodeProcess(args, onSuccess) {
+function spawnNodeProcess(args, onSuccess, envOverrides) {
   const child = spawn(nodeExePath, args, {
     cwd: repoRoot,
     shell: false,
     stdio: 'inherit',
-    env: childEnv,
+    env: envOverrides ? { ...childEnv, ...envOverrides } : childEnv,
   });
 
   registerChild(child, onSuccess);
@@ -218,6 +218,10 @@ function startApi() {
         '.wrangler/state',
       ]);
     },
+    // Run the migration non-interactively. vite is spawned with the same
+    // inherited stdin, so an interactive Y/n prompt here can never be
+    // confirmed (vite steals the keypress). CI=true makes wrangler auto-apply.
+    { CI: 'true' },
   );
 }
 

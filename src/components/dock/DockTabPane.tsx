@@ -480,17 +480,22 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setAddMenu(null);
     };
-    const handleWindowChange = () => setAddMenu(null);
+    // Close on outside scroll, but allow scrolling inside the menu itself (#198).
+    const handleScroll = (event: Event) => {
+      if (addMenuRef.current?.contains(event.target as Node)) return;
+      setAddMenu(null);
+    };
+    const handleResize = () => setAddMenu(null);
 
     window.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', handleWindowChange);
-    window.addEventListener('scroll', handleWindowChange, true);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true);
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', handleWindowChange);
-      window.removeEventListener('scroll', handleWindowChange, true);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
     };
   }, [addMenu]);
 
@@ -506,17 +511,22 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         setTabContextMenu(null);
       }
     };
-    const handleWindowChange = () => setTabContextMenu(null);
+    // Close on outside scroll, but allow scrolling inside the "Change to" submenu (#198).
+    const handleScroll = (event: Event) => {
+      if (contextMenuRef.current?.contains(event.target as Node)) return;
+      setTabContextMenu(null);
+    };
+    const handleResize = () => setTabContextMenu(null);
 
     window.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', handleWindowChange);
-    window.addEventListener('scroll', handleWindowChange, true);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true);
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', handleWindowChange);
-      window.removeEventListener('scroll', handleWindowChange, true);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
     };
   }, [tabContextMenu]);
 

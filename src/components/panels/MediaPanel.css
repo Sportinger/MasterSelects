@@ -689,6 +689,28 @@
   object-fit: cover;
 }
 
+/* Hover video preview in grid/slot view (#201) */
+.media-grid-video-thumb {
+  position: absolute;
+  inset: 0;
+}
+
+.media-grid-video-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-grid-video-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+  pointer-events: none;
+}
+
 .media-grid-thumb-placeholder {
   position: absolute;
   inset: 0;

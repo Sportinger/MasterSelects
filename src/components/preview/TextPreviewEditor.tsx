@@ -376,6 +376,19 @@ export function TextPreviewEditor({
     ));
   }, []);
 
+  // Update the selection highlight live while dragging (the textarea's onSelect
+  // doesn't fire reliably mid-drag). `selectionchange` fires continuously.
+  useEffect(() => {
+    if (!isEditing) return undefined;
+    const handleSelectionChange = () => {
+      if (document.activeElement === textareaRef.current) {
+        syncTextSelection();
+      }
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [isEditing, syncTextSelection]);
+
   const focusEditor = useCallback((selectAll = false) => {
     selectAllOnFocusRef.current = selectAll;
     setIsEditing(true);
@@ -440,7 +453,7 @@ export function TextPreviewEditor({
     setPropertyValue(clip.id, createTextBoundsNumericProperty('position.y'), nextY);
   }, [clip.id, geometry, setPropertyValue, sourcePointFromContainer]);
 
-  const applyVertexDrag = useCallback((drag: DragState, point: OverlayPoint, recordKeyframe: boolean) => {
+  const applyVertexDrag = useCallback((drag: DragState, point: OverlayPoint, recordKeyframe: boolean, freeMove = false) => {
     if (!geometry || !drag.vertexId) return;
     const startVertex = drag.startBounds.vertices.find(vertex => vertex.id === drag.vertexId);
     if (!startVertex) return;
@@ -449,11 +462,43 @@ export function TextPreviewEditor({
     if (!startPoint || !sourcePoint) return;
     const dx = (sourcePoint.x - startPoint.x) / geometry.sourceWidth;
     const dy = (sourcePoint.y - startPoint.y) / geometry.sourceHeight;
+
+    const startVertices = drag.startBounds.vertices;
+    // Default: corner handles resize the box rectangularly (normal handles).
+    // Hold Ctrl (freeMove) to drag a single vertex freely for skew/perspective. (#205)
+    if (!freeMove && startVertices.length === 4) {
+      const minX = Math.min(...startVertices.map(v => v.x));
+      const maxX = Math.max(...startVertices.map(v => v.x));
+      const minY = Math.min(...startVertices.map(v => v.y));
+      const maxY = Math.max(...startVertices.map(v => v.y));
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const draggedLeft = startVertex.x <= centerX;
+      const draggedTop = startVertex.y <= centerY;
+      const newX = startVertex.x + dx;
+      const newY = startVertex.y + dy;
+      const resetHandles = {
+        handleIn: { x: 0, y: 0 },
+        handleOut: { x: 0, y: 0 },
+        handleMode: 'none' as const,
+      };
+      const vertexUpdates = startVertices.map((vertex) => ({
+        vertexId: vertex.id,
+        updates: {
+          ...resetHandles,
+          x: (vertex.x <= centerX) === draggedLeft ? newX : vertex.x,
+          y: (vertex.y <= centerY) === draggedTop ? newY : vertex.y,
+        },
+      }));
+      updateTextBoundsVertices(clip.id, vertexUpdates, recordKeyframe);
+      return;
+    }
+
     updateTextBoundsVertex(clip.id, drag.vertexId, {
       x: startVertex.x + dx,
       y: startVertex.y + dy,
     }, recordKeyframe);
-  }, [clip.id, geometry, sourcePointFromContainer, updateTextBoundsVertex]);
+  }, [clip.id, geometry, sourcePointFromContainer, updateTextBoundsVertex, updateTextBoundsVertices]);
 
   const applyEdgeDrag = useCallback((
     drag: DragState,
@@ -580,7 +625,7 @@ export function TextPreviewEditor({
     ], true);
   }, [clip.id, geometry, updateTextBoundsVertices]);
 
-  const finishDrag = useCallback((target: HTMLElement, pointerId: number, finalPoint?: OverlayPoint, snapEdge = false) => {
+  const finishDrag = useCallback((target: HTMLElement, pointerId: number, finalPoint?: OverlayPoint, freeMove = false) => {
     const drag = dragStateRef.current;
     dragStateRef.current = null;
     setDragSelection(null);
@@ -600,12 +645,12 @@ export function TextPreviewEditor({
     }
 
     if (drag.kind === 'vertex') {
-      applyVertexDrag(drag, current, true);
+      applyVertexDrag(drag, current, true, freeMove);
       return;
     }
 
     if (drag.kind === 'edge') {
-      applyEdgeDrag(drag, current, true, snapEdge);
+      applyEdgeDrag(drag, current, true, !freeMove);
       return;
     }
 
@@ -705,10 +750,8 @@ export function TextPreviewEditor({
   }, [beginDrag, focusEditor]);
 
   const handleVertexPointerDown = useCallback((event: ReactPointerEvent<SVGRectElement>, vertexId: string) => {
-    if (shouldMoveWholeText(event)) {
-      beginDrag(event, 'move');
-      return;
-    }
+    // Ctrl on a handle = free vertex movement (handled during the drag), not
+    // move-whole-text — so corner handles stay usable with Ctrl. (#205)
     beginDrag(event, 'vertex', vertexId);
   }, [beginDrag]);
 
@@ -717,10 +760,6 @@ export function TextPreviewEditor({
     fromVertexId: string,
     toVertexId: string,
   ) => {
-    if (shouldMoveWholeText(event)) {
-      beginDrag(event, 'move');
-      return;
-    }
     beginDrag(event, 'edge', undefined, [fromVertexId, toVertexId]);
   }, [beginDrag]);
 
@@ -748,9 +787,11 @@ export function TextPreviewEditor({
     } else if (drag.kind === 'move') {
       applyMoveDrag(drag, point);
     } else if (drag.kind === 'vertex') {
-      applyVertexDrag(drag, point, true);
+      // Default = rectangular resize; Ctrl = free vertex. (#205)
+      applyVertexDrag(drag, point, true, event.ctrlKey || event.metaKey);
     } else if (drag.kind === 'edge') {
-      applyEdgeDrag(drag, point, true, event.shiftKey);
+      // Default = keep the box rectangular (no Shift needed); Ctrl = free edge. (#205)
+      applyEdgeDrag(drag, point, true, !(event.ctrlKey || event.metaKey));
     }
     event.preventDefault();
     event.stopPropagation();
@@ -763,7 +804,7 @@ export function TextPreviewEditor({
     finishDrag(event.currentTarget, event.pointerId, {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
-    }, event.shiftKey);
+    }, event.ctrlKey || event.metaKey);
     event.preventDefault();
     event.stopPropagation();
   }, [finishDrag]);
@@ -988,7 +1029,7 @@ export function TextPreviewEditor({
             onPointerDown={(event) => handleEdgePointerDown(event, edge.fromVertexId, edge.toVertexId)}
             onDoubleClick={(event) => handleEdgeDoubleClick(event, edge.fromVertexId, edge.toVertexId)}
           >
-            <title>Drag edge. Shift-drag to snap straight. Double-click to straighten.</title>
+            <title>Drag edge to resize. Ctrl-drag for free edge. Double-click to straighten.</title>
           </path>
         ))}
         {geometry.edges.map(edge => (
@@ -1002,7 +1043,7 @@ export function TextPreviewEditor({
             onPointerDown={(event) => handleEdgePointerDown(event, edge.fromVertexId, edge.toVertexId)}
             onDoubleClick={(event) => handleEdgeDoubleClick(event, edge.fromVertexId, edge.toVertexId)}
           >
-            <title>Drag edge. Shift-drag to snap straight. Double-click to straighten.</title>
+            <title>Drag edge to resize. Ctrl-drag for free edge. Double-click to straighten.</title>
           </rect>
         ))}
         {geometry.vertices.map(({ vertex, point }) => (

@@ -450,6 +450,8 @@ export interface TimelineState {
 export interface TrackActions {
   addTrack: (type: 'video' | 'audio' | 'midi') => string;
   removeTrack: (id: string) => void;
+  // Drag-reorder a track relative to another track in the same section (#layers/tracks)
+  reorderTrack: (trackId: string, targetTrackId: string, placeBelow: boolean) => void;
   renameTrack: (id: string, name: string) => void;
   setTrackLabelColor: (id: string, labelColor: LabelColor) => void;
   setTrackMuted: (id: string, muted: boolean) => void;

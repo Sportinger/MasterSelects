@@ -70,7 +70,10 @@ export function useEditModeOverlay({
 
   // Find layer at mouse position (container coordinates)
   const findLayerAtPosition = useCallback((containerX: number, containerY: number): Layer | null => {
-    const visibleLayers = layers.filter(l => l?.visible && l?.source).reverse();
+    // layers[0] is composited on top (see LayerBuilderService), so iterate in
+    // array order and return the first hit = the topmost layer under the cursor.
+    // (Previously this reversed the list and picked the bottom layer.)
+    const visibleLayers = layers.filter(l => l?.visible && l?.source);
 
     for (const layer of visibleLayers) {
       if (!layer) continue;

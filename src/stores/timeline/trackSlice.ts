@@ -331,6 +331,26 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     });
   },
 
+  reorderTrack: (trackId, targetTrackId, placeBelow) => {
+    const { tracks } = get();
+    if (trackId === targetTrackId) return;
+    const source = tracks.find(t => t.id === trackId);
+    const target = tracks.find(t => t.id === targetTrackId);
+    if (!source || !target || source.locked) return;
+
+    // Only reorder within the same section: video among video, audio/midi among
+    // the audio section. Track array order is the compositing z-order for video.
+    const sectionOf = (t: TimelineTrack) => (t.type === 'video' ? 'video' : 'audio');
+    if (sectionOf(source) !== sectionOf(target)) return;
+
+    const without = tracks.filter(t => t.id !== trackId);
+    const targetIndex = without.findIndex(t => t.id === targetTrackId);
+    if (targetIndex < 0) return;
+    const insertIndex = placeBelow ? targetIndex + 1 : targetIndex;
+    without.splice(insertIndex, 0, source);
+    set({ tracks: without });
+  },
+
   renameTrack: (id, name) => {
     const { tracks } = get();
     set({
