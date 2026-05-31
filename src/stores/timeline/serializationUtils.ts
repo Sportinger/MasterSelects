@@ -495,15 +495,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       };
     };
 
-    // Yield to the browser periodically so restoring a large comp (100+ clips)
-    // doesn't run as one long synchronous task that freezes the whole tab for
-    // seconds. Clips then load in responsive chunks instead (issue #228). This
-    // only adds yields — it does not change the per-clip state-update logic.
-    let restoreYieldCounter = 0;
     for (const serializedClip of data.clips) {
-      if (++restoreYieldCounter % 8 === 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
       // Handle composition clips specially
       if (serializedClip.isComposition && serializedClip.compositionId) {
         const composition = mediaStore.compositions.find(c => c.id === serializedClip.compositionId);
