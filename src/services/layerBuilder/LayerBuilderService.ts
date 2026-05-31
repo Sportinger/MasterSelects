@@ -551,30 +551,43 @@ export class LayerBuilderService {
         const incomingClip = trackClips[1];
 
         // Check if they have transition data linking them
-        if (outgoingClip.transitionOut && outgoingClip.transitionOut.linkedClipId === incomingClip.id) {
-          // We're in a transition! Build both layers with adjusted opacity
-          const transitionDuration = outgoingClip.transitionOut.duration;
+        const transition = outgoingClip.transitionOut;
+        if (transition && transition.linkedClipId === incomingClip.id) {
+          // We're in a transition! Build both clips at their normal opacity and
+          // attach transition metadata; the compositor blends the from/to pair
+          // through the transition shader (crossfade, wipe, dip, ...).
+          const transitionDuration = transition.duration;
           const transitionStart = incomingClip.startTime;
 
           // Calculate transition progress (0 = start, 1 = end)
           const progress = Math.max(0, Math.min(1,
             (ctx.playheadPosition - transitionStart) / transitionDuration
           ));
+          const params = transition.params ?? {};
 
-          // Outgoing clip: opacity fades from 1 to 0
-          const outgoingOpacity = 1 - progress;
-          // Incoming clip: opacity fades from 0 to 1
-          const incomingOpacity = progress;
-
-          // Build outgoing clip layer (rendered first, behind)
-          const outgoingLayer = this.buildLayerForClip(outgoingClip, layerIndex, ctx, outgoingOpacity);
+          // Build outgoing ('from') clip layer (rendered first, behind)
+          const outgoingLayer = this.buildLayerForClip(outgoingClip, layerIndex, ctx);
           if (outgoingLayer) {
+            outgoingLayer.transition = {
+              id: transition.id,
+              type: transition.type,
+              role: 'from',
+              progress,
+              params,
+            };
             layers.push(outgoingLayer);
           }
 
-          // Build incoming clip layer (rendered second, on top)
-          const incomingLayer = this.buildLayerForClip(incomingClip, layerIndex, ctx, incomingOpacity);
+          // Build incoming ('to') clip layer (rendered second, on top)
+          const incomingLayer = this.buildLayerForClip(incomingClip, layerIndex, ctx);
           if (incomingLayer) {
+            incomingLayer.transition = {
+              id: transition.id,
+              type: transition.type,
+              role: 'to',
+              progress,
+              params,
+            };
             layers.push(incomingLayer);
           }
 

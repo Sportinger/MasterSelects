@@ -23,6 +23,14 @@ export class RenderTargetManager {
   private effectTempView: GPUTextureView | null = null;
   private effectTempView2: GPUTextureView | null = null;
 
+  // Transition temp textures: isolated "from"/"to" clip renders + the blended result.
+  private transFromTexture: GPUTexture | null = null;
+  private transToTexture: GPUTexture | null = null;
+  private transBlendTexture: GPUTexture | null = null;
+  private transFromView: GPUTextureView | null = null;
+  private transToView: GPUTextureView | null = null;
+  private transBlendView: GPUTextureView | null = null;
+
   private outputWidth = 640;
   private outputHeight = 360;
 
@@ -50,6 +58,12 @@ export class RenderTargetManager {
     this.effectTempTexture2 = null;
     this.effectTempView = null;
     this.effectTempView2 = null;
+    this.transFromTexture = null;
+    this.transToTexture = null;
+    this.transBlendTexture = null;
+    this.transFromView = null;
+    this.transToView = null;
+    this.transBlendView = null;
 
     log.info(`Creating ping-pong textures at ${this.outputWidth}x${this.outputHeight}`);
 
@@ -98,6 +112,23 @@ export class RenderTargetManager {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
       });
 
+      // Transition temp textures (isolated from/to renders + blended result)
+      this.transFromTexture = this.device.createTexture({
+        size: [this.outputWidth, this.outputHeight],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+      });
+      this.transToTexture = this.device.createTexture({
+        size: [this.outputWidth, this.outputHeight],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+      });
+      this.transBlendTexture = this.device.createTexture({
+        size: [this.outputWidth, this.outputHeight],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+      });
+
       // Cache views
       if (this.pingTexture && this.pongTexture) {
         this.pingView = this.pingTexture.createView();
@@ -110,6 +141,11 @@ export class RenderTargetManager {
       if (this.effectTempTexture && this.effectTempTexture2) {
         this.effectTempView = this.effectTempTexture.createView();
         this.effectTempView2 = this.effectTempTexture2.createView();
+      }
+      if (this.transFromTexture && this.transToTexture && this.transBlendTexture) {
+        this.transFromView = this.transFromTexture.createView();
+        this.transToView = this.transToTexture.createView();
+        this.transBlendView = this.transBlendTexture.createView();
       }
 
       log.info('Ping-pong textures created successfully');
@@ -161,6 +197,9 @@ export class RenderTargetManager {
   getEffectTempTexture2(): GPUTexture | null { return this.effectTempTexture2; }
   getEffectTempView(): GPUTextureView | null { return this.effectTempView; }
   getEffectTempView2(): GPUTextureView | null { return this.effectTempView2; }
+  getTransFromView(): GPUTextureView | null { return this.transFromView; }
+  getTransToView(): GPUTextureView | null { return this.transToView; }
+  getTransBlendView(): GPUTextureView | null { return this.transBlendView; }
 
   clearAll(): void {
     this.pingTexture = null;
@@ -176,6 +215,12 @@ export class RenderTargetManager {
     this.effectTempTexture2 = null;
     this.effectTempView = null;
     this.effectTempView2 = null;
+    this.transFromTexture = null;
+    this.transToTexture = null;
+    this.transBlendTexture = null;
+    this.transFromView = null;
+    this.transToView = null;
+    this.transBlendView = null;
   }
 
   destroy(): void {
@@ -186,6 +231,9 @@ export class RenderTargetManager {
     this.blackTexture?.destroy();
     this.effectTempTexture?.destroy();
     this.effectTempTexture2?.destroy();
+    this.transFromTexture?.destroy();
+    this.transToTexture?.destroy();
+    this.transBlendTexture?.destroy();
     this.clearAll();
   }
 }

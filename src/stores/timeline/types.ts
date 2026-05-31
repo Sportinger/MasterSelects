@@ -1076,9 +1076,10 @@ export interface MarkerActions {
 
 // Transition actions interface
 export interface TransitionActions {
-  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number) => void;
+  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number, params?: Record<string, number | boolean | string>) => void;
   removeTransition: (clipId: string, edge: 'in' | 'out') => void;
   updateTransitionDuration: (clipId: string, edge: 'in' | 'out', duration: number) => void;
+  updateTransitionParams: (clipId: string, edge: 'in' | 'out', params: Record<string, number | boolean | string>) => void;
   findClipJunction: (trackId: string, time: number, threshold?: number) => { clipA: TimelineClip; clipB: TimelineClip; junctionTime: number } | null;
 }
 

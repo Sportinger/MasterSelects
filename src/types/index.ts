@@ -113,6 +113,22 @@ export interface Layer {
   maskFeatherQuality?: number;  // Blur quality: 0=low (9 samples), 1=medium (17), 2=high (25)
   maskInvert?: boolean;  // Whether to invert the mask, handled in GPU shader
   maskClipId?: string;  // Clip ID for looking up mask texture (consistent across systems)
+  // Transition metadata (set by LayerBuilder when this layer is one side of a clip transition).
+  // The compositor renders the from/to pair through the transition shader instead of plain compositing.
+  transition?: LayerTransition;
+}
+
+/**
+ * Transition metadata attached to a render Layer during an active clip transition.
+ * Both the outgoing ('from') and incoming ('to') layer carry the same transition `id`
+ * and `progress`, so the compositor can pair them and blend with the transition shader.
+ */
+export interface LayerTransition {
+  id: string;                 // transition instance id, shared by the from/to pair
+  type: string;               // TransitionType
+  role: 'from' | 'to';        // outgoing (from) or incoming (to) clip
+  progress: number;           // 0..1 progress within the overlap region
+  params: Record<string, number | boolean | string>;
 }
 
 export type BlendMode =
@@ -622,6 +638,7 @@ export interface TimelineTransition {
   type: string;  // TransitionType from transitions module
   duration: number;  // seconds
   linkedClipId: string;  // ID of the other clip in the transition
+  params?: Record<string, number | boolean | string>;  // transition-specific params (direction, color, softness, easing)
 }
 
 export interface ClipTransform {

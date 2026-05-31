@@ -1,6 +1,8 @@
 // Transition overlay elements (junction highlight + existing transitions)
 
+import { useState } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
+import { TransitionEditorPopover } from './TransitionEditorPopover';
 
 interface TransitionOverlaysProps {
   activeJunction: { junctionTime: number } | null;
@@ -21,6 +23,8 @@ export function TransitionOverlays({
   getExpandedTrackHeight,
   getTrackHeight,
 }: TransitionOverlaysProps) {
+  const [selectedTransitionId, setSelectedTransitionId] = useState<string | null>(null);
+
   const resolveTrackHeight = (track: TimelineTrack) => getTrackHeight
     ? getTrackHeight(track)
     : isTrackExpanded(track.id)
@@ -86,37 +90,57 @@ export function TransitionOverlays({
         const transitionWidth = timeToPixel(transitionEnd - transitionStart);
         const transitionLeft = timeToPixel(transitionStart);
 
+        const transitionId = clipA.transitionOut.id;
+        const isSelected = selectedTransitionId === transitionId;
+        const width = Math.max(transitionWidth, 20);
+
         return (
           <div
-            key={clipA.transitionOut.id}
+            key={transitionId}
             className="timeline-transition"
             style={{
               position: 'absolute',
               left: transitionLeft,
               top: trackTop,
-              width: Math.max(transitionWidth, 20),
+              width,
               height: trackHeight,
               pointerEvents: 'none',
               zIndex: 50,
             }}
           >
-            {/* Transition visual */}
+            {/* Transition visual (clickable to edit) */}
             <div
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedTransitionId(isSelected ? null : transitionId);
+              }}
+              title="Edit transition"
               style={{
                 position: 'absolute',
                 inset: 4,
                 background: 'linear-gradient(90deg, rgba(74, 158, 255, 0.3), rgba(255, 107, 74, 0.3))',
                 borderRadius: 4,
-                border: '1px solid rgba(255,255,255,0.2)',
+                border: isSelected ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.2)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                pointerEvents: 'auto',
+                cursor: 'pointer',
               }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.6 }}>
                 <path d="M7 4v16M17 4v16M7 12h10" stroke="white" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </div>
+
+            {isSelected && (
+              <TransitionEditorPopover
+                clipA={clipA}
+                left={width / 2}
+                top={0}
+                onClose={() => setSelectedTransitionId(null)}
+              />
+            )}
           </div>
         );
       })}

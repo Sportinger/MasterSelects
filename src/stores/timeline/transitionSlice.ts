@@ -3,7 +3,7 @@
 
 import type { TransitionActions, SliceCreator } from './types';
 import type { TimelineTransition } from '../../types';
-import { getTransition, type TransitionType } from '../../transitions';
+import { getTransition, getDefaultTransitionParams, type TransitionType } from '../../transitions';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('Transitions');
@@ -16,7 +16,7 @@ export const createTransitionSlice: SliceCreator<TransitionActions> = (set, get)
    * Apply a transition between two adjacent clips
    * Creates overlap by moving clipB earlier - NO keyframes, compositor handles blending
    */
-  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number) => {
+  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number, params?: Record<string, number | boolean | string>) => {
     const { clips, invalidateCache } = get();
 
     const clipA = clips.find(c => c.id === clipAId);
@@ -56,6 +56,9 @@ export const createTransitionSlice: SliceCreator<TransitionActions> = (set, get)
     const clipAEnd = clipA.startTime + clipA.duration;
     const newClipBStart = clipAEnd - effectiveDuration;
 
+    // Seed parameters from the transition's schema defaults unless provided.
+    const effectiveParams = params ?? getDefaultTransitionParams(type);
+
     // Create transition objects
     const transitionId = generateTransitionId();
 
@@ -64,6 +67,7 @@ export const createTransitionSlice: SliceCreator<TransitionActions> = (set, get)
       type,
       duration: effectiveDuration,
       linkedClipId: clipBId,
+      params: effectiveParams,
     };
 
     const transitionIn: TimelineTransition = {
@@ -71,6 +75,7 @@ export const createTransitionSlice: SliceCreator<TransitionActions> = (set, get)
       type,
       duration: effectiveDuration,
       linkedClipId: clipAId,
+      params: effectiveParams,
     };
 
     // Update clips with new positions and transition data
@@ -162,11 +167,52 @@ export const createTransitionSlice: SliceCreator<TransitionActions> = (set, get)
     const clipAId = isClipB ? linkedClipId : clipId;
     const clipBId = isClipB ? clipId : linkedClipId;
 
+    // Preserve user-customized params across the remove/re-apply.
+    const params = transition.params;
+
     // First remove the existing transition
     get().removeTransition(clipId, edge);
 
-    // Then apply new transition with updated duration
-    get().applyTransition(clipAId, clipBId, type, newDuration);
+    // Then apply new transition with updated duration (keeping params)
+    get().applyTransition(clipAId, clipBId, type, newDuration, params);
+  },
+
+  /**
+   * Update the parameters of an existing transition. Applies to both clips in the
+   * pair (they share the same transition id, mirrored on opposite edges).
+   */
+  updateTransitionParams: (clipId: string, edge: 'in' | 'out', params: Record<string, number | boolean | string>) => {
+    const { clips, invalidateCache } = get();
+
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip) return;
+
+    const transition = edge === 'in' ? clip.transitionIn : clip.transitionOut;
+    if (!transition) return;
+
+    const linkedClipId = transition.linkedClipId;
+    const otherEdge: 'in' | 'out' = edge === 'in' ? 'out' : 'in';
+
+    set({
+      clips: clips.map(c => {
+        if (c.id === clipId) {
+          const t = edge === 'in' ? c.transitionIn : c.transitionOut;
+          if (!t) return c;
+          const updated: TimelineTransition = { ...t, params: { ...(t.params ?? {}), ...params } };
+          return edge === 'in' ? { ...c, transitionIn: updated } : { ...c, transitionOut: updated };
+        }
+        if (c.id === linkedClipId) {
+          const t = otherEdge === 'in' ? c.transitionIn : c.transitionOut;
+          if (!t || t.id !== transition.id) return c;
+          const updated: TimelineTransition = { ...t, params: { ...(t.params ?? {}), ...params } };
+          return otherEdge === 'in' ? { ...c, transitionIn: updated } : { ...c, transitionOut: updated };
+        }
+        return c;
+      }),
+    });
+
+    invalidateCache();
+    log.info('Updated transition params', { clipId, edge, params });
   },
 
   /**

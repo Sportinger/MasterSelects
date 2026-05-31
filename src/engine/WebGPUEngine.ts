@@ -12,6 +12,7 @@ import { CacheManager } from './managers/CacheManager';
 import { ExportCanvasManager } from './managers/ExportCanvasManager';
 import { CompositorPipeline } from './pipeline/CompositorPipeline';
 import { EffectsPipeline } from '../effects/EffectsPipeline';
+import { TransitionPipeline } from './render/TransitionPipeline';
 import { ColorPipeline } from './color/ColorPipeline';
 import { OutputPipeline } from './pipeline/OutputPipeline';
 import { SlicePipeline } from './pipeline/SlicePipeline';
@@ -60,6 +61,7 @@ export class WebGPUEngine {
   // Pipelines
   private compositorPipeline: CompositorPipeline | null = null;
   private effectsPipeline: EffectsPipeline | null = null;
+  private transitionPipeline: TransitionPipeline | null = null;
   private colorPipeline: ColorPipeline | null = null;
   private outputPipeline: OutputPipeline | null = null;
   private slicePipeline: SlicePipeline | null = null;
@@ -157,11 +159,13 @@ export class WebGPUEngine {
     // Create pipelines
     this.compositorPipeline = new CompositorPipeline(device);
     this.effectsPipeline = new EffectsPipeline(device);
+    this.transitionPipeline = new TransitionPipeline(device);
     this.colorPipeline = new ColorPipeline(device);
     this.outputPipeline = new OutputPipeline(device);
     this.slicePipeline = new SlicePipeline(device);
     await this.compositorPipeline.createPipelines();
     await this.effectsPipeline.createPipelines();
+    await this.transitionPipeline.createPipelines();
     await this.colorPipeline.createPipeline();
     await this.outputPipeline.createPipeline();
     await this.slicePipeline.createPipeline();
@@ -176,7 +180,8 @@ export class WebGPUEngine {
       this.compositorPipeline,
       this.effectsPipeline,
       this.maskTextureManager,
-      this.colorPipeline
+      this.colorPipeline,
+      this.transitionPipeline
     );
 
     this.nestedCompRenderer = new NestedCompRenderer(

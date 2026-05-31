@@ -1031,11 +1031,17 @@ export class RenderDispatcher {
     const effectTempTexture2 = d.renderTargetManager.getEffectTempTexture2() ?? undefined;
     const effectTempView2 = d.renderTargetManager.getEffectTempView2() ?? undefined;
 
+    // Transition temp targets (isolated from/to renders + blended result)
+    const transFromView = d.renderTargetManager.getTransFromView() ?? undefined;
+    const transToView = d.renderTargetManager.getTransToView() ?? undefined;
+    const transBlendView = d.renderTargetManager.getTransBlendView() ?? undefined;
+
     const commandEncoder = device.createCommandEncoder();
     const result = d.compositor.composite(layerData, commandEncoder, {
       device, sampler: d.sampler, pingView, pongView, outputWidth: width, outputHeight: height,
       skipEffects,
       effectTempTexture, effectTempView, effectTempTexture2, effectTempView2,
+      transFromView, transToView, transBlendView,
     });
     const renderTime = performance.now() - t2;
 
