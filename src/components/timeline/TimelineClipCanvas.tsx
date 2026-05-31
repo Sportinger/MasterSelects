@@ -26,9 +26,9 @@ export const MAX_CANVAS_WIDTH_PX = 16000;
 
 // Level-of-Detail thresholds, in CSS px of clip width.
 const LOD_BAR_PX = 4;        // below this: nothing meaningful, draw a thin bar
-const LOD_LABEL_PX = 24;     // above this: room for a label
-const LOD_THUMB_PX = 40;     // above this: draw filmstrip thumbnails
-const CANVAS_THUMB_SLOT_PX = 80; // target width of one filmstrip frame
+const LOD_LABEL_PX = 14;     // above this: room for a (truncated) label
+const LOD_THUMB_PX = 10;     // above this: draw at least one thumbnail (matches DOM path, which shows >=1)
+const CANVAS_THUMB_SLOT_PX = 71; // target width of one filmstrip frame (matches DOM THUMB_WIDTH)
 const MAX_THUMB_SLOTS = 48;  // hard cap per clip
 
 export interface CanvasClip {
@@ -76,11 +76,11 @@ function withAlpha(color: string, alpha: number): string {
   return color;
 }
 
-/** A clip shows a filmstrip when it has a media source and is a video/image. */
+/** A clip shows a source-cache filmstrip when it is a video clip with a media id
+ *  (mirrors the DOM path's `useSourceCache`). Returns the media file id or null. */
 function clipShowsThumbnails(clip: CanvasClip): string | null {
-  const type = clip.source?.type;
-  if (type && type !== 'video' && type !== 'image') return null;
-  return clip.mediaFileId ?? clip.source?.mediaFileId ?? null;
+  if (clip.source?.type !== 'video') return null;
+  return clip.source?.mediaFileId ?? clip.mediaFileId ?? null;
 }
 
 /** Cover-fit draw of a bitmap into a destination rect, clipped by the caller. */
