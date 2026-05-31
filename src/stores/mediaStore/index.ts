@@ -17,6 +17,7 @@ import { createSlotSlice, type SlotActions } from './slices/slotSlice';
 import { createMultiLayerSlice, type MultiLayerActions } from './slices/multiLayerSlice';
 import { createFolderSlice, type FolderActions } from './slices/folderSlice';
 import { createSelectionSlice, type SelectionActions } from './slices/selectionSlice';
+import { createDuplicateSlice, type DuplicateActions } from './slices/duplicateSlice';
 import { createProxySlice, type ProxyActions } from './slices/proxySlice';
 import { createProjectSlice, type ProjectActions } from './slices/projectSlice';
 
@@ -73,6 +74,7 @@ type MediaStoreState = MediaState &
   MultiLayerActions &
   FolderActions &
   SelectionActions &
+  DuplicateActions &
   ProxyActions &
   ProjectActions & {
     getItemsByFolder: (folderId: string | null) => ProjectItem[];
@@ -480,6 +482,7 @@ export const useMediaStore = create<MediaStoreState>()(
     ...createMultiLayerSlice(set, get),
     ...createFolderSlice(set, get),
     ...createSelectionSlice(set, get),
+    ...createDuplicateSlice(set, get),
     ...createProxySlice(set, get),
     ...createProjectSlice(set, get),
   }))

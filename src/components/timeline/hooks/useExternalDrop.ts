@@ -33,6 +33,7 @@ import type { TimelineTrack, TimelineClip, TextClipProperties } from '../../../t
 import type { Composition, MediaFile, SignalAssetItem } from '../../../stores/mediaStore';
 import type { FileImportResult } from '../../../stores/mediaStore/types';
 import { isMediaFileImportResult } from '../../../stores/mediaStore/helpers/importResult';
+import { collectDroppedMediaFiles } from '../../panels/media/dropImport';
 import type { ShapePrimitive } from '../../../types/motionDesign';
 import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import { Logger } from '../../../services/logger';
@@ -47,9 +48,6 @@ const log = Logger.create('useExternalDrop');
 const TIMELINE_DROP_IMPORT_PLACEHOLDER_TIMEOUT_MS = 750;
 
 type FileWithPath = File & { path?: string };
-type FileSystemDataTransferItem = DataTransferItem & {
-  getAsFileSystemHandle: () => Promise<FileSystemFileHandle | FileSystemDirectoryHandle | null>;
-};
 
 function setDroppedFilePath(file: File, filePath?: string): void {
   if (filePath) {
@@ -416,7 +414,7 @@ export function useExternalDrop({
     filePath?: string;
     handle?: FileSystemFileHandle;
     typeOverride?: string;
-  }) => {
+  }): Promise<{ startTime: number; endTime: number } | null> => {
     const {
       trackId,
       file,
@@ -438,20 +436,86 @@ export function useExternalDrop({
         name: file.name,
         filePath,
       });
-      return;
+      return null;
     }
 
     const timelineFile = mediaFile.file ?? file;
     setDroppedFilePath(timelineFile, mediaFile.absolutePath ?? filePath);
+    const resolvedDuration = mediaFile.duration ?? duration;
     addClip(
       trackId,
       timelineFile,
       startTime,
-      mediaFile.duration ?? duration,
+      resolvedDuration,
       mediaFile.id,
       getTimelineMediaTypeOverride(mediaFile) ?? typeOverride,
     );
+    return { startTime, endTime: startTime + (resolvedDuration ?? 5) };
   }, [addClip]);
+
+  // Place one or more externally dropped files onto a track sequentially, going
+  // through the same media-store import path the media panel uses (#194).
+  // `resolveStartTime` lets the caller snap/avoid overlaps; without it the raw
+  // cursor is used (e.g. when dropping onto a freshly created empty track).
+  const placeDroppedTimelineMediaFiles = useCallback(async (params: {
+    dataTransfer: DataTransfer;
+    trackId: string;
+    trackIsVideo: boolean;
+    baseStartTime: number;
+    fallbackDuration?: number;
+    filePath?: string;
+    resolveStartTime?: (desiredStartTime: number, duration?: number) => number;
+  }): Promise<boolean> => {
+    const { dataTransfer, trackId, trackIsVideo, baseStartTime, fallbackDuration, filePath, resolveStartTime } = params;
+
+    const records = await collectDroppedMediaFiles(dataTransfer);
+    if (records.length === 0) return false;
+
+    let cursorTime = baseStartTime;
+    let placedAny = false;
+
+    for (const record of records) {
+      const { file, handle, absolutePath } = record;
+      if (!isMediaFile(file)) continue;
+
+      setDroppedFilePath(file, absolutePath ?? filePath);
+
+      const typeOverride = await classifyMediaType(file);
+      if (typeOverride === 'unknown') continue;
+
+      // Audio-only files belong on audio tracks, everything else on video tracks.
+      const fileIsAudio = isAudioFile(file);
+      if (fileIsAudio && trackIsVideo) {
+        log.debug('Skipping audio file dropped on a video track', { name: file.name });
+        continue;
+      }
+      if (!fileIsAudio && !trackIsVideo) {
+        log.debug('Skipping non-audio file dropped on an audio track', { name: file.name });
+        continue;
+      }
+
+      const startTime = resolveStartTime
+        ? resolveStartTime(cursorTime, fallbackDuration)
+        : cursorTime;
+
+      const placement = await addDroppedTimelineMediaClip({
+        trackId,
+        file,
+        startTime,
+        duration: fallbackDuration,
+        filePath: absolutePath ?? filePath,
+        handle,
+        typeOverride,
+      });
+
+      if (placement) {
+        placedAny = true;
+        cursorTime = placement.endTime;
+      }
+    }
+
+    return placedAny;
+  }, [addDroppedTimelineMediaClip]);
 
   const updateVideoNewTrackGesture = useCallback((clientY: number, isAudio: boolean) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -1820,62 +1884,17 @@ export function useExternalDrop({
         }
       }
 
-      // Handle external file drop
-      const items = e.dataTransfer.items;
-      if (items && items.length > 0) {
-        const item = items[0];
-        if (item.kind === 'file') {
-          // Try to get file handle (File System Access API)
-          if ('getAsFileSystemHandle' in item) {
-            try {
-              const handle = await (item as FileSystemDataTransferItem).getAsFileSystemHandle();
-              if (handle && handle.kind === 'file') {
-                const file = await handle.getFile();
-                setDroppedFilePath(file, filePath);
-                if (isMediaFile(file)) {
-                  const typeOverride = await classifyMediaType(file);
-                  if (typeOverride === 'unknown') {
-                    return;
-                  }
-                  await addDroppedTimelineMediaClip({
-                    trackId: newTrackId,
-                    file,
-                    startTime,
-                    duration: cachedDuration,
-                    filePath,
-                    handle,
-                    typeOverride,
-                  });
-                  log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
-                  return;
-                }
-              }
-            } catch (err) {
-              log.warn('Could not get file handle, falling back:', err);
-            }
-          }
-
-          // Fallback to regular file (no handle)
-          const file = item.getAsFile();
-          if (file) setDroppedFilePath(file, filePath);
-          if (file && isMediaFile(file)) {
-            const typeOverride = await classifyMediaType(file);
-            if (typeOverride === 'unknown') {
-              return;
-            }
-            await addDroppedTimelineMediaClip({
-              trackId: newTrackId,
-              file,
-              startTime,
-              duration: cachedDuration,
-              filePath,
-              typeOverride,
-            });
-          }
-        }
-      }
+      // Handle external file drop (supports multiple files via the shared media import path)
+      await placeDroppedTimelineMediaFiles({
+        dataTransfer: e.dataTransfer,
+        trackId: newTrackId,
+        trackIsVideo: trackType === 'video',
+        baseStartTime: startTime,
+        fallbackDuration: cachedDuration,
+        filePath,
+      });
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, addDroppedTimelineMediaClip, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture, rejectDropDuringExport]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture, rejectDropDuringExport]
   );
 
   // Handle external file drop on track
@@ -2030,85 +2049,27 @@ export function useExternalDrop({
         }
       }
 
-      // Handle external file drop
-      const items = e.dataTransfer.items;
+      // Handle external file drop (supports multiple files via the shared media import path)
       const filePath = extractFilePath(e);
-
-      log.debug('External drop', { items: items?.length, types: Array.from(e.dataTransfer.types) });
+      log.debug('External drop', { items: e.dataTransfer.items?.length, types: Array.from(e.dataTransfer.types) });
       log.debug('Final file path:', filePath || 'NOT AVAILABLE');
 
-      if (items && items.length > 0) {
-        const item = items[0];
-        log.debug('Item details:', { kind: item.kind, type: item.type });
-        if (item.kind === 'file') {
-          // Try to get file handle (File System Access API)
-          if ('getAsFileSystemHandle' in item) {
-            try {
-              const handle = await (item as FileSystemDataTransferItem).getAsFileSystemHandle();
-              if (handle && handle.kind === 'file') {
-                const file = await handle.getFile();
-                // Attach file path if we got it from URI list
-                setDroppedFilePath(file, filePath);
-                log.debug('File from handle:', { name: file.name, type: file.type, size: file.size, path: filePath });
-                if (isMediaFile(file)) {
-                  const typeOverride = await classifyMediaType(file);
-                  if (typeOverride === 'unknown') {
-                    return;
-                  }
-                  // Audio-only files can only go on audio tracks
-                  const fileIsAudio = isAudioFile(file);
-                  if (fileIsAudio && isVideoTrack) {
-                    log.debug('Audio files can only be dropped on audio tracks');
-                    return;
-                  }
-
-                  await addDroppedTimelineMediaClip({
-                    trackId,
-                    file,
-                    startTime: prepareDropStartTime(cachedDuration),
-                    duration: cachedDuration,
-                    filePath,
-                    handle,
-                    typeOverride,
-                  });
-                  log.debug('Imported file with handle:', { name: file.name, absolutePath: filePath });
-                  return;
-                }
-              }
-            } catch (err) {
-              log.warn('Could not get file handle, falling back:', err);
-            }
-          }
-
-          // Fallback to regular file (no handle)
-          const file = item.getAsFile();
-          if (file) setDroppedFilePath(file, filePath);
-          log.debug('Fallback file:', { name: file?.name, type: file?.type, path: filePath });
-          if (file && isMediaFile(file)) {
-            const typeOverride = await classifyMediaType(file);
-            if (typeOverride === 'unknown') {
-              return;
-            }
-            // Audio-only files can only go on audio tracks
-            const fileIsAudio = isAudioFile(file);
-            if (fileIsAudio && isVideoTrack) {
-              log.debug('Audio files can only be dropped on audio tracks');
-              return;
-            }
-
-            await addDroppedTimelineMediaClip({
-              trackId,
-              file,
-              startTime: prepareDropStartTime(cachedDuration),
-              duration: cachedDuration,
-              filePath,
-              typeOverride,
-            });
-          }
-        }
-      }
+      await placeDroppedTimelineMediaFiles({
+        dataTransfer: e.dataTransfer,
+        trackId,
+        trackIsVideo: isVideoTrack,
+        baseStartTime: desiredStartTime,
+        fallbackDuration: cachedDuration,
+        filePath,
+        // Snap/avoid overlaps the same way single drops do, and prep position-overwrite ranges.
+        resolveStartTime: (desired, duration) => {
+          const startTime = resolveTrackStartTime(trackId, desired, duration ?? cachedDuration);
+          prepareDropPlacement(trackId, startTime, duration ?? cachedDuration);
+          return startTime;
+        },
+      });
     },
-    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, addDroppedTimelineMediaClip, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragState]
+    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragState]
   );
 
   useEffect(() => {

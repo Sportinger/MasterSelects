@@ -55,3 +55,19 @@ export const MEDIA_BOARD_UI_SCALE_CAP_ZOOM = 2.5;
 export function getMediaBoardUiScale(zoom: number): number {
   return Math.min(1, MEDIA_BOARD_UI_SCALE_CAP_ZOOM / Math.max(zoom, MEDIA_BOARD_PAN_ZOOM_MIN));
 }
+
+// Background grid base cell size in CSS px (at zoom = 1).
+export const MEDIA_BOARD_GRID_BASE_SIZE = 32;
+// How much the grid follows the canvas zoom. < 1 means the grid scales SLOWER
+// than the board content, giving a subtle parallax/depth effect (#188).
+export const MEDIA_BOARD_GRID_ZOOM_PARALLAX = 0.35;
+
+/**
+ * Grid cell size for the current zoom. The grid scales with zoom but at a
+ * reduced rate, and is clamped so it always stays comfortably visible across
+ * the full zoom range instead of collapsing into a dense haze or vanishing.
+ */
+export function getMediaBoardGridSize(zoom: number): number {
+  const scaled = MEDIA_BOARD_GRID_BASE_SIZE * (1 + (zoom - 1) * MEDIA_BOARD_GRID_ZOOM_PARALLAX);
+  return Math.min(96, Math.max(14, scaled));
+}

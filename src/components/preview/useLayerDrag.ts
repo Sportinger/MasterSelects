@@ -183,7 +183,11 @@ export function useLayerDrag({
       const overlayHeight = overlayRef.current!.height;
       ctx.clearRect(0, 0, overlayWidth, overlayHeight);
 
-      ctx.fillStyle = '#2a2a2a';
+      // Pasteboard backdrop follows the active color scheme (see --preview-pasteboard-bg in tokens.css)
+      const pasteboardBg = getComputedStyle(overlayRef.current!)
+        .getPropertyValue('--preview-pasteboard-bg')
+        .trim() || '#2a2a2a';
+      ctx.fillStyle = pasteboardBg;
       ctx.fillRect(0, 0, overlayWidth, overlayHeight);
 
       ctx.clearRect(

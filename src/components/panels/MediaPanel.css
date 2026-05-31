@@ -13,6 +13,28 @@
   container-type: inline-size;
 }
 
+/* Floating "Copied"/"Pasted"/"Duplicated" feedback (#187) — rises and fades like
+   floating combat text. Portalled to <body>, positioned at the cursor. */
+.media-floating-text {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 100000;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent, #2d8ceb);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65), 0 0 8px rgba(45, 140, 235, 0.35);
+  white-space: nowrap;
+  animation: media-floating-text-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes media-floating-text-rise {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.8); }
+  18% { opacity: 1; transform: translate(-50%, -75%) scale(1.12); }
+  100% { opacity: 0; transform: translate(-50%, -185%) scale(1); }
+}
+
 .media-panel.drop-target {
   background: rgba(74, 144, 226, 0.1);
 }
@@ -759,18 +781,18 @@
   min-height: 0;
   overflow: hidden;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
     var(--bg-primary);
-  background-size: 32px 32px;
+  /* Grid scales with zoom (slower than the canvas — see getMediaBoardGridSize) */
+  background-size:
+    var(--media-board-grid-size, 32px) var(--media-board-grid-size, 32px),
+    var(--media-board-grid-size, 32px) var(--media-board-grid-size, 32px),
+    auto;
   background-position:
     var(--media-board-grid-x, 0px) var(--media-board-grid-y, 0px),
     var(--media-board-grid-x, 0px) var(--media-board-grid-y, 0px),
     0 0;
-}
-
-.media-board-wrapper.board-interacting {
-  background: var(--bg-primary);
 }
 
 .media-board-toolbar {

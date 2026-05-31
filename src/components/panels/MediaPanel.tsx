@@ -1,6 +1,7 @@
 // Media Panel - Project browser like After Effects
 
 import React, { useCallback, useMemo, useRef, useState, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import './MediaPanel.css';
 import { Logger } from '../../services/logger';
 import { FileTypeIcon } from './media/FileTypeIcon';
@@ -37,6 +38,8 @@ import {
   MEDIA_BOARD_THUMBNAIL_WORKER_COUNT,
   MEDIA_BOARD_TIMELINE_HANDOFF_DISTANCE_PX,
   MEDIA_BOARD_VIDEO_POSTER_FALLBACK_LIMIT,
+  MEDIA_BOARD_GRID_PARALLAX,
+  getMediaBoardGridSize,
   getMediaBoardUiScale,
 } from './media/board/constants';
 import {
@@ -854,6 +857,27 @@ export function MediaPanel() {
   const motionShapeItems = useMediaStore(state => state.motionShapeItems ?? EMPTY_MOTION_SHAPE_ITEMS);
   const signalAssets = useMediaStore(state => state.signalAssets ?? EMPTY_SIGNAL_ASSETS);
   const selectedIds = useMediaStore(state => state.selectedIds);
+  const duplicateMediaItems = useMediaStore(state => state.duplicateMediaItems);
+  const copyMediaItems = useMediaStore(state => state.copyMediaItems);
+  const pasteMediaItems = useMediaStore(state => state.pasteMediaItems);
+  const hasMediaClipboard = useMediaStore(state => state.hasMediaClipboard);
+
+  // Floating "Copied"/"Pasted"/"Duplicated" indicator that rises + fades near the
+  // cursor (WoW-style floating combat text), see #187.
+  const lastPointerRef = useRef<{ x: number; y: number }>({
+    x: typeof window !== 'undefined' ? window.innerWidth / 2 : 0,
+    y: typeof window !== 'undefined' ? window.innerHeight / 2 : 0,
+  });
+  const floatingTextIdRef = useRef(0);
+  const [floatingTexts, setFloatingTexts] = useState<Array<{ id: number; text: string; x: number; y: number }>>([]);
+  const showFloatingText = useCallback((text: string) => {
+    const { x, y } = lastPointerRef.current;
+    const id = ++floatingTextIdRef.current;
+    setFloatingTexts((prev) => [...prev, { id, text, x, y }]);
+    window.setTimeout(() => {
+      setFloatingTexts((prev) => prev.filter((entry) => entry.id !== id));
+    }, 900);
+  }, []);
   const expandedFolderIds = useMediaStore(state => state.expandedFolderIds);
   const fileSystemSupported = useMediaStore(state => state.fileSystemSupported);
   const proxyFolderName = useMediaStore(state => state.proxyFolderName);
@@ -2067,6 +2091,67 @@ export function MediaPanel() {
     }
     return null;
   }, [contextMenu, viewMode, gridFolderId, selectedIds, folders]);
+
+  // Copy / paste / duplicate of media-panel items (#187)
+  const handleCopySelected = useCallback(() => {
+    if (selectedIds.length > 0) {
+      copyMediaItems([...selectedIds]);
+      showFloatingText('Copied');
+    }
+    closeContextMenu();
+  }, [selectedIds, copyMediaItems, showFloatingText, closeContextMenu]);
+
+  const handleDuplicateSelected = useCallback(() => {
+    if (selectedIds.length > 0) {
+      duplicateMediaItems([...selectedIds]);
+      showFloatingText('Duplicated');
+    }
+    closeContextMenu();
+  }, [selectedIds, duplicateMediaItems, showFloatingText, closeContextMenu]);
+
+  const handlePasteItems = useCallback(() => {
+    const pasted = pasteMediaItems(getActiveParentId());
+    if (pasted.length > 0) showFloatingText('Pasted');
+    closeContextMenu();
+  }, [pasteMediaItems, getActiveParentId, showFloatingText, closeContextMenu]);
+
+  // Keyboard copy/paste/duplicate, scoped to when the pointer is over the media
+  // panel (mirrors the existing select-all hover scoping in useTimelineKeyboard).
+  // Capture phase + stopImmediatePropagation so timeline copy/paste doesn't also fire.
+  const mediaPanelRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      const root = mediaPanelRootRef.current;
+      if (!root || !root.matches(':hover')) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+        return; // let the browser handle text copy/paste while editing
+      }
+      const key = e.key.toLowerCase();
+      if (key === 'c') {
+        if (selectedIds.length === 0) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        copyMediaItems([...selectedIds]);
+        showFloatingText('Copied');
+      } else if (key === 'v') {
+        if (!hasMediaClipboard()) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const pasted = pasteMediaItems(getActiveParentId());
+        if (pasted.length > 0) showFloatingText('Pasted');
+      } else if (key === 'd') {
+        if (selectedIds.length === 0) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        duplicateMediaItems([...selectedIds]);
+        showFloatingText('Duplicated');
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, [selectedIds, copyMediaItems, pasteMediaItems, duplicateMediaItems, hasMediaClipboard, getActiveParentId, showFloatingText]);
 
   // New composition
   const handleNewComposition = useCallback(() => {
@@ -3900,9 +3985,18 @@ export function MediaPanel() {
 
   const applyMediaBoardViewportPreview = useCallback((viewport: MediaBoardViewport) => {
     const inner = boardCanvasInnerRef.current;
-    if (!inner) return;
-    inner.style.transform = `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`;
-    inner.style.setProperty('--media-board-ui-scale', String(getMediaBoardUiScale(viewport.zoom)));
+    if (inner) {
+      inner.style.transform = `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`;
+      inner.style.setProperty('--media-board-ui-scale', String(getMediaBoardUiScale(viewport.zoom)));
+    }
+    // Keep the background grid in sync during interaction (it stays visible now),
+    // applying the same parallax it gets on commit so it doesn't jump. (#188)
+    const wrapper = boardWrapperRef.current;
+    if (wrapper) {
+      wrapper.style.setProperty('--media-board-grid-x', `${viewport.panX * MEDIA_BOARD_GRID_PARALLAX}px`);
+      wrapper.style.setProperty('--media-board-grid-y', `${viewport.panY * MEDIA_BOARD_GRID_PARALLAX}px`);
+      wrapper.style.setProperty('--media-board-grid-size', `${getMediaBoardGridSize(viewport.zoom)}px`);
+    }
   }, []);
 
   const startMediaBoardPanGesture = useCallback((e: React.MouseEvent, options?: { clearSelectionOnTap?: boolean }) => {
@@ -5038,12 +5132,23 @@ export function MediaPanel() {
 
   return (
     <div
+      ref={mediaPanelRootRef}
       className={`media-panel ${isExternalDragOver ? 'drop-target' : ''}`}
       onDrop={handleRootDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
+      onMouseMove={(e) => { lastPointerRef.current = { x: e.clientX, y: e.clientY }; }}
       onClick={() => { if (contextMenu) closeContextMenu(); }}
     >
+      {/* Floating action feedback — portalled to body so container-type clipping doesn't apply */}
+      {floatingTexts.length > 0 && createPortal(
+        floatingTexts.map((ft) => (
+          <div key={ft.id} className="media-floating-text" style={{ left: ft.x, top: ft.y }}>
+            {ft.text}
+          </div>
+        )),
+        document.body,
+      )}
       {/* Header */}
       <div className="media-panel-header">
         <div className="media-panel-search">
@@ -5605,6 +5710,11 @@ export function MediaPanel() {
             <div className="context-menu-item" onClick={handleImport}>
               Import Media...
             </div>
+            {hasMediaClipboard() && (
+              <div className="context-menu-item" onClick={handlePasteItems}>
+                Paste
+              </div>
+            )}
             {(contextMenu.itemId || multiSelect) && (
               <>
                 <div className="context-menu-separator" />
@@ -5822,6 +5932,13 @@ export function MediaPanel() {
                   </div>
                 )}
 
+                <div className="context-menu-separator" />
+                <div className="context-menu-item" onClick={handleCopySelected}>
+                  Copy{multiSelect ? ` (${selectedIds.length} items)` : ''}
+                </div>
+                <div className="context-menu-item" onClick={handleDuplicateSelected}>
+                  Duplicate{multiSelect ? ` (${selectedIds.length} items)` : ''}
+                </div>
                 <div className="context-menu-separator" />
                 <div className="context-menu-item danger" onClick={handleDelete}>
                   Delete{multiSelect ? ` (${selectedIds.length} items)` : ''}

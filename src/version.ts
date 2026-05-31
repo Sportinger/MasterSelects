@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.0.7';
+export const APP_VERSION = '2.0.8';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.0.7',
-    message: 'MIDI tracks arrive: add a MIDI track, paint clips with the pencil tool, edit notes in a detached piano-roll window, and hear them through a built-in synth that mixes and exports like any audio track.',
+    title: 'MasterSelects 2.0.8',
+    message: 'UI polish batch: drop multiple files at once into the media panel or timeline, copy/paste/duplicate media items, add panels with a new "+" on every tab bar, scroll any dropdown to change it instantly, and a smoother themed board grid.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.0.7',
-  message: 'This release adds DAW-style MIDI tracks with a pencil tool, a detached piano-roll editor, and a built-in synth with mixer parity and export support.',
+  title: 'MasterSelects 2.0.8',
+  message: 'This release bundles a set of UI fixes: multi-file drag & drop, media copy/paste/duplicate, per-panel "+" add button, scroll-through dropdowns, theme-aware edit backdrop, and a parallax board grid.',
   animated: true,
 };
 
