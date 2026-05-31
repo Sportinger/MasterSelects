@@ -27,6 +27,7 @@ import {
 import { analyzeAudioBufferLoudnessSummary } from '../../services/audio/LoudnessEnvelopeGenerator';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
+import { proxyFrameCache } from '../../services/proxyFrameCache';
 import type { AudioEffectInstance, Effect, MasterAudioState, TimelineClip, TimelineTrack, Keyframe } from '../../types';
 
 const log = Logger.create('AudioExportPipeline');
@@ -451,10 +452,23 @@ export class AudioExportPipeline {
       try {
         let buffer: AudioBuffer;
 
-        // Nested composition with pre-mixed audio buffer
+        // Prefer audio the app already has decoded (in-memory cache) or a fast
+        // PCM-WAV audio proxy on disk, instead of re-decoding the full source.
+        // This is the same audio used for playback, so it stays consistent.
+        const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+        let reusable: AudioBuffer | null = null;
+        if (!clip.isComposition && mediaFileId) {
+          reusable = proxyFrameCache.getCachedAudioBuffer(mediaFileId)
+            ?? await proxyFrameCache.getAudioBuffer(mediaFileId);
+        }
+
         if (clip.isComposition && clip.mixdownBuffer) {
+          // Nested composition with pre-mixed audio buffer
           buffer = clip.mixdownBuffer;
           log.debug(`Using mixdown buffer for nested comp ${clip.name}`);
+        } else if (reusable) {
+          buffer = reusable;
+          log.debug(`Using cached/proxy audio for ${clip.name} (${mediaFileId})`);
         } else if (clip.source?.audioElement) {
           // Extract from audio element
           buffer = await this.extractor.extractFromElement(
@@ -462,7 +476,7 @@ export class AudioExportPipeline {
             clip.id
           );
         } else if (clip.file) {
-          // Extract from file
+          // Last resort: decode the full source file
           buffer = await this.extractor.extractAudio(clip.file, clip.id);
         } else {
           log.warn(`No audio source for clip ${clip.id}`);
@@ -495,18 +509,15 @@ export class AudioExportPipeline {
     const clipPlanById = new Map(audioGraphPlan.clips.map(clip => [clip.clipId, clip]));
     const trackPlanById = new Map(audioGraphPlan.tracks.map(track => [track.trackId, track]));
 
-    for (let i = 0; i < clips.length; i++) {
-      const clip = clips[i];
+    // Each clip renders through its own fresh OfflineAudioContext (the effect
+    // renderers create a new context per call), so clips are independent and can
+    // render concurrently. Bounded concurrency keeps memory in check.
+    const RENDER_CONCURRENCY = 4;
+    let completed = 0;
+
+    const renderOne = async (clip: TimelineClip, index: number): Promise<void> => {
       const buffer = buffers.get(clip.id);
-
-      if (!buffer || this.cancelled) continue;
-
-      onProgress?.({
-        phase: 'processing',
-        percent: Math.round((i / clips.length) * 100),
-        currentClip: clip.name,
-        message: `Rendering audio: ${clip.name}`,
-      });
+      if (!buffer || this.cancelled) return;
 
       const keyframes = clipKeyframes.get(clip.id) || [];
       const clipPlan = clipPlanById.get(clip.id);
@@ -517,7 +528,7 @@ export class AudioExportPipeline {
         sourceBuffer: buffer,
         keyframes,
         effectTailSeconds: clipTailSeconds,
-        onProgress: progress => this.emitClipRenderProgress(clip, i, clips.length, progress, onProgress),
+        onProgress: progress => this.emitClipRenderProgress(clip, index, clips.length, progress, onProgress),
       });
 
       const trackPlan = trackPlanById.get(clip.trackId);
@@ -535,7 +546,25 @@ export class AudioExportPipeline {
         : rendered.buffer;
 
       processed.set(clip.id, trackRenderedBuffer);
-    }
+      completed += 1;
+      onProgress?.({
+        phase: 'processing',
+        percent: Math.round((completed / clips.length) * 100),
+        currentClip: clip.name,
+        message: `Rendering audio: ${clip.name}`,
+      });
+    };
+
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < clips.length && !this.cancelled) {
+        const index = cursor++;
+        await renderOne(clips[index], index);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(RENDER_CONCURRENCY, clips.length) }, () => worker())
+    );
 
     return processed;
   }

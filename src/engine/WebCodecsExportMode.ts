@@ -27,10 +27,19 @@ export interface ExportModePlayer {
 }
 
 export class WebCodecsExportMode {
-  private static readonly INITIAL_LOOKAHEAD_SAMPLES = 90;
-  private static readonly DECODE_LOOKAHEAD_SAMPLES = 60;
+  private static readonly INITIAL_LOOKAHEAD_SAMPLES = 120;
+  private static readonly DECODE_LOOKAHEAD_SAMPLES = 90;
   private static readonly KEEP_FRAMES_BEHIND = 24;
-  private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 30;
+  // Start the background decode-ahead while the buffer is still half full, so it
+  // finishes before the export catches the buffer edge (otherwise the export
+  // briefly freezes at every decode-window boundary).
+  private static readonly WARM_AHEAD_THRESHOLD_SAMPLES = 60;
+  // Max pending decodes before applying backpressure. Software decoders can throw
+  // a generic "Decoding error" (EncodingError) when fed far ahead, which closes
+  // the decoder and forces a slow keyframe restart — pacing the feed avoids that.
+  // Kept well above the old unbounded feed (whole window at once) but high enough
+  // that the decode-ahead stays comfortably in front of the export.
+  private static readonly MAX_DECODE_QUEUE = 24;
 
   private player: ExportModePlayer;
 
@@ -209,6 +218,18 @@ export class WebCodecsExportMode {
     const decoder = this.getConfiguredDecoderOrThrow(`decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
 
     for (let i = startIndex; i < endIndexExclusive; i++) {
+      // Backpressure: wait for the decode queue to drain before queuing more, so
+      // a software decoder isn't overwhelmed (the main cause of mid-export
+      // "Decoding error" closes and the periodic 1fps keyframe restarts).
+      let backpressureGuard = 0;
+      while (decoder.decodeQueueSize >= WebCodecsExportMode.MAX_DECODE_QUEUE && backpressureGuard < 500) {
+        if (decoder.state === 'closed') {
+          throw new Error(`FAST export decoder closed during decodeSampleWindow ${startIndex}-${endIndexExclusive}`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 2));
+        backpressureGuard++;
+      }
+
       const sample = samples[i];
       const chunk = new EncodedVideoChunk({
         type: sample.is_sync ? 'key' : 'delta',
@@ -280,7 +301,26 @@ export class WebCodecsExportMode {
       })
       .finally(() => {
         this.pendingWarmBuffer = null;
+        // Keep the decode pipeline continuously ahead of the export so it never
+        // catches the buffer edge (which caused a brief freeze at every window
+        // boundary). Decode the next window right away while the buffer is shallow.
+        this.maybeContinueWarming();
       });
+  }
+
+  private maybeContinueWarming(): void {
+    if (this.pendingWarmBuffer || !this.isActive) {
+      return;
+    }
+    const samples = this.player.getSamples();
+    if (this.decodeCursorIndex >= samples.length) {
+      return;
+    }
+    const bufferedAhead = this.exportFramesCts.length - this.exportCurrentIndex;
+    if (bufferedAhead >= WebCodecsExportMode.DECODE_LOOKAHEAD_SAMPLES) {
+      return;
+    }
+    this.scheduleWarmBufferAroundSample(this.decodeCursorIndex);
   }
 
   private async restartFromKeyframe(targetSampleIndex: number): Promise<void> {
