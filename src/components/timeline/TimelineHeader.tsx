@@ -57,6 +57,7 @@ import {
 import { normalizeAudioEqParams } from '../../engine/audio/eq/AudioEqLegacy';
 import { getAudioEffectParamPathValue } from '../../utils/audioEffectParamPath';
 import { MIDI_INSTRUMENT_OPTIONS, type MidiInstrument } from '../../types/midiClip';
+import { useTrackReorderDrag, trackReorderSection } from './hooks/useTrackReorderDrag';
 
 type KeyframeTrackClip = {
   id: string;
@@ -1325,6 +1326,8 @@ function TimelineHeaderComponent({
   audioLayerAdvancedMode = true,
   showCollapsedAudioSummaryMeter = false,
 }: TimelineHeaderProps) {
+  // Left-drag reorder of this track within its section (#layers/tracks)
+  const { onReorderPointerDown } = useTrackReorderDrag(track);
   // Get the first selected clip in this track
   const trackClips = clips.filter((c) => c.trackId === track.id);
   const selectedTrackClip = trackClips.find((c) => selectedClipIds.has(c.id));
@@ -1512,6 +1515,8 @@ function TimelineHeaderComponent({
       }`}
       style={trackHeaderStyle}
       data-dock-layout-child-anim-id={`timeline-track-header:${track.id}`}
+      data-track-reorder-id={track.id}
+      data-track-reorder-section={trackReorderSection(track)}
       onWheel={onWheel}
       onContextMenu={onContextMenu}
     >
@@ -1520,6 +1525,14 @@ function TimelineHeaderComponent({
         style={{ height: baseHeight, cursor: (track.type === 'video' || isMixerTrack) ? 'pointer' : 'default' }}
         onClick={handleHeaderClick}
       >
+        <div
+          className="track-reorder-handle"
+          title="Drag to reorder"
+          onPointerDown={onReorderPointerDown}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="track-reorder-grip" aria-hidden="true">⋮</span>
+        </div>
         {showAudioSummaryMeter && (
           <AudioLevelMeter
             streamScope={{ kind: 'master' }}

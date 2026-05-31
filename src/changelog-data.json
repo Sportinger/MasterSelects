@@ -2,6 +2,13 @@
   {
     "date": "2026-05-31",
     "type": "improve",
+    "title": "MasterSelects 2.0.9",
+    "description": "Editing batch: text-clip editing is now part of the layer-edit mode — enter edit mode to move/scale a text layer, double-click to type, with normal resize handles and Ctrl for free corners (no more Shift to align). Edit-mode clicks now select the topmost video, arrow keys nudge the selected clip (Alt = larger, Ctrl = finer, zoom-aware), and you can left-drag a grip on track headers to reorder video layers (z-order) and audio/MIDI tracks. Also: Delete removes selected media-panel items, the source player replays audio files, the slot/grid view scrubs video previews on hover, the panel \"Change to\" menu scrolls, newly created text fills the composition, and browser back no longer leaves the app.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-05-31",
+    "type": "improve",
     "title": "MasterSelects 2.0.8",
     "description": "UI polish batch: drag & drop several files at once into the media panel or straight onto the timeline (both now share the same import path), copy/paste/duplicate media items via right-click or Ctrl+C/V/D with floating action feedback, add panels from a new \"+\" button on every tab bar, scroll the mouse wheel over any dropdown to change its value instantly, the layer-edit backdrop now follows the active color scheme, and the media board's background grid stays visible while zooming with a subtle parallax instead of disappearing.",
     "section": "Release"

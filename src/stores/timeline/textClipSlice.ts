@@ -45,13 +45,15 @@ function getActiveCompositionResolution(): { width: number; height: number } {
 
 function getInitialTextProperties(width: number, height: number): TextClipProperties {
   const base = { ...DEFAULT_TEXT_PROPERTIES };
-  const box = resolveTextBoxRect(base, width, height);
+  // A newly created text field spans the whole composition frame (#204) so the
+  // editable text area matches the comp size; the user can resize it afterwards.
+  const box = { x: 0, y: 0, width, height };
   return {
     ...base,
-    boxX: Math.round(box.x),
-    boxY: Math.round(box.y),
-    boxWidth: Math.round(box.width),
-    boxHeight: Math.round(box.height),
+    boxX: 0,
+    boxY: 0,
+    boxWidth: Math.round(width),
+    boxHeight: Math.round(height),
     textBounds: createTextBoundsFromRect(box, width, height),
   };
 }

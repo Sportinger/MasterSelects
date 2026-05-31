@@ -33,6 +33,7 @@ import type { CampaignStep } from './components/common/tutorialCampaigns';
 import { MobileApp } from './components/mobile';
 import { useTheme } from './hooks/useTheme';
 import { useGlobalSelectWheel } from './hooks/useGlobalSelectWheel';
+import { useBackNavigationGuard } from './hooks/useBackNavigationGuard';
 import { useGlobalHistory } from './hooks/useGlobalHistory';
 import { useClipPanelSync } from './hooks/useClipPanelSync';
 import { useIsMobile, useForceMobile } from './hooks/useIsMobile';
@@ -71,6 +72,9 @@ function App() {
 
   // Scroll the mouse wheel over any native <select> to change its value instantly (#174)
   useGlobalSelectWheel();
+
+  // Trap browser back/swipe so it never leaves the app (#200)
+  useBackNavigationGuard();
 
   // Initialize global undo/redo system
   const { historyNotice, clearHistoryNotice } = useGlobalHistory();

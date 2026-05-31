@@ -34,6 +34,64 @@
   z-index: 90;
 }
 
+/* Drag-to-reorder grip + indicators (video layers / audio tracks).
+   Absolutely positioned in the header's left padding gutter so it consumes no
+   flex width (otherwise it squeezes the track name on compact mixer tracks). */
+.track-reorder-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--text-muted, #888);
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+  touch-action: none;
+  z-index: 2;
+}
+
+.track-header:hover .track-reorder-handle {
+  opacity: 0.5;
+}
+
+.track-reorder-handle:hover {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.track-reorder-handle:active {
+  cursor: grabbing;
+}
+
+.track-reorder-grip {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: -2px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.track-header.track-reordering {
+  opacity: 0.55;
+}
+
+.track-header.track-reorder-target-before {
+  box-shadow: inset 0 2px 0 0 var(--accent, #2d8ceb);
+}
+
+.track-header.track-reorder-target-after {
+  box-shadow: inset 0 -2px 0 0 var(--accent, #2d8ceb);
+}
+
+body.track-reordering-active {
+  cursor: grabbing;
+  user-select: none;
+}
+
 .track-header.video {
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 24%, transparent), transparent 58%),

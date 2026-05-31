@@ -420,14 +420,29 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
     if (!media) return;
     const playbackStart = inPoint ?? 0;
     const playbackEnd = outPoint ?? timelineDuration;
-    if (
+    const needsRewind =
       media.ended ||
       media.currentTime >= playbackEnd - MIN_MARK_GAP_SECONDS ||
-      media.currentTime < playbackStart - MIN_MARK_GAP_SECONDS
-    ) {
-      media.currentTime = clampTime(playbackStart, timelineDuration);
+      media.currentTime < playbackStart - MIN_MARK_GAP_SECONDS;
+    if (needsRewind) {
+      // Rewind to the marked start. An *ended* <audio> element must be reset
+      // before play() or it stays ended and play() is a no-op — which is why
+      // audio only played once (Stop+Play worked because Stop reset it). (#203)
+      const start = clampTime(playbackStart, timelineDuration);
+      media.currentTime = start;
+      currentTimeRef.current = start;
+      setCurrentTime(start);
     }
-    void media.play();
+    void media.play().catch(() => {
+      // Last resort if the element refuses to restart: reload and retry once.
+      try {
+        media.load();
+        media.currentTime = clampTime(playbackStart, timelineDuration);
+        void media.play();
+      } catch {
+        /* ignore */
+      }
+    });
   }, [inPoint, isPlayable, outPoint, timelineDuration]);
 
   const pauseSource = useCallback(() => {

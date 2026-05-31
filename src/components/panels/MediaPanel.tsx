@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import './MediaPanel.css';
 import { Logger } from '../../services/logger';
 import { FileTypeIcon } from './media/FileTypeIcon';
+import { MediaGridVideoThumb } from './media/MediaGridVideoThumb';
 import { LABEL_COLORS, getLabelHex } from './media/labelColors';
 import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
@@ -2121,13 +2122,24 @@ export function MediaPanel() {
   const mediaPanelRootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+      if (e.altKey) return;
       const root = mediaPanelRootRef.current;
       if (!root || !root.matches(':hover')) return;
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
-        return; // let the browser handle text copy/paste while editing
+        return; // let the browser handle text editing / copy-paste while typing
       }
+
+      // Delete / Backspace removes the highlighted media items (#207).
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (selectedIds.length === 0) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        void handleDelete();
+        return;
+      }
+
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
       const key = e.key.toLowerCase();
       if (key === 'c') {
         if (selectedIds.length === 0) return;
@@ -2151,7 +2163,7 @@ export function MediaPanel() {
     };
     document.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [selectedIds, copyMediaItems, pasteMediaItems, duplicateMediaItems, hasMediaClipboard, getActiveParentId, showFloatingText]);
+  }, [selectedIds, copyMediaItems, pasteMediaItems, duplicateMediaItems, hasMediaClipboard, getActiveParentId, showFloatingText, handleDelete]);
 
   // New composition
   const handleNewComposition = useCallback(() => {
@@ -2926,7 +2938,13 @@ export function MediaPanel() {
           title={buildGridTooltip(item, isFolder, isComp)}
         >
           <div className="media-grid-thumb">
-            {thumbUrl ? (
+            {mediaFile?.type === 'video' ? (
+              <MediaGridVideoThumb
+                mediaFile={mediaFile}
+                thumbUrl={thumbUrl}
+                onError={() => { void refreshFileUrls(mediaFile.id); }}
+              />
+            ) : thumbUrl ? (
               <img
                 src={thumbUrl}
                 alt=""

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
 import { useMediaStore, type MediaFile } from '../../../stores/mediaStore';
 import type { FlashBoardGenerationRequest, FlashBoardNode } from '../../../stores/flashboardStore/types';
@@ -249,13 +249,14 @@ async function animateCardToMediaTarget(source: HTMLElement, mediaFileId: string
   }
 }
 
-export function MediaAIGenerationQueue() {
+function MediaAIGenerationQueueImpl() {
   const boards = useFlashBoardStore((state) => state.boards);
   const removeNode = useFlashBoardStore((state) => state.removeNode);
   const downloadJobs = useMediaDownloadStore((state) => state.jobs);
   const dismissDownloadJob = useMediaDownloadStore((state) => state.dismissJob);
   const retryDownloadJob = useMediaDownloadStore((state) => state.retryJob);
   const mediaFiles = useMediaStore((state) => state.files);
+  const mediaFilesById = useMemo(() => new Map(mediaFiles.map((file) => [file.id, file])), [mediaFiles]);
   const [now, setNow] = useState(() => Date.now());
   const [flyingItemIds, setFlyingItemIds] = useState<Set<string>>(() => new Set());
   const flyingItemIdsRef = useRef<Set<string>>(new Set());
@@ -346,7 +347,7 @@ export function MediaAIGenerationQueue() {
           : null;
         const mediaFileId = isDownload ? job!.mediaFileId : node!.result?.mediaFileId;
         const generatedMedia = mediaFileId
-          ? mediaFiles.find((file) => file.id === mediaFileId)
+          ? mediaFilesById.get(mediaFileId)
           : undefined;
         const previewUrl = isDownload
           ? (job!.thumbnail || getGeneratedPreviewUrl(generatedMedia))
@@ -498,3 +499,7 @@ export function MediaAIGenerationQueue() {
     </div>
   );
 }
+
+// Memoized: the queue subscribes to its own stores, so it shouldn't re-render
+// just because the (heavy) expanded tray parent re-renders (#199).
+export const MediaAIGenerationQueue = memo(MediaAIGenerationQueueImpl);

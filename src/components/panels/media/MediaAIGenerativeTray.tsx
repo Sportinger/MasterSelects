@@ -1,9 +1,12 @@
-import { lazy, Suspense, useCallback, useState, type SyntheticEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { useFlashBoardRuntime } from '../flashboard/useFlashBoardRuntime';
 import './MediaAIGenerativeTray.css';
 
+// Shared factory so we can both lazy-render and prefetch the (heavy) expanded
+// tray chunk. Module imports are cached, so calling this repeatedly is cheap.
+const importExpandedTray = () => import('./MediaAIGenerativeTrayExpanded');
 const MediaAIGenerativeTrayExpanded = lazy(() =>
-  import('./MediaAIGenerativeTrayExpanded').then((m) => ({ default: m.MediaAIGenerativeTrayExpanded }))
+  importExpandedTray().then((m) => ({ default: m.MediaAIGenerativeTrayExpanded }))
 );
 
 type MediaAITrayMode = 'generate' | 'chat' | 'download';
@@ -24,6 +27,28 @@ export function MediaAIGenerativeTray({
     event.stopPropagation();
   }, []);
 
+  // Warm the heavy expanded chunk while collapsed (on idle), and on button
+  // hover, so the first expand doesn't pay the parse cost on the click (#199).
+  const prefetchExpanded = useCallback(() => {
+    void importExpandedTray();
+  }, []);
+
+  useEffect(() => {
+    if (expanded) return undefined;
+    let cancelled = false;
+    const warm = () => { if (!cancelled) prefetchExpanded(); };
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof win.requestIdleCallback === 'function') {
+      const id = win.requestIdleCallback(warm);
+      return () => { cancelled = true; win.cancelIdleCallback?.(id); };
+    }
+    const id = window.setTimeout(warm, 200);
+    return () => { cancelled = true; window.clearTimeout(id); };
+  }, [expanded, prefetchExpanded]);
+
   const openTray = useCallback((mode: MediaAITrayMode) => {
     setTrayMode(mode);
     onExpandedChange(true);
@@ -37,6 +62,7 @@ export function MediaAIGenerativeTray({
             className="media-ai-tray-launch media-ai-tray-launch-chat"
             type="button"
             onClick={() => openTray('chat')}
+            onMouseEnter={prefetchExpanded}
             title="Open AI chat"
           >
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -49,6 +75,7 @@ export function MediaAIGenerativeTray({
             className="media-ai-tray-launch"
             type="button"
             onClick={() => openTray('generate')}
+            onMouseEnter={prefetchExpanded}
             title="Expand AI prompt"
           >
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
@@ -61,6 +88,7 @@ export function MediaAIGenerativeTray({
             className="media-ai-tray-launch media-ai-tray-launch-download"
             type="button"
             onClick={() => openTray('download')}
+            onMouseEnter={prefetchExpanded}
             title="Open downloads"
           >
             <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
