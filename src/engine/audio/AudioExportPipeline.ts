@@ -22,6 +22,7 @@ import { getAudioEffect } from './AudioEffectRegistry';
 import { dbToLinearGain, finiteNumber } from './audioMath';
 import { ClipAudioRenderService, type ClipAudioRenderProgress } from '../../services/audio/ClipAudioRenderService';
 import { renderMidiClipToBuffer } from './MidiClipRenderer';
+import { getGmSampleBank } from './GmSampleBank';
 import {
   audioGraphPlanStepsToEffectInstances,
 } from '../../services/audio/audioGraphRouteSettings';
@@ -445,6 +446,19 @@ export class AudioExportPipeline {
     onProgress?: AudioExportProgressCallback
   ): Promise<Map<string, AudioBuffer>> {
     const buffers = new Map<string, AudioBuffer>();
+
+    // Preload all GM wavetable samples once, before the clip loop. renderMidiClipToBuffer
+    // schedules notes synchronously then renders immediately, so samples must already be
+    // in the shared bank or GM clips render silent (the async↔sync gap, #193 Phase 4).
+    const gmPrograms = new Set<number>();
+    for (const clip of clips) {
+      if (clip.source?.type !== 'midi') continue;
+      const instrument = tracks.find(t => t.id === clip.trackId)?.midiInstrument;
+      if (instrument?.kind === 'gm') gmPrograms.add(instrument.program);
+    }
+    if (gmPrograms.size > 0) {
+      await getGmSampleBank().ensureLoaded([...gmPrograms]);
+    }
 
     for (let i = 0; i < clips.length; i++) {
       const clip = clips[i];

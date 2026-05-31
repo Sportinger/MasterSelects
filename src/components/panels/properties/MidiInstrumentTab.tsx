@@ -20,7 +20,6 @@ interface MidiInstrumentTabProps {
 export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
   const setTrackMidiInstrument = useTimelineStore(state => state.setTrackMidiInstrument);
   const instrument: MidiInstrument = track.midiInstrument ?? createDefaultMidiInstrument();
-  const { adsr } = instrument;
 
   return (
     <div className="properties-tab-content audio-bus-properties-tab">
@@ -37,17 +36,19 @@ export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
             ))}
           </select>
         </label>
-        <label className="audio-bus-control-row audio-bus-control-row-compact">
-          <span>Waveform</span>
-          <select
-            value={instrument.waveform}
-            onChange={(event) => setTrackMidiInstrument(track.id, { waveform: event.currentTarget.value as OscillatorType })}
-          >
-            {MIDI_WAVEFORM_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
+        {instrument.kind === 'simple-synth' && (
+          <label className="audio-bus-control-row audio-bus-control-row-compact">
+            <span>Waveform</span>
+            <select
+              value={instrument.waveform}
+              onChange={(event) => setTrackMidiInstrument(track.id, { waveform: event.currentTarget.value as OscillatorType })}
+            >
+              {MIDI_WAVEFORM_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="audio-bus-control-row">
           <span>Gain</span>
           <input
@@ -69,35 +70,37 @@ export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
         </label>
       </div>
 
-      <div className="properties-section">
-        <h4>Envelope (ADSR)</h4>
-        {([
-          { key: 'attack', label: 'Attack', max: 2 },
-          { key: 'decay', label: 'Decay', max: 2 },
-          { key: 'sustain', label: 'Sustain', max: 1 },
-          { key: 'release', label: 'Release', max: 4 },
-        ] as const).map(({ key, label, max }) => (
-          <label className="audio-bus-control-row" key={key}>
-            <span>{label}</span>
-            <input
-              type="range"
-              min="0"
-              max={max}
-              step="0.01"
-              value={adsr[key]}
-              onChange={(event) => setTrackMidiInstrument(track.id, { adsr: { ...adsr, [key]: Number(event.currentTarget.value) } })}
-            />
-            <input
-              type="number"
-              min="0"
-              max={max}
-              step="0.01"
-              value={adsr[key]}
-              onChange={(event) => setTrackMidiInstrument(track.id, { adsr: { ...adsr, [key]: Number(event.currentTarget.value) } })}
-            />
-          </label>
-        ))}
-      </div>
+      {instrument.kind === 'simple-synth' && (
+        <div className="properties-section">
+          <h4>Envelope (ADSR)</h4>
+          {([
+            { key: 'attack', label: 'Attack', max: 2 },
+            { key: 'decay', label: 'Decay', max: 2 },
+            { key: 'sustain', label: 'Sustain', max: 1 },
+            { key: 'release', label: 'Release', max: 4 },
+          ] as const).map(({ key, label, max }) => (
+            <label className="audio-bus-control-row" key={key}>
+              <span>{label}</span>
+              <input
+                type="range"
+                min="0"
+                max={max}
+                step="0.01"
+                value={instrument.adsr[key]}
+                onChange={(event) => setTrackMidiInstrument(track.id, { adsr: { ...instrument.adsr, [key]: Number(event.currentTarget.value) } })}
+              />
+              <input
+                type="number"
+                min="0"
+                max={max}
+                step="0.01"
+                value={instrument.adsr[key]}
+                onChange={(event) => setTrackMidiInstrument(track.id, { adsr: { ...instrument.adsr, [key]: Number(event.currentTarget.value) } })}
+              />
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -21,7 +21,9 @@
 
 import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineTrack } from '../../types';
-import { MidiSynth } from '../../engine/audio/MidiSynth';
+import type { IMidiSynth } from '../../engine/audio/IMidiSynth';
+import { createSynthForInstrument } from '../../engine/audio/createSynthForInstrument';
+import { getGmSampleBank } from '../../engine/audio/GmSampleBank';
 import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
 import { audioRoutingManager } from '../audioRoutingManager';
 import {
@@ -45,14 +47,16 @@ const MAX_SCHEDULED_KEYS = 10_000;    // safety cap on the dedup set
  * + metering are all owned by the shared routing graph (mixer-channel parity).
  */
 interface TrackBus {
-  synth: MidiSynth;
+  synth: IMidiSynth;
   sourceGain: GainNode;
+  /** Instrument kind the synth was built for; a change rebuilds the synth. */
+  kind: MidiInstrument['kind'];
 }
 
 class MidiPlaybackScheduler {
   private context: AudioContext | null = null;
   private buses = new Map<string, TrackBus>();
-  private previewSynth: MidiSynth | null = null;
+  private previewSynth: IMidiSynth | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
   private initialized = false;
@@ -63,6 +67,8 @@ class MidiPlaybackScheduler {
   private anchorTimeline = 0;
   // Notes already scheduled in the current run, keyed to avoid double-trigger.
   private scheduled = new Set<string>();
+  // GM programs already requested from the bank, so preload runs once per program.
+  private preloadedPrograms = new Set<number>();
 
   /** Idempotent: subscribe to transport state so playback drives the synth. */
   init(): void {
@@ -75,7 +81,26 @@ class MidiPlaybackScheduler {
         else this.stop();
       },
     );
+    // Preload GM samples as soon as a track's instrument is set/changed (before the
+    // user hits play), so the first note isn't dropped while the asset loads.
+    useTimelineStore.subscribe(
+      (state) => state.tracks,
+      (tracks) => this.preloadGmPrograms(tracks),
+    );
     log.debug('MIDI playback scheduler initialized');
+  }
+
+  /** Fetch GM samples for any GM track program not already requested (deduped). */
+  private preloadGmPrograms(tracks: TimelineTrack[]): void {
+    const programs: number[] = [];
+    for (const track of tracks) {
+      const instrument = track.type === 'midi' ? track.midiInstrument : undefined;
+      if (instrument?.kind !== 'gm') continue;
+      if (this.preloadedPrograms.has(instrument.program)) continue;
+      this.preloadedPrograms.add(instrument.program);
+      programs.push(instrument.program);
+    }
+    if (programs.length > 0) void getGmSampleBank().ensureLoaded(programs);
   }
 
   /**
@@ -97,7 +122,7 @@ class MidiPlaybackScheduler {
       ? useTimelineStore.getState().tracks.find((t) => t.id === trackId && t.type === 'midi')
       : undefined;
     if (track) {
-      const bus = this.getOrCreateBus(track.id);
+      const bus = this.getOrCreateBus(track.id, resolved);
       if (bus) {
         this.routeBus(track.id, bus, track, false);
         bus.synth.previewNote(resolved, pitch, velocity, 0.35);
@@ -106,7 +131,7 @@ class MidiPlaybackScheduler {
     }
 
     if (!this.previewSynth) {
-      this.previewSynth = new MidiSynth(this.context, this.context.destination);
+      this.previewSynth = createSynthForInstrument(resolved, this.context, this.context.destination);
     }
     this.previewSynth.previewNote(resolved, pitch, velocity, 0.35);
   }
@@ -126,16 +151,26 @@ class MidiPlaybackScheduler {
     }
   }
 
-  private getOrCreateBus(trackId: string): TrackBus | null {
-    const existing = this.buses.get(trackId);
-    if (existing) return existing;
+  // The instrument picks the synth implementation (oscillator vs GM wavetable). When
+  // the track's instrument *kind* changes, rebuild the synth onto the same source
+  // gain so the bus keeps its routing/meter while the audio source swaps.
+  private getOrCreateBus(trackId: string, instrument: MidiInstrument): TrackBus | null {
     if (!this.context) return null;
+    const existing = this.buses.get(trackId);
+    if (existing) {
+      if (existing.kind === instrument.kind) return existing;
+      existing.synth.stopAll();
+      existing.synth = createSynthForInstrument(instrument, this.context, existing.sourceGain);
+      existing.kind = instrument.kind;
+      return existing;
+    }
 
     const ctx = this.context;
     const sourceGain = ctx.createGain();
     const bus: TrackBus = {
-      synth: new MidiSynth(ctx, sourceGain),
+      synth: createSynthForInstrument(instrument, ctx, sourceGain),
       sourceGain,
+      kind: instrument.kind,
     };
     this.buses.set(trackId, bus);
     return bus;
@@ -179,6 +214,9 @@ class MidiPlaybackScheduler {
     if (this.running) return;
     if (!this.ensureAudio() || !this.context) return;
     void this.context.resume?.().catch(() => {});
+    // Preload GM samples for current tracks (covers a freshly loaded project where no
+    // instrument-change event fired since init).
+    this.preloadGmPrograms(useTimelineStore.getState().tracks);
     this.running = true;
     this.needReanchor = false;
     this.reanchor();
@@ -260,7 +298,8 @@ class MidiPlaybackScheduler {
     const hasSolo = midiTracks.some((track) => getTrackAudioSolo(track));
 
     for (const track of midiTracks) {
-      const bus = this.getOrCreateBus(track.id);
+      const instrument = track.midiInstrument ?? createDefaultMidiInstrument();
+      const bus = this.getOrCreateBus(track.id, instrument);
       if (!bus) continue;
 
       const silenced = getTrackAudioMuted(track) || (hasSolo && !getTrackAudioSolo(track));
@@ -268,7 +307,6 @@ class MidiPlaybackScheduler {
       this.publishBusMeter(track.id);
 
       if (silenced) continue;
-      const instrument = track.midiInstrument ?? createDefaultMidiInstrument();
 
       for (const clip of state.clips) {
         if (clip.trackId !== track.id || clip.source?.type !== 'midi') continue;

@@ -23,16 +23,33 @@ export interface MidiClipData {
 }
 
 /**
- * Instrument that renders a MIDI track's clips to audio. Kept deliberately
- * minimal for now (one oscillator + ADSR) but behind a `kind` discriminator so
- * future instruments (sampler, FM, …) slot in without reworking the data model.
- * The instrument lives on the *track* (DAW convention), notes live on the clip.
+ * Instrument that renders a MIDI track's clips to audio. A discriminated union on
+ * `kind` so the synth/data model grows by adding a branch (the General MIDI
+ * wavetable in issue #193, future sampler/FM, …) rather than piling optional
+ * fields onto one shape — `tsc` then enumerates every consumer that must handle a
+ * new kind. The instrument lives on the *track* (DAW convention); notes live on
+ * the clip.
  */
-export interface MidiInstrument {
-  kind: 'simple-synth';     // extensible: future 'sampler' | 'fm' | ...
-  waveform: OscillatorType; // 'triangle' for now
+export type MidiInstrument = SimpleSynthInstrument | GmInstrument;
+
+/** The original oscillator + ADSR synth (issue #182). */
+export interface SimpleSynthInstrument {
+  kind: 'simple-synth';
+  waveform: OscillatorType; // 'triangle' default
   adsr: MidiAdsr;
   gain: number;             // 0–1 instrument output gain
+}
+
+/**
+ * General MIDI wavetable instrument (issue #193). Envelope + loop come from the
+ * sampled zone, so only the GM program, an optional percussion flag, and an
+ * output gain live here.
+ */
+export interface GmInstrument {
+  kind: 'gm';
+  program: number;   // 0–127 GM program
+  isDrum?: boolean;  // true = percussion kit (per-note sample, native rate)
+  gain: number;      // 0–1 output gain
 }
 
 export interface MidiAdsr {
@@ -42,8 +59,18 @@ export interface MidiAdsr {
   release: number;  // seconds
 }
 
-/** Default instrument applied to newly created MIDI tracks. */
-export function createDefaultMidiInstrument(): MidiInstrument {
+/**
+ * Default instrument for a given kind. Newly created MIDI tracks get the simple
+ * synth; passing `'gm'` yields GM program 0 (Acoustic Grand Piano). Used both for
+ * track creation and to produce a clean shape when the user switches a track's
+ * instrument kind (so no stale `adsr`/`waveform` carries onto a GM instrument).
+ */
+export function createDefaultMidiInstrument(
+  kind: MidiInstrument['kind'] = 'simple-synth',
+): MidiInstrument {
+  if (kind === 'gm') {
+    return { kind: 'gm', program: 0, isDrum: false, gain: 0.8 };
+  }
   return {
     kind: 'simple-synth',
     waveform: 'triangle',
@@ -59,6 +86,7 @@ export function createDefaultMidiInstrument(): MidiInstrument {
  */
 export const MIDI_INSTRUMENT_OPTIONS: ReadonlyArray<{ kind: MidiInstrument['kind']; label: string }> = [
   { kind: 'simple-synth', label: 'Simple Synth' },
+  { kind: 'gm', label: 'General MIDI' },
 ];
 
 /** Oscillator waveforms offered for the simple synth. */
