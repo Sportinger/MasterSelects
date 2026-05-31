@@ -29,6 +29,7 @@ export const flags = {
   guidedActionsTutorials: true,  // Tutorial scenarios using guided actions
   guidedActionsRecorder: false,  // Future guided action authoring/recording layer
   timelineCanvasClips: false,  // issue #228: draw timeline clip bodies on a canvas (LOD) instead of one DOM node per clip; React/DOM keeps chrome + active-clip overlay
+  timelineCanvasWorker: false,  // issue #228 P4: render the clip canvas in an OffscreenCanvas Web Worker (off main thread); requires timelineCanvasClips. Worker path draws rects/LOD/labels (thumbnails are a follow-up)
 };
 
 // Expose for runtime toggling from devtools

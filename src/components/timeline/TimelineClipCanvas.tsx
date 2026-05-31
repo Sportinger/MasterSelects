@@ -19,6 +19,7 @@
 import { memo, useEffect, useReducer, useRef } from 'react';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { getThumbnailBitmap, ensureThumbnailBitmap } from './utils/thumbnailBitmapCache';
+import { flags } from '../../engine/featureFlags';
 
 // Browser 2D canvas backing-store limit is ~16384px in Chrome; stay safely under.
 export const MAX_CANVAS_WIDTH_PX = 16000;
@@ -212,10 +213,60 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
   const { clips, height, contentWidth, timeToPixel, selectedClipIds, trackColor, excludeIds } = props;
   const cssWidth = Math.max(1, Math.min(contentWidth, MAX_CANVAS_WIDTH_PX));
 
+  // Phase 4: optionally render in an OffscreenCanvas worker (off main thread).
+  const workerMode = flags.timelineCanvasWorker;
+  const workerRef = useRef<Worker | null>(null);
+  const workerReadyRef = useRef(false);
+
   // Redraw when the thumbnail cache gains frames for any of our media files.
-  useEffect(() => thumbnailCacheService.subscribe(() => bumpRedraw()), []);
+  // (Main-thread path only — the worker path does not draw thumbnails yet.)
+  useEffect(() => {
+    if (workerMode) return;
+    return thumbnailCacheService.subscribe(() => bumpRedraw());
+  }, [workerMode]);
+
+  // Worker lifecycle: transfer the canvas's drawing surface to the worker once.
+  useEffect(() => {
+    if (!workerMode) return;
+    const canvas = canvasRef.current;
+    if (!canvas || workerRef.current) return;
+    const worker = new Worker(new URL('./workers/timelineClipCanvas.worker.ts', import.meta.url), { type: 'module' });
+    workerRef.current = worker;
+    const offscreen = canvas.transferControlToOffscreen();
+    worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen]);
+    workerReadyRef.current = true;
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+      workerReadyRef.current = false;
+    };
+  }, [workerMode]);
+
+  // Worker draw: post plain geometry whenever it changes. CSS size stays on the
+  // main-thread element; the worker owns the backing buffer.
+  useEffect(() => {
+    if (!workerMode) return;
+    const canvas = canvasRef.current;
+    const worker = workerRef.current;
+    if (!canvas || !worker || !workerReadyRef.current) return;
+    canvas.style.width = `${cssWidth}px`;
+    canvas.style.height = `${height}px`;
+    const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+    worker.postMessage({
+      type: 'draw',
+      clips: clips.map((c) => ({ id: c.id, startTime: c.startTime, duration: c.duration, name: c.name })),
+      height,
+      cssWidth,
+      pxPerSecond: timeToPixel(1),
+      dpr,
+      selectedIds: Array.from(selectedClipIds),
+      excludeIds: excludeIds ? Array.from(excludeIds) : [],
+      trackColor,
+    });
+  }, [workerMode, clips, height, cssWidth, timeToPixel, selectedClipIds, trackColor, excludeIds]);
 
   useEffect(() => {
+    if (workerMode) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -245,7 +296,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
         rafRef.current = null;
       }
     };
-  }, [clips, height, contentWidth, cssWidth, timeToPixel, selectedClipIds, trackColor, excludeIds, redrawNonce]);
+  }, [workerMode, clips, height, contentWidth, cssWidth, timeToPixel, selectedClipIds, trackColor, excludeIds, redrawNonce]);
 
   return (
     <canvas
