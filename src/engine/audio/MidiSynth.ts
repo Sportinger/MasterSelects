@@ -13,6 +13,7 @@
 // an OfflineAudioContext.
 
 import type { MidiInstrument } from '../../types/midiClip';
+import type { IMidiSynth } from './IMidiSynth';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('MidiSynth');
@@ -38,7 +39,7 @@ interface ActiveVoice {
  * Polyphonic triangle/-ish synth. One instance wraps a single AudioContext (live
  * or offline) and an output node to connect into (e.g. the master mixer input).
  */
-export class MidiSynth {
+export class MidiSynth implements IMidiSynth {
   private readonly context: BaseAudioContext;
   private readonly destination: AudioNode;
   private readonly voices = new Set<ActiveVoice>();
@@ -61,6 +62,11 @@ export class MidiSynth {
     when: number,
     duration: number,
   ): void {
+    // This synth only renders the oscillator instrument; GM instruments are
+    // handled by WavetableSynth via the factory. Narrowing also makes the
+    // `instrument.adsr` / `instrument.waveform` access below type-safe.
+    if (instrument.kind !== 'simple-synth') return;
+
     const ctx = this.context;
     const startAt = Math.max(when, ctx.currentTime);
 
@@ -114,6 +120,11 @@ export class MidiSynth {
   previewNote(instrument: MidiInstrument, pitch: number, velocity = 0.8, duration = 0.3): void {
     if (!('currentTime' in this.context)) return;
     this.scheduleNote(instrument, pitch, velocity, this.context.currentTime, duration);
+  }
+
+  /** The oscillator synth needs no samples; preload is a no-op (IMidiSynth). */
+  async preload(): Promise<void> {
+    // intentionally empty
   }
 
   /**

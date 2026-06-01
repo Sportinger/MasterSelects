@@ -8,7 +8,7 @@
 
 import type { TimelineClip, TimelineTrack } from '../../types';
 import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
-import { MidiSynth } from './MidiSynth';
+import { createSynthForInstrument } from './createSynthForInstrument';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('MidiClipRenderer');
@@ -89,7 +89,7 @@ export async function renderMidiClipToBuffer(
 
   const frames = Math.max(1, Math.ceil(plan.durationSeconds * sampleRate));
   const context = new OfflineCtor(2, frames, sampleRate);
-  const synth = new MidiSynth(context, context.destination);
+  const synth = createSynthForInstrument(plan.instrument, context, context.destination);
 
   for (const note of plan.notes) {
     synth.scheduleNote(plan.instrument, note.pitch, note.velocity, note.startTime, note.duration);

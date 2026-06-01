@@ -856,14 +856,23 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
       tracks: tracks.map(track => {
         if (track.id !== trackId || track.type !== 'midi') return track;
         const current: MidiInstrument = track.midiInstrument ?? createDefaultMidiInstrument();
-        return {
-          ...track,
-          midiInstrument: {
-            ...current,
-            ...patch,
-            adsr: { ...current.adsr, ...(patch.adsr ?? {}) },
-          },
-        };
+
+        // Changing the instrument *kind* swaps to a clean default for that kind
+        // (no stale adsr/waveform left on a GM instrument, etc.), then applies any
+        // other provided fields.
+        if (patch.kind && patch.kind !== current.kind) {
+          const base = createDefaultMidiInstrument(patch.kind);
+          return { ...track, midiInstrument: { ...base, ...patch } as MidiInstrument };
+        }
+
+        // Same kind: shallow-merge, and deep-merge the ADSR only for the simple
+        // synth (GM has no envelope of its own).
+        const merged = { ...current, ...patch } as MidiInstrument;
+        if (merged.kind === 'simple-synth' && current.kind === 'simple-synth') {
+          const patchAdsr = 'adsr' in patch ? patch.adsr : undefined;
+          merged.adsr = { ...current.adsr, ...(patchAdsr ?? {}) };
+        }
+        return { ...track, midiInstrument: merged };
       }),
     });
   },

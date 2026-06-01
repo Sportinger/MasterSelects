@@ -677,6 +677,8 @@ function convertProjectCompositionToStore(
         muted: t.muted,
         solo: t.solo,
         audioState: t.audioState ? structuredClone(t.audioState) : undefined,
+        // MIDI track instrument (issue #182/#193) — restore the synth + GM program.
+        midiInstrument: t.midiInstrument ? structuredClone(t.midiInstrument) : undefined,
       })),
       clips: pc.clips.map((c) => ({
         id: c.id,
