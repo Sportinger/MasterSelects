@@ -230,6 +230,9 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       muted: t.muted || false,
       solo: t.solo || false,
       audioState: t.audioState ? structuredClone(t.audioState) : undefined,
+      // MIDI track instrument (issue #182/#193) — persist so the synth + GM program
+      // survive a hard refresh / project reload, not just the in-memory loadState path.
+      midiInstrument: t.midiInstrument ? structuredClone(t.midiInstrument) : undefined,
     }));
 
     // Convert clips

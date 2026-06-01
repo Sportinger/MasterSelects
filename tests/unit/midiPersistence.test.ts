@@ -1,8 +1,10 @@
 // MIDI persistence round-trip (issue #182, Phase 5).
 //
 // Verifies that a MIDI track's instrument and a MIDI clip's notes survive the
-// in-memory serialize → clear → load cycle (getSerializableState / loadState),
-// which is the same data path projectSave/projectLoad persist to disk.
+// in-memory serialize → clear → load cycle (getSerializableState / loadState).
+// NOTE: this is the in-memory path (a `...track` spread). The on-disk path
+// (projectSave/projectLoad) maps track fields explicitly and is covered separately
+// in projectMediaPersistence.test.ts — they are NOT the same code.
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -24,7 +26,9 @@ describe('MIDI persistence round-trip', () => {
     const clipId = store.addMidiClip(trackId, 1.5, 4);
     if (!clipId) throw new Error('Failed to create MIDI clip');
 
-    store.setTrackMidiInstrument(trackId, { waveform: 'sawtooth', gain: 0.5 });
+    // Explicit kind: new MIDI tracks now default to GM, so select the simple synth
+    // before tweaking its oscillator-specific fields.
+    store.setTrackMidiInstrument(trackId, { kind: 'simple-synth', waveform: 'sawtooth', gain: 0.5 });
     store.addMidiNote(clipId, { pitch: 64, start: 0.25, duration: 0.5, velocity: 0.7 });
     store.addMidiNote(clipId, { pitch: 67, start: 1.0, duration: 0.75, velocity: 0.9 });
 

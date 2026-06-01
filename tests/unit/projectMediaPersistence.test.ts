@@ -614,6 +614,42 @@ describe('project media persistence', () => {
     ]);
   });
 
+  it('persists the MIDI track instrument (synth + GM program) so it survives a reload', async () => {
+    // Regression: the disk save/load maps tracks field-by-field (unlike the in-memory
+    // spread path), and midiInstrument was omitted — so the Wavetable Synth / GM program
+    // was lost on hard refresh. It must round-trip to the saved project composition.
+    mocks.mediaState.activeCompositionId = 'comp-1';
+    mocks.mediaState.compositions = [{
+      id: 'comp-1', name: 'Comp 1', type: 'composition', parentId: null, createdAt: 1,
+      width: 1920, height: 1080, frameRate: 30, duration: 60, backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [] },
+    }];
+    mocks.timelineState.getSerializableState.mockReturnValue({
+      tracks: [{
+        id: 'track-m1', name: 'MIDI 1', type: 'midi', height: 60, muted: false, visible: true, solo: false,
+        midiInstrument: { kind: 'gm', program: 40, isDrum: false, gain: 0.8 },
+      }],
+      clips: [],
+      playheadPosition: 0, duration: 60, zoom: 1, scrollX: 0, inPoint: null, outPoint: null,
+    });
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'comp-1',
+        tracks: [
+          expect.objectContaining({
+            id: 'track-m1',
+            type: 'midi',
+            midiInstrument: { kind: 'gm', program: 40, isDrum: false, gain: 0.8 },
+          }),
+        ],
+      }),
+    ]);
+  });
+
   it('persists transport MIDI bindings in project uiState when syncing stores to the project file', async () => {
     const projectData = {
       media: [],
