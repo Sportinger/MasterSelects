@@ -85,11 +85,12 @@ export class WavetableSynth implements IMidiSynth {
       gain.gain.setValueAtTime(peak, Math.max(attackEnd, endsAt - 0.01));
       gain.gain.exponentialRampToValueAtTime(0.0001, endsAt);
     } else {
-      // Sustained melodic note: ramp toward sustain over the decay, then RELEASE at
-      // the actual note-off (not when decay finishes). Real GM decays are long — a
-      // piano's is tens of seconds — so note-off usually interrupts the decay; we hold
-      // the envelope's current value there and fade out. cancelAndHoldAtTime keeps the
-      // mid-decay level; fall back to the sustain level where it's unavailable.
+      // Sustained melodic note: attack → decay toward the sustain level, HOLD while the
+      // key is down, then release at the actual note-off. The hold must be anchored by
+      // an explicit automation event AT noteOff — otherwise the release ramp below is
+      // interpolated all the way from the decay's end, so the note bleeds away over its
+      // whole length and organs/pads audibly "don't sustain". (cancelAndHoldAtTime is
+      // unreliable for this in Chrome; an explicit setValueAtTime is robust.)
       const decay = Math.max(0.001, env.decay);
       const release = Math.max(0.005, env.release);
       const sustain = clamp01(env.sustain);
@@ -97,11 +98,14 @@ export class WavetableSynth implements IMidiSynth {
       const decayEnd = attackEnd + decay;
       gain.gain.exponentialRampToValueAtTime(sustainLevel, decayEnd);
       const noteOff = Math.max(attackEnd, startAt + Math.max(0.02, duration));
-      if (typeof gain.gain.cancelAndHoldAtTime === 'function') {
-        gain.gain.cancelAndHoldAtTime(noteOff);
-      } else {
-        gain.gain.setValueAtTime(sustainLevel, noteOff);
-      }
+      // Envelope level at noteOff: the sustain level once decay has completed, else the
+      // exponential mid-decay value (a short note can interrupt a long decay) so the
+      // hold doesn't click.
+      const holdLevel = noteOff >= decayEnd
+        ? sustainLevel
+        : Math.max(0.0001, peak * Math.pow(sustainLevel / peak, (noteOff - attackEnd) / decay));
+      gain.gain.cancelScheduledValues(noteOff);
+      gain.gain.setValueAtTime(holdLevel, noteOff);
       endsAt = noteOff + release;
       gain.gain.exponentialRampToValueAtTime(0.0001, endsAt);
     }

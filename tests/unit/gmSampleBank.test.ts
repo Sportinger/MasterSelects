@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   decodeBase64ToFloat32,
+  decodeBase64ToInt16,
   selectZone,
   selectZoneIndex,
   computePlaybackRate,
@@ -10,6 +11,14 @@ import type { GmZone } from '../../src/types/gmAsset';
 function floatsToBase64(values: number[]): string {
   const f32 = new Float32Array(values);
   const bytes = new Uint8Array(f32.buffer);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function int16ToBase64(values: number[]): string {
+  const i16 = new Int16Array(values);
+  const bytes = new Uint8Array(i16.buffer);
   let bin = '';
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
@@ -42,6 +51,27 @@ describe('decodeBase64ToFloat32', () => {
     expect(decoded.length).toBe(2);
     expect(decoded[0]).toBeCloseTo(1, 6);
     expect(decoded[1]).toBeCloseTo(2, 6);
+  });
+});
+
+describe('decodeBase64ToInt16', () => {
+  it('decodes Int16 PCM to normalized Float32 (value/32768)', () => {
+    const raw = [0, 32767, -32768, 16384, -16384];
+    const decoded = decodeBase64ToInt16(int16ToBase64(raw));
+    expect(decoded.length).toBe(raw.length);
+    expect(decoded[0]).toBeCloseTo(0, 6);
+    expect(decoded[1]).toBeCloseTo(32767 / 32768, 6);
+    expect(decoded[2]).toBeCloseTo(-1, 6);     // -32768/32768 = full-scale -1
+    expect(decoded[3]).toBeCloseTo(0.5, 6);
+    expect(decoded[4]).toBeCloseTo(-0.5, 6);
+  });
+
+  it('drops a trailing odd byte (length not a multiple of 2)', () => {
+    const clean = int16ToBase64([100, -200]); // 4 bytes
+    const decoded = decodeBase64ToInt16(btoa(atob(clean) + 'z'));
+    expect(decoded.length).toBe(2);
+    expect(decoded[0]).toBeCloseTo(100 / 32768, 6);
+    expect(decoded[1]).toBeCloseTo(-200 / 32768, 6);
   });
 });
 

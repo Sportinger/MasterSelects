@@ -89,6 +89,36 @@ export const GM_DRUM_KITS: readonly GmDrumKit[] = [
   { program: 56, name: 'SFX Kit' },
 ];
 
+// ── Release availability (issue #193) ────────────────────────────────────────────
+// The full GM_PROGRAM_NAMES / GM_FAMILIES / GM_DRUM_KITS above are the complete GM set
+// and stay intact. But only a curated subset ships as committed assets in the "lite"
+// release, so the pickers below offer ONLY those — users never land on a silent
+// instrument. When the full set is hosted, widen the pickers by setting
+// GM_PICKER_FAMILIES = GM_FAMILIES and GM_PICKER_DRUM_KITS = GM_DRUM_KITS (or point them
+// at a larger availability list). Keep GM_LITE_PROGRAMS in sync with LITE_PROGRAMS in
+// scripts/build-gm-instruments.mjs.
+
+/** Melodic programs whose assets ship in the committed lite set. */
+export const GM_LITE_PROGRAMS: readonly number[] = [
+  0, 4, 11, 12, 16, 19, 25, 27, 32, 33, 38, 40, 48, 52, 56, 60, 65, 73, 81, 89,
+];
+
+/** Drum-kit program numbers whose assets ship in the committed lite set. */
+export const GM_LITE_DRUM_KITS: readonly number[] = [0];
+
+/** Families shown in the program picker — lite programs only, empty families dropped. */
+export const GM_PICKER_FAMILIES: readonly GmFamily[] = GM_FAMILIES
+  .map((family) => ({
+    name: family.name,
+    programs: family.programs.filter((p) => GM_LITE_PROGRAMS.includes(p)),
+  }))
+  .filter((family) => family.programs.length > 0);
+
+/** Drum kits shown in the drum-kit picker — lite kits only. */
+export const GM_PICKER_DRUM_KITS: readonly GmDrumKit[] = GM_DRUM_KITS.filter((kit) =>
+  GM_LITE_DRUM_KITS.includes(kit.program),
+);
+
 /** Program name for a GM program number (clamped/guarded). */
 export function getGmProgramName(program: number): string {
   return GM_PROGRAM_NAMES[program] ?? `Program ${program}`;

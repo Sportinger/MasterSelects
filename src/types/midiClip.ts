@@ -88,7 +88,7 @@ export function createDefaultMidiInstrument(
  */
 export const MIDI_INSTRUMENT_OPTIONS: ReadonlyArray<{ kind: MidiInstrument['kind']; label: string }> = [
   { kind: 'simple-synth', label: 'Simple Synth' },
-  { kind: 'gm', label: 'General MIDI' },
+  { kind: 'gm', label: 'Wavetable Synth' },
 ];
 
 /** Oscillator waveforms offered for the simple synth. */
@@ -102,7 +102,7 @@ export const MIDI_WAVEFORM_OPTIONS: ReadonlyArray<{ value: OscillatorType; label
 /**
  * Human-readable label for an instrument. GM instruments report their concrete
  * program (or drum-kit) name — e.g. "Acoustic Grand Piano" / "Standard Kit" —
- * rather than the generic "General MIDI"; the simple synth reports its kind label.
+ * rather than the generic "Wavetable Synth"; the simple synth reports its kind label.
  */
 export function getMidiInstrumentLabel(instrument: MidiInstrument | undefined | null): string | null {
   if (!instrument) return null;

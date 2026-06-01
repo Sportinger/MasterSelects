@@ -11,7 +11,7 @@
 // to one context's rate and is async. AudioBuffers are not context-bound, so a built
 // buffer is cached once (keyed by program+zone) and reused across live + offline.
 
-import type { GmInstrumentAsset, GmZone } from '../../types/gmAsset';
+import type { GmInstrumentAsset, GmPcmFormat, GmZone } from '../../types/gmAsset';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('GmSampleBank');
@@ -34,6 +34,27 @@ export function decodeBase64ToFloat32(b64: string): Float32Array {
     ? bytes
     : bytes.slice(0, usableBytes);
   return new Float32Array(aligned.buffer, aligned.byteOffset, usableBytes / 4);
+}
+
+/**
+ * Decode a base64 string of little-endian Int16 samples into a normalized
+ * Float32Array (value / 32768, so full-scale ±32768 maps to ±1). Int16 is the
+ * default on-disk encoding — it halves asset size losslessly since the SF2 source
+ * is already 16-bit PCM.
+ */
+export function decodeBase64ToInt16(b64: string): Float32Array {
+  const bytes = base64ToBytes(b64);
+  const usableBytes = bytes.byteLength - (bytes.byteLength % 2);
+  // base64ToBytes returns a fresh, offset-0 buffer, so Int16Array alignment holds.
+  const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, usableBytes / 2);
+  const out = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) out[i] = int16[i] / 32768;
+  return out;
+}
+
+/** Decode a zone's base64 PCM into Float32 samples per the asset's encoding. */
+export function decodeZonePcm(b64: string, format: GmPcmFormat = 'f32'): Float32Array {
+  return format === 'i16' ? decodeBase64ToInt16(b64) : decodeBase64ToFloat32(b64);
 }
 
 /**
@@ -159,13 +180,13 @@ class GmSampleBank {
     }
   }
 
-  private getBuffer(id: string, zoneIdx: number, zone: GmZone, sampleRate: number): AudioBuffer {
+  private getBuffer(id: string, zoneIdx: number, zone: GmZone, sampleRate: number, format: GmPcmFormat): AudioBuffer {
     const key = `${id}:${zoneIdx}`;
     let buffer = this.buffers.get(key);
     if (!buffer) {
       let pcm = this.decoded.get(key);
       if (!pcm) {
-        pcm = decodeBase64ToFloat32(zone.pcm);
+        pcm = decodeZonePcm(zone.pcm, format);
         this.decoded.set(key, pcm);
       }
       // Build at the asset's own sample rate; WebAudio resamples to the playing
@@ -193,7 +214,7 @@ class GmSampleBank {
     const zone = asset.zones[zoneIdx];
 
     const sampleRate = zone.sampleRate ?? asset.sampleRate;
-    const buffer = this.getBuffer(id, zoneIdx, zone, sampleRate);
+    const buffer = this.getBuffer(id, zoneIdx, zone, sampleRate, asset.pcmFormat ?? 'f32');
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = computePlaybackRate(pitch, zone.rootKey, isDrum);

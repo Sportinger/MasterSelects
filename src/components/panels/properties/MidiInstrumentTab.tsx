@@ -12,7 +12,7 @@ import {
   MIDI_WAVEFORM_OPTIONS,
   type MidiInstrument,
 } from '../../../types/midiClip';
-import { GM_FAMILIES, GM_PROGRAM_NAMES, GM_DRUM_KITS } from '../../../types/gmPrograms';
+import { GM_PICKER_FAMILIES, GM_PROGRAM_NAMES, GM_PICKER_DRUM_KITS } from '../../../types/gmPrograms';
 
 interface MidiInstrumentTabProps {
   track: TimelineTrack;
@@ -55,7 +55,7 @@ export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
               value={instrument.program}
               onChange={(event) => setTrackMidiInstrument(track.id, { program: Number(event.currentTarget.value) })}
             >
-              {GM_FAMILIES.map(family => (
+              {GM_PICKER_FAMILIES.map(family => (
                 <optgroup key={family.name} label={family.name}>
                   {family.programs.map(program => (
                     <option key={program} value={program}>{GM_PROGRAM_NAMES[program]}</option>
@@ -72,7 +72,7 @@ export function MidiInstrumentTab({ track }: MidiInstrumentTabProps) {
               value={instrument.program}
               onChange={(event) => setTrackMidiInstrument(track.id, { program: Number(event.currentTarget.value) })}
             >
-              {GM_DRUM_KITS.map(kit => (
+              {GM_PICKER_DRUM_KITS.map(kit => (
                 <option key={kit.program} value={kit.program}>{kit.name}</option>
               ))}
             </select>

@@ -104,6 +104,31 @@ nul
 soundfonts/
 
 # Generated GM instrument assets (#193 2b). Large; produced from the .sf2 by the
-# converter and kept local (full-quality) / served from a CDN later — NOT committed.
-# The picker degrades gracefully when an asset is absent. README stays tracked.
+# converter. The FULL set is kept local (full-quality) / served from a CDN later —
+# NOT committed. The picker degrades gracefully when an asset is absent.
 public/instruments/gm/**/*.json
+
+# ...EXCEPT the committed "lite" set (#193): the curated 21 instruments at 22.05kHz
+# built by `node scripts/build-gm-instruments.mjs --profile lite`, so clones/deploys
+# have sound with no hosting. Keep this list in sync with LITE_PROGRAMS in the script.
+!public/instruments/gm/0000.json
+!public/instruments/gm/0004.json
+!public/instruments/gm/0011.json
+!public/instruments/gm/0012.json
+!public/instruments/gm/0016.json
+!public/instruments/gm/0019.json
+!public/instruments/gm/0025.json
+!public/instruments/gm/0027.json
+!public/instruments/gm/0032.json
+!public/instruments/gm/0033.json
+!public/instruments/gm/0038.json
+!public/instruments/gm/0040.json
+!public/instruments/gm/0048.json
+!public/instruments/gm/0052.json
+!public/instruments/gm/0056.json
+!public/instruments/gm/0060.json
+!public/instruments/gm/0065.json
+!public/instruments/gm/0073.json
+!public/instruments/gm/0081.json
+!public/instruments/gm/0089.json
+!public/instruments/gm/drums/0000.json

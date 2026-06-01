@@ -330,6 +330,44 @@ math pure and unit-tested**; isolate `createBuffer` / `AudioBufferSourceNode` /
 `midiSynth.test.ts` / `midiClipRenderer.test.ts`). Full gate (`build` + `lint` + `test`)
 before commit.
 
+## 10b. Asset profiles, sizing & the committed lite set (implemented 2026-06-01)
+
+The full 128-program FluidR3 set is too large to commit (~162 MB Int16 native). It's
+**reproducible, not stored** — regenerate any time from the converter + source `.sf2`.
+The committed bundle is a curated **lite** set; the **full** set is for local use / a
+future CDN.
+
+**PCM storage = Int16** (`pcmFormat: 'i16'` on the asset; legacy/absent = `'f32'`). The
+SF2 source is already 16-bit, so this is lossless and halves on-disk size vs Float32.
+`GmSampleBank.decodeBase64ToInt16` normalises to Float32 (`value/32768`) at load.
+
+**Converter profiles** (`scripts/build-gm-instruments.mjs`):
+- `--profile full` (default): native rate, any program set (`0` | `0-7` | `all` |
+  `drums`). Gitignored local + future CDN.
+- `--profile lite`: the curated `LITE_PROGRAMS` list + Standard drum kit, downsampled to
+  **22.05 kHz** (area-averaging decimation, loop points rescaled). Built once, committed.
+
+**The committed lite set (21 instruments, ~27 MB, user-curated 2026-06-01):** GM #
+0,4,11,12,16,19,25,27,32,33,38,40,48,52,56,60,65,73,81,89 + Standard drum kit. Covers
+acoustic/electric piano, mallets, organs, acoustic/electric guitar,
+acoustic/electric/synth bass, solo+ensemble strings, choir, brass (trumpet, french
+horn), sax, flute, synth lead+pad, drums. Omits ethnic/SFX/orchestral-completeness
+families. **22 kHz** chosen over 16 kHz (keeps cymbal/bright highs) and over native
+(commit size). The canonical source of truth for the list is `LITE_PROGRAMS` in the
+script — keep the `.gitignore` allowlist in sync with it.
+
+**Git rule (load-bearing):** these JSONs are **committed once and left immutable**. base64
+PCM does not delta-compress between versions, so every re-commit would add another full
+~20 MB blob to history permanently — do **not** regenerate-and-recommit casually. The
+`.gitignore` keeps `public/instruments/gm/**/*.json` ignored *except* an explicit
+allowlist of exactly the 21 lite files, so the full set can never be committed by
+accident. No Git LFS (only worth it for repeated re-commits); GitHub per-file limits are
+not close (largest file ≈ 4.3 MB drums).
+
+**Future full + CDN:** `node scripts/build-gm-instruments.mjs --profile full all drums`
+regenerates everything; serve from a CDN by swapping the asset URL in `GmSampleBank`
+(one line). Lite stays as the offline/fallback bundle.
+
 ## 11. Out of scope (future)
 
 - **SpessaSynth / real SF2-SF3-DLS engine** (Apache-2.0, AudioWorklet) — the eventual
