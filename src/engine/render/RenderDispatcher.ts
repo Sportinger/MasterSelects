@@ -2346,6 +2346,12 @@ export class RenderDispatcher {
     const target = useRenderTargetStore.getState().targets.get(canvasId);
     const showGrid = target?.showTransparencyGrid ?? false;
 
+    // When a target isolates a single layer (layer-index source), the layer is
+    // composited alone over an empty backdrop. Its blend mode is only meaningful
+    // against the layers below it, so applying it here (e.g. multiply → black)
+    // produces a wrong preview. Show the raw source by forcing normal blend (#235).
+    const isolateSingleLayer = target?.source?.type === 'layer-index';
+
     // Ensure resolution is up to date for this render
     d.outputPipeline.updateResolution(width, height);
 
@@ -2394,7 +2400,10 @@ export class RenderDispatcher {
       const hasMask = maskInfo.hasMask;
       const maskTextureView = maskInfo.view;
 
-      d.compositorPipeline!.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer);
+      const uniformLayer = isolateSingleLayer
+        ? { ...layer, blendMode: 'normal' as typeof layer.blendMode }
+        : layer;
+      d.compositorPipeline!.updateLayerUniforms(uniformLayer, sourceAspect, outputAspect, hasMask, uniformBuffer);
 
       let pipeline: GPURenderPipeline;
       let bindGroup: GPUBindGroup;

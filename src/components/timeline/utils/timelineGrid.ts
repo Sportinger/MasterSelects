@@ -37,6 +37,25 @@ function sanitizePositiveNumber(value: number | null | undefined, fallback: numb
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+/**
+ * Snap a CSS-pixel length to a whole number of *device* pixels.
+ *
+ * The timeline grid is a `repeating-linear-gradient` whose period is the
+ * grid spacing. When that period is a fractional number of device pixels,
+ * each repeated 1px line lands on a different sub-pixel boundary, so the
+ * browser anti-aliases every line slightly differently — producing the
+ * bright/dim "moiré" banding reported in #218. Forcing the period to an
+ * integer device-pixel count makes every line rasterize identically, which
+ * removes the banding at any devicePixelRatio. Values <= 1px are left as-is
+ * (they're only used while that grid layer is faded to ~0 opacity, and we
+ * must never emit a 0px period — that is an invalid gradient stop).
+ */
+export function snapToDevicePixels(px: number): number {
+  if (!(px > 1)) return px;
+  const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  return Math.round(px * dpr) / dpr;
+}
+
 function getNiceSecondsAtLeast(minSeconds: number): number {
   const safeMin = Math.max(0.001, minSeconds);
   const exponent = Math.floor(Math.log10(safeMin));

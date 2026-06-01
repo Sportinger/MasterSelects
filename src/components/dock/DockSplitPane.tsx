@@ -51,6 +51,16 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     pendingLiveRatioRef.current = null;
   }, [isResizing, split.ratio]);
 
+  // Expose a global "a dock splitter is being dragged" signal so panels can
+  // suppress their own size transitions during the drag. Without this the
+  // timeline's `.track-lane` height transition trails the live resize and the
+  // grid background visibly lags behind the clips (#221).
+  useEffect(() => {
+    if (!isResizing) return;
+    document.body.classList.add('dock-resizing');
+    return () => document.body.classList.remove('dock-resizing');
+  }, [isResizing]);
+
   useEffect(() => {
     if (!isResizing) return;
 

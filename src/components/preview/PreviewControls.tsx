@@ -168,22 +168,29 @@ export function PreviewControls({
                 {renderLayerOptions(null)}
                 <div className="preview-comp-separator" />
                 <div className="preview-comp-group-label">Compositions</div>
-                {compositions.map((comp) => (
-                  <React.Fragment key={comp.id}>
-                    <button
-                      className={`preview-comp-option ${
-                        source.type === 'composition' && source.compositionId === comp.id ? 'active' : ''
-                      }`}
-                      onClick={() => {
-                        setPanelSource({ type: 'composition', compositionId: comp.id });
-                        setSelectorOpen(false);
-                      }}
-                    >
-                      {comp.name}
-                    </button>
-                    {renderLayerOptions(comp.id)}
-                  </React.Fragment>
-                ))}
+                {compositions.map((comp) => {
+                  const compSelected = source.type === 'composition' && source.compositionId === comp.id;
+                  // A layer of this comp being the current source counts as active
+                  // too, so the (collapsed) comp still reads as selected.
+                  const layerSelected = source.type === 'layer-index' && source.compositionId === comp.id;
+                  return (
+                    <div className="preview-comp-group" key={comp.id}>
+                      <button
+                        className={`preview-comp-option preview-comp-group-head ${compSelected || layerSelected ? 'active' : ''}`}
+                        onClick={() => {
+                          setPanelSource({ type: 'composition', compositionId: comp.id });
+                          setSelectorOpen(false);
+                        }}
+                      >
+                        <span className="preview-comp-group-caret" aria-hidden="true">›</span>
+                        <span className="preview-comp-group-name">{comp.name}</span>
+                      </button>
+                      <div className="preview-comp-group-layers">
+                        {renderLayerOptions(comp.id)}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

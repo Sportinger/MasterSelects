@@ -62,6 +62,7 @@ import { useExternalDrop } from './hooks/useExternalDrop';
 import { useTransitionDrop } from './hooks/useTransitionDrop';
 import { usePickWhipDrag } from './hooks/usePickWhipDrag';
 import { useTimelineHelpers } from './hooks/useTimelineHelpers';
+import { snapToDevicePixels } from './utils/timelineGrid';
 import { usePlayheadSnap } from './hooks/usePlayheadSnap';
 import { useMarkerDrag } from './hooks/useMarkerDrag';
 import { getTimelineToolCursor } from './tools/pointer/timelineToolPointerDispatcher';
@@ -3391,8 +3392,8 @@ export function Timeline() {
                 style={{
                   transform: `translateX(-${scrollX}px)`,
                   minWidth: Math.max(duration * zoom + 500, 2000),
-                  ['--grid-size' as string]: `${gridSize}px`,
-                  ['--frame-grid-size' as string]: `${gridPlan.frameIntervalPixels}px`,
+                  ['--grid-size' as string]: `${snapToDevicePixels(gridSize)}px`,
+                  ['--frame-grid-size' as string]: `${snapToDevicePixels(gridPlan.frameIntervalPixels)}px`,
                   ['--frame-grid-strength' as string]: `${Math.round(gridPlan.frameGridOpacity * 100)}%`,
                   ['--time-grid-strength' as string]: `${Math.round(gridPlan.timeGridOpacity * 100)}%`,
                   ['--time-grid-muted-strength' as string]: `${Math.round(gridPlan.timeGridOpacity * 22)}%`,

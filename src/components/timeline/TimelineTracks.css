@@ -1589,6 +1589,14 @@ body.track-reordering-active {
   transition: background 160ms ease, border-color 160ms ease;
 }
 
+/* While a dock splitter is dragged the panel (and thus track) heights change
+   live. Drop the height transition so the grid background tracks the clips
+   instead of trailing 220ms behind them (#221). */
+body.dock-resizing .track-header,
+body.dock-resizing .track-lane {
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
 .track-resize-handle {
   position: absolute;
   left: 0;

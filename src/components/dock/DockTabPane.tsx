@@ -69,6 +69,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closePanelById,
     changePanelType,
     addPanelTypeToGroup,
+    floatPanel,
     getVisiblePanelTypes,
     hoveredTabTarget,
     setHoveredTabTarget,
@@ -86,6 +87,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closePanelById: s.closePanelById,
     changePanelType: s.changePanelType,
     addPanelTypeToGroup: s.addPanelTypeToGroup,
+    floatPanel: s.floatPanel,
     getVisiblePanelTypes: s.getVisiblePanelTypes,
     hoveredTabTarget: s.hoveredTabTarget,
     setHoveredTabTarget: s.setHoveredTabTarget,
@@ -456,6 +458,17 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closePanelById(tabContextMenu.panel.id);
     setTabContextMenu(null);
   }, [closePanelById, tabContextMenu]);
+
+  const handleFloatContextPanel = useCallback(() => {
+    if (!tabContextMenu) return;
+    // Open the floating window slightly offset from where the menu was invoked
+    // so it doesn't sit exactly under the pointer.
+    floatPanel(tabContextMenu.panel.id, group.id, {
+      x: Math.max(8, tabContextMenu.x - 40),
+      y: Math.max(8, tabContextMenu.y - 8),
+    });
+    setTabContextMenu(null);
+  }, [floatPanel, group.id, tabContextMenu]);
 
   const handleChangeContextPanelType = useCallback((type: PanelType) => {
     if (!tabContextMenu) return;
@@ -890,6 +903,13 @@ export function DockTabPane({ group }: DockTabPaneProps) {
           }}
           onContextMenu={(event) => event.preventDefault()}
         >
+          <button
+            className="dock-tab-context-menu-item"
+            type="button"
+            onClick={handleFloatContextPanel}
+          >
+            <span>Float</span>
+          </button>
           <button
             className="dock-tab-context-menu-item"
             type="button"
