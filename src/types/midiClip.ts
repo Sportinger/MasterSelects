@@ -62,13 +62,14 @@ export interface MidiAdsr {
 }
 
 /**
- * Default instrument for a given kind. Newly created MIDI tracks get the simple
- * synth; passing `'gm'` yields GM program 0 (Acoustic Grand Piano). Used both for
- * track creation and to produce a clean shape when the user switches a track's
- * instrument kind (so no stale `adsr`/`waveform` carries onto a GM instrument).
+ * Default instrument for a given kind. Newly created MIDI tracks default to the
+ * Wavetable Synth (GM program 0, Acoustic Grand Piano); pass `'simple-synth'` for
+ * the oscillator synth. Used both for track creation and to produce a clean shape
+ * when the user switches a track's instrument kind (so no stale `adsr`/`waveform`
+ * carries onto a GM instrument).
  */
 export function createDefaultMidiInstrument(
-  kind: MidiInstrument['kind'] = 'simple-synth',
+  kind: MidiInstrument['kind'] = 'gm',
 ): MidiInstrument {
   if (kind === 'gm') {
     return { kind: 'gm', program: 0, isDrum: false, gain: 0.8 };
