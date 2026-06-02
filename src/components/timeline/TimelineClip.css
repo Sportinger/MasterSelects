@@ -18,6 +18,14 @@
   border: 1px solid #4a6a90;
 }
 
+/* MIDI clips share their identity blue with the MIDI track header
+   (--midi-color in tokens.css). Flat base; the generic top sheen overlay
+   supplies the subtle highlight. */
+.timeline-clip.midi {
+  background: var(--midi-color, #3a4050);
+  border: 1px solid color-mix(in srgb, var(--midi-color, #3a4050) 78%, #fff);
+}
+
 .timeline-clip.audio {
   background: linear-gradient(
     180deg,

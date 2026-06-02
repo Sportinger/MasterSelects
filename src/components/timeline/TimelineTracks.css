@@ -104,6 +104,16 @@ body.track-reordering-active {
     linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 18%, var(--bg-tertiary)), var(--bg-tertiary));
 }
 
+/* MIDI tracks without a custom label color get a flat blue base derived from
+   the shared --midi-color (same hue as MIDI clips), darkened toward the header
+   background. Keeps the standard top sheen for consistency with other headers,
+   but no vertical gradient. */
+.track-header.midi.midi-default-tint {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    color-mix(in srgb, var(--midi-color, #3a4050) 50%, var(--bg-tertiary));
+}
+
 .track-header.targeted {
   border-left: 3px solid var(--timeline-toggle-active-color, var(--accent));
   background:
