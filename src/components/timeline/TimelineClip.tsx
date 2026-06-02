@@ -630,6 +630,9 @@ function TimelineClipComponent({
   const applyTimelineEditOperation = useTimelineStore(s => s.applyTimelineEditOperation);
   const setActiveTimelineTool = useTimelineStore(s => s.setActiveTimelineTool);
   const timelineTrackColorsVisible = useTimelineStore(s => s.audioLayerAdvancedMode !== false);
+  const isRenamingClip = useTimelineStore(s => s.clipRenameId === clip.id);
+  const renameMidiClip = useTimelineStore(s => s.renameMidiClip);
+  const setClipRenameId = useTimelineStore(s => s.setClipRenameId);
   const audioRegionSelection = useTimelineStore(s =>
     s.audioRegionSelection?.clipId === clip.id ? s.audioRegionSelection : null
   );
@@ -4167,17 +4170,43 @@ function TimelineClipComponent({
             {isSplatEffectorClip && (
               <span className="clip-text-icon" title="3D Effector Clip">E</span>
             )}
-            <span className="clip-name">
-              {isMidiClip
-                ? 'MIDI'
-                : isTextClip && clip.textProperties
-                ? clip.textProperties.text.slice(0, 30) || 'Text'
-                : isMathSceneClip && clip.mathScene
-                  ? clip.mathScene.objects.find((object) => object.type === 'function')?.expression || 'Math Scene'
-                : isText3DClip && text3DProperties
-                  ? text3DProperties.text.slice(0, 30) || '3D Text'
-                  : clip.name}
-            </span>
+            {isMidiClip && isRenamingClip ? (
+              <input
+                className="clip-name-input"
+                defaultValue={clip.name && clip.name !== 'MIDI Clip' ? clip.name : ''}
+                placeholder="MIDI"
+                autoFocus
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={(e) => {
+                  renameMidiClip(clip.id, e.currentTarget.value);
+                  setClipRenameId(null);
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') {
+                    renameMidiClip(clip.id, e.currentTarget.value);
+                    setClipRenameId(null);
+                  } else if (e.key === 'Escape') {
+                    setClipRenameId(null);
+                  }
+                }}
+              />
+            ) : (
+              <span className="clip-name">
+                {isMidiClip
+                  ? (clip.name && clip.name !== 'MIDI Clip' ? clip.name : 'MIDI')
+                  : isTextClip && clip.textProperties
+                  ? clip.textProperties.text.slice(0, 30) || 'Text'
+                  : isMathSceneClip && clip.mathScene
+                    ? clip.mathScene.objects.find((object) => object.type === 'function')?.expression || 'Math Scene'
+                  : isText3DClip && text3DProperties
+                    ? text3DProperties.text.slice(0, 30) || '3D Text'
+                    : clip.name}
+              </span>
+            )}
             {/* PickWhip disabled */}
           </div>
           {!isMidiClip && <span className="clip-duration">{formatTime(displayDuration)}</span>}

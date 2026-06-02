@@ -104,6 +104,16 @@ Adding `'midi'` to the track-type union touches ~50 spots that reference `'video
 
 - Serialize MIDI tracks (`midiInstrument`) and MIDI clips (`midiData.notes`) in the project save/load path (`projectSave.ts` / `projectLoad.ts`, composition/timeline types). MIDI clips have no media file, so they serialize purely as data.
 
+### 3.8 Timeline clip presentation (issue #232)
+
+How a MIDI clip looks on the timeline (distinct from the piano-roll editor):
+
+- **Track header / clip color**: MIDI tracks and clips share a blue identity derived from a single `--midi-color` token (`tokens.css`); MIDI track headers without a custom label color get a flat blue tint (`.track-header.midi.midi-default-tint`) so audio vs MIDI is distinguishable at a glance.
+- **In-clip note preview** (`components/ClipMidiPreview.tsx`): a Cubase-style mini note view drawn on a canvas — X = note time, Y = pitch, one thin bar per note. The pitch axis is **fit to the clip's own min..max range** (DAW "fit notes to view") so the used register fills the height. Canvas is sized/positioned to the visible render window (like `ClipWaveform`) so long/zoomed clips stay cheap. Only renders when the clip has notes.
+- **Label**: MIDI clips show `"MIDI"` by default (the generic `"MIDI Clip"` name is treated as "unnamed") and hide the duration number — the note preview conveys content instead.
+- **Rename**: right-click a MIDI clip → **Rename** (`TimelineContextMenu`, MIDI-only) enters inline edit in place of the label. State lives in the store as `clipRenameId`/`setClipRenameId`; the commit action is `renameMidiClip(clipId, name)` (history-tracked). Enter/blur commits, Escape cancels. A renamed clip shows its custom name.
+- **Pencil draw fix**: `useMidiClipDraw` measures the drag against the lane's `.track-clip-row` (time-zero origin) rather than the outer track stack, so a drawn clip lands exactly on the dragged region instead of being shifted right by the header width.
+
 ## 4. Phased delivery (checkpoint after each)
 
 1. **Data model + Add MIDI Track** — ✅ done (commit `a2b43e41`).

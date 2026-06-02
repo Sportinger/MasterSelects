@@ -512,6 +512,12 @@ export interface SolidClipActions {
 // MIDI clip actions (issue #182, extracted to midiClipSlice).
 export interface MidiClipActions {
   addMidiClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  /** Rename a MIDI clip (inline-edit from the clip context menu, issue #232). */
+  renameMidiClip: (clipId: string, name: string) => void;
+  /** Clip currently in inline rename mode, or null. Drives the in-clip name input. */
+  clipRenameId: string | null;
+  /** Enter/leave inline rename mode for a clip (null to cancel). */
+  setClipRenameId: (clipId: string | null) => void;
   // Note CRUD for the piano-roll editor. `start`/`duration` are seconds relative to clip start.
   addMidiNote: (clipId: string, note: { pitch: number; start: number; duration: number; velocity?: number }) => string | null;
   updateMidiNote: (
