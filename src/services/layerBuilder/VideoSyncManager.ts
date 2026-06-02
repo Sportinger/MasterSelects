@@ -2074,6 +2074,7 @@ export class VideoSyncManager {
 
     // Check proxy mode
     const useProxy = ctx.proxyEnabled && mediaFile?.proxyFps &&
+      !ctx.isPlaying &&
       (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
 
     if (useProxy) {

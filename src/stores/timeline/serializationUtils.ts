@@ -24,6 +24,7 @@ import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { clonePersistedClipAudioState } from '../../services/audio/clipAudioStatePersistence';
 import { runtimeAudioMeterBus } from '../../services/audio/runtimeAudioMeterBus';
+import { withProjectStoreSyncGuard } from '../../services/project/projectStoreSyncGuard';
 import type { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import {
   DEFAULT_GAUSSIAN_SPLAT_SETTINGS,
@@ -105,6 +106,35 @@ function restoreClipVideoState(serializedClip: SerializableClip) {
 }
 
 type SerializationUtils = Pick<TimelineUtils, 'getSerializableState' | 'loadState' | 'clearTimeline'>;
+
+// Bound how many video clips warm up (load + GPU frame-prime) concurrently while a
+// comp is being restored. Opening a 100-clip comp otherwise kicks off ~60 video
+// decodes + GPU uploads at once, spiking the shared GPU process and freezing the
+// whole browser. Slots are released when a video settles (canplaythrough/error/
+// timeout) so the queue always drains (issue #228).
+const RESTORE_WARMUP_CONCURRENCY = 4;
+let restoreWarmupActive = 0;
+const restoreWarmupQueue: Array<() => void> = [];
+
+function acquireRestoreWarmupSlot(): Promise<void> {
+  return new Promise((resolve) => {
+    if (restoreWarmupActive < RESTORE_WARMUP_CONCURRENCY) {
+      restoreWarmupActive += 1;
+      resolve();
+    } else {
+      restoreWarmupQueue.push(() => {
+        restoreWarmupActive += 1;
+        resolve();
+      });
+    }
+  });
+}
+
+function releaseRestoreWarmupSlot(): void {
+  restoreWarmupActive = Math.max(0, restoreWarmupActive - 1);
+  const next = restoreWarmupQueue.shift();
+  if (next) next();
+}
 
 export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, get) => ({
   // Get serializable timeline state for saving to composition
@@ -256,7 +286,6 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     // Suppress autosave for the ENTIRE restore (incl. the chunked yields below) so
     // a partially-loaded timeline can never be persisted over the full project.
     // The depth-counter guard holds across awaits/yields (issue #228 data-loss guard).
-    const { withProjectStoreSyncGuard } = await import('../../services/project/projectSave');
     return withProjectStoreSyncGuard(async () => {
     const { pause, clearTimeline } = get();
     const wakePreviewAfterRestore = () => {
@@ -1762,8 +1791,26 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         video.src = fileUrl;
         video.muted = true;
         video.playsInline = true;
-        video.preload = 'auto';
+        video.preload = 'none';
         video.crossOrigin = 'anonymous';
+
+        // Gate warm-up through a small concurrency limiter so opening a large comp
+        // doesn't start every clip's decode + GPU prime at once (issue #228). The
+        // canplaythrough handlers below still run once loading begins; we just bound
+        // how many load at a time and release the slot when this clip settles.
+        void acquireRestoreWarmupSlot().then(() => {
+          let warmupReleased = false;
+          const releaseWarmup = () => {
+            if (warmupReleased) return;
+            warmupReleased = true;
+            releaseRestoreWarmupSlot();
+          };
+          video.addEventListener('canplaythrough', releaseWarmup, { once: true });
+          video.addEventListener('error', releaseWarmup, { once: true });
+          setTimeout(releaseWarmup, 12000);
+          video.preload = 'auto';
+          video.load();
+        });
 
         const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
         const mediaId = serializedClip.mediaFileId;

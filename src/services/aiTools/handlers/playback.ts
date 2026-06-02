@@ -50,6 +50,7 @@ type ScrubMotionResult = {
 type TimelineDomDragTargets = {
   playhead: HTMLElement;
   tracks: HTMLElement;
+  laneReference?: HTMLElement;
 };
 
 export async function handlePlay(
@@ -114,11 +115,14 @@ function getTimelineDomDragTargets(): TimelineDomDragTargets | null {
 
   const playhead = document.querySelector<HTMLElement>('[data-ai-id="timeline-playhead"], .playhead');
   const tracks = document.querySelector<HTMLElement>('[data-ai-id="timeline-tracks"], .timeline-tracks');
+  const laneReference = document.querySelector<HTMLElement>(
+    '[data-guided-target="timeline-lane-reference"], .timeline-lane-reference'
+  );
   if (!playhead || !tracks) {
     return null;
   }
 
-  return { playhead, tracks };
+  return { playhead, tracks, laneReference: laneReference ?? undefined };
 }
 
 function dispatchSyntheticMouseEvent(
@@ -143,9 +147,19 @@ function dispatchSyntheticMouseEvent(
   target.dispatchEvent(event);
 }
 
-function getTimelineClientXForTime(time: number, tracks: HTMLElement): number {
+function getTimelineContentClientLeft(targets: TimelineDomDragTargets): number {
+  if (targets.laneReference) {
+    return targets.laneReference.getBoundingClientRect().left;
+  }
+
+  const tracksRect = targets.tracks.getBoundingClientRect();
+  const originX = Number.parseFloat(targets.tracks.dataset.guidedTimelineOriginX ?? '0');
+  return tracksRect.left + (Number.isFinite(originX) ? originX : 0);
+}
+
+function getTimelineClientXForTime(time: number, targets: TimelineDomDragTargets): number {
   const { zoom, scrollX } = useTimelineStore.getState();
-  return tracks.getBoundingClientRect().left + time * zoom - scrollX;
+  return getTimelineContentClientLeft(targets) + time * zoom - scrollX;
 }
 
 async function runStoreDrivenScrubMotion(
@@ -228,7 +242,7 @@ async function runDomPlayheadScrubMotion(
   const startClientX =
     playheadRect.width > 0
       ? playheadRect.left + playheadRect.width / 2
-      : getTimelineClientXForTime(initialPosition, domTargets.tracks);
+      : getTimelineClientXForTime(initialPosition, domTargets);
   const clientY =
     playheadRect.height > 0
       ? playheadRect.top + playheadRect.height / 2
@@ -248,7 +262,7 @@ async function runDomPlayheadScrubMotion(
   while (true) {
     const elapsedMs = performance.now() - startedAt;
     requestedEndTime = clampPlaybackTime(sampleTimeAtElapsed(elapsedMs), duration);
-    const nextClientX = getTimelineClientXForTime(requestedEndTime, domTargets.tracks);
+    const nextClientX = getTimelineClientXForTime(requestedEndTime, domTargets);
     dispatchSyntheticMouseEvent(document, 'mousemove', nextClientX, clientY);
     framesApplied++;
     const actualPosition = useTimelineStore.getState().playheadPosition;
@@ -262,7 +276,7 @@ async function runDomPlayheadScrubMotion(
     await waitForAnimationFrame();
   }
 
-  const endClientX = getTimelineClientXForTime(requestedEndTime, domTargets.tracks);
+  const endClientX = getTimelineClientXForTime(requestedEndTime, domTargets);
   dispatchSyntheticMouseEvent(document, 'mousemove', endClientX, clientY);
   dispatchSyntheticMouseEvent(document, 'mouseup', endClientX, clientY);
   await waitForAnimationFrame();

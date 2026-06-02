@@ -37,6 +37,10 @@ import {
   type ProjectFolder,
 } from '../projectFileService';
 import { toProjectTransform } from './transformSerialization';
+import {
+  isProjectStoreSyncInProgress,
+  withProjectStoreSyncGuard,
+} from './projectStoreSyncGuard';
 import type {
   ClipVideoState,
   SerializableClip,
@@ -52,7 +56,10 @@ import type {
 } from './types/project.types';
 
 const log = Logger.create('ProjectSync');
-let projectStoreSyncDepth = 0;
+export {
+  isProjectStoreSyncInProgress,
+  withProjectStoreSyncGuard,
+} from './projectStoreSyncGuard';
 
 export interface SaveCurrentProjectOptions {
   source?: 'manual' | 'autosave';
@@ -94,19 +101,6 @@ function shouldPersistMediaWaveform(file: MediaFile): boolean {
 function shouldPersistClipWaveform(clip: ProjectSaveClip): boolean {
   return !clip.audioState?.sourceAnalysisRefs?.waveformPyramidId &&
     !clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId;
-}
-
-export function isProjectStoreSyncInProgress(): boolean {
-  return projectStoreSyncDepth > 0;
-}
-
-export async function withProjectStoreSyncGuard<T>(work: () => Promise<T>): Promise<T> {
-  projectStoreSyncDepth++;
-  try {
-    return await work();
-  } finally {
-    projectStoreSyncDepth = Math.max(0, projectStoreSyncDepth - 1);
-  }
 }
 
 // ============================================

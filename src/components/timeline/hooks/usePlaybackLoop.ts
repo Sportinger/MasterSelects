@@ -32,6 +32,18 @@ function isInteractiveDockLayoutChangeActive(): boolean {
   ));
 }
 
+function syncInternalPlaybackPositionToStore(): void {
+  if (!playheadState.isUsingInternalPosition) return;
+
+  const timelineState = useTimelineStore.getState();
+  if (timelineState.isDraggingPlayhead) {
+    playheadState.position = timelineState.playheadPosition;
+    return;
+  }
+
+  useTimelineStore.setState({ playheadPosition: playheadState.position });
+}
+
 /**
  * Audio Master Clock playback loop
  * Audio runs freely without correction, playhead follows audio time
@@ -42,9 +54,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
     if (!isPlaying) {
       // Sync store to final internal position before disabling —
       // prevents frame jump-back caused by stale 33ms-throttled store value
-      if (playheadState.isUsingInternalPosition) {
-        useTimelineStore.setState({ playheadPosition: playheadState.position });
-      }
+      syncInternalPlaybackPositionToStore();
       clearInternalPlaybackHold();
       playheadState.isUsingInternalPosition = false;
       playheadState.hasMasterAudio = false;
@@ -261,9 +271,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
     return () => {
       cancelAnimationFrame(rafId);
       // Sync final position to store before cleanup
-      if (playheadState.isUsingInternalPosition) {
-        useTimelineStore.setState({ playheadPosition: playheadState.position });
-      }
+      syncInternalPlaybackPositionToStore();
       clearInternalPlaybackHold();
       playheadState.isUsingInternalPosition = false;
       playheadState.hasMasterAudio = false;

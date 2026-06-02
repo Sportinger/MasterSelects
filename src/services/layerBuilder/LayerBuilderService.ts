@@ -878,8 +878,14 @@ export class LayerBuilderService {
       height: clip.source?.videoElement?.videoHeight,
     });
 
-    // Check for proxy usage
-    if (ctx.proxyEnabled && mediaFile?.proxyFps) {
+    // Check for proxy usage. Normal playback should stay on the live video
+    // path; JPEG proxy frame playback behaves like fast scrubbing and causes
+    // visible cadence drops at dense cut boundaries.
+    const useProxyLayer =
+      ctx.proxyEnabled &&
+      mediaFile?.proxyFps &&
+      (!ctx.isPlaying || ctx.isDraggingPlayhead || ctx.hasClipDragPreview);
+    if (useProxyLayer) {
       const proxyLayer = this.tryBuildProxyLayer(clip, layerIndex, timeInfo.clipTime, mediaFile, ctx, opacityOverride);
       if (proxyLayer) return proxyLayer;
     }
