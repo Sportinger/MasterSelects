@@ -293,7 +293,6 @@ export interface TimelineTrackProps {
     clip: TimelineClip,
     trackId: string,
     trackBaseHeightOverride?: number,
-    options?: { passiveVisualsSuppressed?: boolean },
   ) => React.ReactNode;
   // For keyframe tracks - clipKeyframes map triggers re-render when keyframes change
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
@@ -374,7 +373,6 @@ export interface TimelineClipProps {
   onMoveKeyframeGroup?: (keyframeIds: string[], newTime: number) => void;
   timeToPixel: (time: number) => number;
   formatTime: (seconds: number) => string;
-  passiveVisualsSuppressed?: boolean;
 }
 
 // Props for TimelineKeyframes component

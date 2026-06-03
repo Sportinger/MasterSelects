@@ -2763,7 +2763,6 @@ export function Timeline() {
       trackId: string,
       trackBaseHeightOverride?: number,
       trackOverride?: TimelineTrackType,
-      options?: { passiveVisualsSuppressed?: boolean },
     ) => {
       const track = trackMap.get(trackId) ?? trackOverride;
       if (!track) return null;
@@ -2877,7 +2876,6 @@ export function Timeline() {
           onMoveKeyframeGroup={moveKeyframes}
           timeToPixel={timeToPixel}
           formatTime={formatTime}
-          passiveVisualsSuppressed={options?.passiveVisualsSuppressed}
         />
       );
     },
@@ -3208,7 +3206,6 @@ export function Timeline() {
       clip: TimelineClipType,
       trackId: string,
       trackBaseHeightOverride?: number,
-      options?: { passiveVisualsSuppressed?: boolean },
     ) => {
       const track = allSectionTracks.find(candidate => candidate.id === trackId)
         ?? timelineViewTrackMap.get(trackId)
@@ -3218,7 +3215,6 @@ export function Timeline() {
         trackId,
         trackBaseHeightOverride ?? (track ? getSectionTrackBaseHeight(track, sectionKind) : undefined),
         undefined,
-        options,
       );
     };
 
@@ -3540,7 +3536,7 @@ export function Timeline() {
                       onDragLeave={handleCombinedDragLeave}
                       onResizeStart={handleTrackResizeStart}
                       isResizeActive={activeTrackResizeId === track.id}
-                      renderClip={(clip, trackId, trackBaseHeightOverride, options) => renderClipForSection(clip, trackId, trackBaseHeightOverride, options)}
+                      renderClip={(clip, trackId, trackBaseHeightOverride) => renderClipForSection(clip, trackId, trackBaseHeightOverride)}
                       clipKeyframes={clipKeyframes}
                       renderKeyframeDiamonds={renderKeyframeDiamonds}
                       timeToPixel={timeToPixel}

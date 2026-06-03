@@ -102,7 +102,6 @@ function TimelineClipComponent({
   onMoveKeyframeGroup,
   timeToPixel,
   formatTime,
-  passiveVisualsSuppressed = false,
 }: TimelineClipProps) {
   const {
     thumbnailsEnabled,
@@ -156,13 +155,13 @@ function TimelineClipComponent({
     selectClip,
     clipAudioKeyframes,
   } = useClipStoreBindings(clip);
-  const passiveMediaEnabled = !passiveVisualsSuppressed;
-  const passiveDecorationsEnabled = passiveMediaEnabled;
-  const processedWaveformPyramidRef = passiveMediaEnabled ? clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId : undefined;
-  const sourceWaveformPyramidRef = passiveMediaEnabled ? clip.audioState?.sourceAnalysisRefs?.waveformPyramidId : undefined;
+  const passiveMediaEnabled = true;
+  const passiveDecorationsEnabled = true;
+  const processedWaveformPyramidRef = clip.audioState?.processedAnalysisRefs?.processedWaveformPyramidId;
+  const sourceWaveformPyramidRef = clip.audioState?.sourceAnalysisRefs?.waveformPyramidId;
   const hasLegacyWaveformData = hasLegacyWaveformSamples(clip);
-  const processedSpectrogramTileSetRef = passiveMediaEnabled ? clip.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0] : undefined;
-  const sourceSpectrogramTileSetRef = passiveMediaEnabled ? clip.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0] : undefined;
+  const processedSpectrogramTileSetRef = clip.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0];
+  const sourceSpectrogramTileSetRef = clip.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0];
   const processedWaveformState = useTimelineWaveformPyramidState(processedWaveformPyramidRef);
   const sourceWaveformState = useTimelineWaveformPyramidState(sourceWaveformPyramidRef);
   const processedSpectrogramState = useTimelineSpectrogramTileSetState(processedSpectrogramTileSetRef);
