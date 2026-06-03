@@ -3532,6 +3532,7 @@ export function Timeline() {
                       onClipContextMenu={handleClipContextMenu}
                       onEmptyMouseDown={handleEmptyTimelineMouseDown}
                       onEmptyContextMenu={handleEmptyTimelineContextMenu}
+                      onFadeStart={handleFadeStart}
                       onTrimStart={handleTrimStart}
                       onDrop={(e) => handleCombinedDrop(e, track.id)}
                       onDragOver={(e) => handleCombinedDragOver(e, track.id)}

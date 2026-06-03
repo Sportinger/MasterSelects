@@ -1520,6 +1520,16 @@
   opacity: 1;
 }
 
+.clip-interaction-shell .shell-fade-handle {
+  opacity: 1;
+  pointer-events: auto;
+  background: var(--warning);
+}
+
+.clip-interaction-shell .shell-fade-handle:not(.active) {
+  background: rgba(251, 191, 36, 0.72);
+}
+
 .trim-handle.left {
   left: 0;
   border-radius: 4px 0 0 4px;

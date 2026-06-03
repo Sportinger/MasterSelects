@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react';
+import { ClipFadeHandles } from './ClipFadeHandles';
+import { ClipTrimHandles } from './ClipTrimHandles';
 import {
   CLIP_INTERACTION_SHELL_MODULE_SLOTS,
   getClipInteractionShellActiveSlots,
@@ -6,7 +8,6 @@ import {
   type ClipInteractionShellModuleSlot,
   type ClipInteractionShellProps,
 } from './types';
-import { ClipTrimHandles } from './ClipTrimHandles';
 
 function buildShellStyle(props: ClipInteractionShellProps): CSSProperties {
   const { geometry, style } = props;
@@ -40,6 +41,10 @@ function renderBuiltInModule(
 ) {
   if (slot === 'trim') {
     return <ClipTrimHandles key={slot} context={context} commands={commands} />;
+  }
+
+  if (slot === 'fade') {
+    return <ClipFadeHandles key={slot} context={context} commands={commands} />;
   }
 
   return defaultRenderModule(slot);

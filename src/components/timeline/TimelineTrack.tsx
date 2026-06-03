@@ -365,6 +365,7 @@ function TimelineTrackComponent({
   onResizeStart,
   isResizeActive = false,
   onTrimStart,
+  onFadeStart,
   renderClip,
   onClipMouseDown,
   onClipContextMenu,
@@ -949,6 +950,7 @@ function TimelineTrackComponent({
                     mountState={mountState}
                     activeModules={activeModules}
                     commands={{
+                      onFadeStart: (event, context, edge) => onFadeStart(event, context.clip.id, edge),
                       onTrimStart: (event, context, edge) => onTrimStart(event, context.clip.id, edge),
                     }}
                     className="timeline-canvas-interaction-shell"
@@ -1066,6 +1068,7 @@ function areTimelineTrackPropsEqual(
       previous.scrollX === next.scrollX &&
       previous.onEmptyMouseDown === next.onEmptyMouseDown &&
       previous.onEmptyContextMenu === next.onEmptyContextMenu &&
+      previous.onFadeStart === next.onFadeStart &&
       previous.onTrimStart === next.onTrimStart &&
       previous.isResizeActive === next.isResizeActive &&
       previous.clipKeyframes === next.clipKeyframes &&

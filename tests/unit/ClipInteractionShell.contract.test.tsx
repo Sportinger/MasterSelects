@@ -147,17 +147,18 @@ describe('ClipInteractionShell contract', () => {
     expect(getClipInteractionShellActiveSlots(activeModules)).toEqual(['keyframe', 'audio-region']);
   });
 
-  it('renders a lightweight shell scaffold with active slot placeholders', () => {
+  it('renders a lightweight shell scaffold with built-in fade handles and remaining placeholders', () => {
     const { container } = render(<ClipInteractionShell {...createShellProps()} />);
     const shell = container.querySelector<HTMLElement>('.clip-interaction-shell');
 
     expect(shell).toBeTruthy();
     expect(shell?.dataset.clipId).toBe('clip-a');
     expect(shell?.dataset.activeSlots).toBe('fade context-menu tool-preview');
+    expect(container.querySelectorAll('.shell-fade-handle')).toHaveLength(2);
 
     const slots = Array.from(container.querySelectorAll<HTMLElement>('[data-clip-interaction-slot]'))
       .map((node) => node.dataset.clipInteractionSlot);
-    expect(slots).toEqual(['fade', 'context-menu', 'tool-preview']);
+    expect(slots).toEqual(['context-menu', 'tool-preview']);
   });
 
   it('passes typed command context through root callbacks', () => {
@@ -221,6 +222,53 @@ describe('ClipInteractionShell contract', () => {
     expect(onTrimStart).toHaveBeenCalledTimes(1);
     expect(onTrimStart.mock.calls[0][1].clip.id).toBe('clip-a');
     expect(onTrimStart.mock.calls[0][2]).toBe('right');
+  });
+
+  it('renders active fade handles and dispatches fade commands with edge context', () => {
+    const onFadeStart = vi.fn();
+    const props = createShellProps({
+      geometry: {
+        ...createShellProps().geometry,
+        clip: rect({ x: 40, y: 8, width: 160 }),
+        fadeHandles: {
+          left: rect({ x: 40, y: 8, width: 12, height: 12 }),
+          right: rect({ x: 188, y: 8, width: 12, height: 12 }),
+        },
+      },
+      mountState: {
+        clipId: 'clip-a',
+        shouldMount: true,
+        reasons: ['fade'],
+        isFading: true,
+      },
+      activeModules: {
+        fade: {
+          slot: 'fade',
+          enabled: true,
+          state: null,
+          activeEdges: ['right'],
+        },
+      },
+      commands: { onFadeStart },
+    });
+
+    const { container } = render(<ClipInteractionShell {...props} />);
+    const left = container.querySelector<HTMLElement>('.shell-fade-handle.left');
+    const right = container.querySelector<HTMLElement>('.shell-fade-handle.right');
+
+    expect(left).toBeTruthy();
+    expect(right).toBeTruthy();
+    expect(left?.dataset.shellFadeEdge).toBe('left');
+    expect(right?.dataset.shellFadeEdge).toBe('right');
+    expect(left?.style.left).toBe('0px');
+    expect(right?.style.right).toBe('0px');
+    expect(right?.classList.contains('active')).toBe(true);
+
+    fireEvent.mouseDown(left as HTMLElement, { button: 0 });
+
+    expect(onFadeStart).toHaveBeenCalledTimes(1);
+    expect(onFadeStart.mock.calls[0][1].clip.id).toBe('clip-a');
+    expect(onFadeStart.mock.calls[0][2]).toBe('left');
   });
 
   it('does not render when mount state says the shell is not active', () => {

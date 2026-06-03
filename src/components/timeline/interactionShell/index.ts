@@ -1,4 +1,5 @@
 export { ClipInteractionShell } from './ClipInteractionShell';
+export { ClipFadeHandles } from './ClipFadeHandles';
 export { ClipTrimHandles } from './ClipTrimHandles';
 export {
   CLIP_INTERACTION_SHELL_MODULE_KEYS,

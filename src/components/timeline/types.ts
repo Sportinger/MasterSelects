@@ -282,6 +282,7 @@ export interface TimelineTrackProps {
   onEmptyMouseDown: (e: React.MouseEvent, trackId: string, time: number) => void;
   onEmptyContextMenu: (e: React.MouseEvent, trackId: string, time: number) => void;
   onTrimStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
+  onFadeStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnter: (e: React.DragEvent) => void;

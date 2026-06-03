@@ -72,6 +72,7 @@ function renderTimelineTrack(overrides: Partial<TimelineTrackProps> = {}) {
     onEmptyMouseDown: vi.fn(),
     onEmptyContextMenu: vi.fn(),
     onTrimStart: vi.fn(),
+    onFadeStart: vi.fn(),
     onDrop: vi.fn(),
     onDragOver: vi.fn(),
     onDragEnter: vi.fn(),
@@ -260,6 +261,7 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
   });
 
   it('keeps the legacy overlay mounted for an active fade clip until shell parity exists', () => {
+    const onFadeStart = vi.fn();
     const renderClip = vi.fn((clip: TimelineClip) => (
       <div className="timeline-clip" data-clip-id={clip.id} />
     ));
@@ -274,17 +276,19 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
         clipDuration: 4,
         originalFadeDuration: 0.2,
       },
+      onFadeStart,
       renderClip,
     });
 
     const shell = container.querySelector<HTMLElement>('.clip-interaction-shell');
+    const leftFadeHandle = container.querySelector<HTMLElement>('.shell-fade-handle.left');
 
     expect(shell).toBeTruthy();
     expect(shell?.dataset.clipId).toBe('clip-video');
     expect(shell?.dataset.mountReasons).toBe('fade');
     expect(shell?.dataset.activeSlots).toBe('fade');
     expect(shell?.style.pointerEvents).toBe('none');
-    expect(container.querySelectorAll('.shell-fade-handle')).toHaveLength(0);
+    expect(container.querySelectorAll('.shell-fade-handle')).toHaveLength(2);
     expect(container.querySelector('.timeline-canvas-dom-overlay .timeline-clip')).toBeTruthy();
     expect(renderClip).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'clip-video' }),
@@ -292,6 +296,12 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
       undefined,
       { passiveVisualsSuppressed: true },
     );
+
+    fireEvent.mouseDown(leftFadeHandle as HTMLElement, { button: 0 });
+
+    expect(onFadeStart).toHaveBeenCalledTimes(1);
+    expect(onFadeStart.mock.calls[0][1]).toBe('clip-video');
+    expect(onFadeStart.mock.calls[0][2]).toBe('left');
   });
 
   it('mounts shell trim handles for the active trim clip and dispatches trim commands', () => {
