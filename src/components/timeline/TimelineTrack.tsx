@@ -188,6 +188,11 @@ const canSkipLegacyClipBody = (
     activeSlots[0] === 'keyframe' &&
     mountReasons.some((reason) => reason === 'selected-keyframes') &&
     mountReasons.every((reason) => reason === 'selected-keyframes' || reason === 'hover');
+  const audioRegionOnlyShell =
+    activeSlots.length === 1 &&
+    activeSlots[0] === 'audio-region' &&
+    mountReasons.some((reason) => reason === 'audio-region-active') &&
+    mountReasons.every((reason) => reason === 'audio-region-active' || reason === 'hover');
 
   return trimOnlyShell ||
     contextMenuShell ||
@@ -195,7 +200,8 @@ const canSkipLegacyClipBody = (
     hoverOnlyShell ||
     stemOnlyShell ||
     fadeOnlyShell ||
-    keyframeOnlyShell;
+    keyframeOnlyShell ||
+    audioRegionOnlyShell;
 };
 
 const clampShellRectX = (rect: ClipInteractionShellRect, viewport: ClipInteractionShellRect): ClipInteractionShellRect => {

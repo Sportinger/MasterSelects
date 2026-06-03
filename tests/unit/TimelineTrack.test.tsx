@@ -632,7 +632,7 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     expect(renderClip).toHaveBeenCalled();
   });
 
-  it('keeps an audio-region shell and legacy overlay mounted for an active audio region', () => {
+  it('renders an audio-region shell without the legacy overlay body for an active audio region', () => {
     const renderClip = vi.fn((clip: TimelineClip) => (
       <div className="timeline-clip" data-clip-id={clip.id} />
     ));
@@ -657,7 +657,8 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     expect(shell?.dataset.activeSlots).toBe('audio-region');
     expect(shell?.style.pointerEvents).toBe('none');
     expect(container.querySelector('.clip-interaction-shell .clip-audio-region-selection')).toBeTruthy();
-    expect(container.querySelector('.timeline-canvas-dom-overlay .timeline-clip')).toBeTruthy();
+    expect(container.querySelector('.timeline-canvas-dom-overlay .timeline-clip')).toBeNull();
+    expect(renderClip).not.toHaveBeenCalled();
   });
 
   it('keeps a spectral-region shell and legacy overlay mounted for an active spectral selection', () => {

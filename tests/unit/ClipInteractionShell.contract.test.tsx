@@ -456,6 +456,210 @@ describe('ClipInteractionShell contract', () => {
     setAudioRegionSelectionSpy.mockRestore();
   });
 
+  it('runs audio-region context menu commands from the shell portal', () => {
+    const applyAudioRegionEditSpy = vi.spyOn(
+      useTimelineStore.getState(),
+      'applyAudioRegionEdit',
+    ).mockReturnValue('operation-a');
+    const props = createShellProps({
+      clip: {
+        ...createShellProps().clip,
+        name: 'clip.wav',
+        source: { type: 'audio' },
+      },
+      mountState: {
+        clipId: 'clip-a',
+        shouldMount: true,
+        reasons: ['audio-region-active'],
+        hasActiveAudioRegion: true,
+      },
+      activeModules: {
+        audioRegion: {
+          slot: 'audio-region',
+          enabled: true,
+          selection: {
+            clipId: 'clip-a',
+            trackId: 'track-video',
+            startTime: 2,
+            endTime: 4,
+            sourceInPoint: 1,
+            sourceOutPoint: 3,
+          },
+          mode: 'select',
+        },
+      },
+    });
+
+    try {
+      const { container } = render(<ClipInteractionShell {...props} />);
+      const selection = container.querySelector<HTMLElement>('.clip-audio-region-selection');
+
+      fireEvent.contextMenu(selection as HTMLElement, { clientX: 96, clientY: 48 });
+
+      const menu = document.body.querySelector<HTMLElement>('.clip-audio-region-context-menu');
+      const silenceCommand = document.body.querySelector<HTMLElement>('[data-audio-region-command="silence"]');
+
+      expect(menu).toBeTruthy();
+      expect(silenceCommand).toBeTruthy();
+
+      fireEvent.pointerDown(silenceCommand as HTMLElement, { button: 0 });
+
+      expect(applyAudioRegionEditSpy).toHaveBeenCalledWith('silence', { keepSelection: true });
+      expect(document.body.querySelector('.clip-audio-region-context-menu')).toBeNull();
+    } finally {
+      applyAudioRegionEditSpy.mockRestore();
+    }
+  });
+
+  it('renders audio edit stack controls in the audio-region shell', () => {
+    const previousAudioFocusMode = useTimelineStore.getState().audioFocusMode;
+    const toggleOperationSpy = vi.spyOn(
+      useTimelineStore.getState(),
+      'setClipAudioEditOperationEnabled',
+    );
+    let unmount: (() => void) | undefined;
+    useTimelineStore.setState({ audioFocusMode: true });
+    const props = createShellProps({
+      clip: {
+        ...createShellProps().clip,
+        name: 'clip.wav',
+        source: { type: 'audio' },
+        audioState: {
+          editStack: [
+            {
+              id: 'gain-op',
+              type: 'gain',
+              enabled: true,
+              timeRange: { start: 0.5, end: 1.5 },
+              params: { label: 'Boost', gainDb: 3 },
+              createdAt: 1,
+            },
+          ],
+        },
+      },
+      mountState: {
+        clipId: 'clip-a',
+        shouldMount: true,
+        reasons: ['audio-region-active'],
+        hasActiveAudioRegion: true,
+      },
+      activeModules: {
+        audioRegion: {
+          slot: 'audio-region',
+          enabled: true,
+          selection: {
+            clipId: 'clip-a',
+            trackId: 'track-video',
+            startTime: 2,
+            endTime: 4,
+            sourceInPoint: 1,
+            sourceOutPoint: 3,
+          },
+          mode: 'select',
+        },
+      },
+    });
+
+    try {
+      const rendered = render(<ClipInteractionShell {...props} />);
+      unmount = rendered.unmount;
+      const { container } = rendered;
+      const stack = container.querySelector<HTMLElement>('.clip-audio-edit-stack');
+      const operationButton = stack?.querySelector<HTMLElement>('button[title*="Boost"]');
+
+      expect(stack).toBeTruthy();
+      expect(stack?.querySelector('.clip-audio-edit-stack-count')?.textContent).toBe('1/1');
+      expect(operationButton).toBeTruthy();
+
+      fireEvent.click(operationButton as HTMLElement);
+
+      expect(toggleOperationSpy).toHaveBeenCalledWith('clip-a', 'gain-op', false);
+    } finally {
+      unmount?.();
+      toggleOperationSpy.mockRestore();
+      useTimelineStore.setState({ audioFocusMode: previousAudioFocusMode });
+    }
+  });
+
+  it('selects existing audio edit operation overlays from the shell', () => {
+    const previousAudioFocusMode = useTimelineStore.getState().audioFocusMode;
+    const previousShowMarkers = useTimelineStore.getState().showAudioRegionEditMarkers;
+    const setAudioRegionSelectionSpy = vi.spyOn(
+      useTimelineStore.getState(),
+      'setAudioRegionSelection',
+    );
+    let unmount: (() => void) | undefined;
+    useTimelineStore.setState({
+      audioFocusMode: true,
+      showAudioRegionEditMarkers: true,
+    });
+    const props = createShellProps({
+      clip: {
+        ...createShellProps().clip,
+        name: 'clip.wav',
+        source: { type: 'audio' },
+        audioState: {
+          editStack: [
+            {
+              id: 'silence-op',
+              type: 'silence',
+              enabled: true,
+              timeRange: { start: 0.25, end: 0.75 },
+              params: { label: 'Silence' },
+              createdAt: 1,
+            },
+          ],
+        },
+      },
+      mountState: {
+        clipId: 'clip-a',
+        shouldMount: true,
+        reasons: ['audio-region-active'],
+        hasActiveAudioRegion: true,
+      },
+      activeModules: {
+        audioRegion: {
+          slot: 'audio-region',
+          enabled: true,
+          selection: {
+            clipId: 'clip-a',
+            trackId: 'track-video',
+            startTime: 2,
+            endTime: 4,
+            sourceInPoint: 1,
+            sourceOutPoint: 3,
+          },
+          mode: 'select',
+        },
+      },
+    });
+
+    try {
+      const rendered = render(<ClipInteractionShell {...props} />);
+      unmount = rendered.unmount;
+      const { container } = rendered;
+      const operationOverlay = container.querySelector<HTMLElement>('.clip-audio-edit-operation-overlay');
+
+      expect(operationOverlay).toBeTruthy();
+      expect(operationOverlay?.dataset.audioEditType).toBe('silence');
+
+      fireEvent.mouseDown(operationOverlay as HTMLElement, { button: 0 });
+
+      expect(setAudioRegionSelectionSpy).toHaveBeenCalledWith(expect.objectContaining({
+        clipId: 'clip-a',
+        sourceInPoint: 0.25,
+        sourceOutPoint: 0.75,
+      }));
+    } finally {
+      unmount?.();
+      setAudioRegionSelectionSpy.mockRestore();
+      useTimelineStore.setState({
+        audioFocusMode: previousAudioFocusMode,
+        showAudioRegionEditMarkers: previousShowMarkers,
+      });
+    }
+  });
+
   it('renders active stem progress through the shell module', () => {
     const props = createShellProps({
       mountState: {
