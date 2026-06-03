@@ -24,11 +24,8 @@ import {
   ClipPassiveBackgroundLayer,
   ClipPassiveForegroundLayer,
 } from './components/ClipPassiveVisualLayers';
-import {
-  ACTIVE_STEM_JOB_PHASES,
-  EMPTY_STEM_CHOICES,
-  formatStemJobPhase,
-} from './components/ClipStemDisplay';
+import { EMPTY_STEM_CHOICES } from './components/ClipStemDisplay';
+import { formatStemJobPhase, isActiveStemJobPhase } from '../../stores/timeline/helpers/stemSeparationJobPhases';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { Logger } from '../../services/logger';
 import { useTimelineSpectrogramTileSetState } from './hooks/useTimelineSpectrogramTileSet';
@@ -582,7 +579,7 @@ function TimelineClipComponent({
   const isGeneratingAudioProxy = audioProxyStatus === 'generating';
   const hasAudioProxy = audioProxyStatus === 'ready';
   const hasAudioProxyError = audioProxyStatus === 'error';
-  const activeStemSeparationJob = clipStemSeparationJob && ACTIVE_STEM_JOB_PHASES.has(clipStemSeparationJob.phase)
+  const activeStemSeparationJob = clipStemSeparationJob && isActiveStemJobPhase(clipStemSeparationJob.phase)
     ? clipStemSeparationJob
     : null;
   const activeStemProgressPercent = activeStemSeparationJob

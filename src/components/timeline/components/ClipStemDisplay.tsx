@@ -10,34 +10,6 @@ import type { AudioStemKind } from '../../../types/audio';
 
 export const EMPTY_STEM_CHOICES: ClipStemSeparationJobStemChoice[] = [];
 
-export const ACTIVE_STEM_JOB_PHASES = new Set([
-  'queued',
-  'preparing',
-  'downloading-model',
-  'loading-model',
-  'separating',
-  'storing',
-]);
-
-export function formatStemJobPhase(phase: string): string {
-  switch (phase) {
-    case 'queued':
-      return 'Queued';
-    case 'preparing':
-      return 'Preparing audio';
-    case 'downloading-model':
-      return 'Downloading stem model';
-    case 'loading-model':
-      return 'Loading stem model';
-    case 'separating':
-      return 'Separating stems';
-    case 'storing':
-      return 'Storing stems';
-    default:
-      return 'Stem separation';
-  }
-}
-
 export function StemChoiceIcon({ kind }: { kind: AudioStemKind }) {
   switch (kind) {
     case 'vocals':

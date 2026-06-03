@@ -16,16 +16,9 @@ import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
 import type { LabelColor } from '../../stores/mediaStore/types';
 import { resolveAudibleAudioClip } from '../../services/audio/audioClipResolution';
 import { isManualLinkedGroupId } from '../../stores/timeline/helpers/idGenerator';
+import { isActiveStemJobPhase } from '../../stores/timeline/helpers/stemSeparationJobPhases';
 
 const log = Logger.create('TimelineContextMenu');
-const ACTIVE_STEM_JOB_PHASES = new Set<ClipStemSeparationJobState['phase']>([
-  'queued',
-  'preparing',
-  'downloading-model',
-  'loading-model',
-  'separating',
-  'storing',
-]);
 
 interface TimelineContextMenuProps {
   contextMenu: ContextMenuState | null;
@@ -297,7 +290,7 @@ export function TimelineContextMenu({
   const audibleAudioResolution = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
   const audibleAudioClip = audibleAudioResolution?.audioClip ?? null;
   const stemSeparationJob = audibleAudioClip ? clipStemSeparationJobs[audibleAudioClip.id] : undefined;
-  const isStemSeparationActive = ACTIVE_STEM_JOB_PHASES.has(stemSeparationJob?.phase ?? 'failed');
+  const isStemSeparationActive = isActiveStemJobPhase(stemSeparationJob?.phase);
   const stemProgressPercent = Math.round(Math.max(0, Math.min(1, stemSeparationJob?.progress ?? 0)) * 100);
   const hasStemSeparation = Boolean(audibleAudioClip?.audioState?.stemSeparation);
   const isGenerating = mediaFile?.proxyStatus === 'generating';

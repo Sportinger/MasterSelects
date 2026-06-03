@@ -10,6 +10,7 @@ import {
   applyStemStateToClip,
   applyStemStateToSourceCopies,
 } from './helpers/stemSharingHelpers';
+import { isActiveStemJobPhase } from './helpers/stemSeparationJobPhases';
 import { createAudioElement } from './helpers/webCodecsHelpers';
 import type {
   ClipStemSeparationJobPhase,
@@ -24,14 +25,6 @@ import { generateClipId } from './helpers/idGenerator';
 
 const log = Logger.create('TimelineStemSeparation');
 
-const ACTIVE_STEM_JOB_PHASES = new Set<ClipStemSeparationJobPhase>([
-  'queued',
-  'preparing',
-  'downloading-model',
-  'loading-model',
-  'separating',
-  'storing',
-]);
 const STEM_JOB_PROGRESS_UPDATE_MIN_INTERVAL_MS = 250;
 const STEM_JOB_PROGRESS_UPDATE_MIN_DELTA = 0.01;
 const STEM_RELINK_JOB_ID_PREFIX = 'stem-relink';
@@ -75,7 +68,7 @@ function clampStemGainDb(value: number): number {
 }
 
 function hasActiveStemJob(phase: ClipStemSeparationJobPhase | undefined): boolean {
-  return !!phase && ACTIVE_STEM_JOB_PHASES.has(phase);
+  return isActiveStemJobPhase(phase);
 }
 
 function createStemChoices(stemSeparation: ClipAudioStemState): ClipStemSeparationJobStemChoice[] {
