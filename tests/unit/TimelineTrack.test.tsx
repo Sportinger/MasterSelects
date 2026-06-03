@@ -1,7 +1,11 @@
 import { fireEvent, render } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TimelineTrack } from '../../src/components/timeline/TimelineTrack';
 import type { TimelineTrackProps } from '../../src/components/timeline/types';
+import {
+  clearTimelineCanvasDiagnostics,
+  getTimelineCanvasDiagnostics,
+} from '../../src/services/timeline/timelineCanvasDiagnostics';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import type { TimelineClip, TimelineTrack as TimelineTrackType } from '../../src/types';
 
@@ -112,6 +116,10 @@ function renderTimelineTrack(overrides: Partial<TimelineTrackProps> = {}) {
 }
 
 describe('TimelineTrack empty lane right mouse behavior', () => {
+  beforeEach(() => {
+    clearTimelineCanvasDiagnostics();
+  });
+
   it('starts the empty-lane right-button path without opening the menu immediately', () => {
     const onEmptyMouseDown = vi.fn();
     const onEmptyContextMenu = vi.fn();
@@ -193,6 +201,31 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     expect(shell?.dataset.activeSlots).toBe('');
     expect(shell?.style.pointerEvents).toBe('none');
     expect(legacyClip).toBeNull();
+    expect(renderClip).not.toHaveBeenCalled();
+  });
+
+  it('reports zero DOM clip bodies for canvas interaction shells', () => {
+    const renderClip = vi.fn((clip: TimelineClip) => (
+      <div className="timeline-clip" data-clip-id={clip.id} />
+    ));
+
+    const { row } = renderTimelineTrack({
+      clips: [createClip()],
+      renderClip,
+    });
+
+    fireEvent.mouseMove(row, { clientX: 45, clientY: 24 });
+
+    const diagnostics = getTimelineCanvasDiagnostics();
+    const totals = diagnostics.totals as {
+      domOverlayCount: number;
+      domClipBodyCount: number;
+      shellCount: number;
+    };
+
+    expect(totals.domOverlayCount).toBe(1);
+    expect(totals.shellCount).toBe(1);
+    expect(totals.domClipBodyCount).toBe(0);
     expect(renderClip).not.toHaveBeenCalled();
   });
 

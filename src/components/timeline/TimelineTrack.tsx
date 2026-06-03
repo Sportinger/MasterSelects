@@ -15,7 +15,6 @@ import { flags } from '../../engine/featureFlags';
 import { TimelineClipCanvas, type CanvasFadeVisuals } from './TimelineClipCanvas';
 import {
   ClipInteractionShell,
-  getClipInteractionShellActiveSlots,
   type ClipInteractionShellActiveModules,
   type ClipInteractionShellGeometry,
   type ClipInteractionShellMountReason,
@@ -154,51 +153,6 @@ const createShellRect = (x: number, y: number, width: number, height: number): C
   width: Math.max(0, width),
   height: Math.max(0, height),
 });
-
-const LEGACY_SKIP_READY_SHELL_SLOTS = new Set<ClipInteractionShellModuleSlot>([
-  'trim',
-  'fade',
-  'keyframe',
-  'audio-region',
-  'spectral-region',
-  'video-bake',
-  'stem',
-  'context-menu',
-]);
-
-const LEGACY_SKIP_READY_SHELL_REASONS = new Set<ClipInteractionShellMountReason>([
-  'hover',
-  'drag',
-  'multi-drag',
-  'trim',
-  'fade',
-  'context-menu-open',
-  'selected-keyframes',
-  'audio-region-active',
-  'spectral-region-active',
-  'video-bake-active',
-  'stem-active',
-]);
-
-const canSkipLegacyClipBody = (
-  activeSlots: readonly ClipInteractionShellModuleSlot[],
-  mountReasons: readonly ClipInteractionShellMountReason[],
-): boolean => {
-  const parityReadyShell =
-    activeSlots.length > 0 &&
-    activeSlots.every((slot) => LEGACY_SKIP_READY_SHELL_SLOTS.has(slot)) &&
-    mountReasons.every((reason) => LEGACY_SKIP_READY_SHELL_REASONS.has(reason));
-  const dragOnlyShell =
-    activeSlots.length === 0 &&
-    mountReasons.some((reason) => reason === 'drag' || reason === 'multi-drag') &&
-    mountReasons.every((reason) => reason === 'drag' || reason === 'multi-drag' || reason === 'hover');
-  const hoverOnlyShell =
-    activeSlots.length === 0 &&
-    mountReasons.length === 1 &&
-    mountReasons[0] === 'hover';
-
-  return parityReadyShell || dragOnlyShell || hoverOnlyShell;
-};
 
 const clampShellRectX = (rect: ClipInteractionShellRect, viewport: ClipInteractionShellRect): ClipInteractionShellRect => {
   const left = Math.max(rect.x, viewport.x);
@@ -737,48 +691,25 @@ function TimelineTrackComponent({
   );
   useEffect(() => {
     const activeShellSlotCounts: Partial<Record<ClipInteractionShellModuleSlot, number>> = {};
-    const addSlot = (
-      slots: ClipInteractionShellModuleSlot[],
-      slot: ClipInteractionShellModuleSlot,
-    ) => {
-      slots.push(slot);
+    const countSlot = (slot: ClipInteractionShellModuleSlot) => {
       activeShellSlotCounts[slot] = (activeShellSlotCounts[slot] ?? 0) + 1;
     };
-    let domClipBodyCount = useCanvasClips ? 0 : trackClips.length;
 
     domControlClips.forEach((clip) => {
-      const activeSlots: ClipInteractionShellModuleSlot[] = [];
-      if (clipTrim?.clipId === clip.id) addSlot(activeSlots, 'trim');
-      if (clipFade?.clipId === clip.id) addSlot(activeSlots, 'fade');
-      if (clipShellKeyframeStateByClipId.has(clip.id)) addSlot(activeSlots, 'keyframe');
-      if (clipContextMenu?.clipId === clip.id) addSlot(activeSlots, 'context-menu');
+      if (clipTrim?.clipId === clip.id) countSlot('trim');
+      if (clipFade?.clipId === clip.id) countSlot('fade');
+      if (clipShellKeyframeStateByClipId.has(clip.id)) countSlot('keyframe');
+      if (clipContextMenu?.clipId === clip.id) countSlot('context-menu');
       const specialState = clipShellSpecialStateByClipId.get(clip.id);
-      if (specialState?.audioRegionActive) addSlot(activeSlots, 'audio-region');
-      if (specialState?.spectralRegionActive) addSlot(activeSlots, 'spectral-region');
-      if (specialState?.videoBakeActive) addSlot(activeSlots, 'video-bake');
-      if (specialState?.stemActive) addSlot(activeSlots, 'stem');
-
-      const mountReasons: ClipInteractionShellMountReason[] = [];
-      if (hoveredClipId === clip.id) mountReasons.push('hover');
-      if (clipDrag?.clipId === clip.id) mountReasons.push('drag');
-      if (clipDrag?.multiSelectClipIds?.includes(clip.id)) mountReasons.push('multi-drag');
-      if (clipTrim?.clipId === clip.id) mountReasons.push('trim');
-      if (clipFade?.clipId === clip.id) mountReasons.push('fade');
-      if (clipContextMenu?.clipId === clip.id) mountReasons.push('context-menu-open');
-      if (clipShellKeyframeStateByClipId.has(clip.id)) mountReasons.push('selected-keyframes');
-      if (specialState?.audioRegionActive) mountReasons.push('audio-region-active');
-      if (specialState?.spectralRegionActive) mountReasons.push('spectral-region-active');
-      if (specialState?.videoBakeActive) mountReasons.push('video-bake-active');
-      if (specialState?.stemActive) mountReasons.push('stem-active');
-
-      if (!canSkipLegacyClipBody(activeSlots, mountReasons)) {
-        domClipBodyCount += 1;
-      }
+      if (specialState?.audioRegionActive) countSlot('audio-region');
+      if (specialState?.spectralRegionActive) countSlot('spectral-region');
+      if (specialState?.videoBakeActive) countSlot('video-bake');
+      if (specialState?.stemActive) countSlot('stem');
     });
 
     reportTimelineCanvasDomDiagnostics(track.id, {
       domOverlayCount: useCanvasClips ? domControlClips.length : 0,
-      domClipBodyCount,
+      domClipBodyCount: useCanvasClips ? 0 : trackClips.length,
       shellCount: domControlClips.length,
       activeShellSlotCounts,
     });
@@ -787,8 +718,6 @@ function TimelineTrackComponent({
     useCanvasClips,
     domControlClips,
     trackClips.length,
-    hoveredClipId,
-    clipDrag,
     clipTrim,
     clipFade,
     clipContextMenu,
@@ -1067,9 +996,7 @@ function TimelineTrackComponent({
             />
             {domControlClips.map((clip) => {
               const activeModules = getClipShellActiveModules(clip);
-              const activeSlots = getClipInteractionShellActiveSlots(activeModules);
               const mountState = getClipShellMountState(clip.id);
-              const skipLegacyClipBody = canSkipLegacyClipBody(activeSlots, mountState.reasons);
               return (
                 <div
                   key={`canvas-control-${clip.id}`}
@@ -1091,7 +1018,6 @@ function TimelineTrackComponent({
                     className="timeline-canvas-interaction-shell"
                     style={{ pointerEvents: 'none' }}
                   />
-                  {skipLegacyClipBody ? null : renderClip(clip, track.id, undefined, { passiveVisualsSuppressed: true })}
                 </div>
               );
             })}
