@@ -168,7 +168,7 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     expect(renderClip).not.toHaveBeenCalled();
   });
 
-  it('mounts the interaction shell behind the legacy canvas overlay for hovered clips', () => {
+  it('mounts a hover-only interaction shell without the legacy overlay body', () => {
     const renderClip = vi.fn((clip: TimelineClip) => (
       <div className="timeline-clip" data-clip-id={clip.id} />
     ));
@@ -188,14 +188,58 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     expect(shell).toBeTruthy();
     expect(shell?.dataset.clipId).toBe('clip-video');
     expect(shell?.dataset.mountReasons).toBe('hover');
+    expect(shell?.dataset.activeSlots).toBe('');
     expect(shell?.style.pointerEvents).toBe('none');
-    expect(legacyClip).toBeTruthy();
-    expect(renderClip).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'clip-video' }),
-      'track-video',
-      undefined,
-      { passiveVisualsSuppressed: true },
-    );
+    expect(legacyClip).toBeNull();
+    expect(renderClip).not.toHaveBeenCalled();
+  });
+
+  it('routes a primary click through the hover-only shell without the legacy body', () => {
+    const onClipMouseDown = vi.fn();
+    const onEmptyMouseDown = vi.fn();
+    const renderClip = vi.fn((clip: TimelineClip) => (
+      <div className="timeline-clip" data-clip-id={clip.id} />
+    ));
+
+    const { container, row } = renderTimelineTrack({
+      clips: [createClip()],
+      onClipMouseDown,
+      onEmptyMouseDown,
+      renderClip,
+    });
+
+    fireEvent.mouseMove(row, { clientX: 45, clientY: 24 });
+    fireEvent.mouseDown(row, { button: 0, clientX: 45, clientY: 24 });
+
+    expect(onClipMouseDown).toHaveBeenCalledTimes(1);
+    expect(onClipMouseDown.mock.calls[0][1]).toBe('clip-video');
+    expect(onEmptyMouseDown).not.toHaveBeenCalled();
+    expect(container.querySelector('.timeline-canvas-dom-overlay .timeline-clip')).toBeNull();
+    expect(renderClip).not.toHaveBeenCalled();
+  });
+
+  it('routes a clip context menu through the hover-only shell without the legacy body', () => {
+    const onClipContextMenu = vi.fn();
+    const onEmptyContextMenu = vi.fn();
+    const renderClip = vi.fn((clip: TimelineClip) => (
+      <div className="timeline-clip" data-clip-id={clip.id} />
+    ));
+
+    const { container, row } = renderTimelineTrack({
+      clips: [createClip()],
+      onClipContextMenu,
+      onEmptyContextMenu,
+      renderClip,
+    });
+
+    fireEvent.mouseMove(row, { clientX: 45, clientY: 24 });
+    fireEvent.contextMenu(row, { button: 2, clientX: 45, clientY: 24 });
+
+    expect(onClipContextMenu).toHaveBeenCalledTimes(1);
+    expect(onClipContextMenu.mock.calls[0][1]).toBe('clip-video');
+    expect(onEmptyContextMenu).not.toHaveBeenCalled();
+    expect(container.querySelector('.timeline-canvas-dom-overlay .timeline-clip')).toBeNull();
+    expect(renderClip).not.toHaveBeenCalled();
   });
 
   it('does not mount selected-only DOM controls in canvas mode', () => {

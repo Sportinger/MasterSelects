@@ -113,8 +113,12 @@ const canSkipLegacyClipBody = (
     activeSlots.length === 0 &&
     mountReasons.some((reason) => reason === 'drag' || reason === 'multi-drag') &&
     mountReasons.every((reason) => reason === 'drag' || reason === 'multi-drag' || reason === 'hover');
+  const hoverOnlyShell =
+    activeSlots.length === 0 &&
+    mountReasons.length === 1 &&
+    mountReasons[0] === 'hover';
 
-  return trimOnlyShell || contextMenuShell || dragOnlyShell;
+  return trimOnlyShell || contextMenuShell || dragOnlyShell || hoverOnlyShell;
 };
 
 const clampShellRectX = (rect: ClipInteractionShellRect, viewport: ClipInteractionShellRect): ClipInteractionShellRect => {
