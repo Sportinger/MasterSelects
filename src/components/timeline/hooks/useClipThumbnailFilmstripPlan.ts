@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { TimelineClip } from '../../../types';
+import type { ClipSegment, TimelineClip } from '../../../types';
 import { useThumbnailCache } from '../../../hooks/useThumbnailCache';
 import { THUMB_WIDTH } from '../constants';
 import {
@@ -18,6 +18,8 @@ import {
 } from '../utils/thumbnailFilmstrip';
 
 const THUMBNAIL_RENDER_OVERSCAN_PX = THUMB_WIDTH * 3;
+const EMPTY_LEGACY_THUMBNAILS: readonly string[] = [];
+const EMPTY_COMPOSITION_SEGMENTS: readonly ClipSegment[] = [];
 
 export interface ClipThumbnailFilmstripPlan {
   thumbnailRenderWindow: TimelineHorizontalRenderWindow;
@@ -76,8 +78,8 @@ export function useClipThumbnailFilmstripPlan(input: {
     visibleThumbs,
     input.clip.reversed,
   );
-  const legacyThumbnails = input.clip.thumbnails || [];
-  const compositionSegments = input.clip.clipSegments ?? [];
+  const legacyThumbnails = input.clip.thumbnails ?? EMPTY_LEGACY_THUMBNAILS;
+  const compositionSegments = input.clip.clipSegments ?? EMPTY_COMPOSITION_SEGMENTS;
   const thumbnailDisplayPlan = resolveThumbnailDisplayPlan({
     passiveMediaEnabled: input.passiveMediaEnabled,
     thumbnailsEnabled: input.thumbnailsEnabled,

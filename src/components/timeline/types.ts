@@ -277,7 +277,6 @@ export interface TimelineTrackProps {
   externalDrag: ExternalDragState | null;
   zoom: number;
   scrollX: number;
-  timelineRef: React.RefObject<HTMLDivElement | null>;
   onClipMouseDown: (e: React.MouseEvent, clipId: string) => void;
   onClipContextMenu: (e: React.MouseEvent, clipId: string) => void;
   onEmptyMouseDown: (e: React.MouseEvent, trackId: string, time: number) => void;

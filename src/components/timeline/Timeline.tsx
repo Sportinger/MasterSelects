@@ -3529,7 +3529,6 @@ export function Timeline() {
                       externalDrag={externalDrag}
                       zoom={zoom}
                       scrollX={scrollX}
-                      timelineRef={timelineRef}
                       onClipMouseDown={handleTimelineClipMouseDown}
                       onClipContextMenu={handleClipContextMenu}
                       onEmptyMouseDown={handleEmptyTimelineMouseDown}

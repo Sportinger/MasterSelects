@@ -32,7 +32,7 @@ describe('clip media classification', () => {
     expect(resolveClipMediaClassification(makeClip({
       name: 'voice.flac',
       file: new File(['x'], 'voice.flac', { type: '' }),
-    })).toMatchObject({
+    }))).toMatchObject({
       isAudioClip: true,
       clipTypeClass: 'audio',
     });
@@ -41,14 +41,14 @@ describe('clip media classification', () => {
   it('separates text, 3D text, and model clips', () => {
     expect(resolveClipMediaClassification(makeClip({
       source: { type: 'text' },
-    })).toMatchObject({
+    }))).toMatchObject({
       isTextClip: true,
       clipTypeClass: 'text',
     });
 
     expect(resolveClipMediaClassification(makeClip({
       source: { type: 'model', meshType: 'text3d' },
-    })).toMatchObject({
+    }))).toMatchObject({
       isText3DClip: true,
       isModelClip: false,
       clipTypeClass: 'text',
@@ -56,7 +56,7 @@ describe('clip media classification', () => {
 
     expect(resolveClipMediaClassification(makeClip({
       source: { type: 'model' },
-    })).toMatchObject({
+    }))).toMatchObject({
       isModelClip: true,
       staticClipIconKind: 'model',
       showsStaticClipArtwork: true,
@@ -67,7 +67,7 @@ describe('clip media classification', () => {
   it('resolves vector and static artwork metadata', () => {
     expect(resolveClipMediaClassification(makeClip({
       source: { type: 'rive' },
-    })).toMatchObject({
+    }))).toMatchObject({
       isVectorAnimationClip: true,
       vectorAnimationIcon: 'R',
       vectorAnimationTitle: 'Rive Clip',
@@ -76,7 +76,7 @@ describe('clip media classification', () => {
 
     expect(resolveClipMediaClassification(makeClip({
       source: { type: 'camera' },
-    })).toMatchObject({
+    }))).toMatchObject({
       isCameraClip: true,
       staticClipIconKind: 'camera',
       showsStaticClipArtwork: true,
@@ -85,7 +85,7 @@ describe('clip media classification', () => {
 
     expect(resolveClipMediaClassification(makeClip({
       source: { type: 'splat-effector' },
-    })).toMatchObject({
+    }))).toMatchObject({
       isSplatEffectorClip: true,
       staticClipIconKind: null,
       showsStaticClipArtwork: false,

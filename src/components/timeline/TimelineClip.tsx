@@ -10,24 +10,20 @@ import {
   isVectorAnimationSourceType,
   shouldLoopVectorAnimation,
 } from '../../types/vectorAnimation';
-import { ClipAudioMediaView } from './components/ClipAudioMediaView';
 import { ClipAudioEditStackControls } from './components/ClipAudioEditStackControls';
 import { ClipAudioRegionSelectionOverlay } from './components/ClipAudioRegionSelectionOverlay';
 import { ClipSpectralRegionOverlays } from './components/ClipSpectralRegionOverlays';
-import { ClipThumbnailFilmstrip } from './components/ClipThumbnailFilmstrip';
 import { ClipAudioRegionContextMenu } from './components/ClipAudioRegionContextMenu';
 import { ClipVideoBakeRegionOverlays } from './components/ClipVideoBakeRegionOverlays';
 import { ClipAudioEditOperationOverlays } from './components/ClipAudioEditOperationOverlays';
-import { ClipContentMeta } from './components/ClipContentMeta';
-import { ClipCoverageBadges } from './components/ClipCoverageBadges';
 import { ClipStemSwitcher } from './components/ClipStemSwitcher';
-import { ClipPassiveStatusBadges } from './components/ClipPassiveStatusBadges';
-import { ClipTranscriptAnalysisOverlays } from './components/ClipTranscriptAnalysisOverlays';
 import { ClipKeyframeTicks } from './components/ClipKeyframeTicks';
 import { ClipFadeTrimControls } from './components/ClipFadeTrimControls';
 import { ClipSelectionHitareas } from './components/ClipSelectionHitareas';
-import { ClipPreThumbnailDecorations } from './components/ClipPreThumbnailDecorations';
-import { ClipPostThumbnailDecorations } from './components/ClipPostThumbnailDecorations';
+import {
+  ClipPassiveBackgroundLayer,
+  ClipPassiveForegroundLayer,
+} from './components/ClipPassiveVisualLayers';
 import {
   ACTIVE_STEM_JOB_PHASES,
   EMPTY_STEM_CHOICES,
@@ -116,6 +112,7 @@ import {
   scheduleTimelineProcessedWaveformDerivation,
   scheduleTimelineSpectrogramTileGeneration,
 } from '../../services/timeline/timelineAudioArtifactGenerationWarmup';
+import { useClipAudioMediaViewProps } from './hooks/useClipAudioMediaViewProps';
 
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
@@ -129,6 +126,8 @@ const log = Logger.create('TimelineClip');
 
 const EMPTY_CLIP_KEYFRAMES = [] as const;
 const EMPTY_AUDIO_EDIT_STACK = [] as const;
+const EMPTY_WAVEFORM: number[] = [];
+const EMPTY_SPECTRAL_LAYERS = [] as const;
 
 function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
   return isVectorAnimationSourceType(clip.source?.type) &&
@@ -363,7 +362,7 @@ function TimelineClipComponent({
   const processedSpectrogramTileSet = processedSpectrogramState.tileSet;
   const sourceSpectrogramTileSet = sourceSpectrogramState.tileSet;
   const spectrogramTileSet = processedSpectrogramTileSet ?? sourceSpectrogramTileSet;
-  const spectrogramVariant = processedSpectrogramTileSet ? 'processed' : 'source';
+  const spectrogramVariant: 'processed' | 'source' = processedSpectrogramTileSet ? 'processed' : 'source';
   const spectralMaxFrequencyHz = getSpectralMaxFrequencyHz(spectrogramTileSet?.sampleRate);
   const selectedSpectralImageFileId = useMediaStore(s => {
     for (const id of s.selectedIds) {
@@ -382,7 +381,7 @@ function TimelineClipComponent({
   const selectedSpectralImageFile = selectedSpectralImageFileId
     ? spectralImageFilesById.get(selectedSpectralImageFileId) ?? null
     : null;
-  const waveformVariant = waveformUsesProcessedPyramid
+  const waveformVariant: 'processed' | 'source' | 'legacy' = waveformUsesProcessedPyramid
     ? 'processed'
     : waveformUsesSourcePyramid
       ? 'source'
@@ -1012,7 +1011,7 @@ function TimelineClipComponent({
   const waveformPyramidForRender = preferSourceWaveformForAudioRegionDrag
     ? sourceWaveformPyramid
     : waveformPyramid;
-  const waveformVariantForRender = preferSourceWaveformForAudioRegionDrag
+  const waveformVariantForRender: 'processed' | 'source' | 'legacy' = preferSourceWaveformForAudioRegionDrag
     ? 'source'
     : waveformVariant;
   const waveformUsesProcessedPyramidForRender = Boolean(
@@ -1030,7 +1029,7 @@ function TimelineClipComponent({
   const waveformOutPointForRender = processedWaveformPyramidForRender
     ? Math.max(0.001, processedWaveformPyramidForRender.duration)
     : displayOutPoint;
-  const waveformLegacyForRender = clip.waveform ?? [];
+  const waveformLegacyForRender = clip.waveform ?? EMPTY_WAVEFORM;
   const waveformChannelsForRender = clip.waveformChannels;
   const hasWaveformForRender = Boolean(
     waveformPyramidForRender ||
@@ -1077,6 +1076,41 @@ function TimelineClipComponent({
   const stableWaveformContentOffsetPx = stableWaveformGeometry.contentOffsetPx;
   const stableWaveformRenderWindow = stableWaveformGeometry.renderWindow;
   const stableWaveformClipDuration = stableWaveformGeometry.clipDuration;
+  const {
+    audioSpectrogramProps,
+    audioWaveformProps,
+  } = useClipAudioMediaViewProps({
+    clipId: clip.id,
+    trackBaseHeight,
+    width,
+    zoom,
+    audioDisplayMode,
+    spectrogramTileSet,
+    spectrogramInPoint,
+    spectrogramOutPoint,
+    spectrogramNaturalDuration,
+    spectrogramVariant,
+    waveformRenderWindow,
+    waveformLegacyForRender,
+    waveformChannelsForRender,
+    waveformNaturalDurationForRender,
+    waveformPyramidForRender,
+    waveformVariantForRender,
+    waveformDisplayGainForRender,
+    stableWaveformContentWidth,
+    stableWaveformContentInPoint,
+    stableWaveformContentOutPoint,
+    stableWaveformClipDuration,
+    stableWaveformRenderWindow,
+    stableWaveformContentOffsetPx,
+    audioVolumeAutomationKeyframes,
+    predictiveAudioEditStack,
+    predictiveAudioRegionGainPreview,
+    useStableWaveformTrimWindow,
+    originalWaveformTrimInPoint,
+    originalWaveformTrimOutPoint,
+    waveformSourceSecondsPerPixel,
+  });
 
   const commitAudioRegionOperationRange = useCallback((
     operationIds: string[],
@@ -1867,12 +1901,12 @@ function TimelineClipComponent({
   const cutIndicatorX = shouldShowCutIndicator && timelineToolPreview?.time !== undefined
     ? ((timelineToolPreview.time - displayStartTime) / displayDuration) * width
     : null;
-  const audioRegionOverlay = resolveAudioRegionOverlay({
+  const audioRegionOverlay = useMemo(() => resolveAudioRegionOverlay({
     selection: audioRegionSelection,
     displayStartTime,
     displayDuration,
     width,
-  });
+  }), [audioRegionSelection, displayDuration, displayStartTime, width]);
   const selectedAudioRegionGainOperation = useMemo(() => {
     if (!audioRegionSelection) return null;
     const start = Math.min(audioRegionSelection.sourceInPoint, audioRegionSelection.sourceOutPoint);
@@ -1893,14 +1927,19 @@ function TimelineClipComponent({
 
     return null;
   }, [displayAudioEditStack, audioRegionSelection]);
-  const audioRegionGainControl = audioRegionOverlay
+  const audioRegionGainControl = useMemo(() => audioRegionOverlay
     ? resolveAudioRegionGainControl({
         selection: audioRegionSelection,
         overlayWidth: audioRegionOverlay.width,
         selectedOperation: selectedAudioRegionGainOperation,
         dragState: audioRegionGainDrag,
       })
-    : null;
+    : null, [
+      audioRegionGainDrag,
+      audioRegionOverlay,
+      audioRegionSelection,
+      selectedAudioRegionGainOperation,
+    ]);
   const commitAudioRegionGainEdit = useCallback((input: {
     gainDb: number;
     fadeInSeconds: number;
@@ -2073,14 +2112,21 @@ function TimelineClipComponent({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [audioRegionContextMenu, closeAudioRegionContextMenu]);
-  const spectralRegionOverlay = resolveSpectralRegionOverlay({
+  const spectralRegionOverlay = useMemo(() => resolveSpectralRegionOverlay({
     selection: audioSpectralRegionSelection,
     displayStartTime,
     displayDuration,
     width,
     trackBaseHeight,
     maxFrequencyHz: spectralMaxFrequencyHz,
-  });
+  }), [
+    audioSpectralRegionSelection,
+    displayDuration,
+    displayStartTime,
+    spectralMaxFrequencyHz,
+    trackBaseHeight,
+    width,
+  ]);
   const sourceTimeToDisplayTimelineTime = useCallback((sourceTime: number): number => {
     const sourceStart = Math.max(0, displayInPoint ?? 0);
     const sourceEnd = Math.max(sourceStart + 0.001, displayOutPoint ?? sourceStart + displayDuration);
@@ -2088,9 +2134,10 @@ function TimelineClipComponent({
     const timelineRatio = clip.reversed ? 1 - sourceRatio : sourceRatio;
     return displayStartTime + timelineRatio * displayDuration;
   }, [clip.reversed, displayDuration, displayInPoint, displayOutPoint, displayStartTime]);
+  const spectralLayers = clip.audioState?.spectralLayers ?? EMPTY_SPECTRAL_LAYERS;
   const spectralImageLayerOverlays = useMemo(() => resolveSpectralImageLayerOverlays({
     enabled: canSelectSpectralRegion || audioDisplayMode === 'spectral',
-    layers: clip.audioState?.spectralLayers ?? [],
+    layers: spectralLayers,
     displayStartTime,
     displayDuration,
     width,
@@ -2101,10 +2148,10 @@ function TimelineClipComponent({
   }), [
     audioDisplayMode,
     canSelectSpectralRegion,
-    clip.audioState?.spectralLayers,
     displayDuration,
     displayStartTime,
     sourceTimeToDisplayTimelineTime,
+    spectralLayers,
     spectralImageFilesById,
     spectralMaxFrequencyHz,
     trackBaseHeight,
@@ -2271,11 +2318,11 @@ function TimelineClipComponent({
     e.stopPropagation();
     clearAudioSpectralRegionSelection();
   }, [clearAudioSpectralRegionSelection]);
-  const handleAudioEditStackMouseDown = (e: React.MouseEvent) => {
+  const handleAudioEditStackMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-  };
-  const handleBakeAudioEditStack = (e: React.MouseEvent) => {
+  }, []);
+  const handleBakeAudioEditStack = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (audioBakePending) return;
@@ -2283,19 +2330,19 @@ function TimelineClipComponent({
     void bakeClipAudioEditStack(clip.id).finally(() => {
       setAudioBakePending(false);
     });
-  };
-  const handleUnbakeAudioEditStack = (e: React.MouseEvent) => {
+  }, [audioBakePending, bakeClipAudioEditStack, clip.id]);
+  const handleUnbakeAudioEditStack = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (audioBakePending || !canUnbakeAudioEditStack) return;
     unbakeClipAudioEditStack(clip.id);
-  };
-  const handleClearAudioEditStack = (e: React.MouseEvent) => {
+  }, [audioBakePending, canUnbakeAudioEditStack, clip.id, unbakeClipAudioEditStack]);
+  const handleClearAudioEditStack = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     clearClipAudioEditStack(clip.id);
-  };
-  const handleSplitAudioRegionAtSelection = (selectionSnapshot?: TimelineAudioRegionSelection | null) => {
+  }, [clearClipAudioEditStack, clip.id]);
+  const handleSplitAudioRegionAtSelection = useCallback((selectionSnapshot?: TimelineAudioRegionSelection | null) => {
     const store = useTimelineStore.getState();
     const selection = selectionSnapshot?.clipId === clip.id
       ? selectionSnapshot
@@ -2346,8 +2393,8 @@ function TimelineClipComponent({
       log.warn('Split audio region operation failed', { clipId: currentClip.id, range, result });
     }
     clearAudioRegionSelection();
-  };
-  const handleCutAudioRegion = (selectionSnapshot?: TimelineAudioRegionSelection | null) => {
+  }, [applyTimelineEditOperation, audioRegionSelection, clearAudioRegionSelection, clip, selectClip]);
+  const handleCutAudioRegion = useCallback((selectionSnapshot?: TimelineAudioRegionSelection | null) => {
     const store = useTimelineStore.getState();
     const selection = selectionSnapshot?.clipId === clip.id
       ? selectionSnapshot
@@ -2388,17 +2435,32 @@ function TimelineClipComponent({
     } else {
       log.warn('Cut audio region operation failed', { clipId: currentClip.id, range, result });
     }
-  };
+  }, [
+    applyTimelineEditOperation,
+    audioRegionSelection,
+    clearAudioRegionSelection,
+    clip,
+    copySelectedAudioRegion,
+    setAudioRegionSelection,
+  ]);
   const contextMenuAudioRegionSelection = audioRegionContextMenu?.selection ?? audioRegionSelection;
-  const audioRegionContextMenuModel = createAudioRegionContextMenuModel({
+  const audioRegionContextMenuModel = useMemo(() => createAudioRegionContextMenuModel({
     hasAudioRegionClipboard,
     onSplit: () => handleSplitAudioRegionAtSelection(contextMenuAudioRegionSelection),
     onCut: () => handleCutAudioRegion(contextMenuAudioRegionSelection),
     onCopy: copySelectedAudioRegion,
     onPaste: pasteAudioRegionToSelection,
     applyAudioRegionEdit,
-  });
-  const runAudioRegionContextMenuCommand = (
+  }), [
+    applyAudioRegionEdit,
+    contextMenuAudioRegionSelection,
+    copySelectedAudioRegion,
+    handleCutAudioRegion,
+    handleSplitAudioRegionAtSelection,
+    hasAudioRegionClipboard,
+    pasteAudioRegionToSelection,
+  ]);
+  const runAudioRegionContextMenuCommand = useCallback((
     command: AudioRegionContextMenuCommand,
     selection: TimelineAudioRegionSelection,
   ) => {
@@ -2413,7 +2475,44 @@ function TimelineClipComponent({
     setAudioRegionSelection(selection);
     command.action();
     closeAudioRegionContextMenu();
-  };
+  }, [clip.id, closeAudioRegionContextMenu, setAudioRegionSelection]);
+  const audioRegionContextMenuRenderPosition = useMemo(() => {
+    if (!audioRegionContextMenu) return null;
+    return {
+      x: audioRegionContextMenuPosition?.x ?? audioRegionContextMenu.x,
+      y: audioRegionContextMenuPosition?.y ?? audioRegionContextMenu.y,
+    };
+  }, [
+    audioRegionContextMenu,
+    audioRegionContextMenuPosition?.x,
+    audioRegionContextMenuPosition?.y,
+  ]);
+  const stemSwitcherNode = useMemo(() => hasCompletedStemChoices ? (
+    <ClipStemSwitcher
+      stemMenuOpen={stemMenuOpen}
+      completedStemChoices={completedStemChoices}
+      hasStemSourceChoice={hasStemSourceChoice}
+      stemSourceMediaFileId={stemSourceMediaFileId}
+      activeStemMediaFileId={activeStemMediaFileId}
+      onMouseEnter={handleStemSwitcherMouseEnter}
+      onMouseLeave={handleStemSwitcherMouseLeave}
+      onControlMouseDown={handleStemControlMouseDown}
+      onBadgeClick={handleStemBadgeClick}
+      onChoiceClick={handleStemChoiceClick}
+    />
+  ) : null, [
+    activeStemMediaFileId,
+    completedStemChoices,
+    handleStemBadgeClick,
+    handleStemChoiceClick,
+    handleStemControlMouseDown,
+    handleStemSwitcherMouseEnter,
+    handleStemSwitcherMouseLeave,
+    hasCompletedStemChoices,
+    hasStemSourceChoice,
+    stemMenuOpen,
+    stemSourceMediaFileId,
+  ]);
 
   // Track filtering must stay after all hooks so React sees a stable hook order
   // while clips move between tracks during drag and linked edits.
@@ -2451,7 +2550,7 @@ function TimelineClipComponent({
     '--track-color'?: string;
     '--clip-right-sticky-offset'?: string;
   };
-  const sourceExtensionGhosts = resolveSourceExtensionGhosts({
+  const sourceExtensionGhosts = useMemo(() => resolveSourceExtensionGhosts({
     enabled: passiveDecorationsEnabled,
     isTrimming,
     isLinkedToTrimming,
@@ -2469,7 +2568,26 @@ function TimelineClipComponent({
     viewportWidth: renderTimelineViewportWidth,
     overscanPx: TIMELINE_RENDER_OVERSCAN_PX,
     timeToPixel,
-  });
+  }), [
+    clip.duration,
+    clip.inPoint,
+    clip.outPoint,
+    clip.source?.naturalDuration,
+    clip.startTime,
+    clipTrim?.edge,
+    displayDuration,
+    displayInPoint,
+    displayOutPoint,
+    displayStartTime,
+    isLinkedToTrimming,
+    isTrimming,
+    left,
+    passiveDecorationsEnabled,
+    renderTimelineViewportWidth,
+    scrollX,
+    timeToPixel,
+    width,
+  ]);
 
   return (
     <div
@@ -2498,15 +2616,11 @@ function TimelineClipComponent({
           style={{ left: cutIndicatorX }}
         />
       )}
-      {passiveDecorationsEnabled && sourceExtensionGhosts.map((ghost) => (
-        <div
-          key={ghost.edge}
-          className={`clip-source-extension-ghost ${ghost.edge}`}
-          style={{ left: ghost.left, width: ghost.width }}
-        />
-      ))}
-      <ClipPassiveStatusBadges
-        enabled={passiveDecorationsEnabled}
+      <ClipPassiveBackgroundLayer
+        sourceExtensionGhosts={sourceExtensionGhosts}
+        passiveDecorationsEnabled={passiveDecorationsEnabled}
+        passiveMediaEnabled={passiveMediaEnabled}
+        waveformsEnabled={waveformsEnabled}
         clip={clip}
         proxyEnabled={proxyEnabled}
         isGeneratingProxy={isGeneratingProxy}
@@ -2522,87 +2636,17 @@ function TimelineClipComponent({
         activeStemProgressPercent={activeStemProgressPercent}
         isDownloadingStemModel={isDownloadingStemModel}
         isInLinkedGroup={isInLinkedGroup}
-        stemSwitcher={hasCompletedStemChoices ? (
-          <ClipStemSwitcher
-            stemMenuOpen={stemMenuOpen}
-            completedStemChoices={completedStemChoices}
-            hasStemSourceChoice={hasStemSourceChoice}
-            stemSourceMediaFileId={stemSourceMediaFileId}
-            activeStemMediaFileId={activeStemMediaFileId}
-            onMouseEnter={handleStemSwitcherMouseEnter}
-            onMouseLeave={handleStemSwitcherMouseLeave}
-            onControlMouseDown={handleStemControlMouseDown}
-            onBadgeClick={handleStemBadgeClick}
-            onChoiceClick={handleStemChoiceClick}
-          />
-        ) : null}
-      />
-      <ClipCoverageBadges
-        enabled={passiveDecorationsEnabled}
-        clip={clip}
+        stemSwitcher={stemSwitcherNode}
         mediaFiles={mediaFiles}
         isAudioClip={isAudioClip}
+        showWaveformGenerationIndicator={showWaveformGenerationIndicator}
+        audioDisplayMode={audioDisplayMode}
+        hasWaveformForRender={hasWaveformForRender}
+        audioSpectrogramProps={audioSpectrogramProps}
+        audioWaveformProps={audioWaveformProps}
+        audioAnalysisDisplayStatus={audioAnalysisDisplayStatus}
+        audioWaveformDiagnostics={audioWaveformDiagnostics}
       />
-      {/* Waveform generation progress indicator */}
-      {passiveDecorationsEnabled && showWaveformGenerationIndicator && (
-        <div
-          className="clip-waveform-indicator"
-          title={clip.audioAnalysisJob ? `${clip.audioAnalysisJob.label}: ${clip.audioAnalysisJob.phase}` : undefined}
-        >
-          <div
-            className="waveform-progress"
-            style={{ width: `${clip.audioAnalysisJob?.progress ?? clip.waveformProgress ?? 50}%` }}
-          />
-        </div>
-      )}
-      {/* Audio waveform / spectrogram */}
-      {passiveMediaEnabled && waveformsEnabled && isAudioClip && (
-        audioDisplayMode === 'spectral'
-        || hasWaveformForRender
-      ) && (
-        <ClipAudioMediaView
-          audioDisplayMode={audioDisplayMode}
-          hasWaveformForRender={hasWaveformForRender}
-          spectrogramProps={{
-            tileSet: spectrogramTileSet,
-            width,
-            height: Math.max(20, trackBaseHeight - 12),
-            inPoint: spectrogramInPoint,
-            outPoint: spectrogramOutPoint,
-            naturalDuration: spectrogramNaturalDuration,
-            renderStartPx: waveformRenderWindow.startPx,
-            renderWidth: waveformRenderWindow.width,
-            variant: spectrogramVariant,
-          }}
-          waveformProps={{
-            clipId: clip.id,
-            waveform: waveformLegacyForRender,
-            waveformChannels: waveformChannelsForRender,
-            width: stableWaveformContentWidth,
-            height: Math.max(20, trackBaseHeight - 12),
-            inPoint: stableWaveformContentInPoint,
-            outPoint: stableWaveformContentOutPoint,
-            naturalDuration: waveformNaturalDurationForRender,
-            clipDuration: stableWaveformClipDuration,
-            displayMode: audioDisplayMode,
-            pixelsPerSecond: zoom,
-            pyramid: waveformPyramidForRender,
-            waveformVariant: waveformVariantForRender,
-            displayGain: waveformDisplayGainForRender,
-            volumeAutomationKeyframes: audioVolumeAutomationKeyframes,
-            audioEditStack: predictiveAudioEditStack,
-            audioRegionGainPreview: predictiveAudioRegionGainPreview,
-            renderStartPx: stableWaveformRenderWindow.startPx,
-            renderWidth: stableWaveformRenderWindow.width,
-            contentOffsetPx: stableWaveformContentOffsetPx,
-            normalizationInPoint: useStableWaveformTrimWindow ? originalWaveformTrimInPoint : undefined,
-            normalizationOutPoint: useStableWaveformTrimWindow ? originalWaveformTrimOutPoint : undefined,
-            normalizationWidth: useStableWaveformTrimWindow ? Math.max(1, (originalWaveformTrimOutPoint - originalWaveformTrimInPoint) / waveformSourceSecondsPerPixel) : undefined,
-          }}
-          audioAnalysisDisplayStatus={audioAnalysisDisplayStatus}
-          audioWaveformDiagnostics={audioWaveformDiagnostics}
-        />
-      )}
       {audioRegionOverlay && (
         <ClipAudioRegionSelectionOverlay
           overlay={audioRegionOverlay}
@@ -2630,10 +2674,7 @@ function TimelineClipComponent({
       {audioRegionContextMenu && (
         <ClipAudioRegionContextMenu
           menuRef={audioRegionContextMenuRef}
-          position={{
-            x: audioRegionContextMenuPosition?.x ?? audioRegionContextMenu.x,
-            y: audioRegionContextMenuPosition?.y ?? audioRegionContextMenu.y,
-          }}
+          position={audioRegionContextMenuRenderPosition ?? audioRegionContextMenu}
           model={audioRegionContextMenuModel}
           selection={audioRegionContextMenu.selection}
           onRunCommand={runAudioRegionContextMenuCommand}
@@ -2676,8 +2717,8 @@ function TimelineClipComponent({
         onSpectralRegionDrop={handleSpectralImageLayerDrop}
         onSpectralRegionDoubleClick={handleSpectralRegionDoubleClick}
       />
-      <ClipPreThumbnailDecorations
-        enabled={passiveDecorationsEnabled}
+      <ClipPassiveForegroundLayer
+        passiveDecorationsEnabled={passiveDecorationsEnabled}
         clip={clip}
         waveformsEnabled={waveformsEnabled}
         width={width}
@@ -2689,62 +2730,27 @@ function TimelineClipComponent({
         waveformRenderStartPx={waveformRenderWindow.startPx}
         waveformRenderWidth={waveformRenderWindow.width}
         staticClipIconKind={staticClipIconKind}
-      />
-      {/* Segment-based thumbnails for nested compositions */}
-      {showSegmentThumbnails && (
-        <ClipThumbnailFilmstrip
-          mode="segments"
-          renderWindow={thumbnailRenderWindow}
-          segmentPlans={segmentThumbnailPlans}
-        />
-      )}
-      {/* Regular thumbnail filmstrip - source-based cache or legacy fallback */}
-      {showRegularThumbnails && useSourceCache && (
-        <ClipThumbnailFilmstrip
-          mode="regular"
-          renderWindow={thumbnailRenderWindow}
-          useSourceCache={true}
-          cachedThumbnails={cachedThumbnails}
-        />
-      )}
-      {showRegularThumbnails && !useSourceCache && (
-        <ClipThumbnailFilmstrip
-          mode="regular"
-          renderWindow={thumbnailRenderWindow}
-          useSourceCache={false}
-          legacyPlans={legacyThumbnailPlans}
-        />
-      )}
-      <ClipPostThumbnailDecorations
-        enabled={passiveDecorationsEnabled}
-        clip={clip}
-      />
-      {passiveDecorationsEnabled && (
-        <ClipContentMeta
-          clip={clip}
-          clipMetaOffset={clipMetaOffset}
-          displayDuration={displayDuration}
-          formatTime={formatTime}
-          isSolidClip={isSolidClip}
-          isTextClip={isTextClip}
-          isText3DClip={isText3DClip}
-          isMathSceneClip={isMathSceneClip}
-          isVectorAnimationClip={isVectorAnimationClip}
-          vectorAnimationIcon={vectorAnimationIcon}
-          vectorAnimationTitle={vectorAnimationTitle}
-          isSplatEffectorClip={isSplatEffectorClip}
-          staticClipIconKind={staticClipIconKind}
-          text3DProperties={text3DProperties}
-        />
-      )}
-      <ClipTranscriptAnalysisOverlays
-        enabled={passiveDecorationsEnabled}
-        showTranscriptMarkers={showTranscriptMarkers}
-        clip={clip}
+        showSegmentThumbnails={showSegmentThumbnails}
+        showRegularThumbnails={showRegularThumbnails}
+        useSourceCache={useSourceCache}
+        thumbnailRenderWindow={thumbnailRenderWindow}
+        segmentThumbnailPlans={segmentThumbnailPlans}
+        cachedThumbnails={cachedThumbnails}
+        legacyThumbnailPlans={legacyThumbnailPlans}
+        clipMetaOffset={clipMetaOffset}
         displayDuration={displayDuration}
+        formatTime={formatTime}
+        isSolidClip={isSolidClip}
+        isTextClip={isTextClip}
+        isText3DClip={isText3DClip}
+        isMathSceneClip={isMathSceneClip}
+        isVectorAnimationClip={isVectorAnimationClip}
+        vectorAnimationIcon={vectorAnimationIcon}
+        vectorAnimationTitle={vectorAnimationTitle}
+        isSplatEffectorClip={isSplatEffectorClip}
+        text3DProperties={text3DProperties}
+        showTranscriptMarkers={showTranscriptMarkers}
         displayStartTime={displayStartTime}
-        width={width}
-        trackBaseHeight={trackBaseHeight}
         isAudioClip={isAudioClip}
       />
       <ClipKeyframeTicks

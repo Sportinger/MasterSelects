@@ -1026,7 +1026,6 @@ function areTimelineTrackPropsEqual(
       previous.externalDrag === next.externalDrag &&
       previous.zoom === next.zoom &&
       previous.scrollX === next.scrollX &&
-      previous.timelineRef === next.timelineRef &&
       previous.onEmptyMouseDown === next.onEmptyMouseDown &&
       previous.onEmptyContextMenu === next.onEmptyContextMenu &&
       previous.onTrimStart === next.onTrimStart &&

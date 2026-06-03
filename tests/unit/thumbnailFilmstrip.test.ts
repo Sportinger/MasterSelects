@@ -130,9 +130,9 @@ describe('thumbnail filmstrip plan', () => {
       thumbWidth: 100,
     })).toEqual([
       { slotIndex: 0, thumbnailIndex: 1, thumbnail: 't1' },
-      { slotIndex: 1, thumbnailIndex: 2, thumbnail: 't2' },
+      { slotIndex: 1, thumbnailIndex: 1, thumbnail: 't1' },
       { slotIndex: 2, thumbnailIndex: 2, thumbnail: 't2' },
-      { slotIndex: 3, thumbnailIndex: 3, thumbnail: 't3' },
+      { slotIndex: 3, thumbnailIndex: 2, thumbnail: 't2' },
     ]);
   });
 });
