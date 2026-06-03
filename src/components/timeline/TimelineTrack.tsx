@@ -163,12 +163,16 @@ const LEGACY_SKIP_READY_SHELL_SLOTS = new Set<ClipInteractionShellModuleSlot>([
   'spectral-region',
   'video-bake',
   'stem',
+  'context-menu',
 ]);
 
 const LEGACY_SKIP_READY_SHELL_REASONS = new Set<ClipInteractionShellMountReason>([
   'hover',
+  'drag',
+  'multi-drag',
   'trim',
   'fade',
+  'context-menu-open',
   'selected-keyframes',
   'audio-region-active',
   'spectral-region-active',
@@ -180,12 +184,10 @@ const canSkipLegacyClipBody = (
   activeSlots: readonly ClipInteractionShellModuleSlot[],
   mountReasons: readonly ClipInteractionShellMountReason[],
 ): boolean => {
-  const trimOnlyShell = activeSlots.length === 1 && activeSlots[0] === 'trim';
-  const contextMenuShell =
-    activeSlots.length === 1 &&
-    activeSlots[0] === 'context-menu' &&
-    mountReasons.includes('context-menu-open') &&
-    mountReasons.every((reason) => reason === 'context-menu-open' || reason === 'hover');
+  const parityReadyShell =
+    activeSlots.length > 0 &&
+    activeSlots.every((slot) => LEGACY_SKIP_READY_SHELL_SLOTS.has(slot)) &&
+    mountReasons.every((reason) => LEGACY_SKIP_READY_SHELL_REASONS.has(reason));
   const dragOnlyShell =
     activeSlots.length === 0 &&
     mountReasons.some((reason) => reason === 'drag' || reason === 'multi-drag') &&
@@ -194,52 +196,8 @@ const canSkipLegacyClipBody = (
     activeSlots.length === 0 &&
     mountReasons.length === 1 &&
     mountReasons[0] === 'hover';
-  const stemOnlyShell =
-    activeSlots.length === 1 &&
-    activeSlots[0] === 'stem' &&
-    mountReasons.some((reason) => reason === 'stem-active') &&
-    mountReasons.every((reason) => reason === 'stem-active' || reason === 'hover');
-  const fadeOnlyShell =
-    activeSlots.length === 1 &&
-    activeSlots[0] === 'fade' &&
-    mountReasons.some((reason) => reason === 'fade') &&
-    mountReasons.every((reason) => reason === 'fade' || reason === 'hover');
-  const keyframeOnlyShell =
-    activeSlots.length === 1 &&
-    activeSlots[0] === 'keyframe' &&
-    mountReasons.some((reason) => reason === 'selected-keyframes') &&
-    mountReasons.every((reason) => reason === 'selected-keyframes' || reason === 'hover');
-  const audioRegionOnlyShell =
-    activeSlots.length === 1 &&
-    activeSlots[0] === 'audio-region' &&
-    mountReasons.some((reason) => reason === 'audio-region-active') &&
-    mountReasons.every((reason) => reason === 'audio-region-active' || reason === 'hover');
-  const videoBakeOnlyShell =
-    activeSlots.length === 1 &&
-    activeSlots[0] === 'video-bake' &&
-    mountReasons.some((reason) => reason === 'video-bake-active') &&
-    mountReasons.every((reason) => reason === 'video-bake-active' || reason === 'hover');
-  const spectralRegionOnlyShell =
-    activeSlots.length === 1 &&
-    activeSlots[0] === 'spectral-region' &&
-    mountReasons.some((reason) => reason === 'spectral-region-active') &&
-    mountReasons.every((reason) => reason === 'spectral-region-active' || reason === 'hover');
-  const mixedParityShell =
-    activeSlots.length > 1 &&
-    activeSlots.every((slot) => LEGACY_SKIP_READY_SHELL_SLOTS.has(slot)) &&
-    mountReasons.every((reason) => LEGACY_SKIP_READY_SHELL_REASONS.has(reason));
 
-  return trimOnlyShell ||
-    contextMenuShell ||
-    dragOnlyShell ||
-    hoverOnlyShell ||
-    stemOnlyShell ||
-    fadeOnlyShell ||
-    keyframeOnlyShell ||
-    audioRegionOnlyShell ||
-    videoBakeOnlyShell ||
-    spectralRegionOnlyShell ||
-    mixedParityShell;
+  return parityReadyShell || dragOnlyShell || hoverOnlyShell;
 };
 
 const clampShellRectX = (rect: ClipInteractionShellRect, viewport: ClipInteractionShellRect): ClipInteractionShellRect => {

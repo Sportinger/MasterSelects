@@ -634,6 +634,47 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     expect(renderClip).not.toHaveBeenCalled();
   });
 
+  it('renders mixed context-menu and keyframe shell modules without the legacy overlay body', () => {
+    const renderClip = vi.fn((clip: TimelineClip) => (
+      <div className="timeline-clip" data-clip-id={clip.id} />
+    ));
+
+    const { container } = renderTimelineTrack({
+      clips: [createClip()],
+      clipKeyframes: new Map([
+        [
+          'clip-video',
+          [
+            {
+              id: 'kf-opacity',
+              clipId: 'clip-video',
+              time: 1,
+              property: 'opacity',
+              value: 0.5,
+              easing: 'linear',
+            },
+          ],
+        ],
+      ]),
+      selectedKeyframeIds: new Set(['kf-opacity']),
+      clipContextMenu: {
+        clipId: 'clip-video',
+        x: 96,
+        y: 32,
+      },
+      renderClip,
+    });
+
+    const shell = container.querySelector<HTMLElement>('.clip-interaction-shell');
+
+    expect(shell).toBeTruthy();
+    expect(shell?.dataset.mountReasons).toBe('context-menu-open selected-keyframes');
+    expect(shell?.dataset.activeSlots).toBe('keyframe context-menu');
+    expect(container.querySelector('.clip-interaction-shell .keyframe-tick')).toBeTruthy();
+    expect(container.querySelector('.timeline-canvas-dom-overlay .timeline-clip')).toBeNull();
+    expect(renderClip).not.toHaveBeenCalled();
+  });
+
   it('renders an audio-region shell without the legacy overlay body for an active audio region', () => {
     const renderClip = vi.fn((clip: TimelineClip) => (
       <div className="timeline-clip" data-clip-id={clip.id} />
