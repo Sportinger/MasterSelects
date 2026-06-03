@@ -96,8 +96,8 @@ import {
   type SpectralRegionDragState,
   type VideoBakeRegionDragState,
 } from './hooks/useClipRegionInteractions';
+import { useClipKeyframeTickDrag } from './hooks/useClipKeyframeTickDrag';
 
-const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
 const TIMELINE_VIEWPORT_MIN_PX = 1600;
 const TIMELINE_RENDER_OVERSCAN_PX = 512;
@@ -122,14 +122,6 @@ function getSlippedSourceWindow(
   };
 }
 
-type ClipKeyframeTickGroup = NonNullable<TimelineClipProps['keyframeTimeGroups']>[number];
-type KeyframeGroupDragState = {
-  keyframeIds: string[];
-  startX: number;
-  startTime: number;
-  clipWidth: number;
-  clipDuration: number;
-};
 function TimelineClipComponent({
   clip,
   trackId,
@@ -774,8 +766,7 @@ function TimelineClipComponent({
     )
   );
 
-  const keyframeTickGroups: ClipKeyframeTickGroup[] = keyframeTimeGroups;
-  const [keyframeGroupDrag, setKeyframeGroupDrag] = useState<KeyframeGroupDragState | null>(null);
+  const keyframeTickGroups = keyframeTimeGroups;
   const [audioRegionDrag, setAudioRegionDrag] = useState<AudioRegionDragState | null>(null);
   const [videoBakeRegionDrag, setVideoBakeRegionDrag] = useState<VideoBakeRegionDragState | null>(null);
   const [audioRegionMoveDrag, setAudioRegionMoveDrag] = useState<AudioRegionMoveDragState | null>(null);
@@ -970,69 +961,15 @@ function TimelineClipComponent({
     });
   }, [clip.id, setClipAudioEditOperationRange]);
 
-  const handleKeyframeTickMouseDown = useCallback((
-    e: React.MouseEvent<HTMLButtonElement>,
-    group: ClipKeyframeTickGroup
-  ) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (!onMoveKeyframeGroup || group.keyframeIds.length === 0) return;
-
-    setKeyframeGroupDrag({
-      keyframeIds: group.keyframeIds,
-      startX: e.clientX,
-      startTime: group.time,
-      clipWidth: Math.max(1, width),
-      clipDuration: Math.max(0.001, displayDuration),
-    });
-  }, [displayDuration, onMoveKeyframeGroup, width]);
-
-  useEffect(() => {
-    if (!keyframeGroupDrag || !onMoveKeyframeGroup) return;
-
-    const handleDocumentMouseMove = (e: MouseEvent) => {
-      e.preventDefault();
-      const deltaX = e.clientX - keyframeGroupDrag.startX;
-      const deltaTime = (deltaX / keyframeGroupDrag.clipWidth) * keyframeGroupDrag.clipDuration;
-      let newTime = Math.max(
-        0,
-        Math.min(keyframeGroupDrag.clipDuration, keyframeGroupDrag.startTime + deltaTime)
-      );
-
-      if (e.shiftKey) {
-        const movingIds = new Set(keyframeGroupDrag.keyframeIds);
-        let bestDistancePx = KEYFRAME_TICK_SNAP_THRESHOLD_PX;
-
-        for (const group of keyframeTickGroups) {
-          if (group.keyframeIds.some(id => movingIds.has(id))) continue;
-
-          const distancePx = Math.abs(
-            ((group.time - newTime) / keyframeGroupDrag.clipDuration) * keyframeGroupDrag.clipWidth
-          );
-
-          if (distancePx <= bestDistancePx) {
-            bestDistancePx = distancePx;
-            newTime = group.time;
-          }
-        }
-      }
-
-      onMoveKeyframeGroup(keyframeGroupDrag.keyframeIds, newTime);
-    };
-
-    const handleDocumentMouseUp = () => {
-      setKeyframeGroupDrag(null);
-    };
-
-    document.addEventListener('mousemove', handleDocumentMouseMove);
-    document.addEventListener('mouseup', handleDocumentMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleDocumentMouseMove);
-      document.removeEventListener('mouseup', handleDocumentMouseUp);
-    };
-  }, [keyframeGroupDrag, keyframeTickGroups, onMoveKeyframeGroup]);
+  const {
+    keyframeGroupDrag,
+    handleKeyframeTickMouseDown,
+  } = useClipKeyframeTickDrag({
+    keyframeTickGroups,
+    displayDuration,
+    width,
+    onMoveKeyframeGroup,
+  });
 
   const canSelectAudioRegion = audioFocusMode &&
     isAudioClip &&
