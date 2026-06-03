@@ -343,11 +343,9 @@ export interface TimelineClipProps {
   isClipDragActive: boolean;
   clipDrag: ClipDragState | null;
   clipTrim: ClipTrimState | null;
-  clipFade: ClipFadeState | null;
   zoom: number;
   scrollX: number;
   timelineViewportWidth: number;
-  timelineRef: React.RefObject<HTMLDivElement | null>;
   proxyEnabled: boolean;
   proxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
   proxyProgress: number;
@@ -375,12 +373,7 @@ export interface TimelineClipProps {
   keyframeTimeGroups?: ClipKeyframeTimeGroup[];  // Keyframe IDs grouped by clip-local time for global clip-bar handles
   onMoveKeyframeGroup?: (keyframeIds: string[], newTime: number) => void;
   timeToPixel: (time: number) => number;
-  pixelToTime: (pixel: number) => number;
   formatTime: (seconds: number) => string;
-  // Pick whip for layer parenting
-  onPickWhipDragStart: (clipId: string, startX: number, startY: number) => void;
-  onPickWhipDragEnd: () => void;
-  onSetClipParent: (clipId: string, parentClipId: string | null) => void;
   passiveVisualsSuppressed?: boolean;
 }
 

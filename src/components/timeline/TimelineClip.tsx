@@ -2,34 +2,37 @@
 
 import './TimelineClip.css';
 import { memo, type CSSProperties, useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import { IconFileMusic } from '@tabler/icons-react';
 import type { TimelineClipProps } from './types';
-import { THUMB_WIDTH } from './constants';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from './trackColor';
-// PickWhip disabled
 import {
   isVectorAnimationSourceType,
   shouldLoopVectorAnimation,
 } from '../../types/vectorAnimation';
-import { ClipSpectrogram } from './components/ClipSpectrogram';
-import { ClipWaveform } from './components/ClipWaveform';
-import { ClipAnalysisOverlay } from './components/ClipAnalysisOverlay';
-import { FadeCurve } from './components/FadeCurve';
-import {
-  StaticClipIcon,
-  TrimHandleArrows,
-  type StaticClipIconKind,
-} from './components/ClipPresentationPrimitives';
+import { ClipAudioMediaView } from './components/ClipAudioMediaView';
+import { ClipAudioEditStackControls } from './components/ClipAudioEditStackControls';
+import { ClipAudioRegionSelectionOverlay } from './components/ClipAudioRegionSelectionOverlay';
+import { ClipSpectralRegionOverlays } from './components/ClipSpectralRegionOverlays';
+import { ClipThumbnailFilmstrip } from './components/ClipThumbnailFilmstrip';
+import { ClipAudioRegionContextMenu } from './components/ClipAudioRegionContextMenu';
+import { ClipVideoBakeRegionOverlays } from './components/ClipVideoBakeRegionOverlays';
+import { ClipAudioEditOperationOverlays } from './components/ClipAudioEditOperationOverlays';
+import { ClipContentMeta } from './components/ClipContentMeta';
+import { ClipCoverageBadges } from './components/ClipCoverageBadges';
+import { ClipStemSwitcher } from './components/ClipStemSwitcher';
+import { ClipPassiveStatusBadges } from './components/ClipPassiveStatusBadges';
+import { ClipTranscriptAnalysisOverlays } from './components/ClipTranscriptAnalysisOverlays';
+import { ClipKeyframeTicks } from './components/ClipKeyframeTicks';
+import { ClipFadeTrimControls } from './components/ClipFadeTrimControls';
+import { ClipSelectionHitareas } from './components/ClipSelectionHitareas';
+import { ClipPreThumbnailDecorations } from './components/ClipPreThumbnailDecorations';
+import { ClipPostThumbnailDecorations } from './components/ClipPostThumbnailDecorations';
 import {
   ACTIVE_STEM_JOB_PHASES,
   EMPTY_STEM_CHOICES,
   formatStemJobPhase,
-  StemChoiceIcon,
 } from './components/ClipStemDisplay';
-import { useThumbnailCache } from '../../hooks/useThumbnailCache';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { Logger } from '../../services/logger';
 import { useTimelineSpectrogramTileSetState } from './hooks/useTimelineSpectrogramTileSet';
@@ -51,14 +54,12 @@ import {
 import {
   AUDIO_REGION_TIMELINE_EPSILON,
   audioRegionGainDbFromClientY,
-  formatAudioRegionGainLabel,
   isAudioRegionModifierPressed,
   isVideoBakeRegionModifierPressed,
   resolveAudioRegionTimelineRangeForClip,
 } from './utils/audioRegionDisplay';
 import {
   createAudioRegionContextMenuModel,
-  findAudioRegionContextMenuCommand,
   type AudioRegionContextMenuCommand,
 } from './utils/audioRegionContextMenu';
 import {
@@ -72,17 +73,13 @@ import {
 import { resolveProcessedAudioAnalysisDisplayStatus } from './utils/audioAnalysisDisplayStatus';
 import { resolveAudioWaveformDiagnostics } from './utils/audioWaveformDiagnostics';
 import { resolveAudioVolumeAutomationCurveKeyframes } from './utils/audioAutomationCurve';
-import {
-  resolveAnalysisCoveragePercent,
-  resolveTranscriptCoveragePercent,
-} from './utils/clipCoverageBadges';
 import { resolveClipLabelHex } from './utils/resolveClipLabelHex';
 import {
   resolveHorizontalRenderWindow,
   resolveStableWaveformRenderGeometry,
   resolveTimelineViewportWidth,
-  resolveVisibleSourceWindow,
 } from './utils/waveformRenderGeometry';
+import { resolveClipMediaClassification } from './utils/clipMediaClassification';
 import { resolveSourceExtensionGhosts } from './utils/sourceExtensionGhosts';
 import {
   frequencyHzFromSpectralY,
@@ -114,6 +111,7 @@ import {
   createTimelineSourceWaveformGenerationRequest,
   scheduleVisibleTimelineSourceWaveformGeneration,
 } from '../../services/timeline/timelineSourceWaveformWarmup';
+import { useClipThumbnailFilmstripPlan } from './hooks/useClipThumbnailFilmstripPlan';
 import {
   scheduleTimelineProcessedWaveformDerivation,
   scheduleTimelineSpectrogramTileGeneration,
@@ -123,7 +121,6 @@ const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
 const TIMELINE_VIEWPORT_MIN_PX = 1600;
 const TIMELINE_RENDER_OVERSCAN_PX = 512;
-const THUMBNAIL_RENDER_OVERSCAN_PX = THUMB_WIDTH * 3;
 const CLIP_RIGHT_STICKY_PADDING_PX = 8;
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_ZOOM = 250;
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_WIDTH = 16_384;
@@ -136,10 +133,6 @@ const EMPTY_AUDIO_EDIT_STACK = [] as const;
 function canLoopExtendVectorClip(clip: TimelineClipProps['clip']): boolean {
   return isVectorAnimationSourceType(clip.source?.type) &&
     shouldLoopVectorAnimation(clip.source.vectorAnimationSettings);
-}
-
-function finiteNumberOr(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 function getClipSourceDuration(clip: TimelineClipProps['clip']): number {
@@ -245,7 +238,6 @@ function TimelineClipComponent({
   isClipDragActive,
   clipDrag,
   clipTrim,
-  clipFade: _clipFade,
   zoom,
   scrollX,
   timelineViewportWidth,
@@ -570,37 +562,21 @@ function TimelineClipComponent({
     !timelineToolPreview.blocked &&
     (isDirectlyHovered || isLinkedToHovered || isReverseLinkedToHovered);
 
-  // Determine if this is an audio clip (check source type, MIME type, or extension as fallback)
-  const audioExtensions = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'];
-  const fileExt = (clip.file?.name || clip.name || '').split('.').pop()?.toLowerCase() || '';
-  const isAudioClip = clip.source?.type === 'audio' ||
-    clip.file?.type?.startsWith('audio/') ||
-    audioExtensions.includes(fileExt);
-
-  // Determine if this is a text clip
-  const isTextClip = clip.source?.type === 'text';
-  const meshType = clip.meshType ?? clip.source?.meshType;
-  const isText3DClip = clip.source?.type === 'model' && meshType === 'text3d';
-  const isModelClip = clip.source?.type === 'model' && !isText3DClip;
-  const text3DProperties = clip.text3DProperties ?? clip.source?.text3DProperties;
-
-  // Determine if this is a solid clip
-  const isSolidClip = clip.source?.type === 'solid';
-  const isMathSceneClip = clip.source?.type === 'math-scene';
-  const isVectorAnimationClip = isVectorAnimationSourceType(clip.source?.type);
-  const vectorAnimationIcon = clip.source?.type === 'rive' ? 'R' : 'L';
-  const vectorAnimationTitle = clip.source?.type === 'rive' ? 'Rive Clip' : 'Lottie Clip';
-  const isCameraClip = clip.source?.type === 'camera';
-  const isGaussianSplatClip = clip.source?.type === 'gaussian-splat';
-  const isSplatEffectorClip = clip.source?.type === 'splat-effector';
-  const staticClipIconKind: StaticClipIconKind | null = isCameraClip
-    ? 'camera'
-    : isGaussianSplatClip
-      ? 'gaussian-splat'
-      : isModelClip
-        ? 'model'
-        : null;
-  const showsStaticClipArtwork = staticClipIconKind !== null;
+  const {
+    isAudioClip,
+    isTextClip,
+    isText3DClip,
+    isSolidClip,
+    isMathSceneClip,
+    isVectorAnimationClip,
+    vectorAnimationIcon,
+    vectorAnimationTitle,
+    isSplatEffectorClip,
+    staticClipIconKind,
+    showsStaticClipArtwork,
+    text3DProperties,
+    clipTypeClass,
+  } = resolveClipMediaClassification(clip);
 
   const isGeneratingProxy = proxyStatus === 'generating';
   const hasProxy = proxyStatus === 'ready';
@@ -763,28 +739,36 @@ function TimelineClipComponent({
   const staticContentRenderLeft = isClipPositionDragPreview
     ? timeToPixel(displayStartTime)
     : left;
-  const waveformRenderWindow = resolveHorizontalRenderWindow({
+  const waveformRenderWindow = useMemo(() => (
+    resolveHorizontalRenderWindow({
+      scrollX,
+      contentLeft: staticContentRenderLeft,
+      contentWidth: width,
+      viewportWidth: renderTimelineViewportWidth,
+      overscanPx: TIMELINE_RENDER_OVERSCAN_PX,
+    })
+  ), [renderTimelineViewportWidth, scrollX, staticContentRenderLeft, width]);
+  const {
+    thumbnailRenderWindow,
+    showSegmentThumbnails,
+    showRegularThumbnails,
+    useSourceCache,
+    cachedThumbnails,
+    segmentThumbnailPlans,
+    legacyThumbnailPlans,
+  } = useClipThumbnailFilmstripPlan({
+    clip,
+    passiveMediaEnabled,
+    thumbnailsEnabled,
+    isAudioClip,
+    showsStaticClipArtwork,
     scrollX,
     contentLeft: staticContentRenderLeft,
-    contentWidth: width,
+    width,
     viewportWidth: renderTimelineViewportWidth,
-    overscanPx: TIMELINE_RENDER_OVERSCAN_PX,
+    displayInPoint,
+    displayOutPoint,
   });
-  const thumbnailRenderWindow = resolveHorizontalRenderWindow({
-    scrollX,
-    contentLeft: staticContentRenderLeft,
-    contentWidth: width,
-    viewportWidth: renderTimelineViewportWidth,
-    overscanPx: THUMBNAIL_RENDER_OVERSCAN_PX,
-  });
-  const thumbnailVisibleSourceWindow = resolveVisibleSourceWindow({
-    inPoint: displayInPoint,
-    outPoint: displayOutPoint,
-    clipWidth: width,
-    renderWindow: thumbnailRenderWindow,
-  });
-  const thumbnailVisibleInPoint = thumbnailVisibleSourceWindow.inPoint;
-  const thumbnailVisibleOutPoint = thumbnailVisibleSourceWindow.outPoint;
 
   useEffect(() => {
     if (!passiveMediaEnabled || !waveformsEnabled || !isAudioClip || clip.waveformGenerating || isClipDragActive) {
@@ -966,44 +950,12 @@ function TimelineClipComponent({
     )
   );
 
-  // Render only the visible filmstrip window. At deep zoom the full clip can be
-  // hundreds of thousands of pixels wide, so tying thumbnails to full clip width
-  // makes the entire timeline unresponsive.
-  const visibleThumbs = thumbnailRenderWindow.width > 0
-    ? Math.max(1, Math.ceil(thumbnailRenderWindow.width / THUMB_WIDTH) + 1)
-    : 0;
-
-  // Source-based thumbnail cache: pull thumbnails from cache by mediaFileId
-  const sourceMediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
-  const isCompositionWithSegments = clip.isComposition && clip.clipSegments && clip.clipSegments.length > 0;
-  const useSourceCache = passiveMediaEnabled && clip.source?.type === 'video' && !!sourceMediaFileId && !isCompositionWithSegments;
-  const cachedThumbnails = useThumbnailCache(
-    useSourceCache ? sourceMediaFileId : undefined,
-    thumbnailVisibleInPoint,
-    thumbnailVisibleOutPoint,
-    visibleThumbs,
-    clip.reversed
-  );
-  // Fallback to clip.thumbnails for compositions/legacy clips without mediaFileId
-  const legacyThumbnails = clip.thumbnails || [];
-  const compositionSegments = clip.clipSegments ?? [];
-  const showSegmentThumbnails = passiveMediaEnabled &&
-    thumbnailsEnabled &&
-    clip.isComposition &&
-    compositionSegments.length > 0 &&
-    !isAudioClip &&
-    !showsStaticClipArtwork;
-  const showRegularThumbnails = passiveMediaEnabled &&
-    thumbnailsEnabled &&
-    !isAudioClip &&
-    !showsStaticClipArtwork &&
-    !isCompositionWithSegments &&
-    (useSourceCache ? cachedThumbnails.some(Boolean) : legacyThumbnails.length > 0);
-
-  const keyframeTickGroups: ClipKeyframeTickGroup[] = keyframeTimeGroups ?? allKeyframeTimes.map(time => ({
-    time,
-    keyframeIds: [],
-  }));
+  const keyframeTickGroups: ClipKeyframeTickGroup[] = useMemo(() => (
+    keyframeTimeGroups ?? allKeyframeTimes.map(time => ({
+      time,
+      keyframeIds: [],
+    }))
+  ), [allKeyframeTimes, keyframeTimeGroups]);
   const [keyframeGroupDrag, setKeyframeGroupDrag] = useState<KeyframeGroupDragState | null>(null);
   const [audioRegionDrag, setAudioRegionDrag] = useState<AudioRegionDragState | null>(null);
   const [videoBakeRegionDrag, setVideoBakeRegionDrag] = useState<VideoBakeRegionDragState | null>(null);
@@ -1138,7 +1090,7 @@ function TimelineClipComponent({
     });
   }, [clip.id, setClipAudioEditOperationRange]);
 
-  const handleKeyframeTickMouseDown = (
+  const handleKeyframeTickMouseDown = useCallback((
     e: React.MouseEvent<HTMLButtonElement>,
     group: ClipKeyframeTickGroup
   ) => {
@@ -1154,7 +1106,7 @@ function TimelineClipComponent({
       clipWidth: Math.max(1, width),
       clipDuration: Math.max(0.001, displayDuration),
     });
-  };
+  }, [displayDuration, onMoveKeyframeGroup, width]);
 
   useEffect(() => {
     if (!keyframeGroupDrag || !onMoveKeyframeGroup) return;
@@ -1735,9 +1687,6 @@ function TimelineClipComponent({
     spectralRegionDrag,
   ]);
 
-  // Determine clip type class (audio, video, text, or image)
-  const clipTypeClass = isSolidClip ? 'solid' : isMathSceneClip ? 'math-scene' : (isTextClip || isText3DClip) ? 'text' : isCameraClip ? 'camera' : isSplatEffectorClip ? 'splat-effector' : isAudioClip ? 'audio' : (clip.source?.type || 'video');
-
   // Check if this clip is part of a multi-select drag
   const isInMultiSelectDrag = clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined;
   const isClipBodyDragging = isDragging || isLinkedToDragging || isInMultiSelectDrag;
@@ -1964,6 +1913,13 @@ function TimelineClipComponent({
       keepSelection: true,
     });
   }, [setAudioRegionGainEdit]);
+  const handleResetAudioRegionGain = useCallback(() => {
+    commitAudioRegionGainEdit({
+      gainDb: 0,
+      fadeInSeconds: 0,
+      fadeOutSeconds: 0,
+    });
+  }, [commitAudioRegionGainEdit]);
   const publishAudioRegionGainPreview = useCallback((input: {
     gainDb: number;
     fadeInSeconds: number;
@@ -2203,15 +2159,25 @@ function TimelineClipComponent({
     videoBakeRegionSelection,
     width,
   ]);
-  const handleAudioEditOperationOverlayMouseDown = useCallback((
-    overlay: AudioEditOperationOverlay,
-  ) => (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
+  const handleBakeClipVideoRegion = useCallback((regionId: string) => {
+    void bakeClipVideoBakeRegion(clip.id, regionId);
+  }, [bakeClipVideoBakeRegion, clip.id]);
+  const handleUnbakeClipVideoRegion = useCallback((regionId: string) => {
+    unbakeClipVideoBakeRegion(clip.id, regionId);
+  }, [clip.id, unbakeClipVideoBakeRegion]);
+  const handleRemoveClipVideoRegion = useCallback((regionId: string) => {
+    removeClipVideoBakeRegion(clip.id, regionId);
+  }, [clip.id, removeClipVideoBakeRegion]);
+  const handleAudioEditOperationOverlayActivate = useCallback((overlay: AudioEditOperationOverlay) => {
     setAudioRegionContextMenu(null);
     setAudioRegionSelection(overlay.selection);
   }, [setAudioRegionContextMenu, setAudioRegionSelection]);
+  const handleToggleAudioEditOperation = useCallback((operationId: string, disabled: boolean) => {
+    setClipAudioEditOperationEnabled(clip.id, operationId, disabled);
+  }, [clip.id, setClipAudioEditOperationEnabled]);
+  const handleRemoveAudioEditOperation = useCallback((operationId: string) => {
+    removeClipAudioEditOperation(clip.id, operationId);
+  }, [clip.id, removeClipAudioEditOperation]);
   const handleApplySpectralRegionEdit = (type: TimelineSpectralRegionEditType) => (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2299,6 +2265,12 @@ function TimelineClipComponent({
     });
     setAudioSpectralRegionSelection(selection);
   };
+  const handleSpectralRegionDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isAudioRegionModifierPressed(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    clearAudioSpectralRegionSelection();
+  }, [clearAudioSpectralRegionSelection]);
   const handleAudioEditStackMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2426,8 +2398,6 @@ function TimelineClipComponent({
     onPaste: pasteAudioRegionToSelection,
     applyAudioRegionEdit,
   });
-  const audioRegionDirectMenuCommands = audioRegionContextMenuModel.directCommands;
-  const audioRegionContextMenuGroups = audioRegionContextMenuModel.groups;
   const runAudioRegionContextMenuCommand = (
     command: AudioRegionContextMenuCommand,
     selection: TimelineAudioRegionSelection,
@@ -2448,9 +2418,6 @@ function TimelineClipComponent({
   // Track filtering must stay after all hooks so React sees a stable hook order
   // while clips move between tracks during drag and linked edits.
   if (isDragging && clipDrag && clipDrag.currentTrackId !== trackId) {
-    return null;
-  }
-  if (!isDragging && !isLinkedToDragging && clip.trackId !== trackId) {
     return null;
   }
   if (clip.trackId !== trackId && !isDragging) {
@@ -2484,9 +2451,6 @@ function TimelineClipComponent({
     '--track-color'?: string;
     '--clip-right-sticky-offset'?: string;
   };
-  const audioRegionContextMenuPortalTarget = typeof document === 'undefined'
-    ? null
-    : document.body;
   const sourceExtensionGhosts = resolveSourceExtensionGhosts({
     enabled: passiveDecorationsEnabled,
     isTrimming,
@@ -2541,198 +2505,44 @@ function TimelineClipComponent({
           style={{ left: ghost.left, width: ghost.width }}
         />
       ))}
-      {/* YouTube pending download preview */}
-      {passiveDecorationsEnabled && clip.isPendingDownload && clip.youtubeThumbnail && (
-        <div
-          className="clip-youtube-preview"
-          style={{ backgroundImage: `url(${clip.youtubeThumbnail})` }}
-        />
-      )}
-      {/* Download progress bar */}
-      {passiveDecorationsEnabled && clip.isPendingDownload && !clip.downloadError && (
-        <>
-          <div className="clip-download-progress">
-            <div
-              className="clip-download-progress-bar"
-              style={{ width: `${clip.downloadProgress || 0}%` }}
-            />
-          </div>
-          <div className="clip-download-status">
-            <div className="download-spinner" />
-            <span>Downloading {Math.round(clip.downloadProgress || 0)}%{clip.downloadSpeed ? ` \u00B7 ${clip.downloadSpeed}` : ''}</span>
-          </div>
-        </>
-      )}
-      {/* Download error badge */}
-      {passiveDecorationsEnabled && clip.downloadError && (
-        <div className="clip-download-error-badge" title={clip.downloadError}>
-          Error
-        </div>
-      )}
-      {/* Proxy generating indicator - fill badge */}
-      {passiveDecorationsEnabled && isGeneratingProxy && (
-        <div className="clip-proxy-generating" title={`Generating proxy: ${proxyProgress}%`}>
-          <span className="proxy-fill-badge">
-            <span className="proxy-fill-bg">P</span>
-            <span
-              className="proxy-fill-progress"
-              style={{ height: `${proxyProgress}%` }}
-            >P</span>
-          </span>
-          <span className="proxy-percent">{proxyProgress}%</span>
-        </div>
-      )}
-      {passiveDecorationsEnabled && isGeneratingAudioProxy && (
-        <div className="clip-audio-proxy-generating" title={`Preparing WAV audio proxy: ${audioProxyProgress}%`}>
-          <span className="audio-proxy-fill-badge">
-            <span className="audio-proxy-fill-bg">A</span>
-            <span
-              className="audio-proxy-fill-progress"
-              style={{ height: `${audioProxyProgress}%` }}
-            >A</span>
-          </span>
-          <span className="audio-proxy-percent">{audioProxyProgress}%</span>
-        </div>
-      )}
-      {activeStemSeparationJob && (
-        <div className="clip-stem-generating" title={activeStemStatusTitle}>
-          <span className="stem-fill-badge">
-            <span className="stem-fill-bg">S</span>
-            <span
-              className="stem-fill-progress"
-              style={{ height: `${activeStemProgressPercent}%` }}
-            >S</span>
-          </span>
-          <span className={isDownloadingStemModel ? 'stem-status-text' : 'stem-percent'}>
-            {isDownloadingStemModel ? 'Downloading model' : `${activeStemProgressPercent}%`}
-          </span>
-        </div>
-      )}
-      {hasCompletedStemChoices && (
-        <div
-          className={`clip-stem-switcher ${stemMenuOpen ? 'open' : ''}`}
-          onMouseEnter={handleStemSwitcherMouseEnter}
-          onMouseLeave={handleStemSwitcherMouseLeave}
-        >
-          <button
-            type="button"
-            className="clip-stem-ready-badge"
-            aria-label="Show separated stems"
-            title="Separated stems ready"
-            onMouseDown={handleStemControlMouseDown}
-            onClick={handleStemBadgeClick}
-          >
-            S
-          </button>
-          {stemMenuOpen && (
-            <div className="clip-stem-menu" role="menu" aria-label="Use stem source">
-              {hasStemSourceChoice && stemSourceMediaFileId && (
-                <button
-                  type="button"
-                  className={`clip-stem-choice-button source ${activeStemMediaFileId === stemSourceMediaFileId ? 'active' : ''}`}
-                  role="menuitem"
-                  aria-label="Use source audio"
-                  title="Use source audio"
-                  onMouseDown={handleStemControlMouseDown}
-                  onClick={handleStemChoiceClick(stemSourceMediaFileId)}
-                >
-                  <IconFileMusic className="clip-stem-choice-icon" size={15} stroke={2.3} aria-hidden="true" />
-                </button>
-              )}
-              {completedStemChoices.map(stem => {
-                const isActiveStemSource = activeStemMediaFileId === stem.mediaFileId;
-                return (
-                  <button
-                    key={stem.id}
-                    type="button"
-                    className={`clip-stem-choice-button ${isActiveStemSource ? 'active' : ''}`}
-                    role="menuitem"
-                    aria-label={`Use ${stem.label} stem`}
-                    title={`Use ${stem.label} stem as clip source`}
-                    onMouseDown={handleStemControlMouseDown}
-                    onClick={handleStemChoiceClick(stem.mediaFileId)}
-                  >
-                    <StemChoiceIcon kind={stem.kind} />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-      {/* Proxy ready indicator */}
-      {passiveDecorationsEnabled && hasProxy && proxyEnabled && !isGeneratingProxy && (
-        <div className="clip-proxy-badge" title="Proxy ready">
-          P
-        </div>
-      )}
-      {passiveDecorationsEnabled && hasProxyError && (
-        <div className="clip-proxy-error" title="Proxy generation failed">
-          P!
-        </div>
-      )}
-      {passiveDecorationsEnabled && hasAudioProxy && !isGeneratingAudioProxy && (
-        <div className="clip-audio-proxy-badge" title="WAV audio proxy ready">
-          A
-        </div>
-      )}
-      {passiveDecorationsEnabled && hasAudioProxyError && (
-        <div className="clip-audio-proxy-error" title="WAV audio proxy failed">
-          A!
-        </div>
-      )}
-      {/* Reversed indicator */}
-      {passiveDecorationsEnabled && clip.reversed && (
-        <div className="clip-reversed-badge" title="Reversed playback">
-          {'\u27F2'}
-        </div>
-      )}
-      {/* Linked group indicator */}
-      {passiveDecorationsEnabled && isInLinkedGroup && (
-        <div className="clip-linked-group-badge" title="Multicam linked group">
-          {'\u26D3'}
-        </div>
-      )}
-      {/* Transcript badge with coverage fill */}
-      {passiveDecorationsEnabled && clip.transcriptStatus === 'ready' && clip.transcript && clip.transcript.length > 0 && (() => {
-        const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
-        const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-        const pct = resolveTranscriptCoveragePercent({
-          inPoint: clip.inPoint,
-          outPoint: clip.outPoint,
-          duration: clip.duration,
-          transcript: clip.transcript,
-          transcribedRanges: mediaFile?.transcribedRanges,
-        });
-        if (pct <= 0) return null;
-        return pct >= 100 ? (
-          <div className="clip-transcript-badge" title="Fully transcribed">T</div>
-        ) : (
-          <div className="clip-transcript-badge clip-badge-fill" title={`${pct}% transcribed`}>
-            <span className="clip-badge-bg">T</span>
-            <span className="clip-badge-progress clip-badge-transcript-fill" style={{ height: `${pct}%` }}>T</span>
-          </div>
-        );
-      })()}
-      {/* Analysis badge with coverage fill */}
-      {passiveDecorationsEnabled && !isAudioClip && (clip.analysisStatus === 'ready' || clip.sceneDescriptionStatus === 'ready') && (() => {
-        const pct = resolveAnalysisCoveragePercent({
-          inPoint: clip.inPoint,
-          outPoint: clip.outPoint,
-          duration: clip.duration,
-          frames: clip.analysis?.frames,
-          sampleIntervalMs: clip.analysis?.sampleInterval,
-        });
-        if (pct <= 0) return null;
-        return pct >= 100 ? (
-          <div className="clip-analysis-badge" title="Fully analyzed">A</div>
-        ) : (
-          <div className="clip-analysis-badge clip-badge-fill" title={`${pct}% analyzed`}>
-            <span className="clip-badge-bg">A</span>
-            <span className="clip-badge-progress clip-badge-analysis-fill" style={{ height: `${pct}%` }}>A</span>
-          </div>
-        );
-      })()}
+      <ClipPassiveStatusBadges
+        enabled={passiveDecorationsEnabled}
+        clip={clip}
+        proxyEnabled={proxyEnabled}
+        isGeneratingProxy={isGeneratingProxy}
+        proxyProgress={proxyProgress}
+        hasProxy={hasProxy}
+        hasProxyError={hasProxyError}
+        isGeneratingAudioProxy={isGeneratingAudioProxy}
+        audioProxyProgress={audioProxyProgress}
+        hasAudioProxy={hasAudioProxy}
+        hasAudioProxyError={hasAudioProxyError}
+        showActiveStemSeparation={Boolean(activeStemSeparationJob)}
+        activeStemStatusTitle={activeStemStatusTitle}
+        activeStemProgressPercent={activeStemProgressPercent}
+        isDownloadingStemModel={isDownloadingStemModel}
+        isInLinkedGroup={isInLinkedGroup}
+        stemSwitcher={hasCompletedStemChoices ? (
+          <ClipStemSwitcher
+            stemMenuOpen={stemMenuOpen}
+            completedStemChoices={completedStemChoices}
+            hasStemSourceChoice={hasStemSourceChoice}
+            stemSourceMediaFileId={stemSourceMediaFileId}
+            activeStemMediaFileId={activeStemMediaFileId}
+            onMouseEnter={handleStemSwitcherMouseEnter}
+            onMouseLeave={handleStemSwitcherMouseLeave}
+            onControlMouseDown={handleStemControlMouseDown}
+            onBadgeClick={handleStemBadgeClick}
+            onChoiceClick={handleStemChoiceClick}
+          />
+        ) : null}
+      />
+      <ClipCoverageBadges
+        enabled={passiveDecorationsEnabled}
+        clip={clip}
+        mediaFiles={mediaFiles}
+        isAudioClip={isAudioClip}
+      />
       {/* Waveform generation progress indicator */}
       {passiveDecorationsEnabled && showWaveformGenerationIndicator && (
         <div
@@ -2750,786 +2560,219 @@ function TimelineClipComponent({
         audioDisplayMode === 'spectral'
         || hasWaveformForRender
       ) && (
-        <div className="clip-waveform">
-          {audioDisplayMode === 'spectral' && spectrogramTileSet ? (
-            <ClipSpectrogram
-              tileSet={spectrogramTileSet}
-              width={width}
-              height={Math.max(20, trackBaseHeight - 12)}
-              inPoint={spectrogramInPoint}
-              outPoint={spectrogramOutPoint}
-              naturalDuration={spectrogramNaturalDuration}
-              renderStartPx={waveformRenderWindow.startPx}
-              renderWidth={waveformRenderWindow.width}
-              variant={spectrogramVariant}
-            />
-          ) : audioDisplayMode === 'spectral' ? (
-            <div className="spectrogram-pending" />
-          ) : hasWaveformForRender ? (
-            <ClipWaveform
-              clipId={clip.id}
-              waveform={waveformLegacyForRender}
-              waveformChannels={waveformChannelsForRender}
-              width={stableWaveformContentWidth}
-              height={Math.max(20, trackBaseHeight - 12)}
-              inPoint={stableWaveformContentInPoint}
-              outPoint={stableWaveformContentOutPoint}
-              naturalDuration={waveformNaturalDurationForRender}
-              clipDuration={stableWaveformClipDuration}
-              displayMode={audioDisplayMode}
-              pixelsPerSecond={zoom}
-              pyramid={waveformPyramidForRender}
-              waveformVariant={waveformVariantForRender}
-              displayGain={waveformDisplayGainForRender}
-              volumeAutomationKeyframes={audioVolumeAutomationKeyframes}
-              audioEditStack={predictiveAudioEditStack}
-              audioRegionGainPreview={predictiveAudioRegionGainPreview}
-              renderStartPx={stableWaveformRenderWindow.startPx}
-              renderWidth={stableWaveformRenderWindow.width}
-              contentOffsetPx={stableWaveformContentOffsetPx}
-              normalizationInPoint={useStableWaveformTrimWindow ? originalWaveformTrimInPoint : undefined}
-              normalizationOutPoint={useStableWaveformTrimWindow ? originalWaveformTrimOutPoint : undefined}
-              normalizationWidth={useStableWaveformTrimWindow ? Math.max(1, (originalWaveformTrimOutPoint - originalWaveformTrimInPoint) / waveformSourceSecondsPerPixel) : undefined}
-            />
-          ) : null}
-          {(audioAnalysisDisplayStatus || (audioWaveformDiagnostics?.badges.length ?? 0) > 0) && (
-            <div className="clip-audio-status-stack">
-              {audioAnalysisDisplayStatus && (
-                <div
-                  className={`clip-audio-analysis-status clip-audio-analysis-status-${audioAnalysisDisplayStatus.kind}`}
-                  title={audioAnalysisDisplayStatus.title}
-                  data-audio-analysis-status={audioAnalysisDisplayStatus.kind}
-                >
-                  {audioAnalysisDisplayStatus.label}
-                </div>
-              )}
-              {audioWaveformDiagnostics?.badges.map((badge) => (
-                <div
-                  key={badge.kind}
-                  className={`clip-audio-diagnostic-badge ${badge.className}`}
-                  title={badge.title}
-                  data-audio-diagnostic={badge.kind}
-                  data-audio-diagnostic-source={audioWaveformDiagnostics.source}
-                >
-                  {badge.label}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <ClipAudioMediaView
+          audioDisplayMode={audioDisplayMode}
+          hasWaveformForRender={hasWaveformForRender}
+          spectrogramProps={{
+            tileSet: spectrogramTileSet,
+            width,
+            height: Math.max(20, trackBaseHeight - 12),
+            inPoint: spectrogramInPoint,
+            outPoint: spectrogramOutPoint,
+            naturalDuration: spectrogramNaturalDuration,
+            renderStartPx: waveformRenderWindow.startPx,
+            renderWidth: waveformRenderWindow.width,
+            variant: spectrogramVariant,
+          }}
+          waveformProps={{
+            clipId: clip.id,
+            waveform: waveformLegacyForRender,
+            waveformChannels: waveformChannelsForRender,
+            width: stableWaveformContentWidth,
+            height: Math.max(20, trackBaseHeight - 12),
+            inPoint: stableWaveformContentInPoint,
+            outPoint: stableWaveformContentOutPoint,
+            naturalDuration: waveformNaturalDurationForRender,
+            clipDuration: stableWaveformClipDuration,
+            displayMode: audioDisplayMode,
+            pixelsPerSecond: zoom,
+            pyramid: waveformPyramidForRender,
+            waveformVariant: waveformVariantForRender,
+            displayGain: waveformDisplayGainForRender,
+            volumeAutomationKeyframes: audioVolumeAutomationKeyframes,
+            audioEditStack: predictiveAudioEditStack,
+            audioRegionGainPreview: predictiveAudioRegionGainPreview,
+            renderStartPx: stableWaveformRenderWindow.startPx,
+            renderWidth: stableWaveformRenderWindow.width,
+            contentOffsetPx: stableWaveformContentOffsetPx,
+            normalizationInPoint: useStableWaveformTrimWindow ? originalWaveformTrimInPoint : undefined,
+            normalizationOutPoint: useStableWaveformTrimWindow ? originalWaveformTrimOutPoint : undefined,
+            normalizationWidth: useStableWaveformTrimWindow ? Math.max(1, (originalWaveformTrimOutPoint - originalWaveformTrimInPoint) / waveformSourceSecondsPerPixel) : undefined,
+          }}
+          audioAnalysisDisplayStatus={audioAnalysisDisplayStatus}
+          audioWaveformDiagnostics={audioWaveformDiagnostics}
+        />
       )}
       {audioRegionOverlay && (
-        <div
-          className={`clip-audio-region-selection ${audioRegionSelection?.snappedToZeroCrossing ? 'snapped' : ''} ${audioRegionMoveDrag ? 'moving' : ''} ${audioRegionResizeDrag ? 'resizing' : ''}`}
-          style={{
-            left: audioRegionOverlay.left,
-            width: audioRegionOverlay.width,
-          }}
-          onMouseDown={handleAudioRegionSelectionMouseDown}
+        <ClipAudioRegionSelectionOverlay
+          overlay={audioRegionOverlay}
+          snappedToZeroCrossing={Boolean(audioRegionSelection?.snappedToZeroCrossing)}
+          moving={Boolean(audioRegionMoveDrag)}
+          resizing={Boolean(audioRegionResizeDrag)}
+          gainControl={audioRegionGainControl}
+          onSelectionMouseDown={handleAudioRegionSelectionMouseDown}
           onContextMenu={handleAudioRegionContextMenu}
-          title="Drag to move the selected audio region; drag edges to resize"
-        >
-          <span
-            className="clip-audio-region-edge left"
-            onMouseDown={handleAudioRegionEdgeMouseDown('left')}
-            title="Drag to resize the selected audio region start"
-          />
-          <span
-            className="clip-audio-region-edge right"
-            onMouseDown={handleAudioRegionEdgeMouseDown('right')}
-            title="Drag to resize the selected audio region end"
-          />
-          {audioRegionGainControl && (
-            <div
-              className="clip-audio-region-gain-control"
-              style={{ top: `${audioRegionGainControl.yPercent}%` }}
-            >
-              <div
-                className="clip-audio-region-gain-line"
-                onMouseDown={handleAudioRegionGainMouseDown('gain')}
-                onDoubleClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  commitAudioRegionGainEdit({
-                    gainDb: 0,
-                    fadeInSeconds: 0,
-                    fadeOutSeconds: 0,
-                  });
-                }}
-                title="Drag to set region gain; double-click to reset"
-              />
-              <button
-                type="button"
-                className="clip-audio-region-fade-handle fade-in"
-                style={{ left: audioRegionGainControl.fadeInPx }}
-                onMouseDown={handleAudioRegionGainMouseDown('fade-in')}
-                title={`Fade in gain change: ${audioRegionGainControl.fadeInSeconds.toFixed(2)}s`}
-              />
-              <button
-                type="button"
-                className="clip-audio-region-fade-handle fade-out"
-                style={{ right: audioRegionGainControl.fadeOutPx }}
-                onMouseDown={handleAudioRegionGainMouseDown('fade-out')}
-                title={`Fade out gain change: ${audioRegionGainControl.fadeOutSeconds.toFixed(2)}s`}
-              />
-              <span className="clip-audio-region-gain-value">
-                {formatAudioRegionGainLabel(audioRegionGainControl.gainDb)}
-              </span>
-            </div>
-          )}
-        </div>
+          onEdgeMouseDown={handleAudioRegionEdgeMouseDown}
+          onGainMouseDown={handleAudioRegionGainMouseDown}
+          onResetGain={handleResetAudioRegionGain}
+        />
       )}
-      {clipVideoBakeRegionOverlays.map((overlay) => (
-        <div
-          key={overlay.id}
-          className={`clip-video-bake-region ${overlay.selection ? 'selection' : ''} status-${overlay.status ?? 'marked'}`}
-          style={{
-            left: overlay.left,
-            width: overlay.width,
+      <ClipVideoBakeRegionOverlays
+        overlays={clipVideoBakeRegionOverlays}
+        onBakeRegion={handleBakeClipVideoRegion}
+        onUnbakeRegion={handleUnbakeClipVideoRegion}
+        onRemoveRegion={handleRemoveClipVideoRegion}
+      />
+      <ClipAudioEditOperationOverlays
+        overlays={audioEditOperationOverlays}
+        onActivateOverlay={handleAudioEditOperationOverlayActivate}
+      />
+      {audioRegionContextMenu && (
+        <ClipAudioRegionContextMenu
+          menuRef={audioRegionContextMenuRef}
+          position={{
+            x: audioRegionContextMenuPosition?.x ?? audioRegionContextMenu.x,
+            y: audioRegionContextMenuPosition?.y ?? audioRegionContextMenu.y,
           }}
-          title={overlay.selection ? 'Video bake selection' : 'Video bake region'}
-        >
-          {!overlay.selection && (
-            <div className="clip-video-bake-region-controls">
-              <button
-                type="button"
-                className="clip-video-bake-btn"
-                disabled={overlay.status === 'baking'}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (overlay.status === 'baked') {
-                    unbakeClipVideoBakeRegion(clip.id, overlay.id);
-                    return;
-                  }
-                  void bakeClipVideoBakeRegion(clip.id, overlay.id);
-                }}
-                title={overlay.status === 'baked' ? 'Unbake video region' : 'Bake video region'}
-              >
-                {overlay.status === 'baked' ? 'Unbake' : overlay.status === 'baking' ? '...' : 'Bake'}
-              </button>
-              <button
-                type="button"
-                className="clip-video-bake-btn remove"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  removeClipVideoBakeRegion(clip.id, overlay.id);
-                }}
-                title="Remove video bake region"
-              >
-                x
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
-      {audioEditOperationOverlays.map((overlay) => (
-        <div
-          key={overlay.id}
-          className="clip-audio-edit-operation-overlay"
-          data-audio-edit-type={overlay.type}
-          role="button"
-          tabIndex={0}
-          style={{
-            left: overlay.left,
-            width: overlay.width,
-            top: overlay.top,
-            height: overlay.height,
-          }}
-          onMouseDown={handleAudioEditOperationOverlayMouseDown(overlay)}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            e.preventDefault();
-            e.stopPropagation();
-            setAudioRegionContextMenu(null);
-            setAudioRegionSelection(overlay.selection);
-          }}
-          title={overlay.label}
-        >
-          <span>{overlay.label}</span>
-        </div>
-      ))}
-      {audioRegionContextMenu && audioRegionContextMenuPortalTarget && createPortal((
-        <div
-          ref={audioRegionContextMenuRef}
-          className="timeline-context-menu clip-audio-region-context-menu"
-          style={{
-            position: 'fixed',
-            left: audioRegionContextMenuPosition?.x ?? audioRegionContextMenu.x,
-            top: audioRegionContextMenuPosition?.y ?? audioRegionContextMenu.y,
-            zIndex: 10000,
-          }}
-          onPointerDownCapture={(e) => {
-            if (e.button !== 0) return;
-            const target = e.target;
-            if (!(target instanceof Element)) return;
-            const commandElement = target.closest<HTMLElement>('[data-audio-region-command]');
-            const commandKey = commandElement?.dataset.audioRegionCommand;
-            if (!commandKey) return;
-            const command = findAudioRegionContextMenuCommand(audioRegionContextMenuModel, commandKey);
-            if (!command) return;
-            e.preventDefault();
-            e.stopPropagation();
-            runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          <div className="context-menu-title">Audio Region</div>
-          <div className="clip-audio-region-direct-actions">
-            {audioRegionDirectMenuCommands.map(command => (
-              <div
-                key={command.key}
-                data-audio-region-command={command.key}
-                className={`context-menu-item ${command.disabled ? 'disabled' : ''} ${command.danger ? 'danger' : ''}`}
-                onPointerDown={(e) => {
-                  if (e.button !== 0) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
-                }}
-              >
-                {command.label}
-              </div>
-            ))}
-          </div>
-          <div className="context-menu-separator" />
-          {audioRegionContextMenuGroups.map(group => (
-            <div
-              key={group.key}
-              className="context-menu-item has-submenu clip-audio-region-submenu-trigger"
-            >
-                <span>{group.label}</span>
-              <span className="submenu-arrow" aria-hidden="true">▶</span>
-              <div className="context-submenu clip-audio-region-submenu-panel">
-                {group.commands.map(command => (
-                <div
-                  key={command.key}
-                  data-audio-region-command={command.key}
-                  className={`context-menu-item ${command.disabled ? 'disabled' : ''} ${command.danger ? 'danger' : ''}`}
-                  onPointerDown={(e) => {
-                    if (e.button !== 0) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    runAudioRegionContextMenuCommand(command, audioRegionContextMenu.selection);
-                  }}
-                >
-                  {command.label}
-                </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ), audioRegionContextMenuPortalTarget)}
-      {spectralRegionOverlay && (
-        <div
-          className={`clip-spectral-region-selection ${audioSpectralRegionSelection?.selectionMode === 'brush' ? 'brush' : 'rectangle'}`}
-          style={{
-            left: spectralRegionOverlay.left,
-            width: spectralRegionOverlay.width,
-            top: spectralRegionOverlay.top,
-            height: spectralRegionOverlay.height,
-          }}
-        >
-          <span className="clip-spectral-region-corner tl" />
-          <span className="clip-spectral-region-corner tr" />
-          <span className="clip-spectral-region-corner bl" />
-          <span className="clip-spectral-region-corner br" />
-        </div>
+          model={audioRegionContextMenuModel}
+          selection={audioRegionContextMenu.selection}
+          onRunCommand={runAudioRegionContextMenuCommand}
+        />
       )}
-      {spectralImageLayerOverlays.map(({ id, left: overlayLeft, width: overlayWidth, top, height, layer, mediaFile }) => {
-        const blendMode = layer.blendMode ?? 'attenuate';
-        const opacity = finiteNumberOr(layer.opacity, 0.85);
-        const gainDb = finiteNumberOr(layer.gainDb, -18);
-        const imageUrl = mediaFile?.thumbnailUrl || mediaFile?.url;
-
-        return (
-          <div
-            key={id}
-            className={`clip-spectral-image-layer blend-${blendMode} ${layer.enabled === false ? 'disabled' : ''}`}
-            style={{
-              left: overlayLeft,
-              width: overlayWidth,
-              top,
-              height,
-              opacity: Math.max(0.18, opacity),
-              backgroundImage: imageUrl ? `url(${imageUrl})` : undefined,
-            }}
-            title={`${mediaFile?.name ?? 'Spectral image'}: ${blendMode}, ${gainDb.toFixed(1)} dB`}
-          >
-            <span>{blendMode}</span>
-          </div>
-        );
-      })}
-      {spectralRegionOverlay && canSelectSpectralRegion && (
-        <div
-          className="clip-spectral-region-toolbar"
-          style={{
-            left: Math.max(4, spectralRegionOverlay.left),
-            top: Math.max(20, spectralRegionOverlay.top),
-          }}
-          onMouseDown={handleAudioEditStackMouseDown}
-          onDoubleClick={(e) => e.stopPropagation()}
-        >
-          <button type="button" onClick={handleApplySpectralRegionEdit('spectral-mask')} title="Attenuate selected frequency region">Mask</button>
-          <button type="button" onClick={handleApplySpectralRegionEdit('spectral-resynthesis')} title="Create a resynthesis operation for the selected frequency region">Resyn</button>
-          <button
-            type="button"
-            onClick={handleAddSelectedImageSpectralLayer}
-            disabled={!selectedSpectralImageFile}
-            title={selectedSpectralImageFile ? `Add ${selectedSpectralImageFile.name} as a spectral image layer` : 'Select an image in the Media panel first'}
-          >
-            Img
-          </button>
-        </div>
-      )}
+      <ClipSpectralRegionOverlays
+        regionOverlay={spectralRegionOverlay}
+        selectionMode={audioSpectralRegionSelection?.selectionMode}
+        imageLayerOverlays={spectralImageLayerOverlays}
+        canSelectSpectralRegion={canSelectSpectralRegion}
+        selectedSpectralImageFile={selectedSpectralImageFile}
+        onToolbarMouseDown={handleAudioEditStackMouseDown}
+        onApplySpectralRegionEdit={handleApplySpectralRegionEdit}
+        onAddSelectedImageSpectralLayer={handleAddSelectedImageSpectralLayer}
+      />
       {isAudioClip && audioFocusMode && (audioEditStack.length > 0 || canUnbakeAudioEditStack) && (
-        <div className="clip-audio-edit-stack" onMouseDown={handleAudioEditStackMouseDown}>
-          <span className="clip-audio-edit-stack-count" title={`${activeAudioEditCount} active audio edits`}>
-            {activeAudioEditCount}/{audioEditStack.length}
-          </span>
-          {audioEditStack.map(operation => (
-            <button
-              type="button"
-              key={operation.id}
-              className={operation.enabled === false ? 'disabled' : ''}
-              title={`${operation.params.label ?? operation.type}: click to ${operation.enabled === false ? 'enable' : 'bypass'}, Alt-click to remove`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.altKey) {
-                  removeClipAudioEditOperation(clip.id, operation.id);
-                  return;
-                }
-                setClipAudioEditOperationEnabled(clip.id, operation.id, operation.enabled === false);
-              }}
-            >
-              {String(operation.params.label ?? operation.type).slice(0, 3)}
-            </button>
-          ))}
-          <button type="button" onClick={handleBakeAudioEditStack} disabled={audioBakePending || activeAudioEditCount === 0} title="Bake active audio edits into a new WAV source">
-            {audioBakePending ? '...' : 'Bake'}
-          </button>
-          <button type="button" onClick={handleUnbakeAudioEditStack} disabled={audioBakePending || !canUnbakeAudioEditStack} title="Restore the source audio and region edits from the latest bake">
-            Unbake
-          </button>
-          <button type="button" onClick={handleClearAudioEditStack} title="Clear audio edit stack">
-            Clear
-          </button>
-        </div>
-      )}
-      {canSelectAudioRegion && (
-        <div
-          className="clip-audio-region-hitarea"
-          onMouseDown={handleAudioRegionMouseDown}
-          onDoubleClick={handleAudioRegionDoubleClick}
-          title="Double-click to select the whole clip; hold Ctrl/Strg and drag to select an audio region"
+        <ClipAudioEditStackControls
+          operations={audioEditStack}
+          activeCount={activeAudioEditCount}
+          audioBakePending={audioBakePending}
+          canUnbakeAudioEditStack={canUnbakeAudioEditStack}
+          onMouseDown={handleAudioEditStackMouseDown}
+          onToggleOperation={handleToggleAudioEditOperation}
+          onRemoveOperation={handleRemoveAudioEditOperation}
+          onBake={handleBakeAudioEditStack}
+          onUnbake={handleUnbakeAudioEditStack}
+          onClear={handleClearAudioEditStack}
         />
       )}
-      {canSelectVideoBakeRegion && (
-        <div
-          className="clip-video-bake-region-hitarea"
-          onMouseDown={handleVideoBakeRegionMouseDown}
-          onDoubleClick={handleVideoBakeRegionDoubleClick}
-          title="Double-click to mark the whole clip; hold Ctrl/Strg and drag to mark a video bake region"
-        />
-      )}
-      {canSelectSpectralRegion && (
-        <div
-          className="clip-audio-region-hitarea clip-spectral-region-hitarea"
-          onMouseDown={handleSpectralRegionMouseDown}
-          onDragOver={handleSpectralImageLayerDragOver}
-          onDrop={handleSpectralImageLayerDrop}
-          onDoubleClick={(e) => {
-            if (!isAudioRegionModifierPressed(e)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            clearAudioSpectralRegionSelection();
-          }}
-          title="Hold Ctrl/Strg and drag to select a spectral region; add Shift or Alt for brush"
-        />
-      )}
-      {/* Nested composition mixdown waveform - shown overlaid on thumbnails */}
-      {passiveDecorationsEnabled && waveformsEnabled && clip.isComposition && clip.mixdownWaveform && clip.mixdownWaveform.length > 0 && (
-        <div className="clip-mixdown-waveform">
-          <ClipWaveform
-            waveform={clip.mixdownWaveform}
-            width={width}
-            height={Math.min(42, Math.max(16, trackBaseHeight / 3))}
-            inPoint={displayInPoint}
-            outPoint={displayOutPoint}
-            naturalDuration={clip.duration}
-            displayMode={audioDisplayMode}
-            pixelsPerSecond={zoom}
-            renderStartPx={waveformRenderWindow.startPx}
-            renderWidth={waveformRenderWindow.width}
-          />
-        </div>
-      )}
-      {/* Nested composition mixdown generating indicator */}
-      {passiveDecorationsEnabled && clip.isComposition && clip.mixdownGenerating && (
-        <div className="clip-mixdown-indicator">
-          <span>Generating audio...</span>
-        </div>
-      )}
-      {passiveDecorationsEnabled && staticClipIconKind && (
-        <div className="clip-static-artwork" aria-hidden="true">
-          <StaticClipIcon kind={staticClipIconKind} className="clip-static-artwork-icon" />
-        </div>
-      )}
+      <ClipSelectionHitareas
+        canSelectAudioRegion={canSelectAudioRegion}
+        canSelectVideoBakeRegion={canSelectVideoBakeRegion}
+        canSelectSpectralRegion={canSelectSpectralRegion}
+        onAudioRegionMouseDown={handleAudioRegionMouseDown}
+        onAudioRegionDoubleClick={handleAudioRegionDoubleClick}
+        onVideoBakeRegionMouseDown={handleVideoBakeRegionMouseDown}
+        onVideoBakeRegionDoubleClick={handleVideoBakeRegionDoubleClick}
+        onSpectralRegionMouseDown={handleSpectralRegionMouseDown}
+        onSpectralRegionDragOver={handleSpectralImageLayerDragOver}
+        onSpectralRegionDrop={handleSpectralImageLayerDrop}
+        onSpectralRegionDoubleClick={handleSpectralRegionDoubleClick}
+      />
+      <ClipPreThumbnailDecorations
+        enabled={passiveDecorationsEnabled}
+        clip={clip}
+        waveformsEnabled={waveformsEnabled}
+        width={width}
+        trackBaseHeight={trackBaseHeight}
+        displayInPoint={displayInPoint}
+        displayOutPoint={displayOutPoint}
+        audioDisplayMode={audioDisplayMode}
+        pixelsPerSecond={zoom}
+        waveformRenderStartPx={waveformRenderWindow.startPx}
+        waveformRenderWidth={waveformRenderWindow.width}
+        staticClipIconKind={staticClipIconKind}
+      />
       {/* Segment-based thumbnails for nested compositions */}
       {showSegmentThumbnails && (
-        <div
-          className="clip-thumbnails clip-thumbnails-segments clip-thumbnails-windowed"
-          style={{
-            left: thumbnailRenderWindow.startPx,
-            width: thumbnailRenderWindow.width,
-            right: 'auto',
-          }}
-        >
-          {compositionSegments.map((segment, segIdx) => {
-            const windowStartNorm = thumbnailRenderWindow.startPx / Math.max(1, width);
-            const windowEndNorm = (thumbnailRenderWindow.startPx + thumbnailRenderWindow.width) / Math.max(1, width);
-            if (segment.endNorm < windowStartNorm || segment.startNorm > windowEndNorm) return null;
-            const windowNormSpan = Math.max(0.0001, windowEndNorm - windowStartNorm);
-            const clippedSegmentStart = Math.max(segment.startNorm, windowStartNorm);
-            const clippedSegmentEnd = Math.min(segment.endNorm, windowEndNorm);
-            const segmentWidth = ((clippedSegmentEnd - clippedSegmentStart) / windowNormSpan) * 100;
-            const segmentLeft = ((clippedSegmentStart - windowStartNorm) / windowNormSpan) * 100;
-            // Calculate how many thumbnails fit in this segment
-            const segmentThumbCount = Math.max(1, Math.min(
-              visibleThumbs,
-              Math.ceil(((clippedSegmentEnd - clippedSegmentStart) * width) / THUMB_WIDTH) + 1,
-            ));
-
-            return (
-              <div
-                key={segIdx}
-                className="clip-segment"
-                style={{
-                  position: 'absolute',
-                  left: `${segmentLeft}%`,
-                  width: `${segmentWidth}%`,
-                  height: '100%',
-                  display: 'flex',
-                  overflow: 'hidden',
-                }}
-              >
-                {segment.thumbnails.length > 0 ? (
-                  Array.from({ length: segmentThumbCount }).map((_, i) => {
-                    const thumbIndex = Math.floor((i / segmentThumbCount) * segment.thumbnails.length);
-                    const thumb = segment.thumbnails[Math.min(thumbIndex, segment.thumbnails.length - 1)];
-                    return (
-                      <img
-                        key={i}
-                        src={thumb}
-                        alt=""
-                        className="clip-thumb"
-                        draggable={false}
-                        style={{ flex: '1 0 auto', minWidth: 0, objectFit: 'cover' }}
-                      />
-                    );
-                  })
-                ) : (
-                  <div className="clip-segment-empty" style={{ width: '100%', height: '100%', background: '#1a1a1a' }} />
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <ClipThumbnailFilmstrip
+          mode="segments"
+          renderWindow={thumbnailRenderWindow}
+          segmentPlans={segmentThumbnailPlans}
+        />
       )}
       {/* Regular thumbnail filmstrip - source-based cache or legacy fallback */}
-      {showRegularThumbnails && (
-        <div
-          className="clip-thumbnails clip-thumbnails-windowed"
-          style={{
-            left: thumbnailRenderWindow.startPx,
-            width: thumbnailRenderWindow.width,
-            right: 'auto',
-          }}
-        >
-          {useSourceCache ? (
-            // Source-based cache: thumbnails already mapped to visible range by hook
-            cachedThumbnails.map((thumb, i) => thumb ? (
-              <img
-                key={i}
-                src={thumb}
-                alt=""
-                className="clip-thumb"
-                draggable={false}
-              />
-            ) : (
-              <div key={i} className="clip-thumb clip-thumb-placeholder" />
-            ))
-          ) : (
-            // Legacy fallback for clips without mediaFileId (compositions, old projects)
-            Array.from({ length: visibleThumbs }).map((_, i) => {
-              const naturalDuration = clip.source?.naturalDuration || clip.duration;
-              const startRatio = displayInPoint / naturalDuration;
-              const endRatio = displayOutPoint / naturalDuration;
-              const positionInTrimmed = Math.min(1, Math.max(
-                0,
-                (thumbnailRenderWindow.startPx + i * THUMB_WIDTH) / Math.max(1, width),
-              ));
-              const sourceRatio = startRatio + positionInTrimmed * (endRatio - startRatio);
-              const thumbIndex = Math.floor(sourceRatio * legacyThumbnails.length);
-              const thumb = legacyThumbnails[Math.min(Math.max(0, thumbIndex), legacyThumbnails.length - 1)];
-              return (
-                <img
-                  key={i}
-                  src={thumb}
-                  alt=""
-                  className="clip-thumb"
-                  draggable={false}
-                />
-              );
-            })
-          )}
-        </div>
+      {showRegularThumbnails && useSourceCache && (
+        <ClipThumbnailFilmstrip
+          mode="regular"
+          renderWindow={thumbnailRenderWindow}
+          useSourceCache={true}
+          cachedThumbnails={cachedThumbnails}
+        />
       )}
-      {/* Nested composition clip boundary markers */}
-      {passiveDecorationsEnabled && clip.isComposition && clip.nestedClipBoundaries && clip.nestedClipBoundaries.length > 0 && (
-        <div className="nested-clip-boundaries">
-          {clip.nestedClipBoundaries.map((boundary, i) => (
-            <div
-              key={i}
-              className="nested-boundary-line"
-              style={{ left: `${boundary * 100}%` }}
-            />
-          ))}
-        </div>
+      {showRegularThumbnails && !useSourceCache && (
+        <ClipThumbnailFilmstrip
+          mode="regular"
+          renderWindow={thumbnailRenderWindow}
+          useSourceCache={false}
+          legacyPlans={legacyThumbnailPlans}
+        />
       )}
-      {/* Needs reload indicator */}
-      {passiveDecorationsEnabled && clip.needsReload && (
-        <div className="clip-reload-badge" title="Click media file to reload">
-          !
-        </div>
-      )}
+      <ClipPostThumbnailDecorations
+        enabled={passiveDecorationsEnabled}
+        clip={clip}
+      />
       {passiveDecorationsEnabled && (
-      <div className="clip-content">
-        <div
-          className="clip-meta"
-          style={clipMetaOffset > 0 ? { transform: `translateX(${clipMetaOffset}px)` } : undefined}
-        >
-          {clip.isLoading && <div className="clip-loading-spinner" />}
-          <div className="clip-name-row">
-            {isSolidClip && (
-              <span className="clip-solid-swatch" title="Solid Clip" style={{ background: clip.solidColor || '#fff' }} />
-            )}
-            {(isTextClip || isText3DClip) && (
-              <span className="clip-text-icon" title={isText3DClip ? '3D Text Clip' : 'Text Clip'}>
-                {isText3DClip ? '3T' : 'T'}
-              </span>
-            )}
-            {isVectorAnimationClip && (
-              <span className="clip-text-icon" title={vectorAnimationTitle}>{vectorAnimationIcon}</span>
-            )}
-            {isMathSceneClip && (
-              <span className="clip-text-icon" title="Math Scene Clip">ƒ</span>
-            )}
-            {staticClipIconKind && (
-              <StaticClipIcon
-                kind={staticClipIconKind}
-                className="clip-type-icon"
-              />
-            )}
-            {isSplatEffectorClip && (
-              <span className="clip-text-icon" title="3D Effector Clip">E</span>
-            )}
-            <span className="clip-name">
-              {isTextClip && clip.textProperties
-                ? clip.textProperties.text.slice(0, 30) || 'Text'
-                : isMathSceneClip && clip.mathScene
-                  ? clip.mathScene.objects.find((object) => object.type === 'function')?.expression || 'Math Scene'
-                : isText3DClip && text3DProperties
-                  ? text3DProperties.text.slice(0, 30) || '3D Text'
-                  : clip.name}
-            </span>
-            {/* PickWhip disabled */}
-          </div>
-          <span className="clip-duration">{formatTime(displayDuration)}</span>
-        </div>
-      </div>
+        <ClipContentMeta
+          clip={clip}
+          clipMetaOffset={clipMetaOffset}
+          displayDuration={displayDuration}
+          formatTime={formatTime}
+          isSolidClip={isSolidClip}
+          isTextClip={isTextClip}
+          isText3DClip={isText3DClip}
+          isMathSceneClip={isMathSceneClip}
+          isVectorAnimationClip={isVectorAnimationClip}
+          vectorAnimationIcon={vectorAnimationIcon}
+          vectorAnimationTitle={vectorAnimationTitle}
+          isSplatEffectorClip={isSplatEffectorClip}
+          staticClipIconKind={staticClipIconKind}
+          text3DProperties={text3DProperties}
+        />
       )}
-      {/* Transcript word markers */}
-      {passiveDecorationsEnabled && showTranscriptMarkers && clip.transcript && clip.transcript.length > 0 && (
-        <div className="clip-transcript-markers">
-          {clip.transcript.map((word) => {
-            // Word times are relative to clip's inPoint
-            const wordStartInClip = word.start - clip.inPoint;
-            const wordEndInClip = word.end - clip.inPoint;
-
-            // Only show markers that are visible within the clip's current trim
-            if (wordEndInClip < 0 || wordStartInClip > displayDuration) {
-              return null;
-            }
-
-            // Calculate marker position and width
-            const markerStart = Math.max(0, wordStartInClip);
-            const markerEnd = Math.min(displayDuration, wordEndInClip);
-            const markerLeft = (markerStart / displayDuration) * 100;
-            const markerWidth = ((markerEnd - markerStart) / displayDuration) * 100;
-
-            return (
-              <div
-                key={word.id}
-                className="transcript-marker"
-                style={{
-                  left: `${markerLeft}%`,
-                  width: `${Math.max(0.5, markerWidth)}%`,
-                }}
-                title={word.text}
-              />
-            );
-          })}
-        </div>
-      )}
-      {/* Transcribing indicator */}
-      {passiveDecorationsEnabled && clip.transcriptStatus === 'transcribing' && (
-        <div className="clip-transcribing-indicator">
-          <div className="transcribing-progress" style={{ width: `${clip.transcriptProgress || 0}%` }} />
-        </div>
-      )}
-      {/* Analysis overlay - graph showing focus/motion (renders during analysis and when ready) */}
-      {/* Only show analysis overlay for video clips, not audio */}
-      {passiveDecorationsEnabled && !isAudioClip && clip.analysis && (clip.analysisStatus === 'ready' || clip.analysisStatus === 'analyzing') && (
-        <>
-          <div className="analysis-legend-labels">
-            <span className="legend-focus">Focus</span>
-            <span className="legend-motion">Motion</span>
-            {clip.analysisStatus === 'analyzing' && (
-              <span className="legend-progress">{clip.analysisProgress || 0}%</span>
-            )}
-          </div>
-          <div className="clip-analysis-overlay">
-            <ClipAnalysisOverlay
-              analysis={clip.analysis}
-              clipDuration={displayDuration}
-              clipInPoint={clip.inPoint}
-              clipStartTime={displayStartTime}
-              width={width}
-              height={trackBaseHeight}
-            />
-          </div>
-        </>
-      )}
-      {/* Analyzing indicator (thin progress bar at bottom) */}
-      {passiveDecorationsEnabled && clip.analysisStatus === 'analyzing' && (
-        <div className="clip-analyzing-indicator">
-          <div className="analyzing-progress" style={{ width: `${clip.analysisProgress || 0}%` }} />
-        </div>
-      )}
-      {/* Keyframe tick marks on clip bar */}
-      {keyframeTickGroups.length > 0 && (
-        <div className="clip-keyframe-ticks">
-          {keyframeTickGroups.map((group, i) => {
-            const xPercent = (group.time / displayDuration) * 100;
-            if (xPercent < 0 || xPercent > 100) return null;
-            const isDraggingKeyframeGroup = keyframeGroupDrag
-              ? group.keyframeIds.some(id => keyframeGroupDrag.keyframeIds.includes(id))
-              : false;
-            const keyframeCount = group.keyframeIds.length || 1;
-            return (
-              <button
-                type="button"
-                key={`${group.time}:${group.keyframeIds.join('|') || i}`}
-                className={`keyframe-tick${isDraggingKeyframeGroup ? ' dragging' : ''}${group.hasStateChange ? ' state-change' : ''}`}
-                style={{ left: `${xPercent}%` }}
-                onMouseDown={isTrackLocked ? undefined : (e) => handleKeyframeTickMouseDown(e, group)}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)}`}
-                title={`Drag to move ${keyframeCount} keyframe${keyframeCount === 1 ? '' : 's'} at ${formatTime(group.time)} (Shift snaps to clip keyframes)`}
-              />
-            );
-          })}
-        </div>
-      )}
-      {/* Fade curve - SVG bezier curve showing opacity or audio-volume automation */}
-      {visibleFadeCurveKeyframes.length >= 2 && (
-        <div
-          className={`fade-curve-container ${isAudioClip ? 'audio-automation-curve-container' : ''}`}
-          data-audio-automation-curve={isAudioClip ? 'volume' : undefined}
-        >
-          <FadeCurve
-            key={visibleFadeCurveKey}
-            keyframes={visibleFadeCurveKeyframes}
-            clipDuration={displayDuration}
-            width={width}
-            height={trackBaseHeight}
-          />
-        </div>
-      )}
-      {!isTrackLocked && (
-        <>
-          {/* Fade handles - corner handles for adjusting fade-in/out */}
-          <div
-            className={`fade-handle left${fadeInDuration > 0 ? ' active' : ''}`}
-            style={fadeInDuration > 0 ? { left: timeToPixel(fadeInDuration) - 6 } : undefined}
-            onMouseDown={(e) => {
-              if (e.button !== 0) return;
-              if (!canUseFadeHandles) return;
-              e.stopPropagation();
-              onFadeStart(e, 'left');
-            }}
-            title={fadeInDuration > 0 ? `Fade In: ${fadeInDuration.toFixed(2)}s` : 'Drag to add fade in'}
-          />
-          <div
-            className={`fade-handle right${fadeOutDuration > 0 ? ' active' : ''}`}
-            style={fadeOutDuration > 0 ? { right: timeToPixel(fadeOutDuration) - 6 } : undefined}
-            onMouseDown={(e) => {
-              if (e.button !== 0) return;
-              if (!canUseFadeHandles) return;
-              e.stopPropagation();
-              onFadeStart(e, 'right');
-            }}
-            title={fadeOutDuration > 0 ? `Fade Out: ${fadeOutDuration.toFixed(2)}s` : 'Drag to add fade out'}
-          />
-          {/* Trim handles */}
-          <div
-            className={`trim-handle left arrows-${leftTrimHandleDirections.length}`}
-            onMouseDown={(e) => {
-              if (e.button !== 0) return;
-              if (!canUseTrimHandles) return;
-              e.stopPropagation();
-              onTrimStart(e, 'left');
-            }}
-          >
-            <TrimHandleArrows directions={leftTrimHandleDirections} />
-          </div>
-          <div
-            className={`trim-handle right arrows-${rightTrimHandleDirections.length}`}
-            onMouseDown={(e) => {
-              if (e.button !== 0) return;
-              if (!canUseTrimHandles) return;
-              e.stopPropagation();
-              onTrimStart(e, 'right');
-            }}
-          >
-            <TrimHandleArrows directions={rightTrimHandleDirections} />
-          </div>
-        </>
-      )}
+      <ClipTranscriptAnalysisOverlays
+        enabled={passiveDecorationsEnabled}
+        showTranscriptMarkers={showTranscriptMarkers}
+        clip={clip}
+        displayDuration={displayDuration}
+        displayStartTime={displayStartTime}
+        width={width}
+        trackBaseHeight={trackBaseHeight}
+        isAudioClip={isAudioClip}
+      />
+      <ClipKeyframeTicks
+        groups={keyframeTickGroups}
+        displayDuration={displayDuration}
+        draggingKeyframeIds={keyframeGroupDrag?.keyframeIds}
+        isTrackLocked={isTrackLocked}
+        formatTime={formatTime}
+        onTickMouseDown={handleKeyframeTickMouseDown}
+      />
+      <ClipFadeTrimControls
+        fadeCurveKey={visibleFadeCurveKey}
+        fadeCurveKeyframes={visibleFadeCurveKeyframes}
+        displayDuration={displayDuration}
+        width={width}
+        trackBaseHeight={trackBaseHeight}
+        isAudioClip={isAudioClip}
+        isTrackLocked={isTrackLocked}
+        canUseFadeHandles={canUseFadeHandles}
+        canUseTrimHandles={canUseTrimHandles}
+        fadeInDuration={fadeInDuration}
+        fadeOutDuration={fadeOutDuration}
+        timeToPixel={timeToPixel}
+        leftTrimHandleDirections={leftTrimHandleDirections}
+        rightTrimHandleDirections={rightTrimHandleDirections}
+        onFadeStart={onFadeStart}
+        onTrimStart={onTrimStart}
+      />
     </div>
   );
 }

@@ -1581,8 +1581,6 @@ export function Timeline() {
   // Pick whip drag - extracted to hook
   const {
     pickWhipDrag,
-    handlePickWhipDragStart,
-    handlePickWhipDragEnd,
     trackPickWhipDrag,
     handleTrackPickWhipDragStart,
     handleTrackPickWhipDragEnd,
@@ -2856,11 +2854,9 @@ export function Timeline() {
           isClipDragActive={clipDrag !== null}
           clipDrag={clipDragForClip}
           clipTrim={clipTrim}
-          clipFade={clipFade}
           zoom={zoom}
           scrollX={scrollX}
           timelineViewportWidth={timelineViewportWidth}
-          timelineRef={timelineRef}
           proxyEnabled={proxyEnabled}
           proxyStatus={proxyStatus}
           proxyProgress={mediaFile?.proxyProgress || 0}
@@ -2881,11 +2877,7 @@ export function Timeline() {
           keyframeTimeGroups={keyframeTimeGroups}
           onMoveKeyframeGroup={moveKeyframes}
           timeToPixel={timeToPixel}
-          pixelToTime={pixelToTime}
           formatTime={formatTime}
-          onPickWhipDragStart={handlePickWhipDragStart}
-          onPickWhipDragEnd={handlePickWhipDragEnd}
-          onSetClipParent={setClipParent}
           passiveVisualsSuppressed={options?.passiveVisualsSuppressed}
         />
       );
@@ -2918,13 +2910,9 @@ export function Timeline() {
       getClipKeyframes,
       moveKeyframes,
       timeToPixel,
-      pixelToTime,
       formatTime,
       tracks,
       timelineSessionId,
-      handlePickWhipDragStart,
-      handlePickWhipDragEnd,
-      setClipParent,
     ]
   );
 
