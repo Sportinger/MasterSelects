@@ -12,7 +12,6 @@ import { ClipSpectralRegionOverlays } from './components/ClipSpectralRegionOverl
 import { ClipAudioRegionContextMenu } from './components/ClipAudioRegionContextMenu';
 import { ClipVideoBakeRegionOverlays } from './components/ClipVideoBakeRegionOverlays';
 import { ClipAudioEditOperationOverlays } from './components/ClipAudioEditOperationOverlays';
-import { ClipStemSwitcher } from './components/ClipStemSwitcher';
 import { ClipKeyframeTicks } from './components/ClipKeyframeTicks';
 import { ClipFadeTrimControls } from './components/ClipFadeTrimControls';
 import { ClipSelectionHitareas } from './components/ClipSelectionHitareas';
@@ -20,8 +19,6 @@ import {
   ClipPassiveBackgroundLayer,
   ClipPassiveForegroundLayer,
 } from './components/ClipPassiveVisualLayers';
-import { EMPTY_STEM_CHOICES } from './components/ClipStemDisplay';
-import { formatStemJobPhase, isActiveStemJobPhase } from '../../stores/timeline/helpers/stemSeparationJobPhases';
 import { useTimelineSpectrogramTileSetState } from './hooks/useTimelineSpectrogramTileSet';
 import { useTimelineWaveformPyramidState } from './hooks/useTimelineWaveformPyramid';
 import {
@@ -97,6 +94,7 @@ import {
 } from '../../services/timeline/timelineAudioArtifactGenerationWarmup';
 import { useClipAudioMediaViewProps } from './hooks/useClipAudioMediaViewProps';
 import { useClipAudioRegionControls } from './hooks/useClipAudioRegionControls';
+import { useClipStemSwitcher } from './hooks/useClipStemSwitcher';
 
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
@@ -432,8 +430,6 @@ function TimelineClipComponent({
   const clipEntranceKey = useTimelineStore(s => s.clipEntranceAnimationKey);
   const aiMove = useTimelineStore(s => s.aiMovingClips.get(clip.id));
   const [mountEntranceKey] = useState(clipEntranceKey);
-  const [stemMenuOpen, setStemMenuOpen] = useState(false);
-  const stemMenuCloseTimerRef = useRef<number | null>(null);
 
   // Only compute stagger order during composition entrance animation. Doing a
   // full clips sort inside every TimelineClip render gets very expensive once
@@ -533,41 +529,20 @@ function TimelineClipComponent({
   const isGeneratingAudioProxy = audioProxyStatus === 'generating';
   const hasAudioProxy = audioProxyStatus === 'ready';
   const hasAudioProxyError = audioProxyStatus === 'error';
-  const activeStemSeparationJob = clipStemSeparationJob && isActiveStemJobPhase(clipStemSeparationJob.phase)
-    ? clipStemSeparationJob
-    : null;
-  const activeStemProgressPercent = activeStemSeparationJob
-    ? Math.round(Math.max(0, Math.min(1, activeStemSeparationJob.progress)) * 100)
-    : 0;
-  const activeStemStatusLabel = activeStemSeparationJob
-    ? activeStemSeparationJob.message ?? formatStemJobPhase(activeStemSeparationJob.phase)
-    : '';
-  const activeStemStatusTitle = activeStemSeparationJob
-    ? `${activeStemStatusLabel}: ${activeStemProgressPercent}%`
-    : undefined;
-  const isDownloadingStemModel = activeStemSeparationJob?.phase === 'downloading-model';
-  const completedStemChoices = !activeStemSeparationJob && clipStemSeparationJob?.phase === 'complete'
-    ? clipStemSeparationJob.stems ?? EMPTY_STEM_CHOICES
-    : EMPTY_STEM_CHOICES;
-  const hasCompletedStemChoices = completedStemChoices.length > 0;
-  let stemSourceMediaFileId = clipStemSeparationJob?.sourceMediaFileId ?? null;
-  if (!stemSourceMediaFileId) {
-    for (const stem of completedStemChoices) {
-      const sourceMediaFileId = mediaFiles.find(file => file.id === stem.mediaFileId)?.stemInfo?.sourceMediaFileId;
-      if (sourceMediaFileId) {
-        stemSourceMediaFileId = sourceMediaFileId;
-        break;
-      }
-    }
-  }
-  const hasStemSourceChoice = Boolean(
-    stemSourceMediaFileId &&
-    mediaFiles.some(file => file.id === stemSourceMediaFileId && file.type === 'audio')
-  );
-  const stemSourceClip = clipStemSeparationJob
-    ? clips.find(candidate => candidate.id === clipStemSeparationJob.clipId)
-    : clip;
-  const activeStemMediaFileId = stemSourceClip?.source?.mediaFileId ?? stemSourceClip?.mediaFileId;
+  const {
+    showActiveStemSeparation,
+    activeStemProgressPercent,
+    activeStemStatusTitle,
+    isDownloadingStemModel,
+    stemSwitcherNode,
+  } = useClipStemSwitcher({
+    clip,
+    clips,
+    mediaFiles,
+    clipStemSeparationJob,
+    setClipSourceToStem,
+    prewarmStemSourceMediaFiles,
+  });
 
   // Check if this clip is linked to the dragging/trimming clip
   const draggedClip = clipDrag
@@ -1736,7 +1711,7 @@ function TimelineClipComponent({
     hasAudioProxy ? 'has-audio-proxy' : '',
     isGeneratingAudioProxy ? 'generating-audio-proxy' : '',
     hasAudioProxyError ? 'audio-proxy-error' : '',
-    activeStemSeparationJob ? 'separating-stems' : '',
+    showActiveStemSeparation ? 'separating-stems' : '',
     hasKeyframes(clip.id) ? 'has-keyframes' : '',
     clip.reversed ? 'reversed' : '',
     clip.transcriptStatus === 'ready' ? 'has-transcript' : '',
@@ -1755,62 +1730,6 @@ function TimelineClipComponent({
   ]
     .filter(Boolean)
     .join(' ');
-
-  const clearStemMenuCloseTimer = useCallback(() => {
-    if (stemMenuCloseTimerRef.current === null) return;
-    window.clearTimeout(stemMenuCloseTimerRef.current);
-    stemMenuCloseTimerRef.current = null;
-  }, []);
-
-  const prewarmCompletedStemSources = useCallback(() => {
-    if (!hasCompletedStemChoices) return;
-    const mediaFileIds = completedStemChoices.map(stem => stem.mediaFileId);
-    if (stemSourceMediaFileId) {
-      mediaFileIds.unshift(stemSourceMediaFileId);
-    }
-    prewarmStemSourceMediaFiles(mediaFileIds);
-  }, [completedStemChoices, hasCompletedStemChoices, prewarmStemSourceMediaFiles, stemSourceMediaFileId]);
-
-  useEffect(() => clearStemMenuCloseTimer, [clearStemMenuCloseTimer]);
-
-  const handleStemControlMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleStemBadgeClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    clearStemMenuCloseTimer();
-    if (!hasCompletedStemChoices) return;
-    setStemMenuOpen(open => {
-      const nextOpen = !open;
-      if (nextOpen) {
-        prewarmCompletedStemSources();
-      }
-      return nextOpen;
-    });
-  }, [clearStemMenuCloseTimer, hasCompletedStemChoices, prewarmCompletedStemSources]);
-
-  const handleStemChoiceClick = useCallback((stemMediaFileId: string) => (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setClipSourceToStem(clip.id, stemMediaFileId);
-  }, [clip.id, setClipSourceToStem]);
-
-  const handleStemSwitcherMouseEnter = useCallback(() => {
-    clearStemMenuCloseTimer();
-    prewarmCompletedStemSources();
-  }, [clearStemMenuCloseTimer, prewarmCompletedStemSources]);
-
-  const handleStemSwitcherMouseLeave = useCallback(() => {
-    if (!stemMenuOpen) return;
-    clearStemMenuCloseTimer();
-    stemMenuCloseTimerRef.current = window.setTimeout(() => {
-      setStemMenuOpen(false);
-      stemMenuCloseTimerRef.current = null;
-    }, 320);
-  }, [clearStemMenuCloseTimer, stemMenuOpen]);
 
   const getClipPointerContext = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -2102,32 +2021,6 @@ function TimelineClipComponent({
     e.stopPropagation();
     clearClipAudioEditStack(clip.id);
   }, [clearClipAudioEditStack, clip.id]);
-  const stemSwitcherNode = useMemo(() => hasCompletedStemChoices ? (
-    <ClipStemSwitcher
-      stemMenuOpen={stemMenuOpen}
-      completedStemChoices={completedStemChoices}
-      hasStemSourceChoice={hasStemSourceChoice}
-      stemSourceMediaFileId={stemSourceMediaFileId}
-      activeStemMediaFileId={activeStemMediaFileId}
-      onMouseEnter={handleStemSwitcherMouseEnter}
-      onMouseLeave={handleStemSwitcherMouseLeave}
-      onControlMouseDown={handleStemControlMouseDown}
-      onBadgeClick={handleStemBadgeClick}
-      onChoiceClick={handleStemChoiceClick}
-    />
-  ) : null, [
-    activeStemMediaFileId,
-    completedStemChoices,
-    handleStemBadgeClick,
-    handleStemChoiceClick,
-    handleStemControlMouseDown,
-    handleStemSwitcherMouseEnter,
-    handleStemSwitcherMouseLeave,
-    hasCompletedStemChoices,
-    hasStemSourceChoice,
-    stemMenuOpen,
-    stemSourceMediaFileId,
-  ]);
 
   // Track filtering must stay after all hooks so React sees a stable hook order
   // while clips move between tracks during drag and linked edits.
@@ -2246,7 +2139,7 @@ function TimelineClipComponent({
         audioProxyProgress={audioProxyProgress}
         hasAudioProxy={hasAudioProxy}
         hasAudioProxyError={hasAudioProxyError}
-        showActiveStemSeparation={Boolean(activeStemSeparationJob)}
+        showActiveStemSeparation={showActiveStemSeparation}
         activeStemStatusTitle={activeStemStatusTitle}
         activeStemProgressPercent={activeStemProgressPercent}
         isDownloadingStemModel={isDownloadingStemModel}
