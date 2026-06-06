@@ -116,10 +116,10 @@ describe('playback debug stats', () => {
 
   it('does not mark cold seeking video elements bad when responsive proxy scrub preview is available', () => {
     const vfTimeline: VFPipelineEvent[] = [
-      { type: 'vf_preview_frame', t: 0, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
-      { type: 'vf_preview_frame', t: 16, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
-      { type: 'vf_preview_frame', t: 33, detail: { changed: 'false', targetMoved: 'false', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
-      { type: 'vf_preview_frame', t: 50, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-frame', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 0, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-image-frame', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 16, detail: { changed: 'true', targetMoved: 'true', previewPath: 'proxy-image-frame-nearest', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 33, detail: { changed: 'false', targetMoved: 'false', previewPath: 'not-ready-scrub-cache', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 50, detail: { changed: 'true', targetMoved: 'true', previewPath: 'scrub-cache', clipId: 'clip-proxy' } },
     ];
 
     const stats = buildPlaybackDebugStats({
@@ -145,16 +145,21 @@ describe('playback debug stats', () => {
     expect(stats.coldVideos).toBe(1);
     expect(stats.seekingVideos).toBe(1);
     expect(stats.worstReadyState).toBe(1);
-    expect(stats.previewPathCounts).toEqual({ 'proxy-frame': 4 });
+    expect(stats.previewPathCounts).toEqual({
+      'proxy-image-frame': 1,
+      'proxy-image-frame-nearest': 1,
+      'not-ready-scrub-cache': 1,
+      'scrub-cache': 1,
+    });
     expect(stats.previewFreezeEvents).toBe(0);
     expect(stats.status).toBe('ok');
   });
 
-  it('still marks cold seeking video elements bad when proxy scrub preview freezes', () => {
+  it('still marks cold seeking video elements bad when proxy image scrub preview freezes', () => {
     const vfTimeline: VFPipelineEvent[] = [
-      { type: 'vf_preview_frame', t: 0, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-frame-hold', clipId: 'clip-proxy' } },
-      { type: 'vf_preview_frame', t: 40, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-frame-hold', clipId: 'clip-proxy' } },
-      { type: 'vf_preview_frame', t: 80, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-frame-hold', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 0, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-image-frame-hold', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 40, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-image-frame-hold', clipId: 'clip-proxy' } },
+      { type: 'vf_preview_frame', t: 80, detail: { changed: 'false', targetMoved: 'true', previewPath: 'proxy-image-frame-hold', clipId: 'clip-proxy' } },
     ];
 
     const stats = buildPlaybackDebugStats({

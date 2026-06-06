@@ -14,8 +14,16 @@ export function ClipKeyframeTicks({ context, commands }: ClipKeyframeTicksProps)
   const keyframe = context.activeModules.keyframe;
   const displayDuration = Math.max(0.001, context.clip.duration);
 
+  const onBeginKeyframeGroupMove = useCallback((keyframeIds: string[], startTime: number) => {
+    commands?.onMoveKeyframeGroup?.(keyframeIds, startTime, context, 'begin');
+  }, [commands, context]);
+
   const onMoveKeyframeGroup = useCallback((keyframeIds: string[], newTime: number) => {
-    commands?.onMoveKeyframeGroup?.(keyframeIds, newTime, context);
+    commands?.onMoveKeyframeGroup?.(keyframeIds, newTime, context, 'update');
+  }, [commands, context]);
+
+  const onCommitKeyframeGroupMove = useCallback((keyframeIds: string[], newTime: number) => {
+    commands?.onMoveKeyframeGroup?.(keyframeIds, newTime, context, 'commit');
   }, [commands, context]);
 
   const {
@@ -26,6 +34,8 @@ export function ClipKeyframeTicks({ context, commands }: ClipKeyframeTicksProps)
     displayDuration,
     width: context.geometry.clip.width,
     onMoveKeyframeGroup,
+    onKeyframeGroupDragBegin: onBeginKeyframeGroupMove,
+    onKeyframeGroupDragCommit: onCommitKeyframeGroupMove,
   });
 
   if (!keyframe?.enabled) return null;

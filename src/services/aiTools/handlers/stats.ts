@@ -1,5 +1,6 @@
 import { useEngineStore } from '../../../stores/engineStore';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { engine } from '../../../engine/WebGPUEngine';
 import { Logger } from '../../logger';
 import { redactSecrets, redactObject } from '../../security/redact';
@@ -19,11 +20,25 @@ import {
   buildTimelineCanvasStoreDiagnostics,
   getTimelineCanvasDiagnostics,
 } from '../../timeline/timelineCanvasDiagnostics';
+import { timelineRuntimeCoordinator } from '../../timeline/timelineRuntimeCoordinator';
 import type { ToolResult } from '../types';
 
 const DEFAULT_PLAYBACK_WINDOW_MS = 5000;
 const MAX_TRACE_WINDOW_MS = 120000;
 const MAX_TRACE_EVENTS = 2000;
+
+function serializeProjectLoadProgress(progress: ReturnType<typeof useMediaStore.getState>['projectLoadProgress']) {
+  return {
+    active: progress?.active ?? false,
+    phase: progress?.phase ?? 'idle',
+    percent: progress?.percent ?? 0,
+    message: progress?.message ?? '',
+    detail: progress?.detail,
+    itemsDone: progress?.itemsDone,
+    itemsTotal: progress?.itemsTotal,
+    blocking: progress?.blocking ?? false,
+  };
+}
 
 function roundOptional(v: number | undefined): number | undefined {
   return typeof v === 'number' ? round(v) : undefined;
@@ -104,6 +119,7 @@ function collectCacheSnapshot(): Record<string, unknown> {
 function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
   const { engineStats, gpuInfo, isEngineReady } = useEngineStore.getState();
   const timelineState = useTimelineStore.getState();
+  const mediaState = useMediaStore.getState();
   const s = engineStats;
   const playback = getPlaybackDebugStats(s.decoder, playbackWindowMs);
   const renderLoop = engine.getRenderLoop() as (Record<string, unknown> & {
@@ -137,6 +153,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
     drops: s.drops,
     decoder: s.decoder,
     layerCount: s.layerCount,
+    projectLoadProgress: serializeProjectLoadProgress(mediaState.projectLoadProgress),
     audio: s.audio,
     audioDiagnostics: collectAudioDiagnostics({ windowMs: playbackWindowMs, eventLimit: 20 }),
     health: playbackHealthMonitor.snapshot(),
@@ -145,6 +162,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
       tracks: timelineState.tracks,
       clips: timelineState.clips,
     })),
+    timelineRuntimeCoordinator: timelineRuntimeCoordinator.getBridgeStats(),
     slotDecks: slotDeckManager.getSnapshot(),
     pipelineStats: {
       wc: wcPipelineMonitor.stats(),

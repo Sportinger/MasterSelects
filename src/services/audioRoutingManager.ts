@@ -44,6 +44,9 @@ const audioRoutingDebugCounters = {
   masterProcessorRebuilds: 0,
   reverbImpulseBuilds: 0,
   reverbImpulseCacheHits: 0,
+  reverbImpulseCacheEvictions: 0,
+  reverbImpulseCacheClears: 0,
+  reverbImpulseCacheClearedEntries: 0,
   reverbImpulseBuildMsTotal: 0,
   reverbImpulseBuildMsMax: 0,
 };
@@ -214,6 +217,15 @@ function reverbImpulseCacheKey(
   ].join(':');
 }
 
+function clearReverbImpulseCache(): number {
+  const clearedEntries = reverbImpulseCache.size;
+  if (clearedEntries === 0) return 0;
+  reverbImpulseCache.clear();
+  audioRoutingDebugCounters.reverbImpulseCacheClears++;
+  audioRoutingDebugCounters.reverbImpulseCacheClearedEntries += clearedEntries;
+  return clearedEntries;
+}
+
 function getOrCreateReverbImpulse(
   ctx: BaseAudioContext,
   roomSize: number,
@@ -244,6 +256,7 @@ function getOrCreateReverbImpulse(
     const oldestKey = reverbImpulseCache.keys().next().value;
     if (oldestKey === undefined) break;
     reverbImpulseCache.delete(oldestKey);
+    audioRoutingDebugCounters.reverbImpulseCacheEvictions++;
   }
   return buffer;
 }
@@ -1424,7 +1437,12 @@ class AudioRoutingManager {
     }
     this.audioContext = null;
     this.masterRoute = null;
-    log.info('AudioRoutingManager disposed');
+    const clearedReverbImpulses = this.clearReverbImpulseCache();
+    log.info('AudioRoutingManager disposed', { clearedReverbImpulses });
+  }
+
+  clearReverbImpulseCache(): number {
+    return clearReverbImpulseCache();
   }
 
   /**
@@ -1477,6 +1495,7 @@ class AudioRoutingManager {
       })),
       counters: {
         ...audioRoutingDebugCounters,
+        reverbImpulseCacheLimit: REVERB_IMPULSE_CACHE_LIMIT,
         reverbImpulseCacheSize: reverbImpulseCache.size,
         reverbImpulseBuildMsAvg: audioRoutingDebugCounters.reverbImpulseBuilds > 0
           ? roundDebug(

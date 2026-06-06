@@ -11,6 +11,28 @@ import { vectorAnimationRuntimeManager } from '../../src/services/vectorAnimatio
 import type { TimelineClip, TimelineTrack } from '../../src/stores/timeline/types';
 import type { ParallelDecodeManager } from '../../src/engine/ParallelDecodeManager';
 
+const initialMediaState = useMediaStore.getState();
+
+function withMediaStoreState<T>(
+  overrides: Partial<ReturnType<typeof useMediaStore.getState>>,
+  run: () => T,
+): T {
+  const getStateMock = vi.mocked(useMediaStore.getState);
+  const previousImplementation = getStateMock.getMockImplementation();
+  getStateMock.mockReturnValue({
+    ...initialMediaState,
+    ...overrides,
+  });
+
+  try {
+    return run();
+  } finally {
+    if (previousImplementation) {
+      getStateMock.mockImplementation(previousImplementation);
+    }
+  }
+}
+
 describe('ExportLayerBuilder', () => {
   beforeEach(() => {
     useMediaStore.setState({
@@ -168,6 +190,70 @@ describe('ExportLayerBuilder', () => {
       0.5,
       { toleranceMultiplier: 3 },
     );
+  });
+
+  it('uses prepared export image elements for data-only image clips', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as unknown as TimelineTrack;
+    const imageElement = document.createElement('img');
+    const clip = {
+      id: 'clip-image',
+      name: 'Still',
+      trackId: 'track-1',
+      startTime: 0,
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      source: {
+        type: 'image',
+        imageUrl: 'blob:data-only-image',
+      },
+      transform: {},
+      effects: [],
+    } as unknown as TimelineClip;
+    const clipStates = new Map<string, ExportClipState>([[
+      clip.id,
+      {
+        clipId: clip.id,
+        webCodecsPlayer: null,
+        lastSampleIndex: 0,
+        isSequential: false,
+        exportImageElement: imageElement,
+      },
+    ]]);
+    const ctx: FrameContext = {
+      time: 1,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getSourceTimeForClip: () => 1,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, clipStates, null, false);
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source).toEqual({
+      type: 'image',
+      imageElement,
+    });
+    expect(clip.source?.imageElement).toBeUndefined();
   });
 
   it('forces gaussian splats onto the native scene path while keeping full-quality export settings', () => {
@@ -462,6 +548,152 @@ describe('ExportLayerBuilder', () => {
     expect(layers[0]?.source?.type).toBe('model');
     expect(layers[0]?.source?.modelUrl).toBe('blob:hero-1');
     expect(layers[0]?.source?.modelSequence?.frameCount).toBe(3);
+  });
+
+  it('falls back to media-library model sequence and URL for export layers', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as unknown as TimelineTrack;
+    const modelFile = new File(['model'], 'fallback.glb', { type: 'model/gltf-binary' });
+
+    const mediaState = {
+      files: [{
+        id: 'media-model-fallback',
+        name: 'fallback.glb',
+        type: 'model',
+        createdAt: 1,
+        file: modelFile,
+        url: 'blob:media-model-fallback',
+        modelSequence: {
+          fps: 2,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'fallback',
+          frames: [
+            { name: 'fallback000000.glb', modelUrl: 'https://assets.local/fallback-0.glb' },
+            { name: 'fallback000001.glb', modelUrl: 'https://assets.local/fallback-1.glb' },
+            { name: 'fallback000002.glb', modelUrl: 'https://assets.local/fallback-2.glb' },
+          ],
+        },
+      }],
+      compositions: [],
+    } satisfies Partial<ReturnType<typeof useMediaStore.getState>>;
+    useMediaStore.setState(mediaState);
+
+    const clip = {
+      id: 'clip-model-fallback',
+      name: 'Fallback Model',
+      trackId: 'track-1',
+      mediaFileId: 'media-model-fallback',
+      file: modelFile,
+      startTime: 0,
+      duration: 2,
+      inPoint: 0,
+      outPoint: 2,
+      source: {
+        type: 'model',
+        mediaFileId: 'media-model-fallback',
+      },
+      transform: {},
+      is3D: true,
+    } as unknown as TimelineClip;
+
+    const ctx: FrameContext = {
+      time: 0.5,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getSourceTimeForClip: () => 0.5,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = withMediaStoreState(mediaState, () => buildLayersAtTime(ctx, new Map(), null, false));
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('model');
+    expect(layers[0]?.source?.modelUrl).toBe('https://assets.local/fallback-1.glb');
+    expect(layers[0]?.source?.modelSequence?.frameCount).toBe(3);
+  });
+
+  it('falls back to media-library model URL for export layers without sequence data', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as unknown as TimelineTrack;
+
+    const mediaState = {
+      files: [{
+        id: 'media-model-url',
+        name: 'url-model.glb',
+        type: 'model',
+        createdAt: 1,
+        url: 'https://assets.local/url-model.glb',
+      }],
+      compositions: [],
+    } satisfies Partial<ReturnType<typeof useMediaStore.getState>>;
+    useMediaStore.setState(mediaState);
+
+    const clip = {
+      id: 'clip-model-url',
+      name: 'URL Model',
+      trackId: 'track-1',
+      mediaFileId: 'media-model-url',
+      startTime: 0,
+      duration: 2,
+      inPoint: 0,
+      outPoint: 2,
+      source: {
+        type: 'model',
+        mediaFileId: 'media-model-url',
+      },
+      transform: {},
+      is3D: true,
+    } as unknown as TimelineClip;
+
+    const ctx: FrameContext = {
+      time: 0.5,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [clip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, clip]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getSourceTimeForClip: () => 0.5,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = withMediaStoreState(mediaState, () => buildLayersAtTime(ctx, new Map(), null, false));
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('model');
+    expect(layers[0]?.source?.modelUrl).toBe('https://assets.local/url-model.glb');
+    expect(layers[0]?.source?.modelSequence).toBeUndefined();
   });
 
   it('resolves the correct gaussian splat sequence frame for export and keeps native renderer selection', () => {

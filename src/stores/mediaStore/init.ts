@@ -41,6 +41,7 @@ type MediaStoreGlobal = typeof globalThis & {
   __masterselectsMediaStoreBeforeUnloadHandler?: () => void;
   __masterselectsTimelineCompositionSaveSignatures?: Map<string, string>;
   __masterselectsTimelineCompositionSaveRefs?: Map<string, TimelineCompositionSaveRefs>;
+  __TIMELINE_CANVAS_SMOKE_ACTIVE__?: boolean;
 };
 
 // Cached store reference - populated after first access
@@ -126,6 +127,11 @@ const getMediaStore = (): MediaStore | null => {
  * Save current timeline to active composition.
  */
 function saveTimelineToActiveComposition(options: SaveTimelineToActiveCompositionOptions = {}): void {
+  if ((globalThis as MediaStoreGlobal).__TIMELINE_CANVAS_SMOKE_ACTIVE__) {
+    log.debug('Skipped timeline-to-composition save during timeline canvas smoke');
+    return;
+  }
+
   if (isProjectStoreSyncInProgress()) {
     log.debug('Skipped timeline-to-composition save during project store sync');
     return;

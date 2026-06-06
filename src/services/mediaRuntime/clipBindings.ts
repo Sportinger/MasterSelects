@@ -10,6 +10,13 @@ import type {
 
 type ClipSource = NonNullable<TimelineClip['source']>;
 
+export interface PlannedSourceRuntimeBinding {
+  source: TimelineClip['source'];
+  runtimeSourceId: string;
+  runtimeSessionKey: string;
+  mediaFileId?: string;
+}
+
 function getRuntimeKind(type: ClipSource['type']): MediaRuntimeKind | null {
   if (type === 'video' || type === 'audio' || type === 'image') {
     return type;
@@ -139,6 +146,52 @@ export function bindSourceRuntimeForOwner(params: {
     sessionPolicy: params.sessionPolicy,
     sessionOwnerId: params.sessionOwnerId,
   });
+}
+
+export function planSourceRuntimeBindingForOwner(params: {
+  ownerId: string;
+  source: TimelineClip['source'];
+  file?: File;
+  mediaFileId?: string;
+  filePath?: string;
+  sessionPolicy?: DecodeSessionPolicy;
+  sessionOwnerId?: string;
+}): PlannedSourceRuntimeBinding | null {
+  const source = params.source;
+  if (!source) {
+    return null;
+  }
+
+  const mediaFileId = params.mediaFileId ?? source.mediaFileId;
+  const descriptor = buildRuntimeDescriptor({
+    source,
+    file: params.file,
+    mediaFileId,
+    filePath: params.filePath,
+  });
+
+  if (!descriptor) {
+    return null;
+  }
+
+  const runtimeSourceId = mediaRuntimeRegistry.resolveSourceId(descriptor);
+  if (!runtimeSourceId) {
+    return null;
+  }
+
+  const runtimeSessionKey = `${params.sessionPolicy ?? 'interactive'}:${params.sessionOwnerId ?? params.ownerId}`;
+  return {
+    source: {
+      ...source,
+      mediaFileId,
+      filePath: descriptor.filePath ?? source.filePath,
+      runtimeSourceId,
+      runtimeSessionKey,
+    },
+    runtimeSourceId,
+    runtimeSessionKey,
+    mediaFileId,
+  };
 }
 
 export function bindRuntimeToClip(

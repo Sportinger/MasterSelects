@@ -13,6 +13,12 @@ const log = Logger.create('ProxyFrameCache');
 import { fileSystemService } from './fileSystemService';
 import { useMediaStore } from '../stores/mediaStore';
 import { clampAudioPan, dbToLinearGain, finiteNumber } from '../engine/audio/audioMath';
+import { timelineRuntimeCoordinator } from './timeline/timelineRuntimeCoordinator';
+import type {
+  RenderResourceDescriptor,
+  TimelineRuntimeAdmissionDecision,
+  TimelineRuntimePolicyId,
+} from './timeline/runtimeCoordinatorTypes';
 import {
   createSpectralGateState,
   processSpectralGateBlock,
@@ -50,6 +56,9 @@ const SCRUB_FAST_VELOCITY_SECONDS_PER_SECOND = 2.5;
 const SCRUB_REVERSE_THRESHOLD_SECONDS_PER_SECOND = -0.04;
 const MAX_AUDIO_BUFFER_CACHE_BYTES = 192 * 1024 * 1024;
 const MAX_AUDIO_BUFFER_CACHE_ENTRIES = 3;
+const LEGACY_PROXY_FRAME_RUNTIME_POLICY_ID: TimelineRuntimePolicyId = 'thumbnail';
+const INTERACTIVE_PROXY_CACHE_RUNTIME_POLICY_ID: TimelineRuntimePolicyId = 'interactive';
+const BYTES_PER_RGBA_PIXEL = 4;
 const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const HUM_NOTCH_MAX_HARMONICS = 8;
 
@@ -70,6 +79,20 @@ interface CachedFrame {
   frameIndex: number;
   image: HTMLImageElement;
   timestamp: number; // For LRU eviction
+}
+
+interface LegacyProxyFrameCacheStats {
+  frameCount: number;
+  heapBytes: number;
+  width?: number;
+  height?: number;
+}
+
+interface ProxyVideoFrameCacheStats {
+  frameCount: number;
+  decodedFrameBytes: number;
+  width?: number;
+  height?: number;
 }
 
 export interface ProxyCachedFrame {
@@ -881,6 +904,353 @@ class ProxyFrameCache {
     return `${mediaFileId}_${frameIndex}`;
   }
 
+  private getLegacyProxyFrameResourceId(mediaFileId: string): string {
+    return `proxy-frame-cache:${mediaFileId}:legacy-images`;
+  }
+
+  private getAudioBufferResourceId(mediaFileId: string): string {
+    return `proxy-frame-cache:${mediaFileId}:audio-buffer`;
+  }
+
+  private getAudioProxyElementResourceId(mediaFileId: string): string {
+    return `proxy-frame-cache:${mediaFileId}:audio-proxy-element`;
+  }
+
+  private getVideoFrameResourceId(mediaFileId: string): string {
+    return `proxy-frame-cache:${mediaFileId}:video-frames`;
+  }
+
+  private getAudioProxySrcKind(src: string | undefined): 'blob-url' | 'file-path' | 'project-path' | 'remote-url' | 'media-source' | 'unknown' {
+    if (!src) return 'unknown';
+    if (src.startsWith('blob:')) return 'blob-url';
+    if (src.startsWith('http')) return 'remote-url';
+    if (src.startsWith('mediastream:')) return 'media-source';
+    if (src.startsWith('/') || /^[A-Za-z]:[\\/]/.test(src)) return 'file-path';
+    return 'unknown';
+  }
+
+  private estimateLegacyImageBytes(image: HTMLImageElement): number {
+    const width = image.naturalWidth || image.width || 0;
+    const height = image.naturalHeight || image.height || 0;
+    return Math.max(0, Math.round(width * height * BYTES_PER_RGBA_PIXEL));
+  }
+
+  private getLegacyFrameCacheStats(
+    mediaFileId: string,
+    override?: { key: string; entry: CachedFrame | null }
+  ): LegacyProxyFrameCacheStats {
+    let frameCount = 0;
+    let heapBytes = 0;
+    let width: number | undefined;
+    let height: number | undefined;
+    let overrideApplied = false;
+
+    const addImage = (image: HTMLImageElement) => {
+      frameCount += 1;
+      heapBytes += this.estimateLegacyImageBytes(image);
+      width ??= image.naturalWidth || image.width || undefined;
+      height ??= image.naturalHeight || image.height || undefined;
+    };
+
+    for (const [key, entry] of this.cache) {
+      if (entry.mediaFileId !== mediaFileId) continue;
+      if (override && key === override.key) {
+        overrideApplied = true;
+        if (override.entry) {
+          addImage(override.entry.image);
+        }
+        continue;
+      }
+      addImage(entry.image);
+    }
+
+    if (override && !overrideApplied && override.entry?.mediaFileId === mediaFileId) {
+      addImage(override.entry.image);
+    }
+
+    return {
+      frameCount,
+      heapBytes,
+      ...(width ? { width } : {}),
+      ...(height ? { height } : {}),
+    };
+  }
+
+  private createLegacyFrameCacheResource(
+    mediaFileId: string,
+    stats: LegacyProxyFrameCacheStats
+  ): RenderResourceDescriptor {
+    const resourceId = this.getLegacyProxyFrameResourceId(mediaFileId);
+    return {
+      id: resourceId,
+      kind: 'image-canvas',
+      policyId: LEGACY_PROXY_FRAME_RUNTIME_POLICY_ID,
+      owner: {
+        ownerId: `proxy-frame-cache:${mediaFileId}`,
+        ownerType: 'timeline',
+        mediaFileId,
+      },
+      source: {
+        mediaFileId,
+      },
+      dimensions: {
+        ...(stats.width ? { width: stats.width } : {}),
+        ...(stats.height ? { height: stats.height } : {}),
+      },
+      memoryCost: {
+        heapBytes: stats.heapBytes,
+      },
+      imageKind: 'html-image',
+      imageId: resourceId,
+      label: `JPEG proxy frame cache (${stats.frameCount} frames)`,
+      tags: ['proxy-frame-cache', 'jpeg-proxy-frame'],
+    };
+  }
+
+  private canRetainLegacyFrame(
+    mediaFileId: string,
+    key: string,
+    entry: CachedFrame
+  ): TimelineRuntimeAdmissionDecision {
+    const stats = this.getLegacyFrameCacheStats(mediaFileId, { key, entry });
+    return timelineRuntimeCoordinator.canRetainResource(
+      this.createLegacyFrameCacheResource(mediaFileId, stats)
+    );
+  }
+
+  private refreshLegacyFrameCacheResource(mediaFileId: string): void {
+    const stats = this.getLegacyFrameCacheStats(mediaFileId);
+    const resourceId = this.getLegacyProxyFrameResourceId(mediaFileId);
+    if (stats.frameCount === 0) {
+      timelineRuntimeCoordinator.releaseResource(resourceId);
+      return;
+    }
+    timelineRuntimeCoordinator.retainResource(this.createLegacyFrameCacheResource(mediaFileId, stats));
+  }
+
+  private releaseLegacyFrameCacheResource(mediaFileId: string): void {
+    timelineRuntimeCoordinator.releaseResource(this.getLegacyProxyFrameResourceId(mediaFileId));
+  }
+
+  private createAudioBufferResource(mediaFileId: string, buffer: AudioBuffer): RenderResourceDescriptor {
+    const resourceId = this.getAudioBufferResourceId(mediaFileId);
+    return {
+      id: resourceId,
+      kind: 'audio-source-clock',
+      policyId: INTERACTIVE_PROXY_CACHE_RUNTIME_POLICY_ID,
+      owner: {
+        ownerId: `proxy-frame-cache:${mediaFileId}`,
+        ownerType: 'timeline',
+        mediaFileId,
+      },
+      source: {
+        mediaFileId,
+      },
+      dimensions: {
+        durationSeconds: buffer.duration,
+        sampleRate: buffer.sampleRate,
+        channelCount: buffer.numberOfChannels,
+      },
+      memoryCost: {
+        heapBytes: estimateAudioBufferBytes(buffer),
+      },
+      audioSourceId: mediaFileId,
+      clockId: resourceId,
+      label: 'Decoded proxy audio buffer',
+      tags: ['proxy-frame-cache', 'decoded-audio-buffer', 'scrub-audio'],
+    };
+  }
+
+  private cacheDecodedAudioBuffer(mediaFileId: string, buffer: AudioBuffer): boolean {
+    const resource = this.createAudioBufferResource(mediaFileId, buffer);
+    const admission = timelineRuntimeCoordinator.canRetainResource(resource);
+    if (!admission.admitted) {
+      log.debug('Skipped decoded audio buffer cache retention due to runtime budget', {
+        mediaFileId,
+        policyId: admission.policyId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits,
+      });
+      return false;
+    }
+
+    this.touchAudioBufferCacheEntry(mediaFileId, buffer);
+    timelineRuntimeCoordinator.retainResource(resource);
+    this.enforceAudioBufferCacheLimit();
+    return true;
+  }
+
+  private releaseAudioBufferResource(mediaFileId: string): void {
+    timelineRuntimeCoordinator.releaseResource(this.getAudioBufferResourceId(mediaFileId));
+  }
+
+  private createAudioProxyElementResource(
+    mediaFileId: string,
+    audioSrc: string,
+    audio?: HTMLAudioElement,
+  ): RenderResourceDescriptor {
+    const resourceId = this.getAudioProxyElementResourceId(mediaFileId);
+    const readyState = audio?.readyState ?? 0;
+    const networkState = audio?.networkState ?? 0;
+    const status = audio?.error ? 'warning' : readyState >= HTMLMediaElement.HAVE_METADATA ? 'ok' : 'unknown';
+    return {
+      id: resourceId,
+      kind: 'html-media',
+      policyId: INTERACTIVE_PROXY_CACHE_RUNTIME_POLICY_ID,
+      owner: {
+        ownerId: `proxy-frame-cache:${mediaFileId}`,
+        ownerType: 'timeline',
+        mediaFileId,
+      },
+      source: {
+        mediaFileId,
+      },
+      mediaElementKind: 'audio',
+      elementId: resourceId,
+      srcKind: this.getAudioProxySrcKind(audioSrc),
+      diagnostics: {
+        status,
+        provider: {
+          providerId: resourceId,
+          providerKind: 'html-audio',
+          status,
+          isReady: readyState >= HTMLMediaElement.HAVE_METADATA,
+          isPlaying: audio ? !audio.paused : false,
+          isSeeking: audio?.seeking ?? false,
+          currentTimeSeconds: audio?.currentTime ?? 0,
+          readyState,
+          networkState,
+          errorCode: audio?.error ? String(audio.error.code) : undefined,
+        },
+      },
+      label: 'Proxy audio element',
+      tags: ['proxy-frame-cache', 'audio-proxy', 'html-audio'],
+    };
+  }
+
+  private canRetainAudioProxyElement(mediaFileId: string, audioSrc: string): TimelineRuntimeAdmissionDecision {
+    return timelineRuntimeCoordinator.canRetainResource(
+      this.createAudioProxyElementResource(mediaFileId, audioSrc)
+    );
+  }
+
+  private reportAudioProxyElement(mediaFileId: string, audio: HTMLAudioElement): void {
+    timelineRuntimeCoordinator.retainResource(
+      this.createAudioProxyElementResource(mediaFileId, audio.currentSrc || audio.src, audio)
+    );
+  }
+
+  private releaseAudioProxyElementResource(mediaFileId: string): void {
+    timelineRuntimeCoordinator.releaseResource(this.getAudioProxyElementResourceId(mediaFileId));
+  }
+
+  private estimateVideoFrameBytes(frame: VideoFrame): number {
+    const width = frame.codedWidth || frame.displayWidth || 0;
+    const height = frame.codedHeight || frame.displayHeight || 0;
+    return Math.max(0, Math.round(width * height * BYTES_PER_RGBA_PIXEL));
+  }
+
+  private getVideoFrameCacheStats(
+    mediaFileId: string,
+    override?: { key: string; entry: CachedVideoFrame | null }
+  ): ProxyVideoFrameCacheStats {
+    let frameCount = 0;
+    let decodedFrameBytes = 0;
+    let width: number | undefined;
+    let height: number | undefined;
+    let overrideApplied = false;
+
+    const addFrame = (frame: VideoFrame) => {
+      frameCount += 1;
+      decodedFrameBytes += this.estimateVideoFrameBytes(frame);
+      width ??= frame.codedWidth || frame.displayWidth || undefined;
+      height ??= frame.codedHeight || frame.displayHeight || undefined;
+    };
+
+    for (const [key, entry] of this.videoFrameCache) {
+      if (entry.mediaFileId !== mediaFileId) continue;
+      if (override && key === override.key) {
+        overrideApplied = true;
+        if (override.entry) {
+          addFrame(override.entry.frame);
+        }
+        continue;
+      }
+      addFrame(entry.frame);
+    }
+
+    if (override && !overrideApplied && override.entry?.mediaFileId === mediaFileId) {
+      addFrame(override.entry.frame);
+    }
+
+    return {
+      frameCount,
+      decodedFrameBytes,
+      ...(width ? { width } : {}),
+      ...(height ? { height } : {}),
+    };
+  }
+
+  private createVideoFrameCacheResource(
+    mediaFileId: string,
+    stats: ProxyVideoFrameCacheStats
+  ): RenderResourceDescriptor {
+    const resourceId = this.getVideoFrameResourceId(mediaFileId);
+    return {
+      id: resourceId,
+      kind: 'video-frame-provider',
+      policyId: INTERACTIVE_PROXY_CACHE_RUNTIME_POLICY_ID,
+      owner: {
+        ownerId: `proxy-frame-cache:${mediaFileId}`,
+        ownerType: 'timeline',
+        mediaFileId,
+      },
+      source: {
+        mediaFileId,
+      },
+      dimensions: {
+        ...(stats.width ? { width: stats.width } : {}),
+        ...(stats.height ? { height: stats.height } : {}),
+      },
+      memoryCost: {
+        heapBytes: stats.decodedFrameBytes,
+        decodedFrameBytes: stats.decodedFrameBytes,
+      },
+      providerId: resourceId,
+      providerKind: 'webcodecs',
+      canSeek: true,
+      canProvideStaleFrame: true,
+      frameFormat: 'video-frame',
+      label: `Proxy WebCodecs frame cache (${stats.frameCount} frames)`,
+      tags: ['proxy-frame-cache', 'webcodecs-video-frame'],
+    };
+  }
+
+  private canRetainVideoFrame(
+    mediaFileId: string,
+    key: string,
+    entry: CachedVideoFrame
+  ): TimelineRuntimeAdmissionDecision {
+    const stats = this.getVideoFrameCacheStats(mediaFileId, { key, entry });
+    return timelineRuntimeCoordinator.canRetainResource(
+      this.createVideoFrameCacheResource(mediaFileId, stats)
+    );
+  }
+
+  private refreshVideoFrameCacheResource(mediaFileId: string): void {
+    const stats = this.getVideoFrameCacheStats(mediaFileId);
+    const resourceId = this.getVideoFrameResourceId(mediaFileId);
+    if (stats.frameCount === 0) {
+      timelineRuntimeCoordinator.releaseResource(resourceId);
+      return;
+    }
+    timelineRuntimeCoordinator.retainResource(this.createVideoFrameCacheResource(mediaFileId, stats));
+  }
+
+  private releaseVideoFrameCacheResource(mediaFileId: string): void {
+    timelineRuntimeCoordinator.releaseResource(this.getVideoFrameResourceId(mediaFileId));
+  }
+
   private disposeAudioProxyElement(mediaFileId: string, audio: HTMLAudioElement): void {
     const src = audio.currentSrc || audio.src;
     audio.pause();
@@ -891,6 +1261,7 @@ class ProxyFrameCache {
       this.ownedAudioUrls.delete(src);
     }
     this.audioCache.delete(mediaFileId);
+    this.releaseAudioProxyElementResource(mediaFileId);
   }
 
   private touchAudioBufferCacheEntry(mediaFileId: string, buffer: AudioBuffer): void {
@@ -911,6 +1282,7 @@ class ProxyFrameCache {
       const oldest = this.audioBufferCache.entries().next().value as [string, AudioBuffer] | undefined;
       if (!oldest) break;
       this.audioBufferCache.delete(oldest[0]);
+      this.releaseAudioBufferResource(oldest[0]);
       totalBytes -= estimateAudioBufferBytes(oldest[1]);
       log.debug(`Evicted decoded audio buffer from cache: ${oldest[0]}`);
     }
@@ -1071,7 +1443,9 @@ class ProxyFrameCache {
     try {
       const frame = await promise;
       if (frame) {
-        this.addVideoFrameToCache(mediaFileId, frameIndex, frame);
+        if (!this.addVideoFrameToCache(mediaFileId, frameIndex, frame)) {
+          return null;
+        }
       }
       return frame;
     } finally {
@@ -1151,23 +1525,40 @@ class ProxyFrameCache {
     }
   }
 
-  private addVideoFrameToCache(mediaFileId: string, frameIndex: number, frame: VideoFrame): void {
+  private addVideoFrameToCache(mediaFileId: string, frameIndex: number, frame: VideoFrame): boolean {
     const key = this.getKey(mediaFileId, frameIndex);
+    const entry: CachedVideoFrame = {
+      mediaFileId,
+      frameIndex,
+      frame,
+      timestamp: Date.now(),
+    };
+
+    while (!this.videoFrameCache.has(key) && this.videoFrameCache.size >= MAX_VIDEO_FRAME_CACHE_SIZE) {
+      this.evictOldestVideoFrame();
+    }
+
+    const admission = this.canRetainVideoFrame(mediaFileId, key, entry);
+    if (!admission.admitted) {
+      log.debug('Skipped proxy video frame cache retention due to runtime budget', {
+        mediaFileId,
+        frameIndex,
+        policyId: admission.policyId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits,
+      });
+      frame.close();
+      return false;
+    }
+
     const existing = this.videoFrameCache.get(key);
     if (existing && existing.frame !== frame) {
       existing.frame.close();
     }
 
-    while (this.videoFrameCache.size >= MAX_VIDEO_FRAME_CACHE_SIZE) {
-      this.evictOldestVideoFrame();
-    }
-
-    this.videoFrameCache.set(key, {
-      mediaFileId,
-      frameIndex,
-      frame,
-      timestamp: Date.now(),
-    });
+    this.videoFrameCache.set(key, entry);
+    this.refreshVideoFrameCacheResource(mediaFileId);
+    return true;
   }
 
   private evictOldestVideoFrame(): void {
@@ -1184,6 +1575,9 @@ class ProxyFrameCache {
     const oldest = this.videoFrameCache.get(oldestKey);
     oldest?.frame.close();
     this.videoFrameCache.delete(oldestKey);
+    if (oldest) {
+      this.refreshVideoFrameCacheResource(oldest.mediaFileId);
+    }
   }
 
   // Get a frame from cache or load it
@@ -1274,20 +1668,35 @@ class ProxyFrameCache {
   }
 
   // Add frame to cache
-  private addToCache(mediaFileId: string, frameIndex: number, image: HTMLImageElement) {
+  private addToCache(mediaFileId: string, frameIndex: number, image: HTMLImageElement): boolean {
     const key = this.getKey(mediaFileId, frameIndex);
-
-    // Evict old frames if cache is full
-    if (this.cache.size >= MAX_CACHE_SIZE) {
-      this.evictOldest();
-    }
-
-    this.cache.set(key, {
+    const entry: CachedFrame = {
       mediaFileId,
       frameIndex,
       image,
       timestamp: Date.now(),
-    });
+    };
+
+    // Evict old frames if cache is full
+    if (!this.cache.has(key) && this.cache.size >= MAX_CACHE_SIZE) {
+      this.evictOldest();
+    }
+
+    const admission = this.canRetainLegacyFrame(mediaFileId, key, entry);
+    if (!admission.admitted) {
+      log.debug('Skipped proxy frame cache retention due to runtime budget', {
+        mediaFileId,
+        frameIndex,
+        policyId: admission.policyId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits,
+      });
+      return false;
+    }
+
+    this.cache.set(key, entry);
+    this.refreshLegacyFrameCacheResource(mediaFileId);
+    return true;
   }
 
   // Evict oldest frame from cache (LRU)
@@ -1302,8 +1711,11 @@ class ProxyFrameCache {
       }
     }
 
-    if (oldestKey) {
-      this.cache.delete(oldestKey);
+    if (!oldestKey) return;
+    const oldest = this.cache.get(oldestKey);
+    this.cache.delete(oldestKey);
+    if (oldest) {
+      this.refreshLegacyFrameCacheResource(oldest.mediaFileId);
     }
   }
 
@@ -1533,6 +1945,7 @@ class ProxyFrameCache {
    * Load audio proxy from project folder
    */
   private async loadAudioProxy(mediaFileId: string): Promise<HTMLAudioElement | null> {
+    let audioSrc: string | undefined;
     try {
       // Get storage key (prefer fileHash for deduplication)
       const mediaStore = useMediaStore.getState();
@@ -1540,7 +1953,7 @@ class ProxyFrameCache {
       const storageKey = mediaFile?.audioProxyStorageKey || mediaFile?.fileHash || mediaFileId;
 
       // Load audio file from project folder
-      let audioSrc = mediaFile?.audioProxyUrl;
+      audioSrc = mediaFile?.audioProxyUrl;
       if (!audioSrc) {
         const audioFile = await projectFileService.getProxyAudio(storageKey);
         if (!audioFile) {
@@ -1548,6 +1961,21 @@ class ProxyFrameCache {
         }
         audioSrc = URL.createObjectURL(audioFile);
         this.ownedAudioUrls.add(audioSrc);
+      }
+
+      const admission = this.canRetainAudioProxyElement(mediaFileId, audioSrc);
+      if (!admission.admitted) {
+        log.debug('Skipped audio proxy element retention due to runtime budget', {
+          mediaFileId,
+          policyId: admission.policyId,
+          reason: admission.reason,
+          rejectedUnits: admission.rejectedUnits,
+        });
+        if (this.ownedAudioUrls.has(audioSrc)) {
+          URL.revokeObjectURL(audioSrc);
+          this.ownedAudioUrls.delete(audioSrc);
+        }
+        return null;
       }
 
       // Create audio element with object URL
@@ -1573,10 +2001,16 @@ class ProxyFrameCache {
         audio.load();
       });
 
+      this.reportAudioProxyElement(mediaFileId, audio);
       log.info(`Audio proxy loaded for ${mediaFileId}`);
       return audio;
     } catch (e) {
       log.warn(`Failed to load audio proxy for ${mediaFileId}`, e);
+      if (audioSrc && this.ownedAudioUrls.has(audioSrc)) {
+        URL.revokeObjectURL(audioSrc);
+        this.ownedAudioUrls.delete(audioSrc);
+      }
+      this.releaseAudioProxyElementResource(mediaFileId);
       return null;
     }
   }
@@ -1800,13 +2234,13 @@ class ProxyFrameCache {
       const audioContext = this.getAudioContext();
       const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0)); // Clone to avoid detached buffer
 
-      // Cache it
-      this.touchAudioBufferCacheEntry(mediaFileId, audioBuffer);
-      this.enforceAudioBufferCacheLimit();
+      const retained = this.cacheDecodedAudioBuffer(mediaFileId, audioBuffer);
       this.audioBufferFailed.delete(mediaFileId);
       this.audioBufferLoading.delete(mediaFileId);
       this.audioBufferRetryTime.delete(mediaFileId);
-      log.debug(`Decoded ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch`);
+      log.debug(
+        `Decoded ${mediaFileId}: ${audioBuffer.duration.toFixed(1)}s, ${audioBuffer.numberOfChannels}ch${retained ? '' : ' (not cached)'}`
+      );
 
       return audioBuffer;
     } catch (e) {
@@ -2493,17 +2927,19 @@ class ProxyFrameCache {
 
   // Clear cache for a specific media file
   clearForMedia(mediaFileId: string) {
-    for (const [key] of this.cache) {
-      if (key.startsWith(mediaFileId + '_')) {
+    for (const [key, entry] of this.cache) {
+      if (entry.mediaFileId === mediaFileId) {
         this.cache.delete(key);
       }
     }
+    this.releaseLegacyFrameCacheResource(mediaFileId);
     for (const [key, entry] of this.videoFrameCache) {
-      if (key.startsWith(mediaFileId + '_')) {
+      if (entry.mediaFileId === mediaFileId) {
         entry.frame.close();
         this.videoFrameCache.delete(key);
       }
     }
+    this.releaseVideoFrameCacheResource(mediaFileId);
     this.preloadQueue = this.preloadQueue.filter((k) => !k.startsWith(mediaFileId + '_'));
     this.proxyVideoSourcePromises.delete(mediaFileId);
 
@@ -2514,17 +2950,26 @@ class ProxyFrameCache {
     }
 
     this.audioBufferCache.delete(mediaFileId);
+    this.releaseAudioBufferResource(mediaFileId);
     this.audioBufferFailed.delete(mediaFileId);
     this.audioBufferRetryTime.delete(mediaFileId);
   }
 
   // Clear entire cache
   clearAll() {
+    const legacyFrameMediaIds = new Set(Array.from(this.cache.values()).map((entry) => entry.mediaFileId));
+    const videoFrameMediaIds = new Set(Array.from(this.videoFrameCache.values()).map((entry) => entry.mediaFileId));
     this.cache.clear();
+    for (const mediaFileId of legacyFrameMediaIds) {
+      this.releaseLegacyFrameCacheResource(mediaFileId);
+    }
     for (const entry of this.videoFrameCache.values()) {
       entry.frame.close();
     }
     this.videoFrameCache.clear();
+    for (const mediaFileId of videoFrameMediaIds) {
+      this.releaseVideoFrameCacheResource(mediaFileId);
+    }
     this.videoFrameLoadingPromises.clear();
     this.proxyVideoSourcePromises.clear();
     this.preloadQueue = [];
@@ -2536,14 +2981,22 @@ class ProxyFrameCache {
     this.audioCache.clear();
     this.ownedAudioUrls.clear();
 
+    const audioBufferMediaIds = Array.from(this.audioBufferCache.keys());
     this.audioBufferCache.clear();
+    for (const mediaFileId of audioBufferMediaIds) {
+      this.releaseAudioBufferResource(mediaFileId);
+    }
 
     // Clean up audio context
     this.disposeAudioContext();
   }
 
   clearAudioBufferCache(): void {
+    const audioBufferMediaIds = Array.from(this.audioBufferCache.keys());
     this.audioBufferCache.clear();
+    for (const mediaFileId of audioBufferMediaIds) {
+      this.releaseAudioBufferResource(mediaFileId);
+    }
     this.audioBufferFailed.clear();
     this.audioBufferRetryTime.clear();
     this.audioBufferLoading.clear();
@@ -2573,7 +3026,11 @@ class ProxyFrameCache {
     this.scrubFrequencyBuffer = null;
 
     // Clear audio buffer cache (buffers are tied to the old context)
+    const audioBufferMediaIds = Array.from(this.audioBufferCache.keys());
     this.audioBufferCache.clear();
+    for (const mediaFileId of audioBufferMediaIds) {
+      this.releaseAudioBufferResource(mediaFileId);
+    }
     this.audioBufferFailed.clear();
     this.audioBufferRetryTime.clear();
 

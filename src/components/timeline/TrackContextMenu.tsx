@@ -9,6 +9,10 @@ import type { LabelColor } from '../../stores/mediaStore/types';
 import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import { getTrackLabelColor, getTimelineTrackColor } from './trackColor';
+import {
+  createTrackColorSwatchCommands,
+  createTrackContextMenuModel,
+} from './utils/trackContextMenu';
 
 export interface TrackContextMenuState {
   x: number;
@@ -72,21 +76,6 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
     ? (track ? getTimelineTrackColor(track) : 'var(--bg-tertiary)')
     : getLabelHex(currentColor);
 
-  const handleAddVideoTrack = () => {
-    useTimelineStore.getState().addTrack('video');
-    onClose();
-  };
-
-  const handleAddAudioTrack = () => {
-    useTimelineStore.getState().addTrack('audio');
-    onClose();
-  };
-
-  const handleAddMidiTrack = () => {
-    useTimelineStore.getState().addTrack('midi');
-    onClose();
-  };
-
   const handleDeleteTrack = () => {
     useTimelineStore.getState().removeTrack(menu.trackId);
     onClose();
@@ -102,6 +91,18 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
     useTimelineStore.getState().setTrackLabelColor(menu.trackId, color);
     onClose();
   };
+  const contextMenuModel = createTrackContextMenuModel({
+    trackName: menu.trackName,
+    trackTypeCount: trackCount,
+    trackClipCount,
+    onAddTrack: (trackType) => {
+      useTimelineStore.getState().addTrack(trackType);
+      onClose();
+    },
+    onDuplicateTrack: handleDuplicateTrack,
+    onDeleteTrack: handleDeleteTrack,
+  });
+  const colorCommands = createTrackColorSwatchCommands(LABEL_COLORS, handleSetTrackColor);
 
   return createPortal(
     <div
@@ -115,18 +116,14 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="context-menu-item" onClick={handleAddVideoTrack}>
-        + Add Video Track
-      </div>
-      <div className="context-menu-item" onClick={handleAddAudioTrack}>
-        + Add Audio Track
-      </div>
-      <div className="context-menu-item" onClick={handleAddMidiTrack}>
-        + Add MIDI Track
-      </div>
+      {contextMenuModel.addTrackCommands.map(command => (
+        <div key={command.key} className="context-menu-item" onClick={command.action}>
+          {command.label}
+        </div>
+      ))}
       <div className="context-menu-separator" />
-      <div className="context-menu-item" onClick={handleDuplicateTrack}>
-        Duplicate Track
+      <div className="context-menu-item" onClick={contextMenuModel.duplicateCommand.action}>
+        {contextMenuModel.duplicateCommand.label}
       </div>
       <div className="context-menu-separator" />
       <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
@@ -147,37 +144,33 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
         <span className="submenu-arrow">{'\u25B6'}</span>
         <div className="context-submenu clip-color-submenu">
           <div className="clip-color-grid">
-            {LABEL_COLORS.map(color => (
+            {LABEL_COLORS.map(color => {
+              const colorCommand = colorCommands.find(command => command.key === color.key);
+              return (
               <span
                 key={color.key}
                 className={`label-picker-swatch ${color.key === 'none' ? 'none' : ''} ${currentColor === color.key ? 'active' : ''}`}
                 title={color.name}
                 style={{ background: color.key === 'none' ? 'var(--bg-tertiary)' : color.hex }}
-                onClick={() => handleSetTrackColor(color.key)}
+                onClick={colorCommand?.action}
               >
                 {color.key === 'none' && <span className="label-picker-x">&times;</span>}
               </span>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
       <div className="context-menu-separator" />
       <div
-        className={`context-menu-item danger ${trackCount <= 1 ? 'disabled' : ''}`}
+        className={`context-menu-item danger ${contextMenuModel.deleteCommand.disabled ? 'disabled' : ''}`}
         onClick={() => {
-          if (trackCount <= 1) return;
-          handleDeleteTrack();
+          if (contextMenuModel.deleteCommand.disabled) return;
+          contextMenuModel.deleteCommand.action();
         }}
-        title={
-          trackCount <= 1
-            ? 'Cannot delete the last track of this type'
-            : trackClipCount > 0
-            ? `Will delete ${trackClipCount} clip${trackClipCount > 1 ? 's' : ''}`
-            : undefined
-        }
+        title={contextMenuModel.deleteCommand.title}
       >
-        Delete "{menu.trackName}"
-        {trackClipCount > 0 && ` (${trackClipCount} clips)`}
+        {contextMenuModel.deleteCommand.label}
       </div>
     </div>,
     document.body

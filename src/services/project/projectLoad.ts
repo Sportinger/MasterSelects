@@ -1,7 +1,6 @@
 // Project Load — load project file data into stores + background restoration
 
 import { Logger } from '../logger';
-import { engine } from '../../engine/WebGPUEngine';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder, type ProjectLoadProgress } from '../../stores/mediaStore';
 import { getMediaInfo } from '../../stores/mediaStore/helpers/mediaInfoHelpers';
 import {
@@ -9,12 +8,16 @@ import {
   getExpectedProxyFps,
   isProxyFrameIndexSetComplete,
 } from '../../stores/mediaStore/helpers/proxyCompleteness';
-import { updateTimelineClips } from '../../stores/mediaStore/slices/fileManageSlice';
+import {
+  createMediaSourceReplacementPatch,
+  updateTimelineClips,
+} from '../../stores/mediaStore/slices/fileManageSlice';
 import {
   createSignalAssetItem,
   mergeSignalArtifacts,
 } from '../../stores/mediaStore/helpers/signalItems';
 import { useTimelineStore } from '../../stores/timeline';
+import type { TimelineClip } from '../../stores/timeline/types';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -52,14 +55,20 @@ import {
   getStoredProjectFileHandle,
 } from './mediaSourceResolver';
 import {
+  createMediaObjectUrl,
+  createPrimaryMediaObjectUrl,
+  createThumbnailMediaObjectUrl,
+  getGaussianSplatSequenceFrameObjectUrlKey,
+  getModelSequenceFrameObjectUrlKey,
+  revokeAllMediaObjectUrls,
+  revokeMediaFileObjectUrls,
+} from './mediaObjectUrlManager';
+import {
   applyRelinkMatch,
   createRelinkCandidateMapFromHandles,
   findRelinkMatch,
 } from './relinkMedia';
 import { fromProjectTransform } from './transformSerialization';
-import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
-import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
-import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import type {
   GaussianSplatSequenceData,
   GaussianSplatSequenceFrame,
@@ -71,7 +80,6 @@ import type {
   Keyframe,
   AnalysisStatus,
   SceneDescriptionStatus,
-  TimelineClip,
   TranscriptStatus,
 } from '../../types';
 
@@ -299,7 +307,7 @@ async function convertProjectMediaToStore(
         try {
           file = await storedProjectHandle.getFile();
           handle = storedProjectHandle;
-          url = URL.createObjectURL(file);
+          url = createPrimaryMediaObjectUrl(pm.id, file);
           resolvedProjectPath = resolvedProjectPath || `Raw/${storedProjectHandle.name}`;
           await cacheProjectFileHandle(pm.id, storedProjectHandle, true);
           log.info('Restored file from project RAW handle:', pm.name);
@@ -326,7 +334,7 @@ async function convertProjectMediaToStore(
             const result = await projectFileService.getFileFromRaw(frame.projectPath);
             if (result?.file) {
               frameFile = result.file;
-              modelUrl = URL.createObjectURL(result.file);
+              modelUrl = createMediaObjectUrl(pm.id, getModelSequenceFrameObjectUrlKey(frameIndex), result.file);
             }
           } catch (error) {
             log.warn(`Could not restore model sequence frame for ${pm.name}`, {
@@ -340,7 +348,7 @@ async function convertProjectMediaToStore(
           const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
           if (restoredFrame) {
             frameFile = restoredFrame.file;
-            modelUrl = URL.createObjectURL(restoredFrame.file);
+            modelUrl = createMediaObjectUrl(pm.id, getModelSequenceFrameObjectUrlKey(frameIndex), restoredFrame.file);
           }
         }
 
@@ -376,7 +384,7 @@ async function convertProjectMediaToStore(
             const result = await projectFileService.getFileFromRaw(frame.projectPath);
             if (result?.file) {
               frameFile = result.file;
-              splatUrl = URL.createObjectURL(result.file);
+              splatUrl = createMediaObjectUrl(pm.id, getGaussianSplatSequenceFrameObjectUrlKey(frameIndex), result.file);
             }
           } catch (error) {
             log.warn(`Could not restore gaussian splat sequence frame for ${pm.name}`, {
@@ -390,7 +398,7 @@ async function convertProjectMediaToStore(
           const restoredFrame = await restoreSequenceFrameFromHandle(pm.id, frameIndex);
           if (restoredFrame) {
             frameFile = restoredFrame.file;
-            splatUrl = URL.createObjectURL(restoredFrame.file);
+            splatUrl = createMediaObjectUrl(pm.id, getGaussianSplatSequenceFrameObjectUrlKey(frameIndex), restoredFrame.file);
           }
         }
 
@@ -428,7 +436,7 @@ async function convertProjectMediaToStore(
 
           file = result.file;
           handle = result.handle;
-          url = URL.createObjectURL(file);
+          url = createPrimaryMediaObjectUrl(pm.id, file);
           resolvedProjectPath = candidatePath;
           const projectHandle = result.handle;
           if (projectHandle) {
@@ -485,7 +493,7 @@ async function convertProjectMediaToStore(
           const permission = await handle.queryPermission({ mode: 'read' });
           if (permission === 'granted') {
             file = await handle.getFile();
-            url = URL.createObjectURL(file);
+            url = createPrimaryMediaObjectUrl(pm.id, file);
             log.info('Restored file from handle:', pm.name);
           } else {
             log.info('File needs permission:', pm.name);
@@ -1066,6 +1074,10 @@ export async function loadProjectToStores(): Promise<void> {
       itemsTotal: projectData.media.length,
       blocking: true,
     });
+    for (const currentFile of useMediaStore.getState().files) {
+      revokeMediaFileObjectUrls(currentFile);
+    }
+    revokeAllMediaObjectUrls();
     const loadedFiles = await convertProjectMediaToStore(projectData.media, {
       hydrateFiles,
       deferCacheChecks: true,
@@ -1337,27 +1349,22 @@ function isProjectMediaThumbnailCandidate(media: ProjectMediaFile): boolean {
   return Boolean(media.fileHash) && (media.type === 'image' || media.type === 'video');
 }
 
-async function applyCachedThumbnailBatch(thumbnailsById: Map<string, string>): Promise<number> {
+async function applyCachedThumbnailBatch(thumbnailsById: Map<string, Blob>): Promise<number> {
   if (thumbnailsById.size === 0) return 0;
 
-  const thumbnailEntries = [...thumbnailsById.entries()];
-  const appliedUrls = new Set<string>();
+  let appliedCount = 0;
   await applyProjectRestoreMediaUpdate((state) => ({
     files: state.files.map((file) => {
-      const thumbnailUrl = thumbnailsById.get(file.id);
-      if (!thumbnailUrl || file.thumbnailUrl) return file;
-      appliedUrls.add(thumbnailUrl);
+      const thumbnailBlob = thumbnailsById.get(file.id);
+      if (!thumbnailBlob || file.thumbnailUrl) return file;
+      const thumbnailUrl = createThumbnailMediaObjectUrl(file.id, thumbnailBlob);
+      appliedCount += 1;
       return { ...file, thumbnailUrl };
     }),
   }));
 
-  thumbnailEntries.forEach(([, thumbnailUrl]) => {
-    if (!appliedUrls.has(thumbnailUrl) && thumbnailUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(thumbnailUrl);
-    }
-  });
   thumbnailsById.clear();
-  return appliedUrls.size;
+  return appliedCount;
 }
 
 async function restoreCachedMediaThumbnails(
@@ -1365,7 +1372,7 @@ async function restoreCachedMediaThumbnails(
   onProgress?: (done: number, total: number, name: string) => void,
 ): Promise<number> {
   const candidates = projectMedia.filter(isProjectMediaThumbnailCandidate);
-  const thumbnailsById = new Map<string, string>();
+  const thumbnailsById = new Map<string, Blob>();
   let restoredCount = 0;
 
   for (let index = 0; index < candidates.length; index += 1) {
@@ -1393,7 +1400,7 @@ async function restoreCachedMediaThumbnails(
       }
 
       if (thumbnailBlob && thumbnailBlob.size > 0) {
-        thumbnailsById.set(media.id, URL.createObjectURL(thumbnailBlob));
+        thumbnailsById.set(media.id, thumbnailBlob);
       }
 
       if (thumbnailsById.size >= CACHED_THUMBNAIL_RESTORE_BATCH_SIZE) {
@@ -1785,12 +1792,14 @@ async function autoRelinkFromRawFolder(): Promise<void> {
 
         if (permission === 'granted') {
           const fileObj = await fileHandle.getFile();
-          const url = URL.createObjectURL(fileObj);
+          const url = createPrimaryMediaObjectUrl(file.id, fileObj);
+          const sourceReplacementPatch = await createMediaSourceReplacementPatch(fileObj);
 
           fileSystemService.storeFileHandle(file.id, fileHandle);
 
           updatedFiles[i] = {
             ...file,
+            ...sourceReplacementPatch,
             file: fileObj,
             url,
             hasFileHandle: true,
@@ -1817,7 +1826,10 @@ async function autoRelinkFromRawFolder(): Promise<void> {
       // Update timeline clips with proper source elements (video/audio/image)
       for (const file of updatedFiles) {
         if (file.file && !relinkedByProjectScan.has(file.id)) {
-          await updateTimelineClips(file.id, file.file, { generateThumbnails: false });
+          await updateTimelineClips(file.id, file.file, {
+            generateThumbnails: false,
+            fileHash: file.fileHash,
+          });
         }
       }
     }
@@ -1835,249 +1847,81 @@ async function autoRelinkFromRawFolder(): Promise<void> {
  * Reload nested clips for composition clips that are missing their content.
  * This is called after auto-relinking when media files become available.
  */
-async function reloadNestedCompositionClips(): Promise<void> {
+function hasNestedReloadPlaceholder(clips: readonly TimelineClip[] | undefined): boolean {
+  return clips?.some((clip) => clip.needsReload || hasNestedReloadPlaceholder(clip.nestedClips)) ?? false;
+}
+
+export async function reloadNestedCompositionClips(): Promise<void> {
   const timelineStore = useTimelineStore.getState();
   const mediaStore = useMediaStore.getState();
 
-  // Find composition clips that have no nested clips (need reload)
+  // Find composition clips that have no nested clips, or whose already-restored
+  // nested tree still contains relink placeholders from loadState().
   const compClips = timelineStore.clips.filter(
-    c => c.isComposition && c.compositionId && (!c.nestedClips || c.nestedClips.length === 0)
+    c => c.isComposition && c.compositionId && (
+      !c.nestedClips ||
+      c.nestedClips.length === 0 ||
+      hasNestedReloadPlaceholder(c.nestedClips)
+    )
   );
 
   if (compClips.length === 0) return;
 
   log.info(`Reloading ${compClips.length} nested composition clips...`);
+  const reloadTimelineSessionId = timelineStore.timelineSessionId;
 
   for (const compClip of compClips) {
     const composition = mediaStore.compositions.find(c => c.id === compClip.compositionId);
     if (!composition?.timelineData) continue;
 
-    const nestedClips: TimelineClip[] = [];
     const nestedTracks = composition.timelineData.tracks;
-
-    for (const nestedSerializedClip of composition.timelineData.clips) {
-      if (
-        (
-          nestedSerializedClip.sourceType === 'motion-shape' ||
-          nestedSerializedClip.sourceType === 'motion-null' ||
-          nestedSerializedClip.sourceType === 'motion-adjustment'
-        ) &&
-        nestedSerializedClip.motion
-      ) {
-        nestedClips.push({
-          id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
-          trackId: nestedSerializedClip.trackId,
-          name: nestedSerializedClip.name || 'Motion',
-          file: new File([JSON.stringify(nestedSerializedClip.motion)], `${nestedSerializedClip.sourceType}.msmotion`, { type: 'application/json' }),
-          startTime: nestedSerializedClip.startTime,
-          duration: nestedSerializedClip.duration,
-          inPoint: nestedSerializedClip.inPoint,
-          outPoint: nestedSerializedClip.outPoint,
-          source: {
-            type: nestedSerializedClip.sourceType,
-            naturalDuration: nestedSerializedClip.duration,
-          },
-          motion: structuredClone(nestedSerializedClip.motion),
-          thumbnails: nestedSerializedClip.thumbnails,
-          transform: nestedSerializedClip.transform,
-          effects: nestedSerializedClip.effects || [],
-          nodeGraph: cloneClipNodeGraph(nestedSerializedClip.nodeGraph),
-          masks: nestedSerializedClip.masks || [],
-          isLoading: false,
-        });
-        continue;
-      }
-
-      if (nestedSerializedClip.sourceType === 'math-scene' && nestedSerializedClip.mathScene) {
-        const canvas = mathSceneRenderer.createCanvas();
-        const nestedClip: TimelineClip = {
-          id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
-          trackId: nestedSerializedClip.trackId,
-          name: nestedSerializedClip.name,
-          file: new File([JSON.stringify(nestedSerializedClip.mathScene)], 'math-scene.json', { type: 'application/json' }),
-          startTime: nestedSerializedClip.startTime,
-          duration: nestedSerializedClip.duration,
-          inPoint: nestedSerializedClip.inPoint,
-          outPoint: nestedSerializedClip.outPoint,
-          source: {
-            type: 'math-scene',
-            textCanvas: canvas,
-            naturalDuration: nestedSerializedClip.duration,
-          },
-          mathScene: structuredClone(nestedSerializedClip.mathScene),
-          thumbnails: nestedSerializedClip.thumbnails,
-          transform: nestedSerializedClip.transform,
-          effects: nestedSerializedClip.effects || [],
-          nodeGraph: cloneClipNodeGraph(nestedSerializedClip.nodeGraph),
-          masks: nestedSerializedClip.masks || [],
-          reversed: nestedSerializedClip.reversed,
-          speed: nestedSerializedClip.speed,
-          preservesPitch: nestedSerializedClip.preservesPitch,
-          isLoading: false,
-        };
-        mathSceneRenderer.renderClip(nestedClip, 0);
-        nestedClips.push(nestedClip);
-        continue;
-      }
-
-      const nestedMediaFile = mediaStore.files.find(f => f.id === nestedSerializedClip.mediaFileId);
-      if (!nestedMediaFile?.file) continue;
-
-      const nestedClip: TimelineClip = {
-        id: `nested-${compClip.id}-${nestedSerializedClip.id}`,
-        trackId: nestedSerializedClip.trackId,
-        name: nestedSerializedClip.name,
-        file: nestedMediaFile.file,
-        startTime: nestedSerializedClip.startTime,
-        duration: nestedSerializedClip.duration,
-        inPoint: nestedSerializedClip.inPoint,
-        outPoint: nestedSerializedClip.outPoint,
-        source: null,
-        mediaFileId: nestedSerializedClip.mediaFileId,
-        thumbnails: nestedSerializedClip.thumbnails,
-        transform: nestedSerializedClip.transform,
-        effects: nestedSerializedClip.effects || [],
-        nodeGraph: cloneClipNodeGraph(nestedSerializedClip.nodeGraph),
-        masks: nestedSerializedClip.masks || [],
-        reversed: nestedSerializedClip.reversed,
-        speed: nestedSerializedClip.speed,
-        preservesPitch: nestedSerializedClip.preservesPitch,
-        isLoading: true,
-      };
-
-      nestedClips.push(nestedClip);
-
-      const sourceType = nestedSerializedClip.sourceType;
-      const notifyNestedReload = () => {
-        useTimelineStore.setState((state) => ({
-          clips: [...state.clips],
-        }));
-      };
-
-      if (isVectorAnimationSourceType(sourceType)) {
-        try {
-          nestedClip.source = {
-            type: sourceType,
-            mediaFileId: nestedSerializedClip.mediaFileId,
-            naturalDuration: nestedSerializedClip.naturalDuration,
-            vectorAnimationSettings: nestedSerializedClip.vectorAnimationSettings,
-          };
-          const runtime = await vectorAnimationRuntimeManager.prepareClipSource(nestedClip, nestedMediaFile.file);
-          const naturalDuration =
-            runtime.metadata.duration ??
-            nestedSerializedClip.naturalDuration ??
-            nestedSerializedClip.duration;
-
-          nestedClip.source = {
-            type: sourceType,
-            textCanvas: runtime.canvas,
-            mediaFileId: nestedSerializedClip.mediaFileId,
-            naturalDuration,
-            vectorAnimationSettings: nestedSerializedClip.vectorAnimationSettings,
-          };
-          nestedClip.isLoading = false;
-          vectorAnimationRuntimeManager.renderClipAtTime(nestedClip, nestedClip.startTime);
-          notifyNestedReload();
-        } catch (error) {
-          nestedClip.isLoading = false;
-          log.warn('Failed to reload nested vector animation clip', {
-            compClipId: compClip.id,
-            nestedClipId: nestedClip.id,
-            sourceType,
-            error,
-          });
-        }
-        continue;
-      }
-
-      if ((sourceType as string) === 'video' || (sourceType as string) === 'audio') {
-        nestedClip.source = {
-          type: sourceType,
-          mediaFileId: nestedSerializedClip.mediaFileId,
-          naturalDuration: nestedSerializedClip.naturalDuration ?? nestedMediaFile.duration ?? nestedSerializedClip.duration,
-          ...(nestedMediaFile.absolutePath ? { filePath: nestedMediaFile.absolutePath } : {}),
-        };
-        nestedClip.isLoading = false;
-        continue;
-      }
-
-      const fileUrl = URL.createObjectURL(nestedMediaFile.file);
-
-      if (sourceType === 'video') {
-        const video = document.createElement('video');
-        video.src = fileUrl;
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = 'auto';
-        video.crossOrigin = 'anonymous';
-
-        video.addEventListener('canplaythrough', () => {
-          nestedClip.source = {
-            type: 'video',
-            videoElement: video,
-            naturalDuration: video.duration,
-          };
-          nestedClip.isLoading = false;
-
-          // Trigger state update
-          notifyNestedReload();
-
-          // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
-          engine.preCacheVideoFrame(video);
-        }, { once: true });
-
-        video.load();
-      } else if (sourceType === 'audio') {
-        const audio = document.createElement('audio');
-        audio.src = fileUrl;
-        audio.preload = 'auto';
-
-        audio.addEventListener('canplaythrough', () => {
-          nestedClip.source = {
-            type: 'audio',
-            audioElement: audio,
-            naturalDuration: audio.duration,
-          };
-          nestedClip.isLoading = false;
-
-          notifyNestedReload();
-        }, { once: true });
-
-        audio.load();
-      } else if (sourceType === 'image') {
-        const img = new Image();
-        img.src = fileUrl;
-        img.crossOrigin = 'anonymous';
-
-        img.addEventListener('load', () => {
-          nestedClip.source = {
-            type: 'image',
-            imageElement: img,
-          };
-          nestedClip.isLoading = false;
-
-          notifyNestedReload();
-        }, { once: true });
-      }
+    const isCurrentNestedReload = () => {
+      const currentTimelineState = useTimelineStore.getState();
+      const currentClip = currentTimelineState.clips.find((clip) => clip.id === compClip.id);
+      return (
+        currentTimelineState.timelineSessionId === reloadTimelineSessionId &&
+        currentClip?.isComposition === true &&
+        currentClip.compositionId === compClip.compositionId
+      );
+    };
+    const {
+      calculateNestedClipBoundaries,
+      loadNestedClips,
+      generateCompThumbnails,
+    } = await import('../../stores/timeline/nestedCompositionLoader');
+    const nestedClips = await loadNestedClips({
+      compClipId: compClip.id,
+      composition,
+      get: useTimelineStore.getState,
+      set: useTimelineStore.setState,
+      getMediaState: useMediaStore.getState,
+      isCurrentTimelineSession: isCurrentNestedReload,
+      applySpatialFieldsWhenSourceMissing: false,
+    });
+    if (!isCurrentNestedReload()) {
+      continue;
     }
 
     // Update the composition clip with nested data
     if (nestedClips.length > 0) {
-      timelineStore.updateClip(compClip.id, {
+      const compDuration = composition.timelineData?.duration ?? composition.duration;
+      const nestedClipBoundaries = calculateNestedClipBoundaries(composition.timelineData, compDuration);
+
+      useTimelineStore.getState().updateClip(compClip.id, {
         nestedClips,
         nestedTracks,
+        nestedClipBoundaries,
         isLoading: false,
       });
 
       // Generate thumbnails if missing
       if (!compClip.thumbnails || compClip.thumbnails.length === 0) {
-        const { generateCompThumbnails } = await import('../../stores/timeline/clip/addCompClip');
-        const compDuration = composition.timelineData?.duration ?? composition.duration;
         generateCompThumbnails({
           clipId: compClip.id,
           nestedClips,
           compDuration,
-          thumbnailsEnabled: timelineStore.thumbnailsEnabled,
+          thumbnailsEnabled: useTimelineStore.getState().thumbnailsEnabled,
+          boundaries: nestedClipBoundaries,
           get: useTimelineStore.getState,
           set: useTimelineStore.setState,
         });

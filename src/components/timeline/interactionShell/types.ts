@@ -336,6 +336,7 @@ export interface ClipInteractionShellCommands {
     keyframeIds: string[],
     newTime: number,
     context: ClipInteractionShellCommandContext,
+    phase?: 'begin' | 'update' | 'commit',
   ) => void;
   onModuleCommand?: (
     slot: ClipInteractionShellModuleSlot,

@@ -2458,8 +2458,23 @@ export class RenderDispatcher {
     if (!imageData) {
       return false;
     }
+    let createdTexture: GPUTexture | null = null;
     try {
       const { width, height } = { width: imageData.width, height: imageData.height };
+      const gpuCacheAdmission = scrubbingCache.canCacheGpuFrame(time, {
+        width,
+        height,
+        format: 'rgba8unorm',
+        gpuBytes: width * height * 4,
+      });
+      if (!gpuCacheAdmission.admitted) {
+        log.debug('RAM preview GPU cache skipped by runtime admission', {
+          resourceId: gpuCacheAdmission.resourceId,
+          reason: gpuCacheAdmission.reason,
+          rejectedUnits: gpuCacheAdmission.rejectedUnits.map((entry) => entry.unit),
+        });
+        return false;
+      }
 
       let canvas = d.cacheManager.getRamPlaybackCanvas();
       let ctx = d.cacheManager.getRamPlaybackCtx();
@@ -2483,13 +2498,27 @@ export class RenderDispatcher {
         format: 'rgba8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       });
+      createdTexture = texture;
 
       device.queue.copyExternalImageToTexture({ source: canvas }, { texture }, [width, height]);
 
       const view = texture.createView();
       const bindGroup = d.outputPipeline.createOutputBindGroup(d.sampler, view);
 
-      scrubbingCache.addToGpuCache(time, { texture, view, bindGroup });
+      const cachedOnGpu = scrubbingCache.addToGpuCache(time, {
+        texture,
+        view,
+        bindGroup,
+        width,
+        height,
+        format: 'rgba8unorm',
+        gpuBytes: width * height * 4,
+      });
+      if (!cachedOnGpu) {
+        createdTexture = null;
+        return false;
+      }
+      createdTexture = null;
 
       const commandEncoder = device.createCommandEncoder();
       d.outputPipeline.renderToCanvas(commandEncoder, d.previewContext, bindGroup);
@@ -2506,6 +2535,7 @@ export class RenderDispatcher {
       device.queue.submit([commandEncoder.finish()]);
       return true;
     } catch (e) {
+      createdTexture?.destroy();
       log.warn('Failed to render cached frame', e);
       return false;
     }

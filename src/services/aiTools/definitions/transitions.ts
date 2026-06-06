@@ -11,7 +11,7 @@ export const transitionToolDefinitions: ToolDefinition[] = [
         properties: {
           clipAId: { type: 'string', description: 'The first clip ID (outgoing)' },
           clipBId: { type: 'string', description: 'The second clip ID (incoming)' },
-          type: { type: 'string', description: 'Transition type (e.g. "crossDissolve", "dip", "wipe", "slide")' },
+          type: { type: 'string', description: 'Transition type. Currently supported: "crossfade".' },
           duration: { type: 'number', description: 'Transition duration in seconds (default: 0.5)' },
         },
         required: ['clipAId', 'clipBId'],

@@ -1,4 +1,16 @@
 import type { TimelineClip, TimelineTrack } from '../../../types';
+import type {
+  FadeTransactionOperation,
+  KeyframeTransactionOperation,
+  KeyboardCycleBlendModeCommandOperation,
+  KeyboardDeleteCommandOperation,
+  TransitionApplyOperation,
+  TransitionClearPreviewOperation,
+  TransitionPreviewDropOperation,
+  TransitionRemoveOperation,
+  TransitionUpdateDurationOperation,
+} from './transactionTypes';
+import type { ResolvedClipMove } from './transactionTypes';
 
 export type TimelineEditOperationSource =
   | 'ui'
@@ -11,6 +23,7 @@ export type TimelineEditOperationSource =
 export type TimelineEditWarningCode =
   | 'export-locked'
   | 'clip-not-found'
+  | 'keyframe-not-found'
   | 'clip-locked'
   | 'track-locked'
   | 'invalid-time'
@@ -29,6 +42,7 @@ export interface ApplyTimelineEditOperationOptions {
   source: TimelineEditOperationSource;
   historyLabel?: string;
   previewOnly?: boolean;
+  deferHistoryCommit?: boolean;
   signal?: AbortSignal;
 }
 
@@ -127,6 +141,11 @@ export interface MoveClipsOperation extends TimelineEditOperationBase {
   type: 'move-clips';
   moves: TimelineClipMove[];
   includeLinked?: boolean;
+}
+
+export interface MoveClipsResolvedApplyOperation extends TimelineEditOperationBase {
+  type: 'move-clips-resolved';
+  resolvedMoves: ResolvedClipMove[];
 }
 
 export interface TrimClipOperation extends TimelineEditOperationBase {
@@ -239,9 +258,19 @@ export type TimelineEditOperation =
   | SelectClipsFromTimeOperation
   | RippleDeleteSelectionOperation
   | DeleteClipsOperation
+  | FadeTransactionOperation
+  | KeyframeTransactionOperation
+  | KeyboardDeleteCommandOperation
+  | KeyboardCycleBlendModeCommandOperation
+  | TransitionApplyOperation
+  | TransitionRemoveOperation
+  | TransitionUpdateDurationOperation
+  | TransitionPreviewDropOperation
+  | TransitionClearPreviewOperation
   | DeleteGapAtTimeOperation
   | DeleteAllGapsOperation
   | MoveClipsOperation
+  | MoveClipsResolvedApplyOperation
   | TrimClipOperation
   | TrimEdgeToTimeOperation
   | RippleTrimEdgeToTimeOperation

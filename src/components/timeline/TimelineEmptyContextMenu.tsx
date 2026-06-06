@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import type { TimelineEmptyContextMenuState } from './types';
+import { createTimelineEmptyContextMenuModel } from './utils/timelineEmptyContextMenu';
 
 interface TimelineEmptyContextMenuProps {
   menu: TimelineEmptyContextMenuState | null;
@@ -43,6 +44,19 @@ export function TimelineEmptyContextMenu({
 
   if (!menu) return null;
 
+  const contextMenuModel = createTimelineEmptyContextMenuModel({
+    time: menu.time,
+    trackId: menu.trackId,
+    onEraseGap,
+    onEraseLayerGaps,
+    onEraseAllGaps,
+    onFitCompToWindow,
+  });
+  const runCommand = (action: () => void) => {
+    action();
+    onClose();
+  };
+
   return (
     <div
       ref={menuRef}
@@ -57,43 +71,25 @@ export function TimelineEmptyContextMenu({
       onMouseDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.stopPropagation()}
     >
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onEraseGap(menu.time, menu.trackId);
-          onClose();
-        }}
-      >
-        Erase Space Between Clips
-      </div>
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onEraseLayerGaps(menu.time, menu.trackId);
-          onClose();
-        }}
-      >
-        Erase Space Between All Clips in This Layer
-      </div>
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onEraseAllGaps();
-          onClose();
-        }}
-      >
-        Erase Space Between All Clips
-      </div>
+      {contextMenuModel.gapCommands.map(command => (
+        <div
+          key={command.key}
+          className="context-menu-item"
+          onClick={() => runCommand(command.action)}
+        >
+          {command.label}
+        </div>
+      ))}
       <div className="context-menu-separator" />
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onFitCompToWindow();
-          onClose();
-        }}
-      >
-        Fit Comp to Window
-      </div>
+      {contextMenuModel.viewCommands.map(command => (
+        <div
+          key={command.key}
+          className="context-menu-item"
+          onClick={() => runCommand(command.action)}
+        >
+          {command.label}
+        </div>
+      ))}
     </div>
   );
 }

@@ -202,7 +202,7 @@ FFmpeg exports can still receive raw audio because they use `exportRawAudio()`.
 `src/components/panels/properties/AudioEqualizerInstanceList.tsx`,
 `src/components/panels/properties/VolumeTab.tsx`, `src/components/panels/properties/EffectsTab.tsx`,
 `src/components/panels/properties/AudioEditStackTab.tsx`,
-`src/components/timeline/components/ClipSpectrogram.tsx`,
+`src/components/timeline/utils/spectrogramCanvas.ts`, `src/services/timeline/timelineSpectrogramArtifactWarmup.ts`,
 `src/components/panels/nodes/NodeWorkspacePanel.tsx`,
 `src/components/panels/properties/index.tsx`, `src/components/export/ExportPanel.tsx`,
 `src/services/audio/AudioRecordingService.ts`,

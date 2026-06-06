@@ -6,11 +6,18 @@ import {
   runTimelinePlacementCommand,
   showTimelinePlacementCommandPreview,
 } from '../../src/services/timelinePlacementCommands';
+import { NativeHelperClient } from '../../src/services/nativeHelper/NativeHelperClient';
+import {
+  getPrimaryMediaObjectUrlKey,
+  mediaObjectUrlManager,
+  revokeAllMediaObjectUrls,
+} from '../../src/services/project/mediaObjectUrlManager';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const mockedGetMediaState = useMediaStore.getState as unknown as ReturnType<typeof vi.fn>;
+const mockedSetMediaState = useMediaStore.setState as unknown as ReturnType<typeof vi.fn>;
 
 function setMediaState(overrides: Record<string, unknown> = {}): void {
   mockedGetMediaState.mockReturnValue({
@@ -70,6 +77,9 @@ describe('timeline placement commands', () => {
       duration: 60,
     });
     setMediaState();
+    mockedSetMediaState.mockClear();
+    revokeAllMediaObjectUrls();
+    vi.restoreAllMocks();
   });
 
   it('inserts the selected media-panel source at the playhead and ripples existing clips', async () => {
@@ -144,6 +154,82 @@ describe('timeline placement commands', () => {
     expect(source?.duration).toBe(5);
     expect(source?.sourceInPoint).toBe(2);
     expect(source?.naturalDuration).toBe(12);
+  });
+
+  it('stores NativeHelper-resolved placement files under the managed primary media URL key', async () => {
+    const resolvedFile = new File(['image'], 'Resolved.png', { type: 'image/png' });
+    const nativeClient = NativeHelperClient as unknown as {
+      parseFileReferenceUrl: ReturnType<typeof vi.fn>;
+      getReferencedFile: ReturnType<typeof vi.fn>;
+    };
+    nativeClient.parseFileReferenceUrl = vi.fn().mockReturnValue('C:/Images/Resolved.png');
+    nativeClient.getReferencedFile = vi.fn().mockResolvedValue(resolvedFile);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:managed-placement-source');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+    setMediaState({
+      files: [{
+        id: 'native-video-source',
+        name: 'Resolved.png',
+        type: 'image',
+        parentId: null,
+        createdAt: 1,
+        url: 'native-helper-file://C:/Images/Resolved.png',
+        duration: 12,
+        hasAudio: false,
+      }],
+      selectedIds: ['native-video-source'],
+    });
+    const addClip = vi.fn(async (
+      trackId: string,
+      file: File,
+      startTime: number,
+      duration: number,
+      mediaFileId?: string,
+      _mediaTypeOverride?: string,
+      options?: { source?: { naturalDuration?: number } },
+    ) => {
+      const clipId = 'placed-native-source';
+      useTimelineStore.setState((state) => ({
+        clips: [
+          ...state.clips,
+          createMockClip({
+            id: clipId,
+            trackId,
+            file,
+            mediaFileId,
+            startTime,
+            duration,
+            inPoint: 0,
+            outPoint: duration,
+            source: options?.source ?? null,
+          }),
+        ],
+      }));
+      return clipId;
+    });
+    type AddClip = ReturnType<typeof useTimelineStore.getState>['addClip'];
+    useTimelineStore.setState({ addClip: addClip as unknown as AddClip });
+
+    const result = await runTimelinePlacementCommand('overwrite');
+    const created = useTimelineStore.getState().clips.find((clip) => clip.id === result.createdClipId);
+    const mediaPatch = mockedSetMediaState.mock.calls.at(-1)?.[0] as ((state: { files: unknown[] }) => { files: unknown[] }) | undefined;
+    const nextMediaState = mediaPatch?.({
+      files: useMediaStore.getState().files,
+    }) as { files: Array<{ id: string; file?: File; url?: string; hasFileHandle?: boolean; absolutePath?: string }> } | undefined;
+
+    expect(result.success).toBe(true);
+    expect(nativeClient.getReferencedFile).toHaveBeenCalledWith('native-helper-file://C:/Images/Resolved.png', 'Resolved.png');
+    expect(created?.mediaFileId).toBe('native-video-source');
+    expect(created?.file).toBe(resolvedFile);
+    expect(mediaObjectUrlManager.get('native-video-source', getPrimaryMediaObjectUrlKey())).toBe('blob:managed-placement-source');
+    expect(nextMediaState?.files[0]).toMatchObject({
+      id: 'native-video-source',
+      file: resolvedFile,
+      url: 'blob:managed-placement-source',
+      hasFileHandle: true,
+      absolutePath: 'C:/Images/Resolved.png',
+    });
   });
 
   it('builds a non-mutating placement ghost preview from the current source', () => {

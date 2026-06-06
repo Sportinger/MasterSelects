@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import type { TimelineClipProps } from '../types';
 import type { ClipKeyframeTickGroupView } from '../components/ClipKeyframeTicks';
 
 const KEYFRAME_TICK_SNAP_THRESHOLD_PX = 10;
 
-type MoveKeyframeGroup = TimelineClipProps['onMoveKeyframeGroup'];
+type MoveKeyframeGroup = ((keyframeIds: string[], newTime: number) => void) | undefined;
+type KeyframeGroupDragLifecycle = ((keyframeIds: string[], time: number) => void) | undefined;
 
 type KeyframeGroupDragState = {
   keyframeIds: string[];
@@ -19,7 +19,17 @@ export function useClipKeyframeTickDrag(input: {
   displayDuration: number;
   width: number;
   onMoveKeyframeGroup: MoveKeyframeGroup;
+  onKeyframeGroupDragBegin?: KeyframeGroupDragLifecycle;
+  onKeyframeGroupDragCommit?: KeyframeGroupDragLifecycle;
 }) {
+  const {
+    keyframeTickGroups,
+    displayDuration,
+    width,
+    onMoveKeyframeGroup,
+    onKeyframeGroupDragBegin,
+    onKeyframeGroupDragCommit,
+  } = input;
   const [keyframeGroupDrag, setKeyframeGroupDrag] = useState<KeyframeGroupDragState | null>(null);
 
   const handleKeyframeTickMouseDown = useCallback((
@@ -29,20 +39,21 @@ export function useClipKeyframeTickDrag(input: {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    if (!input.onMoveKeyframeGroup || group.keyframeIds.length === 0) return;
+    if (!onMoveKeyframeGroup || group.keyframeIds.length === 0) return;
+    onKeyframeGroupDragBegin?.(group.keyframeIds, group.time);
 
     setKeyframeGroupDrag({
       keyframeIds: group.keyframeIds,
       startX: e.clientX,
       startTime: group.time,
-      clipWidth: Math.max(1, input.width),
-      clipDuration: Math.max(0.001, input.displayDuration),
+      clipWidth: Math.max(1, width),
+      clipDuration: Math.max(0.001, displayDuration),
     });
-  }, [input.displayDuration, input.onMoveKeyframeGroup, input.width]);
+  }, [displayDuration, onKeyframeGroupDragBegin, onMoveKeyframeGroup, width]);
 
   useEffect(() => {
-    if (!keyframeGroupDrag || !input.onMoveKeyframeGroup) return;
-    const onMoveKeyframeGroup = input.onMoveKeyframeGroup;
+    if (!keyframeGroupDrag || !onMoveKeyframeGroup) return;
+    let latestResolvedTime = keyframeGroupDrag.startTime;
 
     const handleDocumentMouseMove = (e: MouseEvent) => {
       e.preventDefault();
@@ -57,7 +68,7 @@ export function useClipKeyframeTickDrag(input: {
         const movingIds = new Set(keyframeGroupDrag.keyframeIds);
         let bestDistancePx = KEYFRAME_TICK_SNAP_THRESHOLD_PX;
 
-        for (const group of input.keyframeTickGroups) {
+        for (const group of keyframeTickGroups) {
           if (group.keyframeIds.some(id => movingIds.has(id))) continue;
 
           const distancePx = Math.abs(
@@ -71,10 +82,12 @@ export function useClipKeyframeTickDrag(input: {
         }
       }
 
+      latestResolvedTime = newTime;
       onMoveKeyframeGroup(keyframeGroupDrag.keyframeIds, newTime);
     };
 
     const handleDocumentMouseUp = () => {
+      onKeyframeGroupDragCommit?.(keyframeGroupDrag.keyframeIds, latestResolvedTime);
       setKeyframeGroupDrag(null);
     };
 
@@ -85,7 +98,7 @@ export function useClipKeyframeTickDrag(input: {
       document.removeEventListener('mousemove', handleDocumentMouseMove);
       document.removeEventListener('mouseup', handleDocumentMouseUp);
     };
-  }, [input.keyframeTickGroups, input.onMoveKeyframeGroup, keyframeGroupDrag]);
+  }, [keyframeTickGroups, onKeyframeGroupDragCommit, onMoveKeyframeGroup, keyframeGroupDrag]);
 
   return {
     keyframeGroupDrag,

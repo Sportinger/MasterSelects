@@ -18,6 +18,7 @@ import {
   updateRuntimePlaybackTime,
 } from '../../src/services/mediaRuntime/runtimePlayback';
 import { WebCodecsPlayer } from '../../src/engine/WebCodecsPlayer';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import type { TimelineClip } from '../../src/types';
 import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
 
@@ -111,6 +112,7 @@ function makeCloneableVideoFrame(
 describe('media runtime bindings', () => {
   beforeEach(() => {
     mediaRuntimeRegistry.clear();
+    timelineRuntimeCoordinator.clearResources();
     setMediaFiles([]);
     vi.mocked(WebCodecsPlayer).mockReset();
   });
@@ -790,6 +792,69 @@ describe('media runtime bindings', () => {
         'interactive-scrub:track-1:media:media-scrub-separate'
       )
     ).toBeNull();
+  });
+
+  it('does not construct an interactive runtime provider when frame-provider admission is denied', async () => {
+    for (let index = 0; index < 8; index += 1) {
+      timelineRuntimeCoordinator.retainResource({
+        id: `existing-interactive-provider-${index}`,
+        kind: 'video-frame-provider',
+        policyId: 'interactive',
+        owner: {
+          ownerId: `existing-interactive-provider-${index}`,
+          ownerType: 'timeline',
+        },
+        providerId: `existing-interactive-provider-${index}`,
+        providerKind: 'webcodecs',
+      });
+    }
+
+    const file = new File(['video'], 'scrub-denied.mp4', { type: 'video/mp4', lastModified: 82 });
+    setMediaFiles([
+      {
+        id: 'media-scrub-denied',
+        file,
+        name: 'scrub-denied.mp4',
+        duration: 9,
+      },
+    ]);
+
+    const previewPlayer = {
+      currentTime: 0,
+      isPlaying: false,
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      getCurrentFrame: () => null,
+      seek: vi.fn(),
+      pause: vi.fn(),
+      getDebugInfo: vi.fn().mockReturnValue(null),
+    };
+
+    const source = bindSourceRuntimeToClip({
+      clipId: 'clip-scrub-denied',
+      source: {
+        type: 'video',
+        naturalDuration: 9,
+        mediaFileId: 'media-scrub-denied',
+        webCodecsPlayer: asWebCodecsPlayer(previewPlayer),
+      },
+      file,
+      mediaFileId: 'media-scrub-denied',
+    });
+    const scrubSource = getScrubRuntimeSource(source, 'track-1', true);
+
+    const provider = await ensureRuntimeFrameProvider(scrubSource, 'interactive', 3.25);
+
+    expect(provider).toBeNull();
+    expect(WebCodecsPlayer).not.toHaveBeenCalled();
+    expect(
+      mediaRuntimeRegistry.getSession(
+        'media:media-scrub-denied',
+        'interactive-scrub:track-1:media:media-scrub-denied'
+      )
+    ).toBeNull();
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.budgetReport.usage.frameProviders).toBe(8);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources).toHaveLength(8);
   });
 
   it('reuses a shared cached frame across simultaneous same-source sessions at the same source time', () => {

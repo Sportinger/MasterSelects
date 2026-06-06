@@ -42,6 +42,18 @@ export function getCachedTimelineSpectrogramTileSet(
   return key ? timelineSpectrogramTileSetCache.get(key) ?? null : null;
 }
 
+export function evictTimelineSpectrogramTileSetRefs(
+  keys: Iterable<string | undefined>,
+): number {
+  let removed = 0;
+  for (const key of keys) {
+    if (key && timelineSpectrogramTileSetCache.delete(key)) {
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 function getManifestFrameCount(manifest: SpectrogramTileSetManifest): number {
   return Math.max(0, ...manifest.tiles.map(tile => tile.frameStart + tile.frameCount));
 }

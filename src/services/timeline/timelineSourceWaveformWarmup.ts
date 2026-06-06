@@ -189,22 +189,6 @@ export async function warmTimelineSourceWaveformGeneration(
   return generation;
 }
 
-export async function warmVisibleTimelineSourceWaveforms(
-  requests: readonly TimelineSourceWaveformGenerationRequest[],
-  options: TimelineSourceWaveformWarmupOptions = {},
-): Promise<TimelineSourceWaveformWarmupResult[]> {
-  const results: TimelineSourceWaveformWarmupResult[] = [];
-  const seen = new Set<string>();
-
-  for (const request of requests) {
-    if (seen.has(request.requestKey)) continue;
-    seen.add(request.requestKey);
-    results.push(await warmTimelineSourceWaveformGeneration(request, options));
-  }
-
-  return results;
-}
-
 export function scheduleVisibleTimelineSourceWaveformGeneration(
   requests: readonly TimelineSourceWaveformGenerationRequest[],
   options: TimelineSourceWaveformWarmupOptions = {},

@@ -5,6 +5,7 @@ import type { GaussianSplatSequenceData, TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { generateClipId } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
+import { createPrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 import {
   resolveGaussianSplatSettingsForSource,
 } from '../../../engine/gaussian/types';
@@ -92,9 +93,14 @@ export function loadGaussianSplatMedia(params: LoadGaussianSplatMediaParams): vo
   try {
     const sequenceFrame = clip.source?.gaussianSplatSequence?.frames[0];
     const renderableFile = clip.file?.size ? clip.file : undefined;
+    const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
     const gaussianSplatUrl = sequenceFrame?.splatUrl
       ?? clip.source?.gaussianSplatUrl
-      ?? (renderableFile ? blobUrlManager.create(clip.id, renderableFile, 'model') : undefined);
+      ?? (renderableFile
+        ? mediaFileId
+          ? createPrimaryMediaObjectUrl(mediaFileId, renderableFile, { revokeExisting: false })
+          : blobUrlManager.create(clip.id, renderableFile, 'model')
+        : undefined);
     const gaussianSplatFileName =
       sequenceFrame?.name ??
       clip.source?.gaussianSplatFileName ??

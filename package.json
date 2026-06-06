@@ -24,6 +24,7 @@
     "test:security": "vitest run tests/security/ tests/unit/aiToolPolicy.test.ts tests/unit/logRedaction.test.ts tests/unit/redact.test.ts --reporter=verbose",
     "fixtures:torture-media": "node scripts/prepare-torture-media.mjs",
     "torture:bridge-fast": "node scripts/run-torture-bridge-fast.mjs",
+    "timeline:canvas:verify": "node scripts/run-timeline-canvas-verification.mjs",
     "swarm:status": "node scripts/swarm-status.mjs once",
     "swarm:status:watch": "node scripts/swarm-status.mjs watch",
     "codex:usage": "node scripts/codex-session-monitor.mjs once",

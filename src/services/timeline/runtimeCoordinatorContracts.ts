@@ -3,6 +3,7 @@ import {
   type RenderResourceDescriptor,
   type RenderResourceKind,
   type RuntimeHealthStatus,
+  type TimelineRuntimeAdmissionDecision,
   type TimelineRuntimeBudgetPressure,
   type TimelineRuntimeBudgetUnit,
   type TimelineRuntimeCoordinator,
@@ -27,6 +28,7 @@ export {
   type RuntimeResourceMemoryCost,
   type RuntimeResourceOwnerDescriptor,
   type RuntimeSessionHealthDiagnostics,
+  type TimelineRuntimeAdmissionDecision,
   type TimelineRuntimeBudgetPressure,
   type TimelineRuntimeCoordinator,
   type TimelineRuntimeCoordinatorBridgeStats,
@@ -44,11 +46,13 @@ export const RENDER_RESOURCE_KINDS = [
   'image-canvas',
   'native-decoder',
   'nested-composition-texture',
+  'gpu-texture',
   'model',
   'gaussian-splat',
   'motion-data',
   'audio-source-clock',
   'runtime-binding',
+  'job',
 ] as const satisfies readonly RenderResourceKind[];
 
 const INTERACTIVE_RESOURCE_KINDS = [
@@ -57,11 +61,13 @@ const INTERACTIVE_RESOURCE_KINDS = [
   'image-canvas',
   'native-decoder',
   'nested-composition-texture',
+  'gpu-texture',
   'model',
   'gaussian-splat',
   'motion-data',
   'audio-source-clock',
   'runtime-binding',
+  'job',
 ] as const satisfies readonly RenderResourceKind[];
 
 const NON_INTERACTIVE_RESOURCE_KINDS = [
@@ -70,11 +76,13 @@ const NON_INTERACTIVE_RESOURCE_KINDS = [
   'image-canvas',
   'native-decoder',
   'nested-composition-texture',
+  'gpu-texture',
   'model',
   'gaussian-splat',
   'motion-data',
   'audio-source-clock',
   'runtime-binding',
+  'job',
 ] as const satisfies readonly RenderResourceKind[];
 
 export const TIMELINE_RUNTIME_POLICY_DESCRIPTORS = [
@@ -184,9 +192,10 @@ export const TIMELINE_RUNTIME_POLICY_DESCRIPTORS = [
       'image-canvas',
       'native-decoder',
       'runtime-binding',
+      'job',
     ],
     defaultBudget: {
-      maxResources: 32,
+      maxResources: 288,
       maxSessions: 8,
       maxFrameProviders: 4,
       maxHtmlMediaElements: 4,
@@ -289,6 +298,61 @@ export function createEmptyPolicyUsage(): TimelineRuntimePolicyUsage {
     heapBytes: 0,
     gpuBytes: 0,
   };
+}
+
+function addPolicyUsage(
+  left: TimelineRuntimePolicyUsage,
+  right: TimelineRuntimePolicyUsage
+): TimelineRuntimePolicyUsage {
+  return {
+    resources: left.resources + right.resources,
+    sessions: left.sessions + right.sessions,
+    frameProviders: left.frameProviders + right.frameProviders,
+    htmlMediaElements: left.htmlMediaElements + right.htmlMediaElements,
+    nativeDecoders: left.nativeDecoders + right.nativeDecoders,
+    gpuTextures: left.gpuTextures + right.gpuTextures,
+    imageBitmaps: left.imageBitmaps + right.imageBitmaps,
+    audioSources: left.audioSources + right.audioSources,
+    jobs: left.jobs + right.jobs,
+    heapBytes: left.heapBytes + right.heapBytes,
+    gpuBytes: left.gpuBytes + right.gpuBytes,
+  };
+}
+
+function createUsageForResources(
+  resources: readonly RenderResourceDescriptor[]
+): TimelineRuntimePolicyUsage {
+  const sessionKeys = new Set<string>();
+  const usage = createEmptyPolicyUsage();
+  usage.resources = resources.length;
+
+  for (const resource of resources) {
+    const sessionKey = resource.runtime?.runtimeSessionKey
+      ?? resource.diagnostics?.session?.sessionKey;
+    if (sessionKey) {
+      sessionKeys.add(sessionKey);
+    }
+
+    if (resource.kind === 'video-frame-provider') usage.frameProviders += 1;
+    if (resource.kind === 'html-media') {
+      usage.htmlMediaElements += 1;
+      if (resource.mediaElementKind === 'audio') {
+        usage.audioSources += 1;
+      }
+    }
+    if (resource.kind === 'native-decoder') usage.nativeDecoders += 1;
+    if (resource.kind === 'image-canvas') usage.imageBitmaps += 1;
+    if (resource.kind === 'nested-composition-texture') usage.gpuTextures += 1;
+    if (resource.kind === 'gpu-texture') usage.gpuTextures += 1;
+    if (resource.kind === 'audio-source-clock') usage.audioSources += 1;
+    if (resource.kind === 'job') usage.jobs += 1;
+
+    usage.heapBytes += resource.memoryCost?.heapBytes ?? 0;
+    usage.gpuBytes += resource.memoryCost?.gpuBytes ?? 0;
+  }
+
+  usage.sessions = sessionKeys.size;
+  return usage;
 }
 
 export function getBudgetLimit(
@@ -394,6 +458,12 @@ export function createBudgetPressure(
   });
 }
 
+function getRejectedBudgetUnits(
+  pressure: readonly TimelineRuntimeBudgetPressure[]
+): readonly TimelineRuntimeBudgetPressure[] {
+  return pressure.filter((entry) => entry.limit !== undefined && entry.used > entry.limit);
+}
+
 export function createEmptyBudgetReport(
   descriptor: TimelineRuntimePolicyDescriptor
 ): TimelineRuntimePolicyBudgetReport {
@@ -407,6 +477,20 @@ export function createEmptyBudgetReport(
   };
 }
 
+function createBudgetReportForResources(
+  descriptor: TimelineRuntimePolicyDescriptor,
+  resources: readonly RenderResourceDescriptor[]
+): TimelineRuntimePolicyBudgetReport {
+  const usage = createUsageForResources(resources);
+  return {
+    policyId: descriptor.id,
+    budget: descriptor.defaultBudget,
+    usage,
+    pressure: createBudgetPressure(descriptor.defaultBudget, usage),
+    diagnostics: resources.flatMap((resource) => resource.diagnostics?.messages ?? []),
+  };
+}
+
 function createEmptyPolicyBridgeStats(
   descriptor: TimelineRuntimePolicyDescriptor
 ): TimelineRuntimePolicyBridgeStats {
@@ -415,6 +499,20 @@ function createEmptyPolicyBridgeStats(
     budgetReport: createEmptyBudgetReport(descriptor),
     resources: [],
     sessions: [],
+  };
+}
+
+function createPolicyBridgeStats(
+  descriptor: TimelineRuntimePolicyDescriptor,
+  resources: readonly RenderResourceDescriptor[]
+): TimelineRuntimePolicyBridgeStats {
+  return {
+    descriptor,
+    budgetReport: createBudgetReportForResources(descriptor, resources),
+    resources,
+    sessions: resources
+      .map((resource) => resource.diagnostics?.session)
+      .filter((session): session is NonNullable<typeof session> => Boolean(session)),
   };
 }
 
@@ -456,18 +554,137 @@ export function createTimelineRuntimePolicyRegistry(
   const policiesById = new Map<TimelineRuntimePolicyId, TimelineRuntimePolicyDescriptor>(
     descriptors.map((descriptor) => [descriptor.id, descriptor])
   );
+  const resourcesById = new Map<string, RenderResourceDescriptor>();
+
+  const listResourcesForPolicy = (policyId: TimelineRuntimePolicyId): RenderResourceDescriptor[] =>
+    Array.from(resourcesById.values()).filter((resource) => resource.policyId === policyId);
 
   return {
     listPolicies: () => descriptors,
     getPolicy: (policyId) => policiesById.get(policyId) ?? null,
+    canRetainResource: (resource): TimelineRuntimeAdmissionDecision => {
+      const resourceId = typeof resource.id === 'string' ? resource.id : 'invalid-resource';
+      if (!isRenderResourceDescriptor(resource)) {
+        return {
+          admitted: false,
+          resourceId,
+          reason: 'invalid-resource-descriptor',
+          projectedUsage: createEmptyPolicyUsage(),
+          pressure: [],
+          rejectedUnits: [],
+        };
+      }
+
+      const descriptor = policiesById.get(resource.policyId);
+      if (!descriptor) {
+        return {
+          admitted: false,
+          resourceId: resource.id,
+          policyId: resource.policyId,
+          reason: 'unknown-policy',
+          projectedUsage: createEmptyPolicyUsage(),
+          pressure: [],
+          rejectedUnits: [],
+        };
+      }
+
+      if (!descriptor.allowedResourceKinds.includes(resource.kind)) {
+        const projectedUsage = createUsageForResources([resource]);
+        const pressure = createBudgetPressure(descriptor.defaultBudget, projectedUsage);
+        return {
+          admitted: false,
+          resourceId: resource.id,
+          policyId: resource.policyId,
+          reason: 'resource-kind-not-allowed',
+          projectedUsage,
+          pressure,
+          rejectedUnits: [],
+        };
+      }
+
+      const projectedResources = [
+        ...listResourcesForPolicy(resource.policyId).filter((entry) => entry.id !== resource.id),
+        resource,
+      ];
+      const projectedUsage = createUsageForResources(projectedResources);
+      const pressure = createBudgetPressure(descriptor.defaultBudget, projectedUsage);
+      const rejectedUnits = getRejectedBudgetUnits(pressure);
+
+      return {
+        admitted: rejectedUnits.length === 0,
+        resourceId: resource.id,
+        policyId: resource.policyId,
+        reason: rejectedUnits.length > 0 ? 'budget-exceeded' : undefined,
+        projectedUsage,
+        pressure,
+        rejectedUnits,
+      };
+    },
+    retainResource: (resource) => {
+      if (!isRenderResourceDescriptor(resource)) {
+        return;
+      }
+      if (!policiesById.has(resource.policyId)) {
+        return;
+      }
+      resourcesById.set(resource.id, JSON.parse(JSON.stringify(resource)) as RenderResourceDescriptor);
+    },
+    releaseResource: (resourceId) => {
+      resourcesById.delete(resourceId);
+    },
+    clearResources: (scope) => {
+      if (!scope?.ownerId && !scope?.policyId) {
+        resourcesById.clear();
+        return;
+      }
+      for (const [resourceId, resource] of resourcesById) {
+        if (scope.ownerId && resource.owner.ownerId !== scope.ownerId) continue;
+        if (scope.policyId && resource.policyId !== scope.policyId) continue;
+        resourcesById.delete(resourceId);
+      }
+    },
     getBudgetReport: (policyId) => {
       if (policyId) {
         const descriptor = policiesById.get(policyId);
-        return descriptor ? [createEmptyBudgetReport(descriptor)] : [];
+        return descriptor ? [createBudgetReportForResources(descriptor, listResourcesForPolicy(policyId))] : [];
       }
-      return descriptors.map((descriptor) => createEmptyBudgetReport(descriptor));
+      return descriptors.map((descriptor) =>
+        createBudgetReportForResources(descriptor, listResourcesForPolicy(descriptor.id))
+      );
     },
-    getBridgeStats: () => createEmptyTimelineRuntimeBridgeStats(Date.now()),
+    getBridgeStats: () => {
+      const policyEntries = descriptors.map((descriptor) => {
+        const resources = listResourcesForPolicy(descriptor.id);
+        return [descriptor.id, createPolicyBridgeStats(descriptor, resources)] as const;
+      });
+      const policies = Object.fromEntries(policyEntries) as Record<
+        TimelineRuntimePolicyId,
+        TimelineRuntimePolicyBridgeStats
+      >;
+      const resources = Array.from(resourcesById.values());
+      const totals = Object.values(policies).reduce(
+        (sum, policy) => addPolicyUsage(sum, policy.budgetReport.usage),
+        createEmptyPolicyUsage()
+      );
+
+      return {
+        schemaVersion: 1,
+        generatedAtMs: Date.now(),
+        policyOrder: descriptors.map((descriptor) => descriptor.id),
+        policies,
+        totals,
+        diagnostics: {
+          providers: resources
+            .map((resource) => resource.diagnostics?.provider)
+            .filter((provider): provider is NonNullable<typeof provider> => Boolean(provider)),
+          sessions: resources
+            .map((resource) => resource.diagnostics?.session)
+            .filter((session): session is NonNullable<typeof session> => Boolean(session)),
+          resources,
+          messages: resources.flatMap((resource) => resource.diagnostics?.messages ?? []),
+        },
+      };
+    },
   };
 }
 
@@ -507,6 +724,8 @@ export function isRenderResourceDescriptor(value: unknown): value is RenderResou
         typeof value.textureId === 'string' &&
         typeof value.depth === 'number'
       );
+    case 'gpu-texture':
+      return typeof value.textureId === 'string' && typeof value.textureKind === 'string';
     case 'model':
       return typeof value.modelId === 'string' && typeof value.modelKind === 'string';
     case 'gaussian-splat':
@@ -521,6 +740,8 @@ export function isRenderResourceDescriptor(value: unknown): value is RenderResou
         typeof value.runtime.runtimeSourceId === 'string' &&
         typeof value.runtime.runtimeSessionKey === 'string'
       );
+    case 'job':
+      return typeof value.jobId === 'string' && typeof value.jobKind === 'string';
     default:
       return false;
   }

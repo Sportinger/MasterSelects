@@ -209,6 +209,52 @@ describe('guided DOM target resolvers', () => {
     expect(resolution.center).toEqual({ x: 415, y: 120 });
   });
 
+  it('resolves canvas shell trim and fade handles from guided start/end edges', async () => {
+    const registry = new GuidedTargetRegistry();
+    registerDomGuidedTargetResolvers(registry);
+
+    const shell = addElement({
+      class: 'clip-interaction-shell',
+      'data-clip-id': 'clip-1',
+    }, {
+      x: 100,
+      y: 100,
+      width: 220,
+      height: 40,
+    });
+    const trimHandle = addElement({ 'data-shell-trim-edge': 'left' }, {
+      x: 100,
+      y: 100,
+      width: 8,
+      height: 40,
+    });
+    const fadeHandle = addElement({ 'data-shell-fade-edge': 'right' }, {
+      x: 308,
+      y: 104,
+      width: 12,
+      height: 12,
+    });
+    shell.appendChild(trimHandle);
+    shell.appendChild(fadeHandle);
+
+    await expect(registry.resolve({
+      kind: 'timelineTrimHandle',
+      clipId: 'clip-1',
+      edge: 'start',
+    })).resolves.toEqual(expect.objectContaining({
+      status: 'resolved',
+      center: { x: 104, y: 120 },
+    }));
+    await expect(registry.resolve({
+      kind: 'timelineFadeHandle',
+      clipId: 'clip-1',
+      edge: 'end',
+    })).resolves.toEqual(expect.objectContaining({
+      status: 'resolved',
+      center: { x: 314, y: 110 },
+    }));
+  });
+
   it('resolves mask vertex, handle, and edge SVG targets by stable mask ids', async () => {
     const registry = new GuidedTargetRegistry();
     registerDomGuidedTargetResolvers(registry);

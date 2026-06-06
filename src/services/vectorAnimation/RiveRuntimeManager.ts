@@ -32,6 +32,11 @@ import type {
   PreparedRiveAsset,
   RiveRuntimePrepareResult,
 } from './types';
+import {
+  createVectorRuntimeAdmissionError,
+  reserveVectorRuntimeCanvasResource,
+  type VectorRuntimePrepareOptions,
+} from './vectorRuntimeReporting';
 
 const log = Logger.create('RiveRuntime');
 const DEFAULT_CANVAS_SIZE = 512;
@@ -44,6 +49,8 @@ interface RiveRuntimeEntry {
   clipId: string;
   isReady: boolean;
   player: Rive;
+  releaseRuntimeResource?: () => void;
+  runtimeResourceId?: string;
   settingsKey: string;
   instanceKey: string;
   activeStateMachineName?: string;
@@ -255,6 +262,43 @@ function getDataBindingPropertiesForSettings(
     : properties;
 }
 
+const rivePrepareFileIds = new WeakMap<File, number>();
+let nextRivePrepareFileId = 1;
+
+function getPrepareFileKey(file: File | undefined): string {
+  if (!file) {
+    return 'none';
+  }
+
+  let id = rivePrepareFileIds.get(file);
+  if (!id) {
+    id = nextRivePrepareFileId;
+    nextRivePrepareFileId += 1;
+    rivePrepareFileIds.set(file, id);
+  }
+
+  return `${id}:${file.name}:${file.size}:${file.lastModified}:${file.type}`;
+}
+
+function getPrepareRuntimeOptionsKey(options?: VectorRuntimePrepareOptions): string {
+  if (!options) {
+    return 'default';
+  }
+  return [
+    options.policyId ?? 'interactive',
+    options.ownerId ?? 'default-owner',
+    options.resourceId ?? 'default-resource',
+  ].join(':');
+}
+
+function getPreparePromiseKey(
+  clip: TimelineClip,
+  fileOverride?: File,
+  runtimeOptions?: VectorRuntimePrepareOptions,
+): string {
+  return `${clip.id}:${getPrepareFileKey(fileOverride ?? clip.file)}:${getPrepareRuntimeOptionsKey(runtimeOptions)}`;
+}
+
 export class RiveRuntimeManager {
   private entries = new Map<string, RiveRuntimeEntry>();
   private preparePromises = new Map<string, Promise<RiveRuntimePrepareResult>>();
@@ -262,27 +306,30 @@ export class RiveRuntimeManager {
   async prepareClipSource(
     clip: TimelineClip,
     fileOverride?: File,
+    runtimeOptions?: VectorRuntimePrepareOptions,
   ): Promise<RiveRuntimePrepareResult> {
     if (clip.source?.type !== 'rive') {
       throw new Error(`prepareClipSource called for non-Rive clip ${clip.id}`);
     }
 
-    const existingPromise = this.preparePromises.get(clip.id);
+    const preparePromiseKey = getPreparePromiseKey(clip, fileOverride, runtimeOptions);
+    const existingPromise = this.preparePromises.get(preparePromiseKey);
     if (existingPromise) {
       return existingPromise;
     }
 
-    const preparePromise = this.prepareClipSourceInternal(clip, fileOverride).finally(() => {
-      this.preparePromises.delete(clip.id);
+    const preparePromise = this.prepareClipSourceInternal(clip, fileOverride, runtimeOptions).finally(() => {
+      this.preparePromises.delete(preparePromiseKey);
     });
 
-    this.preparePromises.set(clip.id, preparePromise);
+    this.preparePromises.set(preparePromiseKey, preparePromise);
     return preparePromise;
   }
 
   private async prepareClipSourceInternal(
     clip: TimelineClip,
     fileOverride?: File,
+    runtimeOptions?: VectorRuntimePrepareOptions,
   ): Promise<RiveRuntimePrepareResult> {
     const file = fileOverride ?? clip.file;
     if (!file) {
@@ -304,36 +351,57 @@ export class RiveRuntimeManager {
     }
 
     const settings = mergeVectorAnimationSettings(clip.source?.vectorAnimationSettings);
-    const canvas = createCanvas(asset.metadata.width, asset.metadata.height);
-    const player = await waitForRiveLoad({
-      canvas,
-      buffer: asset.payload.data.slice(0),
-      artboard: settings.artboard,
-      animations: getSelectedAnimationName(
-        {
-          asset,
-          canvas,
-          clipId: clip.id,
-          isReady: false,
-          player: null as unknown as Rive,
-          settingsKey: '',
-          instanceKey: '',
-          stateMachineInputs: new Map(),
-          riveEventHandler: () => undefined,
-        },
-        settings,
-      ),
-      stateMachines: normalizeVectorAnimationStateName(settings.stateMachineName),
-      layout: createLayout(settings),
-      autoplay: false,
-      autoBind: false,
-      enableRiveAssetCDN: true,
-      shouldDisableRiveListeners: true,
-      automaticallyHandleEvents: false,
-      assetLoader: createAssetLoader(clip.id),
+    const reservation = reserveVectorRuntimeCanvasResource({
+      clip,
+      provider: 'rive',
+      width: asset.metadata.width,
+      height: asset.metadata.height,
+      options: runtimeOptions,
     });
+    if (!reservation.admitted) {
+      throw createVectorRuntimeAdmissionError({
+        clip,
+        provider: 'rive',
+        decision: reservation.decision,
+      });
+    }
 
-    player.pause();
+    const canvas = createCanvas(asset.metadata.width, asset.metadata.height);
+    let player: Rive;
+    try {
+      player = await waitForRiveLoad({
+        canvas,
+        buffer: asset.payload.data.slice(0),
+        artboard: settings.artboard,
+        animations: getSelectedAnimationName(
+          {
+            asset,
+            canvas,
+            clipId: clip.id,
+            isReady: false,
+            player: null as unknown as Rive,
+            settingsKey: '',
+            instanceKey: '',
+            stateMachineInputs: new Map(),
+            riveEventHandler: () => undefined,
+          },
+          settings,
+        ),
+        stateMachines: normalizeVectorAnimationStateName(settings.stateMachineName),
+        layout: createLayout(settings),
+        autoplay: false,
+        autoBind: false,
+        enableRiveAssetCDN: true,
+        shouldDisableRiveListeners: true,
+        automaticallyHandleEvents: false,
+        assetLoader: createAssetLoader(clip.id),
+      });
+
+      player.pause();
+    } catch (error) {
+      reservation.release();
+      throw error;
+    }
 
     const entry: RiveRuntimeEntry = {
       asset,
@@ -341,6 +409,8 @@ export class RiveRuntimeManager {
       clipId: clip.id,
       isReady: true,
       player,
+      releaseRuntimeResource: reservation.release,
+      runtimeResourceId: reservation.resourceId,
       settingsKey: '',
       instanceKey: '',
       stateMachineInputs: new Map(),
@@ -679,6 +749,8 @@ export class RiveRuntimeManager {
       entry.player.cleanup();
     } catch (error) {
       log.warn('Failed to destroy Rive runtime', { clipId, error });
+    } finally {
+      entry.releaseRuntimeResource?.();
     }
     this.entries.delete(clipId);
   }

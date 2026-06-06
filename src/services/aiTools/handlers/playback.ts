@@ -8,6 +8,7 @@ import { vfPipelineMonitor } from '../../vfPipelineMonitor';
 import { playbackHealthMonitor } from '../../playbackHealthMonitor';
 import { useEngineStore } from '../../../stores/engineStore';
 import { buildPlaybackRunDiagnostics } from '../../playbackDebugStats';
+import { getPlayheadPosition } from '../../layerBuilder/PlayheadState';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 type PlaybackPathPreset = 'play_scrub_stress_v1';
@@ -18,15 +19,24 @@ type PlaybackPathStep =
     label: string;
     durationMs: number;
     pauseAtEnd: boolean;
+    playableEndTime: number;
   }
   | {
     kind: 'scrub';
     label: string;
     durationMs: number;
     targetTime: number;
+    unclampedTargetTime: number;
     beginWhilePlaying: boolean;
     pauseOnRelease: boolean;
   };
+
+interface PlaybackPathAnchor {
+  clipStartTime: number;
+  playableEndTime: number;
+  clipId?: string;
+  clipName?: string;
+}
 
 type ScrubMotionResult = {
   dragMode: 'dom_playhead' | 'store_fallback';
@@ -69,13 +79,29 @@ export async function handlePause(
   return { success: true, data: { playing: false } };
 }
 
-function waitForAnimationFrame(): Promise<number> {
+function waitForAnimationFrame(maxWaitMs = 120): Promise<number> {
   return new Promise((resolve) => {
+    let settled = false;
+    let rafId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = (timestamp?: number) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rafId);
+      }
+      resolve(typeof timestamp === 'number' ? timestamp : performance.now());
+    };
+
+    timeoutId = setTimeout(() => finish(), Math.max(0, maxWaitMs));
     if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(resolve);
+      rafId = requestAnimationFrame(finish);
       return;
     }
-    setTimeout(() => resolve(performance.now()), 16);
   });
 }
 
@@ -88,6 +114,29 @@ function waitForTimeout(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, Math.max(0, ms));
   });
+}
+
+function readFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function readDurationMsArg(
+  args: Record<string, unknown>,
+  key: string,
+  defaultValue: number,
+  minValue: number,
+  maxValue = Number.POSITIVE_INFINITY,
+): number {
+  const parsed = readFiniteNumber(args[key]);
+  const rawValue = parsed ?? defaultValue;
+  return Math.max(minValue, Math.min(maxValue, Math.round(rawValue)));
 }
 
 function collectPlaybackRunDiagnostics(startMs: number, endMs: number) {
@@ -160,6 +209,10 @@ function getTimelineContentClientLeft(targets: TimelineDomDragTargets): number {
 function getTimelineClientXForTime(time: number, targets: TimelineDomDragTargets): number {
   const { zoom, scrollX } = useTimelineStore.getState();
   return getTimelineContentClientLeft(targets) + time * zoom - scrollX;
+}
+
+function hasFiniteClientCoordinates(clientX: number, clientY: number): boolean {
+  return Number.isFinite(clientX) && Number.isFinite(clientY);
 }
 
 async function runStoreDrivenScrubMotion(
@@ -248,6 +301,10 @@ async function runDomPlayheadScrubMotion(
       ? playheadRect.top + playheadRect.height / 2
       : tracksRect.top + Math.min(12, Math.max(4, tracksRect.height / 2));
 
+  if (!hasFiniteClientCoordinates(startClientX, clientY)) {
+    return runStoreDrivenScrubMotion(timelineStore, durationMs, sampleTimeAtElapsed, pauseOnRelease);
+  }
+
   dispatchSyntheticMouseEvent(domTargets.playhead, 'mousedown', startClientX, clientY);
   await waitForAnimationFrame();
   await waitForAnimationFrame();
@@ -263,6 +320,11 @@ async function runDomPlayheadScrubMotion(
     const elapsedMs = performance.now() - startedAt;
     requestedEndTime = clampPlaybackTime(sampleTimeAtElapsed(elapsedMs), duration);
     const nextClientX = getTimelineClientXForTime(requestedEndTime, domTargets);
+    if (!hasFiniteClientCoordinates(nextClientX, clientY)) {
+      dispatchSyntheticMouseEvent(document, 'mouseup', startClientX, clientY);
+      await waitForAnimationFrame();
+      return runStoreDrivenScrubMotion(timelineStore, durationMs, sampleTimeAtElapsed, pauseOnRelease);
+    }
     dispatchSyntheticMouseEvent(document, 'mousemove', nextClientX, clientY);
     framesApplied++;
     const actualPosition = useTimelineStore.getState().playheadPosition;
@@ -277,6 +339,11 @@ async function runDomPlayheadScrubMotion(
   }
 
   const endClientX = getTimelineClientXForTime(requestedEndTime, domTargets);
+  if (!hasFiniteClientCoordinates(endClientX, clientY)) {
+    dispatchSyntheticMouseEvent(document, 'mouseup', startClientX, clientY);
+    await waitForAnimationFrame();
+    return runStoreDrivenScrubMotion(timelineStore, durationMs, sampleTimeAtElapsed, pauseOnRelease);
+  }
   dispatchSyntheticMouseEvent(document, 'mousemove', endClientX, clientY);
   dispatchSyntheticMouseEvent(document, 'mouseup', endClientX, clientY);
   await waitForAnimationFrame();
@@ -337,11 +404,7 @@ async function runScrubMotion(
   );
 }
 
-function findPlaybackPathAnchor(timelineStore: TimelineStore): {
-  clipStartTime: number;
-  clipId?: string;
-  clipName?: string;
-} {
+function findPlaybackPathAnchor(timelineStore: TimelineStore): PlaybackPathAnchor {
   const videoTrackIds = new Set(
     timelineStore.tracks
       .filter((track) => track.type === 'video')
@@ -358,72 +421,82 @@ function findPlaybackPathAnchor(timelineStore: TimelineStore): {
   if (!activeClip) {
     return {
       clipStartTime: clampPlaybackTime(timelineStore.playheadPosition, timelineStore.duration),
+      playableEndTime: timelineStore.duration,
     };
   }
 
+  const playableEndTime = Math.max(
+    activeClip.startTime + activeClip.duration,
+    ...videoClips.map((clip) => clip.startTime + clip.duration),
+  );
+
   return {
     clipStartTime: activeClip.startTime,
+    playableEndTime: clampPlaybackTime(playableEndTime, timelineStore.duration),
     clipId: activeClip.id,
     clipName: activeClip.name,
   };
 }
 
-function buildPlaybackPathPreset(
+function clampPlaybackPathTargetTime(
+  targetTime: number,
+  anchor: PlaybackPathAnchor,
+  followingPlaySeconds = 0
+): number {
+  const endMargin = Math.max(0.5, followingPlaySeconds + 0.5);
+  const latestTarget = Math.max(anchor.clipStartTime, anchor.playableEndTime - endMargin);
+  return Math.min(Math.max(anchor.clipStartTime, targetTime), latestTarget);
+}
+
+function createPlaybackPathPlayStep(
+  label: string,
+  durationMs: number,
+  pauseAtEnd: boolean,
+  anchor: PlaybackPathAnchor
+): Extract<PlaybackPathStep, { kind: 'play' }> {
+  return {
+    kind: 'play',
+    label,
+    durationMs,
+    pauseAtEnd,
+    playableEndTime: anchor.playableEndTime,
+  };
+}
+
+function createPlaybackPathScrubStep(
+  label: string,
+  durationMs: number,
+  targetTime: number,
+  followingPlaySeconds: number,
+  anchor: PlaybackPathAnchor
+): Extract<PlaybackPathStep, { kind: 'scrub' }> {
+  return {
+    kind: 'scrub',
+    label,
+    durationMs,
+    targetTime: clampPlaybackPathTargetTime(targetTime, anchor, followingPlaySeconds),
+    unclampedTargetTime: targetTime,
+    beginWhilePlaying: true,
+    pauseOnRelease: true,
+  };
+}
+
+export function buildPlaybackPathPreset(
   preset: PlaybackPathPreset,
-  clipStartTime: number
+  anchor: PlaybackPathAnchor
 ): PlaybackPathStep[] {
+  const clipStartTime = anchor.clipStartTime;
   switch (preset) {
     case 'play_scrub_stress_v1':
     default:
       return [
-        {
-          kind: 'play',
-          label: 'play_1s_from_clip_start',
-          durationMs: 1000,
-          pauseAtEnd: false,
-        },
-        {
-          kind: 'scrub',
-          label: 'scrub_while_playing_to_30s_in_1s',
-          durationMs: 1000,
-          targetTime: clipStartTime + 30,
-          beginWhilePlaying: true,
-          pauseOnRelease: true,
-        },
-        {
-          kind: 'play',
-          label: 'play_1s_after_30s_scrub',
-          durationMs: 1000,
-          pauseAtEnd: false,
-        },
-        {
-          kind: 'scrub',
-          label: 'scrub_while_playing_to_3m_in_2s',
-          durationMs: 2000,
-          targetTime: clipStartTime + 180,
-          beginWhilePlaying: true,
-          pauseOnRelease: true,
-        },
-        {
-          kind: 'play',
-          label: 'play_2s_after_3m_scrub',
-          durationMs: 2000,
-          pauseAtEnd: false,
-        },
-        {
-          kind: 'scrub',
-          label: 'scrub_while_playing_back_to_10s_in_1s',
-          durationMs: 1000,
-          targetTime: clipStartTime + 10,
-          beginWhilePlaying: true,
-          pauseOnRelease: true,
-        },
-        {
-          kind: 'play',
-          label: 'play_5s_after_return_to_10s',
-          durationMs: 5000,
-          pauseAtEnd: true,
-        },
+        createPlaybackPathPlayStep('play_1s_from_clip_start', 1000, false, anchor),
+        createPlaybackPathScrubStep('scrub_while_playing_to_30s_in_1s', 1000, clipStartTime + 30, 1, anchor),
+        createPlaybackPathPlayStep('play_1s_after_30s_scrub', 1000, false, anchor),
+        createPlaybackPathScrubStep('scrub_while_playing_to_3m_in_2s', 2000, clipStartTime + 180, 2, anchor),
+        createPlaybackPathPlayStep('play_2s_after_3m_scrub', 2000, false, anchor),
+        createPlaybackPathScrubStep('scrub_while_playing_back_to_10s_in_1s', 1000, clipStartTime + 10, 5, anchor),
+        createPlaybackPathPlayStep('play_5s_after_return_to_10s', 5000, true, anchor),
       ];
   }
 }
@@ -438,7 +511,32 @@ async function runPlaybackPathPlayStep(
   }
 
   const startedAt = performance.now();
-  const initialPosition = useTimelineStore.getState().playheadPosition;
+  const initialState = useTimelineStore.getState();
+  const initialPosition = getPlayheadPosition(initialState.playheadPosition);
+  const remainingPlayableSeconds = step.playableEndTime - initialPosition;
+  if (remainingPlayableSeconds <= 0.05) {
+    timelineStore.pause();
+    await waitForAnimationFrame();
+
+    return {
+      kind: step.kind,
+      label: step.label,
+      requestedDurationMs: step.durationMs,
+      actualDurationMs: Math.round(performance.now() - startedAt),
+      initialPosition,
+      finalPosition: useTimelineStore.getState().playheadPosition,
+      deltaSeconds: 0,
+      framesObserved: 0,
+      movingFrames: 0,
+      stalledFrames: 0,
+      minVisited: initialPosition,
+      maxVisited: initialPosition,
+      endedPlaying: useTimelineStore.getState().isPlaying,
+      playableEndTime: step.playableEndTime,
+      skipped: true,
+      skipReason: 'no_playable_media_remaining',
+    };
+  }
   let previousPosition = initialPosition;
   let framesObserved = 0;
   let movingFrames = 0;
@@ -459,6 +557,9 @@ async function runPlaybackPathPlayStep(
     minVisited = Math.min(minVisited, position);
     maxVisited = Math.max(maxVisited, position);
     previousPosition = position;
+    if (position >= step.playableEndTime - 0.05) {
+      break;
+    }
   }
 
   if (step.pauseAtEnd) {
@@ -480,6 +581,7 @@ async function runPlaybackPathPlayStep(
     stalledFrames,
     minVisited,
     maxVisited,
+    playableEndTime: step.playableEndTime,
     endedPlaying: finalState.isPlaying,
   };
 }
@@ -514,6 +616,8 @@ async function runPlaybackPathScrubStep(
     initialPosition: scrubResult.initialPosition,
     finalPosition: scrubResult.finalPosition,
     targetTime,
+    unclampedTargetTime: step.unclampedTargetTime,
+    targetWasClamped: Math.abs(targetTime - step.unclampedTargetTime) > 0.0001,
     requestedEndTime: scrubResult.requestedEndTime,
     framesApplied: scrubResult.framesApplied,
     minVisited: scrubResult.minVisited,
@@ -594,31 +698,31 @@ export async function handleSimulatePlayback(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
-  const requestedDurationMs =
-    typeof args.durationMs === 'number' && Number.isFinite(args.durationMs)
-      ? Math.max(100, Math.round(args.durationMs))
-      : 10_000;
-  const settleMs =
-    typeof args.settleMs === 'number' && Number.isFinite(args.settleMs)
-      ? Math.max(0, Math.round(args.settleMs))
-      : 150;
+  const requestedDurationMs = readDurationMsArg(args, 'durationMs', 10_000, 100, 60_000);
+  const settleMs = readDurationMsArg(args, 'settleMs', 150, 0, 5_000);
+  const requestedPlaybackSpeed = readFiniteNumber(args.playbackSpeed);
   const playbackSpeed =
-    typeof args.playbackSpeed === 'number' && Number.isFinite(args.playbackSpeed) && args.playbackSpeed !== 0
-      ? args.playbackSpeed
+    requestedPlaybackSpeed !== null && requestedPlaybackSpeed !== 0
+      ? requestedPlaybackSpeed
       : 1;
   const resetDiagnostics = args.resetDiagnostics !== false;
+  const restorePlaybackState = args.restorePlaybackState === true;
 
   const wasPlaying = timelineStore.isPlaying;
   const previousSpeed = timelineStore.playbackSpeed;
+  let completed = false;
+  let restoredPlaybackState = false;
 
+  try {
   if (wasPlaying) {
     timelineStore.pause();
     await waitForAnimationFrame();
   }
 
-  if (typeof args.startTime === 'number' && Number.isFinite(args.startTime)) {
+  const startTime = readFiniteNumber(args.startTime);
+  if (startTime !== null) {
     timelineStore.setPlayheadPosition(
-      clampPlaybackTime(args.startTime, timelineStore.duration)
+      clampPlaybackTime(startTime, timelineStore.duration)
     );
   }
 
@@ -635,7 +739,9 @@ export async function handleSimulatePlayback(
   timelineStore.setPlaybackSpeed(playbackSpeed);
 
   const startedAt = performance.now();
-  const initialPosition = useTimelineStore.getState().playheadPosition;
+  const deadlineAt = startedAt + requestedDurationMs;
+  const initialState = useTimelineStore.getState();
+  const initialPosition = getPlayheadPosition(initialState.playheadPosition);
   let previousPosition = initialPosition;
   let framesObserved = 0;
   let movingFrames = 0;
@@ -649,9 +755,10 @@ export async function handleSimulatePlayback(
   let maxStepSeconds = 0;
 
   while (true) {
-    const now = await waitForAnimationFrame();
+    const remainingMs = Math.max(0, deadlineAt - performance.now());
+    const now = await waitForAnimationFrame(Math.min(120, Math.max(16, remainingMs)));
     const state = useTimelineStore.getState();
-    const position = state.playheadPosition;
+    const position = getPlayheadPosition(state.playheadPosition);
     const stepSeconds = Math.abs(position - previousPosition);
 
     framesObserved++;
@@ -676,7 +783,7 @@ export async function handleSimulatePlayback(
 
     previousPosition = position;
 
-    if (now - startedAt >= requestedDurationMs) {
+    if (now >= deadlineAt || performance.now() >= deadlineAt) {
       break;
     }
   }
@@ -692,19 +799,22 @@ export async function handleSimulatePlayback(
   }
   await waitForAnimationFrame();
 
+  timelineStore.setPlaybackSpeed(previousSpeed);
+  if (restorePlaybackState && wasPlaying) {
+    await timelineStore.play();
+    timelineStore.setPlaybackSpeed(previousSpeed);
+    restoredPlaybackState = true;
+  }
+
   const finalState = useTimelineStore.getState();
-  const finalPosition = finalState.playheadPosition;
+  const finalPosition = getPlayheadPosition(finalState.playheadPosition);
   const endedAt = performance.now();
   const actualDurationMs = Math.round(endedAt - startedAt);
   const deltaSeconds = finalPosition - initialPosition;
   const expectedDeltaSeconds = (requestedDurationMs / 1000) * playbackSpeed;
   const runDiagnostics = collectPlaybackRunDiagnostics(startedAt, endedAt);
 
-  if (wasPlaying) {
-    await timelineStore.play();
-    timelineStore.setPlaybackSpeed(previousSpeed);
-  }
-
+  completed = true;
   return {
     success: true,
     data: {
@@ -725,12 +835,19 @@ export async function handleSimulatePlayback(
       maxVisited,
       maxStepSeconds,
       wasPlaying,
+      restoredPlaybackState,
       resetDiagnostics,
       settled: settleMs > 0,
       endedPlaying: finalState.isPlaying,
       runDiagnostics,
     },
   };
+  } finally {
+    if (!completed || !restoredPlaybackState) {
+      timelineStore.pause();
+      timelineStore.setPlaybackSpeed(previousSpeed);
+    }
+  }
 }
 
 export async function handleSimulatePlaybackPath(
@@ -747,11 +864,21 @@ export async function handleSimulatePlaybackPath(
       ? args.playbackSpeed
       : 1;
   const anchor = findPlaybackPathAnchor(timelineStore);
-  const startTime =
+  const requestedStartTime =
     typeof args.startTime === 'number' && Number.isFinite(args.startTime)
       ? clampPlaybackTime(args.startTime, timelineStore.duration)
       : clampPlaybackTime(anchor.clipStartTime, timelineStore.duration);
-  const steps = buildPlaybackPathPreset(preset, startTime);
+  const latestPlayableStartTime = Math.max(0, anchor.playableEndTime - 0.5);
+  const startTime = clampPlaybackTime(
+    Math.min(requestedStartTime, latestPlayableStartTime),
+    timelineStore.duration
+  );
+  const pathAnchor: PlaybackPathAnchor = {
+    ...anchor,
+    clipStartTime: startTime,
+    playableEndTime: Math.max(startTime, anchor.playableEndTime),
+  };
+  const steps = buildPlaybackPathPreset(preset, pathAnchor);
   const previousSpeed = timelineStore.playbackSpeed;
 
   timelineStore.pause();
@@ -790,7 +917,10 @@ export async function handleSimulatePlaybackPath(
     success: true,
     data: {
       preset,
+      diagnosticMode: 'playback_scrub_stress',
       clipStartTime: startTime,
+      requestedStartTime,
+      playableEndTime: pathAnchor.playableEndTime,
       clipId: anchor.clipId,
       clipName: anchor.clipName,
       playbackSpeed,

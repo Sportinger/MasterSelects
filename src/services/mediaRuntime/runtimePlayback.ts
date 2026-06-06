@@ -2,6 +2,11 @@ import type { LayerSource, TimelineClip } from '../../types';
 import { engine } from '../../engine/WebGPUEngine';
 import { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import { useMediaStore } from '../../stores/mediaStore';
+import type {
+  RenderResourceDescriptor,
+  TimelineRuntimeAdmissionDecision,
+} from '../timeline/runtimeCoordinatorTypes';
+import { timelineRuntimeCoordinator } from '../timeline/timelineRuntimeCoordinator';
 import { mediaRuntimeRegistry } from './registry';
 import type {
   DecodeSession,
@@ -29,6 +34,25 @@ export interface RuntimePlaybackBinding {
 const INTERACTIVE_PLAYBACK_SESSION_PREFIX = 'interactive-track:';
 const INTERACTIVE_SCRUB_SESSION_PREFIX = 'interactive-scrub:';
 const pendingRuntimeProviderLoads = new Map<string, Promise<RuntimeFrameProvider | null>>();
+const PLAYBACK_RUNTIME_POLICY_IDS: readonly DecodeSessionPolicy[] = [
+  'interactive',
+  'background',
+  'export',
+  'ram-preview',
+];
+
+type RuntimeProviderReservation =
+  | {
+      admitted: true;
+      resourceIds: readonly string[];
+      release: () => void;
+    }
+  | {
+      admitted: false;
+      decision: TimelineRuntimeAdmissionDecision;
+      resourceIds: readonly string[];
+      release: () => void;
+    };
 
 function buildPolicyRuntimeSessionKey(
   sourceId: string,
@@ -78,6 +102,114 @@ function getRuntimeFile(runtime: MediaSourceRuntime): File | null {
   }
 
   return null;
+}
+
+function getRuntimeProviderResourceId(
+  policy: DecodeSessionPolicy,
+  sourceId: string,
+  sessionKey: string,
+  suffix: 'runtime-binding' | 'frame-provider'
+): string {
+  return `runtime-playback:${policy}:${sourceId}:${sessionKey}:${suffix}`;
+}
+
+function createRuntimeProviderAdmissionResources(
+  policy: DecodeSessionPolicy,
+  runtime: MediaSourceRuntime,
+  sessionKey: string,
+  file: File
+): RenderResourceDescriptor[] {
+  const ownerId = `runtime-playback:${policy}:${runtime.sourceId}:${sessionKey}`;
+  const base = {
+    policyId: policy,
+    owner: {
+      ownerId,
+      ownerType: policy === 'ram-preview' ? 'ram-preview' : 'timeline',
+      mediaFileId: runtime.descriptor.mediaFileId,
+    },
+    source: {
+      sourceId: runtime.sourceId,
+      mediaFileId: runtime.descriptor.mediaFileId,
+      projectPath: runtime.descriptor.filePath,
+    },
+    runtime: {
+      runtimeSourceId: runtime.sourceId,
+      runtimeSessionKey: sessionKey,
+    },
+    dimensions: {
+      durationSeconds: runtime.metadata.duration,
+    },
+    tags: ['runtime-playback', policy],
+  } satisfies Omit<RenderResourceDescriptor, 'id' | 'kind'>;
+
+  return [
+    {
+      ...base,
+      id: getRuntimeProviderResourceId(policy, runtime.sourceId, sessionKey, 'runtime-binding'),
+      kind: 'runtime-binding',
+      label: 'Runtime playback binding',
+    },
+    {
+      ...base,
+      id: getRuntimeProviderResourceId(policy, runtime.sourceId, sessionKey, 'frame-provider'),
+      kind: 'video-frame-provider',
+      providerId: `${ownerId}:provider`,
+      providerKind: 'webcodecs',
+      canSeek: true,
+      canProvideStaleFrame: false,
+      frameFormat: 'video-frame',
+      memoryCost: {
+        heapBytes: file.size,
+      },
+      label: 'Runtime playback frame provider',
+    },
+  ];
+}
+
+function reserveRuntimeProviderResources(
+  policy: DecodeSessionPolicy,
+  runtime: MediaSourceRuntime,
+  sessionKey: string,
+  file: File
+): RuntimeProviderReservation {
+  const retainedResourceIds: string[] = [];
+  const release = () => {
+    for (const resourceId of retainedResourceIds) {
+      timelineRuntimeCoordinator.releaseResource(resourceId);
+    }
+  };
+
+  for (const resource of createRuntimeProviderAdmissionResources(policy, runtime, sessionKey, file)) {
+    const decision = timelineRuntimeCoordinator.canRetainResource(resource);
+    if (!decision.admitted) {
+      release();
+      return {
+        admitted: false,
+        decision,
+        resourceIds: [],
+        release: () => undefined,
+      };
+    }
+    timelineRuntimeCoordinator.retainResource(resource);
+    retainedResourceIds.push(resource.id);
+  }
+
+  return {
+    admitted: true,
+    resourceIds: retainedResourceIds,
+    release,
+  };
+}
+
+function releaseRuntimeProviderResources(sourceId: string, sessionKey: string): void {
+  for (const policy of PLAYBACK_RUNTIME_POLICY_IDS) {
+    timelineRuntimeCoordinator.releaseResource(
+      getRuntimeProviderResourceId(policy, sourceId, sessionKey, 'runtime-binding')
+    );
+    timelineRuntimeCoordinator.releaseResource(
+      getRuntimeProviderResourceId(policy, sourceId, sessionKey, 'frame-provider')
+    );
+  }
 }
 
 function hasRuntimeBinding(
@@ -142,6 +274,24 @@ export function getRuntimeFrameProvider(
   policy: DecodeSessionPolicy = 'interactive'
 ): RuntimeFrameProvider | null {
   return resolveRuntimePlaybackBinding(source, policy)?.frameProvider ?? null;
+}
+
+export function peekRuntimeFrameProvider(
+  source: RuntimeBackedSource | null | undefined
+): RuntimeFrameProvider | null {
+  if (!hasRuntimeBinding(source)) {
+    return source?.webCodecsPlayer ?? null;
+  }
+
+  const runtime = mediaRuntimeRegistry.getRuntime(source.runtimeSourceId);
+  const sessionProvider = runtime?.getSessionFrameProvider(source.runtimeSessionKey) ?? null;
+  const sourcePlayer = source.webCodecsPlayer ?? null;
+
+  if (shouldReplaceFrameProvider(sessionProvider, sourcePlayer ?? undefined)) {
+    return sourcePlayer;
+  }
+
+  return sessionProvider ?? sourcePlayer;
 }
 
 export function isRuntimeFullWebCodecsSource(
@@ -363,6 +513,11 @@ export async function ensureRuntimeFrameProvider(
   policy: DecodeSessionPolicy = 'interactive',
   sourceTime?: number
 ): Promise<RuntimeFrameProvider | null> {
+  const hadSession =
+    hasRuntimeBinding(source) &&
+    !!mediaRuntimeRegistry
+      .getRuntime(source.runtimeSourceId)
+      ?.peekSession(source.runtimeSessionKey);
   const binding = resolveRuntimePlaybackBinding(source, policy);
   if (!binding) {
     return null;
@@ -400,6 +555,19 @@ export async function ensureRuntimeFrameProvider(
     return pendingLoad;
   }
 
+  const reservation = reserveRuntimeProviderResources(
+    policy,
+    runtime,
+    binding.sessionKey,
+    file
+  );
+  if (!reservation.admitted) {
+    if (!hadSession) {
+      mediaRuntimeRegistry.releaseSession(binding.sourceId, binding.sessionKey);
+    }
+    return null;
+  }
+
   const initialTime = sourceTime ?? binding.session.currentTime;
   const loadPromise = (async () => {
     const player = new WebCodecsPlayer({
@@ -425,6 +593,7 @@ export async function ensureRuntimeFrameProvider(
       engine.requestRender();
       return player;
     } catch {
+      reservation.release();
       player.destroy?.();
       return null;
     } finally {
@@ -442,6 +611,7 @@ export function releaseRuntimePlaybackSession(
   if (!hasRuntimeBinding(source)) {
     return;
   }
+  releaseRuntimeProviderResources(source.runtimeSourceId, source.runtimeSessionKey);
   pendingRuntimeProviderLoads.delete(
     getPendingProviderLoadKey(source.runtimeSourceId, source.runtimeSessionKey)
   );

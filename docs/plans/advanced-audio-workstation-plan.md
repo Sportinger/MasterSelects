@@ -360,12 +360,12 @@ Current implementation checkpoint:
 - `timelineWaveformPyramidCache` generates source pyramid artifacts during waveform generation, keeps a hot in-memory display cache, and can reload artifact payloads through `AudioArtifactStore`.
 - `timelineLoudnessEnvelopeCache` reloads loudness curve payloads through `AudioArtifactStore` and exposes cached summaries to timeline/node runtime code.
 - `timelineFrequencyPhaseCache` reloads frequency/phase payloads through `AudioArtifactStore` and exposes cached summaries to timeline/node runtime and AI authoring context.
-- `ClipWaveform` renders through `waveformLod`, selecting a pyramid level by timeline `pixelsPerSecond` when an artifact is available.
+- `TimelineClipCanvas` renders waveform lanes through `waveformLod`, selecting a pyramid level by timeline `pixelsPerSecond` when an artifact is available.
 - The timeline renders only the visible waveform window, so deep zoom avoids browser canvas-size stretching and stays sharp at high pixels-per-second.
 - Timeline ruler markers, clip rendering, and thumbnail filmstrips are viewport-windowed with overscan so deep zoom does not scale DOM work with full project duration.
 - `waveformLod` caps generated columns, keeps explicit `pixelsPerSecond` for pyramid choice, and bounds display normalization for invalid/out-of-range inputs.
 - The timeline zoom cap is 10,000 px/sec for precise audio editing, with 10ms/20ms ruler and grid intervals at the deepest zoom levels.
-- `ClipWaveform` schedules canvas work on cancellable animation frames, so rapid zoom/scroll updates drop stale paints before doing synchronous canvas work.
+- Timeline waveform drawing is scheduled through the canvas redraw path, so rapid zoom/scroll updates drop stale paints before doing synchronous canvas work.
 - Visible legacy waveform clips automatically request a source waveform-pyramid upgrade in detailed/high-zoom views.
 - Legacy `clip.waveform: number[]` remains a compatibility fallback and is interpolated only when the user zooms past its stored thumbnail resolution.
 - New audio/video-linked waveform generation paths attach the source waveform pyramid ref to `clip.audioState.sourceAnalysisRefs.waveformPyramidId`.
@@ -767,7 +767,7 @@ Wave 3 starts after persistence and runtime contracts are stable.
 |---|---|---|---|
 | AudioGraph Agent | `AudioGraphRenderer`, graph descriptor types, export scheduling tests | Timeline UI | Shared clip/track/master descriptors for live/offline/export |
 | Legacy Effects Agent | `AudioEffectRenderer`, `audioRoutingManager`, `VolumeTab`, EQ/volume tests | New effects beyond assigned scope | Registry-backed legacy EQ/volume behavior with no old-project regression |
-| Waveform Analysis Agent | waveform pyramid generation, analysis job tests | ClipWaveform UI | Source waveform/loudness artifacts and cache invalidation |
+| Waveform Analysis Agent | waveform pyramid generation, analysis job tests | Timeline waveform UI | Source waveform/loudness artifacts and cache invalidation |
 | Processed Waveform Agent | processed waveform invalidation and graph-backed render tests | Spectral UI | Processed waveform artifacts keyed by clip audio state |
 
 ### Wave 4 Agent Ownership
@@ -777,7 +777,7 @@ Wave 4 can split UI once data contracts are stable.
 | Agent | Owns | Must Avoid | Output |
 |---|---|---|---|
 | Timeline Detail Agent | expanded audio lanes, region selection UI, focus mode shell | Audio DSP internals | Timeline-first editing surface behind flags |
-| Waveform UI Agent | `ClipWaveform` LOD renderer, diagnostics overlays, screenshot tests | Analysis generation internals | Artifact-backed waveform display |
+| Waveform UI Agent | `TimelineClipCanvas` waveform LOD renderer, diagnostics overlays, screenshot tests | Analysis generation internals | Artifact-backed waveform display |
 | Mixer UI Agent | track controls, docked Mixer/Inspector UI, meter shell | Recording backend unless assigned | Track/master controls behind flags |
 | Node Audio UI Agent | node audio lane projection, port badges, generate/refresh actions | AI prompt changes unless assigned | Audio lanes appear from source audio with artifact status |
 
@@ -848,7 +848,7 @@ Current checkpoint:
 
 - Generate source waveform pyramids and loudness artifacts.
 - Generate processed waveform pyramids from `AudioGraphRenderer`.
-- Upgrade `ClipWaveform` to artifact-backed LOD rendering.
+- Upgrade timeline canvas waveform lanes to artifact-backed LOD rendering.
 - Add stereo/multi-channel rendering, fades, automation, clipping/silence diagnostics, and stale indicators.
 - Validate long files, repeated clips, deep zoom, and hundreds of visible clips.
 
@@ -868,9 +868,9 @@ Current checkpoint:
 - The timeline store exposes `generateLoudnessForClip`; generated refs are written to `sourceAnalysisRefs.loudnessEnvelopeId` or `processedAnalysisRefs.loudnessEnvelopeId` with processed-state stale checks.
 - The timeline store exposes `generateBeatOnsetForClip`; generated beat/onset refs are written together so both Node ports stay in sync.
 - The timeline store exposes `generateFrequencyPhaseForClip`; generated frequency/phase refs are written together, cached, and stale-checked against the same processed audio-state identity.
-- `TimelineClip` now loads source and processed waveform pyramids independently, prefers a loaded processed artifact, and falls back to the source pyramid while processed artifacts are loading, missing, or stale.
-- `ClipWaveform` remains a pure renderer and receives a `waveformVariant` hint for source/processed/legacy styling.
-- `ClipWaveform` now renders waveform pyramid channels as separated stereo/multi-channel lanes, including artifact-only views when the old normalized thumbnail array is unavailable.
+- `TimelineClipCanvas` now loads visible source and processed waveform pyramids through timeline artifact warmup services, prefers loaded processed artifacts, and falls back to source/legacy display while processed artifacts are loading, missing, or stale.
+- The canvas waveform renderer stays pure display code and derives source/processed/legacy styling from the clip's visible artifact state.
+- `TimelineClipCanvas` now renders waveform pyramid channels as separated stereo/multi-channel lanes, including artifact-only views when the old normalized thumbnail array is unavailable.
 - Timeline waveform lanes now surface `CLIP` and `SIL` diagnostics from the visible waveform pyramid. Clipping uses artifact peak data only, while legacy normalized thumbnail fallback is restricted to near-zero silence detection so old thumbnails do not produce false clipping warnings.
 - Audio clips now render enabled `audio-volume` fade/automation keyframes as an overlay curve on the waveform lane, so cheap volume-only automation remains visible without forcing processed-analysis regeneration.
 - Static and automated `audio-volume` changes are treated as output/display gain rather than signal-shape analysis invalidators. Source artifacts and compatible processed artifacts remain reusable while the timeline waveform applies a cheap display gain during interaction.
@@ -913,7 +913,7 @@ Current checkpoint:
 
 - `SpectrogramTileSetGenerator` writes deterministic source/processed `spectrogram-tiles` artifacts as tiled STFT payloads with compact project refs.
 - Timeline spectral mode now requests spectrogram artifacts on demand, prefers processed spectrograms when clip audio edits/effects/speed require them, and falls back to source spectrograms otherwise.
-- `ClipSpectrogram` renders real artifact-backed spectrogram tiles inline in the existing timeline lane; spectral mode no longer overlays the old fake spectral waveform bands.
+- `TimelineClipCanvas` and `utils/spectrogramCanvas` render real artifact-backed spectrogram tiles inline in the existing timeline lane; spectral mode no longer overlays the old fake spectral waveform bands.
 - Timeline spectrogram artifacts are cached through `timelineSpectrogramCache` and covered by unit tests for payload encoding, manifest metadata, cache priming, and frequency-bin content.
 - Timeline waveform/spectrogram lanes now distinguish current processed artifacts from fallback source views. Source approximations display a `SRC` badge and stale stripe when non-destructive edits, signal-shaping FX, speed, or spectral layers require processed analysis; referenced artifacts show `PEND`, `MISS`, or `ERR` for loading, missing, or failed processed loads.
 - Image-in-spectrum layers now have an end-to-end non-destructive path: users can add the selected Media panel image from a spectral selection or drop an image onto the spectral lane, the layer is visualized inline, editable from the selected clip `Audio Edits` tab, stored on `clip.audioState.spectralLayers`, invalidates processed refs, and is rendered by `ClipAudioRenderService` through bounded image luminance/alpha masks for processed analysis, bake, and export parity.

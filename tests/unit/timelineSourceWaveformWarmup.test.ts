@@ -5,7 +5,6 @@ import {
   resetTimelineSourceWaveformWarmupForTest,
   scheduleVisibleTimelineSourceWaveformGeneration,
   warmTimelineSourceWaveformGeneration,
-  warmVisibleTimelineSourceWaveforms,
   type TimelineSourceWaveformWarmupDeps,
 } from '../../src/services/timeline/timelineSourceWaveformWarmup';
 
@@ -154,7 +153,8 @@ describe('timeline source waveform warmup', () => {
     expect(deps.getState().generateWaveformForClip).not.toHaveBeenCalled();
   });
 
-  it('deduplicates duplicate warm requests in one batch', async () => {
+  it('deduplicates duplicate scheduled visible waveform generation requests', () => {
+    vi.useFakeTimers();
     const deps = createDeps();
     const request = createTimelineSourceWaveformGenerationRequest({
       id: 'clip-a',
@@ -162,8 +162,12 @@ describe('timeline source waveform warmup', () => {
       source: { type: 'audio', mediaFileId: 'media-a' },
     });
 
-    await expect(warmVisibleTimelineSourceWaveforms([request!, request!], { deps }))
-      .resolves.toEqual([{ clipId: 'clip-a', status: 'generated' }]);
+    scheduleVisibleTimelineSourceWaveformGeneration([request!, request!], {
+      deps,
+      delayMs: 50,
+    });
+    vi.advanceTimersByTime(60);
+
     expect(deps.getState().generateWaveformForClip).toHaveBeenCalledTimes(1);
   });
 });

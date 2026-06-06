@@ -1152,7 +1152,7 @@ Targets should be semantic first, DOM-backed second.
 | `menuItem` | Resolve menu entry by stable menu/item ids, not visible text. |
 | `propertiesTab` | Dispatch/open tab, then resolve tab button by stable target id. |
 | `propertyControl` | Stable target id on control row or number field. |
-| `timelineClip` | Resolve from timeline clip element by `data-clip-id`; fallback from timeline geometry. |
+| `timelineClip` | Resolve active `.clip-interaction-shell` or lightweight preview by `data-clip-id` when mounted; otherwise resolve from timeline geometry. Do not require a `.timeline-clip` body. |
 | `timelineTime` | Resolve from current timeline viewport, scroll, zoom, and track layout. |
 | `timelineTrimHandle` / `timelineFadeHandle` | Resolve clip edge handles through first-class target refs, not CSS classes. |
 | `timelineKeyframe` / `timelineMarker` | Resolve keyframe diamonds and markers through ids or provider geometry. |

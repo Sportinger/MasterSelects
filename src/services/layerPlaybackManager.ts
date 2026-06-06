@@ -8,7 +8,10 @@ import type { Composition, SlotClipEndBehavior } from '../stores/mediaStore/type
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { DEFAULT_TRANSFORM } from '../stores/timeline/constants';
-import { bindSourceRuntimeForOwner } from './mediaRuntime/clipBindings';
+import {
+  bindSourceRuntimeForOwner,
+  planSourceRuntimeBindingForOwner,
+} from './mediaRuntime/clipBindings';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
 import {
   getRuntimeFrameProvider,
@@ -20,8 +23,25 @@ import { slotDeckManager } from './slotDeckManager';
 import { vectorAnimationRuntimeManager } from './vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType, type VectorAnimationProvider } from '../types/vectorAnimation';
 import { getEffectiveScale } from '../utils/transformScale';
+import {
+  releaseReportedClipRuntimeResources,
+  reportClipRuntimeResources,
+  reservePlannedClipRuntimeResources,
+} from './timeline/runtimeResourceReporting';
+import {
+  startTimelineImageHydration,
+  type TimelineImageHydrationHandle,
+} from './timeline/imageRuntimeHydrator';
 
 const log = Logger.create('LayerPlayback');
+
+function getRuntimeSrcKind(url: string): 'blob-url' | 'remote-url' | 'media-source' | 'unknown' {
+  if (!url) return 'unknown';
+  if (url.startsWith('blob:')) return 'blob-url';
+  if (url.startsWith('http')) return 'remote-url';
+  if (url.startsWith('mediastream:')) return 'media-source';
+  return 'unknown';
+}
 
 interface LayerCompState {
   compositionId: string;
@@ -49,6 +69,8 @@ interface LayerPlaybackInfo {
 }
 
 class LayerPlaybackManager {
+  private pendingImageHydrations = new Map<string, TimelineImageHydrationHandle>();
+
   private getRuntimeOwnerId(layerIndex: number, clipId: string): string {
     return `background:${layerIndex}:${clipId}`;
   }
@@ -173,7 +195,7 @@ class LayerPlaybackManager {
           naturalDuration: serializedClip.naturalDuration,
           vectorAnimationSettings: serializedClip.vectorAnimationSettings,
         };
-        this.loadVectorAnimationForClip(clip, mediaFile.file, sourceType);
+        this.loadVectorAnimationForClip(clip, layerIndex, mediaFile.file, sourceType);
       } else {
         clip.isLoading = false;
       }
@@ -218,6 +240,10 @@ class LayerPlaybackManager {
     }
 
     for (const clip of state.clips) {
+      const ownerId = this.getRuntimeOwnerId(layerIndex, clip.id);
+      this.pendingImageHydrations.get(ownerId)?.cancel();
+      this.pendingImageHydrations.delete(ownerId);
+      releaseReportedClipRuntimeResources('background', ownerId);
       if (clip.source?.videoElement) {
         clip.source.videoElement.pause();
         clip.source.videoElement.src = '';
@@ -227,6 +253,10 @@ class LayerPlaybackManager {
         clip.source.audioElement.pause();
         clip.source.audioElement.src = '';
         clip.source.audioElement.load();
+      }
+      if (clip.source?.imageElement) {
+        clip.source.imageElement.removeAttribute('src');
+        clip.source.imageElement.src = '';
       }
       if (isVectorAnimationSourceType(clip.source?.type)) {
         vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
@@ -727,6 +757,44 @@ class LayerPlaybackManager {
   // === Private media loading methods ===
 
   private loadVideoForClip(clip: TimelineClip, layerIndex: number, url: string, mediaFileId: string): void {
+    const ownerId = this.getRuntimeOwnerId(layerIndex, clip.id);
+    const runtimePlan = planSourceRuntimeBindingForOwner({
+      ownerId,
+      source: {
+        type: 'video',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaFileId,
+      sessionPolicy: 'background',
+      sessionOwnerId: ownerId,
+    });
+    const admission = reservePlannedClipRuntimeResources({
+      policyId: 'background',
+      ownerId,
+      ownerType: 'clip',
+      clip,
+      source: runtimePlan?.source ?? {
+        type: 'video',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaElementKind: 'video',
+      srcKind: getRuntimeSrcKind(url),
+      label: `Background layer ${layerIndex} clip resource`,
+      tags: ['background-layer', `layer-${layerIndex}`],
+    });
+    if (!admission.admitted) {
+      clip.isLoading = false;
+      log.debug('Background video load skipped by runtime admission', {
+        clipId: clip.id,
+        layerIndex,
+        reason: admission.decision.reason,
+        rejectedUnits: admission.decision.rejectedUnits.map((entry) => entry.unit),
+      });
+      return;
+    }
+
     const video = document.createElement('video');
     video.src = url;
     video.muted = true; // Background layers muted by default
@@ -735,8 +803,15 @@ class LayerPlaybackManager {
     video.crossOrigin = 'anonymous';
 
     video.addEventListener('canplaythrough', () => {
+      if (this.layerStates.get(layerIndex)?.clips.includes(clip) !== true) {
+        admission.release();
+        video.pause();
+        video.src = '';
+        video.load();
+        return;
+      }
       clip.source = bindSourceRuntimeForOwner({
-        ownerId: this.getRuntimeOwnerId(layerIndex, clip.id),
+        ownerId,
         source: {
           type: 'video',
           videoElement: video,
@@ -745,8 +820,9 @@ class LayerPlaybackManager {
         },
         mediaFileId,
         sessionPolicy: 'background',
-        sessionOwnerId: this.getRuntimeOwnerId(layerIndex, clip.id),
+        sessionOwnerId: ownerId,
       });
+      this.reportClipResources(layerIndex, clip);
       clip.isLoading = false;
       log.debug(`Video loaded for background clip ${clip.name} on layer ${layerIndex}`);
       // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
@@ -754,19 +830,65 @@ class LayerPlaybackManager {
     }, { once: true });
 
     video.addEventListener('error', () => {
+      admission.release();
       clip.isLoading = false;
       log.warn(`Failed to load video for background clip ${clip.name}`);
     }, { once: true });
   }
 
   private loadAudioForClip(clip: TimelineClip, layerIndex: number, url: string, mediaFileId: string): void {
+    const ownerId = this.getRuntimeOwnerId(layerIndex, clip.id);
+    const runtimePlan = planSourceRuntimeBindingForOwner({
+      ownerId,
+      source: {
+        type: 'audio',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaFileId,
+      sessionPolicy: 'background',
+      sessionOwnerId: ownerId,
+    });
+    const admission = reservePlannedClipRuntimeResources({
+      policyId: 'background',
+      ownerId,
+      ownerType: 'clip',
+      clip,
+      source: runtimePlan?.source ?? {
+        type: 'audio',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaElementKind: 'audio',
+      srcKind: getRuntimeSrcKind(url),
+      label: `Background layer ${layerIndex} clip resource`,
+      tags: ['background-layer', `layer-${layerIndex}`],
+    });
+    if (!admission.admitted) {
+      clip.isLoading = false;
+      log.debug('Background audio load skipped by runtime admission', {
+        clipId: clip.id,
+        layerIndex,
+        reason: admission.decision.reason,
+        rejectedUnits: admission.decision.rejectedUnits.map((entry) => entry.unit),
+      });
+      return;
+    }
+
     const audio = document.createElement('audio');
     audio.src = url;
     audio.preload = 'auto';
 
     audio.addEventListener('canplaythrough', () => {
+      if (this.layerStates.get(layerIndex)?.clips.includes(clip) !== true) {
+        admission.release();
+        audio.pause();
+        audio.src = '';
+        audio.load();
+        return;
+      }
       clip.source = bindSourceRuntimeForOwner({
-        ownerId: this.getRuntimeOwnerId(layerIndex, clip.id),
+        ownerId,
         source: {
           type: 'audio',
           audioElement: audio,
@@ -775,45 +897,97 @@ class LayerPlaybackManager {
         },
         mediaFileId,
         sessionPolicy: 'background',
-        sessionOwnerId: this.getRuntimeOwnerId(layerIndex, clip.id),
+        sessionOwnerId: ownerId,
       });
+      this.reportClipResources(layerIndex, clip);
       clip.isLoading = false;
       log.debug(`Audio loaded for background clip ${clip.name} on layer ${layerIndex}`);
     }, { once: true });
 
     audio.addEventListener('error', () => {
+      admission.release();
       clip.isLoading = false;
       log.warn(`Failed to load audio for background clip ${clip.name}`);
     }, { once: true });
   }
 
   private loadImageForClip(clip: TimelineClip, layerIndex: number, url: string): void {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = url;
-
-    img.addEventListener('load', () => {
-      clip.source = bindSourceRuntimeForOwner({
-        ownerId: this.getRuntimeOwnerId(layerIndex, clip.id),
-        source: {
-          type: 'image',
-          imageElement: img,
+    const ownerId = this.getRuntimeOwnerId(layerIndex, clip.id);
+    this.pendingImageHydrations.get(ownerId)?.cancel();
+    const handle = startTimelineImageHydration({
+      url,
+      resource: {
+        id: `timeline-runtime:background:${ownerId}:image-canvas:image`,
+        policyId: 'background',
+        owner: {
+          ownerId,
+          ownerType: 'clip',
+          clipId: clip.id,
+          trackId: clip.trackId,
+          mediaFileId: clip.mediaFileId,
         },
-        mediaFileId: clip.mediaFileId,
-        sessionPolicy: 'background',
-        sessionOwnerId: this.getRuntimeOwnerId(layerIndex, clip.id),
-      });
-      clip.isLoading = false;
-      log.debug(`Image loaded for background clip ${clip.name} on layer ${layerIndex}`);
-    }, { once: true });
-
-    img.addEventListener('error', () => {
-      clip.isLoading = false;
-      log.warn(`Failed to load image for background clip ${clip.name}`);
-    }, { once: true });
+        source: {
+          sourceId: clip.mediaFileId,
+          mediaFileId: clip.mediaFileId,
+          clipId: clip.id,
+          trackId: clip.trackId,
+          previewPath: url,
+        },
+        imageId: `${ownerId}:image`,
+        label: 'Background image hydration',
+        tags: ['background', 'image'],
+      },
+      isCurrent: () => this.layerStates.get(layerIndex)?.clips.includes(clip) === true,
+      onReady: (img) => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.source = bindSourceRuntimeForOwner({
+          ownerId,
+          source: {
+            type: 'image',
+            imageElement: img,
+            mediaFileId: clip.mediaFileId,
+            naturalDuration: clip.duration,
+          },
+          mediaFileId: clip.mediaFileId,
+          sessionPolicy: 'background',
+          sessionOwnerId: ownerId,
+        });
+        this.reportClipResources(layerIndex, clip);
+        clip.isLoading = false;
+        log.debug(`Image loaded for background clip ${clip.name} on layer ${layerIndex}`);
+      },
+      onError: () => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.isLoading = false;
+        log.warn(`Failed to load image for background clip ${clip.name}`);
+      },
+      onStale: () => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.isLoading = false;
+      },
+      onAdmissionDenied: (decision) => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.isLoading = false;
+        log.debug('Background image hydration skipped by runtime admission', {
+          clipId: clip.id,
+          layerIndex,
+          reason: decision.reason,
+          rejectedUnits: decision.rejectedUnits.map((entry) => entry.unit),
+        });
+      },
+    });
+    if (!handle.admitted) {
+      return;
+    }
+    this.pendingImageHydrations.set(ownerId, handle);
   }
 
-  private loadVectorAnimationForClip(clip: TimelineClip, file: File, sourceType: VectorAnimationProvider): void {
+  private loadVectorAnimationForClip(
+    clip: TimelineClip,
+    layerIndex: number,
+    file: File,
+    sourceType: VectorAnimationProvider
+  ): void {
     void (async () => {
       try {
         if (clip.source?.type !== sourceType) {
@@ -823,7 +997,14 @@ class LayerPlaybackManager {
             naturalDuration: clip.duration,
           };
         }
-        const runtime = await vectorAnimationRuntimeManager.prepareClipSource(clip, file);
+        const runtimeOwnerId = this.getRuntimeOwnerId(layerIndex, clip.id);
+        const runtime = await vectorAnimationRuntimeManager.prepareClipSource(clip, file, {
+          policyId: 'background',
+          ownerId: runtimeOwnerId,
+          ownerType: 'clip',
+          label: `Background layer ${layerIndex} vector runtime canvas`,
+          tags: ['background-layer', `layer-${layerIndex}`, 'vector-animation'],
+        });
         const naturalDuration =
           runtime.metadata.duration ??
           clip.source?.naturalDuration ??
@@ -836,6 +1017,7 @@ class LayerPlaybackManager {
           naturalDuration,
           vectorAnimationSettings: clip.source?.vectorAnimationSettings,
         };
+        this.reportClipResources(layerIndex, clip);
         clip.isLoading = false;
         vectorAnimationRuntimeManager.renderClipAtTime(clip, clip.startTime);
       } catch (error) {
@@ -843,6 +1025,17 @@ class LayerPlaybackManager {
         log.warn(`Failed to load vector animation for background clip ${clip.name}`, error);
       }
     })();
+  }
+
+  private reportClipResources(layerIndex: number, clip: TimelineClip): void {
+    reportClipRuntimeResources({
+      policyId: 'background',
+      ownerId: this.getRuntimeOwnerId(layerIndex, clip.id),
+      ownerType: 'clip',
+      clip,
+      label: `Background layer ${layerIndex} clip resource`,
+      tags: ['background-layer', `layer-${layerIndex}`],
+    });
   }
 }
 

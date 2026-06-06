@@ -359,7 +359,8 @@ Core timeline components live in `src/components/timeline/`:
 - `Timeline.tsx` orchestrates the full timeline.
 - `TimelineTrack.tsx` renders track rows and property lanes.
 - `TimelineHeader.tsx` renders track headers and property controls.
-- `TimelineClip.tsx` renders clips, badges, and overlays.
+- `TimelineClipCanvas.tsx` renders passive clip bodies, thumbnails, waveforms, spectrograms, labels, and canvas-only passive decorations.
+- `ClipInteractionShell` modules render active clip affordances such as trim/fade handles, keyframe ticks, region controls, and context-menu shells.
 - `TimelineKeyframes.tsx` renders keyframe diamonds in track lanes.
 - `CurveEditor.tsx` and `CurveEditorHeader.tsx` handle curve editing.
 - `TimelineControls.tsx`, `TimelineRuler.tsx`, and `TimelineNavigator.tsx` handle navigation and toolbar controls.

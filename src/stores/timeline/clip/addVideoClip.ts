@@ -5,18 +5,15 @@ import type { TimelineClip, TimelineTrack } from '../../../types';
 import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { useSettingsStore } from '../../settingsStore';
-import { engine } from '../../../engine/WebGPUEngine';
 import { NativeDecoder } from '../../../services/nativeHelper';
 import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import {
-  initWebCodecsPlayer,
   createVideoElement,
-  createAudioElement,
+  releaseTemporaryMediaElement,
   waitForVideoMetadata,
 } from '../helpers/webCodecsHelpers';
 import { shouldSkipWaveform } from '../helpers/waveformHelpers';
 import { generateLinkedClipIds } from '../helpers/idGenerator';
-import { blobUrlManager } from '../helpers/blobUrlManager';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { detectVideoAudio } from '../helpers/audioDetection';
 import { getMP4MetadataFast, estimateDurationFromFileSize } from '../helpers/mp4MetadataHelper';
@@ -126,25 +123,6 @@ export interface LoadVideoMediaParams {
   setClips: (updater: (clips: TimelineClip[]) => TimelineClip[]) => void;
 }
 
-export function primeImportedVideoFrame(video: HTMLVideoElement, clipId: string): void {
-  // Imported timeline clips should expose a stable first frame immediately,
-  // but the active HTML video warmup must still be owned by VideoSyncManager.
-  if (video.preload !== 'auto') {
-    video.preload = 'auto';
-  }
-
-  const preCacheFrame = () => {
-    void engine.preCacheVideoFrame(video, clipId);
-  };
-
-  if (video.readyState >= 2) {
-    preCacheFrame();
-    return;
-  }
-
-  video.addEventListener('loadeddata', preCacheFrame, { once: true });
-}
-
 /**
  * Load video media in background - handles Native Helper, WebCodecs, thumbnails, and audio.
  */
@@ -233,8 +211,6 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
   // Fallback to HTMLVideoElement if not using native decoder
   if (!nativeDecoder) {
     video = createVideoElement(file);
-    // Track the blob URL for cleanup
-    blobUrlManager.create(clipId, file, 'video');
 
     // Race: MP4Box container parsing vs HTMLVideoElement metadata
     // MP4Box reads from both start+end of file to handle camera MOV files
@@ -267,7 +243,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
     updateClip(clipId, {
       duration: naturalDuration,
       outPoint: naturalDuration,
-      source: { type: 'video', videoElement: video, naturalDuration, mediaFileId },
+      source: { type: 'video', naturalDuration, mediaFileId },
       transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
       isLoading: false,
     });
@@ -282,7 +258,6 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       if (!mp4Meta.hasAudio && audioClipId) {
         log.debug('MP4Box: no audio tracks, removing audio clip', { file: file.name });
         setClips(clips => clips.filter(c => c.id !== audioClipId));
-        blobUrlManager.revokeAll(audioClipId);
       }
     } else {
       detectVideoAudio(file).then(videoHasAudio => {
@@ -291,59 +266,38 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
           if (audioClipId) {
             log.debug('Removing audio clip for video without audio', { file: file.name });
             setClips(clips => clips.filter(c => c.id !== audioClipId));
-            blobUrlManager.revokeAll(audioClipId);
           }
         }
       });
     }
 
-    // If video element eventually loads real metadata, update duration
-    // (covers the file-size-estimate fallback case)
-    if (!video.duration || !isFinite(video.duration)) {
-      video.addEventListener('loadedmetadata', () => {
-        if (video!.duration && isFinite(video!.duration) && video!.duration !== naturalDuration) {
-          const realDuration = video!.duration;
-          log.debug('Late metadata arrived, updating duration', { file: file.name, from: naturalDuration.toFixed(2), to: realDuration.toFixed(2) });
-          setClips(clips => clips.map(c => {
-            if (c.id !== clipId) return c;
-            return {
-              ...c,
-              duration: realDuration,
-              outPoint: realDuration,
-              source: c.source ? { ...c.source, naturalDuration: realDuration } : c.source,
-            };
-          }));
-          // Also update audio clip duration
-          if (audioClipId) {
-            setClips(clips => clips.map(c => {
-              if (c.id !== audioClipId) return c;
-              return { ...c, duration: realDuration, outPoint: realDuration };
-            }));
-          }
-        }
-      }, { once: true });
+    // Generate source-based thumbnails (1 per second) in background.
+    // The thumbnail service owns its own detached generation video; the import
+    // metadata probe video stays local and is released below.
+    const isLargeFile = shouldSkipWaveform(file);
+    if (thumbnailsEnabled && !isLargeFile && mediaFileId) {
+      import('../../../services/thumbnailCacheService').then(({ thumbnailCacheService }) => {
+        const mediaFile = useMediaStore.getState().files.find(f => f.id === mediaFileId);
+        const sourceUrl = mediaFile?.url || URL.createObjectURL(file);
+        const shouldRevokeSourceUrl = !mediaFile?.url;
+        const fileHash = mediaFile?.fileHash;
+        thumbnailCacheService
+          .generateForSourceUrl(mediaFileId, sourceUrl, naturalDuration, fileHash, 'anonymous')
+          .finally(() => {
+            if (shouldRevokeSourceUrl) {
+              URL.revokeObjectURL(sourceUrl);
+            }
+          });
+      });
     }
 
-    // Cache the first decoded frame for stable paused preview.
-    // Active GPU warmup is handled centrally by VideoSyncManager.
-    primeImportedVideoFrame(video, clipId);
-
-    // Initialize WebCodecsPlayer for hardware-accelerated decoding (non-blocking)
-    initWebCodecsPlayer(video, file.name, file).then(webCodecsPlayer => {
-      if (webCodecsPlayer) {
-        setClips(clips => clips.map(c => {
-          if (c.id !== clipId || !c.source) return c;
-          return {
-            ...c,
-            source: { ...c.source, webCodecsPlayer },
-          };
-        }));
-      }
-    });
+    releaseTemporaryMediaElement(video);
+  } else {
+    log.debug('Skipping thumbnails for NativeDecoder file', { file: file.name });
   }
 
-  // Load cached analysis from project folder if available (non-blocking)
-  // Uses getAllAnalysisMerged to combine all analyzed ranges (not just exact match)
+  // Load cached analysis from project folder if available (non-blocking).
+  // Uses getAllAnalysisMerged to combine all analyzed ranges (not just exact match).
   if (mediaFileId) {
     import('../../../services/project/ProjectFileService').then(async ({ projectFileService }) => {
       if (!projectFileService.isProjectOpen()) return;
@@ -362,17 +316,6 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         }
       } catch { /* no cached analysis */ }
     });
-  }
-
-  // Generate source-based thumbnails (1 per second) in background
-  const isLargeFile = shouldSkipWaveform(file);
-  if (thumbnailsEnabled && !isLargeFile && video && mediaFileId) {
-    import('../../../services/thumbnailCacheService').then(({ thumbnailCacheService }) => {
-      const fileHash = useMediaStore.getState().files.find(f => f.id === mediaFileId)?.fileHash;
-      thumbnailCacheService.generateForSource(mediaFileId, video, naturalDuration, fileHash);
-    });
-  } else if (nativeDecoder) {
-    log.debug('Skipping thumbnails for NativeDecoder file', { file: file.name });
   }
 
   // Load audio for linked clip (skip for NativeDecoder - browser can't decode ProRes/DNxHD audio)
@@ -406,14 +349,10 @@ async function loadLinkedAudio(
   updateClip: (id: string, updates: Partial<TimelineClip>) => void,
   setClips: (updater: (clips: TimelineClip[]) => TimelineClip[]) => void
 ): Promise<void> {
-  const audio = createAudioElement(file);
-  // Track the blob URL for cleanup
-  blobUrlManager.create(audioClipId, file, 'audio');
-
   // Mark audio clip as ready immediately
   const cachedWaveform = getCachedMediaWaveform(mediaFileId);
   updateClip(audioClipId, {
-    source: { type: 'audio', audioElement: audio, naturalDuration, mediaFileId },
+    source: { type: 'audio', naturalDuration, mediaFileId },
     isLoading: false,
     ...(cachedWaveform ?? {}),
   });

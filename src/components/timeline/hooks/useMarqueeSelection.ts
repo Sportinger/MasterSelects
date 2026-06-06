@@ -6,6 +6,10 @@ import type { TimelineClip, TimelineTrack, AnimatableProperty } from '../../../t
 import type { MarqueeState, ClipDragState, ClipTrimState, MarkerDragState } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineToolId } from '../../../stores/timeline/types';
+import { isTimelineActiveTarget } from '../utils/timelineActiveTargets';
+
+const KEYFRAME_DIAMOND_HIT_SIZE_PX = 12;
+const KEYFRAME_DIAMOND_CENTER_OFFSET_X_PX = -3;
 
 interface UseMarqueeSelectionProps {
   // Refs
@@ -149,24 +153,53 @@ export function useMarqueeSelection({
       if (!container) return result;
 
       const containerRect = container.getBoundingClientRect();
-      container.querySelectorAll<HTMLElement>('.keyframe-diamond[data-keyframe-id]').forEach((keyframeElement) => {
-        const keyframeId = keyframeElement.dataset.keyframeId;
-        if (!keyframeId) return;
+      const halfSize = KEYFRAME_DIAMOND_HIT_SIZE_PX / 2;
 
-        const keyframeRect = keyframeElement.getBoundingClientRect();
-        const keyframeLeft = keyframeRect.left - containerRect.left + scrollX;
-        const keyframeRight = keyframeRect.right - containerRect.left + scrollX;
-        const keyframeTop = keyframeRect.top - containerRect.top;
-        const keyframeBottom = keyframeRect.bottom - containerRect.top;
+      container.querySelectorAll<HTMLElement>('.keyframe-track-row[data-track-id][data-keyframe-property]').forEach((rowElement) => {
+        const trackId = rowElement.dataset.trackId;
+        const property = rowElement.dataset.keyframeProperty;
+        if (!trackId || !property) return;
 
-        if (keyframeRight > left && keyframeLeft < right && keyframeBottom > top && keyframeTop < bottom) {
-          result.add(keyframeId);
+        const keyframeTrackElement = rowElement.querySelector<HTMLElement>('.keyframe-track') ?? rowElement;
+        const keyframeTrackRect = keyframeTrackElement.getBoundingClientRect();
+        const rowTop = keyframeTrackRect.top - containerRect.top;
+        const rowBottom = keyframeTrackRect.bottom - containerRect.top;
+        if (rowBottom <= top || rowTop >= bottom) return;
+
+        const rowContentLeft = keyframeTrackRect.left - containerRect.left + scrollX;
+        const centerY = rowTop + keyframeTrackRect.height / 2;
+
+        for (const clip of clips) {
+          if (clip.trackId !== trackId) continue;
+          const keyframes = _clipKeyframes.get(clip.id) ?? [];
+          if (keyframes.length === 0) continue;
+
+          const effectiveClipStartTime =
+            clipDrag && clipDrag.clipId === clip.id && clipDrag.snappedTime !== null
+              ? clipDrag.snappedTime
+              : clip.startTime;
+
+          for (const keyframe of keyframes) {
+            if (keyframe.property !== property) continue;
+
+            const centerX = rowContentLeft +
+              timeToPixel(effectiveClipStartTime + keyframe.time) +
+              KEYFRAME_DIAMOND_CENTER_OFFSET_X_PX;
+            const keyframeLeft = centerX - halfSize;
+            const keyframeRight = centerX + halfSize;
+            const keyframeTop = centerY - halfSize;
+            const keyframeBottom = centerY + halfSize;
+
+            if (keyframeRight > left && keyframeLeft < right && keyframeBottom > top && keyframeTop < bottom) {
+              result.add(keyframe.id);
+            }
+          }
         }
       });
 
       return result;
     },
-    [scrollX, trackLanesRef]
+    [_clipKeyframes, clipDrag, clips, scrollX, timeToPixel, trackLanesRef]
   );
 
   const getTrackIdsInRect = useCallback(
@@ -207,7 +240,8 @@ export function useMarqueeSelection({
       // Don't start if clicking on a clip or interactive element
       const target = e.target as HTMLElement;
       if (
-        (!isRangeSelectionTool && target.closest('.timeline-clip')) ||
+        (!isRangeSelectionTool && isTimelineActiveTarget(target)) ||
+        target.closest('[data-shell-trim-edge], [data-shell-fade-edge], [data-clip-interaction-slot]') ||
         target.closest('.playhead') ||
         target.closest('.in-out-marker') ||
         target.closest('.trim-handle') ||

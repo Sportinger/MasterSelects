@@ -52,6 +52,8 @@ export type {
 export {
   clampTimelineRectToViewport,
   createTimelineRect,
+  findTimelineMarqueeExclusionAtPoint,
+  findTimelineMarqueeExclusionsIntersectingRect,
   isTimelineRect,
   timelineRectContainsPoint,
   timelineRectsIntersect,

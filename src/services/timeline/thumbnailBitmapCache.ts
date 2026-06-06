@@ -1,3 +1,13 @@
+import {
+  createThumbnailBitmapResourceDescriptor,
+  getThumbnailBitmapDecodeJobId,
+  getThumbnailBitmapResourceId,
+  releaseThumbnailRuntimeResource,
+  reportThumbnailBitmapDecodeJob,
+  reportThumbnailBitmapResource,
+} from './thumbnailRuntimeReporting';
+import { timelineRuntimeCoordinator } from './timelineRuntimeCoordinator';
+
 // Decoded ImageBitmap cache for timeline thumbnails.
 //
 // thumbnailCacheService owns blob URLs for source thumbnails. Canvas renderers
@@ -22,6 +32,10 @@ export function getThumbnailBitmap(url: string): ImageBitmap | null {
   return null;
 }
 
+export function hasThumbnailBitmap(url: string): boolean {
+  return cache.has(url);
+}
+
 export function ensureThumbnailBitmap(
   url: string,
   onReady: () => void,
@@ -31,23 +45,35 @@ export function ensureThumbnailBitmap(
   if (cache.has(url) || inflight.has(url) || invalidatedUrls.has(url)) return;
 
   inflight.add(url);
+  reportThumbnailBitmapDecodeJob(url, mediaFileId);
   fetch(url)
     .then((r) => r.blob())
     .then((blob) => createImageBitmap(blob))
     .then((bmp) => {
       inflight.delete(url);
+      releaseThumbnailRuntimeResource(getThumbnailBitmapDecodeJobId(url));
       if (invalidatedUrls.has(url)) {
         invalidatedUrls.delete(url);
         bmp.close();
         return;
       }
 
+      const resource = createThumbnailBitmapResourceDescriptor(url, mediaFileId);
+      const admission = timelineRuntimeCoordinator.canRetainResource(resource);
+      if (!admission.admitted) {
+        bmp.close();
+        unlinkUrl(url);
+        return;
+      }
+
       cache.set(url, bmp);
+      reportThumbnailBitmapResource(url, mediaFileId);
       enforceBitmapLimit();
       onReady();
     })
     .catch(() => {
       inflight.delete(url);
+      releaseThumbnailRuntimeResource(getThumbnailBitmapDecodeJobId(url));
     });
 }
 
@@ -76,6 +102,7 @@ export function closeByThumbnailUrls(urls: Iterable<string>): void {
   for (const url of [...urls]) {
     if (inflight.has(url)) {
       invalidatedUrls.add(url);
+      releaseThumbnailRuntimeResource(getThumbnailBitmapDecodeJobId(url));
     }
     inflight.delete(url);
     closeCachedUrl(url);
@@ -93,6 +120,7 @@ export function clearThumbnailBitmapCache(): void {
   closeByThumbnailUrls([...cache.keys()]);
   for (const url of inflight) {
     invalidatedUrls.add(url);
+    releaseThumbnailRuntimeResource(getThumbnailBitmapDecodeJobId(url));
   }
   inflight.clear();
   sourceUrls.clear();
@@ -115,6 +143,7 @@ function enforceBitmapLimit(): void {
 function closeCachedUrl(url: string): void {
   const bmp = cache.get(url);
   cache.delete(url);
+  releaseThumbnailRuntimeResource(getThumbnailBitmapResourceId(url));
   bmp?.close();
 }
 

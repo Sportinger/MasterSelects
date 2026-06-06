@@ -1,4 +1,3 @@
-export const MAX_SPECTROGRAM_CSS_WIDTH = 8192;
 export const MAX_SPECTROGRAM_DRAW_PIXELS = 524_288;
 export const MAX_SPECTROGRAM_DPR = 2;
 
@@ -32,7 +31,7 @@ export function resolveSpectrogramCanvasPlan(input: SpectrogramCanvasPlanInput):
     clipWidth - startPx,
     Number.isFinite(input.renderWidth) && input.renderWidth !== undefined ? input.renderWidth : clipWidth,
   ));
-  const cssCanvasWidth = Math.max(1, Math.min(targetWidth, MAX_SPECTROGRAM_CSS_WIDTH));
+  const cssCanvasWidth = targetWidth;
   const drawHeight = Math.max(1, Math.floor(height * effectiveDpr));
   const widthFromDpr = Math.max(1, Math.floor(cssCanvasWidth * effectiveDpr));
   const widthFromPixelBudget = Math.max(1, Math.floor(MAX_SPECTROGRAM_DRAW_PIXELS / drawHeight));

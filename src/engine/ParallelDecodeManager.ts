@@ -167,6 +167,39 @@ export interface ParallelDecodeFrameLookupOptions {
   toleranceMultiplier?: number;
 }
 
+export interface ParallelDecodeClipRuntimeSnapshot {
+  clipId: string;
+  clipName: string;
+  codec: string;
+  decoderState: string;
+  decodeQueueSize: number;
+  hardwareAcceleration?: HardwareAcceleration;
+  dimensions: {
+    width: number;
+    height: number;
+  };
+  sampleCount: number;
+  sampleIndex: number;
+  isDecoding: boolean;
+  hasPendingDecode: boolean;
+  frameBufferSize: number;
+  estimatedBufferedFrameBytes: number;
+  oldestBufferedTimeSeconds?: number;
+  newestBufferedTimeSeconds?: number;
+  lastDecodedTimeSeconds?: number;
+  isNested?: boolean;
+  parentClipId?: string;
+}
+
+export interface ParallelDecodeRuntimeSnapshot {
+  isActive: boolean;
+  frameToleranceUs: number;
+  clipCount: number;
+  totalBufferedFrames: number;
+  estimatedBufferedFrameBytes: number;
+  clips: ParallelDecodeClipRuntimeSnapshot[];
+}
+
 // Buffer settings - tuned for speed like After Effects
 const BUFFER_AHEAD_FRAMES = 60;   // Pre-decode this many frames ahead (1 second at 60fps)
 const BACKGROUND_DECODE_MARGIN_FRAMES = 180; // Refill earlier during fast export so decode output can catch up
@@ -188,6 +221,16 @@ function isDecoderResetAbort(error: unknown): boolean {
   }
   const message = String(error);
   return message.includes('AbortError') || message.includes('Aborted due to reset');
+}
+
+function secondsFromTimestamp(timestamp: number): number | undefined {
+  return Number.isFinite(timestamp) ? timestamp / 1_000_000 : undefined;
+}
+
+function estimateDecodedFrameBytes(clipDecoder: ClipDecoder): number {
+  const width = clipDecoder.videoTrack.video.width;
+  const height = clipDecoder.videoTrack.video.height;
+  return Math.max(0, width * height * 4 * clipDecoder.frameBuffer.size);
 }
 
 export class ParallelDecodeManager {
@@ -1322,6 +1365,47 @@ export class ParallelDecodeManager {
    */
   hasClip(clipId: string): boolean {
     return this.clipDecoders.has(clipId);
+  }
+
+  getRuntimeSnapshot(): ParallelDecodeRuntimeSnapshot {
+    const clips = Array.from(this.clipDecoders.values()).map((clipDecoder) => {
+      const estimatedBufferedFrameBytes = estimateDecodedFrameBytes(clipDecoder);
+      return {
+        clipId: clipDecoder.clipId,
+        clipName: clipDecoder.clipName,
+        codec: clipDecoder.codecConfig.codec,
+        decoderState: clipDecoder.decoder.state,
+        decodeQueueSize: clipDecoder.decoder.decodeQueueSize,
+        hardwareAcceleration: clipDecoder.codecConfig.hardwareAcceleration,
+        dimensions: {
+          width: clipDecoder.videoTrack.video.width,
+          height: clipDecoder.videoTrack.video.height,
+        },
+        sampleCount: clipDecoder.samples.length,
+        sampleIndex: clipDecoder.sampleIndex,
+        isDecoding: clipDecoder.isDecoding,
+        hasPendingDecode: Boolean(clipDecoder.pendingDecode),
+        frameBufferSize: clipDecoder.frameBuffer.size,
+        estimatedBufferedFrameBytes,
+        oldestBufferedTimeSeconds: secondsFromTimestamp(clipDecoder.oldestTimestamp),
+        newestBufferedTimeSeconds: secondsFromTimestamp(clipDecoder.newestTimestamp),
+        lastDecodedTimeSeconds: secondsFromTimestamp(clipDecoder.lastDecodedTimestamp),
+        isNested: clipDecoder.clipInfo.isNested,
+        parentClipId: clipDecoder.clipInfo.parentClipId,
+      } satisfies ParallelDecodeClipRuntimeSnapshot;
+    });
+
+    return {
+      isActive: this.isActive,
+      frameToleranceUs: this.frameTolerance,
+      clipCount: clips.length,
+      totalBufferedFrames: clips.reduce((sum, clip) => sum + clip.frameBufferSize, 0),
+      estimatedBufferedFrameBytes: clips.reduce(
+        (sum, clip) => sum + clip.estimatedBufferedFrameBytes,
+        0
+      ),
+      clips,
+    };
   }
 
   /**

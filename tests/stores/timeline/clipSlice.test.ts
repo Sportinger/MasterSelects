@@ -3,6 +3,9 @@ import { createTestTimelineStore } from '../../helpers/storeFactory';
 import { createMockClip, createMockTrack, createMockTransform, resetIdCounter } from '../../helpers/mockData';
 import { clipAudioAnalysisJobService } from '../../../src/services/audio/ClipAudioAnalysisJobService';
 import { normalizeAudioEqParams } from '../../../src/engine/audio';
+import { useMediaStore } from '../../../src/stores/mediaStore';
+import { createNestedContentHash } from '../../../src/stores/timeline/clip/addCompClip';
+import { blobUrlManager } from '../../../src/stores/timeline/helpers/blobUrlManager';
 
 describe('clipSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -25,6 +28,7 @@ describe('clipSlice', () => {
   });
 
   afterEach(() => {
+    blobUrlManager.clear();
     vi.restoreAllMocks();
   });
 
@@ -54,6 +58,102 @@ describe('clipSlice', () => {
       expect(updated.waveformGenerating).not.toBe(true);
       expect(updated.audioAnalysisJob).toBeUndefined();
       expect(updated.audioState?.processedAnalysisRefs).toBeUndefined();
+    });
+  });
+
+  describe('refreshCompClipNestedData', () => {
+    function setCompositionTimelineData(timelineData: { duration: number; clips: []; tracks: [] }): void {
+      vi.mocked(useMediaStore.getState).mockReturnValue({
+        files: [],
+        compositions: [{
+          id: 'source-comp',
+          name: 'Source Comp',
+          type: 'composition',
+          parentId: null,
+          createdAt: 1,
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: timelineData.duration,
+          timelineData,
+        }],
+      } as unknown as ReturnType<typeof useMediaStore.getState>);
+    }
+
+    it('invalidates stale composition mixdown runtime when nested content hash changes', async () => {
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:old-comp-mixdown');
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      blobUrlManager.create('comp-clip', new Blob(['old']), 'audio');
+      const mixdownAudio = { src: 'blob:old-comp-mixdown' } as HTMLAudioElement;
+      const mixdownBuffer = { duration: 10 } as AudioBuffer;
+      const timelineData = { duration: 12, clips: [], tracks: [] };
+      setCompositionTimelineData(timelineData);
+      store = createTestTimelineStore({
+        thumbnailsEnabled: false,
+        clips: [createMockClip({
+          id: 'comp-clip',
+          trackId: 'video-1',
+          isComposition: true,
+          compositionId: 'source-comp',
+          nestedContentHash: 'old-hash',
+          mixdownAudio,
+          mixdownBuffer,
+          mixdownWaveform: [0, 0.5],
+          hasMixdownAudio: true,
+          mixdownGenerating: true,
+        })],
+      });
+
+      await store.getState().refreshCompClipNestedData('source-comp');
+
+      const updated = store.getState().clips.find(clip => clip.id === 'comp-clip');
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(blobUrlManager.get('comp-clip', 'audio')).toBeUndefined();
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-comp-mixdown');
+      expect(updated).toEqual(expect.objectContaining({
+        nestedContentHash: createNestedContentHash(timelineData),
+        mixdownAudio: undefined,
+        mixdownBuffer: undefined,
+        mixdownWaveform: undefined,
+        hasMixdownAudio: false,
+        mixdownGenerating: false,
+      }));
+    });
+
+    it('preserves composition mixdown runtime when nested content hash is unchanged', async () => {
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:current-comp-mixdown');
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      blobUrlManager.create('comp-clip', new Blob(['current']), 'audio');
+      const timelineData = { duration: 10, clips: [], tracks: [] };
+      const nestedContentHash = createNestedContentHash(timelineData);
+      const mixdownAudio = { src: 'blob:current-comp-mixdown' } as HTMLAudioElement;
+      const mixdownBuffer = { duration: 10 } as AudioBuffer;
+      setCompositionTimelineData(timelineData);
+      store = createTestTimelineStore({
+        thumbnailsEnabled: false,
+        clips: [createMockClip({
+          id: 'comp-clip',
+          trackId: 'video-1',
+          isComposition: true,
+          compositionId: 'source-comp',
+          nestedContentHash,
+          mixdownAudio,
+          mixdownBuffer,
+          mixdownWaveform: [0.25],
+          hasMixdownAudio: true,
+          mixdownGenerating: false,
+        })],
+      });
+
+      await store.getState().refreshCompClipNestedData('source-comp');
+
+      const updated = store.getState().clips.find(clip => clip.id === 'comp-clip');
+      expect(blobUrlManager.get('comp-clip', 'audio')).toBe('blob:current-comp-mixdown');
+      expect(revokeObjectURL).not.toHaveBeenCalled();
+      expect(updated?.mixdownAudio).toBe(mixdownAudio);
+      expect(updated?.mixdownBuffer).toBe(mixdownBuffer);
+      expect(updated?.mixdownWaveform).toEqual([0.25]);
+      expect(updated?.hasMixdownAudio).toBe(true);
     });
   });
 
@@ -522,6 +622,148 @@ describe('clipSlice', () => {
         expect(linkedAudio).toBeDefined();
         expect(linkedAudio!.linkedClipId).toBe(vc.id);
       }
+    });
+
+    it('splits linked video and audio as data-only sources', () => {
+      const createElementSpy = vi.spyOn(document, 'createElement');
+      const videoClip = createMockClip({
+        id: 'clip-v-runtime',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        linkedClipId: 'clip-a-runtime',
+        mediaFileId: 'media-video',
+        source: {
+          type: 'video',
+          videoElement: document.createElement('video'),
+          webCodecsPlayer: { destroy: vi.fn() } as never,
+          nativeDecoder: { close: vi.fn() } as never,
+          naturalDuration: 10,
+          mediaFileId: 'media-video',
+          runtimeSourceId: 'runtime-video',
+          runtimeSessionKey: 'interactive:clip-v-runtime',
+          filePath: 'C:/media/video.mp4',
+        },
+      });
+      const audioClip = createMockClip({
+        id: 'clip-a-runtime',
+        trackId: 'audio-1',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        linkedClipId: 'clip-v-runtime',
+        mediaFileId: 'media-audio',
+        source: {
+          type: 'audio',
+          audioElement: document.createElement('audio'),
+          naturalDuration: 10,
+          mediaFileId: 'media-audio',
+          runtimeSourceId: 'runtime-audio',
+          runtimeSessionKey: 'interactive:clip-a-runtime',
+          filePath: 'C:/media/audio.wav',
+        },
+      });
+      createElementSpy.mockClear();
+      store = createTestTimelineStore({
+        tracks: [
+          createMockTrack({ id: 'video-1', type: 'video' }),
+          createMockTrack({ id: 'audio-1', type: 'audio' }),
+        ],
+        clips: [videoClip, audioClip],
+      });
+
+      store.getState().splitClip('clip-v-runtime', 5);
+
+      const videoParts = store.getState().clips
+        .filter(c => c.trackId === 'video-1')
+        .toSorted((a, b) => a.startTime - b.startTime);
+      const audioParts = store.getState().clips
+        .filter(c => c.trackId === 'audio-1')
+        .toSorted((a, b) => a.startTime - b.startTime);
+
+      expect(createElementSpy).not.toHaveBeenCalledWith('video');
+      expect(createElementSpy).not.toHaveBeenCalledWith('audio');
+      expect(videoParts).toHaveLength(2);
+      expect(audioParts).toHaveLength(2);
+      expect(videoParts.every(c => !c.source?.videoElement && !c.source?.webCodecsPlayer && !c.source?.nativeDecoder)).toBe(true);
+      expect(audioParts.every(c => !c.source?.audioElement)).toBe(true);
+      expect(videoParts.map(c => c.source)).toEqual([
+        {
+          type: 'video',
+          naturalDuration: 10,
+          mediaFileId: 'media-video',
+          runtimeSourceId: 'runtime-video',
+          runtimeSessionKey: 'interactive:clip-v-runtime',
+          filePath: 'C:/media/video.mp4',
+        },
+        {
+          type: 'video',
+          naturalDuration: 10,
+          mediaFileId: 'media-video',
+          runtimeSourceId: 'runtime-video',
+          runtimeSessionKey: 'interactive:clip-v-runtime',
+          filePath: 'C:/media/video.mp4',
+        },
+      ]);
+    });
+
+    it('splits linked composition audio without carrying runtime audio elements', () => {
+      const staleAudioElement = { src: 'blob:stale-mixdown' } as unknown as HTMLAudioElement;
+      const mixdownBuffer = { duration: 10 } as AudioBuffer;
+      const videoClip = createMockClip({
+        id: 'comp-video',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        linkedClipId: 'comp-audio',
+        isComposition: true,
+        compositionId: 'comp-1',
+        source: { type: 'video', naturalDuration: 10 },
+      });
+      const audioClip = createMockClip({
+        id: 'comp-audio',
+        trackId: 'audio-1',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        linkedClipId: 'comp-video',
+        isComposition: true,
+        compositionId: 'comp-1',
+        source: {
+          type: 'audio',
+          audioElement: staleAudioElement,
+          naturalDuration: 10,
+        },
+        mixdownBuffer,
+        hasMixdownAudio: true,
+      });
+      const createElementSpy = vi.spyOn(document, 'createElement');
+      store = createTestTimelineStore({
+        tracks: [
+          createMockTrack({ id: 'video-1', type: 'video' }),
+          createMockTrack({ id: 'audio-1', type: 'audio' }),
+        ],
+        clips: [videoClip, audioClip],
+      });
+
+      store.getState().splitClip('comp-video', 5);
+
+      const audioParts = store.getState().clips
+        .filter(c => c.trackId === 'audio-1')
+        .toSorted((a, b) => a.startTime - b.startTime);
+      expect(createElementSpy).not.toHaveBeenCalledWith('audio');
+      expect(audioParts).toHaveLength(2);
+      expect(audioParts.map(c => c.source)).toEqual([
+        { type: 'audio', naturalDuration: 10 },
+        { type: 'audio', naturalDuration: 10 },
+      ]);
+      expect(audioParts.map(c => c.mixdownBuffer)).toEqual([mixdownBuffer, mixdownBuffer]);
     });
 
     it('preserves clip properties like name and trackId in split halves', () => {

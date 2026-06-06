@@ -17,6 +17,10 @@ import { getEffectiveScale } from '../../../utils/transformScale';
 import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
 import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
+import {
+  getLazyImageElementForClip,
+  type LazyImageLookupContext,
+} from '../../../services/timeline/lazyImageElements';
 
 const log = Logger.create('useLayerSync');
 
@@ -28,6 +32,25 @@ function isLayerScaleChanged(layerScale: Layer['scale'] | undefined, transformSc
     layerScale.y !== renderScale.y ||
     layerScale.z !== renderScale.z
   );
+}
+
+function createLayerSyncImageLookupContext(
+  onImageStatusChange: (clipId: string) => void
+): LazyImageLookupContext {
+  const mediaFiles = useMediaStore.getState().files;
+  const mediaFileById = new Map(mediaFiles.map((file) => [file.id, file]));
+  const mediaFileByName = new Map(
+    mediaFiles
+      .filter((file) => file.name)
+      .map((file) => [file.name, file])
+  );
+
+  return {
+    now: performance.now(),
+    mediaFileById,
+    mediaFileByName,
+    onImageStatusChange,
+  };
 }
 
 interface UseLayerSyncProps {
@@ -121,7 +144,7 @@ export function useLayerSync({
 
   // Build Layer objects from nested clips for pre-rendering
   const buildNestedLayers = useCallback(
-    (clip: TimelineClip, clipTime: number): Layer[] => {
+    (clip: TimelineClip, clipTime: number, imageLookupContext: LazyImageLookupContext): Layer[] => {
       if (!clip.nestedClips || !clip.nestedTracks) return [];
 
       const nestedVideoTracks = clip.nestedTracks.filter(
@@ -238,7 +261,12 @@ export function useLayerSync({
               z: ((transform.rotation?.z || 0) * Math.PI) / 180,
             },
           });
-        } else if (nestedClip.source?.imageElement) {
+        } else if (nestedClip.source?.type === 'image') {
+          const imageElement = getLazyImageElementForClip(imageLookupContext, nestedClip);
+          if (!imageElement) {
+            continue;
+          }
+
           layers.push({
             id: `nested-layer-${nestedClip.id}`,
             name: nestedClip.name,
@@ -248,7 +276,7 @@ export function useLayerSync({
             blendMode: transform.blendMode || 'normal',
             source: {
               type: 'image',
-              imageElement: nestedClip.source.imageElement,
+              imageElement,
             },
             effects,
             position: {
@@ -369,8 +397,18 @@ export function useLayerSync({
     // Debounce heavy layer sync via requestAnimationFrame.
     // During rapid scrubbing, multiple playheadPosition changes within a single frame
     // are batched — only the last scheduled sync actually executes.
-    pendingRafRef.current = requestAnimationFrame(() => {
+    let runLayerSync: FrameRequestCallback = () => undefined;
+    const scheduleLayerSync = () => {
+      if (pendingRafRef.current !== null) {
+        return;
+      }
+
+      pendingRafRef.current = requestAnimationFrame(runLayerSync);
+    };
+
+    runLayerSync = () => {
     pendingRafRef.current = null;
+    const imageLookupContext = createLayerSyncImageLookupContext(scheduleLayerSync);
 
     const clipsAtTime = getClipsAtTime(playheadPosition);
 
@@ -386,7 +424,7 @@ export function useLayerSync({
         const clipTime = playheadPosition - clip.startTime + clip.inPoint;
 
         // Build all nested layers for pre-rendering
-        const nestedLayers = buildNestedLayers(clip, clipTime);
+        const nestedLayers = buildNestedLayers(clip, clipTime, imageLookupContext);
 
         // Get parent clip transform
         const interpolatedTransform = getInterpolatedTransform(clip.id, clipTime);
@@ -756,8 +794,16 @@ export function useLayerSync({
             layersChanged = true;
           }
         }
-      } else if (clip?.source?.imageElement) {
-        const img = clip.source.imageElement;
+      } else if (clip?.source?.type === 'image') {
+        const img = getLazyImageElementForClip(imageLookupContext, clip);
+        if (!img) {
+          if (layer?.source && layer.sourceClipId !== clip.id) {
+            newLayers[layerIndex] = undefined as unknown as (typeof newLayers)[0];
+            layersChanged = true;
+          }
+          return;
+        }
+
         const imageClipLocalTime = playheadPosition - clip.startTime;
         const transform = getInterpolatedTransform(clip.id, imageClipLocalTime);
         const imageInterpolatedEffects = getInterpolatedEffects(
@@ -1044,7 +1090,9 @@ export function useLayerSync({
     // Update audio status for stats display
     audioStatusTracker.updateStatus(audioPlayingCount, maxAudioDrift, hasAudioError);
 
-    }); // end requestAnimationFrame
+    }; // end runLayerSync
+
+    pendingRafRef.current = requestAnimationFrame(runLayerSync);
   }, [
     playheadPosition,
     clips,

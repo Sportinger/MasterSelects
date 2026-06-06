@@ -4,6 +4,7 @@ import React, { memo, useCallback, useMemo, useRef, useEffect, useState } from '
 import type { ClipKeyframeTimeGroup, TimelineTrackProps } from './types';
 import type { AnimatableProperty, BezierHandle, ClipMask, Keyframe } from '../../types';
 import { CurveEditor } from './CurveEditor';
+import type { CurveEditorEditPhase } from './CurveEditor';
 import {
   isVectorAnimationSourceType,
   parseVectorAnimationInputProperty,
@@ -15,25 +16,38 @@ import { TimelineClipCanvas, type CanvasFadeVisuals } from './TimelineClipCanvas
 import {
   ClipInteractionShell,
   type ClipInteractionShellActiveModules,
+  type ClipInteractionShellCommandContext,
   type ClipInteractionShellGeometry,
   type ClipInteractionShellMountReason,
   type ClipInteractionShellMountState,
   type ClipInteractionShellModuleSlot,
   type ClipInteractionShellRect,
 } from './interactionShell';
-import { reportTimelineCanvasDomDiagnostics } from '../../services/timeline/timelineCanvasDiagnostics';
+import {
+  reportTimelineCanvasDomDiagnostics,
+  unregisterTimelineCanvasTrackDiagnostics,
+} from '../../services/timeline/timelineCanvasDiagnostics';
+import { Logger } from '../../services/logger';
 import { MIN_CLIP_DURATION } from './timelineRenderConstants';
 import { resolveAudioVolumeAutomationCurveKeyframes } from './utils/audioAutomationCurve';
 import type { FadeCurveKeyframe } from './utils/fadeCurvePath';
+import { isTimelineActiveTarget } from './utils/timelineActiveTargets';
+import {
+  dispatchTimelineClipPointerClick,
+  dispatchTimelineClipPointerMove,
+  isTimelinePointerTool,
+} from './tools/pointer/timelineToolPointerDispatcher';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
-const TRACK_VIEWPORT_MIN_PX = 1600;
 const TRACK_RENDER_OVERSCAN_PX = 1200;
 const CLIP_SHELL_VERTICAL_INSET_PX = 4;
 const CLIP_SHELL_HANDLE_WIDTH_PX = 8;
 const CLIP_SHELL_FADE_HANDLE_SIZE_PX = 12;
 const EPSILON = 0.0001;
 const FADE_DURATION_VALUE_EPSILON = 0.01;
+const log = Logger.create('TimelineTrack');
+
+type KeyframeTickMovePhase = 'begin' | 'update' | 'commit';
 
 const isInfiniteTimelineSourceType = (sourceType: string | null | undefined): boolean => (
   sourceType === 'text' ||
@@ -197,6 +211,7 @@ function TrackPropertyTracks({
   onSelectKeyframe,
   onMoveKeyframe,
   onUpdateBezierHandle,
+  applyTimelineEditOperation,
   addKeyframe,
   timeToPixel,
   pixelToTime,
@@ -211,11 +226,32 @@ function TrackPropertyTracks({
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
   onUpdateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
+  applyTimelineEditOperation?: TimelineTrackProps['applyTimelineEditOperation'];
   addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: string | null) => void;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
 }) {
   const clipId = selectedClip?.id;
+  const curveTransactionCounterRef = useRef(0);
+  const curveKeyframeTransactionRef = useRef<{
+    transactionId: string;
+    historyBatchId: string;
+    clipId: string;
+    property: AnimatableProperty;
+    keyframeId: string;
+    originalTime: number;
+    originalValue: number;
+    hasUpdate: boolean;
+  } | null>(null);
+  const curveBezierTransactionRef = useRef<{
+    transactionId: string;
+    historyBatchId: string;
+    clipId: string;
+    property: AnimatableProperty;
+    keyframeId: string;
+    handle: 'in' | 'out';
+    hasUpdate: boolean;
+  } | null>(null);
 
   // Get keyframes for this clip - use clipKeyframes map to trigger re-render when keyframes change
   const keyframeProperties = useMemo(() => {
@@ -236,6 +272,10 @@ function TrackPropertyTracks({
   // Track container ref for getting width
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1000);
+  const allKeyframes = useMemo(
+    () => (clipId ? (clipKeyframes.get(clipId) ?? []) as Keyframe[] : []),
+    [clipId, clipKeyframes],
+  );
 
   // Measure container width
   useEffect(() => {
@@ -248,6 +288,292 @@ function TrackPropertyTracks({
     window.addEventListener('resize', updateWidth);
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
+
+  const findCurveKeyframe = useCallback(
+    (keyframeId: string) => allKeyframes.find((keyframe) => keyframe.id === keyframeId),
+    [allKeyframes],
+  );
+
+  const nextCurveTransactionId = useCallback((kind: string, keyframeId: string) => {
+    curveTransactionCounterRef.current += 1;
+    return `curve-editor:${kind}:${keyframeId}:${curveTransactionCounterRef.current}`;
+  }, []);
+
+  const handleCurveKeyframeMove = useCallback((
+    keyframeId: string,
+    newTime: number,
+    newValue: number,
+    phase?: CurveEditorEditPhase,
+  ) => {
+    const target = findCurveKeyframe(keyframeId);
+    if (!applyTimelineEditOperation) {
+      if (phase === undefined || phase === 'update') {
+        onMoveKeyframe(keyframeId, newTime);
+      }
+      return;
+    }
+    if (!target) {
+      const clearedSession = curveKeyframeTransactionRef.current?.keyframeId === keyframeId;
+      if (curveKeyframeTransactionRef.current?.keyframeId === keyframeId) {
+        curveKeyframeTransactionRef.current = null;
+      }
+      if (clearedSession || phase !== 'update') {
+        log.warn('Skipped curve keyframe edit for missing typed target', {
+          keyframeId,
+          phase: phase ?? 'single',
+        });
+      }
+      return;
+    }
+
+    const ensureSession = () => {
+      const existing = curveKeyframeTransactionRef.current;
+      if (existing?.keyframeId === keyframeId) return existing;
+
+      const transactionId = nextCurveTransactionId('keyframe', keyframeId);
+      const session = {
+        transactionId,
+        historyBatchId: `${transactionId}:history`,
+        clipId: target.clipId,
+        property: target.property,
+        keyframeId,
+        originalTime: target.time,
+        originalValue: target.value,
+        hasUpdate: false,
+      };
+      curveKeyframeTransactionRef.current = session;
+      applyTimelineEditOperation({
+        id: `${transactionId}:begin`,
+        type: 'keyframe-transaction-begin',
+        transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'begin',
+        clipId: target.clipId,
+        property: target.property,
+        keyframeIds: [keyframeId],
+        intent: 'curve-editor',
+      }, {
+        source: 'ui',
+        historyLabel: 'Begin curve keyframe edit',
+      });
+      return session;
+    };
+
+    const session = ensureSession();
+    if (phase === 'begin') return;
+    if (phase === 'commit' && !session.hasUpdate) {
+      curveKeyframeTransactionRef.current = null;
+      return;
+    }
+
+    const operations = [
+      {
+        type: 'keyframe-move' as const,
+        keyframeId,
+        clipId: session.clipId,
+        property: session.property,
+        originalTime: session.originalTime,
+        requestedTime: newTime,
+        resolvedTime: newTime,
+      },
+      {
+        type: 'keyframe-update-value' as const,
+        keyframeId,
+        clipId: session.clipId,
+        property: session.property,
+        value: { value: newValue },
+      },
+    ];
+
+    if (phase === 'commit') {
+      applyTimelineEditOperation({
+        id: `${session.transactionId}:commit:${newTime.toFixed(6)}:${newValue.toFixed(6)}`,
+        type: 'keyframe-transaction-commit',
+        transactionId: session.transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'commit',
+        clipId: session.clipId,
+        property: session.property,
+        keyframeIds: [keyframeId],
+        operations,
+      }, {
+        source: 'ui',
+        historyLabel: 'Edit curve keyframe',
+      });
+      curveKeyframeTransactionRef.current = null;
+      return;
+    }
+
+    session.hasUpdate = true;
+    applyTimelineEditOperation({
+      id: `${session.transactionId}:update:${newTime.toFixed(6)}:${newValue.toFixed(6)}`,
+      type: 'keyframe-transaction-update',
+      transactionId: session.transactionId,
+      historyBatchId: session.historyBatchId,
+      source: 'ui',
+      phase: 'update',
+      clipId: session.clipId,
+      property: session.property,
+      keyframeIds: [keyframeId],
+      operations,
+    }, {
+      source: 'ui',
+      historyLabel: 'Edit curve keyframe',
+      deferHistoryCommit: true,
+    });
+  }, [applyTimelineEditOperation, findCurveKeyframe, nextCurveTransactionId, onMoveKeyframe]);
+
+  const handleCurveBezierHandleUpdate = useCallback((
+    keyframeId: string,
+    handle: 'in' | 'out',
+    position: BezierHandle,
+    phase?: CurveEditorEditPhase,
+  ) => {
+    const target = findCurveKeyframe(keyframeId);
+    if (!applyTimelineEditOperation) {
+      if (phase === undefined || phase === 'update') {
+        onUpdateBezierHandle(keyframeId, handle, position);
+      }
+      return;
+    }
+    if (!target) {
+      const existing = curveBezierTransactionRef.current;
+      const clearedSession = existing?.keyframeId === keyframeId && existing.handle === handle;
+      if (existing?.keyframeId === keyframeId && existing.handle === handle) {
+        curveBezierTransactionRef.current = null;
+      }
+      if (clearedSession || phase !== 'update') {
+        log.warn('Skipped curve bezier handle edit for missing typed target', {
+          keyframeId,
+          handle,
+          phase: phase ?? 'single',
+        });
+      }
+      return;
+    }
+
+    const buildOperation = (session: {
+      transactionId: string;
+      historyBatchId: string;
+      clipId: string;
+      property: AnimatableProperty;
+      keyframeId: string;
+    }) => ({
+      type: 'keyframe-update-bezier-handle' as const,
+      keyframeId: session.keyframeId,
+      clipId: session.clipId,
+      property: session.property,
+      handle,
+      position,
+    });
+
+    if (phase === undefined) {
+      const transactionId = nextCurveTransactionId(`bezier-${handle}`, keyframeId);
+      applyTimelineEditOperation({
+        id: `${transactionId}:commit`,
+        type: 'keyframe-transaction-commit',
+        transactionId,
+        historyBatchId: `${transactionId}:history`,
+        source: 'ui',
+        phase: 'commit',
+        clipId: target.clipId,
+        property: target.property,
+        keyframeIds: [keyframeId],
+        operations: [buildOperation({
+          transactionId,
+          historyBatchId: `${transactionId}:history`,
+          clipId: target.clipId,
+          property: target.property,
+          keyframeId,
+        })],
+      }, {
+        source: 'ui',
+        historyLabel: 'Edit bezier handle',
+      });
+      return;
+    }
+
+    const ensureSession = () => {
+      const existing = curveBezierTransactionRef.current;
+      if (existing?.keyframeId === keyframeId && existing.handle === handle) return existing;
+
+      const transactionId = nextCurveTransactionId(`bezier-${handle}`, keyframeId);
+      const session = {
+        transactionId,
+        historyBatchId: `${transactionId}:history`,
+        clipId: target.clipId,
+        property: target.property,
+        keyframeId,
+        handle,
+        hasUpdate: false,
+      };
+      curveBezierTransactionRef.current = session;
+      applyTimelineEditOperation({
+        id: `${transactionId}:begin`,
+        type: 'keyframe-transaction-begin',
+        transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'begin',
+        clipId: target.clipId,
+        property: target.property,
+        keyframeIds: [keyframeId],
+        intent: 'curve-editor',
+      }, {
+        source: 'ui',
+        historyLabel: 'Begin bezier handle edit',
+      });
+      return session;
+    };
+
+    const session = ensureSession();
+    if (phase === 'begin') return;
+    if (phase === 'commit' && !session.hasUpdate) {
+      curveBezierTransactionRef.current = null;
+      return;
+    }
+
+    const operation = buildOperation(session);
+    if (phase === 'commit') {
+      applyTimelineEditOperation({
+        id: `${session.transactionId}:commit`,
+        type: 'keyframe-transaction-commit',
+        transactionId: session.transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'commit',
+        clipId: session.clipId,
+        property: session.property,
+        keyframeIds: [keyframeId],
+        operations: [operation],
+      }, {
+        source: 'ui',
+        historyLabel: 'Edit bezier handle',
+      });
+      curveBezierTransactionRef.current = null;
+      return;
+    }
+
+    session.hasUpdate = true;
+    applyTimelineEditOperation({
+      id: `${session.transactionId}:update:${position.x.toFixed(6)}:${position.y.toFixed(6)}`,
+      type: 'keyframe-transaction-update',
+      transactionId: session.transactionId,
+      historyBatchId: session.historyBatchId,
+      source: 'ui',
+      phase: 'update',
+      clipId: session.clipId,
+      property: session.property,
+      keyframeIds: [keyframeId],
+      operations: [operation],
+    }, {
+      source: 'ui',
+      historyLabel: 'Edit bezier handle',
+      deferHistoryCommit: true,
+    });
+  }, [applyTimelineEditOperation, findCurveKeyframe, nextCurveTransactionId, onUpdateBezierHandle]);
 
   // If no clip is selected in this track or no keyframes, show nothing
   if (!selectedClip || keyframeProperties.size === 0) {
@@ -277,9 +603,6 @@ function TrackPropertyTracks({
 
   // Get expanded curve properties for this track
   const trackCurveProps = expandedCurveProperties.get(trackId);
-
-  // Get all keyframes for this clip
-  const allKeyframes = clipKeyframes.get(selectedClip.id) || [];
 
   const resolvePenKeyframeValue = (
     keyframes: Array<{ time: number; value: number }>,
@@ -328,7 +651,12 @@ function TrackPropertyTracks({
         const propKeyframes = allKeyframes.filter(kf => kf.property === prop);
 
         return (
-          <div key={prop} className={`keyframe-track-row flat ${isCurveExpanded ? 'curve-expanded' : ''}`}>
+          <div
+            key={prop}
+            className={`keyframe-track-row flat ${isCurveExpanded ? 'curve-expanded' : ''}`}
+            data-track-id={trackId}
+            data-keyframe-property={prop}
+          >
             <div
               className="keyframe-track"
               onMouseDown={(event) => handlePenKeyframeMouseDown(event, prop as AnimatableProperty, propKeyframes)}
@@ -347,10 +675,8 @@ function TrackPropertyTracks({
                 width={containerWidth}
                 selectedKeyframeIds={selectedKeyframeIds}
                 onSelectKeyframe={onSelectKeyframe}
-                onMoveKeyframe={(id, newTime, _newValue) => {
-                  onMoveKeyframe(id, newTime);
-                }}
-                onUpdateBezierHandle={onUpdateBezierHandle}
+                onMoveKeyframe={handleCurveKeyframeMove}
+                onUpdateBezierHandle={handleCurveBezierHandleUpdate}
                 timeToPixel={timeToPixel}
                 pixelToTime={pixelToTime}
               />
@@ -399,6 +725,7 @@ function TimelineTrackComponent({
   onTrimStart,
   onFadeStart,
   onClipMouseDown,
+  onClipDoubleClick,
   onClipContextMenu,
   clipKeyframes,
   renderKeyframeDiamonds,
@@ -410,6 +737,7 @@ function TimelineTrackComponent({
   onSelectKeyframe,
   onMoveKeyframe,
   onMoveKeyframeGroup,
+  applyTimelineEditOperation,
   onUpdateBezierHandle,
   addKeyframe,
 }: TimelineTrackProps) {
@@ -423,9 +751,46 @@ function TimelineTrackComponent({
     return Array.from(uniqueClips.values());
   }, [clips, track.id]);
   const clipFadeClipId = clipFade?.clipId ?? null;
-  const viewportWidth = typeof window === 'undefined'
-    ? TRACK_VIEWPORT_FALLBACK_PX
-    : Math.max(TRACK_VIEWPORT_MIN_PX, window.innerWidth);
+  const clipRowRef = useRef<HTMLDivElement>(null);
+  const [measuredViewportWidth, setMeasuredViewportWidth] = useState(TRACK_VIEWPORT_FALLBACK_PX);
+  const keyframeTickTransactionRef = useRef<{
+    transactionId: string;
+    historyBatchId: string;
+    clipId: string;
+    property?: AnimatableProperty;
+    keyframeIds: string[];
+    originalTimes: Map<string, number>;
+    hasUpdate: boolean;
+  } | null>(null);
+  const keyframeTickTransactionCounterRef = useRef(0);
+
+  useEffect(() => {
+    const row = clipRowRef.current;
+    if (!row) return;
+
+    const updateViewportWidth = () => {
+      const nextWidth = Math.max(
+        1,
+        Math.ceil(row.clientWidth || row.getBoundingClientRect().width || TRACK_VIEWPORT_FALLBACK_PX),
+      );
+      setMeasuredViewportWidth((previous) => (previous === nextWidth ? previous : nextWidth));
+    };
+
+    updateViewportWidth();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(updateViewportWidth);
+      observer.observe(row);
+      return () => observer.disconnect();
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', updateViewportWidth);
+      return () => window.removeEventListener('resize', updateViewportWidth);
+    }
+  }, []);
+
+  const viewportWidth = measuredViewportWidth;
   const visibleStartTime = Math.max(0, (scrollX - TRACK_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001));
   const visibleEndTime = (scrollX + viewportWidth + TRACK_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001);
   const trackClips = useMemo(() => {
@@ -451,6 +816,7 @@ function TimelineTrackComponent({
   }, [allTrackClips, clipDrag, clipFadeClipId, clipTrim?.clipId, visibleEndTime, visibleStartTime]);
   const trackClipIds = useMemo(() => new Set(allTrackClips.map((clip) => clip.id)), [allTrackClips]);
   const clipContextMenuClipId = clipContextMenu?.clipId ?? null;
+  const [hoveredClipId, setHoveredClipId] = useState<string | null>(null);
   const clipShellKeyframeStateByClipId = useMemo(() => {
     const stateByClipId = new Map<string, {
       keyframes: Keyframe[];
@@ -459,12 +825,12 @@ function TimelineTrackComponent({
       activeProperty?: AnimatableProperty;
     }>();
 
-    if (selectedKeyframeIds.size === 0) return stateByClipId;
-
     allTrackClips.forEach((clip) => {
       const keyframes = (clipKeyframes.get(clip.id) ?? []) as Keyframe[];
+      if (keyframes.length === 0) return;
+
       const selectedKeyframes = keyframes.filter((keyframe) => selectedKeyframeIds.has(keyframe.id));
-      if (selectedKeyframes.length === 0) return;
+      if (clip.id !== hoveredClipId && selectedKeyframes.length === 0) return;
 
       stateByClipId.set(clip.id, {
         keyframes,
@@ -475,8 +841,7 @@ function TimelineTrackComponent({
     });
 
     return stateByClipId;
-  }, [allTrackClips, clipKeyframes, selectedKeyframeIds]);
-  const [hoveredClipId, setHoveredClipId] = useState<string | null>(null);
+  }, [allTrackClips, clipKeyframes, hoveredClipId, selectedKeyframeIds]);
   const clipShellSpecialStateByClipId = useMemo(() => {
     const stateByClipId = new Map<string, {
       audioRegionActive: boolean;
@@ -627,9 +992,13 @@ function TimelineTrackComponent({
 
     return Array.from(nextClips.values()).map((clip) => {
       const fade = getClipFadeVisualState(clip);
-      return fade.keyframes.length >= 2 ? { ...clip, fade } : clip;
+      return {
+        ...clip,
+        trackType: track.type,
+        ...(fade.keyframes.length >= 2 ? { fade } : {}),
+      };
     });
-  }, [clipDrag, clipDragPreview, track.id, allTrackClips, clips, getClipFadeVisualState]);
+  }, [clipDrag, clipDragPreview, track.id, track.type, allTrackClips, clips, getClipFadeVisualState]);
   const canvasContentWidth = useMemo(() => {
     let max = trackContentWidth;
     for (const clip of canvasClips) {
@@ -682,6 +1051,12 @@ function TimelineTrackComponent({
     () => canvasClips.filter((clip) => domControlClipIds.has(clip.id)),
     [canvasClips, domControlClipIds],
   );
+  useEffect(() => {
+    return () => {
+      unregisterTimelineCanvasTrackDiagnostics(track.id);
+    };
+  }, [track.id]);
+
   useEffect(() => {
     const activeShellSlotCounts: Partial<Record<ClipInteractionShellModuleSlot, number>> = {};
     const countSlot = (slot: ClipInteractionShellModuleSlot) => {
@@ -788,6 +1163,9 @@ function TimelineTrackComponent({
     const keyframeState = clipShellKeyframeStateByClipId.get(clipId);
     const specialState = clipShellSpecialStateByClipId.get(clipId);
     const audioRegionGainActive = audioRegionGainPreview?.clipId === clipId;
+    const isTrimGestureActive = clipTrim?.clipId === clipId;
+    const isFadeGestureActive = clipFade?.clipId === clipId;
+    const canShowEditHandles = !track.locked && (hoveredClipId === clipId || isTrimGestureActive || isFadeGestureActive);
     const fadeVisualState = getClipFadeVisualState(clip);
     const selectedStemKind = clip.audioState?.stemSeparation?.stems
       .find((stem) => stem.id === clip.audioState?.stemSeparation?.soloStemId)
@@ -795,16 +1173,16 @@ function TimelineTrackComponent({
 
     return {
       trim: {
-        enabled: clipTrim?.clipId === clipId,
+        enabled: canShowEditHandles,
         slot: 'trim',
-        state: clipTrim?.clipId === clipId ? clipTrim : null,
-        activeEdges: clipTrim?.clipId === clipId ? [clipTrim.edge] : [],
+        state: isTrimGestureActive ? clipTrim : null,
+        activeEdges: isTrimGestureActive ? [clipTrim.edge] : [],
       },
       fade: {
-        enabled: clipFade?.clipId === clipId,
+        enabled: canShowEditHandles,
         slot: 'fade',
-        state: clipFade?.clipId === clipId ? clipFade : null,
-        activeEdges: clipFade?.clipId === clipId ? [clipFade.edge] : [],
+        state: isFadeGestureActive ? clipFade : null,
+        activeEdges: isFadeGestureActive ? [clipFade.edge] : [],
         fadeInDuration: fadeVisualState.fadeInDuration,
         fadeOutDuration: fadeVisualState.fadeOutDuration,
         curveKeyframes: fadeVisualState.keyframes,
@@ -868,6 +1246,224 @@ function TimelineTrackComponent({
     }
     return null;
   };
+  const buildClipPointerContext = (
+    clipId: string,
+    clientX: number,
+    rowEl: HTMLElement,
+    altKey: boolean,
+  ) => {
+    const clip = allTrackClips.find((candidate) => candidate.id === clipId);
+    if (!clip) return null;
+    const rowRect = rowEl.getBoundingClientRect();
+    const clipLeft = rowRect.left + timeToPixel(clip.startTime) - scrollX;
+    const timelineState = useTimelineStore.getState();
+    return {
+      toolId: activeTimelineToolId,
+      clip,
+      track,
+      clips,
+      playheadPosition: timelineState.playheadPosition,
+      snappingEnabled: timelineState.snappingEnabled,
+      displayStartTime: clip.startTime,
+      displayDuration: clip.duration,
+      width: Math.max(1, timeToPixel(clip.duration)),
+      clientX,
+      rectLeft: clipLeft,
+      altKey,
+    };
+  };
+  const handleTimelineToolPointerMove = (
+    event: React.MouseEvent<HTMLDivElement>,
+    clipId: string | null,
+  ): boolean => {
+    if (!isTimelinePointerTool(activeTimelineToolId)) return false;
+    if (!clipId) {
+      useTimelineStore.getState().setTimelineToolPreview(null);
+      return false;
+    }
+
+    const context = buildClipPointerContext(
+      clipId,
+      event.clientX,
+      event.currentTarget,
+      event.altKey,
+    );
+    if (!context) return false;
+
+    const result = dispatchTimelineClipPointerMove(context);
+    if (!result.handled) return false;
+
+    useTimelineStore.getState().setTimelineToolPreview(result.preview ?? null);
+    return true;
+  };
+  const handleTimelineToolPointerClick = (
+    event: React.MouseEvent<HTMLDivElement>,
+    clipId: string,
+  ): boolean => {
+    if (!isTimelinePointerTool(activeTimelineToolId)) return false;
+    const context = buildClipPointerContext(
+      clipId,
+      event.clientX,
+      event.currentTarget,
+      event.altKey,
+    );
+    if (!context) return false;
+
+    const result = dispatchTimelineClipPointerClick(context);
+    if (!result.handled) return false;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const timelineState = useTimelineStore.getState();
+    if ('preview' in result) {
+      timelineState.setTimelineToolPreview(result.preview ?? null);
+    }
+    if (result.operation) {
+      timelineState.applyTimelineEditOperation(result.operation, {
+        source: 'ui',
+        historyLabel: result.operation.type === 'split-all-at-time'
+          ? 'Blade all tracks split'
+          : 'Blade split',
+      });
+    }
+    if (result.nextToolId) {
+      timelineState.setActiveTimelineTool(result.nextToolId);
+    }
+    return true;
+  };
+  const handleShellKeyframeGroupMove = useCallback((
+    keyframeIds: string[],
+    newTime: number,
+    context: ClipInteractionShellCommandContext,
+    phase: KeyframeTickMovePhase = 'update',
+  ) => {
+    const keyframeIdSet = new Set(keyframeIds);
+    const targetKeyframes = (context.activeModules.keyframe?.keyframes ?? [])
+      .filter((keyframe): keyframe is Keyframe => keyframeIdSet.has(keyframe.id));
+
+    if (!applyTimelineEditOperation) {
+      if (phase === 'update') {
+        onMoveKeyframeGroup?.(keyframeIds, newTime);
+      }
+      return;
+    }
+
+    const targetKeyframeIdSet = new Set(targetKeyframes.map((keyframe) => keyframe.id));
+    const missingKeyframeIds = keyframeIds.filter((keyframeId) => !targetKeyframeIdSet.has(keyframeId));
+    if (missingKeyframeIds.length > 0) {
+      const existing = keyframeTickTransactionRef.current;
+      const shouldClearSession = existing?.clipId === context.clip.id &&
+        keyframeIds.some((keyframeId) => existing.originalTimes.has(keyframeId));
+      if (shouldClearSession) {
+        keyframeTickTransactionRef.current = null;
+      }
+      if (shouldClearSession || phase !== 'update') {
+        log.warn('Skipped keyframe group move for missing typed targets', {
+          clipId: context.clip.id,
+          keyframeIds,
+          missingKeyframeIds,
+          phase,
+        });
+      }
+      return;
+    }
+
+    const resolvedKeyframeIds = targetKeyframes.map((keyframe) => keyframe.id);
+    const sessionMatches = (session: NonNullable<typeof keyframeTickTransactionRef.current>) => (
+      session.clipId === context.clip.id &&
+      resolvedKeyframeIds.length === session.keyframeIds.length &&
+      resolvedKeyframeIds.every((keyframeId) => session.originalTimes.has(keyframeId))
+    );
+
+    const ensureSession = () => {
+      const existing = keyframeTickTransactionRef.current;
+      if (existing && sessionMatches(existing)) return existing;
+
+      keyframeTickTransactionCounterRef.current += 1;
+      const transactionId = `keyframe-tick:${context.clip.id}:${keyframeTickTransactionCounterRef.current}`;
+      const session = {
+        transactionId,
+        historyBatchId: `${transactionId}:history`,
+        clipId: context.clip.id,
+        property: targetKeyframes[0]?.property,
+        keyframeIds: resolvedKeyframeIds,
+        originalTimes: new Map(targetKeyframes.map((keyframe) => [keyframe.id, keyframe.time])),
+        hasUpdate: false,
+      };
+      keyframeTickTransactionRef.current = session;
+      applyTimelineEditOperation({
+        id: `${transactionId}:begin`,
+        type: 'keyframe-transaction-begin',
+        transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'begin',
+        clipId: context.clip.id,
+        property: session.property,
+        keyframeIds: resolvedKeyframeIds,
+        intent: 'drag-diamond',
+      }, {
+        source: 'ui',
+        historyLabel: 'Begin keyframe move',
+      });
+      return session;
+    };
+
+    const session = ensureSession();
+    if (phase === 'begin') return;
+    if (phase === 'commit' && !session.hasUpdate) {
+      keyframeTickTransactionRef.current = null;
+      return;
+    }
+
+    const operations = targetKeyframes.map((keyframe) => ({
+      type: 'keyframe-move' as const,
+      keyframeId: keyframe.id,
+      clipId: keyframe.clipId,
+      property: keyframe.property,
+      originalTime: session.originalTimes.get(keyframe.id) ?? keyframe.time,
+      requestedTime: newTime,
+      resolvedTime: newTime,
+    }));
+
+    if (phase === 'commit') {
+      applyTimelineEditOperation({
+        id: `${session.transactionId}:commit:${newTime.toFixed(6)}`,
+        type: 'keyframe-transaction-commit',
+        transactionId: session.transactionId,
+        historyBatchId: session.historyBatchId,
+        source: 'ui',
+        phase: 'commit',
+        clipId: context.clip.id,
+        property: session.property,
+        keyframeIds: session.keyframeIds,
+        operations,
+      }, {
+        source: 'ui',
+        historyLabel: 'Move keyframes',
+      });
+      keyframeTickTransactionRef.current = null;
+      return;
+    }
+
+    session.hasUpdate = true;
+    applyTimelineEditOperation({
+      id: `${session.transactionId}:update:${newTime.toFixed(6)}`,
+      type: 'keyframe-transaction-update',
+      transactionId: session.transactionId,
+      historyBatchId: session.historyBatchId,
+      source: 'ui',
+      phase: 'update',
+      clipId: context.clip.id,
+      property: session.property,
+      keyframeIds: session.keyframeIds,
+      operations,
+    }, {
+      source: 'ui',
+      historyLabel: 'Move keyframes',
+      deferHistoryCommit: true,
+    });
+  }, [applyTimelineEditOperation, onMoveKeyframeGroup]);
   const selectedTrackClip = allTrackClips.find((c) => selectedClipIds.has(c.id));
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
   const isPropertiesSelected = propertiesSelection?.kind === 'track' && propertiesSelection.trackId === track.id;
@@ -922,6 +1518,7 @@ function TimelineTrackComponent({
     >
       {/* Clip row - the normal clip area */}
       <div
+        ref={clipRowRef}
         className="track-clip-row"
         style={{ height: baseHeight }}
         onMouseMove={(event) => {
@@ -929,15 +1526,24 @@ function TimelineTrackComponent({
           // interaction shell on top of the canvas.
           const hit = hitTestClipAtClientX(event.clientX, event.currentTarget);
           setHoveredClipId((prev) => (prev === hit ? prev : hit));
+          handleTimelineToolPointerMove(event, hit);
         }}
-        onMouseLeave={() => setHoveredClipId(null)}
+        onMouseLeave={() => {
+          setHoveredClipId(null);
+          if (isTimelinePointerTool(activeTimelineToolId)) {
+            useTimelineStore.getState().setTimelineToolPreview(null);
+          }
+        }}
         onMouseDown={(event) => {
           if (event.button === 0) {
             const target = event.target as HTMLElement;
-            if (!target.closest('.timeline-clip, .timeline-clip-preview')) {
+            if (!isTimelineActiveTarget(target)) {
               const hit = hitTestClipAtClientX(event.clientX, event.currentTarget);
               if (hit) {
                 setHoveredClipId(hit);
+                if (handleTimelineToolPointerClick(event, hit)) {
+                  return;
+                }
                 onClipMouseDown(event, hit);
                 return;
               }
@@ -945,14 +1551,22 @@ function TimelineTrackComponent({
           }
           if (event.button !== 2) return;
           const target = event.target as HTMLElement;
-          if (target.closest('.timeline-clip, .timeline-clip-preview')) return;
+          if (isTimelineActiveTarget(target)) return;
           const rect = event.currentTarget.getBoundingClientRect();
           const time = Math.max(0, pixelToTime(event.clientX - rect.left));
           onEmptyMouseDown(event, track.id, time);
         }}
+        onDoubleClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest('button, input, select, textarea, [data-shell-trim-edge], [data-shell-fade-edge]')) return;
+          const hit = hitTestClipAtClientX(event.clientX, event.currentTarget);
+          if (!hit) return;
+          setHoveredClipId(hit);
+          onClipDoubleClick(event, hit);
+        }}
         onContextMenu={(event) => {
           const target = event.target as HTMLElement;
-          if (target.closest('.timeline-clip, .timeline-clip-preview')) return;
+          if (isTimelineActiveTarget(target)) return;
           const hit = hitTestClipAtClientX(event.clientX, event.currentTarget);
           if (hit) {
             onClipContextMenu(event, hit);
@@ -998,9 +1612,7 @@ function TimelineTrackComponent({
                 commands={{
                   onFadeStart: (event, context, edge) => onFadeStart(event, context.clip.id, edge),
                   onTrimStart: (event, context, edge) => onTrimStart(event, context.clip.id, edge),
-                  onMoveKeyframeGroup: (keyframeIds, newTime) => {
-                    onMoveKeyframeGroup?.(keyframeIds, newTime);
-                  },
+                  onMoveKeyframeGroup: handleShellKeyframeGroupMove,
                 }}
                 className="timeline-canvas-interaction-shell"
                 style={{ pointerEvents: 'none' }}
@@ -1047,6 +1659,7 @@ function TimelineTrackComponent({
           onSelectKeyframe={onSelectKeyframe}
           onMoveKeyframe={onMoveKeyframe}
           onUpdateBezierHandle={onUpdateBezierHandle}
+          applyTimelineEditOperation={applyTimelineEditOperation}
           addKeyframe={addKeyframe}
           timeToPixel={timeToPixel}
           pixelToTime={pixelToTime}
@@ -1105,6 +1718,7 @@ function areTimelineTrackPropsEqual(
       previous.scrollX === next.scrollX &&
       previous.onEmptyMouseDown === next.onEmptyMouseDown &&
       previous.onEmptyContextMenu === next.onEmptyContextMenu &&
+      previous.onClipDoubleClick === next.onClipDoubleClick &&
       previous.onFadeStart === next.onFadeStart &&
       previous.onTrimStart === next.onTrimStart &&
       previous.isResizeActive === next.isResizeActive &&

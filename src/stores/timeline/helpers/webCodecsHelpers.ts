@@ -6,8 +6,26 @@ import { engine } from '../../../engine/WebGPUEngine';
 import { flags } from '../../../engine/featureFlags';
 import { Logger } from '../../../services/logger';
 import { layerBuilder } from '../../../services/layerBuilder';
+import type {
+  RenderResourceDescriptor,
+  TimelineRuntimeAdmissionDecision,
+} from '../../../services/timeline/runtimeCoordinatorTypes';
+import { timelineRuntimeCoordinator } from '../../../services/timeline/timelineRuntimeCoordinator';
 
 const log = Logger.create('WebCodecsHelpers');
+let webCodecsHelperProviderSequence = 0;
+
+type WebCodecsHelperAdmission =
+  | {
+      admitted: true;
+      resourceId: string;
+      release: () => void;
+    }
+  | {
+      admitted: false;
+      decision: TimelineRuntimeAdmissionDecision;
+      release: () => void;
+    };
 
 type VideoFrameCallbackVideo = HTMLVideoElement & {
   requestVideoFrameCallback: (callback: () => void) => number;
@@ -15,6 +33,77 @@ type VideoFrameCallbackVideo = HTMLVideoElement & {
 
 function hasVideoFrameCallback(video: HTMLVideoElement): video is VideoFrameCallbackVideo {
   return 'requestVideoFrameCallback' in video;
+}
+
+function reserveWebCodecsHelperProviderResource(params: {
+  fileName: string;
+  file?: File;
+  fullMode: boolean;
+}): WebCodecsHelperAdmission {
+  webCodecsHelperProviderSequence += 1;
+  const providerId = `webcodecs-helper:${webCodecsHelperProviderSequence}:${params.fileName}`;
+  const resource: RenderResourceDescriptor = {
+    id: `${providerId}:frame-provider`,
+    kind: 'video-frame-provider',
+    policyId: 'interactive',
+    owner: {
+      ownerId: providerId,
+      ownerType: 'timeline',
+      mediaFileId: undefined,
+    },
+    source: {
+      sourceId: params.file
+        ? `${params.file.name}:${params.file.size}:${params.file.lastModified}`
+        : params.fileName,
+      previewPath: params.fileName,
+    },
+    providerId,
+    providerKind: 'webcodecs',
+    canSeek: params.fullMode,
+    canProvideStaleFrame: !params.fullMode,
+    frameFormat: params.fullMode ? 'video-frame' : 'canvas-image-source',
+    memoryCost: params.file
+      ? {
+          heapBytes: params.file.size,
+        }
+      : undefined,
+    label: 'Timeline helper WebCodecs provider',
+    tags: ['timeline-helper', 'webcodecs'],
+  };
+  const decision = timelineRuntimeCoordinator.canRetainResource(resource);
+  if (!decision.admitted) {
+    return {
+      admitted: false,
+      decision,
+      release: () => undefined,
+    };
+  }
+  timelineRuntimeCoordinator.retainResource(resource);
+  return {
+    admitted: true,
+    resourceId: resource.id,
+    release: () => timelineRuntimeCoordinator.releaseResource(resource.id),
+  };
+}
+
+function attachWebCodecsHelperAdmissionRelease(
+  player: WebCodecsPlayer,
+  admission: Extract<WebCodecsHelperAdmission, { admitted: true }>
+): () => void {
+  const originalDestroy = player.destroy?.bind(player);
+  let released = false;
+  const release = () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    admission.release();
+  };
+  player.destroy = (() => {
+    release();
+    originalDestroy?.();
+  }) as WebCodecsPlayer['destroy'];
+  return release;
 }
 
 async function waitForFullWebCodecsReady(
@@ -78,11 +167,26 @@ export async function initWebCodecsPlayer(
   }
 
   const useFullMode = flags.useFullWebCodecsPlayback && !!file;
+  const admission = reserveWebCodecsHelperProviderResource({
+    fileName,
+    file,
+    fullMode: useFullMode,
+  });
+  if (!admission.admitted) {
+    log.warn('WebCodecs provider admission denied', {
+      file: fileName,
+      reason: admission.decision.reason,
+      rejectedUnits: admission.decision.rejectedUnits,
+    });
+    return null;
+  }
 
+  let releaseAdmission: (() => void) | null = null;
+  let webCodecsPlayer: WebCodecsPlayer | null = null;
   try {
     log.debug('Initializing WebCodecs', { file: fileName, fullMode: useFullMode });
 
-    const webCodecsPlayer = new WebCodecsPlayer({
+    webCodecsPlayer = new WebCodecsPlayer({
       loop: false,
       useSimpleMode: !useFullMode,
       onFrame: () => {
@@ -96,6 +200,7 @@ export async function initWebCodecsPlayer(
         engine.requestRender();
       },
     });
+    releaseAdmission = attachWebCodecsHelperAdmissionRelease(webCodecsPlayer, admission);
 
     if (useFullMode) {
       // Full mode: load file via MP4Box + VideoDecoder
@@ -114,6 +219,12 @@ export async function initWebCodecsPlayer(
 
     return webCodecsPlayer;
   } catch (err) {
+    if (releaseAdmission) {
+      releaseAdmission();
+    } else {
+      admission.release();
+    }
+    webCodecsPlayer?.destroy?.();
     log.warn('WebCodecs init failed, using HTMLVideoElement', err);
     return null;
   }
@@ -190,6 +301,19 @@ export function createAudioElement(file: File): HTMLAudioElement {
   audio.src = URL.createObjectURL(file);
   audio.preload = 'auto';
   return audio;
+}
+
+export function releaseTemporaryMediaElement(element: HTMLMediaElement): void {
+  const src = element.currentSrc || element.src;
+  element.removeAttribute('src');
+  try {
+    element.load();
+  } catch {
+    // Removing src is enough for teardown; some browsers reject load() during cleanup.
+  }
+  if (src.startsWith('blob:')) {
+    URL.revokeObjectURL(src);
+  }
 }
 
 /**

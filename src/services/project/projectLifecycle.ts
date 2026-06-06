@@ -26,6 +26,11 @@ let autoSyncDisposers: Array<() => void> = [];
 let beforeUnloadHandler: (() => void) | null = null;
 
 const DEFAULT_CONTINUOUS_SAVE_DELAY_MS = 1000;
+const SMOKE_CONTINUOUS_SAVE_RETRY_DELAY_MS = 500;
+
+type TimelineCanvasSmokeGlobal = typeof globalThis & {
+  __TIMELINE_CANVAS_SMOKE_ACTIVE__?: boolean;
+};
 
 type MediaAutoSyncSelection = Pick<
   MediaState,
@@ -36,6 +41,10 @@ function shallowTupleEqual<T extends readonly unknown[]>(a: T, b: T): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
   return a.every((value, index) => Object.is(value, b[index]));
+}
+
+function isTimelineCanvasSmokeActive(): boolean {
+  return Boolean((globalThis as TimelineCanvasSmokeGlobal).__TIMELINE_CANVAS_SMOKE_ACTIVE__);
 }
 
 function isPersistedMediaFileEqual(a: MediaFile, b: MediaFile): boolean {
@@ -155,6 +164,11 @@ async function executeContinuousSave(): Promise<void> {
     log.debug('Continuous save skipped — no project open');
     return;
   }
+  if (isTimelineCanvasSmokeActive()) {
+    log.debug('Continuous save delayed during timeline canvas smoke');
+    scheduleContinuousSave(SMOKE_CONTINUOUS_SAVE_RETRY_DELAY_MS);
+    return;
+  }
 
   isContinuousSaving = true;
   try {
@@ -183,6 +197,10 @@ async function executeContinuousSave(): Promise<void> {
  */
 function flushContinuousSave(): void {
   if (!projectFileService.isProjectOpen()) return;
+  if (isTimelineCanvasSmokeActive()) {
+    log.warn('Continuous save flush skipped during timeline canvas smoke');
+    return;
+  }
   if (isProjectStoreSyncInProgress()) {
     log.warn('Continuous save flush skipped while project stores are being synchronized');
     return;
@@ -261,6 +279,10 @@ export function setupAutoSync(): void {
 
   const markProjectDirtyAndMaybeSave = (options?: { immediate?: boolean; delayMs?: number }) => {
     if (projectFileService.isProjectOpen() && !isProjectStoreSyncInProgress()) {
+      if (isTimelineCanvasSmokeActive()) {
+        log.debug('Project dirty mark skipped during timeline canvas smoke');
+        return;
+      }
       projectFileService.markDirty();
       triggerContinuousSaveIfEnabled(options);
     }

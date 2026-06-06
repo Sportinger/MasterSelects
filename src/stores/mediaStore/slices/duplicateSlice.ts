@@ -7,6 +7,12 @@
 
 import type { MediaFile, MediaSliceCreator, MediaState } from '../types';
 import { generateId } from '../helpers/importPipeline';
+import {
+  createMediaObjectUrl,
+  createPrimaryMediaObjectUrl,
+  getGaussianSplatSequenceFrameObjectUrlKey,
+  getModelSequenceFrameObjectUrlKey,
+} from '../../../services/project/mediaObjectUrlManager';
 
 export interface DuplicateActions {
   copyMediaItems: (ids: string[]) => void;
@@ -51,13 +57,41 @@ function duplicateItemById(
   const file = state.files.find((f) => f.id === id);
   if (file) {
     const newId = generateId();
+    const modelSequence = file.modelSequence
+      ? {
+          ...file.modelSequence,
+          frames: file.modelSequence.frames.map((frame, index) => ({
+            ...frame,
+            modelUrl: frame.file
+              ? createMediaObjectUrl(newId, getModelSequenceFrameObjectUrlKey(index), frame.file)
+              : frame.modelUrl,
+          })),
+        }
+      : undefined;
+    const gaussianSplatSequence = file.gaussianSplatSequence
+      ? {
+          ...file.gaussianSplatSequence,
+          frames: file.gaussianSplatSequence.frames.map((frame, index) => ({
+            ...frame,
+            splatUrl: frame.file
+              ? createMediaObjectUrl(newId, getGaussianSplatSequenceFrameObjectUrlKey(index), frame.file)
+              : frame.splatUrl,
+          })),
+        }
+      : undefined;
+    const url =
+      modelSequence?.frames[0]?.modelUrl ??
+      gaussianSplatSequence?.frames[0]?.splatUrl ??
+      (file.file ? createPrimaryMediaObjectUrl(newId, file.file) : file.url);
     const cloned: MediaFile = {
       ...file,
       id: newId,
       parentId: resolveParent(file.parentId),
       name: copyName(file.name),
       // Mint a private URL when we still hold the File; otherwise best-effort reuse.
-      url: file.file ? URL.createObjectURL(file.file) : file.url,
+      url,
+      modelSequence,
+      gaussianSplatSequence,
       // Drop derived blob-url artifacts so they regenerate per-clone (no shared revoke).
       thumbnailUrl: undefined,
       proxyVideoUrl: undefined,

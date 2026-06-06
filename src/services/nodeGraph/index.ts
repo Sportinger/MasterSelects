@@ -16,6 +16,8 @@ export {
 } from './clipGraphProjection';
 export type { ClipNodeGraphBuildOptions } from './clipGraphProjection';
 export {
+  clearAINodeRuntimeCache,
+  clearAINodeRuntimeCacheForClip,
   hasRunnableAINodes,
   renderClipAINodesToCanvas,
   sortPixelsTexture,

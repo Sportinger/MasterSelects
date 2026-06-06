@@ -23,6 +23,7 @@ import {
 import type { TimelineClip, TimelineTrack, SerializableClip } from '../types';
 import { generateWaveformFromBuffer } from '../stores/timeline/helpers/waveformHelpers';
 import { MAX_NESTING_DEPTH } from '../stores/timeline/constants';
+import { blobUrlManager } from '../stores/timeline/helpers/blobUrlManager';
 
 export interface CompositionMixdownResult {
   buffer: AudioBuffer;
@@ -263,11 +264,15 @@ class CompositionAudioMixerService {
   /**
    * Create an audio element from an AudioBuffer for playback
    */
-  createAudioElement(buffer: AudioBuffer): HTMLAudioElement {
+  createAudioElement(buffer: AudioBuffer, options: { ownerClipId?: string } = {}): HTMLAudioElement {
     // Convert AudioBuffer to WAV blob
     const wavBlob = this.audioBufferToWav(buffer);
-    const url = URL.createObjectURL(wavBlob);
-    this.blobUrls.add(url);
+    const url = options.ownerClipId
+      ? blobUrlManager.create(options.ownerClipId, wavBlob, 'audio')
+      : URL.createObjectURL(wavBlob);
+    if (!options.ownerClipId) {
+      this.blobUrls.add(url);
+    }
 
     const audio = document.createElement('audio');
     audio.src = url;

@@ -20,6 +20,11 @@ import type {
   LottieRuntimePrepareResult,
   PreparedLottieAsset,
 } from './types';
+import {
+  createVectorRuntimeAdmissionError,
+  reserveVectorRuntimeCanvasResource,
+  type VectorRuntimePrepareOptions,
+} from './vectorRuntimeReporting';
 
 const log = Logger.create('LottieRuntime');
 const DEFAULT_CANVAS_SIZE = 512;
@@ -31,6 +36,8 @@ interface LottieRuntimeEntry {
   clipId: string;
   isReady: boolean;
   player: DotLottie;
+  releaseRuntimeResource?: () => void;
+  runtimeResourceId?: string;
   settingsKey: string;
   activeStateMachineName?: string;
   lastInputValuesKey?: string;
@@ -180,6 +187,43 @@ function getClipLocalTime(clip: TimelineClip, timelineTime: number): number {
   return Math.max(0, timelineTime - clip.startTime);
 }
 
+const lottiePrepareFileIds = new WeakMap<File, number>();
+let nextLottiePrepareFileId = 1;
+
+function getPrepareFileKey(file: File | undefined): string {
+  if (!file) {
+    return 'none';
+  }
+
+  let id = lottiePrepareFileIds.get(file);
+  if (!id) {
+    id = nextLottiePrepareFileId;
+    nextLottiePrepareFileId += 1;
+    lottiePrepareFileIds.set(file, id);
+  }
+
+  return `${id}:${file.name}:${file.size}:${file.lastModified}:${file.type}`;
+}
+
+function getPrepareRuntimeOptionsKey(options?: VectorRuntimePrepareOptions): string {
+  if (!options) {
+    return 'default';
+  }
+  return [
+    options.policyId ?? 'interactive',
+    options.ownerId ?? 'default-owner',
+    options.resourceId ?? 'default-resource',
+  ].join(':');
+}
+
+function getPreparePromiseKey(
+  clip: TimelineClip,
+  fileOverride?: File,
+  runtimeOptions?: VectorRuntimePrepareOptions,
+): string {
+  return `${clip.id}:${getPrepareFileKey(fileOverride ?? clip.file)}:${getPrepareRuntimeOptionsKey(runtimeOptions)}`;
+}
+
 export class LottieRuntimeManager {
   private entries = new Map<string, LottieRuntimeEntry>();
   private preparePromises = new Map<string, Promise<LottieRuntimePrepareResult>>();
@@ -187,27 +231,30 @@ export class LottieRuntimeManager {
   async prepareClipSource(
     clip: TimelineClip,
     fileOverride?: File,
+    runtimeOptions?: VectorRuntimePrepareOptions,
   ): Promise<LottieRuntimePrepareResult> {
     if (clip.source?.type !== 'lottie') {
       throw new Error(`prepareClipSource called for non-Lottie clip ${clip.id}`);
     }
 
-    const existingPromise = this.preparePromises.get(clip.id);
+    const preparePromiseKey = getPreparePromiseKey(clip, fileOverride, runtimeOptions);
+    const existingPromise = this.preparePromises.get(preparePromiseKey);
     if (existingPromise) {
       return existingPromise;
     }
 
-    const preparePromise = this.prepareClipSourceInternal(clip, fileOverride).finally(() => {
-      this.preparePromises.delete(clip.id);
+    const preparePromise = this.prepareClipSourceInternal(clip, fileOverride, runtimeOptions).finally(() => {
+      this.preparePromises.delete(preparePromiseKey);
     });
 
-    this.preparePromises.set(clip.id, preparePromise);
+    this.preparePromises.set(preparePromiseKey, preparePromise);
     return preparePromise;
   }
 
   private async prepareClipSourceInternal(
     clip: TimelineClip,
     fileOverride?: File,
+    runtimeOptions?: VectorRuntimePrepareOptions,
   ): Promise<LottieRuntimePrepareResult> {
     const file = fileOverride ?? clip.file;
     if (!file) {
@@ -228,24 +275,50 @@ export class LottieRuntimeManager {
       this.destroyClipRuntime(clip.id);
     }
 
-    const canvas = createCanvas(asset.metadata.width, asset.metadata.height);
-    const player = new DotLottie({
-      canvas,
-      autoplay: false,
-      data: asset.payload.kind === 'dotlottie'
-        ? asset.payload.data.slice(0)
-        : asset.payload.data,
-      loop: false,
-      renderConfig: {
-        autoResize: false,
-        devicePixelRatio: 1,
-        freezeOnOffscreen: false,
-      },
+    const reservation = reserveVectorRuntimeCanvasResource({
+      clip,
+      provider: 'lottie',
+      width: asset.metadata.width,
+      height: asset.metadata.height,
+      options: runtimeOptions,
     });
+    if (!reservation.admitted) {
+      throw createVectorRuntimeAdmissionError({
+        clip,
+        provider: 'lottie',
+        decision: reservation.decision,
+      });
+    }
 
-    await waitForDotLottieLoad(player);
-    player.setUseFrameInterpolation(false);
-    player.pause();
+    const canvas = createCanvas(asset.metadata.width, asset.metadata.height);
+    let player: DotLottie | undefined;
+    try {
+      player = new DotLottie({
+        canvas,
+        autoplay: false,
+        data: asset.payload.kind === 'dotlottie'
+          ? asset.payload.data.slice(0)
+          : asset.payload.data,
+        loop: false,
+        renderConfig: {
+          autoResize: false,
+          devicePixelRatio: 1,
+          freezeOnOffscreen: false,
+        },
+      });
+
+      await waitForDotLottieLoad(player);
+      player.setUseFrameInterpolation(false);
+      player.pause();
+    } catch (error) {
+      reservation.release();
+      try {
+        player?.destroy();
+      } catch {
+        // Best-effort cleanup after constructor/load failure.
+      }
+      throw error;
+    }
 
     const entry: LottieRuntimeEntry = {
       asset,
@@ -253,6 +326,8 @@ export class LottieRuntimeManager {
       clipId: clip.id,
       isReady: true,
       player,
+      releaseRuntimeResource: reservation.release,
+      runtimeResourceId: reservation.resourceId,
       settingsKey: '',
     };
 
@@ -566,6 +641,8 @@ export class LottieRuntimeManager {
       entry.player.destroy();
     } catch (error) {
       log.warn('Failed to destroy Lottie runtime', { clipId, error });
+    } finally {
+      entry.releaseRuntimeResource?.();
     }
     this.entries.delete(clipId);
   }

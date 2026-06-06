@@ -178,8 +178,11 @@ async function resolveSourceBuffer(
     if (clip.mixdownBuffer) {
       sourceBuffer = clip.mixdownBuffer;
     } else {
-      const { compositionAudioMixer } = await import('../compositionAudioMixer');
-      const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+      const { requestCompositionAudioMixdown } = await import('../timeline/compositionAudioMixdownCache');
+      const mixdownResult = await requestCompositionAudioMixdown(clip);
+      if (signal?.aborted) {
+        throw new DOMException('Clip audio analysis preparation was cancelled.', 'AbortError');
+      }
       if (mixdownResult?.hasAudio) {
         sourceBuffer = mixdownResult.buffer;
         onMixdownReady?.(mixdownResult.buffer);

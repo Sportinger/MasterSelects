@@ -214,15 +214,6 @@
   color: var(--amber-600);
 }
 
-.timeline-clip.has-keyframes .clip-content {
-  border-left: 2px solid var(--amber-600);
-}
-
-.timeline-clip.expanded {
-  overflow: visible;
-  z-index: 10;
-}
-
 .clip-property-rows {
   position: absolute;
   left: 0;

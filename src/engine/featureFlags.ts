@@ -28,7 +28,7 @@ export const flags = {
   guidedActionsAIReplay: true,  // Visual replay for AI tool calls
   guidedActionsTutorials: true,  // Tutorial scenarios using guided actions
   guidedActionsRecorder: false,  // Future guided action authoring/recording layer
-  timelineCanvasWorker: false,  // issue #228 P4: render the clip canvas in an OffscreenCanvas Web Worker (off main thread). Worker path draws rects/LOD/labels (thumbnails are a follow-up)
+  timelineCanvasWorker: false,  // issue #228 P4: OffscreenCanvas clip renderer for eligible rows. Keep default-off until real-media worker-positive proof and final gates pass.
 };
 
 // Expose for runtime toggling from devtools

@@ -48,6 +48,8 @@ import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimatio
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import { hydrateTimelineMediaWindow } from '../timeline/lazyMediaElements';
+import { getLazyImageElementForClip } from '../timeline/lazyImageElements';
+import { getReusableModelUrl } from '../../stores/timeline/restoredMediaSource';
 
 const log = Logger.create('LayerBuilder');
 const SCRUB_PROXY_HOLD_MAX_DRIFT_SECONDS = 0.15;
@@ -129,18 +131,23 @@ export class LayerBuilderService {
 
   private getClipModelSequence(clip: TimelineClip) {
     const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
-    const mediaSequence = mediaFileId
-      ? useMediaStore.getState().files.find((file) => file.id === mediaFileId)?.modelSequence
+    const mediaFile = mediaFileId
+      ? useMediaStore.getState().files.find((file) => file.id === mediaFileId)
       : undefined;
 
-    return resolveModelSequenceData(clip.source?.modelSequence, mediaSequence);
+    return resolveModelSequenceData(clip.source?.modelSequence, mediaFile?.modelSequence);
   }
 
   private resolveClipModelUrl(clip: TimelineClip, sourceTime: number): string | undefined {
+    const mediaFileId = clip.mediaFileId ?? clip.source?.mediaFileId;
+    const mediaFile = mediaFileId
+      ? useMediaStore.getState().files.find((file) => file.id === mediaFileId)
+      : undefined;
+
     return getModelSequenceFrameUrl(
       this.getClipModelSequence(clip),
       sourceTime,
-      clip.source?.modelUrl,
+      clip.source?.modelUrl ?? getReusableModelUrl(mediaFile),
     );
   }
 
@@ -617,18 +624,21 @@ export class LayerBuilderService {
       layer = this.buildVideoLayer(clip, layerIndex, ctx, opacityOverride);
     }
     // Image clip
-    else if (clip.source?.imageElement) {
-      layer = this.buildImageLayer(clip, layerIndex, ctx, opacityOverride);
+    else if (clip.source?.type === 'image') {
+      const imageElement = this.getRenderableImageElement(clip, ctx);
+      if (imageElement) {
+        layer = this.buildImageLayer(clip, layerIndex, ctx, imageElement, opacityOverride);
+      }
     }
     // Vector animation canvas-backed clip
     else if (isVectorAnimationSourceType(clip.source?.type)) {
-      vectorAnimationRuntimeManager.renderClipAtTime(
+      const textCanvas = vectorAnimationRuntimeManager.renderClipAtTime(
         clip,
         ctx.playheadPosition,
         ctx.getInterpolatedVectorAnimationSettings(clip.id, ctx.playheadPosition - clip.startTime),
       );
-      if (clip.source?.textCanvas) {
-        layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride);
+      if (textCanvas) {
+        layer = this.buildTextLayer(clip, layerIndex, ctx, opacityOverride, textCanvas);
       }
     }
     // Math Scene canvas-backed clip
@@ -1105,10 +1115,20 @@ export class LayerBuilderService {
       });
   }
 
+  private getRenderableImageElement(clip: TimelineClip, ctx: FrameContext): HTMLImageElement | null {
+    return clip.source?.imageElement ?? getLazyImageElementForClip(ctx, clip);
+  }
+
   /**
    * Build image layer
    */
-  private buildImageLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
+  private buildImageLayer(
+    clip: TimelineClip,
+    layerIndex: number,
+    ctx: FrameContext,
+    imageElement: HTMLImageElement,
+    opacityOverride?: number,
+  ): Layer {
     const timeInfo = getClipTimeInfo(ctx, clip);
     const transform = this.transformCache.getTransform(
       `${ctx.activeCompId}_${layerIndex}`,
@@ -1129,7 +1149,7 @@ export class LayerBuilderService {
       visible: true,
       opacity: finalOpacity,
       blendMode: transform.blendMode as BlendMode,
-      source: { type: 'image', imageElement: clip.source!.imageElement },
+      source: { type: 'image', imageElement },
       effects,
       colorCorrection,
       position: transform.position,
@@ -1200,7 +1220,13 @@ export class LayerBuilderService {
   /**
    * Build text layer
    */
-  private buildTextLayer(clip: TimelineClip, layerIndex: number, ctx: FrameContext, opacityOverride?: number): Layer {
+  private buildTextLayer(
+    clip: TimelineClip,
+    layerIndex: number,
+    ctx: FrameContext,
+    opacityOverride?: number,
+    sourceTextCanvas?: HTMLCanvasElement,
+  ): Layer {
     const timeInfo = getClipTimeInfo(ctx, clip);
     const transform = this.transformCache.getTransform(
       `${ctx.activeCompId}_${layerIndex}`,
@@ -1208,7 +1234,7 @@ export class LayerBuilderService {
     );
     const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
     const colorCorrection = ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime);
-    let textCanvas = clip.source!.textCanvas;
+    let textCanvas = sourceTextCanvas ?? clip.source!.textCanvas;
     const interpolatedTextBounds = clip.textProperties
       ? ctx.getInterpolatedTextBounds(clip.id, timeInfo.clipLocalTime)
       : undefined;
@@ -1269,7 +1295,7 @@ export class LayerBuilderService {
       : (clip.text3DProperties ?? clip.source?.text3DProperties);
     const modelSequence = this.getClipModelSequence(clip);
     const modelFrame = getModelSequenceFrame(modelSequence, timeInfo.clipTime);
-    const modelUrl = getModelSequenceFrameUrl(modelSequence, timeInfo.clipTime, clip.source?.modelUrl);
+    const modelUrl = this.resolveClipModelUrl(clip, timeInfo.clipTime);
 
     const finalOpacity = opacityOverride !== undefined
       ? transform.opacity * opacityOverride
@@ -1724,10 +1750,14 @@ export class LayerBuilderService {
           runtimeSessionKey: preferHtmlScrubPreview ? undefined : previewRuntimeSource?.runtimeSessionKey,
         },
       } as Layer;
-    } else if (nestedClip.source?.imageElement) {
+    } else if (nestedClip.source?.type === 'image') {
+      const imageElement = this.getRenderableImageElement(nestedClip, ctx);
+      if (!imageElement) {
+        return null;
+      }
       return {
         ...baseLayer,
-        source: { type: 'image', imageElement: nestedClip.source.imageElement },
+        source: { type: 'image', imageElement },
       } as Layer;
     } else if (nestedClip.source?.type === 'math-scene') {
       mathSceneRenderer.renderClip(nestedClip, nestedClipLocalTime);
@@ -1738,15 +1768,15 @@ export class LayerBuilderService {
         } as Layer;
       }
     } else if (isVectorAnimationSourceType(nestedClip.source?.type)) {
-      vectorAnimationRuntimeManager.renderClipAtTime(
+      const textCanvas = vectorAnimationRuntimeManager.renderClipAtTime(
         nestedClip,
         nestedClip.startTime + nestedClipLocalTime,
         ctx.getInterpolatedVectorAnimationSettings(nestedClip.id, nestedClipLocalTime),
       );
-      if (nestedClip.source?.textCanvas) {
+      if (textCanvas) {
         return {
           ...baseLayer,
-          source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
+          source: { type: 'text', textCanvas },
         } as Layer;
       }
     } else if (nestedClip.source?.type === 'motion-shape' && nestedClip.motion?.kind === 'shape') {

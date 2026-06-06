@@ -6,6 +6,10 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import type { RenderTarget, RenderSource } from '../types/renderTarget';
 import { useMediaStore } from './mediaStore';
 import { isRenderTargetRenderable } from '../utils/renderTargetVisibility';
+import {
+  releaseRenderTargetResource,
+  reportRenderTargetResource,
+} from '../services/timeline/renderTargetRuntimeReporting';
 
 interface RenderTargetState {
   targets: Map<string, RenderTarget>;
@@ -54,9 +58,11 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
         next.set(target.id, target);
         return { targets: next };
       });
+      reportRenderTargetResource(target);
     },
 
     unregisterTarget: (id) => {
+      releaseRenderTargetResource(id);
       set((state) => {
         const target = state.targets.get(id);
         // Close output window if applicable
@@ -73,6 +79,7 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
     },
 
     deactivateTarget: (id) => {
+      releaseRenderTargetResource(id);
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
@@ -83,46 +90,59 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
     },
 
     updateTargetSource: (id, source) => {
+      let nextTarget: RenderTarget | null = null;
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
         const next = new Map(state.targets);
-        next.set(id, { ...target, source });
+        nextTarget = { ...target, source };
+        next.set(id, nextTarget);
         return { targets: next };
       });
+      if (nextTarget) reportRenderTargetResource(nextTarget);
     },
 
     updateTargetName: (id, name) => {
+      let nextTarget: RenderTarget | null = null;
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
         const next = new Map(state.targets);
-        next.set(id, { ...target, name });
+        nextTarget = { ...target, name };
+        next.set(id, nextTarget);
         return { targets: next };
       });
+      if (nextTarget) reportRenderTargetResource(nextTarget);
     },
 
     setTargetEnabled: (id, enabled) => {
+      let nextTarget: RenderTarget | null = null;
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
         const next = new Map(state.targets);
-        next.set(id, { ...target, enabled });
+        nextTarget = { ...target, enabled };
+        next.set(id, nextTarget);
         return { targets: next };
       });
+      if (nextTarget) reportRenderTargetResource(nextTarget);
     },
 
     setTargetCanvas: (id, canvas, context) => {
+      let nextTarget: RenderTarget | null = null;
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
         const next = new Map(state.targets);
-        next.set(id, { ...target, canvas, context });
+        nextTarget = { ...target, canvas, context };
+        next.set(id, nextTarget);
         return { targets: next };
       });
+      if (nextTarget) reportRenderTargetResource(nextTarget);
     },
 
     clearTargetCanvas: (id) => {
+      releaseRenderTargetResource(id);
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
@@ -133,13 +153,16 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
     },
 
     setTargetWindow: (id, win) => {
+      let nextTarget: RenderTarget | null = null;
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
         const next = new Map(state.targets);
-        next.set(id, { ...target, window: win });
+        nextTarget = { ...target, window: win };
+        next.set(id, nextTarget);
         return { targets: next };
       });
+      if (nextTarget) reportRenderTargetResource(nextTarget);
     },
 
     setTargetFullscreen: (id, isFullscreen) => {
@@ -153,13 +176,16 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
     },
 
     setTargetTransparencyGrid: (id, show) => {
+      let nextTarget: RenderTarget | null = null;
       set((state) => {
         const target = state.targets.get(id);
         if (!target) return state;
         const next = new Map(state.targets);
-        next.set(id, { ...target, showTransparencyGrid: show });
+        nextTarget = { ...target, showTransparencyGrid: show };
+        next.set(id, nextTarget);
         return { targets: next };
       });
+      if (nextTarget) reportRenderTargetResource(nextTarget);
     },
 
     setSelectedTarget: (id) => {

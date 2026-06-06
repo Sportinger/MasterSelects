@@ -1,6 +1,6 @@
 # Timeline Rendering Architecture — Full-Scope Plan
 
-**Status:** Shipped — P0/P1/P2/P3(canvas default)/P4 implemented. Full god-object dissolution is a tracked follow-up.
+**Status:** Shipped for the main-thread canvas/shell architecture. The full DOM clip body has been deleted on the issue branch. The OffscreenCanvas worker path is implemented for eligible simple clips plus prepared waveform, spectrogram, bounded normal/reversed thumbnail-strip, composition visuals, passive badge/progress, transcript-marker, sampled analysis-overlay, active trim/source-extension, fade-curve, ordinary active drag/drag-preview resources, Slip/Slide resolved geometry/source-range parity, smoke-level worker resource-budget/pending/error gates, focused forced-worker browser proof, full timeline-canvas verification, and explicit default-off product policy. Product worker mode remains default-off because default-on still needs real-media worker-positive proof beyond forced live fallback.
 **Goal:** Display arbitrarily large compositions (100s–1000s of clips) at near-60fps, fully zoomed out, while still showing thumbnails and waveforms — and keep all editing interactions.
 **Author:** debugging session 2026-05-31 (super-cut comp, 100 clips, ~9fps)
 
@@ -11,26 +11,26 @@
 | Phase | What | State | Commit |
 |---|---|---|---|
 | P0a/b/c | Selection-culling fix · TimelineTrack memo · shared id-index | ✅ done | 9ebeae46 |
-| P1 | `TimelineClipCanvas` clip bodies + LOD (flag `timelineCanvasClips`, default OFF) | ✅ done | 77c45121 |
+| P1 | `TimelineClipCanvas` clip bodies + LOD (migration flag retired) | ✅ done | 77c45121 |
 | P1 | Canvas thumbnails (filmstrip, ImageBitmap cache) | ✅ done | 86f95755 |
 | P2 | Canvas interaction via active-clip DOM overlay + hover hit-test | ✅ done | 9f2e338c |
-| P4 | OffscreenCanvas Web Worker path (flag `timelineCanvasWorker`, default OFF) | ✅ done | d01c3cd9 |
+| P4 | OffscreenCanvas Web Worker path (flag `timelineCanvasWorker`, default OFF) | partial: solid/eligible clips plus waveform, spectrogram, bounded normal/reversed thumbnail-strip, composition visuals, passive badge/progress, transcript-marker, sampled analysis-overlay, active trim/source-extension, fade-curve, ordinary active drag/preview transfer, Slip/Slide resolved geometry/source-range parity, smoke-level resource-budget/pending/error gates, focused forced-worker browser proof, full timeline-canvas verification, and explicit default-off product policy done; default-on still needs real-media worker-positive proof | d01c3cd9 + issue branch |
 | P3 | Make canvas the **default** and remove visible high-zoom DOM fallback | ✅ done | b8df7c0b + issue branch |
-| P3 | Finish god-object dissolution (gate audio subscriptions) | ⏳ follow-up | |
+| P3 | Finish god-object dissolution / delete full DOM clip body | done on issue branch | |
 | P1 | Waveforms on canvas (audio clips) | done on issue branch | |
 
-**P3 note:** the canvas is now the production default (`timelineCanvasClips: true`).
+**P3 note:** the canvas is now the production timeline clip-body renderer.
 The per-clip visible DOM path is no longer used as an extreme-zoom fallback. The
 track canvas is viewport-sliced and positioned in absolute timeline space, so its
 backing store stays below browser canvas limits even when the full timeline would
 be far wider than `MAX_CANVAS_WIDTH_PX`. In canvas mode, mounted DOM clips are
 invisible interaction shells for active handles/context-menu affordances while the
-canvas remains the single visible clip-body renderer. Quick rollback if visual
-issues surface: set `timelineCanvasClips` back to `false`. The **full god-object dissolution** (moving
-the ~30 audio-only subscriptions + their JSX into an audio-clip child component) is
-a tracked follow-up — deliberately not done as a blind pass, since the risk of
-breaking audio editing outweighs the marginal gain now that the canvas already
-removes per-clip rendering for the common case.
+canvas remains the single visible clip-body renderer. The old `timelineCanvasClips`
+rollback flag has been removed; rollback now means reverting the fixed canvas
+track path or repairing the canvas renderer directly. The full DOM clip body has
+since been deleted on the issue branch. Current follow-up work is to keep passive
+parity in `TimelineClipCanvas`, active parity in `ClipInteractionShell` modules,
+and runtime/cache ownership outside view components.
 
 ---
 
@@ -64,22 +64,24 @@ From the live dev bridge (`getStats` / `getPlaybackTrace`) on the 100-clip "supe
 
 The GPU draws a frame in ~1 ms. The other ~114 ms is React reconciliation + browser style/layout/paint/composite of a huge timeline DOM. Loading the comp takes ~30 s = mounting 100 heavy components.
 
-### Root causes in current code
+### Historical root causes from the original profile
 
-1. **Viewport culling is defeated by selection.**
-   `src/components/timeline/TimelineTrack.tsx:282` — selected clips are *always* rendered regardless of viewport:
+1. **Viewport culling was defeated by selection.**
+   Historical `TimelineTrack.tsx` code rendered selected clips regardless of viewport:
    ```ts
    if (selectedClipIds.has(clip.id) || draggedClipIds.has(clip.id) || clipTrim?.clipId === clip.id) {
      return true;
    }
    ```
-   Select-all on 100 clips → all 100 in the DOM, culling contributes nothing (exactly the screenshot case).
+   Select-all on 100 clips mounted all 100 DOM bodies. Current track rows use measured viewport culling plus `TimelineClipCanvas` and active shells instead.
 
-2. **`TimelineClip` is a 4,328-line mega-component with 51 store subscriptions per clip.**
+2. **The former `TimelineClip` mega-component was the main per-clip React cost.**
    `src/components/timeline/TimelineClip.tsx` — 51 × `useTimelineStore(...)` + 3 × `useMediaStore(...)`, including **30 `.find()` scans** over `files` / `compositions` / `clips` (O(n)). At 100 clips that is ~5,000 selector evaluations and thousands of array scans on *every* store update. Most are audio-only features (spectral, stems, audio-regions) that a video clip subscribes to but never needs.
 
-3. **`TimelineTrack` memoization is effectively disabled.**
-   `src/components/timeline/TimelineTrack.tsx:430` `areTimelineTrackPropsEqual` only returns `true` during an active clip drag; otherwise every track re-renders on every parent render.
+   Current checkpoint: the `TimelineClip.tsx` component file has been deleted; new work must keep passive clip bodies in canvas and active behavior in `ClipInteractionShell` plus focused modules.
+
+3. **`TimelineTrack` memoization was too weak.**
+   The current track component uses the canvas/shell split and a broader comparator; remaining render work is tracked through timeline canvas diagnostics rather than the old DOM-body memoization profile.
 
 4. **Heavy DOM → expensive paint/composite each frame.**
    100 clips × thumbnails + gradients + `backdrop-filter` form large composited layers the browser must re-composite whenever the preview canvas updates → RAF starved to 115 ms.
@@ -87,9 +89,10 @@ The GPU draws a frame in ~1 ms. The other ~114 ms is React reconciliation + brow
 ### What is already good (keep it)
 
 - Thumbnails are already viewport-windowed (`THUMBNAIL_RENDER_OVERSCAN_PX`, `thumbnailRenderWindow`).
-- `TimelineClip` only subscribes to `playheadPosition` when the blade tool is active (`TimelineClip.tsx:807`) → normal playback does not re-render every clip per frame.
-- Thumbnails come from a central source cache: `thumbnailCacheService` (`src/hooks/useThumbnailCache.ts`).
-- **Waveforms are already rendered on a canvas** with an LOD pyramid: `ClipWaveform.tsx` + `src/components/timeline/utils/waveformLod.ts`. The canvas+LOD pattern is already proven in this codebase.
+- The deleted `TimelineClip` body no longer subscribes per clip; normal playback must continue to avoid per-clip React renders by keeping passive bodies in the canvas.
+- Thumbnails come from the central source cache and canvas demand path:
+  `thumbnailCacheService`, `thumbnailBitmapCache`, and `TimelineClipCanvas`.
+- **Waveforms and spectrograms are now rendered in the timeline canvas** from cache/artifact services. The old DOM `ClipWaveform` and `ClipSpectrogram` components are retired; new passive audio visuals should stay in canvas/shared drawing utilities.
 
 ---
 
@@ -147,12 +150,14 @@ Fully zoomed out, 1000 clips might each be 2 px wide → we draw a handful of ag
 
 - Keep `thumbnailCacheService` as the source of truth (already source-based, dedup across clips sharing a media file).
 - Add an **ImageBitmap layer**: decode each cached thumbnail blob once into an `ImageBitmap` (GPU-uploadable, drawable with `ctx.drawImage` with zero per-frame decode). Optionally pack into a sprite atlas per media file to reduce `drawImage` calls.
-- Canvas asks: "thumbnails for media X, source range [in,out], N slots" → same API shape as `useThumbnailCache.getThumbnailsForRange`, but returns `ImageBitmap`s.
+- Canvas asks: "thumbnails for media X, source range [in,out], N slots"
+  through `thumbnailCacheService.getThumbnailsForRange(...)`; decoded
+  `ImageBitmap` lifecycle belongs to `thumbnailBitmapCache`.
 - Eviction by LRU on total bitmap memory budget (mirror existing cache budget logic).
 
 ### 2.4 Waveform on canvas (reuse `waveformLod`)
 
-`ClipWaveform.tsx` already builds an LOD pyramid and draws to a 2D context. The issue branch now has `TimelineClipCanvas` loading cached waveform-pyramid refs, requesting detailed waveform generation for visible audio clips, and drawing detailed LOD waveform columns directly in the track canvas. The old DOM waveform remains fallback/interaction support, but it is no longer required for the visible audio clip body in canvas mode.
+`TimelineClipCanvas` now loads cached waveform-pyramid refs, requests detailed waveform generation for visible audio clips through timeline services, and draws detailed LOD waveform columns directly in the track canvas. The old DOM waveform component is retired; active audio interactions belong in shell modules, not a passive DOM fallback.
 
 ### 2.5 Hit-testing & interaction (no DOM per clip)
 
@@ -175,15 +180,17 @@ The clip canvas redraws only when something it depends on changes:
 
 ### 2.8 Phase 2 option — OffscreenCanvas in a worker
 
-Once the clip canvas is stable, move its drawing to an `OffscreenCanvas` controlled by a Web Worker. Thumbnails (`ImageBitmap`) and waveform pyramids (transferable `Float32Array`) are worker-friendly. Result: the entire timeline clip render happens **off the main thread**, so even React reconciliation of the chrome can't stutter it. This is the path to rock-solid 60fps with very large comps. Optional, not required for the first big win.
+Once the clip canvas is stable, move eligible drawing to an `OffscreenCanvas` controlled by a Web Worker. Current issue-branch status: geometry, selection/hover, request ids, ready/drawn/error acks, diagnostics, fallback recovery, solid clips, prepared waveform columns, prepared spectrogram rasters, fresh per-draw thumbnail-strip ImageBitmap transfer, source-timed and reversed thumbnail strips, composition visuals, passive badge/progress resources, bounded transcript markers, sampled focus/motion/face analysis overlays, reversed badge parity, active trim/source-extension ghost visuals, fade curve resources, ordinary active drag/drag-preview geometry, Slip/Slide resolved geometry/source-range parity, smoke-level resource-budget/pending/error gates, focused forced-worker browser proof, and full timeline-canvas verification are implemented. The product flag remains default-off after final gates because the current real-media proof is forced fallback, not worker-positive; the verification runner includes forced worker smokes by default.
 
-### 2.9 God-object decomposition (`TimelineClip.tsx` is 4,328 lines)
+### 2.9 God-object decomposition (`TimelineClip.tsx` retired)
 
-**This is a first-class workstream, not a side effect of the canvas migration.** The canvas removes only the *rendering* responsibility from `TimelineClip`. The component also carries a large amount of *interaction/business logic* (audio-region editing, spectral selection, stem separation, video bake, trim/fade/slip gestures, keyframe drag, context menus). That logic does not disappear — it moves to the active-clip overlay. If we move 4,328 lines wholesale into the overlay, we still have a god object, just rendered for one clip.
+**This is a first-class workstream, not a side effect of the canvas migration.** Historically, canvas migration removed only the rendering responsibility from `TimelineClip`; the former component still carried interaction/business logic such as audio-region editing, spectral selection, stem separation, video bake, trim/fade/slip gestures, keyframe drag, and context menus. That logic now belongs in focused active shell modules and services. If future work recreates one large active overlay, we still have a god object, just rendered for one clip.
 
-So `TimelineClip` is decomposed by responsibility, independent of (and partly ahead of) the canvas work:
+The former `TimelineClip` responsibilities are decomposed by responsibility:
 
-| Responsibility (today all inside `TimelineClip`) | Target home |
+Current checkpoint: the component file is gone. Do not recreate a one-file active overlay; route passive body work to `TimelineClipCanvas`, active controls to `ClipInteractionShell`, and shared behavior to focused hooks/services.
+
+| Former responsibility | Target home |
 |---|---|
 | Geometry / trim math (`displayStartTime`, slip window, clamps) | pure `utils` + small hooks |
 | Audio-region editing (selection, gain, fades, fx presets) | own component, **mounted only for audio clips** |
@@ -191,7 +198,7 @@ So `TimelineClip` is decomposed by responsibility, independent of (and partly ah
 | Stem-separation UI (jobs, choices, prewarm) | own module |
 | Video-bake regions | own module |
 | Thumbnails / filmstrip | → canvas (Phase 1) |
-| Waveform | already `ClipWaveform` (reuse) |
+| Waveform / spectrogram | canvas/shared drawing utilities plus timeline artifact warmup services |
 | Pointer / tool dispatch | already partly `timelineToolPointerDispatcher` (finish extracting) |
 | Label-color resolution | indexed-map lookup (see 0c) |
 | 51 store subscriptions | **split by feature** — a video clip must not instantiate the ~30 audio-only subscriptions |
@@ -206,20 +213,20 @@ Decomposition rule: the only thing that needs to render for *every* clip is the 
 
 ## 3. Migration plan (incremental, app stays working)
 
-Each phase is shippable and behind a feature flag where it changes rendering.
+Each phase is shippable; rendering-path flags were migration tools and can be retired after parity is proven.
 
 ### Phase 0 — Stop the bleeding (hours, low risk) ✅ do first
-- **0a.** Fix culling bypass: in `TimelineTrack.tsx:282`, only force-render a selected/dragged clip if it is also within `[visibleStartTime, visibleEndTime]` (+overscan). Selected clips off-screen don't need DOM — selection is restored when scrolled into view. Keep dragged/trimmed clips always rendered.
-- **0b.** Repair `areTimelineTrackPropsEqual` (`TimelineTrack.tsx:430`) to do a real shallow compare in the non-drag case too, so tracks stop re-rendering on every parent render.
-- **0c.** Replace the O(n) `.find()` selectors in `TimelineClip` `mediaLabelHex` and friends with lookups into indexed maps (`filesById`, `compositionsById`) provided by the stores.
-- **0d.** Begin the god-object split (§2.9): gate the ~30 audio-only store subscriptions behind `isAudioClip` so video clips stop instantiating them. First, safe slice of the decomposition; biggest per-clip subscription win and helps the zoomed-out case.
+- **0a.** Historical: fix culling bypass. Current issue-branch rows use measured viewport culling, `TimelineClipCanvas`, and active shells rather than forcing selected off-screen DOM bodies.
+- **0b.** Historical: repair weak `TimelineTrack` memoization. Current issue-branch work tracks remaining render cost through canvas diagnostics and the canvas/shell split.
+- **0c.** Replace the O(n) `.find()` selectors from the former `TimelineClip` media-label path with lookups into indexed maps (`filesById`, `compositionsById`) provided by the stores.
+- **0d.** Historical: begin the god-object split (§2.9). Current issue-branch state has deleted the full DOM clip body; do not reintroduce per-clip subscriptions for passive bodies.
 - **Expected:** select-all on 100 clips drops from 100 → ~15 DOM clips; idle paint loop stops; video clips shed ~30 subscriptions each. Measure `rafGap` via bridge before/after.
 
-### Phase 1 — Read-only clip canvas behind a flag (the real fix)
-- Add `featureFlags.timelineCanvasClips`.
+### Phase 1 — Read-only clip canvas migration (the real fix)
+- Historical migration step: `featureFlags.timelineCanvasClips` was added during rollout and retired after the canvas path became fixed.
 - Build `TimelineClipCanvas` rendering clip backgrounds + LOD + labels for all tracks. Thumbnails/waveforms first via existing data, drawn as bitmaps.
-- When the flag is on, the DOM clip path renders **nothing** (or only the active overlay); the canvas owns the clip bodies. Selection/scroll/zoom drive canvas redraws.
-- Keep DOM path as a feature-flag rollback for parity testing during migration.
+- During migration, the DOM clip path renders **nothing** (or only the active overlay); the canvas owns the clip bodies. Selection/scroll/zoom drive canvas redraws.
+- Keep DOM path only during migration parity testing.
 - **Exit criteria:** 1000-clip synthetic comp scrolls and zooms at ≥55fps; `rafGap` ≤ 18 ms idle.
 
 ### Phase 2 — Interaction parity
@@ -229,11 +236,11 @@ Each phase is shippable and behind a feature flag where it changes rendering.
 - **Exit criteria:** every interaction available in the DOM path works on the canvas path; QA sign-off.
 
 ### Phase 3 — Make canvas the default, finish god-object decomposition, remove DOM clip path
-- Flip the flag on by default; delete the per-clip DOM rendering once parity is confirmed.
+- Make canvas the fixed path; delete the per-clip DOM rendering once parity is confirmed.
 - Complete the §2.9 decomposition: `TimelineClip.tsx` is dissolved into the active-clip overlay + focused per-feature modules (audio-region, spectral, stem, video-bake) mounted lazily by clip kind. The 4,328-line monolith no longer exists; nothing renders for non-active clips except the canvas body.
 
 ### Phase 4 (optional) — OffscreenCanvas worker
-- Move clip drawing off the main thread for very large comps.
+- Move eligible clip drawing off the main thread for very large comps. Solid/eligible clips plus prepared waveform columns, spectrogram rasters, bounded normal/reversed thumbnail strips, composition visuals, passive badge/progress resources, transcript markers, sampled analysis overlays, reversed badge parity, active trim/source-extension ghost visuals, fade curve resources, ordinary active drag/preview geometry, Slip/Slide resolved geometry/source-range parity, smoke-level resource-budget/pending/error gates, focused forced-worker browser proof, full timeline-canvas verification, and explicit default-off product policy are implemented; default-on worker mode still waits on real-media worker-positive proof.
 
 ---
 
@@ -261,27 +268,27 @@ Benchmark harness: a script that programmatically creates N clips (via the AI br
 
 ## 6. Risks & mitigations
 
-- **Interaction parity is the hard part** (trim/fade/region/spectral edits, context menus). Mitigation: keep these as invisible DOM overlays for the active clip; reuse existing handlers; keep the feature flag as the rollback path.
+- **Interaction parity is the hard part** (trim/fade/region/spectral edits, context menus). Mitigation: keep these as invisible DOM overlays for the active clip and reuse existing handlers.
 - **Text/label crispness & accessibility on canvas.** Mitigation: draw labels at devicePixelRatio; keep a11y affordances on the active-clip DOM overlay; canvas is decorative/visual like the preview already is.
 - **Theme/CSS styling moves into draw code.** Mitigation: read CSS custom properties (`--track-color`, etc.) once per redraw into a style object; centralize clip visual style constants.
-- **Large refactor on a shared branch.** Mitigation: feature-flagged, additive; the visible DOM path remains available only through rollback while active-clip interaction shells preserve editing parity.
+- **Large refactor on a shared branch.** Mitigation: staged commits, active-clip interaction shells, focused tests, and direct rollback of the fixed canvas path if needed.
 
 ## 7. First concrete steps
 
 1. Land Phase 0a/0b/0c and re-measure `rafGap` on the super-cut comp (fast, high ROI).
-2. Spike `TimelineClipCanvas` (backgrounds + LOD + labels only) behind `featureFlags.timelineCanvasClips` to validate the 1000-clip target.
-3. Lift `drawWaveform` out of `ClipWaveform.tsx` and add the `ImageBitmap` thumbnail layer on `thumbnailCacheService`.
+2. Spike `TimelineClipCanvas` (backgrounds + LOD + labels only) during migration to validate the 1000-clip target.
+3. Keep waveform/spectrogram drawing in canvas/shared utilities and keep decoded thumbnail bitmap ownership in cache services.
 4. Build the spatial index + pointer routing; add the single active-clip overlay.
 
 ---
 
 ### Appendix — key files
 
-- `src/components/timeline/Timeline.tsx` — composition root, `renderClip` (`:2739`), playhead subscription (`:480`).
+- `src/components/timeline/Timeline.tsx` — composition root, canvas-backed composition switch overlay, playhead subscription.
 - `src/components/timeline/TimelineTrack.tsx` — viewport culling (`:270`), selection bypass (`:282`), memo (`:430`).
-- `src/components/timeline/TimelineClip.tsx` — 4,328-line clip component, 51 subscriptions (target of split).
-- `src/components/timeline/components/ClipWaveform.tsx` + `utils/waveformLod.ts` — existing canvas waveform + LOD (reuse).
-- `src/hooks/useThumbnailCache.ts` + `src/services/thumbnailCacheService.ts` — thumbnail source cache (reuse).
+- `src/components/timeline/TimelineClipCanvas.tsx` — current passive clip-body renderer.
+- `src/components/timeline/utils/spectrogramCanvas.ts` and waveform drawing utilities — current passive audio visual drawing paths.
+- `src/services/thumbnailCacheService.ts` and `src/services/timeline/thumbnailBitmapCache.ts` — thumbnail source cache plus decoded bitmap lifecycle.
 - `src/engine/render/RenderLoop.ts` — engine RAF/idle (confirms render is cheap; timeline DOM is the cost).
 </content>
 </invoke>

@@ -30,6 +30,16 @@ import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
 import type { AudioEffectInstance, Effect, MasterAudioState, TimelineClip, TimelineTrack, Keyframe } from '../../types';
+import {
+  canRetainExportAudioBuffer,
+  reportExportAudioBuffer,
+  type ExportAudioBufferStage,
+} from '../../services/timeline/exportRuntimeReporting';
+import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
+import {
+  applyCompositionAudioMixdownToTimelineClip,
+  requestCompositionAudioMixdown,
+} from '../../services/timeline/compositionAudioMixdownCache';
 
 const log = Logger.create('AudioExportPipeline');
 const MAX_EXPORT_EFFECT_TAIL_SECONDS = 30;
@@ -48,6 +58,10 @@ export interface AudioExportProgress {
 }
 
 export type AudioExportProgressCallback = (progress: AudioExportProgress) => void;
+
+export interface AudioExportRuntimeOptions {
+  exportRunId?: string;
+}
 
 function clampExportTailSeconds(seconds: number): number {
   return Math.max(0, Math.min(MAX_EXPORT_EFFECT_TAIL_SECONDS, seconds));
@@ -156,13 +170,15 @@ export class AudioExportPipeline {
   private graphEffectRenderer: AudioEffectRenderer;
   private settings: AudioExportSettings;
   private cancelled = false;
+  private exportRunId?: string;
 
-  constructor(settings?: Partial<AudioExportSettings>) {
+  constructor(settings?: Partial<AudioExportSettings>, runtimeOptions?: AudioExportRuntimeOptions) {
     this.settings = {
       sampleRate: settings?.sampleRate ?? 48000,
       bitrate: settings?.bitrate ?? 256000,
       normalize: settings?.normalize ?? false,
     };
+    this.exportRunId = runtimeOptions?.exportRunId;
 
     this.extractor = audioExtractor;
     this.mixer = new AudioMixer({
@@ -232,22 +248,30 @@ export class AudioExportPipeline {
       // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
       const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan);
+      const plannedMixBuffer = createAudioBufferLike(
+        2,
+        Math.ceil(duration * this.settings.sampleRate),
+        this.settings.sampleRate
+      );
+      this.assertAudioBufferAdmission('mix-buffer', plannedMixBuffer);
       this.mixer.updateSettings({
         normalize: false,
         masterVolumeDb: 0,
         masterLimiterEnabled: false,
       });
       const mixedBuffer = await this.mixer.mixTracks(trackData, duration);
+      if (this.cancelled) return null;
+      this.reportAudioBuffer('mix-buffer', mixedBuffer);
+      this.assertAudioBufferAdmission('master-buffer', mixedBuffer);
       const masteredBuffer = await this.renderMasterBusAudio(mixedBuffer, audioGraphPlan, onProgress);
 
       if (this.cancelled) return null;
+      this.reportAudioBuffer('master-buffer', masteredBuffer);
 
       // 5. Encode to AAC
       onProgress?.({ phase: 'encoding', percent: 0, message: 'Encoding audio...' });
       const result = await this.encodeAudio(masteredBuffer, onProgress);
-
-      // 6. Cleanup
-      this.extractor.clearCache();
+      if (this.cancelled || !result) return null;
 
       onProgress?.({ phase: 'complete', percent: 100, message: 'Audio export complete' });
 
@@ -256,8 +280,9 @@ export class AudioExportPipeline {
 
     } catch (error) {
       log.error('Export failed:', error);
-      this.extractor.clearCache();
       throw error;
+    } finally {
+      this.extractor.clearCache();
     }
   }
 
@@ -318,16 +343,25 @@ export class AudioExportPipeline {
       // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
       const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan);
+      const plannedMixBuffer = createAudioBufferLike(
+        2,
+        Math.ceil(duration * this.settings.sampleRate),
+        this.settings.sampleRate
+      );
+      this.assertAudioBufferAdmission('mix-buffer', plannedMixBuffer);
       this.mixer.updateSettings({
         normalize: false,
         masterVolumeDb: 0,
         masterLimiterEnabled: false,
       });
       const mixedBuffer = await this.mixer.mixTracks(trackData, duration);
+      if (this.cancelled) return null;
+      this.reportAudioBuffer('mix-buffer', mixedBuffer);
+      this.assertAudioBufferAdmission('master-buffer', mixedBuffer);
       const masteredBuffer = await this.renderMasterBusAudio(mixedBuffer, audioGraphPlan, onProgress);
 
-      // 5. Cleanup
-      this.extractor.clearCache();
+      if (this.cancelled) return null;
+      this.reportAudioBuffer('master-buffer', masteredBuffer);
 
       onProgress?.({ phase: 'complete', percent: 100, message: 'Audio mixing complete' });
 
@@ -336,8 +370,9 @@ export class AudioExportPipeline {
 
     } catch (error) {
       log.error('Raw audio export failed:', error);
-      this.extractor.clearCache();
       throw error;
+    } finally {
+      this.extractor.clearCache();
     }
   }
 
@@ -346,7 +381,95 @@ export class AudioExportPipeline {
    */
   cancel(): void {
     this.cancelled = true;
+    this.encoder?.cancel();
     log.info('Export cancelled');
+  }
+
+  private canReportRuntime(): boolean {
+    return Boolean(this.exportRunId) && !this.cancelled;
+  }
+
+  private getAudioAdmissionDecision(
+    stage: ExportAudioBufferStage,
+    buffer: AudioBuffer,
+    clip?: TimelineClip
+  ): TimelineRuntimeAdmissionDecision | null {
+    if (!this.exportRunId || !this.canReportRuntime()) {
+      return null;
+    }
+
+    return canRetainExportAudioBuffer({
+      runId: this.exportRunId,
+      stage,
+      buffer,
+      clipId: clip?.id,
+      mediaFileId: clip ? this.getClipMediaFileId(clip) : undefined,
+      trackId: clip?.trackId,
+    });
+  }
+
+  private createAudioAdmissionError(
+    stage: ExportAudioBufferStage,
+    decision: TimelineRuntimeAdmissionDecision,
+    clip?: TimelineClip
+  ): Error {
+    const rejectedUnits = decision.rejectedUnits
+      .map((entry) => `${entry.unit}:${entry.used}/${entry.limit ?? 'unbounded'}`)
+      .join(', ');
+    const error = new Error(
+      `Export audio ${stage} denied by runtime admission${clip ? ` for ${clip.name}` : ''}: ${
+        decision.reason ?? 'unknown'
+      }${rejectedUnits ? ` (${rejectedUnits})` : ''}`
+    );
+    error.name = 'ExportAudioAdmissionError';
+    return error;
+  }
+
+  private assertAudioBufferAdmission(
+    stage: ExportAudioBufferStage,
+    buffer: AudioBuffer,
+    clip?: TimelineClip
+  ): void {
+    const decision = this.getAudioAdmissionDecision(stage, buffer, clip);
+    if (decision && !decision.admitted) {
+      throw this.createAudioAdmissionError(stage, decision, clip);
+    }
+  }
+
+  private reportAudioBuffer(
+    stage: ExportAudioBufferStage,
+    buffer: AudioBuffer,
+    clip?: TimelineClip
+  ): boolean {
+    if (!this.exportRunId || !this.canReportRuntime()) {
+      return false;
+    }
+
+    const admission = this.getAudioAdmissionDecision(stage, buffer, clip);
+    if (admission && !admission.admitted) {
+      log.warn('Export audio buffer report skipped by runtime admission', {
+        stage,
+        clipId: clip?.id,
+        resourceId: admission.resourceId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+      });
+      return false;
+    }
+
+    reportExportAudioBuffer({
+      runId: this.exportRunId,
+      stage,
+      buffer,
+      clipId: clip?.id,
+      mediaFileId: clip ? this.getClipMediaFileId(clip) : undefined,
+      trackId: clip?.trackId,
+    });
+    return true;
+  }
+
+  private getClipMediaFileId(clip: TimelineClip): string | undefined {
+    return clip.mediaFileId ?? clip.source?.mediaFileId;
   }
 
   /**
@@ -466,10 +589,10 @@ export class AudioExportPipeline {
         if (clip.source?.type === 'midi') {
           const track = tracks.find(t => t.id === clip.trackId);
           const midiBuffer = await renderMidiClipToBuffer(clip, track, this.settings.sampleRate);
-          buffers.set(
-            clip.id,
-            midiBuffer ?? this.extractor.createSilentBuffer(Math.max(clip.duration, 0.001)),
-          );
+          const buffer = midiBuffer ?? this.extractor.createSilentBuffer(Math.max(clip.duration, 0.001));
+          this.assertAudioBufferAdmission('source-buffer', buffer, clip);
+          buffers.set(clip.id, buffer);
+          this.reportAudioBuffer('source-buffer', buffer, clip);
           continue;
         }
 
@@ -483,10 +606,15 @@ export class AudioExportPipeline {
             ?? await proxyFrameCache.getAudioBuffer(mediaFileId);
         }
 
-        if (clip.isComposition && clip.mixdownBuffer) {
-          // Nested composition with pre-mixed audio buffer
-          buffer = clip.mixdownBuffer;
-          log.debug(`Using mixdown buffer for nested comp ${clip.name}`);
+        if (clip.isComposition) {
+          const mixdown = await requestCompositionAudioMixdown(clip);
+          if (!mixdown?.hasAudio) {
+            log.debug(`Skipping nested comp without audio ${clip.name}`);
+            continue;
+          }
+          buffer = mixdown.buffer;
+          applyCompositionAudioMixdownToTimelineClip(clip.id, mixdown);
+          log.debug(`Using lazy mixdown buffer for nested comp ${clip.name}`);
         } else if (reusable) {
           buffer = reusable;
           log.debug(`Using cached/proxy audio for ${clip.name} (${mediaFileId})`);
@@ -504,12 +632,20 @@ export class AudioExportPipeline {
           continue;
         }
 
+        this.assertAudioBufferAdmission('source-buffer', buffer, clip);
         buffers.set(clip.id, buffer);
+        this.reportAudioBuffer('source-buffer', buffer, clip);
       } catch (error) {
+        if (error instanceof Error && error.name === 'ExportAudioAdmissionError') {
+          throw error;
+        }
         log.error(`Failed to extract audio from ${clip.name}:`, error);
         // Create silent buffer as fallback
         const fallbackDuration = Math.max(clip.outPoint ?? clip.duration, clip.duration, 0.001);
-        buffers.set(clip.id, this.extractor.createSilentBuffer(fallbackDuration));
+        const fallbackBuffer = this.extractor.createSilentBuffer(fallbackDuration);
+        this.assertAudioBufferAdmission('source-buffer', fallbackBuffer, clip);
+        buffers.set(clip.id, fallbackBuffer);
+        this.reportAudioBuffer('source-buffer', fallbackBuffer, clip);
       }
     }
 
@@ -539,6 +675,7 @@ export class AudioExportPipeline {
     const renderOne = async (clip: TimelineClip, index: number): Promise<void> => {
       const buffer = buffers.get(clip.id);
       if (!buffer || this.cancelled) return;
+      this.assertAudioBufferAdmission('processed-buffer', buffer, clip);
 
       const keyframes = clipKeyframes.get(clip.id) || [];
       const clipPlan = clipPlanById.get(clip.id);
@@ -551,6 +688,7 @@ export class AudioExportPipeline {
         effectTailSeconds: clipTailSeconds,
         onProgress: progress => this.emitClipRenderProgress(clip, index, clips.length, progress, onProgress),
       });
+      if (this.cancelled) return;
 
       const trackPlan = trackPlanById.get(clip.trackId);
       const trackEffects = audioGraphPlanStepsToEffectInstances(trackPlan?.effectChain);
@@ -565,8 +703,11 @@ export class AudioExportPipeline {
           trackInputBuffer.duration
         )
         : rendered.buffer;
+      if (this.cancelled) return;
 
+      this.assertAudioBufferAdmission('processed-buffer', trackRenderedBuffer, clip);
       processed.set(clip.id, trackRenderedBuffer);
+      this.reportAudioBuffer('processed-buffer', trackRenderedBuffer, clip);
       completed += 1;
       onProgress?.({
         phase: 'processing',
@@ -741,7 +882,7 @@ export class AudioExportPipeline {
   private async encodeAudio(
     buffer: AudioBuffer,
     onProgress?: AudioExportProgressCallback
-  ): Promise<EncodedAudioResult> {
+  ): Promise<EncodedAudioResult | null> {
     // Ensure stereo
     let stereoBuffer = buffer;
     if (buffer.numberOfChannels === 1) {
@@ -767,6 +908,7 @@ export class AudioExportPipeline {
     if (!supported) {
       throw new Error('AAC audio encoding is not supported in this browser');
     }
+    if (this.cancelled) return null;
 
     // Encode with progress
     await this.encoder.encode(stereoBuffer, (progress) => {
@@ -775,7 +917,8 @@ export class AudioExportPipeline {
         percent: progress.percent,
         message: `Encoding: ${progress.percent}%`,
       });
-    });
+    }, () => this.cancelled);
+    if (this.cancelled) return null;
 
     return await this.encoder.finalize();
   }

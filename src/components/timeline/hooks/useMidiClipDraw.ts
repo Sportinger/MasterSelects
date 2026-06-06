@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TimelineTrack } from '../../../types';
 import type { TimelineToolId } from '../../../stores/timeline/types';
 import { useTimelineStore } from '../../../stores/timeline';
+import { isTimelineActiveTarget } from '../utils/timelineActiveTargets';
 
 const DEFAULT_CLICK_CLIP_DURATION = 4; // seconds, for a no-drag click
 const DRAG_THRESHOLD_PX = 3;
@@ -61,7 +62,7 @@ export function useMidiClipDraw({
 
       const target = e.target as HTMLElement;
       // Only draw on empty lane space, not on existing clips/handles.
-      if (target.closest('.timeline-clip') || target.closest('.track-header')) return;
+      if (isTimelineActiveTarget(target) || target.closest('.track-header')) return;
 
       const laneEl = target.closest<HTMLElement>('.track-lane[data-track-id]');
       const trackId = laneEl?.dataset.trackId;

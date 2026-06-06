@@ -198,11 +198,13 @@ export type RenderResourceKind =
   | 'image-canvas'
   | 'native-decoder'
   | 'nested-composition-texture'
+  | 'gpu-texture'
   | 'model'
   | 'gaussian-splat'
   | 'motion-data'
   | 'audio-source-clock'
-  | 'runtime-binding';
+  | 'runtime-binding'
+  | 'job';
 
 interface RenderResourceDescriptorBase {
   id: string;
@@ -255,6 +257,21 @@ export interface NestedCompositionTextureResourceDescriptor extends RenderResour
   layerCount?: number;
 }
 
+export interface GpuTextureResourceDescriptor extends RenderResourceDescriptorBase {
+  kind: 'gpu-texture';
+  textureId: string;
+  textureKind:
+    | 'render-target'
+    | 'ram-preview-frame'
+    | 'export-frame'
+    | 'intermediate'
+    | 'readback'
+    | 'unknown';
+  format?: string;
+  sampleCount?: number;
+  mipLevelCount?: number;
+}
+
 export interface ModelResourceDescriptor extends RenderResourceDescriptorBase {
   kind: 'model';
   modelId: string;
@@ -294,17 +311,35 @@ export interface RuntimeBindingResourceDescriptor extends RenderResourceDescript
   runtime: Required<Pick<RenderRuntimeBindingDescriptor, 'runtimeSourceId' | 'runtimeSessionKey'>>;
 }
 
+export interface RuntimeJobResourceDescriptor extends RenderResourceDescriptorBase {
+  kind: 'job';
+  jobId: string;
+  jobKind:
+    | 'thumbnail-db-load'
+    | 'thumbnail-generation'
+    | 'thumbnail-bitmap-decode'
+    | 'cache-warmup'
+    | 'render-target-refresh'
+    | 'ram-preview-render'
+    | 'export-render'
+    | 'unknown';
+  queuedAtMs?: number;
+  startedAtMs?: number;
+}
+
 export type RenderResourceDescriptor =
   | VideoFrameProviderResourceDescriptor
   | HtmlMediaResourceDescriptor
   | ImageCanvasResourceDescriptor
   | NativeDecoderResourceDescriptor
   | NestedCompositionTextureResourceDescriptor
+  | GpuTextureResourceDescriptor
   | ModelResourceDescriptor
   | GaussianSplatResourceDescriptor
   | MotionDataResourceDescriptor
   | AudioSourceClockResourceDescriptor
-  | RuntimeBindingResourceDescriptor;
+  | RuntimeBindingResourceDescriptor
+  | RuntimeJobResourceDescriptor;
 
 export interface TimelineRuntimePolicyDescriptor {
   id: TimelineRuntimePolicyId;
@@ -355,6 +390,16 @@ export interface TimelineRuntimePolicyBridgeStats {
   sessions: readonly RuntimeSessionHealthDiagnostics[];
 }
 
+export interface TimelineRuntimeAdmissionDecision {
+  admitted: boolean;
+  resourceId: string;
+  policyId?: TimelineRuntimePolicyId;
+  reason?: string;
+  projectedUsage: TimelineRuntimePolicyUsage;
+  pressure: readonly TimelineRuntimeBudgetPressure[];
+  rejectedUnits: readonly TimelineRuntimeBudgetPressure[];
+}
+
 export interface TimelineRuntimeCoordinatorBridgeStats {
   schemaVersion: 1;
   generatedAtMs: number;
@@ -372,6 +417,13 @@ export interface TimelineRuntimeCoordinatorBridgeStats {
 export interface TimelineRuntimeCoordinator {
   listPolicies(): readonly TimelineRuntimePolicyDescriptor[];
   getPolicy(policyId: TimelineRuntimePolicyId): TimelineRuntimePolicyDescriptor | null;
+  canRetainResource(resource: RenderResourceDescriptor): TimelineRuntimeAdmissionDecision;
+  retainResource(resource: RenderResourceDescriptor): void;
+  releaseResource(resourceId: string): void;
+  clearResources(scope?: {
+    ownerId?: string;
+    policyId?: TimelineRuntimePolicyId;
+  }): void;
   getBudgetReport(policyId?: TimelineRuntimePolicyId): readonly TimelineRuntimePolicyBudgetReport[];
   getBridgeStats(): TimelineRuntimeCoordinatorBridgeStats;
 }

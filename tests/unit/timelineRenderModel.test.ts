@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   clampTimelineRectToViewport,
   createTimelineRect,
+  findTimelineMarqueeExclusionAtPoint,
+  findTimelineMarqueeExclusionsIntersectingRect,
   findTimelineRuntimeReferences,
   isPlainTimelineRenderData,
   isTimelineRect,
@@ -164,12 +166,14 @@ const geometrySnapshot: TimelineGeometrySnapshot = {
       ],
       trimPreview: {
         clipId: 'clip-1',
+        leadClipId: 'clip-1',
         edge: 'right',
         bodyRect: createTimelineRect(600, 22, 260, 72),
         trimGhostRect: createTimelineRect(840, 22, 20, 72),
         role: 'lead',
       },
       fadeCurve: {
+        id: 'fade-curve-clip-1-opacity',
         clipId: 'clip-1',
         edge: 'both',
         controlPoints: [
@@ -179,7 +183,28 @@ const geometrySnapshot: TimelineGeometrySnapshot = {
           { x: 840, y: 94 },
         ],
         boundingRect: createTimelineRect(600, 22, 240, 72),
+        handleRectIds: {
+          right: 'fade-right-clip-1',
+        },
       },
+    },
+  ],
+  trimPreviews: [
+    {
+      clipId: 'clip-1',
+      leadClipId: 'clip-1',
+      edge: 'right',
+      bodyRect: createTimelineRect(600, 22, 260, 72),
+      trimGhostRect: createTimelineRect(840, 22, 20, 72),
+      role: 'lead',
+    },
+    {
+      clipId: 'clip-1-audio',
+      leadClipId: 'clip-1',
+      edge: 'right',
+      bodyRect: createTimelineRect(600, 98, 260, 40),
+      trimGhostRect: createTimelineRect(840, 98, 20, 40),
+      role: 'linked-follower',
     },
   ],
   handles: [
@@ -212,6 +237,7 @@ const geometrySnapshot: TimelineGeometrySnapshot = {
       diamonds: [
         {
           keyframeId: 'kf-1',
+          rectId: 'keyframe-diamond-1',
           clipId: 'clip-1',
           trackId: 'video-1',
           property: 'opacity',
@@ -239,6 +265,26 @@ const geometrySnapshot: TimelineGeometrySnapshot = {
       kind: 'timeline-header',
       rect: createTimelineRect(0, 20, 216, 76),
       trackId: 'video-1',
+    },
+    {
+      id: 'keyframe-editor-opacity',
+      kind: 'keyframe-editor',
+      rect: createTimelineRect(0, 96, 4_000, 44),
+      trackId: 'video-1',
+      clipId: 'clip-1',
+    },
+    {
+      id: 'clip-handle-fade-right-clip-1',
+      kind: 'clip-handle',
+      rect: createTimelineRect(816, 22, 20, 20),
+      trackId: 'video-1',
+      clipId: 'clip-1',
+    },
+    {
+      id: 'context-menu-clip-1',
+      kind: 'active-control',
+      rect: createTimelineRect(720, 32, 180, 220),
+      clipId: 'clip-1',
     },
   ],
   dropTargets: [
@@ -325,11 +371,58 @@ describe('timeline render model contracts', () => {
     expect(geometrySnapshot.tracks[0].rowViewportRect).toEqual(createTimelineRect(240, 20, 960, 76));
     expect(geometrySnapshot.clips[0].bodyRect).toEqual(createTimelineRect(600, 22, 240, 72));
     expect(geometrySnapshot.clips[0].sourceExtensionGhosts[0].edge).toBe('right');
+    expect(geometrySnapshot.trimPreviews.map((preview) => [preview.clipId, preview.leadClipId, preview.role])).toEqual([
+      ['clip-1', 'clip-1', 'lead'],
+      ['clip-1-audio', 'clip-1', 'linked-follower'],
+    ]);
     expect(geometrySnapshot.handles.map((handle) => handle.kind)).toEqual(['trim-left', 'fade-right']);
+    expect(geometrySnapshot.clips[0].fadeCurve?.handleRectIds?.right).toBe('fade-right-clip-1');
+    expect(geometrySnapshot.handles.find((handle) => handle.id === geometrySnapshot.clips[0].fadeCurve?.handleRectIds?.right)?.kind).toBe('fade-right');
     expect(geometrySnapshot.keyframeRows[0].diamonds[0].rect).toEqual(createTimelineRect(626, 101, 10, 10));
+    expect(geometrySnapshot.keyframeRows[0].diamonds[0].rectId).toBe('keyframe-diamond-1');
     expect(geometrySnapshot.transitionJunctions[0].dropZoneRect).toEqual(createTimelineRect(816, 22, 48, 72));
     expect(geometrySnapshot.marqueeExclusions[0].kind).toBe('timeline-header');
+    expect(geometrySnapshot.marqueeExclusions.map(exclusion => exclusion.kind)).toEqual([
+      'timeline-header',
+      'keyframe-editor',
+      'clip-handle',
+      'active-control',
+    ]);
+    expect(geometrySnapshot.marqueeExclusions.find(exclusion => exclusion.kind === 'keyframe-editor')).toMatchObject({
+      id: 'keyframe-editor-opacity',
+      clipId: 'clip-1',
+      trackId: 'video-1',
+      rect: geometrySnapshot.tracks[0].keyframeAreaRect,
+    });
+    expect(geometrySnapshot.marqueeExclusions.find(exclusion => exclusion.kind === 'clip-handle')).toMatchObject({
+      id: 'clip-handle-fade-right-clip-1',
+      clipId: 'clip-1',
+      trackId: 'video-1',
+      rect: geometrySnapshot.handles.find(handle => handle.id === 'fade-right-clip-1')?.hitRect,
+    });
+    expect(geometrySnapshot.marqueeExclusions.find(exclusion => exclusion.kind === 'active-control')).toMatchObject({
+      id: 'context-menu-clip-1',
+      kind: 'active-control',
+      clipId: 'clip-1',
+      rect: createTimelineRect(720, 32, 180, 220),
+    });
     expect(geometrySnapshot.dropTargets[0].kind).toBe('spectral-region');
+  });
+
+  it('captures transition junction geometry for drop zones and hit testing', () => {
+    const [junction] = geometrySnapshot.transitionJunctions;
+
+    expect(junction).toMatchObject({
+      id: 'junction-1',
+      trackId: 'video-1',
+      time: 14,
+      beforeClipId: 'clip-1',
+      afterClipId: 'clip-2',
+    });
+    expect(junction.rect).toEqual(createTimelineRect(836, 22, 8, 72));
+    expect(junction.dropZoneRect).toEqual(createTimelineRect(816, 22, 48, 72));
+    expect(timelineRectContainsPoint(junction.dropZoneRect, { x: 840, y: 40 })).toBe(true);
+    expect(timelineRectContainsPoint(junction.dropZoneRect, { x: 900, y: 40 })).toBe(false);
   });
 
   it('provides pure rect helpers for future geometry resolvers', () => {
@@ -342,5 +435,35 @@ describe('timeline render model contracts', () => {
     expect(timelineRectContainsPoint(clipRect, { x: 620, y: 40 })).toBe(true);
     expect(timelineRectsIntersect(clipRect, viewport)).toBe(true);
     expect(clampTimelineRectToViewport(clipRect, viewport)).toEqual(createTimelineRect(650, 20, 100, 76));
+  });
+
+  it('resolves marquee exclusions from plain geometry data', () => {
+    expect(findTimelineMarqueeExclusionAtPoint(
+      geometrySnapshot.marqueeExclusions,
+      { x: 626, y: 104 },
+    )).toMatchObject({
+      id: 'keyframe-editor-opacity',
+      kind: 'keyframe-editor',
+    });
+    expect(findTimelineMarqueeExclusionAtPoint(
+      geometrySnapshot.marqueeExclusions,
+      { x: 822, y: 30 },
+    )).toMatchObject({
+      id: 'clip-handle-fade-right-clip-1',
+      kind: 'clip-handle',
+    });
+    expect(findTimelineMarqueeExclusionAtPoint(
+      geometrySnapshot.marqueeExclusions,
+      { x: 3000, y: 260 },
+    )).toBeNull();
+
+    expect(findTimelineMarqueeExclusionsIntersectingRect(
+      geometrySnapshot.marqueeExclusions,
+      createTimelineRect(620, 28, 260, 112),
+    ).map(exclusion => exclusion.kind)).toEqual([
+      'keyframe-editor',
+      'clip-handle',
+      'active-control',
+    ]);
   });
 });

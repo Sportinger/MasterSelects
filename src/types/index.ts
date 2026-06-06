@@ -736,6 +736,7 @@ export interface TimelineClip {
     videoElement?: HTMLVideoElement;
     audioElement?: HTMLAudioElement;
     imageElement?: HTMLImageElement;
+    imageUrl?: string;
     webCodecsPlayer?: import('../engine/WebCodecsPlayer').WebCodecsPlayer;
     nativeDecoder?: import('../services/nativeHelper/NativeDecoder').NativeDecoder;
     naturalDuration?: number;

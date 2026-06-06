@@ -1,8 +1,27 @@
 import { fileSystemService } from '../fileSystemService';
 import { projectDB } from '../projectDB';
 import { projectFileService } from './ProjectFileService';
-import { updateTimelineClips, type UpdateTimelineClipsOptions } from '../../stores/mediaStore/slices/fileManageSlice';
+import {
+  createMediaSourceReplacementPatch,
+  createMediaSourceReplacementResetPatch,
+  updateTimelineClips,
+  type UpdateTimelineClipsOptions,
+} from '../../stores/mediaStore/slices/fileManageSlice';
 import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
+import { useTimelineStore } from '../../stores/timeline';
+import {
+  collectTimelineAudioCacheRefsFromClips,
+  invalidateTimelineMediaCaches,
+  type TimelineAudioCacheRefClip,
+} from '../timeline/timelineCacheInvalidation';
+import {
+  collectMediaFileObjectUrls,
+  createMediaObjectUrl,
+  createPrimaryMediaObjectUrl,
+  getGaussianSplatSequenceFrameObjectUrlKey,
+  getModelSequenceFrameObjectUrlKey,
+  revokeMediaFileObjectUrls,
+} from './mediaObjectUrlManager';
 import type {
   GaussianSplatSequenceData,
   GaussianSplatSequenceFrame,
@@ -292,17 +311,12 @@ export function mediaNeedsRelink(mediaFile: MediaFile): boolean {
   return !mediaFile.file && !isNativeProjectLinkedMedia(mediaFile);
 }
 
-function isBlobUrl(url: string | undefined): boolean {
-  return typeof url === 'string' && url.startsWith('blob:');
-}
-
 function replaceMediaFile(mediaFileId: string, nextFile: Partial<MediaFile>): void {
   useMediaStore.setState((state) => ({
     files: state.files.map((file) => {
       if (file.id !== mediaFileId) return file;
-      if (isBlobUrl(file.url) && file.url !== nextFile.url) {
-        URL.revokeObjectURL(file.url);
-      }
+      const nextBlobUrls = collectMediaFileObjectUrls({ ...file, ...nextFile });
+      revokeMediaFileObjectUrls(file, { keepUrls: nextBlobUrls });
       return {
         ...file,
         ...nextFile,
@@ -310,6 +324,27 @@ function replaceMediaFile(mediaFileId: string, nextFile: Partial<MediaFile>): vo
       };
     }),
   }));
+}
+
+function collectActiveTimelineClipsForRelink(mediaFileId: string): TimelineAudioCacheRefClip[] {
+  return useTimelineStore.getState().clips
+    .filter((clip) => clip.source?.mediaFileId === mediaFileId)
+    .map((clip) => ({
+      id: clip.id ?? undefined,
+      audioState: clip.audioState,
+    }));
+}
+
+async function invalidateRelinkSourceReplacementCaches(mediaFile: MediaFile): Promise<void> {
+  const clips = collectActiveTimelineClipsForRelink(mediaFile.id);
+  await invalidateTimelineMediaCaches({
+    reason: 'source-replace',
+    mediaFileId: mediaFile.id,
+    ...(mediaFile.fileHash ? { fileHash: mediaFile.fileHash } : {}),
+    clipIds: clips.map(clip => clip.id).filter((id): id is string => Boolean(id)),
+    sourceAudioAnalysisRefs: mediaFile.audioAnalysisRefs,
+    explicitAudioRefs: collectTimelineAudioCacheRefsFromClips(clips),
+  });
 }
 
 async function applyNativeSingleRelink(
@@ -322,9 +357,11 @@ async function applyNativeSingleRelink(
     projectFileService.resolveRawFilePath(targetPath) ??
     mediaFile.absolutePath;
 
+  await invalidateRelinkSourceReplacementCaches(mediaFile);
   await storeHandle(mediaFile.id, match.candidate.handle);
 
   replaceMediaFile(mediaFile.id, {
+    ...createMediaSourceReplacementResetPatch(),
     file: undefined,
     url: '',
     filePath: absolutePath ?? targetPath,
@@ -347,14 +384,17 @@ async function applySingleRelink(
 
   const targetPath = mediaFile.projectPath ?? match.candidate.name;
   const restored = await copyCandidateToProject(match.candidate, targetPath);
-  const url = URL.createObjectURL(restored.file);
+  const url = createPrimaryMediaObjectUrl(mediaFile.id, restored.file, { revokeExisting: false });
+  const sourceReplacementPatch = await createMediaSourceReplacementPatch(restored.file);
 
+  await invalidateRelinkSourceReplacementCaches(mediaFile);
   await storeHandle(mediaFile.id, restored.handle ?? match.candidate.handle);
   if (restored.handle) {
     await storeHandle(`${mediaFile.id}_project`, restored.handle);
   }
 
   replaceMediaFile(mediaFile.id, {
+    ...sourceReplacementPatch,
     file: restored.file,
     url,
     filePath: match.candidate.absolutePath ?? restored.file.name ?? match.candidate.name,
@@ -363,7 +403,11 @@ async function applySingleRelink(
     fileSize: restored.file.size || mediaFile.fileSize,
   });
 
-  await updateTimelineClips(mediaFile.id, restored.file, options);
+  await updateTimelineClips(mediaFile.id, restored.file, {
+    ...options,
+    invalidateCaches: false,
+    fileHash: sourceReplacementPatch.fileHash,
+  });
   return true;
 }
 
@@ -402,11 +446,14 @@ async function applyNativeModelSequenceRelink(
       sourcePath: absolutePath ?? candidate.name,
       absolutePath,
       projectPath,
+      modelUrl: undefined,
     };
   }
 
   const firstFrame = frames[0];
+  await invalidateRelinkSourceReplacementCaches(mediaFile);
   replaceMediaFile(mediaFile.id, {
+    ...createMediaSourceReplacementResetPatch(),
     file: undefined,
     url: '',
     modelSequence: {
@@ -445,7 +492,12 @@ async function applyModelSequenceRelink(
       candidate,
       buildSequenceRawTarget(existingFrame.projectPath, sequence.sequenceName, candidate.name, 'glb-sequence'),
     );
-    const modelUrl = URL.createObjectURL(restored.file);
+    const modelUrl = createMediaObjectUrl(
+      mediaFile.id,
+      getModelSequenceFrameObjectUrlKey(index),
+      restored.file,
+      { revokeExisting: false },
+    );
     const frameKey = `${mediaFile.id}_frame_${index}`;
 
     await storeHandle(frameKey, restored.handle ?? candidate.handle);
@@ -477,8 +529,11 @@ async function applyModelSequenceRelink(
   };
   const firstFrame = frames[0];
   if (!firstFile || !firstFrame?.modelUrl) return false;
+  const sourceReplacementPatch = await createMediaSourceReplacementPatch(firstFile);
 
+  await invalidateRelinkSourceReplacementCaches(mediaFile);
   replaceMediaFile(mediaFile.id, {
+    ...sourceReplacementPatch,
     file: firstFile,
     url: firstFrame.modelUrl,
     modelSequence,
@@ -488,7 +543,11 @@ async function applyModelSequenceRelink(
     fileSize: frames.reduce((sum, frame) => sum + (frame.file?.size ?? 0), 0) || mediaFile.fileSize,
   });
 
-  await updateTimelineClips(mediaFile.id, firstFile, options);
+  await updateTimelineClips(mediaFile.id, firstFile, {
+    ...options,
+    invalidateCaches: false,
+    fileHash: sourceReplacementPatch.fileHash,
+  });
   return true;
 }
 
@@ -527,12 +586,15 @@ async function applyNativeGaussianSplatSequenceRelink(
       sourcePath: absolutePath ?? candidate.name,
       absolutePath,
       projectPath,
+      splatUrl: undefined,
     };
   }
 
   const firstFrame = frames[0];
   const totalFileSize = frames.reduce((sum, frame) => sum + (frame.fileSize ?? 0), 0);
+  await invalidateRelinkSourceReplacementCaches(mediaFile);
   replaceMediaFile(mediaFile.id, {
+    ...createMediaSourceReplacementResetPatch(),
     file: undefined,
     url: '',
     gaussianSplatSequence: {
@@ -573,7 +635,12 @@ async function applyGaussianSplatSequenceRelink(
       candidate,
       buildSequenceRawTarget(existingFrame.projectPath, sequence.sequenceName, candidate.name, 'splat-sequence'),
     );
-    const splatUrl = URL.createObjectURL(restored.file);
+    const splatUrl = createMediaObjectUrl(
+      mediaFile.id,
+      getGaussianSplatSequenceFrameObjectUrlKey(index),
+      restored.file,
+      { revokeExisting: false },
+    );
     const frameKey = `${mediaFile.id}_frame_${index}`;
 
     await storeHandle(frameKey, restored.handle ?? candidate.handle);
@@ -608,8 +675,11 @@ async function applyGaussianSplatSequenceRelink(
   };
   const firstFrame = frames[0];
   if (!firstFile || !firstFrame?.splatUrl) return false;
+  const sourceReplacementPatch = await createMediaSourceReplacementPatch(firstFile);
 
+  await invalidateRelinkSourceReplacementCaches(mediaFile);
   replaceMediaFile(mediaFile.id, {
+    ...sourceReplacementPatch,
     file: firstFile,
     url: firstFrame.splatUrl,
     gaussianSplatSequence,
@@ -620,7 +690,11 @@ async function applyGaussianSplatSequenceRelink(
     splatFrameCount: gaussianSplatSequence.frameCount,
   });
 
-  await updateTimelineClips(mediaFile.id, firstFile, options);
+  await updateTimelineClips(mediaFile.id, firstFile, {
+    ...options,
+    invalidateCaches: false,
+    fileHash: sourceReplacementPatch.fileHash,
+  });
   return true;
 }
 

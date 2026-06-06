@@ -412,6 +412,8 @@ export function ExportPanel() {
       startTime,
       endTime,
       exportMode: encoder === 'webcodecs' ? 'fast' : 'precise',
+      runtimeReporting: true,
+      runtimeExportKind: 'browser-gif',
     });
     ffmpegFrameRendererRef.current = frameRenderer;
 
@@ -573,6 +575,9 @@ export function ExportPanel() {
       fps: exportFps,
       startTime,
       endTime,
+      runtimeReporting: true,
+      runtimeExportKind: exportAsGif ? 'ffmpeg-gif' : 'ffmpeg-video',
+      includeAudio: shouldIncludeAudio,
     });
     ffmpegFrameRendererRef.current = ffmpegFrameRenderer;
 
@@ -712,6 +717,8 @@ export function ExportPanel() {
             sampleRate: audioSampleRate,
             bitrate: audioBitrate,
             normalize: normalizeAudio,
+          }, {
+            exportRunId: ffmpegFrameRenderer.getRuntimeRunId() ?? undefined,
           });
           ffmpegAudioPipelineRef.current = audioPipeline;
 
@@ -1045,6 +1052,8 @@ export function ExportPanel() {
       startTime,
       endTime: Math.max(endTime, startTime + frameDuration),
       exportMode: encoder === 'webcodecs' ? 'fast' : 'precise',
+      runtimeReporting: true,
+      runtimeExportKind: 'image-sequence',
     });
     ffmpegFrameRendererRef.current = frameRenderer;
     let timelineExportStarted = false;

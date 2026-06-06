@@ -16,12 +16,19 @@ import { fileSystemService } from '../../services/fileSystemService';
 import { projectDB } from '../../services/projectDB';
 import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
+import {
+  createPrimaryMediaObjectUrl,
+  createThumbnailMediaObjectUrl,
+  revokeMediaFileObjectUrls,
+} from '../../services/project/mediaObjectUrlManager';
 
 type MediaStoreSet = (
   partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>),
 ) => void;
 
 const log = Logger.create('LegacyStartupRestore');
+
+const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
 
 export async function restoreLegacyStartupMediaState(
   set: MediaStoreSet,
@@ -46,7 +53,7 @@ export async function restoreLegacyStartupMediaState(
             const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
             if (result) {
               file = result.file;
-              url = URL.createObjectURL(file);
+              url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
               const projectHandle = result.handle;
               if (projectHandle) {
                 fileSystemService.storeFileHandle(mediaFile.id, projectHandle);
@@ -66,14 +73,14 @@ export async function restoreLegacyStartupMediaState(
               const permission = await (handle as FileSystemFileHandle).queryPermission({ mode: 'read' });
               if (permission === 'granted') {
                 file = await (handle as FileSystemFileHandle).getFile();
-                url = URL.createObjectURL(file);
+                url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
                 fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
                 log.debug('Restored file from handle:', stored.name);
               } else {
                 const newPermission = await (handle as FileSystemFileHandle).requestPermission({ mode: 'read' });
                 if (newPermission === 'granted') {
                   file = await (handle as FileSystemFileHandle).getFile();
-                  url = URL.createObjectURL(file);
+                  url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
                   fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
                   log.debug(`Restored file from handle (after permission): ${stored.name}`);
                 }
@@ -94,8 +101,14 @@ export async function restoreLegacyStartupMediaState(
             thumbBlob = storedThumbnail?.blob ?? null;
           }
           if (thumbBlob && thumbBlob.size > 0) {
-            thumbnailUrl = URL.createObjectURL(thumbBlob);
+            thumbnailUrl = createThumbnailMediaObjectUrl(mediaFile.id, thumbBlob);
           }
+        }
+
+        if (file || thumbnailUrl !== mediaFile.thumbnailUrl) {
+          revokeMediaFileObjectUrls(mediaFile, {
+            keepUrls: [url, thumbnailUrl].filter(isBlobUrl),
+          });
         }
 
         let proxyStatus: ProxyStatus = 'none';

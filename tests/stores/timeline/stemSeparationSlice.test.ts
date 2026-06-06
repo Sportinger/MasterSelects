@@ -267,13 +267,19 @@ describe('timeline stem separation slice', () => {
     vi.mocked(useMediaStore.getState).mockReturnValue({ ...EMPTY_MEDIA_STORE_STATE, files: [sourceMediaFile, stemMediaFile] });
 
     const effects = [{ id: 'fx-1', name: 'blur', type: 'blur' as const, enabled: true, params: { radius: 4 } }];
+    const staleAudioElement = document.createElement('audio');
     const audioClip = createAudioClip({
       linkedClipId: 'video-clip',
       duration: 5,
       inPoint: 2,
       outPoint: 7,
       effects,
-      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'media-dialog' },
+      source: {
+        type: 'audio',
+        naturalDuration: 10,
+        mediaFileId: 'media-dialog',
+        audioElement: staleAudioElement,
+      },
       audioState: {
         sourceAnalysisRefs: SOURCE_REFS,
         processedAnalysisRefs: PROCESSED_REFS,
@@ -307,7 +313,7 @@ describe('timeline stem separation slice', () => {
       mediaFileId: 'media-stem-vocals',
       file: stemFile,
     });
-    expect(updatedAudioClip?.source?.audioElement).toBeInstanceOf(HTMLAudioElement);
+    expect(updatedAudioClip?.source).not.toHaveProperty('audioElement');
     expect(updatedAudioClip?.audioState).toMatchObject({
       sourceAudioRevisionId: 'media-stem-vocals',
       sourceAnalysisRefs: { waveformPyramidId: 'stem-waveform' },
@@ -329,6 +335,7 @@ describe('timeline stem separation slice', () => {
       mediaFileId: 'media-dialog',
       file: sourceFile,
     });
+    expect(restoredAudioClip?.source).not.toHaveProperty('audioElement');
     expect(restoredAudioClip?.audioState).toMatchObject({
       sourceAudioRevisionId: 'media-dialog',
       sourceAnalysisRefs: SOURCE_REFS,

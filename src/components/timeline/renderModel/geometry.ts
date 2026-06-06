@@ -46,6 +46,7 @@ export interface TimelineSourceExtensionGhostGeometry {
 
 export interface TimelineTrimPreviewGeometry {
   clipId: string;
+  leadClipId: string;
   edge: 'left' | 'right';
   bodyRect: TimelineRect;
   trimGhostRect?: TimelineRect;
@@ -53,10 +54,12 @@ export interface TimelineTrimPreviewGeometry {
 }
 
 export interface TimelineFadeCurveGeometry {
+  id: string;
   clipId: string;
   edge: 'left' | 'right' | 'both';
   controlPoints: TimelinePoint[];
   boundingRect: TimelineRect;
+  handleRectIds?: Partial<Record<'left' | 'right', string>>;
 }
 
 export interface TimelineClipBodyGeometry {
@@ -97,6 +100,7 @@ export interface TimelineHandleGeometry {
 
 export interface TimelineKeyframeDiamondGeometry {
   keyframeId: string;
+  rectId: string;
   clipId: string;
   trackId: string;
   property: string;
@@ -176,6 +180,7 @@ export interface TimelineGeometrySnapshot {
   contentWidth: number;
   tracks: TimelineTrackLaneGeometry[];
   clips: TimelineClipBodyGeometry[];
+  trimPreviews: TimelineTrimPreviewGeometry[];
   handles: TimelineHandleGeometry[];
   keyframeRows: TimelineKeyframeRowGeometry[];
   transitionJunctions: TimelineTransitionJunctionGeometry[];
@@ -224,6 +229,20 @@ export function timelineRectsIntersect(a: TimelineRect, b: TimelineRect): boolea
     a.y < b.y + b.height &&
     a.y + a.height > b.y
   );
+}
+
+export function findTimelineMarqueeExclusionAtPoint(
+  exclusions: readonly TimelineMarqueeExclusionGeometry[],
+  point: TimelinePoint,
+): TimelineMarqueeExclusionGeometry | null {
+  return exclusions.find(exclusion => timelineRectContainsPoint(exclusion.rect, point)) ?? null;
+}
+
+export function findTimelineMarqueeExclusionsIntersectingRect(
+  exclusions: readonly TimelineMarqueeExclusionGeometry[],
+  rect: TimelineRect,
+): TimelineMarqueeExclusionGeometry[] {
+  return exclusions.filter(exclusion => timelineRectsIntersect(exclusion.rect, rect));
 }
 
 export function clampTimelineRectToViewport(rect: TimelineRect, viewport: TimelineRect): TimelineRect {

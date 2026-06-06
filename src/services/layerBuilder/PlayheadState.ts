@@ -81,6 +81,20 @@ export function sanitizePlayheadPosition(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function sanitizeClockDrivenPosition(value: unknown, fallback = playheadState.position): number {
+  const safePosition = sanitizePlayheadPosition(value, fallback);
+  const safeFallback = sanitizePlayheadPosition(fallback, safePosition);
+  const speed = sanitizePlayheadPosition(playheadState.clockPlaybackSpeed, 1);
+
+  if (speed >= 0 && safePosition < safeFallback) {
+    return safeFallback;
+  }
+  if (speed < 0 && safePosition > safeFallback) {
+    return safeFallback;
+  }
+  return safePosition;
+}
+
 /**
  * Get current playhead position, preferring internal position during playback
  */
@@ -103,7 +117,7 @@ export function getInternalPlaybackPosition(fallback = playheadState.position): 
     const speed = playheadState.masterClipSpeed || 1;
     const audio = playheadState.masterAudioElement;
     if (audio && !audio.paused && audio.readyState >= 2) {
-      return sanitizePlayheadPosition(
+      return sanitizeClockDrivenPosition(
         playheadState.masterClipStartTime +
           (audio.currentTime - playheadState.masterClipInPoint) / speed,
         fallback
@@ -112,7 +126,7 @@ export function getInternalPlaybackPosition(fallback = playheadState.position): 
 
     const audioTime = playheadState.masterAudioClock?.();
     if (audioTime !== null && audioTime !== undefined && Number.isFinite(audioTime)) {
-      return sanitizePlayheadPosition(
+      return sanitizeClockDrivenPosition(
         playheadState.masterClipStartTime +
           (audioTime - playheadState.masterClipInPoint) / speed,
         fallback

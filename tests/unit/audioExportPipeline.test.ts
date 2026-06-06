@@ -1,10 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioExportPipeline } from '../../src/engine/audio/AudioExportPipeline';
 import { renderAudioGraph } from '../../src/engine/audio/AudioGraphRenderer';
 import type { AudioTrackData } from '../../src/engine/audio/AudioMixer';
 import type { AudioGraphRenderPlan } from '../../src/engine/audio/AudioGraphTypes';
 import { analyzeAudioBufferLoudnessSummary } from '../../src/services/audio/LoudnessEnvelopeGenerator';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
+import { reportExportPreviewFrame } from '../../src/services/timeline/exportRuntimeReporting';
+import { clearCompositionAudioMixdownCache } from '../../src/services/timeline/compositionAudioMixdownCache';
+import { useTimelineStore } from '../../src/stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
+
+const compositionAudioMixerMocks = vi.hoisted(() => ({
+  mixdownComposition: vi.fn(),
+  createAudioElement: vi.fn(),
+}));
+
+vi.mock('../../src/services/compositionAudioMixer', () => ({
+  compositionAudioMixer: compositionAudioMixerMocks,
+}));
 
 const videoTrack: TimelineTrack = {
   id: 'v1',
@@ -65,6 +78,21 @@ function createSignalAudioBuffer(channels: number[][], sampleRate = 48_000): Aud
 }
 
 type AudioExportPipelineTestAccess = AudioExportPipeline & {
+  extractor: {
+    clearCache: ReturnType<typeof vi.fn>;
+  };
+  mixer: {
+    updateSettings: ReturnType<typeof vi.fn>;
+    mixTracks: ReturnType<typeof vi.fn>;
+  };
+  extractAllAudio(
+    clips: TimelineClip[],
+    tracks: TimelineTrack[],
+  ): Promise<Map<string, AudioBuffer>>;
+  renderAllClipAudio(
+    clips: TimelineClip[],
+    buffers: Map<string, AudioBuffer>,
+  ): Promise<Map<string, AudioBuffer>>;
   prepareTrackData(
     clips: TimelineClip[],
     buffers: Map<string, AudioBuffer>,
@@ -76,9 +104,21 @@ type AudioExportPipelineTestAccess = AudioExportPipeline & {
     mixedBuffer: AudioBuffer,
     audioGraphPlan: AudioGraphRenderPlan,
   ): Promise<AudioBuffer>;
+  reportAudioBuffer(stage: 'source-buffer' | 'processed-buffer' | 'mix-buffer' | 'master-buffer', buffer: AudioBuffer, clip?: TimelineClip): void;
 };
 
 describe('AudioExportPipeline audio preflight', () => {
+  const initialTimelineState = useTimelineStore.getState();
+
+  afterEach(() => {
+    useTimelineStore.setState(initialTimelineState);
+    timelineRuntimeCoordinator.clearResources();
+    clearCompositionAudioMixdownCache();
+    compositionAudioMixerMocks.mixdownComposition.mockReset();
+    compositionAudioMixerMocks.createAudioElement.mockReset();
+    vi.restoreAllMocks();
+  });
+
   it('returns false for video-only export ranges', () => {
     const clips = [createClip({ source: { type: 'video' } })];
 
@@ -286,6 +326,58 @@ describe('AudioExportPipeline audio preflight', () => {
     }));
   });
 
+  it('extracts data-only composition audio clips through lazy mixdown for export', async () => {
+    const buffer = createMockAudioBuffer();
+    compositionAudioMixerMocks.mixdownComposition.mockResolvedValue({
+      buffer,
+      waveform: [0, 0.5, 0.25],
+      duration: 1,
+      hasAudio: true,
+    });
+    const clip = createClip({
+      id: 'comp-audio',
+      trackId: audioTrack.id,
+      isComposition: true,
+      compositionId: 'comp-1',
+      nestedContentHash: 'hash-a',
+      source: { type: 'audio', naturalDuration: 1 },
+      file: new File([], 'comp-audio.wav'),
+      hasMixdownAudio: false,
+      mixdownBuffer: undefined,
+    });
+    useTimelineStore.setState({
+      clips: [clip],
+      tracks: [audioTrack],
+      clipKeyframes: new Map(),
+      masterAudioState: undefined,
+    });
+    const pipeline = new AudioExportPipeline() as AudioExportPipelineTestAccess;
+    const extractAudio = vi.fn();
+    pipeline.extractor = {
+      clearCache: vi.fn(),
+      extractAudio,
+    } as unknown as AudioExportPipelineTestAccess['extractor'];
+
+    const buffers = await pipeline.extractAllAudio([clip], [audioTrack]);
+
+    expect(compositionAudioMixerMocks.mixdownComposition).toHaveBeenCalledOnce();
+    expect(compositionAudioMixerMocks.mixdownComposition).toHaveBeenCalledWith('comp-1');
+    expect(extractAudio).not.toHaveBeenCalled();
+    expect(buffers.get('comp-audio')).toBe(buffer);
+    const updatedClip = useTimelineStore.getState().clips.find(candidate => candidate.id === 'comp-audio');
+    expect(updatedClip).toEqual(expect.objectContaining({
+      mixdownBuffer: buffer,
+      mixdownWaveform: [0, 0.5, 0.25],
+      waveform: [0, 0.5, 0.25],
+      hasMixdownAudio: true,
+      mixdownGenerating: false,
+    }));
+    expect(updatedClip?.source).toEqual({
+      type: 'audio',
+      naturalDuration: 1,
+    });
+  });
+
   it('prepares export send returns as additional mixer entries', () => {
     const clip = createClip({
       id: 'send-audio',
@@ -393,5 +485,128 @@ describe('AudioExportPipeline audio preflight', () => {
     expect(rendered).toBe(buffer);
     expect(before).toBeGreaterThan(targetLufs + 1);
     expect(after).toBeCloseTo(targetLufs, 1);
+  });
+
+  it('clears extractor cache when raw export is cancelled after extraction', async () => {
+    const clip = createClip({
+      id: 'cancel-audio',
+      trackId: audioTrack.id,
+      source: { type: 'audio', audioElement: {} as HTMLAudioElement },
+    });
+    useTimelineStore.setState({
+      clips: [clip],
+      tracks: [videoTrack, audioTrack],
+      clipKeyframes: new Map(),
+      masterAudioState: undefined,
+    });
+    const pipeline = new AudioExportPipeline() as AudioExportPipelineTestAccess;
+    const clearCache = vi.fn();
+    pipeline.extractor = { clearCache };
+    pipeline.extractAllAudio = vi.fn(async () => {
+      pipeline.cancel();
+      return new Map([[clip.id, createMockAudioBuffer()]]);
+    });
+
+    const result = await pipeline.exportRawAudio(0, 1);
+
+    expect(result).toBeNull();
+    expect(clearCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not complete raw export when cancellation happens after master rendering', async () => {
+    const clip = createClip({
+      id: 'master-cancel-audio',
+      trackId: audioTrack.id,
+      source: { type: 'audio', audioElement: {} as HTMLAudioElement },
+    });
+    const buffer = createMockAudioBuffer();
+    useTimelineStore.setState({
+      clips: [clip],
+      tracks: [videoTrack, audioTrack],
+      clipKeyframes: new Map(),
+      masterAudioState: undefined,
+    });
+    const pipeline = new AudioExportPipeline() as AudioExportPipelineTestAccess;
+    const clearCache = vi.fn();
+    pipeline.extractor = { clearCache };
+    pipeline.extractAllAudio = vi.fn(async () => new Map([[clip.id, buffer]]));
+    pipeline.renderAllClipAudio = vi.fn(async () => new Map([[clip.id, buffer]]));
+    pipeline.mixer = {
+      updateSettings: vi.fn(),
+      mixTracks: vi.fn(async () => buffer),
+    };
+    pipeline.renderMasterBusAudio = vi.fn(async () => {
+      pipeline.cancel();
+      return buffer;
+    });
+
+    const result = await pipeline.exportRawAudio(0, 1);
+
+    expect(result).toBeNull();
+    expect(clearCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports audio buffers only while an export run is active', () => {
+    const clip = createClip({
+      id: 'reported-audio',
+      trackId: audioTrack.id,
+      mediaFileId: 'media-audio',
+      source: { type: 'audio', audioElement: {} as HTMLAudioElement, mediaFileId: 'media-audio' },
+    });
+    const pipeline = new AudioExportPipeline(undefined, {
+      exportRunId: 'run-audio',
+    }) as AudioExportPipelineTestAccess;
+
+    pipeline.reportAudioBuffer('source-buffer', createMockAudioBuffer(), clip);
+    pipeline.cancel();
+    pipeline.reportAudioBuffer('processed-buffer', createMockAudioBuffer(), clip);
+
+    const stats = timelineRuntimeCoordinator.getBridgeStats().policies.export;
+    expect(stats.budgetReport.usage).toMatchObject({
+      resources: 1,
+      audioSources: 1,
+    });
+    expect(stats.resources[0]).toMatchObject({
+      kind: 'audio-source-clock',
+      owner: {
+        ownerId: 'export:run:run-audio',
+        clipId: 'reported-audio',
+        mediaFileId: 'media-audio',
+      },
+      tags: ['export', 'audio', 'source-buffer'],
+    });
+  });
+
+  it('throws source-buffer admission denial without falling back to silence', async () => {
+    for (let index = 0; index < 128; index += 1) {
+      reportExportPreviewFrame({
+        runId: `existing-run-${index}`,
+        width: 1,
+        height: 1,
+        currentTime: index,
+      });
+    }
+    const clip = createClip({
+      id: 'denied-audio',
+      trackId: audioTrack.id,
+      file: new File(['audio'], 'denied.wav', { type: 'audio/wav' }),
+      source: { type: 'audio' },
+    });
+    const buffer = createMockAudioBuffer();
+    const createSilentBuffer = vi.fn(() => buffer);
+    const pipeline = new AudioExportPipeline(undefined, {
+      exportRunId: 'run-audio',
+    }) as AudioExportPipelineTestAccess;
+    pipeline.extractor = {
+      clearCache: vi.fn(),
+      extractAudio: vi.fn(async () => buffer),
+      createSilentBuffer,
+    } as unknown as AudioExportPipelineTestAccess['extractor'];
+
+    await expect(pipeline.extractAllAudio([clip], [audioTrack])).rejects.toThrow(
+      /source-buffer denied by runtime admission/
+    );
+    expect(createSilentBuffer).not.toHaveBeenCalled();
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.export.budgetReport.usage.resources).toBe(128);
   });
 });

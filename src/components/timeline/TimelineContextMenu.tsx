@@ -13,10 +13,30 @@ import { projectFileService } from '../../services/projectFileService';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { Logger } from '../../services/logger';
 import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
-import type { LabelColor } from '../../stores/mediaStore/types';
-import { resolveAudibleAudioClip } from '../../services/audio/audioClipResolution';
+import { resolveAudibleAudioClip, resolveAudibleAudioClipId } from '../../services/audio/audioClipResolution';
 import { isManualLinkedGroupId } from '../../stores/timeline/helpers/idGenerator';
 import { isActiveStemJobPhase } from '../../stores/timeline/helpers/stemSeparationJobPhases';
+import {
+  createClipContextMenuModel,
+  downloadClipContextMenuRawFile,
+  executeClipContextMenuAudioAnalysisRegeneration,
+  executeClipContextMenuAudioProxyRegeneration,
+  executeClipContextMenuClipboardCommand,
+  executeClipContextMenuLabelColor,
+  executeClipContextMenuProxyGeneration,
+  executeClipContextMenuShowInExplorer,
+  executeClipContextMenuStemSeparation,
+  executeClipContextMenuTimelineCommand,
+  executeClipContextMenuTranscription,
+  findMediaFileForClip,
+  regenerateClipContextMenuThumbnails,
+  resolveClipContextMenuLabelTarget,
+} from './utils/clipContextMenu';
+import {
+  createPrimaryMediaObjectUrl,
+  getPrimaryMediaObjectUrlKey,
+  mediaObjectUrlManager,
+} from '../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('TimelineContextMenu');
 
@@ -105,16 +125,7 @@ export function TimelineContextMenu({
   const getMediaFileForClip = useCallback(
     (clipId: string): MediaFile | null => {
       const clip = clipMap.get(clipId);
-      if (!clip) return null;
-
-      const mediaStore = useMediaStore.getState();
-      return mediaStore.files.find(
-        (f) =>
-          f.id === clip.mediaFileId ||
-          f.id === clip.source?.mediaFileId ||
-          f.name === clip.name ||
-          f.name === clip.name.replace(' (Audio)', '')
-      ) || null;
+      return findMediaFileForClip(clip, useMediaStore.getState().files) as MediaFile | null;
     },
     [clipMap]
   );
@@ -150,32 +161,20 @@ export function TimelineContextMenu({
     if (!contextMenu) return;
 
     const mediaFile = getMediaFileForClip(contextMenu.clipId);
-
     if (!mediaFile) {
       log.warn('Media file not found for clip');
       setContextMenu(null);
       return;
     }
 
-    const result = await showInExplorer(type, mediaFile.id);
-
-    if (result.success) {
-      alert(result.message);
-    } else {
-      if (type === 'raw' && mediaFile.file) {
-        const url = URL.createObjectURL(mediaFile.file);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = mediaFile.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        log.debug('Downloaded raw file:', mediaFile.name);
-      } else {
-        alert(result.message);
-      }
-    }
+    await executeClipContextMenuShowInExplorer({
+      type,
+      mediaFile,
+      showInExplorer,
+      notify: (message) => alert(message),
+      downloadRawFile: downloadClipContextMenuRawFile,
+      logDebug: (message, value) => log.debug(message, value),
+    });
 
     setContextMenu(null);
   };
@@ -190,13 +189,16 @@ export function TimelineContextMenu({
       return;
     }
 
-    const mediaStore = useMediaStore.getState();
+    const handled = executeClipContextMenuProxyGeneration({
+      mediaFile,
+      proxyStore: useMediaStore.getState(),
+      action,
+      options,
+    });
 
-    if (action === 'start') {
-      mediaStore.generateProxy(mediaFile.id, options);
+    if (handled && action === 'start') {
       log.debug('Starting proxy generation for:', mediaFile.name);
-    } else {
-      mediaStore.cancelProxyGeneration(mediaFile.id);
+    } else if (handled) {
       log.debug('Cancelled proxy generation for:', mediaFile.name);
     }
 
@@ -212,33 +214,23 @@ export function TimelineContextMenu({
       return;
     }
 
-    const videoClip = [...clipMap.values()].find((candidate) =>
-      (candidate.mediaFileId === mediaFile.id || candidate.source?.mediaFileId === mediaFile.id) &&
-      candidate.source?.type === 'video' &&
-      candidate.source.videoElement
-    );
-    const sourceVideo = videoClip?.source?.type === 'video'
-      ? videoClip.source.videoElement
-      : null;
-
-    if (!sourceVideo) {
-      log.warn('No video element available for thumbnail regeneration', {
-        mediaFileId: mediaFile.id,
-        name: mediaFile.name,
-      });
-      setContextMenu(null);
-      return;
-    }
-
-    const duration = mediaFile.duration ||
-      videoClip?.source?.naturalDuration ||
-      sourceVideo.duration ||
-      videoClip?.duration ||
-      0;
-
     void (async () => {
-      await thumbnailCacheService.clearSource(mediaFile.id);
-      await thumbnailCacheService.generateForSource(mediaFile.id, sourceVideo, duration, mediaFile.fileHash);
+      const result = await regenerateClipContextMenuThumbnails({
+        mediaFile,
+        clips: [...clipMap.values()],
+        thumbnailCache: thumbnailCacheService,
+        getManagedPrimarySourceUrl: (mediaFileId) => mediaObjectUrlManager.get(mediaFileId, getPrimaryMediaObjectUrlKey()),
+        createPrimarySourceUrl: (mediaFileId, file) => createPrimaryMediaObjectUrl(mediaFileId, file, {
+          revokeExisting: false,
+        }),
+      });
+      if (!result.success) {
+        log.warn('No source URL available for thumbnail regeneration', {
+          mediaFileId: mediaFile.id,
+          name: mediaFile.name,
+          reason: result.reason,
+        });
+      }
     })().catch((error) => {
       log.warn('Thumbnail regeneration failed', { mediaFileId: mediaFile.id, error });
     });
@@ -250,9 +242,11 @@ export function TimelineContextMenu({
     if (!contextMenu) return;
 
     const mediaFile = getMediaFileForClip(contextMenu.clipId);
-    if (mediaFile) {
-      void useMediaStore.getState().generateAudioProxy(mediaFile.id, { force });
-    }
+    executeClipContextMenuAudioProxyRegeneration({
+      mediaFile,
+      proxyStore: useMediaStore.getState(),
+      force,
+    });
 
     setContextMenu(null);
   };
@@ -260,10 +254,14 @@ export function TimelineContextMenu({
   const handleWaveformRegeneration = () => {
     if (!contextMenu) return;
 
-    const resolved = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
-    if (resolved?.audioClip.id) {
-      generateWaveformForClip(resolved.audioClip.id, { force: true });
-    }
+    executeClipContextMenuAudioAnalysisRegeneration({
+      clipId: contextMenu.clipId,
+      clips: [...clipMap.values()],
+      kind: 'waveform',
+      resolveAudioClipId: (clips, clipId) => resolveAudibleAudioClipId(clips as TimelineClip[], clipId),
+      generateWaveformForClip,
+      generateSpectrogramForClip,
+    });
 
     setContextMenu(null);
   };
@@ -271,10 +269,14 @@ export function TimelineContextMenu({
   const handleSpectralRegeneration = () => {
     if (!contextMenu) return;
 
-    const resolved = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
-    if (resolved?.audioClip.id) {
-      generateSpectrogramForClip(resolved.audioClip.id, { force: true });
-    }
+    executeClipContextMenuAudioAnalysisRegeneration({
+      clipId: contextMenu.clipId,
+      clips: [...clipMap.values()],
+      kind: 'spectral',
+      resolveAudioClipId: (clips, clipId) => resolveAudibleAudioClipId(clips as TimelineClip[], clipId),
+      generateWaveformForClip,
+      generateSpectrogramForClip,
+    });
 
     setContextMenu(null);
   };
@@ -283,9 +285,31 @@ export function TimelineContextMenu({
 
   const mediaFile = getMediaFileForClip(contextMenu.clipId);
   const clip = clipMap.get(contextMenu.clipId);
-  const isVideo = clip?.source?.type === 'video';
-  const isAudio = clip?.source?.type === 'audio';
-  const isSolid = clip?.source?.type === 'solid';
+  const canPasteEffects = hasClipboardEffects();
+  const canPasteColor = hasClipboardColor();
+  const menuModel = createClipContextMenuModel({
+    clipId: contextMenu.clipId,
+    clip,
+    clipMap,
+    selectedClipIds,
+    isClipLocked,
+    canPasteEffects,
+    canPasteColor,
+  });
+  const {
+    isVideo,
+    isAudio,
+    isSolid,
+    targetClipIds,
+    hasClipLinkTarget,
+    canModifyTargets,
+    canLinkClips,
+    canUnlinkClips,
+    effectCopyLabel,
+    effectPasteLabel,
+    showColorClipboardInEffects,
+    showColorClipboardTopLevel,
+  } = menuModel;
   const isVideoMedia = mediaFile?.type === 'video' || isVideo;
   const audibleAudioResolution = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
   const audibleAudioClip = audibleAudioResolution?.audioClip ?? null;
@@ -312,120 +336,63 @@ export function TimelineContextMenu({
     audibleAudioClip?.audioState?.processedAnalysisRefs?.spectrogramTileSetIds?.[0] ||
     audibleAudioClip?.audioState?.sourceAnalysisRefs?.spectrogramTileSetIds?.[0]
   );
-  const canPasteEffects = hasClipboardEffects();
-  const canPasteColor = hasClipboardColor();
-  const getPasteTargetClipIds = (): string[] => {
-    if (!contextMenu?.clipId) return [];
-    return selectedClipIds.has(contextMenu.clipId)
-      ? [...selectedClipIds]
-      : [contextMenu.clipId];
+
+  const { mediaItemId, currentColor } = resolveClipContextMenuLabelTarget(clip, useMediaStore.getState());
+  const clipboardActions = {
+    copyClipEffects,
+    pasteClipEffects,
+    copyClipColor,
+    pasteClipColor,
   };
-  const targetClipIds = getPasteTargetClipIds();
-  const getClipLinkAffectedIds = (): Set<string> => {
-    const affectedIds = new Set(targetClipIds);
-    const targetIdSet = new Set(targetClipIds);
-    const manualGroupIds = new Set<string>();
-
-    for (const clipId of targetClipIds) {
-      const targetClip = clipMap.get(clipId);
-      if (!targetClip) continue;
-      if (targetClip.linkedClipId) affectedIds.add(targetClip.linkedClipId);
-      const groupId = targetClip.linkedGroupId;
-      if (groupId && isManualLinkedGroupId(groupId)) {
-        manualGroupIds.add(groupId);
-      }
-    }
-
-    for (const candidate of clipMap.values()) {
-      if (candidate.linkedClipId && targetIdSet.has(candidate.linkedClipId)) {
-        affectedIds.add(candidate.id);
-      }
-      if (candidate.linkedGroupId && manualGroupIds.has(candidate.linkedGroupId)) {
-        affectedIds.add(candidate.id);
-      }
-    }
-
-    return affectedIds;
+  const timelineActions = {
+    splitClipAtPlayhead,
+    rippleDeleteSelection,
+    deleteGapAtTime,
+    linkClips,
+    unlinkClips,
+    convertSolidToMotionShape,
+    setMulticamDialogOpen,
+    unlinkGroup,
+    toggleClipReverse,
+    createSubcompositionFromSelection,
+    removeClip,
   };
-  const clipLinkAffectedIds = getClipLinkAffectedIds();
-  const hasClipLinkTarget = targetClipIds.some((clipId) => {
-    const targetClip = clipMap.get(clipId);
-    if (!targetClip) return false;
-    return Boolean(targetClip.linkedClipId) ||
-      isManualLinkedGroupId(targetClip.linkedGroupId) ||
-      [...clipMap.values()].some((candidate) => candidate.linkedClipId === clipId);
-  });
-  const hasLockedTarget = targetClipIds.some(isClipLocked);
-  const hasLockedClipLinkTarget = [...clipLinkAffectedIds].some(isClipLocked);
-  const canModifyTargets = !hasLockedTarget;
-  const canLinkClips = targetClipIds.length >= 2 && !hasLockedClipLinkTarget;
-  const canUnlinkClips = hasClipLinkTarget && !hasLockedClipLinkTarget;
-  const effectCopyLabel = isAudio
-    ? 'Copy Audio Effects'
-    : isVideo
-    ? 'Copy Video Effects'
-    : 'Copy Effects';
-  const effectPasteLabel = isAudio
-    ? 'Paste Audio Effects'
-    : isVideo
-    ? 'Paste Video Effects'
-    : 'Paste Effects';
-  const showColorClipboardInEffects = Boolean(isVideo);
-  const showColorClipboardTopLevel = !isAudio && !showColorClipboardInEffects;
-
-  // Resolve the media item ID and current label color for the clip
-  const resolveMediaItemColor = (): { mediaItemId: string | null; currentColor: LabelColor } => {
-    if (!clip) return { mediaItemId: null, currentColor: 'none' };
-    const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
-    const ms = useMediaStore.getState();
-
-    // Composition clips
-    if (clip.compositionId) {
-      const comp = ms.compositions.find(c => c.id === clip.compositionId);
-      if (comp) return { mediaItemId: comp.id, currentColor: comp.labelColor || 'none' };
-    }
-    // Regular media files
-    if (mediaFileId) {
-      const file = ms.files.find(f => f.id === mediaFileId);
-      if (file) return { mediaItemId: file.id, currentColor: file.labelColor || 'none' };
-    }
-    // Solid items
-    if (clip.source?.type === 'solid') {
-      const solid = mediaFileId
-        ? ms.solidItems.find(si => si.id === mediaFileId)
-        : ms.solidItems.find(si => si.name === clip.name);
-      if (solid) return { mediaItemId: solid.id, currentColor: solid.labelColor || 'none' };
-    }
-    // Text items
-    if (clip.source?.type === 'text') {
-      const text = mediaFileId
-        ? ms.textItems.find(ti => ti.id === mediaFileId)
-        : ms.textItems.find(ti => ti.name === clip.name);
-      if (text) return { mediaItemId: text.id, currentColor: text.labelColor || 'none' };
-    }
-    // Mesh items
-    if (clip.source?.type === 'model') {
-      const mesh = mediaFileId
-        ? (ms.meshItems || []).find(m => m.id === mediaFileId)
-        : (ms.meshItems || []).find(m => m.name === clip.name || m.meshType === clip.meshType);
-      if (mesh) return { mediaItemId: mesh.id, currentColor: mesh.labelColor || 'none' };
-    }
-    // Camera items
-    if (clip.source?.type === 'camera') {
-      const cam = mediaFileId
-        ? (ms.cameraItems || []).find(c => c.id === mediaFileId)
-        : (ms.cameraItems || [])[0]; // Usually only one camera item
-      if (cam) return { mediaItemId: cam.id, currentColor: cam.labelColor || 'none' };
-    }
-    if (clip.source?.type === 'splat-effector') {
-      const effector = mediaFileId
-        ? (ms.splatEffectorItems || []).find(e => e.id === mediaFileId)
-        : (ms.splatEffectorItems || []).find(e => e.name === clip.name);
-      if (effector) return { mediaItemId: effector.id, currentColor: effector.labelColor || 'none' };
-    }
-    return { mediaItemId: null, currentColor: 'none' };
+  const runClipboardCommand = (
+    command: Parameters<typeof executeClipContextMenuClipboardCommand>[0]['command'],
+    canExecute: boolean,
+  ) => {
+    const handled = executeClipContextMenuClipboardCommand({
+      command,
+      clipId: contextMenu.clipId,
+      targetClipIds,
+      canExecute,
+      actions: clipboardActions,
+    });
+    if (handled) setContextMenu(null);
   };
-  const { mediaItemId, currentColor } = resolveMediaItemColor();
+  const runTimelineCommand = (
+    command: Parameters<typeof executeClipContextMenuTimelineCommand>[0]['command'],
+    canExecute: boolean,
+  ) => {
+    const handled = executeClipContextMenuTimelineCommand({
+      command,
+      clip,
+      clipId: contextMenu.clipId,
+      targetClipIds,
+      canExecute,
+      actions: timelineActions,
+    });
+    if (handled) setContextMenu(null);
+  };
+  const runStemSeparationCommand = () => {
+    const handled = executeClipContextMenuStemSeparation({
+      clipId: contextMenu.clipId,
+      canExecute: canModifyTargets && !isStemSeparationActive,
+      force: hasStemSeparation,
+      startClipStemSeparation,
+    });
+    if (handled) setContextMenu(null);
+  };
 
   return (
     <div
@@ -613,22 +580,13 @@ export function TimelineContextMenu({
         <div className="context-submenu">
           <div
             className="context-menu-item"
-            onClick={() => {
-              if (contextMenu.clipId) {
-                copyClipEffects(contextMenu.clipId);
-              }
-              setContextMenu(null);
-            }}
+            onClick={() => runClipboardCommand('copy-effects', Boolean(contextMenu.clipId))}
           >
             {effectCopyLabel}
           </div>
           <div
             className={`context-menu-item ${!canPasteEffects || !canModifyTargets ? 'disabled' : ''}`}
-            onClick={() => {
-              if (!canPasteEffects || !canModifyTargets) return;
-              pasteClipEffects(targetClipIds);
-              setContextMenu(null);
-            }}
+            onClick={() => runClipboardCommand('paste-effects', canPasteEffects && canModifyTargets)}
           >
             {effectPasteLabel}
           </div>
@@ -637,22 +595,13 @@ export function TimelineContextMenu({
               <div className="context-menu-separator" />
               <div
                 className="context-menu-item"
-                onClick={() => {
-                  if (contextMenu.clipId) {
-                    copyClipColor(contextMenu.clipId);
-                  }
-                  setContextMenu(null);
-                }}
+                onClick={() => runClipboardCommand('copy-color', Boolean(contextMenu.clipId))}
               >
                 Copy Color
               </div>
               <div
                 className={`context-menu-item ${!canPasteColor || !canModifyTargets ? 'disabled' : ''}`}
-                onClick={() => {
-                  if (!canPasteColor || !canModifyTargets) return;
-                  pasteClipColor(targetClipIds);
-                  setContextMenu(null);
-                }}
+                onClick={() => runClipboardCommand('paste-color', canPasteColor && canModifyTargets)}
               >
                 Paste Color
               </div>
@@ -664,22 +613,13 @@ export function TimelineContextMenu({
         <>
           <div
             className="context-menu-item"
-            onClick={() => {
-              if (contextMenu.clipId) {
-                copyClipColor(contextMenu.clipId);
-              }
-              setContextMenu(null);
-            }}
+            onClick={() => runClipboardCommand('copy-color', Boolean(contextMenu.clipId))}
           >
             Copy Color
           </div>
           <div
             className={`context-menu-item ${!canPasteColor || !canModifyTargets ? 'disabled' : ''}`}
-            onClick={() => {
-              if (!canPasteColor || !canModifyTargets) return;
-              pasteClipColor(targetClipIds);
-              setContextMenu(null);
-            }}
+            onClick={() => runClipboardCommand('paste-color', canPasteColor && canModifyTargets)}
           >
             Paste Color
           </div>
@@ -689,32 +629,19 @@ export function TimelineContextMenu({
       <div className="context-menu-separator" />
       <div
         className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
-        onClick={() => {
-          if (!canModifyTargets) return;
-          splitClipAtPlayhead();
-          setContextMenu(null);
-        }}
+        onClick={() => runTimelineCommand('split-at-playhead', canModifyTargets)}
       >
         Split at Playhead (C)
       </div>
       <div
         className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
-        onClick={() => {
-          if (!canModifyTargets) return;
-          rippleDeleteSelection(targetClipIds);
-          setContextMenu(null);
-        }}
+        onClick={() => runTimelineCommand('ripple-delete', canModifyTargets)}
       >
         Ripple Delete
       </div>
       <div
         className="context-menu-item"
-        onClick={() => {
-          if (!contextMenu) return;
-          const targetTime = Math.max(0, (clip?.startTime ?? 0) - 0.0005);
-          deleteGapAtTime(targetTime);
-          setContextMenu(null);
-        }}
+        onClick={() => runTimelineCommand('delete-gap-at-clip-start', true)}
       >
         Delete Gap at Clip Start
       </div>
@@ -725,11 +652,7 @@ export function TimelineContextMenu({
           {targetClipIds.length >= 2 && (
             <div
               className={`context-menu-item ${!canLinkClips ? 'disabled' : ''}`}
-              onClick={() => {
-                if (!canLinkClips) return;
-                linkClips(targetClipIds);
-                setContextMenu(null);
-              }}
+              onClick={() => runTimelineCommand('link-clips', canLinkClips)}
             >
               Link Clips
             </div>
@@ -737,11 +660,7 @@ export function TimelineContextMenu({
           {hasClipLinkTarget && (
             <div
               className={`context-menu-item ${!canUnlinkClips ? 'disabled' : ''}`}
-              onClick={() => {
-                if (!canUnlinkClips) return;
-                unlinkClips(targetClipIds);
-                setContextMenu(null);
-              }}
+              onClick={() => runTimelineCommand('unlink-clips', canUnlinkClips)}
             >
               Unlink Clips
             </div>
@@ -754,13 +673,7 @@ export function TimelineContextMenu({
           <div className="context-menu-separator" />
           <div
             className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
-            onClick={() => {
-              if (!canModifyTargets) return;
-              if (contextMenu.clipId) {
-                convertSolidToMotionShape(contextMenu.clipId);
-              }
-              setContextMenu(null);
-            }}
+            onClick={() => runTimelineCommand('convert-solid-to-motion-shape', canModifyTargets)}
           >
             Convert Solid to Motion Shape
           </div>
@@ -771,11 +684,7 @@ export function TimelineContextMenu({
       {selectedClipIds.size > 1 && (
         <div
           className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
-          onClick={() => {
-            if (!canModifyTargets) return;
-            setMulticamDialogOpen(true);
-            setContextMenu(null);
-          }}
+          onClick={() => runTimelineCommand('open-multicam-dialog', canModifyTargets)}
         >
           Combine Multicam ({selectedClipIds.size} clips)
         </div>
@@ -783,13 +692,7 @@ export function TimelineContextMenu({
       {clip?.linkedGroupId && !isManualLinkedGroupId(clip.linkedGroupId) && (
         <div
           className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
-          onClick={() => {
-            if (!canModifyTargets) return;
-            if (contextMenu.clipId) {
-              unlinkGroup(contextMenu.clipId);
-            }
-            setContextMenu(null);
-          }}
+          onClick={() => runTimelineCommand('unlink-multicam-group', canModifyTargets)}
         >
           Unlink from Multicam
         </div>
@@ -798,13 +701,7 @@ export function TimelineContextMenu({
       {isVideo && (
         <div
           className={`context-menu-item ${clip?.reversed ? 'checked' : ''} ${!canModifyTargets ? 'disabled' : ''}`}
-          onClick={() => {
-            if (!canModifyTargets) return;
-            if (contextMenu.clipId) {
-              toggleClipReverse(contextMenu.clipId);
-            }
-            setContextMenu(null);
-          }}
+          onClick={() => runTimelineCommand('toggle-reverse', canModifyTargets)}
         >
           {clip?.reversed ? '\u2713 ' : ''}Reverse Playback
         </div>
@@ -812,11 +709,7 @@ export function TimelineContextMenu({
 
       <div
         className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
-        onClick={() => {
-          if (!canModifyTargets || !contextMenu.clipId) return;
-          createSubcompositionFromSelection(contextMenu.clipId);
-          setContextMenu(null);
-        }}
+        onClick={() => runTimelineCommand('create-subcomposition', canModifyTargets)}
       >
         Create Subcomposition
       </div>
@@ -826,11 +719,7 @@ export function TimelineContextMenu({
           <div className="context-menu-separator" />
           <div
             className={`context-menu-item ${isStemSeparationActive || !canModifyTargets ? 'disabled' : ''}`}
-            onClick={() => {
-              if (!contextMenu.clipId || isStemSeparationActive || !canModifyTargets) return;
-              void startClipStemSeparation(contextMenu.clipId, { force: hasStemSeparation });
-              setContextMenu(null);
-            }}
+            onClick={runStemSeparationCommand}
           >
             {isStemSeparationActive
               ? `Separating Stems... ${stemProgressPercent}%`
@@ -847,10 +736,11 @@ export function TimelineContextMenu({
           <div
             className={`context-menu-item ${clip?.transcriptStatus === 'transcribing' ? 'disabled' : ''}`}
             onClick={async () => {
-              if (contextMenu.clipId && clip?.transcriptStatus !== 'transcribing') {
-                const { transcribeClip } = await import('../../services/clipTranscriber');
-                transcribeClip(contextMenu.clipId);
-              }
+              await executeClipContextMenuTranscription({
+                clipId: contextMenu.clipId,
+                transcriptStatus: clip?.transcriptStatus,
+                loadTranscriber: () => import('../../services/clipTranscriber'),
+              });
               setContextMenu(null);
             }}
           >
@@ -890,9 +780,11 @@ export function TimelineContextMenu({
                 title={c.name}
                 style={{ background: c.key === 'none' ? 'var(--bg-tertiary)' : c.hex }}
                 onClick={() => {
-                  if (mediaItemId) {
-                    useMediaStore.getState().setLabelColor([mediaItemId], c.key as LabelColor);
-                  }
+                  executeClipContextMenuLabelColor({
+                    mediaItemId,
+                    color: c.key,
+                    labelStore: useMediaStore.getState(),
+                  });
                   setContextMenu(null);
                 }}
               >
@@ -906,13 +798,7 @@ export function TimelineContextMenu({
       <div className="context-menu-separator" />
       <div
         className={`context-menu-item danger ${!canModifyTargets ? 'disabled' : ''}`}
-        onClick={() => {
-          if (!canModifyTargets) return;
-          if (contextMenu.clipId) {
-            removeClip(contextMenu.clipId);
-          }
-          setContextMenu(null);
-        }}
+        onClick={() => runTimelineCommand('delete-clip', canModifyTargets)}
       >
         Delete Clip From Timeline
       </div>

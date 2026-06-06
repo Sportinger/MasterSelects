@@ -55,12 +55,9 @@ export interface LoadRiveMediaParams {
 
 export async function loadRiveMedia(params: LoadRiveMediaParams): Promise<void> {
   const { clip, file, mediaFileId, metadata, updateClip } = params;
-  const { riveRuntimeManager } = await import('../../../services/vectorAnimation/RiveRuntimeManager');
-  const runtime = await riveRuntimeManager.prepareClipSource(clip, file);
-  const resolvedMetadata = metadata ?? runtime.metadata;
-  const naturalDuration = resolvedMetadata.duration ?? clip.duration;
-  const nativeScale = (resolvedMetadata.width && resolvedMetadata.height)
-    ? calculateNativeScale(resolvedMetadata.width, resolvedMetadata.height)
+  const naturalDuration = metadata?.duration ?? clip.duration;
+  const nativeScale = (metadata?.width && metadata?.height)
+    ? calculateNativeScale(metadata.width, metadata.height)
     : clip.transform.scale;
 
   updateClip(clip.id, {
@@ -72,7 +69,6 @@ export async function loadRiveMedia(params: LoadRiveMediaParams): Promise<void> 
       type: 'rive',
       mediaFileId,
       naturalDuration,
-      textCanvas: runtime.canvas,
       vectorAnimationSettings: {
         ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
         ...clip.source?.vectorAnimationSettings,

@@ -11,6 +11,13 @@ import {
   ensureThumbnailBitmap,
   getThumbnailBitmap,
 } from '../../src/services/timeline/thumbnailBitmapCache';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
+import { TIMELINE_RUNTIME_POLICY_DESCRIPTORS } from '../../src/services/timeline/runtimeCoordinatorContracts';
+import {
+  createThumbnailGenerationCanvasDescriptor,
+  createThumbnailGenerationVideoDescriptor,
+  createThumbnailJobDescriptor,
+} from '../../src/services/timeline/thumbnailRuntimeReporting';
 
 type ThumbnailCacheServiceTestAccess = typeof thumbnailCacheService & {
   loadFromDB(mediaFileId: string, fileHash?: string): Promise<boolean>;
@@ -24,17 +31,19 @@ type ThumbnailCacheServiceTestAccess = typeof thumbnailCacheService & {
     duration: number,
     fileHash: string | undefined,
     signal: AbortSignal,
-  ): Promise<void>;
+  ): Promise<boolean>;
 };
 
 describe('thumbnailCacheService', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     clearThumbnailBitmapCache();
+    timelineRuntimeCoordinator.clearResources();
   });
 
   afterEach(() => {
     clearThumbnailBitmapCache();
+    timelineRuntimeCoordinator.clearResources();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -200,9 +209,189 @@ describe('thumbnailCacheService', () => {
 
     await expect(thumbnailCacheService.loadCachedForSource(mediaFileId, 'hash-a')).resolves.toBe(true);
 
-    expect(loadFromDbSpy).toHaveBeenCalledWith(mediaFileId, 'hash-a');
+    expect(loadFromDbSpy).toHaveBeenCalledWith(mediaFileId, 'hash-a', expect.any(Number));
     expect(generateSpy).not.toHaveBeenCalled();
     expect(createElementSpy).not.toHaveBeenCalled();
+  });
+
+  it('reports cached thumbnail DB load jobs while IndexedDB work is pending', async () => {
+    const mediaFileId = `media-db-load-report-${Date.now()}`;
+    let resolveFrames: (frames: Array<{ secondIndex: number; blob: Blob }>) => void = () => {};
+    vi.spyOn(projectDB, 'getSourceThumbnails').mockReturnValue(
+      new Promise((resolve) => {
+        resolveFrames = resolve;
+      }),
+    );
+
+    const loadPromise = thumbnailCacheService.loadCachedForSource(mediaFileId, 'hash-a');
+    await vi.waitFor(() => expect(projectDB.getSourceThumbnails).toHaveBeenCalledWith(mediaFileId));
+
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage.jobs).toBe(1);
+
+    resolveFrames([]);
+    await expect(loadPromise).resolves.toBe(false);
+
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage.jobs).toBe(0);
+  });
+
+  it('skips cached thumbnail DB loads before IndexedDB work when job admission is over budget', async () => {
+    for (let index = 0; index < 4; index += 1) {
+      timelineRuntimeCoordinator.retainResource(createThumbnailJobDescriptor({
+        jobId: `retained-thumbnail-job-${index}`,
+        jobKind: 'thumbnail-db-load',
+        mediaFileId: `media-retained-${index}`,
+      }));
+    }
+    const getSourceThumbnails = vi.spyOn(projectDB, 'getSourceThumbnails').mockResolvedValue([]);
+
+    await expect(thumbnailCacheService.loadCachedForSource('media-denied-db', 'hash-a')).resolves.toBe(false);
+
+    expect(getSourceThumbnails).not.toHaveBeenCalled();
+    const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
+    expect(usage.jobs).toBe(4);
+  });
+
+  it('reports thumbnail generation job and detached video only while generation is active', async () => {
+    const isolatedVideo = {
+      src: '',
+      readyState: 2,
+      duration: 12,
+      preload: 'metadata',
+      muted: false,
+      playsInline: false,
+      crossOrigin: '',
+      load: vi.fn(),
+      pause: vi.fn(),
+      removeAttribute: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+    } as unknown as HTMLVideoElement;
+    const mediaFileId = `media-generation-report-${Date.now()}`;
+    let resolveGeneration: (() => void) | undefined;
+
+    vi.spyOn(document, 'createElement').mockReturnValue(isolatedVideo);
+    const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
+    vi.spyOn(service, 'loadFromDB').mockResolvedValue(false);
+    vi.spyOn(service, 'generateThumbnails').mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        resolveGeneration = resolve;
+      }),
+    );
+
+    const generatePromise = thumbnailCacheService.generateForSourceUrl(
+      mediaFileId,
+      'blob:source-url',
+      12,
+      'hash-a',
+    );
+
+    await vi.waitFor(() => {
+      const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
+      expect(usage.jobs).toBe(1);
+      expect(usage.htmlMediaElements).toBe(1);
+    });
+
+    resolveGeneration?.(true);
+    await generatePromise;
+
+    const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
+    expect(usage.jobs).toBe(0);
+    expect(usage.htmlMediaElements).toBe(0);
+  });
+
+  it('skips thumbnail generation before detached video creation when job admission is over budget', async () => {
+    for (let index = 0; index < 4; index += 1) {
+      timelineRuntimeCoordinator.retainResource(createThumbnailJobDescriptor({
+        jobId: `retained-generation-job-${index}`,
+        jobKind: 'thumbnail-generation',
+        mediaFileId: `media-retained-generation-${index}`,
+      }));
+    }
+
+    const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
+    const loadFromDb = vi.spyOn(service, 'loadFromDB').mockResolvedValue(false);
+    const generateThumbnails = vi.spyOn(service, 'generateThumbnails').mockResolvedValue(true);
+    const createElement = vi.spyOn(document, 'createElement');
+
+    await thumbnailCacheService.generateForSourceUrl('media-denied-generation', 'blob:source-url', 12, 'hash-a');
+
+    expect(loadFromDb).not.toHaveBeenCalled();
+    expect(generateThumbnails).not.toHaveBeenCalled();
+    expect(createElement).not.toHaveBeenCalled();
+    expect(thumbnailCacheService.getStatus('media-denied-generation')).toBe('none');
+    const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
+    expect(usage.jobs).toBe(4);
+  });
+
+  it('cleans up detached thumbnail video and resets status when video admission is over budget', async () => {
+    const retainedVideo = {
+      src: 'blob:retained',
+      readyState: 2,
+      paused: true,
+      seeking: false,
+      currentTime: 0,
+      networkState: 1,
+    } as HTMLVideoElement;
+    for (let index = 0; index < 4; index += 1) {
+      timelineRuntimeCoordinator.retainResource(createThumbnailGenerationVideoDescriptor({
+        mediaFileId: `media-retained-video-${index}`,
+        sourceUrl: `blob:retained-${index}`,
+        element: retainedVideo,
+      }));
+    }
+
+    const isolatedVideo = {
+      src: '',
+      readyState: 2,
+      duration: 12,
+      preload: 'metadata',
+      muted: false,
+      playsInline: false,
+      crossOrigin: '',
+      load: vi.fn(),
+      pause: vi.fn(),
+      removeAttribute: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+    } as unknown as HTMLVideoElement;
+    const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
+    vi.spyOn(document, 'createElement').mockReturnValue(isolatedVideo);
+    vi.spyOn(service, 'loadFromDB').mockResolvedValue(false);
+    const generateThumbnails = vi.spyOn(service, 'generateThumbnails').mockResolvedValue(true);
+
+    await thumbnailCacheService.generateForSourceUrl('media-denied-video', 'blob:source-url', 12, 'hash-a');
+
+    expect(generateThumbnails).not.toHaveBeenCalled();
+    expect(isolatedVideo.pause).toHaveBeenCalled();
+    expect(isolatedVideo.removeAttribute).toHaveBeenCalledWith('src');
+    expect(thumbnailCacheService.getStatus('media-denied-video')).toBe('none');
+    const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
+    expect(usage.htmlMediaElements).toBe(4);
+    expect(usage.jobs).toBe(0);
+  });
+
+  it('ignores stale cached thumbnail loads after a source clear', async () => {
+    const mediaFileId = `media-stale-load-test-${Date.now()}`;
+    let resolveLoad: (frames: Array<{ secondIndex: number; blob: Blob }>) => void = () => {};
+    const pendingFrames = new Promise<Array<{ secondIndex: number; blob: Blob }>>((resolve) => {
+      resolveLoad = resolve;
+    });
+    vi.spyOn(projectDB, 'getSourceThumbnails').mockReturnValue(pendingFrames);
+    vi.spyOn(projectDB, 'deleteSourceThumbnails').mockResolvedValue(undefined);
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:stale-thumb');
+
+    const loadPromise = thumbnailCacheService.loadCachedForSource(mediaFileId, 'hash-old');
+    await vi.waitFor(() => expect(projectDB.getSourceThumbnails).toHaveBeenCalledWith(mediaFileId));
+
+    await thumbnailCacheService.clearSource(mediaFileId);
+    resolveLoad([{ secondIndex: 0, blob: new Blob(['old-thumb']) }]);
+
+    await expect(loadPromise).resolves.toBe(false);
+    expect(thumbnailCacheService.hasSource(mediaFileId)).toBe(false);
+    expect(thumbnailCacheService.getCount(mediaFileId)).toBe(0);
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 
   it('closes decoded thumbnail bitmaps before revoking source blob URLs on memory eviction', async () => {
@@ -339,6 +528,88 @@ describe('thumbnailCacheService', () => {
         count: 1,
       },
     ]);
+  });
+
+  it('captures a frame when the thumbnail video is already at the seek target without firing seeked', async () => {
+    const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
+    const mediaFileId = `media-thumb-same-time-${Date.now()}`;
+    const originalCreateElement = document.createElement.bind(document);
+    let currentTime = 0;
+    let objectUrlIndex = 0;
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+      toBlob: vi.fn((callback: BlobCallback) => callback(new Blob(['thumb']))),
+    } as unknown as HTMLCanvasElement;
+    const video = {
+      readyState: 2,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      set currentTime(value: number) {
+        currentTime = value;
+      },
+      get currentTime() {
+        return currentTime;
+      },
+    } as unknown as HTMLVideoElement;
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => (
+      tagName === 'canvas' ? canvas : originalCreateElement(tagName)
+    ));
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:generated-same-time-thumb-${objectUrlIndex++}`);
+    vi.spyOn(projectDB, 'saveSourceThumbnailsBatch').mockResolvedValue(undefined);
+
+    const generated = await service.generateThumbnails(
+      mediaFileId,
+      video,
+      1,
+      'hash-a',
+      new AbortController().signal,
+    );
+
+    expect(generated).toBe(true);
+    expect(canvas.getContext).toHaveBeenCalled();
+    expect(canvas.toBlob).toHaveBeenCalledTimes(1);
+    expect(thumbnailCacheService.getCount(mediaFileId)).toBe(1);
+  });
+
+  it('returns false before frame work when thumbnail generation canvas admission is over budget', async () => {
+    const thumbnailPolicy = TIMELINE_RUNTIME_POLICY_DESCRIPTORS.find((policy) => policy.id === 'thumbnail');
+    const maxImageBitmaps = thumbnailPolicy?.defaultBudget.maxImageBitmaps ?? 256;
+    for (let index = 0; index < maxImageBitmaps; index += 1) {
+      timelineRuntimeCoordinator.retainResource(
+        createThumbnailGenerationCanvasDescriptor(`media-retained-canvas-${index}`)
+      );
+    }
+
+    const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
+    const mediaFileId = `media-canvas-admission-${Date.now()}`;
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+      toBlob: vi.fn((callback: BlobCallback) => callback(new Blob(['thumb']))),
+    } as unknown as HTMLCanvasElement;
+    const video = {
+      readyState: 2,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+
+    const generated = await service.generateThumbnails(
+      mediaFileId,
+      video,
+      2,
+      'hash-a',
+      new AbortController().signal
+    );
+
+    expect(generated).toBe(false);
+    expect(canvas.getContext).not.toHaveBeenCalled();
+    expect(thumbnailCacheService.hasSource(mediaFileId)).toBe(false);
+    const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
+    expect(usage.resources).toBe(maxImageBitmaps);
   });
 
   it('emits memory eviction and source clear events', async () => {

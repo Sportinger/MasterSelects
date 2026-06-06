@@ -2,14 +2,28 @@ import type { TimelineClip } from '../../types';
 import { engine } from '../../engine/WebGPUEngine';
 import type { FrameContext } from '../layerBuilder/types';
 import { Logger } from '../logger';
+import {
+  createMediaObjectUrl,
+  getLazyMediaElementObjectUrlKey,
+  mediaObjectUrlManager,
+} from '../project/mediaObjectUrlManager';
+import type { HtmlMediaResourceDescriptor, RenderResourceDescriptor } from './runtimeCoordinatorTypes';
+import { timelineRuntimeCoordinator } from './timelineRuntimeCoordinator';
 
 type LazyMediaKind = 'video' | 'audio';
 
 interface LazyMediaRecord {
   clipId: string;
+  trackId: string;
   kind: LazyMediaKind;
+  clip: TimelineClip;
   element: HTMLVideoElement | HTMLAudioElement;
   mediaFileId?: string;
+  managedObjectUrl?: {
+    mediaId: string;
+    key: string;
+    url: string;
+  };
   objectUrl?: string;
   sourceUrl?: string;
   lastDesiredAt: number;
@@ -28,8 +42,27 @@ const MAX_DESIRED_CLIPS_PER_TRACK = 3;
 
 const lazyMediaRecords = new Map<string, LazyMediaRecord>();
 
+interface LazyClipCandidate {
+  clip: TimelineClip;
+  trackKey: string;
+  rankStartTime: number;
+  rankDuration: number;
+}
+
 function getRecordKey(kind: LazyMediaKind, clipId: string): string {
   return `${kind}:${clipId}`;
+}
+
+function getResourceId(record: Pick<LazyMediaRecord, 'kind' | 'clipId'>): string {
+  return `timeline-lazy-media:${record.kind}:${record.clipId}`;
+}
+
+function getSourceKindFromUrl(url: string | undefined): HtmlMediaResourceDescriptor['srcKind'] {
+  if (!url) return 'unknown';
+  if (url.startsWith('blob:')) return 'blob-url';
+  if (url.startsWith('http')) return 'remote-url';
+  if (url.startsWith('mediastream:')) return 'media-source';
+  return 'unknown';
 }
 
 function getUsableFile(file: File | undefined): File | undefined {
@@ -46,13 +79,32 @@ function getMediaFileForLazyClip(ctx: FrameContext, clip: TimelineClip) {
   return clip.name ? ctx.mediaFileByName.get(clip.name.replace(/ \(Audio\)$/, '')) ?? ctx.mediaFileByName.get(clip.name) : undefined;
 }
 
-function getLazySource(ctx: FrameContext, clip: TimelineClip): { url: string; objectUrl?: string } | null {
+function getLazySource(ctx: FrameContext, clip: TimelineClip, kind: LazyMediaKind): {
+  url: string;
+  objectUrl?: string;
+  managedObjectUrl?: LazyMediaRecord['managedObjectUrl'];
+} | null {
   const mediaFile = getMediaFileForLazyClip(ctx, clip);
   if (mediaFile?.url) {
     return { url: mediaFile.url };
   }
 
   const file = getUsableFile(clip.file) ?? getUsableFile(clip.source?.file) ?? getUsableFile(mediaFile?.file);
+  const mediaId = mediaFile?.id ?? clip.source?.mediaFileId ?? clip.mediaFileId;
+  if (file && mediaId) {
+    const key = getLazyMediaElementObjectUrlKey(kind, clip.id);
+    const existingUrl = mediaObjectUrlManager.get(mediaId, key);
+    const url = existingUrl ?? createMediaObjectUrl(mediaId, key, file);
+    return {
+      url,
+      managedObjectUrl: {
+        mediaId,
+        key,
+        url,
+      },
+    };
+  }
+
   if (file) {
     const objectUrl = URL.createObjectURL(file);
     return { url: objectUrl, objectUrl };
@@ -98,25 +150,158 @@ function createAudioElement(url: string, preload: HTMLMediaElement['preload']): 
   return audio;
 }
 
+function createLazyMediaDescriptor(params: {
+  clip: TimelineClip;
+  kind: LazyMediaKind;
+  trackId: string;
+  mediaFileId?: string;
+  sourceUrl?: string;
+  plannedSrcKind?: HtmlMediaResourceDescriptor['srcKind'];
+  element?: HTMLVideoElement | HTMLAudioElement;
+}): RenderResourceDescriptor & { kind: 'html-media' } {
+  const element = params.element;
+  const providerKind = params.kind === 'video' ? 'html-video' : 'html-audio';
+  const status = element?.error ? 'warning' : 'unknown';
+  return {
+    id: getResourceId({ kind: params.kind, clipId: params.clip.id }),
+    kind: 'html-media',
+    policyId: 'interactive',
+    owner: {
+      ownerId: params.clip.id,
+      ownerType: 'clip',
+      clipId: params.clip.id,
+      trackId: params.trackId,
+      mediaFileId: params.mediaFileId,
+    },
+    source: {
+      clipId: params.clip.id,
+      trackId: params.trackId,
+      mediaFileId: params.mediaFileId,
+    },
+    mediaElementKind: params.kind,
+    elementId: getRecordKey(params.kind, params.clip.id),
+    srcKind: params.plannedSrcKind ?? getSourceKindFromUrl(params.sourceUrl),
+    diagnostics: {
+      status,
+      provider: {
+        providerId: getRecordKey(params.kind, params.clip.id),
+        providerKind,
+        status,
+        isReady: element ? element.readyState >= HTMLMediaElement.HAVE_METADATA : false,
+        isPlaying: element ? !element.paused : false,
+        isSeeking: element?.seeking ?? false,
+        currentTimeSeconds: element?.currentTime,
+        readyState: element?.readyState,
+        networkState: element?.networkState,
+        errorCode: element?.error ? String(element.error.code) : undefined,
+      },
+    },
+    label: `Lazy ${params.kind} element`,
+    tags: ['primary-lazy-media', params.kind],
+  };
+}
+
+function classifyLazySource(record: LazyMediaRecord): RenderResourceDescriptor & { kind: 'html-media' } {
+  return createLazyMediaDescriptor({
+    clip: record.clip,
+    kind: record.kind,
+    trackId: record.trackId,
+    mediaFileId: record.mediaFileId,
+    sourceUrl: record.sourceUrl,
+    plannedSrcKind: record.objectUrl ? 'blob-url' : undefined,
+    element: record.element,
+  });
+}
+
+function getPlannedLazySourceKind(ctx: FrameContext, clip: TimelineClip): {
+  mediaFileId?: string;
+  srcKind: HtmlMediaResourceDescriptor['srcKind'];
+} {
+  const mediaFile = getMediaFileForLazyClip(ctx, clip);
+  const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId ?? mediaFile?.id;
+  if (mediaFile?.url) {
+    return { mediaFileId, srcKind: getSourceKindFromUrl(mediaFile.url) };
+  }
+
+  const file = getUsableFile(clip.file) ?? getUsableFile(clip.source?.file) ?? getUsableFile(mediaFile?.file);
+  if (file) {
+    return { mediaFileId, srcKind: 'blob-url' };
+  }
+
+  return { mediaFileId, srcKind: 'unknown' };
+}
+
+function canAttachLazyMedia(ctx: FrameContext, clip: TimelineClip, kind: LazyMediaKind): boolean {
+  const planned = getPlannedLazySourceKind(ctx, clip);
+  const admission = timelineRuntimeCoordinator.canRetainResource(createLazyMediaDescriptor({
+    clip,
+    kind,
+    trackId: clip.trackId,
+    mediaFileId: planned.mediaFileId,
+    plannedSrcKind: planned.srcKind,
+  }));
+  if (!admission.admitted) {
+    log.debug('Lazy media element skipped by runtime admission', {
+      clipId: clip.id,
+      kind,
+      reason: admission.reason,
+      rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+    });
+  }
+  return admission.admitted;
+}
+
+function revokeManagedObjectUrl(managedObjectUrl: LazyMediaRecord['managedObjectUrl']): void {
+  if (!managedObjectUrl) return;
+  const currentManagedUrl = mediaObjectUrlManager.get(managedObjectUrl.mediaId, managedObjectUrl.key);
+  if (currentManagedUrl === managedObjectUrl.url) {
+    mediaObjectUrlManager.revoke(managedObjectUrl.mediaId, managedObjectUrl.key);
+    return;
+  }
+  URL.revokeObjectURL(managedObjectUrl.url);
+}
+
+function reportLazyMediaRecord(record: LazyMediaRecord): void {
+  timelineRuntimeCoordinator.retainResource(classifyLazySource(record));
+}
+
+function releaseLazyMediaRecord(record: Pick<LazyMediaRecord, 'kind' | 'clipId'>): void {
+  timelineRuntimeCoordinator.releaseResource(getResourceId(record));
+}
+
+function replaceLazyRecord(key: string, record: LazyMediaRecord, ctx: FrameContext): void {
+  const existing = lazyMediaRecords.get(key);
+  if (existing && existing.element !== record.element) {
+    detachRecord(existing, ctx);
+  }
+  lazyMediaRecords.set(key, record);
+  reportLazyMediaRecord(record);
+}
+
 function attachVideoElement(ctx: FrameContext, clip: TimelineClip, now: number): void {
   if (!clip.source || clip.source.type !== 'video' || clip.source.videoElement || clip.source.nativeDecoder) return;
+  if (!canAttachLazyMedia(ctx, clip, 'video')) return;
 
-  const source = getLazySource(ctx, clip);
+  const source = getLazySource(ctx, clip, 'video');
   if (!source) return;
 
   const video = createVideoElement(source.url, ctx.isPlaying ? 'auto' : 'metadata');
   const key = getRecordKey('video', clip.id);
   const mediaFile = getMediaFileForLazyClip(ctx, clip);
-  lazyMediaRecords.set(key, {
+  const record: LazyMediaRecord = {
     clipId: clip.id,
+    trackId: clip.trackId,
     kind: 'video',
+    clip,
     element: video,
     mediaFileId: clip.source.mediaFileId ?? clip.mediaFileId ?? mediaFile?.id,
+    managedObjectUrl: source.managedObjectUrl,
     objectUrl: source.objectUrl,
     sourceUrl: source.url,
     lastDesiredAt: now,
     createdAt: now,
-  });
+  };
+  replaceLazyRecord(key, record, ctx);
 
   clip.source = {
     ...clip.source,
@@ -135,23 +320,28 @@ function attachVideoElement(ctx: FrameContext, clip: TimelineClip, now: number):
 
 function attachAudioElement(ctx: FrameContext, clip: TimelineClip, now: number): void {
   if (!clip.source || clip.source.type !== 'audio' || clip.source.audioElement) return;
+  if (!canAttachLazyMedia(ctx, clip, 'audio')) return;
 
-  const source = getLazySource(ctx, clip);
+  const source = getLazySource(ctx, clip, 'audio');
   if (!source) return;
 
   const audio = createAudioElement(source.url, ctx.isPlaying ? 'auto' : 'metadata');
   const key = getRecordKey('audio', clip.id);
   const mediaFile = getMediaFileForLazyClip(ctx, clip);
-  lazyMediaRecords.set(key, {
+  const record: LazyMediaRecord = {
     clipId: clip.id,
+    trackId: clip.trackId,
     kind: 'audio',
+    clip,
     element: audio,
     mediaFileId: clip.source.mediaFileId ?? clip.mediaFileId ?? mediaFile?.id,
+    managedObjectUrl: source.managedObjectUrl,
     objectUrl: source.objectUrl,
     sourceUrl: source.url,
     lastDesiredAt: now,
     createdAt: now,
-  });
+  };
+  replaceLazyRecord(key, record, ctx);
 
   clip.source = {
     ...clip.source,
@@ -166,9 +356,20 @@ function attachAudioElement(ctx: FrameContext, clip: TimelineClip, now: number):
   audio.load();
 }
 
-function detachRecord(record: LazyMediaRecord, ctx: FrameContext): void {
-  const clip = ctx.clips.find(candidate => candidate.id === record.clipId);
+function findClipById(clips: readonly TimelineClip[], clipId: string): TimelineClip | undefined {
+  for (const clip of clips) {
+    if (clip.id === clipId) return clip;
+    const nestedClip = clip.nestedClips ? findClipById(clip.nestedClips, clipId) : undefined;
+    if (nestedClip) return nestedClip;
+  }
+
+  return undefined;
+}
+
+function detachRecord(record: LazyMediaRecord, ctx?: Pick<FrameContext, 'clips'>): void {
+  const clip = ctx ? findClipById(ctx.clips, record.clipId) ?? record.clip : record.clip;
   const element = record.element;
+  releaseLazyMediaRecord(record);
 
   element.pause();
   if (record.kind === 'video') {
@@ -181,10 +382,11 @@ function detachRecord(record: LazyMediaRecord, ctx: FrameContext): void {
     // Some browsers throw if load() runs during teardown; src removal is enough.
   }
 
-  if (record.objectUrl) {
+  if (record.managedObjectUrl) {
+    revokeManagedObjectUrl(record.managedObjectUrl);
+  } else if (record.objectUrl) {
     URL.revokeObjectURL(record.objectUrl);
   }
-
   if (clip?.source) {
     if (record.kind === 'video' && clip.source.videoElement === element) {
       const nextSource = { ...clip.source };
@@ -198,8 +400,8 @@ function detachRecord(record: LazyMediaRecord, ctx: FrameContext): void {
   }
 }
 
-function isClipInWindow(clip: TimelineClip, start: number, end: number): boolean {
-  return clip.startTime < end && clip.startTime + clip.duration > start;
+function isTimeSpanInWindow(startTime: number, duration: number, start: number, end: number): boolean {
+  return startTime < end && startTime + duration > start;
 }
 
 function markDesired(desired: Set<string>, kind: LazyMediaKind, clip: TimelineClip, now: number): void {
@@ -208,6 +410,7 @@ function markDesired(desired: Set<string>, kind: LazyMediaKind, clip: TimelineCl
   const record = lazyMediaRecords.get(key);
   if (record) {
     record.lastDesiredAt = now;
+    reportLazyMediaRecord(record);
   }
 }
 
@@ -234,15 +437,87 @@ function pruneLazyRecords(ctx: FrameContext, desired: Set<string>): void {
   }
 }
 
-function getClipWindowRank(clip: TimelineClip, playheadPosition: number): number {
-  const clipEnd = clip.startTime + clip.duration;
-  if (clip.startTime <= playheadPosition && clipEnd > playheadPosition) {
-    return Math.abs((clip.startTime + clipEnd) / 2 - playheadPosition) * 0.001;
+function getClipWindowRank(candidate: LazyClipCandidate, playheadPosition: number): number {
+  const clipEnd = candidate.rankStartTime + candidate.rankDuration;
+  if (candidate.rankStartTime <= playheadPosition && clipEnd > playheadPosition) {
+    return Math.abs((candidate.rankStartTime + clipEnd) / 2 - playheadPosition) * 0.001;
   }
-  if (clip.startTime > playheadPosition) {
-    return 1 + clip.startTime - playheadPosition;
+  if (candidate.rankStartTime > playheadPosition) {
+    return 1 + candidate.rankStartTime - playheadPosition;
   }
   return 2 + playheadPosition - clipEnd;
+}
+
+function addCandidate(
+  byTrack: Map<string, LazyClipCandidate[]>,
+  candidate: LazyClipCandidate,
+): void {
+  const trackClips = byTrack.get(candidate.trackKey);
+  if (trackClips) {
+    trackClips.push(candidate);
+  } else {
+    byTrack.set(candidate.trackKey, [candidate]);
+  }
+}
+
+function nestedTrackAllowsKind(
+  parentClip: TimelineClip,
+  clip: TimelineClip,
+  kind: LazyMediaKind,
+): boolean {
+  const track = parentClip.nestedTracks?.find(candidate => candidate.id === clip.trackId);
+  if (!track) return true;
+  if (kind === 'video') return track.visible !== false;
+  return track.muted !== true;
+}
+
+function collectNestedDesiredClips(
+  byTrack: Map<string, LazyClipCandidate[]>,
+  parentClip: TimelineClip,
+  kind: LazyMediaKind,
+  windowStart: number,
+  windowEnd: number,
+  parentAbsoluteStart: number,
+  parentSourceInPoint: number,
+  trackPath: string,
+): void {
+  if (!parentClip.nestedClips?.length) return;
+
+  for (const nestedClip of parentClip.nestedClips) {
+    const nestedAbsoluteStart = parentAbsoluteStart + nestedClip.startTime - parentSourceInPoint;
+    const nestedDuration = nestedClip.duration;
+    const nestedTrackKey = `${trackPath}:${nestedClip.trackId}`;
+
+    if (
+      nestedClip.source?.type === kind &&
+      nestedTrackAllowsKind(parentClip, nestedClip, kind) &&
+      isTimeSpanInWindow(nestedAbsoluteStart, nestedDuration, windowStart, windowEnd)
+    ) {
+      addCandidate(byTrack, {
+        clip: nestedClip,
+        trackKey: nestedTrackKey,
+        rankStartTime: nestedAbsoluteStart,
+        rankDuration: nestedDuration,
+      });
+    }
+
+    if (
+      nestedClip.isComposition &&
+      nestedClip.nestedClips?.length &&
+      isTimeSpanInWindow(nestedAbsoluteStart, nestedDuration, windowStart, windowEnd)
+    ) {
+      collectNestedDesiredClips(
+        byTrack,
+        nestedClip,
+        kind,
+        windowStart,
+        windowEnd,
+        nestedAbsoluteStart,
+        nestedClip.inPoint || 0,
+        nestedTrackKey,
+      );
+    }
+  }
 }
 
 function collectDesiredClips(
@@ -252,18 +527,32 @@ function collectDesiredClips(
   start: number,
   end: number,
 ): TimelineClip[] {
-  const byTrack = new Map<string, TimelineClip[]>();
+  const byTrack = new Map<string, LazyClipCandidate[]>();
 
   for (const clip of ctx.clips) {
-    if (!clip.source || clip.source.type !== kind) continue;
-    if (!trackIds.has(clip.trackId)) continue;
-    if (!isClipInWindow(clip, start, end)) continue;
+    const topLevelTrackAllowed = trackIds.has(clip.trackId);
+    const topLevelInWindow = isTimeSpanInWindow(clip.startTime, clip.duration, start, end);
 
-    const trackClips = byTrack.get(clip.trackId);
-    if (trackClips) {
-      trackClips.push(clip);
-    } else {
-      byTrack.set(clip.trackId, [clip]);
+    if (clip.source?.type === kind && topLevelTrackAllowed && topLevelInWindow) {
+      addCandidate(byTrack, {
+        clip,
+        trackKey: clip.trackId,
+        rankStartTime: clip.startTime,
+        rankDuration: clip.duration,
+      });
+    }
+
+    if (topLevelTrackAllowed && topLevelInWindow && clip.isComposition && clip.nestedClips?.length) {
+      collectNestedDesiredClips(
+        byTrack,
+        clip,
+        kind,
+        start,
+        end,
+        clip.startTime,
+        clip.inPoint || 0,
+        clip.trackId,
+      );
     }
   }
 
@@ -272,9 +561,9 @@ function collectDesiredClips(
     trackClips.sort((left, right) => {
       const rankDiff = getClipWindowRank(left, ctx.playheadPosition) - getClipWindowRank(right, ctx.playheadPosition);
       if (rankDiff !== 0) return rankDiff;
-      return left.startTime - right.startTime;
+      return left.rankStartTime - right.rankStartTime;
     });
-    selected.push(...trackClips.slice(0, MAX_DESIRED_CLIPS_PER_TRACK));
+    selected.push(...trackClips.slice(0, MAX_DESIRED_CLIPS_PER_TRACK).map(candidate => candidate.clip));
   }
 
   return selected;
@@ -308,10 +597,9 @@ export function getLazyTimelineMediaElementCount(): number {
 }
 
 export function releaseAllLazyTimelineMediaElements(): void {
-  const fakeCtx = { clips: [], now: performance.now() } as unknown as FrameContext;
   for (const record of lazyMediaRecords.values()) {
     try {
-      detachRecord(record, fakeCtx);
+      detachRecord(record);
     } catch (error) {
       log.warn('Failed to detach lazy media element', error);
     }

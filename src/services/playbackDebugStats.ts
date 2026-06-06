@@ -554,6 +554,9 @@ function derivePlaybackStatus(stats: Omit<PlaybackDebugStats, 'status'>): Playba
   const fallbackPreviewFrames = Object.entries(stats.previewPathCounts ?? {}).reduce(
     (count, [path, value]) =>
       path === 'proxy-frame' ||
+      path === 'proxy-image-frame' ||
+      path === 'proxy-image-frame-nearest' ||
+      path === 'not-ready-scrub-cache' ||
       path === 'scrub-cache' ||
       path === 'gpu-cached' ||
       path === 'copied-preview'

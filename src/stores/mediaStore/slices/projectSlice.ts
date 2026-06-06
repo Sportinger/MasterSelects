@@ -7,6 +7,10 @@ import { useTimelineStore } from '../../timeline';
 import { engine } from '../../../engine/WebGPUEngine';
 import { Logger } from '../../../services/logger';
 import { restoreLegacyStartupMediaState } from '../legacyStartupRestore';
+import {
+  revokeAllMediaObjectUrls,
+  revokeMediaFileObjectUrls,
+} from '../../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('Project');
 
@@ -38,12 +42,19 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
   initFromDB: () => restoreLegacyStartupMediaState(set, get),
 
   newProject: () => {
+    const previousFiles = get().files;
+
     // Clear timeline first
     const timelineStore = useTimelineStore.getState();
     timelineStore.clearTimeline();
 
     // Clear the render frame
     engine.clearFrame();
+
+    previousFiles.forEach((file) => {
+      revokeMediaFileObjectUrls(file);
+    });
+    revokeAllMediaObjectUrls();
 
     // Create new default composition
     const newCompId = `comp-${Date.now()}`;

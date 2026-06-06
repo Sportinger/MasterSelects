@@ -686,7 +686,7 @@ export class PlaybackHealthMonitor {
   softReset(): void {
     const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
-    const lc = engine.getLayerCollector();
+    const lc = engine.getLayerCollector?.();
 
     const videoClips = this.getVisibleHtmlVideoClipsAtPlayhead(ctx);
 
@@ -710,7 +710,7 @@ export class PlaybackHealthMonitor {
 
   forceDecodeAll(): void {
     const ctx = createFrameContext();
-    const lc = engine.getLayerCollector();
+    const lc = engine.getLayerCollector?.();
 
     const videoClips = this.getVisibleHtmlVideoClipsAtPlayhead(ctx);
 

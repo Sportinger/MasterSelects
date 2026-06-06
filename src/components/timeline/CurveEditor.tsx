@@ -16,6 +16,8 @@ import { useMediaStore } from '../../stores/mediaStore';
 const CURVE_KEYFRAME_SNAP_THRESHOLD_PX = 10;
 const EMPTY_CLIP_KEYFRAMES: Keyframe[] = [];
 
+export type CurveEditorEditPhase = 'begin' | 'update' | 'commit';
+
 function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | undefined {
   for (const clip of clips) {
     if (clip.id === clipId) {
@@ -41,8 +43,13 @@ export interface CurveEditorProps {
   width: number;
   selectedKeyframeIds: Set<string>;
   onSelectKeyframe: (id: string, addToSelection: boolean) => void;
-  onMoveKeyframe: (id: string, newTime: number, newValue: number) => void;
-  onUpdateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
+  onMoveKeyframe: (id: string, newTime: number, newValue: number, phase?: CurveEditorEditPhase) => void;
+  onUpdateBezierHandle: (
+    keyframeId: string,
+    handle: 'in' | 'out',
+    position: BezierHandle,
+    phase?: CurveEditorEditPhase,
+  ) => void;
   timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
 }
@@ -218,6 +225,11 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     startHandleX?: number;
     startHandleY?: number;
   } | null>(null);
+  const latestDragValueRef = useRef<
+    | { type: 'keyframe'; keyframeId: string; time: number; value: number }
+    | { type: 'handle'; keyframeId: string; handle: 'in' | 'out'; position: BezierHandle }
+    | null
+  >(null);
 
   const height = useTimelineStore(s => s.curveEditorHeight);
   const setCurveEditorHeight = useTimelineStore(s => s.setCurveEditorHeight);
@@ -352,6 +364,13 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     if (!rect) return;
 
     onSelectKeyframe(kf.id, e.shiftKey);
+    latestDragValueRef.current = {
+      type: 'keyframe',
+      keyframeId: kf.id,
+      time: kf.time,
+      value: kf.value,
+    };
+    onMoveKeyframe(kf.id, kf.time, kf.value, 'begin');
 
     setDragState({
       type: 'keyframe',
@@ -361,7 +380,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       startTime: kf.time,
       startValue: kf.value,
     });
-  }, [onSelectKeyframe]);
+  }, [onMoveKeyframe, onSelectKeyframe]);
 
   // Handle mouse down on bezier handle
   const handleHandleMouseDown = useCallback((e: React.MouseEvent, kf: Keyframe, handleType: 'in' | 'out') => {
@@ -387,6 +406,14 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       handle = kf.handleOut || { x: defaultX, y: defaultY };
     }
 
+    latestDragValueRef.current = {
+      type: 'handle',
+      keyframeId: kf.id,
+      handle: handleType,
+      position: handle,
+    };
+    onUpdateBezierHandle(kf.id, handleType, handle, 'begin');
+
     setDragState({
       type: handleType === 'in' ? 'handle-in' : 'handle-out',
       keyframeId: kf.id,
@@ -397,7 +424,7 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
       startHandleX: handle.x,
       startHandleY: handle.y,
     });
-  }, [sortedKeyframes]);
+  }, [onUpdateBezierHandle, sortedKeyframes]);
 
   // Handle right-click on bezier handle - reset to default
   const handleHandleContextMenu = useCallback((e: React.MouseEvent, kf: Keyframe, handleType: 'in' | 'out') => {
@@ -457,7 +484,13 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
         newValue = Math.max(0, Math.min(stateNames.length - 1, Math.round(newValue)));
       }
 
-      onMoveKeyframe(dragState.keyframeId, newTime, newValue);
+      latestDragValueRef.current = {
+        type: 'keyframe',
+        keyframeId: dragState.keyframeId,
+        time: newTime,
+        value: newValue,
+      };
+      onMoveKeyframe(dragState.keyframeId, newTime, newValue, 'update');
     } else {
       // Move handle
       const kf = sortedKeyframes.find(k => k.id === dragState.keyframeId);
@@ -477,24 +510,39 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
         handleValue = 0;
       }
 
-      onUpdateBezierHandle(dragState.keyframeId, isIn ? 'in' : 'out', {
+      const handle = isIn ? 'in' : 'out';
+      const position = {
         x: constrainedTime,
         y: handleValue,
-      });
+      };
+      latestDragValueRef.current = {
+        type: 'handle',
+        keyframeId: dragState.keyframeId,
+        handle,
+        position,
+      };
+      onUpdateBezierHandle(dragState.keyframeId, handle, position, 'update');
     }
   }, [dragState, getClampedSvgPoint, xToTime, yToValue, clipDuration, onMoveKeyframe, onUpdateBezierHandle, sortedKeyframes, snapTimeToClipKeyframe, isDiscreteStateProperty, stateNames.length]);
 
   // Handle mouse up
   const handleMouseUp = useCallback(() => {
+    const latest = latestDragValueRef.current;
+    if (latest?.type === 'keyframe') {
+      onMoveKeyframe(latest.keyframeId, latest.time, latest.value, 'commit');
+    } else if (latest?.type === 'handle') {
+      onUpdateBezierHandle(latest.keyframeId, latest.handle, latest.position, 'commit');
+    }
+    latestDragValueRef.current = null;
     setDragState(null);
-  }, []);
+  }, [onMoveKeyframe, onUpdateBezierHandle]);
 
   useEffect(() => {
     if (!dragState) return;
 
     const handleWindowMouseMove = (event: MouseEvent) => {
       if ((event.buttons & 1) !== 1) {
-        setDragState(null);
+        handleMouseUp();
         return;
       }
 

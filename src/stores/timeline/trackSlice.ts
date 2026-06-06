@@ -15,6 +15,7 @@ import { Logger } from '../../services/logger';
 import { generateClipId, generateEffectId } from './helpers/idGenerator';
 import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
 import { runtimeAudioMeterBus } from '../../services/audio/runtimeAudioMeterBus';
+import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
 import {
   getAudioEffect,
   getAudioEffectDefaultParams,
@@ -22,6 +23,7 @@ import {
 } from '../../engine/audio/AudioEffectRegistry';
 import { mergeAudioEffectParamPatch } from '../../utils/audioEffectParamPath';
 import { runAudioExportPreflight as computeAudioExportPreflight } from '../../services/audio/audioExportPreflight';
+import { cleanupDeletedClipResources } from './deletedClipResources';
 
 const log = Logger.create('TrackSlice');
 
@@ -261,46 +263,53 @@ function withAudioExportPreflightMeasurementHistory(
   };
 }
 
-function createTrackId(type: 'video' | 'audio' | 'midi'): string {
+type TimelineTrackCreationType = 'video' | 'audio' | 'midi';
+
+function createTrackId(type: TimelineTrackCreationType): string {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function createTimelineTrackForType(
+  type: TimelineTrackCreationType,
+  tracks: readonly TimelineTrack[],
+): TimelineTrack {
+  const typeCount = tracks.filter(t => t.type === type).length + 1;
+  const typeLabel = type === 'video' ? 'Video' : type === 'midi' ? 'MIDI' : 'Audio';
+  return {
+    id: createTrackId(type),
+    name: `${typeLabel} ${typeCount}`,
+    type,
+    height: type === 'video' ? 60 : 40,
+    muted: false,
+    visible: true,
+    solo: false,
+    ...(type === 'midi' ? { midiInstrument: createDefaultMidiInstrument() } : {}),
+  };
+}
+
+export function insertTimelineTrack(
+  tracks: readonly TimelineTrack[],
+  expandedTracks: ReadonlySet<string>,
+  newTrack: TimelineTrack,
+): { tracks: TimelineTrack[]; expandedTracks: Set<string> } {
+  const nextExpandedTracks = new Set(expandedTracks);
+  nextExpandedTracks.add(newTrack.id);
+
+  return {
+    tracks: newTrack.type === 'video' ? [newTrack, ...tracks] : [...tracks, newTrack],
+    expandedTracks: nextExpandedTracks,
+  };
 }
 
 export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
   addTrack: (type) => {
     const { tracks, expandedTracks } = get();
-    const typeCount = tracks.filter(t => t.type === type).length + 1;
-    const typeLabel = type === 'video' ? 'Video' : type === 'midi' ? 'MIDI' : 'Audio';
-    const newTrack: TimelineTrack = {
-      id: createTrackId(type),
-      name: `${typeLabel} ${typeCount}`,
-      type,
-      height: type === 'video' ? 60 : 40,
-      muted: false,
-      visible: true,
-      solo: false,
-      // MIDI tracks carry the instrument that renders their clips (issue #182)
-      ...(type === 'midi' ? { midiInstrument: createDefaultMidiInstrument() } : {}),
-    };
+    const newTrack = createTimelineTrackForType(type, tracks);
 
     // Video tracks: insert at TOP (before all existing video tracks)
     // Audio tracks: insert at BOTTOM (after all existing audio tracks)
     // Both types auto-expand for keyframe visibility
-    const newExpanded = new Set(expandedTracks);
-    newExpanded.add(newTrack.id);
-
-    if (type === 'video') {
-      // Insert at index 0 (top of timeline)
-      set({
-        tracks: [newTrack, ...tracks],
-        expandedTracks: newExpanded,
-      });
-    } else {
-      // Audio: append at end (bottom of timeline)
-      set({
-        tracks: [...tracks, newTrack],
-        expandedTracks: newExpanded,
-      });
-    }
+    set(insertTimelineTrack(tracks, expandedTracks, newTrack));
 
     return newTrack.id;
   },
@@ -312,6 +321,7 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
       log.warn('Cannot remove locked track', { id });
       return;
     }
+    const deletedClips = clips.filter(c => c.trackId === id);
     const nextTracks = tracks.filter(t => t.id !== id);
     const nextTargetTrackIdByType = { ...targetTrackIdByType };
     if (track && nextTargetTrackIdByType[track.type] === id) {
@@ -320,6 +330,7 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     // Runtime meters live on the dedicated bus; drop this track's snapshot there
     // and mirror the resulting bus state back into the store.
     runtimeAudioMeterBus.clearTrack(id);
+    cleanupDeletedClipResources(deletedClips);
     set({
       tracks: nextTracks,
       clips: clips.filter(c => c.trackId !== id),
@@ -372,6 +383,7 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
 
   setTrackMuted: (id, muted) => {
     const { tracks } = get();
+    const track = tracks.find(t => t.id === id);
     set({
       tracks: tracks.map(t => t.id === id
         ? {
@@ -383,6 +395,9 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
         }
         : t),
     });
+    if (muted && track?.type === 'audio') {
+      stopTimelineAudioPlayback();
+    }
     // Audio changes don't affect video cache
   },
 

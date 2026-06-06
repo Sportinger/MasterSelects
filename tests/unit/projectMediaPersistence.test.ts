@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { revokeAllMediaObjectUrls } from '../../src/services/project/mediaObjectUrlManager';
 
 const mocks = vi.hoisted(() => ({
   mediaState: {
@@ -28,6 +29,9 @@ const mocks = vi.hoisted(() => ({
   saveProject: vi.fn(async () => true),
   getStoredHandle: vi.fn(async () => null),
   storeHandle: vi.fn(async () => undefined),
+  getThumbnail: vi.fn(async () => undefined),
+  saveThumbnail: vi.fn(async () => undefined),
+  deleteSourceThumbnails: vi.fn(async () => undefined),
   getFileHandle: vi.fn(() => undefined),
   storeFileHandle: vi.fn(),
   clearTimeline: vi.fn(),
@@ -35,8 +39,11 @@ const mocks = vi.hoisted(() => ({
   timelineState: {
     clearTimeline: vi.fn(),
     loadState: vi.fn(async () => undefined),
+    updateClip: vi.fn(),
     getSerializableState: vi.fn(() => ({ tracks: [], clips: [] })),
     clips: [] as unknown[],
+    timelineSessionId: 1,
+    clipKeyframes: new Map<string, unknown[]>(),
     playheadPosition: 0,
     zoom: 1,
     scrollX: 0,
@@ -51,6 +58,7 @@ const mocks = vi.hoisted(() => ({
     setAudioDisplayMode: vi.fn(),
     setShowTranscriptMarkers: vi.fn(),
   },
+  timelineSetState: vi.fn(),
   youtubeState: {
     getState: vi.fn(() => ({})),
     loadState: vi.fn(),
@@ -76,6 +84,12 @@ const mocks = vi.hoisted(() => ({
   },
   mediaSetState: vi.fn(),
   midiSetState: vi.fn(),
+  createMediaSourceReplacementPatch: vi.fn(async (file: File) => ({
+    fileHash: `hash:${file.name}`,
+  })),
+  createMediaSourceReplacementResetPatch: vi.fn(() => ({
+    fileHash: undefined,
+  })),
   createObjectURL: vi.fn(() => 'blob:project-media'),
   settingsSetState: vi.fn(),
 }));
@@ -90,6 +104,7 @@ vi.mock('../../src/stores/mediaStore', () => ({
 vi.mock('../../src/stores/timeline', () => ({
   useTimelineStore: {
     getState: () => mocks.timelineState,
+    setState: mocks.timelineSetState,
   },
 }));
 
@@ -140,6 +155,9 @@ vi.mock('../../src/services/projectDB', () => ({
   projectDB: {
     getStoredHandle: mocks.getStoredHandle,
     storeHandle: mocks.storeHandle,
+    getThumbnail: mocks.getThumbnail,
+    saveThumbnail: mocks.saveThumbnail,
+    deleteSourceThumbnails: mocks.deleteSourceThumbnails,
   },
 }));
 
@@ -166,8 +184,25 @@ vi.mock('../../src/engine/WebGPUEngine', () => ({
 }));
 
 vi.mock('../../src/stores/mediaStore/slices/fileManageSlice', () => ({
+  createMediaSourceReplacementPatch: mocks.createMediaSourceReplacementPatch,
+  createMediaSourceReplacementResetPatch: mocks.createMediaSourceReplacementResetPatch,
   updateTimelineClips: vi.fn(async () => undefined),
 }));
+
+const defaultProjectTransform = () => ({
+  x: 0,
+  y: 0,
+  z: 0,
+  scaleX: 1,
+  scaleY: 1,
+  rotation: 0,
+  rotationX: 0,
+  rotationY: 0,
+  anchorX: 0.5,
+  anchorY: 0.5,
+  opacity: 1,
+  blendMode: 'normal',
+});
 
 describe('project media persistence', () => {
   beforeEach(() => {
@@ -190,13 +225,40 @@ describe('project media persistence', () => {
     mocks.midiState.slotBindings = {};
     mocks.midiState.parameterBindings = {};
     mocks.timelineState.clips = [];
+    mocks.timelineState.timelineSessionId = 1;
+    mocks.timelineState.clipKeyframes = new Map<string, unknown[]>();
+    mocks.timelineState.loadState.mockImplementation(async () => undefined);
+    mocks.timelineState.updateClip.mockImplementation((clipId: string, patch: Record<string, unknown>) => {
+      mocks.timelineState.clips = mocks.timelineState.clips.map((clip) => (
+        typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === clipId
+          ? { ...clip, ...patch }
+          : clip
+      ));
+    });
+    mocks.timelineSetState.mockImplementation((partial: Record<string, unknown> | ((state: typeof mocks.timelineState) => Record<string, unknown>)) => {
+      const nextPartial = typeof partial === 'function'
+        ? partial(mocks.timelineState)
+        : partial;
+      Object.assign(mocks.timelineState, nextPartial);
+    });
     mocks.timelineState.audioDisplayMode = 'detailed';
     mocks.getFileFromRaw.mockResolvedValue(null);
     mocks.getTranscript.mockResolvedValue(null);
     mocks.getAnalysisRanges.mockResolvedValue([]);
     mocks.hasProxyAudio.mockResolvedValue(false);
+    mocks.getStoredHandle.mockResolvedValue(null);
+    mocks.storeHandle.mockResolvedValue(undefined);
+    mocks.getThumbnail.mockResolvedValue(undefined);
+    mocks.saveThumbnail.mockResolvedValue(undefined);
+    mocks.deleteSourceThumbnails.mockResolvedValue(undefined);
     mocks.scanRawFolder.mockResolvedValue(new Map());
     mocks.scanProjectFolder.mockResolvedValue(new Map());
+    mocks.createMediaSourceReplacementPatch.mockImplementation(async (file: File) => ({
+      fileHash: `hash:${file.name}`,
+    }));
+    mocks.createMediaSourceReplacementResetPatch.mockImplementation(() => ({
+      fileHash: undefined,
+    }));
     mocks.getProjectData.mockReturnValue({
       media: [],
       compositions: [],
@@ -225,6 +287,11 @@ describe('project media persistence', () => {
       },
       configurable: true,
     });
+  });
+
+  afterEach(() => {
+    revokeAllMediaObjectUrls();
+    vi.restoreAllMocks();
   });
 
   it('persists projectPath when syncing stores to the project file', async () => {
@@ -1306,6 +1373,1100 @@ describe('project media persistence', () => {
     }));
   });
 
+  it('rebuilds post-relink nested video and audio clips as data-only sources', async () => {
+    const videoFile = new File(['video-bytes'], 'nested-video.mp4', { type: 'video/mp4' });
+    const audioFile = new File(['audio-bytes'], 'nested-audio.wav', { type: 'audio/wav' });
+    const videoHandle = {
+      kind: 'file',
+      name: videoFile.name,
+      getFile: vi.fn(async () => videoFile),
+      queryPermission: vi.fn(async () => 'granted'),
+    } as unknown as FileSystemFileHandle;
+    const audioHandle = {
+      kind: 'file',
+      name: audioFile.name,
+      getFile: vi.fn(async () => audioFile),
+      queryPermission: vi.fn(async () => 'granted'),
+    } as unknown as FileSystemFileHandle;
+    const createElementSpy = vi.spyOn(document, 'createElement');
+
+    mocks.scanRawFolder.mockResolvedValue(new Map([
+      [videoFile.name, videoHandle],
+      [audioFile.name, audioHandle],
+    ]));
+    mocks.timelineState.loadState.mockImplementationOnce(async (timelineData: {
+      clips: Array<Record<string, unknown>>;
+    }) => {
+      mocks.timelineState.clips = timelineData.clips.map((clip) => ({
+        ...clip,
+        nestedClips: [],
+      }));
+    });
+    mocks.getProjectData.mockReturnValue({
+      media: [
+        {
+          id: 'media-video-1',
+          name: videoFile.name,
+          type: 'video',
+          sourcePath: 'C:/capture/nested-video.mp4',
+          projectPath: 'Raw/nested-video.mp4',
+          duration: 8,
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          hasAudio: true,
+          hasProxy: false,
+          folderId: null,
+          importedAt: new Date(1).toISOString(),
+        },
+        {
+          id: 'media-audio-1',
+          name: audioFile.name,
+          type: 'audio',
+          sourcePath: 'C:/capture/nested-audio.wav',
+          projectPath: 'Raw/nested-audio.wav',
+          duration: 8,
+          audioCodec: 'pcm',
+          hasProxy: false,
+          folderId: null,
+          importedAt: new Date(1).toISOString(),
+        },
+      ],
+      compositions: [
+        {
+          id: 'parent-comp',
+          name: 'Parent Comp',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 12,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [{
+            id: 'parent-video-track',
+            name: 'Video 1',
+            type: 'video',
+            height: 60,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'parent-comp-clip',
+            trackId: 'parent-video-track',
+            name: 'Nested Child',
+            mediaId: '',
+            startTime: 0,
+            duration: 8,
+            inPoint: 0,
+            outPoint: 8,
+            transform: defaultProjectTransform(),
+            effects: [],
+            masks: [],
+            keyframes: [],
+            volume: 1,
+            audioEnabled: true,
+            reversed: false,
+            disabled: false,
+            isComposition: true,
+            compositionId: 'child-comp',
+            thumbnails: ['existing-thumb'],
+          }],
+          markers: [],
+        },
+        {
+          id: 'child-comp',
+          name: 'Child Comp',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 8,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [
+            {
+              id: 'child-video-track',
+              name: 'Video 1',
+              type: 'video',
+              height: 60,
+              locked: false,
+              visible: true,
+              muted: false,
+              solo: false,
+            },
+            {
+              id: 'child-audio-track',
+              name: 'Audio 1',
+              type: 'audio',
+              height: 60,
+              locked: false,
+              visible: true,
+              muted: false,
+              solo: false,
+            },
+          ],
+          clips: [
+            {
+              id: 'nested-video-clip',
+              trackId: 'child-video-track',
+              name: 'Nested Video',
+              mediaId: 'media-video-1',
+              sourceType: 'video',
+              naturalDuration: 8,
+              startTime: 0,
+              duration: 8,
+              inPoint: 0,
+              outPoint: 8,
+              transform: defaultProjectTransform(),
+              effects: [],
+              masks: [],
+              keyframes: [],
+              volume: 1,
+              audioEnabled: true,
+              reversed: false,
+              disabled: false,
+            },
+            {
+              id: 'nested-audio-clip',
+              trackId: 'child-audio-track',
+              name: 'Nested Audio',
+              mediaId: 'media-audio-1',
+              sourceType: 'audio',
+              naturalDuration: 8,
+              startTime: 0,
+              duration: 8,
+              inPoint: 0,
+              outPoint: 8,
+              transform: defaultProjectTransform(),
+              effects: [],
+              masks: [],
+              keyframes: [],
+              volume: 1,
+              audioEnabled: true,
+              reversed: false,
+              disabled: false,
+            },
+          ],
+          markers: [],
+        },
+      ],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: 'parent-comp',
+      openCompositionIds: ['parent-comp'],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    for (let attempt = 0; attempt < 1000 && mocks.timelineState.updateClip.mock.calls.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    expect(mocks.timelineState.updateClip).toHaveBeenCalledWith('parent-comp-clip', expect.objectContaining({
+      nestedClips: expect.any(Array),
+      nestedTracks: expect.any(Array),
+      isLoading: false,
+    }));
+    const parentClip = mocks.timelineState.clips.find((clip) => (
+      typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === 'parent-comp-clip'
+    )) as { nestedClips?: Array<{ id: string; source?: Record<string, unknown>; isLoading?: boolean }> };
+    expect(parentClip.nestedClips).toHaveLength(2);
+
+    const nestedVideo = parentClip.nestedClips?.find((clip) => clip.id === 'nested-parent-comp-clip-nested-video-clip');
+    const nestedAudio = parentClip.nestedClips?.find((clip) => clip.id === 'nested-parent-comp-clip-nested-audio-clip');
+    expect(nestedVideo?.source).toEqual(expect.objectContaining({
+      type: 'video',
+      mediaFileId: 'media-video-1',
+      naturalDuration: 8,
+      filePath: 'C:/capture/nested-video.mp4',
+    }));
+    expect(nestedAudio?.source).toEqual(expect.objectContaining({
+      type: 'audio',
+      mediaFileId: 'media-audio-1',
+      naturalDuration: 8,
+      filePath: 'C:/capture/nested-audio.wav',
+    }));
+    expect(nestedVideo?.source).not.toHaveProperty('videoElement');
+    expect(nestedVideo?.source).not.toHaveProperty('audioElement');
+    expect(nestedAudio?.source).not.toHaveProperty('videoElement');
+    expect(nestedAudio?.source).not.toHaveProperty('audioElement');
+    expect(nestedVideo?.isLoading).toBe(false);
+    expect(nestedAudio?.isLoading).toBe(false);
+    expect(mocks.createObjectURL).toHaveBeenCalledTimes(2);
+    expect(createElementSpy.mock.calls.some(([tagName]) => tagName === 'video' || tagName === 'audio')).toBe(false);
+    createElementSpy.mockRestore();
+  }, 10_000);
+
+  it('delegates post-relink nested reload recursively through nested compositions', async () => {
+    const videoFile = new File(['video-bytes'], 'grandchild-video.mp4', { type: 'video/mp4' });
+    mocks.mediaState.files = [{
+      id: 'media-video-1',
+      name: videoFile.name,
+      type: 'video',
+      file: videoFile,
+      duration: 5,
+      sourcePath: 'C:/capture/grandchild-video.mp4',
+      absolutePath: 'C:/capture/grandchild-video.mp4',
+    }];
+    mocks.mediaState.compositions = [
+      {
+        id: 'child-comp',
+        name: 'Child Comp',
+        duration: 10,
+        timelineData: {
+          duration: 10,
+          tracks: [{
+            id: 'child-video-track',
+            name: 'Child Video',
+            type: 'video',
+            height: 60,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'child-comp-clip',
+            trackId: 'child-video-track',
+            name: 'Grandchild Comp',
+            sourceType: 'video',
+            isComposition: true,
+            compositionId: 'grandchild-comp',
+            startTime: 0,
+            duration: 5,
+            inPoint: 0,
+            outPoint: 5,
+            transform: defaultProjectTransform(),
+            effects: [],
+          }],
+        },
+      },
+      {
+        id: 'grandchild-comp',
+        name: 'Grandchild Comp',
+        duration: 5,
+        timelineData: {
+          duration: 5,
+          tracks: [{
+            id: 'grandchild-video-track',
+            name: 'Grandchild Video',
+            type: 'video',
+            height: 60,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'grandchild-video-clip',
+            trackId: 'grandchild-video-track',
+            name: 'Grandchild Video',
+            mediaFileId: 'media-video-1',
+            sourceType: 'video',
+            naturalDuration: 5,
+            startTime: 0,
+            duration: 5,
+            inPoint: 0,
+            outPoint: 5,
+            transform: defaultProjectTransform(),
+            effects: [],
+          }],
+        },
+      },
+    ];
+    mocks.timelineState.clips = [{
+      id: 'parent-comp-clip',
+      trackId: 'parent-video-track',
+      name: 'Parent Comp Clip',
+      isComposition: true,
+      compositionId: 'child-comp',
+      nestedClips: [],
+      thumbnails: ['existing-thumb'],
+    }];
+
+    const { reloadNestedCompositionClips } = await import('../../src/services/project/projectLoad');
+    await reloadNestedCompositionClips();
+
+    expect(mocks.timelineState.updateClip).toHaveBeenCalledWith('parent-comp-clip', expect.objectContaining({
+      nestedClips: expect.any(Array),
+      nestedTracks: expect.any(Array),
+      nestedClipBoundaries: expect.any(Array),
+      isLoading: false,
+    }));
+
+    const parentClip = mocks.timelineState.clips.find((clip) => (
+      typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === 'parent-comp-clip'
+    )) as {
+      nestedClips?: Array<{
+        id: string;
+        nestedClips?: Array<{ source?: Record<string, unknown>; isLoading?: boolean }>;
+      }>;
+    };
+    const childCompClip = parentClip.nestedClips?.[0];
+    const grandchildVideo = childCompClip?.nestedClips?.[0];
+
+    expect(childCompClip?.id).toBe('nested-parent-comp-clip-child-comp-clip');
+    expect(grandchildVideo?.source).toEqual(expect.objectContaining({
+      type: 'video',
+      mediaFileId: 'media-video-1',
+      naturalDuration: 5,
+      filePath: 'C:/capture/grandchild-video.mp4',
+    }));
+    expect(grandchildVideo?.source).not.toHaveProperty('videoElement');
+    expect(grandchildVideo?.source).not.toHaveProperty('audioElement');
+    expect(grandchildVideo?.isLoading).toBe(false);
+  });
+
+  it('skips same-id post-relink nested reload when the composition identity changes before update', async () => {
+    mocks.mediaState.compositions = [
+      {
+        id: 'child-comp',
+        name: 'Child Comp',
+        duration: 10,
+        timelineData: {
+          duration: 10,
+          tracks: [{
+            id: 'child-video-track',
+            name: 'Child Video',
+            type: 'video',
+            height: 60,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'child-comp-clip',
+            trackId: 'child-video-track',
+            name: 'Grandchild Comp',
+            sourceType: 'video',
+            isComposition: true,
+            compositionId: 'grandchild-comp',
+            startTime: 0,
+            duration: 5,
+            inPoint: 0,
+            outPoint: 5,
+            transform: defaultProjectTransform(),
+            effects: [],
+          }],
+        },
+      },
+      {
+        id: 'grandchild-comp',
+        name: 'Grandchild Comp',
+        duration: 5,
+        timelineData: {
+          duration: 5,
+          tracks: [],
+          clips: [],
+        },
+      },
+    ];
+    mocks.timelineState.clips = [{
+      id: 'parent-comp-clip',
+      trackId: 'parent-video-track',
+      name: 'Parent Comp Clip',
+      isComposition: true,
+      compositionId: 'child-comp',
+      nestedClips: [],
+      thumbnails: ['existing-thumb'],
+    }];
+
+    const { reloadNestedCompositionClips } = await import('../../src/services/project/projectLoad');
+    const reloadPromise = reloadNestedCompositionClips();
+
+    mocks.timelineState.clips = [{
+      ...(mocks.timelineState.clips[0] as Record<string, unknown>),
+      compositionId: 'other-comp',
+    }];
+
+    await reloadPromise;
+
+    expect(mocks.timelineState.updateClip).not.toHaveBeenCalled();
+  });
+
+  it('restores project-load nested image clips as data-only sources without stale async patches', async () => {
+    const imageFile = new File(['image'], 'nested-still.png', { type: 'image/png' });
+    const createdImages: HTMLImageElement[] = [];
+    vi.stubGlobal('Image', function MockImage() {
+      const image = document.createElement('img');
+      createdImages.push(image);
+      return image;
+    } as unknown as typeof Image);
+
+    mocks.mediaState.files = [{
+      id: 'media-image-1',
+      name: imageFile.name,
+      type: 'image',
+      file: imageFile,
+      duration: 5,
+      sourcePath: 'C:/capture/nested-still.png',
+      absolutePath: 'C:/capture/nested-still.png',
+    }];
+    mocks.mediaState.compositions = [{
+      id: 'child-comp',
+      name: 'Child Comp',
+      duration: 5,
+      timelineData: {
+        duration: 5,
+        tracks: [{
+          id: 'child-video-track',
+          name: 'Child Video',
+          type: 'video',
+          height: 60,
+          visible: true,
+          muted: false,
+          solo: false,
+        }],
+        clips: [{
+          id: 'nested-image-clip',
+          trackId: 'child-video-track',
+          name: 'Nested Image',
+          mediaFileId: 'media-image-1',
+          sourceType: 'image',
+          naturalDuration: 5,
+          startTime: 0,
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          transform: defaultProjectTransform(),
+          effects: [],
+        }],
+      },
+    }];
+    mocks.timelineState.clips = [{
+      id: 'parent-comp-clip',
+      trackId: 'parent-video-track',
+      name: 'Parent Comp Clip',
+      isComposition: true,
+      compositionId: 'child-comp',
+      nestedClips: [],
+      thumbnails: ['existing-thumb'],
+    }];
+
+    const { reloadNestedCompositionClips } = await import('../../src/services/project/projectLoad');
+    await reloadNestedCompositionClips();
+
+    const parentClip = mocks.timelineState.clips.find((clip) => (
+      typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === 'parent-comp-clip'
+    )) as { nestedClips?: Array<{ source?: { imageUrl?: string; imageElement?: HTMLImageElement }; isLoading?: boolean }> };
+    expect(parentClip.nestedClips?.[0].source).toMatchObject({
+      type: 'image',
+      mediaFileId: 'media-image-1',
+      imageUrl: 'blob:project-media',
+      naturalDuration: 5,
+      filePath: 'C:/capture/nested-still.png',
+    });
+    expect(parentClip.nestedClips?.[0].source?.imageElement).toBeUndefined();
+    expect(parentClip.nestedClips?.[0].isLoading).toBe(false);
+
+    mocks.timelineSetState.mockClear();
+    mocks.timelineState.timelineSessionId = 2;
+    expect(createdImages).toHaveLength(0);
+
+    expect(mocks.timelineSetState).not.toHaveBeenCalled();
+    expect(parentClip.nestedClips?.[0].source?.imageUrl).toBe('blob:project-media');
+    expect(parentClip.nestedClips?.[0].isLoading).toBe(false);
+  });
+
+  it('keeps unavailable post-relink nested non-video assets as neutral placeholders', async () => {
+    mocks.mediaState.files = [
+      {
+        id: 'media-image-1',
+        name: 'missing-still.png',
+        type: 'image',
+        file: undefined,
+        url: '',
+        duration: 5,
+        sourcePath: 'C:/missing/missing-still.png',
+      },
+      {
+        id: 'media-lottie-1',
+        name: 'missing-animation.lottie',
+        type: 'lottie',
+        file: undefined,
+        url: '',
+        duration: 5,
+        sourcePath: 'C:/missing/missing-animation.lottie',
+      },
+      {
+        id: 'media-model-1',
+        name: 'missing-model.glb',
+        type: 'model',
+        file: undefined,
+        url: '',
+        duration: 3600,
+        sourcePath: 'C:/missing/missing-model.glb',
+      },
+      {
+        id: 'media-splat-1',
+        name: 'missing-splat.ply',
+        type: 'gaussian-splat',
+        file: undefined,
+        url: '',
+        duration: 3600,
+        sourcePath: 'C:/missing/missing-splat.ply',
+      },
+    ];
+    mocks.mediaState.compositions = [{
+      id: 'child-comp',
+      name: 'Child Comp',
+      duration: 8,
+      timelineData: {
+        duration: 8,
+        tracks: [{
+          id: 'child-video-track',
+          name: 'Child Video',
+          type: 'video',
+          height: 60,
+          visible: true,
+          muted: false,
+          solo: false,
+        }],
+        clips: [
+          {
+            id: 'nested-image-clip',
+            trackId: 'child-video-track',
+            name: 'Missing Image',
+            mediaFileId: 'media-image-1',
+            sourceType: 'image',
+            naturalDuration: 5,
+            startTime: 0,
+            duration: 2,
+            inPoint: 0,
+            outPoint: 2,
+            transform: defaultProjectTransform(),
+            effects: [],
+          },
+          {
+            id: 'nested-lottie-clip',
+            trackId: 'child-video-track',
+            name: 'Missing Lottie',
+            mediaFileId: 'media-lottie-1',
+            sourceType: 'lottie',
+            naturalDuration: 5,
+            startTime: 2,
+            duration: 2,
+            inPoint: 0,
+            outPoint: 2,
+            transform: defaultProjectTransform(),
+            effects: [],
+          },
+          {
+            id: 'nested-model-clip',
+            trackId: 'child-video-track',
+            name: 'Missing Model',
+            mediaFileId: 'media-model-1',
+            sourceType: 'model',
+            naturalDuration: 3600,
+            startTime: 4,
+            duration: 2,
+            inPoint: 0,
+            outPoint: 2,
+            transform: defaultProjectTransform(),
+            effects: [],
+            is3D: true,
+          },
+          {
+            id: 'nested-splat-clip',
+            trackId: 'child-video-track',
+            name: 'Missing Splat',
+            mediaFileId: 'media-splat-1',
+            sourceType: 'gaussian-splat',
+            naturalDuration: 3600,
+            startTime: 6,
+            duration: 2,
+            inPoint: 0,
+            outPoint: 2,
+            transform: defaultProjectTransform(),
+            effects: [],
+            is3D: true,
+          },
+        ],
+      },
+    }];
+    mocks.timelineState.clips = [{
+      id: 'parent-comp-clip',
+      trackId: 'parent-video-track',
+      name: 'Parent Comp Clip',
+      isComposition: true,
+      compositionId: 'child-comp',
+      nestedClips: [],
+      thumbnails: ['existing-thumb'],
+    }];
+
+    const { reloadNestedCompositionClips } = await import('../../src/services/project/projectLoad');
+    await reloadNestedCompositionClips();
+
+    expect(mocks.createObjectURL).not.toHaveBeenCalled();
+    expect(mocks.timelineState.updateClip).toHaveBeenCalledWith('parent-comp-clip', expect.objectContaining({
+      nestedClips: expect.any(Array),
+      isLoading: false,
+    }));
+
+    const parentClip = mocks.timelineState.clips.find((clip) => (
+      typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === 'parent-comp-clip'
+    )) as {
+      nestedClips?: Array<{
+        id: string;
+        source?: unknown;
+        isLoading?: boolean;
+        needsReload?: boolean;
+      }>;
+    };
+    const nestedById = new Map(parentClip.nestedClips?.map((clip) => [clip.id, clip]));
+    const nestedImage = nestedById.get('nested-parent-comp-clip-nested-image-clip');
+    const nestedLottie = nestedById.get('nested-parent-comp-clip-nested-lottie-clip');
+    const nestedModel = nestedById.get('nested-parent-comp-clip-nested-model-clip');
+    const nestedSplat = nestedById.get('nested-parent-comp-clip-nested-splat-clip');
+
+    expect(nestedImage).toEqual(expect.objectContaining({
+      source: null,
+      isLoading: false,
+      needsReload: undefined,
+    }));
+    expect(nestedLottie).toEqual(expect.objectContaining({
+      source: null,
+      isLoading: false,
+      needsReload: undefined,
+    }));
+    expect(nestedModel).toEqual(expect.objectContaining({
+      source: null,
+      isLoading: false,
+      needsReload: undefined,
+    }));
+    expect(nestedSplat).toEqual(expect.objectContaining({
+      source: null,
+      isLoading: false,
+      needsReload: undefined,
+    }));
+  });
+
+  it('rebuilds post-relink nested trees that already contain needsReload placeholders', async () => {
+    const modelFile = new File(['model-bytes'], 'nested-model.glb', { type: 'model/gltf-binary' });
+
+    mocks.mediaState.files = [{
+      id: 'media-model-1',
+      name: modelFile.name,
+      type: 'model',
+      file: modelFile,
+      duration: 3600,
+      sourcePath: 'C:/capture/nested-model.glb',
+      absolutePath: 'C:/capture/nested-model.glb',
+    }];
+    mocks.mediaState.compositions = [{
+      id: 'child-comp',
+      name: 'Child Comp',
+      duration: 8,
+      timelineData: {
+        duration: 8,
+        tracks: [{
+          id: 'child-video-track',
+          name: 'Child Video',
+          type: 'video',
+          height: 60,
+          visible: true,
+          muted: false,
+          solo: false,
+        }],
+        clips: [{
+          id: 'nested-model-clip',
+          trackId: 'child-video-track',
+          name: 'Nested Model',
+          mediaFileId: 'media-model-1',
+          sourceType: 'model',
+          naturalDuration: 3600,
+          startTime: 0,
+          duration: 8,
+          inPoint: 0,
+          outPoint: 8,
+          transform: defaultProjectTransform(),
+          effects: [],
+          is3D: true,
+        }],
+      },
+    }];
+    mocks.timelineState.clips = [{
+      id: 'parent-comp-clip',
+      trackId: 'parent-video-track',
+      name: 'Parent Comp Clip',
+      isComposition: true,
+      compositionId: 'child-comp',
+      nestedClips: [{
+        id: 'nested-parent-comp-clip-nested-model-clip',
+        trackId: 'child-video-track',
+        name: 'Nested Model',
+        mediaFileId: 'media-model-1',
+        source: {
+          type: 'model',
+          mediaFileId: 'media-model-1',
+          naturalDuration: 3600,
+        },
+        needsReload: true,
+        isLoading: false,
+      }],
+      thumbnails: ['existing-thumb'],
+    }];
+
+    const { reloadNestedCompositionClips } = await import('../../src/services/project/projectLoad');
+    await reloadNestedCompositionClips();
+
+    expect(mocks.timelineState.updateClip).toHaveBeenCalledWith('parent-comp-clip', expect.objectContaining({
+      nestedClips: expect.any(Array),
+      isLoading: false,
+    }));
+
+    const parentClip = mocks.timelineState.clips.find((clip) => (
+      typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === 'parent-comp-clip'
+    )) as { nestedClips?: Array<{ id: string; source?: Record<string, unknown>; needsReload?: boolean; isLoading?: boolean }> };
+    const nestedModel = parentClip.nestedClips?.find((clip) => clip.id === 'nested-parent-comp-clip-nested-model-clip');
+
+    expect(nestedModel?.source).toEqual(expect.objectContaining({
+      type: 'model',
+      mediaFileId: 'media-model-1',
+      modelUrl: 'blob:project-media',
+      naturalDuration: 3600,
+    }));
+    expect(nestedModel?.needsReload).toBeUndefined();
+    expect(nestedModel?.isLoading).toBe(false);
+    expect(mocks.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebuilds post-relink nested model clips from restored model URLs', async () => {
+    const modelFile = new File(['model-bytes'], 'nested-model.glb', { type: 'model/gltf-binary' });
+    const modelHandle = {
+      kind: 'file',
+      name: modelFile.name,
+      getFile: vi.fn(async () => modelFile),
+      queryPermission: vi.fn(async () => 'granted'),
+    } as unknown as FileSystemFileHandle;
+
+    mocks.scanRawFolder.mockResolvedValue(new Map([
+      [modelFile.name, modelHandle],
+    ]));
+    mocks.timelineState.loadState.mockImplementationOnce(async (timelineData: {
+      clips: Array<Record<string, unknown>>;
+    }) => {
+      mocks.timelineState.clips = timelineData.clips.map((clip) => ({
+        ...clip,
+        nestedClips: [],
+      }));
+    });
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-model-1',
+        name: modelFile.name,
+        type: 'model',
+        sourcePath: 'C:/capture/nested-model.glb',
+        projectPath: 'Raw/nested-model.glb',
+        duration: 3600,
+        hasProxy: false,
+        folderId: null,
+        importedAt: new Date(1).toISOString(),
+        modelSequence: {
+          fps: 30,
+          frameCount: 1,
+          playbackMode: 'clamp',
+          frames: [
+            { name: modelFile.name, sourcePath: 'C:/capture/nested-model.glb', absolutePath: 'C:/capture/nested-model.glb' },
+          ],
+        },
+      }],
+      compositions: [
+        {
+          id: 'parent-comp',
+          name: 'Parent Comp',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 12,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [{
+            id: 'parent-video-track',
+            name: 'Video 1',
+            type: 'video',
+            height: 60,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'parent-comp-clip',
+            trackId: 'parent-video-track',
+            name: 'Nested Child',
+            mediaId: '',
+            startTime: 0,
+            duration: 8,
+            inPoint: 0,
+            outPoint: 8,
+            transform: defaultProjectTransform(),
+            effects: [],
+            masks: [],
+            keyframes: [],
+            volume: 1,
+            audioEnabled: true,
+            reversed: false,
+            disabled: false,
+            isComposition: true,
+            compositionId: 'child-comp',
+            thumbnails: ['existing-thumb'],
+          }],
+          markers: [],
+        },
+        {
+          id: 'child-comp',
+          name: 'Child Comp',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 8,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [{
+            id: 'child-video-track',
+            name: 'Video 1',
+            type: 'video',
+            height: 60,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'nested-model-clip',
+            trackId: 'child-video-track',
+            name: 'Nested Model',
+            mediaId: 'media-model-1',
+            sourceType: 'model',
+            naturalDuration: 3600,
+            startTime: 0,
+            duration: 8,
+            inPoint: 0,
+            outPoint: 8,
+            transform: defaultProjectTransform(),
+            effects: [],
+            masks: [],
+            keyframes: [],
+            volume: 1,
+            audioEnabled: false,
+            reversed: false,
+            disabled: false,
+            is3D: true,
+            modelSequence: {
+              fps: 30,
+              frameCount: 1,
+              playbackMode: 'clamp',
+              frames: [
+                { name: modelFile.name, sourcePath: 'C:/capture/nested-model.glb', absolutePath: 'C:/capture/nested-model.glb' },
+              ],
+            },
+          }],
+          markers: [],
+        },
+      ],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: 'parent-comp',
+      openCompositionIds: ['parent-comp'],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    for (let attempt = 0; attempt < 120 && mocks.timelineState.updateClip.mock.calls.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    const parentClip = mocks.timelineState.clips.find((clip) => (
+      typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === 'parent-comp-clip'
+    )) as { nestedClips?: Array<{ id: string; source?: Record<string, unknown>; is3D?: boolean; isLoading?: boolean }> };
+    const nestedModel = parentClip.nestedClips?.find((clip) => clip.id === 'nested-parent-comp-clip-nested-model-clip');
+
+    expect(nestedModel?.source).toEqual(expect.objectContaining({
+      type: 'model',
+      mediaFileId: 'media-model-1',
+      modelUrl: 'blob:project-media',
+      modelSequence: expect.objectContaining({ frameCount: 1 }),
+      naturalDuration: 3600,
+    }));
+    expect(nestedModel?.is3D).toBe(true);
+    expect(nestedModel?.isLoading).toBe(false);
+    expect(mocks.createObjectURL).toHaveBeenCalledTimes(1);
+  }, 10_000);
+
+  it('rebuilds post-relink nested gaussian splat clips from restored sequence URLs', async () => {
+    const splatFile = new File(['splat-bytes'], 'nested-splat.ply', { type: 'application/octet-stream' });
+    const splatHandle = {
+      kind: 'file',
+      name: splatFile.name,
+      getFile: vi.fn(async () => splatFile),
+      queryPermission: vi.fn(async () => 'granted'),
+    } as unknown as FileSystemFileHandle;
+    const gaussianSplatSequence = {
+      fps: 30,
+      frameCount: 1,
+      playbackMode: 'clamp',
+      sequenceName: 'scan',
+      frames: [
+        { name: splatFile.name, sourcePath: 'C:/capture/nested-splat.ply', absolutePath: 'C:/capture/nested-splat.ply' },
+      ],
+    };
+
+    mocks.scanRawFolder.mockResolvedValue(new Map([
+      [splatFile.name, splatHandle],
+    ]));
+    mocks.timelineState.loadState.mockImplementationOnce(async (timelineData: {
+      clips: Array<Record<string, unknown>>;
+    }) => {
+      mocks.timelineState.clips = timelineData.clips.map((clip) => ({
+        ...clip,
+        nestedClips: [],
+      }));
+    });
+    mocks.getProjectData.mockReturnValue({
+      media: [{
+        id: 'media-splat-1',
+        name: splatFile.name,
+        type: 'gaussian-splat',
+        sourcePath: 'C:/capture/nested-splat.ply',
+        projectPath: 'Raw/nested-splat.ply',
+        duration: 3600,
+        hasProxy: false,
+        folderId: null,
+        importedAt: new Date(1).toISOString(),
+        gaussianSplatSequence,
+      }],
+      compositions: [
+        {
+          id: 'parent-comp',
+          name: 'Parent Comp',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 12,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [{
+            id: 'parent-video-track',
+            name: 'Video 1',
+            type: 'video',
+            height: 60,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'parent-comp-clip',
+            trackId: 'parent-video-track',
+            name: 'Nested Child',
+            mediaId: '',
+            startTime: 0,
+            duration: 8,
+            inPoint: 0,
+            outPoint: 8,
+            transform: defaultProjectTransform(),
+            effects: [],
+            masks: [],
+            keyframes: [],
+            volume: 1,
+            audioEnabled: true,
+            reversed: false,
+            disabled: false,
+            isComposition: true,
+            compositionId: 'child-comp',
+            thumbnails: ['existing-thumb'],
+          }],
+          markers: [],
+        },
+        {
+          id: 'child-comp',
+          name: 'Child Comp',
+          width: 1920,
+          height: 1080,
+          frameRate: 30,
+          duration: 8,
+          backgroundColor: '#000000',
+          folderId: null,
+          tracks: [{
+            id: 'child-video-track',
+            name: 'Video 1',
+            type: 'video',
+            height: 60,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+          }],
+          clips: [{
+            id: 'nested-splat-clip',
+            trackId: 'child-video-track',
+            name: 'Nested Splat',
+            mediaId: 'media-splat-1',
+            sourceType: 'gaussian-splat',
+            naturalDuration: 3600,
+            startTime: 0,
+            duration: 8,
+            inPoint: 0,
+            outPoint: 8,
+            transform: defaultProjectTransform(),
+            effects: [],
+            masks: [],
+            keyframes: [],
+            volume: 1,
+            audioEnabled: false,
+            reversed: false,
+            disabled: false,
+            is3D: true,
+            threeDEffectorsEnabled: false,
+            gaussianSplatSequence,
+          }],
+          markers: [],
+        },
+      ],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: 'parent-comp',
+      openCompositionIds: ['parent-comp'],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    for (let attempt = 0; attempt < 120 && mocks.timelineState.updateClip.mock.calls.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    const parentClip = mocks.timelineState.clips.find((clip) => (
+      typeof clip === 'object' && clip !== null && 'id' in clip && clip.id === 'parent-comp-clip'
+    )) as { nestedClips?: Array<{ id: string; source?: Record<string, unknown>; is3D?: boolean; isLoading?: boolean }> };
+    const nestedSplat = parentClip.nestedClips?.find((clip) => clip.id === 'nested-parent-comp-clip-nested-splat-clip');
+
+    expect(nestedSplat?.source).toEqual(expect.objectContaining({
+      type: 'gaussian-splat',
+      mediaFileId: 'media-splat-1',
+      gaussianSplatUrl: 'blob:project-media',
+      gaussianSplatFileName: splatFile.name,
+      gaussianSplatRuntimeKey: 'C:/capture/nested-splat.ply',
+      gaussianSplatSequence: expect.objectContaining({ frameCount: 1, sequenceName: 'scan' }),
+      naturalDuration: 3600,
+      threeDEffectorsEnabled: false,
+    }));
+    expect(nestedSplat?.is3D).toBe(true);
+    expect(nestedSplat?.isLoading).toBe(false);
+    expect(mocks.createObjectURL).toHaveBeenCalledTimes(1);
+  }, 10_000);
+
   it('moves media panel items with missing folder parents back to root on load', async () => {
     mocks.getProjectData.mockReturnValue({
       media: [{
@@ -2058,6 +3219,74 @@ describe('project media persistence', () => {
         }),
       }),
     ]);
+  });
+
+  it('revokes previous media-state sequence frame urls before loading project media', async () => {
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    mocks.mediaState.files = [
+      {
+        id: 'old-model-seq',
+        name: 'old model sequence',
+        type: 'model',
+        parentId: null,
+        createdAt: 1,
+        url: 'blob:old-model-main',
+        thumbnailUrl: 'blob:old-model-thumb',
+        modelSequence: {
+          fps: 30,
+          frameCount: 2,
+          playbackMode: 'clamp',
+          frames: [
+            { name: 'old000000.glb', modelUrl: 'blob:old-model-frame-0' },
+            { name: 'old000001.glb', modelUrl: 'blob:old-model-frame-1' },
+          ],
+        },
+      },
+      {
+        id: 'old-splat-seq',
+        name: 'old splat sequence',
+        type: 'gaussian-splat',
+        parentId: null,
+        createdAt: 1,
+        url: 'blob:old-splat-main',
+        proxyVideoUrl: 'blob:old-splat-proxy',
+        audioProxyUrl: 'blob:old-splat-audio-proxy',
+        gaussianSplatSequence: {
+          fps: 30,
+          frameCount: 2,
+          playbackMode: 'clamp',
+          frames: [
+            { name: 'old000000.ply', splatUrl: 'blob:old-splat-frame-0' },
+            { name: 'old000001.ply', splatUrl: 'blob:old-splat-frame-1' },
+          ],
+        },
+      },
+    ];
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-model-main');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-model-thumb');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-model-frame-0');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-model-frame-1');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-splat-main');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-splat-proxy');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-splat-audio-proxy');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-splat-frame-0');
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:old-splat-frame-1');
+    expect(mocks.mediaState.files).toEqual([]);
   });
 
   it('restores model sequence frames from stored frame handles when no RAW copies exist', async () => {

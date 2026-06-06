@@ -158,8 +158,7 @@ src/components/timeline/
 │   ├── useVideoPreload.ts   # NEW
 │   └── useAutoFeatures.ts   # NEW
 ├── components/
-│   ├── TimelineOverlays.tsx # NEW
-│   └── NewTrackDropZone.tsx # NEW
+│   └── TimelineOverlays.tsx # NEW
 └── utils/
     └── fileTypeHelpers.ts   # NEW
 ```

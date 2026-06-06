@@ -88,7 +88,7 @@ Adding `'midi'` to the track-type union touches ~50 spots that reference `'video
   - Free placement — no snap.
   - **Live playhead cursor**: read `useTimelineStore.playheadPosition`, draw a vertical line at the corresponding time within the clip; only visible while the playhead is over the clip.
   - Edits write back to `clip.midiData` via a timeline store action (with history support).
-- Double-click handler on a MIDI clip in `TimelineClip.tsx` → `openPianoRoll(clip.id)`.
+- Double-click handling for MIDI clips routes through the canvas/shell timeline path in `Timeline.tsx`/`TimelineTrack.tsx` and opens `openPianoRoll(clip.id)`. Active targets should use `ClipInteractionShell`/`useMidiClipDraw`, not the deleted `TimelineClip.tsx` body.
 
 ### 3.6 Synth + playback
 
@@ -147,7 +147,7 @@ Still TODO: instrument **chip in the MIDI track header** (`TimelineTrack.tsx`) �
 **Modified (non-exhaustive)**
 - `src/types/index.ts` (track type union, `TimelineTrack`, `TimelineClip`, `TimelineSourceType`)
 - `src/stores/timeline/trackSlice.ts`, `types.ts`, `helpers/idGenerator.ts`, `selectors.ts`
-- `src/components/timeline/TrackContextMenu.tsx`, `Timeline.tsx`, `TimelineClip.tsx`
+- `src/components/timeline/TrackContextMenu.tsx`, `Timeline.tsx`, `TimelineTrack.tsx`, `TimelineClipCanvas.tsx`, and `ClipInteractionShell` modules as needed.
 - `src/stores/timeline/toolDefaults.ts`, `toolSlice.ts` + toolbar/flyout
 - `src/engine/audio/AudioMixer.ts` / `AudioExportPipeline.ts`
 - `src/services/project/projectSave.ts`, `projectLoad.ts`, project/composition types

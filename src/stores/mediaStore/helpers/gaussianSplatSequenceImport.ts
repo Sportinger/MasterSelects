@@ -14,6 +14,10 @@ import {
 import { useSettingsStore } from '../../settingsStore';
 import type { MediaFile } from '../types';
 import { readGaussianSplatFileStats, summarizeGaussianSplatSequenceStats } from './gaussianSplatStats';
+import {
+  createMediaObjectUrl,
+  getGaussianSplatSequenceFrameObjectUrlKey,
+} from '../../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('GaussianSplatSequenceImport');
 
@@ -155,7 +159,7 @@ export async function processGaussianSplatSequenceImport<T extends GaussianSplat
       sourcePath: entry.absolutePath ?? entry.file.name,
       absolutePath: entry.absolutePath,
       file: entry.file,
-      splatUrl: URL.createObjectURL(entry.file),
+      splatUrl: createMediaObjectUrl(id, getGaussianSplatSequenceFrameObjectUrlKey(index), entry.file),
       splatCount: frameStats.splatCount,
       fileSize: frameStats.fileSize,
       container: frameStats.container,

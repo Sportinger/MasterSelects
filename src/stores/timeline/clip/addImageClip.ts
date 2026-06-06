@@ -4,6 +4,7 @@
 import type { TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
 import { useMediaStore } from '../../mediaStore';
+import { startTimelineImageHydration } from '../../../services/timeline/imageRuntimeHydrator';
 import { generateImageThumbnail } from '../helpers/thumbnailHelpers';
 import { generateClipId } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
@@ -52,13 +53,13 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
   const { clip, updateClip } = params;
   const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
 
-  // Create and load image element - track URL for cleanup
-  const img = new Image();
-  img.src = blobUrlManager.create(clip.id, clip.file, 'image');
-
-  await new Promise<void>((resolve) => {
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
+  const imageUrl = blobUrlManager.create(clip.id, clip.file, 'image');
+  const img = await new Promise<HTMLImageElement>((resolve) => {
+    startTimelineImageHydration({
+      url: imageUrl,
+      onReady: resolve,
+      onError: (_event, image) => resolve(image),
+    });
   });
 
   // Generate thumbnail
@@ -71,7 +72,7 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
     : { x: 1, y: 1 };
 
   updateClip(clip.id, {
-    source: { type: 'image', imageElement: img, naturalDuration: clip.duration, mediaFileId },
+    source: { type: 'image', imageUrl, naturalDuration: clip.duration, mediaFileId },
     transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
     thumbnails,
     isLoading: false,

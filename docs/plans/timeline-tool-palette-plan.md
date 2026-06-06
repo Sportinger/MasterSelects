@@ -211,7 +211,7 @@ Aktuell relevante Stellen:
 | Toolbar UI | `src/components/timeline/TimelineControls.tsx` | Snapping + Cut Button direkt gerendert | `TimelineToolPalette` mit Gruppen/Flyouts |
 | Icons | `TimelineControls.tsx`, diverse Inline-SVGs | Inline-SVG pro Button | Tabler Adapter + MS Custom Icons |
 | Keyboard | `src/services/shortcutTypes.ts`, `shortcutPresets.ts`, `useTimelineKeyboard.ts` | einzelne Actions, `tool.cutToggle` | Registry-basierte Tool- und Command-Shortcuts |
-| Cut Tool | `Timeline.tsx`, `TimelineClip.tsx` | Cut Hover/Click/Snap direkt im Clip | `bladeToolHandler` + gemeinsame overlay state |
+| Cut Tool | `Timeline.tsx`, `TimelineTrack.tsx`, `TimelineClipCanvas.tsx`, `ClipInteractionShell` | Cut Hover/Click/Snap in Canvas/Shell-Pointerpfad | `bladeToolHandler` + gemeinsame overlay state |
 | Selection | `selectionSlice.ts`, `useMarqueeSelection.ts` | Clip/keyframe selection getrennt von Werkzeugen | Selection tools nutzen zentrale selection operations |
 | Drag/Trim | `useClipDrag.ts`, `useClipTrim.ts`, `useClipFade.ts` | Hook-spezifische Pointer-Logik | weiterhin nutzbar, aber ueber Tool Dispatcher aktivierbar |
 | Export Lock | `exportEditLock.ts` | einzelne Action-Namen gesperrt, inklusive altem Toolmode | mutierende Operationen blocken, nicht-mutierende Tool-Auswahl erlauben |
@@ -256,7 +256,7 @@ Review B: Timeline UI, Pointer-Interaktion, Shortcuts und Overlays
 
 - prueft `src/components/timeline/**`, `src/hooks/**`, `src/services/shortcutTypes.ts`, `src/services/shortcutPresets.ts` und timeline-nahe CSS
 - validiert die geplante Tool-Palette, Flyouts, Tool-Dispatcher und Overlay-Schicht gegen die heutige UI-Struktur
-- sucht harte Kopplungen wie Cut-Hover in `Timeline.tsx`/`TimelineClip.tsx`, Drag/Trim-Sonderlogik und Shortcut-Sonderpfade
+- sucht harte Kopplungen wie Cut-Hover in `Timeline.tsx`/`TimelineTrack.tsx`, Drag/Trim-Sonderlogik und Shortcut-Sonderpfade
 - prueft, welche bestehenden Controls durch die Tool-Palette ersetzt oder vereinfacht werden koennen
 - liefert konkrete Plan-Aenderungen mit Datei-/Komponentenreferenzen
 
@@ -500,7 +500,7 @@ Die Registry ersetzt:
 
 Heute entscheiden mehrere Hooks und Komponenten selbst, ob sie auf Pointer reagieren:
 
-- `TimelineClip` kennt Cut Tool direkt.
+- Der Canvas/Shell-Pointerpfad kennt Cut Tool direkt.
 - `useClipDrag` startet immer bei Clip-Mousedown, ausser Cut blockiert es.
 - `useClipTrim` startet direkt an Kanten.
 - `useMarqueeSelection` startet auf leerem Raum.
@@ -544,7 +544,7 @@ interface TimelineToolHandler {
 
 Damit kann MS vereinfachen:
 
-- Cut-spezifische MouseMove/Click-Logik aus `TimelineClip.tsx` entfernen.
+- Cut-spezifische MouseMove/Click-Logik aus dem Canvas/Shell-Pointerpfad in Tool-Handler verschieben.
 - Cursor-Logik wird aus Clip-Styles in Tool-Handler verschoben.
 - Marquee/TrackSelect/RangeSelect teilen sich Hit-Testing.
 - Trim/Ripple/Roll/Slip/Slide teilen sich Edge- und neighbor-resolution.
@@ -709,7 +709,7 @@ Transport, Master Audio, View, Proxy und Zoom bleiben in `TimelineControls`, koe
 | Cut Button in `TimelineControls` | Registry-rendered Tool Group | kein Button-Sonderfall |
 | Inline-SVGs fuer Timeline Edit Tools | Tabler Adapter + Custom Icons | einheitlicher Look, weniger JSX |
 | Cut Hover State in `Timeline.tsx` | `timelineToolPreview` | alle Tool-Previews einheitlich |
-| Cut MouseMove/Click in `TimelineClip.tsx` | `bladeToolHandler` | Clip-Komponente wird dummer |
+| Cut MouseMove/Click im Canvas/Shell-Pointerpfad | `bladeToolHandler` | Timeline-Komponenten bleiben dumm |
 | Marquee als isolierter Spezialhook | `rangeSelectTool`/`selectTool` nutzt shared hit-testing | Range und Marquee teilen Geometrie |
 | `splitClipAtPlayhead` als einzige Split-Command-Variante | Split Operations: selected/current/all tracks | sauberer fuer Toolbar, Shortcut, AI |
 | Delete nur remove selected clips | Delete/Lift/RippleDelete/DeleteGap Commands | echte NLE-Semantik |
@@ -1051,11 +1051,11 @@ Dateien:
 - `useTimelineToolPointerDispatcher.ts`
 - `handlers/bladeTool.ts`
 - `TimelineToolOverlayLayer.tsx`
-- Anpassungen in `Timeline.tsx`, `TimelineClip.tsx`
+- Anpassungen in `Timeline.tsx`, `TimelineTrack.tsx`, `TimelineClipCanvas.tsx`, und Shell/Target-Utilities
 
 Lieferung:
 
-- Cut Hover/Click aus `TimelineClip.tsx` entfernen.
+- Cut Hover/Click aus dem Canvas/Shell-Pointerpfad entfernen.
 - Blade benutzt Tool Handler.
 - `timelineToolPreview` rendert Cut-Indikator.
 - Blade all tracks kann dieselbe Infrastruktur nutzen.

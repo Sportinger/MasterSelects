@@ -8,6 +8,12 @@ export interface TimelineCanvasDrawDiagnostics {
   thumbnailDrawCount: number;
   waveformClipCount: number;
   workerMode: boolean;
+  workerEligible?: boolean;
+  workerFallbackReasons?: readonly string[];
+  workerPendingDraw?: boolean;
+  workerDrawMs?: number;
+  workerResourceBytes?: number;
+  workerError?: string;
 }
 
 export interface TimelineCanvasDomDiagnostics {
@@ -60,6 +66,35 @@ export function reportTimelineCanvasDrawDiagnostics(
   });
 }
 
+function deleteTrackDiagnosticsChannel(
+  trackId: string,
+  channel: 'canvas' | 'dom',
+): void {
+  const existing = tracks.get(trackId);
+  if (!existing) return;
+
+  const next: TimelineCanvasTrackDiagnostics = {
+    ...existing,
+    updatedAt: nowMs(),
+  };
+  if (channel === 'canvas') {
+    delete next.canvas;
+  } else {
+    delete next.dom;
+  }
+
+  if (!next.canvas && !next.dom) {
+    tracks.delete(trackId);
+    return;
+  }
+
+  tracks.set(trackId, next);
+}
+
+export function unregisterTimelineCanvasDrawDiagnostics(trackId: string): void {
+  deleteTrackDiagnosticsChannel(trackId, 'canvas');
+}
+
 export function reportTimelineCanvasDomDiagnostics(
   trackId: string,
   dom: TimelineCanvasDomDiagnostics,
@@ -71,6 +106,14 @@ export function reportTimelineCanvasDomDiagnostics(
     canvas: existing?.canvas,
     dom,
   });
+}
+
+export function unregisterTimelineCanvasDomDiagnostics(trackId: string): void {
+  deleteTrackDiagnosticsChannel(trackId, 'dom');
+}
+
+export function unregisterTimelineCanvasTrackDiagnostics(trackId: string): void {
+  tracks.delete(trackId);
 }
 
 function createEmptyTotals() {
@@ -86,6 +129,16 @@ function createEmptyTotals() {
     domClipBodyCount: 0,
     shellCount: 0,
     workerTrackCount: 0,
+    workerEligibleTrackCount: 0,
+    workerFallbackTrackCount: 0,
+    workerFallbackReasons: {} as Record<string, number>,
+    workerPendingTrackCount: 0,
+    workerDrawReportCount: 0,
+    workerDrawMsTotal: 0,
+    workerDrawMsMax: 0,
+    workerResourceBytes: 0,
+    workerErrorTrackCount: 0,
+    workerErrors: {} as Record<string, number>,
     activeShellSlotCounts: {} as Partial<Record<ClipInteractionShellModuleSlot, number>>,
   };
 }
@@ -103,6 +156,26 @@ function addTrackDiagnostics(
     totals.thumbnailDrawCount += track.canvas.thumbnailDrawCount;
     totals.waveformClipCount += track.canvas.waveformClipCount;
     if (track.canvas.workerMode) totals.workerTrackCount += 1;
+    if (track.canvas.workerEligible) totals.workerEligibleTrackCount += 1;
+    if (track.canvas.workerPendingDraw) totals.workerPendingTrackCount += 1;
+    if (typeof track.canvas.workerDrawMs === 'number' && Number.isFinite(track.canvas.workerDrawMs)) {
+      totals.workerDrawReportCount += 1;
+      totals.workerDrawMsTotal += track.canvas.workerDrawMs;
+      totals.workerDrawMsMax = Math.max(totals.workerDrawMsMax, track.canvas.workerDrawMs);
+    }
+    if (typeof track.canvas.workerResourceBytes === 'number' && Number.isFinite(track.canvas.workerResourceBytes)) {
+      totals.workerResourceBytes += track.canvas.workerResourceBytes;
+    }
+    if (track.canvas.workerError) {
+      totals.workerErrorTrackCount += 1;
+      totals.workerErrors[track.canvas.workerError] = (totals.workerErrors[track.canvas.workerError] ?? 0) + 1;
+    }
+    if (!track.canvas.workerMode && track.canvas.workerFallbackReasons?.length) {
+      totals.workerFallbackTrackCount += 1;
+      track.canvas.workerFallbackReasons.forEach((reason) => {
+        totals.workerFallbackReasons[reason] = (totals.workerFallbackReasons[reason] ?? 0) + 1;
+      });
+    }
   }
   if (track.dom) {
     totals.domOverlayCount += track.dom.domOverlayCount;
@@ -116,12 +189,16 @@ export function getTimelineCanvasDiagnostics(store?: TimelineCanvasStoreDiagnost
   const now = nowMs();
   const reportedTracks = Array.from(tracks.values())
     .sort((a, b) => a.trackId.localeCompare(b.trackId));
+  const storeTrackIds = store ? new Set(store.trackIds) : null;
   const activeTracks: Array<TimelineCanvasTrackDiagnostics & { ageMs: number; isStale: false }> = [];
   const staleTracks: Array<TimelineCanvasTrackDiagnostics & { ageMs: number; isStale: true }> = [];
+  const orphanedTracks: Array<TimelineCanvasTrackDiagnostics & { ageMs: number; isOrphaned: true }> = [];
 
   reportedTracks.forEach((track) => {
     const ageMs = Math.max(0, now - track.updatedAt);
-    if (ageMs > STALE_TRACK_MS) {
+    if (storeTrackIds && !storeTrackIds.has(track.trackId)) {
+      orphanedTracks.push({ ...track, ageMs, isOrphaned: true });
+    } else if (!storeTrackIds && ageMs > STALE_TRACK_MS) {
       staleTracks.push({ ...track, ageMs, isStale: true });
     } else {
       activeTracks.push({ ...track, ageMs, isStale: false });
@@ -132,6 +209,8 @@ export function getTimelineCanvasDiagnostics(store?: TimelineCanvasStoreDiagnost
   activeTracks.forEach((track) => addTrackDiagnostics(totals, track));
   const reportedTotals = createEmptyTotals();
   reportedTracks.forEach((track) => addTrackDiagnostics(reportedTotals, track));
+  const orphanedTotals = createEmptyTotals();
+  orphanedTracks.forEach((track) => addTrackDiagnostics(orphanedTotals, track));
 
   const reportedTrackIds = new Set(reportedTracks.map((track) => track.trackId));
   const missingTrackIds = store
@@ -142,6 +221,8 @@ export function getTimelineCanvasDiagnostics(store?: TimelineCanvasStoreDiagnost
     totals: {
       ...totals,
       staleTrackCount: staleTracks.length,
+      orphanedTrackCount: orphanedTracks.length,
+      orphanedInputClipCount: orphanedTotals.inputClipCount,
       reportedTrackCount: reportedTotals.trackCount,
       reportedInputClipCount: reportedTotals.inputClipCount,
       reportedDomClipBodyCount: reportedTotals.domClipBodyCount,
@@ -154,6 +235,7 @@ export function getTimelineCanvasDiagnostics(store?: TimelineCanvasStoreDiagnost
     },
     tracks: activeTracks,
     staleTracks,
+    orphanedTracks,
   };
 }
 

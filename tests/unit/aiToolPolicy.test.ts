@@ -146,6 +146,29 @@ describe('AI Tool Policy Registry', () => {
     }
   });
 
+  it('timeline canvas verification smokes are devBridge-only automation tools', () => {
+    for (const tool of [
+      'runTimelineCanvasBladeToolSmoke',
+      'runTimelineCanvasExportPreviewParitySmoke',
+      'runTimelineCanvasLargeProjectSmoke',
+      'runTimelineCanvasMarqueeSmoke',
+      'runTimelineCanvasPlayheadSmoothnessSmoke',
+      'runTimelineCanvasThumbnailReloadSmoke',
+      'runTimelineCanvasRamPreviewSmoke',
+      'runTimelineCanvasSpectralPlaybackSmoke',
+    ]) {
+      const policy = getToolPolicy(tool);
+      expect(policy, `Missing policy for ${tool}`).toBeDefined();
+      expect(policy!.readOnly).toBe(false);
+      expect(policy!.riskLevel).toBe('medium');
+      expect(checkToolAccess(tool, 'devBridge').allowed, `${tool} should allow devBridge`).toBe(true);
+      expect(checkToolAccess(tool, 'console').allowed, `${tool} should allow console`).toBe(true);
+      expect(checkToolAccess(tool, 'internal').allowed, `${tool} should allow internal`).toBe(true);
+      expect(checkToolAccess(tool, 'chat').allowed, `${tool} should not allow chat`).toBe(false);
+      expect(checkToolAccess(tool, 'nativeHelper').allowed, `${tool} should not allow nativeHelper`).toBe(false);
+    }
+  });
+
   it('sensitive telemetry tools still exclude nativeHelper', () => {
     const helperBlockedTools = ['getLogs', 'getRuntimeDiagnostics', 'clearRuntimeDiagnostics', 'getStats', 'getStatsHistory', 'getPlaybackTrace'];
     for (const name of helperBlockedTools) {

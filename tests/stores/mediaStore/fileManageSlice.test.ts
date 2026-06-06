@@ -5,7 +5,7 @@
  * we create a minimal Zustand store that includes only the slices under test.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { create } from 'zustand';
 import type { MediaState, MediaFile, MediaFolder, TextItem, SolidItem, Composition } from '../../../src/stores/mediaStore/types';
 import type { CompositionTimelineData, SerializableClip, TimelineClip } from '../../../src/types';
@@ -15,18 +15,41 @@ const thumbnailMocks = vi.hoisted(() => ({
   handleThumbnailDedup: vi.fn(async (_fileHash: string | undefined, thumbnailUrl: string | undefined) => thumbnailUrl),
 }));
 
+const fileHashMocks = vi.hoisted(() => ({
+  calculateFileHash: vi.fn(async () => 'hash-reloaded'),
+}));
+
 vi.mock('../../../src/stores/mediaStore/helpers/thumbnailHelpers', () => ({
   createThumbnail: thumbnailMocks.createThumbnail,
   handleThumbnailDedup: thumbnailMocks.handleThumbnailDedup,
 }));
 
-import { createFileManageSlice, collectMediaFileUsages, type FileManageActions } from '../../../src/stores/mediaStore/slices/fileManageSlice';
+vi.mock('../../../src/stores/mediaStore/helpers/fileHashHelpers', () => ({
+  calculateFileHash: fileHashMocks.calculateFileHash,
+}));
+
+import {
+  createFileManageSlice,
+  createMediaSourceReplacementPatch,
+  collectMediaFileUsages,
+  updateTimelineClips,
+  type FileManageActions,
+} from '../../../src/stores/mediaStore/slices/fileManageSlice';
 import { createFolderSlice, type FolderActions } from '../../../src/stores/mediaStore/slices/folderSlice';
 import { createSelectionSlice, type SelectionActions } from '../../../src/stores/mediaStore/slices/selectionSlice';
 import { createCompositionSlice, type CompositionActions } from '../../../src/stores/mediaStore/slices/compositionSlice';
+import { useMediaStore } from '../../../src/stores/mediaStore';
 import { projectFileService } from '../../../src/services/projectFileService';
 import { projectDB } from '../../../src/services/projectDB';
+import { thumbnailCacheService } from '../../../src/services/thumbnailCacheService';
 import { useTimelineStore } from '../../../src/stores/timeline';
+import { blobUrlManager } from '../../../src/stores/timeline/helpers/blobUrlManager';
+import { vectorAnimationRuntimeManager } from '../../../src/services/vectorAnimation/VectorAnimationRuntimeManager';
+import {
+  getThumbnailMediaObjectUrlKey,
+  mediaObjectUrlManager,
+  revokeAllMediaObjectUrls,
+} from '../../../src/services/project/mediaObjectUrlManager';
 
 // ---- Minimal store factory ------------------------------------------------
 
@@ -286,6 +309,14 @@ describe('MediaStore - File Management', () => {
     thumbnailMocks.createThumbnail.mockResolvedValue('blob:http://localhost/refreshed-thumb');
     thumbnailMocks.handleThumbnailDedup.mockClear();
     thumbnailMocks.handleThumbnailDedup.mockImplementation(async (_fileHash: string | undefined, thumbnailUrl: string | undefined) => thumbnailUrl);
+    fileHashMocks.calculateFileHash.mockClear();
+    fileHashMocks.calculateFileHash.mockResolvedValue('hash-reloaded');
+  });
+
+  afterEach(() => {
+    blobUrlManager.clear();
+    revokeAllMediaObjectUrls();
+    vi.restoreAllMocks();
   });
 
   // --- Adding media files ---
@@ -1008,6 +1039,46 @@ describe('MediaStore - File Management', () => {
       revokeObjectURL.mockRestore();
     });
 
+    it('should call URL.revokeObjectURL for model and gaussian sequence frame blob urls', () => {
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const file = makeMediaFile({
+        id: 'f1',
+        url: '',
+        type: 'gaussian-splat',
+        proxyVideoUrl: 'blob:http://localhost/proxy-video',
+        audioProxyUrl: 'blob:http://localhost/audio-proxy',
+        modelSequence: {
+          fps: 30,
+          frameCount: 2,
+          playbackMode: 'clamp',
+          frames: [
+            { name: 'hero000000.glb', modelUrl: 'blob:http://localhost/model-0' },
+            { name: 'hero000001.glb', modelUrl: 'blob:http://localhost/model-1' },
+          ],
+        },
+        gaussianSplatSequence: {
+          fps: 30,
+          frameCount: 2,
+          playbackMode: 'clamp',
+          frames: [
+            { name: 'scan000000.ply', splatUrl: 'blob:http://localhost/splat-0' },
+            { name: 'scan000001.ply', splatUrl: 'blob:http://localhost/splat-1' },
+          ],
+        },
+      });
+      store.setState({ files: [file] });
+
+      store.getState().removeFile('f1');
+
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/proxy-video');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/audio-proxy');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/model-0');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/model-1');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/splat-0');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/splat-1');
+      revokeObjectURL.mockRestore();
+    });
+
     it('should not revoke non-blob thumbnail urls', () => {
       const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
       const file = makeMediaFile({ id: 'f1', thumbnailUrl: 'data:image/png;base64,abc' });
@@ -1069,6 +1140,39 @@ describe('MediaStore - File Management', () => {
   });
 
   describe('refreshFileUrls', () => {
+    it('restores stored thumbnail blobs with media-owned object url tracking', async () => {
+      const thumbnailBlob = new Blob(['thumb'], { type: 'image/webp' });
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL')
+        .mockReturnValueOnce('blob:http://localhost/stored-thumb');
+      vi.spyOn(projectFileService, 'isProjectOpen').mockReturnValue(true);
+      const getThumbnail = vi.spyOn(projectFileService, 'getThumbnail').mockResolvedValue(thumbnailBlob);
+      const saveThumbnail = vi.spyOn(projectDB, 'saveThumbnail').mockResolvedValue(undefined);
+      const file = makeMediaFile({
+        id: 'img-thumb-1',
+        type: 'image',
+        name: 'still.png',
+        fileHash: 'hash-still',
+        thumbnailUrl: undefined,
+      });
+
+      store.setState({ files: [file] });
+
+      const result = await store.getState().ensureFileThumbnail('img-thumb-1');
+      const updated = store.getState().files[0];
+
+      expect(result).toBe(true);
+      expect(getThumbnail).toHaveBeenCalledWith('hash-still');
+      expect(saveThumbnail).toHaveBeenCalledWith(expect.objectContaining({
+        fileHash: 'hash-still',
+        blob: thumbnailBlob,
+      }));
+      expect(updated.thumbnailUrl).toBe('blob:http://localhost/stored-thumb');
+      expect(mediaObjectUrlManager.get('img-thumb-1', getThumbnailMediaObjectUrlKey())).toBe('blob:http://localhost/stored-thumb');
+      expect(createObjectURL).toHaveBeenCalledWith(thumbnailBlob);
+
+      createObjectURL.mockRestore();
+    });
+
     it('should recreate image blob urls from the current file object', async () => {
       const createObjectURL = vi.spyOn(URL, 'createObjectURL')
         .mockReturnValueOnce('blob:http://localhost/refreshed-file');
@@ -1091,11 +1195,503 @@ describe('MediaStore - File Management', () => {
       expect(updated.url).toBe('blob:http://localhost/refreshed-file');
       expect(updated.thumbnailUrl).toBe('blob:http://localhost/refreshed-thumb');
       expect(thumbnailMocks.createThumbnail).toHaveBeenCalledWith(file.file, 'image');
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/original-file');
       expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/original-thumb');
 
       createObjectURL.mockRestore();
       revokeObjectURL.mockRestore();
+    });
+  });
+
+  describe('source replacement identity', () => {
+    it('computes a new file hash and clears source-derived media fields', async () => {
+      const replacementFile = new File(['replacement'], 'replacement.mp4', { type: 'video/mp4' });
+
+      const patch = await createMediaSourceReplacementPatch(replacementFile);
+
+      expect(fileHashMocks.calculateFileHash).toHaveBeenCalledWith(replacementFile);
+      expect(patch).toMatchObject({
+        fileHash: 'hash-reloaded',
+        thumbnailUrl: undefined,
+        audioAnalysisRefs: undefined,
+        waveform: undefined,
+        waveformChannels: undefined,
+        waveformStatus: 'idle',
+        proxyStatus: undefined,
+        audioProxyStorageKey: undefined,
+      });
+    });
+
+    it('reloadFile stores the new hash and clears stale clip audio analysis refs', async () => {
+      const replacementFile = new File(['replacement'], 'clip.mp4', { type: 'video/mp4' });
+      const sourceFile = makeMediaFile({
+        id: 'media-reload',
+        name: 'clip.mp4',
+        file: undefined,
+        projectPath: 'Raw/clip.mp4',
+        fileHash: 'hash-old',
+        thumbnailUrl: 'blob:http://localhost/old-thumb',
+        audioAnalysisRefs: {
+          waveformPyramidId: 'media-old-waveform',
+          spectrogramTileSetIds: ['media-old-spectrogram'],
+        },
+        waveform: [0, 1],
+        waveformChannels: [[0, 1]],
+        waveformStatus: 'ready',
+        audioProxyStorageKey: 'hash-old',
+        proxyStatus: 'ready',
+      });
+
+      store.setState({ files: [sourceFile] });
+      vi.spyOn(useMediaStore, 'getState').mockImplementation(() => ({
+        files: store.getState().files,
+      } as unknown as ReturnType<typeof useMediaStore.getState>));
+      useTimelineStore.setState({
+        clips: [{
+          id: 'clip-reload',
+          trackId: 'video-1',
+          name: 'clip.mp4',
+          file: sourceFile.file as File,
+          startTime: 0,
+          duration: 9,
+          inPoint: 0,
+          outPoint: 9,
+          needsReload: true,
+          isLoading: true,
+          source: {
+            type: 'video',
+            mediaFileId: 'media-reload',
+            naturalDuration: 9,
+          },
+          audioState: {
+            muted: true,
+            sourceAnalysisRefs: { waveformPyramidId: 'clip-old-source-waveform' },
+            processedAnalysisRefs: { processedWaveformPyramidId: 'clip-old-processed-waveform' },
+          },
+          transform: {},
+          effects: [],
+        } as TimelineClip],
+      });
+      vi.spyOn(projectFileService, 'isProjectOpen').mockReturnValue(true);
+      vi.spyOn(projectFileService, 'getFileFromRaw').mockResolvedValue({ file: replacementFile });
+      vi.spyOn(projectDB, 'deleteSourceThumbnails').mockResolvedValue(undefined);
+      const generateForSourceUrl = vi.spyOn(thumbnailCacheService, 'generateForSourceUrl').mockResolvedValue(undefined);
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL')
+        .mockReturnValueOnce('blob:http://localhost/reloaded-media');
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const createElement = vi.spyOn(document, 'createElement');
+
+      const result = await store.getState().reloadFile('media-reload');
+      const updatedMedia = store.getState().files[0];
+      const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-reload');
+
+      expect(result).toBe(true);
+      expect(updatedMedia.file).toBe(replacementFile);
+      expect(updatedMedia.url).toBe('blob:http://localhost/reloaded-media');
+      expect(updatedMedia.fileHash).toBe('hash-reloaded');
+      expect(updatedMedia.thumbnailUrl).toBeUndefined();
+      expect(updatedMedia.audioAnalysisRefs).toBeUndefined();
+      expect(updatedMedia.waveform).toBeUndefined();
+      expect(updatedMedia.waveformChannels).toBeUndefined();
+      expect(updatedMedia.waveformStatus).toBe('idle');
+      expect(updatedMedia.audioProxyStorageKey).toBeUndefined();
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(createElement).not.toHaveBeenCalledWith('video');
+      expect(createElement).not.toHaveBeenCalledWith('audio');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/media-reload');
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/old-thumb');
+      expect(updatedClip?.needsReload).toBe(false);
+      expect(updatedClip?.file).toBe(replacementFile);
+      expect(updatedClip?.audioState?.muted).toBe(true);
+      expect(updatedClip?.audioState?.sourceAnalysisRefs).toBeUndefined();
+      expect(updatedClip?.audioState?.processedAnalysisRefs).toBeUndefined();
+      expect(updatedClip?.source).toEqual({
+        type: 'video',
+        naturalDuration: 9,
+        mediaFileId: 'media-reload',
+      });
+      expect((updatedClip?.source as { videoElement?: HTMLVideoElement } | undefined)?.videoElement).toBeUndefined();
+      expect(generateForSourceUrl).toHaveBeenCalledWith(
+        'media-reload',
+        'blob:http://localhost/reloaded-media',
+        9,
+        'hash-reloaded',
+      );
+    });
+
+    it('updateTimelineClips reloads audio clips without creating audio elements', async () => {
+      const replacementFile = new File(['replacement'], 'voice.wav', { type: 'audio/wav' });
+      const mediaFile = makeMediaFile({
+        id: 'media-audio-reload',
+        type: 'audio',
+        name: 'voice.wav',
+        file: replacementFile,
+        url: 'blob:http://localhost/audio-media',
+        duration: 13,
+      });
+      vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+        files: [mediaFile],
+      } as unknown as ReturnType<typeof useMediaStore.getState>);
+      const createElement = vi.spyOn(document, 'createElement');
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/unexpected-audio');
+      useTimelineStore.setState({
+        clips: [{
+          id: 'clip-audio-reload',
+          trackId: 'audio-1',
+          name: 'voice.wav',
+          file: undefined,
+          startTime: 0,
+          duration: 13,
+          inPoint: 0,
+          outPoint: 13,
+          needsReload: true,
+          isLoading: true,
+          source: {
+            type: 'audio',
+            mediaFileId: 'media-audio-reload',
+          },
+          transform: {},
+          effects: [],
+        } as TimelineClip],
+      });
+
+      await updateTimelineClips('media-audio-reload', replacementFile, { invalidateCaches: false });
+
+      const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-audio-reload');
+      expect(createElement).not.toHaveBeenCalledWith('audio');
+      expect(createElement).not.toHaveBeenCalledWith('video');
+      expect(createObjectURL).not.toHaveBeenCalled();
+      expect(updatedClip?.needsReload).toBe(false);
+      expect(updatedClip?.isLoading).toBe(false);
+      expect(updatedClip?.file).toBe(replacementFile);
+      expect(updatedClip?.source).toEqual({
+        type: 'audio',
+        naturalDuration: 13,
+        mediaFileId: 'media-audio-reload',
+      });
+      expect((updatedClip?.source as { audioElement?: HTMLAudioElement } | undefined)?.audioElement).toBeUndefined();
+    });
+
+    it('reloads vector animation clips without preparing runtime canvases', async () => {
+      const lottieJson = JSON.stringify({
+        v: '5.7.0',
+        fr: 30,
+        ip: 0,
+        op: 180,
+        w: 1920,
+        h: 1080,
+        layers: [],
+      });
+      const lottieFile = new File([lottieJson], 'anim.json', { type: 'application/json' });
+      Object.defineProperty(lottieFile, 'text', {
+        value: vi.fn().mockResolvedValue(lottieJson),
+        configurable: true,
+      });
+      const mediaFile = makeMediaFile({
+        id: 'media-lottie-reload',
+        type: 'lottie',
+        name: 'anim.json',
+        file: lottieFile,
+        duration: 6,
+      });
+      vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+        files: [mediaFile],
+      } as unknown as ReturnType<typeof useMediaStore.getState>);
+      const prepareClipSource = vi.spyOn(vectorAnimationRuntimeManager, 'prepareClipSource');
+      useTimelineStore.setState({
+        clips: [{
+          id: 'clip-lottie-reload',
+          trackId: 'video-1',
+          name: 'anim.json',
+          file: undefined,
+          startTime: 0,
+          duration: 6,
+          inPoint: 0,
+          outPoint: 6,
+          needsReload: true,
+          isLoading: true,
+          source: {
+            type: 'lottie',
+            mediaFileId: 'media-lottie-reload',
+            naturalDuration: 6,
+          },
+          transform: {},
+          effects: [],
+        } as TimelineClip],
+      });
+
+      await updateTimelineClips('media-lottie-reload', lottieFile, { invalidateCaches: false });
+
+      const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-lottie-reload');
+      expect(prepareClipSource).not.toHaveBeenCalled();
+      expect(updatedClip?.needsReload).toBe(false);
+      expect(updatedClip?.isLoading).toBe(false);
+      expect(updatedClip?.file).toBe(lottieFile);
+      expect(updatedClip?.source).toEqual(expect.objectContaining({
+        type: 'lottie',
+        mediaFileId: 'media-lottie-reload',
+        naturalDuration: 6,
+      }));
+      expect(updatedClip?.source).not.toHaveProperty('textCanvas');
+    });
+
+    it('uses media-owned model sequence frame urls when reloading model clips', async () => {
+      const frameFile = new File(['model-0'], 'hero000000.glb', { type: 'model/gltf-binary' });
+      const mediaFile = makeMediaFile({
+        id: 'media-model-seq',
+        name: 'hero (2f)',
+        type: 'model',
+        file: frameFile,
+        url: 'blob:http://localhost/model-frame-0',
+        modelSequence: {
+          fps: 30,
+          frameCount: 2,
+          playbackMode: 'clamp',
+          sequenceName: 'hero',
+          frames: [
+            { name: 'hero000000.glb', file: frameFile, modelUrl: 'blob:http://localhost/model-frame-0' },
+            { name: 'hero000001.glb', modelUrl: 'blob:http://localhost/model-frame-1' },
+          ],
+        },
+      });
+      vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+        files: [mediaFile],
+      } as unknown as ReturnType<typeof useMediaStore.getState>);
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/unexpected-model');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      useTimelineStore.setState({
+        clips: [{
+          id: 'clip-model-seq',
+          trackId: 'video-1',
+          name: 'hero',
+          file: undefined,
+          startTime: 0,
+          duration: 1,
+          inPoint: 0,
+          outPoint: 1,
+          needsReload: true,
+          isLoading: true,
+          source: {
+            type: 'model',
+            mediaFileId: 'media-model-seq',
+          },
+          transform: {},
+          effects: [],
+        } as TimelineClip],
+      });
+
+      await updateTimelineClips('media-model-seq', frameFile, {
+        generateThumbnails: false,
+        invalidateCaches: false,
+      });
+
+      const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-model-seq');
+      const modelSource = updatedClip?.source as (TimelineClip['source'] & {
+        modelSequence?: { frames: Array<{ modelUrl?: string }> };
+      }) | undefined;
+      expect(updatedClip?.needsReload).toBe(false);
+      expect(updatedClip?.isLoading).toBe(false);
+      expect(updatedClip?.source).toEqual(expect.objectContaining({
+        type: 'model',
+        mediaFileId: 'media-model-seq',
+        modelUrl: 'blob:http://localhost/model-frame-0',
+        modelSequence: expect.objectContaining({ frameCount: 2 }),
+      }));
+      expect(modelSource?.modelSequence?.frames[0]?.modelUrl).toBe('blob:http://localhost/model-frame-0');
+      expect(blobUrlManager.get('clip-model-seq', 'model')).toBeUndefined();
+      expect(createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it('uses the media-owned primary url when reloading single model clips', async () => {
+      const modelFile = new File(['model'], 'hero.glb', { type: 'model/gltf-binary' });
+      const mediaFile = makeMediaFile({
+        id: 'media-model-single',
+        name: 'hero.glb',
+        type: 'model',
+        file: modelFile,
+        url: 'blob:http://localhost/model-primary',
+      });
+      vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+        files: [mediaFile],
+      } as unknown as ReturnType<typeof useMediaStore.getState>);
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/unexpected-model');
+      useTimelineStore.setState({
+        clips: [{
+          id: 'clip-model-single',
+          trackId: 'video-1',
+          name: 'hero.glb',
+          file: undefined,
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          needsReload: true,
+          isLoading: true,
+          source: {
+            type: 'model',
+            mediaFileId: 'media-model-single',
+          },
+          transform: {},
+          effects: [],
+        } as TimelineClip],
+      });
+
+      await updateTimelineClips('media-model-single', modelFile, {
+        generateThumbnails: false,
+        invalidateCaches: false,
+      });
+
+      const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-model-single');
+      expect(updatedClip?.needsReload).toBe(false);
+      expect(updatedClip?.isLoading).toBe(false);
+      expect(updatedClip?.source).toEqual(expect.objectContaining({
+        type: 'model',
+        mediaFileId: 'media-model-single',
+        modelUrl: 'blob:http://localhost/model-primary',
+      }));
+      expect(blobUrlManager.get('clip-model-single', 'model')).toBeUndefined();
+      expect(createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it('uses media-owned gaussian splat sequence frame urls when reloading gaussian clips', async () => {
+      const frameFile = new File(['splat-0'], 'scan000000.ply', { type: 'application/octet-stream' });
+      const mediaFile = makeMediaFile({
+        id: 'media-splat-seq',
+        name: 'scan (2f)',
+        type: 'gaussian-splat',
+        file: frameFile,
+        url: 'blob:http://localhost/splat-frame-0',
+        fileHash: 'hash-splat',
+        gaussianSplatSequence: {
+          fps: 30,
+          frameCount: 2,
+          playbackMode: 'clamp',
+          sequenceName: 'scan',
+          frames: [
+            {
+              name: 'scan000000.ply',
+              file: frameFile,
+              splatUrl: 'blob:http://localhost/splat-frame-0',
+              projectPath: 'Raw/scan000000.ply',
+            },
+            {
+              name: 'scan000001.ply',
+              splatUrl: 'blob:http://localhost/splat-frame-1',
+              projectPath: 'Raw/scan000001.ply',
+            },
+          ],
+        },
+      });
+      vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+        files: [mediaFile],
+      } as unknown as ReturnType<typeof useMediaStore.getState>);
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/unexpected-splat');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      useTimelineStore.setState({
+        clips: [{
+          id: 'clip-splat-seq',
+          trackId: 'video-1',
+          name: 'scan',
+          file: undefined,
+          startTime: 0,
+          duration: 1,
+          inPoint: 0,
+          outPoint: 1,
+          needsReload: true,
+          isLoading: true,
+          source: {
+            type: 'gaussian-splat',
+            mediaFileId: 'media-splat-seq',
+          },
+          transform: {},
+          effects: [],
+        } as TimelineClip],
+      });
+
+      await updateTimelineClips('media-splat-seq', frameFile, {
+        generateThumbnails: false,
+        invalidateCaches: false,
+      });
+
+      const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-splat-seq');
+      const splatSource = updatedClip?.source as (TimelineClip['source'] & {
+        gaussianSplatFileHash?: string;
+        gaussianSplatSequence?: { frames: Array<{ splatUrl?: string }> };
+      }) | undefined;
+      expect(updatedClip?.needsReload).toBe(false);
+      expect(updatedClip?.isLoading).toBe(false);
+      expect(updatedClip?.source).toEqual(expect.objectContaining({
+        type: 'gaussian-splat',
+        mediaFileId: 'media-splat-seq',
+        gaussianSplatUrl: 'blob:http://localhost/splat-frame-0',
+        gaussianSplatFileName: 'scan000000.ply',
+        gaussianSplatRuntimeKey: 'Raw/scan000000.ply',
+        gaussianSplatSequence: expect.objectContaining({ frameCount: 2 }),
+      }));
+      expect(splatSource?.gaussianSplatFileHash).toBeUndefined();
+      expect(splatSource?.gaussianSplatSequence?.frames[0]?.splatUrl).toBe('blob:http://localhost/splat-frame-0');
+      expect(blobUrlManager.get('clip-splat-seq', 'file')).toBeUndefined();
+      expect(createObjectURL).not.toHaveBeenCalled();
+    });
+
+    it('uses the model blob key when reloading legacy gaussian avatar clips', async () => {
+      const avatarFile = new File(['avatar'], 'avatar.zip', { type: 'application/zip' });
+      const mediaFile = makeMediaFile({
+        id: 'media-avatar',
+        name: 'avatar.zip',
+        type: 'gaussian-avatar',
+        file: avatarFile,
+        url: '',
+      });
+      vi.spyOn(useMediaStore, 'getState').mockReturnValue({
+        files: [mediaFile],
+      } as unknown as ReturnType<typeof useMediaStore.getState>);
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/avatar-reload');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      useTimelineStore.setState({
+        clips: [{
+          id: 'clip-avatar',
+          trackId: 'video-1',
+          name: 'avatar.zip',
+          file: undefined,
+          startTime: 0,
+          duration: 1,
+          inPoint: 0,
+          outPoint: 1,
+          needsReload: true,
+          isLoading: true,
+          source: {
+            type: 'gaussian-avatar',
+            mediaFileId: 'media-avatar',
+            gaussianBlendshapes: {
+              jawOpen: 0.5,
+            },
+          },
+          transform: {},
+          effects: [],
+        } as TimelineClip],
+      });
+
+      await updateTimelineClips('media-avatar', avatarFile, {
+        generateThumbnails: false,
+        invalidateCaches: false,
+      });
+
+      const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-avatar');
+      expect(updatedClip?.needsReload).toBe(false);
+      expect(updatedClip?.isLoading).toBe(false);
+      expect(updatedClip?.source).toEqual(expect.objectContaining({
+        type: 'gaussian-avatar',
+        mediaFileId: 'media-avatar',
+        gaussianAvatarUrl: 'blob:http://localhost/avatar-reload',
+        gaussianBlendshapes: {
+          jawOpen: 0.5,
+        },
+      }));
+      expect(blobUrlManager.get('clip-avatar', 'model')).toBe('blob:http://localhost/avatar-reload');
+      expect(blobUrlManager.get('clip-avatar', 'file')).toBeUndefined();
+      expect(createObjectURL).toHaveBeenCalledWith(avatarFile);
     });
   });
 

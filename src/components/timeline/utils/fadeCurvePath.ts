@@ -20,7 +20,19 @@ export interface FadeCurvePath {
   points: FadeCurvePoint[];
 }
 
-export function buildFadeCurvePath({
+export interface FadeCurveSegment {
+  cp1: FadeCurvePoint;
+  cp2: FadeCurvePoint;
+  end: FadeCurvePoint;
+}
+
+export interface FadeCurveGeometry {
+  startPoint: FadeCurvePoint;
+  segments: FadeCurveSegment[];
+  points: FadeCurvePoint[];
+}
+
+export function buildFadeCurveGeometry({
   keyframes,
   clipDuration,
   width,
@@ -30,7 +42,7 @@ export function buildFadeCurvePath({
   clipDuration: number;
   width: number;
   height: number;
-}): FadeCurvePath | null {
+}): FadeCurveGeometry | null {
   if (keyframes.length < 2 || width <= 0 || height <= 0 || clipDuration <= 0) {
     return null;
   }
@@ -38,7 +50,7 @@ export function buildFadeCurvePath({
   const sorted = [...keyframes].sort((a, b) => a.time - b.time);
   const timeToX = (time: number) => (time / clipDuration) * width;
   const valueToY = (value: number) => height - value * height;
-  const pathSegments: string[] = [];
+  const segments: FadeCurveSegment[] = [];
   const points: FadeCurvePoint[] = [];
 
   const firstKeyframe = sorted[0];
@@ -47,7 +59,6 @@ export function buildFadeCurvePath({
     y: valueToY(firstKeyframe.value),
   };
   points.push(firstPoint);
-  pathSegments.push(`M ${firstPoint.x} ${firstPoint.y}`);
 
   for (let index = 0; index < sorted.length - 1; index += 1) {
     const current = sorted[index];
@@ -100,13 +111,41 @@ export function buildFadeCurvePath({
       }
     }
 
-    pathSegments.push(`C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`);
-    points.push({ x: x2, y: y2 });
+    const end = { x: x2, y: y2 };
+    segments.push({
+      cp1: { x: cp1x, y: cp1y },
+      cp2: { x: cp2x, y: cp2y },
+      end,
+    });
+    points.push(end);
   }
 
-  const curvePath = pathSegments.join(' ');
-  const lastPoint = points[points.length - 1];
-  const fillPath = `${curvePath} L ${lastPoint.x} ${height} L ${firstPoint.x} ${height} Z`;
+  return { startPoint: firstPoint, segments, points };
+}
 
-  return { curvePath, fillPath, points };
+export function buildFadeCurvePath({
+  keyframes,
+  clipDuration,
+  width,
+  height,
+}: {
+  keyframes: readonly FadeCurveKeyframe[];
+  clipDuration: number;
+  width: number;
+  height: number;
+}): FadeCurvePath | null {
+  const geometry = buildFadeCurveGeometry({ keyframes, clipDuration, width, height });
+  if (!geometry) return null;
+
+  const pathSegments = [
+    `M ${geometry.startPoint.x} ${geometry.startPoint.y}`,
+    ...geometry.segments.map((segment) => (
+      `C ${segment.cp1.x} ${segment.cp1.y}, ${segment.cp2.x} ${segment.cp2.y}, ${segment.end.x} ${segment.end.y}`
+    )),
+  ];
+  const curvePath = pathSegments.join(' ');
+  const lastPoint = geometry.points[geometry.points.length - 1];
+  const fillPath = `${curvePath} L ${lastPoint.x} ${height} L ${geometry.startPoint.x} ${height} Z`;
+
+  return { curvePath, fillPath, points: geometry.points };
 }

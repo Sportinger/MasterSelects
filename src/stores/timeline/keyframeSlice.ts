@@ -1,7 +1,15 @@
 // Keyframe-related actions slice
 
-import type { KeyframeActions, SliceCreator, Keyframe, AnimatableProperty, ClipTransform } from './types';
+import type {
+  KeyframeActions,
+  SliceCreator,
+  Keyframe,
+  AnimatableProperty,
+  ClipTransform,
+} from './types';
+import type { TimelineEditOperationSource } from './editOperations/types';
 import type { Effect, TimelineClip, TimelineTrack, ClipMask, ClipCustomNodeParamValue, MaskPathKeyframeValue, TextBoundsPath } from '../../types';
+import { endBatch, startBatch } from '../historyStore';
 import { engine } from '../../engine/WebGPUEngine';
 import { parseCameraProperty } from '../../types';
 import { useMediaStore } from '../mediaStore';
@@ -80,6 +88,12 @@ import {
 } from '../../utils/colorParam';
 
 type MaskPathVertex = MaskPathKeyframeValue['vertices'][number];
+
+type PathKeyframeWriteOptions = {
+  phase?: 'update' | 'commit';
+  source?: TimelineEditOperationSource;
+  historyLabel?: string;
+};
 
 function findClipById(clips: TimelineClip[], clipId: string): TimelineClip | undefined {
   for (const clip of clips) {
@@ -526,6 +540,10 @@ function applyMaskPathValue(mask: ClipMask, value: MaskPathKeyframeValue): ClipM
   };
 }
 
+function createPathKeyframeTransactionId(prefix: string, clipId: string, property: AnimatableProperty): string {
+  return `${prefix}-${clipId}-${property}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 function getClipTextBounds(clip: TimelineClip): TextBoundsPath | undefined {
   if (!clip.textProperties) return undefined;
   const canvas = clip.source?.textCanvas;
@@ -907,8 +925,8 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     engine.requestRender();
   },
 
-  addMaskPathKeyframe: (clipId, maskId, providedPathValue, time, easing = 'linear') => {
-    const { clips, playheadPosition, clipKeyframes, invalidateCache } = get();
+  addMaskPathKeyframe: (clipId, maskId, providedPathValue, time, easing = 'linear', options?: PathKeyframeWriteOptions) => {
+    const { clips, playheadPosition } = get();
     const clip = findClipById(clips, clipId);
     const mask = clip?.masks?.find(candidate => candidate.id === maskId);
     if (!clip || !mask) return;
@@ -917,33 +935,54 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const normalizedEasing = normalizeEasingType(easing, 'linear');
     const clipLocalTime = time ?? (playheadPosition - clip.startTime);
     const clampedTime = Math.max(0, Math.min(clipLocalTime, clip.duration));
-    const existingKeyframes = clipKeyframes.get(clipId) || [];
-    const existingAtTime = getKeyframeAtTime(existingKeyframes, property, clampedTime);
     const pathValue = providedPathValue ? cloneMaskPathValue(providedPathValue) : getMaskPathValue(mask);
+    const phase = options?.phase ?? 'commit';
+    const source = options?.source ?? 'ui';
+    const transactionId = createPathKeyframeTransactionId('mask-path-keyframe', clipId, property);
+    const operation = {
+      type: 'keyframe-create' as const,
+      clipId,
+      property,
+      time: clampedTime,
+      value: { pathValue },
+      easing: normalizedEasing,
+    };
 
-    const newKeyframes = existingAtTime
-      ? existingKeyframes.map(keyframe =>
-          keyframe.id === existingAtTime.id
-            ? { ...keyframe, value: 0, pathValue, easing: normalizedEasing }
-            : keyframe
-        )
-      : [
-          ...existingKeyframes,
-          {
-            id: `kf_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            clipId,
-            time: clampedTime,
-            property,
-            value: 0,
-            pathValue,
-            easing: normalizedEasing,
-          },
-        ].sort((a, b) => a.time - b.time);
+    if (phase === 'update') {
+      get().applyTimelineEditOperation({
+        id: `${transactionId}-update`,
+        type: 'keyframe-transaction-update',
+        phase: 'update',
+        transactionId,
+        historyBatchId: transactionId,
+        source,
+        clipId,
+        property,
+        keyframeIds: [],
+        operations: [operation],
+      }, {
+        source,
+        historyLabel: options?.historyLabel ?? 'Edit mask path keyframe',
+        deferHistoryCommit: true,
+      });
+      return;
+    }
 
-    const newMap = new Map(clipKeyframes);
-    newMap.set(clipId, newKeyframes);
-    set({ clipKeyframes: newMap });
-    invalidateCache();
+    get().applyTimelineEditOperation({
+      id: `${transactionId}-commit`,
+      type: 'keyframe-transaction-commit',
+      phase: 'commit',
+      transactionId,
+      historyBatchId: transactionId,
+      source,
+      clipId,
+      property,
+      keyframeIds: [],
+      operations: [operation],
+    }, {
+      source,
+      historyLabel: options?.historyLabel ?? 'Add mask path keyframe',
+    });
   },
 
   recordMaskPathKeyframe: (clipId, maskId) => {
@@ -956,37 +995,63 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   disableMaskPathKeyframes: (clipId, maskId, pathValue) => {
     const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache } = get();
     const property = createMaskPathProperty(maskId);
-    if (pathValue) {
-      set({
-        clips: clips.map(clip => {
-          if (clip.id !== clipId) return clip;
-          return {
-            ...clip,
-            masks: (clip.masks || []).map(mask =>
-              mask.id === maskId ? applyMaskPathValue(mask, pathValue) : mask
-            ),
-          };
-        }),
-      });
-    }
-
     const existingKeyframes = clipKeyframes.get(clipId) || [];
-    const filtered = existingKeyframes.filter(keyframe => keyframe.property !== property);
-    const newMap = new Map(clipKeyframes);
-    if (filtered.length > 0) {
-      newMap.set(clipId, filtered);
-    } else {
-      newMap.delete(clipId);
-    }
+    const removedKeyframes = existingKeyframes.filter(keyframe => keyframe.property === property);
 
     const newRecording = new Set(keyframeRecordingEnabled);
     newRecording.delete(`${clipId}:${property}`);
-    set({ clipKeyframes: newMap, keyframeRecordingEnabled: newRecording });
-    invalidateCache();
+
+    startBatch('Disable mask path keyframes');
+    try {
+      if (pathValue) {
+        set({
+          clips: clips.map(clip => {
+            if (clip.id !== clipId) return clip;
+            return {
+              ...clip,
+              masks: (clip.masks || []).map(mask =>
+                mask.id === maskId ? applyMaskPathValue(mask, pathValue) : mask
+              ),
+            };
+          }),
+        });
+      }
+
+      set({ keyframeRecordingEnabled: newRecording });
+
+      if (removedKeyframes.length > 0) {
+        const transactionId = createPathKeyframeTransactionId('disable-mask-path-keyframes', clipId, property);
+        get().applyTimelineEditOperation({
+          id: `${transactionId}-update`,
+          type: 'keyframe-transaction-update',
+          phase: 'update',
+          transactionId,
+          historyBatchId: transactionId,
+          source: 'ui',
+          clipId,
+          property,
+          keyframeIds: removedKeyframes.map(keyframe => keyframe.id),
+          operations: removedKeyframes.map(keyframe => ({
+            type: 'keyframe-remove' as const,
+            keyframeId: keyframe.id,
+            clipId,
+            property,
+          })),
+        }, {
+          source: 'ui',
+          historyLabel: 'Disable mask path keyframes',
+          deferHistoryCommit: true,
+        });
+      } else {
+        invalidateCache();
+      }
+    } finally {
+      endBatch();
+    }
   },
 
-  addTextBoundsPathKeyframe: (clipId, providedPathValue, time, easing = 'linear') => {
-    const { clips, playheadPosition, clipKeyframes, invalidateCache } = get();
+  addTextBoundsPathKeyframe: (clipId, providedPathValue, time, easing = 'linear', options?: PathKeyframeWriteOptions) => {
+    const { clips, playheadPosition } = get();
     const clip = findClipById(clips, clipId);
     const textBounds = clip ? getClipTextBounds(clip) : undefined;
     if (!clip || !textBounds) return;
@@ -995,33 +1060,54 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
     const normalizedEasing = normalizeEasingType(easing, 'linear');
     const clipLocalTime = time ?? (playheadPosition - clip.startTime);
     const clampedTime = Math.max(0, Math.min(clipLocalTime, clip.duration));
-    const existingKeyframes = clipKeyframes.get(clipId) || [];
-    const existingAtTime = getKeyframeAtTime(existingKeyframes, property, clampedTime);
     const pathValue = providedPathValue ? cloneMaskPathValue(providedPathValue) : getTextBoundsPathValue(textBounds);
+    const phase = options?.phase ?? 'commit';
+    const source = options?.source ?? 'ui';
+    const transactionId = createPathKeyframeTransactionId('text-bounds-path-keyframe', clipId, property);
+    const operation = {
+      type: 'keyframe-create' as const,
+      clipId,
+      property,
+      time: clampedTime,
+      value: { pathValue },
+      easing: normalizedEasing,
+    };
 
-    const newKeyframes = existingAtTime
-      ? existingKeyframes.map(keyframe =>
-          keyframe.id === existingAtTime.id
-            ? { ...keyframe, value: 0, pathValue, easing: normalizedEasing }
-            : keyframe
-        )
-      : [
-          ...existingKeyframes,
-          {
-            id: `kf_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            clipId,
-            time: clampedTime,
-            property,
-            value: 0,
-            pathValue,
-            easing: normalizedEasing,
-          },
-        ].sort((a, b) => a.time - b.time);
+    if (phase === 'update') {
+      get().applyTimelineEditOperation({
+        id: `${transactionId}-update`,
+        type: 'keyframe-transaction-update',
+        phase: 'update',
+        transactionId,
+        historyBatchId: transactionId,
+        source,
+        clipId,
+        property,
+        keyframeIds: [],
+        operations: [operation],
+      }, {
+        source,
+        historyLabel: options?.historyLabel ?? 'Edit text bounds path keyframe',
+        deferHistoryCommit: true,
+      });
+      return;
+    }
 
-    const newMap = new Map(clipKeyframes);
-    newMap.set(clipId, newKeyframes);
-    set({ clipKeyframes: newMap });
-    invalidateCache();
+    get().applyTimelineEditOperation({
+      id: `${transactionId}-commit`,
+      type: 'keyframe-transaction-commit',
+      phase: 'commit',
+      transactionId,
+      historyBatchId: transactionId,
+      source,
+      clipId,
+      property,
+      keyframeIds: [],
+      operations: [operation],
+    }, {
+      source,
+      historyLabel: options?.historyLabel ?? 'Add text bounds path keyframe',
+    });
   },
 
   recordTextBoundsPathKeyframe: (clipId) => {
@@ -1034,37 +1120,63 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
   disableTextBoundsPathKeyframes: (clipId, pathValue) => {
     const { clips, clipKeyframes, keyframeRecordingEnabled, invalidateCache } = get();
     const property = createTextBoundsPathProperty();
-    if (pathValue) {
-      set({
-        clips: clips.map(clip => {
-          if (clip.id !== clipId || !clip.textProperties) return clip;
-          const textBounds = getClipTextBounds(clip);
-          if (!textBounds) return clip;
-          return {
-            ...clip,
-            textProperties: {
-              ...clip.textProperties,
-              boxEnabled: true,
-              textBounds: applyTextBoundsPathValue(textBounds, pathValue),
-            },
-          };
-        }),
-      });
-    }
-
     const existingKeyframes = clipKeyframes.get(clipId) || [];
-    const filtered = existingKeyframes.filter(keyframe => keyframe.property !== property);
-    const newMap = new Map(clipKeyframes);
-    if (filtered.length > 0) {
-      newMap.set(clipId, filtered);
-    } else {
-      newMap.delete(clipId);
-    }
+    const removedKeyframes = existingKeyframes.filter(keyframe => keyframe.property === property);
 
     const newRecording = new Set(keyframeRecordingEnabled);
     newRecording.delete(`${clipId}:${property}`);
-    set({ clipKeyframes: newMap, keyframeRecordingEnabled: newRecording });
-    invalidateCache();
+
+    startBatch('Disable text bounds path keyframes');
+    try {
+      if (pathValue) {
+        set({
+          clips: clips.map(clip => {
+            if (clip.id !== clipId || !clip.textProperties) return clip;
+            const textBounds = getClipTextBounds(clip);
+            if (!textBounds) return clip;
+            return {
+              ...clip,
+              textProperties: {
+                ...clip.textProperties,
+                boxEnabled: true,
+                textBounds: applyTextBoundsPathValue(textBounds, pathValue),
+              },
+            };
+          }),
+        });
+      }
+
+      set({ keyframeRecordingEnabled: newRecording });
+
+      if (removedKeyframes.length > 0) {
+        const transactionId = createPathKeyframeTransactionId('disable-text-bounds-path-keyframes', clipId, property);
+        get().applyTimelineEditOperation({
+          id: `${transactionId}-update`,
+          type: 'keyframe-transaction-update',
+          phase: 'update',
+          transactionId,
+          historyBatchId: transactionId,
+          source: 'ui',
+          clipId,
+          property,
+          keyframeIds: removedKeyframes.map(keyframe => keyframe.id),
+          operations: removedKeyframes.map(keyframe => ({
+            type: 'keyframe-remove' as const,
+            keyframeId: keyframe.id,
+            clipId,
+            property,
+          })),
+        }, {
+          source: 'ui',
+          historyLabel: 'Disable text bounds path keyframes',
+          deferHistoryCommit: true,
+        });
+      } else {
+        invalidateCache();
+      }
+    } finally {
+      endBatch();
+    }
   },
 
   removeKeyframe: (keyframeId) => {

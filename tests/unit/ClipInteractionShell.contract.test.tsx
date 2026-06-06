@@ -342,10 +342,19 @@ describe('ClipInteractionShell contract', () => {
     fireEvent.mouseMove(document, { clientX: 80 });
     fireEvent.mouseUp(document);
 
-    expect(onMoveKeyframeGroup).toHaveBeenCalledTimes(1);
+    expect(onMoveKeyframeGroup).toHaveBeenCalledTimes(3);
     expect(onMoveKeyframeGroup.mock.calls[0][0]).toEqual(['kf-a']);
-    expect(onMoveKeyframeGroup.mock.calls[0][1]).toBeCloseTo(2);
+    expect(onMoveKeyframeGroup.mock.calls[0][1]).toBeCloseTo(1);
     expect(onMoveKeyframeGroup.mock.calls[0][2].clip.id).toBe('clip-a');
+    expect(onMoveKeyframeGroup.mock.calls[0][3]).toBe('begin');
+    expect(onMoveKeyframeGroup.mock.calls[1][0]).toEqual(['kf-a']);
+    expect(onMoveKeyframeGroup.mock.calls[1][1]).toBeCloseTo(2);
+    expect(onMoveKeyframeGroup.mock.calls[1][2].clip.id).toBe('clip-a');
+    expect(onMoveKeyframeGroup.mock.calls[1][3]).toBe('update');
+    expect(onMoveKeyframeGroup.mock.calls[2][0]).toEqual(['kf-a']);
+    expect(onMoveKeyframeGroup.mock.calls[2][1]).toBeCloseTo(2);
+    expect(onMoveKeyframeGroup.mock.calls[2][2].clip.id).toBe('clip-a');
+    expect(onMoveKeyframeGroup.mock.calls[2][3]).toBe('commit');
   });
 
   it('renders active audio-region visuals through the shell module', () => {

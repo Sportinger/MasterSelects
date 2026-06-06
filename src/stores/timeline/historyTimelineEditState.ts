@@ -12,6 +12,7 @@ import type {
   SerializableClip,
   TimelineClip,
   TimelineTrack,
+  TrackAudioState,
 } from '../../types';
 import type { TimelineMarker } from './types';
 
@@ -332,6 +333,93 @@ function cloneOptionalPlainData<T>(value: T | undefined): T | undefined {
   return value === undefined ? undefined : cloneHistoryPlainData(value);
 }
 
+function isAudioBinaryPayload(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return true;
+  if (typeof AudioBuffer !== 'undefined' && value instanceof AudioBuffer) return true;
+  return false;
+}
+
+function isAudioPayloadKey(key: string): boolean {
+  const normalized = key.replace(/[_-]/g, '').toLowerCase();
+
+  if (
+    normalized === 'payloadrefs' ||
+    normalized.endsWith('ref') ||
+    normalized.endsWith('refs') ||
+    normalized.endsWith('id') ||
+    normalized.endsWith('ids')
+  ) {
+    return false;
+  }
+
+  return (
+    normalized === 'payload' ||
+    normalized === 'bytes' ||
+    normalized === 'buffer' ||
+    normalized === 'blob' ||
+    normalized === 'file' ||
+    normalized === 'waveform' ||
+    normalized === 'samples' ||
+    normalized === 'sampledata' ||
+    normalized === 'audiobuffer' ||
+    normalized === 'arraybuffer' ||
+    normalized.endsWith('samples') ||
+    normalized.endsWith('bytes') ||
+    normalized.endsWith('buffer') ||
+    normalized.includes('channeldata') ||
+    normalized.includes('rawaudio') ||
+    normalized.includes('audiodata') ||
+    normalized.includes('pcm') ||
+    normalized.includes('fftdata') ||
+    normalized.includes('waveformdata') ||
+    normalized.includes('spectrogramdata') ||
+    normalized.includes('tilebytes')
+  );
+}
+
+function cloneJsonSafeAudioValue<T>(value: T, seen?: WeakSet<object>): T | undefined {
+  if (value === null) return value;
+  if (typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'object') return undefined;
+  if (isAudioBinaryPayload(value)) return undefined;
+
+  if (!seen) seen = new WeakSet<object>();
+  if (seen.has(value as object)) return undefined;
+  seen.add(value as object);
+
+  if (Array.isArray(value)) {
+    const clonedArray: unknown[] = [];
+    for (const item of value) {
+      const clonedItem = cloneJsonSafeAudioValue(item, seen);
+      if (clonedItem !== undefined) {
+        clonedArray.push(clonedItem);
+      }
+    }
+    return clonedArray as T;
+  }
+
+  if (!isPlainObject(value)) return undefined;
+
+  const cloned: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (isAudioPayloadKey(key)) continue;
+    const clonedValue = cloneJsonSafeAudioValue(nestedValue, seen);
+    if (clonedValue !== undefined) {
+      cloned[key] = clonedValue;
+    }
+  }
+
+  return cloned as T;
+}
+
+function cloneAudioPlainData<T>(value: T | undefined): T | undefined {
+  if (value === undefined) return undefined;
+  const cloned = cloneJsonSafeAudioValue(value);
+  return cloned === undefined ? undefined : cloneHistoryPlainData(cloned);
+}
+
 function readKeyframes(
   keyframes: CreateHistoryTimelineEditStateInput['clipKeyframes'],
   clipId: string,
@@ -355,7 +443,7 @@ export function toHistoryTimelineTrackEditState(track: TimelineTrack): HistoryTi
     solo: track.solo,
     locked: track.locked,
     parentTrackId: track.parentTrackId,
-    audioState: track.audioState,
+    audioState: cloneAudioPlainData<TrackAudioState>(track.audioState),
     midiInstrument: track.midiInstrument,
   });
 }
@@ -386,7 +474,7 @@ export function toHistoryTimelineClipEditState(
     parentClipId: clip.parentClipId,
     naturalDuration: clip.source?.naturalDuration,
     videoState: cloneOptionalPlainData(clip.videoState),
-    audioState: cloneOptionalPlainData(clip.audioState),
+    audioState: cloneAudioPlainData<ClipAudioState>(clip.audioState),
     transform: clip.transform,
     effects: clip.effects,
     colorCorrection: clip.colorCorrection,
@@ -455,7 +543,7 @@ export function createHistoryTimelineEditState(
         ? Object.fromEntries(input.clipKeyframes)
         : input.clipKeyframes ?? {}),
       markers: cloneHistoryPlainData(input.markers ?? []),
-      masterAudioState: cloneOptionalPlainData(input.masterAudioState),
+      masterAudioState: cloneAudioPlainData<MasterAudioState>(input.masterAudioState),
     },
   };
 

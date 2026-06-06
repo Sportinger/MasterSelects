@@ -3,6 +3,7 @@ import { flags } from '../../src/engine/featureFlags';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { slotDeckManager } from '../../src/services/slotDeckManager';
 import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import type { Composition, SlotDeckState } from '../../src/stores/mediaStore/types';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
 
@@ -11,6 +12,16 @@ vi.mock('../../src/services/mediaRuntime/clipBindings', () => ({
     ...source,
     runtimeSourceId: `runtime:${ownerId}`,
     runtimeSessionKey: `session:${ownerId}`,
+  })),
+  planSourceRuntimeBindingForOwner: vi.fn(({ ownerId, source }) => ({
+    source: {
+      ...source,
+      runtimeSourceId: `runtime:${ownerId}`,
+      runtimeSessionKey: `session:${ownerId}`,
+    },
+    runtimeSourceId: `runtime:${ownerId}`,
+    runtimeSessionKey: `session:${ownerId}`,
+    mediaFileId: source.mediaFileId,
   })),
 }));
 
@@ -78,10 +89,14 @@ function createComposition(
 describe('slotDeckManager', () => {
   let mediaState: MockMediaState;
   let createElementSpy: ReturnType<typeof vi.spyOn> | null = null;
+  const noop = () => undefined;
 
   beforeEach(() => {
     flags.useWarmSlotDecks = true;
     slotDeckManager.disposeAll();
+    timelineRuntimeCoordinator.clearResources();
+    vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(noop);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(noop);
 
     mediaState = {
       files: [],
@@ -105,7 +120,9 @@ describe('slotDeckManager', () => {
     createElementSpy?.mockRestore();
     createElementSpy = null;
     slotDeckManager.disposeAll();
+    timelineRuntimeCoordinator.clearResources();
     flags.useWarmSlotDecks = false;
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -200,6 +217,15 @@ describe('slotDeckManager', () => {
       runtimeSourceId: 'runtime:slot-deck:0:clip-1',
       runtimeSessionKey: 'session:slot-deck:0:clip-1',
     });
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies['slot-deck']).toMatchObject({
+      budgetReport: {
+        usage: {
+          resources: 2,
+          sessions: 1,
+          htmlMediaElements: 1,
+        },
+      },
+    });
 
     slotDeckManager.disposeSlot(0);
 
@@ -215,6 +241,129 @@ describe('slotDeckManager', () => {
       'runtime:slot-deck:0:clip-1',
       'slot-deck:0:clip-1'
     );
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies['slot-deck']?.resources ?? []).toHaveLength(0);
+  });
+
+  it('cancels pending slot image hydration when the deck is disposed', () => {
+    const imageClip = {
+      id: 'clip-image',
+      trackId: 'video-track',
+      name: 'Image Clip',
+      startTime: 0,
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      sourceType: 'image',
+      mediaFileId: 'media-image',
+      transform: {
+        opacity: 1,
+        blendMode: 'normal',
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+      },
+      effects: [],
+    };
+    mediaState.compositions = [
+      createComposition('comp-image', {
+        tracks: [{ id: 'video-track', type: 'video', visible: true }],
+        clips: [imageClip],
+      }),
+    ];
+    mediaState.files = [{ id: 'media-image', url: 'blob:test-image', duration: 5 }];
+    mediaState.slotAssignments = { 'comp-image': 0 };
+    const createdImages: HTMLImageElement[] = [];
+    vi.stubGlobal('Image', function MockImage() {
+      const image = document.createElement('img');
+      createdImages.push(image);
+      return image;
+    } as unknown as typeof Image);
+
+    slotDeckManager.prepareSlot(0, 'comp-image');
+    expect(slotDeckManager.getSlotState(0)).toMatchObject({
+      status: 'warming',
+      preparedClipCount: 1,
+      readyClipCount: 0,
+    });
+
+    slotDeckManager.disposeSlot(0);
+    createdImages[0].dispatchEvent(new Event('load'));
+
+    expect(mediaState.slotDeckStates[0]).toMatchObject({
+      status: 'disposed',
+      compositionId: null,
+    });
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies['slot-deck'].resources).toHaveLength(0);
+    expect(mediaRuntimeRegistry.releaseRuntime).not.toHaveBeenCalledWith(
+      'runtime:slot-deck:0:clip-image',
+      'slot-deck:0:clip-image'
+    );
+  });
+
+  it('skips slot image hydration when the slot-deck image budget is full', () => {
+    for (let index = 0; index < 48; index += 1) {
+      timelineRuntimeCoordinator.retainResource({
+        id: `preexisting-slot-image-${index}`,
+        kind: 'image-canvas',
+        policyId: 'slot-deck',
+        owner: {
+          ownerId: `preexisting-slot-image-${index}`,
+          ownerType: 'slot',
+          clipId: `preexisting-slot-image-${index}`,
+        },
+        source: {
+          clipId: `preexisting-slot-image-${index}`,
+        },
+        imageKind: 'html-image',
+        imageId: `preexisting-slot-image-${index}`,
+        label: 'Preexisting slot image',
+      });
+    }
+    const imageClip = {
+      id: 'clip-image',
+      trackId: 'video-track',
+      name: 'Image Clip',
+      startTime: 0,
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      sourceType: 'image',
+      mediaFileId: 'media-image',
+      transform: {
+        opacity: 1,
+        blendMode: 'normal',
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+      },
+      effects: [],
+    };
+    mediaState.compositions = [
+      createComposition('comp-image', {
+        tracks: [{ id: 'video-track', type: 'video', visible: true }],
+        clips: [imageClip],
+      }),
+    ];
+    mediaState.files = [{ id: 'media-image', url: 'blob:test-image', duration: 5 }];
+    mediaState.slotAssignments = { 'comp-image': 0 };
+    const createdImages: HTMLImageElement[] = [];
+    vi.stubGlobal('Image', function MockImage() {
+      const image = document.createElement('img');
+      createdImages.push(image);
+      return image;
+    } as unknown as typeof Image);
+
+    slotDeckManager.prepareSlot(0, 'comp-image');
+
+    expect(createdImages).toHaveLength(0);
+    expect(slotDeckManager.getSlotState(0)).toMatchObject({
+      status: 'warm',
+      preparedClipCount: 0,
+      readyClipCount: 0,
+      firstFrameReady: true,
+    });
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies['slot-deck'].budgetReport.usage.imageBitmaps).toBe(48);
+    expect(mediaRuntimeRegistry.releaseRuntime).not.toHaveBeenCalled();
   });
 
   it('re-prepares the newly assigned composition after a pinned deck is released', () => {

@@ -12,6 +12,12 @@ import { openPianoRoll } from '../../pianoRoll/PianoRollBoot';
 import type { TimelineClipDragPreview, TimelineToolId } from '../../../stores/timeline/types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 import {
+  createResolvedClipMoveOperationPlan,
+  resolveClipMoveRequest,
+  type ResolvedClipMove,
+  type ResolvedClipMoveOperationPlan,
+} from '../../../stores/timeline/editOperations';
+import {
   findNearestCompatibleClipDragTrackId,
   getClipDragNewTrackId,
   getClipDragNewTrackType,
@@ -26,6 +32,11 @@ const MIN_TOOL_GESTURE_DURATION = 0.1;
 const CLIP_DRAG_COMMIT_EPSILON_SECONDS = 0.000001;
 const CLIP_DRAG_STATE_PUBLISH_INTERVAL_MS = 33;
 const CLIP_DRAG_PREVIEW_PUBLISH_INTERVAL_MS = 66;
+const CLIP_DRAG_RESOLVED_MOVE_BLOCK_REASONS = new Set([
+  'fallback-track',
+  'overlap-trim',
+  'selected-linked-pair',
+]);
 
 interface UseClipDragProps {
   // Refs
@@ -44,8 +55,6 @@ interface UseClipDragProps {
 
   // Actions
   selectClip: (clipId: string | null, addToSelection?: boolean, setPrimaryOnly?: boolean) => void;
-  addTrack: (type: TimelineTrack['type']) => string;
-  moveClip: (clipId: string, newStartTime: number, trackId: string, skipLinked?: boolean, skipGroup?: boolean, skipTrim?: boolean, excludeClipIds?: string[]) => void;
   applyTimelineEditOperation: (
     operation: TimelineEditOperation,
     options: { source: 'ui'; historyLabel?: string },
@@ -121,6 +130,42 @@ function clampSlideTimelineDelta(clips: TimelineClip[], clip: TimelineClip, time
   const minDelta = -(previousClip.duration - MIN_TOOL_GESTURE_DURATION);
   const maxDelta = nextClip.duration - MIN_TOOL_GESTURE_DURATION;
   return clamp(timelineDelta, minDelta, maxDelta);
+}
+
+export function createClipDragTypedMoveCommitOperation(
+  resolutionId: string,
+  resolvedMoves: readonly ResolvedClipMove[],
+  operationPlan: ResolvedClipMoveOperationPlan,
+): TimelineEditOperation | null {
+  if (operationPlan.canApplyWithMoveClipsOperation) {
+    return operationPlan.operation;
+  }
+
+  const canApplyResolvedMove =
+    operationPlan.blockedReasons.length > 0 &&
+    operationPlan.blockedReasons.every(reason => CLIP_DRAG_RESOLVED_MOVE_BLOCK_REASONS.has(reason));
+
+  if (!canApplyResolvedMove) return null;
+
+  return {
+    id: resolutionId,
+    type: 'move-clips-resolved',
+    resolvedMoves: [...resolvedMoves],
+  };
+}
+
+function collectDragExcludeClipIds(
+  selectedClipIds: Iterable<string>,
+  clipMap: Map<string, TimelineClip>,
+): string[] {
+  const excludeClipIds = new Set(selectedClipIds);
+  for (const clipId of excludeClipIds) {
+    const clip = clipMap.get(clipId);
+    if (clip?.linkedClipId) {
+      excludeClipIds.add(clip.linkedClipId);
+    }
+  }
+  return [...excludeClipIds];
 }
 
 function buildClipDragPreview(
@@ -288,8 +333,6 @@ export function useClipDrag({
   isExporting,
   activeTimelineToolId,
   selectClip,
-  addTrack,
-  moveClip,
   applyTimelineEditOperation,
   openCompositionTab,
   pixelToTime,
@@ -884,13 +927,14 @@ export function useClipDrag({
           const currentClipMap = clipMapRef.current;
           const draggedClipForDrop = currentClipMap.get(drag.clipId);
           const finalTrackId = drag.newTrackType
-            ? addTrack(drag.newTrackType)
+            ? getClipDragNewTrackId(drag.newTrackType)
             : resolveCompatibleClipDragTrackId(
                 drag.currentTrackId,
                 drag.originalTrackId,
                 draggedClipForDrop,
                 tracks,
               );
+          const currentTracksForCommit = useTimelineStore.getState().tracks;
 
           // Commit the already-calculated drag preview position. This keeps
           // snap hysteresis honest: if the clip is still visually held at a
@@ -926,64 +970,66 @@ export function useClipDrag({
             usedDragPreviewPosition: drag.snappedTime !== null,
           });
 
-          // If multiple clips are selected, move them all by the same delta
-          if (isMultiSelect) {
-            log.debug('Moving multiple clips', { count: currentSelectedIds.size });
-            const draggedClip = currentClipMap.get(drag.clipId);
-            const shouldCommitMultiSelect =
-              finalTrackId !== draggedClip?.trackId ||
-              Math.abs(timeDelta) > CLIP_DRAG_COMMIT_EPSILON_SECONDS;
+          const draggedClip = currentClipMap.get(drag.clipId);
+          const shouldCommitMove =
+            isMultiSelect
+              ? finalTrackId !== draggedClip?.trackId ||
+                Math.abs(timeDelta) > CLIP_DRAG_COMMIT_EPSILON_SECONDS
+              : !draggedClip ||
+                finalTrackId !== draggedClip.trackId ||
+                Math.abs(finalStartTime - draggedClip.startTime) > CLIP_DRAG_COMMIT_EPSILON_SECONDS;
+          const allExcludedIds = collectDragExcludeClipIds(currentSelectedIds, currentClipMap);
 
-            if (shouldCommitMultiSelect) {
-              // Collect all clips that should be excluded from resistance (selected + linked)
-              const allExcludedIds: string[] = [...currentSelectedIds];
-              for (const selId of currentSelectedIds) {
-                const selClip = currentClipMap.get(selId);
-                if (selClip?.linkedClipId && !allExcludedIds.includes(selClip.linkedClipId)) {
-                  allExcludedIds.push(selClip.linkedClipId);
-                }
+          if (shouldCommitMove) {
+            const resolution = resolveClipMoveRequest({
+              id: `move:${drag.clipId}:${Date.now()}`,
+              clips: [...currentClipMap.values()],
+              tracks: currentTracksForCommit,
+              clipId: drag.clipId,
+              requestedStartTime: finalStartTime,
+              requestedTrackId: finalTrackId,
+              requestedNewTrackType: drag.newTrackType ?? undefined,
+              selectedClipIds: isMultiSelect ? currentSelectedIds : undefined,
+              includeLinked: !drag.altKeyPressed,
+              includeGroups: !drag.altKeyPressed,
+              excludeClipIds: allExcludedIds,
+              getPositionWithResistance: (clipId, startTime, trackId, duration, excludeClipIds) =>
+                getPositionWithResistance(
+                  clipId,
+                  startTime,
+                  trackId,
+                  duration,
+                  undefined,
+                  excludeClipIds ? [...excludeClipIds] : undefined,
+                ),
+            });
+            const operationPlan = createResolvedClipMoveOperationPlan(
+              resolution.id,
+              resolution.resolvedMoves,
+              resolution.warnings,
+            );
+            const operationToApply = createClipDragTypedMoveCommitOperation(
+              resolution.id,
+              resolution.resolvedMoves,
+              operationPlan,
+            );
+
+            if (operationToApply) {
+              const applyResult = applyTimelineEditOperation(operationToApply, {
+                source: 'ui',
+                historyLabel: isMultiSelect ? 'Move selected clips' : 'Move clip',
+              });
+              if (!applyResult.success) {
+                log.warn('Typed clip drag commit failed', {
+                  operationId: operationToApply.id,
+                  warnings: applyResult.warnings,
+                });
               }
-
-              // Track which clips we've already moved (to avoid double-moving linked clips)
-              const movedClipIds = new Set<string>();
-
-              // Move the dragged clip first (this handles snapping)
-              // skipLinked depends on whether linked clip is also selected
-              const draggedLinkedInSelection = !!(draggedClip?.linkedClipId && currentSelectedIds.has(draggedClip.linkedClipId));
-              moveClip(drag.clipId, finalStartTime, finalTrackId, draggedLinkedInSelection, drag.altKeyPressed, false, allExcludedIds);
-              movedClipIds.add(drag.clipId);
-              // If linked clip was moved via skipLinked=false, mark it as moved
-              if (draggedClip?.linkedClipId && !draggedLinkedInSelection && !drag.altKeyPressed) {
-                movedClipIds.add(draggedClip.linkedClipId);
-              }
-
-              // Move other selected clips by the same delta
-              for (const selectedId of currentSelectedIds) {
-                if (movedClipIds.has(selectedId)) continue; // Skip already-moved clips
-                const selectedClip = currentClipMap.get(selectedId);
-                if (selectedClip) {
-                  const newTime = Math.max(0, selectedClip.startTime + timeDelta);
-                  // If linked clip is also selected, skip it (will be moved in its own iteration)
-                  // If linked clip is NOT selected, move it with this clip (skipLinked=false)
-                  const linkedInSelection = !!(selectedClip.linkedClipId && currentSelectedIds.has(selectedClip.linkedClipId));
-                  moveClip(selectedId, newTime, selectedClip.trackId, linkedInSelection, true, false, allExcludedIds); // skipGroup always true, skipTrim false
-                  movedClipIds.add(selectedId);
-                  // If linked clip was moved via skipLinked=false, mark it as moved
-                  if (selectedClip.linkedClipId && !linkedInSelection) {
-                    movedClipIds.add(selectedClip.linkedClipId);
-                  }
-                }
-              }
-            }
-          } else {
-            // Single clip drag - normal behavior
-            const draggedClip = currentClipMap.get(drag.clipId);
-            if (
-              !draggedClip ||
-              finalTrackId !== draggedClip.trackId ||
-              Math.abs(finalStartTime - draggedClip.startTime) > CLIP_DRAG_COMMIT_EPSILON_SECONDS
-            ) {
-              moveClip(drag.clipId, finalStartTime, finalTrackId, false, drag.altKeyPressed);
+            } else {
+              log.warn('Typed clip drag commit blocked', {
+                blockedReasons: operationPlan.blockedReasons,
+                warnings: resolution.warnings,
+              });
             }
           }
         }
@@ -995,7 +1041,7 @@ export function useClipDrag({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [activeTimelineToolId, applyTimelineEditOperation, trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, getRenderedTrackHeight, selectClip, getSnappedPosition, getPositionWithResistance, addTrack, moveClip, setClipDragStateForInteraction]
+    [activeTimelineToolId, applyTimelineEditOperation, trackLanesRef, timelineRef, clipMap, tracks, scrollX, snappingEnabled, isExporting, pixelToTime, getRenderedTrackHeight, selectClip, getSnappedPosition, getPositionWithResistance, setClipDragStateForInteraction]
   );
 
   // Handle double-click on clip - open composition if it's a nested comp

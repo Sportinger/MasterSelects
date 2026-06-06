@@ -180,6 +180,11 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           const cappedDelta = Math.min(deltaTime, MAX_PLAYBACK_DELTA_SECONDS);
           newPosition = playheadState.position + cappedDelta * playbackSpeed;
         }
+        if (playbackSpeed > 0 && newPosition < previousPosition) {
+          newPosition = previousPosition;
+        } else if (playbackSpeed < 0 && newPosition > previousPosition) {
+          newPosition = previousPosition;
+        }
         lastTime = currentTime;
 
         const stopMarker = findStopMarkerInPlaybackRange(markers, previousPosition, newPosition);

@@ -41,6 +41,7 @@ import {
   createSignalTimelineAdapterPlan,
   placeSignalAssetOnTimeline,
 } from '../../../runtime/renderers/signalTimelineRendererAdapter';
+import { createPrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 import type { AddClipOptions, TimelineToolId } from '../../../stores/timeline/types';
 import type { TimelineEditResult, TimelinePlacementMode } from '../../../stores/timeline/editOperations/types';
 
@@ -200,7 +201,7 @@ async function resolveMediaFileForTimeline(mediaFile: MediaFile): Promise<File |
 
     const referencedPath = NativeHelperClient.parseFileReferenceUrl(nativeReferenceUrl) ?? mediaFile.absolutePath;
     setDroppedFilePath(file, referencedPath ?? undefined);
-    const url = URL.createObjectURL(file);
+    const url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
 
     useMediaStore.setState((state) => ({
       files: state.files.map((currentFile) =>

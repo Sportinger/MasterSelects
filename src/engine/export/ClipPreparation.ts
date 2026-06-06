@@ -11,13 +11,37 @@ import {
   getProjectRawPathCandidates,
   getStoredProjectFileHandle,
 } from '../../services/project/mediaSourceResolver';
-import { bindSourceRuntimeForOwner } from '../../services/mediaRuntime/clipBindings';
+import {
+  bindSourceRuntimeForOwner,
+  planSourceRuntimeBindingForOwner,
+  type PlannedSourceRuntimeBinding,
+} from '../../services/mediaRuntime/clipBindings';
 import { mediaRuntimeRegistry } from '../../services/mediaRuntime/registry';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import type { WebCodecsPlayer } from '../WebCodecsPlayer';
 import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import type { MediaFile } from '../../stores/mediaStore/types';
+import {
+  releaseReservedExportImageElement,
+  releaseReservedExportParallelDecoder,
+  releaseReservedExportParallelFrameBuffer,
+  releaseReservedExportFrameProvider,
+  releaseReservedExportRuntimeBinding,
+  releaseReservedExportPreciseVideoElement,
+  getExportRunOwnerId,
+  reserveExportImageElement,
+  reserveExportFrameProvider,
+  reserveExportParallelDecoder,
+  reserveExportParallelFrameBuffer,
+  reserveExportRuntimeBinding,
+  reserveExportPreciseVideoElement,
+  type ExportClipElementAdmissionReport,
+  type ExportFrameProviderAdmissionReport,
+  type ExportParallelDecodeAdmissionReport,
+  type ExportRuntimeBindingAdmissionReport,
+} from '../../services/timeline/exportRuntimeReporting';
+import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
 
 const log = Logger.create('ClipPreparation');
 const FAST_EXPORT_SINGLE_FILE_LIMIT_BYTES = 1536 * 1024 * 1024; // 1.5 GB
@@ -37,8 +61,167 @@ function getExportRuntimeOwnerId(clipId: string): string {
   return `export:${clipId}`;
 }
 
+function createExportPreparationAdmissionError(
+  stage: string,
+  clip: Pick<TimelineClip, 'id' | 'name'>,
+  decision: TimelineRuntimeAdmissionDecision
+): Error {
+  const rejected = decision.rejectedUnits
+    .map((unit) => `${unit.unit} ${unit.used}/${unit.limit ?? 'unlimited'}`)
+    .join(', ');
+  const suffix = rejected ? ` (${rejected})` : '';
+  const error = new Error(
+    `Export preparation refused ${stage} for "${clip.name}" (${clip.id}): ${decision.reason ?? 'not admitted'}${suffix}`
+  );
+  error.name = 'ExportPreparationAdmissionError';
+  return error;
+}
+
 function getClipMediaFileId(clip: TimelineClip): string | undefined {
   return clip.mediaFileId || clip.source?.mediaFileId;
+}
+
+function getClipAdmissionIdentity(clip: TimelineClip): {
+  id: string;
+  trackId?: string;
+  mediaFileId?: string;
+  duration?: number;
+} {
+  return {
+    id: clip.id,
+    trackId: clip.trackId,
+    mediaFileId: getClipMediaFileId(clip),
+    duration: clip.duration,
+  };
+}
+
+function createRuntimeBindingPlan(
+  clip: TimelineClip,
+  runtimeOwnerId: string
+): PlannedSourceRuntimeBinding | null {
+  return planSourceRuntimeBindingForOwner({
+    ownerId: runtimeOwnerId,
+    source: clip.source,
+    file: clip.file,
+    mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
+    filePath: clip.source?.filePath,
+    sessionPolicy: 'export',
+    sessionOwnerId: runtimeOwnerId,
+  });
+}
+
+function createRuntimeBindingAdmissionReport(
+  runId: string,
+  clip: TimelineClip,
+  plan: PlannedSourceRuntimeBinding
+): ExportRuntimeBindingAdmissionReport {
+  return {
+    runId,
+    clip: getClipAdmissionIdentity(clip),
+    runtimeSource: {
+      type: plan.source?.type,
+      runtimeSourceId: plan.runtimeSourceId,
+      runtimeSessionKey: plan.runtimeSessionKey,
+      mediaFileId: plan.mediaFileId,
+      filePath: plan.source?.filePath,
+    },
+  };
+}
+
+function createSequentialFrameProviderAdmissionReport(
+  runId: string,
+  clip: TimelineClip,
+  mediaFile: MediaFile | null | undefined,
+  runtimePlan: PlannedSourceRuntimeBinding | null
+): ExportFrameProviderAdmissionReport {
+  return {
+    runId,
+    clip: getClipAdmissionIdentity(clip),
+    runtimeSource: runtimePlan
+      ? {
+          runtimeSourceId: runtimePlan.runtimeSourceId,
+          runtimeSessionKey: runtimePlan.runtimeSessionKey,
+          mediaFileId: runtimePlan.mediaFileId,
+        }
+      : undefined,
+    width: mediaFile?.width,
+    height: mediaFile?.height,
+    providerKind: 'webcodecs',
+    frameFormat: 'video-frame',
+    label: 'Export WebCodecs frame provider',
+    tags: ['export', 'clip-state', 'webcodecs', 'sequential'],
+  };
+}
+
+function estimateParallelFrameBufferBytes(
+  mediaFile: MediaFile | null | undefined,
+  fps: number
+): number | undefined {
+  if (!mediaFile?.width || !mediaFile.height) {
+    return undefined;
+  }
+  const plannedBufferedFrames = Math.min(60, Math.max(1, Math.ceil(fps || 30)));
+  return mediaFile.width * mediaFile.height * 4 * plannedBufferedFrames;
+}
+
+function createParallelDecodeAdmissionReport(params: {
+  runId: string;
+  clip: TimelineClip;
+  mediaFile: MediaFile | null | undefined;
+  fps: number;
+  isNested?: boolean;
+}): ExportParallelDecodeAdmissionReport {
+  const mediaFileId = getClipMediaFileId(params.clip);
+  return {
+    runId: params.runId,
+    clip: {
+      ...getClipAdmissionIdentity(params.clip),
+      mediaFileId,
+    },
+    codec: params.mediaFile?.codec,
+    width: params.mediaFile?.width,
+    height: params.mediaFile?.height,
+    isNested: params.isNested,
+    estimatedBufferedFrameBytes: estimateParallelFrameBufferBytes(params.mediaFile, params.fps),
+  };
+}
+
+function reserveParallelDecodeAdmission(
+  report: ExportParallelDecodeAdmissionReport,
+  clip: TimelineClip
+): void {
+  const decoderDecision = reserveExportParallelDecoder(report);
+  if (!decoderDecision.admitted) {
+    throw createExportPreparationAdmissionError('parallel decoder', clip, decoderDecision);
+  }
+
+  const frameBufferDecision = reserveExportParallelFrameBuffer(report);
+  if (!frameBufferDecision.admitted) {
+    releaseReservedExportParallelDecoder(report);
+    throw createExportPreparationAdmissionError('parallel decoded frame buffer', clip, frameBufferDecision);
+  }
+}
+
+function releaseParallelDecodeAdmission(report: ExportParallelDecodeAdmissionReport): void {
+  releaseReservedExportParallelFrameBuffer(report);
+  releaseReservedExportParallelDecoder(report);
+}
+
+function reserveExportRuntimeBindingForClip(
+  runId: string | undefined,
+  clip: TimelineClip,
+  runtimePlan: PlannedSourceRuntimeBinding | null
+): ExportRuntimeBindingAdmissionReport | null {
+  if (!runId || !runtimePlan) {
+    return null;
+  }
+
+  const report = createRuntimeBindingAdmissionReport(runId, clip, runtimePlan);
+  const decision = reserveExportRuntimeBinding(report);
+  if (!decision.admitted) {
+    throw createExportPreparationAdmissionError('runtime binding', clip, decision);
+  }
+  return report;
 }
 
 function getClipSourceCacheKey(clip: TimelineClip, mediaFile?: MediaFile | null): string {
@@ -122,6 +305,47 @@ function createDetachedExportVideoElement(src: string): HTMLVideoElement {
   return video;
 }
 
+function getExportSrcKind(
+  src: string | undefined
+): 'blob-url' | 'remote-url' | 'project-path' | 'unknown' {
+  if (!src) return 'unknown';
+  if (src.startsWith('blob:')) return 'blob-url';
+  if (src.startsWith('http')) return 'remote-url';
+  return 'project-path';
+}
+
+function createClipElementAdmissionReport(
+  runId: string,
+  clip: TimelineClip,
+  mediaFile: MediaFile | null | undefined,
+  options: {
+    previewPath?: string;
+    srcKind?: 'blob-url' | 'remote-url' | 'project-path' | 'unknown';
+    dedicated?: boolean;
+  } = {}
+): ExportClipElementAdmissionReport {
+  return {
+    runId,
+    clip: {
+      id: clip.id,
+      trackId: clip.trackId,
+      mediaFileId: getClipMediaFileId(clip),
+      duration: clip.duration,
+    },
+    mediaFileId: mediaFile?.id ?? getClipMediaFileId(clip),
+    previewPath: options.previewPath,
+    srcKind: options.srcKind,
+    dedicated: options.dedicated,
+  };
+}
+
+function createDetachedExportImageElement(src: string): HTMLImageElement {
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.src = src;
+  return image;
+}
+
 function waitForVideoCondition(
   video: HTMLVideoElement,
   events: Array<'loadedmetadata' | 'loadeddata' | 'canplay' | 'canplaythrough' | 'seeked' | 'error'>,
@@ -157,6 +381,39 @@ function waitForVideoCondition(
     for (const eventName of events) {
       video.addEventListener(eventName, onEvent);
     }
+  });
+}
+
+function waitForExportImageLoad(image: HTMLImageElement, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (image.complete || image.naturalWidth > 0) {
+      resolve(true);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve(image.complete || image.naturalWidth > 0);
+    }, timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      image.removeEventListener('load', onLoad);
+      image.removeEventListener('error', onError);
+    };
+
+    const onLoad = () => {
+      cleanup();
+      resolve(true);
+    };
+
+    const onError = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    image.addEventListener('load', onLoad);
+    image.addEventListener('error', onError);
   });
 }
 
@@ -251,7 +508,8 @@ async function resolveClipExportFile(clip: TimelineClip, mediaFile?: MediaFile |
 async function createPreciseExportVideoElement(
   clip: TimelineClip,
   mediaFile?: MediaFile | null,
-  warmupTime = 0
+  warmupTime = 0,
+  exportRunId?: string
 ): Promise<{ videoElement: HTMLVideoElement; objectUrl?: string } | null> {
   const resolvedFile = await resolveClipExportFile(clip, mediaFile);
   const fallbackSrc =
@@ -260,11 +518,32 @@ async function createPreciseExportVideoElement(
     mediaFile?.url ||
     '';
 
-  const objectUrl = resolvedFile ? URL.createObjectURL(resolvedFile) : undefined;
-  const src = objectUrl ?? fallbackSrc;
-  if (!src) {
+  if (!resolvedFile && !fallbackSrc) {
     return null;
   }
+
+  const admissionReport = exportRunId
+    ? createClipElementAdmissionReport(exportRunId, clip, mediaFile, {
+        previewPath: resolvedFile ? resolvedFile.name : fallbackSrc,
+        srcKind: resolvedFile ? 'blob-url' : getExportSrcKind(fallbackSrc),
+        dedicated: true,
+      })
+    : null;
+  if (admissionReport) {
+    const admission = reserveExportPreciseVideoElement(admissionReport);
+    if (!admission.admitted) {
+      log.debug('Export precise video skipped by runtime admission', {
+        clipId: clip.id,
+        resourceId: admission.resourceId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+      });
+      return null;
+    }
+  }
+
+  const objectUrl = resolvedFile ? URL.createObjectURL(resolvedFile) : undefined;
+  const src = objectUrl ?? fallbackSrc;
 
   const videoElement = createDetachedExportVideoElement(src);
 
@@ -285,9 +564,135 @@ async function createPreciseExportVideoElement(
     if (objectUrl) {
       URL.revokeObjectURL(objectUrl);
     }
+    if (admissionReport) {
+      releaseReservedExportPreciseVideoElement(admissionReport);
+    }
     log.warn(`Failed to create dedicated PRECISE export video for ${clip.name}:`, e);
     return null;
   }
+}
+
+async function createExportImageElement(
+  clip: TimelineClip,
+  mediaFile?: MediaFile | null,
+  exportRunId?: string
+): Promise<{ imageElement: HTMLImageElement; objectUrl?: string; dedicated: boolean } | null> {
+  if (clip.source?.imageElement) {
+    if (exportRunId) {
+      const admissionReport = createClipElementAdmissionReport(exportRunId, clip, mediaFile, {
+        previewPath: clip.source.imageElement.currentSrc || clip.source.imageElement.src,
+        srcKind: getExportSrcKind(clip.source.imageElement.currentSrc || clip.source.imageElement.src),
+        dedicated: false,
+      });
+      const admission = reserveExportImageElement(admissionReport);
+      if (!admission.admitted) {
+        log.debug('Export shared image skipped by runtime admission', {
+          clipId: clip.id,
+          resourceId: admission.resourceId,
+          reason: admission.reason,
+          rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+        });
+        return null;
+      }
+    }
+    return {
+      imageElement: clip.source.imageElement,
+      dedicated: false,
+    };
+  }
+
+  const reusableSrc = clip.source?.imageUrl || mediaFile?.url || '';
+  const resolvedFile = reusableSrc ? null : await resolveClipExportFile(clip, mediaFile);
+  if (!reusableSrc && !resolvedFile) {
+    return null;
+  }
+  const admissionReport = exportRunId
+    ? createClipElementAdmissionReport(exportRunId, clip, mediaFile, {
+        previewPath: reusableSrc || resolvedFile?.name,
+        srcKind: resolvedFile ? 'blob-url' : getExportSrcKind(reusableSrc),
+        dedicated: true,
+      })
+    : null;
+  if (admissionReport) {
+    const admission = reserveExportImageElement(admissionReport);
+    if (!admission.admitted) {
+      log.debug('Export image skipped by runtime admission', {
+        clipId: clip.id,
+        resourceId: admission.resourceId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+      });
+      return null;
+    }
+  }
+
+  const objectUrl = resolvedFile ? URL.createObjectURL(resolvedFile) : undefined;
+  const src = reusableSrc || objectUrl || '';
+
+  const imageElement = createDetachedExportImageElement(src);
+  const loaded = await waitForExportImageLoad(imageElement, 10000);
+  if (!loaded) {
+    imageElement.removeAttribute('src');
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
+    if (admissionReport) {
+      releaseReservedExportImageElement(admissionReport);
+    }
+    log.warn(`Failed to prepare export image for ${clip.name}`);
+    return null;
+  }
+
+  return {
+    imageElement,
+    objectUrl,
+    dedicated: true,
+  };
+}
+
+function collectExportImageClips(clips: TimelineClip[], output: TimelineClip[] = []): TimelineClip[] {
+  for (const clip of clips) {
+    if (clip.source?.type === 'image') {
+      output.push(clip);
+    }
+    if (clip.isComposition && clip.nestedClips?.length) {
+      collectExportImageClips(clip.nestedClips, output);
+    }
+  }
+  return output;
+}
+
+async function prepareImageClipsForExport(
+  clips: TimelineClip[],
+  mediaFiles: MediaFile[],
+  clipStates: Map<string, ExportClipState>,
+  exportRunId?: string
+): Promise<void> {
+  const imageClips = collectExportImageClips(clips);
+  if (imageClips.length === 0) {
+    return;
+  }
+
+  await Promise.all(imageClips.map(async (clip) => {
+    const mediaFileId = getClipMediaFileId(clip);
+    const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+    const preparedImage = await createExportImageElement(clip, mediaFile, exportRunId);
+    if (!preparedImage) {
+      return;
+    }
+
+    clipStates.set(clip.id, {
+      ...(clipStates.get(clip.id) ?? {
+        clipId: clip.id,
+        webCodecsPlayer: null,
+        lastSampleIndex: 0,
+        isSequential: false,
+      }),
+      exportImageElement: preparedImage.imageElement,
+      exportImageObjectUrl: preparedImage.objectUrl ?? null,
+      hasDedicatedExportImageElement: preparedImage.dedicated,
+    });
+  }));
 }
 
 function getClipWarmupSourceTime(clip: TimelineClip, exportStartTime: number): number {
@@ -308,8 +713,11 @@ function getClipWarmupSourceTime(clip: TimelineClip, exportStartTime: number): n
 function createExportRuntimeSource(
   clip: TimelineClip,
   runtimeOwnerId: string,
-  overridePlayer?: WebCodecsPlayer | null
+  overridePlayer?: WebCodecsPlayer | null,
+  exportRunId?: string
 ): TimelineClip['source'] {
+  const runtimePlan = createRuntimeBindingPlan(clip, runtimeOwnerId);
+  const admissionReport = reserveExportRuntimeBindingForClip(exportRunId, clip, runtimePlan);
   const runtimeSource = bindSourceRuntimeForOwner({
     ownerId: runtimeOwnerId,
     source: clip.source,
@@ -321,6 +729,16 @@ function createExportRuntimeSource(
   });
 
   if (!runtimeSource) {
+    if (admissionReport) {
+      releaseReservedExportRuntimeBinding(admissionReport);
+    }
+    return clip.source;
+  }
+
+  if (!runtimeSource.runtimeSourceId || !runtimeSource.runtimeSessionKey) {
+    if (admissionReport) {
+      releaseReservedExportRuntimeBinding(admissionReport);
+    }
     return clip.source;
   }
 
@@ -351,7 +769,8 @@ async function loadClipFileDataCached(
  */
 export async function prepareClipsForExport(
   settings: ExportSettings,
-  exportMode: ExportMode
+  exportMode: ExportMode,
+  exportRunId?: string
 ): Promise<ClipPreparationResult> {
   const endPrepare = log.time('prepareClipsForExport TOTAL');
   const { clips, tracks } = useTimelineStore.getState();
@@ -388,14 +807,30 @@ export async function prepareClipsForExport(
       if (!clip.file) {
         return;
       }
-      await vectorAnimationRuntimeManager.prepareClipSource(clip, clip.file);
+      await vectorAnimationRuntimeManager.prepareClipSource(
+        clip,
+        clip.file,
+        exportRunId
+          ? {
+              policyId: 'export',
+              ownerId: getExportRunOwnerId(exportRunId),
+              ownerType: 'export',
+              resourceId: `export:${exportRunId}:clip:${clip.id}:vector-canvas`,
+              imageId: `export:${exportRunId}:clip:${clip.id}:vector-canvas`,
+              label: 'Export vector runtime canvas',
+              tags: ['export', 'clip-state', 'vector-animation', clip.source?.type ?? 'vector'],
+            }
+          : undefined,
+      );
     }));
   }
+
+  await prepareImageClipsForExport(videoClips, mediaFiles, clipStates, exportRunId);
 
   log.info(`Preparing ${videoClips.length} video clips for ${exportMode.toUpperCase()} export...`);
 
   if (exportMode === 'precise') {
-    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime);
+    const result = await initializePreciseMode(videoClips, clipStates, mediaFiles, startTime, exportRunId);
     endPrepare();
     return result;
   }
@@ -410,11 +845,21 @@ export async function prepareClipsForExport(
 
   // FAST MODE: WebCodecs with MP4Box parsing
   try {
-    return await initializeFastMode(videoClips, mediaFiles, startTime, endTime, clipStates, settings.fps, endPrepare);
+    return await initializeFastMode(
+      videoClips,
+      mediaFiles,
+      startTime,
+      endTime,
+      clipStates,
+      settings.fps,
+      exportRunId,
+      endPrepare
+    );
   } catch (e) {
     if (shouldAutoFallbackToPrecise(e)) {
       log.error('FAST export failed; strict export will not auto-switch to PRECISE mode', e);
     }
+    cleanupExportMode(clipStates, null);
     endPrepare();
     throw e;
   }
@@ -424,14 +869,16 @@ async function initializePreciseMode(
   videoClips: TimelineClip[],
   clipStates: Map<string, ExportClipState>,
   mediaFiles: MediaFile[],
-  exportStartTime: number
+  exportStartTime: number,
+  exportRunId?: string
 ): Promise<ClipPreparationResult> {
   const registerPreciseClip = async (clip: TimelineClip, warmupTime: number) => {
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
     const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId;
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+    const runtimeSource = createExportRuntimeSource(clip, runtimeOwnerId, null, exportRunId);
     const preparedVideo = clip.source?.type === 'video'
-      ? await createPreciseExportVideoElement(clip, mediaFile, warmupTime)
+      ? await createPreciseExportVideoElement(clip, mediaFile, warmupTime, exportRunId)
       : null;
 
     clipStates.set(clip.id, {
@@ -440,7 +887,7 @@ async function initializePreciseMode(
       lastSampleIndex: 0,
       isSequential: false,
       runtimeOwnerId,
-      runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId),
+      runtimeSource,
       preciseVideoElement: preparedVideo?.videoElement ?? clip.source?.videoElement ?? null,
       preciseVideoObjectUrl: preparedVideo?.objectUrl ?? null,
       hasDedicatedPreciseVideoElement: !!preparedVideo,
@@ -494,6 +941,7 @@ async function initializeFastMode(
   endTime: number,
   clipStates: Map<string, ExportClipState>,
   fps: number,
+  exportRunId: string | undefined,
   endPrepare: () => void
 ): Promise<ClipPreparationResult> {
   const { WebCodecsPlayer } = await import('../WebCodecsPlayer');
@@ -501,59 +949,84 @@ async function initializeFastMode(
   const initializeSequentialClip = async (clip: TimelineClip): Promise<void> => {
     const mediaFileId = getClipMediaFileId(clip);
     const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
-
-    const endLoad = log.time(`loadClipFileData "${clip.name}"`);
-    const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
-    endLoad();
-
-    if (!fileData) {
-      throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}". Try PRECISE mode instead.`);
-    }
-
-    // Detect file format from magic bytes
-    const header = new Uint8Array(fileData.slice(0, 12));
-    const isMOV = header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70 &&
-                  (header[8] === 0x71 && header[9] === 0x74);
-    const fileType = isMOV ? 'MOV' : 'MP4';
-
-    log.debug(`Loaded ${clip.name} (${(fileData.byteLength / 1024 / 1024).toFixed(1)}MB, ${fileType})`);
-
-    // Create dedicated WebCodecs player for export
-    const exportPlayer = new WebCodecsPlayer({ useSimpleMode: false, loop: false });
-
-    const endParse = log.time(`loadArrayBuffer "${clip.name}"`);
-    try {
-      await exportPlayer.loadArrayBuffer(fileData);
-      endParse();
-    } catch (e) {
-      endParse();
-      const hint = isMOV ? ' MOV containers may have unsupported audio codecs.' : '';
-      throw new Error(`FAST export failed: WebCodecs/MP4Box parsing failed for clip "${clip.name}": ${e}.${hint} Try PRECISE mode instead.`);
-    }
-
-    // Calculate clip start time (accounting for speed)
-    const clipStartInExport = Math.max(0, startTime - clip.startTime);
-    const clipSpeed = clip.speed ?? 1;
-    const speedAdjusted = clipStartInExport * Math.abs(clipSpeed);
-    const clipTime = (clip.reversed !== (clipSpeed < 0))
-      ? clip.outPoint - speedAdjusted
-      : clip.inPoint + speedAdjusted;
-
-    const endSeqPrep = log.time(`prepareForSequentialExport "${clip.name}"`);
-    await exportPlayer.prepareForSequentialExport(clipTime);
-    endSeqPrep();
     const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
+    const runtimePlan = createRuntimeBindingPlan(clip, runtimeOwnerId);
+    const providerAdmissionReport = exportRunId
+      ? createSequentialFrameProviderAdmissionReport(exportRunId, clip, mediaFile, runtimePlan)
+      : null;
+    if (providerAdmissionReport) {
+      const providerDecision = reserveExportFrameProvider(providerAdmissionReport);
+      if (!providerDecision.admitted) {
+        throw createExportPreparationAdmissionError('FAST WebCodecs frame provider', clip, providerDecision);
+      }
+    }
 
-    clipStates.set(clip.id, {
-      clipId: clip.id,
-      webCodecsPlayer: exportPlayer,
-      lastSampleIndex: exportPlayer.getCurrentSampleIndex(),
-      isSequential: true,
-      runtimeOwnerId,
-      runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId, exportPlayer),
-    });
+    let exportPlayer: WebCodecsPlayer | null = null;
+    try {
+      const endLoad = log.time(`loadClipFileData "${clip.name}"`);
+      const fileData = await loadClipFileDataCached(clip, mediaFile, fileDataCache);
+      endLoad();
 
-    log.debug(`Clip ${clip.name}: FAST mode enabled (${exportPlayer.width}x${exportPlayer.height})`);
+      if (!fileData) {
+        throw new Error(`FAST export failed: Could not load file data for clip "${clip.name}". Try PRECISE mode instead.`);
+      }
+
+      // Detect file format from magic bytes
+      const header = new Uint8Array(fileData.slice(0, 12));
+      const isMOV = header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70 &&
+                    (header[8] === 0x71 && header[9] === 0x74);
+      const fileType = isMOV ? 'MOV' : 'MP4';
+
+      log.debug(`Loaded ${clip.name} (${(fileData.byteLength / 1024 / 1024).toFixed(1)}MB, ${fileType})`);
+
+      // Create dedicated WebCodecs player for export
+      exportPlayer = new WebCodecsPlayer({ useSimpleMode: false, loop: false });
+
+      const endParse = log.time(`loadArrayBuffer "${clip.name}"`);
+      try {
+        await exportPlayer.loadArrayBuffer(fileData);
+        endParse();
+      } catch (e) {
+        endParse();
+        const hint = isMOV ? ' MOV containers may have unsupported audio codecs.' : '';
+        throw new Error(`FAST export failed: WebCodecs/MP4Box parsing failed for clip "${clip.name}": ${e}.${hint} Try PRECISE mode instead.`);
+      }
+
+      // Calculate clip start time (accounting for speed)
+      const clipStartInExport = Math.max(0, startTime - clip.startTime);
+      const clipSpeed = clip.speed ?? 1;
+      const speedAdjusted = clipStartInExport * Math.abs(clipSpeed);
+      const clipTime = (clip.reversed !== (clipSpeed < 0))
+        ? clip.outPoint - speedAdjusted
+        : clip.inPoint + speedAdjusted;
+
+      const endSeqPrep = log.time(`prepareForSequentialExport "${clip.name}"`);
+      await exportPlayer.prepareForSequentialExport(clipTime);
+      endSeqPrep();
+
+      clipStates.set(clip.id, {
+        clipId: clip.id,
+        webCodecsPlayer: exportPlayer,
+        lastSampleIndex: exportPlayer.getCurrentSampleIndex(),
+        isSequential: true,
+        runtimeOwnerId,
+        runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId, exportPlayer, exportRunId),
+      });
+
+      log.debug(`Clip ${clip.name}: FAST mode enabled (${exportPlayer.width}x${exportPlayer.height})`);
+    } catch (e) {
+      if (!clipStates.has(clip.id) && providerAdmissionReport) {
+        releaseReservedExportFrameProvider(providerAdmissionReport);
+      }
+      if (!clipStates.has(clip.id) && exportPlayer) {
+        try {
+          exportPlayer.destroy();
+        } catch {
+          // Ignore cleanup errors for a failed export-preparation player.
+        }
+      }
+      throw e;
+    }
   };
 
   // Separate composition clips from regular video clips
@@ -606,7 +1079,18 @@ async function initializeFastMode(
     }
 
     log.info(`Using PARALLEL decoding for ${regularVideoClips.length} regular + ${nestedVideoClips.length} nested = ${totalVideoClips} video clips`);
-    return initializeParallelDecoding(regularVideoClips, mediaFiles, startTime, endTime, nestedVideoClips, clipStates, fps, endPrepare, fileDataCache);
+    return initializeParallelDecoding(
+      regularVideoClips,
+      mediaFiles,
+      startTime,
+      endTime,
+      nestedVideoClips,
+      clipStates,
+      fps,
+      exportRunId,
+      endPrepare,
+      fileDataCache
+    );
   }
 
   // Single clip: use sequential approach
@@ -633,9 +1117,47 @@ async function initializeParallelDecoding(
   nestedClips: Array<{ clip: TimelineClip; parentClip: TimelineClip }>,
   clipStates: Map<string, ExportClipState>,
   fps: number,
+  exportRunId: string | undefined,
   endPrepare: () => void,
   fileDataCache: ClipFileDataCache
 ): Promise<ClipPreparationResult> {
+  const reservedParallelReports: ExportParallelDecodeAdmissionReport[] = [];
+  if (exportRunId) {
+    try {
+      for (const clip of clips) {
+        const mediaFileId = getClipMediaFileId(clip);
+        const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+        const report = createParallelDecodeAdmissionReport({
+          runId: exportRunId,
+          clip,
+          mediaFile,
+          fps,
+        });
+        reserveParallelDecodeAdmission(report, clip);
+        reservedParallelReports.push(report);
+      }
+
+      for (const { clip } of nestedClips) {
+        const mediaFileId = getClipMediaFileId(clip);
+        const mediaFile = mediaFileId ? mediaFiles.find(f => f.id === mediaFileId) : null;
+        const report = createParallelDecodeAdmissionReport({
+          runId: exportRunId,
+          clip,
+          mediaFile,
+          fps,
+          isNested: true,
+        });
+        reserveParallelDecodeAdmission(report, clip);
+        reservedParallelReports.push(report);
+      }
+    } catch (e) {
+      for (const report of reservedParallelReports) {
+        releaseParallelDecodeAdmission(report);
+      }
+      throw e;
+    }
+  }
+
   const parallelDecoder = new ParallelDecodeManager();
 
   try {
@@ -770,7 +1292,7 @@ async function initializeParallelDecoding(
       lastSampleIndex: 0,
       isSequential: false,
       runtimeOwnerId,
-      runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId),
+      runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId, null, exportRunId),
     });
   }
 
@@ -782,7 +1304,7 @@ async function initializeParallelDecoding(
       lastSampleIndex: 0,
       isSequential: false,
       runtimeOwnerId,
-      runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId),
+      runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId, null, exportRunId),
     });
   }
 
@@ -796,6 +1318,9 @@ async function initializeParallelDecoding(
     exportMode: 'fast',
   };
   } catch (e) {
+    for (const report of reservedParallelReports) {
+      releaseParallelDecodeAdmission(report);
+    }
     parallelDecoder.cleanup();
     throw e;
   }
@@ -885,6 +1410,22 @@ export function cleanupExportMode(
     if (state.preciseVideoObjectUrl) {
       try {
         URL.revokeObjectURL(state.preciseVideoObjectUrl);
+      } catch {
+        // Ignore URL cleanup failures.
+      }
+    }
+    if (state.hasDedicatedExportImageElement && state.exportImageElement) {
+      try {
+        state.exportImageElement.onload = null;
+        state.exportImageElement.onerror = null;
+        state.exportImageElement.removeAttribute('src');
+      } catch {
+        // Ignore cleanup failures for detached export image elements.
+      }
+    }
+    if (state.exportImageObjectUrl) {
+      try {
+        URL.revokeObjectURL(state.exportImageObjectUrl);
       } catch {
         // Ignore URL cleanup failures.
       }

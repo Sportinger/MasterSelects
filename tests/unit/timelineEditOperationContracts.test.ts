@@ -368,6 +368,36 @@ describe('timeline edit operation transaction contracts', () => {
     }
   });
 
+  it('covers typed transition apply, remove, and update-duration operation payloads', () => {
+    const transitionOperations = sampleTransactionOperations.filter(operation =>
+      operation.type === 'transition-apply' ||
+      operation.type === 'transition-remove' ||
+      operation.type === 'transition-update-duration'
+    );
+
+    expect(transitionOperations.map(operation => operation.type)).toEqual([
+      'transition-apply',
+      'transition-remove',
+      'transition-update-duration',
+    ]);
+    expect(transitionOperations[0]).toMatchObject({
+      clipAId: 'clip-a',
+      clipBId: 'clip-b',
+      junction: transitionJunction,
+    });
+    expect(transitionOperations[1]).toMatchObject({
+      clipId: 'clip-a',
+      edge: 'out',
+      transitionId: 'transition-1',
+    });
+    expect(transitionOperations[2]).toMatchObject({
+      clipId: 'clip-a',
+      edge: 'out',
+      requestedDuration: 1.5,
+      junction: transitionJunction,
+    });
+  });
+
   it('captures the legacy move parity checklist as required fields', () => {
     const exhaustiveMoveParity = {
       snapping: true,
@@ -399,4 +429,3 @@ describe('timeline edit operation transaction contracts', () => {
     expect([...KEYFRAME_EDIT_OPERATION_TYPES].sort()).toEqual(Object.keys(exhaustiveKeyframeMap).sort());
   });
 });
-
