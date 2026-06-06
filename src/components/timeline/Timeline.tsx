@@ -1,10 +1,11 @@
 // Timeline component - Main orchestrator for video editing timeline
-// Composes TimelineRuler, TimelineControls, TimelineHeader, TimelineTrack, TimelineClip, TimelineKeyframes
+// Composes TimelineRuler, TimelineControls, TimelineHeader, TimelineTrack, TimelineKeyframes
 
 import { useRef, useState, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import './Timeline.css';
 import './TimelineTracks.css';
+import './TimelineClip.css';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import {
@@ -18,7 +19,6 @@ import {
 } from '../../stores/timeline/selectors';
 import type {
   AnimatableProperty,
-  Keyframe,
   TimelineClip as TimelineClipType,
   TimelineTrack as TimelineTrackType,
   VideoBakeRegion,
@@ -31,7 +31,7 @@ import { TimelineHeader } from './TimelineHeader';
 import { TrackContextMenu, type TrackContextMenuState } from './TrackContextMenu';
 import { MarkerContextMenu, type MarkerContextMenuState } from './MarkerContextMenu';
 import { TimelineTrack } from './TimelineTrack';
-import { TimelineClip } from './TimelineClip';
+import { TimelineClipCanvas } from './TimelineClipCanvas';
 import { TimelineKeyframes } from './TimelineKeyframes';
 import { MulticamDialog } from './MulticamDialog';
 import { TimelineNavigator } from './TimelineNavigator';
@@ -74,11 +74,11 @@ import {
   MIN_TRACK_HEADER_WIDTH,
   MAX_TRACK_HEADER_WIDTH,
 } from '../../stores/timeline/constants';
-import type { TimelineTrackFocusMode } from '../../stores/timeline/types';
-import type { ClipDragState, ClipKeyframeTimeGroup, ContextMenuState, TimelineControlsProps, TimelineEmptyContextMenuState, TimelineRulerCacheRange } from './types';
+import type { TimelineClipDragPreview, TimelineTrackFocusMode } from '../../stores/timeline/types';
+import type { ClipDragState, ContextMenuState, TimelineControlsProps, TimelineEmptyContextMenuState, TimelineRulerCacheRange } from './types';
 import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
-import { parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 import { createSubcompositionFromSelection } from '../../services/timelineSubcomposition';
+import { getPlayheadPosition } from '../../services/layerBuilder';
 import { getTimelineTrackBaseHeight } from './utils/timelineAudioLayout';
 import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from './trackColor';
 import {
@@ -87,7 +87,6 @@ import {
 } from './utils/clipDragTrackTargeting';
 import { isManualLinkedGroupId } from '../../stores/timeline/helpers/idGenerator';
 
-const KEYFRAME_TIME_GROUP_PRECISION = 1000;
 const RAM_PREVIEW_FEATURE_ENABLED = false;
 const TIMELINE_END_PADDING_PX = 100;
 const TIMELINE_VIEWPORT_FALLBACK_PX = 1600;
@@ -136,6 +135,22 @@ function clipDragAffectsTrack(
 
   if (drag.multiSelectClipIds?.some((clipId) => clipMap.get(clipId)?.trackId === trackId)) return true;
   if (drag.overlapClipIds?.some((clipId) => clipMap.get(clipId)?.trackId === trackId)) return true;
+  return false;
+}
+
+function clipDragPreviewAffectsTrack(
+  preview: TimelineClipDragPreview | null,
+  trackId: string,
+  clipMap: Map<string, TimelineClipType>,
+): boolean {
+  if (!preview) return false;
+
+  for (const [clipId, patch] of Object.entries(preview.patches)) {
+    const clip = clipMap.get(clipId);
+    if (clip?.trackId === trackId) return true;
+    if ((patch.trackId ?? clip?.trackId) === trackId) return true;
+  }
+
   return false;
 }
 
@@ -440,31 +455,6 @@ function buildCompositionSwitchTracks(
   return [...mappedTargetTracks, ...departingTracks];
 }
 
-function getClipKeyframeTimeGroups(
-  keyframes: Array<Pick<Keyframe, 'id' | 'time' | 'property'>>
-): ClipKeyframeTimeGroup[] {
-  const groups = new Map<number, ClipKeyframeTimeGroup>();
-
-  keyframes.forEach((keyframe) => {
-    const bucket = Math.round(keyframe.time * KEYFRAME_TIME_GROUP_PRECISION) / KEYFRAME_TIME_GROUP_PRECISION;
-    const group = groups.get(bucket);
-    if (group) {
-      group.keyframeIds.push(keyframe.id);
-      group.properties = [...(group.properties ?? []), keyframe.property];
-      group.hasStateChange = group.hasStateChange || Boolean(parseVectorAnimationStateProperty(keyframe.property));
-    } else {
-      groups.set(bucket, {
-        time: keyframe.time,
-        keyframeIds: [keyframe.id],
-        properties: [keyframe.property],
-        hasStateChange: Boolean(parseVectorAnimationStateProperty(keyframe.property)),
-      });
-    }
-  });
-
-  return [...groups.values()].sort((a, b) => a.time - b.time);
-}
-
 export function Timeline() {
   // ===========================================
   // GROUPED STORE SUBSCRIPTIONS (6 instead of 29)
@@ -486,14 +476,17 @@ export function Timeline() {
 
   // Slot grid progress - direct selector for reliable reactivity
   const slotGridProgress = useTimelineStore(state => state.slotGridProgress);
-  const timelineSessionId = useTimelineStore(state => state.timelineSessionId);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
+  const clipDragPreview = useTimelineStore(state => state.clipDragPreview);
 
   // UI settings (rarely changes)
   const { snappingEnabled, inPoint, outPoint, loopPlayback, toolMode, activeTimelineToolId, thumbnailsEnabled, waveformsEnabled, audioDisplayMode, audioLayerAdvancedMode, audioFocusMode, trackFocusMode, showAudioRegionEditMarkers } =
     useTimelineStore(useShallow(selectUISettings));
   const timelineRangeSelection = useTimelineStore(state => state.timelineRangeSelection);
   const timelineToolPreview = useTimelineStore(state => state.timelineToolPreview);
+  const audioRegionSelection = useTimelineStore(state => state.audioRegionSelection);
+  const audioRegionGainPreview = useTimelineStore(state => state.audioRegionGainPreview);
+  const audioSpectralRegionSelection = useTimelineStore(state => state.audioSpectralRegionSelection);
   const videoBakeRegions = useTimelineStore(state => state.videoBakeRegions);
   const videoBakeRegionSelection = useTimelineStore(state => state.videoBakeRegionSelection);
   const timelineToolCursor = getTimelineToolCursor(activeTimelineToolId);
@@ -539,9 +532,9 @@ export function Timeline() {
   // Clip actions
   const {
     addClip, addCompClip, addTextClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip,
-    addMathSceneClip, addMotionShapeClip, moveClip,
+    addMathSceneClip, addMotionShapeClip,
     updateClip, updateTextProperties, removeClip, selectClip, unlinkGroup, linkClips, unlinkClips, splitClipAtPlayhead,
-    toggleClipReverse, updateClipTransform, setClipParent, generateWaveformForClip, generateSpectrogramForClip,
+    toggleClipReverse, setClipParent, generateWaveformForClip, generateSpectrogramForClip,
     addClipEffect, convertSolidToMotionShape, rippleDeleteSelection, deleteGapAtTime, deleteAllGaps,
     prepareTimelinePlacementRange, startClipStemSeparation,
   } = store;
@@ -555,8 +548,8 @@ export function Timeline() {
 
   // Keyframe actions
   const {
-    getClipKeyframes, selectKeyframe, deselectAllKeyframes, hasKeyframes,
-    addKeyframe, moveKeyframe, moveKeyframes, updateKeyframe, removeKeyframe,
+    getClipKeyframes, selectKeyframe, deselectAllKeyframes,
+    addKeyframe, moveKeyframe, moveKeyframes, updateKeyframe,
     setPropertyValue, toggleCurveExpanded, updateBezierHandle,
   } = store;
 
@@ -633,6 +626,7 @@ export function Timeline() {
   const timelineRef = useRef<HTMLDivElement>(null);
   const timelineBodyRef = useRef<HTMLDivElement>(null);
   const trackLanesRef = useRef<HTMLDivElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null);
   const scrollWrapperRef = useRef<HTMLDivElement>(null);
   const [scrubCacheRevision, setScrubCacheRevision] = useState(0);
   const [timelineViewportWidth, setTimelineViewportWidth] = useState(TIMELINE_VIEWPORT_FALLBACK_PX);
@@ -861,8 +855,6 @@ export function Timeline() {
     isExporting,
     activeTimelineToolId,
     selectClip,
-    addTrack,
-    moveClip,
     applyTimelineEditOperation: store.applyTimelineEditOperation,
     openCompositionTab,
     pixelToTime,
@@ -888,13 +880,11 @@ export function Timeline() {
   });
 
   // Clip fade (fade-in/out handles) - extracted to hook
-  const { clipFade, handleFadeStart, getFadeInDuration, getFadeOutDuration } = useClipFade({
+  const { clipFade, handleFadeStart } = useClipFade({
     clipMap,
     tracks,
     isExporting,
-    addKeyframe,
-    removeKeyframe,
-    moveKeyframe,
+    applyTimelineEditOperation: store.applyTimelineEditOperation,
     getClipKeyframes,
     addClipEffect,
     pixelToTime,
@@ -997,7 +987,6 @@ export function Timeline() {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (target.closest('.clip-video-bake-region')) return;
-      if (target.closest('.clip-video-bake-region-hitarea')) return;
       if (target.closest('.timeline-video-bake-region')) return;
       if (target.closest('.timeline-ruler-video-bake-region')) return;
       if (target.closest('.time-ruler')) return;
@@ -1531,6 +1520,7 @@ export function Timeline() {
     deselectAllKeyframes,
     setTimelineRangeSelection,
     clearTimelineRangeSelection,
+    timeToPixel,
     pixelToTime,
     isTrackExpanded: isTrackExpandedForRender,
     getTrackBaseHeight: getRenderedTrackBaseHeight,
@@ -1539,8 +1529,6 @@ export function Timeline() {
 
   // MIDI pencil tool: draw MIDI clip regions on MIDI track lanes (issue #182)
   const { midiDrawGhost, handleMidiDrawMouseDown } = useMidiClipDraw({
-    trackLanesRef,
-    scrollX,
     tracks,
     activeTimelineToolId,
     pixelToTime,
@@ -1558,8 +1546,6 @@ export function Timeline() {
   // Pick whip drag - extracted to hook
   const {
     pickWhipDrag,
-    handlePickWhipDragStart,
-    handlePickWhipDragEnd,
     trackPickWhipDrag,
     handleTrackPickWhipDragStart,
     handleTrackPickWhipDragEnd,
@@ -2425,10 +2411,8 @@ export function Timeline() {
     toggleLoopPlayback,
     selectedClipIds,
     selectedKeyframeIds,
-    removeClip,
-    removeKeyframe,
+    applyTimelineEditOperation: store.applyTimelineEditOperation,
     splitClipAtPlayhead,
-    updateClipTransform,
     copyClips,
     pasteClips,
     copyKeyframes,
@@ -2735,176 +2719,74 @@ export function Timeline() {
     [clips, selectedKeyframeIds, clipKeyframes, clipDrag, scrollX, selectKeyframe, moveKeyframe, updateKeyframe, toggleCurveExpanded, timeToPixel, pixelToTime, hoveredKeyframeRow, handleKeyframeRowHover]
   );
 
-  // Render a clip
-  const renderClip = useCallback(
-    (
-      clip: TimelineClipType,
-      trackId: string,
-      trackBaseHeightOverride?: number,
-      trackOverride?: TimelineTrackType,
-    ) => {
-      const track = trackMap.get(trackId) ?? trackOverride;
-      if (!track) return null;
-
-      const isDragging = clipDrag?.clipId === clip.id;
-      const isTrimming = clipTrim?.clipId === clip.id;
-      const isFading = clipFade?.clipId === clip.id;
-
-      const draggedClip = clipDrag
-        ? clipMap.get(clipDrag.clipId)
-        : undefined;
-      const trimmedClip = clipTrim
-        ? clipMap.get(clipTrim.clipId)
-        : undefined;
-
-      const isLinkedToDragging =
-        clipDrag &&
-        draggedClip &&
-        (clip.linkedClipId === clipDrag.clipId ||
-          draggedClip.linkedClipId === clip.id ||
-          (
-            draggedClip.linkedGroupId &&
-            isManualLinkedGroupId(draggedClip.linkedGroupId) &&
-            clip.linkedGroupId === draggedClip.linkedGroupId &&
-            clip.id !== draggedClip.id
-          ));
-      const isInMultiSelectDrag =
-        !!clipDrag?.multiSelectClipIds?.includes(clip.id) &&
-        clipDrag.multiSelectTimeDelta !== undefined;
-      const isOverlapCollisionTarget = !!clipDrag?.overlapClipIds?.includes(clip.id);
-      const clipDragForClip =
-        clipDrag && (isDragging || isLinkedToDragging || isInMultiSelectDrag || isOverlapCollisionTarget)
-          ? clipDrag
-          : null;
-      const isLinkedToTrimming =
-        clipTrim &&
-        !clipTrim.altKey &&
-        trimmedClip &&
-        (clip.linkedClipId === clipTrim.clipId ||
-          trimmedClip.linkedClipId === clip.id);
-      // Multi-select trim: a selected clip (not the dragged one) that should resize
-      // live alongside it. Only the default edge-trim drives a multi-clip trim.
-      const isTrimFollower =
-        !!clipTrim &&
-        !isTrimming &&
-        !isLinkedToTrimming &&
-        (activeTimelineToolId === 'select' || activeTimelineToolId === 'edge-trim') &&
-        selectedClipIds.size > 1 &&
-        selectedClipIds.has(clipTrim.clipId) &&
-        selectedClipIds.has(clip.id);
-
-      // Use mediaFiles from hook state instead of getState() for render-time lookups
-      const mediaFile = mediaFiles.find(
-        (f) =>
-          f.id === clip.mediaFileId ||
-          f.name === clip.name ||
-          f.name === clip.name.replace(' (Audio)', '')
-      );
-      const proxyStatus =
-        mediaFile?.proxyStatus === 'ready' &&
-        !isProxyFrameCountComplete(mediaFile.proxyFrameCount, mediaFile.duration, mediaFile.proxyFps ?? mediaFile.fps)
-          ? 'none'
-          : mediaFile?.proxyStatus;
-      const clipKeyframeList = getClipKeyframes(clip.id);
-      const keyframeTimeGroups = getClipKeyframeTimeGroups(clipKeyframeList);
-      const trackBaseHeight = trackBaseHeightOverride ?? getRenderedTrackBaseHeight(track);
-      const renderTracks = trackOverride && !tracks.some(candidate => candidate.id === trackOverride.id)
-        ? [...tracks, trackOverride]
-        : tracks;
-
-      return (
-        <TimelineClip
-          key={`${timelineSessionId}:${clip.id}`}
-          clip={clip}
-          trackId={trackId}
-          track={track}
-          trackBaseHeight={trackBaseHeight}
-          tracks={renderTracks}
-          clips={clips}
-          isSelected={selectedClipIds.has(clip.id)}
-          isInLinkedGroup={!!clip.linkedGroupId}
-          isDragging={isDragging}
-          isTrimming={isTrimming}
-          isFading={isFading}
-          isLinkedToDragging={!!isLinkedToDragging}
-          isLinkedToTrimming={!!isLinkedToTrimming}
-          isTrimFollower={isTrimFollower}
-          isClipDragActive={clipDrag !== null}
-          clipDrag={clipDragForClip}
-          clipTrim={clipTrim}
-          clipFade={clipFade}
-          zoom={zoom}
-          scrollX={scrollX}
-          timelineViewportWidth={timelineViewportWidth}
-          timelineRef={timelineRef}
-          proxyEnabled={proxyEnabled}
-          proxyStatus={proxyStatus}
-          proxyProgress={mediaFile?.proxyProgress || 0}
-          audioProxyStatus={mediaFile?.audioProxyStatus}
-          audioProxyProgress={mediaFile?.audioProxyProgress || 0}
-          showTranscriptMarkers={showTranscriptMarkers}
-          snappingEnabled={snappingEnabled}
-          onMouseDown={(e) => handleTimelineClipMouseDown(e, clip.id)}
-          onDoubleClick={(e) => handleClipDoubleClick(e, clip.id)}
-          onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
-          onTrimStart={(e, edge) => handleTrimStart(e, clip.id, edge)}
-          onFadeStart={(e, edge) => handleFadeStart(e, clip.id, edge)}
-          hasKeyframes={hasKeyframes}
-          fadeInDuration={getFadeInDuration(clip.id)}
-          fadeOutDuration={getFadeOutDuration(clip.id)}
-          opacityKeyframes={clipKeyframeList.filter(k => k.property === 'opacity')}
-          allKeyframeTimes={keyframeTimeGroups.map(group => group.time)}
-          keyframeTimeGroups={keyframeTimeGroups}
-          onMoveKeyframeGroup={moveKeyframes}
-          timeToPixel={timeToPixel}
-          pixelToTime={pixelToTime}
-          formatTime={formatTime}
-          onPickWhipDragStart={handlePickWhipDragStart}
-          onPickWhipDragEnd={handlePickWhipDragEnd}
-          onSetClipParent={setClipParent}
-        />
-      );
-    },
-    [
-      trackMap,
-      getRenderedTrackBaseHeight,
-      clipMap,
-      clips,
-      selectedClipIds,
-      activeTimelineToolId,
-      clipDrag,
-      clipTrim,
-      clipFade,
-      zoom,
-      scrollX,
-      timelineViewportWidth,
-      proxyEnabled,
-      mediaFiles,
-      showTranscriptMarkers,
-      snappingEnabled,
-      handleTimelineClipMouseDown,
-      handleClipDoubleClick,
-      handleClipContextMenu,
-      handleTrimStart,
-      handleFadeStart,
-      hasKeyframes,
-      getFadeInDuration,
-      getFadeOutDuration,
-      getClipKeyframes,
-      moveKeyframes,
-      timeToPixel,
-      pixelToTime,
-      formatTime,
-      tracks,
-      timelineSessionId,
-      handlePickWhipDragStart,
-      handlePickWhipDragEnd,
-      setClipParent,
-    ]
+  const getMediaFileForClip = useCallback(
+    (clip: TimelineClipType) => mediaFiles.find(
+      (file) =>
+        file.id === clip.mediaFileId ||
+        file.name === clip.name ||
+        file.name === clip.name.replace(' (Audio)', '')
+    ),
+    [mediaFiles],
   );
 
-  const playheadLeft = timeToPixel(playheadPosition) - scrollX + trackHeaderWidth;
+  const visualPlayheadPosition = isPlaying && !isDraggingPlayhead
+    ? getPlayheadPosition(playheadPosition)
+    : playheadPosition;
+  const playheadLeft = timeToPixel(visualPlayheadPosition) - scrollX + trackHeaderWidth;
+  const playheadInlineStyle = isPlaying && !isDraggingPlayhead ? undefined : { left: playheadLeft };
   const showPlayhead = playheadLeft >= trackHeaderWidth;
+  const playheadMetricsRef = useRef({
+    timeToPixel,
+    scrollX,
+    trackHeaderWidth,
+    playheadLeft,
+  });
+  useEffect(() => {
+    playheadMetricsRef.current = {
+      timeToPixel,
+      scrollX,
+      trackHeaderWidth,
+      playheadLeft,
+    };
+  }, [playheadLeft, scrollX, timeToPixel, trackHeaderWidth]);
+
+  useEffect(() => {
+    const playhead = playheadRef.current;
+    if (!playhead) return;
+
+    if (!isPlaying || isDraggingPlayhead) {
+      playhead.style.left = `${playheadMetricsRef.current.playheadLeft}px`;
+      return;
+    }
+
+    let rafId = 0;
+    const updateLivePlayhead = () => {
+      const timelineState = useTimelineStore.getState();
+      const storePosition = timelineState.playheadPosition;
+      const livePosition = getPlayheadPosition(storePosition);
+      const metrics = playheadMetricsRef.current;
+      const nextLeft = metrics.timeToPixel(livePosition) - metrics.scrollX + metrics.trackHeaderWidth;
+      const previousLeft = Number.parseFloat(playhead.dataset.liveLeft ?? '');
+      const left = (
+        timelineState.playbackSpeed >= 0 &&
+        Number.isFinite(previousLeft) &&
+        nextLeft < previousLeft &&
+        previousLeft - nextLeft <= 2
+      )
+        ? previousLeft
+        : nextLeft;
+      playhead.dataset.liveLeft = String(left);
+      playhead.style.left = `${left}px`;
+      rafId = requestAnimationFrame(updateLivePlayhead);
+    };
+
+    updateLivePlayhead();
+    return () => {
+      cancelAnimationFrame(rafId);
+      delete playhead.dataset.liveLeft;
+    };
+  }, [isPlaying, isDraggingPlayhead]);
+
   const timelineSwitchMotionClass = clipAnimationPhase === 'exiting'
     ? (compositionSwitchDirection === 'backward' ? 'timeline-switch-exit-left' : 'timeline-switch-exit-right')
     : clipAnimationPhase === 'entering'
@@ -3114,21 +2996,20 @@ export function Timeline() {
     const audioPreviewHeight = audioNewTrackPreviewHeight;
     const draggedClipForNewTrack = clipDrag ? clipMap.get(clipDrag.clipId) : undefined;
     const renderClipDragNewTrackPreview = (type: 'video' | 'audio') => {
-      if (!draggedClipForNewTrack || clipDragNewTrackType !== type) return null;
+      if (!draggedClipForNewTrack || !clipDrag || clipDragNewTrackType !== type) return null;
 
       const trackId = type === 'video'
         ? CLIP_DRAG_NEW_VIDEO_TRACK_ID
         : CLIP_DRAG_NEW_AUDIO_TRACK_ID;
       const baseHeight = type === 'video' ? VIDEO_NEW_TRACK_PREVIEW_HEIGHT : audioPreviewHeight;
-      const ghostTrack: TimelineTrackType = {
-        id: trackId,
-        name: type === 'video' ? 'New Video Track' : 'New Audio Track',
-        type,
-        height: baseHeight,
-        muted: false,
-        visible: true,
-        solo: false,
-      };
+      const previewPatch = clipDragPreview?.patches[draggedClipForNewTrack.id];
+      const previewStartTime = Math.max(
+        0,
+        previewPatch?.startTime ?? clipDrag.snappedTime ?? draggedClipForNewTrack.startTime,
+      );
+      const mediaFile = getMediaFileForClip(draggedClipForNewTrack);
+      const thumbnailUrl = mediaFile?.thumbnailUrl ?? draggedClipForNewTrack.thumbnails?.[0];
+      const label = draggedClipForNewTrack.name || mediaFile?.name || 'Clip';
 
       return (
         <div
@@ -3136,7 +3017,25 @@ export function Timeline() {
           style={{ height: baseHeight }}
         >
           <div className="track-clip-row" style={{ height: baseHeight }}>
-            {renderClip(draggedClipForNewTrack, trackId, baseHeight, ghostTrack)}
+            <div
+              className={`timeline-clip-preview ${type}${thumbnailUrl ? ' has-thumbnail' : ''}`}
+              data-clip-id={draggedClipForNewTrack.id}
+              data-preview-track-id={trackId}
+              style={{
+                left: timeToPixel(previewStartTime),
+                width: Math.max(1, timeToPixel(draggedClipForNewTrack.duration)),
+              }}
+            >
+              {thumbnailUrl && (
+                <div
+                  className="timeline-clip-preview-thumbnail"
+                  style={{ backgroundImage: `url("${thumbnailUrl.replace(/"/g, '\\"')}")` }}
+                />
+              )}
+              <div className="clip-content">
+                <span className="clip-name">{label}</span>
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -3168,16 +3067,12 @@ export function Timeline() {
         ]
       : [];
 
-    const renderClipForSection = (clip: TimelineClipType, trackId: string) => {
-      const track = allSectionTracks.find(candidate => candidate.id === trackId)
-        ?? timelineViewTrackMap.get(trackId)
-        ?? trackMap.get(trackId);
-      return renderClip(
-        clip,
-        trackId,
-        track ? getSectionTrackBaseHeight(track, sectionKind) : undefined,
-      );
-    };
+    const compositionSwitchClipMotionClass = clipAnimationPhase === 'exiting'
+      ? (compositionSwitchDirection === 'backward' ? 'exit-animate-left' : 'exit-animate-right')
+      : clipAnimationPhase === 'entering'
+        ? (compositionSwitchDirection === 'backward' ? 'entrance-animate-right' : 'entrance-animate-left')
+        : '';
+    const sectionCanvasContentWidth = Math.max(duration * zoom + 500, 2000);
 
     const getSectionTrackHeightById = (trackId: string, fallbackBaseHeight: number) => {
       const track = allSectionTracks.find(candidate => candidate.id === trackId)
@@ -3440,6 +3335,15 @@ export function Timeline() {
                   const trackClipDrag = clipDragAffectsTrack(clipDrag, track.id, clipMap)
                     ? clipDrag
                     : null;
+                  const trackClipDragPreview = clipDragPreviewAffectsTrack(clipDragPreview, track.id, clipMap)
+                    ? clipDragPreview
+                    : null;
+                  const trackClipFade = clipFade && clipMap.get(clipFade.clipId)?.trackId === track.id
+                    ? clipFade
+                    : null;
+                  const trackClipContextMenu = contextMenu && clipMap.get(contextMenu.clipId)?.trackId === track.id
+                    ? contextMenu
+                    : null;
 
                   return (
                     <TimelineTrack
@@ -3460,17 +3364,28 @@ export function Timeline() {
                       selectedClipIds={selectedClipIds}
                       selectedKeyframeIds={selectedKeyframeIds}
                       activeTimelineToolId={activeTimelineToolId}
+                      waveformsEnabled={waveformsEnabled}
+                      audioDisplayMode={audioDisplayMode}
                       isClipDragActive={clipDrag !== null}
                       clipDrag={trackClipDrag}
+                      clipDragPreview={trackClipDragPreview}
                       clipTrim={clipTrim}
+                      clipFade={trackClipFade}
+                      clipContextMenu={trackClipContextMenu}
+                      audioRegionSelection={audioRegionSelection}
+                      audioRegionGainPreview={audioRegionGainPreview}
+                      audioSpectralRegionSelection={audioSpectralRegionSelection}
+                      videoBakeRegionSelection={videoBakeRegionSelection}
+                      clipStemSeparationJobs={clipStemSeparationJobs}
                       externalDrag={externalDrag}
                       zoom={zoom}
                       scrollX={scrollX}
-                      timelineRef={timelineRef}
                       onClipMouseDown={handleTimelineClipMouseDown}
+                      onClipDoubleClick={handleClipDoubleClick}
                       onClipContextMenu={handleClipContextMenu}
                       onEmptyMouseDown={handleEmptyTimelineMouseDown}
                       onEmptyContextMenu={handleEmptyTimelineContextMenu}
+                      onFadeStart={handleFadeStart}
                       onTrimStart={handleTrimStart}
                       onDrop={(e) => handleCombinedDrop(e, track.id)}
                       onDragOver={(e) => handleCombinedDragOver(e, track.id)}
@@ -3478,7 +3393,6 @@ export function Timeline() {
                       onDragLeave={handleCombinedDragLeave}
                       onResizeStart={handleTrackResizeStart}
                       isResizeActive={activeTrackResizeId === track.id}
-                      renderClip={(clip, trackId) => renderClipForSection(clip, trackId)}
                       clipKeyframes={clipKeyframes}
                       renderKeyframeDiamonds={renderKeyframeDiamonds}
                       timeToPixel={timeToPixel}
@@ -3486,6 +3400,8 @@ export function Timeline() {
                       expandedCurveProperties={expandedCurveProperties}
                       onSelectKeyframe={selectKeyframe}
                       onMoveKeyframe={moveKeyframe}
+                      onMoveKeyframeGroup={moveKeyframes}
+                      applyTimelineEditOperation={store.applyTimelineEditOperation}
                       onUpdateBezierHandle={updateBezierHandle}
                       addKeyframe={addKeyframe}
                     />
@@ -3503,11 +3419,14 @@ export function Timeline() {
 
                 {isCompositionTrackMorphing && (
                   <div className="composition-exit-clips-overlay">
-                    {allSectionTracks.map((track) => {
+                    {allSectionTracks.map((track, trackIndex) => {
                       const isExpanded = !sectionCollapsed && isTrackExpandedFromState(track.id);
                       const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
                       const dynamicHeight = isExpanded ? getExpandedTrackHeight(track.id, baseHeight) : baseHeight;
                       const trackClips = clips.filter((clip) => clip.trackId === track.id);
+                      const trackColor = timelineTrackColorsVisible
+                        ? getTimelineTrackColor(track, trackIndex)
+                        : TIMELINE_TRACK_COLOR_HIDDEN;
 
                       return (
                         <div
@@ -3516,7 +3435,22 @@ export function Timeline() {
                           style={{ height: dynamicHeight }}
                         >
                           <div className="track-clip-row" style={{ height: baseHeight }}>
-                            {trackClips.map((clip) => renderClipForSection(clip, track.id))}
+                            <div className={`composition-switch-clip-canvas ${compositionSwitchClipMotionClass}`}>
+                              <TimelineClipCanvas
+                                clips={trackClips}
+                                trackId={track.id}
+                                height={baseHeight}
+                                contentWidth={sectionCanvasContentWidth}
+                                timeToPixel={timeToPixel}
+                                selectedClipIds={selectedClipIds}
+                                hoveredClipId={null}
+                                trackColor={trackColor}
+                                scrollX={scrollX}
+                                viewportWidth={timelineViewportWidth}
+                                waveformsEnabled={waveformsEnabled}
+                                audioDisplayMode={audioDisplayMode}
+                              />
+                            </div>
                           </div>
                         </div>
                       );
@@ -4020,9 +3954,10 @@ export function Timeline() {
           {/* Playhead - spans from ruler through all tracks */}
           {showPlayhead && (
             <div
+              ref={playheadRef}
               className={`playhead ${timelineSwitchMotionClass}`}
               data-ai-id="timeline-playhead"
-              style={{ left: playheadLeft }}
+              style={playheadInlineStyle}
               onMouseDown={handlePlayheadMouseDown}
             >
               <div className="playhead-head" />

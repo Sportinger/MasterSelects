@@ -4,15 +4,35 @@ import { flags } from '../engine/featureFlags';
 import type { Composition, SlotDeckState } from '../stores/mediaStore/types';
 import { useMediaStore } from '../stores/mediaStore';
 import { DEFAULT_TRANSFORM } from '../stores/timeline/constants';
-import { bindSourceRuntimeForOwner } from './mediaRuntime/clipBindings';
+import {
+  bindSourceRuntimeForOwner,
+  planSourceRuntimeBindingForOwner,
+} from './mediaRuntime/clipBindings';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
 import { vectorAnimationRuntimeManager } from './vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType, type VectorAnimationProvider } from '../types/vectorAnimation';
+import {
+  releaseReportedClipRuntimeResources,
+  reportClipRuntimeResources,
+  reservePlannedClipRuntimeResources,
+} from './timeline/runtimeResourceReporting';
+import {
+  startTimelineImageHydration,
+  type TimelineImageHydrationHandle,
+} from './timeline/imageRuntimeHydrator';
 
 type DecoderMode = SlotDeckState['decoderMode'];
 type SlotDeckStatus = SlotDeckState['status'];
 
 const SLOT_DECK_SOFT_CAP = 8;
+
+function getRuntimeSrcKind(url: string): 'blob-url' | 'remote-url' | 'media-source' | 'unknown' {
+  if (!url) return 'unknown';
+  if (url.startsWith('blob:')) return 'blob-url';
+  if (url.startsWith('http')) return 'remote-url';
+  if (url.startsWith('mediastream:')) return 'media-source';
+  return 'unknown';
+}
 
 export interface PreparedSlotDeck {
   slotIndex: number;
@@ -62,6 +82,8 @@ function sanitizeError(error: unknown): string {
 
 class SlotDeckManager {
   private decks = new Map<number, SlotDeckEntry>();
+  private pendingImageHydrations = new Map<string, TimelineImageHydrationHandle>();
+  private pendingVideoDisposers = new Map<string, () => void>();
 
   constructor() {
     (globalThis as typeof globalThis & { __slotDeckManager?: SlotDeckManager }).__slotDeckManager = this;
@@ -69,6 +91,26 @@ class SlotDeckManager {
 
   private getDeckOwnerId(slotIndex: number, clipId: string): string {
     return `slot-deck:${slotIndex}:${clipId}`;
+  }
+
+  private cleanupVideoElement(video: HTMLVideoElement): void {
+    video.pause();
+    engine.cleanupVideo(video);
+    video.removeAttribute('src');
+    video.src = '';
+    try {
+      video.load();
+    } catch {
+      // Browser teardown can race media loading; releasing GPU/cache state is the important part.
+    }
+  }
+
+  private disposePendingVideo(ownerId: string): void {
+    const dispose = this.pendingVideoDisposers.get(ownerId);
+    if (!dispose) {
+      return;
+    }
+    dispose();
   }
 
   private buildDeckState(entry: SlotDeckEntry): SlotDeckState {
@@ -207,6 +249,11 @@ class SlotDeckManager {
 
   private disposeEntry(entry: SlotDeckEntry): void {
     for (const clip of entry.clips) {
+      const ownerId = this.getDeckOwnerId(entry.slotIndex, clip.id);
+      this.pendingImageHydrations.get(ownerId)?.cancel();
+      this.pendingImageHydrations.delete(ownerId);
+      this.disposePendingVideo(ownerId);
+      releaseReportedClipRuntimeResources('slot-deck', ownerId);
       if (clip.source?.runtimeSourceId && clip.source.runtimeSessionKey) {
         mediaRuntimeRegistry.releaseSession(
           clip.source.runtimeSourceId,
@@ -214,18 +261,20 @@ class SlotDeckManager {
         );
         mediaRuntimeRegistry.releaseRuntime(
           clip.source.runtimeSourceId,
-          this.getDeckOwnerId(entry.slotIndex, clip.id)
+          ownerId
         );
       }
       if (clip.source?.videoElement) {
-        clip.source.videoElement.pause();
-        clip.source.videoElement.src = '';
-        clip.source.videoElement.load();
+        this.cleanupVideoElement(clip.source.videoElement);
       }
       if (clip.source?.audioElement) {
         clip.source.audioElement.pause();
         clip.source.audioElement.src = '';
         clip.source.audioElement.load();
+      }
+      if (clip.source?.imageElement) {
+        clip.source.imageElement.removeAttribute('src');
+        clip.source.imageElement.src = '';
       }
       if (isVectorAnimationSourceType(clip.source?.type)) {
         vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
@@ -235,7 +284,44 @@ class SlotDeckManager {
     this.pushDisposedState(entry.slotIndex);
   }
 
-  private loadVideoForClip(entry: SlotDeckEntry, clip: TimelineClip, url: string, mediaFileId: string): void {
+  private loadVideoForClip(entry: SlotDeckEntry, clip: TimelineClip, url: string, mediaFileId: string): boolean {
+    const ownerId = this.getDeckOwnerId(entry.slotIndex, clip.id);
+    const runtimePlan = planSourceRuntimeBindingForOwner({
+      ownerId,
+      source: {
+        type: 'video',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaFileId,
+      sessionPolicy: 'background',
+      sessionOwnerId: ownerId,
+    });
+    const admission = reservePlannedClipRuntimeResources({
+      policyId: 'slot-deck',
+      ownerId,
+      ownerType: 'slot',
+      compositionId: entry.compositionId,
+      clip,
+      source: runtimePlan?.source ?? {
+        type: 'video',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaElementKind: 'video',
+      srcKind: getRuntimeSrcKind(url),
+      label: `Slot ${entry.slotIndex} clip resource`,
+      tags: ['slot-deck', `slot-${entry.slotIndex}`],
+    });
+    if (!admission.admitted) {
+      clip.isLoading = false;
+      if (this.decks.get(entry.slotIndex) === entry && !entry.pendingDispose) {
+        this.pushDeckState(entry);
+      }
+      return false;
+    }
+
+    this.disposePendingVideo(ownerId);
     const video = document.createElement('video');
     video.src = url;
     video.muted = true;
@@ -243,16 +329,36 @@ class SlotDeckManager {
     video.preload = 'auto';
     video.crossOrigin = 'anonymous';
 
-    video.addEventListener('canplaythrough', () => {
+    let disposed = false;
+    const disposePending = () => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      video.removeEventListener('canplaythrough', onCanPlayThrough);
+      video.removeEventListener('error', onError);
+      admission.release();
+      this.cleanupVideoElement(video);
+      if (this.pendingVideoDisposers.get(ownerId) === disposePending) {
+        this.pendingVideoDisposers.delete(ownerId);
+      }
+    };
+    const onCanPlayThrough = () => {
+      if (disposed) {
+        return;
+      }
       if (this.decks.get(entry.slotIndex) !== entry || entry.pendingDispose) {
-        video.pause();
-        video.src = '';
-        video.load();
+        disposePending();
         return;
       }
 
+      disposed = true;
+      video.removeEventListener('error', onError);
+      if (this.pendingVideoDisposers.get(ownerId) === disposePending) {
+        this.pendingVideoDisposers.delete(ownerId);
+      }
       clip.source = bindSourceRuntimeForOwner({
-        ownerId: this.getDeckOwnerId(entry.slotIndex, clip.id),
+        ownerId,
         source: {
           type: 'video',
           videoElement: video,
@@ -261,26 +367,71 @@ class SlotDeckManager {
         },
         mediaFileId,
         sessionPolicy: 'background',
-        sessionOwnerId: this.getDeckOwnerId(entry.slotIndex, clip.id),
+        sessionOwnerId: ownerId,
       });
+      this.reportClipResources(entry, clip);
       clip.isLoading = false;
       engine.preCacheVideoFrame?.(video);
       this.markClipReady(entry, 'html', { visual: true });
-    }, { once: true });
+    };
 
-    video.addEventListener('error', (event) => {
+    const onError = (event: Event) => {
+      disposePending();
       clip.isLoading = false;
       this.markDeckFailure(entry, event);
-    }, { once: true });
+    };
+
+    this.pendingVideoDisposers.set(ownerId, disposePending);
+    video.addEventListener('canplaythrough', onCanPlayThrough, { once: true });
+    video.addEventListener('error', onError, { once: true });
+
+    return true;
   }
 
-  private loadAudioForClip(entry: SlotDeckEntry, clip: TimelineClip, url: string, mediaFileId: string): void {
+  private loadAudioForClip(entry: SlotDeckEntry, clip: TimelineClip, url: string, mediaFileId: string): boolean {
+    const ownerId = this.getDeckOwnerId(entry.slotIndex, clip.id);
+    const runtimePlan = planSourceRuntimeBindingForOwner({
+      ownerId,
+      source: {
+        type: 'audio',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaFileId,
+      sessionPolicy: 'background',
+      sessionOwnerId: ownerId,
+    });
+    const admission = reservePlannedClipRuntimeResources({
+      policyId: 'slot-deck',
+      ownerId,
+      ownerType: 'slot',
+      compositionId: entry.compositionId,
+      clip,
+      source: runtimePlan?.source ?? {
+        type: 'audio',
+        mediaFileId,
+        naturalDuration: clip.source?.naturalDuration ?? clip.duration,
+      },
+      mediaElementKind: 'audio',
+      srcKind: getRuntimeSrcKind(url),
+      label: `Slot ${entry.slotIndex} clip resource`,
+      tags: ['slot-deck', `slot-${entry.slotIndex}`],
+    });
+    if (!admission.admitted) {
+      clip.isLoading = false;
+      if (this.decks.get(entry.slotIndex) === entry && !entry.pendingDispose) {
+        this.pushDeckState(entry);
+      }
+      return false;
+    }
+
     const audio = document.createElement('audio');
     audio.src = url;
     audio.preload = 'auto';
 
     audio.addEventListener('canplaythrough', () => {
       if (this.decks.get(entry.slotIndex) !== entry || entry.pendingDispose) {
+        admission.release();
         audio.pause();
         audio.src = '';
         audio.load();
@@ -288,7 +439,7 @@ class SlotDeckManager {
       }
 
       clip.source = bindSourceRuntimeForOwner({
-        ownerId: this.getDeckOwnerId(entry.slotIndex, clip.id),
+        ownerId,
         source: {
           type: 'audio',
           audioElement: audio,
@@ -297,47 +448,90 @@ class SlotDeckManager {
         },
         mediaFileId,
         sessionPolicy: 'background',
-        sessionOwnerId: this.getDeckOwnerId(entry.slotIndex, clip.id),
+        sessionOwnerId: ownerId,
       });
+      this.reportClipResources(entry, clip);
       clip.isLoading = false;
       this.markClipReady(entry, 'html');
     }, { once: true });
 
     audio.addEventListener('error', (event) => {
+      admission.release();
       clip.isLoading = false;
       this.markDeckFailure(entry, event);
     }, { once: true });
+
+    return true;
   }
 
-  private loadImageForClip(entry: SlotDeckEntry, clip: TimelineClip, url: string): void {
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.src = url;
-
-    image.addEventListener('load', () => {
-      if (this.decks.get(entry.slotIndex) !== entry || entry.pendingDispose) {
-        image.src = '';
-        return;
-      }
-
-      clip.source = bindSourceRuntimeForOwner({
-        ownerId: this.getDeckOwnerId(entry.slotIndex, clip.id),
-        source: {
-          type: 'image',
-          imageElement: image,
+  private loadImageForClip(entry: SlotDeckEntry, clip: TimelineClip, url: string): boolean {
+    const ownerId = this.getDeckOwnerId(entry.slotIndex, clip.id);
+    this.pendingImageHydrations.get(ownerId)?.cancel();
+    const handle = startTimelineImageHydration({
+      url,
+      resource: {
+        id: `timeline-runtime:slot-deck:${ownerId}:image-canvas:image`,
+        policyId: 'slot-deck',
+        owner: {
+          ownerId,
+          ownerType: 'slot',
+          clipId: clip.id,
+          trackId: clip.trackId,
+          mediaFileId: clip.mediaFileId,
         },
-        mediaFileId: clip.mediaFileId,
-        sessionPolicy: 'background',
-        sessionOwnerId: this.getDeckOwnerId(entry.slotIndex, clip.id),
-      });
-      clip.isLoading = false;
-      this.markClipReady(entry, 'html', { visual: true });
-    }, { once: true });
-
-    image.addEventListener('error', (event) => {
-      clip.isLoading = false;
-      this.markDeckFailure(entry, event);
-    }, { once: true });
+        source: {
+          sourceId: clip.mediaFileId,
+          mediaFileId: clip.mediaFileId,
+          clipId: clip.id,
+          trackId: clip.trackId,
+          previewPath: url,
+        },
+        imageId: `${ownerId}:image`,
+        label: 'Slot deck image hydration',
+        tags: ['slot-deck', 'image'],
+      },
+      isCurrent: () => this.decks.get(entry.slotIndex) === entry && !entry.pendingDispose,
+      onReady: (image) => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.source = bindSourceRuntimeForOwner({
+          ownerId,
+          source: {
+            type: 'image',
+            imageElement: image,
+            mediaFileId: clip.mediaFileId,
+            naturalDuration: clip.duration,
+          },
+          mediaFileId: clip.mediaFileId,
+          sessionPolicy: 'background',
+          sessionOwnerId: ownerId,
+        });
+        this.reportClipResources(entry, clip);
+        clip.isLoading = false;
+        this.markClipReady(entry, 'html', { visual: true });
+      },
+      onError: (event) => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.isLoading = false;
+        this.markDeckFailure(entry, event);
+      },
+      onStale: () => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.isLoading = false;
+      },
+      onAdmissionDenied: (decision) => {
+        this.pendingImageHydrations.delete(ownerId);
+        clip.isLoading = false;
+        if (this.decks.get(entry.slotIndex) === entry && !entry.pendingDispose) {
+          this.pushDeckState(entry);
+        }
+        void decision;
+      },
+    });
+    if (!handle.admitted) {
+      return false;
+    }
+    this.pendingImageHydrations.set(ownerId, handle);
+    return true;
   }
 
   private loadVectorAnimationForClip(entry: SlotDeckEntry, clip: TimelineClip, file: File, sourceType: VectorAnimationProvider): void {
@@ -351,7 +545,14 @@ class SlotDeckManager {
           };
         }
 
-        const runtime = await vectorAnimationRuntimeManager.prepareClipSource(clip, file);
+        const ownerId = this.getDeckOwnerId(entry.slotIndex, clip.id);
+        const runtime = await vectorAnimationRuntimeManager.prepareClipSource(clip, file, {
+          policyId: 'slot-deck',
+          ownerId,
+          ownerType: 'slot',
+          label: `Slot ${entry.slotIndex} vector runtime canvas`,
+          tags: ['slot-deck', `slot-${entry.slotIndex}`, 'vector-animation'],
+        });
         if (this.decks.get(entry.slotIndex) !== entry || entry.pendingDispose) {
           vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, sourceType);
           return;
@@ -369,6 +570,7 @@ class SlotDeckManager {
           naturalDuration,
           vectorAnimationSettings: clip.source?.vectorAnimationSettings,
         };
+        this.reportClipResources(entry, clip);
         clip.isLoading = false;
         vectorAnimationRuntimeManager.renderClipAtTime(clip, clip.startTime);
         this.markClipReady(entry, 'html', { visual: true });
@@ -377,6 +579,18 @@ class SlotDeckManager {
         this.markDeckFailure(entry, error);
       }
     })();
+  }
+
+  private reportClipResources(entry: SlotDeckEntry, clip: TimelineClip): void {
+    reportClipRuntimeResources({
+      policyId: 'slot-deck',
+      ownerId: this.getDeckOwnerId(entry.slotIndex, clip.id),
+      ownerType: 'slot',
+      clip,
+      compositionId: entry.compositionId,
+      label: `Slot ${entry.slotIndex} clip resource`,
+      tags: ['slot-deck', `slot-${entry.slotIndex}`],
+    });
   }
 
   prepareSlot(slotIndex: number, compositionId: string): void {
@@ -487,17 +701,22 @@ class SlotDeckManager {
       const fileUrl = mediaFile?.url;
 
       if (sourceType === 'video' && fileUrl && serializedClip.mediaFileId) {
-        entry.preparedClipCount += 1;
         clip.isLoading = true;
-        this.loadVideoForClip(entry, clip, fileUrl, serializedClip.mediaFileId);
+        if (this.loadVideoForClip(entry, clip, fileUrl, serializedClip.mediaFileId)) {
+          entry.preparedClipCount += 1;
+        }
       } else if (sourceType === 'audio' && fileUrl && serializedClip.mediaFileId) {
-        entry.preparedClipCount += 1;
         clip.isLoading = true;
-        this.loadAudioForClip(entry, clip, fileUrl, serializedClip.mediaFileId);
+        if (this.loadAudioForClip(entry, clip, fileUrl, serializedClip.mediaFileId)) {
+          entry.preparedClipCount += 1;
+        }
       } else if (sourceType === 'image' && fileUrl) {
-        entry.preparedClipCount += 1;
         clip.isLoading = true;
-        this.loadImageForClip(entry, clip, fileUrl);
+        if (this.loadImageForClip(entry, clip, fileUrl)) {
+          entry.preparedClipCount += 1;
+        } else {
+          clip.isLoading = false;
+        }
       } else if (isVectorAnimationSourceType(sourceType) && mediaFile?.file) {
         entry.preparedClipCount += 1;
         clip.isLoading = true;

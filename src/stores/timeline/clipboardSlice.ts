@@ -7,16 +7,16 @@ import {
   ensureColorCorrectionState,
   parseEffectProperty,
 } from '../../types';
-import { flags } from '../../engine/featureFlags';
 import { Logger } from '../../services/logger';
 import { captureSnapshot } from '../historyStore';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
-import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { generateEffectId } from './helpers/idGenerator';
+import { blobUrlManager } from './helpers/blobUrlManager';
 import { cloneClipNodeGraph, remapClipNodeGraphEffectIds } from '../../services/nodeGraph';
+import { createPrimaryMediaObjectUrl } from '../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('Clipboard');
 
@@ -143,6 +143,16 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         thumbnails: clip.thumbnails ? [...clip.thumbnails] : undefined,
         waveform: clip.waveform ? [...clip.waveform] : undefined,
         waveformChannels: clip.waveformChannels?.map(channel => [...channel]),
+        audioAnalysisRefs: clip.audioState
+          ? {
+              sourceAnalysisRefs: clip.audioState.sourceAnalysisRefs
+                ? structuredClone(clip.audioState.sourceAnalysisRefs)
+                : undefined,
+              processedAnalysisRefs: clip.audioState.processedAnalysisRefs
+                ? structuredClone(clip.audioState.processedAnalysisRefs)
+                : undefined,
+            }
+          : undefined,
         isComposition: clip.isComposition,
         compositionId: clip.compositionId,
         is3D: clip.is3D,
@@ -336,6 +346,16 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
         waveform: clipData.waveform ? [...clipData.waveform] : undefined,
         waveformChannels: clipData.waveformChannels?.map(channel => [...channel]),
+        audioState: clipData.audioAnalysisRefs
+          ? {
+              sourceAnalysisRefs: clipData.audioAnalysisRefs.sourceAnalysisRefs
+                ? structuredClone(clipData.audioAnalysisRefs.sourceAnalysisRefs)
+                : undefined,
+              processedAnalysisRefs: clipData.audioAnalysisRefs.processedAnalysisRefs
+                ? structuredClone(clipData.audioAnalysisRefs.processedAnalysisRefs)
+                : undefined,
+            }
+          : undefined,
         isComposition: clipData.isComposition,
         compositionId: clipData.compositionId,
         is3D: clipData.is3D,
@@ -489,163 +509,86 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
         const sourceType = newClip.source?.type;
 
         if (isVectorAnimationSourceType(sourceType)) {
-          try {
-            const runtimeClip: TimelineClip = {
-              ...newClip,
-              file: mediaFile.file,
-              source: {
-                type: sourceType,
-                mediaFileId,
-                naturalDuration: newClip.source?.naturalDuration ?? newClip.duration,
-                vectorAnimationSettings: newClip.source?.vectorAnimationSettings,
-              },
-            };
-            const runtime = await vectorAnimationRuntimeManager.prepareClipSource(runtimeClip, mediaFile.file);
-            const naturalDuration =
-              runtime.metadata.duration ??
-              newClip.source?.naturalDuration ??
-              newClip.duration;
-            vectorAnimationRuntimeManager.renderClipAtTime(runtimeClip, runtimeClip.startTime);
-
-            set((state) => ({
-              clips: state.clips.map((c) =>
-                c.id === newClip.id
-                  ? {
-                      ...c,
-                      file: mediaFile.file!,
-                      source: {
-                        type: sourceType,
-                        textCanvas: runtime.canvas,
-                        mediaFileId,
-                        naturalDuration,
-                        vectorAnimationSettings: runtimeClip.source?.vectorAnimationSettings,
-                      },
-                      isLoading: false,
-                      needsReload: false,
-                    }
-                  : c
-              ),
-            }));
-          } catch (error) {
-            log.warn('Failed to restore pasted vector animation clip', { clipId: newClip.id, sourceType, error });
-            set((state) => ({
-              clips: state.clips.map((c) =>
-                c.id === newClip.id
-                  ? { ...c, isLoading: false }
-                  : c
-              ),
-            }));
-          }
+          set((state) => ({
+            clips: state.clips.map((c) =>
+              c.id === newClip.id
+                ? {
+                    ...c,
+                    file: mediaFile.file!,
+                    source: {
+                      type: sourceType,
+                      mediaFileId,
+                      naturalDuration: c.source?.naturalDuration ?? mediaFile.duration ?? c.duration,
+                      vectorAnimationSettings: c.source?.vectorAnimationSettings,
+                    },
+                    isLoading: false,
+                    needsReload: false,
+                  }
+                : c
+            ),
+          }));
           continue;
         }
 
-        const fileUrl = URL.createObjectURL(mediaFile.file);
-
         if (sourceType === 'video') {
-          const video = document.createElement('video');
-          video.src = fileUrl;
-          video.muted = true;
-          video.playsInline = true;
-          video.preload = 'auto';
-          video.crossOrigin = 'anonymous';
-
-          video.addEventListener('canplaythrough', async () => {
-            set(state => ({
-              clips: state.clips.map(c =>
-                c.id === newClip.id
-                  ? {
-                      ...c,
-                      file: mediaFile.file!,
-                      source: {
-                        type: 'video' as const,
-                        videoElement: video,
-                        naturalDuration: video.duration,
-                        mediaFileId,
-                      },
-                      isLoading: false,
-                      needsReload: false,
-                    }
-                  : c
-              ),
-            }));
-
-            // Try to initialize WebCodecsPlayer
-            const hasWebCodecs = 'VideoDecoder' in window && 'VideoFrame' in window;
-            if (hasWebCodecs && flags.useFullWebCodecsPlayback) {
-              try {
-                const { WebCodecsPlayer } = await import('../../engine/WebCodecsPlayer');
-                const webCodecsPlayer = new WebCodecsPlayer({
-                  loop: false,
-                  useSimpleMode: true,
-                  onError: (error) => {
-                    log.warn('WebCodecs error', { error: error.message });
-                  },
-                });
-                webCodecsPlayer.attachToVideoElement(video);
-
-                set(state => ({
-                  clips: state.clips.map(c =>
-                    c.id === newClip.id && c.source?.type === 'video'
-                      ? {
-                          ...c,
-                          source: { ...c.source, webCodecsPlayer },
-                        }
-                      : c
-                  ),
-                }));
-              } catch (err) {
-                log.warn('WebCodecsPlayer init failed for pasted clip', err);
-              }
-            }
-          }, { once: true });
+          set(state => ({
+            clips: state.clips.map(c =>
+              c.id === newClip.id
+                ? {
+                    ...c,
+                    file: mediaFile.file!,
+                    source: {
+                      type: 'video' as const,
+                      naturalDuration: c.source?.naturalDuration ?? mediaFile.duration ?? c.duration,
+                      mediaFileId,
+                    },
+                    isLoading: false,
+                    needsReload: false,
+                  }
+                : c
+            ),
+          }));
         } else if (sourceType === 'audio') {
-          const audio = document.createElement('audio');
-          audio.src = fileUrl;
-          audio.preload = 'auto';
-
-          audio.addEventListener('canplaythrough', () => {
-            set(state => ({
-              clips: state.clips.map(c =>
-                c.id === newClip.id
-                  ? {
-                      ...c,
-                      file: mediaFile.file!,
-                      source: {
-                        type: 'audio' as const,
-                        audioElement: audio,
-                        naturalDuration: audio.duration,
-                        mediaFileId,
-                      },
-                      isLoading: false,
-                      needsReload: false,
-                    }
-                  : c
-              ),
-            }));
-          }, { once: true });
+          set(state => ({
+            clips: state.clips.map(c =>
+              c.id === newClip.id
+                ? {
+                    ...c,
+                    file: mediaFile.file!,
+                    source: {
+                      type: 'audio' as const,
+                      naturalDuration: c.source?.naturalDuration ?? mediaFile.duration ?? c.duration,
+                      mediaFileId,
+                    },
+                    isLoading: false,
+                    needsReload: false,
+                  }
+                : c
+            ),
+          }));
         } else if (sourceType === 'image') {
-          const img = new Image();
-          img.src = fileUrl;
-
-          img.addEventListener('load', () => {
-            set(state => ({
-              clips: state.clips.map(c =>
-                c.id === newClip.id
-                  ? {
-                      ...c,
-                      file: mediaFile.file!,
-                      source: {
-                        type: 'image' as const,
-                        imageElement: img,
-                      },
-                      isLoading: false,
-                      needsReload: false,
-                    }
-                  : c
-              ),
-            }));
-          }, { once: true });
+          const fileUrl = blobUrlManager.create(newClip.id, mediaFile.file, 'image');
+          set(state => ({
+            clips: state.clips.map(c =>
+              c.id === newClip.id
+                ? {
+                    ...c,
+                    file: mediaFile.file!,
+                    source: {
+                      type: 'image' as const,
+                      imageUrl: fileUrl,
+                      naturalDuration: c.source?.naturalDuration || c.duration,
+                      mediaFileId,
+                    },
+                    isLoading: false,
+                    needsReload: false,
+                  }
+                : c
+            ),
+          }));
         } else if (sourceType === 'model') {
+          const fileUrl = mediaFile.url
+            ?? createPrimaryMediaObjectUrl(mediaFile.id, mediaFile.file, { revokeExisting: false });
           set(state => ({
             clips: state.clips.map(c =>
               c.id === newClip.id

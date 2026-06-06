@@ -63,6 +63,9 @@ export interface ExportClipState {
   preciseVideoElement?: HTMLVideoElement | null;
   preciseVideoObjectUrl?: string | null;
   hasDedicatedPreciseVideoElement?: boolean;
+  exportImageElement?: HTMLImageElement | null;
+  exportImageObjectUrl?: string | null;
+  hasDedicatedExportImageElement?: boolean;
 }
 
 // ============ PRESETS ============

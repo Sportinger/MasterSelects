@@ -109,6 +109,10 @@ export const playbackToolDefinitions: ToolDefinition[] = [
             type: 'boolean',
             description: 'Whether to reset WebCodecs/VF/health diagnostics before the run. Defaults to true.',
           },
+          restorePlaybackState: {
+            type: 'boolean',
+            description: 'Restore playback if it was already running before the simulation. Defaults to false so diagnostics runs leave playback paused.',
+          },
         },
         required: [],
       },

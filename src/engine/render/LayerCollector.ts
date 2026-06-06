@@ -172,6 +172,48 @@ export class LayerCollector {
     }
   }
 
+  private tryPlaybackHtmlVideoFallback(
+    layer: Layer,
+    video: HTMLVideoElement | null | undefined,
+    deps: LayerCollectorDeps,
+    layerReuseKey: string,
+    reason: string
+  ): LayerRenderData | null {
+    if (
+      !deps.isPlaying ||
+      deps.isExporting ||
+      !video ||
+      video.readyState < 2 ||
+      video.seeking ||
+      useTimelineStore.getState().isDraggingPlayhead
+    ) {
+      return null;
+    }
+
+    const fallback = this.tryHTMLVideo(layer, video, deps, {
+      playbackFallback: true,
+    });
+    if (!fallback) {
+      return null;
+    }
+
+    const previewPath = fallback.previewPath === 'live-import'
+      ? 'playback-html-fallback'
+      : fallback.previewPath;
+    const state = previewPath?.includes('cache') || previewPath?.includes('hold')
+      ? 'hold'
+      : 'render';
+
+    this.setCollectorState(layerReuseKey, state, {
+      reason: `html_fallback_${reason}`,
+    });
+
+    return {
+      ...fallback,
+      previewPath,
+    };
+  }
+
   collect(layers: Layer[], deps: LayerCollectorDeps): LayerRenderData[] {
     this.layerRenderData.length = 0;
     this.hasVideo = false;
@@ -460,6 +502,14 @@ export class LayerCollector {
           !allowRuntimeFrameReadDuringSettle &&
           !frameAcceptable
         ) {
+          const fallback = this.tryPlaybackHtmlVideoFallback(
+            layer,
+            source.videoElement,
+            deps,
+            layerReuseKey,
+            'stale_runtime_frame'
+          );
+          if (fallback) return fallback;
           this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'stale_runtime_frame',
           });
@@ -495,6 +545,14 @@ export class LayerCollector {
 
       if (frameProvider && typeof frameProvider.getCurrentFrame === 'function') {
         if (!frameProviderStable && !canReuseLastFrame && !allowPendingScrubFrame) {
+          const fallback = this.tryPlaybackHtmlVideoFallback(
+            layer,
+            source.videoElement,
+            deps,
+            layerReuseKey,
+            'pending_unstable'
+          );
+          if (fallback) return fallback;
           this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'pending_unstable',
           });
@@ -538,6 +596,14 @@ export class LayerCollector {
             !effectiveHoldingFrame &&
             !frameAcceptable
           ) {
+            const fallback = this.tryPlaybackHtmlVideoFallback(
+              layer,
+              source.videoElement,
+              deps,
+              layerReuseKey,
+              'stale_provider_frame'
+            );
+            if (fallback) return fallback;
             this.setCollectorState(layerReuseKey, 'drop', {
               reason: 'stale_provider_frame',
             });
@@ -569,6 +635,14 @@ export class LayerCollector {
               previewPath: 'webcodecs',
             };
           }
+          const fallback = this.tryPlaybackHtmlVideoFallback(
+            layer,
+            source.videoElement,
+            deps,
+            layerReuseKey,
+            'import_failed'
+          );
+          if (fallback) return fallback;
           this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'import_failed',
           });
@@ -604,10 +678,29 @@ export class LayerCollector {
             }
           }
         } else {
+          const fallback = this.tryPlaybackHtmlVideoFallback(
+            layer,
+            source.videoElement,
+            deps,
+            layerReuseKey,
+            'no_frame'
+          );
+          if (fallback) return fallback;
           this.setCollectorState(layerReuseKey, 'drop', {
             reason: 'no_frame',
           });
         }
+      }
+
+      const playbackFallback = this.tryPlaybackHtmlVideoFallback(
+        layer,
+        source.videoElement,
+        deps,
+        layerReuseKey,
+        'no_provider_frame'
+      );
+      if (playbackFallback) {
+        return playbackFallback;
       }
 
       // HTMLVideo preview is handled above when enabled.
@@ -627,7 +720,13 @@ export class LayerCollector {
     targetTime: number
   ) {
     const isDragging = useTimelineStore.getState().isDraggingPlayhead;
-    const tolerance = video.seeking || isDragging ? 0.35 : 0.2;
+    const tolerance = isDragging
+      ? 0.35
+      : deps.isPlaying
+        ? 0.09
+        : video.seeking
+          ? 0.35
+          : 0.2;
     const ownerMatched =
       deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance, layer.sourceClipId) ?? null;
     if (ownerMatched) {
@@ -652,10 +751,11 @@ export class LayerCollector {
   private getPlaybackStallHoldFrame(
     layer: Layer,
     video: HTMLVideoElement,
-    deps: LayerCollectorDeps
+    deps: LayerCollectorDeps,
+    targetTime: number
   ) {
     const ownerMatched = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
-    if (ownerMatched) {
+    if (this.isFrameNearTarget(ownerMatched, targetTime, 0.15)) {
       return ownerMatched;
     }
 
@@ -664,7 +764,8 @@ export class LayerCollector {
       return null;
     }
 
-    return deps.scrubbingCache?.getLastFrame(video) ?? null;
+    const lastFrame = deps.scrubbingCache?.getLastFrame(video) ?? null;
+    return this.isFrameNearTarget(lastFrame, targetTime, 0.15) ? lastFrame : null;
   }
 
   private isFrameNearTarget(
@@ -791,7 +892,28 @@ export class LayerCollector {
     });
   }
 
-  private tryHTMLVideo(layer: Layer, video: HTMLVideoElement, deps: LayerCollectorDeps): LayerRenderData | null {
+  private isPlaybackHtmlLiveFrameUsable(layer: Layer, video: HTMLVideoElement): boolean {
+    const targetTime = layer.source?.mediaTime;
+    if (
+      typeof targetTime !== 'number' ||
+      !Number.isFinite(targetTime) ||
+      !Number.isFinite(video.currentTime) ||
+      video.videoWidth <= 0 ||
+      video.videoHeight <= 0
+    ) {
+      return false;
+    }
+
+    const maxDrift = video.paused ? 0.12 : 0.35;
+    return Math.abs(video.currentTime - targetTime) <= maxDrift;
+  }
+
+  private tryHTMLVideo(
+    layer: Layer,
+    video: HTMLVideoElement,
+    deps: LayerCollectorDeps,
+    options: { playbackFallback?: boolean } = {}
+  ): LayerRenderData | null {
     const videoKey = `video:${this.getVideoObjectId(video)}`;
     const layerReuseKey = this.getLayerReuseKey(layer);
 
@@ -921,13 +1043,16 @@ export class LayerCollector {
         !video.seeking &&
         (presentedDriftSeconds ?? currentTimeDriftSeconds) <=
           LayerCollector.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS;
-      const allowLiveVideoImport =
+      let allowLiveVideoImport =
         !shouldPreferStableHold &&
         !hasPresentedOwnerMismatch &&
         (isPausedSettle
           ? hasFreshPresentedFrame
           : !awaitingPausedTargetFrame &&
             (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
+      if (options.playbackFallback && !this.isPlaybackHtmlLiveFrameUsable(layer, video)) {
+        allowLiveVideoImport = false;
+      }
       const allowConfirmedFrameCaching = !hasPresentedOwnerMismatch && (isPausedSettle
         ? hasFreshPresentedFrame
         : !awaitingPausedTargetFrame &&
@@ -1211,10 +1336,10 @@ export class LayerCollector {
           previewPath: 'same-clip-hold',
         };
       }
-      // Last resort during playback: use ANY cached frame to avoid black flash.
-      // A slightly stale frame is vastly better than black.
+      // Last resort during playback: use a nearby cached frame to avoid black
+      // without flashing a visibly wrong frame from the previous entry.
       if (deps.isPlaying) {
-        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps);
+        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps, targetTime);
         if (anyFrame) {
           this.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, lastPresentedTime);
           this.currentDecoder = 'HTMLVideo(cached)';
@@ -1340,9 +1465,9 @@ export class LayerCollector {
           previewPath: 'same-clip-hold',
         };
       }
-      // Last resort during playback: hold any cached frame to avoid black
+      // Last resort during playback: hold a nearby cached frame to avoid black
       if (deps.isPlaying) {
-        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps);
+        const anyFrame = this.getPlaybackStallHoldFrame(layer, video, deps, targetTime);
         if (anyFrame) {
           this.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
           this.currentDecoder = 'HTMLVideo(cached)';

@@ -151,26 +151,45 @@ function resolveBladeLineOverlay(
   timeToPixel: (time: number) => number,
 ): TimelineToolOverlayItem[] {
   if (
-    preview.toolId !== 'blade-all-tracks' ||
     !isTimelineBladeTool(preview.toolId) ||
-    preview.plane !== 'section-scrolled' ||
     !isFiniteNumber(preview.time)
   ) {
     return [];
   }
 
-  const hasEligibleTrack = rows.some((row) => isTrackEligible(row.track));
-  if (!hasEligibleTrack || contentHeight <= 0) return [];
-
   const left = timeToPixel(clamp(preview.time, 0, Math.max(0, duration))) - 1;
+
+  if (preview.toolId === 'blade-all-tracks' && preview.plane === 'section-scrolled') {
+    const hasEligibleTrack = rows.some((row) => isTrackEligible(row.track));
+    if (!hasEligibleTrack || contentHeight <= 0) return [];
+
+    return [{
+      id: `blade-line:${preview.toolId}:${preview.time}`,
+      kind: 'blade-line',
+      toolId: preview.toolId,
+      left,
+      top: 0,
+      width: 2,
+      height: contentHeight,
+    }];
+  }
+
+  if (preview.toolId !== 'blade' || preview.plane !== 'clip-local' || !preview.trackId) {
+    return [];
+  }
+
+  const row = rows.find((candidate) => candidate.track.id === preview.trackId);
+  if (!row || !isTrackEligible(row.track)) return [];
+
   return [{
-    id: `blade-line:${preview.toolId}:${preview.time}`,
+    id: `blade-line:${preview.toolId}:${preview.trackId}:${preview.time}`,
     kind: 'blade-line',
     toolId: preview.toolId,
+    trackId: row.track.id,
     left,
-    top: 0,
+    top: row.top + 3,
     width: 2,
-    height: contentHeight,
+    height: Math.max(1, row.height - 6),
   }];
 }
 

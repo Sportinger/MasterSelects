@@ -4,6 +4,7 @@ import { THUMBNAIL_TIMEOUT } from '../constants';
 import { projectFileService } from '../../../services/projectFileService';
 import { projectDB } from '../../../services/projectDB';
 import { Logger } from '../../../services/logger';
+import { createThumbnailMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('Thumbnail');
 
@@ -235,6 +236,31 @@ async function canvasToThumbnailUrl(canvas: HTMLCanvasElement): Promise<string> 
   return canvas.toDataURL('image/jpeg', THUMBNAIL_QUALITY);
 }
 
+export async function createManagedThumbnailUrl(
+  mediaId: string,
+  thumbnailUrl: string | undefined
+): Promise<string | undefined> {
+  if (!thumbnailUrl) {
+    return undefined;
+  }
+
+  try {
+    const blob = await fetchThumbnailBlob(thumbnailUrl);
+    if (!blob || blob.size <= 0) {
+      return thumbnailUrl;
+    }
+
+    const managedUrl = createThumbnailMediaObjectUrl(mediaId, blob);
+    if (isBlobUrl(thumbnailUrl) && managedUrl !== thumbnailUrl) {
+      URL.revokeObjectURL(thumbnailUrl);
+    }
+    return managedUrl;
+  } catch (error) {
+    log.warn('Failed to manage thumbnail URL:', error);
+    return thumbnailUrl;
+  }
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
   return new Promise((resolve) => {
     canvas.toBlob(resolve, type, quality);
@@ -247,10 +273,11 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
  */
 export async function handleThumbnailDedup(
   fileHash: string | undefined,
-  thumbnailUrl: string | undefined
+  thumbnailUrl: string | undefined,
+  mediaId?: string
 ): Promise<string | undefined> {
   if (!fileHash) {
-    return thumbnailUrl;
+    return mediaId ? createManagedThumbnailUrl(mediaId, thumbnailUrl) : thumbnailUrl;
   }
 
   try {
@@ -273,7 +300,9 @@ export async function handleThumbnailDedup(
       if (projectFileService.isProjectOpen()) {
         void projectFileService.saveThumbnail(fileHash, existingBlob);
       }
-      return URL.createObjectURL(existingBlob);
+      return mediaId
+        ? createThumbnailMediaObjectUrl(mediaId, existingBlob)
+        : URL.createObjectURL(existingBlob);
     }
 
     // Save new thumbnail
@@ -295,7 +324,7 @@ export async function handleThumbnailDedup(
     log.warn('Dedup error:', e);
   }
 
-  return thumbnailUrl;
+  return mediaId ? createManagedThumbnailUrl(mediaId, thumbnailUrl) : thumbnailUrl;
 }
 
 /**

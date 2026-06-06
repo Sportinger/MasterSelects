@@ -5,9 +5,12 @@ import type { TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { requireMediaFileImportResult } from '../../mediaStore/helpers/importResult';
-import { initWebCodecsPlayer, createAudioElement } from '../helpers/webCodecsHelpers';
+import {
+  createVideoElement,
+  releaseTemporaryMediaElement,
+  waitForVideoMetadata,
+} from '../helpers/webCodecsHelpers';
 import { generateClipId } from '../helpers/idGenerator';
-import { blobUrlManager } from '../helpers/blobUrlManager';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
 import {
@@ -19,6 +22,12 @@ import {
 } from '../../../services/audio/timelineWaveformPyramidCache';
 
 const log = Logger.create('CompleteDownload');
+
+function getUsableDuration(duration: number | undefined): number | undefined {
+  return typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+    ? duration
+    : undefined;
+}
 
 export interface CompleteDownloadParams {
   clipId: string;
@@ -56,25 +65,6 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
 
   log.debug('Completing download', { clipId });
 
-  // Create and load video element - track URL for cleanup
-  const video = document.createElement('video');
-  video.preload = 'auto';
-  video.muted = true;
-  video.playsInline = true;
-  video.crossOrigin = 'anonymous';
-  const url = blobUrlManager.create(clipId, file, 'video');
-  video.src = url;
-
-  await new Promise<void>((resolve, reject) => {
-    video.addEventListener('loadedmetadata', () => resolve(), { once: true });
-    video.addEventListener('error', () => reject(new Error('Failed to load video')), { once: true });
-    video.load();
-  });
-
-  const naturalDuration = video.duration || 30;
-  const initialThumbnails = clip.youtubeThumbnail ? [clip.youtubeThumbnail] : [];
-  video.currentTime = 0;
-
   // Import to media store in YouTube folder
   const mediaStore = useMediaStore.getState();
 
@@ -88,6 +78,19 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
     await mediaStore.importFile(file, ytFolder.id),
     'YouTube download import',
   );
+
+  let naturalDuration = getUsableDuration(mediaFile.duration);
+  if (!naturalDuration) {
+    const metadataVideo = createVideoElement(file);
+    try {
+      await waitForVideoMetadata(metadataVideo, 8000);
+      naturalDuration = getUsableDuration(metadataVideo.duration);
+    } finally {
+      releaseTemporaryMediaElement(metadataVideo);
+    }
+  }
+  naturalDuration ??= 30;
+  const initialThumbnails = clip.youtubeThumbnail ? [clip.youtubeThumbnail] : [];
 
   // Find/create audio track
   const audioTrackId = findAvailableAudioTrack(clip.startTime, naturalDuration);
@@ -103,7 +106,6 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
       outPoint: naturalDuration,
       source: {
         type: 'video' as const,
-        videoElement: video,
         naturalDuration,
         mediaFileId: mediaFile.id,
       },
@@ -146,34 +148,8 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
 
   log.debug('Download complete', { clipId, duration: naturalDuration });
 
-  // Initialize WebCodecsPlayer
-  const webCodecsPlayer = await initWebCodecsPlayer(video, file.name, file);
-  if (webCodecsPlayer) {
-    const currentClips = get().clips;
-    const targetClip = currentClips.find((c: TimelineClip) => c.id === clipId);
-    if (targetClip?.source) {
-      set({
-        clips: updateClipById(currentClips, clipId, {
-          source: { ...targetClip.source, webCodecsPlayer }
-        }),
-      });
-    }
-  }
-
-  // Load audio element for linked clip
+  // Generate waveform in background for the linked audio clip.
   if (audioTrackId && audioClipId) {
-    const audio = createAudioElement(file);
-    // Share the same blob URL reference for the audio clip
-    blobUrlManager.share(clipId, audioClipId, 'video');
-    audio.src = url;
-
-    set({
-      clips: updateClipById(get().clips, audioClipId, {
-        source: { type: 'audio' as const, audioElement: audio, naturalDuration, mediaFileId: mediaFile.id }
-      }),
-    });
-
-    // Generate waveform in background
     if (waveformsEnabled) {
       generateWaveformAsync(audioClipId, file, mediaFile.id, get, set);
     }
@@ -182,7 +158,15 @@ export async function completeDownload(params: CompleteDownloadParams): Promise<
   // Generate source-based thumbnails (1 per second) in background
   if (mediaFile?.id) {
     import('../../../services/thumbnailCacheService').then(({ thumbnailCacheService }) => {
-      thumbnailCacheService.generateForSource(mediaFile.id, video, naturalDuration, mediaFile.fileHash);
+      const sourceUrl = mediaFile.url || URL.createObjectURL(file);
+      const shouldRevokeSourceUrl = !mediaFile.url;
+      thumbnailCacheService
+        .generateForSourceUrl(mediaFile.id, sourceUrl, naturalDuration, mediaFile.fileHash)
+        .finally(() => {
+          if (shouldRevokeSourceUrl) {
+            URL.revokeObjectURL(sourceUrl);
+          }
+        });
     });
   }
 }

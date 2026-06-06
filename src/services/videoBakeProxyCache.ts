@@ -1,4 +1,9 @@
 import type { Layer, VideoBakeRegion } from '../types';
+import type {
+  RenderResourceDescriptor,
+  TimelineRuntimeAdmissionDecision,
+} from './timeline/runtimeCoordinatorTypes';
+import { timelineRuntimeCoordinator } from './timeline/timelineRuntimeCoordinator';
 import { Logger } from './logger';
 
 const log = Logger.create('VideoBakeProxyCache');
@@ -25,6 +30,64 @@ interface VideoBakeProxyArtifact {
   height: number;
   fps: number;
   pendingSeekTime: number | null;
+  runtimeResourceId: string;
+}
+
+function getArtifactOwnerId(compositionId: string, regionId: string): string {
+  return `video-bake-proxy:${compositionId}:${regionId}`;
+}
+
+function createVideoBakeProxyResource(input: VideoBakeProxyArtifactInput): RenderResourceDescriptor {
+  const ownerId = getArtifactOwnerId(input.compositionId, input.region.id);
+  const duration = Math.max(0, input.region.endTime - input.region.startTime);
+  return {
+    id: `${ownerId}:html-media:video`,
+    kind: 'html-media',
+    policyId: 'composition-render',
+    owner: {
+      ownerId,
+      ownerType: 'composition',
+      compositionId: input.compositionId,
+    },
+    source: {
+      sourceId: input.region.id,
+      compositionId: input.compositionId,
+    },
+    mediaElementKind: 'video',
+    elementId: `${ownerId}:video`,
+    srcKind: 'blob-url',
+    dimensions: {
+      width: input.width,
+      height: input.height,
+      fps: input.fps,
+      durationSeconds: duration,
+    },
+    diagnostics: {
+      status: 'unknown',
+      provider: {
+        providerId: `${ownerId}:video`,
+        providerKind: 'html-video',
+        status: 'unknown',
+      },
+    },
+    label: 'Video bake proxy element',
+    tags: ['composition-render', 'video-bake-proxy'],
+  };
+}
+
+function createVideoBakeProxyAdmissionError(
+  input: VideoBakeProxyArtifactInput,
+  decision: TimelineRuntimeAdmissionDecision,
+): Error {
+  const rejected = decision.rejectedUnits
+    .map((unit) => `${unit.unit} ${unit.used}/${unit.limit ?? 'unlimited'}`)
+    .join(', ');
+  const suffix = rejected ? ` (${rejected})` : '';
+  const error = new Error(
+    `Video bake proxy refused runtime video for region "${input.region.id}": ${decision.reason ?? 'not admitted'}${suffix}`
+  );
+  error.name = 'VideoBakeProxyAdmissionError';
+  return error;
 }
 
 class VideoBakeProxyCache {
@@ -37,47 +100,60 @@ class VideoBakeProxyCache {
 
     this.remove(input.region.id);
 
-    const url = URL.createObjectURL(input.blob);
-    const video = document.createElement('video');
-    video.src = url;
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
-    video.crossOrigin = 'anonymous';
-    video.loop = false;
-    video.controls = false;
-    video.style.display = 'none';
+    const resource = createVideoBakeProxyResource(input);
+    const admission = timelineRuntimeCoordinator.canRetainResource(resource);
+    if (!admission.admitted) {
+      throw createVideoBakeProxyAdmissionError(input, admission);
+    }
+    timelineRuntimeCoordinator.retainResource(resource);
 
-    const artifact: VideoBakeProxyArtifact = {
-      regionId: input.region.id,
-      compositionId: input.compositionId,
-      startTime: input.region.startTime,
-      endTime: input.region.endTime,
-      url,
-      video,
-      width: input.width,
-      height: input.height,
-      fps: input.fps,
-      pendingSeekTime: null,
-    };
-
-    video.addEventListener('seeked', () => {
-      artifact.pendingSeekTime = null;
-      this.requestRender();
-    });
-
-    video.addEventListener('error', () => {
-      log.warn('Video bake proxy element failed', {
-        regionId: artifact.regionId,
-        error: video.error?.message,
-      });
-    });
+    let url: string | null = null;
 
     try {
+      url = URL.createObjectURL(input.blob);
+      const video = document.createElement('video');
+      video.src = url;
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.crossOrigin = 'anonymous';
+      video.loop = false;
+      video.controls = false;
+      video.style.display = 'none';
+
+      const artifact: VideoBakeProxyArtifact = {
+        regionId: input.region.id,
+        compositionId: input.compositionId,
+        startTime: input.region.startTime,
+        endTime: input.region.endTime,
+        url,
+        video,
+        width: input.width,
+        height: input.height,
+        fps: input.fps,
+        pendingSeekTime: null,
+        runtimeResourceId: resource.id,
+      };
+
+      video.addEventListener('seeked', () => {
+        artifact.pendingSeekTime = null;
+        this.requestRender();
+      });
+
+      video.addEventListener('error', () => {
+        log.warn('Video bake proxy element failed', {
+          regionId: artifact.regionId,
+          error: video.error?.message,
+        });
+      });
+
       await this.waitForReady(video);
       this.artifacts.set(input.region.id, artifact);
     } catch (error) {
-      URL.revokeObjectURL(url);
+      timelineRuntimeCoordinator.releaseResource(resource.id);
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
       throw error;
     }
   }
@@ -90,6 +166,7 @@ class VideoBakeProxyCache {
     artifact.video.removeAttribute('src');
     artifact.video.load();
     URL.revokeObjectURL(artifact.url);
+    timelineRuntimeCoordinator.releaseResource(artifact.runtimeResourceId);
     this.artifacts.delete(regionId);
   }
 

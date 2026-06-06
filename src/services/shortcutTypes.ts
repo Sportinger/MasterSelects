@@ -27,6 +27,7 @@ export type ShortcutActionId =
   | 'tool.cutToggle'
   | 'tool.blade'
   | 'tool.bladeAllTracks'
+  | 'tool.glue'
   | 'tool.trimGroup'
   | 'tool.edgeTrim'
   | 'tool.rippleTrim'

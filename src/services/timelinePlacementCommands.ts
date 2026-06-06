@@ -17,6 +17,7 @@ import { useTimelineStore } from '../stores/timeline';
 import type { TimelinePlacementMode } from '../stores/timeline/editOperations/types';
 import type { TimelineStore, TimelineToolPreview } from '../stores/timeline/types';
 import { NativeHelperClient } from './nativeHelper/NativeHelperClient';
+import { createPrimaryMediaObjectUrl } from './project/mediaObjectUrlManager';
 import { Logger } from './logger';
 
 const log = Logger.create('TimelinePlacementCommands');
@@ -129,7 +130,7 @@ async function resolveMediaFileForTimeline(mediaFile: MediaFile): Promise<File |
     if (referencedPath) {
       (file as File & { path?: string }).path = referencedPath;
     }
-    const url = URL.createObjectURL(file);
+    const url = createPrimaryMediaObjectUrl(mediaFile.id, file);
 
     useMediaStore.setState((state) => ({
       files: state.files.map((currentFile) =>

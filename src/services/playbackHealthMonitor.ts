@@ -12,7 +12,9 @@
 
 import { Logger } from './logger';
 import { engine } from '../engine/WebGPUEngine';
-import { createFrameContext, getClipTimeInfo, layerBuilder } from './layerBuilder';
+import { getClipTimeInfo, layerBuilder } from './layerBuilder';
+import { createFrameContext } from './layerBuilder/FrameContext';
+import type { FrameContext } from './layerBuilder';
 import { useTimelineStore } from '../stores/timeline';
 import type { TimelineClip } from '../types';
 import {
@@ -142,6 +144,30 @@ export class PlaybackHealthMonitor {
     return !clip.source?.webCodecsPlayer?.isFullMode?.();
   }
 
+  private getVisibleHtmlVideoClipsAtPlayhead(ctx: FrameContext): TimelineClip[] {
+    const seenClipIds = new Set<string>();
+    const seenVideos = new Set<HTMLVideoElement>();
+    const result: TimelineClip[] = [];
+
+    for (const clip of ctx.clipsAtTime) {
+      const video = clip.source?.videoElement;
+      const hasTrackMetadata = ctx.tracks.length > 0 || ctx.videoTracks.length > 0;
+      const trackVisible = hasTrackMetadata ? ctx.visibleVideoTrackIds.has(clip.trackId) : true;
+      if (!video || !clip.trackId || !trackVisible) {
+        continue;
+      }
+      if (seenClipIds.has(clip.id) || seenVideos.has(video)) {
+        continue;
+      }
+
+      seenClipIds.add(clip.id);
+      seenVideos.add(video);
+      result.push(clip);
+    }
+
+    return result;
+  }
+
   start(): void {
     if (this.intervalId !== null) return;
     this.startTime = performance.now();
@@ -184,7 +210,9 @@ export class PlaybackHealthMonitor {
   // --- Main check loop ---
 
   private checkHealth(): void {
-    const { isPlaying, clips, tracks, playheadPosition, clipDragPreview } = useTimelineStore.getState();
+    const { clipDragPreview } = useTimelineStore.getState();
+    const ctx = createFrameContext();
+    const { isPlaying, clips, tracks, playheadPosition } = ctx;
     const now = performance.now();
     const hasVisualRenderDemand = hasTimelineVisualRenderDemand({
       clips,
@@ -193,11 +221,8 @@ export class PlaybackHealthMonitor {
       clipDragPreview,
     });
 
-    // Gather active video clips at playhead
-    const clipsAtTime = clips.filter(
-      (c) => playheadPosition >= c.startTime && playheadPosition < c.startTime + c.duration
-    );
-    const videoClips = clipsAtTime.filter((c) => c.source?.videoElement);
+    // Gather visible video clips at the effective playhead.
+    const videoClips = this.getVisibleHtmlVideoClipsAtPlayhead(ctx);
     const htmlHealthVideoClips = videoClips.filter((clip) => this.shouldMonitorHtmlVideoHealth(clip));
 
     const vsm = layerBuilder.getVideoSyncManager();
@@ -583,11 +608,8 @@ export class PlaybackHealthMonitor {
     const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
     const lc = engine.getLayerCollector();
-    const clipsAtPlayhead = ctx.clips.filter(
-      (clip) =>
-        (clip.source?.videoElement || clip.source?.webCodecsPlayer) &&
-        playheadPosition >= clip.startTime &&
-        playheadPosition < clip.startTime + clip.duration
+    const clipsAtPlayhead = this.getVisibleHtmlVideoClipsAtPlayhead(ctx).filter(
+      (clip) => clip.source?.videoElement || clip.source?.webCodecsPlayer
     );
 
     this.videoTimeTracker.clear();
@@ -662,16 +684,11 @@ export class PlaybackHealthMonitor {
   }
 
   softReset(): void {
-    const { clips, playheadPosition } = useTimelineStore.getState();
+    const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
-    const lc = engine.getLayerCollector();
+    const lc = engine.getLayerCollector?.();
 
-    const videoClips = clips.filter(
-      (c) =>
-        c.source?.videoElement &&
-        playheadPosition >= c.startTime &&
-        playheadPosition < c.startTime + c.duration
-    );
+    const videoClips = this.getVisibleHtmlVideoClipsAtPlayhead(ctx);
 
     // Force decode all
     for (const clip of videoClips) {
@@ -682,7 +699,7 @@ export class PlaybackHealthMonitor {
 
     // Clear orphaned RVFC handles
     const rvfcIds = vsm.getActiveRvfcClipIds();
-    const currentIds = new Set(clips.map((c) => c.id));
+    const currentIds = new Set(ctx.clips.map((c) => c.id));
     for (const id of rvfcIds) {
       if (!currentIds.has(id)) vsm.cancelRvfcHandle(id);
     }
@@ -692,15 +709,10 @@ export class PlaybackHealthMonitor {
   }
 
   forceDecodeAll(): void {
-    const { clips, playheadPosition } = useTimelineStore.getState();
-    const lc = engine.getLayerCollector();
+    const ctx = createFrameContext();
+    const lc = engine.getLayerCollector?.();
 
-    const videoClips = clips.filter(
-      (c) =>
-        c.source?.videoElement &&
-        playheadPosition >= c.startTime &&
-        playheadPosition < c.startTime + c.duration
-    );
+    const videoClips = this.getVisibleHtmlVideoClipsAtPlayhead(ctx);
 
     for (const clip of videoClips) {
       const video = clip.source!.videoElement!;
@@ -712,15 +724,10 @@ export class PlaybackHealthMonitor {
   }
 
   clearWarmups(): void {
-    const { clips, playheadPosition } = useTimelineStore.getState();
+    const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
 
-    const videoClips = clips.filter(
-      (c) =>
-        c.source?.videoElement &&
-        playheadPosition >= c.startTime &&
-        playheadPosition < c.startTime + c.duration
-    );
+    const videoClips = this.getVisibleHtmlVideoClipsAtPlayhead(ctx);
 
     for (const clip of videoClips) {
       vsm.clearWarmupState(clip.source!.videoElement!);
@@ -766,13 +773,9 @@ export class PlaybackHealthMonitor {
     anomalyCounts: Record<AnomalyType, number>;
     videoStates: Array<{ clipId: string; currentTime: number; readyState: number; seeking: boolean; paused: boolean }>;
   } {
-    const { clips, playheadPosition, isPlaying } = useTimelineStore.getState();
-    const videoClips = clips.filter(
-      (c) =>
-        c.source?.videoElement &&
-        playheadPosition >= c.startTime &&
-        playheadPosition < c.startTime + c.duration
-    );
+    const { isPlaying } = useTimelineStore.getState();
+    const ctx = createFrameContext();
+    const videoClips = this.getVisibleHtmlVideoClipsAtPlayhead(ctx);
 
     const totalAnomalies = Object.values(this.anomalyCounts).reduce((a, b) => a + b, 0);
     const status = totalAnomalies === 0 ? 'healthy' : isPlaying ? 'degraded' : 'idle-with-issues';
@@ -810,17 +813,11 @@ export class PlaybackHealthMonitor {
     warmingUp: boolean;
     gpuReady: boolean;
   }> {
-    const { clips, playheadPosition } = useTimelineStore.getState();
+    const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
     const lc = engine.getLayerCollector();
 
-    return clips
-      .filter(
-        (c) =>
-          c.source?.videoElement &&
-          playheadPosition >= c.startTime &&
-          playheadPosition < c.startTime + c.duration
-      )
+    return this.getVisibleHtmlVideoClipsAtPlayhead(ctx)
       .map((c) => {
         const v = c.source!.videoElement!;
         return {

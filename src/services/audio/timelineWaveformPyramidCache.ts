@@ -5,7 +5,8 @@ import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
 import { Logger } from '../logger';
 import { AudioArtifactStore } from './AudioArtifactStore';
-import type { AudioAnalysisArtifact, AudioArtifactRef } from './audioArtifactTypes';
+import type { AudioAnalysisArtifact, AudioArtifactRef, AudioChannelLayout } from './audioArtifactTypes';
+import { isAudioAnalysisArtifactStaleForInput } from './audioAnalysisManifestKeys';
 import {
   WaveformPyramidGenerator,
   createWaveformPyramidAnalyzerVersion,
@@ -70,6 +71,26 @@ function getProjectHandle(): FileSystemDirectoryHandle | null {
       getProjectHandle?: () => FileSystemDirectoryHandle | null;
     }
   ).getProjectHandle?.() ?? null;
+}
+
+function describeSourceWaveformChannelLayout(channelCount: number): AudioChannelLayout {
+  if (channelCount === 1) {
+    return { kind: 'mono', channelCount, labels: ['M'] };
+  }
+
+  if (channelCount === 2) {
+    return { kind: 'stereo', channelCount, labels: ['L', 'R'] };
+  }
+
+  if (channelCount > 2 && channelCount <= 8) {
+    return { kind: 'surround', channelCount };
+  }
+
+  if (channelCount > 8) {
+    return { kind: 'discrete', channelCount };
+  }
+
+  return { kind: 'unknown', channelCount: Math.max(0, channelCount) };
 }
 
 export function createCurrentAudioArtifactStore(): AudioArtifactStore {
@@ -318,6 +339,18 @@ export function getCachedTimelineWaveformPyramid(
   return key ? timelineWaveformPyramidCache.get(key) ?? null : null;
 }
 
+export function evictTimelineWaveformPyramidRefs(
+  keys: Iterable<string | undefined>,
+): number {
+  let removed = 0;
+  for (const key of keys) {
+    if (key && timelineWaveformPyramidCache.delete(key)) {
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 export async function readTimelineWaveformPyramid(
   manifest: WaveformPyramidManifest,
   store: AudioArtifactStore,
@@ -425,6 +458,7 @@ async function findReusableSourceWaveformPyramid(input: {
   sourceFingerprint: string;
   clipAudioStateHash?: string;
   sampleRate: number;
+  channelLayout: AudioChannelLayout;
   duration: number;
 }): Promise<{
   pyramid: TimelineWaveformPyramid;
@@ -432,13 +466,18 @@ async function findReusableSourceWaveformPyramid(input: {
 } | null> {
   const analyzerVersion = createWaveformPyramidAnalyzerVersion();
   const candidates = await input.store.listAnalysisArtifacts(input.mediaFileId, 'waveform-pyramid');
+  const expectedInput = {
+    mediaFileId: input.mediaFileId,
+    sourceFingerprint: input.sourceFingerprint,
+    kind: 'waveform-pyramid' as const,
+    analyzerVersion,
+    channelLayout: input.channelLayout,
+    sampleRate: input.sampleRate,
+    duration: input.duration,
+    clipAudioStateHash: input.clipAudioStateHash,
+  };
   const artifact = candidates.find(candidate => (
-    candidate.stale !== true
-    && candidate.sourceFingerprint === input.sourceFingerprint
-    && candidate.clipAudioStateHash === input.clipAudioStateHash
-    && candidate.sampleRate === input.sampleRate
-    && Math.abs(candidate.duration - input.duration) < 0.000001
-    && candidate.analyzerVersion === analyzerVersion
+    !isAudioAnalysisArtifactStaleForInput(candidate, expectedInput)
     && Boolean(candidate.metadata?.waveformManifest)
   ));
 
@@ -494,6 +533,7 @@ async function generateTimelineWaveformAnalysisForFileUncached(
         sourceFingerprint,
         clipAudioStateHash: options.clipAudioStateHash,
         sampleRate: audioBuffer.sampleRate,
+        channelLayout: describeSourceWaveformChannelLayout(audioBuffer.numberOfChannels),
         duration: audioBuffer.duration,
       });
       if (reusable) {

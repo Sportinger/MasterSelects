@@ -1,6 +1,11 @@
 import { useEffect } from 'react';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import type { TimelineEmptyContextMenuState } from './types';
+import {
+  createTimelineEmptyContextMenuModel,
+  executeTimelineEmptyContextMenuCommand,
+  type TimelineEmptyContextMenuCommand,
+} from './utils/timelineEmptyContextMenu';
 
 interface TimelineEmptyContextMenuProps {
   menu: TimelineEmptyContextMenuState | null;
@@ -24,24 +29,44 @@ export function TimelineEmptyContextMenu({
   useEffect(() => {
     if (!menu) return;
 
-    const handleClickOutside = () => onClose();
+    const handlePointerOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      onClose();
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('contextmenu', handleClickOutside, true);
+    document.addEventListener('mousedown', handlePointerOutside, true);
+    document.addEventListener('contextmenu', handlePointerOutside, true);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('contextmenu', handleClickOutside, true);
+      document.removeEventListener('mousedown', handlePointerOutside, true);
+      document.removeEventListener('contextmenu', handlePointerOutside, true);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [menu, onClose]);
+  }, [menu, menuRef, onClose]);
 
   if (!menu) return null;
+
+  const contextMenuModel = createTimelineEmptyContextMenuModel({
+    time: menu.time,
+    trackId: menu.trackId,
+  });
+  const runCommand = (command: TimelineEmptyContextMenuCommand) => {
+    const executed = executeTimelineEmptyContextMenuCommand(command, {
+      onEraseGap,
+      onEraseLayerGaps,
+      onEraseAllGaps,
+      onFitCompToWindow,
+    });
+    if (executed) {
+      onClose();
+    }
+  };
 
   return (
     <div
@@ -57,43 +82,25 @@ export function TimelineEmptyContextMenu({
       onMouseDown={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.stopPropagation()}
     >
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onEraseGap(menu.time, menu.trackId);
-          onClose();
-        }}
-      >
-        Erase Space Between Clips
-      </div>
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onEraseLayerGaps(menu.time, menu.trackId);
-          onClose();
-        }}
-      >
-        Erase Space Between All Clips in This Layer
-      </div>
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onEraseAllGaps();
-          onClose();
-        }}
-      >
-        Erase Space Between All Clips
-      </div>
+      {contextMenuModel.gapCommands.map(command => (
+        <div
+          key={command.key}
+          className="context-menu-item"
+          onClick={() => runCommand(command)}
+        >
+          {command.label}
+        </div>
+      ))}
       <div className="context-menu-separator" />
-      <div
-        className="context-menu-item"
-        onClick={() => {
-          onFitCompToWindow();
-          onClose();
-        }}
-      >
-        Fit Comp to Window
-      </div>
+      {contextMenuModel.viewCommands.map(command => (
+        <div
+          key={command.key}
+          className="context-menu-item"
+          onClick={() => runCommand(command)}
+        >
+          {command.label}
+        </div>
+      ))}
     </div>
   );
 }

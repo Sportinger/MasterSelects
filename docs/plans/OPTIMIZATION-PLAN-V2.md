@@ -416,7 +416,8 @@ After each change:
 
 ### Already Optimized:
 - `src/components/timeline/Timeline.tsx` - ✅ Uses selectors correctly
-- `src/components/timeline/TimelineClip.tsx` - ✅ Uses memo + selectors
+- `src/components/timeline/TimelineClipCanvas.tsx` - current passive clip-body renderer
+- `src/components/timeline/interactionShell/` - current active clip controls
 - `src/components/timeline/TimelineTrack.tsx` - ✅ Uses memo
 - `src/components/timeline/TimelineHeader.tsx` - ✅ Uses memo
 

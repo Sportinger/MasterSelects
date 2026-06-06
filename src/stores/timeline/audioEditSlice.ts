@@ -35,7 +35,6 @@ import {
 import { generateTimelineWaveformAnalysisForFile } from '../../services/audio/timelineWaveformPyramidCache';
 import { PROJECT_FOLDERS } from '../../services/project/core/constants';
 import { useMediaStore } from '../mediaStore';
-import { createAudioElement } from './helpers/webCodecsHelpers';
 import { captureSnapshot } from '../historyStore';
 
 const log = Logger.create('TimelineAudioEdit');
@@ -316,15 +315,6 @@ function createAudioBakeRestoreState(clip: TimelineClip): AudioBakeRestoreState 
     waveformChannels: clip.waveformChannels?.map(channel => [...channel]),
     audioState: clip.audioState ? structuredClone(clip.audioState) : undefined,
   };
-}
-
-function createAudioElementForRestoredSource(file: File | undefined, url: string | undefined): HTMLAudioElement | undefined {
-  if (file) return createAudioElement(file);
-  if (!url || typeof document === 'undefined') return undefined;
-  const audio = document.createElement('audio');
-  audio.src = url;
-  audio.preload = 'auto';
-  return audio;
 }
 
 function createPlaceholderAudioFile(name: string): File {
@@ -1101,7 +1091,6 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
       return null;
     }
 
-    const audioElement = createAudioElement(bakedFile);
     const analysis = await generateTimelineWaveformAnalysisForFile(bakedFile, {
       mediaFileId: imported.id,
     });
@@ -1130,7 +1119,6 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
           source: {
             ...(currentClip.source ?? { type: 'audio' as const }),
             type: 'audio' as const,
-            audioElement,
             naturalDuration: nextOutPoint,
             mediaFileId: imported.id,
             file: bakedFile,
@@ -1206,7 +1194,6 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
 
     const restoredFile = sourceMediaFile.file;
     const restoredUrl = sourceMediaFile.url;
-    const audioElement = createAudioElementForRestoredSource(restoredFile, restoredUrl);
     if (!restoredFile && !restoredUrl) {
       log.warn('Cannot unbake clip because the source media has no file or URL', {
         clipId,
@@ -1239,7 +1226,6 @@ export const createAudioEditSlice: SliceCreator<AudioEditActions> = (set, get) =
           source: {
             ...(currentClip.source ?? { type: 'audio' as const }),
             type: 'audio' as const,
-            ...(audioElement ? { audioElement } : {}),
             naturalDuration,
             mediaFileId: sourceMediaFileId,
             ...(restoredFile ? { file: restoredFile } : {}),

@@ -25,6 +25,7 @@ import type { IMidiSynth } from '../../engine/audio/IMidiSynth';
 import { createSynthForInstrument } from '../../engine/audio/createSynthForInstrument';
 import { getGmSampleBank, type GmSoundRef } from '../../engine/audio/GmSampleBank';
 import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
+import { isNoteStartInWindow, noteAbsoluteStart } from '../midi/midiClipTiming';
 import { audioRoutingManager } from '../audioRoutingManager';
 import {
   createTrackLiveAudioRouteSettings,
@@ -318,7 +319,9 @@ class MidiPlaybackScheduler {
 
         const clipEnd = clip.startTime + clip.duration;
         for (const note of notes) {
-          const absStart = clip.startTime + note.start;
+          // Notes outside the clip's in/out window are silent but preserved (#232).
+          if (!isNoteStartInWindow(clip, note)) continue;
+          const absStart = noteAbsoluteStart(clip, note);
           if (absStart < windowStartTimeline - 0.001 || absStart >= windowEndTimeline) continue;
 
           // Clamp the playable length to the clip boundary, then skip empties.

@@ -1,38 +1,22 @@
-// Project persistence slice - save, load, init
+// Project UI/runtime actions. Project-file save/load lives in ProjectFileService.
 
-import type {
-  CameraItem,
-  Composition,
-  MathSceneItem,
-  MediaFile,
-  MediaFolder,
-  MediaSliceCreator,
-  MotionShapeItem,
-  ProxyStatus,
-  SignalAssetItem,
-  SolidItem,
-  TextItem,
-} from '../types';
-import type { SignalArtifact, SignalGraph, SignalOperatorDescriptor } from '../../../signals';
+import type { Composition, MediaSliceCreator } from '../types';
 import { DEFAULT_COMPOSITION } from '../constants';
-import { generateId } from '../helpers/importPipeline';
-import { getExpectedProxyFps, isProxyFrameIndexSetComplete } from '../helpers/proxyCompleteness';
-import { projectDB, type StoredProject } from '../../../services/projectDB';
-import { projectFileService } from '../../../services/projectFileService';
 import { fileSystemService } from '../../../services/fileSystemService';
 import { useTimelineStore } from '../../timeline';
 import { engine } from '../../../engine/WebGPUEngine';
 import { Logger } from '../../../services/logger';
+import { restoreLegacyStartupMediaState } from '../legacyStartupRestore';
+import {
+  revokeAllMediaObjectUrls,
+  revokeMediaFileObjectUrls,
+} from '../../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('Project');
 
 export interface ProjectActions {
   initFromDB: () => Promise<void>;
-  saveProject: (name?: string) => Promise<string>;
-  loadProject: (projectId: string) => Promise<void>;
   newProject: () => void;
-  getProjectList: () => Promise<StoredProject[]>;
-  deleteProject: (projectId: string) => Promise<void>;
   setProjectName: (name: string) => void;
   pickProxyFolder: () => Promise<FileSystemDirectoryHandle | null>;
   showInExplorer: (type: 'raw' | 'proxy', mediaFileId?: string) => Promise<{ success: boolean; message: string }>;
@@ -55,346 +39,22 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
     return fileSystemService.showInExplorer(type, mediaFileId);
   },
 
-  initFromDB: async () => {
-    set({ isLoading: true });
-    try {
-      const storedFiles = await projectDB.getAllMediaFiles();
-      const { files } = get();
-
-      // Restore files from file handles
-      const updatedFiles = await Promise.all(
-        files.map(async (mediaFile) => {
-          const stored = storedFiles.find((sf) => sf.id === mediaFile.id);
-          if (!stored) return mediaFile;
-
-          let file: File | undefined;
-          let url = mediaFile.url;
-          let thumbnailUrl = mediaFile.thumbnailUrl;
-
-          // Prefer the project-local RAW copy. It is the canonical media source once imported.
-          if (mediaFile.projectPath && projectFileService.isProjectOpen()) {
-            try {
-              const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
-              if (result) {
-                file = result.file;
-                url = URL.createObjectURL(file);
-                const projectHandle = result.handle;
-                if (projectHandle) {
-                  fileSystemService.storeFileHandle(mediaFile.id, projectHandle);
-                  await projectDB.storeHandle(`media_${mediaFile.id}`, projectHandle);
-                }
-                log.debug('Restored file from project RAW copy:', stored.name);
-              }
-            } catch (e) {
-              log.warn(`Failed to restore file from project RAW copy: ${stored.name}`, e);
-            }
-          }
-
-          // Fall back to the stored handle when the RAW copy is unavailable.
-          if (!file) {
-            const handle = await projectDB.getStoredHandle(`media_${mediaFile.id}`);
-            if (handle && 'getFile' in handle) {
-              try {
-                const permission = await (handle as FileSystemFileHandle).queryPermission({ mode: 'read' });
-                if (permission === 'granted') {
-                  file = await (handle as FileSystemFileHandle).getFile();
-                  url = URL.createObjectURL(file);
-                  fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
-                  log.debug('Restored file from handle:', stored.name);
-                } else {
-                  const newPermission = await (handle as FileSystemFileHandle).requestPermission({ mode: 'read' });
-                  if (newPermission === 'granted') {
-                    file = await (handle as FileSystemFileHandle).getFile();
-                    url = URL.createObjectURL(file);
-                    fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
-                    log.debug(`Restored file from handle (after permission): ${stored.name}`);
-                  }
-                }
-              } catch (e) {
-                log.warn(`Failed to restore file from handle: ${stored.name}`, e);
-              }
-            }
-          }
-
-          // Restore thumbnail from project folder or IndexedDB cache.
-          if (stored.fileHash) {
-            let thumbBlob: Blob | null = null;
-            if (projectFileService.isProjectOpen()) {
-              thumbBlob = await projectFileService.getThumbnail(stored.fileHash);
-            }
-            if (!thumbBlob || thumbBlob.size <= 0) {
-              const storedThumbnail = await projectDB.getThumbnail(stored.fileHash);
-              thumbBlob = storedThumbnail?.blob ?? null;
-            }
-            if (thumbBlob && thumbBlob.size > 0) {
-              thumbnailUrl = URL.createObjectURL(thumbBlob);
-            }
-          }
-
-          // Check for existing proxy by hash (fallback to mediaId for older projects)
-          let proxyStatus: ProxyStatus = 'none';
-          let proxyFrameCount: number | undefined;
-          let proxyProgress = 0;
-          let proxyFps: number | undefined;
-          let proxyFormat: MediaFile['proxyFormat'];
-          if (stored.type === 'video' && projectFileService.isProjectOpen()) {
-            // Try fileHash first, then fall back to mediaId (for backwards compatibility)
-            const storageKey = stored.fileHash || mediaFile.id;
-            const frameIndices = await projectFileService.getProxyFrameIndices(storageKey);
-            if (isProxyFrameIndexSetComplete(frameIndices, stored.duration ?? mediaFile.duration, stored.fps ?? mediaFile.fps)) {
-              proxyFps = getExpectedProxyFps(stored.fps ?? mediaFile.fps);
-              proxyStatus = 'ready';
-              proxyFrameCount = frameIndices.size;
-              proxyProgress = 100;
-              proxyFormat = 'jpeg-sequence';
-            }
-          }
-
-          // Check for existing transcript on disk
-          let transcriptStatus: import('../../../types').TranscriptStatus = 'none';
-          let transcript: import('../../../types').TranscriptWord[] | undefined;
-          if (projectFileService.isProjectOpen()) {
-            try {
-              const saved = await projectFileService.getTranscript(mediaFile.id);
-              if (saved && Array.isArray(saved) && saved.length > 0) {
-                transcriptStatus = 'ready';
-                transcript = saved as import('../../../types').TranscriptWord[];
-              }
-            } catch { /* no transcript file */ }
-          }
-
-          return {
-            ...mediaFile,
-            file,
-            url,
-            thumbnailUrl,
-            fileHash: stored.fileHash,
-            hasFileHandle: !!file,
-            proxyStatus,
-            proxyFrameCount,
-            proxyFps: proxyStatus === 'ready' ? proxyFps : undefined,
-            proxyProgress,
-            proxyFormat,
-            transcriptStatus,
-            transcript,
-            duration: stored.duration ?? mediaFile.duration,
-            width: stored.width ?? mediaFile.width,
-            height: stored.height ?? mediaFile.height,
-            fps: stored.fps ?? mediaFile.fps,
-            codec: stored.codec ?? mediaFile.codec,
-            container: stored.container ?? mediaFile.container,
-            fileSize: stored.fileSize ?? mediaFile.fileSize,
-          };
-        })
-      );
-
-      // Restore generated media items from localStorage
-      let restoredTextItems: TextItem[] = [];
-      let restoredSolidItems: SolidItem[] = [];
-      let restoredMeshItems: import('../types').MeshItem[] = [];
-      let restoredCameraItems: CameraItem[] = [];
-      let restoredSplatEffectorItems: import('../types').SplatEffectorItem[] = [];
-      let restoredMathSceneItems: MathSceneItem[] = [];
-      let restoredMotionShapeItems: MotionShapeItem[] = [];
-      try {
-        const storedText = localStorage.getItem('ms-textItems');
-        if (storedText) restoredTextItems = JSON.parse(storedText);
-      } catch { /* ignore parse errors */ }
-      try {
-        const storedSolid = localStorage.getItem('ms-solidItems');
-        if (storedSolid) restoredSolidItems = JSON.parse(storedSolid);
-      } catch { /* ignore parse errors */ }
-      try {
-        const storedMesh = localStorage.getItem('ms-meshItems');
-        if (storedMesh) restoredMeshItems = JSON.parse(storedMesh);
-      } catch { /* ignore parse errors */ }
-      try {
-        const storedCamera = localStorage.getItem('ms-cameraItems');
-        if (storedCamera) restoredCameraItems = JSON.parse(storedCamera);
-      } catch { /* ignore parse errors */ }
-      try {
-        const storedSplatEffectors = localStorage.getItem('ms-splatEffectorItems');
-        if (storedSplatEffectors) restoredSplatEffectorItems = JSON.parse(storedSplatEffectors);
-      } catch { /* ignore parse errors */ }
-      try {
-        const storedMathScenes = localStorage.getItem('ms-mathSceneItems');
-        if (storedMathScenes) restoredMathSceneItems = JSON.parse(storedMathScenes);
-      } catch { /* ignore parse errors */ }
-      try {
-        const storedMotionShapes = localStorage.getItem('ms-motionShapeItems');
-        if (storedMotionShapes) restoredMotionShapeItems = JSON.parse(storedMotionShapes);
-      } catch { /* ignore parse errors */ }
-
-      set({
-        files: updatedFiles,
-        isLoading: false,
-        ...(restoredTextItems.length > 0 && { textItems: restoredTextItems }),
-        ...(restoredSolidItems.length > 0 && { solidItems: restoredSolidItems }),
-        ...(restoredMeshItems.length > 0 && { meshItems: restoredMeshItems }),
-        ...(restoredCameraItems.length > 0 && { cameraItems: restoredCameraItems }),
-        ...(restoredSplatEffectorItems.length > 0 && { splatEffectorItems: restoredSplatEffectorItems }),
-        ...(restoredMathSceneItems.length > 0 && { mathSceneItems: restoredMathSceneItems }),
-        ...(restoredMotionShapeItems.length > 0 && { motionShapeItems: restoredMotionShapeItems }),
-      });
-      log.info(`Restored ${storedFiles.length} files from IndexedDB`);
-    } catch (e) {
-      log.error('Failed to init from IndexedDB:', e);
-      set({ isLoading: false });
-    }
-  },
-
-  saveProject: async (name?: string) => {
-    const state = get();
-    const projectName = name || state.currentProjectName;
-    const projectId = state.currentProjectId || generateId();
-
-    // Save current timeline to active composition first
-    if (state.activeCompositionId) {
-      const timelineStore = useTimelineStore.getState();
-      const timelineData = timelineStore.getSerializableState();
-      set((s) => ({
-        compositions: s.compositions.map((c) =>
-          c.id === state.activeCompositionId ? { ...c, timelineData } : c
-        ),
-      }));
-    }
-
-    const project: StoredProject = {
-      id: projectId,
-      name: projectName,
-      createdAt: state.currentProjectId ? Date.now() : Date.now(),
-      updatedAt: Date.now(),
-      data: {
-        compositions: get().compositions,
-        folders: state.folders,
-        activeCompositionId: state.activeCompositionId,
-        openCompositionIds: state.openCompositionIds,
-        expandedFolderIds: state.expandedFolderIds,
-        mediaFileIds: state.files.map((f) => f.id),
-        textItems: state.textItems,
-        solidItems: state.solidItems,
-        meshItems: state.meshItems,
-        cameraItems: state.cameraItems,
-        splatEffectorItems: state.splatEffectorItems,
-        mathSceneItems: state.mathSceneItems,
-        motionShapeItems: state.motionShapeItems,
-        signalAssets: state.signalAssets,
-        signalArtifacts: state.signalArtifacts,
-        signalGraphs: state.signalGraphs,
-        signalOperators: state.signalOperators,
-      },
-    };
-
-    await projectDB.saveProject(project);
-    set({ currentProjectId: projectId, currentProjectName: projectName });
-    log.info('Saved:', projectName);
-    return projectId;
-  },
-
-  loadProject: async (projectId: string) => {
-    set({ isLoading: true });
-    try {
-      const project = await projectDB.getProject(projectId);
-      if (!project) {
-        throw new Error('Project not found');
-      }
-
-      // Load media files from IndexedDB
-      const storedFiles = await projectDB.getAllMediaFiles();
-      const mediaFileMap = new Map(storedFiles.map((f) => [f.id, f]));
-
-      // Restore files from metadata (legacy fallback)
-      const files: MediaFile[] = [];
-      for (const fileId of project.data.mediaFileIds) {
-        const stored = mediaFileMap.get(fileId);
-        if (stored) {
-          const storedWithBlob = stored as typeof stored & { blob?: Blob; thumbnailBlob?: Blob };
-          if (storedWithBlob.blob) {
-            const file = new File([storedWithBlob.blob], stored.name, { type: storedWithBlob.blob.type });
-            const url = URL.createObjectURL(file);
-            let thumbnailUrl: string | undefined;
-            if (storedWithBlob.thumbnailBlob) {
-              thumbnailUrl = URL.createObjectURL(storedWithBlob.thumbnailBlob);
-            }
-            files.push({
-              id: stored.id,
-              name: stored.name,
-              type: stored.type,
-              parentId: null,
-              createdAt: stored.createdAt,
-              file,
-              url,
-              thumbnailUrl,
-              duration: stored.duration,
-              width: stored.width,
-              height: stored.height,
-            });
-          }
-        }
-      }
-
-      // Clear timeline first
-      const timelineStore = useTimelineStore.getState();
-      timelineStore.clearTimeline();
-
-      // Clear the render frame
-      engine.clearFrame();
-
-      // Restore state
-      set({
-        files,
-        compositions: project.data.compositions as Composition[],
-        folders: project.data.folders as MediaFolder[],
-        textItems: (project.data.textItems as TextItem[]) || [],
-        solidItems: (project.data.solidItems as SolidItem[]) || [],
-        meshItems: (project.data.meshItems as import('../types').MeshItem[]) || [],
-        cameraItems: (project.data.cameraItems as CameraItem[]) || [],
-        splatEffectorItems: (project.data.splatEffectorItems as import('../types').SplatEffectorItem[]) || [],
-        mathSceneItems: (project.data.mathSceneItems as MathSceneItem[]) || [],
-        motionShapeItems: (project.data.motionShapeItems as MotionShapeItem[]) || [],
-        signalAssets: (project.data.signalAssets as SignalAssetItem[]) || [],
-        signalArtifacts: (project.data.signalArtifacts as SignalArtifact[]) || [],
-        signalGraphs: (project.data.signalGraphs as SignalGraph[]) || [],
-        signalOperators: (project.data.signalOperators as SignalOperatorDescriptor[]) || [],
-        activeCompositionId: null,
-        openCompositionIds: (project.data.openCompositionIds as string[]) || [],
-        expandedFolderIds: project.data.expandedFolderIds,
-        currentProjectId: projectId,
-        currentProjectName: project.name,
-        isLoading: false,
-      });
-
-      // Load active composition's timeline
-      if (project.data.activeCompositionId) {
-        const comp = (project.data.compositions as Composition[]).find(
-          (c) => c.id === project.data.activeCompositionId
-        );
-        if (comp) {
-          await timelineStore.loadState(comp.timelineData);
-          set({
-            activeCompositionId: project.data.activeCompositionId,
-            openCompositionIds: get().openCompositionIds.includes(project.data.activeCompositionId as string)
-              ? get().openCompositionIds
-              : [...get().openCompositionIds, project.data.activeCompositionId as string]
-          });
-        }
-      }
-
-      log.info('Loaded:', project.name);
-    } catch (e) {
-      log.error('Failed to load:', e);
-      set({ isLoading: false });
-      throw e;
-    }
-  },
+  initFromDB: () => restoreLegacyStartupMediaState(set, get),
 
   newProject: () => {
+    const previousFiles = get().files;
+
     // Clear timeline first
     const timelineStore = useTimelineStore.getState();
     timelineStore.clearTimeline();
 
     // Clear the render frame
     engine.clearFrame();
+
+    previousFiles.forEach((file) => {
+      revokeMediaFileObjectUrls(file);
+    });
+    revokeAllMediaObjectUrls();
 
     // Create new default composition
     const newCompId = `comp-${Date.now()}`;
@@ -452,12 +112,4 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
     log.info('New project created');
   },
 
-  getProjectList: async () => {
-    return projectDB.getAllProjects();
-  },
-
-  deleteProject: async (projectId: string) => {
-    await projectDB.deleteProject(projectId);
-    log.info('Deleted:', projectId);
-  },
 });

@@ -79,6 +79,25 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     return clipId;
   },
 
+  clipRenameId: null,
+
+  setClipRenameId: (clipId) => {
+    set({ clipRenameId: clipId });
+  },
+
+  renameMidiClip: (clipId, name) => {
+    const { clips } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'midi') {
+      log.warn('Cannot rename: not a MIDI clip', { clipId });
+      return;
+    }
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === clip.name) return;
+    captureSnapshot('Rename MIDI clip');
+    set({ clips: clips.map(c => (c.id === clipId ? { ...c, name: trimmed } : c)) });
+  },
+
   addMidiNote: (clipId, note) => {
     const { clips, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);

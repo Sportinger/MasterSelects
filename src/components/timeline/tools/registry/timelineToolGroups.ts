@@ -31,6 +31,7 @@ export const TIMELINE_TOOL_GROUPS: TimelineToolGroupDefinition[] = [
     tools: [
       'blade',
       'blade-all-tracks',
+      'glue',
       'split-at-playhead',
       'split-all-at-playhead',
       'trim-start-to-playhead',

@@ -1,5 +1,6 @@
 import { blobToArrayBuffer } from '../../artifacts';
 import type { AudioArtifactStore } from './AudioArtifactStore';
+import { createCurrentAudioArtifactStore } from './timelineWaveformPyramidCache';
 import {
   decodeFrequencyBandPayload,
   decodePhaseCorrelationPayload,
@@ -71,6 +72,22 @@ export function getCachedTimelinePhaseCorrelation(key: string | undefined): Time
 export function clearTimelineFrequencyPhaseCache(): void {
   frequencySummaryCache.clear();
   phaseCorrelationCache.clear();
+}
+
+export function evictTimelineFrequencyPhaseRefs(
+  keys: Iterable<string | undefined>,
+): number {
+  let removed = 0;
+  for (const key of keys) {
+    if (!key) continue;
+    if (frequencySummaryCache.delete(key)) {
+      removed += 1;
+    }
+    if (phaseCorrelationCache.delete(key)) {
+      removed += 1;
+    }
+  }
+  return removed;
 }
 
 export async function readTimelineFrequencySummary(
@@ -149,4 +166,44 @@ export async function cacheTimelineFrequencyPhaseFromArtifacts(
   }
 
   return { frequency, phase };
+}
+
+export async function loadTimelineFrequencySummary(
+  refId: string | undefined,
+): Promise<TimelineFrequencySummary | null> {
+  const cached = getCachedTimelineFrequencySummary(refId);
+  if (cached || !refId) return cached ?? null;
+
+  const store = createCurrentAudioArtifactStore();
+  const artifact = await store.getAnalysisArtifact(refId);
+  const manifest = artifact?.metadata?.frequencySummaryManifest as FrequencySummaryManifest | undefined;
+  if (!artifact || !manifest) return null;
+
+  const frequency = await readTimelineFrequencySummary(manifest, store);
+  primeTimelineFrequencySummaryCache([
+    refId,
+    artifact.id,
+    artifact.manifestRef.artifactId,
+  ], frequency);
+  return frequency;
+}
+
+export async function loadTimelinePhaseCorrelation(
+  refId: string | undefined,
+): Promise<TimelinePhaseCorrelation | null> {
+  const cached = getCachedTimelinePhaseCorrelation(refId);
+  if (cached || !refId) return cached ?? null;
+
+  const store = createCurrentAudioArtifactStore();
+  const artifact = await store.getAnalysisArtifact(refId);
+  const manifest = artifact?.metadata?.phaseCorrelationManifest as PhaseCorrelationManifest | undefined;
+  if (!artifact || !manifest) return null;
+
+  const phase = await readTimelinePhaseCorrelation(manifest, store);
+  primeTimelinePhaseCorrelationCache([
+    refId,
+    artifact.id,
+    artifact.manifestRef.artifactId,
+  ], phase);
+  return phase;
 }

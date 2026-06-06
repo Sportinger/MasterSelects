@@ -43,6 +43,18 @@ export function getCachedTimelineLoudnessEnvelope(
   return key ? timelineLoudnessEnvelopeCache.get(key) ?? null : null;
 }
 
+export function evictTimelineLoudnessEnvelopeRefs(
+  keys: Iterable<string | undefined>,
+): number {
+  let removed = 0;
+  for (const key of keys) {
+    if (key && timelineLoudnessEnvelopeCache.delete(key)) {
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 export async function readTimelineLoudnessEnvelope(
   manifest: LoudnessEnvelopeManifest,
   store: AudioArtifactStore,

@@ -3,13 +3,16 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
-import { isVectorAnimationSourceType, shouldLoopVectorAnimation } from '../../../types/vectorAnimation';
 import type { ClipTrimState } from '../types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 import type { TimelineToolId, TimelineToolPreview, TimelineToolPreviewGhostRange } from '../../../stores/timeline/types';
 import { LAYER_BUILDER_CONSTANTS } from '../../../services/layerBuilder/types';
+import {
+  canLoopExtendTimelineVectorClip,
+  isInfiniteTimelineSourceType,
+} from '../utils/clipSourceTiming';
+import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
 
-const MIN_CLIP_DURATION = 0.1;
 const EPSILON = 0.0001;
 // Pixel radius within which a trim edge snaps to a clip edge / playhead / marker.
 const TRIM_SNAP_PIXELS = 12;
@@ -58,23 +61,8 @@ interface UseClipTrimReturn {
   handleTrimStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
 }
 
-function canLoopExtendVectorClip(clip: TimelineClip): boolean {
-  return isVectorAnimationSourceType(clip.source?.type) &&
-    shouldLoopVectorAnimation(clip.source.vectorAnimationSettings);
-}
-
 function getClipEnd(clip: TimelineClip): number {
   return clip.startTime + clip.duration;
-}
-
-function isInfiniteTrimSource(clip: TimelineClip): boolean {
-  const sourceType = clip.source?.type;
-  return sourceType === 'text' ||
-    sourceType === 'image' ||
-    sourceType === 'solid' ||
-    sourceType === 'camera' ||
-    sourceType === 'splat-effector' ||
-    sourceType === 'math-scene';
 }
 
 function isTrackLocked(tracks: TimelineTrack[], trackId: string): boolean {
@@ -188,7 +176,7 @@ function computeTrimTiming(
   orig: TrimOriginals,
   deltaTime: number,
 ) {
-  const maxDuration = isInfiniteTrimSource(clip)
+  const maxDuration = isInfiniteTimelineSourceType(clip.source?.type)
     ? Number.MAX_SAFE_INTEGER
     : (clip.source?.naturalDuration || orig.duration);
 
@@ -198,14 +186,14 @@ function computeTrimTiming(
 
   if (edge === 'left') {
     const maxTrim = orig.duration - MIN_CLIP_DURATION;
-    const minTrim = isInfiniteTrimSource(clip)
+    const minTrim = isInfiniteTimelineSourceType(clip.source?.type)
       ? -orig.startTime
       : -orig.inPoint;
     const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
     newStartTime = orig.startTime + clampedDelta;
     newInPoint = orig.inPoint + clampedDelta;
   } else {
-    const maxExtend = canLoopExtendVectorClip(clip)
+    const maxExtend = canLoopExtendTimelineVectorClip(clip)
       ? Number.MAX_SAFE_INTEGER
       : maxDuration - orig.outPoint;
     const minTrim = -(orig.duration - MIN_CLIP_DURATION);

@@ -17,6 +17,14 @@ const log = Logger.create('AITool:Media');
 
 type MediaStore = ReturnType<typeof useMediaStore.getState>;
 type LocalFileBackend = 'devBridge' | 'nativeHelper';
+type LocalFileImportStage =
+  | 'validate'
+  | 'fetchLocalFileBlob'
+  | 'createFile'
+  | 'mediaStore.importFile'
+  | 'timelinePlacement';
+
+const LOCAL_FILE_RANGE_CHUNK_BYTES = 4 * 1024 * 1024;
 
 const DEFAULT_LOCAL_FILE_EXTENSIONS = [
   '.mp4', '.webm', '.mov', '.mkv', '.avi',
@@ -90,6 +98,91 @@ function guessMimeTypeFromPath(filePath: string): string {
   return LOCAL_FILE_MIME_TYPES[normalizedPath.slice(dotIndex)] || 'application/octet-stream';
 }
 
+function isFetchNetworkError(error: unknown): boolean {
+  if (error instanceof TypeError && /failed to fetch/i.test(error.message)) {
+    return true;
+  }
+
+  return typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string' &&
+    /failed to fetch/i.test((error as { message: string }).message);
+}
+
+function parseContentRangeTotal(contentRange: string | null): number | null {
+  if (!contentRange) return null;
+  const match = contentRange.match(/\/(\d+)$/);
+  if (!match) return null;
+  const total = Number(match[1]);
+  return Number.isFinite(total) && total >= 0 ? total : null;
+}
+
+async function readLocalFileResponseError(response: Response): Promise<Error> {
+  const body = await response.json().catch(() => ({ error: response.statusText }));
+  return new Error(typeof body.error === 'string' ? body.error : `HTTP ${response.status}`);
+}
+
+function createLocalFileRequestUrl(normalizedPath: string): string {
+  return `/api/local-file?path=${encodeURIComponent(normalizedPath)}`;
+}
+
+async function fetchLocalFileDevBridgeResponse(
+  normalizedPath: string,
+  init?: RequestInit,
+): Promise<Response> {
+  return fetchWithDevBridgeAuth(createLocalFileRequestUrl(normalizedPath), init);
+}
+
+async function fetchLocalFileBlobInRanges(
+  normalizedPath: string,
+  originalError: unknown,
+): Promise<Blob> {
+  const mimeType = guessMimeTypeFromPath(normalizedPath);
+  const firstResponse = await fetchLocalFileDevBridgeResponse(normalizedPath, {
+    headers: { Range: 'bytes=0-0' },
+  });
+
+  if (!firstResponse.ok) {
+    throw await readLocalFileResponseError(firstResponse);
+  }
+
+  if (firstResponse.status !== 206) {
+    return firstResponse.blob();
+  }
+
+  const totalBytes = parseContentRangeTotal(firstResponse.headers.get('Content-Range'));
+  if (totalBytes === null) {
+    throw originalError instanceof Error ? originalError : new Error('Failed to fetch local file');
+  }
+
+  const parts: ArrayBuffer[] = [await firstResponse.arrayBuffer()];
+  let offset = parts[0]?.byteLength ?? 0;
+
+  while (offset < totalBytes) {
+    const end = Math.min(totalBytes - 1, offset + LOCAL_FILE_RANGE_CHUNK_BYTES - 1);
+    const response = await fetchLocalFileDevBridgeResponse(normalizedPath, {
+      headers: { Range: `bytes=${offset}-${end}` },
+    });
+
+    if (!response.ok) {
+      throw await readLocalFileResponseError(response);
+    }
+
+    const chunk = await response.arrayBuffer();
+    if (chunk.byteLength <= 0) {
+      throw new Error(`Empty local-file range response at byte ${offset}`);
+    }
+
+    parts.push(chunk);
+    offset += chunk.byteLength;
+  }
+
+  return new Blob(parts, {
+    type: firstResponse.headers.get('Content-Type') || mimeType,
+  });
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -147,13 +240,23 @@ async function fetchLocalFileBlob(filePath: string, callerContext: CallerContext
   const backend = getLocalFileBackend(callerContext);
 
   if (backend === 'devBridge') {
-    const encodedPath = encodeURIComponent(normalizedPath);
-    const response = await fetchWithDevBridgeAuth(`/api/local-file?path=${encodedPath}`);
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(body.error || `HTTP ${response.status}`);
+    try {
+      const response = await fetchLocalFileDevBridgeResponse(normalizedPath);
+      if (!response.ok) {
+        throw await readLocalFileResponseError(response);
+      }
+      return await response.blob();
+    } catch (error) {
+      if (!isFetchNetworkError(error)) {
+        throw error;
+      }
+
+      log.warn('Full local-file fetch failed, retrying with byte ranges', {
+        path: normalizedPath,
+        error,
+      });
+      return fetchLocalFileBlobInRanges(normalizedPath, error);
     }
-    return response.blob();
   }
 
   if (backend === 'nativeHelper') {
@@ -315,8 +418,17 @@ export async function handleDeleteMediaItem(
   const folder = mediaStore.folders.find(f => f.id === itemId);
 
   if (file) {
-    mediaStore.removeFile(itemId);
-    return { success: true, data: { itemId, deletedName: file.name, type: 'file' } };
+    const result = await mediaStore.deleteMediaFilesEverywhere([itemId]);
+    return {
+      success: true,
+      data: {
+        itemId,
+        deletedName: file.name,
+        type: 'file',
+        removedClipCount: result.removedClipCount,
+        artifactFailures: result.artifactFailures,
+      },
+    };
   } else if (comp) {
     mediaStore.removeComposition(itemId);
     return { success: true, data: { itemId, deletedName: comp.name, type: 'composition' } };
@@ -451,8 +563,8 @@ export async function handleImportLocalFiles(
   activateDockPanel('media');
   flashPreviewCanvas('import');
 
-  const results: Array<{ id: string; name: string; type: string; duration?: number; path: string }> = [];
-  const errors: Array<{ path: string; error: string }> = [];
+  const results: Array<{ id: string; name: string; type: string; duration?: number; path: string; blobSize?: number }> = [];
+  const errors: Array<{ path: string; error: string; stage?: LocalFileImportStage }> = [];
 
   // Validate all paths through file access broker
   const hasRoots = getAllowedRoots().length > 0;
@@ -481,14 +593,17 @@ export async function handleImportLocalFiles(
       }
     }
 
+    let importStage: LocalFileImportStage = 'fetchLocalFileBlob';
     try {
       const normalizedPath = normalizeLocalPath(filePath);
       log.info(`Fetching: ${normalizedPath}`);
 
       const blob = await fetchLocalFileBlob(normalizedPath, callerContext);
+      importStage = 'createFile';
       const fileName = normalizedPath.split('/').pop() || 'unknown';
       const file = new File([blob], fileName, { type: blob.type });
 
+      importStage = 'mediaStore.importFile';
       const importedItem = await mediaStore.importFile(file);
       results.push({
         id: importedItem.id,
@@ -496,12 +611,13 @@ export async function handleImportLocalFiles(
         type: importedItem.type,
         duration: importedItem.type === 'signal' ? undefined : importedItem.duration,
         path: filePath,
+        blobSize: blob.size,
       });
       log.info(`Imported: ${importedItem.name} (${importedItem.type})`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      log.error(`Failed to import: ${filePath}`, err);
-      errors.push({ path: filePath, error: msg });
+      log.error(`Failed to import: ${filePath}`, { stage: importStage, error: err });
+      errors.push({ path: filePath, error: msg, stage: importStage });
     }
   }
 

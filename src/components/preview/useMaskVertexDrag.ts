@@ -43,7 +43,18 @@ function recordPathIfAnimated(clipId: string, mask: ClipMask, vertexUpdates: Arr
   const store = useTimelineStore.getState();
   const property = createMaskPathProperty(mask.id);
   if (!store.isRecording(clipId, property) && !store.hasKeyframes(clipId, property)) return;
-  store.addMaskPathKeyframe(clipId, mask.id, buildPathValueWithVertexUpdates(mask, vertexUpdates));
+  store.addMaskPathKeyframe(
+    clipId,
+    mask.id,
+    buildPathValueWithVertexUpdates(mask, vertexUpdates),
+    undefined,
+    'linear',
+    {
+      phase: 'update',
+      source: 'ui',
+      historyLabel: 'Move mask vertices',
+    },
+  );
 }
 
 export function useMaskVertexDrag(

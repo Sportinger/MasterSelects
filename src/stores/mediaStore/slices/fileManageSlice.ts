@@ -15,7 +15,9 @@ import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation
 import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMetadata';
 import { readRiveMetadata } from '../../../services/vectorAnimation/riveMetadata';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
-import { createThumbnail, handleThumbnailDedup } from '../helpers/thumbnailHelpers';
+import { clearAINodeRuntimeCacheForClip } from '../../../services/nodeGraph';
+import { calculateFileHash } from '../helpers/fileHashHelpers';
+import { createManagedThumbnailUrl, createThumbnail, handleThumbnailDedup } from '../helpers/thumbnailHelpers';
 import {
   startMediaFileWaveformGeneration,
 } from '../helpers/mediaWaveformHelpers';
@@ -33,11 +35,93 @@ import {
   primeTimelineSpectrogramTileSetCache,
   readTimelineSpectrogramTileSet,
 } from '../../../services/audio/timelineSpectrogramCache';
+import {
+  getModelSequenceFrameUrl,
+  resolveModelSequenceData,
+} from '../../../utils/modelSequence';
+import {
+  collectTimelineAudioCacheRefsFromClips,
+  invalidateTimelineMediaCaches,
+  type TimelineAudioCacheRefClip,
+} from '../../../services/timeline/timelineCacheInvalidation';
+import { releaseCompositionMixdownClipRuntime } from '../../../services/timeline/compositionAudioMixdownRuntimeResources';
+import {
+  createPrimaryMediaObjectUrl,
+  createThumbnailMediaObjectUrl,
+  getThumbnailMediaObjectUrlKey,
+  mediaObjectUrlManager,
+  revokeMediaFileObjectUrls,
+} from '../../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('Reload');
 const isBlobUrl = (value?: string): value is string => typeof value === 'string' && value.startsWith('blob:');
 const activeThumbnailRequests = new Map<string, Promise<boolean>>();
 const activeMediaSpectrogramJobs = new Map<string, Promise<void>>();
+
+function revokeThumbnailObjectUrl(mediaId: string, thumbnailUrl: string | undefined): void {
+  if (!isBlobUrl(thumbnailUrl)) {
+    return;
+  }
+
+  const key = getThumbnailMediaObjectUrlKey();
+  const managedThumbnailUrl = mediaObjectUrlManager.get(mediaId, key);
+  if (managedThumbnailUrl === thumbnailUrl) {
+    mediaObjectUrlManager.revoke(mediaId, key);
+    return;
+  }
+
+  URL.revokeObjectURL(thumbnailUrl);
+}
+
+export type MediaSourceReplacementPatch = Partial<Pick<
+  MediaFile,
+  | 'fileHash'
+  | 'thumbnailUrl'
+  | 'audioAnalysisRefs'
+  | 'waveform'
+  | 'waveformChannels'
+  | 'waveformStatus'
+  | 'waveformProgress'
+  | 'proxyStatus'
+  | 'proxyProgress'
+  | 'proxyFrameCount'
+  | 'proxyFps'
+  | 'proxyFormat'
+  | 'proxyVideoUrl'
+  | 'hasProxyAudio'
+  | 'audioProxyStatus'
+  | 'audioProxyProgress'
+  | 'audioProxyStorageKey'
+  | 'audioProxyUrl'
+>>;
+
+export function createMediaSourceReplacementResetPatch(fileHash?: string): MediaSourceReplacementPatch {
+  return {
+    fileHash,
+    thumbnailUrl: undefined,
+    audioAnalysisRefs: undefined,
+    waveform: undefined,
+    waveformChannels: undefined,
+    waveformStatus: 'idle',
+    waveformProgress: undefined,
+    proxyStatus: undefined,
+    proxyProgress: undefined,
+    proxyFrameCount: undefined,
+    proxyFps: undefined,
+    proxyFormat: undefined,
+    proxyVideoUrl: undefined,
+    hasProxyAudio: undefined,
+    audioProxyStatus: undefined,
+    audioProxyProgress: undefined,
+    audioProxyStorageKey: undefined,
+    audioProxyUrl: undefined,
+  };
+}
+
+export async function createMediaSourceReplacementPatch(file: File): Promise<MediaSourceReplacementPatch> {
+  const fileHash = await calculateFileHash(file);
+  return createMediaSourceReplacementResetPatch(fileHash || undefined);
+}
 
 function mediaFileCanHaveAudio(mediaFile: MediaFile): boolean {
   if (mediaFile.type === 'audio') return true;
@@ -125,6 +209,7 @@ type ClipWithMediaReference = {
   mediaFileId?: string;
   file?: File;
   sourceType?: string;
+  audioState?: TimelineClip['audioState'];
   source?: {
     mediaFileId?: string;
     file?: File;
@@ -297,6 +382,78 @@ function getCompositionClipsForUsage(
   return composition.timelineData?.clips ?? [];
 }
 
+function collectActiveTimelineClipsForMediaFileId(mediaFileId: string): TimelineAudioCacheRefClip[] {
+  return useTimelineStore.getState().clips
+    .filter(clip => getClipMediaFileId(clip) === mediaFileId)
+    .map(clip => ({
+      id: clip.id,
+      audioState: clip.audioState,
+    }));
+}
+
+function collectMediaClipsByMatcherForCacheInvalidation(
+  targetFiles: MediaFile[],
+  compositions: Composition[],
+  activeCompositionId: string | null,
+  activeTimelineClips: TimelineClip[],
+  matcher: MediaFileDeleteMatcher,
+): Map<string, TimelineAudioCacheRefClip[]> {
+  const targetIds = new Set(targetFiles.map(file => file.id));
+  const clipsByMediaFileId = new Map(
+    targetFiles.map(file => [file.id, [] as TimelineAudioCacheRefClip[]])
+  );
+
+  for (const composition of compositions) {
+    const clips = getCompositionClipsForUsage(composition, activeCompositionId, activeTimelineClips);
+    for (const clip of clips) {
+      const mediaFileId = matcher.matchClip(clip);
+      if (!mediaFileId || !targetIds.has(mediaFileId)) {
+        continue;
+      }
+      clipsByMediaFileId.get(mediaFileId)?.push({
+        id: clip.id,
+        audioState: clip.audioState,
+      });
+    }
+  }
+
+  return clipsByMediaFileId;
+}
+
+async function invalidateMediaSourceReplacementCaches(
+  mediaFileId: string,
+  mediaFile: Pick<MediaFile, 'fileHash' | 'audioAnalysisRefs'> | undefined,
+  clips: readonly TimelineAudioCacheRefClip[],
+): Promise<void> {
+  await invalidateTimelineMediaCaches({
+    reason: 'source-replace',
+    mediaFileId,
+    ...(mediaFile?.fileHash ? { fileHash: mediaFile.fileHash } : {}),
+    clipIds: clips.map(clip => clip.id).filter((id): id is string => Boolean(id)),
+    sourceAudioAnalysisRefs: mediaFile?.audioAnalysisRefs,
+    explicitAudioRefs: collectTimelineAudioCacheRefsFromClips(clips),
+  });
+}
+
+function createSourceReplacementClipAudioPatch(clip: TimelineClip): Partial<Pick<TimelineClip, 'audioState'>> {
+  if (
+    !clip.audioState?.sourceAudioRevisionId
+    && !clip.audioState?.sourceAnalysisRefs
+    && !clip.audioState?.processedAnalysisRefs
+  ) {
+    return {};
+  }
+
+  return {
+    audioState: {
+      ...clip.audioState,
+      sourceAudioRevisionId: undefined,
+      sourceAnalysisRefs: undefined,
+      processedAnalysisRefs: undefined,
+    },
+  };
+}
+
 export function collectMediaFileUsages(
   ids: string[],
   files: MediaFile[],
@@ -347,21 +504,7 @@ export function collectMediaFileUsages(
 }
 
 function revokeMediaFileUrls(file: MediaFile): void {
-  if (isBlobUrl(file.url)) URL.revokeObjectURL(file.url);
-  if (isBlobUrl(file.thumbnailUrl) && file.thumbnailUrl !== file.url) {
-    URL.revokeObjectURL(file.thumbnailUrl);
-  }
-  if (isBlobUrl(file.proxyVideoUrl) && file.proxyVideoUrl !== file.url && file.proxyVideoUrl !== file.thumbnailUrl) {
-    URL.revokeObjectURL(file.proxyVideoUrl);
-  }
-  if (
-    isBlobUrl(file.audioProxyUrl) &&
-    file.audioProxyUrl !== file.url &&
-    file.audioProxyUrl !== file.thumbnailUrl &&
-    file.audioProxyUrl !== file.proxyVideoUrl
-  ) {
-    URL.revokeObjectURL(file.audioProxyUrl);
-  }
+  revokeMediaFileObjectUrls(file);
 }
 
 function cleanupTimelineClipResources(clip: TimelineClip): void {
@@ -385,11 +528,13 @@ function cleanupTimelineClipResources(clip: TimelineClip): void {
     clip.mixdownAudio.src = '';
     clip.mixdownAudio.load();
   }
+  releaseCompositionMixdownClipRuntime(clip);
 
   if (isVectorAnimationSourceType(clip.source?.type)) {
     vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
   }
 
+  clearAINodeRuntimeCacheForClip(clip.id);
   blobUrlManager.revokeAll(clip.id);
 }
 
@@ -549,6 +694,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
   removeFile: (id: string) => {
     const file = get().files.find((f) => f.id === id);
     if (file) {
+      thumbnailCacheService.evictFromMemory(id);
       revokeMediaFileUrls(file);
     }
 
@@ -574,6 +720,13 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
     const state = get();
     const filesToDelete = state.files.filter(file => mediaFileIds.has(file.id));
     const matcher = createMediaFileDeleteMatcher(filesToDelete, state.files);
+    const clipsByMediaFileId = collectMediaClipsByMatcherForCacheInvalidation(
+      filesToDelete,
+      state.compositions,
+      state.activeCompositionId,
+      useTimelineStore.getState().clips,
+      matcher,
+    );
     const usages = collectMediaFileUsages(
       filesToDelete.map(file => file.id),
       state.files,
@@ -606,6 +759,16 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
       const fileHashIsShared = Boolean(
         file.fileHash && remainingFiles.some(remaining => remaining.fileHash === file.fileHash)
       );
+      const cacheClips = clipsByMediaFileId.get(file.id) ?? [];
+      await invalidateTimelineMediaCaches({
+        reason: 'media-delete',
+        mediaFileId: file.id,
+        ...(file.fileHash ? { fileHash: file.fileHash } : {}),
+        clipIds: cacheClips.map(clip => clip.id).filter((id): id is string => Boolean(id)),
+        sourceAudioAnalysisRefs: file.audioAnalysisRefs,
+        explicitAudioRefs: collectTimelineAudioCacheRefsFromClips(cacheClips),
+        preserveSharedFileHashArtifacts: fileHashIsShared,
+      });
       const artifactResult = await projectFileService.deleteMediaFileArtifacts({
         mediaId: file.id,
         projectPath: rawPathIsShared ? undefined : file.projectPath,
@@ -694,7 +857,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
         if (!options.force && mediaFile.fileHash && projectFileService.isProjectOpen()) {
           const existingBlob = await projectFileService.getThumbnail(mediaFile.fileHash);
           if (existingBlob && existingBlob.size > 0) {
-            thumbnailUrl = URL.createObjectURL(existingBlob);
+            thumbnailUrl = createThumbnailMediaObjectUrl(mediaFile.id, existingBlob);
             void projectDB.saveThumbnail({
               fileHash: mediaFile.fileHash,
               blob: existingBlob,
@@ -706,7 +869,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
         if (!options.force && !thumbnailUrl && mediaFile.fileHash) {
           const storedThumbnail = await projectDB.getThumbnail(mediaFile.fileHash);
           if (storedThumbnail?.blob && storedThumbnail.blob.size > 0) {
-            thumbnailUrl = URL.createObjectURL(storedThumbnail.blob);
+            thumbnailUrl = createThumbnailMediaObjectUrl(mediaFile.id, storedThumbnail.blob);
             if (projectFileService.isProjectOpen()) {
               void projectFileService.saveThumbnail(mediaFile.fileHash, storedThumbnail.blob);
             }
@@ -718,12 +881,12 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
         if (!thumbnailUrl && sourceFile) {
           const generatedThumbnail = await createThumbnail(sourceFile, mediaFile.type);
           thumbnailUrl = options.force
-            ? generatedThumbnail
-            : await handleThumbnailDedup(mediaFile.fileHash, generatedThumbnail);
+            ? await createManagedThumbnailUrl(mediaFile.id, generatedThumbnail)
+            : await handleThumbnailDedup(mediaFile.fileHash, generatedThumbnail, mediaFile.id);
 
-          if (options.force && generatedThumbnail && mediaFile.fileHash) {
+          if (options.force && thumbnailUrl && mediaFile.fileHash) {
             try {
-              const response = await fetch(generatedThumbnail);
+              const response = await fetch(thumbnailUrl);
               const blob = await response.blob();
               if (blob.size > 0) {
                 await projectDB.saveThumbnail({
@@ -760,11 +923,11 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
           }),
         }));
 
-        if (applied && options.force && isBlobUrl(oldThumbnailUrl) && oldThumbnailUrl !== thumbnailUrl) {
-          URL.revokeObjectURL(oldThumbnailUrl);
+        if (applied && options.force && oldThumbnailUrl !== thumbnailUrl) {
+          revokeThumbnailObjectUrl(id, oldThumbnailUrl);
         }
-        if (!applied && isBlobUrl(thumbnailUrl)) {
-          URL.revokeObjectURL(thumbnailUrl);
+        if (!applied) {
+          revokeThumbnailObjectUrl(id, thumbnailUrl);
         }
 
         return applied || Boolean(get().files.find((file) => file.id === id)?.thumbnailUrl);
@@ -774,9 +937,7 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
           name: mediaFile.name,
           error,
         });
-        if (thumbnailUrl && isBlobUrl(thumbnailUrl)) {
-          URL.revokeObjectURL(thumbnailUrl);
-        }
+        revokeThumbnailObjectUrl(id, thumbnailUrl);
         return false;
       }
     })().finally(() => {
@@ -919,16 +1080,17 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
     }
 
     const refreshThumbnail = options?.refreshThumbnail ?? true;
-    const oldUrl = mediaFile.url;
-    const oldThumbnailUrl = mediaFile.thumbnailUrl;
-    const url = URL.createObjectURL(mediaFile.file);
+    const url = createPrimaryMediaObjectUrl(id, mediaFile.file, { revokeExisting: false });
     let thumbnailUrl = mediaFile.thumbnailUrl;
 
     if (refreshThumbnail) {
+      const generatedThumbnail = mediaFile.type === 'image' || mediaFile.type === 'video'
+        ? await createThumbnail(mediaFile.file, mediaFile.type)
+        : undefined;
       if (mediaFile.type === 'image') {
-        thumbnailUrl = await createThumbnail(mediaFile.file, 'image');
+        thumbnailUrl = await createManagedThumbnailUrl(id, generatedThumbnail);
       } else if (mediaFile.type === 'video') {
-        thumbnailUrl = await createThumbnail(mediaFile.file, 'video');
+        thumbnailUrl = await createManagedThumbnailUrl(id, generatedThumbnail);
       }
     }
 
@@ -940,13 +1102,9 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
       ),
     }));
 
-    if (isBlobUrl(oldUrl)) {
-      URL.revokeObjectURL(oldUrl);
-    }
-
-    if (refreshThumbnail && isBlobUrl(oldThumbnailUrl) && oldThumbnailUrl !== oldUrl) {
-      URL.revokeObjectURL(oldThumbnailUrl);
-    }
+    revokeMediaFileObjectUrls(mediaFile, {
+      keepUrls: [url, thumbnailUrl].filter(isBlobUrl),
+    });
 
     log.info('Refreshed media blob URLs', {
       id: mediaFile.id,
@@ -1011,21 +1169,29 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
       await projectDB.storeHandle(`media_${id}`, handle);
     }
 
-    // Revoke old URL
-    if (mediaFile.url) URL.revokeObjectURL(mediaFile.url);
+    revokeMediaFileUrls(mediaFile);
+    await invalidateMediaSourceReplacementCaches(
+      id,
+      mediaFile,
+      collectActiveTimelineClipsForMediaFileId(id),
+    );
 
     // Create new URL
-    const url = URL.createObjectURL(file);
+    const url = createPrimaryMediaObjectUrl(id, file);
+    const sourceReplacementPatch = await createMediaSourceReplacementPatch(file);
 
     // Update store
     set((state) => ({
       files: state.files.map((f) =>
-        f.id === id ? { ...f, file, url, hasFileHandle: true } : f
+        f.id === id ? { ...f, ...sourceReplacementPatch, file, url, hasFileHandle: true } : f
       ),
     }));
 
     // Update timeline clips
-    await updateTimelineClips(id, file);
+    await updateTimelineClips(id, file, {
+      invalidateCaches: false,
+      fileHash: sourceReplacementPatch.fileHash,
+    });
 
     log.info('Success:', mediaFile.name);
     return true;
@@ -1082,16 +1248,25 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
         await projectDB.storeHandle(`media_${mediaFileToReload.id}`, handle);
       }
 
-      if (mediaFileToReload.url) URL.revokeObjectURL(mediaFileToReload.url);
-      const url = URL.createObjectURL(file);
+      revokeMediaFileUrls(mediaFileToReload);
+      await invalidateMediaSourceReplacementCaches(
+        mediaFileToReload.id,
+        mediaFileToReload,
+        collectActiveTimelineClipsForMediaFileId(mediaFileToReload.id),
+      );
+      const url = createPrimaryMediaObjectUrl(mediaFileToReload.id, file);
+      const sourceReplacementPatch = await createMediaSourceReplacementPatch(file);
 
       set((state) => ({
         files: state.files.map((f) =>
-          f.id === mediaFileToReload.id ? { ...f, file, url, hasFileHandle: true } : f
+          f.id === mediaFileToReload.id ? { ...f, ...sourceReplacementPatch, file, url, hasFileHandle: true } : f
         ),
       }));
 
-      await updateTimelineClips(mediaFileToReload.id, file);
+      await updateTimelineClips(mediaFileToReload.id, file, {
+        invalidateCaches: false,
+        fileHash: sourceReplacementPatch.fileHash,
+      });
       totalReloaded++;
     }
 
@@ -1102,12 +1277,25 @@ export const createFileManageSlice: MediaSliceCreator<FileManageActions> = (set,
 
 /**
  * Update timeline clips with reloaded file.
- * Creates the actual video/audio elements for the clip sources.
+ * Writes data-only clip sources for video/audio; runtime hydration happens lazily.
  * Exported for use by projectSync auto-relink.
  */
-export async function updateTimelineClips(mediaFileId: string, file: File): Promise<void> {
+export type UpdateTimelineClipsOptions = {
+  generateThumbnails?: boolean;
+  invalidateCaches?: boolean;
+  fileHash?: string;
+};
+
+export async function updateTimelineClips(
+  mediaFileId: string,
+  file: File,
+  options: UpdateTimelineClipsOptions = {},
+): Promise<void> {
+  const generateThumbnails = options.generateThumbnails !== false;
+  const shouldInvalidateCaches = options.invalidateCaches !== false;
   const timelineStore = useTimelineStore.getState();
   const mediaFile = useMediaStore.getState().files.find((entry) => entry.id === mediaFileId);
+  const fileHash = options.fileHash ?? mediaFile?.fileHash;
   const clips = timelineStore.clips.filter(
     c => c.source?.mediaFileId === mediaFileId && c.needsReload
   );
@@ -1124,125 +1312,78 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
     return;
   }
 
-  const url = URL.createObjectURL(file);
+  if (shouldInvalidateCaches) {
+    await invalidateMediaSourceReplacementCaches(mediaFileId, mediaFile, clips);
+  }
+
+  let sharedFileUrl: string | undefined;
+  const getSharedFileUrl = () => {
+    sharedFileUrl ??= mediaFile?.url || createPrimaryMediaObjectUrl(mediaFileId, file);
+    return sharedFileUrl;
+  };
 
   for (const clip of clips) {
     const sourceType = clip.source?.type;
 
     if (sourceType === 'video') {
-      // Create video element
-      const video = document.createElement('video');
-      video.src = url;
-      video.muted = true;
-      video.playsInline = true;
-      video.crossOrigin = 'anonymous';
-      video.preload = 'auto';
-
-      video.addEventListener('canplaythrough', () => {
-        const naturalDuration = video.duration || clip.duration;
-        timelineStore.updateClip(clip.id, {
-          file,
-          needsReload: false,
-          isLoading: false,
-          source: {
-            type: 'video',
-            videoElement: video,
-            naturalDuration,
-            mediaFileId,
-          },
-        });
-        // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
-        engine.preCacheVideoFrame(video);
-        void thumbnailCacheService.generateForSource(mediaFileId, video, naturalDuration);
-      }, { once: true });
-
-      video.addEventListener('error', () => {
-        log.warn('Failed to load video for clip:', clip.name);
-        timelineStore.updateClip(clip.id, {
-          needsReload: false,
-          isLoading: false,
-        });
-      }, { once: true });
-
-      video.load();
+      const naturalDuration = clip.source?.naturalDuration || mediaFile?.duration || clip.duration;
+      const sourceUrl = getSharedFileUrl();
+      timelineStore.updateClip(clip.id, {
+        ...createSourceReplacementClipAudioPatch(clip),
+        file,
+        needsReload: false,
+        isLoading: false,
+        source: {
+          type: 'video',
+          naturalDuration,
+          mediaFileId,
+        },
+      });
+      if (generateThumbnails) {
+        void thumbnailCacheService.generateForSourceUrl(mediaFileId, sourceUrl, naturalDuration, fileHash);
+      }
     } else if (sourceType === 'audio') {
-      // Create audio element
-      const audio = document.createElement('audio');
-      audio.src = url;
-      audio.preload = 'auto';
-
-      audio.addEventListener('canplaythrough', () => {
-        const naturalDuration = audio.duration || clip.duration;
-        timelineStore.updateClip(clip.id, {
-          file,
-          needsReload: false,
-          isLoading: false,
-          source: {
-            type: 'audio',
-            audioElement: audio,
-            naturalDuration,
-            mediaFileId,
-          },
-        });
-      }, { once: true });
-
-      audio.addEventListener('error', () => {
-        log.warn('Failed to load audio for clip:', clip.name);
-        timelineStore.updateClip(clip.id, {
-          needsReload: false,
-          isLoading: false,
-        });
-      }, { once: true });
-
-      audio.load();
+      const naturalDuration = clip.source?.naturalDuration || mediaFile?.duration || clip.duration;
+      timelineStore.updateClip(clip.id, {
+        ...createSourceReplacementClipAudioPatch(clip),
+        file,
+        needsReload: false,
+        isLoading: false,
+        source: {
+          type: 'audio',
+          naturalDuration,
+          mediaFileId,
+        },
+      });
     } else if (sourceType === 'image') {
-      // Create image element
-      const img = new Image();
-      img.src = url;
-      img.crossOrigin = 'anonymous';
-
-      img.addEventListener('load', () => {
-        timelineStore.updateClip(clip.id, {
-          file,
-          needsReload: false,
-          isLoading: false,
-          source: {
-            type: 'image',
-            imageElement: img,
-            mediaFileId,
-          },
-        });
-      }, { once: true });
-
-      img.addEventListener('error', () => {
-        log.warn('Failed to load image for clip:', clip.name);
-        timelineStore.updateClip(clip.id, {
-          needsReload: false,
-          isLoading: false,
-        });
-      }, { once: true });
+      const imageUrl = getSharedFileUrl();
+      const naturalDuration = clip.source?.naturalDuration || mediaFile?.duration || clip.duration;
+      timelineStore.updateClip(clip.id, {
+        ...createSourceReplacementClipAudioPatch(clip),
+        file,
+        needsReload: false,
+        isLoading: false,
+        source: {
+          type: 'image',
+          imageUrl,
+          naturalDuration,
+          mediaFileId,
+        },
+      });
     } else if (isVectorAnimationSourceType(sourceType)) {
       try {
         const metadata = sourceType === 'lottie'
           ? await readLottieMetadata(file)
           : await readRiveMetadata(file);
-        const runtime = await vectorAnimationRuntimeManager.prepareClipSource({
-          ...clip,
-          file,
-          source: {
-            ...clip.source!,
-            textCanvas: clip.source?.textCanvas,
-          },
-        }, file);
 
         timelineStore.updateClip(clip.id, {
+          ...createSourceReplacementClipAudioPatch(clip),
           file,
           needsReload: false,
           isLoading: false,
           source: {
             ...clip.source!,
             type: sourceType,
-            textCanvas: runtime.canvas,
             naturalDuration: metadata.duration ?? clip.duration,
             mediaFileId,
           },
@@ -1256,20 +1397,28 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
       }
     } else if (sourceType === 'model') {
       // 3D Model — create blob URL for the shared scene loader
-      const modelUrl = URL.createObjectURL(file);
+      const modelSequence = resolveModelSequenceData(
+        clip.source?.modelSequence,
+        mediaFile?.modelSequence,
+      );
+      const sequenceModelUrl = getModelSequenceFrameUrl(modelSequence, 0);
+      const modelUrl = sequenceModelUrl ?? (mediaFile?.url || blobUrlManager.create(clip.id, file, 'model'));
       timelineStore.updateClip(clip.id, {
+        ...createSourceReplacementClipAudioPatch(clip),
         file,
         needsReload: false,
         isLoading: false,
         source: {
           ...clip.source!,
           modelUrl,
+          ...(modelSequence ? { modelSequence } : {}),
         },
       });
     } else if (sourceType === 'gaussian-avatar') {
       // Gaussian avatar — create blob URL for the renderer
-      const gaussianAvatarUrl = URL.createObjectURL(file);
+      const gaussianAvatarUrl = mediaFile?.url || blobUrlManager.create(clip.id, file, 'model');
       timelineStore.updateClip(clip.id, {
+        ...createSourceReplacementClipAudioPatch(clip),
         file,
         needsReload: false,
         isLoading: false,
@@ -1286,8 +1435,9 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
         mediaFile?.gaussianSplatSequence,
       );
       const firstFrame = gaussianSplatSequence?.frames[0];
-      const gaussianSplatUrl = firstFrame?.splatUrl ?? URL.createObjectURL(file);
+      const gaussianSplatUrl = firstFrame?.splatUrl ?? (mediaFile?.url || blobUrlManager.create(clip.id, file, 'file'));
       timelineStore.updateClip(clip.id, {
+        ...createSourceReplacementClipAudioPatch(clip),
         file,
         needsReload: false,
         isLoading: false,
@@ -1295,6 +1445,7 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
           ...clip.source!,
           gaussianSplatUrl,
           gaussianSplatFileName: firstFrame?.name ?? file.name,
+          gaussianSplatFileHash: firstFrame ? undefined : fileHash,
           gaussianSplatRuntimeKey:
             firstFrame?.projectPath ??
             firstFrame?.absolutePath ??
@@ -1307,6 +1458,7 @@ export async function updateTimelineClips(mediaFileId: string, file: File): Prom
     } else {
       // Unknown type - just update the file reference
       timelineStore.updateClip(clip.id, {
+        ...createSourceReplacementClipAudioPatch(clip),
         file,
         needsReload: false,
         isLoading: false,

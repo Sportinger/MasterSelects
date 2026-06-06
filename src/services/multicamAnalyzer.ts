@@ -137,6 +137,43 @@ async function extractFrame(
   });
 }
 
+async function loadVideoMetadata(video: HTMLVideoElement): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('loadedmetadata', onLoadedMetadata);
+      video.removeEventListener('error', onError);
+      clearTimeout(timeoutId);
+    };
+
+    const onLoadedMetadata = () => {
+      cleanup();
+      resolve();
+    };
+
+    const onError = () => {
+      cleanup();
+      reject(new Error('Failed to load video'));
+    };
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('Video load timeout'));
+    }, 30000);
+    video.addEventListener('loadedmetadata', onLoadedMetadata);
+    video.addEventListener('error', onError);
+  });
+}
+
+function releaseAnalysisVideo(video: HTMLVideoElement, objectUrl: string): void {
+  try {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 class MulticamAnalyzer {
   /**
    * Analyze a single camera
@@ -156,93 +193,91 @@ class MulticamAnalyzer {
 
     // Create video element
     const video = document.createElement('video');
-    video.src = URL.createObjectURL(mediaFile.file);
-    video.muted = true;
-    video.preload = 'auto';
+    const objectUrl = URL.createObjectURL(mediaFile.file);
 
-    // Wait for video to load
-    await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error('Failed to load video'));
-      setTimeout(() => reject(new Error('Video load timeout')), 30000);
-    });
+    try {
+      video.src = objectUrl;
+      video.muted = true;
+      video.preload = 'auto';
 
-    // Create canvas for frame extraction
-    const canvas = document.createElement('canvas');
-    canvas.width = 320; // Analyze at lower resolution for speed
-    canvas.height = 180;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      // Wait for video to load
+      await loadVideoMetadata(video);
 
-    if (!ctx) {
-      URL.revokeObjectURL(video.src);
-      return null;
-    }
+      // Create canvas for frame extraction
+      const canvas = document.createElement('canvas');
+      canvas.width = 320; // Analyze at lower resolution for speed
+      canvas.height = 180;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-    const duration = video.duration * 1000; // ms
-    const totalSamples = Math.ceil(duration / SAMPLE_INTERVAL_MS);
-    const frames: FrameAnalysis[] = [];
-    let previousFrame: ImageData | null = null;
-
-    // Get audio levels
-    const audioCurve = await audioAnalyzer.analyzeLevels(camera.mediaFileId, SAMPLE_INTERVAL_MS);
-    const audioLevelMap = new Map<number, number>();
-    if (audioCurve) {
-      for (const level of audioCurve.levels) {
-        audioLevelMap.set(level.timestamp, level.level);
-      }
-    }
-
-    // Analyze frames
-    for (let i = 0; i < totalSamples; i++) {
-      if (checkCancelled?.()) {
-        URL.revokeObjectURL(video.src);
+      if (!ctx) {
         return null;
       }
 
-      const timestamp = i * SAMPLE_INTERVAL_MS;
+      const duration = video.duration * 1000; // ms
+      const totalSamples = Math.ceil(duration / SAMPLE_INTERVAL_MS);
+      const frames: FrameAnalysis[] = [];
+      let previousFrame: ImageData | null = null;
 
-      // Extract frame
-      const frame = await extractFrame(video, timestamp, canvas, ctx);
-
-      // Analyze motion
-      const motion = analyzeMotion(frame, previousFrame);
-
-      // Analyze sharpness
-      const sharpness = analyzeSharpness(frame);
-
-      // Detect faces (TODO: implement with TensorFlow.js)
-      const faces = await detectFaces(frame);
-
-      // Get audio level
-      const audioLevel = audioLevelMap.get(timestamp) ?? 0;
-
-      frames.push({
-        timestamp,
-        motion,
-        sharpness,
-        faces,
-        audioLevel,
-      });
-
-      previousFrame = frame;
-
-      // Update progress
-      if (onProgress) {
-        onProgress(Math.round(((i + 1) / totalSamples) * 100));
+      // Get audio levels
+      const audioCurve = await audioAnalyzer.analyzeLevels(camera.mediaFileId, SAMPLE_INTERVAL_MS);
+      const audioLevelMap = new Map<number, number>();
+      if (audioCurve) {
+        for (const level of audioCurve.levels) {
+          audioLevelMap.set(level.timestamp, level.level);
+        }
       }
 
-      // Yield to UI every 10 frames
-      if (i % 10 === 0) {
-        await new Promise(r => setTimeout(r, 0));
+      // Analyze frames
+      for (let i = 0; i < totalSamples; i++) {
+        if (checkCancelled?.()) {
+          return null;
+        }
+
+        const timestamp = i * SAMPLE_INTERVAL_MS;
+
+        // Extract frame
+        const frame = await extractFrame(video, timestamp, canvas, ctx);
+
+        // Analyze motion
+        const motion = analyzeMotion(frame, previousFrame);
+
+        // Analyze sharpness
+        const sharpness = analyzeSharpness(frame);
+
+        // Detect faces (TODO: implement with TensorFlow.js)
+        const faces = await detectFaces(frame);
+
+        // Get audio level
+        const audioLevel = audioLevelMap.get(timestamp) ?? 0;
+
+        frames.push({
+          timestamp,
+          motion,
+          sharpness,
+          faces,
+          audioLevel,
+        });
+
+        previousFrame = frame;
+
+        // Update progress
+        if (onProgress) {
+          onProgress(Math.round(((i + 1) / totalSamples) * 100));
+        }
+
+        // Yield to UI every 10 frames
+        if (i % 10 === 0) {
+          await new Promise(r => setTimeout(r, 0));
+        }
       }
+
+      return {
+        cameraId: camera.id,
+        frames,
+      };
+    } finally {
+      releaseAnalysisVideo(video, objectUrl);
     }
-
-    URL.revokeObjectURL(video.src);
-
-    return {
-      cameraId: camera.id,
-      frames,
-    };
   }
 
   /**

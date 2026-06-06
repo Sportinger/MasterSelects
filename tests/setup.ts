@@ -56,11 +56,17 @@ vi.mock('../src/services/googleFontsService', () => ({
 vi.mock('../src/services/thumbnailRenderer', () => ({
   thumbnailRenderer: {
     generateClipThumbnails: vi.fn().mockResolvedValue([]),
+    generateCompositionThumbnails: vi.fn().mockResolvedValue([]),
   },
 }))
 
 vi.mock('../src/services/nativeHelper', () => ({
   NativeDecoder: vi.fn(),
+  NativeHelperClient: {
+    isConnected: vi.fn(() => false),
+    getDownloadedFile: vi.fn(async () => null),
+    listDir: vi.fn(async () => []),
+  },
 }))
 
 vi.mock('../src/services/nativeHelper/NativeHelperClient', () => ({

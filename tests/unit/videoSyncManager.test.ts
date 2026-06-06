@@ -17,6 +17,7 @@ type EngineTestAccess = typeof engine & {
 };
 
 type VideoSyncManagerTestAccess = {
+  canStartLiveHtmlPlaybackFallback: (...args: unknown[]) => boolean;
   computeHandoffs: (...args: unknown[]) => unknown;
   getHandoffVideoElement: (...args: unknown[]) => unknown;
   getPausedWebCodecsProvider: (...args: unknown[]) => unknown;
@@ -156,6 +157,29 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     };
 
     expect(manager.shouldSeekPausedWebCodecsProvider(provider, 1)).toBe(true);
+  });
+
+  it('allows live HTML playback fallback only while the provider is not audio-ready', () => {
+    const manager = createManager();
+    const readyVideo = {
+      paused: true,
+      readyState: 4,
+      seeking: false,
+      currentSrc: 'blob:test-video',
+      src: 'blob:test-video',
+    };
+
+    expect(manager.canStartLiveHtmlPlaybackFallback(readyVideo, false, false)).toBe(true);
+    expect(manager.canStartLiveHtmlPlaybackFallback(readyVideo, true, false)).toBe(false);
+    expect(manager.canStartLiveHtmlPlaybackFallback(readyVideo, false, true)).toBe(false);
+    expect(manager.canStartLiveHtmlPlaybackFallback({
+      ...readyVideo,
+      seeking: true,
+    }, false, false)).toBe(false);
+    expect(manager.canStartLiveHtmlPlaybackFallback({
+      ...readyVideo,
+      readyState: 1,
+    }, false, false)).toBe(false);
   });
 
   it('does not force a paused seek when the provider already has a frame at the target time', () => {

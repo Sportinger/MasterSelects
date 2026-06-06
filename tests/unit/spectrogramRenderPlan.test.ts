@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_SPECTROGRAM_CSS_WIDTH,
   MAX_SPECTROGRAM_DRAW_PIXELS,
   resolveSpectrogramCanvasPlan,
 } from '../../src/components/timeline/utils/spectrogramRenderPlan';
@@ -16,7 +15,7 @@ describe('resolveSpectrogramCanvasPlan', () => {
     });
 
     expect(plan.startPx).toBe(75_000);
-    expect(plan.cssCanvasWidth).toBe(MAX_SPECTROGRAM_CSS_WIDTH);
+    expect(plan.cssCanvasWidth).toBe(120_000);
     expect(plan.drawWidth * plan.drawHeight).toBeLessThanOrEqual(MAX_SPECTROGRAM_DRAW_PIXELS);
     expect(plan.drawHeight).toBe(360);
   });

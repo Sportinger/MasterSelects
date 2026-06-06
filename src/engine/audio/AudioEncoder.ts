@@ -37,6 +37,8 @@ export type AudioEncoderProgressCallback = (progress: {
   percent: number;
 }) => void;
 
+export type AudioEncoderCancelPredicate = () => boolean;
+
 export class AudioEncoderWrapper {
   private encoder: AudioEncoder | null = null;
   private settings: AudioEncoderSettings;
@@ -48,6 +50,7 @@ export class AudioEncoderWrapper {
   private totalSamples = 0;
   private activeCodec: AudioCodec = 'aac';
   private activeCodecString: string = 'mp4a.40.2';
+  private isCancelled = false;
 
   constructor(settings: AudioEncoderSettings) {
     this.settings = {
@@ -196,6 +199,7 @@ export class AudioEncoderWrapper {
 
     try {
       this.encoder.configure(config);
+      this.isCancelled = false;
       log.info(`Initialized with ${this.activeCodec.toUpperCase()}: ${this.settings.sampleRate}Hz, ${this.settings.numberOfChannels}ch, ${bitrate / 1000}kbps`);
       return true;
     } catch (e) {
@@ -228,7 +232,8 @@ export class AudioEncoderWrapper {
    */
   async encode(
     buffer: AudioBuffer,
-    onProgress?: AudioEncoderProgressCallback
+    onProgress?: AudioEncoderProgressCallback,
+    shouldCancel?: AudioEncoderCancelPredicate
   ): Promise<void> {
     if (!this.encoder || this.isClosed) {
       throw new Error('[AudioEncoder] Encoder not initialized or already closed');
@@ -247,6 +252,12 @@ export class AudioEncoderWrapper {
     log.info(`Encoding ${buffer.duration.toFixed(2)}s audio (${totalFrames} frames)`);
 
     for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+      if (this.isCancelled || shouldCancel?.()) {
+        this.cancel();
+        log.info('Encoding cancelled');
+        return;
+      }
+
       const startSample = frameIndex * frameSize;
       const endSample = Math.min(startSample + frameSize, buffer.length);
       const numSamples = endSample - startSample;
@@ -283,6 +294,11 @@ export class AudioEncoderWrapper {
       // Yield to allow UI updates every 100 frames
       if (frameIndex % 100 === 0) {
         await new Promise(resolve => setTimeout(resolve, 0));
+        if (this.isCancelled || shouldCancel?.()) {
+          this.cancel();
+          log.info('Encoding cancelled');
+          return;
+        }
       }
     }
 
@@ -344,6 +360,18 @@ export class AudioEncoderWrapper {
     };
   }
 
+  cancel(): void {
+    this.isCancelled = true;
+    if (this.encoder && !this.isClosed) {
+      try {
+        this.encoder.close();
+      } catch {
+        // Ignore encoder close failures during cancellation.
+      }
+      this.isClosed = true;
+    }
+  }
+
   /**
    * Get encoded chunks (for muxing)
    */
@@ -372,6 +400,7 @@ export class AudioEncoderWrapper {
     this.encodedSamples = 0;
     this.totalSamples = 0;
     this.isClosed = false;
+    this.isCancelled = false;
 
     return this.init();
   }

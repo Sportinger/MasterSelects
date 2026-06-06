@@ -80,6 +80,7 @@ The engine render loop is RAF-based and has three important behaviors:
 - Playback is rate-limited to about 60 fps.
 - Scrubbing is rate-limited to about 30 fps unless a fresh frame arrives via `requestVideoFrameCallback`.
 - The loop does not render while export is active.
+- During normal playback, video clips stay on the live HTMLVideo/WebGPU import path even when JPEG proxy frames are available. Proxy image frames are used for paused preview, scrub fallback, and timeline thumbnails, but not as the primary playback surface because dense cut sequences need the browser video decoder and cut warmup path to remain active.
 
 ### Browser Fallbacks
 

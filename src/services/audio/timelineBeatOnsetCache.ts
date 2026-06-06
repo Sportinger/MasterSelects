@@ -66,6 +66,22 @@ export function clearTimelineBeatOnsetCache(): void {
   onsetMapCache.clear();
 }
 
+export function evictTimelineBeatOnsetRefs(
+  keys: Iterable<string | undefined>,
+): number {
+  let removed = 0;
+  for (const key of keys) {
+    if (!key) continue;
+    if (beatGridCache.delete(key)) {
+      removed += 1;
+    }
+    if (onsetMapCache.delete(key)) {
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 export async function readTimelineOnsetMap(
   manifest: OnsetMapManifest,
   store: AudioArtifactStore,

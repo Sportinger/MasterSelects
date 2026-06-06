@@ -27,6 +27,7 @@ export {
   startInternalPosition,
   stopInternalPosition,
   updateInternalPosition,
+  updateInternalPlaybackSpeed,
 } from './PlayheadState';
 
 // Re-export FrameContext utilities

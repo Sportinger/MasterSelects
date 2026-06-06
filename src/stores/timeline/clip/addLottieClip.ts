@@ -55,12 +55,9 @@ export interface LoadLottieMediaParams {
 
 export async function loadLottieMedia(params: LoadLottieMediaParams): Promise<void> {
   const { clip, file, mediaFileId, metadata, updateClip } = params;
-  const { lottieRuntimeManager } = await import('../../../services/vectorAnimation/LottieRuntimeManager');
-  const runtime = await lottieRuntimeManager.prepareClipSource(clip, file);
-  const resolvedMetadata = metadata ?? runtime.metadata;
-  const naturalDuration = resolvedMetadata.duration ?? clip.duration;
-  const nativeScale = (resolvedMetadata.width && resolvedMetadata.height)
-    ? calculateNativeScale(resolvedMetadata.width, resolvedMetadata.height)
+  const naturalDuration = metadata?.duration ?? clip.duration;
+  const nativeScale = (metadata?.width && metadata?.height)
+    ? calculateNativeScale(metadata.width, metadata.height)
     : clip.transform.scale;
 
   updateClip(clip.id, {
@@ -72,7 +69,6 @@ export async function loadLottieMedia(params: LoadLottieMediaParams): Promise<vo
       type: 'lottie',
       mediaFileId,
       naturalDuration,
-      textCanvas: runtime.canvas,
       vectorAnimationSettings: {
         ...DEFAULT_VECTOR_ANIMATION_CLIP_SETTINGS,
         ...clip.source?.vectorAnimationSettings,

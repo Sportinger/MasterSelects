@@ -1,11 +1,67 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useTimelineStore } from '../../src/stores/timeline';
 import { DEFAULT_TRACKS } from '../../src/stores/timeline/constants';
-import { createMockClip, createMockTrack } from '../helpers/mockData';
+import {
+  addClipCustomNodeDefinition,
+  clearAINodeRuntimeCache,
+  createClipAICustomNodeDefinition,
+  renderClipAINodesToCanvas,
+} from '../../src/services/nodeGraph';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
+import {
+  createResolvedClipMoveOperationPlan,
+  resolveClipMoveRequest,
+} from '../../src/stores/timeline/editOperations/moveResolution';
+import { createMaskPathProperty, type LayerSource, type TimelineClip } from '../../src/types';
+import { createMockClip, createMockKeyframe, createMockTrack } from '../helpers/mockData';
+
+function createTransitionJunctionFixture(clipAId = 'clip-a', clipBId = 'clip-b', junctionTime = 10) {
+  return {
+    geometrySnapshotId: 'geometry-1',
+    trackId: 'video-1',
+    clipAId,
+    clipBId,
+    junctionTime,
+    junctionRect: { geometrySnapshotId: 'geometry-1', rectId: 'junction', kind: 'transition-junction' },
+    dropZoneRect: { geometrySnapshotId: 'geometry-1', rectId: 'drop-zone', kind: 'transition-drop-zone' },
+    thresholdSeconds: 0.5,
+  } as const;
+}
+
+function createSourceCanvas(width = 2, height = 1): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  const image = context?.createImageData(width, height);
+  if (image) {
+    image.data.fill(255);
+    context?.putImageData(image, 0, 0);
+  }
+  return canvas;
+}
+
+function createIdentityAINodeClip(id: string): TimelineClip {
+  const clip = createMockClip({ id, trackId: 'video-1', source: { type: 'text' } });
+  const definition = {
+    ...createClipAICustomNodeDefinition('custom-ai', clip),
+    status: 'ready' as const,
+    ai: {
+      prompt: 'Pass input through',
+      generatedCode: 'defineNode({ process(input) { return { output: input.input }; } })',
+    },
+  };
+  return {
+    ...clip,
+    nodeGraph: addClipCustomNodeDefinition(clip, definition),
+  };
+}
 
 describe('timeline edit operations kernel', () => {
   beforeEach(() => {
+    clearAINodeRuntimeCache();
+    timelineRuntimeCoordinator.clearResources();
     useTimelineStore.setState({
       tracks: DEFAULT_TRACKS,
       clips: [],
@@ -14,7 +70,13 @@ describe('timeline edit operations kernel', () => {
       playheadPosition: 0,
       isExporting: false,
       duration: 60,
+      timelineToolPreview: null,
     });
+  });
+
+  afterEach(() => {
+    clearAINodeRuntimeCache();
+    timelineRuntimeCoordinator.clearResources();
   });
 
   it('blocks mutating operations while export is active', () => {
@@ -119,6 +181,164 @@ describe('timeline edit operations kernel', () => {
       [8, 4],
     ]);
     expect([...useTimelineStore.getState().selectedClipIds]).toHaveLength(1);
+  });
+
+  it('bulk splits media runtime sources as data-only parts', () => {
+    const video = createMockClip({
+      id: 'video-runtime',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 12,
+      inPoint: 0,
+      outPoint: 12,
+      linkedClipId: 'audio-runtime',
+      mediaFileId: 'media-video',
+      source: {
+        type: 'video',
+        videoElement: document.createElement('video'),
+        webCodecsPlayer: { destroy: vi.fn() } as never,
+        nativeDecoder: { close: vi.fn() } as never,
+        naturalDuration: 12,
+        mediaFileId: 'media-video',
+        runtimeSourceId: 'runtime-video',
+        runtimeSessionKey: 'interactive:video-runtime',
+        filePath: 'C:/media/video.mp4',
+      },
+    });
+    const audio = createMockClip({
+      id: 'audio-runtime',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 12,
+      inPoint: 0,
+      outPoint: 12,
+      linkedClipId: 'video-runtime',
+      mediaFileId: 'media-audio',
+      source: {
+        type: 'audio',
+        audioElement: document.createElement('audio'),
+        naturalDuration: 12,
+        mediaFileId: 'media-audio',
+        runtimeSourceId: 'runtime-audio',
+        runtimeSessionKey: 'interactive:audio-runtime',
+        filePath: 'C:/media/audio.wav',
+      },
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'bulk-runtime-data-only-split',
+      type: 'split-at-times',
+      clipId: 'video-runtime',
+      times: [4, 8],
+      includeLinked: true,
+    }, { source: 'ui', historyLabel: 'Split runtime-backed clip' });
+
+    expect(result.success).toBe(true);
+    const clips = useTimelineStore.getState().clips;
+    const videoParts = clips.filter((clip) => clip.trackId === 'video-1');
+    const audioParts = clips.filter((clip) => clip.trackId === 'audio-1');
+
+    expect(videoParts).toHaveLength(3);
+    expect(audioParts).toHaveLength(3);
+    expect(videoParts.every((clip) => !clip.source?.videoElement && !clip.source?.webCodecsPlayer && !clip.source?.nativeDecoder)).toBe(true);
+    expect(audioParts.every((clip) => !clip.source?.audioElement)).toBe(true);
+    expect(videoParts.map((clip) => clip.source)).toEqual([
+      {
+        type: 'video',
+        naturalDuration: 12,
+        mediaFileId: 'media-video',
+        runtimeSourceId: 'runtime-video',
+        runtimeSessionKey: 'interactive:video-runtime',
+        filePath: 'C:/media/video.mp4',
+      },
+      {
+        type: 'video',
+        naturalDuration: 12,
+        mediaFileId: 'media-video',
+        runtimeSourceId: 'runtime-video',
+        runtimeSessionKey: 'interactive:video-runtime',
+        filePath: 'C:/media/video.mp4',
+      },
+      {
+        type: 'video',
+        naturalDuration: 12,
+        mediaFileId: 'media-video',
+        runtimeSourceId: 'runtime-video',
+        runtimeSessionKey: 'interactive:video-runtime',
+        filePath: 'C:/media/video.mp4',
+      },
+    ]);
+  });
+
+  it('bulk splits linked composition audio as data-only parts', () => {
+    const staleAudioElement = { src: 'blob:stale-mixdown' } as unknown as HTMLAudioElement;
+    const mixdownBuffer = { duration: 12 } as AudioBuffer;
+    const video = createMockClip({
+      id: 'comp-video',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 12,
+      inPoint: 0,
+      outPoint: 12,
+      linkedClipId: 'comp-audio',
+      isComposition: true,
+      compositionId: 'comp-1',
+      source: { type: 'video', naturalDuration: 12 },
+    });
+    const audio = createMockClip({
+      id: 'comp-audio',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 12,
+      inPoint: 0,
+      outPoint: 12,
+      linkedClipId: 'comp-video',
+      isComposition: true,
+      compositionId: 'comp-1',
+      source: {
+        type: 'audio',
+        audioElement: staleAudioElement,
+        naturalDuration: 12,
+      },
+      mixdownBuffer,
+      hasMixdownAudio: true,
+    });
+    const createElementSpy = vi.spyOn(document, 'createElement');
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'bulk-composition-audio-split',
+      type: 'split-at-times',
+      clipId: 'comp-video',
+      times: [4, 8],
+      includeLinked: true,
+    }, { source: 'ui', historyLabel: 'Split composition audio' });
+
+    const audioParts = useTimelineStore.getState().clips
+      .filter((clip) => clip.trackId === 'audio-1')
+      .toSorted((a, b) => a.startTime - b.startTime);
+    expect(result.success).toBe(true);
+    expect(createElementSpy).not.toHaveBeenCalledWith('audio');
+    expect(audioParts).toHaveLength(3);
+    expect(audioParts.map((clip) => clip.source)).toEqual([
+      { type: 'audio', naturalDuration: 12 },
+      { type: 'audio', naturalDuration: 12 },
+      { type: 'audio', naturalDuration: 12 },
+    ]);
+    expect(audioParts.map((clip) => clip.mixdownBuffer)).toEqual([mixdownBuffer, mixdownBuffer, mixdownBuffer]);
   });
 
   it('splits only the requested audio clip and clears the stale video link', () => {
@@ -241,6 +461,851 @@ describe('timeline edit operations kernel', () => {
 
     expect(result.success).toBe(true);
     expect(useTimelineStore.getState().clips).toEqual([]);
+  });
+
+  it('releases AI node runtime resources for clips deleted by the edit kernel', () => {
+    const clip = createIdentityAINodeClip('ai-node-delete');
+    const source: LayerSource = {
+      type: 'text',
+      textCanvas: createSourceCanvas(4, 2),
+    };
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [clip],
+      selectedClipIds: new Set(),
+    });
+
+    expect(renderClipAINodesToCanvas(clip, source, 'layer-ai-node-delete', 0)).not.toBeNull();
+    expect(timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .filter((resource) => resource.tags?.includes('ai-node-runtime'))).toHaveLength(2);
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'delete-ai-runtime',
+      type: 'delete-clips',
+      clipIds: [clip.id],
+    }, { source: 'ui' });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips).toEqual([]);
+    expect(timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .filter((resource) => resource.tags?.includes('ai-node-runtime'))).toHaveLength(0);
+  });
+
+  it('applies keyboard delete command keyframes-first without deleting selected clips', () => {
+    const clip = createMockClip({ id: 'clip-1', trackId: 'video-1' });
+    const keyframes = [
+      createMockKeyframe({ id: 'kf-delete', clipId: 'clip-1', property: 'opacity', time: 0, value: 0.5 }),
+      createMockKeyframe({ id: 'kf-keep', clipId: 'clip-1', property: 'opacity', time: 1, value: 1 }),
+    ];
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [clip],
+      clipKeyframes: new Map([['clip-1', keyframes]]),
+      selectedClipIds: new Set(['clip-1']),
+      selectedKeyframeIds: new Set(['kf-delete']),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'keyboard-delete',
+      type: 'keyboard-delete-command',
+      transactionId: 'keyboard-delete',
+      historyBatchId: 'keyboard-delete',
+      source: 'shortcut',
+      command: 'delete',
+      priority: 'keyframes-first',
+      keyframeIds: ['kf-delete'],
+      clipIds: ['clip-1'],
+      includeLinked: false,
+    }, { source: 'shortcut', historyLabel: 'Delete keyframes' });
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['clip-1']);
+    expect(useTimelineStore.getState().clips.map((candidate) => candidate.id)).toEqual(['clip-1']);
+    expect(useTimelineStore.getState().clipKeyframes.get('clip-1')?.map((keyframe) => keyframe.id)).toEqual(['kf-keep']);
+    expect([...useTimelineStore.getState().selectedClipIds]).toEqual(['clip-1']);
+    expect([...useTimelineStore.getState().selectedKeyframeIds]).toEqual([]);
+  });
+
+  it('warns for missing and locked keyframes in keyboard delete command while deleting valid keyframes', () => {
+    const unlocked = createMockClip({ id: 'unlocked-clip', trackId: 'video-1' });
+    const locked = createMockClip({ id: 'locked-clip', trackId: 'video-2' });
+    const keyframes = new Map([
+      [
+        'unlocked-clip',
+        [
+          createMockKeyframe({ id: 'kf-valid', clipId: 'unlocked-clip', property: 'opacity', time: 0, value: 0.5 }),
+        ],
+      ],
+      [
+        'locked-clip',
+        [
+          createMockKeyframe({ id: 'kf-locked', clipId: 'locked-clip', property: 'opacity', time: 0, value: 0.5 }),
+        ],
+      ],
+    ]);
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'video-2', type: 'video', locked: true }),
+      ],
+      clips: [unlocked, locked],
+      clipKeyframes: keyframes,
+      selectedKeyframeIds: new Set(['kf-valid', 'kf-locked', 'kf-missing']),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'keyboard-delete-keyframes-mixed',
+      type: 'keyboard-delete-command',
+      transactionId: 'keyboard-delete-keyframes-mixed',
+      historyBatchId: 'keyboard-delete-keyframes-mixed',
+      source: 'shortcut',
+      command: 'delete',
+      priority: 'keyframes-first',
+      keyframeIds: ['kf-valid', 'kf-locked', 'kf-missing'],
+      clipIds: [],
+      includeLinked: false,
+    }, { source: 'shortcut', historyLabel: 'Delete keyframes' });
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['unlocked-clip']);
+    expect(result.warnings.map((warning) => warning.code)).toEqual(['track-locked', 'keyframe-not-found']);
+    expect(useTimelineStore.getState().clipKeyframes.has('unlocked-clip')).toBe(false);
+    expect(useTimelineStore.getState().clipKeyframes.get('locked-clip')?.map((keyframe) => keyframe.id)).toEqual(['kf-locked']);
+  });
+
+  it('applies keyboard delete command clips-only with selected-linked parity', () => {
+    const video = createMockClip({
+      id: 'video-1',
+      trackId: 'video-1',
+      linkedClipId: 'audio-1',
+    });
+    const audio = createMockClip({
+      id: 'audio-1',
+      trackId: 'audio-1',
+      linkedClipId: 'video-1',
+      source: { type: 'audio' },
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+      selectedClipIds: new Set(['video-1']),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'keyboard-delete-clips',
+      type: 'keyboard-delete-command',
+      transactionId: 'keyboard-delete-clips',
+      historyBatchId: 'keyboard-delete-clips',
+      source: 'shortcut',
+      command: 'delete',
+      priority: 'clips-only',
+      keyframeIds: [],
+      clipIds: ['video-1'],
+      includeLinked: false,
+    }, { source: 'shortcut', historyLabel: 'Delete clips' });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips.map((candidate) => [candidate.id, candidate.linkedClipId])).toEqual([
+      ['audio-1', undefined],
+    ]);
+  });
+
+  it('applies keyboard blend-mode command to all requested unlocked clips', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({ id: 'clip-a', trackId: 'video-1' }),
+        createMockClip({ id: 'clip-b', trackId: 'video-1' }),
+      ],
+      selectedClipIds: new Set(['clip-a', 'clip-b']),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'keyboard-blend',
+      type: 'keyboard-cycle-blend-mode-command',
+      transactionId: 'keyboard-blend',
+      historyBatchId: 'keyboard-blend',
+      source: 'shortcut',
+      command: 'cycle-blend-mode',
+      clipIds: ['clip-a', 'clip-b'],
+      direction: 'next',
+      anchorClipId: 'clip-a',
+      currentBlendMode: 'normal',
+      nextBlendMode: 'dissolve',
+      blendModeSequence: ['normal', 'dissolve'],
+    }, { source: 'shortcut', historyLabel: 'Cycle blend mode' });
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['clip-a', 'clip-b']);
+    expect(useTimelineStore.getState().clips.map((candidate) => [candidate.id, candidate.transform.blendMode])).toEqual([
+      ['clip-a', 'dissolve'],
+      ['clip-b', 'dissolve'],
+    ]);
+  });
+
+  it('applies keyframe transaction commit operations through the kernel', () => {
+    const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', duration: 10 });
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [clip],
+      clipKeyframes: new Map([['clip-1', [
+        createMockKeyframe({ id: 'kf-move', clipId: 'clip-1', property: 'opacity', time: 1, value: 0.25 }),
+        createMockKeyframe({ id: 'kf-update', clipId: 'clip-1', property: 'opacity', time: 2, value: 0.5 }),
+        createMockKeyframe({ id: 'kf-remove', clipId: 'clip-1', property: 'opacity', time: 4, value: 1 }),
+      ]]]),
+      selectedKeyframeIds: new Set(),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'keyframe-commit',
+      type: 'keyframe-transaction-commit',
+      transactionId: 'keyframe-commit',
+      historyBatchId: 'keyframe-commit',
+      source: 'ui',
+      phase: 'commit',
+      clipId: 'clip-1',
+      property: 'opacity',
+      keyframeIds: ['kf-move', 'kf-update', 'kf-remove'],
+      operations: [
+        {
+          type: 'keyframe-move',
+          keyframeId: 'kf-move',
+          clipId: 'clip-1',
+          property: 'opacity',
+          originalTime: 1,
+          requestedTime: 3,
+          resolvedTime: 3,
+        },
+        {
+          type: 'keyframe-update-value',
+          keyframeId: 'kf-update',
+          clipId: 'clip-1',
+          property: 'opacity',
+          value: { value: 0.75 },
+        },
+        {
+          type: 'keyframe-update-easing',
+          keyframeId: 'kf-update',
+          clipId: 'clip-1',
+          property: 'opacity',
+          easing: 'ease-in',
+        },
+        {
+          type: 'keyframe-remove',
+          keyframeId: 'kf-remove',
+          clipId: 'clip-1',
+          property: 'opacity',
+        },
+        {
+          type: 'keyframe-create',
+          clipId: 'clip-1',
+          property: 'opacity',
+          time: 5,
+          value: { value: 0.2 },
+          easing: 'linear',
+        },
+        {
+          type: 'keyframe-select',
+          selectedKeyframeIds: ['kf-update'],
+          mode: 'replace',
+        },
+      ],
+    }, { source: 'ui', historyLabel: 'Commit keyframe transaction' });
+
+    const keyframes = useTimelineStore.getState().clipKeyframes.get('clip-1') ?? [];
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['clip-1']);
+    expect(result.warnings).toEqual([]);
+    expect(keyframes.find(keyframe => keyframe.id === 'kf-move')?.time).toBe(3);
+    expect(keyframes.find(keyframe => keyframe.id === 'kf-update')).toMatchObject({
+      value: 0.75,
+      easing: 'ease-in',
+    });
+    expect(keyframes.some(keyframe => keyframe.id === 'kf-remove')).toBe(false);
+    expect(keyframes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ clipId: 'clip-1', property: 'opacity', time: 5, value: 0.2 }),
+    ]));
+    expect([...useTimelineStore.getState().selectedKeyframeIds]).toEqual(['kf-update']);
+  });
+
+  it('creates and updates path-value keyframes through the keyframe transaction kernel', () => {
+    const clip = createMockClip({ id: 'clip-1', trackId: 'video-1', duration: 10 });
+    const property = createMaskPathProperty('mask-1');
+    const pathValue = {
+      closed: true,
+      vertices: [
+        {
+          id: 'v1',
+          x: 0.1,
+          y: 0.2,
+          handleIn: { x: 0, y: 0 },
+          handleOut: { x: 0, y: 0 },
+        },
+      ],
+    };
+    const replacementPathValue = {
+      closed: false,
+      vertices: [
+        {
+          id: 'v2',
+          x: 0.4,
+          y: 0.5,
+          handleIn: { x: 0.1, y: 0 },
+          handleOut: { x: -0.1, y: 0 },
+        },
+      ],
+    };
+
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [clip],
+      clipKeyframes: new Map([['clip-1', [
+        createMockKeyframe({
+          id: 'kf-existing-path',
+          clipId: 'clip-1',
+          property,
+          time: 2,
+          value: 0,
+          pathValue,
+        }),
+      ]]]),
+      selectedKeyframeIds: new Set(),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'path-keyframe-commit',
+      type: 'keyframe-transaction-commit',
+      transactionId: 'path-keyframe-commit',
+      historyBatchId: 'path-keyframe-commit',
+      source: 'ui',
+      phase: 'commit',
+      clipId: 'clip-1',
+      property,
+      keyframeIds: [],
+      operations: [
+        {
+          type: 'keyframe-create',
+          clipId: 'clip-1',
+          property,
+          time: 1,
+          value: { pathValue },
+          easing: 'linear',
+        },
+        {
+          type: 'keyframe-create',
+          clipId: 'clip-1',
+          property,
+          time: 2,
+          value: { pathValue: replacementPathValue },
+          easing: 'ease-in',
+        },
+      ],
+    }, { source: 'ui', historyLabel: 'Commit path keyframes' });
+
+    const keyframes = useTimelineStore.getState().clipKeyframes.get('clip-1') ?? [];
+    const created = keyframes.find(keyframe => keyframe.time === 1);
+    const updated = keyframes.find(keyframe => keyframe.id === 'kf-existing-path');
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['clip-1']);
+    expect(result.warnings).toEqual([]);
+    expect(keyframes).toHaveLength(2);
+    expect(created).toMatchObject({
+      clipId: 'clip-1',
+      property,
+      value: 0,
+      pathValue,
+      easing: 'linear',
+    });
+    expect(created?.pathValue).not.toBe(pathValue);
+    expect(updated).toMatchObject({
+      value: 0,
+      pathValue: replacementPathValue,
+      easing: 'ease-in',
+    });
+    expect(updated?.pathValue).not.toBe(replacementPathValue);
+  });
+
+  it('warns for missing and locked keyframe transaction operations while applying valid ones', () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'video-2', type: 'video', locked: true }),
+      ],
+      clips: [
+        createMockClip({ id: 'clip-valid', trackId: 'video-1', duration: 10 }),
+        createMockClip({ id: 'clip-locked', trackId: 'video-2', duration: 10 }),
+      ],
+      clipKeyframes: new Map([
+        ['clip-valid', [
+          createMockKeyframe({ id: 'kf-valid', clipId: 'clip-valid', property: 'opacity', time: 1, value: 0.2 }),
+        ]],
+        ['clip-locked', [
+          createMockKeyframe({ id: 'kf-locked', clipId: 'clip-locked', property: 'opacity', time: 1, value: 0.2 }),
+        ]],
+      ]),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'keyframe-mixed',
+      type: 'keyframe-transaction-update',
+      transactionId: 'keyframe-mixed',
+      historyBatchId: 'keyframe-mixed',
+      source: 'ui',
+      phase: 'update',
+      clipId: 'clip-valid',
+      property: 'opacity',
+      keyframeIds: ['kf-valid', 'kf-locked', 'kf-missing'],
+      operations: [
+        {
+          type: 'keyframe-move',
+          keyframeId: 'kf-valid',
+          clipId: 'clip-valid',
+          property: 'opacity',
+          originalTime: 1,
+          requestedTime: 2,
+          resolvedTime: 2,
+        },
+        {
+          type: 'keyframe-move',
+          keyframeId: 'kf-locked',
+          clipId: 'clip-locked',
+          property: 'opacity',
+          originalTime: 1,
+          requestedTime: 2,
+          resolvedTime: 2,
+        },
+        {
+          type: 'keyframe-remove',
+          keyframeId: 'kf-missing',
+          clipId: 'clip-valid',
+          property: 'opacity',
+        },
+      ],
+    }, { source: 'ui', historyLabel: 'Update keyframe transaction' });
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['clip-valid']);
+    expect(result.warnings.map(warning => warning.code)).toEqual(['track-locked', 'keyframe-not-found']);
+    expect(useTimelineStore.getState().clipKeyframes.get('clip-valid')?.[0]?.time).toBe(2);
+    expect(useTimelineStore.getState().clipKeyframes.get('clip-locked')?.[0]?.time).toBe(1);
+  });
+
+  it('applies fade transaction commit by materializing left fade keyframes', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', duration: 10 })],
+      clipKeyframes: new Map(),
+    });
+
+    const beginResult = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'fade-begin',
+      type: 'fade-transaction-begin',
+      transactionId: 'fade-begin',
+      historyBatchId: 'fade-begin',
+      source: 'ui',
+      phase: 'begin',
+      clipId: 'clip-1',
+      edge: 'left',
+      originalFadeDuration: 0,
+      clipDuration: 10,
+      property: 'opacity',
+    }, { source: 'ui', historyLabel: 'Begin fade transaction' });
+
+    const commitResult = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'fade-commit',
+      type: 'fade-transaction-commit',
+      transactionId: 'fade-commit',
+      historyBatchId: 'fade-commit',
+      source: 'ui',
+      phase: 'commit',
+      clipId: 'clip-1',
+      edge: 'left',
+      finalFadeDuration: 2,
+      keyframePlan: {
+        clipId: 'clip-1',
+        property: 'opacity',
+        edge: 'left',
+        duration: 2,
+        zeroKeyframeId: 'fade-zero',
+        oneKeyframeId: 'fade-one',
+        createdKeyframeIds: ['fade-zero', 'fade-one'],
+        movedKeyframeIds: [],
+        removedKeyframeIds: [],
+      },
+    }, { source: 'ui', historyLabel: 'Commit fade transaction' });
+    const keyframes = useTimelineStore.getState().clipKeyframes.get('clip-1') ?? [];
+
+    expect(beginResult.success).toBe(true);
+    expect(beginResult.warnings).toEqual([]);
+    expect(commitResult.success).toBe(true);
+    expect(commitResult.changedClipIds).toEqual(['clip-1']);
+    expect(keyframes).toEqual([
+      expect.objectContaining({ id: 'fade-zero', clipId: 'clip-1', property: 'opacity', time: 0, value: 0, easing: 'ease-out' }),
+      expect.objectContaining({ id: 'fade-one', clipId: 'clip-1', property: 'opacity', time: 2, value: 1, easing: 'linear' }),
+    ]);
+  });
+
+  it('updates existing right fade keyframes while preserving curve handles', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', duration: 10 })],
+      clipKeyframes: new Map([['clip-1', [
+        createMockKeyframe({
+          id: 'fade-one',
+          clipId: 'clip-1',
+          property: 'opacity',
+          time: 8,
+          value: 1,
+          easing: 'bezier',
+          handleOut: { x: 0.2, y: 0.5 },
+        }),
+        createMockKeyframe({
+          id: 'fade-zero',
+          clipId: 'clip-1',
+          property: 'opacity',
+          time: 10,
+          value: 0,
+          easing: 'linear',
+        }),
+      ]]]),
+      selectedKeyframeIds: new Set(['fade-one', 'fade-zero']),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'fade-update-right',
+      type: 'fade-transaction-update',
+      transactionId: 'fade-update-right',
+      historyBatchId: 'fade-update-right',
+      source: 'ui',
+      phase: 'update',
+      clipId: 'clip-1',
+      edge: 'right',
+      requestedFadeDuration: 3,
+      resolvedFadeDuration: 3,
+      keyframePlan: {
+        clipId: 'clip-1',
+        property: 'opacity',
+        edge: 'right',
+        duration: 3,
+        zeroKeyframeId: 'fade-zero',
+        oneKeyframeId: 'fade-one',
+        createdKeyframeIds: [],
+        movedKeyframeIds: ['fade-one'],
+        removedKeyframeIds: [],
+      },
+    }, { source: 'ui', historyLabel: 'Update fade transaction' });
+    const keyframes = useTimelineStore.getState().clipKeyframes.get('clip-1') ?? [];
+
+    expect(result.success).toBe(true);
+    expect(keyframes.find(keyframe => keyframe.id === 'fade-one')).toMatchObject({
+      time: 7,
+      value: 1,
+      easing: 'bezier',
+      handleOut: { x: 0.2, y: 0.5 },
+    });
+    expect(keyframes.find(keyframe => keyframe.id === 'fade-zero')).toMatchObject({
+      time: 10,
+      value: 0,
+    });
+    expect([...useTimelineStore.getState().selectedKeyframeIds]).toEqual(['fade-one', 'fade-zero']);
+  });
+
+  it('removes fade keyframes when committed duration is zero', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', duration: 10 })],
+      clipKeyframes: new Map([['clip-1', [
+        createMockKeyframe({ id: 'fade-zero', clipId: 'clip-1', property: 'opacity', time: 0, value: 0 }),
+        createMockKeyframe({ id: 'fade-one', clipId: 'clip-1', property: 'opacity', time: 2, value: 1 }),
+      ]]]),
+      selectedKeyframeIds: new Set(['fade-zero', 'fade-one']),
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'fade-remove-left',
+      type: 'fade-transaction-commit',
+      transactionId: 'fade-remove-left',
+      historyBatchId: 'fade-remove-left',
+      source: 'ui',
+      phase: 'commit',
+      clipId: 'clip-1',
+      edge: 'left',
+      finalFadeDuration: 0,
+      keyframePlan: {
+        clipId: 'clip-1',
+        property: 'opacity',
+        edge: 'left',
+        duration: 0,
+        zeroKeyframeId: 'fade-zero',
+        oneKeyframeId: 'fade-one',
+        createdKeyframeIds: [],
+        movedKeyframeIds: [],
+        removedKeyframeIds: ['fade-zero', 'fade-one'],
+      },
+    }, { source: 'ui', historyLabel: 'Remove fade transaction' });
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['clip-1']);
+    expect(useTimelineStore.getState().clipKeyframes.has('clip-1')).toBe(false);
+    expect([...useTimelineStore.getState().selectedKeyframeIds]).toEqual([]);
+  });
+
+  it('stores transition drop preview ghost ranges through the operation kernel', () => {
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-preview',
+      type: 'transition-preview-drop',
+      transactionId: 'typed-transition-preview',
+      historyBatchId: 'typed-transition-preview',
+      source: 'external-drop',
+      geometrySnapshotId: 'geometry-1',
+      transitionType: 'crossfade',
+      requestedDuration: 2,
+      junction: createTransitionJunctionFixture('clip-a', 'clip-b', 10),
+    }, { source: 'external-drop', historyLabel: 'Preview transition drop' });
+
+    const preview = useTimelineStore.getState().timelineToolPreview;
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(preview).toMatchObject({
+      toolId: 'select',
+      plane: 'section-scrolled',
+      trackId: 'video-1',
+      time: 10,
+      startTime: 9,
+      endTime: 11,
+      label: 'crossfade',
+      zIndex: 16,
+    });
+    expect(preview?.ghostRanges).toEqual([{
+      id: 'typed-transition-preview:transition-preview',
+      trackId: 'video-1',
+      startTime: 9,
+      endTime: 11,
+      label: 'crossfade',
+      variant: 'transition-drop',
+    }]);
+  });
+
+  it('stores and clears blocked transition drop preview state', () => {
+    const previewResult = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-preview-blocked',
+      type: 'transition-preview-drop',
+      transactionId: 'typed-transition-preview-blocked',
+      historyBatchId: 'typed-transition-preview-blocked',
+      source: 'external-drop',
+      geometrySnapshotId: 'geometry-1',
+      transitionType: 'crossfade',
+      requestedDuration: 1,
+      junction: null,
+    }, { source: 'external-drop', historyLabel: 'Preview transition drop' });
+
+    expect(previewResult.success).toBe(true);
+    expect(previewResult.changedClipIds).toEqual([]);
+    expect(previewResult.warnings[0]?.code).toBe('invalid-range');
+    expect(useTimelineStore.getState().timelineToolPreview).toMatchObject({
+      toolId: 'select',
+      plane: 'section-scrolled',
+      label: 'crossfade',
+      blocked: true,
+      message: 'No transition junction at the current drop target.',
+      zIndex: 16,
+    });
+
+    const clearResult = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-clear',
+      type: 'transition-clear-preview',
+      transactionId: 'typed-transition-clear',
+      historyBatchId: 'typed-transition-clear',
+      source: 'external-drop',
+      reason: 'drag-leave',
+    }, { source: 'external-drop', historyLabel: 'Clear transition preview' });
+
+    expect(clearResult.success).toBe(true);
+    expect(clearResult.changedClipIds).toEqual([]);
+    expect(clearResult.warnings).toEqual([]);
+    expect(useTimelineStore.getState().timelineToolPreview).toBeNull();
+  });
+
+  it('applies a typed transition operation with reciprocal clip metadata', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({ id: 'clip-a', trackId: 'video-1', startTime: 0, duration: 10 }),
+        createMockClip({ id: 'clip-b', trackId: 'video-1', startTime: 10, duration: 8 }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-apply',
+      type: 'transition-apply',
+      transactionId: 'typed-transition-apply',
+      historyBatchId: 'typed-transition-apply',
+      source: 'external-drop',
+      clipAId: 'clip-a',
+      clipBId: 'clip-b',
+      transitionType: 'crossfade',
+      requestedDuration: 2,
+      junction: createTransitionJunctionFixture(),
+    }, { source: 'external-drop', historyLabel: 'Drop transition' });
+
+    const clips = useTimelineStore.getState().clips;
+    const clipA = clips.find(clip => clip.id === 'clip-a');
+    const clipB = clips.find(clip => clip.id === 'clip-b');
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['clip-a', 'clip-b']);
+    expect(clipA?.transitionOut).toMatchObject({ type: 'crossfade', duration: 2, linkedClipId: 'clip-b' });
+    expect(clipB?.transitionIn).toMatchObject({ type: 'crossfade', duration: 2, linkedClipId: 'clip-a' });
+    expect(clipA?.transitionOut?.id).toBe(clipB?.transitionIn?.id);
+    expect(clipB?.startTime).toBe(8);
+  });
+
+  it('clamps typed transition duration to the transition and clip limits', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({ id: 'clip-a', trackId: 'video-1', startTime: 0, duration: 4 }),
+        createMockClip({ id: 'clip-b', trackId: 'video-1', startTime: 4, duration: 3 }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-clamp',
+      type: 'transition-apply',
+      transactionId: 'typed-transition-clamp',
+      historyBatchId: 'typed-transition-clamp',
+      source: 'ui',
+      clipAId: 'clip-a',
+      clipBId: 'clip-b',
+      transitionType: 'crossfade',
+      requestedDuration: 5,
+      junction: createTransitionJunctionFixture('clip-a', 'clip-b', 4),
+    }, { source: 'ui', historyLabel: 'Apply transition' });
+
+    const clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
+    expect(result.success).toBe(true);
+    expect(clipB?.transitionIn?.duration).toBe(1.5);
+    expect(clipB?.startTime).toBe(2.5);
+  });
+
+  it('removes a typed transition and restores the incoming clip start', () => {
+    const transition = { id: 'transition-existing', type: 'crossfade', duration: 2 };
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          transitionOut: { ...transition, linkedClipId: 'clip-b' },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 8,
+          duration: 8,
+          transitionIn: { ...transition, linkedClipId: 'clip-a' },
+        }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-remove',
+      type: 'transition-remove',
+      transactionId: 'typed-transition-remove',
+      historyBatchId: 'typed-transition-remove',
+      source: 'ui',
+      clipId: 'clip-a',
+      edge: 'out',
+      transitionId: 'transition-existing',
+    }, { source: 'ui', historyLabel: 'Remove transition' });
+
+    const clips = useTimelineStore.getState().clips;
+    expect(result.success).toBe(true);
+    expect(clips.find(clip => clip.id === 'clip-a')?.transitionOut).toBeUndefined();
+    expect(clips.find(clip => clip.id === 'clip-b')?.transitionIn).toBeUndefined();
+    expect(clips.find(clip => clip.id === 'clip-b')?.startTime).toBe(10);
+  });
+
+  it('updates typed transition duration while preserving the transition id', () => {
+    const transition = { id: 'transition-existing', type: 'crossfade', duration: 1 };
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          transitionOut: { ...transition, linkedClipId: 'clip-b' },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 9,
+          duration: 8,
+          transitionIn: { ...transition, linkedClipId: 'clip-a' },
+        }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-update',
+      type: 'transition-update-duration',
+      transactionId: 'typed-transition-update',
+      historyBatchId: 'typed-transition-update',
+      source: 'ui',
+      clipId: 'clip-b',
+      edge: 'in',
+      transitionId: 'transition-existing',
+      requestedDuration: 3,
+    }, { source: 'ui', historyLabel: 'Update transition duration' });
+
+    const clipA = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a');
+    const clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
+    expect(result.success).toBe(true);
+    expect(clipA?.transitionOut).toMatchObject({ id: 'transition-existing', type: 'crossfade', duration: 3, linkedClipId: 'clip-b' });
+    expect(clipB?.transitionIn).toMatchObject({ id: 'transition-existing', type: 'crossfade', duration: 3, linkedClipId: 'clip-a' });
+    expect(clipB?.startTime).toBe(7);
+  });
+
+  it('blocks typed transition operations on locked tracks', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video', locked: true })],
+      clips: [
+        createMockClip({ id: 'clip-a', trackId: 'video-1', startTime: 0, duration: 10 }),
+        createMockClip({ id: 'clip-b', trackId: 'video-1', startTime: 10, duration: 8 }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-locked',
+      type: 'transition-apply',
+      transactionId: 'typed-transition-locked',
+      historyBatchId: 'typed-transition-locked',
+      source: 'ui',
+      clipAId: 'clip-a',
+      clipBId: 'clip-b',
+      transitionType: 'crossfade',
+      requestedDuration: 1,
+      junction: createTransitionJunctionFixture(),
+    }, { source: 'ui', historyLabel: 'Apply transition' });
+
+    expect(result.success).toBe(false);
+    expect(result.warnings[0]?.code).toBe('track-locked');
+    expect(useTimelineStore.getState().clips.some(clip => clip.transitionIn || clip.transitionOut)).toBe(false);
   });
 
   it('deletes a gap at time by shifting following clips left', () => {
@@ -374,6 +1439,397 @@ describe('timeline edit operations kernel', () => {
       ['video-1', 6],
       ['audio-1', 6],
     ]);
+  });
+
+  it('applies resolved move overlap trims in one operation kernel path', () => {
+    const moving = createMockClip({
+      id: 'moving',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 3,
+      inPoint: 0,
+      outPoint: 3,
+      source: { type: 'video' },
+    });
+    const overlapped = createMockClip({
+      id: 'overlapped',
+      trackId: 'video-1',
+      startTime: 5,
+      duration: 4,
+      inPoint: 10,
+      outPoint: 14,
+      source: { type: 'video' },
+    });
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-overlap',
+      clips: [moving, overlapped],
+      tracks,
+      clipId: 'moving',
+      requestedStartTime: 3,
+      getPositionWithResistance: () => ({
+        startTime: 3,
+        forcingOverlap: true,
+      }),
+    });
+    useTimelineStore.setState({
+      tracks,
+      clips: [moving, overlapped],
+      selectedClipIds: new Set(['moving', 'overlapped']),
+      primarySelectedClipId: 'overlapped',
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'resolved-move-overlap',
+      type: 'move-clips-resolved',
+      resolvedMoves: resolution.resolvedMoves,
+    }, { source: 'ui', historyLabel: 'Move clip' });
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['moving', 'overlapped']);
+    expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.startTime, clip.inPoint, clip.outPoint, clip.duration])).toEqual([
+      ['moving', 3, 0, 3, 3],
+      ['overlapped', 6, 11, 14, 3],
+    ]);
+    expect([...useTimelineStore.getState().selectedClipIds]).toEqual(['moving', 'overlapped']);
+    expect(useTimelineStore.getState().primarySelectedClipId).toBe('overlapped');
+  });
+
+  it('removes covered overlap victims from selection in resolved move operations', () => {
+    const moving = createMockClip({
+      id: 'moving',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'video' },
+    });
+    const covered = createMockClip({
+      id: 'covered',
+      trackId: 'video-1',
+      startTime: 4,
+      duration: 2,
+      inPoint: 10,
+      outPoint: 12,
+      source: { type: 'video' },
+    });
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-covered-overlap',
+      clips: [moving, covered],
+      tracks,
+      clipId: 'moving',
+      requestedStartTime: 3,
+      getPositionWithResistance: () => ({
+        startTime: 3,
+        forcingOverlap: true,
+      }),
+    });
+    useTimelineStore.setState({
+      tracks,
+      clips: [moving, covered],
+      selectedClipIds: new Set(['moving', 'covered']),
+      primarySelectedClipId: 'covered',
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'resolved-move-covered-overlap',
+      type: 'move-clips-resolved',
+      resolvedMoves: resolution.resolvedMoves,
+    }, { source: 'ui', historyLabel: 'Move clip' });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips.map(clip => clip.id)).toEqual(['moving']);
+    expect([...useTimelineStore.getState().selectedClipIds]).toEqual(['moving']);
+    expect(useTimelineStore.getState().primarySelectedClipId).toBe('moving');
+  });
+
+  it('applies resolved move overlap trims to linked clip partners', () => {
+    const moving = createMockClip({
+      id: 'moving',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 3,
+      inPoint: 0,
+      outPoint: 3,
+      source: { type: 'video' },
+    });
+    const linkedVideo = createMockClip({
+      id: 'linked-video',
+      trackId: 'video-1',
+      startTime: 5,
+      duration: 4,
+      inPoint: 10,
+      outPoint: 14,
+      linkedClipId: 'linked-audio',
+      source: { type: 'video' },
+    });
+    const linkedAudio = createMockClip({
+      id: 'linked-audio',
+      trackId: 'audio-1',
+      startTime: 5,
+      duration: 4,
+      inPoint: 10,
+      outPoint: 14,
+      linkedClipId: 'linked-video',
+      source: { type: 'audio' },
+    });
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-linked-overlap',
+      clips: [moving, linkedVideo, linkedAudio],
+      tracks,
+      clipId: 'moving',
+      requestedStartTime: 3,
+      getPositionWithResistance: () => ({
+        startTime: 3,
+        forcingOverlap: true,
+      }),
+    });
+    useTimelineStore.setState({
+      tracks,
+      clips: [moving, linkedVideo, linkedAudio],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'resolved-move-linked-overlap',
+      type: 'move-clips-resolved',
+      resolvedMoves: resolution.resolvedMoves,
+    }, { source: 'ui', historyLabel: 'Move clip' });
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['moving', 'linked-video', 'linked-audio']);
+    expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.startTime, clip.inPoint, clip.duration])).toEqual([
+      ['moving', 3, 0, 3],
+      ['linked-video', 6, 11, 3],
+      ['linked-audio', 6, 11, 3],
+    ]);
+  });
+
+  it('materializes resolved fallback tracks inside the operation kernel', () => {
+    const moving = createMockClip({
+      id: 'moving',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 4,
+      source: { type: 'video' },
+    });
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'video-2', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-fallback-track',
+      clips: [moving],
+      tracks,
+      clipId: 'moving',
+      requestedStartTime: 6,
+      requestedNewTrackType: 'video',
+    });
+    useTimelineStore.setState({
+      tracks,
+      clips: [moving],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'resolved-move-fallback-track',
+      type: 'move-clips-resolved',
+      resolvedMoves: resolution.resolvedMoves,
+    }, { source: 'ui', historyLabel: 'Move clip' });
+
+    const state = useTimelineStore.getState();
+    const fallbackTrack = state.tracks.find(track =>
+      track.type === 'video' && !tracks.some(originalTrack => originalTrack.id === track.id));
+    const movedClip = state.clips.find(clip => clip.id === 'moving');
+
+    expect(resolution.resolvedMoves[0]?.fallbackTrack).toMatchObject({
+      createFallbackTrack: true,
+      reason: 'explicit-new-track-zone',
+    });
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['moving']);
+    expect(fallbackTrack).toBeDefined();
+    expect(movedClip).toMatchObject({
+      startTime: 6,
+      trackId: fallbackTrack?.id,
+    });
+  });
+
+  it('applies selected linked-pair resolved moves while preserving offsets', () => {
+    const video = createMockClip({
+      id: 'video',
+      trackId: 'video-1',
+      startTime: 3,
+      duration: 4,
+      linkedClipId: 'audio',
+      source: { type: 'video' },
+    });
+    const audio = createMockClip({
+      id: 'audio',
+      trackId: 'audio-1',
+      startTime: 3.5,
+      duration: 4,
+      linkedClipId: 'video',
+      source: { type: 'audio' },
+    });
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-selected-linked-pair',
+      clips: [video, audio],
+      tracks,
+      clipId: 'video',
+      requestedStartTime: 8,
+      selectedClipIds: ['video', 'audio'],
+    });
+    const operationPlan = createResolvedClipMoveOperationPlan(
+      resolution.id,
+      resolution.resolvedMoves,
+      resolution.warnings,
+    );
+    const operationToApply = operationPlan.canApplyWithMoveClipsOperation
+      ? operationPlan.operation
+      : {
+        id: resolution.id,
+        type: 'move-clips-resolved' as const,
+        resolvedMoves: resolution.resolvedMoves,
+      };
+    useTimelineStore.setState({
+      tracks,
+      clips: [video, audio],
+      selectedClipIds: new Set(['video', 'audio']),
+      primarySelectedClipId: 'video',
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation(
+      operationToApply,
+      { source: 'ui', historyLabel: 'Move selected clips' },
+    );
+
+    expect(operationPlan.canApplyWithMoveClipsOperation).toBe(false);
+    expect(operationPlan.blockedReasons).toEqual(['selected-linked-pair']);
+    expect(operationToApply.type).toBe('move-clips-resolved');
+    expect(resolution.resolvedMoves.map(move => move.selectedLinkedPair.preservedOffsets)).toEqual([true, true]);
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['video', 'audio']);
+    expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.startTime, clip.trackId])).toEqual([
+      ['video', 8, 'video-1'],
+      ['audio', 8.5, 'audio-1'],
+    ]);
+    expect(useTimelineStore.getState().primarySelectedClipId).toBe('video');
+  });
+
+  it('applies linked group resolved moves through the typed operation kernel', () => {
+    const clips = [
+      createMockClip({ id: 'lead', trackId: 'video-1', startTime: 1, duration: 2, linkedGroupId: 'group-1', source: { type: 'video' } }),
+      createMockClip({ id: 'group-video', trackId: 'video-1', startTime: 4, duration: 2, linkedGroupId: 'group-1', source: { type: 'video' } }),
+      createMockClip({ id: 'group-audio', trackId: 'audio-1', startTime: 5, duration: 2, linkedGroupId: 'group-1', source: { type: 'audio' } }),
+    ];
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-linked-group',
+      clips,
+      tracks,
+      clipId: 'lead',
+      requestedStartTime: 6,
+    });
+    const operationPlan = createResolvedClipMoveOperationPlan(
+      resolution.id,
+      resolution.resolvedMoves,
+      resolution.warnings,
+    );
+    useTimelineStore.setState({ tracks, clips });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation(
+      operationPlan.operation,
+      { source: 'ui', historyLabel: 'Move linked group' },
+    );
+
+    expect(operationPlan.canApplyWithMoveClipsOperation).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['lead', 'group-video', 'group-audio']);
+    expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.startTime, clip.trackId])).toEqual([
+      ['lead', 6, 'video-1'],
+      ['group-video', 9, 'video-1'],
+      ['group-audio', 10, 'audio-1'],
+    ]);
+  });
+
+  it('keeps linked group followers in place when group following is disabled', () => {
+    const clips = [
+      createMockClip({ id: 'lead', trackId: 'video-1', startTime: 1, duration: 2, linkedGroupId: 'group-1', source: { type: 'video' } }),
+      createMockClip({ id: 'group-video', trackId: 'video-1', startTime: 4, duration: 2, linkedGroupId: 'group-1', source: { type: 'video' } }),
+      createMockClip({ id: 'group-audio', trackId: 'audio-1', startTime: 5, duration: 2, linkedGroupId: 'group-1', source: { type: 'audio' } }),
+    ];
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio' }),
+    ];
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-linked-group-disabled',
+      clips,
+      tracks,
+      clipId: 'lead',
+      requestedStartTime: 6,
+      includeGroups: false,
+    });
+    useTimelineStore.setState({ tracks, clips });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation(
+      resolution.operation,
+      { source: 'ui', historyLabel: 'Move ungrouped clip' },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(['lead']);
+    expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.startTime, clip.trackId])).toEqual([
+      ['lead', 6, 'video-1'],
+      ['group-video', 4, 'video-1'],
+      ['group-audio', 5, 'audio-1'],
+    ]);
+  });
+
+  it('blocks linked group resolved moves when a follower track is locked', () => {
+    const clips = [
+      createMockClip({ id: 'lead', trackId: 'video-1', startTime: 1, duration: 2, linkedGroupId: 'group-1', source: { type: 'video' } }),
+      createMockClip({ id: 'group-audio', trackId: 'audio-1', startTime: 5, duration: 2, linkedGroupId: 'group-1', source: { type: 'audio' } }),
+    ];
+    const tracks = [
+      createMockTrack({ id: 'video-1', type: 'video' }),
+      createMockTrack({ id: 'audio-1', type: 'audio', locked: true }),
+    ];
+
+    const resolution = resolveClipMoveRequest({
+      id: 'resolved-move-linked-group-locked',
+      clips,
+      tracks,
+      clipId: 'lead',
+      requestedStartTime: 6,
+    });
+
+    expect(resolution.resolvedMoves).toEqual([]);
+    expect(resolution.operation.moves).toEqual([]);
+    expect(resolution.warnings[0]).toMatchObject({
+      code: 'track-locked',
+      clipId: 'group-audio',
+      trackId: 'audio-1',
+    });
   });
 
   it('trims linked clips through the operation kernel', () => {

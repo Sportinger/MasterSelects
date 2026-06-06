@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { createTransitionJunctionGeometryReference } from '../../../stores/timeline/editOperations/transitionOperations';
 import { TRANSITION_MIME_TYPE } from '../../panels/TransitionsPanel';
 import type { TimelineClip } from '../../../types';
 
@@ -37,12 +38,23 @@ export interface UseTransitionDropResult {
 // Threshold in seconds for detecting junction proximity
 const JUNCTION_THRESHOLD = 0.5;
 
+function readTransitionDropData(e: React.DragEvent): TransitionDropData | null {
+  const dataStr = e.dataTransfer.getData(TRANSITION_MIME_TYPE);
+  if (!dataStr) return null;
+
+  try {
+    return JSON.parse(dataStr) as TransitionDropData;
+  } catch {
+    return null;
+  }
+}
+
 export function useTransitionDrop(): UseTransitionDropResult {
   const [activeJunction, setActiveJunction] = useState<JunctionHighlight | null>(null);
   const lastCheckTime = useRef<number>(0);
 
   const findClipJunction = useTimelineStore(state => state.findClipJunction);
-  const applyTransition = useTimelineStore(state => state.applyTransition);
+  const applyTimelineEditOperation = useTimelineStore(state => state.applyTimelineEditOperation);
 
   // Check if the drag event contains transition data
   const isTransitionDrag = useCallback((e: React.DragEvent): boolean => {
@@ -63,6 +75,8 @@ export function useTransitionDrop(): UseTransitionDropResult {
 
     // Find nearby junction
     const junction = findClipJunction(trackId, mouseTime, JUNCTION_THRESHOLD);
+    const transitionData = readTransitionDropData(e);
+    const operationId = `transition-preview:${Date.now()}`;
 
     if (junction) {
       setActiveJunction({
@@ -71,10 +85,49 @@ export function useTransitionDrop(): UseTransitionDropResult {
         clipB: junction.clipB,
         junctionTime: junction.junctionTime,
       });
+      if (transitionData) {
+        applyTimelineEditOperation({
+          id: operationId,
+          type: 'transition-preview-drop',
+          transactionId: operationId,
+          historyBatchId: operationId,
+          source: 'external-drop',
+          geometrySnapshotId: `transition-geometry:${operationId}`,
+          transitionType: transitionData.type,
+          requestedDuration: transitionData.duration,
+          junction: createTransitionJunctionGeometryReference({
+            operationId,
+            trackId,
+            clipAId: junction.clipA.id,
+            clipBId: junction.clipB.id,
+            junctionTime: junction.junctionTime,
+            thresholdSeconds: JUNCTION_THRESHOLD,
+          }),
+        }, {
+          source: 'external-drop',
+          historyLabel: 'Preview transition drop',
+        });
+      }
     } else {
       setActiveJunction(null);
+      if (transitionData) {
+        applyTimelineEditOperation({
+          id: operationId,
+          type: 'transition-preview-drop',
+          transactionId: operationId,
+          historyBatchId: operationId,
+          source: 'external-drop',
+          geometrySnapshotId: `transition-geometry:${operationId}`,
+          transitionType: transitionData.type,
+          requestedDuration: transitionData.duration,
+          junction: null,
+        }, {
+          source: 'external-drop',
+          historyLabel: 'Preview transition drop',
+        });
+      }
     }
-  }, [isTransitionDrag, findClipJunction]);
+  }, [isTransitionDrag, findClipJunction, applyTimelineEditOperation]);
 
   // Handle drop to apply transition
   const handleDrop = useCallback((e: React.DragEvent, trackId: string, mouseTime: number) => {
@@ -82,14 +135,21 @@ export function useTransitionDrop(): UseTransitionDropResult {
 
     e.preventDefault();
 
-    // Get transition data
-    const dataStr = e.dataTransfer.getData(TRANSITION_MIME_TYPE);
-    if (!dataStr) return;
-
-    let transitionData: TransitionDropData;
-    try {
-      transitionData = JSON.parse(dataStr);
-    } catch {
+    const transitionData = readTransitionDropData(e);
+    if (!transitionData) {
+      setActiveJunction(null);
+      const clearId = `transition-clear:${Date.now()}`;
+      applyTimelineEditOperation({
+        id: clearId,
+        type: 'transition-clear-preview',
+        transactionId: clearId,
+        historyBatchId: clearId,
+        source: 'external-drop',
+        reason: 'invalid-drop',
+      }, {
+        source: 'external-drop',
+        historyLabel: 'Clear transition preview',
+      });
       return;
     }
 
@@ -97,24 +157,77 @@ export function useTransitionDrop(): UseTransitionDropResult {
     const junction = findClipJunction(trackId, mouseTime, JUNCTION_THRESHOLD);
     if (!junction) {
       setActiveJunction(null);
+      const clearId = `transition-clear:${Date.now()}`;
+      applyTimelineEditOperation({
+        id: clearId,
+        type: 'transition-clear-preview',
+        transactionId: clearId,
+        historyBatchId: clearId,
+        source: 'external-drop',
+        reason: 'invalid-drop',
+      }, {
+        source: 'external-drop',
+        historyLabel: 'Clear transition preview',
+      });
       return;
     }
 
-    // Apply the transition
-    applyTransition(
-      junction.clipA.id,
-      junction.clipB.id,
-      transitionData.type,
-      transitionData.duration
-    );
+    const operationId = `transition-drop:${Date.now()}`;
+    applyTimelineEditOperation({
+      id: operationId,
+      type: 'transition-apply',
+      transactionId: operationId,
+      historyBatchId: operationId,
+      source: 'external-drop',
+      geometrySnapshotId: `transition-geometry:${operationId}`,
+      clipAId: junction.clipA.id,
+      clipBId: junction.clipB.id,
+      transitionType: transitionData.type,
+      requestedDuration: transitionData.duration,
+      junction: createTransitionJunctionGeometryReference({
+        operationId,
+        trackId,
+        clipAId: junction.clipA.id,
+        clipBId: junction.clipB.id,
+        junctionTime: junction.junctionTime,
+        thresholdSeconds: JUNCTION_THRESHOLD,
+      }),
+    }, {
+      source: 'external-drop',
+      historyLabel: 'Drop transition',
+    });
 
     setActiveJunction(null);
-  }, [isTransitionDrag, findClipJunction, applyTransition]);
+    const clearId = `transition-clear:${operationId}`;
+    applyTimelineEditOperation({
+      id: clearId,
+      type: 'transition-clear-preview',
+      transactionId: clearId,
+      historyBatchId: clearId,
+      source: 'external-drop',
+      reason: 'drop-complete',
+    }, {
+      source: 'external-drop',
+      historyLabel: 'Clear transition preview',
+    });
+  }, [isTransitionDrag, findClipJunction, applyTimelineEditOperation]);
 
   // Handle drag leave
   const handleDragLeave = useCallback(() => {
     setActiveJunction(null);
-  }, []);
+    const operationId = `transition-clear:${Date.now()}`;
+    applyTimelineEditOperation({
+      id: operationId,
+      type: 'transition-clear-preview',
+      transactionId: operationId,
+      historyBatchId: operationId,
+      source: 'external-drop',
+      reason: 'drag-leave',
+    }, {
+      source: 'external-drop',
+      historyLabel: 'Clear transition preview',
+    });
+  }, [applyTimelineEditOperation]);
 
   return {
     activeJunction,

@@ -18,6 +18,7 @@ import { prewarmGaussianSplatRuntime } from '../../../engine/scene/runtime/Share
 import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMetadata';
 import { prepareRiveAsset } from '../../../services/vectorAnimation/riveMetadata';
 import { readGaussianSplatFileStats } from './gaussianSplatStats';
+import { createPrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('Import');
 
@@ -66,7 +67,6 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
 
   const type: MediaFile['type'] = typeOverride ?? detectedType as MediaFile['type'];
   let canonicalFile = file;
-  let url = URL.createObjectURL(file);
 
   const vectorAnimationInfo = type === 'lottie' || type === 'rive'
     ? await (type === 'lottie' ? prepareLottieAsset(file) : prepareRiveAsset(file)).then((prepared) => ({
@@ -94,7 +94,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   const fileHash = await calculateFileHash(file);
 
   // Handle thumbnail deduplication (unified - was 3x duplicate)
-  const thumbnailUrl = await handleThumbnailDedup(fileHash, rawThumbnail);
+  const thumbnailUrl = await handleThumbnailDedup(fileHash, rawThumbnail, id);
 
   // Check for existing proxy (unified - was 3x duplicate)
   const proxyInfo = await checkExistingProxy(
@@ -122,9 +122,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
         : (await projectFileService.getFileFromRaw(copyResult.relativePath))?.file;
 
       if (projectFile) {
-        URL.revokeObjectURL(url);
         canonicalFile = projectFile;
-        url = URL.createObjectURL(projectFile);
       }
     } catch (e) {
       log.warn('Failed to promote RAW copy as canonical media source', {
@@ -148,7 +146,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     parentId: parentId ?? null,
     createdAt: Date.now(),
     file: canonicalFile,
-    url,
+    url: createPrimaryMediaObjectUrl(id, canonicalFile),
     thumbnailUrl,
     fileHash,
     hasFileHandle: !!copyResult || !!handle,

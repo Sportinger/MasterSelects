@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addClipCustomNodeDefinition,
+  clearAINodeRuntimeCache,
+  clearAINodeRuntimeCacheForClip,
   connectClipNodeGraphPorts,
   createClipAICustomNodeDefinition,
   hasRunnableAINodes,
@@ -9,6 +11,8 @@ import {
 } from '../../src/services/nodeGraph';
 import { DEFAULT_TRANSFORM } from '../../src/stores/timeline/constants';
 import type { LayerSource, TimelineClip } from '../../src/types';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
+import type { RenderResourceDescriptor } from '../../src/services/timeline/runtimeCoordinatorTypes';
 import { primeTimelineLoudnessEnvelopeCache } from '../../src/services/audio/timelineLoudnessEnvelopeCache';
 import {
   primeTimelineFrequencySummaryCache,
@@ -36,7 +40,64 @@ function createClip(): TimelineClip {
   };
 }
 
+function createSourceCanvas(width = 2, height = 1): HTMLCanvasElement {
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = width;
+  sourceCanvas.height = height;
+  const sourceContext = sourceCanvas.getContext('2d');
+  const sourceImage = sourceContext?.createImageData(width, height);
+  if (sourceImage) {
+    sourceImage.data.fill(255);
+    sourceContext?.putImageData(sourceImage, 0, 0);
+  }
+  return sourceCanvas;
+}
+
+function createIdentityAINodeClip(id = 'clip-1'): TimelineClip {
+  const clip = { ...createClip(), id };
+  const definition = {
+    ...createClipAICustomNodeDefinition('custom-ai', clip),
+    status: 'ready' as const,
+    ai: {
+      prompt: 'Pass input through',
+      generatedCode: 'defineNode({ process(input) { return { output: input.input }; } })',
+    },
+  };
+  return {
+    ...clip,
+    nodeGraph: addClipCustomNodeDefinition(clip, definition),
+  };
+}
+
+function createRetainedInteractiveCanvasResource(index: number): RenderResourceDescriptor {
+  return {
+    id: `retained-ai-node-budget-${index}`,
+    kind: 'image-canvas',
+    policyId: 'interactive',
+    owner: {
+      ownerId: `retained-ai-node-budget-${index}`,
+      ownerType: 'timeline',
+    },
+    imageKind: 'html-canvas',
+    imageId: `retained-ai-node-budget-${index}`,
+    diagnostics: {
+      status: 'ok',
+    },
+  };
+}
+
 describe('AI node runtime', () => {
+  beforeEach(() => {
+    clearAINodeRuntimeCache();
+    timelineRuntimeCoordinator.clearResources();
+  });
+
+  afterEach(() => {
+    clearAINodeRuntimeCache();
+    timelineRuntimeCoordinator.clearResources();
+    vi.restoreAllMocks();
+  });
+
   it('sorts RGBA pixels deterministically', () => {
     const output = sortPixelsTexture({
       width: 3,
@@ -69,6 +130,138 @@ describe('AI node runtime', () => {
     const nodeGraph = addClipCustomNodeDefinition(clip, definition);
 
     expect(hasRunnableAINodes({ ...clip, nodeGraph })).toBe(false);
+  });
+
+  it('reports retained AI node runtime canvases and releases them when the cache clears', () => {
+    const clip = createIdentityAINodeClip('ai-node-reported');
+    const source: LayerSource = {
+      type: 'text',
+      textCanvas: createSourceCanvas(4, 2),
+      mediaFileId: 'media-ai-node',
+      runtimeSourceId: 'runtime-ai-node-source',
+      runtimeSessionKey: 'interactive:ai-node-source',
+    };
+
+    const outputCanvas = renderClipAINodesToCanvas(clip, source, 'layer-ai-node', 0);
+
+    expect(outputCanvas).not.toBeNull();
+    const resources = timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .filter((resource) => resource.tags?.includes('ai-node-runtime'));
+    expect(resources).toHaveLength(2);
+    expect(resources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'image-canvas',
+        policyId: 'interactive',
+        imageKind: 'html-canvas',
+        owner: expect.objectContaining({
+          ownerId: 'timeline:ai-node-runtime:ai-node-reported',
+          ownerType: 'clip',
+          clipId: 'ai-node-reported',
+          mediaFileId: 'media-ai-node',
+        }),
+        source: expect.objectContaining({
+          sourceId: 'runtime-ai-node-source',
+          mediaFileId: 'media-ai-node',
+        }),
+        runtime: {
+          runtimeSourceId: 'runtime-ai-node-source',
+          runtimeSessionKey: 'interactive:ai-node-source',
+        },
+        dimensions: expect.objectContaining({
+          width: 4,
+          height: 2,
+        }),
+        memoryCost: {
+          heapBytes: 4 * 2 * 4,
+        },
+      }),
+    ]));
+
+    clearAINodeRuntimeCache();
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources).toHaveLength(0);
+  });
+
+  it('skips AI node canvas allocation when the interactive canvas budget cannot retain both canvases', () => {
+    for (let index = 0; index < 47; index += 1) {
+      timelineRuntimeCoordinator.retainResource(createRetainedInteractiveCanvasResource(index));
+    }
+
+    const clip = createIdentityAINodeClip('ai-node-denied');
+    const source: LayerSource = {
+      type: 'text',
+      textCanvas: createSourceCanvas(4, 2),
+    };
+    const createElement = vi.spyOn(document, 'createElement');
+
+    const outputCanvas = renderClipAINodesToCanvas(clip, source, 'layer-ai-node-denied', 0);
+
+    expect(outputCanvas).toBeNull();
+    expect(createElement).not.toHaveBeenCalledWith('canvas');
+    const interactiveResources = timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources;
+    expect(interactiveResources).toHaveLength(47);
+    expect(interactiveResources.some((resource) => resource.tags?.includes('ai-node-runtime'))).toBe(false);
+  });
+
+  it('releases cached AI node canvases when a clip no longer has runnable AI nodes', () => {
+    const clip = createIdentityAINodeClip('ai-node-removed');
+    const source: LayerSource = {
+      type: 'text',
+      textCanvas: createSourceCanvas(4, 2),
+    };
+
+    expect(renderClipAINodesToCanvas(clip, source, 'layer-ai-node-removed', 0)).not.toBeNull();
+    expect(timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .filter((resource) => resource.tags?.includes('ai-node-runtime'))).toHaveLength(2);
+
+    expect(renderClipAINodesToCanvas(
+      {
+        ...clip,
+        nodeGraph: undefined,
+      },
+      source,
+      'layer-ai-node-removed',
+      0,
+    )).toBeNull();
+
+    expect(timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .filter((resource) => resource.tags?.includes('ai-node-runtime'))).toHaveLength(0);
+  });
+
+  it('releases cached AI node canvases for a single removed clip', () => {
+    const firstClip = createIdentityAINodeClip('ai-node-first');
+    const secondClip = createIdentityAINodeClip('ai-node-second');
+    const firstSource: LayerSource = {
+      type: 'text',
+      textCanvas: createSourceCanvas(4, 2),
+    };
+    const secondSource: LayerSource = {
+      type: 'text',
+      textCanvas: createSourceCanvas(5, 2),
+    };
+
+    expect(renderClipAINodesToCanvas(firstClip, firstSource, 'layer-ai-node-first', 0)).not.toBeNull();
+    expect(renderClipAINodesToCanvas(secondClip, secondSource, 'layer-ai-node-second', 0)).not.toBeNull();
+    expect(timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .filter((resource) => resource.tags?.includes('ai-node-runtime'))).toHaveLength(4);
+
+    clearAINodeRuntimeCacheForClip(firstClip.id);
+
+    const remainingResources = timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .filter((resource) => resource.tags?.includes('ai-node-runtime'));
+    expect(remainingResources).toHaveLength(2);
+    expect(remainingResources.every(
+      (resource) => resource.owner.clipId === secondClip.id,
+    )).toBe(true);
   });
 
   it('injects bounded artifact-only audio analysis context into generated AI nodes', () => {

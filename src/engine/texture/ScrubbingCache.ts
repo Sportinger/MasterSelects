@@ -3,9 +3,34 @@
 
 import { Logger } from '../../services/logger';
 import { vfPipelineMonitor } from '../../services/vfPipelineMonitor';
+import {
+  canRetainRamPreviewCompositeCache,
+  canRetainRamPreviewGpuFrame,
+  releaseRamPreviewCompositeCacheResource,
+  releaseRamPreviewGpuFrameCacheResources,
+  releaseRamPreviewGpuFrameResource,
+  reportRamPreviewCompositeCache,
+  reportRamPreviewGpuFrame,
+  type RamPreviewCompositeCacheReport,
+  type RamPreviewGpuFrameReport,
+} from '../../services/timeline/ramPreviewRuntimeReporting';
+import { timelineRuntimeCoordinator } from '../../services/timeline/timelineRuntimeCoordinator';
+import type {
+  RenderResourceDescriptor,
+  TimelineRuntimeAdmissionDecision,
+} from '../../services/timeline/runtimeCoordinatorTypes';
 import type { GpuFrameCacheEntry } from '../core/types';
 
 const log = Logger.create('ScrubbingCache');
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 type ScrubbingTextureEntry = {
   texture: GPUTexture;
@@ -365,11 +390,103 @@ export class ScrubbingCache {
     return Number.isFinite(duration) && duration > 0 ? duration : undefined;
   }
 
+  private getBackgroundPreloadVideoResourceId(videoSrc: string): string {
+    return `scrubbing-cache:background-preload-video:${hashString(videoSrc)}`;
+  }
+
+  private getVideoSrcKind(src: string | undefined): 'blob-url' | 'file-path' | 'project-path' | 'remote-url' | 'media-source' | 'unknown' {
+    if (!src) return 'unknown';
+    if (src.startsWith('blob:')) return 'blob-url';
+    if (src.startsWith('file:')) return 'file-path';
+    if (/^https?:\/\//i.test(src)) return 'remote-url';
+    if (src.startsWith('mediastream:')) return 'media-source';
+    return 'project-path';
+  }
+
+  private createBackgroundPreloadVideoResource(
+    videoSrc: string,
+    element?: HTMLVideoElement,
+  ): RenderResourceDescriptor {
+    const resourceId = this.getBackgroundPreloadVideoResourceId(videoSrc);
+    const readyState = element?.readyState ?? 0;
+    const networkState = element?.networkState ?? 0;
+    const status = element?.error
+      ? 'warning'
+      : readyState >= HTMLMediaElement.HAVE_METADATA
+        ? 'ok'
+        : 'unknown';
+    return {
+      id: resourceId,
+      kind: 'html-media',
+      policyId: 'background',
+      owner: {
+        ownerId: `scrubbing-cache:background-preload:${hashString(videoSrc)}`,
+        ownerType: 'timeline',
+      },
+      source: {
+        sourceId: videoSrc,
+        previewPath: videoSrc,
+      },
+      mediaElementKind: 'video',
+      elementId: resourceId,
+      srcKind: this.getVideoSrcKind(videoSrc),
+      dimensions: {
+        width: element?.videoWidth,
+        height: element?.videoHeight,
+        durationSeconds: this.getFiniteDuration(element?.duration ?? 0),
+      },
+      diagnostics: {
+        status,
+        provider: {
+          providerId: resourceId,
+          providerKind: 'html-video',
+          status,
+          isReady: readyState >= HTMLMediaElement.HAVE_METADATA,
+          isPlaying: element ? !element.paused : false,
+          isSeeking: element?.seeking ?? false,
+          currentTimeSeconds: element?.currentTime ?? 0,
+          readyState,
+          networkState,
+          errorCode: element?.error ? String(element.error.code) : undefined,
+        },
+      },
+      label: 'Background scrub preload video',
+      tags: ['scrubbing-cache', 'background-preload', 'html-video'],
+    };
+  }
+
+  private canRetainBackgroundPreloadVideo(videoSrc: string): TimelineRuntimeAdmissionDecision {
+    return timelineRuntimeCoordinator.canRetainResource(
+      this.createBackgroundPreloadVideoResource(videoSrc)
+    );
+  }
+
+  private reportBackgroundPreloadVideo(videoSrc: string, element: HTMLVideoElement): void {
+    timelineRuntimeCoordinator.retainResource(
+      this.createBackgroundPreloadVideoResource(videoSrc, element)
+    );
+  }
+
+  private releaseBackgroundPreloadVideo(videoSrc: string): void {
+    timelineRuntimeCoordinator.releaseResource(this.getBackgroundPreloadVideoResourceId(videoSrc));
+  }
+
   private getOrCreateBackgroundSession(video: HTMLVideoElement): BackgroundPreloadSession | null {
-    const videoSrc = video.src;
+    const videoSrc = video.currentSrc || video.src;
+    if (!videoSrc) return null;
     const existing = this.backgroundPreloadSessions.get(videoSrc);
     if (existing && !existing.disposed) {
       return existing;
+    }
+
+    const admission = this.canRetainBackgroundPreloadVideo(videoSrc);
+    if (!admission.admitted) {
+      log.debug('Background scrub preload video skipped by runtime admission', {
+        videoSrc,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+      });
+      return null;
     }
 
     const backgroundVideo = document.createElement('video');
@@ -381,6 +498,7 @@ export class ScrubbingCache {
     }
     backgroundVideo.src = video.currentSrc || video.src;
     backgroundVideo.load();
+    this.reportBackgroundPreloadVideo(videoSrc, backgroundVideo);
 
     const session: BackgroundPreloadSession = {
       videoSrc,
@@ -849,6 +967,7 @@ export class ScrubbingCache {
     } catch {
       // Best-effort cleanup only.
     }
+    this.releaseBackgroundPreloadVideo(session.videoSrc);
   }
 
   private clearBackgroundPreload(videoSrc?: string): void {
@@ -1163,12 +1282,104 @@ export class ScrubbingCache {
     return Math.round(time * 30) / 30;
   }
 
-  // Cache composite frame data
-  cacheCompositeFrame(time: number, imageData: ImageData): void {
+  private createCompositeCacheReport(
+    frameCount: number,
+    heapBytes: number,
+    sampleFrame?: Pick<ImageData, 'width' | 'height'>
+  ): RamPreviewCompositeCacheReport {
+    return {
+      frameCount,
+      maxFrames: this.maxCompositeCacheFrames,
+      heapBytes,
+      width: sampleFrame?.width,
+      height: sampleFrame?.height,
+    };
+  }
+
+  private getProjectedCompositeCacheReport(
+    key: number,
+    frameBytes: number,
+    sampleFrame?: Pick<ImageData, 'width' | 'height'>
+  ): RamPreviewCompositeCacheReport {
+    if (this.compositeCache.has(key)) {
+      return this.createCompositeCacheReport(this.compositeCache.size, this.compositeCacheBytes, sampleFrame);
+    }
+
+    const entries = Array.from(this.compositeCache, ([entryKey, frame]) => ({
+      key: entryKey,
+      bytes: frame.data.byteLength,
+    }));
+    entries.push({ key, bytes: frameBytes });
+    let projectedBytes = this.compositeCacheBytes + frameBytes;
+
+    while (
+      entries.length > this.maxCompositeCacheFrames ||
+      projectedBytes > this.maxCompositeCacheBytes
+    ) {
+      const evicted = entries.shift();
+      if (!evicted) break;
+      projectedBytes -= evicted.bytes;
+    }
+
+    return this.createCompositeCacheReport(entries.length, Math.max(0, projectedBytes), sampleFrame);
+  }
+
+  private createCompositeCacheDeniedDecision(reason: string): TimelineRuntimeAdmissionDecision {
+    return {
+      admitted: false,
+      resourceId: 'ram-preview:composite-cache:image-data',
+      policyId: 'ram-preview',
+      reason,
+      projectedUsage: {
+        resources: 0,
+        sessions: 0,
+        frameProviders: 0,
+        htmlMediaElements: 0,
+        nativeDecoders: 0,
+        gpuTextures: 0,
+        imageBitmaps: 0,
+        audioSources: 0,
+        jobs: 0,
+        heapBytes: 0,
+        gpuBytes: 0,
+      },
+      pressure: [],
+      rejectedUnits: [],
+    };
+  }
+
+  canCacheCompositeFrame(
+    time: number,
+    frameBytes: number,
+    sampleFrame?: Pick<ImageData, 'width' | 'height'>
+  ): TimelineRuntimeAdmissionDecision {
     const key = this.quantizeTime(time);
-    if (this.compositeCache.has(key)) return;
+    const report = this.getProjectedCompositeCacheReport(key, frameBytes, sampleFrame);
+    if (report.frameCount <= 0 || report.heapBytes <= 0) {
+      return this.createCompositeCacheDeniedDecision('composite-cache-frame-exceeds-local-budget');
+    }
+    return canRetainRamPreviewCompositeCache(report);
+  }
+
+  // Cache composite frame data
+  cacheCompositeFrame(time: number, imageData: ImageData): boolean {
+    const key = this.quantizeTime(time);
+    if (this.compositeCache.has(key)) return true;
 
     const frameBytes = imageData.data.byteLength;
+    const projectedReport = this.getProjectedCompositeCacheReport(key, frameBytes, imageData);
+    if (projectedReport.frameCount <= 0 || projectedReport.heapBytes <= 0) return false;
+
+    const admission = canRetainRamPreviewCompositeCache(projectedReport);
+    if (!admission.admitted) {
+      log.debug('RAM preview composite cache skipped by runtime admission', {
+        resourceId: admission.resourceId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+      });
+      return false;
+    }
+
     this.compositeCache.set(key, imageData);
     this.compositeCacheBytes += frameBytes;
 
@@ -1186,6 +1397,15 @@ export class ScrubbingCache {
         break;
       }
     }
+
+    this.reportCompositeCacheResource(imageData);
+    return true;
+  }
+
+  private reportCompositeCacheResource(sampleFrame?: ImageData): void {
+    reportRamPreviewCompositeCache(
+      this.createCompositeCacheReport(this.compositeCache.size, this.compositeCacheBytes, sampleFrame)
+    );
   }
 
   // Get cached composite frame if available
@@ -1229,32 +1449,106 @@ export class ScrubbingCache {
     return null;
   }
 
+  private createGpuFrameReport(
+    time: number,
+    entry: Pick<GpuFrameCacheEntry, 'width' | 'height' | 'format' | 'gpuBytes'>
+  ): RamPreviewGpuFrameReport {
+    return {
+      frameKey: this.quantizeTime(time),
+      time,
+      width: entry.width,
+      height: entry.height,
+      format: entry.format,
+      gpuBytes: entry.gpuBytes,
+    };
+  }
+
+  private evictOldestGpuFrame(excludedKey?: number): boolean {
+    for (const oldestKey of this.gpuFrameCache.keys()) {
+      if (oldestKey === excludedKey) continue;
+      const evicted = this.gpuFrameCache.get(oldestKey);
+      if (evicted) evicted.texture.destroy();
+      releaseRamPreviewGpuFrameResource(oldestKey);
+      this.gpuFrameCache.delete(oldestKey);
+      return true;
+    }
+    return false;
+  }
+
+  private prepareGpuCacheAdmission(
+    frameKey: number,
+    report: RamPreviewGpuFrameReport
+  ): TimelineRuntimeAdmissionDecision {
+    let admission = canRetainRamPreviewGpuFrame(report);
+    while (
+      !admission.admitted &&
+      admission.rejectedUnits.some((entry) =>
+        entry.unit === 'resource' || entry.unit === 'gpu-texture' || entry.unit === 'gpu-bytes'
+      ) &&
+      this.evictOldestGpuFrame(frameKey)
+    ) {
+      admission = canRetainRamPreviewGpuFrame(report);
+    }
+    return admission;
+  }
+
+  canCacheGpuFrame(
+    time: number,
+    entry: Pick<GpuFrameCacheEntry, 'width' | 'height' | 'format' | 'gpuBytes'>
+  ): TimelineRuntimeAdmissionDecision {
+    const report = this.createGpuFrameReport(time, entry);
+    return this.prepareGpuCacheAdmission(report.frameKey, report);
+  }
+
   // Add to GPU cache
-  addToGpuCache(time: number, entry: GpuFrameCacheEntry): void {
+  addToGpuCache(time: number, entry: GpuFrameCacheEntry): boolean {
     const key = this.quantizeTime(time);
+    const report = this.createGpuFrameReport(time, entry);
+    const admission = this.prepareGpuCacheAdmission(key, report);
+    if (!admission.admitted) {
+      entry.texture.destroy();
+      log.debug('RAM preview GPU frame cache skipped by runtime admission', {
+        resourceId: admission.resourceId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((rejected) => rejected.unit),
+      });
+      return false;
+    }
+
+    const existing = this.gpuFrameCache.get(key);
+    if (existing) {
+      existing.texture.destroy();
+      releaseRamPreviewGpuFrameResource(key);
+      this.gpuFrameCache.delete(key);
+    }
+
     this.gpuFrameCache.set(key, entry);
+    reportRamPreviewGpuFrame(report);
 
     // Evict oldest GPU cached frames if over limit
     while (this.gpuFrameCache.size > this.maxGpuCacheFrames) {
-      const oldestKey = this.gpuFrameCache.keys().next().value;
-      if (oldestKey !== undefined) {
-        const evicted = this.gpuFrameCache.get(oldestKey);
-        if (evicted) evicted.texture.destroy();
-        this.gpuFrameCache.delete(oldestKey);
-      }
+      if (!this.evictOldestGpuFrame()) break;
     }
+    return true;
+  }
+
+  releaseCompositeRuntimeResources(): void {
+    releaseRamPreviewCompositeCacheResource();
+    releaseRamPreviewGpuFrameCacheResources();
   }
 
   // Clear composite cache
   clearCompositeCache(): void {
     this.compositeCache.clear();
     this.compositeCacheBytes = 0;
+    releaseRamPreviewCompositeCacheResource();
 
     // Clear GPU frame cache - destroy textures to free VRAM
     for (const entry of this.gpuFrameCache.values()) {
       entry.texture.destroy();
     }
     this.gpuFrameCache.clear();
+    releaseRamPreviewGpuFrameCacheResources();
 
     log.debug('Composite cache cleared');
   }

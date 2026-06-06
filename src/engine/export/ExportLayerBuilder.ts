@@ -26,6 +26,7 @@ import {
 import { getModelSequenceFrameUrl, resolveModelSequenceData } from '../../utils/modelSequence';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { textRenderer } from '../../services/textRenderer';
+import { getReusableModelUrl } from '../../stores/timeline/restoredMediaSource';
 
 // Cache video tracks and solo state at export start (don't change during export)
 let cachedVideoTracks: TimelineTrack[] | null = null;
@@ -102,14 +103,15 @@ function getTextCanvasForExport(clip: TimelineClip, clipLocalTime: number, ctx: 
 function buildModelSource(clip: TimelineClip, sourceTime: number): Layer['source'] {
   const meshType = getClipMeshType(clip);
   const text3DProperties = getClipText3DProperties(clip);
+  const mediaFile = getClipMediaFile(clip);
   const modelSequence = resolveModelSequenceData(
     clip.source?.modelSequence,
-    getClipMediaFile(clip)?.modelSequence,
+    mediaFile?.modelSequence,
   );
 
   return {
     type: 'model',
-    modelUrl: getModelSequenceFrameUrl(modelSequence, sourceTime, clip.source?.modelUrl),
+    modelUrl: getModelSequenceFrameUrl(modelSequence, sourceTime, clip.source?.modelUrl ?? getReusableModelUrl(mediaFile)),
     ...(modelSequence ? { modelSequence } : {}),
     ...(meshType ? { meshType } : {}),
     ...(text3DProperties ? { text3DProperties } : {}),
@@ -178,6 +180,13 @@ function getExportVideoElement(
   clipStates: Map<string, ExportClipState>
 ): HTMLVideoElement | null {
   return clipStates.get(clip.id)?.preciseVideoElement ?? clip.source?.videoElement ?? null;
+}
+
+function getExportImageElement(
+  clip: TimelineClip,
+  clipStates: Map<string, ExportClipState>
+): HTMLImageElement | null {
+  return clipStates.get(clip.id)?.exportImageElement ?? clip.source?.imageElement ?? null;
 }
 
 function getVectorAnimationSettingsForExport(
@@ -273,11 +282,14 @@ export function buildLayersAtTime(
       if (layer) layers.push(layer);
     }
     // Handle image clips
-    else if (clip.source?.type === 'image' && clip.source.imageElement) {
-      layers.push({
-        ...baseLayerProps,
-        source: { type: 'image', imageElement: clip.source.imageElement },
-      });
+    else if (clip.source?.type === 'image') {
+      const imageElement = getExportImageElement(clip, clipStates);
+      if (imageElement) {
+        layers.push({
+          ...baseLayerProps,
+          source: { type: 'image', imageElement },
+        });
+      }
     }
     // Handle motion shape clips
     else if (clip.source?.type === 'motion-shape') {
@@ -307,23 +319,33 @@ export function buildLayersAtTime(
       });
     }
     // Handle text, solid, vector animation, and Math Scene clips
-    else if ((clip.source?.type === 'text' || clip.source?.type === 'solid' || isVectorAnimationSourceType(clip.source?.type) || clip.source?.type === 'math-scene') && clip.source.textCanvas) {
+    else if (
+      clip.source?.type === 'text' ||
+      clip.source?.type === 'solid' ||
+      isVectorAnimationSourceType(clip.source?.type) ||
+      clip.source?.type === 'math-scene'
+    ) {
+      let textCanvas: HTMLCanvasElement | undefined;
       if (isVectorAnimationSourceType(clip.source.type)) {
-        vectorAnimationRuntimeManager.renderClipAtTime(
+        textCanvas = vectorAnimationRuntimeManager.renderClipAtTime(
           clip,
           time,
           getVectorAnimationSettingsForExport(clip, clipLocalTime, ctx),
-        );
+        ) ?? undefined;
       } else if (clip.source.type === 'math-scene') {
         mathSceneRenderer.renderClip(clip, clipLocalTime);
+        textCanvas = clip.source.textCanvas;
+      } else if (clip.source.textCanvas) {
+        textCanvas = clip.source.type === 'text'
+          ? getTextCanvasForExport(clip, clipLocalTime, ctx)
+          : clip.source.textCanvas;
       }
-      const textCanvas = clip.source.type === 'text'
-        ? getTextCanvasForExport(clip, clipLocalTime, ctx)
-        : clip.source.textCanvas;
-      layers.push({
-        ...baseLayerProps,
-        source: { type: 'text', textCanvas },
-      });
+      if (textCanvas) {
+        layers.push({
+          ...baseLayerProps,
+          source: { type: 'text', textCanvas },
+        });
+      }
     }
   }
 
@@ -660,11 +682,14 @@ function buildNestedLayerForExport(
     return null;
   }
 
-  if (nestedClip.source?.type === 'image' && nestedClip.source.imageElement) {
-    return {
-      ...baseLayer,
-      source: { type: 'image', imageElement: nestedClip.source.imageElement },
-    } as Layer;
+  if (nestedClip.source?.type === 'image') {
+    const imageElement = getExportImageElement(nestedClip, clipStates);
+    return imageElement
+      ? {
+          ...baseLayer,
+          source: { type: 'image', imageElement },
+        } as Layer
+      : null;
   }
 
   if (nestedClip.source?.type === 'motion-shape') {
@@ -703,20 +728,31 @@ function buildNestedLayerForExport(
     } as Layer;
   }
 
-  if ((nestedClip.source?.type === 'text' || nestedClip.source?.type === 'solid' || isVectorAnimationSourceType(nestedClip.source?.type) || nestedClip.source?.type === 'math-scene') && nestedClip.source.textCanvas) {
+  if (
+    nestedClip.source?.type === 'text' ||
+    nestedClip.source?.type === 'solid' ||
+    isVectorAnimationSourceType(nestedClip.source?.type) ||
+    nestedClip.source?.type === 'math-scene'
+  ) {
+    let textCanvas: HTMLCanvasElement | undefined;
     if (isVectorAnimationSourceType(nestedClip.source.type)) {
-      vectorAnimationRuntimeManager.renderClipAtTime(
+      textCanvas = vectorAnimationRuntimeManager.renderClipAtTime(
         nestedClip,
         nestedClip.startTime + nestedClipLocalTime,
         getVectorAnimationSettingsForExport(nestedClip, nestedClipLocalTime),
-      );
+      ) ?? undefined;
     } else if (nestedClip.source.type === 'math-scene') {
       mathSceneRenderer.renderClip(nestedClip, nestedClipLocalTime);
+      textCanvas = nestedClip.source.textCanvas;
+    } else {
+      textCanvas = nestedClip.source.textCanvas;
     }
-    return {
-      ...baseLayer,
-      source: { type: 'text', textCanvas: nestedClip.source.textCanvas },
-    } as Layer;
+    if (textCanvas) {
+      return {
+        ...baseLayer,
+        source: { type: 'text', textCanvas },
+      } as Layer;
+    }
   }
 
   return null;

@@ -195,6 +195,10 @@ describe('timeline audio edit baking', () => {
     expect(updated.inPoint).toBe(0);
     expect(updated.outPoint).toBe(2.5);
     expect(updated.waveform).toEqual([0.1, 0.4, 0.2]);
+    expect(updated.source?.mediaFileId).toBe('media-baked');
+    expect(updated.source?.naturalDuration).toBe(2.5);
+    expect(updated.source).not.toHaveProperty('audioElement');
+    expect(mocks.createAudioElement).not.toHaveBeenCalled();
     expect(updated.audioState?.editStack).toEqual([]);
     expect(updated.audioState?.sourceAudioRevisionId).toBe('media-baked');
     expect(updated.audioState?.sourceAnalysisRefs).toEqual({
@@ -304,7 +308,7 @@ describe('timeline audio edit baking', () => {
     const didUnbake = store.getState().unbakeClipAudioEditStack('audio-clip');
 
     expect(didUnbake).toBe(true);
-    expect(mocks.createAudioElement).toHaveBeenCalledWith(sourceFile);
+    expect(mocks.createAudioElement).not.toHaveBeenCalled();
     const updated = store.getState().clips[0];
     expect(updated.name).toBe('dialog.wav');
     expect(updated.file).toBe(sourceFile);
@@ -316,6 +320,7 @@ describe('timeline audio edit baking', () => {
     expect(updated.waveformChannels).toEqual([[0.3, 0.1]]);
     expect(updated.source?.mediaFileId).toBe('media-source');
     expect(updated.source?.naturalDuration).toBe(4);
+    expect(updated.source).not.toHaveProperty('audioElement');
     expect(updated.audioState?.editStack).toEqual(restoredEditStack);
     expect(updated.audioState?.sourceAnalysisRefs).toEqual({ waveformPyramidId: 'waveform-source' });
     expect(updated.audioState?.processedAnalysisRefs).toEqual({ processedWaveformPyramidId: 'waveform-processed' });

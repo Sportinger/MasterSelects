@@ -66,6 +66,9 @@ describe('timeline tool slice compatibility', () => {
     expect(store.getState().activeTimelineToolId).toBe('blade-all-tracks');
 
     store.getState().cycleTimelineToolGroup('cut');
+    expect(store.getState().activeTimelineToolId).toBe('glue');
+
+    store.getState().cycleTimelineToolGroup('cut');
     expect(store.getState().activeTimelineToolId).toBe('blade');
   });
 

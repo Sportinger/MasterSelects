@@ -189,7 +189,8 @@ export const TimelineClip = React.memo(function TimelineClip(props) {
 ```
 
 **Files to consider:**
-- `src/components/timeline/TimelineClip.tsx`
+- `src/components/timeline/TimelineClipCanvas.tsx`
+- `src/components/timeline/interactionShell/`
 - `src/components/timeline/TimelineTrack.tsx`
 - `src/components/timeline/TimelineHeader.tsx`
 

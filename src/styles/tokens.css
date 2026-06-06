@@ -135,6 +135,11 @@
   --purple-light: var(--purple-400);
   --purple-dim: rgba(139, 92, 246, 0.15);
 
+  /* MIDI identity — shared blue-gray used by both MIDI clips and MIDI track
+     headers so the two stay visually linked from a single source of truth.
+     The header tint is derived from this by darkening toward --bg-tertiary. */
+  --midi-color: #3a4050;
+
   /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
      SPACING SCALE (4px base grid)
      â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */

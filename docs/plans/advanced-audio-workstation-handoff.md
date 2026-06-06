@@ -38,7 +38,7 @@ Recent fixes in this handoff pass:
 - Made source audio-port `AI` actions create renderable audio-reactive visual AI nodes when the graph owner is visual. The node is inserted into the texture chain and receives the selected audio port as a named sidechain such as `frequencyBands`, while audio-only graph owners keep the existing analysis-typed standalone node behavior.
 - Upgraded replace-mode image-in-spectrum layers from bandpass gain shaping to STFT image resynthesis. The render path maps image luminance into time/frequency magnitudes, reuses source phase where possible, and synthesizes deterministic phase for silent bins so replace layers can create spectral content non-destructively.
 - Improved replace-mode image-in-spectrum quality. Silent-bin synthesis now uses deterministic phase continuity across STFT frames instead of frame-random phase, spectral image masks are kept at higher source resolution, and mask sampling is bilinear so image-driven edits/resynthesis avoid hard pixel-boundary stepping.
-- Bounded inline spectrogram CPU rendering for deep zoom. The render plan caps draw pixels, preserves the visible timeline span, and `ClipSpectrogram` now uses lookup tables instead of recalculating time/frequency for every pixel.
+- Bounded inline spectrogram CPU rendering for deep zoom. The render plan caps draw pixels, preserves the visible timeline span, and `TimelineClipCanvas` / `utils/spectrogramCanvas` use lookup tables instead of recalculating time/frequency for every pixel.
 - Fixed the timeline and mixer audio meters so colored Peak/RMS fills use transform-scaled layers again, with the white line acting only as a peak marker.
 - Added Transient Cleanup in the Audio Edit Stack panel. It detects high-crest peaks, creates non-destructive `repairType: transient-soften` operations, and renders the softening through `ClipAudioRenderService` for preview, bake, processed analysis, and export parity.
 - Added responsive audio track-header density modes. Full-height audio lanes keep the mixer-strip controls, medium lanes use a two-row compact control matrix, and very small lanes collapse fader/pan while keeping core buttons stable instead of clipping three rows of controls.
@@ -53,7 +53,7 @@ Recent fixes in this handoff pass:
 - Fixed the production build blocker in `AudioEditStackTab` by making audio-region selection narrowing explicit before reading source in/out points.
 - Raised the timeline zoom cap to 10,000 px/sec for precise audio editing and added 10ms/20ms ruler/grid intervals at the deepest zoom levels.
 - Deferred inline waveform canvas drawing to cancellable animation frames, matching the spectrogram behavior so rapid zoom/scroll updates cancel stale waveform paints before they block interaction.
-- Added artifact-backed stereo/multi-channel waveform rendering. `ClipWaveform` now draws separated channel lanes from waveform pyramid channel data and can render artifact-only waveforms even when no legacy normalized thumbnail array is present.
+- Added artifact-backed stereo/multi-channel waveform rendering. The timeline canvas waveform path draws separated channel lanes from waveform pyramid channel data and can render artifact-only waveforms even when no legacy normalized thumbnail array is present.
 - Added processed-analysis display status for timeline waveform/spectrogram lanes. When a clip needs processed analysis but only source/legacy data is available, the lane gets a visible `SRC` approximation badge and stale stripe; loading, missing, and failed processed artifacts get distinct `PEND`, `MISS`, and `ERR` states.
 - Added timeline waveform `CLIP` and `SIL` diagnostics. The badges use source/processed waveform pyramid peak/RMS data for artifact-backed clipping and silence checks, apply cheap display gain for volume-only output changes, and avoid treating normalized legacy thumbnails as clipping evidence.
 - Added audio-volume fade/automation overlay curves on timeline audio clips. The curve is derived from enabled legacy or registry `audio-volume` keyframes, so volume automation remains visible while source/processed waveform artifacts stay reusable.
@@ -113,29 +113,23 @@ Passed:
 - `npm run test -- tests\unit\layerBuilderService.test.ts tests\unit\aiNodeRuntime.test.ts`
 - `npx eslint src\services\layerBuilder\LayerBuilderService.ts src\services\nodeGraph\aiNodeRuntime.ts tests\unit\layerBuilderService.test.ts tests\unit\aiNodeRuntime.test.ts`
 - `npm run test -- tests\unit\timelineSpectralSelection.test.ts tests\stores\timeline\audioEditSlice.test.ts`
-- `npx eslint src\components\timeline\TimelineClip.tsx src\components\timeline\utils\spectralSelection.ts src\stores\timeline\audioEditSlice.ts src\stores\timeline\types.ts tests\unit\timelineSpectralSelection.test.ts tests\stores\timeline\audioEditSlice.test.ts`
+- `npx eslint src\components\timeline\TimelineTrack.tsx src\components\timeline\TimelineClipCanvas.tsx src\components\timeline\utils\timelineActiveTargets.ts src\stores\timeline\audioEditSlice.ts src\stores\timeline\types.ts tests\unit\timelineSpectralSelection.test.ts tests\stores\timeline\audioEditSlice.test.ts`
 - `npm run test -- tests\unit\audio\clipAudioRenderService.test.ts`
 - `npx eslint src\services\audio\ClipAudioRenderService.ts tests\unit\audio\clipAudioRenderService.test.ts`
 - `npm run test -- tests\unit\nodeGraphProjection.test.ts tests\stores\timeline\nodeGraphSlice.test.ts`
 - `npx eslint src\services\nodeGraph\clipGraphProjection.ts src\stores\timeline\nodeGraphSlice.ts src\stores\timeline\types.ts src\stores\timeline\exportEditLock.ts src\components\panels\nodes\NodeWorkspacePanel.tsx tests\unit\nodeGraphProjection.test.ts tests\stores\timeline\nodeGraphSlice.test.ts`
-- `npm run test -- tests\unit\spectrogramRenderPlan.test.ts tests\unit\timelineSpectralSelection.test.ts tests\unit\waveformLod.test.ts`
-- `npx eslint src\components\timeline\components\ClipSpectrogram.tsx src\components\timeline\utils\spectrogramRenderPlan.ts tests\unit\spectrogramRenderPlan.test.ts`
+- `npm run test -- tests\unit\spectrogramRenderPlan.test.ts tests\unit\timelineSpectrogramCanvas.test.ts tests\unit\timelineSpectralSelection.test.ts tests\unit\waveformLod.test.ts`
+- `npx eslint src\components\timeline\TimelineClipCanvas.tsx src\components\timeline\utils\spectrogramCanvas.ts src\components\timeline\utils\spectrogramRenderPlan.ts src\services\timeline\timelineSpectrogramArtifactWarmup.ts tests\unit\spectrogramRenderPlan.test.ts tests\unit\timelineSpectrogramCanvas.test.ts`
 - `npm run test -- tests\unit\audio\audioTransientDetection.test.ts tests\unit\audio\clipAudioRenderService.test.ts tests\stores\timeline\audioEditSlice.test.ts tests\unit\AudioLevelMeter.test.tsx`
 - `npx eslint src\services\audio\audioTransientDetection.ts src\services\audio\ClipAudioRenderService.ts src\stores\timeline\audioEditSlice.ts src\stores\timeline\types.ts src\stores\timeline\exportEditLock.ts src\components\panels\properties\AudioEditStackTab.tsx tests\unit\audio\audioTransientDetection.test.ts tests\unit\audio\clipAudioRenderService.test.ts tests\stores\timeline\audioEditSlice.test.ts tests\unit\AudioLevelMeter.test.tsx`
 - `npm run test -- tests\unit\timelineAudioLayout.test.ts tests\unit\AudioLevelMeter.test.tsx`
 - `npx eslint src\components\timeline\TimelineHeader.tsx src\components\timeline\components\AudioLevelMeter.tsx src\components\timeline\utils\audioTrackHeaderDensity.ts tests\unit\timelineAudioLayout.test.ts tests\unit\AudioLevelMeter.test.tsx`
-- `npm run test -- tests\unit\ClipSpectrogram.test.tsx tests\unit\spectrogramRenderPlan.test.ts`
-- `npx eslint src\components\timeline\components\ClipSpectrogram.tsx src\components\timeline\utils\spectrogramRenderPlan.ts tests\unit\ClipSpectrogram.test.tsx tests\unit\spectrogramRenderPlan.test.ts`
-- `npm run test -- tests\unit\audioAnalysisDisplayStatus.test.ts tests\unit\ClipWaveform.test.tsx tests\unit\ClipSpectrogram.test.tsx`
-- `npx eslint src\components\timeline\TimelineClip.tsx src\components\timeline\utils\audioAnalysisDisplayStatus.ts tests\unit\audioAnalysisDisplayStatus.test.ts` (CSS path is ignored by the repo ESLint config)
-- `npm run test -- tests\unit\audioWaveformDiagnostics.test.ts tests\unit\audioAnalysisDisplayStatus.test.ts tests\unit\ClipWaveform.test.tsx`
-- `npx eslint src\components\timeline\TimelineClip.tsx src\components\timeline\utils\audioWaveformDiagnostics.ts tests\unit\audioWaveformDiagnostics.test.ts`
-- `npm run test -- tests\unit\ClipWaveform.test.tsx tests\unit\waveformLod.test.ts tests\unit\audioWaveformDiagnostics.test.ts`
-- `npx eslint src\components\timeline\components\ClipWaveform.tsx src\components\timeline\TimelineClip.tsx src\components\timeline\utils\audioWaveformDiagnostics.ts tests\unit\ClipWaveform.test.tsx tests\unit\audioWaveformDiagnostics.test.ts`
-- `npm run test -- tests\unit\audioAutomationCurve.test.ts tests\unit\ClipWaveform.test.tsx tests\unit\audioWaveformDiagnostics.test.ts`
-- `npx eslint src\components\timeline\TimelineClip.tsx src\components\timeline\utils\audioAutomationCurve.ts tests\unit\audioAutomationCurve.test.ts`
-- `npm run test -- tests\stores\timeline\playbackSlice.test.ts tests\unit\ClipWaveform.test.tsx tests\unit\ClipSpectrogram.test.tsx tests\unit\waveformLod.test.ts tests\unit\spectrogramRenderPlan.test.ts`
-- `npx eslint src\stores\timeline\constants.ts src\components\timeline\hooks\useTimelineHelpers.ts src\components\timeline\TimelineRuler.tsx src\components\timeline\components\ClipWaveform.tsx tests\stores\timeline\playbackSlice.test.ts tests\helpers\storeFactory.ts tests\unit\ClipWaveform.test.tsx`
+- `npm run test -- tests\unit\timelineSpectrogramCanvas.test.ts tests\unit\spectrogramRenderPlan.test.ts`
+- `npx eslint src\components\timeline\TimelineClipCanvas.tsx src\components\timeline\utils\spectrogramCanvas.ts src\components\timeline\utils\spectrogramRenderPlan.ts src\services\timeline\timelineSpectrogramArtifactWarmup.ts tests\unit\timelineSpectrogramCanvas.test.ts tests\unit\spectrogramRenderPlan.test.ts`
+- `npm run test -- tests\unit\audioAutomationCurve.test.ts tests\unit\waveformLod.test.ts tests\unit\timelineSpectrogramCanvas.test.ts`
+- `npx eslint src\components\timeline\TimelineClipCanvas.tsx src\services\timeline\timelineWaveformArtifactWarmup.ts src\services\timeline\timelineSourceWaveformWarmup.ts src\services\timeline\timelineSpectrogramArtifactWarmup.ts src\components\timeline\utils\spectrogramCanvas.ts tests\unit\timelineSpectrogramCanvas.test.ts`
+- `npm run test -- tests\stores\timeline\playbackSlice.test.ts tests\unit\waveformLod.test.ts tests\unit\spectrogramRenderPlan.test.ts tests\unit\timelineSpectrogramCanvas.test.ts`
+- `npx eslint src\stores\timeline\constants.ts src\components\timeline\hooks\useTimelineHelpers.ts src\components\timeline\TimelineRuler.tsx src\components\timeline\TimelineClipCanvas.tsx tests\stores\timeline\playbackSlice.test.ts tests\helpers\storeFactory.ts tests\unit\timelineSpectrogramCanvas.test.ts`
 - `npm run test -- tests\stores\timeline\trackSlice.test.ts`
 - `npx eslint src\types\audio.ts src\stores\timeline\trackSlice.ts src\components\panels\audio-mixer\AudioMixerPanel.tsx tests\stores\timeline\trackSlice.test.ts`
 - `npm run test -- tests\unit\audio\audioRecordingService.test.ts`
@@ -170,7 +164,7 @@ Passed:
 - `npm run test -- tests\unit\TrackContextMenu.test.tsx`
 - `npx eslint src\components\timeline\TrackContextMenu.tsx tests\unit\TrackContextMenu.test.tsx`
 - `npm run build`
-- `npm run lint` (passes with the existing React hook warnings in `EditableDraggableNumber.tsx`, `Timeline.tsx`, `useTimelineSpectrogramTileSet.ts`, and `useTimelineWaveformPyramid.ts`)
+- `npm run lint` (historical full-run result from the audio workstation batch; deleted timeline waveform/spectrogram wrapper hooks no longer exist in the current issue branch)
 - `npm run test` (213 files, 2791 tests)
 - `npm run test -- tests\stores\timeline\nodeGraphSlice.test.ts tests\unit\nodeGraphProjection.test.ts tests\unit\aiNodeRuntime.test.ts`
 - `npx eslint src\stores\timeline\nodeGraphSlice.ts src\services\nodeGraph\clipGraphProjection.ts tests\stores\timeline\nodeGraphSlice.test.ts`

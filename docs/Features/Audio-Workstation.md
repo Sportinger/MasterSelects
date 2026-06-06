@@ -123,11 +123,15 @@ Current focused checks cover:
 ## Sources
 
 - `src/components/panels/audio-mixer/AudioMixerPanel.tsx`
-- `src/components/timeline/TimelineClip.tsx`
+- `src/components/timeline/TimelineTrack.tsx`
+- `src/components/timeline/TimelineClipCanvas.tsx`
 - `src/components/timeline/TimelineControls.tsx`
 - `src/components/timeline/TimelineHeader.tsx`
-- `src/components/timeline/components/ClipWaveform.tsx`
-- `src/components/timeline/utils/audioWaveformDiagnostics.ts`
+- `src/components/timeline/interactionShell/`
+- `src/components/timeline/utils/spectrogramCanvas.ts`
+- `src/services/timeline/timelineWaveformArtifactWarmup.ts`
+- `src/services/timeline/timelineSourceWaveformWarmup.ts`
+- `src/services/timeline/timelineSpectrogramArtifactWarmup.ts`
 - `src/stores/timeline/helpers/audioAnalysisStateHelpers.ts`
 - `src/services/audio/processedWaveformEligibility.ts`
 - `src/services/audio/ClipAudioAnalysisOrchestrator.ts`

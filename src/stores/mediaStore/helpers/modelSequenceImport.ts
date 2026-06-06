@@ -11,6 +11,10 @@ import {
 } from '../../../utils/modelSequence';
 import { useSettingsStore } from '../../settingsStore';
 import type { MediaFile } from '../types';
+import {
+  createMediaObjectUrl,
+  getModelSequenceFrameObjectUrlKey,
+} from '../../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('ModelSequenceImport');
 
@@ -132,7 +136,7 @@ export async function processModelSequenceImport<T extends ModelSequenceImportEn
       sourcePath: entry.absolutePath ?? entry.file.name,
       absolutePath: entry.absolutePath,
       file: entry.file,
-      modelUrl: URL.createObjectURL(entry.file),
+      modelUrl: createMediaObjectUrl(id, getModelSequenceFrameObjectUrlKey(index), entry.file),
     });
     advanceProgress();
   }

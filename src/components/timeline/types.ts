@@ -9,10 +9,16 @@ import type {
   BezierHandle,
   EasingType,
   RotationInterpolationMode,
+  ClipAudioRegionGainPreview,
 } from '../../types';
 import type {
+  ClipStemSeparationJobState,
+  TimelineAudioRegionSelection,
   TimelineAudioDisplayMode,
+  TimelineClipDragPreview,
+  TimelineSpectralRegionSelection,
   TimelineToolId,
+  TimelineEditOperationActions,
   TimelineTrackFocusMode,
   TimelineVideoBakeRegionSelection,
 } from '../../stores/timeline/types';
@@ -256,25 +262,35 @@ export interface TimelineTrackProps {
   selectedClipIds: Set<string>;
   selectedKeyframeIds: Set<string>;
   activeTimelineToolId: TimelineToolId;
+  waveformsEnabled: boolean;
+  audioDisplayMode: TimelineAudioDisplayMode;
   isClipDragActive: boolean;
   clipDrag: ClipDragState | null;
+  clipDragPreview: TimelineClipDragPreview | null;
   clipTrim: ClipTrimState | null;
+  clipFade: ClipFadeState | null;
+  clipContextMenu: ContextMenuState | null;
+  audioRegionSelection: TimelineAudioRegionSelection | null;
+  audioRegionGainPreview: ClipAudioRegionGainPreview | null;
+  audioSpectralRegionSelection: TimelineSpectralRegionSelection | null;
+  videoBakeRegionSelection: TimelineVideoBakeRegionSelection | null;
+  clipStemSeparationJobs: Record<string, ClipStemSeparationJobState>;
   externalDrag: ExternalDragState | null;
   zoom: number;
   scrollX: number;
-  timelineRef: React.RefObject<HTMLDivElement | null>;
   onClipMouseDown: (e: React.MouseEvent, clipId: string) => void;
+  onClipDoubleClick: (e: React.MouseEvent, clipId: string) => void;
   onClipContextMenu: (e: React.MouseEvent, clipId: string) => void;
   onEmptyMouseDown: (e: React.MouseEvent, trackId: string, time: number) => void;
   onEmptyContextMenu: (e: React.MouseEvent, trackId: string, time: number) => void;
   onTrimStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
+  onFadeStart: (e: React.MouseEvent, clipId: string, edge: 'left' | 'right') => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragEnter: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onResizeStart?: (e: React.PointerEvent, trackId: string) => void;
   isResizeActive?: boolean;
-  renderClip: (clip: TimelineClip, trackId: string, trackBaseHeightOverride?: number) => React.ReactNode;
   // For keyframe tracks - clipKeyframes map triggers re-render when keyframes change
   clipKeyframes: Map<string, Array<{ id: string; clipId: string; time: number; property: AnimatableProperty; value: number; easing: string }>>;
   renderKeyframeDiamonds: (trackId: string, property: AnimatableProperty) => React.ReactNode;
@@ -284,6 +300,8 @@ export interface TimelineTrackProps {
   expandedCurveProperties: Map<string, Set<AnimatableProperty>>;
   onSelectKeyframe: (keyframeId: string, addToSelection: boolean) => void;
   onMoveKeyframe: (keyframeId: string, newTime: number) => void;
+  onMoveKeyframeGroup?: (keyframeIds: string[], newTime: number) => void;
+  applyTimelineEditOperation?: TimelineEditOperationActions['applyTimelineEditOperation'];
   onUpdateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
   addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: string | null) => void;
 }
@@ -302,65 +320,6 @@ export interface ClipKeyframeTimeGroup {
   keyframeIds: string[];
   properties?: AnimatableProperty[];
   hasStateChange?: boolean;
-}
-
-// Props for TimelineClip component
-export interface TimelineClipProps {
-  clip: TimelineClip;
-  trackId: string;
-  track: TimelineTrack;
-  trackBaseHeight: number;
-  tracks: TimelineTrack[];
-  clips: TimelineClip[];
-  isSelected: boolean;
-  isInLinkedGroup: boolean;  // True if clip has linkedGroupId (multicam)
-  isDragging: boolean;
-  isTrimming: boolean;
-  isFading: boolean;  // True if this clip is being fade-adjusted
-  isLinkedToDragging: boolean;
-  isLinkedToTrimming: boolean;
-  isTrimFollower?: boolean;  // Selected clip resizing live alongside a multi-trim
-  isClipDragActive: boolean;
-  clipDrag: ClipDragState | null;
-  clipTrim: ClipTrimState | null;
-  clipFade: ClipFadeState | null;
-  zoom: number;
-  scrollX: number;
-  timelineViewportWidth: number;
-  timelineRef: React.RefObject<HTMLDivElement | null>;
-  proxyEnabled: boolean;
-  proxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
-  proxyProgress: number;
-  audioProxyStatus: 'none' | 'generating' | 'ready' | 'error' | undefined;
-  audioProxyProgress: number;
-  showTranscriptMarkers: boolean;
-  snappingEnabled: boolean;
-  onMouseDown: (e: React.MouseEvent) => void;
-  onDoubleClick: (e: React.MouseEvent) => void;
-  onContextMenu: (e: React.MouseEvent) => void;
-  onTrimStart: (e: React.MouseEvent, edge: 'left' | 'right') => void;
-  onFadeStart: (e: React.MouseEvent, edge: 'left' | 'right') => void;
-  hasKeyframes: (clipId: string, property?: AnimatableProperty) => boolean;
-  fadeInDuration: number;  // Current fade-in duration in seconds
-  fadeOutDuration: number;  // Current fade-out duration in seconds
-  opacityKeyframes: Array<{
-    id: string;
-    time: number;
-    value: number;
-    easing: string;
-    handleIn?: { x: number; y: number };
-    handleOut?: { x: number; y: number };
-  }>;  // Opacity keyframes for fade curve visualization
-  allKeyframeTimes: number[];  // Unique keyframe times for tick marks on clip bar
-  keyframeTimeGroups?: ClipKeyframeTimeGroup[];  // Keyframe IDs grouped by clip-local time for global clip-bar handles
-  onMoveKeyframeGroup?: (keyframeIds: string[], newTime: number) => void;
-  timeToPixel: (time: number) => number;
-  pixelToTime: (pixel: number) => number;
-  formatTime: (seconds: number) => string;
-  // Pick whip for layer parenting
-  onPickWhipDragStart: (clipId: string, startX: number, startY: number) => void;
-  onPickWhipDragEnd: () => void;
-  onSetClipParent: (clipId: string, parentClipId: string | null) => void;
 }
 
 // Props for TimelineKeyframes component
@@ -392,11 +351,4 @@ export interface TimelineKeyframesProps {
   pixelToTime: (pixel: number) => number;
   isRowHovered?: boolean;
   onKeyframeRowHover?: (trackId: string, property: AnimatableProperty, hovered: boolean) => void;
-}
-
-// Waveform props
-export interface WaveformProps {
-  waveform: number[];
-  width: number;
-  height: number;
 }

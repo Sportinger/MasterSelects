@@ -25,5 +25,6 @@ npm run torture:bridge-fast
 
 The runner reads `manifest.local.json`, creates a fresh nested timeline with
 effects and masks through the dev bridge, performs scrub/playback checks,
-captures a frame grid, and runs short fast plus precise export probes. Reports
-are written under `reports/`.
+captures a frame grid, and runs a short fast export probe. Add
+`-- --include-precise` to also run the precise export probe. Reports are written
+under `reports/`.

@@ -992,6 +992,175 @@ describe('LayerCollector', () => {
     expect(collector.getDecoder()).toBe('HTMLVideo');
   });
 
+  it('falls back to live HTML video during playback when full WebCodecs has no frame', () => {
+    const video = {
+      src: 'blob:test-video',
+      currentSrc: 'blob:test-video',
+      currentTime: 10.2,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+    const webCodecsPlayer = {
+      isFullMode: () => true,
+      getCurrentFrame: vi.fn(() => null),
+      hasFrame: vi.fn(() => false),
+      getPendingSeekTime: vi.fn(() => null),
+      currentTime: 10.2,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => ({ label: 'html-video-texture' })),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-playback-html-fallback',
+      sourceClipId: 'clip-playback-html-fallback',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 10.2,
+        videoElement: video,
+        webCodecsPlayer,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: null,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: true,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(textureManager.importVideoTexture).toHaveBeenCalledWith(video);
+    expect(webCodecsPlayer.getCurrentFrame).toHaveBeenCalledTimes(1);
+    expect(result[0]).toMatchObject({
+      isVideo: true,
+      previewPath: 'playback-html-fallback',
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      targetMediaTime: 10.2,
+    });
+    expect(hoisted.wcRecord).not.toHaveBeenCalledWith('collector_drop', expect.anything());
+    expect(collector.getDecoder()).toBe('HTMLVideo');
+  });
+
+  it('does not use live HTML fallback for paused full WebCodecs frames', () => {
+    const video = {
+      src: 'blob:test-video',
+      currentSrc: 'blob:test-video',
+      currentTime: 10.2,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+    const webCodecsPlayer = {
+      isFullMode: () => true,
+      getCurrentFrame: vi.fn(() => null),
+      hasFrame: vi.fn(() => false),
+      getPendingSeekTime: vi.fn(() => null),
+      currentTime: 10.2,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => ({ label: 'html-video-texture' })),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-paused-webcodecs-empty',
+      sourceClipId: 'clip-paused-webcodecs-empty',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 10.2,
+        videoElement: video,
+        webCodecsPlayer,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: null,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(0);
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+  });
+
+  it('does not live-import a stale paused HTML video as a playback fallback', () => {
+    const video = {
+      src: 'blob:test-video',
+      currentSrc: 'blob:test-video',
+      currentTime: 8,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+    const webCodecsPlayer = {
+      isFullMode: () => true,
+      getCurrentFrame: vi.fn(() => null),
+      hasFrame: vi.fn(() => false),
+      getPendingSeekTime: vi.fn(() => null),
+      currentTime: 8,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => ({ label: 'stale-html-video-texture' })),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-stale-playback-html-fallback',
+      sourceClipId: 'clip-stale-playback-html-fallback',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 10.2,
+        videoElement: video,
+        webCodecsPlayer,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: null,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: true,
+    });
+
+    expect(result).toHaveLength(0);
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+  });
+
   it('keeps precise export videos renderable even without preview presented-frame history', () => {
     const video = {
       src: 'blob:export-video',

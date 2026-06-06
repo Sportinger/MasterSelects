@@ -14,6 +14,14 @@ import { seekAllClipsToTime, waitForAllVideosReady } from '../../engine/export/V
 import { getFrameTolerance } from '../../engine/export/types';
 import type { ExportClipState, ExportMode, ExportSettings, FrameContext } from '../../engine/export/types';
 import type { ParallelDecodeManager } from '../../engine/ParallelDecodeManager';
+import {
+  createExportRunId,
+  releaseExportRunResources,
+  reportExportClipStates,
+  reportExportOutputSurface,
+  reportExportParallelDecodeResources,
+  reportExportRunJob,
+} from '../../services/timeline/exportRuntimeReporting';
 
 const log = Logger.create('ExportHelpers');
 
@@ -24,6 +32,9 @@ interface FFmpegFrameRendererOptions {
   startTime: number;
   endTime: number;
   exportMode?: ExportMode;
+  runtimeReporting?: boolean;
+  runtimeExportKind?: string;
+  includeAudio?: boolean;
 }
 
 const PRECISE_FFMPEG_EXPORT_DEFAULTS: Pick<ExportSettings, 'codec' | 'container' | 'bitrate'> = {
@@ -41,56 +52,81 @@ export class FFmpegFrameRenderer {
   private initialized = false;
   private cancelled = false;
   private cleanedUp = false;
+  private runtimeRunId: string | null = null;
+  private runtimeRunReported = false;
+  private lastRuntimeReportMs = Number.NEGATIVE_INFINITY;
 
   constructor(options: FFmpegFrameRendererOptions) {
     this.options = options;
     this.frameTolerance = getFrameTolerance(options.fps);
+    this.runtimeRunId = options.runtimeReporting ? createExportRunId() : null;
   }
 
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
     }
+    this.reportRuntimeRunJob();
 
-    const preparation = await prepareClipsForExport(
-      {
-        ...PRECISE_FFMPEG_EXPORT_DEFAULTS,
-        width: this.options.width,
-        height: this.options.height,
-        fps: this.options.fps,
+    let layerBuilderStarted = false;
+    try {
+      const preparation = await prepareClipsForExport(
+        {
+          ...PRECISE_FFMPEG_EXPORT_DEFAULTS,
+          width: this.options.width,
+          height: this.options.height,
+          fps: this.options.fps,
+          startTime: this.options.startTime,
+          endTime: this.options.endTime,
+        },
+        this.options.exportMode ?? 'precise',
+        this.runtimeRunId ?? undefined
+      );
+
+      this.clipStates = preparation.clipStates;
+      this.parallelDecoder = preparation.parallelDecoder;
+      this.useParallelDecode = preparation.useParallelDecode;
+      this.reportPreparedRuntimeResources(true);
+
+      const { tracks } = useTimelineStore.getState();
+      initializeLayerBuilder(tracks);
+      layerBuilderStarted = true;
+      await preload3DAssetsForExport({
         startTime: this.options.startTime,
         endTime: this.options.endTime,
-      },
-      this.options.exportMode ?? 'precise'
-    );
+        width: this.options.width,
+        height: this.options.height,
+      });
+      await preloadGaussianSplatsForExport({
+        startTime: this.options.startTime,
+        endTime: this.options.endTime,
+      });
 
-    this.clipStates = preparation.clipStates;
-    this.parallelDecoder = preparation.parallelDecoder;
-    this.useParallelDecode = preparation.useParallelDecode;
-
-    const { tracks } = useTimelineStore.getState();
-    initializeLayerBuilder(tracks);
-    await preload3DAssetsForExport({
-      startTime: this.options.startTime,
-      endTime: this.options.endTime,
-      width: this.options.width,
-      height: this.options.height,
-    });
-    await preloadGaussianSplatsForExport({
-      startTime: this.options.startTime,
-      endTime: this.options.endTime,
-    });
-
-    this.initialized = true;
-    log.info('Initialized FFmpeg frame renderer with runtime-backed export sessions');
+      this.initialized = true;
+      log.info('Initialized FFmpeg frame renderer with runtime-backed export sessions');
+    } catch (error) {
+      cleanupExportMode(this.clipStates, this.parallelDecoder);
+      if (layerBuilderStarted) {
+        cleanupLayerBuilder();
+      }
+      this.releaseRuntimeResources();
+      this.parallelDecoder = null;
+      this.useParallelDecode = false;
+      throw error;
+    }
   }
 
   cancel(): void {
     this.cancelled = true;
+    this.releaseRuntimeResources();
   }
 
   isCancelled(): boolean {
     return this.cancelled;
+  }
+
+  getRuntimeRunId(): string | null {
+    return this.runtimeRunId;
   }
 
   async buildLayersAtTime(time: number): Promise<Layer[]> {
@@ -104,6 +140,7 @@ export class FFmpegFrameRenderer {
       this.parallelDecoder,
       this.useParallelDecode
     );
+    this.reportPreparedRuntimeResources();
 
     this.throwIfCancelled();
 
@@ -131,6 +168,7 @@ export class FFmpegFrameRenderer {
 
     cleanupExportMode(this.clipStates, this.parallelDecoder);
     cleanupLayerBuilder();
+    this.releaseRuntimeResources();
 
     this.parallelDecoder = null;
     this.useParallelDecode = false;
@@ -171,5 +209,68 @@ export class FFmpegFrameRenderer {
     if (this.cancelled) {
       throw new Error('FFmpeg frame rendering cancelled');
     }
+  }
+
+  private reportRuntimeRunJob(): void {
+    if (!this.runtimeRunId || this.runtimeRunReported) {
+      return;
+    }
+
+    this.runtimeRunReported = true;
+    reportExportRunJob({
+      runId: this.runtimeRunId,
+      settings: {
+        ...PRECISE_FFMPEG_EXPORT_DEFAULTS,
+        width: this.options.width,
+        height: this.options.height,
+        fps: this.options.fps,
+        startTime: this.options.startTime,
+        endTime: this.options.endTime,
+        includeAudio: this.options.includeAudio ?? false,
+        exportMode: this.options.exportMode ?? 'precise',
+      },
+      totalFrames: Math.max(1, Math.ceil(
+        Math.max(0, this.options.endTime - this.options.startTime) * this.options.fps
+      )),
+      startedAtMs: Date.now(),
+      exportMode: this.options.runtimeExportKind ?? this.options.exportMode ?? 'ffmpeg',
+      requestedAudio: this.options.includeAudio ?? false,
+      effectiveAudio: this.options.includeAudio ?? false,
+    });
+  }
+
+  private reportPreparedRuntimeResources(force = false): void {
+    if (!this.runtimeRunId || this.cancelled) {
+      return;
+    }
+
+    const now = performance.now();
+    if (!force && now - this.lastRuntimeReportMs < 1000) {
+      return;
+    }
+    this.lastRuntimeReportMs = now;
+
+    reportExportOutputSurface({
+      runId: this.runtimeRunId,
+      width: this.options.width,
+      height: this.options.height,
+      zeroCopy: false,
+    });
+    reportExportClipStates(this.runtimeRunId, this.clipStates);
+
+    if (this.useParallelDecode && this.parallelDecoder) {
+      reportExportParallelDecodeResources(
+        this.runtimeRunId,
+        this.parallelDecoder.getRuntimeSnapshot(),
+        this.clipStates
+      );
+    }
+  }
+
+  private releaseRuntimeResources(): void {
+    if (!this.runtimeRunId) {
+      return;
+    }
+    releaseExportRunResources(this.runtimeRunId);
   }
 }

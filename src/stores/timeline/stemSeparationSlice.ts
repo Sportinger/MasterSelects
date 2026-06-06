@@ -10,7 +10,7 @@ import {
   applyStemStateToClip,
   applyStemStateToSourceCopies,
 } from './helpers/stemSharingHelpers';
-import { createAudioElement } from './helpers/webCodecsHelpers';
+import { isActiveStemJobPhase } from './helpers/stemSeparationJobPhases';
 import type {
   ClipStemSeparationJobPhase,
   ClipStemSeparationJobStemChoice,
@@ -24,14 +24,6 @@ import { generateClipId } from './helpers/idGenerator';
 
 const log = Logger.create('TimelineStemSeparation');
 
-const ACTIVE_STEM_JOB_PHASES = new Set<ClipStemSeparationJobPhase>([
-  'queued',
-  'preparing',
-  'downloading-model',
-  'loading-model',
-  'separating',
-  'storing',
-]);
 const STEM_JOB_PROGRESS_UPDATE_MIN_INTERVAL_MS = 250;
 const STEM_JOB_PROGRESS_UPDATE_MIN_DELTA = 0.01;
 const STEM_RELINK_JOB_ID_PREFIX = 'stem-relink';
@@ -54,7 +46,6 @@ const STEM_LABEL_TO_KIND = new Map<string, AudioStemKind>([
 
 let stemSeparationRunner: ClipStemSeparationRunner | null = null;
 const stemJobControllers = new Map<string, { jobId: string; controller: AbortController }>();
-const stemSourceAudioElementCache = new Map<string, { file: File; element: HTMLAudioElement }>();
 
 export function setClipStemSeparationRunner(runner: ClipStemSeparationRunner | null): void {
   stemSeparationRunner = runner;
@@ -75,7 +66,7 @@ function clampStemGainDb(value: number): number {
 }
 
 function hasActiveStemJob(phase: ClipStemSeparationJobPhase | undefined): boolean {
-  return !!phase && ACTIVE_STEM_JOB_PHASES.has(phase);
+  return isActiveStemJobPhase(phase);
 }
 
 function createStemChoices(stemSeparation: ClipAudioStemState): ClipStemSeparationJobStemChoice[] {
@@ -89,35 +80,8 @@ function createStemChoices(stemSeparation: ClipAudioStemState): ClipStemSeparati
     }));
 }
 
-function getOrCreateStemSourceAudioElement(mediaFile: MediaFile): HTMLAudioElement | null {
-  if (!mediaFile.file) return null;
-
-  const cached = stemSourceAudioElementCache.get(mediaFile.id);
-  if (cached?.file === mediaFile.file) {
-    return cached.element;
-  }
-
-  if (cached) {
-    disposeReplacedAudioElement(cached.element);
-  }
-
-  const element = createAudioElement(mediaFile.file);
-  stemSourceAudioElementCache.set(mediaFile.id, { file: mediaFile.file, element });
-  return element;
-}
-
 function prewarmStemSourceAudioElement(mediaFile: MediaFile): boolean {
-  const element = getOrCreateStemSourceAudioElement(mediaFile);
-  if (!element) return false;
-
-  try {
-    if (element.paused && element.readyState < 2) {
-      element.load();
-    }
-  } catch {
-    // A cold element can still be started by the normal sync pass on selection.
-  }
-  return true;
+  return !!mediaFile.file;
 }
 
 function stemKindSortIndex(kind: AudioStemKind): number {
@@ -263,15 +227,6 @@ function createStemAudioState(
   };
 }
 
-function getClipSourceTimeAtPlayhead(clip: TimelineClip, playheadPosition: number): number {
-  const speed = Math.max(0.001, Math.abs(clip.speed ?? 1));
-  const localTime = Math.max(0, Math.min(clip.duration, playheadPosition - clip.startTime));
-  if (clip.reversed || (clip.speed ?? 1) < 0) {
-    return Math.max(0, clip.outPoint - localTime * speed);
-  }
-  return Math.max(0, clip.inPoint + localTime * speed);
-}
-
 function disposeReplacedAudioElement(element: HTMLAudioElement | HTMLVideoElement | undefined): void {
   if (!element) return;
   try {
@@ -283,25 +238,6 @@ function disposeReplacedAudioElement(element: HTMLAudioElement | HTMLVideoElemen
   if (playheadState.masterAudioElement === element) {
     clearMasterAudio();
   }
-}
-
-function primeStemAudioElementForLivePlayback(
-  element: HTMLAudioElement,
-  clip: TimelineClip,
-  playheadPosition: number,
-  isPlaying: boolean,
-): void {
-  if (!isPlaying) return;
-  try {
-    element.currentTime = getClipSourceTimeAtPlayhead(clip, playheadPosition);
-    element.playbackRate = Math.max(0.25, Math.min(4, Math.abs(clip.speed ?? 1)));
-    void element.play().catch(() => {
-      // The regular audio sync pass will retry once the element can play.
-    });
-  } catch {
-    // The regular audio sync pass can recover on the next frame.
-  }
-  playheadState.playbackJustStarted = true;
 }
 
 function updateStemJob(
@@ -739,16 +675,12 @@ export const createStemSeparationSlice: SliceCreator<StemSeparationActions> = (s
 
     const isLivePlaybackSwitch = get().isPlaying && !get().isDraggingPlayhead;
     const sourceFile = mediaFile.file;
-    const playheadPosition = playheadState.isUsingInternalPosition
-      ? playheadState.position
-      : get().playheadPosition;
     const oldAudioElement = audioClip.source?.audioElement;
     const naturalDuration = mediaFile.duration ?? audioClip.source?.naturalDuration ?? audioClip.outPoint ?? audioClip.duration;
-    const audioElement = getOrCreateStemSourceAudioElement(mediaFile) ?? createAudioElement(sourceFile);
     const sourcePath = mediaFile.absolutePath ?? mediaFile.filePath ?? mediaFile.projectPath;
-    primeStemAudioElementForLivePlayback(audioElement, audioClip, playheadPosition, isLivePlaybackSwitch);
-    if (oldAudioElement !== audioElement) {
-      disposeReplacedAudioElement(oldAudioElement);
+    disposeReplacedAudioElement(oldAudioElement);
+    if (isLivePlaybackSwitch) {
+      playheadState.playbackJustStarted = true;
     }
 
     if (!isLivePlaybackSwitch) {
@@ -757,6 +689,10 @@ export const createStemSeparationSlice: SliceCreator<StemSeparationActions> = (s
     set((state) => ({
       clips: state.clips.map(currentClip => {
         if (currentClip.id !== audioClip.id) return currentClip;
+        const {
+          audioElement: _audioElement,
+          ...dataOnlySource
+        } = currentClip.source ?? { type: 'audio' as const };
 
         return {
           ...currentClip,
@@ -768,9 +704,8 @@ export const createStemSeparationSlice: SliceCreator<StemSeparationActions> = (s
           waveformProgress: mediaFile.waveformProgress ?? (mediaFile.waveform ? 100 : 0),
           needsReload: false,
           source: {
-            ...(currentClip.source ?? { type: 'audio' as const }),
+            ...dataOnlySource,
             type: 'audio' as const,
-            audioElement,
             naturalDuration,
             mediaFileId: mediaFile.id,
             file: sourceFile,

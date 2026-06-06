@@ -137,6 +137,16 @@ import {
 import { handleDebugExport } from './export';
 import { handleCreateTortureProjectFixture } from './torture';
 import {
+  handleRunTimelineCanvasBladeToolSmoke,
+  handleRunTimelineCanvasExportPreviewParitySmoke,
+  handleRunTimelineCanvasLargeProjectSmoke,
+  handleRunTimelineCanvasMarqueeSmoke,
+  handleRunTimelineCanvasPlayheadSmoothnessSmoke,
+  handleRunTimelineCanvasRamPreviewSmoke,
+  handleRunTimelineCanvasSpectralPlaybackSmoke,
+  handleRunTimelineCanvasThumbnailReloadSmoke,
+} from './timelineCanvasSmoke';
+import {
   handleGetNodeWorkspaceDebugState,
   handleSendAINodePrompt,
 } from './nodeWorkspace';
@@ -252,6 +262,14 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   purgePlaybackPath: handlePurgePlaybackPath,
   debugExport: handleDebugExport,
   createTortureProjectFixture: handleCreateTortureProjectFixture,
+  runTimelineCanvasBladeToolSmoke: handleRunTimelineCanvasBladeToolSmoke,
+  runTimelineCanvasExportPreviewParitySmoke: handleRunTimelineCanvasExportPreviewParitySmoke,
+  runTimelineCanvasLargeProjectSmoke: handleRunTimelineCanvasLargeProjectSmoke,
+  runTimelineCanvasMarqueeSmoke: handleRunTimelineCanvasMarqueeSmoke,
+  runTimelineCanvasPlayheadSmoothnessSmoke: handleRunTimelineCanvasPlayheadSmoothnessSmoke,
+  runTimelineCanvasThumbnailReloadSmoke: handleRunTimelineCanvasThumbnailReloadSmoke,
+  runTimelineCanvasRamPreviewSmoke: handleRunTimelineCanvasRamPreviewSmoke,
+  runTimelineCanvasSpectralPlaybackSmoke: handleRunTimelineCanvasSpectralPlaybackSmoke,
   getNodeWorkspaceDebugState: handleGetNodeWorkspaceDebugState,
   sendAINodePrompt: handleSendAINodePrompt,
   getDockLayoutDebugState: handleGetDockLayoutDebugState,
@@ -312,11 +330,11 @@ function collectDockLayoutDebugState(): Record<string, unknown> {
   const timelineElements = typeof document === 'undefined'
     ? []
     : Array.from(document.querySelectorAll<HTMLElement>(
-      '[data-dock-layout-anim-id="panel:timeline"], [data-dock-layout-anim-id="group:timeline-group"], .timeline-container, .track-lane.audio, .timeline-clip.audio, .clip-waveform',
+      '[data-dock-layout-anim-id="panel:timeline"], [data-dock-layout-anim-id="group:timeline-group"], .timeline-container, .track-lane.audio, .timeline-clip-canvas, .clip-interaction-shell, .timeline-clip-preview',
     )).map((element) => collectElementDebug(element));
   const waveformCanvases = typeof document === 'undefined'
     ? []
-    : Array.from(document.querySelectorAll<HTMLCanvasElement>('.waveform-canvas')).map((canvas) => {
+    : Array.from(document.querySelectorAll<HTMLCanvasElement>('.timeline-clip-canvas')).map((canvas) => {
       const rect = canvas.getBoundingClientRect();
       const style = window.getComputedStyle(canvas);
       const parent = canvas.parentElement;
@@ -545,6 +563,12 @@ export {
   handleClearRuntimeDiagnostics,
   handleDebugExport,
   handleCreateTortureProjectFixture,
+  handleRunTimelineCanvasLargeProjectSmoke,
+  handleRunTimelineCanvasMarqueeSmoke,
+  handleRunTimelineCanvasPlayheadSmoothnessSmoke,
+  handleRunTimelineCanvasRamPreviewSmoke,
+  handleRunTimelineCanvasSpectralPlaybackSmoke,
+  handleRunTimelineCanvasThumbnailReloadSmoke,
   handleGetNodeWorkspaceDebugState,
   handleSendAINodePrompt,
 };

@@ -76,13 +76,13 @@ describe('CurveEditor behavior', () => {
 
     expect(onUpdateBezierHandle).toHaveBeenLastCalledWith('kf-left', 'out', expect.objectContaining({
       x: 2,
-    }));
+    }), 'update');
 
     fireEvent.mouseMove(window, { clientX: 100, clientY: 50, buttons: 1 });
 
     expect(onUpdateBezierHandle).toHaveBeenLastCalledWith('kf-left', 'out', expect.objectContaining({
       x: 1,
-    }));
+    }), 'update');
   });
 
   it('resizes on shift wheel without bubbling to the timeline wheel handler', () => {
@@ -160,6 +160,6 @@ describe('CurveEditor behavior', () => {
     fireEvent.mouseDown(keyframe, { button: 0, clientX: 0, clientY: 50, buttons: 1 });
     fireEvent.mouseMove(window, { clientX: 192, clientY: 45, buttons: 1, shiftKey: true });
 
-    expect(onMoveKeyframe).toHaveBeenLastCalledWith('kf-left', 2, 0.5);
+    expect(onMoveKeyframe).toHaveBeenLastCalledWith('kf-left', 2, 0.5, 'update');
   });
 });

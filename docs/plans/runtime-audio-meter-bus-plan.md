@@ -77,7 +77,7 @@ This plan covers all live runtime audio meter streams found in the current codeb
 This plan intentionally does not cover other meter-like displays that are not runtime audio-meter telemetry:
 
 - video scopes: `src/components/panels/scopes/*` and `src/engine/analysis/*`
-- timeline clip waveform drawing: `src/components/timeline/components/ClipWaveform.tsx`
+- timeline clip waveform/spectrogram drawing: `src/components/timeline/TimelineClipCanvas.tsx` plus shared canvas utilities and timeline artifact warmup services
 - waveform-pyramid and loudness-envelope artifacts/caches under `src/services/audio/*`
 - media import or analysis progress indicators
 - playback health, render timing, and performance diagnostics

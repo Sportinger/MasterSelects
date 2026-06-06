@@ -5,6 +5,7 @@ import type { ModelSequenceData, TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { generateClipId } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
+import { createPrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 
 const DEFAULT_MODEL_DURATION = 10; // seconds — initial display duration
 const MAX_MODEL_DURATION = 3600; // 1 hour — models are static, can be any length
@@ -70,11 +71,16 @@ export function loadModelMedia(params: LoadModelMediaParams): void {
   const { clip, updateClip } = params;
   const sequenceModelUrl = clip.source?.modelSequence?.frames[0]?.modelUrl;
   const renderableFile = clip.file?.size ? clip.file : undefined;
+  const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
 
   // Create a blob URL that the shared scene renderer can fetch
   const modelUrl = sequenceModelUrl
     ?? clip.source?.modelUrl
-    ?? (renderableFile ? blobUrlManager.create(clip.id, renderableFile, 'model') : undefined);
+    ?? (renderableFile
+      ? mediaFileId
+        ? createPrimaryMediaObjectUrl(mediaFileId, renderableFile, { revokeExisting: false })
+        : blobUrlManager.create(clip.id, renderableFile, 'model')
+      : undefined);
 
   if (!modelUrl) {
     updateClip(clip.id, { isLoading: false });

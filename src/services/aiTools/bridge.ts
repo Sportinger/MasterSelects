@@ -30,9 +30,31 @@ import { runtimeAudioMeterBus } from '../audio/runtimeAudioMeterBus';
 import { DEFAULT_STEM_MODEL_ID, getStemModelManager } from '../audio/stemSeparation';
 import { proxyFrameCache } from '../proxyFrameCache';
 
-const tabId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-  ? crypto.randomUUID()
-  : `tab-${Math.random().toString(36).slice(2, 10)}`;
+const AI_BRIDGE_TAB_ID_SESSION_KEY = 'masterselects.aiBridgeTabId';
+const AI_BRIDGE_PRESENCE_INTERVAL_MS = 3000;
+
+function createBridgeTabId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `tab-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getStableBridgeTabId(): string {
+  if (typeof window === 'undefined' || typeof window.sessionStorage === 'undefined') {
+    return createBridgeTabId();
+  }
+  try {
+    const existing = window.sessionStorage.getItem(AI_BRIDGE_TAB_ID_SESSION_KEY);
+    if (existing) return existing;
+    const next = createBridgeTabId();
+    window.sessionStorage.setItem(AI_BRIDGE_TAB_ID_SESSION_KEY, next);
+    return next;
+  } catch {
+    return createBridgeTabId();
+  }
+}
+
+const tabId = getStableBridgeTabId();
 const BRIDGE_GUIDED_OPTIONS_ARG = '__guidedOptions';
 const REAL_CLIP_DRAG_RECORD_ARM_KEY = 'masterselects.debug.recordNextClipDrag';
 const REAL_CLIP_DRAG_RECORD_RESULT_KEY = 'masterselects.debug.lastRealClipDragRecord';
@@ -944,27 +966,91 @@ async function measureTimelineInteraction(args: Record<string, unknown> = {}) {
   };
 }
 
-function findClipDragMeasureTarget(args: Record<string, unknown> = {}): HTMLElement | null {
+interface ClipDragMeasureTarget {
+  element: HTMLElement;
+  clipId: string | null;
+  rect: DOMRect;
+}
+
+function findClipDragDomTargetById(clipId: string): HTMLElement | null {
+  const escapedClipId = CSS.escape(clipId);
+  return document.querySelector<HTMLElement>(`.clip-interaction-shell[data-clip-id="${escapedClipId}"]`) ??
+    document.querySelector<HTMLElement>(`.timeline-clip-preview[data-clip-id="${escapedClipId}"]`);
+}
+
+function findClipDragCanvasTargetById(clipId: string): ClipDragMeasureTarget | null {
+  const timelineState = useTimelineStore.getState();
+  const clip = timelineState.clips.find((candidate) => candidate.id === clipId);
+  if (!clip) return null;
+  const row = document.querySelector<HTMLElement>(
+    `.track-lane[data-track-id="${CSS.escape(clip.trackId)}"] .track-clip-row`,
+  );
+  if (!row) return null;
+  const rowRect = row.getBoundingClientRect();
+  const zoom = Math.max(0.001, timelineState.zoom ?? 50);
+  const scrollX = Math.max(0, timelineState.scrollX ?? 0);
+  const left = rowRect.left + clip.startTime * zoom - scrollX;
+  const width = Math.max(1, clip.duration * zoom);
+  const clippedLeft = Math.max(rowRect.left, Math.min(rowRect.right - 1, left));
+  const clippedRight = Math.max(clippedLeft + 1, Math.min(rowRect.right, left + width));
+  return {
+    element: row,
+    clipId,
+    rect: {
+      x: clippedLeft,
+      y: rowRect.y,
+      left: clippedLeft,
+      top: rowRect.top,
+      right: clippedRight,
+      bottom: rowRect.bottom,
+      width: clippedRight - clippedLeft,
+      height: rowRect.height,
+      toJSON: () => ({}),
+    } as DOMRect,
+  };
+}
+
+function createClipDragMeasureTargetFromElement(element: HTMLElement): ClipDragMeasureTarget {
+  return {
+    element,
+    clipId: element.dataset.clipId ?? null,
+    rect: element.getBoundingClientRect(),
+  };
+}
+
+function findClipDragMeasureTarget(args: Record<string, unknown> = {}): ClipDragMeasureTarget | null {
   const clipId = typeof args.clipId === 'string' && args.clipId.trim()
     ? args.clipId.trim()
     : '';
   if (clipId) {
-    return document.querySelector<HTMLElement>(`.timeline-clip[data-clip-id="${CSS.escape(clipId)}"]`);
+    const element = findClipDragDomTargetById(clipId);
+    if (element) return createClipDragMeasureTargetFromElement(element);
+    return findClipDragCanvasTargetById(clipId);
   }
 
   const selectedClipIds = useTimelineStore.getState().selectedClipIds;
   for (const selectedClipId of selectedClipIds) {
-    const selectedElement = document.querySelector<HTMLElement>(
-      `.timeline-clip[data-clip-id="${CSS.escape(selectedClipId)}"]`,
-    );
-    if (selectedElement) return selectedElement;
+    const selectedElement = findClipDragDomTargetById(selectedClipId);
+    if (selectedElement) return createClipDragMeasureTargetFromElement(selectedElement);
+    const canvasTarget = findClipDragCanvasTargetById(selectedClipId);
+    if (canvasTarget) return canvasTarget;
   }
 
-  const candidates = Array.from(document.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]'));
-  return candidates
-    .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+  const domCandidates = Array.from(document.querySelectorAll<HTMLElement>(
+    '.clip-interaction-shell[data-clip-id], .timeline-clip-preview[data-clip-id]',
+  ));
+  const domTarget = domCandidates
+    .map((element) => createClipDragMeasureTargetFromElement(element))
     .filter(({ rect }) => rect.width >= 32 && rect.height >= 12)
-    .sort((left, right) => (right.rect.width * right.rect.height) - (left.rect.width * left.rect.height))[0]?.element ?? null;
+    .sort((left, right) => (right.rect.width * right.rect.height) - (left.rect.width * left.rect.height))[0] ?? null;
+  if (domTarget) return domTarget;
+
+  const timelineState = useTimelineStore.getState();
+  return timelineState.clips
+    .map((clip) => findClipDragCanvasTargetById(clip.id))
+    .filter((target): target is ClipDragMeasureTarget => Boolean(target))
+    .filter(({ rect }) => rect.width >= 32 && rect.height >= 12)
+    .sort((left, right) => (right.rect.width * right.rect.height) - (left.rect.width * left.rect.height))[0] ?? null;
 }
 
 function dispatchMouseMeasureEvent(
@@ -1021,9 +1107,9 @@ async function measureClipDragInteraction(args: Record<string, unknown> = {}) {
     : Math.max(2, Math.round(durationMs / 3000));
   const dispatchTargetMoves = args.dispatchTargetMoves === true;
   const dispatchPointerMoves = args.dispatchPointerMoves === true;
-  const target = findClipDragMeasureTarget(args);
+  const measureTarget = findClipDragMeasureTarget(args);
 
-  if (!target) {
+  if (!measureTarget) {
     return {
       success: false,
       error: 'No visible timeline clip found for drag measurement.',
@@ -1033,10 +1119,11 @@ async function measureClipDragInteraction(args: Record<string, unknown> = {}) {
     };
   }
 
-  const rect = target.getBoundingClientRect();
+  const target = measureTarget.element;
+  const rect = measureTarget.rect;
   const originX = rect.left + Math.max(8, Math.min(rect.width - 8, rect.width * 0.5));
   const originY = rect.top + Math.max(8, Math.min(rect.height - 8, rect.height * 0.5));
-  const clipId = target.dataset.clipId ?? null;
+  const clipId = measureTarget.clipId;
   const expectedFrameMs = 1000 / 60;
   const startedAt = performance.now();
   const frames: Array<{ elapsedMs: number; deltaMs: number }> = [];
@@ -1574,7 +1661,7 @@ function installRealClipDragRecorder(): () => void {
     if (!isRealClipDragRecorderArmed()) return;
     if (event.button !== 0) return;
     const target = event.target instanceof Element
-      ? event.target.closest<HTMLElement>('.timeline-clip[data-clip-id]')
+      ? event.target.closest<HTMLElement>('.clip-interaction-shell[data-clip-id], .timeline-clip-preview[data-clip-id]')
       : null;
     if (!target) return;
     startRealClipDragRecording(event, target);
@@ -2785,7 +2872,7 @@ if (import.meta.hot) {
     window.addEventListener('focus', sendPresence);
     window.addEventListener('blur', sendPresence);
     document.addEventListener('visibilitychange', sendPresence);
-    presenceIntervalId = window.setInterval(sendPresence, 10000);
+    presenceIntervalId = window.setInterval(sendPresence, AI_BRIDGE_PRESENCE_INTERVAL_MS);
   }
 
   import.meta.hot.dispose(() => {
@@ -2819,6 +2906,7 @@ if (import.meta.hot) {
       if (delayMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
+      sendPresence();
 
       let result: unknown;
       if (data.tool === '_list') {

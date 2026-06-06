@@ -116,6 +116,8 @@ export function getTimelineReplayToolId(operation: TimelineEditOperation): Timel
       return 'blade';
     case 'split-all-at-time':
       return 'blade-all-tracks';
+    case 'merge-midi-clips':
+      return 'glue';
     case 'select-clips-from-time':
       if (operation.trackIds === undefined && operation.direction === 'forward') return 'track-select-forward-all';
       return operation.direction === 'backward' ? 'track-select-backward' : 'track-select-forward';
@@ -144,8 +146,25 @@ export function getTimelineReplayToolId(operation: TimelineEditOperation): Timel
     case 'extract-range':
       return 'extract-range';
     case 'move-clips':
+    case 'move-clips-resolved':
       return 'position-overwrite';
+    case 'keyframe-transaction-begin':
+    case 'keyframe-transaction-update':
+    case 'keyframe-transaction-commit':
+    case 'keyframe-transaction-cancel':
+      return 'pen-keyframe';
     case 'delete-clips':
+    case 'fade-transaction-begin':
+    case 'fade-transaction-update':
+    case 'fade-transaction-commit':
+    case 'fade-transaction-cancel':
+    case 'keyboard-delete-command':
+    case 'keyboard-cycle-blend-mode-command':
+    case 'transition-apply':
+    case 'transition-remove':
+    case 'transition-update-duration':
+    case 'transition-preview-drop':
+    case 'transition-clear-preview':
       return 'select';
   }
 }
@@ -237,8 +256,16 @@ function getTimelineReplayPointerPath(
     }
   }
 
-  if (operation.type === 'move-clips') {
-    const firstMove = operation.moves[0];
+  if (operation.type === 'move-clips' || operation.type === 'move-clips-resolved') {
+    const firstMove = operation.type === 'move-clips'
+      ? operation.moves[0]
+      : operation.resolvedMoves[0]
+        ? {
+          clipId: operation.resolvedMoves[0].clipId,
+          startTime: operation.resolvedMoves[0].resolvedStartTime,
+          trackId: operation.resolvedMoves[0].resolvedTrackId,
+        }
+        : undefined;
     if (firstMove) {
       return [
         { target: clipTarget(firstMove.clipId), label: 'Move clip', durationMs: 260 },
@@ -270,9 +297,30 @@ function getPrimaryClipId(operation: TimelineEditOperation): string | undefined 
       return operation.clipIds?.[0];
     case 'ripple-delete-selection':
     case 'delete-clips':
+    case 'keyboard-delete-command':
       return operation.clipIds?.[0];
+    case 'keyboard-cycle-blend-mode-command':
+      return operation.anchorClipId;
+    case 'transition-apply':
+      return operation.clipAId;
+    case 'transition-remove':
+    case 'transition-update-duration':
+      return operation.clipId;
+    case 'transition-preview-drop':
+      return operation.junction?.clipAId;
+    case 'fade-transaction-begin':
+    case 'fade-transaction-update':
+    case 'fade-transaction-commit':
+    case 'fade-transaction-cancel':
+    case 'keyframe-transaction-begin':
+    case 'keyframe-transaction-update':
+    case 'keyframe-transaction-commit':
+    case 'keyframe-transaction-cancel':
+      return operation.clipId;
     case 'move-clips':
       return operation.moves[0]?.clipId;
+    case 'move-clips-resolved':
+      return operation.resolvedMoves[0]?.clipId;
     case 'split-all-at-time':
     case 'select-clips-from-time':
     case 'delete-gap-at-time':
@@ -301,6 +349,14 @@ function getPrimaryTrackId(operation: TimelineEditOperation): string | undefined
       return operation.range?.trackIds[0];
     case 'move-clips':
       return operation.moves[0]?.trackId;
+    case 'move-clips-resolved':
+      return operation.resolvedMoves[0]?.resolvedTrackId;
+    case 'transition-apply':
+      return operation.junction.trackId;
+    case 'transition-update-duration':
+      return operation.junction?.trackId;
+    case 'transition-preview-drop':
+      return operation.junction?.trackId;
     default:
       return undefined;
   }
@@ -325,20 +381,40 @@ function getPrimaryTimelineTime(operation: TimelineEditOperation): number | unde
       return operation.startTime;
     case 'move-clips':
       return operation.moves[0]?.startTime;
+    case 'move-clips-resolved':
+      return operation.resolvedMoves[0]?.resolvedStartTime;
     case 'lift-range':
     case 'extract-range':
       return operation.range?.startTime;
     case 'ripple-delete-selection':
     case 'delete-clips':
+    case 'keyboard-delete-command':
     case 'delete-all-gaps':
+    case 'fade-transaction-begin':
+    case 'fade-transaction-update':
+    case 'fade-transaction-commit':
+    case 'fade-transaction-cancel':
+    case 'keyframe-transaction-begin':
+    case 'keyframe-transaction-update':
+    case 'keyframe-transaction-commit':
+    case 'keyframe-transaction-cancel':
     case 'slip-clip':
     case 'slide-clip':
+    case 'keyboard-cycle-blend-mode-command':
+    case 'transition-remove':
+    case 'transition-clear-preview':
       return undefined;
+    case 'transition-apply':
+      return operation.junction.junctionTime;
+    case 'transition-update-duration':
+      return operation.junction?.junctionTime;
+    case 'transition-preview-drop':
+      return operation.junction?.junctionTime;
   }
 }
 
 function getTimelineReplayDurationMs(operation: TimelineEditOperation): number {
-  if (operation.type === 'move-clips' || operation.type === 'place-timeline-range') return 1100;
+  if (operation.type === 'move-clips' || operation.type === 'move-clips-resolved' || operation.type === 'place-timeline-range') return 1100;
   if (operation.type === 'split-at-times' && operation.times.length > 1) return 1200;
   return 900;
 }
@@ -349,11 +425,15 @@ function getToneForOperation(operation: TimelineEditOperation): GuidedTone {
     case 'ripple-delete-selection':
     case 'delete-gap-at-time':
     case 'delete-all-gaps':
+    case 'keyboard-delete-command':
     case 'lift-range':
     case 'extract-range':
       return 'danger';
     case 'place-timeline-range':
     case 'move-clips':
+    case 'move-clips-resolved':
+    case 'transition-apply':
+    case 'transition-update-duration':
       return 'success';
     default:
       return 'primary';
@@ -361,6 +441,19 @@ function getToneForOperation(operation: TimelineEditOperation): GuidedTone {
 }
 
 function formatOperationTitle(operation: TimelineEditOperation): string {
+  if (operation.type === 'transition-apply') return 'Apply Transition';
+  if (operation.type === 'transition-remove') return 'Remove Transition';
+  if (operation.type === 'transition-update-duration') return 'Update Transition';
+  if (operation.type === 'transition-preview-drop') return 'Preview Transition Drop';
+  if (operation.type === 'transition-clear-preview') return 'Clear Transition Preview';
+  if (operation.type === 'fade-transaction-begin') return 'Begin Fade';
+  if (operation.type === 'fade-transaction-update') return 'Update Fade';
+  if (operation.type === 'fade-transaction-commit') return 'Commit Fade';
+  if (operation.type === 'fade-transaction-cancel') return 'Cancel Fade';
+  if (operation.type === 'keyframe-transaction-begin') return 'Begin Keyframe Edit';
+  if (operation.type === 'keyframe-transaction-update') return 'Update Keyframes';
+  if (operation.type === 'keyframe-transaction-commit') return 'Commit Keyframes';
+  if (operation.type === 'keyframe-transaction-cancel') return 'Cancel Keyframe Edit';
   return getTimelineReplayToolId(operation)
     .split('-')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -391,10 +484,46 @@ function formatOperationBody(operation: TimelineEditOperation): string {
         : 'Place source in the timeline.';
     case 'move-clips':
       return `${operation.moves.length} clip move${operation.moves.length === 1 ? '' : 's'}.`;
+    case 'move-clips-resolved':
+      return `${operation.resolvedMoves.length} resolved clip move${operation.resolvedMoves.length === 1 ? '' : 's'}.`;
     case 'slip-clip':
       return `Slip source by ${formatSignedSeconds(operation.sourceDelta)}.`;
     case 'slide-clip':
       return `Slide by ${formatSignedSeconds(operation.timelineDelta)}.`;
+    case 'keyboard-delete-command':
+      return operation.keyframeIds.length > 0
+        ? `Delete ${operation.keyframeIds.length} keyframe${operation.keyframeIds.length === 1 ? '' : 's'}.`
+        : `Delete ${operation.clipIds.length} clip${operation.clipIds.length === 1 ? '' : 's'}.`;
+    case 'keyboard-cycle-blend-mode-command':
+      return `Set ${operation.clipIds.length} clip${operation.clipIds.length === 1 ? '' : 's'} to ${operation.nextBlendMode}.`;
+    case 'transition-apply':
+      return `Apply ${operation.transitionType} for ${formatTime(operation.requestedDuration)}.`;
+    case 'transition-remove':
+      return `Remove ${operation.edge} transition.`;
+    case 'transition-update-duration':
+      return `Set ${operation.edge} transition to ${formatTime(operation.requestedDuration)}.`;
+    case 'transition-preview-drop':
+      return operation.junction
+        ? `Preview ${operation.transitionType} for ${formatTime(operation.requestedDuration)}.`
+        : `Preview blocked ${operation.transitionType} drop.`;
+    case 'transition-clear-preview':
+      return `Clear transition preview after ${operation.reason}.`;
+    case 'fade-transaction-begin':
+      return `Begin ${operation.edge} fade from ${formatTime(operation.originalFadeDuration)}.`;
+    case 'fade-transaction-update':
+      return `Preview ${operation.edge} fade at ${formatTime(operation.resolvedFadeDuration)}.`;
+    case 'fade-transaction-commit':
+      return `Set ${operation.edge} fade to ${formatTime(operation.finalFadeDuration)}.`;
+    case 'fade-transaction-cancel':
+      return `Cancel ${operation.edge} fade edit.`;
+    case 'keyframe-transaction-begin':
+      return `Begin keyframe edit for ${operation.keyframeIds.length} keyframe${operation.keyframeIds.length === 1 ? '' : 's'}.`;
+    case 'keyframe-transaction-update':
+      return `Preview ${operation.operations.length} keyframe operation${operation.operations.length === 1 ? '' : 's'}.`;
+    case 'keyframe-transaction-commit':
+      return `Commit ${operation.operations.length} keyframe operation${operation.operations.length === 1 ? '' : 's'}.`;
+    case 'keyframe-transaction-cancel':
+      return `Cancel keyframe edit and discard ${operation.discardKeyframeIds.length} keyframe${operation.discardKeyframeIds.length === 1 ? '' : 's'}.`;
     default:
       return `Replay ${operation.type}.`;
   }

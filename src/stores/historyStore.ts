@@ -44,6 +44,14 @@ import type {
 import { createDefaultFlashBoardComposer } from './flashboardStore/defaults';
 import type { ExportStoreData } from './exportStore';
 import { createDefaultExportStoreData, getExportStoreData } from './exportStore';
+import {
+  createHistoryTimelineEditState,
+  type HistoryTimelineEditState,
+} from './timeline/historyTimelineEditState';
+import { createHistoryTimelineRestoreState } from './timeline/historyTimelineRestoreState';
+import { syncHistoryRehydratedTimelineRuntimeResources } from '../services/timeline/historyRuntimeRehydration';
+import { clearAINodeRuntimeCache } from '../services/nodeGraph';
+import { stopTimelineAudioPlayback } from '../services/audio/timelineAudioPlaybackStopper';
 
 const log = Logger.create('History');
 const MAX_HISTORY_EVENT_LOG_SIZE = 500;
@@ -125,6 +133,8 @@ interface StateSnapshot {
     markers: TimelineMarker[];
     masterAudioState?: MasterAudioState;
   };
+
+  timelineEditState?: HistoryTimelineEditState;
 
   // Media state
   media: {
@@ -403,6 +413,7 @@ function isAudioPayloadKey(key: string): boolean {
     normalized === 'audiobuffer' ||
     normalized === 'arraybuffer' ||
     normalized.endsWith('samples') ||
+    normalized.endsWith('bytes') ||
     normalized.endsWith('buffer') ||
     normalized.includes('channeldata') ||
     normalized.includes('rawaudio') ||
@@ -907,6 +918,55 @@ function createTimelineSnapshot(): StateSnapshot['timeline'] {
   };
 }
 
+function createTimelineEditStateSnapshot(
+  label: string,
+  timestamp: number,
+): HistoryTimelineEditState | undefined {
+  const timeline = getTimelineState?.() || null;
+  if (!timeline) return undefined;
+
+  return createHistoryTimelineEditState({
+    id: `history:${timestamp}:${label}`,
+    label,
+    timestamp,
+    tracks: timeline.tracks || [],
+    clips: timeline.clips || [],
+    selectedClipIds: timeline.selectedClipIds || new Set<string>(),
+    zoom: timeline.zoom || 50,
+    scrollX: timeline.scrollX || 0,
+    layers: (timeline.layers || []).filter(Boolean),
+    selectedLayerId: timeline.selectedLayerId || null,
+    clipKeyframes: timeline.clipKeyframes,
+    markers: timeline.markers || [],
+    masterAudioState: timeline.masterAudioState,
+  });
+}
+
+function createTimelineSnapshotFromEditState(
+  timelineEditState: HistoryTimelineEditState,
+): StateSnapshot['timeline'] {
+  const restored = createHistoryTimelineRestoreState(timelineEditState, {}, {
+    placeholderFileMode: 'plain-data',
+  }).state;
+  return {
+    clips: restored.clips.map(cloneClipForHistory),
+    tracks: restored.tracks.map(cloneTrackForHistory),
+    selectedClipIds: [...restored.selectedClipIds],
+    zoom: restored.zoom,
+    scrollX: restored.scrollX,
+    layers: deepClone(restored.layers),
+    selectedLayerId: restored.selectedLayerId,
+    clipKeyframes: Object.fromEntries(
+      Array.from(restored.clipKeyframes.entries()).map(([clipId, keyframes]) => [
+        clipId,
+        deepClone(keyframes),
+      ])
+    ),
+    markers: deepClone(restored.markers),
+    masterAudioState: cloneMasterAudioState(restored.masterAudioState),
+  };
+}
+
 function createMediaSnapshot(): StateSnapshot['media'] {
   const media = getMediaState?.() || null;
 
@@ -956,10 +1016,15 @@ function createExportSnapshot(): ExportStoreData {
 
 // Create snapshot from current state
 function createSnapshot(label: string, _previousSnapshot?: StateSnapshot | null): StateSnapshot {
+  const timestamp = Date.now();
+  const timelineEditState = createTimelineEditStateSnapshot(label, timestamp);
   return {
-    timestamp: Date.now(),
+    timestamp,
     label,
-    timeline: createTimelineSnapshot(),
+    timeline: timelineEditState
+      ? createTimelineSnapshotFromEditState(timelineEditState)
+      : createTimelineSnapshot(),
+    timelineEditState,
     media: createMediaSnapshot(),
     dock: createDockSnapshot(),
     flashboard: createFlashBoardSnapshot(),
@@ -974,40 +1039,53 @@ function applySnapshot(snapshot: StateSnapshot) {
   // Apply timeline state (including layers)
   if (setTimelineState && getTimelineState) {
     const currentTimeline = getTimelineState();
-    // Preserve source references for layers (filter out undefined entries from snapshots)
-    const restoredLayers = (snapshot.timeline.layers || []).filter(Boolean).map((layer) => {
-      const currentLayer = (currentTimeline.layers || []).find((l) => l?.id === layer.id);
-      return {
-        ...deepClone(layer),
-        source: currentLayer?.source || layer.source,
-      };
-    });
+    let timelineState: Partial<TimelineStoreState>;
 
-    // Convert plain object back to Map<string, Keyframe[]>
-    const restoredKeyframes = new Map<string, Keyframe[]>();
-    if (snapshot.timeline.clipKeyframes) {
-      for (const [clipId, kfs] of Object.entries(snapshot.timeline.clipKeyframes)) {
-        restoredKeyframes.set(clipId, deepClone(kfs));
+    if (snapshot.timelineEditState) {
+      const restored = createHistoryTimelineRestoreState(snapshot.timelineEditState, currentTimeline);
+      timelineState = restored.state;
+      log.debug('Restored timeline from HistoryTimelineEditState', restored.diagnostics);
+    } else {
+      // Preserve source references for layers (filter out undefined entries from snapshots)
+      const restoredLayers = (snapshot.timeline.layers || []).filter(Boolean).map((layer) => {
+        const currentLayer = (currentTimeline.layers || []).find((l) => l?.id === layer.id);
+        return {
+          ...deepClone(layer),
+          source: currentLayer?.source || layer.source,
+        };
+      });
+
+      // Convert plain object back to Map<string, Keyframe[]>
+      const restoredKeyframes = new Map<string, Keyframe[]>();
+      if (snapshot.timeline.clipKeyframes) {
+        for (const [clipId, kfs] of Object.entries(snapshot.timeline.clipKeyframes)) {
+          restoredKeyframes.set(clipId, deepClone(kfs));
+        }
       }
-    }
 
-    const timelineState: Partial<TimelineStoreState> = {
-      clips: snapshot.timeline.clips.map(cloneClipForHistory),
-      tracks: snapshot.timeline.tracks.map(cloneTrackForHistory),
-      selectedClipIds: new Set(snapshot.timeline.selectedClipIds || []),
-      zoom: snapshot.timeline.zoom,
-      scrollX: snapshot.timeline.scrollX,
-      layers: restoredLayers,
-      selectedLayerId: snapshot.timeline.selectedLayerId,
-      clipKeyframes: restoredKeyframes,
-      markers: deepClone(snapshot.timeline.markers || []),
-    };
+      timelineState = {
+        clips: snapshot.timeline.clips.map(cloneClipForHistory),
+        tracks: snapshot.timeline.tracks.map(cloneTrackForHistory),
+        selectedClipIds: new Set(snapshot.timeline.selectedClipIds || []),
+        zoom: snapshot.timeline.zoom,
+        scrollX: snapshot.timeline.scrollX,
+        layers: restoredLayers,
+        selectedLayerId: snapshot.timeline.selectedLayerId,
+        clipKeyframes: restoredKeyframes,
+        markers: deepClone(snapshot.timeline.markers || []),
+      };
+    }
 
     if ('masterAudioState' in currentTimeline || snapshot.timeline.masterAudioState !== undefined) {
-      timelineState.masterAudioState = cloneMasterAudioState(snapshot.timeline.masterAudioState);
+      timelineState.masterAudioState = snapshot.timelineEditState
+        ? cloneMasterAudioState(snapshot.timelineEditState.timeline.masterAudioState)
+        : cloneMasterAudioState(snapshot.timeline.masterAudioState);
     }
 
+    stopTimelineAudioPlayback();
+    clearAINodeRuntimeCache();
     setTimelineState(timelineState);
+    syncHistoryRehydratedTimelineRuntimeResources(timelineState.clips ?? []);
   }
 
   // Apply media state (preserve file references)

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   classifyMediaType: vi.fn(async () => 'video'),
@@ -88,6 +88,7 @@ vi.mock('../../src/stores/settingsStore', () => ({
 }));
 
 import { processImport } from '../../src/stores/mediaStore/helpers/importPipeline';
+import { revokeAllMediaObjectUrls } from '../../src/services/project/mediaObjectUrlManager';
 
 function createFrameIndexSet(count: number): Set<number> {
   return new Set(Array.from({ length: count }, (_, index) => index));
@@ -102,6 +103,11 @@ describe('processImport', () => {
     mocks.getProxyFrameCount.mockResolvedValue(0);
     mocks.getProxyFrameIndices.mockResolvedValue(new Set());
     mocks.isProjectOpen.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    revokeAllMediaObjectUrls();
+    vi.restoreAllMocks();
   });
 
   it('promotes the project RAW copy to the canonical media source', async () => {
@@ -139,8 +145,9 @@ describe('processImport', () => {
     expect(mocks.storeFileHandle).toHaveBeenCalledWith('media-1', rawHandle);
     expect(mocks.storeHandle).toHaveBeenCalledWith('media_media-1_project', rawHandle);
     expect(mocks.storeHandle).toHaveBeenCalledWith('media_media-1', rawHandle);
-    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:original');
-    expect(createObjectURLSpy).toHaveBeenCalledTimes(2);
+    expect(mocks.handleThumbnailDedup).toHaveBeenCalledWith('hash-123', undefined, 'media-1');
+    expect(revokeObjectURLSpy).not.toHaveBeenCalledWith('blob:original');
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
   });
 
   it('stores Lottie metadata without using HTML media probing', async () => {

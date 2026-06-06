@@ -94,6 +94,7 @@ export function createCompositionAudioClip(params: CreateCompAudioClipParams): T
     audioElement,
     waveform,
     mixdownBuffer,
+    hasAudio,
     linkedClipId,
   } = params;
 
@@ -108,7 +109,7 @@ export function createCompositionAudioClip(params: CreateCompAudioClipParams): T
     outPoint: duration,
     source: {
       type: 'audio',
-      audioElement: audioElement || document.createElement('audio'),
+      ...(audioElement ? { audioElement } : {}),
       naturalDuration: duration,
     },
     linkedClipId,
@@ -119,6 +120,8 @@ export function createCompositionAudioClip(params: CreateCompAudioClipParams): T
     isComposition: true,
     compositionId,
     mixdownBuffer,
+    mixdownGenerating: false,
+    hasMixdownAudio: hasAudio ?? Boolean(mixdownBuffer),
   };
 }
 

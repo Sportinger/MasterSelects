@@ -6,9 +6,12 @@ import { useMediaStore } from '../mediaStore';
 import { engine } from '../../engine/WebGPUEngine';
 import { getRuntimeFrameProvider } from '../../services/mediaRuntime/runtimePlayback';
 import {
+  getPlayheadPosition,
   playheadState,
   sanitizePlayheadPosition,
+  startInternalPosition,
   stopInternalPosition,
+  updateInternalPlaybackSpeed,
 } from '../../services/layerBuilder/PlayheadState';
 import { resolvePlaybackStartPosition } from './playbackRange';
 import { prewarmProxyFramesForTimelinePosition } from '../../services/proxyFramePrewarm';
@@ -199,14 +202,18 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       }
     }
 
+    startInternalPosition(playbackStartPosition, playbackSpeed);
     set({ playbackWarmup: null, isPlaying: true });
   },
 
   pause: () => {
     stopTimelineAudioPlayback();
+    const currentPosition = getPlayheadPosition(get().playheadPosition);
+    playheadState.position = currentPosition;
+    stopInternalPosition();
     // Reset playback speed to normal when pausing
     // So that Space (play/pause toggle) plays forward again
-    set({ isPlaying: false, playbackSpeed: 1, playbackWarmup: null });
+    set({ isPlaying: false, playbackSpeed: 1, playheadPosition: currentPosition, playbackWarmup: null });
   },
 
   stop: () => {
@@ -297,6 +304,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   },
 
   setPlaybackSpeed: (speed: number) => {
+    if (get().isPlaying && playheadState.isUsingInternalPosition) {
+      updateInternalPlaybackSpeed(speed);
+    }
     set({ playbackSpeed: speed });
   },
 

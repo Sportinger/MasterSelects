@@ -123,6 +123,10 @@ export interface GpuFrameCacheEntry {
   texture: GPUTexture;
   view: GPUTextureView;
   bindGroup: GPUBindGroup;
+  width?: number;
+  height?: number;
+  format?: string;
+  gpuBytes?: number;
 }
 
 // === REFACTOR: New interfaces for module communication ===

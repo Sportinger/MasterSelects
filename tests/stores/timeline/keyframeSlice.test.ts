@@ -6,6 +6,7 @@ import {
   createMaskPathProperty,
   createMaskNumericProperty,
   createNodeGraphParamProperty,
+  createTextBoundsPathProperty,
   type AudioEffectParamValue,
   type ClipMask,
   type MaskPathKeyframeValue,
@@ -129,6 +130,136 @@ describe('keyframeSlice', () => {
     expect(keyframe?.pathValue?.vertices).toHaveLength(3);
     expect(keyframe?.pathValue?.vertices[1].x).toBe(1);
     expect(keyframe?.pathValue?.closed).toBe(true);
+  });
+
+  it('addMaskPathKeyframe: routes path writes through the timeline edit operation kernel', () => {
+    const mask: ClipMask = {
+      id: 'mask-1',
+      name: 'Mask 1',
+      vertices: [
+        { id: 'v1', x: 0, y: 0, handleIn: { x: 0, y: 0 }, handleOut: { x: 0.1, y: 0 }, handleMode: 'mirrored' },
+        { id: 'v2', x: 1, y: 0, handleIn: { x: -0.1, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'mirrored' },
+      ],
+      closed: true,
+      opacity: 1,
+      feather: 0,
+      featherQuality: 50,
+      inverted: false,
+      mode: 'add',
+      expanded: true,
+      position: { x: 0, y: 0 },
+      enabled: true,
+      visible: true,
+    };
+    store = createTestTimelineStore({
+      clips: [createMockClip({ id: 'clip-1', trackId: 'video-1', startTime: 0, duration: 10, masks: [mask] })],
+    });
+    const applyTimelineEditOperation = store.getState().applyTimelineEditOperation;
+    const applySpy = vi.fn((operation, options) => applyTimelineEditOperation(operation, options));
+    store.setState({ applyTimelineEditOperation: applySpy });
+
+    store.getState().addMaskPathKeyframe('clip-1', 'mask-1', undefined, 2);
+
+    expect(applySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'keyframe-transaction-commit',
+        phase: 'commit',
+        clipId: 'clip-1',
+        property: createMaskPathProperty('mask-1'),
+        operations: [
+          expect.objectContaining({
+            type: 'keyframe-create',
+            clipId: 'clip-1',
+            property: createMaskPathProperty('mask-1'),
+            time: 2,
+            value: expect.objectContaining({
+              pathValue: expect.objectContaining({ closed: true }),
+            }),
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        source: 'ui',
+        historyLabel: 'Add mask path keyframe',
+      }),
+    );
+    expect(store.getState().clipKeyframes.get('clip-1')?.[0]?.property).toBe(createMaskPathProperty('mask-1'));
+  });
+
+  it('addTextBoundsPathKeyframe: routes text path writes through the timeline edit operation kernel', () => {
+    const textPath: MaskPathKeyframeValue = {
+      closed: true,
+      vertices: [
+        { id: 'tbv-1', x: 0.1, y: 0.1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+        { id: 'tbv-2', x: 0.9, y: 0.1, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 }, handleMode: 'none' },
+      ],
+    };
+    store = createTestTimelineStore({
+      clips: [createMockClip({
+        id: 'clip-text',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 10,
+        source: { type: 'text' },
+        textProperties: {
+          text: 'Hello',
+          fontFamily: 'Arial',
+          fontSize: 64,
+          fontWeight: 400,
+          fontStyle: 'normal',
+          color: '#ffffff',
+          textAlign: 'left',
+          verticalAlign: 'top',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          boxEnabled: true,
+          boxX: 0,
+          boxY: 0,
+          boxWidth: 100,
+          boxHeight: 100,
+          strokeEnabled: false,
+          strokeColor: '#000000',
+          strokeWidth: 0,
+          shadowEnabled: false,
+          shadowColor: '#000000',
+          shadowOffsetX: 0,
+          shadowOffsetY: 0,
+          shadowBlur: 0,
+          pathEnabled: false,
+          pathPoints: [],
+        },
+      })],
+    });
+    const applyTimelineEditOperation = store.getState().applyTimelineEditOperation;
+    const applySpy = vi.fn((operation, options) => applyTimelineEditOperation(operation, options));
+    store.setState({ applyTimelineEditOperation: applySpy });
+
+    store.getState().addTextBoundsPathKeyframe('clip-text', textPath, 3);
+
+    expect(applySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'keyframe-transaction-commit',
+        phase: 'commit',
+        clipId: 'clip-text',
+        property: createTextBoundsPathProperty(),
+        operations: [
+          expect.objectContaining({
+            type: 'keyframe-create',
+            clipId: 'clip-text',
+            property: createTextBoundsPathProperty(),
+            time: 3,
+            value: expect.objectContaining({
+              pathValue: expect.objectContaining({ closed: true }),
+            }),
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        source: 'ui',
+        historyLabel: 'Add text bounds path keyframe',
+      }),
+    );
+    expect(store.getState().clipKeyframes.get('clip-text')?.[0]?.property).toBe(createTextBoundsPathProperty());
   });
 
   it('getInterpolatedMasks: interpolates mask path and position keyframes', () => {

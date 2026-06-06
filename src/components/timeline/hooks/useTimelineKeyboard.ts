@@ -2,12 +2,13 @@
 // Uses central ShortcutRegistry for configurable key bindings
 
 import { useEffect } from 'react';
-import type { TimelineClip, ClipTransform } from '../../../types';
+import type { TimelineClip } from '../../../types';
 import type { Composition } from '../../../stores/mediaStore';
 import { ALL_BLEND_MODES } from '../constants';
 import { getShortcutRegistry } from '../../../services/shortcutRegistry';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
+import type { TimelineEditOperationActions } from '../../../stores/timeline/types';
 import { TIMELINE_TOOL_DEFINITIONS } from '../tools/registry';
 import { runTimelineToolCommand } from '../tools/timelineToolCommands';
 
@@ -86,10 +87,8 @@ interface UseTimelineKeyboardProps {
   selectedKeyframeIds: Set<string>;
 
   // Clip operations
-  removeClip: (id: string) => void;
-  removeKeyframe: (id: string) => void;
+  applyTimelineEditOperation: TimelineEditOperationActions['applyTimelineEditOperation'];
   splitClipAtPlayhead: () => void;
-  updateClipTransform: (id: string, transform: Partial<ClipTransform>) => void;
 
   // Copy/Paste
   copyClips: () => void;
@@ -126,10 +125,8 @@ export function useTimelineKeyboard({
   toggleLoopPlayback,
   selectedClipIds,
   selectedKeyframeIds,
-  removeClip,
-  removeKeyframe,
+  applyTimelineEditOperation,
   splitClipAtPlayhead,
-  updateClipTransform,
   copyClips,
   pasteClips,
   copyKeyframes,
@@ -248,12 +245,23 @@ export function useTimelineKeyboard({
       // Delete: remove selected keyframes first, then clips
       if (registry.matches('edit.delete', e)) {
         e.preventDefault();
-        if (selectedKeyframeIds.size > 0) {
-          [...selectedKeyframeIds].forEach(keyframeId => removeKeyframe(keyframeId));
-          return;
-        }
-        if (selectedClipIds.size > 0) {
-          [...selectedClipIds].forEach(clipId => removeClip(clipId));
+        if (selectedKeyframeIds.size > 0 || selectedClipIds.size > 0) {
+          const transactionId = `keyboard-delete:${Date.now()}`;
+          applyTimelineEditOperation({
+            id: transactionId,
+            type: 'keyboard-delete-command',
+            transactionId,
+            historyBatchId: transactionId,
+            source: 'shortcut',
+            command: 'delete',
+            priority: selectedKeyframeIds.size > 0 ? 'keyframes-first' : 'clips-only',
+            keyframeIds: [...selectedKeyframeIds],
+            clipIds: [...selectedClipIds],
+            includeLinked: false,
+          }, {
+            source: 'shortcut',
+            historyLabel: selectedKeyframeIds.size > 0 ? 'Delete keyframes' : 'Delete clips',
+          });
         }
         return;
       }
@@ -359,10 +367,22 @@ export function useTimelineKeyboard({
           (currentIndex + direction + ALL_BLEND_MODES.length) %
           ALL_BLEND_MODES.length;
         const nextMode = ALL_BLEND_MODES[nextIndex];
+        const transactionId = `keyboard-cycle-blend-mode:${nextMode}:${Date.now()}`;
 
-        [...selectedClipIds].forEach(clipId => {
-          updateClipTransform(clipId, { blendMode: nextMode });
-        });
+        applyTimelineEditOperation({
+          id: transactionId,
+          type: 'keyboard-cycle-blend-mode-command',
+          transactionId,
+          historyBatchId: transactionId,
+          source: 'shortcut',
+          command: 'cycle-blend-mode',
+          clipIds: [...selectedClipIds],
+          direction: direction === 1 ? 'next' : 'previous',
+          anchorClipId: firstSelectedId,
+          currentBlendMode: currentMode,
+          nextBlendMode: nextMode,
+          blendModeSequence: ALL_BLEND_MODES,
+        }, { source: 'shortcut', historyLabel: 'Cycle blend mode' });
         return;
       }
 
@@ -406,11 +426,9 @@ export function useTimelineKeyboard({
     toggleLoopPlayback,
     selectedClipIds,
     selectedKeyframeIds,
-    removeClip,
-    removeKeyframe,
+    applyTimelineEditOperation,
     splitClipAtPlayhead,
     clipMap,
-    updateClipTransform,
     copyClips,
     pasteClips,
     copyKeyframes,

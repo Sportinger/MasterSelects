@@ -59,6 +59,7 @@ import {
   isPreparedClipAudioAnalysisInputStale,
   prepareClipAudioAnalysisInput,
 } from '../../services/audio/ClipAudioAnalysisOrchestrator';
+import { releaseCompositionMixdownClipRuntime } from '../../services/timeline/compositionAudioMixdownRuntimeResources';
 import {
   createClipAudioAnalysisJobState,
   updateClipAudioAnalysisJobState,
@@ -67,6 +68,7 @@ import {
   clipAudioAnalysisJobService,
   isClipAudioAnalysisJobCancelledError,
 } from '../../services/audio/ClipAudioAnalysisJobService';
+import { hasTimelineWaveformData } from '../../utils/audioWaveformPresence';
 
 const log = Logger.create('ClipSlice');
 
@@ -214,27 +216,35 @@ import { createLottieClipPlaceholder, loadLottieMedia } from './clip/addLottieCl
 import { createRiveClipPlaceholder, loadRiveMedia } from './clip/addRiveClip';
 import { createModelClipPlaceholder, loadModelMedia } from './clip/addModelClip';
 import { createGaussianSplatClipPlaceholder, loadGaussianSplatMedia } from './clip/addGaussianSplatClip';
-import { createVideoElement, createAudioElement } from './helpers/webCodecsHelpers';
 import {
   createCompClipPlaceholder,
-  loadNestedClips,
   createCompLinkedAudioClip,
   createNestedContentHash,
-  calculateNestedClipBoundaries,
-  buildClipSegments,
 } from './clip/addCompClip';
 import {
+  loadNestedClips,
+  calculateNestedClipBoundaries,
+  scheduleNestedClipSegmentBuild,
+} from './nestedCompositionLoader';
+import {
   generateLinkedClipIds,
+  generateMidiNoteId,
 } from './helpers/idGenerator';
+import { partitionMidiNotesAtCut } from '../../services/midi/midiClipTiming';
 import { blobUrlManager } from './helpers/blobUrlManager';
+import { cleanupDeletedClipResources } from './deletedClipResources';
 import { updateClipById } from './helpers/clipStateHelpers';
 import {
   applyClipUpdatesWithAudioAnalysisInvalidation,
   clearProcessedAudioAnalysisRefs,
 } from './helpers/audioAnalysisStateHelpers';
+import {
+  cloneLinkedSourceForPart,
+  cloneSourceForPart,
+  getSourceForFirstSplitPart,
+} from './editOperations/splitBatchOperations';
 import { readLottieMetadata } from '../../services/vectorAnimation/lottieMetadata';
 import { readRiveMetadata } from '../../services/vectorAnimation/riveMetadata';
-import { vectorAnimationRuntimeManager } from '../../services/vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 
 export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
@@ -588,7 +598,13 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     // Load nested clips if timeline data exists
     if (composition.timelineData) {
-      const nestedClips = await loadNestedClips({ compClipId: compClip.id, composition, get, set });
+      const nestedClips = await loadNestedClips({
+        compClipId: compClip.id,
+        composition,
+        get,
+        set,
+        isCurrentTimelineSession,
+      });
       if (!isCurrentTimelineSession()) {
         return;
       }
@@ -604,39 +620,18 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         ),
       });
 
-      // Build segment-based thumbnails (waits for nested clips to load)
-      if (thumbnailsEnabled) {
-        // Wait a bit for nested clip sources to load, then build segments
-        setTimeout(async () => {
-          if (!isCurrentTimelineSession()) {
-            return;
-          }
-          // Get fresh nested clips (they may have updated sources now)
-          const freshCompClip = get().clips.find(c => c.id === compClip.id);
-          if (!freshCompClip) {
-            return;
-          }
-          const freshNestedClips = freshCompClip?.nestedClips || nestedClips;
-
-          const clipSegments = await buildClipSegments(
-            composition.timelineData,
-            compDuration,
-            freshNestedClips
-          );
-
-          if (!isCurrentTimelineSession()) {
-            return;
-          }
-          if (clipSegments.length > 0) {
-            set({
-              clips: get().clips.map(c =>
-                c.id === compClip.id ? { ...c, clipSegments } : c
-              ),
-            });
-            log.info('Set clip segments for nested comp', { clipId: compClip.id, segmentCount: clipSegments.length });
-          }
-        }, 500); // Wait for video elements to load
-      }
+      scheduleNestedClipSegmentBuild({
+        clipId: compClip.id,
+        timelineData: composition.timelineData,
+        compDuration,
+        nestedClips,
+        thumbnailsEnabled,
+        get,
+        set,
+        isCurrentTimelineSession,
+        delayMs: 500,
+        logLabel: 'Set clip segments for nested comp',
+      });
     }
 
     // Create linked audio clip (always, even if no audio)
@@ -669,28 +664,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       return;
     }
 
-    // Clean up resources for all clips being removed
-    for (const removeId of idsToRemove) {
-      const clip = clips.find(c => c.id === removeId);
-      if (!clip) continue;
-      if (clip.source?.type === 'video' && clip.source.videoElement) {
-        const video = clip.source.videoElement;
-        video.pause();
-        video.src = '';
-        video.load();
-        import('../../engine/WebGPUEngine').then(({ engine }) => engine.cleanupVideo(video));
-      }
-      if (clip.source?.type === 'audio' && clip.source.audioElement) {
-        const audio = clip.source.audioElement;
-        audio.pause();
-        audio.src = '';
-        audio.load();
-      }
-      if (isVectorAnimationSourceType(clip.source?.type)) {
-        vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
-      }
-      blobUrlManager.revokeAll(removeId);
-    }
+    cleanupDeletedClipResources(clips.filter(clip => idsToRemove.has(clip.id)));
 
     const newSelectedIds = new Set(selectedClipIds);
     for (const removeId of idsToRemove) newSelectedIds.delete(removeId);
@@ -852,29 +826,67 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substr(2, 5);
 
-    // Create new video/audio elements for the second clip to avoid sharing HTMLMediaElements
-    // This is critical: both clips need their own elements for independent seeking/playback
-    let secondClipSource = clip.source;
-    if (clip.source?.type === 'video' && clip.source.videoElement && clip.file) {
-      const newVideo = createVideoElement(clip.file);
-      secondClipSource = {
-        ...clip.source,
-        videoElement: newVideo,
-        // Share WebCodecsPlayer with clip1 — both clips are from the same source
-        // and never overlap (same track), so one decoder handles both.
-        // advanceToTime already handles time jumps at cut boundaries.
-        // This avoids async re-parsing the MP4 and creating a second decoder
-        // that could crash or race with the first.
-        webCodecsPlayer: clip.source.webCodecsPlayer,
+    // MIDI clips have no external source file — the note data IS the content, so
+    // a cut yields two INDEPENDENT clips (each owning its own rebased notes),
+    // not two windows onto a shared array as with media. See partitionMidiNotesAtCut.
+    if (clip.source?.type === 'midi') {
+      const { left, right } = partitionMidiNotesAtCut(
+        clip.midiData?.notes ?? [],
+        { inPoint: clip.inPoint, outPoint: clip.outPoint },
+        splitInSource,
+        (source, rebased) => ({
+          id: generateMidiNoteId(),
+          pitch: source.pitch,
+          velocity: source.velocity,
+          start: rebased.start,
+          duration: rebased.duration,
+        }),
+      );
+
+      const midiFirstClip: TimelineClip = {
+        ...clip,
+        ...deepCloneClipProps(clip),
+        id: `clip-${timestamp}-${randomSuffix}-a`,
+        duration: firstPartDuration,
+        inPoint: 0,
+        outPoint: firstPartDuration,
+        source: { type: 'midi', naturalDuration: firstPartDuration },
+        midiData: { ...(clip.midiData ?? { notes: [] }), notes: left },
+        linkedClipId: undefined,
+        transitionOut: undefined,
+        transitionIn: undefined,
       };
-    } else if (clip.source?.type === 'audio' && clip.source.audioElement && clip.file) {
-      // Handle audio-only clips - create new audio element for second clip
-      const newAudio = createAudioElement(clip.file);
-      secondClipSource = {
-        ...clip.source,
-        audioElement: newAudio,
+      const midiSecondClip: TimelineClip = {
+        ...clip,
+        ...deepCloneClipProps(clip),
+        id: `clip-${timestamp}-${randomSuffix}-b`,
+        startTime: splitTime,
+        duration: secondPartDuration,
+        inPoint: 0,
+        outPoint: secondPartDuration,
+        source: { type: 'midi', naturalDuration: secondPartDuration },
+        midiData: { ...(clip.midiData ?? { notes: [] }), notes: right },
+        linkedClipId: undefined,
+        transitionIn: undefined,
+        transitionOut: undefined,
       };
+
+      const remaining = clips.filter(c => c.id !== clipId);
+      remaining.push(midiFirstClip, midiSecondClip);
+      set({ clips: remaining, selectedClipIds: new Set([midiSecondClip.id]) });
+      updateDuration();
+      invalidateCache();
+      log.debug('Split MIDI clip', {
+        clip: clip.name,
+        splitTime: splitTime.toFixed(2),
+        leftNotes: left.length,
+        rightNotes: right.length,
+      });
+      return;
     }
+
+    // Split parts carry serializable source metadata; runtime media elements are rebuilt on demand.
+    const secondClipSource = cloneSourceForPart(clip);
 
     const firstClip: TimelineClip = {
       ...clip,
@@ -883,6 +895,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       duration: firstPartDuration,
       outPoint: splitInSource,
       linkedClipId: undefined,
+      source: getSourceForFirstSplitPart(clip),
       transitionOut: undefined,
     };
 
@@ -903,34 +916,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     if (clip.linkedClipId) {
       const linkedClip = clips.find(c => c.id === clip.linkedClipId);
       if (linkedClip) {
-        // Create new audio element for linked second clip
-        let linkedSecondSource = linkedClip.source;
-        if (linkedClip.source?.type === 'audio' && linkedClip.source.audioElement) {
-          // For composition audio clips, use mixdownBuffer to create new audio element
-          if (linkedClip.mixdownBuffer) {
-            // Async create audio from mixdown buffer
-            import('../../services/compositionAudioMixer').then(({ compositionAudioMixer }) => {
-              const newAudio = compositionAudioMixer.createAudioElement(linkedClip.mixdownBuffer!);
-              const { clips: currentClips } = get();
-              const linkedSecondClipId = `clip-${timestamp}-${randomSuffix}-linked-b`;
-              set({
-                clips: currentClips.map(c => {
-                  if (c.id !== linkedSecondClipId || !c.source) return c;
-                  return { ...c, source: { ...c.source, audioElement: newAudio } };
-                }),
-              });
-            });
-            // Source will be updated async, use existing for now
-            linkedSecondSource = { ...linkedClip.source };
-          } else if (linkedClip.file && linkedClip.file.size > 0) {
-            // Regular audio file (not empty composition placeholder)
-            const newAudio = createAudioElement(linkedClip.file);
-            linkedSecondSource = {
-              ...linkedClip.source,
-              audioElement: newAudio,
-            };
-          }
-        }
+        const linkedSecondClipId = `clip-${timestamp}-${randomSuffix}-linked-b`;
+        const linkedSecondSource = cloneLinkedSourceForPart(linkedClip);
 
         const linkedFirstClip: TimelineClip = {
           ...linkedClip,
@@ -939,11 +926,12 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           duration: firstPartDuration,
           outPoint: linkedClip.inPoint + firstPartDuration,
           linkedClipId: firstClip.id,
+          source: getSourceForFirstSplitPart(linkedClip),
         };
         const linkedSecondClip: TimelineClip = {
           ...linkedClip,
           ...deepCloneClipProps(linkedClip),
-          id: `clip-${timestamp}-${randomSuffix}-linked-b`,
+          id: linkedSecondClipId,
           startTime: splitTime,
           duration: secondPartDuration,
           inPoint: linkedClip.inPoint + firstPartDuration,
@@ -1058,6 +1046,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const { clips } = get();
     const clip = clips.find(c => c.id === clipId);
     if (!clip || clip.waveformGenerating) return;
+    if (!options.force && hasTimelineWaveformData(clip)) return;
     const includePyramid = options.previewOnly !== true;
 
     set({
@@ -1080,18 +1069,18 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         let audioAnalysisRefs: import('../../types/audio').MediaFileAudioAnalysisRefs | undefined;
 
         if (clip.isComposition && clip.compositionId) {
-          const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
-          const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+          const { requestCompositionAudioMixdown } = await import('../../services/timeline/compositionAudioMixdownCache');
+          const mixdownResult = await requestCompositionAudioMixdown(clip);
           if (signal.aborted) throw signal.reason;
 
           if (mixdownResult?.hasAudio) {
             waveform = mixdownResult.waveform;
-            const mixdownAudio = compositionAudioMixer.createAudioElement(mixdownResult.buffer);
             set({
               clips: updateClipById(get().clips, clipId, {
-                source: { type: 'audio' as const, audioElement: mixdownAudio, naturalDuration: mixdownResult.duration },
                 mixdownBuffer: mixdownResult.buffer,
+                mixdownWaveform: mixdownResult.waveform,
                 hasMixdownAudio: true,
+                mixdownGenerating: false,
               }),
             });
           } else if (clip.mixdownBuffer) {
@@ -1291,15 +1280,17 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           if (clip.mixdownBuffer) {
             sourceBuffer = clip.mixdownBuffer;
           } else {
-            const { compositionAudioMixer } = await import('../../services/compositionAudioMixer');
-            const mixdownResult = await compositionAudioMixer.mixdownComposition(clip.compositionId);
+            const { requestCompositionAudioMixdown } = await import('../../services/timeline/compositionAudioMixdownCache');
+            const mixdownResult = await requestCompositionAudioMixdown(clip);
             if (signal.aborted) throw signal.reason;
             if (mixdownResult?.hasAudio) {
               sourceBuffer = mixdownResult.buffer;
               set({
                 clips: updateClipById(get().clips, clipId, {
                   mixdownBuffer: mixdownResult.buffer,
+                  mixdownWaveform: mixdownResult.waveform,
                   hasMixdownAudio: true,
+                  mixdownGenerating: false,
                 }),
               });
             }
@@ -2087,7 +2078,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       }
       // Check if content actually changed (compare hashes)
       const oldContentHash = compClip.nestedContentHash;
-      const needsThumbnailUpdate = oldContentHash !== newContentHash;
+      const contentHashChanged = oldContentHash !== newContentHash;
+      const needsThumbnailUpdate = contentHashChanged;
 
       // Load updated nested clips
       const nestedClips = await loadNestedClips({
@@ -2095,6 +2087,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         composition,
         get,
         set,
+        isCurrentTimelineSession,
       });
       if (!isCurrentTimelineSession()) {
         return;
@@ -2116,48 +2109,40 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
                 nestedTracks,
                 nestedContentHash: newContentHash,
                 nestedClipBoundaries,
+                ...(contentHashChanged
+                  ? {
+                      mixdownAudio: undefined,
+                      mixdownBuffer: undefined,
+                      mixdownWaveform: undefined,
+                      hasMixdownAudio: false,
+                      mixdownGenerating: false,
+                    }
+                  : {}),
                 // Keep existing clipSegments if not regenerating
                 clipSegments: needsThumbnailUpdate ? undefined : c.clipSegments,
               }
             : c
         ),
       });
+      if (contentHashChanged) {
+        releaseCompositionMixdownClipRuntime(compClip);
+        blobUrlManager.revokeType(compClip.id, 'audio');
+      }
 
       // Only regenerate thumbnails if content actually changed
       if (needsThumbnailUpdate && get().thumbnailsEnabled) {
-        // Wait a bit for nested clip sources to load, then build segments
-        setTimeout(async () => {
-          if (!isCurrentTimelineSession()) {
-            return;
-          }
-          // Get fresh nested clips (they may have updated sources now)
-          const freshCompClip = get().clips.find(c => c.id === compClip.id);
-          if (!freshCompClip) {
-            return;
-          }
-          const freshNestedClips = freshCompClip?.nestedClips || nestedClips;
-
-          const clipSegments = await buildClipSegments(
-            composition.timelineData,
-            compDuration,
-            freshNestedClips
-          );
-
-          if (!isCurrentTimelineSession()) {
-            return;
-          }
-          if (clipSegments.length > 0) {
-            set({
-              clips: get().clips.map(c =>
-                c.id === compClip.id ? { ...c, clipSegments } : c
-              ),
-            });
-            log.info('Updated clip segments for nested comp', {
-              clipId: compClip.id,
-              segmentCount: clipSegments.length,
-            });
-          }
-        }, 500); // Wait for video elements to load
+        scheduleNestedClipSegmentBuild({
+          clipId: compClip.id,
+          timelineData: composition.timelineData,
+          compDuration,
+          nestedClips,
+          thumbnailsEnabled: true,
+          get,
+          set,
+          isCurrentTimelineSession,
+          delayMs: 500,
+          logLabel: 'Updated clip segments for nested comp',
+        });
       } else {
         log.debug('Skipped segment regeneration (no content change or thumbnails disabled)', {
           compClipId: compClip.id,

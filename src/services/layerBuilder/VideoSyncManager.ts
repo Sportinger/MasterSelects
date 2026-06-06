@@ -76,6 +76,7 @@ export class VideoSyncManager {
   private warmupClipIds = new WeakMap<HTMLVideoElement, string>();
   private warmupTargetTimes = new WeakMap<HTMLVideoElement, number>();
   private nextWarmupAttemptId = 1;
+  private upcomingPreplayVideos = new Map<HTMLVideoElement, { clipId: string; startTime: number }>();
 
   // Track which videos are being force-decoded to avoid duplicate calls
   private forceDecodeInProgress = new Set<string>();
@@ -124,15 +125,52 @@ export class VideoSyncManager {
   private static readonly PREVIEW_CONTINUATION_TARGET_EPSILON = 0.22;
   private static readonly PREVIEW_CONTINUATION_OWN_READY_EPSILON = 0.12;
 
+  private isVisibleVideoTrackClip(ctx: FrameContext, clip: TimelineClip): boolean {
+    if (!clip.trackId) return false;
+
+    const visibleIds = (ctx as Partial<FrameContext>).visibleVideoTrackIds;
+    if (visibleIds) {
+      return visibleIds.has(clip.trackId);
+    }
+
+    const partialCtx = ctx as Partial<FrameContext>;
+    const allTracks = partialCtx.tracks ?? [];
+    const videoTracks = partialCtx.videoTracks?.length
+      ? partialCtx.videoTracks
+      : allTracks.filter((track) => track.type === 'video');
+    if (videoTracks.length === 0 && allTracks.length === 0) {
+      return true;
+    }
+    const track = videoTracks.find((candidate) => candidate.id === clip.trackId);
+    if (!track || track.visible === false) return false;
+
+    const anySolo = videoTracks.some((candidate) => candidate.solo);
+    return !anySolo || !!track.solo;
+  }
+
+  private getVisibleVideoTrackClipsAtTime(ctx: FrameContext): TimelineClip[] {
+    return ctx.clipsAtTime.filter((clip) => this.isVisibleVideoTrackClip(ctx, clip));
+  }
+
+  private isVideoGpuReady(video: HTMLVideoElement): boolean {
+    return this.gpuWarmedUp.has(video) || engine.getLayerCollector?.()?.isVideoGpuReady(video) === true;
+  }
+
   /**
    * Reset all per-clip state. Called during composition switch to prevent
    * stale references to destroyed video elements / WebCodecsPlayers.
    */
   reset(): void {
+    for (const video of this.upcomingPreplayVideos.keys()) {
+      if (!video.paused) {
+        video.pause();
+      }
+    }
     this.lastTrackState.clear();
     this.activeHandoffs.clear();
     this.handoffElements.clear();
     this.previewContinuationElements.clear();
+    this.upcomingPreplayVideos.clear();
     this.lastSeekRef = {};
     this.clipWasPlaying.clear();
     this.clipWasDragging.clear();
@@ -464,6 +502,126 @@ export class VideoSyncManager {
     return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
   }
 
+  private isVideoElementActiveAtPlayhead(ctx: FrameContext, video: HTMLVideoElement): boolean {
+    return this.getVisibleVideoTrackClipsAtTime(ctx).some((activeClip) =>
+      activeClip.source?.videoElement === video ||
+      this.activeHandoffs.get(activeClip.id) === video
+    );
+  }
+
+  private positionWarmedUpcomingVideo(
+    ctx: FrameContext,
+    clip: TimelineClip,
+    video: HTMLVideoElement,
+    targetTime: number
+  ): void {
+    if (this.isVideoElementActiveAtPlayhead(ctx, video)) return;
+    if (!video.paused || video.seeking) return;
+
+    const safeTargetTime = this.safeSeekTime(video, targetTime);
+    if (video.preload !== 'auto') {
+      video.preload = 'auto';
+    }
+
+    const drift = Math.abs(video.currentTime - safeTargetTime);
+    if (drift > 0.08) {
+      try {
+        video.currentTime = safeTargetTime;
+        vfPipelineMonitor.record('vf_settle_seek', {
+          clipId: clip.id,
+          target: Math.round(safeTargetTime * 1000) / 1000,
+          recovery: 'warmup-preseek',
+          driftMs: Math.round(drift * 1000),
+        });
+      } catch {
+        return;
+      }
+    }
+
+    if (video.readyState >= 2 && !video.seeking) {
+      engine.ensureVideoFrameCached(video, clip.id);
+      engine.cacheFrameAtTime(video, safeTargetTime);
+    }
+  }
+
+  private pruneUpcomingPreplays(ctx: FrameContext, isInteractivePreview: boolean): void {
+    for (const [video, state] of this.upcomingPreplayVideos) {
+      const clip = ctx.clips.find((candidate) => candidate.id === state.clipId);
+      const lead = clip ? clip.startTime - ctx.playheadPosition : Number.POSITIVE_INFINITY;
+      const isActive = !!clip &&
+        clip.startTime <= ctx.playheadPosition &&
+        clip.startTime + clip.duration > ctx.playheadPosition;
+      const shouldKeep =
+        ctx.isPlaying &&
+        !isInteractivePreview &&
+        !!clip &&
+        this.isVisibleVideoTrackClip(ctx, clip) &&
+        (isActive || (lead > 0 && lead <= VideoSyncManager.UPCOMING_PREPLAY_LOOKAHEAD_SECONDS + 0.05));
+
+      if (!shouldKeep) {
+        if (!video.paused) {
+          video.pause();
+        }
+        this.upcomingPreplayVideos.delete(video);
+      } else if (isActive) {
+        this.upcomingPreplayVideos.delete(video);
+      }
+    }
+  }
+
+  private maybeStartUpcomingPreplay(
+    ctx: FrameContext,
+    clip: TimelineClip,
+    video: HTMLVideoElement,
+    clipStartSourceTime: number
+  ): void {
+    if (!ctx.isPlaying || ctx.isDraggingPlayhead || ctx.hasClipDragPreview) return;
+    if (ctx.playbackSpeed !== 1 || clip.reversed || ctx.hasKeyframes(clip.id, 'speed')) return;
+    if (this.upcomingPreplayVideos.has(video)) return;
+    if (this.warmingUpVideos.has(video) || video.seeking || !video.paused) return;
+    if (!this.isVideoGpuReady(video) || video.readyState < 2) return;
+    if (this.isVideoElementActiveAtPlayhead(ctx, video)) return;
+
+    const leadSeconds = clip.startTime - ctx.playheadPosition;
+    if (leadSeconds <= 0 || leadSeconds > VideoSyncManager.UPCOMING_PREPLAY_LOOKAHEAD_SECONDS) {
+      return;
+    }
+
+    const initialSpeed = Math.abs(ctx.getInterpolatedSpeed(clip.id, 0) || 1);
+    if (!Number.isFinite(initialSpeed) || initialSpeed <= 0 || Math.abs(initialSpeed - 1) > 0.01) {
+      return;
+    }
+
+    const preplayTime = clipStartSourceTime - leadSeconds;
+    const clipFloor = (clip.inPoint ?? 0) + 0.01;
+    if (preplayTime < clipFloor) {
+      return;
+    }
+
+    const safePreplayTime = this.safeSeekTime(video, preplayTime);
+    if (Math.abs(video.currentTime - safePreplayTime) > 0.035) {
+      try {
+        video.currentTime = safePreplayTime;
+      } catch {
+        return;
+      }
+    }
+
+    video.muted = true;
+    this.upcomingPreplayVideos.set(video, { clipId: clip.id, startTime: clip.startTime });
+    video.play()
+      .then(() => {
+        vfPipelineMonitor.record('vf_play', {
+          clipId: clip.id,
+          preplay: 'true',
+          leadMs: Math.round(leadSeconds * 1000),
+        });
+      })
+      .catch(() => {
+        this.upcomingPreplayVideos.delete(video);
+      });
+  }
+
   private preloadPausedJumpNeighborhood(ctx: FrameContext): void {
     if (ctx.isPlaying || ctx.isDraggingPlayhead) {
       return;
@@ -557,7 +715,7 @@ export class VideoSyncManager {
 
       if (
         !this.warmingUpVideos.has(video) &&
-        (shouldWarmTargetFrame || !this.gpuWarmedUp.has(video))
+        (shouldWarmTargetFrame || !this.isVideoGpuReady(video))
       ) {
         this.startTargetedWarmup(clip.id, video, targetTime, {
           proactive: true,
@@ -1265,6 +1423,31 @@ export class VideoSyncManager {
     return (audioElement.played?.length ?? 0) > 0;
   }
 
+  private canStartLiveHtmlPlaybackFallback(
+    audioElement:
+      | {
+        paused: boolean;
+        readyState: number;
+        seeking: boolean;
+        currentSrc: string;
+        src: string;
+      }
+      | null
+      | undefined,
+    playbackReadyForAudio: boolean,
+    holdScrubRelease: boolean
+  ): boolean {
+    if (!audioElement || playbackReadyForAudio || holdScrubRelease) {
+      return false;
+    }
+
+    return (
+      audioElement.readyState >= 2 &&
+      !audioElement.seeking &&
+      Boolean(audioElement.currentSrc || audioElement.src)
+    );
+  }
+
   private shouldHoldScrubReleaseIntoPlayback(
     clipId: string,
     provider:
@@ -1437,7 +1620,7 @@ export class VideoSyncManager {
     this.activeHandoffs.clear();
     this.handoffElements.clear();
 
-    for (const clip of ctx.clipsAtTime) {
+    for (const clip of this.getVisibleVideoTrackClipsAtTime(ctx)) {
       if (!clip.source?.videoElement || !clip.trackId) continue;
 
       const prev = this.lastTrackState.get(clip.trackId);
@@ -1587,6 +1770,7 @@ export class VideoSyncManager {
 
     // Compute handoffs for seamless cut transitions
     this.computeHandoffs(ctx);
+    this.pruneUpcomingPreplays(ctx, isInteractivePreview);
 
     // Proactively warm upcoming clips before sync so boundary crossings during
     // playback or drag scrubbing are less likely to hit a cold decoder surface.
@@ -1603,7 +1787,10 @@ export class VideoSyncManager {
     }
 
     // Sync each clip at playhead
-    for (const clip of ctx.clipsAtTime) {
+    const visibleVideoClipsAtTime = this.getVisibleVideoTrackClipsAtTime(ctx);
+    const visibleVideoClipIdsAtTime = new Set(visibleVideoClipsAtTime.map((clip) => clip.id));
+
+    for (const clip of visibleVideoClipsAtTime) {
       this.syncClipVideo(clip, ctx);
 
       // Sync nested composition videos
@@ -1615,11 +1802,11 @@ export class VideoSyncManager {
     // Pause videos not at playhead (but don't pause videos during GPU warmup)
     for (const clip of ctx.clips) {
       if (clip.source?.videoElement) {
-        const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
-          ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
+        const isAtPlayhead = visibleVideoClipIdsAtTime.has(clip.id);
         if (!isAtPlayhead && !clip.source.videoElement.paused &&
             !this.warmingUpVideos.has(clip.source.videoElement) &&
-            !this.handoffElements.has(clip.source.videoElement)) {
+            !this.handoffElements.has(clip.source.videoElement) &&
+            !(ctx.isPlaying && this.upcomingPreplayVideos.has(clip.source.videoElement))) {
           clip.source.videoElement.pause();
         }
         if (!ctx.isPlaying && !isAtPlayhead) {
@@ -1635,8 +1822,7 @@ export class VideoSyncManager {
 
       // Pause nested comp videos not at playhead
       if (clip.isComposition && clip.nestedClips) {
-        const isAtPlayhead = ctx.clipsByTrackId.has(clip.trackId) &&
-          ctx.clipsByTrackId.get(clip.trackId)?.id === clip.id;
+        const isAtPlayhead = visibleVideoClipIdsAtTime.has(clip.id);
         if (!isAtPlayhead) {
           for (const nestedClip of clip.nestedClips) {
             if (nestedClip.source?.videoElement && !nestedClip.source.videoElement.paused) {
@@ -2067,6 +2253,7 @@ export class VideoSyncManager {
       (settle?.reason === 'playback-stop' && scrubSettleState.isPending(clip.id))
     );
     const video = useHandoffVideo ? handoffVideo : clip.source.videoElement;
+    this.upcomingPreplayVideos.delete(video);
     this.muteLinkedVideoSourceAudio(ctx, clip, video);
     const timeInfo = getClipTimeInfo(ctx, clip);
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
@@ -2074,6 +2261,8 @@ export class VideoSyncManager {
 
     // Check proxy mode
     const useProxy = ctx.proxyEnabled && mediaFile?.proxyFps &&
+      !ctx.isPlaying &&
+      isInteractivePreview &&
       (mediaFile.proxyStatus === 'ready' || mediaFile.proxyStatus === 'generating');
 
     if (useProxy) {
@@ -2109,7 +2298,7 @@ export class VideoSyncManager {
     const warmupCooldown = this.warmupRetryCooldown.get(video);
     const cooldownOk = !warmupCooldown || performance.now() - warmupCooldown > 2000;
     if (!isInteractivePreview && !ctx.isPlaying && !video.seeking && hasSrc && cooldownOk &&
-        (video.played?.length ?? 0) === 0 && !this.warmingUpVideos.has(video)) {
+        !this.isVideoGpuReady(video) && !this.warmingUpVideos.has(video)) {
       vfPipelineMonitor.record('vf_gpu_cold', { clipId: clip.id });
       this.startTargetedWarmup(clip.id, video, timeInfo.clipTime, {
         proactive: false,
@@ -2125,7 +2314,7 @@ export class VideoSyncManager {
     // resolves. Fire-and-forget: the normal seek below still runs.
     if (isInteractivePreview && hasSrc && cooldownOk &&
         (video.played?.length ?? 0) === 0 &&
-        !this.gpuWarmedUp.has(video) &&
+        !this.isVideoGpuReady(video) &&
         !this.warmingUpVideos.has(video) &&
         !this.forceDecodeInProgress.has(clip.id)) {
       this.forceDecodeColdScrubFrame(clip.id, video);
@@ -2657,6 +2846,7 @@ export class VideoSyncManager {
   private static readonly WARMUP_RETARGET_THRESHOLD_SECONDS = 0.2;
   private static readonly WARMUP_RETARGET_COOLDOWN_MS = 120;
   private static readonly MANUAL_TELEPORT_FAST_SEEK_THRESHOLD = 0.35;
+  private static readonly UPCOMING_PREPLAY_LOOKAHEAD_SECONDS = 0.25;
 
   /**
    * Warm up video elements for clips that will become active within LOOKAHEAD_TIME.
@@ -2680,6 +2870,8 @@ export class VideoSyncManager {
     );
 
     for (const clip of ctx.clips) {
+      if (!this.isVisibleVideoTrackClip(ctx, clip)) continue;
+
       const clipStart = clip.startTime;
       const clipEnd = clip.startTime + clip.duration;
       const clipTime = isInteractivePreview
@@ -2708,8 +2900,15 @@ export class VideoSyncManager {
 
       const video = clip.source.videoElement;
 
-      // Skip if GPU already confirmed warm, or warmup in progress
-      if (this.gpuWarmedUp.has(video) || this.warmingUpVideos.has(video)) continue;
+      // A warm GPU surface still needs to be parked at this upcoming clip's
+      // source time. Copy/paste and repeated sources can otherwise enter warm
+      // but at the wrong frame, forcing a boundary seek.
+      if (this.isVideoGpuReady(video)) {
+        this.positionWarmedUpcomingVideo(ctx, clip, video, clipTime);
+        this.maybeStartUpcomingPreplay(ctx, clip, video, clipTime);
+        continue;
+      }
+      if (this.warmingUpVideos.has(video)) continue;
 
       // Skip if no source loaded
       if (!video.src && !video.currentSrc) continue;
@@ -2736,6 +2935,7 @@ export class VideoSyncManager {
     const lookaheadEnd = ctx.playheadPosition + VideoSyncManager.LOOKAHEAD_TIME;
 
     for (const clip of ctx.clips) {
+      if (!this.isVisibleVideoTrackClip(ctx, clip)) continue;
       if (!clip.source?.videoElement) continue;
 
       const video = clip.source.videoElement;
@@ -2745,8 +2945,8 @@ export class VideoSyncManager {
       // Is this clip about to become active? (starts within lookahead, not yet active)
       if (clipStart <= ctx.playheadPosition || clipStart > lookaheadEnd) continue;
 
-      // Skip videos already warmed up or warming up (handled by warmupUpcomingClips)
-      if (this.gpuWarmedUp.has(video) || this.warmingUpVideos.has(video)) continue;
+      if (this.warmingUpVideos.has(video)) continue;
+      if (this.isVideoElementActiveAtPlayhead(ctx, video)) continue;
 
       if (video.preload !== 'auto') {
         video.preload = 'auto';
@@ -2770,6 +2970,8 @@ export class VideoSyncManager {
     const lookaheadEnd = ctx.playheadPosition + VideoSyncManager.LOOKAHEAD_TIME;
 
     for (const compClip of ctx.clips) {
+      if (!this.isVisibleVideoTrackClip(ctx, compClip)) continue;
+
       const clipStart = compClip.startTime;
       if (
         !compClip.isComposition ||
@@ -2796,7 +2998,7 @@ export class VideoSyncManager {
           ? nestedClip.outPoint - nestedLocalTime
           : nestedLocalTime + nestedClip.inPoint;
 
-        if (this.warmingUpVideos.has(video) || this.gpuWarmedUp.has(video) || video.seeking) {
+        if (this.warmingUpVideos.has(video) || video.seeking) {
           continue;
         }
 
@@ -2815,7 +3017,7 @@ export class VideoSyncManager {
    * Update per-track state after syncing (for cut transition detection next frame)
    */
   private updateLastTrackState(ctx: FrameContext): void {
-    for (const clip of ctx.clipsAtTime) {
+    for (const clip of this.getVisibleVideoTrackClipsAtTime(ctx)) {
       if (!clip.source?.videoElement || !clip.trackId) continue;
 
       const handoffElement = this.activeHandoffs.get(clip.id);
@@ -3042,14 +3244,32 @@ export class VideoSyncManager {
           playbackProvider,
           playbackTargetTime
         );
-        if (audioVideo.paused && playbackReadyForAudio && !holdScrubRelease) {
+        const normalForwardHtmlFallback =
+          ctx.playbackSpeed === 1 &&
+          !clip.reversed &&
+          timeInfo.speed > 0 &&
+          Math.abs(timeInfo.absSpeed - 1) <= 0.01 &&
+          !ctx.hasKeyframes(clip.id, 'speed');
+        const liveHtmlFallbackReady =
+          normalForwardHtmlFallback &&
+          this.canStartLiveHtmlPlaybackFallback(
+            audioVideo,
+            playbackReadyForAudio,
+            holdScrubRelease
+          );
+        const canStartPlaybackElement = playbackReadyForAudio || liveHtmlFallbackReady;
+        if (audioVideo.paused && canStartPlaybackElement && !holdScrubRelease) {
           const startupAudioDrift = Math.abs(audioVideo.currentTime - playbackTargetTime);
           if (startupAudioDrift > 0.05) {
             audioVideo.currentTime = this.safeSeekTime(audioVideo, playbackTargetTime);
+            if (liveHtmlFallbackReady && !playbackReadyForAudio) {
+              return;
+            }
           }
           log.info('Audio element PLAY', {
             clip: clip.id.slice(-6),
             isHandoff: !!handoffVideo,
+            liveHtmlFallback: liveHtmlFallbackReady,
             time: audioVideo.currentTime.toFixed(3),
             target: playbackTargetTime.toFixed(3),
           });
@@ -3060,7 +3280,7 @@ export class VideoSyncManager {
         if (
           this.shouldCorrectPlaybackAudioDrift(
             audioVideo,
-            playbackReadyForAudio,
+            canStartPlaybackElement,
             holdScrubRelease
           ) &&
           audioDrift > 0.3

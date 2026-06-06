@@ -536,7 +536,9 @@ Update timeline helpers and display:
 
 Likely files:
 
-- `src/components/timeline/TimelineClip.tsx`
+- `src/components/timeline/TimelineClipCanvas.tsx`
+- `src/components/timeline/TimelineTrack.tsx`
+- `src/components/timeline/interactionShell/`
 - `src/components/timeline/utils/fileTypeHelpers.ts`
 - `src/stores/timeline/clipboardSlice.ts`
 - `src/stores/timeline/types.ts`

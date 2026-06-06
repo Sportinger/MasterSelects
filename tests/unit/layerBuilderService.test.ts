@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LayerBuilderService } from '../../src/services/layerBuilder/LayerBuilderService';
 import { flags } from '../../src/engine/featureFlags';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -14,6 +14,11 @@ import { mediaRuntimeRegistry } from '../../src/services/mediaRuntime/registry';
 import { scrubSettleState } from '../../src/services/scrubSettleState';
 import { proxyFrameCache } from '../../src/services/proxyFrameCache';
 import { vectorAnimationRuntimeManager } from '../../src/services/vectorAnimation/VectorAnimationRuntimeManager';
+import {
+  getLazyTimelineImageElementCount,
+  releaseAllLazyTimelineImageElements,
+} from '../../src/services/timeline/lazyImageElements';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import type { RuntimeFrameProvider } from '../../src/services/mediaRuntime/types';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
 import {
@@ -45,14 +50,42 @@ const createService = (): LayerBuilderServiceTestAccess => new LayerBuilderServi
 const asRuntimeProvider = (provider: unknown): RuntimeFrameProvider => provider as RuntimeFrameProvider;
 const asWebCodecsPlayer = (player: unknown): WebCodecsPlayerSlot => player as WebCodecsPlayerSlot;
 
+function withMediaStoreState<T>(
+  overrides: Partial<ReturnType<typeof useMediaStore.getState>>,
+  run: () => T,
+): T {
+  const getStateMock = vi.mocked(useMediaStore.getState);
+  const previousImplementation = getStateMock.getMockImplementation();
+  getStateMock.mockReturnValue({
+    ...initialMediaState,
+    ...overrides,
+  });
+
+  try {
+    return run();
+  } finally {
+    if (previousImplementation) {
+      getStateMock.mockImplementation(previousImplementation);
+    }
+  }
+}
+
 describe('LayerBuilderService paused visual provider selection', () => {
   beforeEach(() => {
     mediaRuntimeRegistry.clear();
+    releaseAllLazyTimelineImageElements();
+    timelineRuntimeCoordinator.clearResources();
     scrubSettleState.clear();
     useTimelineStore.setState(initialTimelineState);
     useMediaStore.setState(initialMediaState);
     flags.useFullWebCodecsPlayback = true;
     flags.disableHtmlPreviewFallback = true;
+  });
+
+  afterEach(() => {
+    releaseAllLazyTimelineImageElements();
+    timelineRuntimeCoordinator.clearResources();
+    vi.unstubAllGlobals();
   });
 
   it('treats a full WebCodecs source as renderable even before the video element is attached', () => {
@@ -77,6 +110,171 @@ describe('LayerBuilderService paused visual provider selection', () => {
         },
       })
     ).toBe(false);
+  });
+
+  it('renders data-only image clips through the lazy image runtime once loaded', () => {
+    const service = new LayerBuilderService();
+    const createdImages: HTMLImageElement[] = [];
+    const ImageCtor = vi.fn(function ImageMock() {
+      const image = document.createElement('img');
+      createdImages.push(image);
+      return image;
+    });
+    vi.stubGlobal('Image', ImageCtor);
+
+    const mediaState = {
+      ...initialMediaState,
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [{
+        id: 'media-image-1',
+        name: 'still.png',
+        type: 'image',
+        parentId: null,
+        createdAt: 1,
+        url: 'blob:lazy-image',
+        duration: 5,
+        width: 100,
+        height: 100,
+      }],
+    };
+    useTimelineStore.setState({
+      tracks: [{
+        id: 'track-v1',
+        name: 'Video 1',
+        type: 'video',
+        visible: true,
+        muted: false,
+        solo: false,
+      }],
+      clips: [{
+        id: 'clip-image-1',
+        trackId: 'track-v1',
+        name: 'still.png',
+        file: new File([], 'pending.png', { type: 'image/png' }),
+        startTime: 0,
+        duration: 5,
+        inPoint: 0,
+        outPoint: 5,
+        effects: [],
+        transform: { ...DEFAULT_TRANSFORM },
+        source: {
+          type: 'image',
+          mediaFileId: 'media-image-1',
+          naturalDuration: 5,
+        },
+        mediaFileId: 'media-image-1',
+        isLoading: false,
+      }],
+      playheadPosition: 1,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const coldLayers = withMediaStoreState(mediaState, () => service.buildLayersFromStore());
+
+    expect(coldLayers).toHaveLength(0);
+    expect(getLazyTimelineImageElementCount()).toBe(1);
+    expect(createdImages[0]?.src).toBe('blob:lazy-image');
+    expect(useTimelineStore.getState().clips[0].source?.imageElement).toBeUndefined();
+
+    createdImages[0].dispatchEvent(new Event('load'));
+
+    const warmLayers = withMediaStoreState(mediaState, () => service.buildLayersFromStore());
+
+    expect(warmLayers).toHaveLength(1);
+    expect(warmLayers[0]?.source).toEqual({
+      type: 'image',
+      imageElement: createdImages[0],
+    });
+    expect(useTimelineStore.getState().clips[0].source?.imageElement).toBeUndefined();
+  });
+
+  it('does not allocate lazy image elements when the interactive image budget is full', () => {
+    const service = new LayerBuilderService();
+    const ImageCtor = vi.fn(function ImageMock() {
+      return document.createElement('img');
+    });
+    vi.stubGlobal('Image', ImageCtor);
+    for (let index = 0; index < 64; index += 1) {
+      timelineRuntimeCoordinator.retainResource({
+        id: `preexisting-image-${index}`,
+        kind: 'image-canvas',
+        policyId: 'interactive',
+        owner: {
+          ownerId: `preexisting-image-${index}`,
+          ownerType: 'clip',
+          clipId: `preexisting-image-${index}`,
+        },
+        source: {
+          clipId: `preexisting-image-${index}`,
+        },
+        imageKind: 'html-image',
+        imageId: `preexisting-image-${index}`,
+        label: 'Preexisting image',
+      });
+    }
+
+    const mediaState = {
+      ...initialMediaState,
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [{
+        id: 'media-image-1',
+        name: 'still.png',
+        type: 'image',
+        parentId: null,
+        createdAt: 1,
+        url: 'blob:lazy-image',
+        duration: 5,
+        width: 100,
+        height: 100,
+      }],
+    };
+    useTimelineStore.setState({
+      tracks: [{
+        id: 'track-v1',
+        name: 'Video 1',
+        type: 'video',
+        visible: true,
+        muted: false,
+        solo: false,
+      }],
+      clips: [{
+        id: 'clip-image-1',
+        trackId: 'track-v1',
+        name: 'still.png',
+        file: new File([], 'pending.png', { type: 'image/png' }),
+        startTime: 0,
+        duration: 5,
+        inPoint: 0,
+        outPoint: 5,
+        effects: [],
+        transform: { ...DEFAULT_TRANSFORM },
+        source: {
+          type: 'image',
+          mediaFileId: 'media-image-1',
+          naturalDuration: 5,
+        },
+        mediaFileId: 'media-image-1',
+        isLoading: false,
+      }],
+      playheadPosition: 1,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = withMediaStoreState(mediaState, () => service.buildLayersFromStore());
+
+    expect(layers).toHaveLength(0);
+    expect(getLazyTimelineImageElementCount()).toBe(0);
+    expect(ImageCtor).not.toHaveBeenCalled();
+    expect(useTimelineStore.getState().clips[0].source?.imageElement).toBeUndefined();
+    expect(timelineRuntimeCoordinator.getBridgeStats().totals.imageBitmaps).toBe(64);
   });
 
   it('rejects stale held proxy frames during drag scrubs after large time jumps', () => {
@@ -523,6 +721,150 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.type).toBe('model');
     expect(layers[0]?.source?.modelUrl).toBe('blob:hero-1');
+  });
+
+  it('falls back to media-library model sequence and URL for preview layers', () => {
+    const service = new LayerBuilderService();
+    const modelFile = new File(['model'], 'fallback.glb', { type: 'model/gltf-binary' });
+
+    const mediaState = {
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [{
+        id: 'media-model-fallback',
+        name: 'fallback.glb',
+        type: 'model',
+        createdAt: 1,
+        file: modelFile,
+        url: 'blob:media-model-fallback',
+        modelSequence: {
+          fps: 2,
+          frameCount: 3,
+          playbackMode: 'clamp',
+          sequenceName: 'fallback',
+          frames: [
+            { name: 'fallback000000.glb', modelUrl: 'https://assets.local/fallback-0.glb' },
+            { name: 'fallback000001.glb', modelUrl: 'https://assets.local/fallback-1.glb' },
+            { name: 'fallback000002.glb', modelUrl: 'https://assets.local/fallback-2.glb' },
+          ],
+        },
+      }],
+      compositions: [],
+      proxyEnabled: false,
+    } satisfies Partial<ReturnType<typeof useMediaStore.getState>>;
+    useMediaStore.setState(mediaState);
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'clip-model-fallback',
+          trackId: 'track-v1',
+          name: 'Fallback Model',
+          mediaFileId: 'media-model-fallback',
+          file: modelFile,
+          startTime: 0,
+          duration: 2,
+          inPoint: 0,
+          outPoint: 2,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: {
+            type: 'model',
+            mediaFileId: 'media-model-fallback',
+          },
+          isLoading: false,
+          is3D: true,
+        },
+      ],
+      playheadPosition: 0.5,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = withMediaStoreState(mediaState, () => service.buildLayersFromStore());
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('model');
+    expect(layers[0]?.source?.modelUrl).toBe('https://assets.local/fallback-1.glb');
+    expect(layers[0]?.source?.modelFileName).toBe('fallback000001.glb');
+    expect(layers[0]?.source?.modelSequence?.frameCount).toBe(3);
+    expect(layers[0]?.source?.file).toBe(modelFile);
+  });
+
+  it('falls back to media-library model URL for preview layers without sequence data', () => {
+    const service = new LayerBuilderService();
+
+    const mediaState = {
+      activeCompositionId: null,
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [{
+        id: 'media-model-url',
+        name: 'url-model.glb',
+        type: 'model',
+        createdAt: 1,
+        url: 'https://assets.local/url-model.glb',
+      }],
+      compositions: [],
+      proxyEnabled: false,
+    } satisfies Partial<ReturnType<typeof useMediaStore.getState>>;
+    useMediaStore.setState(mediaState);
+
+    useTimelineStore.setState({
+      tracks: [
+        {
+          id: 'track-v1',
+          name: 'Video 1',
+          type: 'video',
+          visible: true,
+          muted: false,
+          solo: false,
+        },
+      ],
+      clips: [
+        {
+          id: 'clip-model-url',
+          trackId: 'track-v1',
+          name: 'URL Model',
+          mediaFileId: 'media-model-url',
+          startTime: 0,
+          duration: 2,
+          inPoint: 0,
+          outPoint: 2,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: {
+            type: 'model',
+            mediaFileId: 'media-model-url',
+          },
+          isLoading: false,
+          is3D: true,
+        },
+      ],
+      playheadPosition: 0.5,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = withMediaStoreState(mediaState, () => service.buildLayersFromStore());
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.source?.type).toBe('model');
+    expect(layers[0]?.source?.modelUrl).toBe('https://assets.local/url-model.glb');
+    expect(layers[0]?.source?.modelSequence).toBeUndefined();
   });
 
   it('selects the correct gaussian splat sequence frame and keeps native renderer selection', () => {

@@ -3,15 +3,30 @@ import { AudioSyncHandler } from '../../src/services/layerBuilder/AudioSyncHandl
 import { AudioTrackSyncManager } from '../../src/services/layerBuilder/AudioTrackSyncManager';
 import { audioRoutingManager } from '../../src/services/audioRoutingManager';
 import { proxyFrameCache } from '../../src/services/proxyFrameCache';
+import { clearCompositionAudioMixdownCache } from '../../src/services/timeline/compositionAudioMixdownCache';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { useMediaStore } from '../../src/stores/mediaStore';
+import { StemAudioSourceResolver } from '../../src/services/audio/stemSeparation';
 import type { FrameContext, AudioSyncState } from '../../src/services/layerBuilder/types';
-import type { AudioMeterSnapshot, TimelineClip } from '../../src/types';
+import type { AudioMeterSnapshot, ClipAudioStemLayer, TimelineClip } from '../../src/types';
+import type { RenderResourceDescriptor } from '../../src/services/timeline/runtimeCoordinatorTypes';
 import { createMockClip } from '../helpers/mockData';
+
+const compositionAudioMixerMocks = vi.hoisted(() => ({
+  mixdownComposition: vi.fn(),
+  createAudioElement: vi.fn(),
+}));
+
+vi.mock('../../src/services/compositionAudioMixer', () => ({
+  compositionAudioMixer: compositionAudioMixerMocks,
+}));
 
 type ProxyFrameCacheTestAccess = typeof proxyFrameCache & {
   playScrubAudio: typeof proxyFrameCache.playScrubAudio;
   hasAudioBuffer: typeof proxyFrameCache.hasAudioBuffer;
   getCachedAudioProxy: typeof proxyFrameCache.getCachedAudioProxy;
+  getAudioProxy: typeof proxyFrameCache.getAudioProxy;
   preloadAudioProxy: typeof proxyFrameCache.preloadAudioProxy;
   getAudioBuffer: typeof proxyFrameCache.getAudioBuffer;
   stopScrubAudio: typeof proxyFrameCache.stopScrubAudio;
@@ -21,6 +36,38 @@ type AudioTrackSyncManagerTestAccess = {
   audioSyncHandler: Pick<AudioSyncHandler, 'syncAudioElement' | 'stopScrubAudio'>;
   syncAudioTrackClips: (ctx: FrameContext, state: AudioSyncState) => void;
   syncVideoClipAudio: (ctx: FrameContext, state: AudioSyncState) => void;
+};
+type AudioTrackSyncManagerRuntimeTestAccess = AudioTrackSyncManagerTestAccess & {
+  activeAudioTrackProxies: Map<string, HTMLAudioElement>;
+  activeAudioTrackProxyMediaFileIds: Map<string, string>;
+  retainedAudioElementResourceIds: WeakMap<HTMLAudioElement, string>;
+  stemAudioElements: Map<string, {
+    key: string;
+    entries: Map<string, {
+      key: string;
+      element: HTMLAudioElement | null;
+      loading: boolean;
+      error?: string;
+      url?: string;
+      resourceId?: string;
+    }>;
+  }>;
+  stemLayerBufferCache: Map<string, AudioBuffer>;
+  getAudioProxyInstanceForClip: (
+    mediaFileId: string,
+    clipId: string,
+    activeMap: Map<string, HTMLAudioElement>,
+    activeMediaFileIds: Map<string, string>,
+  ) => HTMLAudioElement | null;
+  removeActiveAudioProxy: (
+    clipId: string,
+    activeMap: Map<string, HTMLAudioElement>,
+    mediaFileIds: Map<string, string>,
+  ) => void;
+  loadStemAudioElement: (clipId: string, key: string, stem: ClipAudioStemLayer) => Promise<void>;
+  disposeStemAudioSet: (clipId: string) => void;
+  cacheStemLayerBuffer: (layer: ClipAudioStemLayer, key: string, buffer: AudioBuffer) => boolean;
+  clearStemLayerBufferCache: () => void;
 };
 
 const testProxyFrameCache = proxyFrameCache as ProxyFrameCacheTestAccess;
@@ -83,10 +130,96 @@ function makeMeterSnapshot(peakLinear: number, updatedAt: number): AudioMeterSna
   };
 }
 
+function makeStemLayer(overrides: Partial<ClipAudioStemLayer> = {}): ClipAudioStemLayer {
+  return {
+    id: 'vocals',
+    label: 'Vocals',
+    gainDb: 0,
+    muted: false,
+    mediaFileId: 'stem-media',
+    sourceFingerprint: 'source-fingerprint',
+    manifestArtifactId: 'stem-manifest',
+    payloadRef: {
+      artifactId: 'stem-artifact',
+      hash: 'stem-hash',
+    },
+    ...overrides,
+  } as ClipAudioStemLayer;
+}
+
+function makeAudioBuffer(duration = 1, sampleRate = 48_000, channelCount = 2): AudioBuffer {
+  const length = Math.round(duration * sampleRate);
+  const channels = Array.from({ length: channelCount }, () => new Float32Array(length));
+  return {
+    duration,
+    sampleRate,
+    numberOfChannels: channelCount,
+    length,
+    getChannelData: (channel: number) => channels[channel] ?? channels[0],
+  } as unknown as AudioBuffer;
+}
+
+function createRetainedInteractiveAudioResource(index: number): RenderResourceDescriptor {
+  return {
+    id: `retained-interactive-audio-${index}`,
+    kind: 'html-media',
+    policyId: 'interactive',
+    owner: {
+      ownerId: `retained-interactive-audio-${index}`,
+      ownerType: 'timeline',
+    },
+    mediaElementKind: 'audio',
+    elementId: `retained-interactive-audio-${index}`,
+    diagnostics: {
+      status: 'ok',
+    },
+  };
+}
+
+function mockMediaStoreFiles(files: unknown[]): void {
+  (useMediaStore.getState as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+    files,
+  });
+}
+
+function installObjectUrlMocks(url = 'blob:stem-preview-audio'): {
+  createObjectURL: ReturnType<typeof vi.fn>;
+  revokeObjectURL: ReturnType<typeof vi.fn>;
+  restore: () => void;
+} {
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+  const createObjectURL = vi.fn(() => url);
+  const revokeObjectURL = vi.fn();
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: createObjectURL,
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: revokeObjectURL,
+  });
+  return {
+    createObjectURL,
+    revokeObjectURL,
+    restore: () => {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectURL,
+      });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: originalRevokeObjectURL,
+      });
+    },
+  };
+}
+
 function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
   const originalPlayScrubAudio = testProxyFrameCache.playScrubAudio;
   const originalHasAudioBuffer = testProxyFrameCache.hasAudioBuffer;
   const originalGetCachedAudioProxy = testProxyFrameCache.getCachedAudioProxy;
+  const originalGetAudioProxy = testProxyFrameCache.getAudioProxy;
   const originalPreloadAudioProxy = testProxyFrameCache.preloadAudioProxy;
   const originalGetAudioBuffer = testProxyFrameCache.getAudioBuffer;
   const originalStopScrubAudio = testProxyFrameCache.stopScrubAudio;
@@ -94,6 +227,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
   const playScrubAudio = vi.fn();
   const hasAudioBuffer = vi.fn(() => overrides.hasAudioBuffer ?? true);
   const getCachedAudioProxy = vi.fn(() => null);
+  const getAudioProxy = vi.fn(async () => null);
   const preloadAudioProxy = vi.fn();
   const getAudioBuffer = vi.fn();
   const stopScrubAudio = vi.fn();
@@ -102,6 +236,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
   testProxyFrameCache.playScrubAudio = playScrubAudio;
   testProxyFrameCache.hasAudioBuffer = hasAudioBuffer;
   testProxyFrameCache.getCachedAudioProxy = getCachedAudioProxy;
+  testProxyFrameCache.getAudioProxy = getAudioProxy;
   testProxyFrameCache.preloadAudioProxy = preloadAudioProxy;
   testProxyFrameCache.getAudioBuffer = getAudioBuffer;
   testProxyFrameCache.stopScrubAudio = stopScrubAudio;
@@ -111,6 +246,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
     playScrubAudio,
     hasAudioBuffer,
     getCachedAudioProxy,
+    getAudioProxy,
     preloadAudioProxy,
     getAudioBuffer,
     stopScrubAudio,
@@ -119,6 +255,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
       testProxyFrameCache.playScrubAudio = originalPlayScrubAudio;
       testProxyFrameCache.hasAudioBuffer = originalHasAudioBuffer;
       testProxyFrameCache.getCachedAudioProxy = originalGetCachedAudioProxy;
+      testProxyFrameCache.getAudioProxy = originalGetAudioProxy;
       testProxyFrameCache.preloadAudioProxy = originalPreloadAudioProxy;
       testProxyFrameCache.getAudioBuffer = originalGetAudioBuffer;
       testProxyFrameCache.stopScrubAudio = originalStopScrubAudio;
@@ -137,6 +274,9 @@ describe('scrub audio sync', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     useTimelineStore.setState({ audioRegionGainPreview: null });
+    clearCompositionAudioMixdownCache();
+    compositionAudioMixerMocks.mixdownComposition.mockReset();
+    compositionAudioMixerMocks.createAudioElement.mockReset();
   });
 
   it('applies clip volume during fallback scrub playback instead of a fixed default', () => {
@@ -507,5 +647,360 @@ describe('scrub audio sync', () => {
     }));
     expect(target.volume).toBeCloseTo(10 ** (-12 / 20), 4);
     expect(passedCtx).toBe(ctx);
+  });
+
+  it('lazily hydrates data-only composition audio for audio-track playback', async () => {
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerTestAccess;
+    const syncAudioElement = vi.fn();
+    manager.audioSyncHandler = { syncAudioElement, stopScrubAudio: vi.fn() };
+    const buffer = { duration: 10 } as AudioBuffer;
+    const audioElement = {
+      paused: true,
+      src: 'blob:composition-mixdown',
+      readyState: 4,
+    } as unknown as HTMLAudioElement;
+    compositionAudioMixerMocks.mixdownComposition.mockResolvedValue({
+      buffer,
+      waveform: [0, 0.4, 0.2],
+      duration: 10,
+      hasAudio: true,
+    });
+    compositionAudioMixerMocks.createAudioElement.mockReturnValue(audioElement);
+    const audioClip = makeClip({
+      id: 'comp-audio',
+      trackId: 'audio-track',
+      isComposition: true,
+      compositionId: 'comp-1',
+      nestedContentHash: 'hash-a',
+      source: { type: 'audio', naturalDuration: 10 },
+      hasMixdownAudio: false,
+      mixdownBuffer: undefined,
+    });
+    useTimelineStore.setState({
+      clips: [audioClip],
+      audioRegionGainPreview: null,
+    });
+
+    const ctx = makeFrameContext({
+      clips: [audioClip],
+      clipsAtTime: [audioClip],
+      audioTracks: [{ id: 'audio-track', type: 'audio', muted: false }],
+      unmutedAudioTrackIds: new Set(['audio-track']),
+      isDraggingPlayhead: false,
+      isPlaying: true,
+      playheadPosition: 2,
+      frameNumber: 60,
+    });
+
+    manager.syncAudioTrackClips(
+      ctx,
+      { audioPlayingCount: 0, maxAudioDrift: 0, hasAudioError: false, masterSet: false }
+    );
+    for (let tick = 0; tick < 50; tick += 1) {
+      await Promise.resolve();
+      const updated = useTimelineStore.getState().clips.find(clip => clip.id === 'comp-audio');
+      if (updated?.source?.audioElement === audioElement) break;
+    }
+
+    expect(syncAudioElement).not.toHaveBeenCalled();
+    expect(compositionAudioMixerMocks.mixdownComposition).toHaveBeenCalledOnce();
+    expect(compositionAudioMixerMocks.mixdownComposition).toHaveBeenCalledWith('comp-1');
+    expect(compositionAudioMixerMocks.createAudioElement).toHaveBeenCalledWith(buffer, { ownerClipId: 'comp-audio' });
+    const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'comp-audio');
+    expect(updatedClip).toEqual(expect.objectContaining({
+      mixdownBuffer: buffer,
+      mixdownWaveform: [0, 0.4, 0.2],
+      waveform: [0, 0.4, 0.2],
+      hasMixdownAudio: true,
+      mixdownGenerating: false,
+    }));
+    expect(updatedClip?.source?.audioElement).toBe(audioElement);
+  });
+
+  it('clears composition audio generating state when lazy mixdown returns no result', async () => {
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerTestAccess;
+    const syncAudioElement = vi.fn();
+    manager.audioSyncHandler = { syncAudioElement, stopScrubAudio: vi.fn() };
+    compositionAudioMixerMocks.mixdownComposition.mockResolvedValue(null);
+    const audioClip = makeClip({
+      id: 'missing-comp-audio',
+      trackId: 'audio-track',
+      isComposition: true,
+      compositionId: 'missing-comp',
+      nestedContentHash: 'missing-hash',
+      source: { type: 'audio', naturalDuration: 10 },
+      hasMixdownAudio: false,
+      mixdownBuffer: undefined,
+      mixdownGenerating: false,
+    });
+    useTimelineStore.setState({
+      clips: [audioClip],
+      audioRegionGainPreview: null,
+    });
+
+    manager.syncAudioTrackClips(
+      makeFrameContext({
+        clips: [audioClip],
+        clipsAtTime: [audioClip],
+        audioTracks: [{ id: 'audio-track', type: 'audio', muted: false }],
+        unmutedAudioTrackIds: new Set(['audio-track']),
+        isDraggingPlayhead: false,
+        isPlaying: true,
+        playheadPosition: 2,
+        frameNumber: 60,
+      }),
+      { audioPlayingCount: 0, maxAudioDrift: 0, hasAudioError: false, masterSet: false }
+    );
+
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'missing-comp-audio')?.mixdownGenerating).toBe(true);
+    for (let tick = 0; tick < 50; tick += 1) {
+      await Promise.resolve();
+      const updated = useTimelineStore.getState().clips.find(clip => clip.id === 'missing-comp-audio');
+      if (updated?.mixdownGenerating === false) break;
+    }
+
+    expect(syncAudioElement).not.toHaveBeenCalled();
+    expect(compositionAudioMixerMocks.mixdownComposition).toHaveBeenCalledWith('missing-comp');
+    const updatedClip = useTimelineStore.getState().clips.find(clip => clip.id === 'missing-comp-audio');
+    expect(updatedClip).toEqual(expect.objectContaining({
+      mixdownGenerating: false,
+      mixdownBuffer: undefined,
+    }));
+    expect(updatedClip?.mixdownAudio).toBeUndefined();
+  });
+});
+
+describe('AudioTrackSyncManager stem layer buffer runtime reporting', () => {
+  beforeEach(() => {
+    timelineRuntimeCoordinator.clearResources();
+    mockMediaStoreFiles([]);
+  });
+
+  afterEach(() => {
+    timelineRuntimeCoordinator.clearResources();
+    mockMediaStoreFiles([]);
+    vi.restoreAllMocks();
+  });
+
+  it('reports retained stem layer buffers and releases them when the cache clears', () => {
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerRuntimeTestAccess;
+    const layer = makeStemLayer();
+    const buffer = makeAudioBuffer(2, 48_000, 2);
+
+    expect(manager.cacheStemLayerBuffer(layer, 'stem-cache-key', buffer)).toBe(true);
+
+    const stats = timelineRuntimeCoordinator.getBridgeStats().policies.interactive;
+    const resource = stats.resources.find((entry) =>
+      entry.tags?.includes('stem-layer-buffer') &&
+      entry.source?.sourceId === 'vocals'
+    );
+
+    expect(resource).toMatchObject({
+      kind: 'audio-source-clock',
+      policyId: 'interactive',
+      owner: {
+        ownerId: 'audio-track-sync:stem-layer-buffer-cache',
+        ownerType: 'timeline',
+        mediaFileId: 'stem-media',
+      },
+      source: {
+        sourceId: 'vocals',
+        mediaFileId: 'stem-media',
+        fileHash: 'stem-hash',
+      },
+      dimensions: {
+        durationSeconds: 2,
+        sampleRate: 48_000,
+        channelCount: 2,
+      },
+      memoryCost: {
+        heapBytes: 2 * 48_000 * 2 * 4,
+      },
+    });
+    expect(stats.budgetReport.usage.audioSources).toBe(1);
+    expect(manager.stemLayerBufferCache.has('stem-cache-key')).toBe(true);
+
+    manager.clearStemLayerBufferCache();
+
+    expect(manager.stemLayerBufferCache.has('stem-cache-key')).toBe(false);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: resource?.id })]));
+  });
+
+  it('skips stem layer buffer cache retention when the interactive heap budget is full', () => {
+    timelineRuntimeCoordinator.retainResource({
+      id: 'retained-stem-budget',
+      kind: 'audio-source-clock',
+      policyId: 'interactive',
+      owner: {
+        ownerId: 'retained-stem-budget',
+        ownerType: 'timeline',
+      },
+      audioSourceId: 'retained-stem-budget',
+      memoryCost: {
+        heapBytes: 512 * 1024 * 1024,
+      },
+    });
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerRuntimeTestAccess;
+
+    expect(manager.cacheStemLayerBuffer(makeStemLayer(), 'denied-stem-cache-key', makeAudioBuffer())).toBe(false);
+
+    expect(manager.stemLayerBufferCache.has('denied-stem-cache-key')).toBe(false);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+      .not.toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          owner: expect.objectContaining({ ownerId: 'audio-track-sync:stem-layer-buffer-cache' }),
+        }),
+      ]));
+  });
+
+  it('reports cloned active audio proxy elements and releases them on proxy removal', () => {
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerRuntimeTestAccess;
+    const cacheStub = stubProxyFrameCache();
+    const sharedProxy = document.createElement('audio');
+    sharedProxy.src = 'blob:shared-audio-proxy';
+    cacheStub.getCachedAudioProxy.mockReturnValue(sharedProxy);
+    mockMediaStoreFiles([{
+      id: 'media-audio-proxy',
+      name: 'audio-proxy.wav',
+      url: 'blob:shared-audio-proxy',
+      hasProxyAudio: true,
+      audioProxyStatus: 'ready',
+    }]);
+
+    const proxy = manager.getAudioProxyInstanceForClip(
+      'media-audio-proxy',
+      'clip-audio-proxy',
+      manager.activeAudioTrackProxies,
+      manager.activeAudioTrackProxyMediaFileIds,
+    );
+
+    expect(proxy).not.toBeNull();
+    expect(proxy).not.toBe(sharedProxy);
+    const resource = timelineRuntimeCoordinator
+      .getBridgeStats()
+      .policies.interactive.resources
+      .find((entry) => entry.tags?.includes('active-audio-proxy'));
+    expect(resource).toMatchObject({
+      kind: 'html-media',
+      policyId: 'interactive',
+      mediaElementKind: 'audio',
+      srcKind: 'blob-url',
+      owner: {
+        ownerId: 'audio-track-sync:active-audio-proxy:clip-audio-proxy',
+        ownerType: 'clip',
+        clipId: 'clip-audio-proxy',
+        mediaFileId: 'media-audio-proxy',
+      },
+      source: {
+        sourceId: 'media-audio-proxy',
+        mediaFileId: 'media-audio-proxy',
+      },
+    });
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.budgetReport.usage.htmlMediaElements).toBe(1);
+
+    manager.removeActiveAudioProxy(
+      'clip-audio-proxy',
+      manager.activeAudioTrackProxies,
+      manager.activeAudioTrackProxyMediaFileIds,
+    );
+
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: resource?.id })]));
+    cacheStub.restore();
+  });
+
+  it('reports stem preview buffer audio elements and revokes owned object URLs on disposal', async () => {
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerRuntimeTestAccess;
+    const layer = makeStemLayer();
+    const key = 'stem-preview-set';
+    const buffer = makeAudioBuffer(1.5, 44_100, 2);
+    const objectUrls = installObjectUrlMocks('blob:stem-preview-buffer');
+    manager.stemAudioElements.set('clip-stem-preview', {
+      key,
+      entries: new Map([[layer.id, { key, element: null, loading: true }]]),
+    });
+    vi.spyOn(StemAudioSourceResolver.prototype, 'resolveStemLayerBuffer').mockResolvedValue(buffer);
+
+    try {
+      await manager.loadStemAudioElement('clip-stem-preview', key, layer);
+
+      expect(objectUrls.createObjectURL).toHaveBeenCalledOnce();
+      const entry = manager.stemAudioElements.get('clip-stem-preview')?.entries.get(layer.id);
+      expect(entry?.element).toBeInstanceOf(HTMLAudioElement);
+      expect(entry?.url).toBe('blob:stem-preview-buffer');
+      const resource = timelineRuntimeCoordinator
+        .getBridgeStats()
+        .policies.interactive.resources
+        .find((candidate) => candidate.tags?.includes('stem-audio-element'));
+      expect(resource).toMatchObject({
+        kind: 'html-media',
+        policyId: 'interactive',
+        mediaElementKind: 'audio',
+        srcKind: 'blob-url',
+        owner: {
+          ownerId: 'audio-track-sync:stem-audio-element:clip-stem-preview',
+          ownerType: 'clip',
+          clipId: 'clip-stem-preview',
+          mediaFileId: 'stem-media',
+        },
+        source: {
+          sourceId: 'vocals',
+          mediaFileId: 'stem-media',
+          fileHash: 'stem-hash',
+        },
+        dimensions: {
+          durationSeconds: 1.5,
+          sampleRate: 44_100,
+          channelCount: 2,
+        },
+      });
+
+      manager.disposeStemAudioSet('clip-stem-preview');
+
+      expect(objectUrls.revokeObjectURL).toHaveBeenCalledWith('blob:stem-preview-buffer');
+      expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+        .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: resource?.id })]));
+    } finally {
+      objectUrls.restore();
+    }
+  });
+
+  it('denies stem preview buffer audio before creating object URLs or audio elements when the policy is full', async () => {
+    for (let index = 0; index < 48; index += 1) {
+      timelineRuntimeCoordinator.retainResource(createRetainedInteractiveAudioResource(index));
+    }
+    const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerRuntimeTestAccess;
+    const layer = makeStemLayer({ id: 'drums', label: 'Drums' });
+    const key = 'stem-preview-denied-set';
+    const objectUrls = installObjectUrlMocks('blob:should-not-exist');
+    const createElement = vi.spyOn(document, 'createElement');
+    manager.stemAudioElements.set('clip-stem-denied', {
+      key,
+      entries: new Map([[layer.id, { key, element: null, loading: true }]]),
+    });
+    vi.spyOn(StemAudioSourceResolver.prototype, 'resolveStemLayerBuffer').mockResolvedValue(makeAudioBuffer());
+
+    try {
+      await manager.loadStemAudioElement('clip-stem-denied', key, layer);
+
+      const entry = manager.stemAudioElements.get('clip-stem-denied')?.entries.get(layer.id);
+      expect(entry).toMatchObject({
+        key,
+        element: null,
+        loading: false,
+        error: 'Stem preview audio budget denied: Drums',
+      });
+      expect(objectUrls.createObjectURL).not.toHaveBeenCalled();
+      expect(createElement).not.toHaveBeenCalledWith('audio');
+      expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+        .not.toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            tags: expect.arrayContaining(['stem-audio-element']),
+          }),
+        ]));
+    } finally {
+      objectUrls.restore();
+    }
   });
 });

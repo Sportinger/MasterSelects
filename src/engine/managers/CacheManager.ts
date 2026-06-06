@@ -19,6 +19,7 @@ export class CacheManager {
   }
 
   handleDeviceLost(): void {
+    this.scrubbingCache?.destroy();
     this.scrubbingCache = null;
     this.lastVideoTime.clear();
   }
@@ -114,6 +115,18 @@ export class CacheManager {
     if (!pixels) return;
 
     const { width, height } = getResolution();
+    const admission = this.scrubbingCache.canCacheCompositeFrame(time, pixels.byteLength, {
+      width,
+      height,
+    });
+    if (!admission.admitted) {
+      log.debug('RAM Preview composite frame skipped by runtime admission', {
+        resourceId: admission.resourceId,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+      });
+      return;
+    }
 
     if (this.scrubbingCache.getCompositeCacheStats(width, height).count === 0) {
       let nonZero = 0;

@@ -86,6 +86,31 @@ describe('timeline tool overlay layer layout', () => {
     ]);
   });
 
+  it('creates a track-local blade line for normal blade hover', () => {
+    const layout = resolveTimelineToolOverlayLayout({
+      ...baseArgs,
+      preview: {
+        toolId: 'blade',
+        plane: 'clip-local',
+        trackId: 'video-1',
+        clipId: 'clip-1',
+        time: 4,
+      },
+    });
+
+    expect(layout.items).toEqual([
+      expect.objectContaining({
+        kind: 'blade-line',
+        toolId: 'blade',
+        trackId: 'video-1',
+        left: 39,
+        width: 2,
+        top: 3,
+        height: 34,
+      }),
+    ]);
+  });
+
   it('anchors blocked tool messages to the target clip row', () => {
     const layout = resolveTimelineToolOverlayLayout({
       ...baseArgs,

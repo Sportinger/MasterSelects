@@ -77,6 +77,10 @@ const TIMELINE_HEADER_WIDTH_FALLBACK = 210;
 const TIMELINE_TIME_TARGET_WIDTH = 8;
 const TIMELINE_TIME_TARGET_HEIGHT = 28;
 
+function timelineShellEdge(edge: 'start' | 'end'): 'left' | 'right' {
+  return edge === 'start' ? 'left' : 'right';
+}
+
 export function registerDomGuidedTargetResolvers(registry: GuidedTargetRegistry): () => void {
   const unregisterElementTargets = [...ELEMENT_TARGET_KINDS].map((kind) => (
     registry.registerResolver(kind as ElementTargetKind, resolveElementBackedTarget, `dom-${kind}`)
@@ -371,16 +375,19 @@ function findElementForTarget(target: GuidedTargetRef): Element | null {
     case 'timelineClip':
       return findFirstElement([
         `[data-guided-target="timeline-clip:${escapeAttr(target.clipId)}"]`,
+        `.clip-interaction-shell[data-clip-id="${escapeAttr(target.clipId)}"]`,
         `[data-clip-id="${escapeAttr(target.clipId)}"]`,
       ]);
     case 'timelineTrimHandle':
       return findFirstElement([
         `[data-guided-target="timeline-trim:${escapeAttr(target.clipId)}:${escapeAttr(target.edge)}"]`,
+        `.clip-interaction-shell[data-clip-id="${escapeAttr(target.clipId)}"] [data-shell-trim-edge="${timelineShellEdge(target.edge)}"]`,
         `[data-clip-id="${escapeAttr(target.clipId)}"] [data-guided-trim-edge="${escapeAttr(target.edge)}"]`,
       ]);
     case 'timelineFadeHandle':
       return findFirstElement([
         `[data-guided-target="timeline-fade:${escapeAttr(target.clipId)}:${escapeAttr(target.edge)}"]`,
+        `.clip-interaction-shell[data-clip-id="${escapeAttr(target.clipId)}"] [data-shell-fade-edge="${timelineShellEdge(target.edge)}"]`,
         `[data-clip-id="${escapeAttr(target.clipId)}"] [data-guided-fade-edge="${escapeAttr(target.edge)}"]`,
       ]);
     case 'timelineMarker':

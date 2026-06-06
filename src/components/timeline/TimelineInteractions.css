@@ -180,12 +180,6 @@
   box-shadow: inset 0 0 8px rgba(239, 68, 68, 0.3);
 }
 
-/* AI Move Animation - blue shadow during FLIP transition */
-.timeline-clip.ai-moving {
-  z-index: 100;
-  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.4), 0 0 0 1px rgba(59, 130, 246, 0.3);
-}
-
 /* ============================================
    AI Preview Canvas Flash Overlays
    ============================================ */
@@ -279,7 +273,6 @@
 }
 
 .timeline-tracks.export-locked,
-.timeline-tracks.export-locked .timeline-clip,
 .timeline-tracks.export-locked .trim-handle,
 .timeline-tracks.export-locked .fade-handle,
 .timeline-tracks.export-locked .in-out-marker,

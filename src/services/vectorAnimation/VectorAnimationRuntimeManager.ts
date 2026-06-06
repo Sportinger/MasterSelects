@@ -4,6 +4,7 @@ import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import type { LottieRuntimeManager } from './LottieRuntimeManager';
 import type { RiveRuntimeManager } from './RiveRuntimeManager';
 import type { VectorAnimationRuntimePrepareResult } from './types';
+import type { VectorRuntimePrepareOptions } from './vectorRuntimeReporting';
 
 let lottieRuntimeManager: LottieRuntimeManager | null = null;
 let lottieRuntimeManagerPromise: Promise<LottieRuntimeManager> | null = null;
@@ -44,12 +45,13 @@ class VectorAnimationRuntimeManager {
   async prepareClipSource(
     clip: TimelineClip,
     fileOverride?: File,
+    runtimeOptions?: VectorRuntimePrepareOptions,
   ): Promise<VectorAnimationRuntimePrepareResult> {
     if (clip.source?.type === 'lottie') {
-      return (await loadLottieRuntimeManager()).prepareClipSource(clip, fileOverride);
+      return (await loadLottieRuntimeManager()).prepareClipSource(clip, fileOverride, runtimeOptions);
     }
     if (clip.source?.type === 'rive') {
-      return (await loadRiveRuntimeManager()).prepareClipSource(clip, fileOverride);
+      return (await loadRiveRuntimeManager()).prepareClipSource(clip, fileOverride, runtimeOptions);
     }
     throw new Error(`prepareClipSource called for non-vector clip ${clip.id}`);
   }

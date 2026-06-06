@@ -31,9 +31,23 @@ import {
   formatBitrate,
   checkCodecSupport,
 } from './codecHelpers';
+import {
+  canRetainExportOutputSurface,
+  canRetainExportPreviewFrame,
+  canRetainExportRunJob,
+  createExportRunId,
+  releaseExportRunResources,
+  reportExportClipStates,
+  reportExportOutputSurface,
+  reportExportParallelDecodeResources,
+  reportExportPreviewFrame,
+  reportExportRunJob,
+} from '../../services/timeline/exportRuntimeReporting';
+import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
 
 export class FrameExporter {
   private static readonly PREVIEW_FRAME_INTERVAL_MS = 0;
+  private static readonly RUNTIME_REPORT_INTERVAL_MS = 1000;
 
   private settings: FullExportSettings;
   private encoder: VideoEncoderWrapper | null = null;
@@ -45,10 +59,57 @@ export class FrameExporter {
   private parallelDecoder: ParallelDecodeManager | null = null;
   private useParallelDecode = false;
   private lastPreviewFramePublishMs = Number.NEGATIVE_INFINITY;
+  private lastExportRuntimeReportMs = Number.NEGATIVE_INFINITY;
+  private activeExportRunId: string | null = null;
 
   constructor(settings: FullExportSettings) {
     this.settings = settings;
     this.exportMode = settings.exportMode ?? 'fast';
+  }
+
+  private createAdmissionError(
+    stage: string,
+    decision: TimelineRuntimeAdmissionDecision
+  ): Error {
+    const rejectedUnits = decision.rejectedUnits
+      .map((entry) => `${entry.unit}:${entry.used}/${entry.limit ?? 'unbounded'}`)
+      .join(', ');
+    const error = new Error(
+      `Export ${stage} denied by runtime admission: ${decision.reason ?? 'unknown'}${
+        rejectedUnits ? ` (${rejectedUnits})` : ''
+      }`
+    );
+    Object.assign(error, { admissionDecision: decision });
+    return error;
+  }
+
+  private logSoftAdmissionDenial(stage: string, decision: TimelineRuntimeAdmissionDecision): void {
+    log.debug(`Export ${stage} skipped by runtime admission`, {
+      resourceId: decision.resourceId,
+      reason: decision.reason,
+      rejectedUnits: decision.rejectedUnits.map((entry) => entry.unit),
+    });
+  }
+
+  private abortExportSetup(
+    runId: string,
+    error: unknown,
+    originalDimensions?: { width: number; height: number }
+  ): void {
+    this.encoder?.cancel();
+    this.audioPipeline?.cancel();
+    if (originalDimensions) {
+      engine.cleanupExportCanvas();
+      engine.setExporting(false);
+      engine.setResolution(originalDimensions.width, originalDimensions.height);
+    }
+    exportDiagnostics.finish('failed', error);
+    releaseExportRunResources(runId);
+    if (this.activeExportRunId === runId) {
+      this.activeExportRunId = null;
+    }
+    this.encoder = null;
+    this.audioPipeline = null;
   }
 
   private resetAttemptState(): void {
@@ -58,6 +119,8 @@ export class FrameExporter {
     this.clipStates.clear();
     this.parallelDecoder = null;
     this.useParallelDecode = false;
+    this.lastExportRuntimeReportMs = Number.NEGATIVE_INFINITY;
+    this.activeExportRunId = null;
   }
 
   private shouldForcePreciseRendering(): boolean {
@@ -122,6 +185,22 @@ export class FrameExporter {
       clip.source?.type !== 'camera' &&
       clip.source?.type !== 'splat-effector'
     );
+    const exportRunId = createExportRunId();
+    const startedAtMs = Date.now();
+    const runJobReport = {
+      runId: exportRunId,
+      settings: this.settings,
+      totalFrames,
+      startedAtMs,
+      exportMode: this.exportMode,
+      requestedAudio,
+      effectiveAudio: shouldExportAudio,
+    };
+    const runJobAdmission = canRetainExportRunJob(runJobReport);
+    if (!runJobAdmission.admitted) {
+      throw this.createAdmissionError('run job', runJobAdmission);
+    }
+    this.activeExportRunId = exportRunId;
 
     // For stacked alpha, the encoded video is double height (RGB top + alpha bottom)
     const encodedHeight = this.settings.stackedAlpha ? height * 2 : height;
@@ -154,6 +233,7 @@ export class FrameExporter {
     }
 
     log.info(`Starting export: ${width}x${encodedHeight} @ ${fps}fps, ${totalFrames} frames, audio: ${shouldExportAudio ? 'yes' : 'no'}${this.settings.stackedAlpha ? ', stacked alpha' : ''}`);
+    reportExportRunJob(runJobReport);
 
     // Initialize encoder (with doubled height for stacked alpha)
     this.encoder = new VideoEncoderWrapper({ ...this.settings, height: encodedHeight, includeAudio: shouldExportAudio });
@@ -180,7 +260,31 @@ export class FrameExporter {
         sampleRate: this.settings.audioSampleRate ?? 48000,
         bitrate: this.settings.audioBitrate ?? 256000,
         normalize: this.settings.normalizeAudio ?? false,
+      }, {
+        exportRunId,
       });
+    }
+
+    const zeroCopySurfaceReport = {
+      runId: exportRunId,
+      width,
+      height,
+      zeroCopy: true,
+      stackedAlpha: this.settings.stackedAlpha,
+    };
+    const readbackSurfaceReport = {
+      runId: exportRunId,
+      width,
+      height,
+      zeroCopy: false,
+      stackedAlpha: this.settings.stackedAlpha,
+    };
+    const zeroCopySurfaceAdmission = canRetainExportOutputSurface(zeroCopySurfaceReport);
+    const readbackSurfaceAdmission = canRetainExportOutputSurface(readbackSurfaceReport);
+    if (!zeroCopySurfaceAdmission.admitted && !readbackSurfaceAdmission.admitted) {
+      const error = this.createAdmissionError('output surface', zeroCopySurfaceAdmission);
+      this.abortExportSetup(exportRunId, error);
+      throw error;
     }
 
     const originalDimensions = engine.getOutputDimensions();
@@ -188,7 +292,15 @@ export class FrameExporter {
     engine.setExporting(true);
 
     // Initialize export canvas for zero-copy VideoFrame creation
-    const useZeroCopy = engine.initExportCanvas(width, height, this.settings.stackedAlpha);
+    const useZeroCopy = zeroCopySurfaceAdmission.admitted
+      ? engine.initExportCanvas(width, height, this.settings.stackedAlpha)
+      : false;
+    if (!useZeroCopy && !readbackSurfaceAdmission.admitted) {
+      const error = this.createAdmissionError('readback output surface', readbackSurfaceAdmission);
+      this.abortExportSetup(exportRunId, error, originalDimensions);
+      throw error;
+    }
+    reportExportOutputSurface(useZeroCopy ? zeroCopySurfaceReport : readbackSurfaceReport);
     if (useZeroCopy) {
       if (hasGaussianSplatsInRange || has3DAssetsInRange) {
         log.info('Complex 3D export detected, using zero-copy export canvas path');
@@ -205,12 +317,14 @@ export class FrameExporter {
     try {
       // Prepare clips for export
       const prepareStart = performance.now();
-      const preparation = await prepareClipsForExport(this.settings, this.exportMode);
+      const preparation = await prepareClipsForExport(this.settings, this.exportMode, exportRunId);
       exportDiagnostics.recordPhase('prepare', performance.now() - prepareStart);
       this.clipStates = preparation.clipStates;
       this.parallelDecoder = preparation.parallelDecoder;
       this.useParallelDecode = preparation.useParallelDecode;
       this.exportMode = preparation.exportMode;
+      reportExportClipStates(exportRunId, this.clipStates);
+      this.reportExportRuntimeState(exportRunId, true);
 
       // Initialize layer builder cache (tracks don't change during export)
       initializeLayerBuilder(tracks);
@@ -293,6 +407,7 @@ export class FrameExporter {
         const seekStart = performance.now();
         await seekAllClipsToTime(ctx, this.clipStates, this.parallelDecoder, this.useParallelDecode);
         const seekMs = performance.now() - seekStart;
+        this.reportExportRuntimeState(exportRunId);
 
         const waitStart = performance.now();
         await waitForAllVideosReady(ctx, this.clipStates, this.parallelDecoder, this.useParallelDecode);
@@ -464,6 +579,10 @@ export class FrameExporter {
       this.cleanup(originalDimensions);
       exportDiagnostics.recordPhase('cleanup', performance.now() - cleanupStart);
       exportDiagnostics.finish(finalStatus, finalError);
+      releaseExportRunResources(exportRunId);
+      if (this.activeExportRunId === exportRunId) {
+        this.activeExportRunId = null;
+      }
       this.encoder = null;
       this.audioPipeline = null;
     }
@@ -473,6 +592,28 @@ export class FrameExporter {
     this.isCancelled = true;
     this.audioPipeline?.cancel();
     cleanupExportMode(this.clipStates, this.parallelDecoder);
+    if (this.activeExportRunId) {
+      releaseExportRunResources(this.activeExportRunId);
+      this.activeExportRunId = null;
+    }
+  }
+
+  private reportExportRuntimeState(runId: string, force = false): void {
+    if (!this.useParallelDecode || !this.parallelDecoder) {
+      return;
+    }
+
+    const now = performance.now();
+    if (!force && now - this.lastExportRuntimeReportMs < FrameExporter.RUNTIME_REPORT_INTERVAL_MS) {
+      return;
+    }
+
+    this.lastExportRuntimeReportMs = now;
+    reportExportParallelDecodeResources(
+      runId,
+      this.parallelDecoder.getRuntimeSnapshot(),
+      this.clipStates
+    );
   }
 
   private shouldPublishExportPreviewFrame(): boolean {
@@ -481,6 +622,27 @@ export class FrameExporter {
       return false;
     }
     this.lastPreviewFramePublishMs = now;
+    return true;
+  }
+
+  private shouldAllocateExportPreviewFrame(
+    width: number,
+    height: number,
+    currentTime: number
+  ): boolean {
+    if (!this.shouldPublishExportPreviewFrame()) return false;
+    if (!this.activeExportRunId) return false;
+
+    const admission = canRetainExportPreviewFrame({
+      runId: this.activeExportRunId,
+      width,
+      height,
+      currentTime,
+    });
+    if (!admission.admitted) {
+      this.logSoftAdmissionDenial('preview frame', admission);
+      return false;
+    }
     return true;
   }
 
@@ -496,6 +658,14 @@ export class FrameExporter {
           bitmap.close();
           return;
         }
+        if (this.activeExportRunId) {
+          reportExportPreviewFrame({
+            runId: this.activeExportRunId,
+            width: bitmap.width,
+            height: bitmap.height,
+            currentTime,
+          });
+        }
         timeline.setExportPreviewFrame(bitmap, currentTime);
       })
       .catch((error) => {
@@ -507,7 +677,9 @@ export class FrameExporter {
   }
 
   private publishExportPreviewFrame(videoFrame: VideoFrame, currentTime: number): void {
-    if (!this.shouldPublishExportPreviewFrame()) return;
+    const width = videoFrame.displayWidth || videoFrame.codedWidth;
+    const height = videoFrame.displayHeight || videoFrame.codedHeight;
+    if (!this.shouldAllocateExportPreviewFrame(width, height, currentTime)) return;
 
     let previewFrame: VideoFrame;
     try {
@@ -530,7 +702,7 @@ export class FrameExporter {
     height: number,
     currentTime: number,
   ): void {
-    if (!this.shouldPublishExportPreviewFrame()) return;
+    if (!this.shouldAllocateExportPreviewFrame(width, height, currentTime)) return;
 
     const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
     this.publishBitmapWhenStillExporting(createImageBitmap(imageData), currentTime);

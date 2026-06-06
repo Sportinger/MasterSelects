@@ -5,9 +5,38 @@ import { RAM_PREVIEW_FPS } from './constants';
 import { quantizeTime } from './utils';
 import { Logger } from '../../services/logger';
 import { RamPreviewEngine } from '../../services/ramPreviewEngine';
+import {
+  canRetainRamPreviewRunJob,
+  createRamPreviewRunId,
+  releaseRamPreviewRunResources,
+  reportRamPreviewRunJob,
+} from '../../services/timeline/ramPreviewRuntimeReporting';
 import { useMediaStore } from '../mediaStore';
 
 const log = Logger.create('RamPreviewSlice');
+
+export interface RamPreviewGenerationErrorInfo {
+  message: string;
+  stack?: string;
+}
+
+let lastRamPreviewGenerationError: RamPreviewGenerationErrorInfo | null = null;
+
+function captureRamPreviewGenerationError(error: unknown): RamPreviewGenerationErrorInfo {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return {
+    message: String(error),
+  };
+}
+
+export function getLastRamPreviewGenerationError(): RamPreviewGenerationErrorInfo | null {
+  return lastRamPreviewGenerationError;
+}
 
 export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get) => {
   const generateRange = async (
@@ -27,12 +56,30 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
       start: rangeStart.toFixed(3),
       end: rangeEnd.toFixed(3),
     });
+    lastRamPreviewGenerationError = null;
+
+    let completed = false;
+    const runId = createRamPreviewRunId();
+    const runJobReport = {
+      runId,
+      start: rangeStart,
+      end: rangeEnd,
+      centerTime: Math.max(rangeStart, Math.min(rangeEnd, centerTime)),
+      label,
+      startedAtMs: Date.now(),
+    };
+    const admission = canRetainRamPreviewRunJob(runJobReport);
+    if (!admission.admitted) {
+      lastRamPreviewGenerationError = {
+        message: `RAM preview skipped by runtime admission: ${admission.reason ?? 'not admitted'}`,
+      };
+      return false;
+    }
 
     const { engine } = await import('../../engine/WebGPUEngine');
     engine.setGeneratingRamPreview(true);
     set({ isRamPreviewing: true, ramPreviewProgress: 0, ramPreviewRange: null });
-
-    let completed = false;
+    reportRamPreviewRunJob(runJobReport);
 
     try {
       const preview = new RamPreviewEngine(engine);
@@ -43,9 +90,18 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
           centerTime: Math.max(rangeStart, Math.min(rangeEnd, centerTime)),
           clips,
           tracks,
+          runId,
         },
         {
-          isCancelled: () => !get().isRamPreviewing,
+          isCancelled: () => {
+            const cancelled = !get().isRamPreviewing;
+            if (cancelled && !lastRamPreviewGenerationError) {
+              lastRamPreviewGenerationError = {
+                message: 'RAM preview was cancelled because isRamPreviewing became false',
+              };
+            }
+            return cancelled;
+          },
           isFrameCached: (qt) => get().cachedFrameTimes.has(qt),
           getSourceTimeForClip: (id, t) => get().getSourceTimeForClip(id, t),
           getInterpolatedSpeed: (id, t) => get().getInterpolatedSpeed(id, t),
@@ -70,10 +126,12 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
         log.debug(`${label} cancelled`);
       }
     } catch (error) {
+      lastRamPreviewGenerationError = captureRamPreviewGenerationError(error);
       log.error(`${label} error`, error);
       completed = false;
     } finally {
       engine.setGeneratingRamPreview(false);
+      releaseRamPreviewRunResources(runId);
       set({ isRamPreviewing: false, ramPreviewProgress: null });
     }
 
@@ -131,8 +189,14 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
 
   clearRamPreview: async () => {
     const { engine } = await import('../../engine/WebGPUEngine');
+    engine.setGeneratingRamPreview(false);
     engine.clearCompositeCache();
-    set({ ramPreviewRange: null, ramPreviewProgress: null, cachedFrameTimes: new Set() });
+    set({
+      isRamPreviewing: false,
+      ramPreviewRange: null,
+      ramPreviewProgress: null,
+      cachedFrameTimes: new Set(),
+    });
   },
 
   // Playback frame caching (green line like After Effects)

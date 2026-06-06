@@ -1,202 +1,124 @@
-// Transition-related actions slice
-// Transitions are handled independently from keyframes - the compositor blends clips during rendering
+// Transition-related actions slice.
+// The public actions stay as compatibility wrappers; the operation kernel owns mutation and batching.
 
 import type { TransitionActions, SliceCreator } from './types';
-import type { TimelineTransition } from '../../types';
-import { getTransition, type TransitionType } from '../../transitions';
+import { createTransitionJunctionGeometryReference } from './editOperations/transitionOperations';
+import type { TimelineEditResult } from './editOperations/types';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('Transitions');
 
-// Generate unique transition ID
-const generateTransitionId = () => `transition-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+const JUNCTION_THRESHOLD_SECONDS = 0.5;
 
-export const createTransitionSlice: SliceCreator<TransitionActions> = (set, get) => ({
+function logFailedTransition(action: string, result: TimelineEditResult): void {
+  if (result.success) return;
+  log.warn(action, { warnings: result.warnings });
+}
+
+export const createTransitionSlice: SliceCreator<TransitionActions> = (_set, get) => ({
   /**
-   * Apply a transition between two adjacent clips
-   * Creates overlap by moving clipB earlier - NO keyframes, compositor handles blending
+   * Apply a transition between two adjacent clips.
+   * Creates overlap by moving clipB earlier; the operation kernel owns validation and batching.
    */
-  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number) => {
-    const { clips, invalidateCache } = get();
-
+  applyTransition: (clipAId, clipBId, type, duration, options = {}) => {
+    const operationId = `transition-apply:${Date.now()}`;
+    const { clips } = get();
     const clipA = clips.find(c => c.id === clipAId);
     const clipB = clips.find(c => c.id === clipBId);
+    const junctionTime = clipA ? clipA.startTime + clipA.duration : clipB?.startTime ?? 0;
+    const trackId = clipA?.trackId ?? clipB?.trackId ?? '';
 
-    if (!clipA || !clipB) {
-      log.warn('Cannot apply transition: clips not found', { clipAId, clipBId });
-      return;
-    }
-
-    // Verify clips are on the same track
-    if (clipA.trackId !== clipB.trackId) {
-      log.warn('Cannot apply transition: clips on different tracks');
-      return;
-    }
-
-    // Verify clipB comes after clipA
-    if (clipB.startTime < clipA.startTime) {
-      log.warn('Cannot apply transition: clipB must come after clipA');
-      return;
-    }
-
-    // Get transition definition for validation
-    const transitionDef = getTransition(type as TransitionType);
-    if (!transitionDef) {
-      log.warn('Unknown transition type', { type });
-      return;
-    }
-
-    // Clamp duration to valid range
-    const effectiveDuration = Math.min(
-      Math.max(duration, transitionDef.minDuration),
-      Math.min(transitionDef.maxDuration, clipA.duration * 0.5, clipB.duration * 0.5)
-    );
-
-    // Calculate new positions - move clipB's start earlier to create overlap
-    const clipAEnd = clipA.startTime + clipA.duration;
-    const newClipBStart = clipAEnd - effectiveDuration;
-
-    // Create transition objects
-    const transitionId = generateTransitionId();
-
-    const transitionOut: TimelineTransition = {
-      id: transitionId,
-      type,
-      duration: effectiveDuration,
-      linkedClipId: clipBId,
-    };
-
-    const transitionIn: TimelineTransition = {
-      id: transitionId,
-      type,
-      duration: effectiveDuration,
-      linkedClipId: clipAId,
-    };
-
-    // Update clips with new positions and transition data
-    set({
-      clips: clips.map(c => {
-        if (c.id === clipAId) {
-          return { ...c, transitionOut };
-        }
-        if (c.id === clipBId) {
-          return { ...c, startTime: newClipBStart, transitionIn };
-        }
-        return c;
+    const result = get().applyTimelineEditOperation({
+      id: operationId,
+      type: 'transition-apply',
+      transactionId: operationId,
+      historyBatchId: operationId,
+      source: options.source ?? 'ui',
+      geometrySnapshotId: `transition-geometry:${operationId}`,
+      clipAId,
+      clipBId,
+      transitionType: type,
+      requestedDuration: duration,
+      junction: createTransitionJunctionGeometryReference({
+        operationId,
+        trackId,
+        clipAId,
+        clipBId,
+        junctionTime,
+        thresholdSeconds: JUNCTION_THRESHOLD_SECONDS,
       }),
+    }, {
+      source: options.source ?? 'ui',
+      historyLabel: options.historyLabel ?? 'Apply transition',
     });
-
-    invalidateCache();
-    log.info('Applied transition', { type, duration: effectiveDuration, clipA: clipA.name, clipB: clipB.name });
+    logFailedTransition('Cannot apply transition', result);
+    return result;
   },
 
   /**
-   * Remove a transition from a clip
+   * Remove a transition from a clip edge.
    */
-  removeTransition: (clipId: string, edge: 'in' | 'out') => {
-    const { clips, invalidateCache } = get();
-
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip) return;
-
-    const transition = edge === 'in' ? clip.transitionIn : clip.transitionOut;
-    if (!transition) return;
-
-    const linkedClip = clips.find(c => c.id === transition.linkedClipId);
-    const duration = transition.duration;
-
-    if (edge === 'in') {
-      // Move clip back to non-overlapping position
-      const linkedClipEnd = linkedClip ? linkedClip.startTime + linkedClip.duration : clip.startTime;
-      const newStartTime = linkedClipEnd; // Remove overlap
-
-      set({
-        clips: clips.map(c => {
-          if (c.id === clipId) {
-            return { ...c, startTime: newStartTime, transitionIn: undefined };
-          }
-          if (c.id === transition.linkedClipId) {
-            return { ...c, transitionOut: undefined };
-          }
-          return c;
-        }),
-      });
-    } else {
-      // Move linked clip back
-      set({
-        clips: clips.map(c => {
-          if (c.id === clipId) {
-            return { ...c, transitionOut: undefined };
-          }
-          if (c.id === transition.linkedClipId) {
-            const newStart = clip.startTime + clip.duration;
-            return { ...c, startTime: newStart, transitionIn: undefined };
-          }
-          return c;
-        }),
-      });
-    }
-
-    invalidateCache();
-    log.info('Removed transition', { clipId, edge, duration });
+  removeTransition: (clipId, edge, options = {}) => {
+    const operationId = `transition-remove:${Date.now()}`;
+    const result = get().applyTimelineEditOperation({
+      id: operationId,
+      type: 'transition-remove',
+      transactionId: operationId,
+      historyBatchId: operationId,
+      source: options.source ?? 'ui',
+      clipId,
+      edge,
+    }, {
+      source: options.source ?? 'ui',
+      historyLabel: options.historyLabel ?? 'Remove transition',
+    });
+    logFailedTransition('Cannot remove transition', result);
+    return result;
   },
 
   /**
-   * Update the duration of an existing transition
+   * Update the duration of an existing transition.
    */
-  updateTransitionDuration: (clipId: string, edge: 'in' | 'out', newDuration: number) => {
+  updateTransitionDuration: (clipId, edge, newDuration, options = {}) => {
+    const operationId = `transition-update-duration:${Date.now()}`;
+    const result = get().applyTimelineEditOperation({
+      id: operationId,
+      type: 'transition-update-duration',
+      transactionId: operationId,
+      historyBatchId: operationId,
+      source: options.source ?? 'ui',
+      clipId,
+      edge,
+      requestedDuration: newDuration,
+    }, {
+      source: options.source ?? 'ui',
+      historyLabel: options.historyLabel ?? 'Update transition duration',
+    });
+    logFailedTransition('Cannot update transition duration', result);
+    return result;
+  },
+
+  /**
+   * Find a junction between two clips at a given time.
+   */
+  findClipJunction: (trackId: string, time: number, threshold: number = JUNCTION_THRESHOLD_SECONDS) => {
     const { clips } = get();
 
-    const clip = clips.find(c => c.id === clipId);
-    if (!clip) return;
-
-    const transition = edge === 'in' ? clip.transitionIn : clip.transitionOut;
-    if (!transition) return;
-
-    // Remove and re-apply with new duration
-    const linkedClipId = transition.linkedClipId;
-    const type = transition.type;
-
-    // Determine which is clipA and clipB
-    const isClipB = edge === 'in';
-    const clipAId = isClipB ? linkedClipId : clipId;
-    const clipBId = isClipB ? clipId : linkedClipId;
-
-    // First remove the existing transition
-    get().removeTransition(clipId, edge);
-
-    // Then apply new transition with updated duration
-    get().applyTransition(clipAId, clipBId, type, newDuration);
-  },
-
-  /**
-   * Find a junction between two clips at a given time
-   * Returns the two clips if found, null otherwise
-   */
-  findClipJunction: (trackId: string, time: number, threshold: number = 0.5) => {
-    const { clips } = get();
-
-    // Get clips on this track, sorted by start time
     const trackClips = clips
       .filter(c => c.trackId === trackId)
-      .sort((a, b) => a.startTime - b.startTime);
+      .toSorted((a, b) => a.startTime - b.startTime);
 
-    // Find adjacent clip pairs
     for (let i = 0; i < trackClips.length - 1; i++) {
       const clipA = trackClips[i];
       const clipB = trackClips[i + 1];
-
       const clipAEnd = clipA.startTime + clipA.duration;
       const gap = clipB.startTime - clipAEnd;
 
-      // Check if clips are touching (small gap) or already have a transition (negative gap/overlap)
       if (Math.abs(gap) < 0.1 || (clipA.transitionOut && clipB.transitionIn)) {
-        // For clips with transition, junction is at the transition center
         const junctionTime = clipA.transitionOut
           ? clipAEnd - clipA.transitionOut.duration / 2
           : clipAEnd;
 
-        // Check if the given time is near this junction
         if (Math.abs(time - junctionTime) < threshold) {
           return { clipA, clipB, junctionTime };
         }

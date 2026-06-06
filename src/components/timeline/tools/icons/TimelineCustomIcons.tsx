@@ -56,6 +56,19 @@ export function BladeAllTracksIcon(props: TimelineCustomIconProps) {
   );
 }
 
+export function GlueBottleIcon(props: TimelineCustomIconProps) {
+  return (
+    <SvgIcon {...props}>
+      {/* School-glue bottle: orange-style cone cap, neck, chunky body, label band */}
+      <path d="M9.5 7 L12 2.5 L14.5 7 Z" />
+      <path d="M10.5 7v2" />
+      <path d="M13.5 7v2" />
+      <path d="M10.5 9 Q7 9.5 7 13 L7 19 Q7 21 9 21 L15 21 Q17 21 17 19 L17 13 Q17 9.5 13.5 9" />
+      <ellipse cx="12" cy="15.5" rx="3.4" ry="2.3" />
+    </SvgIcon>
+  );
+}
+
 export function TrimEdgeIcon(props: TimelineCustomIconProps) {
   return (
     <SvgIcon {...props}>

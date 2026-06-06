@@ -1,5 +1,4 @@
 import type { TimelineClip, TimelineTrack } from '../../../types';
-import { createAudioElement, createVideoElement } from '../helpers/webCodecsHelpers';
 import type { SplitAtTimesOperation, TimelineEditWarning } from './types';
 
 const SPLIT_EPSILON = 0.001;
@@ -11,10 +10,34 @@ export interface SplitAtTimesApplyResult {
   warnings: TimelineEditWarning[];
 }
 
-export type ScheduleLinkedMixdownSourceUpdate = (
-  clipId: string,
-  mixdownBuffer: AudioBuffer,
-) => void;
+export function isCompositionAudioClip(clip: Pick<TimelineClip, 'isComposition' | 'source'>): boolean {
+  return clip.isComposition === true && clip.source?.type === 'audio';
+}
+
+export function stripCompositionAudioRuntimeSource(source: TimelineClip['source']): TimelineClip['source'] {
+  if (!source || source.type !== 'audio') return source;
+  const { audioElement: _audioElement, ...dataOnlySource } = source;
+  return dataOnlySource;
+}
+
+export function stripTimelineMediaRuntimeSource(source: TimelineClip['source']): TimelineClip['source'] {
+  if (!source || (source.type !== 'video' && source.type !== 'audio')) {
+    return source;
+  }
+
+  const {
+    videoElement: _videoElement,
+    audioElement: _audioElement,
+    webCodecsPlayer: _webCodecsPlayer,
+    nativeDecoder: _nativeDecoder,
+    ...dataOnlySource
+  } = source;
+  return dataOnlySource;
+}
+
+export function getSourceForFirstSplitPart(clip: TimelineClip): TimelineClip['source'] {
+  return stripTimelineMediaRuntimeSource(clip.source);
+}
 
 export function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
   return {
@@ -26,76 +49,14 @@ export function deepCloneClipProps(clip: TimelineClip): Partial<TimelineClip> {
   };
 }
 
-function cloneVideoElementForSplit(clip: TimelineClip): HTMLVideoElement {
-  const existingSrc = clip.source?.videoElement?.src;
-  if (existingSrc) {
-    const video = document.createElement('video');
-    video.src = existingSrc;
-    video.preload = 'none';
-    video.muted = true;
-    video.playsInline = true;
-    video.crossOrigin = 'anonymous';
-    return video;
-  }
-
-  const video = createVideoElement(clip.file);
-  video.preload = 'none';
-  return video;
-}
-
-function cloneAudioElementForSplit(clip: Pick<TimelineClip, 'file' | 'source'>): HTMLAudioElement {
-  const existingSrc = clip.source?.audioElement?.src;
-  if (existingSrc) {
-    const audio = document.createElement('audio');
-    audio.src = existingSrc;
-    audio.preload = 'none';
-    return audio;
-  }
-
-  const audio = createAudioElement(clip.file);
-  audio.preload = 'none';
-  return audio;
-}
-
 export function cloneSourceForPart(clip: TimelineClip): TimelineClip['source'] {
-  if (clip.source?.type === 'video' && clip.source.videoElement && clip.file) {
-    return {
-      ...clip.source,
-      videoElement: cloneVideoElementForSplit(clip),
-      webCodecsPlayer: clip.source.webCodecsPlayer,
-    };
-  }
-
-  if (clip.source?.type === 'audio' && clip.source.audioElement && clip.file) {
-    return {
-      ...clip.source,
-      audioElement: cloneAudioElementForSplit(clip),
-    };
-  }
-
-  return clip.source;
+  return stripTimelineMediaRuntimeSource(clip.source);
 }
 
 export function cloneLinkedSourceForPart(
   linkedClip: TimelineClip,
-  partClipId: string,
-  scheduleMixdownSourceUpdate?: ScheduleLinkedMixdownSourceUpdate,
 ): TimelineClip['source'] {
-  if (linkedClip.source?.type === 'audio' && linkedClip.source.audioElement) {
-    if (linkedClip.mixdownBuffer) {
-      scheduleMixdownSourceUpdate?.(partClipId, linkedClip.mixdownBuffer);
-      return { ...linkedClip.source };
-    }
-
-    if (linkedClip.file && linkedClip.file.size > 0) {
-      return {
-        ...linkedClip.source,
-        audioElement: cloneAudioElementForSplit(linkedClip),
-      };
-    }
-  }
-
-  return linkedClip.source;
+  return stripTimelineMediaRuntimeSource(linkedClip.source);
 }
 
 function getTrackForClip(clip: TimelineClip, tracks: TimelineTrack[]): TimelineTrack | undefined {
@@ -120,7 +81,6 @@ export function applySplitAtTimesOperation(
   operation: SplitAtTimesOperation,
   clips: TimelineClip[],
   tracks: TimelineTrack[],
-  scheduleMixdownSourceUpdate?: ScheduleLinkedMixdownSourceUpdate,
 ): SplitAtTimesApplyResult {
   const warnings: TimelineEditWarning[] = [];
   const clip = clips.find(candidate => candidate.id === operation.clipId);
@@ -208,7 +168,7 @@ export function applySplitAtTimesOperation(
       inPoint: partInPoint,
       outPoint: partOutPoint,
       linkedClipId: linkedPartId,
-      source: index === 0 ? clip.source : cloneSourceForPart(clip),
+      source: index === 0 ? getSourceForFirstSplitPart(clip) : cloneSourceForPart(clip),
       transitionIn: index === 0 ? clip.transitionIn : undefined,
       transitionOut: index === boundaries.length - 2 ? clip.transitionOut : undefined,
     });
@@ -225,8 +185,8 @@ export function applySplitAtTimesOperation(
         outPoint: linkedInPoint + partDuration,
         linkedClipId: partId,
         source: index === 0
-          ? linkedClip.source
-          : cloneLinkedSourceForPart(linkedClip, linkedPartId, scheduleMixdownSourceUpdate),
+          ? getSourceForFirstSplitPart(linkedClip)
+          : cloneLinkedSourceForPart(linkedClip),
         transitionIn: index === 0 ? linkedClip.transitionIn : undefined,
         transitionOut: index === boundaries.length - 2 ? linkedClip.transitionOut : undefined,
       });

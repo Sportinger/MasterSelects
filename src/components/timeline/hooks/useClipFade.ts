@@ -1,22 +1,21 @@
-// useClipFade - Fade-in/out handle dragging with real-time keyframe generation
-// Creates opacity keyframes (video) or volume keyframes (audio) as the user drags
-// Preserves existing bezier handles when adjusting fade duration
+// useClipFade - Fade-in/out handle dragging through timeline edit operations.
+// Creates opacity keyframes (video) or volume keyframes (audio) as the user drags.
+// Preserves existing bezier handles when adjusting fade duration.
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { TimelineClip, TimelineTrack, AnimatableProperty, EasingType } from '../../../types';
+import type { TimelineClip, TimelineTrack, AnimatableProperty, Keyframe } from '../../../types';
 import { createEffectProperty } from '../../../types';
+import type {
+  ApplyTimelineEditOperationOptions,
+  TimelineEditOperation,
+  TimelineEditResult,
+} from '../../../stores/timeline/editOperations/types';
 import type { ClipFadeState } from '../types';
 
-interface KeyframeData {
-  id: string;
-  clipId: string;
-  time: number;
-  property: string;
-  value: number;
-  easing: string;
-  handleIn?: { x: number; y: number };
-  handleOut?: { x: number; y: number };
-}
+type ApplyTimelineEditOperation = (
+  operation: TimelineEditOperation,
+  options: ApplyTimelineEditOperationOptions,
+) => TimelineEditResult;
 
 interface UseClipFadeProps {
   // Clip and track data
@@ -24,11 +23,9 @@ interface UseClipFadeProps {
   tracks: TimelineTrack[];
   isExporting: boolean;
 
-  // Keyframe actions
-  addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: EasingType) => void;
-  removeKeyframe: (keyframeId: string) => void;
-  moveKeyframe: (keyframeId: string, newTime: number) => void;
-  getClipKeyframes: (clipId: string) => KeyframeData[];
+  // Edit operation actions
+  applyTimelineEditOperation: ApplyTimelineEditOperation;
+  getClipKeyframes: (clipId: string) => Keyframe[];
 
   // Audio effect management
   addClipEffect: (clipId: string, effectType: string) => string | null | undefined;
@@ -49,9 +46,7 @@ export function useClipFade({
   clipMap,
   tracks,
   isExporting,
-  addKeyframe,
-  removeKeyframe,
-  moveKeyframe,
+  applyTimelineEditOperation,
   getClipKeyframes,
   addClipEffect,
   pixelToTime,
@@ -63,11 +58,20 @@ export function useClipFade({
     clipFadeRef.current = clipFade;
   }, [clipFade]);
 
-  // Store the keyframe IDs we're working with during a drag
+  // Store the keyframe IDs we're working with during a drag.
   const fadeKeyframeIdsRef = useRef<{
-    startKeyframeId?: string;  // The keyframe at start/end of fade (value 0)
-    endKeyframeId?: string;    // The keyframe at fade point (value 1)
+    zeroKeyframeId?: string;
+    oneKeyframeId?: string;
   }>({});
+
+  const fadeDragSessionRef = useRef<{
+    transactionId: string;
+    historyBatchId: string;
+    updateIndex: number;
+    property: AnimatableProperty;
+    currentFadeDuration: number;
+    hasAppliedUpdate: boolean;
+  } | null>(null);
 
   // Helper to check if clip is on an audio track
   const isAudioClip = useCallback((clipId: string): boolean => {
@@ -114,6 +118,83 @@ export function useClipFade({
 
     return 'opacity';
   }, [clipMap, isAudioClip, addClipEffect]);
+
+  const isFadeKeyframeForProperty = useCallback((clipId: string, keyframe: Keyframe, property: AnimatableProperty): boolean => (
+    keyframe.property === property || (isAudioClip(clipId) && keyframe.property.includes('.volume'))
+  ), [isAudioClip]);
+
+  const refreshFadeKeyframeIds = useCallback((
+    clipId: string,
+    edge: 'left' | 'right',
+    property: AnimatableProperty,
+    clipDuration: number,
+  ) => {
+    const fadeKeyframes = getClipKeyframes(clipId)
+      .filter(keyframe => isFadeKeyframeForProperty(clipId, keyframe, property))
+      .sort((a, b) => a.time - b.time);
+
+    if (edge === 'left') {
+      const zeroKeyframe = fadeKeyframes.find(keyframe => keyframe.time === 0 && keyframe.value === 0);
+      const oneKeyframe = fadeKeyframes.find(keyframe => keyframe.value >= 0.99 && keyframe.time > 0 && keyframe.time <= clipDuration * 0.5);
+      fadeKeyframeIdsRef.current = {
+        zeroKeyframeId: zeroKeyframe?.id,
+        oneKeyframeId: oneKeyframe?.id,
+      };
+      return;
+    }
+
+    const zeroKeyframe = fadeKeyframes.find(keyframe => Math.abs(keyframe.time - clipDuration) < 0.01 && keyframe.value === 0);
+    const oneKeyframe = fadeKeyframes.find(keyframe => keyframe.value >= 0.99 && keyframe.time > clipDuration * 0.5);
+    fadeKeyframeIdsRef.current = {
+      zeroKeyframeId: zeroKeyframe?.id,
+      oneKeyframeId: oneKeyframe?.id,
+    };
+  }, [getClipKeyframes, isFadeKeyframeForProperty]);
+
+  const getAudioVolumeEffectId = useCallback((property: AnimatableProperty): string | undefined => {
+    const parts = property.split('.');
+    return parts[0] === 'effect' && parts[2] === 'volume' ? parts[1] : undefined;
+  }, []);
+
+  const buildFadeKeyframePlan = useCallback((
+    clipId: string,
+    edge: 'left' | 'right',
+    property: AnimatableProperty,
+    duration: number,
+  ) => {
+    const session = fadeDragSessionRef.current;
+    const { zeroKeyframeId, oneKeyframeId } = fadeKeyframeIdsRef.current;
+    const needsCreatedIds = duration > 0.01 && (!zeroKeyframeId || !oneKeyframeId);
+    const createdKeyframeIds = needsCreatedIds && session
+      ? [`${session.transactionId}:zero`, `${session.transactionId}:one`]
+      : [];
+
+    return {
+      clipId,
+      property,
+      edge,
+      duration,
+      zeroKeyframeId,
+      oneKeyframeId,
+      createdKeyframeIds,
+      movedKeyframeIds: duration > 0.01
+        ? [zeroKeyframeId, oneKeyframeId].filter((keyframeId): keyframeId is string => Boolean(keyframeId))
+        : [],
+      removedKeyframeIds: duration <= 0.01
+        ? [zeroKeyframeId, oneKeyframeId].filter((keyframeId): keyframeId is string => Boolean(keyframeId))
+        : [],
+      audioVolumeEffectId: isAudioClip(clipId) ? getAudioVolumeEffectId(property) : undefined,
+    };
+  }, [getAudioVolumeEffectId, isAudioClip]);
+
+  const resolveFadeDuration = useCallback((fade: ClipFadeState, clientX: number): number => {
+    const deltaX = clientX - fade.startX;
+    const deltaTime = pixelToTime(Math.abs(deltaX));
+    const requestedFadeDuration = fade.edge === 'left'
+      ? fade.originalFadeDuration + (deltaX > 0 ? deltaTime : -deltaTime)
+      : fade.originalFadeDuration + (deltaX < 0 ? deltaTime : -deltaTime);
+    return Math.max(0, Math.min(requestedFadeDuration, fade.clipDuration * 0.5));
+  }, [pixelToTime]);
 
   // Calculate fade-in duration from keyframes (opacity for video, volume for audio)
   const getFadeInDuration = useCallback((clipId: string): number => {
@@ -207,8 +288,8 @@ export function useClipFade({
         const endKf = fadeKeyframes.find(k => k.value >= 0.99 && k.time > 0 && k.time < clip.duration * 0.5);
 
         if (startKf && endKf) {
-          fadeKeyframeIdsRef.current.startKeyframeId = startKf.id;
-          fadeKeyframeIdsRef.current.endKeyframeId = endKf.id;
+          fadeKeyframeIdsRef.current.zeroKeyframeId = startKf.id;
+          fadeKeyframeIdsRef.current.oneKeyframeId = endKf.id;
         }
       } else {
         // Fade-out: Look for keyframe at end (value 0) and previous one (value 1)
@@ -216,10 +297,34 @@ export function useClipFade({
         const startKf = fadeKeyframes.find(k => k.value >= 0.99 && k.time > clip.duration * 0.5);
 
         if (startKf && endKf) {
-          fadeKeyframeIdsRef.current.startKeyframeId = startKf.id;
-          fadeKeyframeIdsRef.current.endKeyframeId = endKf.id;
+          fadeKeyframeIdsRef.current.oneKeyframeId = startKf.id;
+          fadeKeyframeIdsRef.current.zeroKeyframeId = endKf.id;
         }
       }
+
+      const transactionId = `fade:${clipId}:${edge}:${Date.now()}`;
+      const historyBatchId = `${transactionId}:history`;
+      fadeDragSessionRef.current = {
+        transactionId,
+        historyBatchId,
+        updateIndex: 0,
+        property: fadeProperty,
+        currentFadeDuration: originalFadeDuration,
+        hasAppliedUpdate: false,
+      };
+      applyTimelineEditOperation({
+        id: `${transactionId}:begin`,
+        type: 'fade-transaction-begin',
+        transactionId,
+        historyBatchId,
+        source: 'ui',
+        phase: 'begin',
+        clipId,
+        edge,
+        originalFadeDuration,
+        clipDuration: clip.duration,
+        property: fadeProperty,
+      }, { source: 'ui', historyLabel: 'Begin fade transaction' });
 
       const initialFade: ClipFadeState = {
         clipId,
@@ -240,81 +345,41 @@ export function useClipFade({
         if (!currentClip) return;
 
         // Determine the property to use for this fade (opacity for video, volume for audio)
-        const currentFadeProperty = isAudioClip(fade.clipId)
+        const session = fadeDragSessionRef.current;
+        const currentFadeProperty = session?.property ?? (isAudioClip(fade.clipId)
           ? ensureAudioVolumeEffect(fade.clipId)
-          : 'opacity' as AnimatableProperty;
+          : 'opacity' as AnimatableProperty);
+        const newFadeDuration = resolveFadeDuration(
+          { ...fade, clipDuration: currentClip.duration },
+          moveEvent.clientX,
+        );
 
-        // Calculate new fade duration based on mouse movement
-        const deltaX = moveEvent.clientX - fade.startX;
-        const deltaTime = pixelToTime(Math.abs(deltaX));
-
-        let newFadeDuration: number;
-        if (fade.edge === 'left') {
-          // For fade-in: dragging right increases duration
-          newFadeDuration = fade.originalFadeDuration + (deltaX > 0 ? deltaTime : -deltaTime);
-        } else {
-          // For fade-out: dragging left increases duration
-          newFadeDuration = fade.originalFadeDuration + (deltaX < 0 ? deltaTime : -deltaTime);
-        }
-
-        // Clamp fade duration (min 0, max half of clip duration)
-        const maxFade = currentClip.duration * 0.5;
-        newFadeDuration = Math.max(0, Math.min(newFadeDuration, maxFade));
-
-        // Update keyframes FIRST (before triggering React re-render)
-        const { startKeyframeId, endKeyframeId } = fadeKeyframeIdsRef.current;
-
-        if (fade.edge === 'left') {
-          // Fade-in: move the end keyframe (value 1) to new position
-          if (startKeyframeId && endKeyframeId) {
-            // Just move the existing keyframe - preserves all bezier handles
-            moveKeyframe(endKeyframeId, newFadeDuration);
-          } else if (newFadeDuration > 0.01) {
-            // No existing fade - create new keyframes
-            addKeyframe(fade.clipId, currentFadeProperty, 0, 0, 'ease-out');
-            addKeyframe(fade.clipId, currentFadeProperty, 1, newFadeDuration, 'linear');
-
-            // Get the newly created keyframe IDs for future moves
-            const newKeyframes = getClipKeyframes(fade.clipId).filter(k =>
-              k.property === currentFadeProperty || (isAudioClip(fade.clipId) && k.property.includes('.volume'))
-            );
-            const newStartKf = newKeyframes.find(k => k.time === 0 && k.value === 0);
-            const newEndKf = newKeyframes.find(k => k.value >= 0.99 && k.time > 0);
-            if (newStartKf && newEndKf) {
-              fadeKeyframeIdsRef.current.startKeyframeId = newStartKf.id;
-              fadeKeyframeIdsRef.current.endKeyframeId = newEndKf.id;
-            }
+        if (session) {
+          const updateIndex = session.updateIndex;
+          session.updateIndex += 1;
+          session.currentFadeDuration = newFadeDuration;
+          const result = applyTimelineEditOperation({
+            id: `${session.transactionId}:update:${updateIndex}`,
+            type: 'fade-transaction-update',
+            transactionId: session.transactionId,
+            historyBatchId: session.historyBatchId,
+            source: 'ui',
+            phase: 'update',
+            clipId: fade.clipId,
+            edge: fade.edge,
+            requestedFadeDuration: newFadeDuration,
+            resolvedFadeDuration: newFadeDuration,
+            keyframePlan: buildFadeKeyframePlan(
+              fade.clipId,
+              fade.edge,
+              currentFadeProperty,
+              newFadeDuration,
+            ),
+          }, { source: 'ui', historyLabel: 'Update fade transaction', deferHistoryCommit: true });
+          if (result.success) {
+            session.hasAppliedUpdate = true;
+            refreshFadeKeyframeIds(fade.clipId, fade.edge, currentFadeProperty, currentClip.duration);
           }
-        } else {
-          // Fade-out: move the start keyframe (value 1) to new position
-          if (startKeyframeId && endKeyframeId) {
-            // Just move the existing keyframe - preserves all bezier handles
-            const fadeStartTime = currentClip.duration - newFadeDuration;
-            moveKeyframe(startKeyframeId, fadeStartTime);
-          } else if (newFadeDuration > 0.01) {
-            // No existing fade - create new keyframes
-            const fadeStartTime = currentClip.duration - newFadeDuration;
-            addKeyframe(fade.clipId, currentFadeProperty, 1, fadeStartTime, 'ease-in');
-            addKeyframe(fade.clipId, currentFadeProperty, 0, currentClip.duration, 'linear');
-
-            // Get the newly created keyframe IDs for future moves
-            const newKeyframes = getClipKeyframes(fade.clipId).filter(k =>
-              k.property === currentFadeProperty || (isAudioClip(fade.clipId) && k.property.includes('.volume'))
-            );
-            const newStartKf = newKeyframes.find(k => k.value >= 0.99 && k.time > currentClip.duration * 0.5);
-            const newEndKf = newKeyframes.find(k => Math.abs(k.time - currentClip.duration) < 0.01 && k.value === 0);
-            if (newStartKf && newEndKf) {
-              fadeKeyframeIdsRef.current.startKeyframeId = newStartKf.id;
-              fadeKeyframeIdsRef.current.endKeyframeId = newEndKf.id;
-            }
-          }
-        }
-
-        // Handle removing fade when duration goes to 0
-        if (newFadeDuration <= 0.01 && startKeyframeId && endKeyframeId) {
-          removeKeyframe(startKeyframeId);
-          removeKeyframe(endKeyframeId);
-          fadeKeyframeIdsRef.current = {};
         }
 
         // Now update local state to trigger re-render with the fresh keyframe data
@@ -327,9 +392,35 @@ export function useClipFade({
       };
 
       const handleMouseUp = () => {
+        const fade = clipFadeRef.current;
+        const session = fadeDragSessionRef.current;
+        if (fade && session?.hasAppliedUpdate) {
+          const currentClip = clipMap.get(fade.clipId);
+          if (currentClip) {
+            applyTimelineEditOperation({
+              id: `${session.transactionId}:commit`,
+              type: 'fade-transaction-commit',
+              transactionId: session.transactionId,
+              historyBatchId: session.historyBatchId,
+              source: 'ui',
+              phase: 'commit',
+              clipId: fade.clipId,
+              edge: fade.edge,
+              finalFadeDuration: session.currentFadeDuration,
+              keyframePlan: buildFadeKeyframePlan(
+                fade.clipId,
+                fade.edge,
+                session.property,
+                session.currentFadeDuration,
+              ),
+            }, { source: 'ui', historyLabel: 'Edit clip fade' });
+            refreshFadeKeyframeIds(fade.clipId, fade.edge, session.property, currentClip.duration);
+          }
+        }
         setClipFade(null);
         clipFadeRef.current = null;
         fadeKeyframeIdsRef.current = {};
+        fadeDragSessionRef.current = null;
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
       };
@@ -337,7 +428,20 @@ export function useClipFade({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [clipMap, tracks, isExporting, getFadeInDuration, getFadeOutDuration, getClipKeyframes, pixelToTime, addKeyframe, moveKeyframe, removeKeyframe, isAudioClip, ensureAudioVolumeEffect]
+    [
+      clipMap,
+      tracks,
+      isExporting,
+      getFadeInDuration,
+      getFadeOutDuration,
+      getClipKeyframes,
+      applyTimelineEditOperation,
+      isAudioClip,
+      ensureAudioVolumeEffect,
+      resolveFadeDuration,
+      buildFadeKeyframePlan,
+      refreshFadeKeyframeIds,
+    ]
   );
 
   return {

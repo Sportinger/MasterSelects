@@ -6,6 +6,10 @@ import type { TimelineClip, TimelineTrack, AnimatableProperty } from '../../../t
 import type { MarqueeState, ClipDragState, ClipTrimState, MarkerDragState } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineToolId } from '../../../stores/timeline/types';
+import { isTimelineActiveTarget } from '../utils/timelineActiveTargets';
+
+const KEYFRAME_DIAMOND_HIT_SIZE_PX = 12;
+const KEYFRAME_DIAMOND_CENTER_OFFSET_X_PX = -3;
 
 interface UseMarqueeSelectionProps {
   // Refs
@@ -34,6 +38,7 @@ interface UseMarqueeSelectionProps {
   clearTimelineRangeSelection: ReturnType<typeof useTimelineStore.getState>['clearTimelineRangeSelection'];
 
   // Helpers
+  timeToPixel: (time: number) => number;
   pixelToTime: (pixel: number) => number;
   isTrackExpanded: (trackId: string) => boolean;
   getTrackBaseHeight: (track: TimelineTrack) => number;
@@ -48,7 +53,7 @@ interface UseMarqueeSelectionReturn {
 export function useMarqueeSelection({
   trackLanesRef,
   scrollX,
-  clips: _clips,
+  clips,
   tracks: _tracks,
   selectedClipIds,
   selectedKeyframeIds,
@@ -63,6 +68,7 @@ export function useMarqueeSelection({
   deselectAllKeyframes,
   setTimelineRangeSelection,
   clearTimelineRangeSelection,
+  timeToPixel,
   pixelToTime,
   isTrackExpanded: _isTrackExpanded,
   getTrackBaseHeight: _getTrackBaseHeight,
@@ -75,7 +81,31 @@ export function useMarqueeSelection({
     marqueeRef.current = marquee;
   }, [marquee]);
 
-  // Helper: Calculate which clips intersect with a rectangle
+  const getTimelineContentOriginX = useCallback((): number => {
+    const container = trackLanesRef.current;
+    if (!container) return 0;
+
+    const containerRect = container.getBoundingClientRect();
+    const rowEl = container.querySelector<HTMLElement>('.track-clip-row') ??
+      container.querySelector<HTMLElement>('.track-lanes-scroll');
+    if (!rowEl) return 0;
+
+    const rowRect = rowEl.getBoundingClientRect();
+    return rowRect.left - containerRect.left + scrollX;
+  }, [scrollX, trackLanesRef]);
+
+  const stackXToTimelineTime = useCallback(
+    (x: number): number => Math.max(0, pixelToTime(x - getTimelineContentOriginX())),
+    [getTimelineContentOriginX, pixelToTime],
+  );
+
+  // Helper: Calculate which clips intersect with a rectangle.
+  //
+  // Computed from clip DATA, not from clip DOM elements: in canvas mode (issue
+  // #228) clips are drawn on a canvas and have no per-clip DOM node. We take each
+  // clip's X from the same timeToPixel helper as the renderer and its Y from the
+  // track's still-DOM clip-row element. This also fixes the old DOM path, where
+  // viewport-culled off-screen clips couldn't be marquee-selected.
   const getClipsInRect = useCallback(
     (left: number, right: number, top: number, bottom: number): Set<string> => {
       const result = new Set<string>();
@@ -83,24 +113,36 @@ export function useMarqueeSelection({
       if (!container) return result;
 
       const containerRect = container.getBoundingClientRect();
-      container.querySelectorAll<HTMLElement>('.timeline-clip[data-clip-id]').forEach((clipElement) => {
-        const clipId = clipElement.dataset.clipId;
-        if (!clipId) return;
+      const visitedTrackIds = new Set<string>();
 
-        const clipRect = clipElement.getBoundingClientRect();
-        const clipLeft = clipRect.left - containerRect.left + scrollX;
-        const clipRight = clipRect.right - containerRect.left + scrollX;
-        const clipTop = clipRect.top - containerRect.top;
-        const clipBottom = clipRect.bottom - containerRect.top;
+      container.querySelectorAll<HTMLElement>('.track-lane[data-track-id]').forEach((laneEl) => {
+        const trackId = laneEl.dataset.trackId;
+        if (!trackId || visitedTrackIds.has(trackId)) return;
+        visitedTrackIds.add(trackId);
 
-        if (clipRight > left && clipLeft < right && clipBottom > top && clipTop < bottom) {
-          result.add(clipId);
+        const track = _tracks.find((candidate) => candidate.id === trackId);
+        if (!track || track.locked || track.visible === false) return;
+
+        const rowEl = laneEl.querySelector<HTMLElement>('.track-clip-row') ?? laneEl;
+        const rowRect = rowEl.getBoundingClientRect();
+        const rowTop = rowRect.top - containerRect.top;
+        const rowBottom = rowRect.bottom - containerRect.top;
+        const rowContentLeft = rowRect.left - containerRect.left + scrollX;
+        if (Math.min(rowBottom, bottom) - Math.max(rowTop, top) <= 1) return; // track outside vertical band
+
+        for (const clip of clips) {
+          if (clip.trackId !== trackId) continue;
+          const clipLeft = rowContentLeft + timeToPixel(clip.startTime);
+          const clipRight = rowContentLeft + timeToPixel(clip.startTime + clip.duration);
+          if (Math.min(clipRight, right) - Math.max(clipLeft, left) > 1) {
+            result.add(clip.id);
+          }
         }
       });
 
       return result;
     },
-    [scrollX, trackLanesRef]
+    [timeToPixel, trackLanesRef, clips, _tracks, scrollX]
   );
 
   // Helper: Calculate which keyframes intersect with a rectangle
@@ -111,24 +153,53 @@ export function useMarqueeSelection({
       if (!container) return result;
 
       const containerRect = container.getBoundingClientRect();
-      container.querySelectorAll<HTMLElement>('.keyframe-diamond[data-keyframe-id]').forEach((keyframeElement) => {
-        const keyframeId = keyframeElement.dataset.keyframeId;
-        if (!keyframeId) return;
+      const halfSize = KEYFRAME_DIAMOND_HIT_SIZE_PX / 2;
 
-        const keyframeRect = keyframeElement.getBoundingClientRect();
-        const keyframeLeft = keyframeRect.left - containerRect.left + scrollX;
-        const keyframeRight = keyframeRect.right - containerRect.left + scrollX;
-        const keyframeTop = keyframeRect.top - containerRect.top;
-        const keyframeBottom = keyframeRect.bottom - containerRect.top;
+      container.querySelectorAll<HTMLElement>('.keyframe-track-row[data-track-id][data-keyframe-property]').forEach((rowElement) => {
+        const trackId = rowElement.dataset.trackId;
+        const property = rowElement.dataset.keyframeProperty;
+        if (!trackId || !property) return;
 
-        if (keyframeRight > left && keyframeLeft < right && keyframeBottom > top && keyframeTop < bottom) {
-          result.add(keyframeId);
+        const keyframeTrackElement = rowElement.querySelector<HTMLElement>('.keyframe-track') ?? rowElement;
+        const keyframeTrackRect = keyframeTrackElement.getBoundingClientRect();
+        const rowTop = keyframeTrackRect.top - containerRect.top;
+        const rowBottom = keyframeTrackRect.bottom - containerRect.top;
+        if (rowBottom <= top || rowTop >= bottom) return;
+
+        const rowContentLeft = keyframeTrackRect.left - containerRect.left + scrollX;
+        const centerY = rowTop + keyframeTrackRect.height / 2;
+
+        for (const clip of clips) {
+          if (clip.trackId !== trackId) continue;
+          const keyframes = _clipKeyframes.get(clip.id) ?? [];
+          if (keyframes.length === 0) continue;
+
+          const effectiveClipStartTime =
+            clipDrag && clipDrag.clipId === clip.id && clipDrag.snappedTime !== null
+              ? clipDrag.snappedTime
+              : clip.startTime;
+
+          for (const keyframe of keyframes) {
+            if (keyframe.property !== property) continue;
+
+            const centerX = rowContentLeft +
+              timeToPixel(effectiveClipStartTime + keyframe.time) +
+              KEYFRAME_DIAMOND_CENTER_OFFSET_X_PX;
+            const keyframeLeft = centerX - halfSize;
+            const keyframeRight = centerX + halfSize;
+            const keyframeTop = centerY - halfSize;
+            const keyframeBottom = centerY + halfSize;
+
+            if (keyframeRight > left && keyframeLeft < right && keyframeBottom > top && keyframeTop < bottom) {
+              result.add(keyframe.id);
+            }
+          }
         }
       });
 
       return result;
     },
-    [scrollX, trackLanesRef]
+    [_clipKeyframes, clipDrag, clips, scrollX, timeToPixel, trackLanesRef]
   );
 
   const getTrackIdsInRect = useCallback(
@@ -169,7 +240,8 @@ export function useMarqueeSelection({
       // Don't start if clicking on a clip or interactive element
       const target = e.target as HTMLElement;
       if (
-        (!isRangeSelectionTool && target.closest('.timeline-clip')) ||
+        (!isRangeSelectionTool && isTimelineActiveTarget(target)) ||
+        target.closest('[data-shell-trim-edge], [data-shell-fade-edge], [data-clip-interaction-slot]') ||
         target.closest('.playhead') ||
         target.closest('.in-out-marker') ||
         target.closest('.trim-handle') ||
@@ -196,7 +268,7 @@ export function useMarqueeSelection({
       const isInKeyframeArea = target.closest('.keyframe-track-row') !== null;
 
       if (isRangeSelectionTool) {
-        const startTime = Math.max(0, pixelToTime(startX));
+        const startTime = stackXToTimelineTime(startX);
         setMarquee({
           mode: 'range',
           startX,
@@ -252,7 +324,7 @@ export function useMarqueeSelection({
       isDraggingPlayhead,
       scrollX,
       activeTimelineToolId,
-      pixelToTime,
+      stackXToTimelineTime,
       setTimelineRangeSelection,
       clearTimelineRangeSelection,
       getTrackIdsInRect,
@@ -290,8 +362,8 @@ export function useMarqueeSelection({
 
       if (m.mode === 'range') {
         setTimelineRangeSelection({
-          startTime: Math.max(0, pixelToTime(left)),
-          endTime: Math.max(0, pixelToTime(right)),
+          startTime: stackXToTimelineTime(left),
+          endTime: stackXToTimelineTime(right),
           trackIds: getTrackIdsInRect(top, bottom),
         });
         return;
@@ -347,7 +419,7 @@ export function useMarqueeSelection({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [marquee, trackLanesRef, scrollX, pixelToTime, setTimelineRangeSelection, getTrackIdsInRect, selectClip, getClipsInRect, getKeyframesInRect, selectKeyframe, deselectAllKeyframes]);
+  }, [marquee, trackLanesRef, scrollX, stackXToTimelineTime, setTimelineRangeSelection, getTrackIdsInRect, selectClip, getClipsInRect, getKeyframesInRect, selectKeyframe, deselectAllKeyframes]);
 
   return {
     marquee,

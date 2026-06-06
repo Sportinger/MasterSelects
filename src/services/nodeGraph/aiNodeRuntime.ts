@@ -17,6 +17,8 @@ import { createTextLayoutSnapshot, type TextBoxRect, type TextLayoutSnapshot } f
 import { getCanvasVersion, markDynamicCanvasUpdated } from '../canvasVersion';
 import { extractAINodeGeneratedCode } from './aiNodeDefinition';
 import { buildClipNodeGraph } from './clipGraphProjection';
+import { timelineRuntimeCoordinator } from '../timeline/timelineRuntimeCoordinator';
+import type { RenderResourceDescriptor } from '../timeline/runtimeCoordinatorTypes';
 import { getCachedTimelineLoudnessEnvelope } from '../audio/timelineLoudnessEnvelopeCache';
 import {
   getCachedTimelineFrequencySummary,
@@ -37,6 +39,8 @@ const PIXEL_SORT_MAX_PIXELS = 320 * 180;
 const GENERATED_NODE_MAX_PIXELS = 96 * 54;
 const MAX_RUNTIME_AUDIO_SPECTROGRAM_REFS = 16;
 const MAX_RUNTIME_AUDIO_REPAIR_SUGGESTIONS = 6;
+const AI_NODE_RUNTIME_CACHE_ENTRY_LIMIT = 24;
+const AI_NODE_RUNTIME_CACHE_BYTE_LIMIT = 96 * 1024 * 1024;
 
 export interface AINodeRuntimeTexture {
   data: Uint8ClampedArray;
@@ -287,8 +291,11 @@ interface AINodeExecutable {
 }
 
 interface RuntimeCacheEntry {
+  clipId: string;
   canvas: HTMLCanvasElement;
   sourceCanvas: HTMLCanvasElement;
+  resourceIds: readonly [string, string];
+  byteSize: number;
   lastSignature?: string;
 }
 
@@ -303,6 +310,7 @@ interface AINodeRuntimeAudioOptions {
 
 const runtimeCache = new Map<string, RuntimeCacheEntry>();
 const executableCache = new Map<string, AINodeExecutable | null>();
+let runtimeCacheBytes = 0;
 
 function isRunnableCustomNode(definition: ClipCustomNodeDefinition): boolean {
   return definition.bypassed !== true &&
@@ -416,18 +424,288 @@ function getNodeProcessPixelBudget(
   return hasPixelSortNode ? PIXEL_SORT_MAX_PIXELS : GENERATED_NODE_MAX_PIXELS;
 }
 
-function ensureCacheEntry(key: string): RuntimeCacheEntry {
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function getCanvasByteSize(width: number, height: number): number {
+  return Math.max(0, Math.round(width) * Math.round(height) * 4);
+}
+
+function getAINodeRuntimeCacheResourceIds(key: string): readonly [string, string] {
+  const hash = hashString(key);
+  return [
+    `timeline:ai-node-runtime:${hash}:source-canvas`,
+    `timeline:ai-node-runtime:${hash}:output-canvas`,
+  ];
+}
+
+function getAINodeRuntimeOwner(clip: TimelineClip, source: LayerSource): RenderResourceDescriptor['owner'] {
+  return {
+    ownerId: `timeline:ai-node-runtime:${clip.id}`,
+    ownerType: 'clip',
+    clipId: clip.id,
+    trackId: clip.trackId,
+    compositionId: clip.compositionId,
+    mediaFileId: source.mediaFileId ?? clip.source?.mediaFileId ?? clip.mediaFileId,
+  };
+}
+
+function createAINodeRuntimeCanvasResource(params: {
+  id: string;
+  imageId: string;
+  label: string;
+  clip: TimelineClip;
+  source: LayerSource;
+  layerId: string;
+  width: number;
+  height: number;
+}): RenderResourceDescriptor {
+  const owner = getAINodeRuntimeOwner(params.clip, params.source);
+  return {
+    id: params.id,
+    kind: 'image-canvas',
+    policyId: 'interactive',
+    owner,
+    source: {
+      sourceId: params.source.runtimeSourceId ?? params.source.mediaFileId ?? params.clip.mediaFileId,
+      mediaFileId: params.source.mediaFileId ?? params.clip.mediaFileId,
+      clipId: params.clip.id,
+      trackId: params.clip.trackId,
+      compositionId: owner.compositionId,
+      projectPath: params.source.filePath,
+      previewPath: params.source.previewPath,
+    },
+    runtime: params.source.runtimeSourceId && params.source.runtimeSessionKey
+      ? {
+          runtimeSourceId: params.source.runtimeSourceId,
+          runtimeSessionKey: params.source.runtimeSessionKey,
+        }
+      : undefined,
+    imageKind: 'html-canvas',
+    imageId: params.imageId,
+    dimensions: {
+      width: params.width,
+      height: params.height,
+      durationSeconds: params.clip.duration,
+    },
+    memoryCost: {
+      heapBytes: getCanvasByteSize(params.width, params.height),
+    },
+    diagnostics: {
+      status: 'ok',
+      provider: {
+        providerId: params.imageId,
+        providerKind: 'canvas',
+        status: 'ok',
+      },
+    },
+    label: params.label,
+    tags: ['timeline', 'node-graph', 'ai-node-runtime', params.layerId],
+  };
+}
+
+function createAINodeRuntimeCanvasResources(params: {
+  key: string;
+  clip: TimelineClip;
+  source: LayerSource;
+  layerId: string;
+  width: number;
+  height: number;
+}): readonly [RenderResourceDescriptor, RenderResourceDescriptor] {
+  const [sourceResourceId, outputResourceId] = getAINodeRuntimeCacheResourceIds(params.key);
+  return [
+    createAINodeRuntimeCanvasResource({
+      id: sourceResourceId,
+      imageId: `${sourceResourceId}:image`,
+      label: 'AI node source canvas',
+      clip: params.clip,
+      source: params.source,
+      layerId: params.layerId,
+      width: params.width,
+      height: params.height,
+    }),
+    createAINodeRuntimeCanvasResource({
+      id: outputResourceId,
+      imageId: `${outputResourceId}:image`,
+      label: 'AI node output canvas',
+      clip: params.clip,
+      source: params.source,
+      layerId: params.layerId,
+      width: params.width,
+      height: params.height,
+    }),
+  ];
+}
+
+function reserveAINodeRuntimeCanvasResources(
+  resources: readonly RenderResourceDescriptor[],
+): boolean {
+  const retained: string[] = [];
+  for (const resource of resources) {
+    const admission = timelineRuntimeCoordinator.canRetainResource(resource);
+    if (!admission.admitted) {
+      for (const resourceId of retained) {
+        timelineRuntimeCoordinator.releaseResource(resourceId);
+      }
+      return false;
+    }
+    timelineRuntimeCoordinator.retainResource(resource);
+    retained.push(resource.id);
+  }
+  return true;
+}
+
+function getAINodeRuntimeCanvasResourceByteSize(resources: readonly RenderResourceDescriptor[]): number {
+  return resources.reduce((sum, resource) => sum + (resource.memoryCost?.heapBytes ?? 0), 0);
+}
+
+function releaseRuntimeCanvas(canvas: HTMLCanvasElement): void {
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+function releaseRuntimeCacheEntry(entry: RuntimeCacheEntry): void {
+  runtimeCacheBytes -= entry.byteSize;
+  for (const resourceId of entry.resourceIds) {
+    timelineRuntimeCoordinator.releaseResource(resourceId);
+  }
+  releaseRuntimeCanvas(entry.canvas);
+  releaseRuntimeCanvas(entry.sourceCanvas);
+}
+
+function releaseRuntimeCacheEntryByKey(key: string): void {
+  const entry = runtimeCache.get(key);
+  if (!entry) {
+    return;
+  }
+  releaseRuntimeCacheEntry(entry);
+  runtimeCache.delete(key);
+}
+
+function updateRuntimeCacheEntryResources(
+  entry: RuntimeCacheEntry,
+  key: string,
+  clip: TimelineClip,
+  source: LayerSource,
+  layerId: string,
+  outputSize?: { width: number; height: number },
+): boolean {
+  const [sourceResource, outputResource] = createAINodeRuntimeCanvasResources({
+    key,
+    clip,
+    source,
+    layerId,
+    width: Math.max(1, entry.sourceCanvas.width),
+    height: Math.max(1, entry.sourceCanvas.height),
+  });
+  const outputWidth = Math.max(1, Math.round(outputSize?.width ?? entry.canvas.width));
+  const outputHeight = Math.max(1, Math.round(outputSize?.height ?? entry.canvas.height));
+  const outputDescriptor = {
+    ...outputResource,
+    dimensions: {
+      ...outputResource.dimensions,
+      width: outputWidth,
+      height: outputHeight,
+    },
+    memoryCost: {
+      heapBytes: getCanvasByteSize(outputWidth, outputHeight),
+    },
+  } satisfies RenderResourceDescriptor;
+  if (!reserveAINodeRuntimeCanvasResources([sourceResource, outputDescriptor])) {
+    releaseRuntimeCacheEntryByKey(key);
+    return false;
+  }
+
+  const nextByteSize = (sourceResource.memoryCost?.heapBytes ?? 0) + (outputDescriptor.memoryCost?.heapBytes ?? 0);
+  runtimeCacheBytes += nextByteSize - entry.byteSize;
+  entry.byteSize = nextByteSize;
+  return true;
+}
+
+function enforceAINodeRuntimeCacheLimits(protectedKey?: string): void {
+  while (
+    runtimeCache.size > AI_NODE_RUNTIME_CACHE_ENTRY_LIMIT ||
+    runtimeCacheBytes > AI_NODE_RUNTIME_CACHE_BYTE_LIMIT
+  ) {
+    const oldestKey = runtimeCache.keys().next().value;
+    if (!oldestKey || (oldestKey === protectedKey && runtimeCache.size === 1)) break;
+    const oldest = runtimeCache.get(oldestKey);
+    if (oldest) {
+      releaseRuntimeCacheEntry(oldest);
+    }
+    runtimeCache.delete(oldestKey);
+  }
+}
+
+export function clearAINodeRuntimeCache(): void {
+  for (const entry of runtimeCache.values()) {
+    releaseRuntimeCacheEntry(entry);
+  }
+  runtimeCache.clear();
+  runtimeCacheBytes = 0;
+}
+
+export function clearAINodeRuntimeCacheForClip(clipId: string): void {
+  for (const [key, entry] of runtimeCache.entries()) {
+    if (entry.clipId !== clipId) {
+      continue;
+    }
+    releaseRuntimeCacheEntry(entry);
+    runtimeCache.delete(key);
+  }
+}
+
+function ensureCacheEntry(
+  key: string,
+  clip: TimelineClip,
+  source: LayerSource,
+  layerId: string,
+  processSize: { width: number; height: number },
+): RuntimeCacheEntry | null {
   const existing = runtimeCache.get(key);
+  const resources = createAINodeRuntimeCanvasResources({
+    key,
+    clip,
+    source,
+    layerId,
+    width: processSize.width,
+    height: processSize.height,
+  });
+  const nextByteSize = getAINodeRuntimeCanvasResourceByteSize(resources);
   if (existing) {
+    if (!reserveAINodeRuntimeCanvasResources(resources)) {
+      releaseRuntimeCacheEntryByKey(key);
+      return null;
+    }
+    runtimeCacheBytes += nextByteSize - existing.byteSize;
+    existing.byteSize = nextByteSize;
+    runtimeCache.delete(key);
+    runtimeCache.set(key, existing);
+    enforceAINodeRuntimeCacheLimits(key);
     return existing;
   }
 
+  if (!reserveAINodeRuntimeCanvasResources(resources)) {
+    return null;
+  }
+
   const entry = {
+    clipId: clip.id,
     canvas: document.createElement('canvas'),
     sourceCanvas: document.createElement('canvas'),
+    resourceIds: [resources[0].id, resources[1].id] as const,
+    byteSize: nextByteSize,
   };
   entry.canvas.dataset.masterselectsDynamic = 'true';
   runtimeCache.set(key, entry);
+  runtimeCacheBytes += entry.byteSize;
+  enforceAINodeRuntimeCacheLimits(key);
   return entry;
 }
 
@@ -1588,14 +1866,17 @@ export function renderClipAINodesToCanvas(
   resolveParams: AINodeParamResolver = () => ({}),
   audioOptions: AINodeRuntimeAudioOptions = {},
 ): HTMLCanvasElement | null {
+  const cacheKey = `${layerId}:${clip.id}`;
   const runnableNodes = getConnectedRunnableCustomNodes(clip);
   if (runnableNodes.length === 0 || typeof document === 'undefined') {
+    releaseRuntimeCacheEntryByKey(cacheKey);
     return null;
   }
 
   const canvasSource = getCanvasSource(source);
   const sourceSize = getCanvasSourceDimensions(source);
   if (!canvasSource || !sourceSize) {
+    releaseRuntimeCacheEntryByKey(cacheKey);
     return null;
   }
 
@@ -1620,7 +1901,11 @@ export function renderClipAINodesToCanvas(
       .join('|'),
   ].join(':');
 
-  const entry = ensureCacheEntry(`${layerId}:${clip.id}`);
+  const entry = ensureCacheEntry(cacheKey, clip, source, layerId, processSize);
+  if (!entry) {
+    return null;
+  }
+
   if (entry.lastSignature === signature) {
     return entry.canvas;
   }
@@ -1629,6 +1914,7 @@ export function renderClipAINodesToCanvas(
   entry.sourceCanvas.height = processSize.height;
   const context = entry.sourceCanvas.getContext('2d', { willReadFrequently: true });
   if (!context) {
+    releaseRuntimeCacheEntryByKey(cacheKey);
     return null;
   }
 
@@ -1649,10 +1935,18 @@ export function renderClipAINodesToCanvas(
       audioOptions,
     );
 
+    if (!updateRuntimeCacheEntryResources(entry, cacheKey, clip, source, layerId, {
+      width: output.width,
+      height: output.height,
+    })) {
+      return null;
+    }
+
     entry.canvas.width = output.width;
     entry.canvas.height = output.height;
     const outputContext = entry.canvas.getContext('2d');
     if (!outputContext) {
+      releaseRuntimeCacheEntryByKey(cacheKey);
       return null;
     }
     const outputImageData = outputContext.createImageData(output.width, output.height);
@@ -1660,8 +1954,10 @@ export function renderClipAINodesToCanvas(
     outputContext.putImageData(outputImageData, 0, 0);
     markDynamicCanvasUpdated(entry.canvas, 'ai-node');
     entry.lastSignature = signature;
+    enforceAINodeRuntimeCacheLimits(cacheKey);
     return entry.canvas;
   } catch (error) {
+    releaseRuntimeCacheEntryByKey(cacheKey);
     log.warn('Failed to render AI node canvas; passing source through', error);
     return null;
   }

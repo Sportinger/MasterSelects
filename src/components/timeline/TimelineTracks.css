@@ -104,6 +104,16 @@ body.track-reordering-active {
     linear-gradient(90deg, color-mix(in srgb, var(--track-color, #303030) 18%, var(--bg-tertiary)), var(--bg-tertiary));
 }
 
+/* MIDI tracks without a custom label color get a flat blue base derived from
+   the shared --midi-color (same hue as MIDI clips), darkened toward the header
+   background. Keeps the standard top sheen for consistency with other headers,
+   but no vertical gradient. */
+.track-header.midi.midi-default-tint {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    color-mix(in srgb, var(--midi-color, #3a4050) 50%, var(--bg-tertiary));
+}
+
 .track-header.targeted {
   border-left: 3px solid var(--timeline-toggle-active-color, var(--accent));
   background:
@@ -1729,61 +1739,8 @@ body.track-reordering-active {
   opacity: 0.88;
 }
 
-.timeline-track-section.collapsed .timeline-clip {
-  top: max(0px, min(2px, calc(var(--timeline-focus-context-track-height, 12px) * 0.18)));
-  bottom: max(0px, min(2px, calc(var(--timeline-focus-context-track-height, 12px) * 0.18)));
-  border-radius: 1px;
-  background: linear-gradient(180deg, #5f7692, #3f536c) !important;
-  border-color: #7f94ad !important;
-  box-shadow: 0 0 0 1px rgba(126, 148, 173, 0.18);
-}
-
-.timeline-track-section.collapsed .timeline-clip.overlap-collision-source,
-.timeline-track-section.collapsed .timeline-clip.overlap-collision-target {
-  z-index: 110 !important;
-  background:
-    linear-gradient(180deg, rgba(255, 89, 89, 0.95), rgba(172, 20, 31, 0.9)) !important;
-  border-color: #ff5a5a !important;
-  box-shadow:
-    0 0 0 1px rgba(255, 116, 116, 1),
-    0 0 9px rgba(255, 47, 47, 0.98),
-    0 0 18px rgba(239, 68, 68, 0.82) !important;
-  filter: drop-shadow(0 0 7px rgba(239, 68, 68, 0.95));
-  animation: mini-clip-overlap-collision-pulse 620ms ease-in-out infinite;
-}
-
-@keyframes mini-clip-overlap-collision-pulse {
-  0%,
-  100% {
-    opacity: 0.84;
-    transform: scaleY(1);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scaleY(1.35);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .timeline-track-section.collapsed .timeline-clip.overlap-collision-source,
-  .timeline-track-section.collapsed .timeline-clip.overlap-collision-target {
-    animation: none;
-    opacity: 1;
-  }
-}
-
 .timeline-track-section.collapsed .track-lane::before {
   display: none;
-}
-
-.timeline-track-section.collapsed .timeline-clip > * {
-  display: none !important;
-}
-
-.timeline-track-section.collapsed .timeline-clip::before,
-.timeline-track-section.collapsed .timeline-clip::after {
-  display: none !important;
 }
 
 .timeline-track-section.collapsed .track-header.mixer .track-header-main {
@@ -2066,6 +2023,72 @@ body.track-reordering-active {
   position: relative;
   width: 100%;
   overflow: visible;
+}
+
+.composition-switch-clip-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes composition-switch-clip-entrance-from-left {
+  from {
+    opacity: 1;
+    transform: translate3d(-72px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes composition-switch-clip-entrance-from-right {
+  from {
+    opacity: 1;
+    transform: translate3d(72px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes composition-switch-clip-exit-right {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(calc(140vw + 100%), 0, 0);
+  }
+}
+
+@keyframes composition-switch-clip-exit-left {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(calc(-140vw - 100%), 0, 0);
+  }
+}
+
+.composition-switch-clip-canvas.entrance-animate-left {
+  animation: composition-switch-clip-entrance-from-left 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.composition-switch-clip-canvas.entrance-animate-right {
+  animation: composition-switch-clip-entrance-from-right 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.composition-switch-clip-canvas.exit-animate-right {
+  animation: composition-switch-clip-exit-right 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.composition-switch-clip-canvas.exit-animate-left {
+  animation: composition-switch-clip-exit-left 0.175s cubic-bezier(0.7, 0, 0.84, 0) forwards;
 }
 
 /* Track header resize cursor on shift hover */

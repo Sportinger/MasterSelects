@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useHistoryStore, initHistoryStoreRefs, setHistoryCallbacks, captureSnapshot as captureSnapshotFn, undo as undoFn, redo as redoFn, startBatch as startBatchFn, endBatch as endBatchFn, serializeHistoryStateForProject, hydrateHistoryStateFromProject, setHistoryDisabledForDebug, isHistoryDisabledForDebug } from '../../src/stores/historyStore';
+import { findHistoryStateBoundaryViolations } from '../../src/stores/timeline/historyTimelineEditState';
+import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import type { Layer, TimelineClip } from '../../src/types';
 import { createMockClip } from '../helpers/mockData';
 
@@ -171,6 +173,11 @@ describe('historyStore', () => {
 
     mocks = createMockStores();
     initHistoryStoreRefs(mocks);
+    timelineRuntimeCoordinator.clearResources();
+  });
+
+  afterEach(() => {
+    timelineRuntimeCoordinator.clearResources();
   });
 
   it('captureSnapshot: first capture sets currentSnapshot', () => {
@@ -179,6 +186,106 @@ describe('historyStore', () => {
     expect(state.currentSnapshot).not.toBeNull();
     expect(state.currentSnapshot!.label).toBe('first');
     expect(state.undoStack.length).toBe(0);
+  });
+
+  it('captureSnapshot: stores a runtime-free timeline edit sidecar', () => {
+    const runtimeClip = mockClip({
+      id: 'runtime-clip',
+      file: { name: 'clip.mp4' } as File,
+      source: {
+        type: 'video',
+        mediaFileId: 'media-1',
+        file: { name: 'clip.mp4' } as File,
+        videoElement: { tagName: 'VIDEO' } as HTMLVideoElement,
+        naturalDuration: 12,
+      },
+      audioState: {
+        sourceAnalysisRefs: { waveformPyramidId: 'waveform-ref' },
+        processedAnalysisRefs: { processedWaveformPyramidId: 'processed-waveform-ref' },
+      },
+    });
+    const runtimeLayer = mockLayer({
+      id: 'runtime-layer',
+      sourceClipId: 'runtime-clip',
+      source: {
+        type: 'video',
+        mediaFileId: 'media-1',
+        file: { name: 'layer-source.mp4' } as File,
+        videoElement: { tagName: 'VIDEO' } as HTMLVideoElement,
+      } as NonNullable<Layer['source']>,
+    });
+
+    mocks.setTimelineState({
+      clips: [runtimeClip],
+      selectedClipIds: new Set(['runtime-clip']),
+      layers: [runtimeLayer],
+      selectedLayerId: 'runtime-layer',
+    });
+
+    useHistoryStore.getState().captureSnapshot('with runtime');
+    const timelineEditState = useHistoryStore.getState().currentSnapshot?.timelineEditState;
+
+    expect(timelineEditState).toBeDefined();
+    expect(findHistoryStateBoundaryViolations(timelineEditState)).toEqual([]);
+    expect(JSON.parse(JSON.stringify(timelineEditState))).toEqual(timelineEditState);
+    expect(timelineEditState?.timeline.clips[0].runtimeRef).toEqual({
+      kind: 'media-file',
+      sourceType: 'video',
+      mediaFileId: 'media-1',
+      naturalDuration: 12,
+    });
+    expect(timelineEditState?.timeline.layers[0].sourceRef).toEqual({
+      type: 'video',
+      sourceClipId: 'runtime-clip',
+      mediaFileId: 'media-1',
+    });
+  });
+
+  it('captureSnapshot: derives legacy timeline data from the runtime-free sidecar', () => {
+    const runtimeFile = new File(['video'], 'clip.mp4', { type: 'video/mp4' });
+    const runtimeVideo = { tagName: 'VIDEO', runtimeId: 'snapshot-video' } as unknown as HTMLVideoElement;
+    const runtimeLayerSource = {
+      type: 'video',
+      mediaFileId: 'media-1',
+      file: runtimeFile,
+      videoElement: runtimeVideo,
+    } as NonNullable<Layer['source']>;
+    mocks.setTimelineState({
+      clips: [
+        mockClip({
+          id: 'runtime-clip',
+          file: runtimeFile,
+          source: {
+            type: 'video',
+            mediaFileId: 'media-1',
+            file: runtimeFile,
+            videoElement: runtimeVideo,
+            naturalDuration: 12,
+          },
+          mediaFileId: 'media-1',
+        }),
+      ],
+      layers: [
+        mockLayer({
+          id: 'runtime-layer',
+          sourceClipId: 'runtime-clip',
+          source: runtimeLayerSource,
+        }),
+      ],
+    });
+
+    useHistoryStore.getState().captureSnapshot('with runtime');
+    const snapshot = useHistoryStore.getState().currentSnapshot;
+    const legacyClip = snapshot?.timeline.clips[0];
+    const legacyLayer = snapshot?.timeline.layers[0];
+
+    expect(legacyClip?.source?.videoElement).toBeUndefined();
+    expect(legacyClip?.source?.webCodecsPlayer).toBeUndefined();
+    expect(legacyClip?.source?.file).toBeUndefined();
+    expect(legacyClip?.file).not.toBe(runtimeFile);
+    expect(legacyClip?.file instanceof File).toBe(false);
+    expect(legacyLayer?.source?.videoElement).toBeUndefined();
+    expect(legacyLayer?.source?.file).toBeUndefined();
   });
 
   it('captureSnapshot: second capture pushes first to undoStack', () => {
@@ -248,6 +355,120 @@ describe('historyStore', () => {
     expect(mocks.timeline.getState().zoom).toBe(50); // original value
     expect(useHistoryStore.getState().undoStack.length).toBe(0);
     expect(useHistoryStore.getState().redoStack.length).toBe(1);
+  });
+
+  it('undo: restores from timelineEditState and reuses compatible current runtime', () => {
+    const oldVideo = { tagName: 'VIDEO', runtimeId: 'old-video' } as unknown as HTMLVideoElement;
+    const currentVideo = { tagName: 'VIDEO', runtimeId: 'current-video' } as unknown as HTMLVideoElement;
+    const firstClip = mockClip({
+      id: 'runtime-clip',
+      startTime: 0,
+      mediaFileId: 'media-1',
+      source: {
+        type: 'video',
+        mediaFileId: 'media-1',
+        videoElement: oldVideo,
+        naturalDuration: 12,
+      },
+    });
+    const secondClip = mockClip({
+      ...firstClip,
+      startTime: 5,
+      source: {
+        type: 'video',
+        mediaFileId: 'media-1',
+        videoElement: currentVideo,
+        naturalDuration: 12,
+      },
+    });
+
+    mocks.setTimelineState({ clips: [firstClip] });
+    useHistoryStore.getState().captureSnapshot('initial runtime');
+    mocks.setTimelineState({ clips: [secondClip] });
+    useHistoryStore.getState().captureSnapshot('moved runtime');
+
+    useHistoryStore.getState().undo();
+    const restoredClip = mocks.timeline.getState().clips[0];
+
+    expect(restoredClip.startTime).toBe(0);
+    expect(restoredClip.source?.videoElement).toBe(currentVideo);
+    expect(restoredClip.source?.videoElement).not.toBe(oldVideo);
+  });
+
+  it('undo: reports rehydrated compatible runtime resources after restore', () => {
+    const oldVideo = document.createElement('video');
+    oldVideo.src = 'blob:old-video';
+    const currentVideo = document.createElement('video');
+    currentVideo.src = 'blob:current-video';
+    const firstClip = mockClip({
+      id: 'runtime-clip',
+      startTime: 0,
+      mediaFileId: 'media-1',
+      source: {
+        type: 'video',
+        mediaFileId: 'media-1',
+        runtimeSourceId: 'media:media-1',
+        runtimeSessionKey: 'interactive:old',
+        videoElement: oldVideo,
+        naturalDuration: 12,
+      },
+    });
+    const secondClip = mockClip({
+      ...firstClip,
+      startTime: 5,
+      source: {
+        type: 'video',
+        mediaFileId: 'media-1',
+        runtimeSourceId: 'media:media-1',
+        runtimeSessionKey: 'interactive:current',
+        videoElement: currentVideo,
+        naturalDuration: 12,
+      },
+    });
+
+    mocks.setTimelineState({ clips: [firstClip] });
+    useHistoryStore.getState().captureSnapshot('initial runtime');
+    mocks.setTimelineState({ clips: [secondClip] });
+    useHistoryStore.getState().captureSnapshot('moved runtime');
+
+    timelineRuntimeCoordinator.clearResources();
+    useHistoryStore.getState().undo();
+
+    const resources = timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources;
+    expect(resources.map((resource) => resource.owner.ownerId).toSorted()).toEqual([
+      'history-rehydrate:runtime-clip',
+      'history-rehydrate:runtime-clip',
+    ]);
+    expect(JSON.stringify(resources)).toContain('interactive:current');
+    expect(JSON.stringify(resources)).not.toContain('interactive:old');
+  });
+
+  it('undo: restores deleted clips as data-only lazy reload entries', () => {
+    const oldVideo = { tagName: 'VIDEO', runtimeId: 'deleted-video' } as unknown as HTMLVideoElement;
+    const firstClip = mockClip({
+      id: 'deleted-runtime-clip',
+      mediaFileId: 'media-1',
+      source: {
+        type: 'video',
+        mediaFileId: 'media-1',
+        videoElement: oldVideo,
+        naturalDuration: 12,
+      },
+    });
+
+    mocks.setTimelineState({ clips: [firstClip] });
+    useHistoryStore.getState().captureSnapshot('initial runtime');
+    mocks.setTimelineState({ clips: [] });
+    useHistoryStore.getState().captureSnapshot('delete runtime');
+
+    useHistoryStore.getState().undo();
+    const restoredClip = mocks.timeline.getState().clips[0];
+
+    expect(restoredClip.id).toBe('deleted-runtime-clip');
+    expect(restoredClip.source?.videoElement).toBeUndefined();
+    expect(restoredClip.source?.mediaFileId).toBe('media-1');
+    expect(restoredClip.mediaFileId).toBe('media-1');
+    expect(restoredClip.needsReload).toBe(true);
   });
 
   it('undo: returns the label of the action being undone', () => {
@@ -911,18 +1132,21 @@ describe('historyStore', () => {
   // ─── Snapshot deep clone isolation ─────────────────────────────────
 
   it('snapshots are deep cloned: mutating source does not affect snapshot', () => {
-    const clips = [mockClip({ id: 'c1', trackId: 'v1', startFrame: 0, endFrame: 100 })];
+    const clips = [mockClip({ id: 'c1', trackId: 'v1', startTime: 0, duration: 100, startFrame: 0, endFrame: 100 })];
     mocks.setTimelineState({ clips });
     useHistoryStore.getState().captureSnapshot('with clips');
 
     // Mutate the original array
+    clips[0].startTime = 999;
     clips[0].endFrame = 999;
     clips.push({ id: 'c2', trackId: 'v1', startFrame: 200, endFrame: 300 });
 
     const snapshot = useHistoryStore.getState().currentSnapshot!;
     // Snapshot should not be affected
     expect(snapshot.timeline.clips.length).toBe(1);
-    expect((snapshot.timeline.clips[0] as LegacyClip).endFrame).toBe(100);
+    expect(snapshot.timeline.clips[0].startTime).toBe(0);
+    expect(snapshot.timelineEditState?.timeline.clips[0].startTime).toBe(0);
+    expect((snapshot.timeline.clips[0] as LegacyClip).endFrame).toBeUndefined();
   });
 
   it('snapshots are deep cloned: mutating snapshot does not affect subsequent undo', () => {

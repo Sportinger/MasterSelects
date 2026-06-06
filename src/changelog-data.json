@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-06-06",
+    "type": "refactor",
+    "title": "MasterSelects 2.1.2",
+    "description": "Timeline canvas refactor release: large timelines now keep clip bodies on the canvas/worker renderer, dense MIDI clips draw through an aggregated canvas preview instead of per-note DOM, and the staging MIDI/GM sampler work is merged into the new timeline paths without restoring the old TimelineClip renderer.",
+    "section": "Release"
+  },
+  {
     "date": "2026-06-01",
     "type": "new",
     "title": "MasterSelects 2.1.1",

@@ -72,6 +72,14 @@ function resolvePlayStartTime(options?: CompositionSwitchOptions): number {
     : 0;
 }
 
+function resetPlaybackClockForCompositionStart(playStartTime: number): void {
+  playheadState.position = playStartTime;
+  playheadState.hasMasterAudio = false;
+  playheadState.masterAudioElement = null;
+  playheadState.masterAudioClock = null;
+  playheadState.playbackJustStarted = true;
+}
+
 type NestedCompReferenceClip = Pick<SerializableClip, 'isComposition' | 'compositionId' | 'inPoint' | 'outPoint' | 'duration'> &
   Partial<Pick<SerializableClip, 'sourceType' | 'naturalDuration' | 'waveform'>> &
   Partial<Pick<TimelineClip, 'source'>>;
@@ -419,11 +427,7 @@ export const createCompositionSlice: MediaSliceCreator<CompositionActions> = (se
       ts.pause();
       ts.setPlayheadPosition(playStartTime);
       // Reset the high-frequency playhead and audio master
-      playheadState.position = playStartTime;
-      playheadState.hasMasterAudio = false;
-      playheadState.masterAudioElement = null;
-      playheadState.masterAudioClock = null;
-      playheadState.playbackJustStarted = true;
+      resetPlaybackClockForCompositionStart(playStartTime);
       // Seek all video/audio elements back to their in-points
       for (const clip of ts.clips) {
         if (clip.source?.videoElement) {
@@ -792,10 +796,10 @@ function doSetActiveComposition(
   // Save current timeline to current composition
   const savedCompId = currentActiveId;
   if (currentActiveId) {
-    // Sync high-frequency playhead position back to store before serializing
-    // (rAF loop updates playheadState.position but not the Zustand store)
-    // Always sync — even when paused, playheadState.position has the most recent value
-    timelineStore.setPlayheadPosition(playheadState.position);
+    // Sync the active internal playback clock back to the store before serializing.
+    if (playheadState.isUsingInternalPosition) {
+      timelineStore.setPlayheadPosition(playheadState.position);
+    }
     const timelineData = timelineStore.getSerializableState();
     set((state) => ({
       compositions: state.compositions.map((c) =>
@@ -857,12 +861,19 @@ async function finishCompositionSwitch(
 
   // Load new composition's timeline
   if (newId) {
+    if (playFromStart) {
+      timelineStore.pause();
+      timelineStore.setPlayheadPosition(playStartTime);
+      resetPlaybackClockForCompositionStart(playStartTime);
+    }
+
     const freshCompositions = get().compositions;
     const newComp = freshCompositions.find((c) => c.id === newId);
     await timelineStore.loadState(newComp?.timelineData);
 
     if (playFromStart) {
       timelineStore.setPlayheadPosition(playStartTime);
+      resetPlaybackClockForCompositionStart(playStartTime);
       timelineStore.play();
     } else if (syncedPlayhead !== null && syncedPlayhead >= 0) {
       timelineStore.setPlayheadPosition(syncedPlayhead);

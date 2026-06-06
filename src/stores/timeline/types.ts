@@ -41,6 +41,7 @@ import type {
   AudioSendState,
   SpectralImageLayer,
   VideoBakeRegion,
+  ClipAudioState,
   ClipAudioStemState,
   AudioStemKind,
 } from '../../types';
@@ -113,6 +114,7 @@ export type TimelineToolId =
   | 'range-select'
   | 'blade'
   | 'blade-all-tracks'
+  | 'glue'
   | 'split-at-playhead'
   | 'split-all-at-playhead'
   | 'trim-start-to-playhead'
@@ -158,7 +160,8 @@ export type TimelineToolPreviewGhostVariant =
   | 'trim-target'
   | 'ripple-shift'
   | 'rolling-neighbor'
-  | 'rate-stretch';
+  | 'rate-stretch'
+  | 'transition-drop';
 
 export interface TimelineToolPreviewGhostRange {
   id: string;
@@ -512,6 +515,12 @@ export interface SolidClipActions {
 // MIDI clip actions (issue #182, extracted to midiClipSlice).
 export interface MidiClipActions {
   addMidiClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  /** Rename a MIDI clip (inline-edit from the clip context menu, issue #232). */
+  renameMidiClip: (clipId: string, name: string) => void;
+  /** Clip currently in inline rename mode, or null. Drives the in-clip name input. */
+  clipRenameId: string | null;
+  /** Enter/leave inline rename mode for a clip (null to cancel). */
+  setClipRenameId: (clipId: string | null) => void;
   // Note CRUD for the piano-roll editor. `start`/`duration` are seconds relative to clip start.
   addMidiNote: (clipId: string, note: { pitch: number; start: number; duration: number; velocity?: number }) => string | null;
   updateMidiNote: (
@@ -1036,10 +1045,23 @@ export interface KeyframeActions {
   toggleKeyframeRecording: (clipId: string, property: AnimatableProperty) => void;
   isRecording: (clipId: string, property: AnimatableProperty) => boolean;
   setPropertyValue: (clipId: string, property: AnimatableProperty, value: number) => void;
-  addMaskPathKeyframe: (clipId: string, maskId: string, pathValue?: Keyframe['pathValue'], time?: number, easing?: string | null) => void;
+  addMaskPathKeyframe: (
+    clipId: string,
+    maskId: string,
+    pathValue?: Keyframe['pathValue'],
+    time?: number,
+    easing?: string | null,
+    options?: { phase?: 'update' | 'commit'; source?: TimelineEditOperationSource; historyLabel?: string },
+  ) => void;
   recordMaskPathKeyframe: (clipId: string, maskId: string) => void;
   disableMaskPathKeyframes: (clipId: string, maskId: string, pathValue?: Keyframe['pathValue']) => void;
-  addTextBoundsPathKeyframe: (clipId: string, pathValue?: Keyframe['pathValue'], time?: number, easing?: string | null) => void;
+  addTextBoundsPathKeyframe: (
+    clipId: string,
+    pathValue?: Keyframe['pathValue'],
+    time?: number,
+    easing?: string | null,
+    options?: { phase?: 'update' | 'commit'; source?: TimelineEditOperationSource; historyLabel?: string },
+  ) => void;
   recordTextBoundsPathKeyframe: (clipId: string) => void;
   disableTextBoundsPathKeyframes: (clipId: string, pathValue?: Keyframe['pathValue']) => void;
   toggleTrackExpanded: (trackId: string) => void;
@@ -1076,9 +1098,24 @@ export interface MarkerActions {
 
 // Transition actions interface
 export interface TransitionActions {
-  applyTransition: (clipAId: string, clipBId: string, type: string, duration: number) => void;
-  removeTransition: (clipId: string, edge: 'in' | 'out') => void;
-  updateTransitionDuration: (clipId: string, edge: 'in' | 'out', duration: number) => void;
+  applyTransition: (
+    clipAId: string,
+    clipBId: string,
+    type: string,
+    duration: number,
+    options?: { source?: TimelineEditOperationSource; historyLabel?: string },
+  ) => TimelineEditResult;
+  removeTransition: (
+    clipId: string,
+    edge: 'in' | 'out',
+    options?: { source?: TimelineEditOperationSource; historyLabel?: string },
+  ) => TimelineEditResult;
+  updateTransitionDuration: (
+    clipId: string,
+    edge: 'in' | 'out',
+    duration: number,
+    options?: { source?: TimelineEditOperationSource; historyLabel?: string },
+  ) => TimelineEditResult;
   findClipJunction: (trackId: string, time: number, threshold?: number) => { clipA: TimelineClip; clipB: TimelineClip; junctionTime: number } | null;
 }
 
@@ -1147,6 +1184,7 @@ export interface ClipboardClipData {
   thumbnails?: string[];
   waveform?: number[];
   waveformChannels?: number[][];
+  audioAnalysisRefs?: Pick<ClipAudioState, 'processedAnalysisRefs' | 'sourceAnalysisRefs'>;
   // Composition clips
   isComposition?: boolean;
   compositionId?: string;

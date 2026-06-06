@@ -4,10 +4,9 @@
 import type { TimelineClip } from '../../../types';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
-import { createAudioElement } from '../helpers/webCodecsHelpers';
+import { createAudioElement, releaseTemporaryMediaElement } from '../helpers/webCodecsHelpers';
 import { AUDIO_WAVEFORM_THRESHOLD } from '../helpers/waveformHelpers';
 import { generateClipId } from '../helpers/idGenerator';
-import { blobUrlManager } from '../helpers/blobUrlManager';
 import { Logger } from '../../../services/logger';
 import {
   SOURCE_WAVEFORM_MAX_PREVIEW_SAMPLES,
@@ -84,8 +83,6 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
 
   // Create and load audio element
   const audio = createAudioElement(file);
-  // Track the blob URL for cleanup
-  blobUrlManager.create(clip.id, file, 'audio');
 
   // Wait for metadata
   await new Promise<void>((resolve) => {
@@ -103,13 +100,14 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
   updateClip(clip.id, {
     duration: naturalDuration,
     outPoint: naturalDuration,
-    source: { type: 'audio', audioElement: audio, naturalDuration, mediaFileId },
+    source: { type: 'audio', naturalDuration, mediaFileId },
     isLoading: false,
     ...(cachedWaveform ?? {
       waveformGenerating: waveformsEnabled && !isLargeFile,
       waveformProgress: 0,
     }),
   });
+  releaseTemporaryMediaElement(audio);
 
   // Generate waveform in background - only if enabled and not very large
   if (isLargeFile) {
