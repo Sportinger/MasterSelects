@@ -1,4 +1,5 @@
 import {
+  canRetainThumbnailJob,
   createThumbnailBitmapResourceDescriptor,
   getThumbnailBitmapDecodeJobId,
   getThumbnailBitmapResourceId,
@@ -44,6 +45,25 @@ export function ensureThumbnailBitmap(
   registerThumbnailBitmapSource(url, mediaFileId);
   if (cache.has(url) || inflight.has(url) || invalidatedUrls.has(url)) return;
 
+  const jobId = getThumbnailBitmapDecodeJobId(url);
+  const jobAdmission = canRetainThumbnailJob({
+    jobId,
+    jobKind: 'thumbnail-bitmap-decode',
+    mediaFileId,
+    thumbnailUrl: url,
+  });
+  if (!jobAdmission.admitted) {
+    unlinkUrl(url);
+    return;
+  }
+
+  const resource = createThumbnailBitmapResourceDescriptor(url, mediaFileId);
+  const bitmapAdmission = timelineRuntimeCoordinator.canRetainResource(resource);
+  if (!bitmapAdmission.admitted) {
+    unlinkUrl(url);
+    return;
+  }
+
   inflight.add(url);
   reportThumbnailBitmapDecodeJob(url, mediaFileId);
   fetch(url)
@@ -58,7 +78,6 @@ export function ensureThumbnailBitmap(
         return;
       }
 
-      const resource = createThumbnailBitmapResourceDescriptor(url, mediaFileId);
       const admission = timelineRuntimeCoordinator.canRetainResource(resource);
       if (!admission.admitted) {
         bmp.close();

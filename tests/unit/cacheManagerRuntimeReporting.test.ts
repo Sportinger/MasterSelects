@@ -10,6 +10,39 @@ const createImageData = (width: number, height: number): ImageData =>
     height,
   }) as ImageData;
 
+type ScrubbingCacheDeviceLossTestAccess = {
+  getOrCreateBackgroundSession(video: HTMLVideoElement): { video: HTMLVideoElement } | null;
+};
+
+const createSourceVideo = () => ({
+  src: 'blob:device-loss-source',
+  currentSrc: 'blob:device-loss-source',
+  crossOrigin: 'anonymous',
+  duration: 12,
+}) as unknown as HTMLVideoElement;
+
+const createBackgroundVideo = () => ({
+  src: '',
+  currentSrc: '',
+  muted: false,
+  preload: '',
+  playsInline: false,
+  crossOrigin: '',
+  readyState: 0,
+  networkState: 0,
+  duration: 12,
+  videoWidth: 1920,
+  videoHeight: 1080,
+  currentTime: 0,
+  paused: true,
+  seeking: false,
+  load: vi.fn(),
+  pause: vi.fn(),
+  removeAttribute: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+}) as unknown as HTMLVideoElement;
+
 describe('CacheManager runtime reporting cleanup', () => {
   beforeEach(() => {
     timelineRuntimeCoordinator.clearResources();
@@ -21,16 +54,24 @@ describe('CacheManager runtime reporting cleanup', () => {
     vi.restoreAllMocks();
   });
 
-  it('releases RAM preview cache reporting before dropping ScrubbingCache on device loss', () => {
+  it('destroys ScrubbingCache resources before dropping it on device loss', () => {
     const manager = new CacheManager();
     manager.initialize({} as GPUDevice);
     manager.getScrubbingCache()?.cacheCompositeFrame(1, createImageData(10, 10));
+    const backgroundVideo = createBackgroundVideo();
+    vi.spyOn(document, 'createElement').mockReturnValue(backgroundVideo);
+    (manager.getScrubbingCache() as unknown as ScrubbingCacheDeviceLossTestAccess)
+      .getOrCreateBackgroundSession(createSourceVideo());
 
     expect(timelineRuntimeCoordinator.getBridgeStats().policies['ram-preview'].resources).toHaveLength(1);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.background.resources).toHaveLength(1);
 
     manager.handleDeviceLost();
 
     expect(timelineRuntimeCoordinator.getBridgeStats().policies['ram-preview'].resources).toHaveLength(0);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.background.resources).toHaveLength(0);
+    expect(backgroundVideo.pause).toHaveBeenCalledOnce();
+    expect(backgroundVideo.removeAttribute).toHaveBeenCalledWith('src');
   });
 
   it('skips ImageData allocation when RAM preview composite cache admission is denied', async () => {

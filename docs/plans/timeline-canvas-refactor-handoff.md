@@ -8,19 +8,22 @@ Issue/branch: issue #228 on `issue-228-timeline-canvas-rendering`.
 
 ## Start Here Before Spawning Agents
 
-- The current committed branch tip is `0f202a6b` (`Refactor timeline canvas
-  rendering architecture`), matching `origin/issue-228-timeline-canvas-rendering`;
-  the working tree was clean immediately after push.
-- Fresh checkouts of this branch at `0f202a6b` already include the committed
+- The current committed branch tip is `ace78705` (`Harden timeline menu guards
+  and image reloads`), matching `origin/issue-228-timeline-canvas-rendering`.
+- The current working tree has the post-`ace78705` runtime-admission slice in
+  progress: `19` tracked changed files, `2` new untracked files, tracked
+  `+823/-103` net `+720` LOC plus `+86` new-file LOC from
+  `npm run swarm:status` at `2026-06-06T11:49:21Z`.
+- Fresh checkouts of this branch at `ace78705` already include the committed
   canvas refactor and deleted DOM clip body. New workdirs can be created from the
   branch; continue to avoid reverting unrelated local work if a future tree
   becomes dirty.
 - The old DOM clip body retirement is committed at `0f202a6b`;
   `src/components/timeline/TimelineClip.tsx` is absent at `HEAD`.
-- Full gates passed for the content committed as `0f202a6b`: `npm run build`,
-  `npm run lint`, and `npm run test` (`362` test files / `3862` tests). Rerun
-  the relevant targeted checks after new slices and rerun final full gates before
-  merge/release readiness or another normal push.
+- Full gates passed for the content committed as `ace78705`: `npm run build`,
+  `npm run lint`, and `npm run test` (`363` test files / `3869` tests). Rerun
+  the relevant targeted checks after the current uncommitted slice and rerun
+  final full gates before merge/release readiness or another normal push.
 - `src/components/timeline/Timeline.tsx` intentionally still imports
   `TimelineClip.css`. The CSS file is now shell/overlay styling, not proof that
   `TimelineClip.tsx` should be restored.
@@ -72,6 +75,30 @@ Issue/branch: issue #228 on `issue-228-timeline-canvas-rendering`.
   `npm run test -- tests/stores/mediaStore/fileManageSlice.test.ts tests/unit/TimelineContextMenu.test.tsx tests/unit/TimelineEmptyContextMenu.test.tsx tests/unit/clipContextMenu.test.ts tests/unit/timelineEmptyContextMenu.test.ts tests/unit/trackContextMenu.test.ts tests/unit/TrackContextMenu.test.tsx`
   (`164` tests), touched-file ESLint, and
   `npx tsc -p tsconfig.app.json --noEmit --pretty false`.
+- Current uncommitted runtime-admission slice after `ace78705`: composition
+  mixdown playback `HTMLAudioElement`s are admitted/reported before allocation,
+  completed mixdown `AudioBuffer` cache entries are retained/released through
+  the runtime coordinator, nested content-hash refresh/deleted clip/media-delete
+  cleanup release composition mixdown runtime, thumbnail generation video/canvas
+  admission now happens before DOM allocation, and thumbnail bitmap decode job
+  plus bitmap admission now happen before `fetch`/`createImageBitmap`.
+  `ScrubbingCache` background preload videos are now background-policy admitted
+  before hidden video creation, released on source/session clear, and
+  `CacheManager.handleDeviceLost()` destroys the whole cache instead of dropping
+  it after only composite-resource release. Composition mixdown runtime release
+  now lives in store-cycle-safe resource helpers, while the timeline store
+  mutation helper is isolated from the cache/mixer path. Focused checks passed:
+  `npm run test -- tests/unit/compositionAudioMixdownCache.test.ts tests/unit/audioScrubSync.test.ts tests/unit/compositionAudioMixer.test.ts tests/stores/mediaStore/fileManageSlice.test.ts`
+  (`147` tests), `npm run test -- tests/unit/thumbnailCacheService.test.ts tests/unit/thumbnailBitmapCache.test.ts`
+  (`24` tests), `npm run test -- tests/unit/scrubbingCache.test.ts tests/unit/cacheManagerRuntimeReporting.test.ts`
+  (`14` tests), `npm run test -- tests/stores/timeline/clipSlice.test.ts`
+  (`139` tests), touched-file ESLint, and
+  `npx tsc -p tsconfig.app.json --noEmit --pretty false`.
+- Remaining agent-confirmed runtime/menu work after this slice: export/audio-only
+  composition mixdown admission before timeline mutation, thumbnail blob URL
+  reporting and legacy media thumbnail helpers, pending background/slot
+  hidden-video disposer cleanup, and full context-menu pure command descriptors
+  plus parity tests.
 - The old DOM `TimelineClip.tsx` body has been deleted.
 - Timeline clip rendering is canvas-first, with forced-worker synthetic/fallback
   smokes in place. Focused live real-media worker-positive smokes have passed on

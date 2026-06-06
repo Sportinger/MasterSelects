@@ -59,6 +59,7 @@ import {
   isPreparedClipAudioAnalysisInputStale,
   prepareClipAudioAnalysisInput,
 } from '../../services/audio/ClipAudioAnalysisOrchestrator';
+import { releaseCompositionMixdownClipRuntime } from '../../services/timeline/compositionAudioMixdownRuntimeResources';
 import {
   createClipAudioAnalysisJobState,
   updateClipAudioAnalysisJobState,
@@ -2062,6 +2063,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
         ),
       });
       if (contentHashChanged) {
+        releaseCompositionMixdownClipRuntime(compClip);
         blobUrlManager.revokeType(compClip.id, 'audio');
       }
 

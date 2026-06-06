@@ -501,9 +501,7 @@ class ThumbnailCacheService {
       // Generate fresh thumbnails
       const abortController = new AbortController();
       this.abortControllers.set(mediaFileId, abortController);
-      const thumbnailVideo = createThumbnailGenerationVideoFromUrl(sourceUrl, crossOrigin);
-
-      if (!thumbnailVideo) {
+      if (!sourceUrl) {
         log.warn('Thumbnail generation skipped - source has no usable URL', { mediaFileId });
         this.abortControllers.delete(mediaFileId);
         this.notify(mediaFileId, 'error');
@@ -513,7 +511,6 @@ class ThumbnailCacheService {
       const videoAdmission = canRetainThumbnailGenerationVideo({
         mediaFileId,
         sourceUrl,
-        element: thumbnailVideo,
       });
       if (!videoAdmission.admitted) {
         log.debug('Thumbnail generation video skipped by runtime admission', {
@@ -521,9 +518,17 @@ class ThumbnailCacheService {
           reason: videoAdmission.reason,
           rejectedUnits: videoAdmission.rejectedUnits.map((entry) => entry.unit),
         });
-        cleanupThumbnailGenerationVideo(thumbnailVideo);
         this.abortControllers.delete(mediaFileId);
         this.notify(mediaFileId, 'none');
+        return;
+      }
+
+      const thumbnailVideo = createThumbnailGenerationVideoFromUrl(sourceUrl, crossOrigin);
+
+      if (!thumbnailVideo) {
+        log.warn('Thumbnail generation skipped - source has no usable URL', { mediaFileId });
+        this.abortControllers.delete(mediaFileId);
+        this.notify(mediaFileId, 'error');
         return;
       }
 
@@ -634,9 +639,6 @@ class ThumbnailCacheService {
       });
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = THUMB_WIDTH;
-    canvas.height = THUMB_HEIGHT;
     const canvasAdmission = canRetainThumbnailGenerationCanvas(mediaFileId);
     if (!canvasAdmission.admitted) {
       log.debug('Thumbnail generation canvas skipped by runtime admission', {
@@ -646,6 +648,9 @@ class ThumbnailCacheService {
       });
       return false;
     }
+    const canvas = document.createElement('canvas');
+    canvas.width = THUMB_WIDTH;
+    canvas.height = THUMB_HEIGHT;
     reportThumbnailGenerationCanvas(mediaFileId);
 
     try {

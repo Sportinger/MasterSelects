@@ -14,10 +14,23 @@ import {
   type RamPreviewCompositeCacheReport,
   type RamPreviewGpuFrameReport,
 } from '../../services/timeline/ramPreviewRuntimeReporting';
-import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
+import { timelineRuntimeCoordinator } from '../../services/timeline/timelineRuntimeCoordinator';
+import type {
+  RenderResourceDescriptor,
+  TimelineRuntimeAdmissionDecision,
+} from '../../services/timeline/runtimeCoordinatorTypes';
 import type { GpuFrameCacheEntry } from '../core/types';
 
 const log = Logger.create('ScrubbingCache');
+
+function hashString(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
 
 type ScrubbingTextureEntry = {
   texture: GPUTexture;
@@ -377,11 +390,103 @@ export class ScrubbingCache {
     return Number.isFinite(duration) && duration > 0 ? duration : undefined;
   }
 
+  private getBackgroundPreloadVideoResourceId(videoSrc: string): string {
+    return `scrubbing-cache:background-preload-video:${hashString(videoSrc)}`;
+  }
+
+  private getVideoSrcKind(src: string | undefined): 'blob-url' | 'file-path' | 'project-path' | 'remote-url' | 'media-source' | 'unknown' {
+    if (!src) return 'unknown';
+    if (src.startsWith('blob:')) return 'blob-url';
+    if (src.startsWith('file:')) return 'file-path';
+    if (/^https?:\/\//i.test(src)) return 'remote-url';
+    if (src.startsWith('mediastream:')) return 'media-source';
+    return 'project-path';
+  }
+
+  private createBackgroundPreloadVideoResource(
+    videoSrc: string,
+    element?: HTMLVideoElement,
+  ): RenderResourceDescriptor {
+    const resourceId = this.getBackgroundPreloadVideoResourceId(videoSrc);
+    const readyState = element?.readyState ?? 0;
+    const networkState = element?.networkState ?? 0;
+    const status = element?.error
+      ? 'warning'
+      : readyState >= HTMLMediaElement.HAVE_METADATA
+        ? 'ok'
+        : 'unknown';
+    return {
+      id: resourceId,
+      kind: 'html-media',
+      policyId: 'background',
+      owner: {
+        ownerId: `scrubbing-cache:background-preload:${hashString(videoSrc)}`,
+        ownerType: 'timeline',
+      },
+      source: {
+        sourceId: videoSrc,
+        previewPath: videoSrc,
+      },
+      mediaElementKind: 'video',
+      elementId: resourceId,
+      srcKind: this.getVideoSrcKind(videoSrc),
+      dimensions: {
+        width: element?.videoWidth,
+        height: element?.videoHeight,
+        durationSeconds: this.getFiniteDuration(element?.duration ?? 0),
+      },
+      diagnostics: {
+        status,
+        provider: {
+          providerId: resourceId,
+          providerKind: 'html-video',
+          status,
+          isReady: readyState >= HTMLMediaElement.HAVE_METADATA,
+          isPlaying: element ? !element.paused : false,
+          isSeeking: element?.seeking ?? false,
+          currentTimeSeconds: element?.currentTime ?? 0,
+          readyState,
+          networkState,
+          errorCode: element?.error ? String(element.error.code) : undefined,
+        },
+      },
+      label: 'Background scrub preload video',
+      tags: ['scrubbing-cache', 'background-preload', 'html-video'],
+    };
+  }
+
+  private canRetainBackgroundPreloadVideo(videoSrc: string): TimelineRuntimeAdmissionDecision {
+    return timelineRuntimeCoordinator.canRetainResource(
+      this.createBackgroundPreloadVideoResource(videoSrc)
+    );
+  }
+
+  private reportBackgroundPreloadVideo(videoSrc: string, element: HTMLVideoElement): void {
+    timelineRuntimeCoordinator.retainResource(
+      this.createBackgroundPreloadVideoResource(videoSrc, element)
+    );
+  }
+
+  private releaseBackgroundPreloadVideo(videoSrc: string): void {
+    timelineRuntimeCoordinator.releaseResource(this.getBackgroundPreloadVideoResourceId(videoSrc));
+  }
+
   private getOrCreateBackgroundSession(video: HTMLVideoElement): BackgroundPreloadSession | null {
-    const videoSrc = video.src;
+    const videoSrc = video.currentSrc || video.src;
+    if (!videoSrc) return null;
     const existing = this.backgroundPreloadSessions.get(videoSrc);
     if (existing && !existing.disposed) {
       return existing;
+    }
+
+    const admission = this.canRetainBackgroundPreloadVideo(videoSrc);
+    if (!admission.admitted) {
+      log.debug('Background scrub preload video skipped by runtime admission', {
+        videoSrc,
+        reason: admission.reason,
+        rejectedUnits: admission.rejectedUnits.map((entry) => entry.unit),
+      });
+      return null;
     }
 
     const backgroundVideo = document.createElement('video');
@@ -393,6 +498,7 @@ export class ScrubbingCache {
     }
     backgroundVideo.src = video.currentSrc || video.src;
     backgroundVideo.load();
+    this.reportBackgroundPreloadVideo(videoSrc, backgroundVideo);
 
     const session: BackgroundPreloadSession = {
       videoSrc,
@@ -861,6 +967,7 @@ export class ScrubbingCache {
     } catch {
       // Best-effort cleanup only.
     }
+    this.releaseBackgroundPreloadVideo(session.videoSrc);
   }
 
   private clearBackgroundPreload(videoSrc?: string): void {

@@ -44,6 +44,7 @@ import {
   invalidateTimelineMediaCaches,
   type TimelineAudioCacheRefClip,
 } from '../../../services/timeline/timelineCacheInvalidation';
+import { releaseCompositionMixdownClipRuntime } from '../../../services/timeline/compositionAudioMixdownRuntimeResources';
 import {
   createPrimaryMediaObjectUrl,
   createThumbnailMediaObjectUrl,
@@ -527,6 +528,7 @@ function cleanupTimelineClipResources(clip: TimelineClip): void {
     clip.mixdownAudio.src = '';
     clip.mixdownAudio.load();
   }
+  releaseCompositionMixdownClipRuntime(clip);
 
   if (isVectorAnimationSourceType(clip.source?.type)) {
     vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);

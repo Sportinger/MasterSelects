@@ -5,6 +5,7 @@ import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { audioRoutingManager } from '../../services/audioRoutingManager';
 import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
 import { clearMasterAudio, playheadState } from '../../services/layerBuilder/PlayheadState';
+import { releaseCompositionMixdownClipRuntime } from '../../services/timeline/compositionAudioMixdownRuntimeResources';
 import { blobUrlManager } from './helpers/blobUrlManager';
 
 function detachMediaElement(element: HTMLMediaElement | null | undefined): void {
@@ -42,6 +43,7 @@ export function cleanupDeletedClipResources(deletedClips: readonly TimelineClip[
     if (clip.mixdownAudio) {
       detachMediaElement(clip.mixdownAudio);
     }
+    releaseCompositionMixdownClipRuntime(clip);
     if (isVectorAnimationSourceType(clip.source?.type)) {
       vectorAnimationRuntimeManager.destroyClipRuntime(clip.id, clip.source.type);
     }

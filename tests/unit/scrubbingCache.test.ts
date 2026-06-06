@@ -10,6 +10,8 @@ type ScrubbingCacheTestAccess = {
   cacheCompositeFrame(time: number, imageData: ImageData): boolean;
   hasCompositeCacheFrame(time: number): boolean;
   clearCompositeCache(): void;
+  clearScrubbingCache(videoSrc?: string): void;
+  getOrCreateBackgroundSession(video: HTMLVideoElement): { videoSrc: string; video: HTMLVideoElement } | null;
   addToGpuCache(time: number, entry: {
     texture: GPUTexture;
     view: GPUTextureView;
@@ -42,6 +44,49 @@ const createGpuEntry = (width: number, height: number) => ({
   format: 'rgba8unorm',
   gpuBytes: width * height * 4,
 });
+
+const createSourceVideo = (src = 'blob:source-video') => ({
+  src,
+  currentSrc: src,
+  crossOrigin: 'anonymous',
+  duration: 12,
+}) as unknown as HTMLVideoElement;
+
+const createBackgroundVideo = () => ({
+  src: '',
+  currentSrc: '',
+  muted: false,
+  preload: '',
+  playsInline: false,
+  crossOrigin: '',
+  readyState: 0,
+  networkState: 0,
+  duration: 12,
+  videoWidth: 1920,
+  videoHeight: 1080,
+  currentTime: 0,
+  paused: true,
+  seeking: false,
+  load: vi.fn(),
+  pause: vi.fn(),
+  removeAttribute: vi.fn(),
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+}) as unknown as HTMLVideoElement;
+
+function retainBackgroundPreloadResource(index: number): void {
+  timelineRuntimeCoordinator.retainResource({
+    id: `retained-background-preload-${index}`,
+    kind: 'html-media',
+    policyId: 'background',
+    owner: {
+      ownerId: `retained-background-preload-${index}`,
+      ownerType: 'timeline',
+    },
+    mediaElementKind: 'video',
+    elementId: `retained-background-preload-${index}`,
+  });
+}
 
 beforeEach(() => {
   timelineRuntimeCoordinator.clearResources();
@@ -198,5 +243,47 @@ describe('ScrubbingCache RAM preview runtime reporting', () => {
     expect(cache.addToGpuCache(1, entry)).toBe(false);
     expect(entry.texture.destroy).toHaveBeenCalledOnce();
     expect(timelineRuntimeCoordinator.getBridgeStats().policies['ram-preview'].budgetReport.usage.resources).toBe(96);
+  });
+});
+
+describe('ScrubbingCache background preload runtime reporting', () => {
+  it('reports background preload videos and releases them on source clear', () => {
+    const cache = createCache();
+    const backgroundVideo = createBackgroundVideo();
+    vi.spyOn(document, 'createElement').mockReturnValue(backgroundVideo);
+
+    const session = cache.getOrCreateBackgroundSession(createSourceVideo());
+
+    expect(session?.video).toBe(backgroundVideo);
+    const resources = timelineRuntimeCoordinator.getBridgeStats().policies.background.resources;
+    expect(resources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'html-media',
+        policyId: 'background',
+        mediaElementKind: 'video',
+        srcKind: 'blob-url',
+        tags: expect.arrayContaining(['background-preload']),
+      }),
+    ]));
+
+    cache.clearScrubbingCache('blob:source-video');
+
+    expect(backgroundVideo.pause).toHaveBeenCalledOnce();
+    expect(backgroundVideo.removeAttribute).toHaveBeenCalledWith('src');
+    expect(backgroundVideo.load).toHaveBeenCalledTimes(2);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.background.resources).toHaveLength(0);
+  });
+
+  it('skips background preload video allocation when background policy is full', () => {
+    const cache = createCache();
+    for (let index = 0; index < 6; index += 1) {
+      retainBackgroundPreloadResource(index);
+    }
+    const createElement = vi.spyOn(document, 'createElement');
+
+    expect(cache.getOrCreateBackgroundSession(createSourceVideo('blob:denied-source-video'))).toBeNull();
+
+    expect(createElement).not.toHaveBeenCalledWith('video');
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.background.budgetReport.usage.htmlMediaElements).toBe(6);
   });
 });

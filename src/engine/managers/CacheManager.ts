@@ -19,7 +19,7 @@ export class CacheManager {
   }
 
   handleDeviceLost(): void {
-    this.scrubbingCache?.releaseCompositeRuntimeResources();
+    this.scrubbingCache?.destroy();
     this.scrubbingCache = null;
     this.lastVideoTime.clear();
   }

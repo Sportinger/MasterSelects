@@ -45,6 +45,8 @@ import { thumbnailCacheService } from '../../../src/services/thumbnailCacheServi
 import { useTimelineStore } from '../../../src/stores/timeline';
 import { blobUrlManager } from '../../../src/stores/timeline/helpers/blobUrlManager';
 import { vectorAnimationRuntimeManager } from '../../../src/services/vectorAnimation/VectorAnimationRuntimeManager';
+import { timelineRuntimeCoordinator } from '../../../src/services/timeline/timelineRuntimeCoordinator';
+import { getCompositionMixdownAudioElementResourceId } from '../../../src/services/timeline/compositionAudioMixdownCache';
 import {
   getThumbnailMediaObjectUrlKey,
   mediaObjectUrlManager,
@@ -315,6 +317,7 @@ describe('MediaStore - File Management', () => {
 
   afterEach(() => {
     blobUrlManager.clear();
+    timelineRuntimeCoordinator.clearResources();
     revokeAllMediaObjectUrls();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -493,6 +496,19 @@ describe('MediaStore - File Management', () => {
         selectedClipIds: new Set(['active-clip']),
         primarySelectedClipId: 'active-clip',
       });
+      const mixdownResourceId = getCompositionMixdownAudioElementResourceId('active-clip');
+      timelineRuntimeCoordinator.retainResource({
+        id: mixdownResourceId,
+        kind: 'html-media',
+        policyId: 'interactive',
+        owner: {
+          ownerId: 'composition-audio-mixdown:active-clip',
+          ownerType: 'clip',
+          clipId: 'active-clip',
+        },
+        mediaElementKind: 'audio',
+        elementId: mixdownResourceId,
+      });
 
       const result = await store.getState().deleteMediaFilesEverywhere(['f1']);
 
@@ -501,6 +517,8 @@ describe('MediaStore - File Management', () => {
       expect(useTimelineStore.getState().selectedClipIds).toEqual(new Set());
       expect(useTimelineStore.getState().primarySelectedClipId).toBeNull();
       expect(store.getState().compositions[0].timelineData?.clips).toEqual([]);
+      expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+        .not.toEqual(expect.arrayContaining([expect.objectContaining({ id: mixdownResourceId })]));
     });
   });
 

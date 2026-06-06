@@ -135,11 +135,11 @@ export function reportThumbnailGenerationVideo(params: {
 export function createThumbnailGenerationVideoDescriptor(params: {
   mediaFileId: string;
   sourceUrl: string;
-  element: HTMLVideoElement;
+  element?: HTMLVideoElement;
 }): RenderResourceDescriptor {
-  const status: RuntimeHealthStatus = params.element.error
+  const status: RuntimeHealthStatus = params.element?.error
     ? 'warning'
-    : params.element.readyState >= HTMLMediaElement.HAVE_METADATA
+    : (params.element?.readyState ?? 0) >= HTMLMediaElement.HAVE_METADATA
       ? 'ok'
       : 'unknown';
   return {
@@ -164,13 +164,13 @@ export function createThumbnailGenerationVideoDescriptor(params: {
         providerId: `thumbnail-generation-video:${params.mediaFileId}`,
         providerKind: 'html-video',
         status,
-        isReady: params.element.readyState >= HTMLMediaElement.HAVE_METADATA,
-        isPlaying: !params.element.paused,
-        isSeeking: params.element.seeking,
-        currentTimeSeconds: params.element.currentTime,
-        readyState: params.element.readyState,
-        networkState: params.element.networkState,
-        errorCode: params.element.error ? String(params.element.error.code) : undefined,
+        isReady: (params.element?.readyState ?? 0) >= HTMLMediaElement.HAVE_METADATA,
+        isPlaying: params.element ? !params.element.paused : false,
+        isSeeking: params.element?.seeking ?? false,
+        currentTimeSeconds: params.element?.currentTime ?? 0,
+        readyState: params.element?.readyState ?? 0,
+        networkState: params.element?.networkState ?? 0,
+        errorCode: params.element?.error ? String(params.element.error.code) : undefined,
       },
     },
     label: 'Thumbnail generation video',
@@ -181,7 +181,7 @@ export function createThumbnailGenerationVideoDescriptor(params: {
 export function canRetainThumbnailGenerationVideo(params: {
   mediaFileId: string;
   sourceUrl: string;
-  element: HTMLVideoElement;
+  element?: HTMLVideoElement;
 }): TimelineRuntimeAdmissionDecision {
   return timelineRuntimeCoordinator.canRetainResource(createThumbnailGenerationVideoDescriptor(params));
 }

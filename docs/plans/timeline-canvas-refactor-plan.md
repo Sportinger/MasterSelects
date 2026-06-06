@@ -6,6 +6,42 @@
 **Parallelism target:** up to 6 agents working on independent streams  
 **Primary rule:** timeline visuals must not create, own, or warm playback media runtime
 
+**Latest runtime-admission checkpoint:** After commit `ace78705`, the next
+runtime-boundary slice moved composition-audio and thumbnail allocation closer
+to the target ownership model. `compositionAudioMixdownCache.ts` now gates
+composition mixdown playback `HTMLAudioElement` creation through the interactive
+runtime coordinator, reports/release clip-scoped playback elements, reports
+completed mixdown `AudioBuffer` cache entries as retained runtime bindings with
+heap/duration diagnostics, releases those buffer resources on LRU eviction and
+cache clear, and exposes a clip-runtime release helper used by deleted-clip
+cleanup, nested content-hash refresh, and media-delete cleanup. Thumbnail
+generation now admits detached generation videos before `document.createElement('video')`,
+admits generation canvases before `document.createElement('canvas')`,
+and admits bitmap decode jobs plus retained bitmap resources before
+`fetch(...)` / `createImageBitmap(...)`. `ScrubbingCache` background preload
+videos are now background-policy admitted before hidden video creation, released
+on source/session clear, and `CacheManager.handleDeviceLost()` destroys the
+whole cache instead of dropping it after only composite-resource release.
+Composition mixdown runtime release now lives in store-cycle-safe resource
+helpers, while the timeline store mutation helper is isolated from the
+cache/mixer path so Timeline store slices can import cleanup without re-entering
+`useTimelineStore` during initialization.
+Focused checks passed:
+`npm run test -- tests/unit/compositionAudioMixdownCache.test.ts tests/unit/audioScrubSync.test.ts tests/unit/compositionAudioMixer.test.ts tests/stores/mediaStore/fileManageSlice.test.ts`
+(`147` tests), `npm run test -- tests/unit/thumbnailCacheService.test.ts tests/unit/thumbnailBitmapCache.test.ts`
+(`24` tests), `npm run test -- tests/unit/scrubbingCache.test.ts tests/unit/cacheManagerRuntimeReporting.test.ts`
+(`14` tests), `npm run test -- tests/stores/timeline/clipSlice.test.ts`
+(`139` tests), touched-file ESLint, and
+`npx tsc -p tsconfig.app.json --noEmit --pretty false`. Current LOC
+watermark from `npm run swarm:status` at `2026-06-06T11:49:21Z`: `19`
+tracked changed files, `2` new untracked files, tracked `+823/-103` net
+`+720` plus `+86` new-file LOC. Remaining agent-confirmed work:
+export/audio-only composition mixdown
+admission before timeline mutation, thumbnail blob URL reporting and legacy
+media thumbnail helpers, pending background/slot hidden-video disposer cleanup,
+full context-menu pure command descriptors/parity tests, worker default-on/live
+proof, torture-media coverage, and final broad gates.
+
 **Latest post-push menu/image reload checkpoint:** After commit/push
 `0f202a6b`, a six-agent audit found concrete remaining Phase 3/5 follow-ups.
 This slice fixed the smallest high-signal items: `TimelineEmptyContextMenu.tsx`

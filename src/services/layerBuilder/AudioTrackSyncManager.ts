@@ -22,11 +22,11 @@ import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import { clearMasterAudio, playheadState, setMasterAudioClock } from './PlayheadState';
 import { hydrateTimelineMediaWindow } from '../timeline/lazyMediaElements';
 import {
-  applyCompositionAudioMixdownToTimelineClip,
   createCompositionMixdownAudioElement,
   getCompositionAudioMixdownKey,
   requestCompositionAudioMixdown,
 } from '../timeline/compositionAudioMixdownCache';
+import { applyCompositionAudioMixdownToTimelineClip } from '../timeline/compositionAudioMixdownTimelineState';
 import { timelineRuntimeCoordinator } from '../timeline/timelineRuntimeCoordinator';
 import type { RenderResourceDescriptor, TimelineRuntimeAdmissionDecision } from '../timeline/runtimeCoordinatorTypes';
 
@@ -966,7 +966,10 @@ export class AudioTrackSyncManager {
 
     const existingBuffer = clip.mixdownBuffer;
     if (existingBuffer && clip.hasMixdownAudio !== false) {
-      const element = createCompositionMixdownAudioElement(clip.id, existingBuffer);
+      const element = createCompositionMixdownAudioElement(clip.id, existingBuffer, {
+        compositionId: clip.compositionId,
+      });
+      if (!element) return null;
       applyCompositionAudioMixdownToTimelineClip(clip.id, {
         key: getCompositionAudioMixdownKey(clip) ?? clip.compositionId,
         buffer: existingBuffer,
@@ -1007,7 +1010,13 @@ export class AudioTrackSyncManager {
           applyCompositionAudioMixdownToTimelineClip(clip.id, result);
           return;
         }
-        const element = createCompositionMixdownAudioElement(clip.id, result.buffer);
+        const element = createCompositionMixdownAudioElement(clip.id, result.buffer, {
+          compositionId: clip.compositionId,
+        });
+        if (!element) {
+          applyCompositionAudioMixdownToTimelineClip(clip.id, result);
+          return;
+        }
         applyCompositionAudioMixdownToTimelineClip(clip.id, result, { audioElement: element });
       })
       .finally(() => {

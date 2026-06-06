@@ -9,7 +9,10 @@ import {
   hasThumbnailBitmap,
 } from '../../src/services/timeline/thumbnailBitmapCache';
 import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
-import { createThumbnailBitmapResourceDescriptor } from '../../src/services/timeline/thumbnailRuntimeReporting';
+import {
+  createThumbnailBitmapResourceDescriptor,
+  createThumbnailJobDescriptor,
+} from '../../src/services/timeline/thumbnailRuntimeReporting';
 
 describe('thumbnailBitmapCache', () => {
   beforeEach(() => {
@@ -113,7 +116,7 @@ describe('thumbnailBitmapCache', () => {
     expect(thumbnailUsage.imageBitmaps).toBe(0);
   });
 
-  it('closes decoded bitmaps instead of caching them when thumbnail admission is over budget', async () => {
+  it('skips fetch and decode when thumbnail bitmap admission is over budget', () => {
     const thumbnailBitmapLimit = timelineRuntimeCoordinator.getPolicy('thumbnail')?.defaultBudget.maxImageBitmaps;
     expect(thumbnailBitmapLimit).toBeGreaterThan(0);
 
@@ -123,16 +126,17 @@ describe('thumbnailBitmapCache', () => {
       );
     }
 
-    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       blob: () => Promise.resolve(new Blob(['thumb'])),
     } as Response);
-    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue(bitmap));
+    const createImageBitmapMock = vi.fn();
+    vi.stubGlobal('createImageBitmap', createImageBitmapMock);
     const onReady = vi.fn();
 
     ensureThumbnailBitmap('blob:over-budget-frame', onReady, 'media-over-budget');
-    await vi.waitFor(() => expect(bitmap.close).toHaveBeenCalledTimes(1));
 
+    expect(fetch).not.toHaveBeenCalled();
+    expect(createImageBitmapMock).not.toHaveBeenCalled();
     expect(onReady).not.toHaveBeenCalled();
     expect(getThumbnailBitmap('blob:over-budget-frame')).toBeNull();
     expect(hasThumbnailBitmap('blob:over-budget-frame')).toBe(false);
@@ -140,5 +144,29 @@ describe('thumbnailBitmapCache', () => {
     const thumbnailUsage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
     expect(thumbnailUsage.resources).toBe(thumbnailBitmapLimit);
     expect(thumbnailUsage.jobs).toBe(0);
+  });
+
+  it('skips fetch and decode when thumbnail bitmap decode jobs are over budget', () => {
+    const maxJobs = timelineRuntimeCoordinator.getPolicy('thumbnail')?.defaultBudget.maxJobs ?? 4;
+    for (let index = 0; index < maxJobs; index += 1) {
+      timelineRuntimeCoordinator.retainResource(createThumbnailJobDescriptor({
+        jobId: `retained-thumbnail-decode-job-${index}`,
+        jobKind: 'thumbnail-bitmap-decode',
+        mediaFileId: `media-${index}`,
+        thumbnailUrl: `blob:retained-job-${index}`,
+      }));
+    }
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      blob: () => Promise.resolve(new Blob(['thumb'])),
+    } as Response);
+    const createImageBitmapMock = vi.fn();
+    vi.stubGlobal('createImageBitmap', createImageBitmapMock);
+
+    ensureThumbnailBitmap('blob:over-job-budget-frame', vi.fn(), 'media-over-job-budget');
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(createImageBitmapMock).not.toHaveBeenCalled();
+    const thumbnailUsage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
+    expect(thumbnailUsage.jobs).toBe(maxJobs);
   });
 });

@@ -324,7 +324,7 @@ describe('thumbnailCacheService', () => {
     expect(usage.jobs).toBe(4);
   });
 
-  it('cleans up detached thumbnail video and resets status when video admission is over budget', async () => {
+  it('skips detached thumbnail video creation when video admission is over budget', async () => {
     const retainedVideo = {
       src: 'blob:retained',
       readyState: 2,
@@ -341,31 +341,15 @@ describe('thumbnailCacheService', () => {
       }));
     }
 
-    const isolatedVideo = {
-      src: '',
-      readyState: 2,
-      duration: 12,
-      preload: 'metadata',
-      muted: false,
-      playsInline: false,
-      crossOrigin: '',
-      load: vi.fn(),
-      pause: vi.fn(),
-      removeAttribute: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      play: vi.fn().mockResolvedValue(undefined),
-    } as unknown as HTMLVideoElement;
     const service = thumbnailCacheService as unknown as ThumbnailCacheServiceTestAccess;
-    vi.spyOn(document, 'createElement').mockReturnValue(isolatedVideo);
+    const createElement = vi.spyOn(document, 'createElement');
     vi.spyOn(service, 'loadFromDB').mockResolvedValue(false);
     const generateThumbnails = vi.spyOn(service, 'generateThumbnails').mockResolvedValue(true);
 
     await thumbnailCacheService.generateForSourceUrl('media-denied-video', 'blob:source-url', 12, 'hash-a');
 
     expect(generateThumbnails).not.toHaveBeenCalled();
-    expect(isolatedVideo.pause).toHaveBeenCalled();
-    expect(isolatedVideo.removeAttribute).toHaveBeenCalledWith('src');
+    expect(createElement).not.toHaveBeenCalledWith('video');
     expect(thumbnailCacheService.getStatus('media-denied-video')).toBe('none');
     const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;
     expect(usage.htmlMediaElements).toBe(4);
@@ -595,7 +579,7 @@ describe('thumbnailCacheService', () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     } as unknown as HTMLVideoElement;
-    vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(canvas);
 
     const generated = await service.generateThumbnails(
       mediaFileId,
@@ -606,6 +590,7 @@ describe('thumbnailCacheService', () => {
     );
 
     expect(generated).toBe(false);
+    expect(createElement).not.toHaveBeenCalledWith('canvas');
     expect(canvas.getContext).not.toHaveBeenCalled();
     expect(thumbnailCacheService.hasSource(mediaFileId)).toBe(false);
     const usage = timelineRuntimeCoordinator.getBridgeStats().policies.thumbnail.budgetReport.usage;

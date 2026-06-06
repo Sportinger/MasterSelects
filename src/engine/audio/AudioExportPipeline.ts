@@ -37,9 +37,9 @@ import {
 } from '../../services/timeline/exportRuntimeReporting';
 import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
 import {
-  applyCompositionAudioMixdownToTimelineClip,
   requestCompositionAudioMixdown,
 } from '../../services/timeline/compositionAudioMixdownCache';
+import { applyCompositionAudioMixdownToTimelineClip } from '../../services/timeline/compositionAudioMixdownTimelineState';
 
 const log = Logger.create('AudioExportPipeline');
 const MAX_EXPORT_EFFECT_TAIL_SECONDS = 30;
