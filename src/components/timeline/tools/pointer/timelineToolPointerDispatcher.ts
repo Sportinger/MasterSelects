@@ -36,6 +36,10 @@ export function isTimelineBladeTool(toolId: TimelineToolId): toolId is 'blade' |
   return toolId === 'blade' || toolId === 'blade-all-tracks';
 }
 
+export function isTimelineGlueTool(toolId: TimelineToolId): toolId is 'glue' {
+  return toolId === 'glue';
+}
+
 export function isTimelineTrackSelectTool(
   toolId: TimelineToolId,
 ): toolId is 'track-select-forward' | 'track-select-backward' | 'track-select-forward-all' {
@@ -46,6 +50,7 @@ export function isTimelineTrackSelectTool(
 
 export function isTimelinePointerTool(toolId: TimelineToolId): boolean {
   return isTimelineBladeTool(toolId) ||
+    isTimelineGlueTool(toolId) ||
     isTimelineTrackSelectTool(toolId) ||
     toolId === 'range-select' ||
     toolId === 'edge-trim' ||
@@ -92,6 +97,13 @@ const CURSOR_PATHS = {
     '<path d="M5 12h14" />',
     '<path d="M5 18h14" />',
     '<path d="M15 4l-6 16" />',
+  ],
+  glue: [
+    '<path d="M9.5 7L12 3l2.5 4z" />',
+    '<path d="M10.5 7v2" />',
+    '<path d="M13.5 7v2" />',
+    '<path d="M10.5 9Q7 9.5 7 13v6q0 2 2 2h6q2 0 2-2v-6q0-3.5-3.5-4z" />',
+    '<path d="M9 15.5h6" />',
   ],
   trackForward: [
     '<path d="M4 6h10" />',
@@ -184,6 +196,7 @@ const TIMELINE_TOOL_CURSOR_ICONS = {
   'range-select': { paths: CURSOR_PATHS.range, hotspotX: 16, hotspotY: 16 },
   blade: { paths: CURSOR_PATHS.blade, hotspotX: 12, hotspotY: 12 },
   'blade-all-tracks': { paths: CURSOR_PATHS.bladeAllTracks, hotspotX: 12, hotspotY: 12 },
+  glue: { paths: CURSOR_PATHS.glue, hotspotX: 16, hotspotY: 7 },
   'split-at-playhead': { paths: CURSOR_PATHS.blade, hotspotX: 12, hotspotY: 12 },
   'split-all-at-playhead': { paths: CURSOR_PATHS.bladeAllTracks, hotspotX: 12, hotspotY: 12 },
   'trim-start-to-playhead': { paths: CURSOR_PATHS.trim, hotspotX: 16, hotspotY: 16 },
@@ -225,6 +238,7 @@ const TIMELINE_TOOL_ICON_CURSORS = {
   'range-select': createIconCursor(CURSOR_PATHS.range, 'crosshair', TIMELINE_TOOL_CURSOR_ICONS['range-select'].hotspotX, TIMELINE_TOOL_CURSOR_ICONS['range-select'].hotspotY),
   blade: createIconCursor(CURSOR_PATHS.blade, 'crosshair', TIMELINE_TOOL_CURSOR_ICONS.blade.hotspotX, TIMELINE_TOOL_CURSOR_ICONS.blade.hotspotY),
   'blade-all-tracks': createIconCursor(CURSOR_PATHS.bladeAllTracks, 'crosshair', TIMELINE_TOOL_CURSOR_ICONS['blade-all-tracks'].hotspotX, TIMELINE_TOOL_CURSOR_ICONS['blade-all-tracks'].hotspotY),
+  glue: createIconCursor(CURSOR_PATHS.glue, 'crosshair', TIMELINE_TOOL_CURSOR_ICONS.glue.hotspotX, TIMELINE_TOOL_CURSOR_ICONS.glue.hotspotY),
   'split-at-playhead': createIconCursor(CURSOR_PATHS.blade, 'crosshair', TIMELINE_TOOL_CURSOR_ICONS['split-at-playhead'].hotspotX, TIMELINE_TOOL_CURSOR_ICONS['split-at-playhead'].hotspotY),
   'split-all-at-playhead': createIconCursor(CURSOR_PATHS.bladeAllTracks, 'crosshair', TIMELINE_TOOL_CURSOR_ICONS['split-all-at-playhead'].hotspotX, TIMELINE_TOOL_CURSOR_ICONS['split-all-at-playhead'].hotspotY),
   'trim-start-to-playhead': createIconCursor(CURSOR_PATHS.trim, 'ew-resize', TIMELINE_TOOL_CURSOR_ICONS['trim-start-to-playhead'].hotspotX, TIMELINE_TOOL_CURSOR_ICONS['trim-start-to-playhead'].hotspotY),
@@ -380,6 +394,24 @@ export function dispatchTimelineClipPointerClick(
         direction: context.toolId === 'track-select-backward' ? 'backward' : 'forward',
         trackIds: context.toolId === 'track-select-forward-all' ? undefined : [context.track.id],
         includeLinked: true,
+      },
+    };
+  }
+
+  if (isTimelineGlueTool(context.toolId)) {
+    // Cubase-style glue: click any MIDI clip to merge its contiguous run of
+    // touching/overlapping clips (a gap breaks the run). Alt-click force-merges
+    // every following clip, gaps included. Non-MIDI/locked → no-op.
+    if (context.track.locked === true || context.clip.source?.type !== 'midi') {
+      return { handled: false };
+    }
+    return {
+      handled: true,
+      operation: {
+        id: `glue:${context.clip.id}:${context.altKey ? 'all' : 'run'}`,
+        type: 'merge-midi-clips',
+        clipId: context.clip.id,
+        allFollowing: context.altKey,
       },
     };
   }

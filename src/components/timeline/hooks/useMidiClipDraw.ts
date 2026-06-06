@@ -24,8 +24,6 @@ export interface MidiDrawGhost {
 }
 
 interface UseMidiClipDrawProps {
-  trackLanesRef: React.RefObject<HTMLDivElement | null>;
-  scrollX: number;
   tracks: TimelineTrack[];
   activeTimelineToolId: TimelineToolId;
   pixelToTime: (pixel: number) => number;
@@ -41,12 +39,14 @@ interface ActiveDraw {
   laneTop: number;     // viewport px
   laneHeight: number;  // px
   startClientX: number;
-  startContentX: number;
+  // The lane's clip-row element. Its current left edge is the time-zero origin
+  // (already scroll- and header-offset-corrected), so content px = clientX -
+  // rowEl.getBoundingClientRect().left. Re-read on mouseup so a mid-draw scroll
+  // stays correct. Mirrors the proven empty-area handler in TimelineTrack.
+  rowEl: HTMLElement;
 }
 
 export function useMidiClipDraw({
-  trackLanesRef,
-  scrollX,
   tracks,
   activeTimelineToolId,
   pixelToTime,
@@ -70,24 +70,24 @@ export function useMidiClipDraw({
       const track = tracks.find((t) => t.id === trackId);
       if (!track || track.type !== 'midi' || track.locked) return;
 
-      const container = trackLanesRef.current;
-      if (!container) return;
-      const containerRect = container.getBoundingClientRect();
+      // Measure time against the clip row's left edge (time-zero origin), not the
+      // outer track stack — the stack includes the header column, which otherwise
+      // shifts the new clip right by trackHeaderWidth / zoom seconds.
+      const rowEl = laneEl.querySelector<HTMLElement>('.track-clip-row') ?? laneEl;
       const laneRect = laneEl.getBoundingClientRect();
 
-      const startContentX = e.clientX - containerRect.left + scrollX;
       drawRef.current = {
         trackId,
         laneTop: laneRect.top,
         laneHeight: laneRect.height,
         startClientX: e.clientX,
-        startContentX,
+        rowEl,
       };
       setGhost({ left: e.clientX, top: laneRect.top, width: 0, height: laneRect.height });
       e.preventDefault();
       e.stopPropagation();
     },
-    [activeTimelineToolId, tracks, trackLanesRef, scrollX],
+    [activeTimelineToolId, tracks],
   );
 
   useEffect(() => {
@@ -107,19 +107,19 @@ export function useMidiClipDraw({
       setGhost(null);
       if (!draw) return;
 
-      const container = trackLanesRef.current;
-      if (!container) return;
-      const containerRect = container.getBoundingClientRect();
-      const endContentX = e.clientX - containerRect.left + scrollX;
+      // The row's live left edge is time-zero (scroll already baked in).
+      const originLeft = draw.rowEl.getBoundingClientRect().left;
+      const startContentX = draw.startClientX - originLeft;
+      const endContentX = e.clientX - originLeft;
 
-      const startTime = Math.max(0, pixelToTime(Math.min(draw.startContentX, endContentX)));
+      const startTime = Math.max(0, pixelToTime(Math.min(startContentX, endContentX)));
       const movedPx = Math.abs(e.clientX - draw.startClientX);
 
       let duration: number;
       if (movedPx < DRAG_THRESHOLD_PX) {
         duration = DEFAULT_CLICK_CLIP_DURATION;
       } else {
-        const endTime = Math.max(0, pixelToTime(Math.max(draw.startContentX, endContentX)));
+        const endTime = Math.max(0, pixelToTime(Math.max(startContentX, endContentX)));
         duration = Math.max(0.05, endTime - startTime);
       }
 
@@ -136,8 +136,8 @@ export function useMidiClipDraw({
       document.removeEventListener('mouseup', handleUp);
     };
     // Re-bind whenever a draw begins (ghost transitions from null) so the
-    // listeners close over the current scrollX / pixelToTime.
-  }, [ghost !== null, trackLanesRef, scrollX, pixelToTime]); // eslint-disable-line react-hooks/exhaustive-deps
+    // listeners close over the current pixelToTime.
+  }, [ghost !== null, pixelToTime]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { midiDrawGhost: ghost, handleMidiDrawMouseDown };
 }

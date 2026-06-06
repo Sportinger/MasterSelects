@@ -3,6 +3,7 @@
 
 import type { SliceCreator, TimelineClip, TimelineUtils } from './types';
 import { SNAP_THRESHOLD_SECONDS } from './constants';
+import { getTrackOverlapPolicy } from './helpers/overlapPolicy';
 
 type PositioningUtils = Pick<
   TimelineUtils,
@@ -151,10 +152,16 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
   // Returns position with resistance applied, and whether user has "broken through" to force overlap
   // Uses PIXEL-based resistance so it works regardless of clip duration
   getPositionWithResistance: (clipId: string, desiredStartTime: number, trackId: string, duration: number, _zoom?: number, excludeClipIds?: string[]) => {
-    const { clips } = get();
+    const { clips, tracks } = get();
     const movingClip = clips.find(c => c.id === clipId);
     const excludeSet = new Set(excludeClipIds || []);
     const isTrackChange = movingClip ? movingClip.trackId !== trackId : false;
+
+    // Stack tracks (e.g. MIDI) let clips coexist: overlap is legal, never trimmed
+    // and never bounced to another track. Drop the clip exactly where requested.
+    if (getTrackOverlapPolicy(tracks.find(t => t.id === trackId)) === 'stack') {
+      return { startTime: Math.max(0, desiredStartTime), forcingOverlap: false };
+    }
 
     // Get other clips on the TARGET track (excluding the moving clip, its linked clip, and any excluded clips)
     const otherClips = clips.filter(c =>
@@ -222,7 +229,11 @@ export const createPositioningUtils: SliceCreator<PositioningUtils> = (set, get)
 
   // Trim any clips that the placed clip overlaps with
   trimOverlappingClips: (clipId: string, startTime: number, trackId: string, duration: number, excludeClipIds?: string[]) => {
-    const { clips, invalidateCache } = get();
+    const { clips, tracks, invalidateCache } = get();
+
+    // Stack tracks (e.g. MIDI) never eat overlapping clips — they cohabitate.
+    if (getTrackOverlapPolicy(tracks.find(t => t.id === trackId)) === 'stack') return;
+
     const movingClip = clips.find(c => c.id === clipId);
     const excludeSet = new Set(excludeClipIds || []);
 

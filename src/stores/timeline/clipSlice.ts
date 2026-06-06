@@ -225,7 +225,9 @@ import {
 } from './clip/addCompClip';
 import {
   generateLinkedClipIds,
+  generateMidiNoteId,
 } from './helpers/idGenerator';
+import { partitionMidiNotesAtCut } from '../../services/midi/midiClipTiming';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { updateClipById } from './helpers/clipStateHelpers';
 import {
@@ -851,6 +853,65 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substr(2, 5);
+
+    // MIDI clips have no external source file — the note data IS the content, so
+    // a cut yields two INDEPENDENT clips (each owning its own rebased notes),
+    // not two windows onto a shared array as with media. See partitionMidiNotesAtCut.
+    if (clip.source?.type === 'midi') {
+      const { left, right } = partitionMidiNotesAtCut(
+        clip.midiData?.notes ?? [],
+        { inPoint: clip.inPoint, outPoint: clip.outPoint },
+        splitInSource,
+        (source, rebased) => ({
+          id: generateMidiNoteId(),
+          pitch: source.pitch,
+          velocity: source.velocity,
+          start: rebased.start,
+          duration: rebased.duration,
+        }),
+      );
+
+      const midiFirstClip: TimelineClip = {
+        ...clip,
+        ...deepCloneClipProps(clip),
+        id: `clip-${timestamp}-${randomSuffix}-a`,
+        duration: firstPartDuration,
+        inPoint: 0,
+        outPoint: firstPartDuration,
+        source: { type: 'midi', naturalDuration: firstPartDuration },
+        midiData: { ...(clip.midiData ?? { notes: [] }), notes: left },
+        linkedClipId: undefined,
+        transitionOut: undefined,
+        transitionIn: undefined,
+      };
+      const midiSecondClip: TimelineClip = {
+        ...clip,
+        ...deepCloneClipProps(clip),
+        id: `clip-${timestamp}-${randomSuffix}-b`,
+        startTime: splitTime,
+        duration: secondPartDuration,
+        inPoint: 0,
+        outPoint: secondPartDuration,
+        source: { type: 'midi', naturalDuration: secondPartDuration },
+        midiData: { ...(clip.midiData ?? { notes: [] }), notes: right },
+        linkedClipId: undefined,
+        transitionIn: undefined,
+        transitionOut: undefined,
+      };
+
+      const remaining = clips.filter(c => c.id !== clipId);
+      remaining.push(midiFirstClip, midiSecondClip);
+      set({ clips: remaining, selectedClipIds: new Set([midiSecondClip.id]) });
+      updateDuration();
+      invalidateCache();
+      log.debug('Split MIDI clip', {
+        clip: clip.name,
+        splitTime: splitTime.toFixed(2),
+        leftNotes: left.length,
+        rightNotes: right.length,
+      });
+      return;
+    }
 
     // Create new video/audio elements for the second clip to avoid sharing HTMLMediaElements
     // This is critical: both clips need their own elements for independent seeking/playback

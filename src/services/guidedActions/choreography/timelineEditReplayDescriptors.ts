@@ -116,6 +116,8 @@ export function getTimelineReplayToolId(operation: TimelineEditOperation): Timel
       return 'blade';
     case 'split-all-at-time':
       return 'blade-all-tracks';
+    case 'merge-midi-clips':
+      return 'glue';
     case 'select-clips-from-time':
       if (operation.trackIds === undefined && operation.direction === 'forward') return 'track-select-forward-all';
       return operation.direction === 'backward' ? 'track-select-backward' : 'track-select-forward';

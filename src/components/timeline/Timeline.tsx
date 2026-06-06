@@ -1539,8 +1539,6 @@ export function Timeline() {
 
   // MIDI pencil tool: draw MIDI clip regions on MIDI track lanes (issue #182)
   const { midiDrawGhost, handleMidiDrawMouseDown } = useMidiClipDraw({
-    trackLanesRef,
-    scrollX,
     tracks,
     activeTimelineToolId,
     pixelToTime,

@@ -1,21 +1,12 @@
 import type { TimelineClip } from '../../../types';
 import { isVectorAnimationSourceType, shouldLoopVectorAnimation } from '../../../types/vectorAnimation';
+import { isInfiniteTrimSource } from './infiniteTrimSource';
 
 const MIN_CLIP_DURATION = 0.1;
 const EPSILON = 0.001;
 
 export type TrimHandleEdge = 'left' | 'right';
 export type TrimHandleArrowDirection = 'left' | 'right';
-
-function isInfiniteTrimSource(clip: TimelineClip): boolean {
-  const sourceType = clip.source?.type;
-  return sourceType === 'text' ||
-    sourceType === 'image' ||
-    sourceType === 'solid' ||
-    sourceType === 'camera' ||
-    sourceType === 'splat-effector' ||
-    sourceType === 'math-scene';
-}
 
 function canLoopExtendVectorClip(clip: TimelineClip): boolean {
   return isVectorAnimationSourceType(clip.source?.type) &&

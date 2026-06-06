@@ -30,6 +30,7 @@ import {
 import type { TimelineToolGroupId, TimelineToolId } from '../../../stores/timeline/types';
 import {
   BladeAllTracksIcon,
+  GlueBottleIcon,
   MarkInIcon,
   MarkOutIcon,
   RippleTrimIcon,
@@ -61,6 +62,7 @@ export const TIMELINE_TOOL_ICONS: Record<TimelineToolId, TimelineToolIcon> = {
   'range-select': IconSquaresSelected,
   blade: IconBlade,
   'blade-all-tracks': BladeAllTracksIcon,
+  glue: GlueBottleIcon,
   'split-at-playhead': IconScissors,
   'split-all-at-playhead': IconArrowsSplit,
   'trim-start-to-playhead': TrimToPlayheadIcon,

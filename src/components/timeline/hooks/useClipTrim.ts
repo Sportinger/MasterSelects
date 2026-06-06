@@ -8,6 +8,7 @@ import type { ClipTrimState } from '../types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 import type { TimelineToolId, TimelineToolPreview, TimelineToolPreviewGhostRange } from '../../../stores/timeline/types';
 import { LAYER_BUILDER_CONSTANTS } from '../../../services/layerBuilder/types';
+import { isInfiniteTrimSource } from '../utils/infiniteTrimSource';
 
 const MIN_CLIP_DURATION = 0.1;
 const EPSILON = 0.0001;
@@ -65,16 +66,6 @@ function canLoopExtendVectorClip(clip: TimelineClip): boolean {
 
 function getClipEnd(clip: TimelineClip): number {
   return clip.startTime + clip.duration;
-}
-
-function isInfiniteTrimSource(clip: TimelineClip): boolean {
-  const sourceType = clip.source?.type;
-  return sourceType === 'text' ||
-    sourceType === 'image' ||
-    sourceType === 'solid' ||
-    sourceType === 'camera' ||
-    sourceType === 'splat-effector' ||
-    sourceType === 'math-scene';
 }
 
 function isTrackLocked(tracks: TimelineTrack[], trackId: string): boolean {

@@ -85,6 +85,14 @@ export interface SplitAtTimesOperation extends TimelineEditOperationBase {
   includeLinked?: boolean;
 }
 
+export interface MergeMidiClipsOperation extends TimelineEditOperationBase {
+  type: 'merge-midi-clips';
+  /** The clicked (anchor) MIDI clip; merges with the next clip on its track. */
+  clipId: string;
+  /** Alt-click: glue the anchor with EVERY following MIDI clip on the track. */
+  allFollowing?: boolean;
+}
+
 export interface SelectClipsFromTimeOperation extends TimelineEditOperationBase {
   type: 'select-clips-from-time';
   time: number;
@@ -236,6 +244,7 @@ export type TimelineEditOperation =
   | SplitAtTimeOperation
   | SplitAllAtTimeOperation
   | SplitAtTimesOperation
+  | MergeMidiClipsOperation
   | SelectClipsFromTimeOperation
   | RippleDeleteSelectionOperation
   | DeleteClipsOperation

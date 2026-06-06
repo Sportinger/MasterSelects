@@ -105,6 +105,17 @@ export const TIMELINE_TOOL_DEFINITIONS: TimelineToolDefinition[] = [
     shortcutActionId: 'tool.bladeAllTracks',
   }),
   tool({
+    id: 'glue',
+    groupId: 'cut',
+    kind: 'mode',
+    label: 'Glue',
+    description: 'Click a MIDI clip to merge it with the next clip on its track; Alt-click glues all following clips.',
+    priority: 'P1',
+    availability: 'enabled',
+    mutatesTimeline: true,
+    shortcutActionId: 'tool.glue',
+  }),
+  tool({
     id: 'split-at-playhead',
     groupId: 'cut',
     kind: 'command',

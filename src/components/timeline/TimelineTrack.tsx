@@ -6,6 +6,7 @@ import type { AnimatableProperty, BezierHandle, ClipMask, Keyframe } from '../..
 import { CurveEditor } from './CurveEditor';
 import { parseVectorAnimationInputProperty, parseVectorAnimationStateProperty } from '../../types/vectorAnimation';
 import { useTimelineStore } from '../../stores/timeline';
+import { isAudioSectionTrack } from './utils/trackSection';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_VIEWPORT_MIN_PX = 1600;
@@ -296,7 +297,7 @@ function TimelineTrackComponent({
     height: dynamicHeight,
     ...(trackColor ? { '--track-color': trackColor } : {}),
   } as React.CSSProperties & { '--track-color'?: string };
-  const isMutedTrack = track.type === 'audio' && (track.audioState?.muted ?? track.muted) === true;
+  const isMutedTrack = isAudioSectionTrack(track) && (track.audioState?.muted ?? track.muted) === true;
   const isHiddenTrack = track.type === 'video' && track.visible === false;
   const renderExternalPreview = (
     className: string,

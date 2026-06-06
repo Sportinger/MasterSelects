@@ -10,6 +10,8 @@ import { applyRangeEditOperation } from './rangeOperations';
 import { selectClipsFromTimeOperation } from './selectionOperations';
 import { applyPlaceTimelineRangeOperation } from './placementOperations';
 import { applySplitAtTimesOperation } from './splitBatchOperations';
+import { applyMergeMidiClipsOperation } from './mergeOperations';
+import { generateMidiClipId, generateMidiNoteId } from '../helpers/idGenerator';
 import { resolveSplitAllAtTimeTargets, resolveSplitAtTimeTargets } from './splitOperations';
 import { applyDeleteAllGapsOperation, applyDeleteGapAtTimeOperation, applyRippleDeleteSelectionOperation } from './rippleOperations';
 import {
@@ -134,6 +136,40 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         operationId,
         changedClipIds: resolved.clipIds,
         warnings: resolved.warnings,
+      };
+    }
+
+    if (operation.type === 'merge-midi-clips') {
+      const result = applyMergeMidiClipsOperation(
+        operation,
+        get().clips,
+        get().tracks,
+        generateMidiNoteId,
+        generateMidiClipId,
+      );
+      if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
+        return resultFromWarnings(operationId, result.warnings);
+      }
+
+      startBatch(options.historyLabel ?? 'Glue MIDI clips');
+      try {
+        set({
+          clips: result.clips,
+          selectedClipIds: result.selectedClipIds,
+          primarySelectedClipId: result.mergedClipId,
+        });
+        get().updateDuration();
+        get().invalidateCache();
+      } finally {
+        endBatch();
+      }
+
+      return {
+        success: true,
+        operationId,
+        changedClipIds: result.changedClipIds,
+        selectedClipIds: [...result.selectedClipIds],
+        warnings: result.warnings,
       };
     }
 

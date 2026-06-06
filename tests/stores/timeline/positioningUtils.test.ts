@@ -63,6 +63,68 @@ describe('positioningUtils', () => {
     });
   });
 
+  it('lets MIDI clips overlap freely without forcing-overlap (stack policy)', () => {
+    const movingMidi = createMockClip({
+      id: 'midi-moving',
+      trackId: 'midi-1',
+      startTime: 8,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'midi', naturalDuration: 4 },
+    });
+    const midiTarget = createMockClip({
+      id: 'midi-target',
+      trackId: 'midi-1',
+      startTime: 4,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'midi', naturalDuration: 4 },
+    });
+    const store = createTestTimelineStore({
+      tracks: [{ id: 'midi-1', name: 'MIDI 1', type: 'midi', height: 60, muted: false, visible: true, solo: false }],
+      clips: [movingMidi, midiTarget],
+    });
+
+    // Dropping the moving clip on top of the target lands exactly where requested
+    // and is never flagged as a forced overlap.
+    const result = store.getState().getPositionWithResistance('midi-moving', 5, 'midi-1', 4);
+    expect(result).toMatchObject({ startTime: 5, forcingOverlap: false });
+  });
+
+  it('never eats overlapping clips on a MIDI track (trim is a no-op)', () => {
+    const placed = createMockClip({
+      id: 'midi-placed',
+      trackId: 'midi-1',
+      startTime: 5,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'midi', naturalDuration: 4 },
+    });
+    const underneath = createMockClip({
+      id: 'midi-underneath',
+      trackId: 'midi-1',
+      startTime: 4,
+      duration: 4,
+      inPoint: 0,
+      outPoint: 4,
+      source: { type: 'midi', naturalDuration: 4 },
+    });
+    const store = createTestTimelineStore({
+      tracks: [{ id: 'midi-1', name: 'MIDI 1', type: 'midi', height: 60, muted: false, visible: true, solo: false }],
+      clips: [placed, underneath],
+    });
+
+    store.getState().trimOverlappingClips('midi-placed', 5, 'midi-1', 4);
+
+    // Both clips survive untouched — they cohabitate.
+    const after = store.getState().clips.find(c => c.id === 'midi-underneath');
+    expect(store.getState().clips).toHaveLength(2);
+    expect(after).toMatchObject({ startTime: 4, duration: 4 });
+  });
+
   it('snaps clip start and end to the playhead', () => {
     const movingVideo = createMockClip({
       id: 'video-moving',

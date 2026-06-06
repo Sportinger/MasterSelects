@@ -9,6 +9,7 @@
 import type { TimelineClip, TimelineTrack } from '../../types';
 import { createDefaultMidiInstrument, type MidiInstrument } from '../../types/midiClip';
 import { createSynthForInstrument } from './createSynthForInstrument';
+import { contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('MidiClipRenderer');
@@ -29,10 +30,11 @@ export interface MidiClipRenderPlan {
 
 /**
  * Resolve a MIDI clip + its track into a render plan. Pure (no WebAudio) so the
- * note/timing logic is unit-testable. Notes are clip-local already
- * (`note.start` is relative to the clip start); we drop notes that begin at or
- * after the clip end and bound the render length to the clip duration so a clip's
- * audio never bleeds past its timeline region (matching audio-clip boundaries).
+ * note/timing logic is unit-testable. `note.start` is content time; we keep only
+ * notes inside the clip's in/out window, position them relative to the window's
+ * left edge, drop ones that begin at or after the clip end, and bound the render
+ * length to the clip duration so a clip's audio never bleeds past its timeline
+ * region (matching audio-clip boundaries).
  */
 export function planMidiClipNotes(
   clip: TimelineClip,
@@ -44,7 +46,10 @@ export function planMidiClipNotes(
 
   const notes: PlannedMidiNote[] = [];
   for (const note of sourceNotes) {
-    const startTime = Math.max(0, note.start);
+    // Notes outside the clip's in/out window are silent (#232); inside, position
+    // them relative to the window's left edge so a resized clip renders correctly.
+    if (!isNoteStartInWindow(clip, note)) continue;
+    const startTime = Math.max(0, contentTimeToClipLocal(clip, note.start));
     if (startTime >= durationSeconds) continue; // begins after the clip ends
     notes.push({
       pitch: note.pitch,

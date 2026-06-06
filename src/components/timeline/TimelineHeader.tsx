@@ -1366,6 +1366,9 @@ function TimelineHeaderComponent({
   const trackTypeIndex = tracks.filter((timelineTrack) => timelineTrack.type === track.type).findIndex((timelineTrack) => timelineTrack.id === track.id);
   const showTimelineTrackColor = audioLayerAdvancedMode !== false;
   const trackColor = showTimelineTrackColor ? getTimelineTrackColor(track, trackTypeIndex) : TIMELINE_TRACK_COLOR_HIDDEN;
+  // MIDI tracks get a default blue tint (matching MIDI clips) only when the user
+  // hasn't picked a custom label color, so an explicit label choice still wins.
+  const isMidiDefaultTint = isMidiTrack && (!track.labelColor || track.labelColor === 'none');
   const trackHeaderStyle = {
     height: dynamicHeight,
     '--track-color': trackColor,
@@ -1494,7 +1497,7 @@ function TimelineHeaderComponent({
 
   return (
     <div
-      className={`track-header ${track.type} ${isMixerTrack ? 'mixer' : ''} ${isDimmed ? 'dimmed' : ''} ${
+      className={`track-header ${track.type} ${isMixerTrack ? 'mixer' : ''} ${isMidiDefaultTint ? 'midi-default-tint' : ''} ${isDimmed ? 'dimmed' : ''} ${
         isExpanded ? 'expanded' : ''
       } ${track.locked ? 'locked' : ''} ${
         isMutedTrack ? 'track-muted' : ''

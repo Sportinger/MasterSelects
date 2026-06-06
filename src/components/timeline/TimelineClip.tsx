@@ -24,6 +24,7 @@ import {
 } from '../../types/vectorAnimation';
 import { ClipSpectrogram } from './components/ClipSpectrogram';
 import { ClipWaveform } from './components/ClipWaveform';
+import { ClipMidiPreview } from './components/ClipMidiPreview';
 import { ClipAnalysisOverlay } from './components/ClipAnalysisOverlay';
 import { FadeCurve } from './components/FadeCurve';
 import { useThumbnailCache } from '../../hooks/useThumbnailCache';
@@ -70,6 +71,7 @@ import {
   isTimelinePointerTool,
 } from './tools/pointer/timelineToolPointerDispatcher';
 import { getTrimHandleArrowDirections } from './utils/trimHandleDirections';
+import { isInfiniteTrimSource } from './utils/infiniteTrimSource';
 import type { ClipAudioEditOperation, VideoBakeRegion } from '../../types';
 import type { AudioStemKind } from '../../types/audio';
 
@@ -629,6 +631,9 @@ function TimelineClipComponent({
   const applyTimelineEditOperation = useTimelineStore(s => s.applyTimelineEditOperation);
   const setActiveTimelineTool = useTimelineStore(s => s.setActiveTimelineTool);
   const timelineTrackColorsVisible = useTimelineStore(s => s.audioLayerAdvancedMode !== false);
+  const isRenamingClip = useTimelineStore(s => s.clipRenameId === clip.id);
+  const renameMidiClip = useTimelineStore(s => s.renameMidiClip);
+  const setClipRenameId = useTimelineStore(s => s.setClipRenameId);
   const audioRegionSelection = useTimelineStore(s =>
     s.audioRegionSelection?.clipId === clip.id ? s.audioRegionSelection : null
   );
@@ -950,6 +955,9 @@ function TimelineClipComponent({
     clip.file?.type?.startsWith('audio/') ||
     audioExtensions.includes(fileExt);
 
+  // Determine if this is a MIDI clip (note-data clip rendered by the track synth)
+  const isMidiClip = clip.source?.type === 'midi';
+
   // Determine if this is a text clip
   const isTextClip = clip.source?.type === 'text';
   const meshType = clip.meshType ?? clip.source?.meshType;
@@ -1035,8 +1043,7 @@ function TimelineClipComponent({
     // Use the resolved (snapped/frame-quantized) delta so the live resize lands
     // exactly where the trim will commit.
     const deltaTime = clipTrim.appliedDelta;
-    const sourceType = clip.source?.type;
-    const isInfiniteClip = sourceType === 'text' || sourceType === 'image' || sourceType === 'solid' || sourceType === 'camera' || sourceType === 'splat-effector' || sourceType === 'math-scene';
+    const isInfiniteClip = isInfiniteTrimSource(clip);
     const canLoopExtendRight = canLoopExtendVectorClip(clip);
     const maxDuration = isInfiniteClip
       ? Number.MAX_SAFE_INTEGER
@@ -1066,12 +1073,15 @@ function TimelineClipComponent({
     // Resize this clip live too: a linked clip, or a selected clip following a
     // multi-trim. Each clamps the shared (snapped) delta to its own bounds.
     const deltaTime = clipTrim.appliedDelta;
+    const isInfiniteClip = isInfiniteTrimSource(clip);
     const canLoopExtendRight = canLoopExtendVectorClip(clip);
-    const maxDuration = clip.source?.naturalDuration || clip.duration;
+    const maxDuration = isInfiniteClip
+      ? Number.MAX_SAFE_INTEGER
+      : (clip.source?.naturalDuration || clip.duration);
 
     if (clipTrim.edge === 'left') {
       const maxTrim = clip.duration - 0.1;
-      const minTrim = -clip.inPoint;
+      const minTrim = isInfiniteClip ? -clip.startTime : -clip.inPoint;
       const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
       displayStartTime = clip.startTime + clampedDelta;
       displayDuration = clip.duration - clampedDelta;
@@ -2383,7 +2393,9 @@ function TimelineClipComponent({
         ? 'Track select'
         : result.operation.type === 'split-all-at-time'
           ? 'Blade all tracks'
-          : 'Blade clip',
+          : result.operation.type === 'merge-midi-clips'
+            ? 'Glue MIDI clips'
+            : 'Blade clip',
       });
     }
     if (result.nextToolId) setActiveTimelineTool(result.nextToolId);
@@ -3538,6 +3550,18 @@ function TimelineClipComponent({
           />
         </div>
       )}
+      {/* MIDI note preview — mini piano-roll guide to the clip's content (#232) */}
+      {isMidiClip && clip.midiData && clip.midiData.notes.length > 0 && (
+        <div className="clip-midi-preview">
+          <ClipMidiPreview
+            notes={clip.midiData.notes}
+            width={width}
+            height={Math.max(16, trackBaseHeight - 12)}
+            pixelsPerSecond={zoom}
+            inPoint={displayInPoint}
+          />
+        </div>
+      )}
       {/* Audio waveform / spectrogram */}
       {waveformsEnabled && isAudioClip && (
         audioDisplayMode === 'spectral'
@@ -4149,18 +4173,46 @@ function TimelineClipComponent({
             {isSplatEffectorClip && (
               <span className="clip-text-icon" title="3D Effector Clip">E</span>
             )}
-            <span className="clip-name">
-              {isTextClip && clip.textProperties
-                ? clip.textProperties.text.slice(0, 30) || 'Text'
-                : isMathSceneClip && clip.mathScene
-                  ? clip.mathScene.objects.find((object) => object.type === 'function')?.expression || 'Math Scene'
-                : isText3DClip && text3DProperties
-                  ? text3DProperties.text.slice(0, 30) || '3D Text'
-                  : clip.name}
-            </span>
+            {isMidiClip && isRenamingClip ? (
+              <input
+                className="clip-name-input"
+                defaultValue={clip.name && clip.name !== 'MIDI Clip' ? clip.name : ''}
+                placeholder="MIDI"
+                autoFocus
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={(e) => {
+                  renameMidiClip(clip.id, e.currentTarget.value);
+                  setClipRenameId(null);
+                }}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') {
+                    renameMidiClip(clip.id, e.currentTarget.value);
+                    setClipRenameId(null);
+                  } else if (e.key === 'Escape') {
+                    setClipRenameId(null);
+                  }
+                }}
+              />
+            ) : (
+              <span className="clip-name">
+                {isMidiClip
+                  ? (clip.name && clip.name !== 'MIDI Clip' ? clip.name : 'MIDI')
+                  : isTextClip && clip.textProperties
+                  ? clip.textProperties.text.slice(0, 30) || 'Text'
+                  : isMathSceneClip && clip.mathScene
+                    ? clip.mathScene.objects.find((object) => object.type === 'function')?.expression || 'Math Scene'
+                  : isText3DClip && text3DProperties
+                    ? text3DProperties.text.slice(0, 30) || '3D Text'
+                    : clip.name}
+              </span>
+            )}
             {/* PickWhip disabled */}
           </div>
-          <span className="clip-duration">{formatTime(displayDuration)}</span>
+          {!isMidiClip && <span className="clip-duration">{formatTime(displayDuration)}</span>}
         </div>
       </div>
       {/* Transcript word markers */}
