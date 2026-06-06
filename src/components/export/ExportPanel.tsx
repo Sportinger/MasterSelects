@@ -60,6 +60,12 @@ import {
   useExportStore,
   type ExportImageFormat as ImageFormat,
 } from '../../stores/exportStore';
+import {
+  canRetainExportRunJob,
+  createExportRunId,
+  releaseExportRunResources,
+  reportExportRunJob,
+} from '../../services/timeline/exportRuntimeReporting';
 
 type ExportSummaryTarget =
   | 'command-bar'
@@ -842,6 +848,39 @@ export function ExportPanel() {
     setIsExporting(true);
     setError(null);
     const { startTime, endTime } = getCurrentExportRange();
+    const actualWidth = useCustomResolution ? customWidth : width;
+    const actualHeight = useCustomResolution ? customHeight : height;
+    const actualFps = useCustomFps ? customFps : fps;
+    const exportRunId = createExportRunId();
+    const runJobReport = {
+      runId: exportRunId,
+      settings: {
+        width: actualWidth,
+        height: actualHeight,
+        fps: actualFps,
+        codec: videoCodec,
+        container: containerFormat,
+        bitrate,
+        startTime,
+        endTime,
+        includeAudio: true,
+        audioSampleRate,
+        audioBitrate,
+        normalizeAudio,
+        exportMode: encoder === 'htmlvideo' ? 'precise' as const : 'fast' as const,
+        filename,
+      },
+      startedAtMs: Date.now(),
+      exportMode: 'audio-only',
+      requestedAudio: true,
+      effectiveAudio: true,
+    };
+    const runAdmission = canRetainExportRunJob(runJobReport);
+    if (!runAdmission.admitted) {
+      setError(`Audio export denied by runtime admission: ${runAdmission.reason ?? 'unknown'}`);
+      setIsExporting(false);
+      return;
+    }
     setProgress({
       phase: 'audio',
       currentFrame: 0,
@@ -857,11 +896,14 @@ export function ExportPanel() {
       sampleRate: audioSampleRate,
       bitrate: audioBitrate,
       normalize: normalizeAudio,
+    }, {
+      exportRunId,
     });
     ffmpegAudioPipelineRef.current = audioPipeline;
     let timelineExportStarted = false;
 
     try {
+      reportExportRunJob(runJobReport);
       startExport(startTime, endTime);
       timelineExportStarted = true;
 
@@ -933,6 +975,7 @@ export function ExportPanel() {
       setError(e instanceof Error ? e.message : 'Audio export failed');
     } finally {
       ffmpegAudioPipelineRef.current = null;
+      releaseExportRunResources(exportRunId);
       setIsExporting(false);
       if (timelineExportStarted) {
         endExport();
@@ -942,9 +985,17 @@ export function ExportPanel() {
     audioBitrate,
     audioOnlyFormat,
     audioSampleRate,
+    bitrate,
+    containerFormat,
+    customFps,
+    customHeight,
+    customWidth,
+    encoder,
     endExport,
     filename,
+    fps,
     getCurrentExportRange,
+    height,
     isExporting,
     normalizeAudio,
     setError,
@@ -952,6 +1003,10 @@ export function ExportPanel() {
     setIsExporting,
     setProgress,
     startExport,
+    useCustomFps,
+    useCustomResolution,
+    videoCodec,
+    width,
   ]);
 
   // Handle FCPXML export

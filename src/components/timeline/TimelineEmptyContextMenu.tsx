@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import type { TimelineEmptyContextMenuState } from './types';
-import { createTimelineEmptyContextMenuModel } from './utils/timelineEmptyContextMenu';
+import {
+  createTimelineEmptyContextMenuModel,
+  executeTimelineEmptyContextMenuCommand,
+  type TimelineEmptyContextMenuCommand,
+} from './utils/timelineEmptyContextMenu';
 
 interface TimelineEmptyContextMenuProps {
   menu: TimelineEmptyContextMenuState | null;
@@ -51,14 +55,17 @@ export function TimelineEmptyContextMenu({
   const contextMenuModel = createTimelineEmptyContextMenuModel({
     time: menu.time,
     trackId: menu.trackId,
-    onEraseGap,
-    onEraseLayerGaps,
-    onEraseAllGaps,
-    onFitCompToWindow,
   });
-  const runCommand = (action: () => void) => {
-    action();
-    onClose();
+  const runCommand = (command: TimelineEmptyContextMenuCommand) => {
+    const executed = executeTimelineEmptyContextMenuCommand(command, {
+      onEraseGap,
+      onEraseLayerGaps,
+      onEraseAllGaps,
+      onFitCompToWindow,
+    });
+    if (executed) {
+      onClose();
+    }
   };
 
   return (
@@ -79,7 +86,7 @@ export function TimelineEmptyContextMenu({
         <div
           key={command.key}
           className="context-menu-item"
-          onClick={() => runCommand(command.action)}
+          onClick={() => runCommand(command)}
         >
           {command.label}
         </div>
@@ -89,7 +96,7 @@ export function TimelineEmptyContextMenu({
         <div
           key={command.key}
           className="context-menu-item"
-          onClick={() => runCommand(command.action)}
+          onClick={() => runCommand(command)}
         >
           {command.label}
         </div>

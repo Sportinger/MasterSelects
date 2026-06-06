@@ -609,4 +609,61 @@ describe('AudioExportPipeline audio preflight', () => {
     expect(createSilentBuffer).not.toHaveBeenCalled();
     expect(timelineRuntimeCoordinator.getBridgeStats().policies.export.budgetReport.usage.resources).toBe(128);
   });
+
+  it('does not write composition mixdown state when export source-buffer admission is denied', async () => {
+    for (let index = 0; index < 128; index += 1) {
+      reportExportPreviewFrame({
+        runId: `existing-run-${index}`,
+        width: 1,
+        height: 1,
+        currentTime: index,
+      });
+    }
+    const buffer = createMockAudioBuffer();
+    compositionAudioMixerMocks.mixdownComposition.mockResolvedValue({
+      buffer,
+      waveform: [0, 0.5],
+      duration: 1,
+      hasAudio: true,
+    });
+    const clip = createClip({
+      id: 'denied-comp-audio',
+      trackId: audioTrack.id,
+      isComposition: true,
+      compositionId: 'comp-denied',
+      nestedContentHash: 'hash-denied',
+      source: { type: 'audio', naturalDuration: 1 },
+      file: new File([], 'denied-comp.wav'),
+      hasMixdownAudio: false,
+      mixdownBuffer: undefined,
+      mixdownWaveform: undefined,
+      mixdownGenerating: true,
+    });
+    useTimelineStore.setState({
+      clips: [clip],
+      tracks: [audioTrack],
+      clipKeyframes: new Map(),
+      masterAudioState: undefined,
+    });
+    const pipeline = new AudioExportPipeline(undefined, {
+      exportRunId: 'run-denied-composition',
+    }) as AudioExportPipelineTestAccess;
+    pipeline.extractor = {
+      clearCache: vi.fn(),
+      createSilentBuffer: vi.fn(),
+    } as unknown as AudioExportPipelineTestAccess['extractor'];
+
+    await expect(pipeline.extractAllAudio([clip], [audioTrack])).rejects.toThrow(
+      /source-buffer denied by runtime admission/
+    );
+
+    const updatedClip = useTimelineStore.getState().clips.find(candidate => candidate.id === clip.id);
+    expect(updatedClip).toEqual(expect.objectContaining({
+      hasMixdownAudio: false,
+      mixdownBuffer: undefined,
+      mixdownWaveform: undefined,
+      mixdownGenerating: true,
+    }));
+    expect(compositionAudioMixerMocks.mixdownComposition).toHaveBeenCalledOnce();
+  });
 });

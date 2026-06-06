@@ -613,6 +613,7 @@ export class AudioExportPipeline {
             continue;
           }
           buffer = mixdown.buffer;
+          this.assertAudioBufferAdmission('source-buffer', buffer, clip);
           applyCompositionAudioMixdownToTimelineClip(clip.id, mixdown);
           log.debug(`Using lazy mixdown buffer for nested comp ${clip.name}`);
         } else if (reusable) {

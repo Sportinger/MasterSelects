@@ -6,9 +6,9 @@
 **Parallelism target:** up to 6 agents working on independent streams  
 **Primary rule:** timeline visuals must not create, own, or warm playback media runtime
 
-**Latest runtime-admission checkpoint:** After commit `ace78705`, the next
-runtime-boundary slice moved composition-audio and thumbnail allocation closer
-to the target ownership model. `compositionAudioMixdownCache.ts` now gates
+**Latest runtime-admission checkpoint:** Commit `8841c778` moved
+composition-audio, thumbnail, and scrubbing allocation closer to the target
+ownership model. `compositionAudioMixdownCache.ts` now gates
 composition mixdown playback `HTMLAudioElement` creation through the interactive
 runtime coordinator, reports/release clip-scoped playback elements, reports
 completed mixdown `AudioBuffer` cache entries as retained runtime bindings with
@@ -31,16 +31,29 @@ Focused checks passed:
 (`147` tests), `npm run test -- tests/unit/thumbnailCacheService.test.ts tests/unit/thumbnailBitmapCache.test.ts`
 (`24` tests), `npm run test -- tests/unit/scrubbingCache.test.ts tests/unit/cacheManagerRuntimeReporting.test.ts`
 (`14` tests), `npm run test -- tests/stores/timeline/clipSlice.test.ts`
-(`139` tests), touched-file ESLint, and
-`npx tsc -p tsconfig.app.json --noEmit --pretty false`. Current LOC
-watermark from `npm run swarm:status` at `2026-06-06T11:49:21Z`: `19`
-tracked changed files, `2` new untracked files, tracked `+823/-103` net
-`+720` plus `+86` new-file LOC. Remaining agent-confirmed work:
-export/audio-only composition mixdown
-admission before timeline mutation, thumbnail blob URL reporting and legacy
-media thumbnail helpers, pending background/slot hidden-video disposer cleanup,
-full context-menu pure command descriptors/parity tests, worker default-on/live
-proof, torture-media coverage, and final broad gates.
+(`139` tests), touched-file ESLint,
+`npx tsc -p tsconfig.app.json --noEmit --pretty false`, and final full
+`npm run build`, `npm run lint`, and `npm run test` (`363` files / `3878`
+tests). Current LOC watermark from `npm run swarm:status` at
+`2026-06-06T11:56:23Z`: clean tree, `0` tracked changed files, `0` new
+untracked files, `+0/-0`.
+
+**Current post-`8841c778` export/menu descriptor checkpoint:** Composition
+mixdown writeback during export now checks export `source-buffer` admission
+before mutating timeline state, and audio-only export creates/reports/releases
+an export run id so `AudioExportPipeline` admission is active outside video
+exports. Track/Empty context menus now produce pure command descriptors with
+explicit executor helpers instead of closure `action` fields. Current LOC
+watermark from `npm run swarm:status` at `2026-06-06T12:03:59Z`: `11` tracked
+changed files, `0` new untracked files, tracked `+382/-123` net `+259`.
+Focused checks passed: `npm run test -- tests/unit/audioExportPipeline.test.ts tests/unit/compositionAudioMixdownCache.test.ts`
+(`26` tests), `npm run test -- tests/unit/trackContextMenu.test.ts tests/unit/timelineEmptyContextMenu.test.ts tests/unit/TrackContextMenu.test.tsx tests/unit/TimelineEmptyContextMenu.test.tsx`
+(`15` tests), `npx tsc -p tsconfig.app.json --noEmit --pretty false`, and
+`npm run test -- tests/unit/audioExportPipeline.test.ts tests/unit/compositionAudioMixdownCache.test.ts tests/unit/exportRuntimeReporting.test.ts`
+(`33` tests). Remaining agent-confirmed work: thumbnail blob URL reporting and
+legacy media thumbnail helpers, background/slot bound and pending hidden-video
+disposer cleanup, Clip context-menu pure command descriptors/parity tests,
+worker default-on/live proof, torture-media coverage, and final broad gates.
 
 **Latest post-push menu/image reload checkpoint:** After commit/push
 `0f202a6b`, a six-agent audit found concrete remaining Phase 3/5 follow-ups.

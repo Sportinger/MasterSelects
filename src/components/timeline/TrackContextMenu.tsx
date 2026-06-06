@@ -12,6 +12,10 @@ import { getTrackLabelColor, getTimelineTrackColor } from './trackColor';
 import {
   createTrackColorSwatchCommands,
   createTrackContextMenuModel,
+  executeTrackColorSwatchCommand,
+  executeTrackContextMenuCommand,
+  type TrackContextMenuCommand,
+  type TrackColorSwatchCommand,
 } from './utils/trackContextMenu';
 
 export interface TrackContextMenuState {
@@ -76,33 +80,30 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
     ? (track ? getTimelineTrackColor(track) : 'var(--bg-tertiary)')
     : getLabelHex(currentColor);
 
-  const handleDeleteTrack = () => {
-    useTimelineStore.getState().removeTrack(menu.trackId);
-    onClose();
-  };
-
-  const handleDuplicateTrack = () => {
-    // Add a track of the same type
-    useTimelineStore.getState().addTrack(menu.trackType);
-    onClose();
-  };
-
-  const handleSetTrackColor = (color: LabelColor) => {
-    useTimelineStore.getState().setTrackLabelColor(menu.trackId, color);
-    onClose();
-  };
   const contextMenuModel = createTrackContextMenuModel({
     trackName: menu.trackName,
     trackTypeCount: trackCount,
     trackClipCount,
-    onAddTrack: (trackType) => {
-      useTimelineStore.getState().addTrack(trackType);
-      onClose();
-    },
-    onDuplicateTrack: handleDuplicateTrack,
-    onDeleteTrack: handleDeleteTrack,
   });
-  const colorCommands = createTrackColorSwatchCommands(LABEL_COLORS, handleSetTrackColor);
+  const colorCommands = createTrackColorSwatchCommands(LABEL_COLORS);
+  const runTrackCommand = (command: TrackContextMenuCommand) => {
+    const executed = executeTrackContextMenuCommand(command, {
+      addTrack: (trackType) => useTimelineStore.getState().addTrack(trackType),
+      duplicateTrack: () => useTimelineStore.getState().addTrack(menu.trackType),
+      deleteTrack: () => useTimelineStore.getState().removeTrack(menu.trackId),
+    });
+    if (executed) {
+      onClose();
+    }
+  };
+  const runColorCommand = (command: TrackColorSwatchCommand) => {
+    const executed = executeTrackColorSwatchCommand(command, {
+      setTrackColor: (color: LabelColor) => useTimelineStore.getState().setTrackLabelColor(menu.trackId, color),
+    });
+    if (executed) {
+      onClose();
+    }
+  };
 
   return createPortal(
     <div
@@ -117,12 +118,12 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
       onClick={(e) => e.stopPropagation()}
     >
       {contextMenuModel.addTrackCommands.map(command => (
-        <div key={command.key} className="context-menu-item" onClick={command.action}>
+        <div key={command.key} className="context-menu-item" onClick={() => runTrackCommand(command)}>
           {command.label}
         </div>
       ))}
       <div className="context-menu-separator" />
-      <div className="context-menu-item" onClick={contextMenuModel.duplicateCommand.action}>
+      <div className="context-menu-item" onClick={() => runTrackCommand(contextMenuModel.duplicateCommand)}>
         {contextMenuModel.duplicateCommand.label}
       </div>
       <div className="context-menu-separator" />
@@ -152,7 +153,9 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
                 className={`label-picker-swatch ${color.key === 'none' ? 'none' : ''} ${currentColor === color.key ? 'active' : ''}`}
                 title={color.name}
                 style={{ background: color.key === 'none' ? 'var(--bg-tertiary)' : color.hex }}
-                onClick={colorCommand?.action}
+                onClick={() => {
+                  if (colorCommand) runColorCommand(colorCommand);
+                }}
               >
                 {color.key === 'none' && <span className="label-picker-x">&times;</span>}
               </span>
@@ -166,7 +169,7 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
         className={`context-menu-item danger ${contextMenuModel.deleteCommand.disabled ? 'disabled' : ''}`}
         onClick={() => {
           if (contextMenuModel.deleteCommand.disabled) return;
-          contextMenuModel.deleteCommand.action();
+          runTrackCommand(contextMenuModel.deleteCommand);
         }}
         title={contextMenuModel.deleteCommand.title}
       >

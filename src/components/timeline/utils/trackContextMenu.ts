@@ -1,9 +1,12 @@
 import type { LabelColor } from '../../../stores/mediaStore/types';
 
+export type TrackContextMenuCommandKind = 'add-track' | 'duplicate-track' | 'delete-track';
+
 export interface TrackContextMenuCommand {
   key: string;
   label: string;
-  action: () => void;
+  kind: TrackContextMenuCommandKind;
+  trackType?: 'video' | 'audio' | 'midi';
   disabled?: boolean;
   danger?: boolean;
   title?: string;
@@ -19,14 +22,20 @@ export interface CreateTrackContextMenuModelInput {
   trackName: string;
   trackTypeCount: number;
   trackClipCount: number;
-  onAddTrack: (trackType: 'video' | 'audio' | 'midi') => void;
-  onDuplicateTrack: () => void;
-  onDeleteTrack: () => void;
 }
 
 export interface TrackColorSwatchCommand {
   key: LabelColor;
-  action: () => void;
+}
+
+export interface ExecuteTrackContextMenuCommandInput {
+  addTrack: (trackType: 'video' | 'audio' | 'midi') => void;
+  duplicateTrack: () => void;
+  deleteTrack: () => void;
+}
+
+export interface ExecuteTrackColorSwatchCommandInput {
+  setTrackColor: (color: LabelColor) => void;
 }
 
 export function createTrackContextMenuModel(input: CreateTrackContextMenuModelInput): TrackContextMenuModel {
@@ -40,19 +49,19 @@ export function createTrackContextMenuModel(input: CreateTrackContextMenuModelIn
 
   return {
     addTrackCommands: [
-      { key: 'add-video-track', label: '+ Add Video Track', action: () => input.onAddTrack('video') },
-      { key: 'add-audio-track', label: '+ Add Audio Track', action: () => input.onAddTrack('audio') },
-      { key: 'add-midi-track', label: '+ Add MIDI Track', action: () => input.onAddTrack('midi') },
+      { key: 'add-video-track', label: '+ Add Video Track', kind: 'add-track', trackType: 'video' },
+      { key: 'add-audio-track', label: '+ Add Audio Track', kind: 'add-track', trackType: 'audio' },
+      { key: 'add-midi-track', label: '+ Add MIDI Track', kind: 'add-track', trackType: 'midi' },
     ],
     duplicateCommand: {
       key: 'duplicate-track',
       label: 'Duplicate Track',
-      action: input.onDuplicateTrack,
+      kind: 'duplicate-track',
     },
     deleteCommand: {
       key: 'delete-track',
       label: deleteLabel,
-      action: input.onDeleteTrack,
+      kind: 'delete-track',
       disabled: deleteDisabled,
       danger: true,
       title: deleteTitle,
@@ -62,10 +71,38 @@ export function createTrackContextMenuModel(input: CreateTrackContextMenuModelIn
 
 export function createTrackColorSwatchCommands(
   colors: readonly { key: LabelColor }[],
-  onSetTrackColor: (color: LabelColor) => void,
 ): TrackColorSwatchCommand[] {
   return colors.map((color) => ({
     key: color.key,
-    action: () => onSetTrackColor(color.key),
   }));
+}
+
+export function executeTrackContextMenuCommand(
+  command: TrackContextMenuCommand,
+  input: ExecuteTrackContextMenuCommandInput,
+): boolean {
+  if (command.disabled) return false;
+
+  switch (command.kind) {
+    case 'add-track':
+      if (!command.trackType) return false;
+      input.addTrack(command.trackType);
+      return true;
+    case 'duplicate-track':
+      input.duplicateTrack();
+      return true;
+    case 'delete-track':
+      input.deleteTrack();
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function executeTrackColorSwatchCommand(
+  command: TrackColorSwatchCommand,
+  input: ExecuteTrackColorSwatchCommandInput,
+): boolean {
+  input.setTrackColor(command.key);
+  return true;
 }
