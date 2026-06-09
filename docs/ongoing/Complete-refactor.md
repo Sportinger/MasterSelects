@@ -420,7 +420,7 @@ Shared hubs need explicit ownership before implementation:
 - `Preview`
 - `MediaPanel`
 - `aiTools/bridge`
-- dev smoke/torture handlers such as `timelineCanvasSmoke`
+- dev smoke/stress test handlers such as `timelineCanvasSmoke`
 
 ## Runtime Invariants
 

@@ -1,4 +1,4 @@
-﻿# Complete Refactor - Execution History 2026-06-09
+# Complete Refactor - Execution History 2026-06-09
 
 Archived from `docs/ongoing/complete-refactor/execution-queue-and-lanes.md` during queue compression.
 
@@ -2004,7 +2004,7 @@ ownership, cache ownership, and runtime invariants improve.
 
 ## AI Bridge And Smoke Quarantine
 
-`aiTools/bridge.ts` and dev smoke/torture files are architecture debt, but they
+`aiTools/bridge.ts` and dev smoke/stress test files are architecture debt, but they
 also protect current behavior.
 
 Plan rule:

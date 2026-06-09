@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
-const defaultManifestPath = path.join(repoRoot, 'fixtures', 'torture-media', 'manifest.local.json');
-const defaultReportsDir = path.join(repoRoot, 'fixtures', 'torture-media', 'reports');
+const defaultManifestPath = path.join(repoRoot, 'fixtures', 'stress-test-media', 'manifest.local.json');
+const defaultReportsDir = path.join(repoRoot, 'fixtures', 'stress-test-media', 'reports');
 
 function parseArgs(argv) {
   const options = {
@@ -39,12 +39,12 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: npm run torture:bridge-fast -- [options]
+  console.log(`Usage: npm run stress-test:bridge-fast -- [options]
 
 Options:
   --base-url <url>     Dev server base URL. Default: http://localhost:5173
-  --manifest <path>    Local torture media manifest. Default: fixtures/torture-media/manifest.local.json
-  --out <dir>          Report output directory. Default: fixtures/torture-media/reports
+  --manifest <path>    Local stress test media manifest. Default: fixtures/stress-test-media/manifest.local.json
+  --out <dir>          Report output directory. Default: fixtures/stress-test-media/reports
   --skip-export        Build/scrub/capture only; skip fast and precise export probes
   --include-precise    Also run a short precise/HTML export probe
 `);
@@ -219,7 +219,7 @@ async function main() {
 
   const runStartedAt = new Date().toISOString();
   const report = {
-    name: 'MasterSelects bridge torture fast',
+    name: 'MasterSelects bridge stress test fast',
     generatedAt: runStartedAt,
     baseUrl: baseUrl.origin,
     manifestPath: options.manifest,
@@ -243,10 +243,10 @@ async function main() {
   report.steps.clearRuntimeDiagnostics = await postTool('clearRuntimeDiagnostics', {}, 10000);
 
   console.log('Creating fixture project...');
-  report.steps.createFixture = assertToolSuccess('createTortureProjectFixture', await postTool('createTortureProjectFixture', {
+  report.steps.createFixture = assertToolSuccess('createStressTestProjectFixture', await postTool('createStressTestProjectFixture', {
     paths: importPaths.slice(0, 3),
     resetProject: true,
-    projectName: `Bridge Torture Fast ${new Date().toLocaleString('sv-SE')}`,
+    projectName: `Bridge Stress Test Fast ${new Date().toLocaleString('sv-SE')}`,
     durationSeconds: 6.2,
     width: 1920,
     height: 1080,
@@ -352,7 +352,7 @@ async function main() {
   await fs.writeFile(reportPath, JSON.stringify(compactReportValue(report), null, 2));
 
   console.log('');
-  console.log('Fast torture run complete.');
+  console.log('Fast stress test run complete.');
   console.log(`Frame grid: ${path.relative(repoRoot, report.artifacts.frameGrid ?? '')}`);
   console.log(`Report: ${path.relative(repoRoot, reportPath)}`);
   console.log(`Fast export bytes: ${report.summary.exportFastBytes ?? 'skipped'}`);

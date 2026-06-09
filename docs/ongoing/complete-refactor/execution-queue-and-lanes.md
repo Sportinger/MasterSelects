@@ -581,6 +581,22 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
   `P1B-SIGNAL-MOBILE-SURFACE-153`; mobile import/list/tap placement now handles
   signal assets through `MobileMediaPanel.tsx` only, with existing-video-track
   placement as the known limitation.
+- Wave 3 stress-test rename completed:
+  `RENAME-STRESS-TEST-155`; the old legacy feature name is gone repo-wide
+  across 96 occurrences / 20 files, including filenames, scripts, fixtures,
+  npm scripts, tool ids, flags, and docs/changelog prose.
+- Wave 3 P1A media-runtime contracts completed:
+  `P1A-MEDIA-RUNTIME-CONTRACTS-156`; `RuntimeSourceId`, `MediaAssetRef`,
+  runtime-free `TimelineSourceRef`, and `MediaRuntimeLease<RuntimeHandles>` are
+  defined, re-exported, tested, and mapped to first migration packets.
+- Wave 3 MediaPanel continuation completed:
+  `P4-MEDIA-PANEL-SPLIT-157`; drag/drop/marquee control moved to
+  `useMediaPanelDragDropMarquee.ts`, reducing `MediaPanel.tsx` to about 3950
+  raw lines / 3572 non-blank lines.
+- Wave 3 runtime gates closed:
+  Universal Signal end-to-end AI-bridge smoke passed in the real browser, and
+  the P4 FlashBoard lane exit gate closed with zero console errors/log
+  anomalies plus previously verified active-generation integration suites.
 
 ## High-Conflict Ownership Snapshot
 
@@ -601,19 +617,19 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
 
 ## Active Packet
 
-None. Wave 2 (`P1B-SIGNAL-TIMELINE-FILE-DROP-151`,
-`P4-MEDIA-PANEL-SPLIT-152`, `P1B-SIGNAL-MOBILE-SURFACE-153`) is completed and
-orchestrator-verified. The orchestrator is authoring wave 3: P1A contract
-packet, MediaPanel slice, and runtime smokes.
+None. Wave 3 (`RENAME-STRESS-TEST-155`,
+`P1A-MEDIA-RUNTIME-CONTRACTS-156`, `P4-MEDIA-PANEL-SPLIT-157`) is completed
+and orchestrator-verified with the full unit suite; Universal Signal runtime
+smoke passed and the FlashBoard lane gate is closed.
 
 ## Queued Packets
 
-No worker-owned source packet is currently queued. The orchestrator is
-authoring wave 3: Phase 1A media-source data/runtime contract packet,
-MediaPanel continuation, and runtime smokes (FlashBoard gate + signal
-end-to-end) once the dev bridge is up.
+No worker-owned source packet is currently active. Next wave candidates:
+type-barrel thinning toward the 150-line target, P1A migration packet 1
+(blobUrlManager object-url lease owner), and next MediaPanel slice.
 
 ## Immediate Next Step
 
-Orchestrator authors and dispatches wave 3: P1A contract packet, MediaPanel
-slice, and runtime smokes once the dev bridge is up.
+Orchestrator authors the next wave: type-barrel thinning toward the 150-line
+target, P1A migration packet 1 (blobUrlManager object-url lease owner), and
+next MediaPanel slice.

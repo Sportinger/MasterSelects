@@ -135,7 +135,7 @@ import {
   handlePurgePlaybackPath,
 } from './stats';
 import { handleDebugExport } from './export';
-import { handleCreateTortureProjectFixture } from './torture';
+import { handleCreateStressTestProjectFixture } from './stressTest';
 import {
   handleRunTimelineCanvasBladeToolSmoke,
   handleRunTimelineCanvasExportPreviewParitySmoke,
@@ -261,7 +261,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   getPlaybackTrace: handleGetPlaybackTrace,
   purgePlaybackPath: handlePurgePlaybackPath,
   debugExport: handleDebugExport,
-  createTortureProjectFixture: handleCreateTortureProjectFixture,
+  createStressTestProjectFixture: handleCreateStressTestProjectFixture,
   runTimelineCanvasBladeToolSmoke: handleRunTimelineCanvasBladeToolSmoke,
   runTimelineCanvasExportPreviewParitySmoke: handleRunTimelineCanvasExportPreviewParitySmoke,
   runTimelineCanvasLargeProjectSmoke: handleRunTimelineCanvasLargeProjectSmoke,
@@ -562,7 +562,7 @@ export {
   handleGetStatsHistory,
   handleClearRuntimeDiagnostics,
   handleDebugExport,
-  handleCreateTortureProjectFixture,
+  handleCreateStressTestProjectFixture,
   handleRunTimelineCanvasLargeProjectSmoke,
   handleRunTimelineCanvasMarqueeSmoke,
   handleRunTimelineCanvasPlayheadSmoothnessSmoke,

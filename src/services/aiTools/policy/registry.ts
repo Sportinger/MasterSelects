@@ -150,7 +150,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
     riskLevel: 'medium',
     allowedCallers: ['devBridge', 'console', 'internal'],
   }],
-  ['createTortureProjectFixture', devBridgeFixture()],
+  ['createStressTestProjectFixture', devBridgeFixture()],
   ['runTimelineCanvasBladeToolSmoke', {
     ...bridgeTelemetry(),
     readOnly: false,

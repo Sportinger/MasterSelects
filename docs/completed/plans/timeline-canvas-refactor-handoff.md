@@ -67,7 +67,7 @@ Issue/branch: issue #228 on `issue-228-timeline-canvas-rendering`.
     visual backtrack fix are also now covered. Clip context-menu
     side-effecting handlers now route through a central descriptor executor, and
     `timelineCanvasWorker` is product-default on. The remaining open work is
-    fresh live/default-on worker proof, torture-media coverage when a local
+    fresh live/default-on worker proof, stress-test-media coverage when a local
     manifest is present, and final broad verification.
 - Use about 95% when asked "how far are we in the plan?" Keep the separate
   implementation-breadth number at about 98%. Do not raise the risk-weighted
@@ -155,11 +155,11 @@ Issue/branch: issue #228 on `issue-228-timeline-canvas-rendering`.
   `npm run test -- tests/unit/clipContextMenu.test.ts tests/unit/TimelineContextMenu.test.tsx`
   (`34` tests).
 - Remaining agent-confirmed runtime/menu work after the current slice:
-  live/default-on worker proof, torture-media coverage if a local manifest is
+  live/default-on worker proof, stress-test-media coverage if a local manifest is
   prepared, and final broad gates. A local ignored
-  `fixtures/torture-media/manifest.local.json` has been regenerated as an
+  `fixtures/stress-test-media/manifest.local.json` has been regenerated as an
   MP4-only local fixture from `public/masterselects_github.mp4`, so the default
-  verification runner should include Torture on this machine until the ignored
+  verification runner should include Stress test on this machine until the ignored
   fixture files are removed.
 - Final browser verification checkpoint: full bridge verification passed in
   `fixtures/timeline-canvas-reports/run-20260606-134318Z/report.json` after the
@@ -167,10 +167,10 @@ Issue/branch: issue #228 on `issue-228-timeline-canvas-rendering`.
   MP4 live fixture with `150` video clips and `150` audio clips, then passed
   live composition verification, export-preview parity, forced worker prewarm,
   synthetic worker, thumbnail worker, live worker compatibility, live worker
-  positive, unforced default-on live worker, Torture, synthetic large-project,
+  positive, unforced default-on live worker, Stress test, synthetic large-project,
   thumbnail-before-playback reload, scrub/playback/path, playhead smoothness,
   Blade, and marquee checks. Fast export produced `1141079` bytes and the
-  summary had no verification failures. The local ignored Torture manifest was
+  summary had no verification failures. The local ignored Stress test manifest was
   regenerated as MP4-only for this proof so the FAST/MP4Box export gate tests
   rendering instead of failing on WebM container parsing. After this checkpoint,
   remaining pre-push work is only the final broad `npm run build`,
@@ -436,7 +436,7 @@ Issue/branch: issue #228 on `issue-228-timeline-canvas-rendering`.
   also passed the worker prewarm, `720` clip / `8` track forced-worker synthetic
   proof, and worker-thumbnail synthetic proof with no verification failures.
   Default-on still needs fresh full live `workerPositiveLive`, unforced
-  default-on live proof, visual parity/torture coverage, and final broad gates.
+  default-on live proof, visual parity/stress test coverage, and final broad gates.
 - Handoff/plan status should reflect these blockers. Do not let a new agent
   treat historical full checks or the deleted DOM body as final readiness.
 
@@ -689,7 +689,7 @@ not current dirty work.
     `workerFallbackTrackCount=0`, `workerPendingTrackCount=0`,
     `workerErrorTrackCount=0`, `workerResourceBytes=30720000`, `60fps`, zero
     dropped/slow frames, and worker-thumbnail synthetic passed.
-  - Not yet done: full live/default-on readiness, torture-media coverage,
+  - Not yet done: full live/default-on readiness, stress-test-media coverage,
     visual worker parity proof, and final broad build/lint/test/browser gates
     remain open.
 - Latest split media-runtime data-only cleanup:
@@ -1083,8 +1083,8 @@ timeline hooks. Do not recreate a full DOM clip body.
 | 2 - Cache boundary and module extraction | Mostly done | Warmups, cache invalidation, relink/source identity, and artifact reads are extracted. Source-fingerprint equivalence and hash-collision hardening remain. |
 | 3 - Interaction operations and geometry parity | Mostly done | Typed move, overlap trim, keyboard delete/blend, transition apply/remove/update, transition preview/drop-clear, generic keyframe transaction operations, fade transaction execution through `useClipFade`, selected clip-bar keyframe tick-drag transactions, expanded curve-editor keyframe/Bezier drags, stale typed-target no-fallback behavior, Mask/Text path-keyframe compatibility routing, and clip context-menu descriptor execution are executable and covered by focused tests. Remaining work is final shell/canvas parity proof in the broad browser gate. |
 | 4 - Retire full TimelineClip overlay | Done | Full DOM body and old passive overlay components/tests are retired. |
-| 5 - Runtime and persistence boundary | Partial | Runtime coordinator reporting/adapters are implemented; full allocator ownership is not. Admission gates now exist for thumbnail DB-load jobs, thumbnail generation jobs, detached thumbnail generation video/canvas resources, decoded thumbnail bitmaps, primary lazy video/audio elements, interactive lazy image elements, interactive scrub WebCodecs providers, legacy WebCodecs helper providers, Vector runtime canvases, video-bake proxy videos, legacy JPEG proxy-frame cache resources, decoded AudioBuffer cache resources, proxy VideoFrame cache resources, shared image hydrator resources for composition/background/slot paths, background/slot/composition video/audio runtime resources, RAM preview run-job/image/video-provider/CPU-cache/GPU-cache resources, export run/output/preview/image/precise-video/audio resources, export runtime bindings, FAST sequential WebCodecs providers, and parallel decoder/frame-buffer resources. Video/audio/nested-video/composition-audio/top-level-image/nested-image restore is data-only. AddComp linked composition-audio clips are now data-only placeholders, split paths no longer clone media runtime objects (`videoElement`, `audioElement`, WebCodecs providers, native decoders), FFmpeg frame rendering forwards its run id into export preparation, audio edit bake/unbake keeps restored/baked sources data-only, and stem source switching keeps clip sources data-only. Playback/export composition-audio mixdown-on-demand is implemented through the shared cache. Direct browser video/audio add, timeline video/audio paste, media relink/reload video/audio, download completion video/audio, and direct/paste/reload Vector user actions are data-only. 3D user-action URL ownership now prefers media-owned URLs. Image/model/vector/gaussian/avatar restore source construction is consolidated. Project-load/relink sequence frame URLs, durable primary `MediaFile.url` paths, and file-backed lazy video/audio element URLs are now media-scoped/manager-owned. Interactive lazy image preview, export image hydration, RAM/composition image hydration, background/slot image hydration, and `useLayerSync` data-only image support are implemented; broader allocator ownership remains for remaining stray runtime callers and final live/torture verification. |
-| 6 - Worker and large-project hardening | Mostly done | Worker protocol, resources, diagnostics, forced smokes, and the real-media worker-positive runner hook are in place. Default-on waits for a fresh live `workerPositiveLive` pass and torture-media coverage. |
+| 5 - Runtime and persistence boundary | Partial | Runtime coordinator reporting/adapters are implemented; full allocator ownership is not. Admission gates now exist for thumbnail DB-load jobs, thumbnail generation jobs, detached thumbnail generation video/canvas resources, decoded thumbnail bitmaps, primary lazy video/audio elements, interactive lazy image elements, interactive scrub WebCodecs providers, legacy WebCodecs helper providers, Vector runtime canvases, video-bake proxy videos, legacy JPEG proxy-frame cache resources, decoded AudioBuffer cache resources, proxy VideoFrame cache resources, shared image hydrator resources for composition/background/slot paths, background/slot/composition video/audio runtime resources, RAM preview run-job/image/video-provider/CPU-cache/GPU-cache resources, export run/output/preview/image/precise-video/audio resources, export runtime bindings, FAST sequential WebCodecs providers, and parallel decoder/frame-buffer resources. Video/audio/nested-video/composition-audio/top-level-image/nested-image restore is data-only. AddComp linked composition-audio clips are now data-only placeholders, split paths no longer clone media runtime objects (`videoElement`, `audioElement`, WebCodecs providers, native decoders), FFmpeg frame rendering forwards its run id into export preparation, audio edit bake/unbake keeps restored/baked sources data-only, and stem source switching keeps clip sources data-only. Playback/export composition-audio mixdown-on-demand is implemented through the shared cache. Direct browser video/audio add, timeline video/audio paste, media relink/reload video/audio, download completion video/audio, and direct/paste/reload Vector user actions are data-only. 3D user-action URL ownership now prefers media-owned URLs. Image/model/vector/gaussian/avatar restore source construction is consolidated. Project-load/relink sequence frame URLs, durable primary `MediaFile.url` paths, and file-backed lazy video/audio element URLs are now media-scoped/manager-owned. Interactive lazy image preview, export image hydration, RAM/composition image hydration, background/slot image hydration, and `useLayerSync` data-only image support are implemented; broader allocator ownership remains for remaining stray runtime callers and final live/stress test verification. |
+| 6 - Worker and large-project hardening | Mostly done | Worker protocol, resources, diagnostics, forced smokes, and the real-media worker-positive runner hook are in place. Default-on waits for a fresh live `workerPositiveLive` pass and stress-test-media coverage. |
 
 ## Completed Major Work
 

@@ -18,10 +18,11 @@ orchestrator or worker-agent execution run starts.
 - Handoff templates: prepared for execution only
 - Source implementation: current bounded source packet has explicit write set,
   forbidden files, and gates
-- Current bounded packet: none; wave 2 (packets 151-153) completed and
-  orchestrator-verified; next wave = Phase 1A media-source data/runtime
-  contract packet, MediaPanel continuation, and runtime smokes (FlashBoard gate
-  + signal end-to-end) once the dev bridge is up.
+- Current bounded packet: none; wave 3 (packets 155-157) completed and
+  orchestrator-verified with the full unit suite; Universal Signal runtime
+  smoke passed and the FlashBoard lane gate is closed; next wave = type-barrel
+  thinning toward the 150-line target, P1A migration packet 1 (blobUrlManager
+  object-url lease owner), and next MediaPanel slice.
 - Completed source/tooling packet: `P0-REG-001`; focused registry checks passed.
 - Completed bounded packet: `P0-BASELINE-REFRESH-001`, read-only plus docs.
 - Completed bounded packet: `P1-CONTRACT-001`, contracts and focused boundary
@@ -1902,14 +1903,65 @@ orchestrator or worker-agent execution run starts.
   Known limitation: signal placement requires an existing video track and does not create one.
   Orchestrator-verified: npx tsc -b clean; 10 test files / 32 tests green (timeline drop, mediaPanel, guard, importer suites).
 - Incident note:
-  During wave 2, `src/services/aiTools/handlers/torture.ts` and `fixtures/torture-media/README.md` disappeared from the worktree outside any packet write set.
+  During wave 2, `src/services/aiTools/handlers/stressTest.ts` and `fixtures/stress-test-media/README.md` disappeared from the worktree outside any packet write set.
   Worker session logs show all workers only observed the deletion and correctly reported the broken import instead of fixing it.
   The orchestrator restored both files from HEAD.
   Integrity rule added: workers never delete/revert outside write set; orchestrator checks git status before dispatch and commit.
   Orchestrator-verified: npx tsc -b clean; 10 test files / 32 tests green (timeline drop, mediaPanel, guard, importer suites).
-- Next eligible packet: Phase 1A media-source data/runtime contract packet,
-  MediaPanel continuation, and runtime smokes (FlashBoard gate + signal
-  end-to-end) once the dev bridge is up.
+- Completed bounded packet:
+  `RENAME-STRESS-TEST-155`; the legacy stress-test feature's old name was eliminated repo-wide (96 occurrences, 20 files).
+  Handler/scripts/fixtures are now `stressTest.ts`,
+  `prepare-stress-test-media.mjs`, `run-stress-test-bridge-fast.mjs`, and
+  `fixtures/stress-test-media/`.
+  NPM scripts, tool/symbol ids, `--skip-stress-test`, and docs/changelog prose now use stress-test naming.
+  This includes `createStressTestProjectFixture`, `AITool:StressTest`,
+  `fixtures:stress-test-media`, and `stress-test:bridge-fast`.
+  Zero case-insensitive old-name hits remain, including filenames; `node
+  --check` passed on all renamed scripts.
+  Orchestrator-verified: npx tsc -b clean; FULL unit suite green (397 test files / 4130 tests, 59s).
+- Completed bounded packet:
+  `P1A-MEDIA-RUNTIME-CONTRACTS-156`; `src/services/mediaRuntime/contracts.ts`
+  defines branded `RuntimeSourceId`, discriminated `MediaAssetRef`
+  (media-file/signal/external origins), durable asset-ref-based
+  `TimelineSourceRef` free of runtime ids, and `MediaRuntimeLease<RuntimeHandles>`.
+  `types.ts` re-exports the contracts for import compatibility, and
+  `tests/unit/mediaRuntimeContracts.test.ts` covers ref serializability via the
+  persisted-state guard plus lease/runtime separation.
+  Migration map recorded `blobUrlManager`, `sourceRuntimeSanitizer`,
+  `webCodecsHelpers`, proxyFrameCache handle ownership, and projectLoad
+  hydration handles with smallest later packet boundaries.
+  This closes the two open Phase 1A contract/migration checklist items.
+  Orchestrator-verified: npx tsc -b clean; FULL unit suite green (397 test files / 4130 tests, 59s).
+- Completed bounded packet:
+  `P4-MEDIA-PANEL-SPLIT-157`; extracted the drag/drop/marquee controller into
+  `src/components/panels/media/panel/useMediaPanelDragDropMarquee.ts`.
+  The new 287-raw-line hook owns external drop import planning, panel/root
+  drag-over state, internal item drag start/end, folder drop moves, and
+  empty-space marquee behavior.
+  `MediaPanel.tsx` is reduced to about 3950 raw lines and 3572 non-blank
+  lines.
+  Orchestrator-verified: npx tsc -b clean; FULL unit suite green (397 test files / 4130 tests, 59s).
+- Runtime gate closed:
+  Universal Signal end-to-end smoke PASSED via AI bridge in the real browser.
+  `signal-smoke.csv` imported through `importLocalFiles` as type `signal`,
+  placed on timeline track `video-2` via `addToTimeline`, and `placedClips`
+  reported a signal clip.
+  Render proof showed engine `layerCount=1` and the timeline canvas
+  visible/drawn clips count at 3.
+  This satisfies the Universal Signal runtime-proof criterion.
+  `importLocalFiles` and `placeSignalAssetOnTimeline` already exist as bridge
+  surface in `handlers/media.ts`.
+- Runtime gate closed:
+  P4 FlashBoard lane exit gate CLOSED after full app boot of the refactored
+  Composer/store code with zero browser console errors and zero FlashBoard log
+  anomalies.
+  Closure includes the previously verified active-generation integration suites
+  at 5 files and 16 tests.
+  The UI-level composer click-through smoke is explicitly reassigned to Phase 7
+  bridge-handler work because a composer driver tool does not exist yet.
+- Next eligible packet: type-barrel thinning toward the 150-line target, P1A
+  migration packet 1 (blobUrlManager object-url lease owner), and next
+  MediaPanel slice.
 - Product source refactors remain blocked outside approved packet write sets.
 
 ## Document Map
@@ -2606,6 +2658,8 @@ Gates and subchecks:
   - [ ] guided replay/compiler/runtime contracts separated
 - [ ] `P7_POLICY_REGISTRY_STABLE`
   - [ ] caller policy/permissions tests defined
+- [ ] `P7_FLASHBOARD_COMPOSER_DRIVER_TOOL`
+  - [ ] composer click-through smoke can drive UI through a bridge handler
 
 Do not:
 
@@ -2722,9 +2776,9 @@ Do not:
 - [x] Define `services/mediaRuntime` as canonical runtime lease domain.
 - [x] Define runtime-handle roundtrip guard requirement.
 - [x] Define HMR-safe runtime owner requirement.
-- [ ] Define `MediaAssetRef`, `TimelineSourceRef`, `MediaRuntimeLease`, and
+- [x] Define `MediaAssetRef`, `TimelineSourceRef`, `MediaRuntimeLease`, and
       `RuntimeSourceId` target contracts.
-- [ ] Map migration sources: `blobUrlManager`, `sourceRuntimeSanitizer`,
+- [x] Map migration sources: `blobUrlManager`, `sourceRuntimeSanitizer`,
       `webCodecsHelpers`, proxy/cache handles, project hydration handles, and
       media object URL managers.
 - [x] Define static runtime-handle scan for shared durable types.

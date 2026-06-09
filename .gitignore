@@ -59,10 +59,10 @@ ffmpeg-wasm-build/build.log
 
 # Test videos (large files - keep out of git)
 public/test-videos/
-fixtures/torture-media/media/
-fixtures/torture-media/frames/
-fixtures/torture-media/reports/
-fixtures/torture-media/*.local.json
+fixtures/stress-test-media/media/
+fixtures/stress-test-media/frames/
+fixtures/stress-test-media/reports/
+fixtures/stress-test-media/*.local.json
 fixtures/timeline-canvas-reports/
 
 # Rust build artifacts

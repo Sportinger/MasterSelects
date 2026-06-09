@@ -1,53 +1,28 @@
-export type MediaRuntimeKind = 'video' | 'audio' | 'image';
+import type {
+  DecodeSessionPolicy,
+  MediaRuntimeKind,
+  MediaSourceMetadata,
+  RuntimeSourceId,
+  RuntimeSessionKey,
+} from './contracts';
 
-export type RuntimeSourceId = string;
-export type RuntimeSessionKey = string;
-
-export type DecodeSessionPolicy =
-  | 'interactive'
-  | 'background'
-  | 'export'
-  | 'ram-preview';
-
-export type MediaAssetRefKind =
-  | MediaRuntimeKind
-  | 'model'
-  | 'gaussian-splat'
-  | 'signal'
-  | 'unknown';
-
-export interface MediaAssetFingerprint {
-  fileHash?: string;
-  fileSize?: number;
-  fileLastModified?: number;
-  sourcePath?: string;
-  projectPath?: string;
-}
-
-export interface MediaAssetRef {
-  mediaFileId?: string;
-  kind: MediaAssetRefKind;
-  fileName?: string;
-  fingerprint?: MediaAssetFingerprint;
-  metadata?: MediaSourceMetadata;
-}
-
-export interface TimelineSourceRef {
-  clipId?: string;
-  mediaFileId?: string;
-  sourceType: string;
-  assetRef?: MediaAssetRef;
-  runtimeSourceId?: RuntimeSourceId;
-  runtimeSessionKey?: RuntimeSessionKey;
-}
-
-export interface MediaRuntimeLease {
-  runtimeSourceId: RuntimeSourceId;
-  runtimeSessionKey?: RuntimeSessionKey;
-  ownerId: string;
-  policy: DecodeSessionPolicy;
-  acquiredAt: number;
-}
+export type {
+  DecodeSessionPolicy,
+  ExternalMediaAssetRef,
+  MediaAssetFingerprint,
+  MediaAssetRef,
+  MediaAssetRefKind,
+  MediaAssetRefOrigin,
+  MediaFileAssetRef,
+  MediaRuntimeKind,
+  MediaRuntimeLease,
+  MediaRuntimeLeaseStatus,
+  MediaSourceMetadata,
+  RuntimeSessionKey,
+  RuntimeSourceId,
+  SignalMediaAssetRef,
+  TimelineSourceRef,
+} from './contracts';
 
 export interface RenderFrameSource {
   runtimeSourceId: RuntimeSourceId;
@@ -56,17 +31,6 @@ export interface RenderFrameSource {
   frameNumber?: number;
   mediaFileId?: string;
   kind: MediaRuntimeKind;
-}
-
-export interface MediaSourceMetadata {
-  duration?: number;
-  width?: number;
-  height?: number;
-  fps?: number;
-  codec?: string;
-  audioCodec?: string;
-  container?: string;
-  hasAudio?: boolean;
 }
 
 export interface MediaSourceRuntimeDescriptor {

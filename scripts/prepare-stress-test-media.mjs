@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
-const DEFAULT_OUTPUT_DIR = path.join(repoRoot, 'fixtures', 'torture-media');
+const DEFAULT_OUTPUT_DIR = path.join(repoRoot, 'fixtures', 'stress-test-media');
 const DEFAULT_ROLES = [
   {
     id: 'primary-motion',
@@ -31,15 +31,15 @@ const DEFAULT_ROLES = [
 function usage() {
   return [
     'Usage:',
-    '  npm run fixtures:torture-media -- [options] <video...>',
+    '  npm run fixtures:stress-test-media -- [options] <video...>',
     '',
     'Options:',
-    '  --out <dir>       Fixture directory. Default: fixtures/torture-media',
+    '  --out <dir>       Fixture directory. Default: fixtures/stress-test-media',
     '  --mode <mode>     copy or reference. Default: copy',
     '  --force           Recopy files even if the target exists',
     '',
     'Example:',
-    '  npm run fixtures:torture-media -- --force "C:/Videos/a.mp4" "C:/Videos/b.mp4" "C:/Videos/c.mp4"',
+    '  npm run fixtures:stress-test-media -- --force "C:/Videos/a.mp4" "C:/Videos/b.mp4" "C:/Videos/c.mp4"',
   ].join('\n');
 }
 
@@ -235,7 +235,7 @@ async function main() {
 
   const manifest = {
     version: 1,
-    name: 'MasterSelects Torture Media',
+    name: 'MasterSelects Stress Test Media',
     generatedAt: new Date().toISOString(),
     mode: args.mode,
     fixtureDir: toPortablePath(outDir),

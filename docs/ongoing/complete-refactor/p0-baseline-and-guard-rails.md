@@ -71,7 +71,7 @@ by `P0-BASELINE-REFRESH-001`:
 - `getState()` usage:
   - total hits: 1,243
   - top files: `timelineCanvasSmoke.ts` 56, `MatAnyoneService.ts` 48,
-    `torture.ts` 46, `aiTools/bridge.ts` 33, `SAM2Panel.tsx` 32,
+    `stressTest.ts` 46, `aiTools/bridge.ts` 33, `SAM2Panel.tsx` 32,
     `AudioMixerPanel.tsx` 30, `surfaceInteractionDriver.ts` 29,
     `aiTools/handlers/playback.ts` 29, `SAM2Service.ts` 29,
     `Preview.tsx` 28.
@@ -102,10 +102,10 @@ by `P0-BASELINE-REFRESH-001`:
 - smoke inventory:
   - total hits: 124
   - existing package scripts include `timeline:canvas:verify` and
-    `torture:bridge-fast`.
+    `stress-test:bridge-fast`.
   - top smoke surfaces: `scripts/run-timeline-canvas-verification.mjs` 54,
     `src/services/aiTools/handlers/index.ts` 8,
-    `scripts/run-torture-bridge-fast.mjs` 7,
+    `scripts/run-stress-test-bridge-fast.mjs` 7,
     `src/services/aiTools/policy/registry.ts` 7.
 
 Guard rails to create before implementation:
@@ -242,7 +242,7 @@ rg -n 'position:\s*fixed|z-index\s*:|pointer-events\s*:\s*none|:global|(^|[,{]\s
 - `P0S_SMOKE_INVENTORY`
 
 ```powershell
-rg -n 'debugExport|getStats|getPlaybackTrace|simulatePlayback|simulateScrub|timelineCanvasSmoke|timeline:canvas:verify|torture:bridge-fast' src scripts tests package.json
+rg -n 'debugExport|getStats|getPlaybackTrace|simulatePlayback|simulateScrub|timelineCanvasSmoke|timeline:canvas:verify|stress-test:bridge-fast' src scripts tests package.json
 ```
 
 - `P0S_TIMELINE_REGISTRY_TEMPLATE`

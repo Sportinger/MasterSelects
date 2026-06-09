@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const defaultReportsDir = path.join(repoRoot, 'fixtures', 'timeline-canvas-reports');
-const defaultManifestPath = path.join(repoRoot, 'fixtures', 'torture-media', 'manifest.local.json');
+const defaultManifestPath = path.join(repoRoot, 'fixtures', 'stress-test-media', 'manifest.local.json');
 const defaultLiveCompositionId = process.env.TIMELINE_CANVAS_LIVE_COMP_ID || '1780705391680-ecu7panot';
 const defaultLiveImportPaths = process.env.TIMELINE_CANVAS_LIVE_IMPORT_PATHS
   ? process.env.TIMELINE_CANVAS_LIVE_IMPORT_PATHS
@@ -40,7 +40,7 @@ function parseArgs(argv) {
     checkWorkerDefaultOn: true,
     skipExport: false,
     skipExportPreviewParity: false,
-    skipTorture: false,
+    skipStressTest: false,
     skipLarge: false,
     skipLiveComposition: false,
     skipRam: false,
@@ -72,7 +72,7 @@ function parseArgs(argv) {
       options.baseUrl = argv[++index] ?? options.baseUrl;
     } else if (arg === '--manifest') {
       options.manifest = path.resolve(argv[++index] ?? options.manifest);
-      options.skipTorture = false;
+      options.skipStressTest = false;
     } else if (arg === '--out') {
       options.out = path.resolve(argv[++index] ?? options.out);
     } else if (arg === '--live-composition-id') {
@@ -127,8 +127,8 @@ function parseArgs(argv) {
       options.skipExport = true;
     } else if (arg === '--skip-export-preview-parity') {
       options.skipExportPreviewParity = true;
-    } else if (arg === '--skip-torture') {
-      options.skipTorture = true;
+    } else if (arg === '--skip-stress-test') {
+      options.skipStressTest = true;
     } else if (arg === '--skip-large') {
       options.skipLarge = true;
     } else if (arg === '--skip-live-composition') {
@@ -190,7 +190,7 @@ function printHelp() {
 
 Options:
   --base-url <url>             Dev server base URL. Default: http://localhost:5173
-  --manifest <path>            Torture media manifest for nested export/RAM probes
+  --manifest <path>            Stress test media manifest for nested export/RAM probes
   --out <dir>                  Report output directory
   --live-composition-id <id>   Real-media comp to verify. Default: TIMELINE_CANVAS_LIVE_COMP_ID or ${defaultLiveCompositionId}
   --live-import-path <path>    Add a local video for auto-created live fixture fallback. Repeatable.
@@ -214,7 +214,7 @@ Options:
   --skip-worker-default-on     Skip the default-on live worker smoke
   --skip-export                Skip debugExport probes
   --skip-export-preview-parity Skip export-preview fingerprint parity smoke
-  --skip-torture               Skip torture fixture even when manifest exists
+  --skip-stress-test               Skip stress test fixture even when manifest exists
   --skip-large                 Skip synthetic large-project scroll/zoom/select-all smoke
   --skip-ram                   Skip RAM preview smoke
   --skip-spectral              Skip spectral playback smoke
@@ -879,9 +879,9 @@ function buildCompactReport(report) {
       statsHistorySuccess: report.steps.statsHistoryAfterReload?.success ?? null,
       statsHistorySummary: report.steps.statsHistoryAfterReload?.data?.summary ?? null,
     },
-    torture: {
-      skipped: report.summary.tortureSkipped ?? null,
-      fixtureSuccess: report.steps.createTortureProjectFixture?.success ?? null,
+    stressTest: {
+      skipped: report.summary.stressTestSkipped ?? null,
+      fixtureSuccess: report.steps.createStressTestProjectFixture?.success ?? null,
       exportFastBytes: report.summary.exportFastBytes ?? null,
       exportPreciseBytes: report.summary.exportPreciseBytes ?? null,
     },
@@ -913,7 +913,7 @@ function buildCompactReport(report) {
         playback: summarizePlaybackSmoke(report.steps.liveCompositionPlayback),
         playbackPath: summarizePlaybackPathSmoke(report.steps.liveCompositionPlaybackPath),
       },
-      torture: {
+      stressTest: {
         scrub: summarizeScrubSmoke(report.steps.simulateScrub),
         playback: summarizePlaybackSmoke(report.steps.simulatePlayback),
         playbackPath: summarizePlaybackPathSmoke(report.steps.simulatePlaybackPath),
@@ -1762,17 +1762,17 @@ async function main() {
   }
 
   const hasManifest = await pathExists(options.manifest);
-  const shouldRunTorture = !options.skipTorture && hasManifest;
-  if (shouldRunTorture) {
+  const shouldRunStressTest = !options.skipStressTest && hasManifest;
+  if (shouldRunStressTest) {
     const manifest = await readJson(options.manifest);
     const importPaths = Array.isArray(manifest.importPaths) ? manifest.importPaths.slice(0, 3) : [];
     if (importPaths.length < 3) {
       throw new Error(`Manifest must contain at least three importPaths: ${options.manifest}`);
     }
-    console.log('Creating torture fixture...');
-    report.steps.createTortureProjectFixture = assertToolSuccess(
-      'createTortureProjectFixture',
-      await postTool('createTortureProjectFixture', {
+    console.log('Creating stress test fixture...');
+    report.steps.createStressTestProjectFixture = assertToolSuccess(
+      'createStressTestProjectFixture',
+      await postTool('createStressTestProjectFixture', {
         paths: importPaths,
         resetProject: true,
         projectName: `Timeline Canvas Verification ${new Date().toLocaleString('sv-SE')}`,
@@ -1880,7 +1880,7 @@ async function main() {
       }
     }
   } else {
-    report.summary.tortureSkipped = hasManifest
+    report.summary.stressTestSkipped = hasManifest
       ? 'skipped by option'
       : `manifest not found: ${path.relative(repoRoot, options.manifest)}`;
   }
@@ -2014,7 +2014,7 @@ async function main() {
       );
     }
 
-    if (!shouldRunTorture && !options.skipSpectral) {
+    if (!shouldRunStressTest && !options.skipSpectral) {
       console.log('Running synthetic spectral playback smoke...');
       report.steps.spectralPlaybackSynthetic = assertToolSuccess(
         'runTimelineCanvasSpectralPlaybackSmoke',
@@ -2026,7 +2026,7 @@ async function main() {
       );
     }
 
-    if (!shouldRunTorture && !options.skipRam) {
+    if (!shouldRunStressTest && !options.skipRam) {
       console.log('Running synthetic RAM preview smoke...');
       report.steps.ramPreviewSynthetic = assertToolSuccess(
         'runTimelineCanvasRamPreviewSmoke',
@@ -2119,7 +2119,7 @@ async function main() {
   console.log(`Worker live fallback: ${report.steps.workerFallbackLive?.success === true ? 'passed' : (report.summary.workerFallbackLiveSkipped ?? 'skipped')}`);
   console.log(`Worker live positive: ${report.steps.workerPositiveLive?.success === true ? 'passed' : (report.summary.workerPositiveLiveSkipped ?? 'skipped')}`);
   console.log(`Worker default live: ${report.steps.workerDefaultLive?.success === true ? 'passed' : (report.summary.workerDefaultLiveSkipped ?? 'skipped')}`);
-  console.log(`Torture: ${report.summary.tortureSkipped ?? 'ran'}`);
+  console.log(`Stress test: ${report.summary.stressTestSkipped ?? 'ran'}`);
   console.log(`Live composition: ${report.summary.liveCompositionSkipped ?? (report.summary.liveCompositionSuccess ? 'passed' : 'warnings')}`);
 
   if (report.summary.verificationFailures.length > 0) {

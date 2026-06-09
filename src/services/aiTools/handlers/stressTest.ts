@@ -8,7 +8,7 @@ import type { CallerContext } from '../policy';
 import type { ToolResult } from '../types';
 import { handleImportLocalFiles } from './media';
 
-const log = Logger.create('AITool:Torture');
+const log = Logger.create('AITool:StressTest');
 
 type FixtureRole = 'primary-motion' | 'blend-mask' | 'detail-nested';
 
@@ -190,7 +190,7 @@ async function addMediaSegment(params: {
   for (const clip of createdClips) {
     if (trimmedClipIds.has(clip.id)) continue;
     const trimResult = useTimelineStore.getState().applyTimelineEditOperation({
-      id: `torture-segment-trim:${clip.id}:${inPoint}:${outPoint}`,
+      id: `stressTest-segment-trim:${clip.id}:${inPoint}:${outPoint}`,
       type: 'trim-clip',
       clipId: clip.id,
       inPoint,
@@ -198,7 +198,7 @@ async function addMediaSegment(params: {
       includeLinked: true,
     }, {
       source: 'ai-tool',
-      historyLabel: 'Torture fixture: trim media segment',
+      historyLabel: 'Stress test fixture: trim media segment',
     });
     if (!trimResult.success) {
       throw new Error(trimResult.warnings.map((warning) => warning.message).join(' ') || `Failed to trim fixture segment for ${media.name}`);
@@ -392,7 +392,7 @@ async function prepareImportedMedia(
     : mediaFileIds;
 
   if (roleIds.length < 3) {
-    throw new Error(`Torture fixture needs at least 3 video files, got ${roleIds.length}`);
+    throw new Error(`Stress test fixture needs at least 3 video files, got ${roleIds.length}`);
   }
 
   const freshMedia = useMediaStore.getState();
@@ -401,7 +401,7 @@ async function prepareImportedMedia(
   const blend = mediaById.get(roleIds[1]);
   const detail = mediaById.get(roleIds[2]);
   if (!primary || !blend || !detail) {
-    throw new Error('Imported torture fixture media could not be resolved from media store');
+    throw new Error('Imported stress test fixture media could not be resolved from media store');
   }
 
   return {
@@ -417,7 +417,7 @@ async function prepareImportedMedia(
 
 async function buildSubComposition(ctx: FixtureBuildContext): Promise<Composition> {
   const mediaStore = useMediaStore.getState();
-  const comp = mediaStore.createComposition('Torture 02 - Detail Subcomp', {
+  const comp = mediaStore.createComposition('Stress test 02 - Detail Subcomp', {
     width: ctx.width,
     height: ctx.height,
     frameRate: ctx.frameRate,
@@ -476,7 +476,7 @@ async function buildSubComposition(ctx: FixtureBuildContext): Promise<Compositio
 
 async function buildNestedComposition(ctx: FixtureBuildContext, subComp: Composition): Promise<Composition> {
   const mediaStore = useMediaStore.getState();
-  const comp = mediaStore.createComposition('Torture 01 - Nested Blend', {
+  const comp = mediaStore.createComposition('Stress test 01 - Nested Blend', {
     width: ctx.width,
     height: ctx.height,
     frameRate: ctx.frameRate,
@@ -555,7 +555,7 @@ async function buildNestedComposition(ctx: FixtureBuildContext, subComp: Composi
 async function buildMainComposition(ctx: FixtureBuildContext, mainComp: Composition, nestedComp: Composition): Promise<Composition> {
   const mediaStore = useMediaStore.getState();
   mediaStore.updateComposition(mainComp.id, {
-    name: 'Torture 00 - Main Fast',
+    name: 'Stress test 00 - Main Fast',
     width: ctx.width,
     height: ctx.height,
     frameRate: ctx.frameRate,
@@ -698,7 +698,7 @@ async function buildMainComposition(ctx: FixtureBuildContext, mainComp: Composit
   return useMediaStore.getState().compositions.find((entry) => entry.id === mainComp.id) ?? mainComp;
 }
 
-export async function handleCreateTortureProjectFixture(
+export async function handleCreateStressTestProjectFixture(
   args: Record<string, unknown>,
   callerContext: CallerContext = 'internal'
 ): Promise<ToolResult> {
@@ -706,7 +706,7 @@ export async function handleCreateTortureProjectFixture(
   const resetProject = args.resetProject !== false;
   const projectName = typeof args.projectName === 'string' && args.projectName.trim()
     ? args.projectName.trim()
-    : `Bridge Torture Fixture ${new Date().toISOString()}`;
+    : `Bridge Stress Test Fixture ${new Date().toISOString()}`;
   const durationSeconds = finiteNumber(args.durationSeconds, 6.2, 2, 30);
   const width = Math.round(finiteNumber(args.width, 1920, 64, 7680));
   const height = Math.round(finiteNumber(args.height, 1080, 64, 4320));
@@ -728,7 +728,7 @@ export async function handleCreateTortureProjectFixture(
     if (preparedMedia.errors && preparedMedia.imported.length === 0) {
       return {
         success: false,
-        error: 'No torture fixture media could be imported',
+        error: 'No stress test fixture media could be imported',
         data: { errors: preparedMedia.errors },
       };
     }
@@ -800,7 +800,7 @@ export async function handleCreateTortureProjectFixture(
       },
     };
   } catch (error) {
-    log.error('Failed to create torture fixture', error);
+    log.error('Failed to create stress test fixture', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),

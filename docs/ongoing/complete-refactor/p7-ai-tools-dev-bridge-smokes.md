@@ -16,7 +16,7 @@ Current codebase signals:
 - `aiTools/handlers/index.ts`: 575 LOC.
 - `aiTools/bridge.ts`: 2,995 LOC.
 - `timelineCanvasSmoke.ts`: 3,110 LOC.
-- `torture.ts`: 46 `getState()` usages.
+- `stressTest.ts`: 46 `getState()` usages.
 - AI bridge touches project service, HMR, execution, policy, debug export,
   project patching, and smoke plumbing.
 

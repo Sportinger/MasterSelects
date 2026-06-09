@@ -14,7 +14,7 @@ Current codebase signals:
 - `getState()` usage outside stores is widespread:
   - `timelineCanvasSmoke`: 56
   - `MatAnyoneService`: 48
-  - `torture`: 46
+  - `stress test`: 46
   - `aiTools/bridge`: 33
   - `SAM2Panel`: 32
   - `AudioMixerPanel`: 30

@@ -127,8 +127,8 @@
   {
     "date": "2026-05-25",
     "type": "improve",
-    "title": "Project Save and Bridge Torture Reliability",
-    "description": "Project save/load guardrails and AI Bridge torture diagnostics now better protect active timelines and make browser export smoke tests easier to run from automation.",
+    "title": "Project Save and Bridge Stress Test Reliability",
+    "description": "Project save/load guardrails and AI Bridge stress test diagnostics now better protect active timelines and make browser export smoke tests easier to run from automation.",
     "section": "Reliability / Debugging",
     "commits": ["d8139c8c", "b8a8a899"]
   },

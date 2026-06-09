@@ -50,7 +50,7 @@ AI tools/chat/agent bridge, AI generation, hosted/cloud auth, billing/credits, s
 ## Recommended README changes
 
 - Replace all "90+ exported tools" claims with the current exported count, or avoid a hard count and say "the shared AI tool catalog". If using a count today, use 86 exported tools and note that some bridge-only diagnostic handlers are policy-gated and not model-exposed.
-- Clarify that `window.aiTools.list()` reflects `AI_TOOLS`, while some bridge/debug handlers such as `debugExport`, `createTortureProjectFixture`, `getDockLayoutDebugState`, and `switchDockLayout` are handler/policy entries but not in the exported model tool catalog (`src/services/aiTools/handlers/index.ts:252-257`; `src/services/aiTools/policy/registry.ts:127-153`).
+- Clarify that `window.aiTools.list()` reflects `AI_TOOLS`, while some bridge/debug handlers such as `debugExport`, `createStressTestProjectFixture`, `getDockLayoutDebugState`, and `switchDockLayout` are handler/policy entries but not in the exported model tool catalog (`src/services/aiTools/handlers/index.ts:252-257`; `src/services/aiTools/policy/registry.ts:127-153`).
 - Update the AI generation blurb to distinguish current primary paths: Cloud/Kie.ai/Seedance/Nano Banana/ElevenLabs/Suno, with PiAPI/EvoLink as development/BYO or legacy-compatible catalog paths.
 - Keep the security CI claim, but be precise: `npm run test:security` plus the GitHub security workflow cover JS tests, `npm audit`, and `cargo audit` (`package.json:24`, `.github/workflows/security.yml:20`, `.github/workflows/security.yml:34`).
 

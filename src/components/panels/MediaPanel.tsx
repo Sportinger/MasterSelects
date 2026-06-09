@@ -7,7 +7,6 @@ import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
 import { LabelColorPicker } from './media/LabelColorPicker';
 import { isImportedMediaFileItem } from './media/itemTypeGuards';
-import { collectDroppedMediaFiles, planDroppedMediaImports } from './media/dropImport';
 import { getMediaContextActionState } from './media/context/contextActionState';
 import { getMediaContextSelectedItemState } from './media/context/contextSelectedItemState';
 import { renderMediaAnnotationContextMenuMount } from './media/context/MediaAnnotationContextMenuMount';
@@ -41,6 +40,7 @@ import { MediaPanelHeader } from './media/panel/MediaPanelHeader';
 import { MediaNoMediaEmptyState } from './media/panel/MediaNoMediaEmptyState';
 import { MediaNoSearchResultsEmptyState } from './media/panel/MediaNoSearchResultsEmptyState';
 import type { MediaPanelViewMode } from './media/panel/types';
+import { useMediaPanelDragDropMarquee, type MediaPanelMarquee } from './media/panel/useMediaPanelDragDropMarquee';
 import { useMediaPanelProjectItems } from './media/panel/useMediaPanelProjectItems';
 import { MediaBoardAnnotationLayer } from './media/board/MediaBoardAnnotationLayer';
 import { MediaBoardView } from './media/board/MediaBoardView';
@@ -150,7 +150,6 @@ import {
   type MediaSourceRevealRequest,
 } from '../../services/mediaSourceReveal';
 import {
-  applyExternalDragPayloadToDataTransfer,
   clearExternalDragPayload,
   createExternalDragPayloadForProjectItem,
   dispatchExternalDragBridgeEvent,
@@ -412,6 +411,7 @@ export function MediaPanel() {
   const {
     importFiles,
     importFilesWithPicker,
+    importFilesWithHandles,
     createComposition,
     createFolder,
     getMediaFileUsages,
@@ -488,8 +488,7 @@ export function MediaPanel() {
   const [contextMenu, setContextMenu] = useState<MediaPanelContextMenu | null>(null);
 
   // Marquee selection state
-  const [marquee, setMarquee] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
-  const marqueeRef = useRef<{ startX: number; startY: number; initialSelection: string[] } | null>(null);
+  const [marquee, setMarquee] = useState<MediaPanelMarquee | null>(null);
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const [settingsDialog, setSettingsDialog] = useState<{ compositionId: string; width: number; height: number; frameRate: number; duration: number } | null>(null);
   const [solidSettingsDialog, setSolidSettingsDialog] = useState<MediaContextSolidSettingsDialogState | null>(null);
@@ -1138,145 +1137,39 @@ export function MediaPanel() {
     }
   }, [importFiles]);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Check if this is an external file drag (from OS file explorer)
-    const hasFiles = e.dataTransfer.types.includes('Files');
-    const isInternalDrag = e.dataTransfer.types.includes('application/x-media-panel-item');
-
-    log.debug('DragOver', { hasFiles, isInternalDrag, types: [...e.dataTransfer.types] });
-
-    if (hasFiles && !isInternalDrag) {
-      e.dataTransfer.dropEffect = 'copy';
-      setIsExternalDragOver(true);
-    }
+  const clearMediaBoardInsertionPreview = useCallback(() => {
+    setMediaBoardInsertionPreview(null);
   }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Only reset if leaving the panel entirely (not just entering a child)
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX;
-    const y = e.clientY;
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      setIsExternalDragOver(false);
-    }
-  }, []);
-
-  const handleExternalDropImport = useCallback(async (dataTransfer: DataTransfer, targetParentId: string | null) => {
-    const mediaStore = useMediaStore.getState();
-    const droppedFiles = await collectDroppedMediaFiles(dataTransfer);
-
-    if (droppedFiles.length === 0) {
-      return;
-    }
-
-    const importBatches = planDroppedMediaImports(
-      droppedFiles,
-      mediaStore.folders,
-      targetParentId,
-      (name, parentId) => mediaStore.createFolder(name, parentId),
-    );
-
-    for (const batch of importBatches) {
-      if (batch.filesWithHandles.length > 0) {
-        await mediaStore.importFilesWithHandles(batch.filesWithHandles, batch.parentId);
-      }
-
-      if (batch.files.length > 0) {
-        await mediaStore.importFiles(batch.files, batch.parentId);
-      }
-    }
-  }, []);
-
-  // Marquee selection handlers
-  const handleMarqueeMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    const target = e.target as HTMLElement;
-    // Ignore clicks on buttons, inputs, context menus, and the list column
-    // headers / resize handles (dragging a column must not start a marquee, #214)
-    if (target.closest('button, input, .context-menu, .media-column-headers, .media-col-resize-handle')) return;
-
-    // Don't start marquee when clicking on an item — let item drag handle it
-    const clickedOnItem = !!target.closest('.media-item, .media-grid-item');
-    if (clickedOnItem) return;
-
-    const container = itemListRef.current;
-    if (!container) return;
-
-    const rect = container.getBoundingClientRect();
-    const startX = e.clientX - rect.left + container.scrollLeft;
-    const startY = e.clientY - rect.top + container.scrollTop;
-    const clientStartX = e.clientX;
-    const clientStartY = e.clientY;
-
-    const initial = e.ctrlKey || e.metaKey ? [...selectedIds] : [];
-    let isDragging = false;
-
-    const handleMouseMove = (ev: MouseEvent) => {
-      const dx = ev.clientX - clientStartX;
-      const dy = ev.clientY - clientStartY;
-
-      // Start marquee after 4px movement threshold
-      if (!isDragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-        isDragging = true;
-        marqueeRef.current = { startX, startY, initialSelection: initial };
-        if (!ev.ctrlKey && !ev.metaKey) {
-          setSelection([]);
-        }
-      }
-
-      if (!isDragging || !marqueeRef.current) return;
-
-      const r = container.getBoundingClientRect();
-      const cx = ev.clientX - r.left + container.scrollLeft;
-      const cy = ev.clientY - r.top + container.scrollTop;
-      setMarquee({ startX: marqueeRef.current.startX, startY: marqueeRef.current.startY, currentX: cx, currentY: cy });
-
-      // Hit-test items
-      const mLeft = Math.min(marqueeRef.current.startX, cx);
-      const mRight = Math.max(marqueeRef.current.startX, cx);
-      const mTop = Math.min(marqueeRef.current.startY, cy);
-      const mBottom = Math.max(marqueeRef.current.startY, cy);
-
-      const itemEls = container.querySelectorAll('.media-item, .media-grid-item');
-      const hitIds: string[] = [];
-      itemEls.forEach((el) => {
-        const elRect = el.getBoundingClientRect();
-        const elTop = elRect.top - r.top + container.scrollTop;
-        const elBottom = elTop + elRect.height;
-        const elLeft = elRect.left - r.left + container.scrollLeft;
-        const elRight = elLeft + elRect.width;
-        if (elRight > mLeft && elLeft < mRight && elBottom > mTop && elTop < mBottom) {
-          const itemId = (el as HTMLElement).dataset.mediaPanelAnimId ?? el.parentElement?.getAttribute('data-item-id');
-          if (itemId) hitIds.push(itemId);
-        }
-      });
-
-      const combined = [...new Set([...marqueeRef.current.initialSelection, ...hitIds])];
-      setSelection(combined);
-    };
-
-    const handleMouseUp = () => {
-      if (!isDragging) {
-        // Clicked on empty space without dragging → deselect all
-        if (!e.ctrlKey && !e.metaKey) {
-          setSelection([]);
-        }
-      }
-      isDragging = false;
-      marqueeRef.current = null;
-      setMarquee(null);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [selectedIds, setSelection]);
+  const getTimelineSlotGridProgress = useCallback(() => useTimelineStore.getState().slotGridProgress, []);
+  const {
+    handleExternalDropImport,
+    handleDragOver,
+    handleDragLeave,
+    handleMarqueeMouseDown,
+    handleDragStart,
+    handleDragEnd,
+    handleFolderDragOver,
+    handleFolderDragLeave,
+    handleFolderDrop,
+    handleRootDrop,
+  } = useMediaPanelDragDropMarquee({
+    itemListRef,
+    renameTimerRef,
+    folders,
+    selectedIds,
+    activeCompositionId,
+    setSelection,
+    moveToFolder,
+    createFolder,
+    importFiles,
+    importFilesWithHandles,
+    setMarquee,
+    setInternalDragId,
+    setDragOverFolderId,
+    setIsExternalDragOver,
+    clearMediaBoardInsertionPreview,
+    getSlotGridProgress: getTimelineSlotGridProgress,
+  });
 
   // Handle item selection
   const handleItemClick = useCallback((id: string, e: React.MouseEvent) => {
@@ -1743,153 +1636,6 @@ export function MediaPanel() {
     }
     setSettingsDialog(null);
   }, [settingsDialog, updateComposition, activeCompositionId]);
-
-  // Handle drag start for media files and compositions (to drag to Timeline OR to folders)
-  const handleDragStart = useCallback((e: React.DragEvent, item: ProjectItem) => {
-    // Cancel pending rename — drag wins over rename
-    if (renameTimerRef.current) {
-      clearTimeout(renameTimerRef.current);
-      renameTimerRef.current = null;
-    }
-    const isFolder = 'isExpanded' in item;
-    clearExternalDragPayload();
-
-    // Mark as internal drag (for moving to folders)
-    e.dataTransfer.setData('application/x-media-panel-item', item.id);
-    setInternalDragId(item.id);
-
-    // Don't set timeline data for folders
-    if (isFolder) {
-      e.dataTransfer.effectAllowed = 'move';
-      if (e.currentTarget instanceof HTMLElement) {
-        e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
-      }
-      return;
-    }
-
-    if (isImportedMediaFileItem(item) && (item.isImporting || mediaNeedsRelink(item))) {
-      // File still importing or truly unresolved - only allow internal move
-      e.dataTransfer.effectAllowed = 'move';
-      if (e.currentTarget instanceof HTMLElement) {
-        e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
-      }
-      return;
-    }
-
-    const payload = createExternalDragPayloadForProjectItem(item, {
-      activeCompositionId,
-      slotGridProgress: useTimelineStore.getState().slotGridProgress,
-    });
-
-    if (!payload) {
-      e.preventDefault();
-      return;
-    }
-
-    setExternalDragPayload(payload);
-    applyExternalDragPayloadToDataTransfer(e.dataTransfer, payload);
-    e.dataTransfer.effectAllowed = 'copyMove';
-
-    // Set drag image
-    if (e.currentTarget instanceof HTMLElement) {
-      e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
-    }
-  }, [activeCompositionId]);
-
-  // Handle drag end (clear internal drag state)
-  const handleDragEnd = useCallback(() => {
-    setInternalDragId(null);
-    setDragOverFolderId(null);
-    setMediaBoardInsertionPreview(null);
-    clearExternalDragPayload();
-  }, []);
-
-  // Handle drag over folder (for internal moves and external imports)
-  const handleFolderDragOver = useCallback((e: React.DragEvent, folderId: string) => {
-    const isInternalDrag = e.dataTransfer.types.includes('application/x-media-panel-item');
-    const hasFiles = e.dataTransfer.types.includes('Files');
-
-    if (!isInternalDrag && !hasFiles) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = isInternalDrag ? 'move' : 'copy';
-    setDragOverFolderId(folderId);
-  }, []);
-
-  // Handle drag leave folder
-  const handleFolderDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOverFolderId(null);
-  }, []);
-
-  // Handle drop on folder
-  const handleFolderDrop = useCallback(async (e: React.DragEvent, folderId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
-      setIsExternalDragOver(false);
-      await handleExternalDropImport(e.dataTransfer, folderId);
-      setDragOverFolderId(null);
-      setInternalDragId(null);
-      return;
-    }
-
-    const itemId = e.dataTransfer.getData('application/x-media-panel-item');
-    if (itemId && itemId !== folderId) {
-      // Don't allow dropping a folder into itself or its children
-      const draggedFolder = folders.find(f => f.id === itemId);
-      if (draggedFolder) {
-        // Check if target is a child of dragged folder (would create cycle)
-        let parent = folders.find(f => f.id === folderId);
-        while (parent) {
-          if (parent.id === itemId) {
-            // Would create cycle - abort
-            setDragOverFolderId(null);
-            setInternalDragId(null);
-            return;
-          }
-          parent = folders.find(f => f.id === parent?.parentId);
-        }
-      }
-
-      // Move item(s) to folder
-      const itemsToMove = selectedIds.includes(itemId) ? selectedIds : [itemId];
-      moveToFolder(itemsToMove, folderId);
-    }
-
-    setDragOverFolderId(null);
-    setInternalDragId(null);
-  }, [folders, selectedIds, moveToFolder, handleExternalDropImport]);
-
-  // Handle drop on root (move out of folder or external file import)
-  const handleRootDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsExternalDragOver(false);
-
-    log.debug('Drop event', { types: [...e.dataTransfer.types], filesCount: e.dataTransfer.files.length });
-
-    // Check if this is an external file drop
-    if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
-      await handleExternalDropImport(e.dataTransfer, null);
-      return;
-    }
-
-    // Internal drag - move to root
-    const itemId = e.dataTransfer.getData('application/x-media-panel-item');
-    if (itemId) {
-      const itemsToMove = selectedIds.includes(itemId) ? selectedIds : [itemId];
-      moveToFolder(itemsToMove, null); // null = root
-    }
-
-    setDragOverFolderId(null);
-    setInternalDragId(null);
-  }, [selectedIds, moveToFolder, handleExternalDropImport]);
 
   // Name column width state (resizable)
   const [nameColumnWidth, setNameColumnWidth] = useState(() => {
