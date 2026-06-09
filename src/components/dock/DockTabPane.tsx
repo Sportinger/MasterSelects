@@ -3,7 +3,7 @@
 import { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { DockTabGroup, DockPanel, PanelType } from '../../types/dock';
-import { DEPRECATED_PANEL_TYPES, MULTI_INSTANCE_PANEL_TYPES, PANEL_CONFIGS, WIP_PANEL_TYPES } from '../../types/dock';
+import { MULTI_INSTANCE_PANEL_TYPES, PANEL_CONFIGS, WIP_PANEL_TYPES } from '../../types/dock';
 import { useDockStore } from '../../stores/dockStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -24,8 +24,7 @@ const HOLD_DURATION = 500; // ms to hold before drag starts
 const TAB_INSERT_HOT_ZONE_PX = 36;
 const TAB_SLOT_SIZE_PX = 22;
 const TAB_SLOT_GAP_PX = 7;
-const CHANGE_TO_PANEL_TYPES = (Object.keys(PANEL_CONFIGS) as PanelType[])
-  .filter((type) => !DEPRECATED_PANEL_TYPES.includes(type));
+const CHANGE_TO_PANEL_TYPES = Object.keys(PANEL_CONFIGS) as PanelType[];
 
 // Add-panel "+" menu order: multi-instance (spawnable) types like Preview float to the top.
 const ADD_MENU_PANEL_TYPES = [...CHANGE_TO_PANEL_TYPES].sort((a, b) => (

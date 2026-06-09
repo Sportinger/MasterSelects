@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   AI_PANEL_TYPES,
-  DEPRECATED_PANEL_TYPES,
   PANEL_CONFIGS,
   SCOPE_PANEL_TYPES,
   WIP_PANEL_TYPES,
@@ -35,12 +34,15 @@ describe('dock panel configs', () => {
     expect(SCOPE_PANEL_TYPES).not.toContain(panelType);
   });
 
-  it('keeps the old AI Generative panel only as a migration target', () => {
-    expect(DEPRECATED_PANEL_TYPES).toContain('ai-video');
-    expect(AI_PANEL_TYPES).not.toContain('ai-video');
-    expect(PANEL_CONFIGS['ai-video']).toMatchObject({
-      type: 'ai-video',
-      title: 'AI Generative',
+  it('excludes retired dock panel ids from the active panel contract', () => {
+    const activePanelTypes = Object.keys(PANEL_CONFIGS);
+    const retiredPanelTypes = ['ai-video', 'youtube', 'download'];
+
+    retiredPanelTypes.forEach((type) => {
+      expect(activePanelTypes).not.toContain(type);
+      expect(AI_PANEL_TYPES as readonly string[]).not.toContain(type);
+      expect(SCOPE_PANEL_TYPES as readonly string[]).not.toContain(type);
+      expect(WIP_PANEL_TYPES as readonly string[]).not.toContain(type);
     });
   });
 });

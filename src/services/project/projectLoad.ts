@@ -21,24 +21,28 @@ import type { TimelineClip } from '../../stores/timeline/types';
 import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useFlashBoardStore } from '../../stores/flashboardStore';
-import { createDefaultFlashBoardComposer } from '../../stores/flashboardStore/defaults';
+import {
+  hydrateFlashBoardActiveGenerationRecords,
+  resetFlashBoardActiveGenerationState,
+  type FlashBoardActiveGenerationRecord,
+} from '../../stores/flashboardStore/activeGenerationRecords';
 import { useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { hydrateHistoryStateFromProject } from '../../stores/historyStore';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import type {
-  FlashBoard,
   FlashBoardGenerationRequest,
   FlashBoardJobState,
   FlashBoardMediaType,
-  FlashBoardNode,
   FlashBoardOutputType,
   FlashBoardResult,
   FlashBoardService,
-  ProjectFlashBoardState,
 } from '../../stores/flashboardStore/types';
+import type {
+  ProjectFlashBoardGenerationRecord,
+  ProjectFlashBoardState,
+} from './types/flashboard.types';
 import {
   projectFileService,
   type ProjectFile,
@@ -322,8 +326,8 @@ async function convertProjectMediaToStore(
       const sequenceFrames: ModelSequenceFrame[] = [];
       for (let frameIndex = 0; frameIndex < pm.modelSequence.frames.length; frameIndex += 1) {
         const frame = pm.modelSequence.frames[frameIndex];
-        let frameFile = frame.file;
-        let modelUrl = frame.modelUrl;
+        let frameFile: File | undefined;
+        let modelUrl: string | undefined;
         const frameFileUrl = resolveProjectRawFileUrl(frame.projectPath);
         if (!hydrateFiles && !modelUrl && frameFileUrl) {
           modelUrl = frameFileUrl;
@@ -372,8 +376,8 @@ async function convertProjectMediaToStore(
       const sequenceFrames: GaussianSplatSequenceFrame[] = [];
       for (let frameIndex = 0; frameIndex < pm.gaussianSplatSequence.frames.length; frameIndex += 1) {
         const frame = pm.gaussianSplatSequence.frames[frameIndex];
-        let frameFile = frame.file;
-        let splatUrl = frame.splatUrl;
+        let frameFile: File | undefined;
+        let splatUrl: string | undefined;
         const frameFileUrl = resolveProjectRawFileUrl(frame.projectPath);
         if (!hydrateFiles && !splatUrl && frameFileUrl) {
           splatUrl = frameFileUrl;
@@ -989,47 +993,39 @@ function normalizeFlashBoardResult(
   };
 }
 
-function hydrateFlashBoardFromProject(data: ProjectFlashBoardState): void {
-  const boards: FlashBoard[] = data.boards.map((board) => {
-    const nodes: FlashBoardNode[] = board.nodes.map((node) => {
-      let job: FlashBoardJobState | undefined;
-      if (node.job) {
-        const interrupted = node.job.status === 'queued' || node.job.status === 'processing';
-        job = {
-          ...node.job,
-          status: interrupted ? 'failed' : node.job.status,
-          error: interrupted && !node.job.error ? 'Job interrupted by reload' : node.job.error,
-        };
-      }
-      return {
-        id: node.id,
-        kind: node.kind,
-        createdAt: new Date(node.createdAt).getTime(),
-        updatedAt: new Date(node.updatedAt).getTime(),
-        position: node.position,
-        size: node.size,
-        request: normalizeFlashBoardRequest(node.request),
-        job,
-        result: normalizeFlashBoardResult(node.result),
-      };
-    });
+function normalizeFlashBoardJob(
+  job: ProjectFlashBoardGenerationRecord['job'] | undefined,
+): FlashBoardJobState | undefined {
+  if (!job) {
+    return undefined;
+  }
 
-    return {
-      id: board.id,
-      name: board.name,
-      createdAt: new Date(board.createdAt).getTime(),
-      updatedAt: new Date(board.updatedAt).getTime(),
-      viewport: board.viewport,
-      nodes,
-    };
-  });
+  const interrupted = job.status === 'queued' || job.status === 'processing';
+  return {
+    ...job,
+    status: interrupted ? 'failed' : job.status,
+    error: interrupted && !job.error ? 'Job interrupted by reload' : job.error,
+  };
+}
 
-  useFlashBoardStore.setState({
-    activeBoardId: data.activeBoardId,
-    boards,
-    selectedNodeIds: [],
-    composer: createDefaultFlashBoardComposer(),
-  });
+function normalizeFlashBoardGenerationRecord(
+  record: ProjectFlashBoardGenerationRecord,
+): FlashBoardActiveGenerationRecord {
+  return {
+    id: record.id,
+    kind: 'generation',
+    createdAt: new Date(record.createdAt).getTime(),
+    updatedAt: new Date(record.updatedAt).getTime(),
+    request: normalizeFlashBoardRequest(record.request),
+    job: normalizeFlashBoardJob(record.job),
+    result: normalizeFlashBoardResult(record.result),
+  };
+}
+
+function hydrateFlashBoardGenerationRecordsFromProject(data: ProjectFlashBoardState): void {
+  hydrateFlashBoardActiveGenerationRecords(
+    data.generationRecords.map(normalizeFlashBoardGenerationRecord),
+  );
 }
 
 // ============================================
@@ -1199,12 +1195,7 @@ export async function loadProjectToStores(): Promise<void> {
     blocking: true,
   });
 
-  // Load YouTube panel state
-  if (projectData.youtube) {
-    useYouTubeStore.getState().loadState(projectData.youtube);
-  } else {
-    useYouTubeStore.getState().reset();
-  }
+  useYouTubeStore.getState().reset();
 
   // Restore dock layout from project
   if (projectData.uiState?.dockLayout) {
@@ -1213,16 +1204,11 @@ export async function loadProjectToStores(): Promise<void> {
   }
 
   if (projectData.flashboard) {
-    hydrateFlashBoardFromProject(projectData.flashboard);
+    hydrateFlashBoardGenerationRecordsFromProject(projectData.flashboard);
     flashBoardMediaBridge.hydrateMetadata(projectData.flashboard.generationMetadataByMediaId ?? {});
     log.info(' Restored FlashBoard state from project');
   } else {
-    useFlashBoardStore.setState({
-      activeBoardId: null,
-      boards: [],
-      selectedNodeIds: [],
-      composer: createDefaultFlashBoardComposer(),
-    });
+    resetFlashBoardActiveGenerationState();
     flashBoardMediaBridge.hydrateMetadata({});
   }
 

@@ -7,26 +7,11 @@ import type {
 type Set = (partial: Partial<FlashBoardStoreState> | ((state: FlashBoardStoreState) => Partial<FlashBoardStoreState>)) => void;
 
 export interface UiSliceActions {
-  openComposer: (draftNodeId: string) => void;
-  closeComposer: () => void;
   updateComposer: (patch: Partial<FlashBoardComposerState>) => void;
   setHoveredComposerReference: (reference: FlashBoardHoveredComposerReference | null) => void;
 }
 
 export const createUiSlice = (set: Set): UiSliceActions => ({
-  openComposer: (draftNodeId: string): void => {
-    set((state) => ({
-      composer: { ...state.composer, draftNodeId, isOpen: true },
-    }));
-  },
-
-  closeComposer: (): void => {
-    set((state) => ({
-      composer: { ...state.composer, draftNodeId: null, isOpen: false },
-      hoveredComposerReference: null,
-    }));
-  },
-
   updateComposer: (patch: Partial<FlashBoardComposerState>): void => {
     set((state) => ({
       composer: {

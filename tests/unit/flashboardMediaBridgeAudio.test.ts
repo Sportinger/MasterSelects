@@ -9,50 +9,40 @@ describe('FlashBoardMediaBridge audio imports', () => {
   beforeEach(() => {
     flashBoardMediaBridge.hydrateMetadata({});
     useFlashBoardStore.setState({
-      activeBoardId: 'board-1',
-      boards: [{
-        id: 'board-1',
-        name: 'Board',
+      activeGenerationRecords: [{
+        id: 'generation-audio',
+        kind: 'generation',
         createdAt: 1,
         updatedAt: 1,
-        viewport: { zoom: 1, panX: 0, panY: 0 },
-        nodes: [{
-          id: 'node-audio',
-          kind: 'generation',
-          createdAt: 1,
-          updatedAt: 1,
-          position: { x: 0, y: 0 },
-          size: { width: 280, height: 100 },
-          job: { status: 'processing' },
-          request: {
-            service: 'elevenlabs',
-            providerId: 'elevenlabs-tts',
-            version: 'eleven_multilingual_v2',
-            outputType: 'audio',
-            prompt: 'Hello board',
-            voiceId: 'voice-1',
-            voiceName: 'Narrator',
-            languageOverride: true,
-            languageCode: 'en',
-            outputFormat: 'mp3_44100_128',
-            voiceSettings: {
-              speed: 1,
-              stability: 0.5,
-              similarityBoost: 0.75,
-              style: 0,
-              useSpeakerBoost: true,
-            },
-            referenceMediaFileIds: [],
+        job: { status: 'processing' },
+        request: {
+          service: 'elevenlabs',
+          providerId: 'elevenlabs-tts',
+          version: 'eleven_multilingual_v2',
+          outputType: 'audio',
+          prompt: 'Hello board',
+          voiceId: 'voice-1',
+          voiceName: 'Narrator',
+          languageOverride: true,
+          languageCode: 'en',
+          outputFormat: 'mp3_44100_128',
+          voiceSettings: {
+            speed: 1,
+            stability: 0.5,
+            similarityBoost: 0.75,
+            style: 0,
+            useSpeakerBoost: true,
           },
-        }],
+          referenceMediaFileIds: [],
+        },
       }],
-      selectedNodeIds: [],
+      selectedActiveGenerationRecordIds: [],
       composer: createDefaultFlashBoardComposer(),
       hoveredComposerReference: null,
     });
   });
 
-  it('imports generated audio files into AI Gen / Audio and completes the node', async () => {
+  it('imports generated audio files into AI Gen / Audio and completes the record', async () => {
     const folders: MediaFolder[] = [];
     const importedAudio: MediaFile = {
       id: 'media-audio',
@@ -85,7 +75,7 @@ describe('FlashBoardMediaBridge audio imports', () => {
     } as unknown as ReturnType<typeof useMediaStore.getState>);
 
     const file = new File(['mp3'], 'voice.mp3', { type: 'audio/mpeg' });
-    const result = await flashBoardMediaBridge.importGeneratedFile('node-audio', file, 'audio');
+    const result = await flashBoardMediaBridge.importGeneratedFile('generation-audio', file, 'audio');
 
     const aiGenFolder = folders.find((folder) => folder.name === 'AI Gen');
     const audioFolder = folders.find((folder) => folder.name === 'Audio');
@@ -100,7 +90,7 @@ describe('FlashBoardMediaBridge audio imports', () => {
       mediaType: 'audio',
       duration: 1.5,
     });
-    expect(useFlashBoardStore.getState().boards[0].nodes[0].result).toMatchObject({
+    expect(useFlashBoardStore.getState().activeGenerationRecords[0].result).toMatchObject({
       mediaFileId: 'media-audio',
       mediaType: 'audio',
     });

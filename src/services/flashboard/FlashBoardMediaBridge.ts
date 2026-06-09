@@ -1,13 +1,16 @@
 import { Logger } from '../logger';
 import { useMediaStore } from '../../stores/mediaStore';
 import { requireMediaFileImportResult } from '../../stores/mediaStore/helpers/importResult';
-import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { captureCurrentPreviewFrameFile } from '../previewFrameCapture';
+import {
+  completeFlashBoardActiveGenerationRecord,
+  getFlashBoardActiveGenerationRecord,
+  type FlashBoardActiveGenerationRecord,
+} from '../../stores/flashboardStore/activeGenerationRecords';
 import type {
   FlashBoardGenerationMetadata,
   FlashBoardMediaType,
   FlashBoardResult,
-  FlashBoardNode,
 } from '../../stores/flashboardStore/types';
 import type { MediaFile } from '../../stores/mediaStore';
 import { setExternalDragPayload, clearExternalDragPayload } from '../../components/timeline/utils/externalDragSession';
@@ -30,18 +33,6 @@ function sanitizeForFilename(prompt: string, maxLen = 30): string {
 }
 
 /**
- * Find a FlashBoardNode by ID across all boards.
- */
-function findNodeById(nodeId: string): FlashBoardNode | undefined {
-  const { boards } = useFlashBoardStore.getState();
-  for (const board of boards) {
-    const node = board.nodes.find(n => n.id === nodeId);
-    if (node) return node;
-  }
-  return undefined;
-}
-
-/**
  * FlashBoardMediaBridge handles importing AI-generated media into the Media Pool
  * and provides timeline integration (drag protocol, direct add-to-timeline).
  *
@@ -49,7 +40,7 @@ function findNodeById(nodeId: string): FlashBoardNode | undefined {
  *   1. Job completes with a videoUrl
  *   2. Bridge downloads the video as a File
  *   3. Bridge imports the File into the Media Pool under "AI Gen / Video" (or "Images")
- *   4. Bridge updates the FlashBoard node with the result (mediaFileId, dimensions, duration)
+ *   4. Bridge updates the FlashBoard record with the result (mediaFileId, dimensions, duration)
  *   5. Bridge stores generation metadata keyed by mediaFileId for project persistence
  *
  * The imported media is then draggable to the timeline using the standard
@@ -155,56 +146,56 @@ class FlashBoardMediaBridge {
    */
   private buildMetadata(
     mediaFileId: string,
-    node: FlashBoardNode | undefined,
+    record: FlashBoardActiveGenerationRecord | undefined,
     mediaType: FlashBoardMediaType,
   ): FlashBoardGenerationMetadata | null {
-    if (!node?.request) {
+    if (!record?.request) {
       return null;
     }
 
     return {
       mediaFileId,
-      service: node.request.service,
-      providerId: node.request.providerId,
-      version: node.request.version,
-      outputType: node.request.outputType,
+      service: record.request.service,
+      providerId: record.request.providerId,
+      version: record.request.version,
+      outputType: record.request.outputType,
       mediaType,
-      prompt: node.request.prompt,
-      negativePrompt: node.request.negativePrompt,
-      duration: node.request.duration,
-      aspectRatio: node.request.aspectRatio,
-      imageSize: node.request.imageSize,
-      generateAudio: node.request.generateAudio,
-      multiShots: node.request.multiShots,
-      multiPrompt: node.request.multiPrompt,
-      voiceId: node.request.voiceId,
-      voiceName: node.request.voiceName,
-      languageOverride: node.request.languageOverride,
-      languageCode: node.request.languageCode,
-      outputFormat: node.request.outputFormat,
-      voiceSettings: node.request.voiceSettings,
-      sunoCustomMode: node.request.sunoCustomMode,
-      sunoInstrumental: node.request.sunoInstrumental,
-      sunoStyle: node.request.sunoStyle,
-      sunoTitle: node.request.sunoTitle,
-      sunoNegativeTags: node.request.sunoNegativeTags,
-      sunoVocalGender: node.request.sunoVocalGender,
-      sunoStyleWeight: node.request.sunoStyleWeight,
-      sunoWeirdnessConstraint: node.request.sunoWeirdnessConstraint,
-      sunoAudioWeight: node.request.sunoAudioWeight,
-      startMediaFileId: node.request.startMediaFileId,
-      endMediaFileId: node.request.endMediaFileId,
-      referenceMediaFileIds: node.request.referenceMediaFileIds ?? [],
+      prompt: record.request.prompt,
+      negativePrompt: record.request.negativePrompt,
+      duration: record.request.duration,
+      aspectRatio: record.request.aspectRatio,
+      imageSize: record.request.imageSize,
+      generateAudio: record.request.generateAudio,
+      multiShots: record.request.multiShots,
+      multiPrompt: record.request.multiPrompt,
+      voiceId: record.request.voiceId,
+      voiceName: record.request.voiceName,
+      languageOverride: record.request.languageOverride,
+      languageCode: record.request.languageCode,
+      outputFormat: record.request.outputFormat,
+      voiceSettings: record.request.voiceSettings,
+      sunoCustomMode: record.request.sunoCustomMode,
+      sunoInstrumental: record.request.sunoInstrumental,
+      sunoStyle: record.request.sunoStyle,
+      sunoTitle: record.request.sunoTitle,
+      sunoNegativeTags: record.request.sunoNegativeTags,
+      sunoVocalGender: record.request.sunoVocalGender,
+      sunoStyleWeight: record.request.sunoStyleWeight,
+      sunoWeirdnessConstraint: record.request.sunoWeirdnessConstraint,
+      sunoAudioWeight: record.request.sunoAudioWeight,
+      startMediaFileId: record.request.startMediaFileId,
+      endMediaFileId: record.request.endMediaFileId,
+      referenceMediaFileIds: record.request.referenceMediaFileIds ?? [],
       createdAt: new Date().toISOString(),
     };
   }
 
   async importGeneratedFile(
-    nodeId: string,
+    recordId: string,
     file: File,
     mediaType: FlashBoardMediaType,
   ): Promise<FlashBoardResult> {
-    const node = findNodeById(nodeId);
+    const record = getFlashBoardActiveGenerationRecord(recordId);
     const folderId = this.getOrCreateMediaSubfolder(mediaType);
 
     const mediaFile = requireMediaFileImportResult(
@@ -227,25 +218,25 @@ class FlashBoardMediaBridge {
       height: mediaFile.height,
     };
 
-    const metadata = this.buildMetadata(mediaFile.id, node, mediaType);
+    const metadata = this.buildMetadata(mediaFile.id, record, mediaType);
     if (metadata) {
       this.generationMetadata.set(mediaFile.id, metadata);
     }
 
-    useFlashBoardStore.getState().completeNode(nodeId, result);
+    completeFlashBoardActiveGenerationRecord(recordId, result);
 
     log.info(`Imported AI ${mediaType}: ${file.name} -> ${mediaFile.id}`);
     return result;
   }
 
   async importGeneratedMedia(
-    nodeId: string,
+    recordId: string,
     videoUrl: string,
     mediaType: FlashBoardMediaType = 'video'
   ): Promise<FlashBoardResult> {
-    // Look up the node to get prompt/request info
-    const node = findNodeById(nodeId);
-    const prompt = node?.request?.prompt ?? '';
+    // Look up the record to get prompt/request info
+    const record = getFlashBoardActiveGenerationRecord(recordId);
+    const prompt = record?.request?.prompt ?? '';
 
     // Build a human-readable filename
     const timestamp = Date.now();
@@ -259,11 +250,11 @@ class FlashBoardMediaBridge {
       file = await this.downloadAsFile(videoUrl, filename);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown download error';
-      log.error(`Failed to download media for node ${nodeId}: ${message}`);
+      log.error(`Failed to download media for record ${recordId}: ${message}`);
       throw err;
     }
 
-    return this.importGeneratedFile(nodeId, file, mediaType);
+    return this.importGeneratedFile(recordId, file, mediaType);
   }
 
   async importCurrentFrame(): Promise<MediaFile> {

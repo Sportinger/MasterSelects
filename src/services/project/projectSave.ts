@@ -7,10 +7,12 @@ import {
   signalAssetItemToProjectMetadata,
 } from '../../stores/mediaStore/helpers/signalItems';
 import { useTimelineStore } from '../../stores/timeline';
-import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useFlashBoardStore } from '../../stores/flashboardStore';
+import {
+  getFlashBoardActiveGenerationRecords,
+  type FlashBoardActiveGenerationRecord,
+} from '../../stores/flashboardStore/activeGenerationRecords';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { recordHistoryEvent, serializeHistoryStateForProject } from '../../stores/historyStore';
@@ -20,12 +22,10 @@ import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyrami
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import type {
-  FlashBoardGenerationMetadata,
-  FlashBoardStoreState,
-  ProjectFlashBoard,
-  ProjectFlashBoardNode,
+  ProjectFlashBoardGenerationMetadata,
+  ProjectFlashBoardGenerationRecord,
   ProjectFlashBoardState,
-} from '../../stores/flashboardStore/types';
+} from './types/flashboard.types';
 import {
   projectFileService,
   type ProjectFile,
@@ -359,84 +359,71 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
   });
 }
 
-function serializeFlashBoardState(state: FlashBoardStoreState): ProjectFlashBoardState {
-  const generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata> = {};
+function serializeFlashBoardGenerationRecord(
+  record: FlashBoardActiveGenerationRecord,
+): ProjectFlashBoardGenerationRecord {
+  let job: ProjectFlashBoardGenerationRecord['job'];
+  if (record.job) {
+    const { remoteTaskId: _remoteTaskId, ...rest } = record.job;
+    job = rest;
+  }
 
-  const boards: ProjectFlashBoard[] = state.boards
-    .filter((board) => board.nodes.length > 0)
-    .map((board) => {
-      const nodes: ProjectFlashBoardNode[] = board.nodes.map((node) => {
-        if (node.result?.mediaFileId && node.request) {
-          generationMetadataByMediaId[node.result.mediaFileId] = {
-            mediaFileId: node.result.mediaFileId,
-            service: node.request.service,
-            providerId: node.request.providerId,
-            version: node.request.version,
-            outputType: node.request.outputType,
-            mediaType: node.result.mediaType,
-            prompt: node.request.prompt,
-            negativePrompt: node.request.negativePrompt,
-            duration: node.request.duration,
-            aspectRatio: node.request.aspectRatio,
-            imageSize: node.request.imageSize,
-            generateAudio: node.request.generateAudio,
-            multiShots: node.request.multiShots,
-            multiPrompt: node.request.multiPrompt,
-            voiceId: node.request.voiceId,
-            voiceName: node.request.voiceName,
-            languageOverride: node.request.languageOverride,
-            languageCode: node.request.languageCode,
-            outputFormat: node.request.outputFormat,
-            voiceSettings: node.request.voiceSettings,
-            sunoCustomMode: node.request.sunoCustomMode,
-            sunoInstrumental: node.request.sunoInstrumental,
-            sunoStyle: node.request.sunoStyle,
-            sunoTitle: node.request.sunoTitle,
-            sunoNegativeTags: node.request.sunoNegativeTags,
-            sunoVocalGender: node.request.sunoVocalGender,
-            sunoStyleWeight: node.request.sunoStyleWeight,
-            sunoWeirdnessConstraint: node.request.sunoWeirdnessConstraint,
-            sunoAudioWeight: node.request.sunoAudioWeight,
-            startMediaFileId: node.request.startMediaFileId,
-            endMediaFileId: node.request.endMediaFileId,
-            referenceMediaFileIds: node.request.referenceMediaFileIds,
-            createdAt: new Date(node.createdAt).toISOString(),
-          };
-        }
+  return {
+    id: record.id,
+    createdAt: new Date(record.createdAt).toISOString(),
+    updatedAt: new Date(record.updatedAt).toISOString(),
+    request: record.request,
+    job,
+    result: record.result,
+  };
+}
 
-        let job: ProjectFlashBoardNode['job'];
-        if (node.job) {
-          const { remoteTaskId: _remoteTaskId, ...rest } = node.job;
-          job = rest;
-        }
+function serializeFlashBoardState(records: FlashBoardActiveGenerationRecord[]): ProjectFlashBoardState {
+  const generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata> = {};
 
-        return {
-          id: node.id,
-          kind: node.kind,
-          createdAt: new Date(node.createdAt).toISOString(),
-          updatedAt: new Date(node.updatedAt).toISOString(),
-          position: node.position,
-          size: node.size,
-          request: node.request,
-          job,
-          result: node.result,
-        };
-      });
-
-      return {
-        id: board.id,
-        name: board.name,
-        createdAt: new Date(board.createdAt).toISOString(),
-        updatedAt: new Date(board.updatedAt).toISOString(),
-        viewport: board.viewport,
-        nodes,
+  for (const record of records) {
+    if (record.result?.mediaFileId && record.request) {
+      generationMetadataByMediaId[record.result.mediaFileId] = {
+        mediaFileId: record.result.mediaFileId,
+        service: record.request.service,
+        providerId: record.request.providerId,
+        version: record.request.version,
+        outputType: record.request.outputType,
+        mediaType: record.result.mediaType,
+        prompt: record.request.prompt,
+        negativePrompt: record.request.negativePrompt,
+        duration: record.request.duration,
+        aspectRatio: record.request.aspectRatio,
+        imageSize: record.request.imageSize,
+        generateAudio: record.request.generateAudio,
+        multiShots: record.request.multiShots,
+        multiPrompt: record.request.multiPrompt,
+        voiceId: record.request.voiceId,
+        voiceName: record.request.voiceName,
+        languageOverride: record.request.languageOverride,
+        languageCode: record.request.languageCode,
+        outputFormat: record.request.outputFormat,
+        voiceSettings: record.request.voiceSettings,
+        sunoCustomMode: record.request.sunoCustomMode,
+        sunoInstrumental: record.request.sunoInstrumental,
+        sunoStyle: record.request.sunoStyle,
+        sunoTitle: record.request.sunoTitle,
+        sunoNegativeTags: record.request.sunoNegativeTags,
+        sunoVocalGender: record.request.sunoVocalGender,
+        sunoStyleWeight: record.request.sunoStyleWeight,
+        sunoWeirdnessConstraint: record.request.sunoWeirdnessConstraint,
+        sunoAudioWeight: record.request.sunoAudioWeight,
+        startMediaFileId: record.request.startMediaFileId,
+        endMediaFileId: record.request.endMediaFileId,
+        referenceMediaFileIds: record.request.referenceMediaFileIds,
+        createdAt: new Date(record.createdAt).toISOString(),
       };
-    });
+    }
+  }
 
   return {
     version: 1,
-    activeBoardId: state.activeBoardId,
-    boards,
+    generationRecords: records.map(serializeFlashBoardGenerationRecord),
     generationMetadataByMediaId,
   };
 }
@@ -585,9 +572,7 @@ export async function syncStoresToProject(): Promise<void> {
         delete projectData.signals;
       }
 
-      // Save YouTube panel state
-      const youtubeState = useYouTubeStore.getState().getState();
-      projectData.youtube = youtubeState;
+      Reflect.deleteProperty(projectData, 'youtube');
 
       // Save UI state (dock layout + composition view states)
       const dockLayout = useDockStore.getState().getLayoutForProject();
@@ -682,10 +667,9 @@ export async function syncStoresToProject(): Promise<void> {
       projectData.mathSceneItems = freshState.mathSceneItems;
       projectData.motionShapeItems = freshState.motionShapeItems;
 
-      const flashBoardState = useFlashBoardStore.getState();
-      const hasBoardsToPersist = flashBoardState.boards.some((board) => board.nodes.length > 0);
-      if (hasBoardsToPersist) {
-        projectData.flashboard = serializeFlashBoardState(flashBoardState);
+      const flashBoardGenerationRecords = getFlashBoardActiveGenerationRecords();
+      if (flashBoardGenerationRecords.length > 0) {
+        projectData.flashboard = serializeFlashBoardState(flashBoardGenerationRecords);
       } else {
         delete projectData.flashboard;
       }

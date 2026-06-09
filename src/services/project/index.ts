@@ -8,8 +8,6 @@ export { projectFileService } from './ProjectFileService';
 export type {
   ProjectFile,
   ProjectSettings,
-  ProjectYouTubeVideo,
-  ProjectYouTubeState,
   ProjectMediaFile,
   ProjectComposition,
   ProjectTrack,

@@ -1,11 +1,37 @@
 export interface FlashBoardStoreState {
-  activeBoardId: string | null;
-  boards: FlashBoard[];
-  selectedNodeIds: string[];
-  viewMode: 'board';
+  activeGenerationRecords: FlashBoardActiveGenerationRecord[];
+  selectedActiveGenerationRecordIds: string[];
   composer: FlashBoardComposerState;
   hoveredComposerReference: FlashBoardHoveredComposerReference | null;
 }
+
+export const FLASHBOARD_STORE_STATE_KEYS = [
+  'activeGenerationRecords',
+  'selectedActiveGenerationRecordIds',
+  'composer',
+  'hoveredComposerReference',
+] as const satisfies readonly (keyof FlashBoardStoreState)[];
+
+export type FlashBoardStoreStateKey = typeof FLASHBOARD_STORE_STATE_KEYS[number];
+
+export const FLASHBOARD_ACTIVE_GENERATION_STATE_KEYS = [
+  'activeGenerationRecords',
+  'selectedActiveGenerationRecordIds',
+  'composer',
+  'hoveredComposerReference',
+] as const satisfies readonly FlashBoardStoreStateKey[];
+
+export const FLASHBOARD_RETIRED_BOARD_WORKSPACE_STATE_KEYS = [] as const satisfies readonly FlashBoardStoreStateKey[];
+
+export interface FlashBoardStateClassification {
+  activeGeneration: readonly FlashBoardStoreStateKey[];
+  retiredBoardWorkspace: readonly FlashBoardStoreStateKey[];
+}
+
+export const FLASHBOARD_STATE_CLASSIFICATION = {
+  activeGeneration: FLASHBOARD_ACTIVE_GENERATION_STATE_KEYS,
+  retiredBoardWorkspace: FLASHBOARD_RETIRED_BOARD_WORKSPACE_STATE_KEYS,
+} as const satisfies FlashBoardStateClassification;
 
 export type FlashBoardService = 'piapi' | 'kieai' | 'evolink' | 'cloud' | 'elevenlabs' | 'suno';
 export type FlashBoardOutputType = 'video' | 'image' | 'audio';
@@ -27,7 +53,6 @@ export interface FlashBoardMultiShotPrompt {
 }
 
 export interface FlashBoardComposerState {
-  draftNodeId: string | null;
   isOpen: boolean;
   generateAudio: boolean;
   multiShots: boolean;
@@ -63,22 +88,11 @@ export interface FlashBoardHoveredComposerReference {
   role: FlashBoardComposerReferenceRole;
 }
 
-export interface FlashBoard {
+export interface FlashBoardActiveGenerationRecord {
   id: string;
-  name: string;
+  kind: 'generation';
   createdAt: number;
   updatedAt: number;
-  viewport: { zoom: number; panX: number; panY: number };
-  nodes: FlashBoardNode[];
-}
-
-export interface FlashBoardNode {
-  id: string;
-  kind: 'generation' | 'reference';
-  createdAt: number;
-  updatedAt: number;
-  position: { x: number; y: number };
-  size: { width: number; height: number };
   request?: FlashBoardGenerationRequest;
   job?: FlashBoardJobState;
   result?: FlashBoardResult;
@@ -133,36 +147,6 @@ export interface FlashBoardResult {
   duration?: number;
   width?: number;
   height?: number;
-}
-
-// Project persistence types (ISO date strings instead of numbers)
-
-export interface ProjectFlashBoardState {
-  version: 1;
-  activeBoardId: string | null;
-  boards: ProjectFlashBoard[];
-  generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata>;
-}
-
-export interface ProjectFlashBoard {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-  viewport: { zoom: number; panX: number; panY: number };
-  nodes: ProjectFlashBoardNode[];
-}
-
-export interface ProjectFlashBoardNode {
-  id: string;
-  kind: 'generation' | 'reference';
-  createdAt: string;
-  updatedAt: string;
-  position: { x: number; y: number };
-  size: { width: number; height: number };
-  request?: FlashBoardGenerationRequest;
-  job?: Omit<FlashBoardJobState, 'remoteTaskId'>;
-  result?: FlashBoardResult;
 }
 
 export interface FlashBoardGenerationMetadata {

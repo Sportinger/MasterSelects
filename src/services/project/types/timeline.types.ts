@@ -35,6 +35,15 @@ export interface ProjectMaskVertex {
   handleMode?: 'none' | 'mirrored' | 'split';
 }
 
+export interface ProjectMaskPathVertex {
+  id: string;
+  x: number;
+  y: number;
+  handleIn: { x: number; y: number };
+  handleOut: { x: number; y: number };
+  handleMode?: 'none' | 'mirrored' | 'split';
+}
+
 export interface ProjectMask {
   id: string;
   name: string;
@@ -51,14 +60,21 @@ export interface ProjectMask {
   position: { x: number; y: number };
 }
 
+export interface ProjectMaskPathKeyframeValue {
+  vertices: ProjectMaskPathVertex[];
+  closed: boolean;
+}
+
+export type ProjectRotationInterpolationMode = 'shortest' | 'continuous';
+
 export interface ProjectKeyframe {
   id: string;
   property: string;
   time: number;
   value: number;
-  pathValue?: import('../../../types').MaskPathKeyframeValue;
+  pathValue?: ProjectMaskPathKeyframeValue;
   easing: string;
-  rotationInterpolation?: import('../../../types').RotationInterpolationMode;
+  rotationInterpolation?: ProjectRotationInterpolationMode;
   bezierHandles?: {
     x1: number;
     y1: number;

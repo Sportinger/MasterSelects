@@ -8,16 +8,13 @@ import type {
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'history' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-video' | 'ai-segment' | 'scene-description' | 'youtube' | 'download' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-properties' | 'history' | 'audio-mixer' | 'node-workspace' | 'media' | 'export' | 'midi-mapping' | 'multicam' | 'ai-chat' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
 
 // Scope panel types for filtering in View menu
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
 
 // WIP panel types — shown grayed out with bug icon in View menu
 export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions'];
-
-// Deprecated panel types stay in the union only so persisted layouts can be migrated away.
-export const DEPRECATED_PANEL_TYPES: PanelType[] = ['ai-video', 'youtube', 'download'];
 
 // Panel types that may exist more than once at the same time. These spawn a fresh,
 // independent instance (unique id) from the tab-bar "+" instead of focusing the
@@ -250,30 +247,6 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     title: 'AI Chat',
     minWidth: 300,
     minHeight: 300,
-    closable: false,
-  },
-  // Deprecated: kept only so persisted layouts can be normalized away from the old standalone AI Generative tab.
-  'ai-video': {
-    type: 'ai-video',
-    title: 'AI Generative',
-    minWidth: 300,
-    minHeight: 400,
-    closable: false,
-  },
-  // Deprecated: downloads now live in the Media Panel tray; this remains for saved-layout migration.
-  youtube: {
-    type: 'youtube',
-    title: 'YouTube',
-    minWidth: 300,
-    minHeight: 400,
-    closable: false,
-  },
-  // Deprecated: downloads now live in the Media Panel tray; this remains for saved-layout migration.
-  download: {
-    type: 'download',
-    title: 'Downloads',
-    minWidth: 300,
-    minHeight: 400,
     closable: false,
   },
   transitions: {

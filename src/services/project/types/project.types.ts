@@ -4,45 +4,39 @@ import type { ProjectMediaFile } from './media.types';
 import type { ProjectComposition } from './composition.types';
 import type { ProjectFolder } from './folder.types';
 import type { DockLayout } from '../../../types/dock';
+import type { ProjectAudioState } from '../../../types/audio';
+import type { ProjectHistoryState } from '../../../types/history';
 import type {
   SignalArtifact,
   SignalAsset,
   SignalGraph,
   SignalOperatorDescriptor,
 } from '../../../signals';
-import type { ProjectAudioState } from '../../../types/audio';
-import type { ProjectFlashBoardState } from '../../../stores/flashboardStore/types';
-import type { ExportStoreData } from '../../../stores/exportStore';
-import type { TimelineAudioDisplayMode, TimelineTrackFocusMode } from '../../../stores/timeline/types';
-import type { ProjectHistoryState } from '../../../types/history';
 import type {
-  CameraItem,
-  LabelColor,
-  MathSceneItem,
-  MeshItem,
-  MotionShapeItem,
-  SolidItem,
-  SplatEffectorItem,
-  TextItem,
-} from '../../../stores/mediaStore/types';
+  ProjectCameraItem,
+  ProjectLabelColor,
+  ProjectMathSceneItem,
+  ProjectMediaBoardGroupOffsets,
+  ProjectMediaBoardNodeLayout,
+  ProjectMediaBoardOrder,
+  ProjectMediaBoardViewport,
+  ProjectMeshItem,
+  ProjectMotionShapeItem,
+  ProjectSolidItem,
+  ProjectSplatEffectorItem,
+  ProjectTextItem,
+  ProjectTimelineAudioDisplayMode,
+  ProjectTimelineTrackFocusMode,
+} from './schema.types';
+import type { ProjectExportStoreData } from './export.types';
+import type { ProjectFlashBoardState } from './flashboard.types';
 
-export interface ProjectYouTubeVideo {
-  id: string;
-  title: string;
-  thumbnail: string;
-  channelTitle: string;
-  publishedAt: string;
-  duration?: string;
-  durationSeconds?: number;
-  viewCount?: string;
-  platform?: string;
-  sourceUrl?: string;
-}
-
-export interface ProjectYouTubeState {
-  videos: ProjectYouTubeVideo[];
-  lastQuery: string;
-}
+export type {
+  ProjectMediaBoardGroupOffsets,
+  ProjectMediaBoardNodeLayout,
+  ProjectMediaBoardOrder,
+  ProjectMediaBoardViewport,
+} from './schema.types';
 
 export interface ProjectSettings {
   width: number;
@@ -75,24 +69,8 @@ export interface ProjectSignalAssetItemState {
   id: string;
   parentId: string | null;
   createdAt: number;
-  labelColor?: LabelColor;
+  labelColor?: ProjectLabelColor;
 }
-
-export interface ProjectMediaBoardViewport {
-  zoom: number;
-  panX: number;
-  panY: number;
-}
-
-export interface ProjectMediaBoardNodeLayout {
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-}
-
-export type ProjectMediaBoardOrder = Record<string, string[]>;
-export type ProjectMediaBoardGroupOffsets = Record<string, { x: number; y: number }>;
 
 // UI state that gets persisted with the project
 export interface ProjectUIState {
@@ -119,9 +97,9 @@ export interface ProjectUIState {
   // View toggles
   thumbnailsEnabled?: boolean;
   waveformsEnabled?: boolean;
-  audioDisplayMode?: TimelineAudioDisplayMode;
+  audioDisplayMode?: ProjectTimelineAudioDisplayMode;
   audioFocusMode?: boolean;
-  trackFocusMode?: TimelineTrackFocusMode;
+  trackFocusMode?: ProjectTimelineTrackFocusMode;
   trackHeaderWidth?: number;
   timelineSplitRatio?: number | null;
   proxyEnabled?: boolean;
@@ -129,7 +107,7 @@ export interface ProjectUIState {
   showChangelogOnStartup?: boolean;
   lastSeenChangelogVersion?: string | null;
   midi?: ProjectMIDIState;
-  exportState?: ExportStoreData;
+  exportState?: ProjectExportStoreData;
   history?: ProjectHistoryState;
 }
 
@@ -173,9 +151,6 @@ export interface ProjectFile {
   // Media source folders (for relinking after cache clear)
   mediaSourceFolders?: string[];
 
-  // YouTube panel state
-  youtube?: ProjectYouTubeState;
-
   // UI state (dock layout, view positions, etc.)
   uiState?: ProjectUIState;
 
@@ -183,11 +158,11 @@ export interface ProjectFile {
   flashboard?: ProjectFlashBoardState;
 
   // Generated media items
-  textItems?: TextItem[];
-  solidItems?: SolidItem[];
-  meshItems?: MeshItem[];
-  cameraItems?: CameraItem[];
-  splatEffectorItems?: SplatEffectorItem[];
-  mathSceneItems?: MathSceneItem[];
-  motionShapeItems?: MotionShapeItem[];
+  textItems?: ProjectTextItem[];
+  solidItems?: ProjectSolidItem[];
+  meshItems?: ProjectMeshItem[];
+  cameraItems?: ProjectCameraItem[];
+  splatEffectorItems?: ProjectSplatEffectorItem[];
+  mathSceneItems?: ProjectMathSceneItem[];
+  motionShapeItems?: ProjectMotionShapeItem[];
 }

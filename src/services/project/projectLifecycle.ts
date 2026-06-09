@@ -4,11 +4,12 @@ import { Logger } from '../logger';
 import { useMediaStore, type MediaFile, type Composition, type MediaFolder } from '../../stores/mediaStore';
 import type { MediaState } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
-import { useYouTubeStore } from '../../stores/youtubeStore';
 import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useFlashBoardStore } from '../../stores/flashboardStore';
-import { createDefaultFlashBoardComposer } from '../../stores/flashboardStore/defaults';
+import {
+  resetFlashBoardActiveGenerationState,
+  subscribeFlashBoardActiveGenerationRecords,
+} from '../../stores/flashboardStore/activeGenerationRecords';
 import { useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { projectFileService } from '../projectFileService';
@@ -260,12 +261,7 @@ export async function openExistingProject(): Promise<boolean> {
  */
 export function closeCurrentProject(): void {
   projectFileService.closeProject();
-  useFlashBoardStore.setState({
-    activeBoardId: null,
-    boards: [],
-    selectedNodeIds: [],
-    composer: createDefaultFlashBoardComposer(),
-  });
+  resetFlashBoardActiveGenerationState();
   useExportStore.getState().reset();
   useMediaStore.getState().newProject();
 }
@@ -329,13 +325,9 @@ export function setupAutoSync(): void {
   registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.slotBindings, handleMIDIProjectStateChange));
   registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.parameterBindings, handleMIDIProjectStateChange));
 
-  registerAutoSyncDisposer(useFlashBoardStore.subscribe(
-    (state) => [state.boards, state.activeBoardId] as const,
-    () => {
-      markProjectDirtyAndMaybeSave();
-    },
-    { equalityFn: shallowTupleEqual },
-  ));
+  registerAutoSyncDisposer(subscribeFlashBoardActiveGenerationRecords(() => {
+    markProjectDirtyAndMaybeSave();
+  }));
 
   registerAutoSyncDisposer(useExportStore.subscribe(
     (state) => [state.settings, state.presets, state.selectedPresetId] as const,
@@ -344,15 +336,6 @@ export function setupAutoSync(): void {
     },
     { equalityFn: shallowTupleEqual },
   ));
-
-  // Subscribe to YouTube store changes
-  let prevYouTubeVideos = useYouTubeStore.getState().videos;
-  registerAutoSyncDisposer(useYouTubeStore.subscribe((state) => {
-    if (state.videos !== prevYouTubeVideos) {
-      prevYouTubeVideos = state.videos;
-      markProjectDirtyAndMaybeSave();
-    }
-  }));
 
   // Subscribe to dock layout changes
   let prevDockLayout = useDockStore.getState().layout;

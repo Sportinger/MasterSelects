@@ -19,7 +19,7 @@ import type {
   SavedDockTimelineTrackSlotLayout,
   PanelConfig,
 } from '../types/dock';
-import { DEPRECATED_PANEL_TYPES, MULTI_INSTANCE_PANEL_TYPES, PANEL_CONFIGS } from '../types/dock';
+import { MULTI_INSTANCE_PANEL_TYPES, PANEL_CONFIGS } from '../types/dock';
 import {
   removePanel,
   insertPanelAtTarget,
@@ -37,8 +37,6 @@ const DEFAULT_TIMELINE_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default-timeline'
 export const DOCK_LAYOUT_TRANSITION_EVENT = 'masterselects:dock-layout-transition';
 const DOCK_LAYOUT_TRANSITION_DURATION_MS = 500;
 
-// Valid panel types (used to filter out removed panels from saved layouts)
-const DEPRECATED_PANEL_TYPE_SET = new Set<PanelType>(DEPRECATED_PANEL_TYPES);
 const BUILT_IN_PANEL_TYPES: PanelType[] = [
   'preview',
   'multi-preview',
@@ -54,39 +52,24 @@ const BUILT_IN_PANEL_TYPES: PanelType[] = [
   'ai-chat',
   'ai-segment',
   'scene-description',
-  'download',
   'transitions',
   'scope-waveform',
   'scope-histogram',
   'scope-vectorscope',
 ];
-const VALID_PANEL_TYPES = new Set(BUILT_IN_PANEL_TYPES.filter((type) => !DEPRECATED_PANEL_TYPE_SET.has(type)));
+const VALID_PANEL_TYPES = new Set(BUILT_IN_PANEL_TYPES);
 const PANEL_CONFIG_LOOKUP = PANEL_CONFIGS as Partial<Record<PanelType, PanelConfig>>;
 const VALID_TIMELINE_AUDIO_DISPLAY_MODES = new Set(['compact', 'detailed', 'spectral']);
 const VALID_TIMELINE_TRACK_FOCUS_MODES = new Set(['balanced', 'audio', 'video']);
 const TIMELINE_TRACK_TYPES = ['video', 'audio'] as const;
 type TimelineTrackType = (typeof TIMELINE_TRACK_TYPES)[number];
 const MAX_SAVED_TIMELINE_TRACKS_PER_TYPE = 64;
-const LEGACY_PANEL_TYPE_ALIASES: Partial<Record<PanelType, PanelType>> = {
-  youtube: 'download',
-};
-const COLLAPSED_LEGACY_ALIAS_TYPES = new Set<PanelType>(['download']);
-const LEGACY_PANEL_TITLES: Partial<Record<PanelType, Set<string>>> = {
-  'ai-video': new Set(['AI Video']),
-};
-
 interface NormalizedDockPanel {
   panel: DockPanel;
-  sourceType: PanelType;
 }
 
 interface NormalizedFloatingPanel {
   floatingPanel: FloatingPanel;
-  sourceType: PanelType;
-}
-
-function resolvePanelType(type: PanelType): PanelType {
-  return LEGACY_PANEL_TYPE_ALIASES[type] ?? type;
 }
 
 function getPanelConfig(type: PanelType): PanelConfig {
@@ -101,45 +84,17 @@ function getPanelConfig(type: PanelType): PanelConfig {
 }
 
 function normalizeDockPanel(panel: DockPanel): NormalizedDockPanel | null {
-  const normalizedType = resolvePanelType(panel.type);
+  const normalizedType = panel.type;
   if (!VALID_PANEL_TYPES.has(normalizedType)) {
     return null;
   }
-  const configTitle = getPanelConfig(normalizedType).title;
-  const legacyTitles = LEGACY_PANEL_TITLES[normalizedType];
-  const title = normalizedType === panel.type && !legacyTitles?.has(panel.title)
-    ? panel.title
-    : configTitle;
 
   return {
-    sourceType: panel.type,
     panel: {
       ...panel,
       type: normalizedType,
-      title,
     },
   };
-}
-
-function collapseAliasedPanels(panels: NormalizedDockPanel[]): DockPanel[] {
-  const preferredPanelIds = new Map<PanelType, string>();
-
-  for (const panelType of COLLAPSED_LEGACY_ALIAS_TYPES) {
-    const candidates = panels.filter((candidate) => candidate.panel.type === panelType);
-    if (candidates.length <= 1) {
-      continue;
-    }
-
-    const preferredCandidate = candidates.find((candidate) => candidate.sourceType === panelType) ?? candidates[0];
-    preferredPanelIds.set(panelType, preferredCandidate.panel.id);
-  }
-
-  return panels
-    .filter((candidate) => {
-      const preferredPanelId = preferredPanelIds.get(candidate.panel.type);
-      return preferredPanelId === undefined || candidate.panel.id === preferredPanelId;
-    })
-    .map((candidate) => candidate.panel);
 }
 
 function normalizeFloatingPanel(floatingPanel: FloatingPanel): NormalizedFloatingPanel | null {
@@ -149,7 +104,6 @@ function normalizeFloatingPanel(floatingPanel: FloatingPanel): NormalizedFloatin
   }
 
   return {
-    sourceType: normalizedDockPanel.sourceType,
     floatingPanel: {
       ...floatingPanel,
       panel: normalizedDockPanel.panel,
@@ -157,35 +111,13 @@ function normalizeFloatingPanel(floatingPanel: FloatingPanel): NormalizedFloatin
   };
 }
 
-function collapseAliasedFloatingPanels(floatingPanels: NormalizedFloatingPanel[]): FloatingPanel[] {
-  const preferredPanelIds = new Map<PanelType, string>();
-
-  for (const panelType of COLLAPSED_LEGACY_ALIAS_TYPES) {
-    const candidates = floatingPanels.filter((candidate) => candidate.floatingPanel.panel.type === panelType);
-    if (candidates.length <= 1) {
-      continue;
-    }
-
-    const preferredCandidate = candidates.find((candidate) => candidate.sourceType === panelType) ?? candidates[0];
-    preferredPanelIds.set(panelType, preferredCandidate.floatingPanel.panel.id);
-  }
-
-  return floatingPanels
-    .filter((candidate) => {
-      const preferredPanelId = preferredPanelIds.get(candidate.floatingPanel.panel.type);
-      return preferredPanelId === undefined || candidate.floatingPanel.panel.id === preferredPanelId;
-    })
-    .map((candidate) => candidate.floatingPanel);
-}
-
 // Normalize legacy aliases and filter out invalid panel types from a layout node
 function filterInvalidPanels(node: DockNode): DockNode | null {
   if (node.kind === 'tab-group') {
-    const validPanels = collapseAliasedPanels(
-      node.panels
-        .map(normalizeDockPanel)
-        .filter((panel): panel is NormalizedDockPanel => panel !== null)
-    );
+    const validPanels = node.panels
+      .map(normalizeDockPanel)
+      .filter((panel): panel is NormalizedDockPanel => panel !== null)
+      .map((candidate) => candidate.panel);
     if (validPanels.length === 0) return null;
     return {
       ...node,
@@ -209,11 +141,10 @@ function cleanupPersistedLayout(layout: DockLayout): DockLayout {
   return {
     ...layout,
     root: cleanedRoot || DEFAULT_LAYOUT.root,
-    floatingPanels: collapseAliasedFloatingPanels(
-      layout.floatingPanels
-        .map(normalizeFloatingPanel)
-        .filter((panel): panel is NormalizedFloatingPanel => panel !== null)
-    ),
+    floatingPanels: layout.floatingPanels
+      .map(normalizeFloatingPanel)
+      .filter((panel): panel is NormalizedFloatingPanel => panel !== null)
+      .map((candidate) => candidate.floatingPanel),
   };
 }
 
@@ -907,7 +838,7 @@ function panelTypesForGroup(layout: DockLayout, groupId: string): PanelType[] | 
   if (!group) {
     return null;
   }
-  return group.panels.map((panel) => resolvePanelType(panel.type));
+  return group.panels.map((panel) => panel.type);
 }
 
 function arePanelTypeListsEqual(left: PanelType[] | null, right: PanelType[]): boolean {
@@ -944,10 +875,7 @@ function isLegacyFactoryDefaultLayout(layout: DockLayout): boolean {
   const timelineGroup = findTabGroupById(layout.root, 'timeline-group');
   const leftPanelTypes = panelTypesForGroup(layout, 'left-group');
   return (
-    (
-      arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat', 'download'])
-      || arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat'])
-    )
+    arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat'])
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'preview-group'), ['preview'])
     && arePanelTypeListsEqual(panelTypesForGroup(layout, 'timeline-group'), ['timeline'])
     && leftGroup?.activeIndex === 0
@@ -1154,19 +1082,18 @@ export const useDockStore = create<DockState>()(
         },
 
         changePanelType: (panelId, type) => {
-          const resolvedType = resolvePanelType(type);
-          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
+          if (!VALID_PANEL_TYPES.has(type)) return;
 
           const { layout } = get();
           const sourceGroupId = findGroupIdByPanelId(layout.root, panelId);
           if (!sourceGroupId) return;
           const sourcePanel = findPanelById(layout, panelId);
-          if (!sourcePanel || resolvePanelType(sourcePanel.type) === resolvedType) return;
+          if (!sourcePanel || sourcePanel.type === type) return;
 
           let nextLayout = layout;
           let replacementPanel: DockPanel | null = null;
 
-          const existingDockedPanel = findPanelAndGroup(nextLayout.root, resolvedType);
+          const existingDockedPanel = findPanelAndGroup(nextLayout.root, type);
           if (existingDockedPanel && existingDockedPanel.panel.id !== panelId) {
             replacementPanel = existingDockedPanel.panel;
             nextLayout = removePanel(nextLayout, existingDockedPanel.panel.id, existingDockedPanel.groupId);
@@ -1177,7 +1104,7 @@ export const useDockStore = create<DockState>()(
           }
 
           if (!replacementPanel) {
-            const floatingPanel = nextLayout.floatingPanels.find((floating) => resolvePanelType(floating.panel.type) === resolvedType);
+            const floatingPanel = nextLayout.floatingPanels.find((floating) => floating.panel.type === type);
             if (floatingPanel && floatingPanel.panel.id !== panelId) {
               replacementPanel = floatingPanel.panel;
               nextLayout = {
@@ -1188,10 +1115,10 @@ export const useDockStore = create<DockState>()(
           }
 
           if (!replacementPanel) {
-            const config = getPanelConfig(resolvedType);
+            const config = getPanelConfig(type);
             replacementPanel = {
-              id: resolvedType,
-              type: resolvedType,
+              id: type,
+              type,
               title: config.title,
             };
           }
@@ -1394,16 +1321,15 @@ export const useDockStore = create<DockState>()(
           collectPanelTypes(layout.root, types);
           // Also check floating panels
           layout.floatingPanels.forEach((f) => {
-            const normalizedType = resolvePanelType(f.panel.type);
-            if (VALID_PANEL_TYPES.has(normalizedType) && !types.includes(normalizedType)) {
-              types.push(normalizedType);
+            if (VALID_PANEL_TYPES.has(f.panel.type) && !types.includes(f.panel.type)) {
+              types.push(f.panel.type);
             }
           });
           return types;
         },
 
         isPanelTypeVisible: (type) => {
-          return get().getVisiblePanelTypes().includes(resolvePanelType(type));
+          return get().getVisiblePanelTypes().includes(type);
         },
 
         togglePanelType: (type) => {
@@ -1416,15 +1342,14 @@ export const useDockStore = create<DockState>()(
         },
 
         showPanelType: (type) => {
-          const resolvedType = resolvePanelType(type);
-          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
+          if (!VALID_PANEL_TYPES.has(type)) return;
           const { layout, isPanelTypeVisible } = get();
-          if (isPanelTypeVisible(resolvedType)) return; // Already visible
+          if (isPanelTypeVisible(type)) return; // Already visible
 
-          const config = getPanelConfig(resolvedType);
+          const config = getPanelConfig(type);
           const newPanel: DockPanel = {
-            id: resolvedType,
-            type: resolvedType,
+            id: type,
+            type,
             title: config.title,
           };
 
@@ -1450,11 +1375,10 @@ export const useDockStore = create<DockState>()(
         },
 
         hidePanelType: (type) => {
-          const resolvedType = resolvePanelType(type);
           const { layout } = get();
 
           // Find and remove the panel from the layout
-          const result = findPanelAndGroup(layout.root, resolvedType);
+          const result = findPanelAndGroup(layout.root, type);
           if (result) {
             let newLayout = removePanel(layout, result.panel.id, result.groupId);
             newLayout = {
@@ -1469,7 +1393,7 @@ export const useDockStore = create<DockState>()(
           }
 
           // Also check floating panels
-          const floatingIndex = layout.floatingPanels.findIndex((f) => resolvePanelType(f.panel.type) === resolvedType);
+          const floatingIndex = layout.floatingPanels.findIndex((f) => f.panel.type === type);
           if (floatingIndex >= 0) {
             set((state) => ({
               layout: {
@@ -1483,24 +1407,23 @@ export const useDockStore = create<DockState>()(
         },
 
         activatePanelType: (type) => {
-          const resolvedType = resolvePanelType(type);
-          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
+          if (!VALID_PANEL_TYPES.has(type)) return;
           const { setActiveTab, showPanelType, isPanelTypeVisible, bringToFront } = get();
 
           // First make sure the panel is visible
-          if (!isPanelTypeVisible(resolvedType)) {
-            showPanelType(resolvedType);
+          if (!isPanelTypeVisible(type)) {
+            showPanelType(type);
           }
 
           const { layout } = get();
 
           // Find the panel in the layout and activate it
-          const result = findPanelAndGroup(layout.root, resolvedType);
+          const result = findPanelAndGroup(layout.root, type);
           if (result) {
             // Find the actual tab group to get the panel index
             const group = findTabGroupById(layout.root, result.groupId);
             if (group) {
-              const panelIndex = group.panels.findIndex((p) => resolvePanelType(p.type) === resolvedType);
+              const panelIndex = group.panels.findIndex((p) => p.type === type);
               if (panelIndex >= 0) {
                 setActiveTab(result.groupId, panelIndex);
               }
@@ -1508,21 +1431,20 @@ export const useDockStore = create<DockState>()(
           }
 
           // Also check floating panels
-          const floatingPanel = layout.floatingPanels.find((f) => resolvePanelType(f.panel.type) === resolvedType);
+          const floatingPanel = layout.floatingPanels.find((f) => f.panel.type === type);
           if (floatingPanel) {
             bringToFront(floatingPanel.id);
           }
         },
 
         addPanelTypeToGroup: (type, groupId) => {
-          const resolvedType = resolvePanelType(type);
-          if (!VALID_PANEL_TYPES.has(resolvedType)) return;
+          if (!VALID_PANEL_TYPES.has(type)) return;
 
           // Multi-instance panels (e.g. Preview) always spawn a fresh, independent
           // instance side-by-side of the clicked group instead of focusing the
           // existing one. Each instance has its own id / render target.
-          if (MULTI_INSTANCE_PANEL_TYPES.includes(resolvedType)) {
-            if (resolvedType === 'preview') {
+          if (MULTI_INSTANCE_PANEL_TYPES.includes(type)) {
+            if (type === 'preview') {
               get().addPreviewPanel(null, groupId);
             }
             return;
@@ -1532,15 +1454,15 @@ export const useDockStore = create<DockState>()(
 
           // Built-in panels are singletons (id === type). If already visible,
           // just focus it instead of trying to create a duplicate.
-          if (isPanelTypeVisible(resolvedType)) {
-            activatePanelType(resolvedType);
+          if (isPanelTypeVisible(type)) {
+            activatePanelType(type);
             return;
           }
 
-          const config = getPanelConfig(resolvedType);
+          const config = getPanelConfig(type);
           const newPanel: DockPanel = {
-            id: resolvedType,
-            type: resolvedType,
+            id: type,
+            type,
             title: config.title,
           };
 
@@ -1945,9 +1867,8 @@ function replacePanelInNode(node: DockNode, panelId: string, replacementPanel: D
 function collectPanelTypes(node: DockNode, types: PanelType[]): void {
   if (node.kind === 'tab-group') {
     node.panels.forEach((p) => {
-      const normalizedType = resolvePanelType(p.type);
-      if (VALID_PANEL_TYPES.has(normalizedType) && !types.includes(normalizedType)) {
-        types.push(normalizedType);
+      if (VALID_PANEL_TYPES.has(p.type) && !types.includes(p.type)) {
+        types.push(p.type);
       }
     });
   } else {
@@ -1982,7 +1903,7 @@ function findPanelAndGroup(
   panelType: PanelType
 ): { panel: DockPanel; groupId: string } | null {
   if (node.kind === 'tab-group') {
-    const panel = node.panels.find((p) => resolvePanelType(p.type) === panelType);
+    const panel = node.panels.find((p) => p.type === panelType);
     if (panel) {
       return { panel, groupId: node.id };
     }

@@ -6,7 +6,7 @@ import {
   useDockStore,
 } from '../../src/stores/dockStore';
 import { DEFAULT_TRACKS, useTimelineStore } from '../../src/stores/timeline';
-import type { DockNode, DockTabGroup, PanelType } from '../../src/types/dock';
+import type { DockLayout, DockNode, DockTabGroup, PanelType } from '../../src/types/dock';
 
 function findTabGroup(node: DockNode, groupId: string): DockTabGroup | null {
   if (node.kind === 'tab-group') {
@@ -98,6 +98,39 @@ describe('dock store saved layouts', () => {
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
     expect(rightGroup?.panels.map((panel) => panel.type)).toContain('history');
     expect(rightGroup?.panels[rightGroup.activeIndex]?.type).toBe('history');
+  });
+
+  it('drops retired dock panel payload ids from restored project layouts', () => {
+    const legacyLayout = {
+      root: {
+        kind: 'tab-group',
+        id: 'legacy-group',
+        activeIndex: 2,
+        panels: [
+          { id: 'media', type: 'media', title: 'Media' },
+          { id: 'youtube', type: 'youtube', title: 'YouTube' },
+          { id: 'download', type: 'download', title: 'Downloads' },
+          { id: 'ai-video', type: 'ai-video', title: 'AI Generative' },
+        ],
+      },
+      floatingPanels: [
+        {
+          id: 'floating-download',
+          panel: { id: 'floating-download-panel', type: 'download', title: 'Downloads' },
+          position: { x: 0, y: 0 },
+          size: { width: 320, height: 400 },
+          zIndex: 1001,
+        },
+      ],
+      panelZoom: {},
+    } as unknown as DockLayout;
+
+    useDockStore.getState().setLayoutFromProject(legacyLayout);
+
+    const group = findTabGroup(useDockStore.getState().layout.root, 'legacy-group');
+    expect(panelTypes(group)).toEqual(['media']);
+    expect(group?.activeIndex).toBe(0);
+    expect(useDockStore.getState().layout.floatingPanels).toEqual([]);
   });
 
   it('changes a dock tab to another panel type in the same slot', () => {

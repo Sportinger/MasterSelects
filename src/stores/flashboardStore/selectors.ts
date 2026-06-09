@@ -1,4 +1,4 @@
-import type { FlashBoard, FlashBoardNode, FlashBoardStoreState } from './types';
+import type { FlashBoardActiveGenerationRecord, FlashBoardStoreState } from './types';
 
 export interface FlashBoardMediaReferenceUsage {
   start: boolean;
@@ -6,10 +6,10 @@ export interface FlashBoardMediaReferenceUsage {
   reference: boolean;
 }
 
-const EMPTY_NODES: FlashBoardNode[] = [];
+const EMPTY_RECORDS: FlashBoardActiveGenerationRecord[] = [];
 const EMPTY_REFERENCE_IDS: string[] = [];
 
-let cachedReferenceUsageNodes: FlashBoardNode[] = EMPTY_NODES;
+let cachedReferenceUsageRecords: FlashBoardActiveGenerationRecord[] = EMPTY_RECORDS;
 let cachedReferenceUsageComposerStart: string | undefined;
 let cachedReferenceUsageComposerEnd: string | undefined;
 let cachedReferenceUsageComposerReferenceIds: string[] = EMPTY_REFERENCE_IDS;
@@ -32,59 +32,14 @@ function markReferenceUsage(
   usageByMediaId[mediaFileId][role] = true;
 }
 
-export const selectActiveBoard = (state: FlashBoardStoreState): FlashBoard | undefined =>
-  state.boards.find((b) => b.id === state.activeBoardId);
-
-export const selectActiveBoardNodes = (state: FlashBoardStoreState): FlashBoardNode[] => {
-  const board = state.boards.find((b) => b.id === state.activeBoardId);
-  return board?.nodes ?? [];
-};
-
-export const selectNodeById = (state: FlashBoardStoreState, nodeId: string): FlashBoardNode | undefined => {
-  for (const board of state.boards) {
-    const node = board.nodes.find((n) => n.id === nodeId);
-    if (node) return node;
-  }
-  return undefined;
-};
-
-export const selectSelectedNodes = (state: FlashBoardStoreState): FlashBoardNode[] => {
-  const ids = new Set(state.selectedNodeIds);
-  if (ids.size === 0) return [];
-  const board = state.boards.find((b) => b.id === state.activeBoardId);
-  if (!board) return [];
-  return board.nodes.filter((n) => ids.has(n.id));
-};
-
-export const selectQueuedNodes = (state: FlashBoardStoreState): FlashBoardNode[] => {
-  const nodes: FlashBoardNode[] = [];
-  for (const board of state.boards) {
-    for (const node of board.nodes) {
-      if (node.job?.status === 'queued') nodes.push(node);
-    }
-  }
-  return nodes;
-};
-
-export const selectProcessingNodes = (state: FlashBoardStoreState): FlashBoardNode[] => {
-  const nodes: FlashBoardNode[] = [];
-  for (const board of state.boards) {
-    for (const node of board.nodes) {
-      if (node.job?.status === 'processing') nodes.push(node);
-    }
-  }
-  return nodes;
-};
-
 export const selectActiveBoardReferenceUsageByMediaFileId = (
   state: FlashBoardStoreState
 ): Record<string, FlashBoardMediaReferenceUsage> => {
-  const board = selectActiveBoard(state);
-  const boardNodes = board?.nodes ?? EMPTY_NODES;
+  const records = state.activeGenerationRecords;
   const composerReferenceIds = state.composer.referenceMediaFileIds ?? EMPTY_REFERENCE_IDS;
 
   if (
-    cachedReferenceUsageNodes === boardNodes &&
+    cachedReferenceUsageRecords === records &&
     cachedReferenceUsageComposerStart === state.composer.startMediaFileId &&
     cachedReferenceUsageComposerEnd === state.composer.endMediaFileId &&
     cachedReferenceUsageComposerReferenceIds === composerReferenceIds
@@ -94,8 +49,8 @@ export const selectActiveBoardReferenceUsageByMediaFileId = (
 
   const usageByMediaId: Record<string, FlashBoardMediaReferenceUsage> = {};
 
-  for (const node of boardNodes) {
-    const request = node.request;
+  for (const record of records) {
+    const request = record.request;
     if (!request) {
       continue;
     }
@@ -115,7 +70,7 @@ export const selectActiveBoardReferenceUsageByMediaFileId = (
     markReferenceUsage(usageByMediaId, mediaFileId, 'reference');
   }
 
-  cachedReferenceUsageNodes = boardNodes;
+  cachedReferenceUsageRecords = records;
   cachedReferenceUsageComposerStart = state.composer.startMediaFileId;
   cachedReferenceUsageComposerEnd = state.composer.endMediaFileId;
   cachedReferenceUsageComposerReferenceIds = composerReferenceIds;

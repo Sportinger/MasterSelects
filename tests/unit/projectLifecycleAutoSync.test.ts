@@ -114,6 +114,7 @@ describe('project lifecycle auto sync', () => {
     setupAutoSync();
 
     expect(mocks.midiSubscribe).toHaveBeenCalledTimes(4);
+    expect(mocks.youtubeSubscribe).not.toHaveBeenCalled();
 
     const transportBindingListener = mocks.midiSubscribe.mock.calls[1]?.[1] as () => void;
     transportBindingListener();
@@ -122,7 +123,7 @@ describe('project lifecycle auto sync', () => {
   });
 
   it('tears down previous auto-sync subscriptions before setting up again', async () => {
-    const disposers = Array.from({ length: 11 }, () => vi.fn());
+    const disposers = Array.from({ length: 10 }, () => vi.fn());
     let disposerIndex = 0;
     const nextDisposer = () => disposers[disposerIndex++] ?? vi.fn();
 
@@ -131,7 +132,6 @@ describe('project lifecycle auto sync', () => {
     mocks.midiSubscribe.mockImplementation(() => nextDisposer());
     mocks.flashBoardSubscribe.mockImplementation(() => nextDisposer());
     mocks.exportSubscribe.mockImplementation(() => nextDisposer());
-    mocks.youtubeSubscribe.mockImplementation(() => nextDisposer());
     mocks.dockSubscribe.mockImplementation(() => nextDisposer());
 
     const { setupAutoSync } = await import('../../src/services/project/projectLifecycle');
@@ -139,7 +139,9 @@ describe('project lifecycle auto sync', () => {
     setupAutoSync();
     setupAutoSync();
 
-    for (const dispose of disposers.slice(0, 11)) {
+    expect(mocks.youtubeSubscribe).not.toHaveBeenCalled();
+
+    for (const dispose of disposers.slice(0, 10)) {
       expect(dispose).toHaveBeenCalledTimes(1);
     }
   });

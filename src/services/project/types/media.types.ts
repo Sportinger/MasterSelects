@@ -1,8 +1,11 @@
 // Media-related types
 
 import type { VectorAnimationMetadata } from '../../../types/vectorAnimation';
-import type { GaussianSplatSequenceData, ModelSequenceData } from '../../../types';
 import type { MediaFileAudioAnalysisRefs, MediaFileStemInfo } from '../../../types/audio';
+import type {
+  ProjectGaussianSplatSequenceData,
+  ProjectModelSequenceData,
+} from './schema.types';
 
 export interface ProjectMediaFile {
   id: string;
@@ -42,8 +45,8 @@ export interface ProjectMediaFile {
   audioProxyStorageKey?: string;
 
   vectorAnimation?: VectorAnimationMetadata;
-  modelSequence?: ModelSequenceData;
-  gaussianSplatSequence?: GaussianSplatSequenceData;
+  modelSequence?: ProjectModelSequenceData;
+  gaussianSplatSequence?: ProjectGaussianSplatSequenceData;
 
   // Folder organization
   folderId: string | null;

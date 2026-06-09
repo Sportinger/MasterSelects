@@ -1,21 +1,45 @@
 // Media Panel - Project browser like After Effects
 
 import React, { useCallback, useMemo, useRef, useState, useEffect, useLayoutEffect } from 'react';
-import { createPortal } from 'react-dom';
 import './MediaPanel.css';
 import { Logger } from '../../services/logger';
-import { FileTypeIcon } from './media/FileTypeIcon';
-import { MediaGridVideoThumb } from './media/MediaGridVideoThumb';
-import { MediaWaveformThumb } from './media/MediaWaveformThumb';
-import { LABEL_COLORS, getLabelHex } from './media/labelColors';
+import { LABEL_COLORS } from './media/labelColors';
 import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
 import { LabelColorPicker } from './media/LabelColorPicker';
 import { getItemImportProgress, getItemWaveformProgress, isImportedMediaFileItem } from './media/itemTypeGuards';
-import { handleSubmenuHover, handleSubmenuLeave } from './media/submenuPosition';
 import { collectDroppedMediaFiles, planDroppedMediaImports } from './media/dropImport';
-import { MediaAIGenerativeTray } from './media/MediaAIGenerativeTray';
+import { getMediaContextActionState } from './media/context/contextActionState';
+import { getMediaContextSelectedItemState } from './media/context/contextSelectedItemState';
+import { renderMediaAnnotationContextMenuMount } from './media/context/MediaAnnotationContextMenuMount';
+import { MediaContextActionsMenu } from './media/context/MediaContextActionsMenu';
+import { MediaContextMenuFrame } from './media/context/MediaContextMenuFrame';
+import { useMediaContextExplorerHandlers } from './media/context/useMediaContextExplorerHandlers';
+import { useMediaContextLocalHandlers, type MediaContextSolidSettingsDialogState } from './media/context/useMediaContextLocalHandlers';
+import { formatMediaDuration as formatDuration } from './media/grid/format';
+import { MediaGridChrome } from './media/grid/MediaGridChrome';
+import { MediaGridItem } from './media/grid/MediaGridItem';
+import { MediaFloatingFeedbackPortal } from './media/panel/MediaFloatingFeedbackPortal';
+import { MediaGenerationTrayMount } from './media/panel/MediaGenerationTrayMount';
+import { MediaClassicListChrome } from './media/list/MediaClassicListChrome';
+import { MEDIA_CLASSIC_COLUMN_LABELS } from './media/list/MediaClassicColumnHeaders';
+import { MediaClassicListRow } from './media/list/MediaClassicListRow';
+import type { MediaClassicColumnId, MediaClassicDynamicColumnWidths, MediaClassicListRowData } from './media/list/types';
+import type { MediaPanelContextMenu } from './media/context/types';
+import { MediaDropOverlay } from './media/panel/MediaDropOverlay';
+import { MediaPanelHeader } from './media/panel/MediaPanelHeader';
+import { MediaNoMediaEmptyState } from './media/panel/MediaNoMediaEmptyState';
+import { MediaNoSearchResultsEmptyState } from './media/panel/MediaNoSearchResultsEmptyState';
+import type { MediaPanelViewMode } from './media/panel/types';
+import { MediaBoardAnnotationLayer } from './media/board/MediaBoardAnnotationLayer';
 import { MediaBoardView } from './media/board/MediaBoardView';
+import { useMediaBoardAnnotationCommands } from './media/board/useMediaBoardAnnotationCommands';
+import { useMediaBoardAnnotationGestures } from './media/board/useMediaBoardAnnotationGestures';
+import { useMediaBoardAnnotationState } from './media/board/useMediaBoardAnnotationState';
+import {
+  MEDIA_BOARD_ANNOTATION_COLOR_OPTIONS,
+  getVisibleMediaBoardAnnotations,
+} from './media/board/annotations';
 import {
   DEFAULT_BOARD_VIEWPORT,
   MEDIA_BOARD_AUTOPAN_EDGE_PX,
@@ -54,10 +78,10 @@ import {
   mediaBoardGroupIntersectsVisibleRect,
   mediaBoardNodeIntersectsVisibleRect,
   normalizeMediaBoardOrderIds,
-  reconcileMediaBoardLayouts,
   restoreMediaBoardLayoutItems,
   waitForMediaBoardThumbnailTurn,
 } from './media/board/layout';
+import { reconcileMediaBoardLayouts } from './media/board/layoutReconcile';
 import { drawMediaBoardOverviewItem } from './media/board/overviewCanvas';
 import {
   loadMediaBoardGroupOffsets,
@@ -123,8 +147,7 @@ import {
 } from '../timeline/utils/externalDragSession';
 
 // Column definitions
-type ColumnId = 'label' | 'name' | 'badges' | 'duration' | 'resolution' | 'fps' | 'container' | 'codec' | 'audio' | 'bitrate' | 'size';
-type MediaPanelViewMode = 'classic' | 'icons' | 'board';
+type ColumnId = MediaClassicColumnId;
 
 const CLASSIC_ROW_HEIGHT = 20;
 const CLASSIC_OVERSCAN_ROWS = 12;
@@ -143,50 +166,7 @@ const EMPTY_MATH_SCENE_ITEMS: MathSceneItem[] = [];
 const EMPTY_MOTION_SHAPE_ITEMS: MotionShapeItem[] = [];
 const EMPTY_SIGNAL_ASSETS: SignalAssetItem[] = [];
 
-interface ClassicListRow {
-  item: ProjectItem;
-  depth: number;
-}
-
-type MediaPanelContextMenu = {
-  x: number;
-  y: number;
-  itemId?: string;
-  annotationId?: string;
-  parentId?: string | null;
-  boardPosition?: { x: number; y: number };
-};
-
-type MediaBoardAnnotationColor = string | 'transparent';
-
-interface MediaBoardAnnotation {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  text: string;
-  fontSize: number;
-  backgroundColor: MediaBoardAnnotationColor;
-  textColor: MediaBoardAnnotationColor;
-  editing: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
-
-const COLUMN_LABELS_MAP: Record<ColumnId, string> = {
-  label: '●',
-  name: 'Name',
-  badges: 'Status',
-  duration: 'Duration',
-  resolution: 'Resolution',
-  fps: 'FPS',
-  container: 'Container',
-  codec: 'Codec',
-  audio: 'Audio',
-  bitrate: 'Bitrate',
-  size: 'Size',
-};
+type ClassicListRow = MediaClassicListRowData;
 
 const DEFAULT_COLUMN_ORDER: ColumnId[] = ['name', 'badges', 'label', 'duration', 'resolution', 'fps', 'container', 'codec', 'audio', 'bitrate', 'size'];
 const STORAGE_KEY = 'media-panel-column-order';
@@ -195,24 +175,6 @@ const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
 const MEDIA_PANEL_VIEW_TRANSITION_MS = 500;
 const MEDIA_PANEL_REVEAL_PULSE_MS = 1200;
 const MEDIA_PANEL_REVEAL_REQUEST_MAX_AGE_MS = 10000;
-const MEDIA_BOARD_ANNOTATIONS_STORAGE_KEY = 'media-panel-board-annotations';
-const DEFAULT_MEDIA_BOARD_ANNOTATION_FONT_SIZE = 18;
-const MEDIA_BOARD_ANNOTATION_FONT_SIZE_MIN = 12;
-const MEDIA_BOARD_ANNOTATION_FONT_SIZE_MAX = 64;
-const DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE = { width: 300, height: 190 };
-const MEDIA_BOARD_ANNOTATION_MIN_SIZE = { width: 120, height: 74 };
-const MEDIA_BOARD_ANNOTATION_MAX_SIZE = { width: 1100, height: 760 };
-const DEFAULT_MEDIA_BOARD_ANNOTATION_BACKGROUND: MediaBoardAnnotationColor = '#f1dfa1';
-const DEFAULT_MEDIA_BOARD_ANNOTATION_TEXT: MediaBoardAnnotationColor = '#2f2612';
-const MEDIA_BOARD_ANNOTATION_COLOR_OPTIONS: Array<{ label: string; value: MediaBoardAnnotationColor }> = [
-  { label: 'Yellow', value: '#f1dfa1' },
-  { label: 'White', value: '#f6f6f2' },
-  { label: 'Black', value: '#151515' },
-  { label: 'Blue', value: '#4f7bea' },
-  { label: 'Red', value: '#e15353' },
-  { label: 'Green', value: '#53b86f' },
-  { label: 'Transparent', value: 'transparent' },
-];
 
 const DYNAMIC_MEDIA_COLUMN_IDS: Exclude<ColumnId, 'name'>[] = [
   'badges',
@@ -318,22 +280,12 @@ function getProjectItemIconType(item: ProjectItem | undefined): string | undefin
   return item.type;
 }
 
-function isAiReferenceMediaFile(item: ProjectItem | null | undefined): item is MediaFile {
-  if (!item) return false;
-  return isImportedMediaFileItem(item) && (
-    item.type === 'image' ||
-    item.type === 'video' ||
-    item.type === 'audio'
-  );
-}
-
 function clampMediaStatusBadgeColumnWidth(width: number): number {
   return Math.max(
     MEDIA_STATUS_BADGE_COLUMN_MIN_WIDTH,
     Math.min(MEDIA_STATUS_BADGE_COLUMN_MAX_WIDTH, Math.ceil(width)),
   );
 }
-
 function getMediaStatusBadgeWidths(item: ProjectItem): number[] {
   const mediaFile = isImportedMediaFileItem(item) ? item : null;
   const importProgress = getItemImportProgress(item);
@@ -442,7 +394,7 @@ function estimateClassicMediaColumnWidth(text: string): number {
   return weightedLength * MEDIA_COLUMN_TEXT_CHAR_WIDTH + MEDIA_COLUMN_TEXT_PADDING_X;
 }
 
-function getClassicMediaColumnWidths(items: ProjectItem[]): Record<Exclude<ColumnId, 'name'>, number> {
+function getClassicMediaColumnWidths(items: ProjectItem[]): MediaClassicDynamicColumnWidths {
   return DYNAMIC_MEDIA_COLUMN_IDS.reduce((widths, colId) => {
     if (colId === 'badges') {
       widths.badges = getMediaStatusBadgeColumnWidth(items);
@@ -450,20 +402,13 @@ function getClassicMediaColumnWidths(items: ProjectItem[]): Record<Exclude<Colum
     }
 
     const limits = MEDIA_COLUMN_WIDTH_LIMITS[colId];
-    const headerWidth = estimateClassicMediaColumnWidth(COLUMN_LABELS_MAP[colId]);
+    const headerWidth = estimateClassicMediaColumnWidth(MEDIA_CLASSIC_COLUMN_LABELS[colId]);
     const contentWidth = items.reduce((maxWidth, item) => (
       Math.max(maxWidth, estimateClassicMediaColumnWidth(getClassicMediaColumnText(item, colId)))
     ), headerWidth);
     widths[colId] = Math.max(limits.min, Math.min(limits.max, Math.ceil(contentWidth)));
     return widths;
   }, {} as Record<Exclude<ColumnId, 'name'>, number>);
-}
-
-function mediaFileHasAudio(mediaFile: MediaFile | null): boolean {
-  if (!mediaFile) return false;
-  if (mediaFile.type === 'audio') return true;
-  if (mediaFile.type !== 'video') return false;
-  return mediaFile.hasAudio !== false || Boolean(mediaFile.audioCodec);
 }
 
 async function regenerateTimelineSourceThumbnails(mediaFile: MediaFile): Promise<void> {
@@ -561,76 +506,6 @@ function getMediaPanelAnimatedTarget(root: HTMLElement | null, itemId: string): 
   }
 
   return root.querySelector<HTMLElement>(`[data-media-panel-anim-id="${CSS.escape(itemId)}"]`);
-}
-
-function clampMediaBoardAnnotationFontSize(value: unknown): number {
-  const size = typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : DEFAULT_MEDIA_BOARD_ANNOTATION_FONT_SIZE;
-  return Math.min(
-    MEDIA_BOARD_ANNOTATION_FONT_SIZE_MAX,
-    Math.max(MEDIA_BOARD_ANNOTATION_FONT_SIZE_MIN, size),
-  );
-}
-
-function normalizeMediaBoardAnnotationColor(
-  value: unknown,
-  fallback: MediaBoardAnnotationColor,
-): MediaBoardAnnotationColor {
-  if (value === 'transparent') return 'transparent';
-  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim())) {
-    return value.trim();
-  }
-  return fallback;
-}
-
-function loadMediaBoardAnnotations(): MediaBoardAnnotation[] {
-  try {
-    const stored = localStorage.getItem(MEDIA_BOARD_ANNOTATIONS_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as Array<Partial<MediaBoardAnnotation>>;
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map((annotation): MediaBoardAnnotation | null => {
-        if (!annotation || typeof annotation !== 'object' || typeof annotation.id !== 'string') {
-          return null;
-        }
-        const x = Number(annotation.x);
-        const y = Number(annotation.y);
-        const width = Number(annotation.width);
-        const height = Number(annotation.height);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-        return {
-          id: annotation.id,
-          x,
-          y,
-          width: Number.isFinite(width)
-            ? Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.width, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.width, width))
-            : DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.width,
-          height: Number.isFinite(height)
-            ? Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.height, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.height, height))
-            : DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.height,
-          text: typeof annotation.text === 'string' ? annotation.text : '',
-          fontSize: clampMediaBoardAnnotationFontSize(annotation.fontSize),
-          backgroundColor: normalizeMediaBoardAnnotationColor(
-            annotation.backgroundColor,
-            DEFAULT_MEDIA_BOARD_ANNOTATION_BACKGROUND,
-          ),
-          textColor: normalizeMediaBoardAnnotationColor(annotation.textColor, DEFAULT_MEDIA_BOARD_ANNOTATION_TEXT),
-          editing: Boolean(annotation.editing),
-          createdAt: typeof annotation.createdAt === 'number' ? annotation.createdAt : Date.now(),
-          updatedAt: typeof annotation.updatedAt === 'number' ? annotation.updatedAt : Date.now(),
-        };
-      })
-      .filter((annotation): annotation is MediaBoardAnnotation => annotation !== null);
-  } catch {
-    return [];
-  }
-}
-
-function saveMediaBoardAnnotations(annotations: MediaBoardAnnotation[]): void {
-  localStorage.setItem(MEDIA_BOARD_ANNOTATIONS_STORAGE_KEY, JSON.stringify(annotations));
 }
 
 function isSignalAssetItem(item: ProjectItem): item is SignalAssetItem {
@@ -973,7 +848,7 @@ export function MediaPanel() {
   const marqueeRef = useRef<{ startX: number; startY: number; initialSelection: string[] } | null>(null);
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const [settingsDialog, setSettingsDialog] = useState<{ compositionId: string; width: number; height: number; frameRate: number; duration: number } | null>(null);
-  const [solidSettingsDialog, setSolidSettingsDialog] = useState<{ solidItemId: string; width: number; height: number; color: string } | null>(null);
+  const [solidSettingsDialog, setSolidSettingsDialog] = useState<MediaContextSolidSettingsDialogState | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState<MediaDeleteConfirmationRequest | null>(null);
   const [deleteConfirmationBusy, setDeleteConfirmationBusy] = useState(false);
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
@@ -1004,8 +879,14 @@ export function MediaPanel() {
   const [mediaBoardMarquee, setMediaBoardMarquee] = useState<MediaBoardMarquee | null>(null);
   const [mediaBoardInsertionPreview, setMediaBoardInsertionPreview] = useState<MediaBoardInsertionPreview | null>(null);
   const [pendingMediaReveal, setPendingMediaReveal] = useState<MediaSourceRevealRequest | null>(null);
-  const [mediaBoardAnnotations, setMediaBoardAnnotations] = useState<MediaBoardAnnotation[]>(loadMediaBoardAnnotations);
-  const [selectedMediaBoardAnnotationId, setSelectedMediaBoardAnnotationId] = useState<string | null>(null);
+  const {
+    createMediaBoardAnnotation,
+    mediaBoardAnnotations,
+    reloadMediaBoardAnnotations,
+    selectedMediaBoardAnnotationId,
+    setSelectedMediaBoardAnnotationId,
+    updateMediaBoardAnnotation,
+  } = useMediaBoardAnnotationState();
   const suppressMediaBoardContextMenuRef = useRef(false);
   const suppressMediaBoardContextMenuTimerRef = useRef<number | null>(null);
 
@@ -1050,10 +931,6 @@ export function MediaPanel() {
   useEffect(() => {
     saveMediaBoardLayouts(mediaBoardLayouts);
   }, [mediaBoardLayouts]);
-
-  useEffect(() => {
-    saveMediaBoardAnnotations(mediaBoardAnnotations);
-  }, [mediaBoardAnnotations]);
 
   useLayoutEffect(() => {
     if (viewMode !== 'board') return;
@@ -1902,6 +1779,13 @@ export function MediaPanel() {
     setContextMenu(null);
   }, []);
 
+  const mediaContextExplorerHandlers = useMediaContextExplorerHandlers({
+    showInExplorer,
+    pickProxyFolder,
+    closeContextMenu,
+  });
+  const mediaContextLocalHandlers = useMediaContextLocalHandlers({ moveToFolder, setSolidSettingsDialog, closeContextMenu });
+
   const handleToggleAiPromptReferences = useCallback((mediaFileIds: string[]) => {
     if (mediaFileIds.length === 0) {
       closeContextMenu();
@@ -2450,7 +2334,7 @@ export function MediaPanel() {
       setMediaBoardOrder(loadMediaBoardOrder());
       setMediaBoardGroupOffsets(loadMediaBoardGroupOffsets());
       setMediaBoardLayouts(loadMediaBoardLayouts());
-      setMediaBoardAnnotations(loadMediaBoardAnnotations());
+      reloadMediaBoardAnnotations();
       setSelectedMediaBoardAnnotationId(null);
       const storedNameWidth = localStorage.getItem('media-panel-name-width');
       setNameColumnWidth(storedNameWidth ? parseInt(storedNameWidth, 10) : 250);
@@ -2459,7 +2343,7 @@ export function MediaPanel() {
 
     window.addEventListener(MEDIA_PANEL_PROJECT_UI_LOADED_EVENT, handleProjectUiLoaded);
     return () => window.removeEventListener(MEDIA_PANEL_PROJECT_UI_LOADED_EVENT, handleProjectUiLoaded);
-  }, []);
+  }, [reloadMediaBoardAnnotations, setSelectedMediaBoardAnnotationId]);
 
   // Save name column width
   useEffect(() => {
@@ -2494,372 +2378,52 @@ export function MediaPanel() {
     document.body.style.userSelect = 'none';
   }, [nameColumnWidth]);
 
-  // Render column content for an item
-  const renderColumnContent = (
-    colId: ColumnId,
-    item: ProjectItem,
-    depth: number,
-    isFolder: boolean,
-    isExpanded: boolean,
-    isRenaming: boolean,
-    isSelected: boolean,
-    mediaFile: MediaFile | null
-  ) => {
-    const importProgress = getItemImportProgress(item);
-    const waveformProgress = getItemWaveformProgress(item);
-
-    switch (colId) {
-      case 'label': {
-        const labelColor = 'labelColor' in item ? (item as MediaFile).labelColor : undefined;
-        const hex = getLabelHex(labelColor);
-        return (
-          <div
-            className="media-col media-col-label"
-            onClick={(e) => {
-              e.stopPropagation();
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              setLabelPickerItemId(item.id);
-              setLabelPickerPos({ x: rect.left, y: rect.bottom + 2 });
-            }}
-          >
-            <span
-              className="media-label-dot"
-              style={{
-                background: hex === 'transparent' ? 'var(--border-color)' : hex,
-                opacity: hex === 'transparent' ? 0.4 : 1,
-              }}
-            />
-          </div>
-        );
-      }
-      case 'name': {
-        return (
-          <div
-            className="media-col media-col-name"
-            style={{ paddingLeft: `${4 + depth * 16}px`, width: nameColumnWidth, minWidth: nameColumnWidth, maxWidth: nameColumnWidth }}
-          >
-            {isFolder && (
-              <span
-                className={`media-folder-arrow ${isExpanded ? 'expanded' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFolderExpanded(item.id);
-                }}
-              >
-                ▶
-              </span>
-            )}
-            <span className="media-item-icon">
-              {isFolder
-                ? <span className="media-folder-icon">&#128193;</span>
-                : <FileTypeIcon type={getProjectItemIconType(item)} />
-              }
-            </span>
-            {isRenaming ? (
-              <input
-                type="text"
-                className="media-item-rename"
-                value={renameValue}
-                size={Math.max(1, renameValue.length)}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={finishRename}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') finishRename();
-                  if (e.key === 'Escape') setRenamingId(null);
-                }}
-                autoFocus
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <span
-                className={`media-item-name ${isSelected ? 'editable' : ''}`}
-                onClick={(e) => handleNameClick(e, item.id, item.name)}
-              >
-                {item.name}
-              </span>
-            )}
-            {importProgress !== null && (
-              <span
-                className="media-item-import-progress"
-                title={`Importing: ${importProgress}%`}
-              >
-                {importProgress}%
-              </span>
-            )}
-            {importProgress === null && waveformProgress !== null && (
-              <span
-                className="media-item-waveform-generating"
-                title={`Generating waveform: ${waveformProgress}%`}
-              >
-                <span className="waveform-fill-badge" aria-hidden="true">
-                  <span className="waveform-fill-bg">W</span>
-                  <span className="waveform-fill-progress" style={{ height: `${waveformProgress}%` }}>W</span>
-                </span>
-                <span className="waveform-percent">{waveformProgress}%</span>
-              </span>
-            )}
-            {'audioProxyStatus' in item && item.audioProxyStatus === 'ready' && (
-              <span className="media-item-audio-proxy-badge" title="WAV audio proxy ready">A</span>
-            )}
-            {'audioProxyStatus' in item && item.audioProxyStatus === 'error' && (
-              <span className="media-item-audio-proxy-error" title="WAV audio proxy failed">A!</span>
-            )}
-            {'audioProxyStatus' in item && item.audioProxyStatus === 'generating' && (
-              <span className="media-item-audio-proxy-generating" title={`Preparing WAV audio proxy: ${(item as MediaFile).audioProxyProgress || 0}%`}>
-                <span className="audio-proxy-fill-badge">
-                  <span className="audio-proxy-fill-bg">A</span>
-                  <span className="audio-proxy-fill-progress" style={{ height: `${(item as MediaFile).audioProxyProgress || 0}%` }}>A</span>
-                </span>
-                <span className="audio-proxy-percent">{(item as MediaFile).audioProxyProgress || 0}%</span>
-              </span>
-            )}
-            {'proxyStatus' in item &&
-              item.proxyStatus === 'ready' &&
-              isProxyFrameCountComplete(
-                (item as MediaFile).proxyFrameCount,
-                (item as MediaFile).duration,
-                (item as MediaFile).proxyFps ?? (item as MediaFile).fps
-              ) && (
-              <span className="media-item-proxy-badge" title="Proxy generated">P</span>
-            )}
-            {'proxyStatus' in item && item.proxyStatus === 'error' && (
-              <span className="media-item-proxy-error" title="Proxy generation failed. Right-click to retry.">P!</span>
-            )}
-            {'proxyStatus' in item && item.proxyStatus === 'generating' && (
-              <span className="media-item-proxy-generating" title={`Generating proxy: ${(item as MediaFile).proxyProgress || 0}%`}>
-                <span className="proxy-fill-badge">
-                  <span className="proxy-fill-bg">P</span>
-                  <span className="proxy-fill-progress" style={{ height: `${(item as MediaFile).proxyProgress || 0}%` }}>P</span>
-                </span>
-                <span className="proxy-percent">{(item as MediaFile).proxyProgress || 0}%</span>
-              </span>
-            )}
-            {/* Transcript badge with coverage fill */}
-            {'transcriptStatus' in item && (item as MediaFile).transcriptStatus === 'ready' && (() => {
-              const cov = (item as MediaFile).transcriptCoverage ?? 0;
-              const pct = Math.round(cov * 100);
-              return pct >= 100 ? (
-                <span
-                  className="media-item-transcript-badge"
-                  title="Fully transcribed — click to open"
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'transcript'); }}
-                >T</span>
-              ) : (
-                <span
-                  className="media-item-transcript-fill"
-                  title={`${pct}% transcribed — click to open`}
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'transcript'); }}
-                >
-                  <span className="coverage-fill-badge transcript-fill">
-                    <span className="coverage-fill-bg">T</span>
-                    <span className="coverage-fill-progress" style={{ height: `${pct}%` }}>T</span>
-                  </span>
-                </span>
-              );
-            })()}
-            {/* Analysis badge with coverage fill */}
-            {'analysisStatus' in item && (item as MediaFile).analysisStatus === 'ready' && (() => {
-              const cov = (item as MediaFile).analysisCoverage ?? 0;
-              const pct = Math.round(cov * 100);
-              return pct >= 100 ? (
-                <span
-                  className="media-item-analysis-badge"
-                  title="Fully analyzed — click to open"
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'analysis'); }}
-                >A</span>
-              ) : (
-                <span
-                  className="media-item-analysis-fill"
-                  title={`${pct}% analyzed — click to open`}
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'analysis'); }}
-                >
-                  <span className="coverage-fill-badge analysis-fill">
-                    <span className="coverage-fill-bg">A</span>
-                    <span className="coverage-fill-progress" style={{ height: `${pct}%` }}>A</span>
-                  </span>
-                </span>
-              );
-            })()}
-          </div>
-        );
-      }
-      case 'badges':
-        return (
-          <div className="media-col media-col-badges">
-            {importProgress !== null && (
-              <span className="media-item-import-progress" title={`Importing: ${importProgress}%`}>
-                {importProgress}%
-              </span>
-            )}
-            {importProgress === null && waveformProgress !== null && (
-              <span className="media-item-waveform-generating" title={`Generating waveform: ${waveformProgress}%`}>
-                <span className="waveform-fill-badge" aria-hidden="true">
-                  <span className="waveform-fill-bg">W</span>
-                  <span className="waveform-fill-progress" style={{ height: `${waveformProgress}%` }}>W</span>
-                </span>
-                <span className="waveform-percent">{waveformProgress}%</span>
-              </span>
-            )}
-            {importProgress === null && waveformProgress === null && Boolean(mediaFile?.waveform?.length || mediaFile?.audioAnalysisRefs?.waveformPyramidId) && (
-              <span className="media-item-waveform-badge" title="Waveform ready">W</span>
-            )}
-            {mediaFile?.audioProxyStatus === 'ready' && (
-              <span className="media-item-audio-proxy-badge" title="WAV audio proxy ready">A</span>
-            )}
-            {mediaFile?.audioProxyStatus === 'error' && (
-              <span className="media-item-audio-proxy-error" title="WAV audio proxy failed">A!</span>
-            )}
-            {mediaFile?.audioProxyStatus === 'generating' && (
-              <span className="media-item-audio-proxy-generating" title={`Preparing WAV audio proxy: ${mediaFile.audioProxyProgress || 0}%`}>
-                <span className="audio-proxy-fill-badge">
-                  <span className="audio-proxy-fill-bg">A</span>
-                  <span className="audio-proxy-fill-progress" style={{ height: `${mediaFile.audioProxyProgress || 0}%` }}>A</span>
-                </span>
-                <span className="audio-proxy-percent">{mediaFile.audioProxyProgress || 0}%</span>
-              </span>
-            )}
-            {mediaFile?.proxyStatus === 'ready' &&
-              isProxyFrameCountComplete(
-                mediaFile.proxyFrameCount,
-                mediaFile.duration,
-                mediaFile.proxyFps ?? mediaFile.fps
-              ) && (
-              <span className="media-item-proxy-badge" title="Proxy generated">P</span>
-            )}
-            {mediaFile?.proxyStatus === 'error' && (
-              <span className="media-item-proxy-error" title="Proxy generation failed. Right-click to retry.">P!</span>
-            )}
-            {mediaFile?.proxyStatus === 'generating' && (
-              <span className="media-item-proxy-generating" title={`Generating proxy: ${mediaFile.proxyProgress || 0}%`}>
-                <span className="proxy-fill-badge">
-                  <span className="proxy-fill-bg">P</span>
-                  <span className="proxy-fill-progress" style={{ height: `${mediaFile.proxyProgress || 0}%` }}>P</span>
-                </span>
-                <span className="proxy-percent">{mediaFile.proxyProgress || 0}%</span>
-              </span>
-            )}
-            {mediaFile?.transcriptStatus === 'ready' && (() => {
-              const pct = Math.round((mediaFile.transcriptCoverage ?? 0) * 100);
-              return pct >= 100 ? (
-                <span
-                  className="media-item-transcript-badge"
-                  title="Fully transcribed - click to open"
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'transcript'); }}
-                >T</span>
-              ) : (
-                <span
-                  className="media-item-transcript-fill"
-                  title={`${pct}% transcribed - click to open`}
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'transcript'); }}
-                >
-                  <span className="coverage-fill-badge transcript-fill">
-                    <span className="coverage-fill-bg">T</span>
-                    <span className="coverage-fill-progress" style={{ height: `${pct}%` }}>T</span>
-                  </span>
-                </span>
-              );
-            })()}
-            {mediaFile?.analysisStatus === 'ready' && (() => {
-              const pct = Math.round((mediaFile.analysisCoverage ?? 0) * 100);
-              return pct >= 100 ? (
-                <span
-                  className="media-item-analysis-badge"
-                  title="Fully analyzed - click to open"
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'analysis'); }}
-                >A</span>
-              ) : (
-                <span
-                  className="media-item-analysis-fill"
-                  title={`${pct}% analyzed - click to open`}
-                  onClick={(e) => { e.stopPropagation(); handleBadgeClick(item.id, 'analysis'); }}
-                >
-                  <span className="coverage-fill-badge analysis-fill">
-                    <span className="coverage-fill-bg">A</span>
-                    <span className="coverage-fill-progress" style={{ height: `${pct}%` }}>A</span>
-                  </span>
-                </span>
-              );
-            })()}
-          </div>
-        );
-      case 'duration': {
-        const importProgress = getItemImportProgress(item);
-        return (
-          <div className="media-col media-col-duration">
-            {importProgress !== null
-              ? `Import ${importProgress}%`
-              : ('duration' in item && item.duration ? formatDuration(item.duration) : '–')}
-          </div>
-        );
-      }
-      case 'resolution':
-        return (
-          <div className="media-col media-col-resolution" title={getGaussianSplatResolutionLabel(item) ?? undefined}>
-            {getGaussianSplatResolutionLabel(item) ??
-              ('width' in item && 'height' in item && item.width && item.height ? `${item.width}×${item.height}` : '–')}
-          </div>
-        );
-      case 'fps':
-        return (
-          <div className="media-col media-col-fps">
-            {mediaFile?.fps ? `${mediaFile.fps}` : ('type' in item && item.type === 'composition' ? (item as Composition).frameRate : '–')}
-          </div>
-        );
-      case 'container':
-        return <div className="media-col media-col-container">{getMediaFileContainerLabel(mediaFile) || '–'}</div>;
-      case 'codec':
-        return <div className="media-col media-col-codec">{getMediaFileCodecLabel(mediaFile) || '–'}</div>;
-      case 'audio':
-        return <div className="media-col media-col-audio">
-          {mediaFile?.type === 'audio' ? 'Yes' :
-           mediaFile?.type === 'image' ? '–' :
-           mediaFile?.hasAudio === true ? 'Yes' :
-           mediaFile?.hasAudio === false ? 'No' : '–'}
-        </div>;
-      case 'bitrate':
-        return <div className="media-col media-col-bitrate">{mediaFile?.bitrate ? formatBitrate(mediaFile.bitrate) : '–'}</div>;
-      case 'size':
-        return <div className="media-col media-col-size">{mediaFile ? formatFileSize(mediaFile.fileSize) : '–'}</div>;
-      default:
-        return null;
-    }
-  };
-
   // Render a single classic-list row. Tree traversal is virtualized separately.
   const renderClassicRow = (item: ProjectItem, depth: number = 0) => {
     const isFolder = 'isExpanded' in item;
-    const isSelected = selectedIds.includes(item.id);
-    const isRenaming = renamingId === item.id;
-    const isExpanded = isFolder && expandedFolderIds.includes(item.id);
     const isMediaFile = isImportedMediaFileItem(item);
-    const needsRelink = isMediaFile && mediaNeedsRelink(item);
-    const isImporting = isMediaFile && !!item.isImporting;
-    const isDragTarget = isFolder && dragOverFolderId === item.id;
-    const isBeingDragged = internalDragId === item.id;
-    const mediaFile = isMediaFile ? item : null;
 
     return (
-      <div key={item.id} data-item-id={item.id}>
-        <div
-          data-media-panel-anim-id={item.id}
-          className={`media-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${needsRelink ? 'no-file' : ''} ${isImporting ? 'importing' : ''} ${isDragTarget ? 'drag-target' : ''} ${isBeingDragged ? 'dragging' : ''}`}
-          draggable={!isImporting}
-          onDragStart={(e) => handleDragStart(e, item)}
-          onDragEnd={handleDragEnd}
-          onDragOver={isFolder ? (e) => handleFolderDragOver(e, item.id) : undefined}
-          onDragLeave={isFolder ? handleFolderDragLeave : undefined}
-          onDrop={isFolder ? (e) => handleFolderDrop(e, item.id) : undefined}
-          onClick={(e) => handleItemClick(item.id, e)}
-          onDoubleClick={() => handleItemDoubleClick(item)}
-          onContextMenu={(e) => handleContextMenu(e, item.id)}
-        >
-          {columnOrder.map(colId => (
-            <React.Fragment key={colId}>
-              {renderColumnContent(colId, item, depth, isFolder, isExpanded, isRenaming, isSelected, mediaFile)}
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
+      <MediaClassicListRow
+        key={item.id}
+        item={item}
+        depth={depth}
+        columnOrder={columnOrder}
+        selected={selectedIds.includes(item.id)}
+        renaming={renamingId === item.id}
+        expanded={isFolder && expandedFolderIds.includes(item.id)}
+        needsRelink={isMediaFile && mediaNeedsRelink(item)}
+        dragTarget={isFolder && dragOverFolderId === item.id}
+        beingDragged={internalDragId === item.id}
+        nameColumnWidth={nameColumnWidth}
+        renameValue={renameValue}
+        onOpenLabelPicker={(itemId, x, y) => {
+          setLabelPickerItemId(itemId);
+          setLabelPickerPos({ x, y });
+        }}
+        onToggleFolder={toggleFolderExpanded}
+        onRenameValueChange={setRenameValue}
+        onFinishRename={finishRename}
+        onCancelRename={() => setRenamingId(null)}
+        onNameClick={handleNameClick}
+        onBadgeClick={handleBadgeClick}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onFolderDragOver={handleFolderDragOver}
+        onFolderDragLeave={handleFolderDragLeave}
+        onFolderDrop={handleFolderDrop}
+        onClick={(event, itemId) => handleItemClick(itemId, event)}
+        onDoubleClick={handleItemDoubleClick}
+        onContextMenu={(event, itemId) => handleContextMenu(event, itemId)}
+        getProjectItemIconType={getProjectItemIconType}
+        getGaussianSplatResolutionLabel={getGaussianSplatResolutionLabel}
+        getMediaFileContainerLabel={getMediaFileContainerLabel}
+        getMediaFileCodecLabel={getMediaFileCodecLabel}
+        isProxyFrameCountComplete={isProxyFrameCountComplete}
+        formatDuration={formatDuration}
+        formatFileSize={formatFileSize}
+        formatBitrate={formatBitrate}
+      />
     );
   };
 
@@ -2906,79 +2470,26 @@ export function MediaPanel() {
   // Render a single grid item
   const renderGridItem = (item: ProjectItem) => {
     const isFolder = 'isExpanded' in item;
-    const isSelected = selectedIds.includes(item.id);
-    const isMediaFile = isImportedMediaFileItem(item);
-    const mediaFile = isMediaFile ? item : null;
-    const isComp = !isFolder && 'type' in item && item.type === 'composition';
-    const comp = isComp ? (item as Composition) : null;
-    const thumbUrl = mediaFile?.thumbnailUrl;
-    const isDragTarget = isFolder && dragOverFolderId === item.id;
-    const isImporting = !!mediaFile?.isImporting;
-    const importProgress = getItemImportProgress(item);
-    const waveformProgress = getItemWaveformProgress(item);
-
-    // Duration badge: videos + compositions
-    const duration = mediaFile?.duration || comp?.duration || ('duration' in item ? item.duration : undefined);
-
-    // Folder item count
-    const folderCount = isFolder ? getItemsForParent(item.id).length : 0;
 
     return (
-      <div key={item.id} data-item-id={item.id}>
-        <div
-          data-media-panel-anim-id={item.id}
-          className={`media-grid-item ${isSelected ? 'selected' : ''} ${isFolder ? 'folder' : ''} ${isDragTarget ? 'drag-target' : ''} ${isImporting ? 'importing' : ''}`}
-          draggable={!isImporting}
-          onDragStart={(e) => handleDragStart(e, item)}
-          onDragEnd={handleDragEnd}
-          onDragOver={isFolder ? (e) => handleFolderDragOver(e, item.id) : undefined}
-          onDragLeave={isFolder ? handleFolderDragLeave : undefined}
-          onDrop={isFolder ? (e) => handleFolderDrop(e, item.id) : undefined}
-          onClick={(e) => handleItemClick(item.id, e)}
-          onDoubleClick={() => handleItemDoubleClick(item)}
-          onContextMenu={(e) => handleContextMenu(e, item.id)}
-          title={buildGridTooltip(item, isFolder, isComp)}
-        >
-          <div className="media-grid-thumb">
-            {mediaFile?.type === 'video' ? (
-              <MediaGridVideoThumb
-                mediaFile={mediaFile}
-                thumbUrl={thumbUrl}
-                onError={() => { void refreshFileUrls(mediaFile.id); }}
-              />
-            ) : mediaFile?.type === 'audio' ? (
-              <MediaWaveformThumb mediaFile={mediaFile} />
-            ) : thumbUrl ? (
-              <img
-                src={thumbUrl}
-                alt=""
-                draggable={false}
-                onError={mediaFile ? () => { void refreshFileUrls(mediaFile.id); } : undefined}
-              />
-            ) : (
-              <div className="media-grid-thumb-placeholder">
-                <FileTypeIcon type={isFolder ? 'folder' : isComp ? 'composition' : getProjectItemIconType(item)} large />
-              </div>
-            )}
-            {duration ? (
-              <span className="media-grid-duration">{formatDuration(duration)}</span>
-            ) : null}
-            {isFolder && folderCount > 0 && (
-              <span className="media-grid-badge">{folderCount}</span>
-            )}
-            {importProgress !== null && (
-              <span className="media-grid-import-badge">{importProgress}%</span>
-            )}
-            {importProgress === null && waveformProgress !== null && (
-              <span className="media-grid-waveform-badge" title={`Generating waveform: ${waveformProgress}%`}>
-                <span className="waveform-progress-mark">W</span>
-                <span>{waveformProgress}%</span>
-              </span>
-            )}
-          </div>
-          <div className="media-grid-name" title={item.name}>{item.name}</div>
-        </div>
-      </div>
+      <MediaGridItem
+        key={item.id}
+        item={item}
+        selected={selectedIds.includes(item.id)}
+        dragTarget={isFolder && dragOverFolderId === item.id}
+        folderItemCount={isFolder ? getItemsForParent(item.id).length : 0}
+        getProjectItemIconType={getProjectItemIconType}
+        buildTooltip={buildGridTooltip}
+        onRefreshFileUrls={(mediaFileId) => { void refreshFileUrls(mediaFileId); }}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onFolderDragOver={handleFolderDragOver}
+        onFolderDragLeave={handleFolderDragLeave}
+        onFolderDrop={handleFolderDrop}
+        onClick={(event, itemId) => handleItemClick(itemId, event)}
+        onDoubleClick={handleItemDoubleClick}
+        onContextMenu={(event, itemId) => handleContextMenu(event, itemId)}
+      />
     );
   };
 
@@ -3711,295 +3222,44 @@ export function MediaPanel() {
       return;
     }
 
-    const now = Date.now();
-    const annotation: MediaBoardAnnotation = {
-      id: `media-board-annotation-${now}-${Math.random().toString(36).slice(2, 8)}`,
-      x: point.x,
-      y: point.y,
-      width: DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.width,
-      height: DEFAULT_MEDIA_BOARD_ANNOTATION_SIZE.height,
-      text: '',
-      fontSize: DEFAULT_MEDIA_BOARD_ANNOTATION_FONT_SIZE,
-      backgroundColor: DEFAULT_MEDIA_BOARD_ANNOTATION_BACKGROUND,
-      textColor: DEFAULT_MEDIA_BOARD_ANNOTATION_TEXT,
-      editing: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    setMediaBoardAnnotations((current) => [...current, annotation]);
+    createMediaBoardAnnotation(point);
     setSelection([]);
-    setSelectedMediaBoardAnnotationId(annotation.id);
     closeContextMenu();
-  }, [closeContextMenu, contextMenu?.boardPosition, setSelection]);
+  }, [closeContextMenu, contextMenu?.boardPosition, createMediaBoardAnnotation, setSelection]);
 
-  const updateMediaBoardAnnotation = useCallback((id: string, patch: Partial<Pick<
-    MediaBoardAnnotation,
-    'text' | 'fontSize' | 'x' | 'y' | 'width' | 'height' | 'backgroundColor' | 'textColor' | 'editing'
-  >>) => {
-    setMediaBoardAnnotations((current) => current.map((annotation) => (
-      annotation.id === id
-        ? {
-          ...annotation,
-          ...patch,
-          width: patch.width === undefined
-            ? annotation.width
-            : Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.width, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.width, patch.width)),
-          height: patch.height === undefined
-            ? annotation.height
-            : Math.max(MEDIA_BOARD_ANNOTATION_MIN_SIZE.height, Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.height, patch.height)),
-          fontSize: patch.fontSize === undefined
-            ? annotation.fontSize
-            : clampMediaBoardAnnotationFontSize(patch.fontSize),
-          backgroundColor: patch.backgroundColor === undefined
-            ? annotation.backgroundColor
-            : normalizeMediaBoardAnnotationColor(patch.backgroundColor, annotation.backgroundColor),
-          textColor: patch.textColor === undefined
-            ? annotation.textColor
-            : normalizeMediaBoardAnnotationColor(patch.textColor, annotation.textColor),
-          updatedAt: Date.now(),
-        }
-        : annotation
-    )));
-  }, []);
-
-  const startMediaBoardAnnotationDrag = useCallback((e: React.MouseEvent, annotation: MediaBoardAnnotation) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('input, button')) {
-      return;
-    }
-
-    if (e.button === 0) {
-      setSelection([]);
-      setSelectedMediaBoardAnnotationId(annotation.id);
-      return;
-    }
-
-    if (e.button !== 2) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    closeContextMenu();
-    setSelection([]);
-    setSelectedMediaBoardAnnotationId(annotation.id);
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startAnnotation = { x: annotation.x, y: annotation.y };
-    const startZoom = Math.max(MEDIA_BOARD_PAN_ZOOM_MIN, mediaBoardViewportRef.current.zoom);
-    let didDrag = false;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
-      if (!didDrag && distance < MEDIA_BOARD_DRAG_START_DISTANCE) return;
-      if (!didDrag) {
-        didDrag = true;
-        document.body.style.cursor = 'grabbing';
-        document.body.style.userSelect = 'none';
-      }
-      moveEvent.preventDefault();
-      updateMediaBoardAnnotation(annotation.id, {
-        x: startAnnotation.x + ((moveEvent.clientX - startX) / startZoom),
-        y: startAnnotation.y + ((moveEvent.clientY - startY) / startZoom),
-      });
-    };
-
-    const handleMouseUp = () => {
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      if (didDrag) {
-        suppressNextMediaBoardContextMenu();
-      }
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('blur', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('blur', handleMouseUp);
-  }, [closeContextMenu, setSelection, suppressNextMediaBoardContextMenu, updateMediaBoardAnnotation]);
-
-  const startMediaBoardAnnotationResize = useCallback((
-    e: React.MouseEvent,
-    annotation: MediaBoardAnnotation,
-    corner: 'nw' | 'ne' | 'sw' | 'se',
-  ) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    closeContextMenu();
-    setSelection([]);
-    setSelectedMediaBoardAnnotationId(annotation.id);
-
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const startZoom = Math.max(MEDIA_BOARD_PAN_ZOOM_MIN, mediaBoardViewportRef.current.zoom);
-    const start = {
-      x: annotation.x,
-      y: annotation.y,
-      width: annotation.width,
-      height: annotation.height,
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      moveEvent.preventDefault();
-      const dx = (moveEvent.clientX - startX) / startZoom;
-      const dy = (moveEvent.clientY - startY) / startZoom;
-      const fromLeft = corner.includes('w');
-      const fromTop = corner.includes('n');
-      const requestedWidth = fromLeft ? start.width - dx : start.width + dx;
-      const requestedHeight = fromTop ? start.height - dy : start.height + dy;
-      const width = Math.max(
-        MEDIA_BOARD_ANNOTATION_MIN_SIZE.width,
-        Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.width, requestedWidth),
-      );
-      const height = Math.max(
-        MEDIA_BOARD_ANNOTATION_MIN_SIZE.height,
-        Math.min(MEDIA_BOARD_ANNOTATION_MAX_SIZE.height, requestedHeight),
-      );
-
-      updateMediaBoardAnnotation(annotation.id, {
-        width,
-        height,
-        x: fromLeft ? start.x + (start.width - width) : start.x,
-        y: fromTop ? start.y + (start.height - height) : start.y,
-      });
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('blur', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('blur', handleMouseUp);
-  }, [closeContextMenu, setSelection, updateMediaBoardAnnotation]);
-
-  const visibleMediaBoardAnnotations = useMemo(() => (
-    mediaBoardAnnotations.filter((annotation) => (
-      selectedMediaBoardAnnotationId === annotation.id
-      || (
-        annotation.x + annotation.width > mediaBoardVisibleRect.left
-        && annotation.x < mediaBoardVisibleRect.right
-        && annotation.y + annotation.height > mediaBoardVisibleRect.top
-        && annotation.y < mediaBoardVisibleRect.bottom
-      )
-    ))
-  ), [mediaBoardAnnotations, mediaBoardVisibleRect, selectedMediaBoardAnnotationId]);
-
-  const mediaBoardAnnotationNodes = useMemo(() => (
-    visibleMediaBoardAnnotations.map((annotation) => {
-      const isSelected = selectedMediaBoardAnnotationId === annotation.id;
-      const handleEditToggle = () => {
-        const editing = !annotation.editing;
-        updateMediaBoardAnnotation(annotation.id, { editing });
-        if (editing) {
-          window.requestAnimationFrame(() => {
-            boardCanvasRef.current
-              ?.querySelector<HTMLTextAreaElement>(`[data-media-board-annotation-text="${annotation.id}"]`)
-              ?.focus();
-          });
-        }
-      };
-
-      return (
-        <div
-          key={annotation.id}
-          className={`media-board-annotation ${isSelected ? 'selected' : ''} ${annotation.editing ? 'editing' : ''}`}
-          style={{
-            left: annotation.x,
-            top: annotation.y,
-            width: annotation.width,
-            height: annotation.height,
-            background: annotation.backgroundColor,
-            color: annotation.textColor,
-          }}
-          onMouseDown={(event) => startMediaBoardAnnotationDrag(event, annotation)}
-          onContextMenu={(event) => {
-            if (consumeSuppressedMediaBoardContextMenu()) {
-              event.preventDefault();
-              return;
-            }
-            event.preventDefault();
-            event.stopPropagation();
-            setSelection([]);
-            setSelectedMediaBoardAnnotationId(annotation.id);
-            setContextMenu({ x: event.clientX, y: event.clientY, annotationId: annotation.id });
-          }}
-        >
-          <div className="media-board-annotation-controls">
-            <input
-              className="media-board-annotation-size"
-              type="range"
-              min={MEDIA_BOARD_ANNOTATION_FONT_SIZE_MIN}
-              max={MEDIA_BOARD_ANNOTATION_FONT_SIZE_MAX}
-              step={1}
-              value={annotation.fontSize}
-              onMouseDown={(event) => event.stopPropagation()}
-              onChange={(event) => updateMediaBoardAnnotation(annotation.id, { fontSize: Number(event.currentTarget.value) })}
-              title={`${annotation.fontSize}px`}
-              aria-label="Annotation text size"
-            />
-          </div>
-          <textarea
-            data-media-board-annotation-text={annotation.id}
-            className="media-board-annotation-text"
-            value={annotation.text}
-            placeholder="Annotation"
-            readOnly={!annotation.editing}
-            autoFocus={isSelected && annotation.editing && annotation.text.length === 0}
-            onMouseDown={(event) => {
-              if (annotation.editing) {
-                event.stopPropagation();
-              } else {
-                event.preventDefault();
-              }
-            }}
-            onDoubleClick={(event) => event.stopPropagation()}
-            onFocus={() => {
-              setSelection([]);
-              setSelectedMediaBoardAnnotationId(annotation.id);
-            }}
-            onChange={(event) => updateMediaBoardAnnotation(annotation.id, { text: event.currentTarget.value })}
-            style={{
-              color: annotation.textColor,
-              fontSize: annotation.fontSize,
-            }}
-            spellCheck
-          />
-          <button
-            type="button"
-            className={`media-board-annotation-edit ${annotation.editing ? 'active' : ''}`}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={handleEditToggle}
-            title={annotation.editing ? 'Lock text' : 'Edit text'}
-          >
-            Edit
-          </button>
-          {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
-            <div
-              key={corner}
-              className={`media-board-annotation-resize ${corner}`}
-              onMouseDown={(event) => startMediaBoardAnnotationResize(event, annotation, corner)}
-            />
-          ))}
-        </div>
-      );
-    })
-  ), [
-    consumeSuppressedMediaBoardContextMenu,
-    selectedMediaBoardAnnotationId,
-    setSelection,
+  const {
     startMediaBoardAnnotationDrag,
     startMediaBoardAnnotationResize,
+  } = useMediaBoardAnnotationGestures({
+    closeContextMenu,
+    mediaBoardViewportRef,
+    setSelectedMediaBoardAnnotationId,
+    setSelection,
+    suppressNextMediaBoardContextMenu,
     updateMediaBoardAnnotation,
-    visibleMediaBoardAnnotations,
-  ]);
+  });
+
+  const {
+    handleMediaBoardAnnotationContextMenu,
+    handleMediaBoardAnnotationEditToggle,
+    handleMediaBoardAnnotationFocus,
+    requestMediaBoardAnnotationTextFocus,
+  } = useMediaBoardAnnotationCommands({
+    boardRootRef: boardCanvasRef,
+    consumeSuppressedMediaBoardContextMenu,
+    setAnnotationContextMenu: setContextMenu,
+    setSelectedMediaBoardAnnotationId,
+    setSelection,
+    updateMediaBoardAnnotation,
+  });
+
+  const visibleMediaBoardAnnotations = useMemo(() => (
+    getVisibleMediaBoardAnnotations(
+      mediaBoardAnnotations,
+      mediaBoardVisibleRect,
+      selectedMediaBoardAnnotationId,
+    )
+  ), [mediaBoardAnnotations, mediaBoardVisibleRect, selectedMediaBoardAnnotationId]);
 
   const setMediaBoardPerformanceMode = useCallback((enabled: boolean) => {
     boardWrapperRef.current?.classList.toggle('board-interacting', enabled);
@@ -5123,7 +4383,17 @@ export function MediaPanel() {
       getMediaFileContainerLabel={getMediaFileContainerLabel}
       getMediaFileCodecLabel={getMediaFileCodecLabel}
     >
-      {mediaBoardAnnotationNodes}
+      <MediaBoardAnnotationLayer
+        annotations={visibleMediaBoardAnnotations}
+        selectedAnnotationId={selectedMediaBoardAnnotationId}
+        onAnnotationContextMenu={handleMediaBoardAnnotationContextMenu}
+        onAnnotationFocus={handleMediaBoardAnnotationFocus}
+        onEditToggle={handleMediaBoardAnnotationEditToggle}
+        onRequestTextFocus={requestMediaBoardAnnotationTextFocus}
+        onStartDrag={startMediaBoardAnnotationDrag}
+        onStartResize={startMediaBoardAnnotationResize}
+        onUpdateAnnotation={updateMediaBoardAnnotation}
+      />
     </MediaBoardView>
   );
   // Grid view: items for current folder, or flattened matches while searching.
@@ -5162,177 +4432,34 @@ export function MediaPanel() {
       onMouseMove={(e) => { lastPointerRef.current = { x: e.clientX, y: e.clientY }; }}
       onClick={() => { if (contextMenu) closeContextMenu(); }}
     >
-      {/* Floating action feedback — portalled to body so container-type clipping doesn't apply */}
-      {floatingTexts.length > 0 && createPortal(
-        floatingTexts.map((ft) => (
-          <div key={ft.id} className="media-floating-text" style={{ left: ft.x, top: ft.y }}>
-            {ft.text}
-          </div>
-        )),
-        document.body,
-      )}
+      <MediaFloatingFeedbackPortal items={floatingTexts} />
       {/* Header */}
-      <div className="media-panel-header">
-        <div className="media-panel-search">
-          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.4" />
-            <path d="M10.3 10.3 14 14" />
-          </svg>
-          <input
-            value={mediaSearchQuery}
-            onChange={(e) => setMediaSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setMediaSearchQuery('');
-            }}
-            placeholder="Search or *.mp4"
-            aria-label="Search project items"
-          />
-          {mediaSearchQuery ? (
-            <button
-              type="button"
-              className="media-panel-search-clear"
-              onClick={() => setMediaSearchQuery('')}
-              title="Clear search"
-              aria-label="Clear search"
-            >
-              x
-            </button>
-          ) : null}
-        </div>
-        <span className="media-panel-count">
-          {isMediaSearchActive ? `${mediaSearchResultCount} of ${totalItems} items` : `${totalItems} items`}
-        </span>
-        <div className="media-panel-actions">
-          {filesNeedReload && (
-            <button
-              className="btn btn-sm btn-reload-all"
-              onClick={() => setShowRelinkDialog(true)}
-              title={`Restore access to ${filesNeedReloadCount} file${filesNeedReloadCount > 1 ? 's' : ''}`}
-            >
-              Relink ({filesNeedReloadCount})
-            </button>
-          )}
-          <div className="media-view-segment" role="tablist" aria-label="Media view mode">
-            <button
-              className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'classic' ? 'active' : ''}`}
-              onClick={() => handleViewModeChange('classic')}
-              title="Classic list view"
-              aria-label="Classic list view"
-            >
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="2" width="14" height="2" rx="0.5"/><rect x="1" y="7" width="14" height="2" rx="0.5"/><rect x="1" y="12" width="14" height="2" rx="0.5"/></svg>
-            </button>
-            <button
-              className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'icons' ? 'active' : ''}`}
-              onClick={() => handleViewModeChange('icons')}
-              title="Large icon view"
-              aria-label="Large icon view"
-            >
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-            </button>
-            <button
-              className={`btn btn-sm btn-icon media-view-toggle ${viewMode === 'board' ? 'active' : ''}`}
-              onClick={() => handleViewModeChange('board')}
-              title="Board view"
-              aria-label="Board view"
-            >
-              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M2 2h5v4H2V2Zm7 0h5v6H9V2ZM2 8h5v6H2V8Zm7 2h5v4H9v-4Z"/></svg>
-            </button>
-          </div>
-          <button className="btn btn-sm media-panel-import-button" onClick={handleImport} title="Import Media">
-            Import
-          </button>
-          <div className="add-dropdown-container">
-            <button
-              className={`btn btn-sm add-dropdown-trigger ${addDropdownOpen ? 'active' : ''}`}
-              onClick={() => setAddDropdownOpen(!addDropdownOpen)}
-              title="Add New Item"
-            >
-              + Add ▾
-            </button>
-            {addDropdownOpen && (
-              <div className="add-dropdown-menu">
-                <div className="add-dropdown-item" onClick={() => { handleNewComposition(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="composition" /></span>
-                  <span>Composition</span>
-                </div>
-                <div className="add-dropdown-item" onClick={() => { handleNewFolder(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><span className="media-folder-icon">&#128193;</span></span>
-                  <span>Folder</span>
-                </div>
-                <div className="add-dropdown-separator" />
-                <div className="add-dropdown-item" onClick={() => { handleNewText(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="text" /></span>
-                  <span>Text</span>
-                </div>
-                <div className="add-dropdown-item" onClick={() => { handleNewSolid(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="solid" /></span>
-                  <span>Solid</span>
-                </div>
-                <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="mesh" /></span>
-                  <span>3D</span>
-                  <span className="submenu-arrow">&#9654;</span>
-                  <div className="add-dropdown-submenu">
-                    <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                      <span className="add-dropdown-icon"><FileTypeIcon type="mesh" /></span>
-                      <span>Mesh</span>
-                      <span className="submenu-arrow">&#9654;</span>
-                      <div className="add-dropdown-submenu">
-                        {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
-                          <div key={meshType} className="add-dropdown-item" onClick={() => { handleNewMesh(meshType); setAddDropdownOpen(false); }}>
-                            <span>{meshType.charAt(0).toUpperCase() + meshType.slice(1)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="add-dropdown-item" onClick={() => { handleNewText3D(); setAddDropdownOpen(false); }}>
-                      <span className="add-dropdown-icon"><FileTypeIcon type="text-3d" /></span>
-                      <span>3D Text</span>
-                    </div>
-                    <div className="add-dropdown-item" onClick={() => { handleNewCamera(); setAddDropdownOpen(false); }}>
-                      <span className="add-dropdown-icon"><FileTypeIcon type="camera" /></span>
-                      <span>Camera</span>
-                    </div>
-                    <div className="add-dropdown-item" onClick={() => { handleNewSplatEffector(); setAddDropdownOpen(false); }}>
-                      <span className="add-dropdown-icon"><FileTypeIcon type="splat-effector" /></span>
-                      <span>3D Effector</span>
-                    </div>
-                    <div className="add-dropdown-item" onClick={() => { handleImportGaussianSplat(); setAddDropdownOpen(false); }}>
-                      <span className="add-dropdown-icon"><FileTypeIcon type="gaussian-splat" /></span>
-                      <span>Gaussian Splat</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="add-dropdown-separator" />
-                <div className="add-dropdown-item" onClick={() => { handleNewMathScene(); setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="math-scene" /></span>
-                  <span>Math Scene</span>
-                </div>
-                <div className="add-dropdown-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="motion-shape" /></span>
-                  <span>Motion Shape</span>
-                  <span className="submenu-arrow">&#9654;</span>
-                  <div className="add-dropdown-submenu">
-                    <div className="add-dropdown-item" onClick={() => { handleNewMotionShape('rectangle'); setAddDropdownOpen(false); }}>
-                      <span>Rectangle</span>
-                    </div>
-                    <div className="add-dropdown-item" onClick={() => { handleNewMotionShape('ellipse'); setAddDropdownOpen(false); }}>
-                      <span>Ellipse</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="add-dropdown-separator" />
-                <div className="add-dropdown-item" onClick={() => { /* TODO: Add adjustment layer */ setAddDropdownOpen(false); }}>
-                  <span className="add-dropdown-icon"><FileTypeIcon type="solid" /></span>
-                  <span>Adjustment Layer</span>
-                  <span className="add-dropdown-hint">Coming soon</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
+      <MediaPanelHeader
+        query={mediaSearchQuery}
+        onQueryChange={setMediaSearchQuery}
+        isSearchActive={isMediaSearchActive}
+        searchResultCount={mediaSearchResultCount}
+        totalItems={totalItems}
+        filesNeedReload={filesNeedReload}
+        filesNeedReloadCount={filesNeedReloadCount}
+        onOpenRelinkDialog={() => setShowRelinkDialog(true)}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
+        onImport={handleImport}
+        addDropdownOpen={addDropdownOpen}
+        onAddDropdownOpenChange={setAddDropdownOpen}
+        onNewComposition={handleNewComposition}
+        onNewFolder={handleNewFolder}
+        onNewText={handleNewText}
+        onNewSolid={handleNewSolid}
+        onNewMesh={handleNewMesh}
+        onNewText3D={handleNewText3D}
+        onNewCamera={handleNewCamera}
+        onNewSplatEffector={handleNewSplatEffector}
+        onImportGaussianSplat={handleImportGaussianSplat}
+        onNewMathScene={handleNewMathScene}
+        onNewMotionShape={handleNewMotionShape}
+      />
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -5346,628 +4473,171 @@ export function MediaPanel() {
       {/* Item list with column headers */}
       <div className={`media-panel-content media-panel-content-${viewMode}`} ref={mediaPanelContentRef}>
         {totalItems === 0 ? (
-          <div className="media-panel-empty" onContextMenu={(e) => handleContextMenu(e)}>
-            <div className="drop-icon">
-              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-            </div>
-            <p>No media imported</p>
-            <p className="hint">Drag & drop files or folders here or click Import</p>
-          </div>
+          <MediaNoMediaEmptyState onContextMenu={handleContextMenu} />
         ) : isMediaSearchActive && mediaSearchResultCount === 0 ? (
-          <div className="media-panel-empty" onContextMenu={(e) => handleContextMenu(e)}>
-            <p>No matching items</p>
-            <p className="hint">{mediaSearchQuery}</p>
-          </div>
+          <MediaNoSearchResultsEmptyState
+            query={mediaSearchQuery}
+            onContextMenu={handleContextMenu}
+          />
         ) : viewMode === 'classic' ? (
-          <div
-            className={[
-              'media-panel-table-wrapper',
-              isClassicListVerticalScrolling ? 'is-vertical-scrolling' : '',
-              isClassicListHorizontallyScrolled ? 'is-horizontal-scrolled' : '',
-            ].filter(Boolean).join(' ')}
-            ref={itemListRef}
+          <MediaClassicListChrome
+            wrapperRef={itemListRef}
+            isVerticalScrolling={isClassicListVerticalScrolling}
+            isHorizontallyScrolled={isClassicListHorizontallyScrolled}
             onScroll={handleClassicListScroll}
             onMouseDown={handleMarqueeMouseDown}
-            onContextMenu={(e) => {
-              const target = e.target as HTMLElement;
-              if (!target.closest('.media-item')) handleContextMenu(e);
-            }}
-            style={{
-              position: 'relative',
-              '--media-name-column-width': `${nameColumnWidth}px`,
-              '--media-label-column-width': `${dynamicMediaColumnWidths.label}px`,
-              '--media-badge-column-width': `${dynamicMediaColumnWidths.badges}px`,
-              '--media-duration-column-width': `${dynamicMediaColumnWidths.duration}px`,
-              '--media-resolution-column-width': `${dynamicMediaColumnWidths.resolution}px`,
-              '--media-fps-column-width': `${dynamicMediaColumnWidths.fps}px`,
-              '--media-container-column-width': `${dynamicMediaColumnWidths.container}px`,
-              '--media-codec-column-width': `${dynamicMediaColumnWidths.codec}px`,
-              '--media-audio-column-width': `${dynamicMediaColumnWidths.audio}px`,
-              '--media-bitrate-column-width': `${dynamicMediaColumnWidths.bitrate}px`,
-              '--media-size-column-width': `${dynamicMediaColumnWidths.size}px`,
-            } as React.CSSProperties}
-          >
-            {/* Column headers */}
-            <div className="media-column-headers">
-              {columnOrder.map((colId) => (
-                <div
-                  key={colId}
-                  className={`media-col media-col-${colId} ${draggingColumn === colId ? 'dragging' : ''} ${dragOverColumn === colId ? 'drag-over' : ''} ${sortColumn === colId ? 'sorted' : ''}`}
-                  style={colId === 'name' ? { width: nameColumnWidth, minWidth: nameColumnWidth, maxWidth: nameColumnWidth } : undefined}
-                  draggable
-                  onDragStart={(e) => handleColumnDragStart(e, colId)}
-                  onDragOver={(e) => handleColumnDragOver(e, colId)}
-                  onDragLeave={handleColumnDragLeave}
-                  onDrop={(e) => handleColumnDrop(e, colId)}
-                  onDragEnd={handleColumnDragEnd}
-                  onClick={() => handleColumnSort(colId)}
-                >
-                  {COLUMN_LABELS_MAP[colId]}
-                  {sortColumn === colId && (
-                    <span className="media-sort-indicator">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-                  )}
-                  {/* Resize handle after name column */}
-                  {colId === 'name' && (
-                    <div
-                      className="media-col-resize-handle"
-                      onMouseDown={handleResizeStart}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-            <div
-              className="media-item-list"
-            >
-              {classicTopSpacerHeight > 0 && (
-                <div className="media-classic-virtual-spacer" style={{ height: classicTopSpacerHeight }} />
-              )}
-              {classicVisibleRows.map(({ item, depth }) => renderClassicRow(item, depth))}
-              {classicBottomSpacerHeight > 0 && (
-                <div className="media-classic-virtual-spacer" style={{ height: classicBottomSpacerHeight }} />
-              )}
-              {/* Marquee selection rectangle */}
-              {marquee && (() => {
-                const left = Math.min(marquee.startX, marquee.currentX);
-                const top = Math.min(marquee.startY, marquee.currentY);
-                const width = Math.abs(marquee.currentX - marquee.startX);
-                const height = Math.abs(marquee.currentY - marquee.startY);
-                if (width < 3 && height < 3) return null;
-                return (
-                  <div
-                    className="media-marquee"
-                    style={{ left, top, width, height }}
-                  />
-                );
-              })()}
-            </div>
-          </div>
+            onContextMenu={handleContextMenu}
+            nameColumnWidth={nameColumnWidth}
+            columnWidths={dynamicMediaColumnWidths}
+            columnOrder={columnOrder}
+            draggingColumn={draggingColumn}
+            dragOverColumn={dragOverColumn}
+            sortColumn={sortColumn}
+            sortDirection={sortDirection}
+            onColumnDragStart={handleColumnDragStart}
+            onColumnDragOver={handleColumnDragOver}
+            onColumnDragLeave={handleColumnDragLeave}
+            onColumnDrop={handleColumnDrop}
+            onColumnDragEnd={handleColumnDragEnd}
+            onColumnSort={handleColumnSort}
+            onNameColumnResizeStart={handleResizeStart}
+            topSpacerHeight={classicTopSpacerHeight}
+            bottomSpacerHeight={classicBottomSpacerHeight}
+            visibleRows={classicVisibleRows}
+            renderRow={({ item, depth }) => renderClassicRow(item, depth)}
+            marquee={marquee}
+          />
         ) : viewMode === 'icons' ? (
-          /* Grid View */
-          <div
-            className="media-grid-wrapper"
-            ref={itemListRef}
+          <MediaGridChrome
+            wrapperRef={itemListRef}
+            items={gridItems}
+            showBreadcrumb={!isMediaSearchActive && Boolean(gridFolderId)}
+            breadcrumbItems={gridBreadcrumb}
+            onSelectFolder={setGridFolderId}
             onMouseDown={handleMarqueeMouseDown}
-            onContextMenu={(e) => {
-              const target = e.target as HTMLElement;
-              if (!target.closest('.media-grid-item')) handleContextMenu(e);
-            }}
-            style={{ position: 'relative' }}
-          >
-            {/* Breadcrumb for folder navigation */}
-            {!isMediaSearchActive && gridFolderId && (
-              <div className="media-grid-breadcrumb">
-                {gridBreadcrumb.map((crumb, i) => (
-                  <React.Fragment key={crumb.id ?? 'root'}>
-                    {i > 0 && <span className="media-grid-breadcrumb-sep">/</span>}
-                    <button
-                      className={`media-grid-breadcrumb-btn ${i === gridBreadcrumb.length - 1 ? 'active' : ''}`}
-                      onClick={() => setGridFolderId(crumb.id)}
-                    >
-                      {crumb.name}
-                    </button>
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-            <div className="media-grid">
-              {gridItems.map(item => renderGridItem(item))}
-            </div>
-            {/* Marquee selection rectangle */}
-            {marquee && (() => {
-              const left = Math.min(marquee.startX, marquee.currentX);
-              const top = Math.min(marquee.startY, marquee.currentY);
-              const width = Math.abs(marquee.currentX - marquee.startX);
-              const height = Math.abs(marquee.currentY - marquee.startY);
-              if (width < 3 && height < 3) return null;
-              return (
-                <div
-                  className="media-marquee"
-                  style={{ left, top, width, height }}
-                />
-              );
-            })()}
-          </div>
+            onContextMenu={handleContextMenu}
+            renderItem={renderGridItem}
+            marquee={marquee}
+          />
         ) : (
           renderMediaBoardView()
         )}
       </div>
 
-      {isMediaBoardDeepZoomActive && !isGenerativeTrayExpanded ? null : (
-        <MediaAIGenerativeTray
-          expanded={isGenerativeTrayExpanded}
-          onExpandedChange={setGenerativeTrayExpanded}
-        />
-      )}
-
+      <MediaGenerationTrayMount
+        suppressed={isMediaBoardDeepZoomActive && !isGenerativeTrayExpanded}
+        expanded={isGenerativeTrayExpanded}
+        onExpandedChange={setGenerativeTrayExpanded}
+      />
       {/* Drop overlay - shown when dragging files from outside */}
       {isExternalDragOver && (
-        <div className="media-panel-drop-overlay">
-          <div className="drop-overlay-content">
-            <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            <span>Drop files or folders to import</span>
-          </div>
-        </div>
+        <MediaDropOverlay />
       )}
 
       {/* Context Menu */}
       {contextMenu && (() => {
         const multiSelect = selectedIds.length > 1;
-        const selectedItem = contextMenu.itemId
-          ? files.find(f => f.id === contextMenu.itemId) ||
-            compositions.find(c => c.id === contextMenu.itemId) ||
-            folders.find(f => f.id === contextMenu.itemId) ||
-            textItems.find(t => t.id === contextMenu.itemId) ||
-            solidItems.find(s => s.id === contextMenu.itemId) ||
-            meshItems.find(m => m.id === contextMenu.itemId) ||
-            cameraItems.find(c => c.id === contextMenu.itemId) ||
-            splatEffectorItems.find(e => e.id === contextMenu.itemId) ||
-            mathSceneItems.find(m => m.id === contextMenu.itemId) ||
-            motionShapeItems.find(m => m.id === contextMenu.itemId) ||
-            signalAssets.find(item => item.id === contextMenu.itemId)
-          : null;
-        const isMediaFile = selectedItem ? isImportedMediaFileItem(selectedItem) : false;
-        const mediaFile = isMediaFile ? (selectedItem as MediaFile) : null;
-        const isVideoFile = mediaFile?.type === 'video';
-        const isAudioFile = mediaFile?.type === 'audio';
-        const isImageFile = mediaFile?.type === 'image';
-        const isComposition = selectedItem && 'type' in selectedItem && selectedItem.type === 'composition';
-        const isSolidItem = selectedItem && 'type' in selectedItem && selectedItem.type === 'solid';
-        const composition = isComposition ? (selectedItem as Composition) : null;
-        const solidItem = isSolidItem ? (selectedItem as SolidItem) : null;
-        const contextSelectionIds = multiSelect && contextMenu.itemId && selectedIds.includes(contextMenu.itemId)
-          ? selectedIds
-          : contextMenu.itemId
-            ? [contextMenu.itemId]
-            : [];
-        const aiReferenceMediaFileIds = contextSelectionIds.filter((id) => {
-          const candidate = files.find((file) => file.id === id);
-          return isAiReferenceMediaFile(candidate);
+        const {
+          selectedItem,
+          mediaFile,
+          composition,
+          solidItem,
+        } = getMediaContextSelectedItemState({
+          itemId: contextMenu.itemId,
+          items: allProjectItems,
         });
-        const allContextMediaReferenced = aiReferenceMediaFileIds.length > 0
-          && aiReferenceMediaFileIds.every((id) => composerReferenceMediaFileIds.includes(id));
-        const isGenerating = mediaFile?.proxyStatus === 'generating';
-        const hasProxy = mediaFile?.proxyStatus === 'ready';
-        const hasAudio = mediaFileHasAudio(mediaFile);
-        const isAudioProxyGenerating = mediaFile?.audioProxyStatus === 'generating';
-        const hasAudioProxy = mediaFile?.audioProxyStatus === 'ready' || mediaFile?.hasProxyAudio === true;
-        const isSourceAudioAnalysisGenerating = mediaFile?.waveformStatus === 'generating';
-        const hasSourceWaveform = Boolean(mediaFile?.waveform?.length || mediaFile?.audioAnalysisRefs?.waveformPyramidId);
-        const hasSourceSpectrogram = Boolean(mediaFile?.audioAnalysisRefs?.spectrogramTileSetIds?.[0]);
-        const canRegenerateMediaArtifacts = Boolean(
-          mediaFile && (
-            isVideoFile ||
-            isAudioFile ||
-            isImageFile ||
-            hasAudio
-          )
-        );
-        // Available folders for "Move to Folder" submenu
-        const availableFolders = folders.filter(f => !selectedIds.includes(f.id));
-        const contextAnnotation = contextMenu.annotationId
-          ? mediaBoardAnnotations.find((annotation) => annotation.id === contextMenu.annotationId) ?? null
-          : null;
+        const contextActionState = getMediaContextActionState({
+          contextMenu,
+          multiSelect,
+          selectedIds,
+          files,
+          folders,
+          composerReferenceMediaFileIds,
+          mediaFile,
+          viewMode,
+        });
+        const annotationContextMenu = renderMediaAnnotationContextMenuMount({
+          annotationId: contextMenu.annotationId,
+          annotations: mediaBoardAnnotations,
+          colorOptions: MEDIA_BOARD_ANNOTATION_COLOR_OPTIONS,
+          menuRef: contextMenuRef,
+          x: contextMenuPosition?.x ?? contextMenu.x,
+          y: contextMenuPosition?.y ?? contextMenu.y,
+          onUpdateColor: (annotationId, target, value) => {
+            updateMediaBoardAnnotation(annotationId, { [target]: value });
+          },
+          onClose: closeContextMenu,
+        });
 
-        if (contextAnnotation) {
-          const renderAnnotationColorSubmenu = (
-            label: string,
-            target: 'backgroundColor' | 'textColor',
-          ) => (
-            <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-              <span>{label}</span>
-              <span className="submenu-arrow">&#9654;</span>
-              <div className="context-submenu media-board-annotation-color-submenu">
-                {MEDIA_BOARD_ANNOTATION_COLOR_OPTIONS.map((option) => {
-                  const selected = contextAnnotation[target] === option.value;
-                  return (
-                    <div
-                      key={`${target}-${option.value}`}
-                      className="context-menu-item media-board-annotation-color-item"
-                      onClick={() => {
-                        updateMediaBoardAnnotation(contextAnnotation.id, { [target]: option.value });
-                        closeContextMenu();
-                      }}
-                    >
-                      <span
-                        className="media-board-annotation-color-swatch"
-                        style={{ '--swatch-color': option.value } as React.CSSProperties}
-                      />
-                      <span>{option.label}{selected ? ' (current)' : ''}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-
-          return (
-            <div
-              ref={contextMenuRef}
-              className="media-context-menu"
-              style={{
-                position: 'fixed',
-                left: contextMenuPosition?.x ?? contextMenu.x,
-                top: contextMenuPosition?.y ?? contextMenu.y,
-                zIndex: 10000,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {renderAnnotationColorSubmenu('Background', 'backgroundColor')}
-              {renderAnnotationColorSubmenu('Text', 'textColor')}
-            </div>
-          );
+        if (annotationContextMenu) {
+          return annotationContextMenu;
         }
 
         return (
-          <div
-            ref={contextMenuRef}
-            className="media-context-menu"
-            style={{
-              position: 'fixed',
-              left: contextMenuPosition?.x ?? contextMenu.x,
-              top: contextMenuPosition?.y ?? contextMenu.y,
-              zIndex: 10000,
-            }}
-            onClick={(e) => e.stopPropagation()}
+          <MediaContextMenuFrame
+            menuRef={contextMenuRef}
+            x={contextMenuPosition?.x ?? contextMenu.x}
+            y={contextMenuPosition?.y ?? contextMenu.y}
           >
-            {viewMode === 'board' && contextMenu.boardPosition && !contextMenu.itemId && (
-              <>
-                <div className="context-menu-item" onClick={handleNewMediaBoardAnnotation}>
-                  <span>Annotation</span>
-                </div>
-                <div className="context-menu-separator" />
-              </>
-            )}
-            <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-              <span>Add</span>
-              <span className="submenu-arrow">&#9654;</span>
-              <div className="context-submenu">
-                <div className="context-menu-item" onClick={() => { handleNewComposition(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="composition" /></span>
-                  <span>Composition</span>
-                </div>
-                <div className="context-menu-item" onClick={() => { handleNewFolder(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><span className="media-folder-icon">&#128193;</span></span>
-                  <span>Folder</span>
-                </div>
-                <div className="context-menu-separator" />
-                <div className="context-menu-item" onClick={() => { handleNewText(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="text" /></span>
-                  <span>Text</span>
-                </div>
-                <div className="context-menu-item" onClick={() => { handleNewSolid(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
-                  <span>Solid</span>
-                </div>
-                <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                  <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
-                  <span>3D</span>
-                  <span className="submenu-arrow">&#9654;</span>
-                  <div className="context-submenu">
-                    <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                      <span className="context-menu-icon"><FileTypeIcon type="mesh" /></span>
-                      <span>Mesh</span>
-                      <span className="submenu-arrow">&#9654;</span>
-                      <div className="context-submenu">
-                        {(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone'] as const).map(meshType => (
-                          <div key={meshType} className="context-menu-item" onClick={() => { handleNewMesh(meshType); closeContextMenu(); }}>
-                            {meshType.charAt(0).toUpperCase() + meshType.slice(1)}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="context-menu-item" onClick={() => { handleNewText3D(); closeContextMenu(); }}>
-                      <span className="context-menu-icon"><FileTypeIcon type="text-3d" /></span>
-                      <span>3D Text</span>
-                    </div>
-                    <div className="context-menu-item" onClick={() => { handleNewCamera(); closeContextMenu(); }}>
-                      <span className="context-menu-icon"><FileTypeIcon type="camera" /></span>
-                      <span>Camera</span>
-                    </div>
-                    <div className="context-menu-item" onClick={() => { handleNewSplatEffector(); closeContextMenu(); }}>
-                      <span className="context-menu-icon"><FileTypeIcon type="splat-effector" /></span>
-                      <span>3D Effector</span>
-                    </div>
-                    <div className="context-menu-item" onClick={() => { handleImportGaussianSplat(); closeContextMenu(); }}>
-                      <span className="context-menu-icon"><FileTypeIcon type="gaussian-splat" /></span>
-                      <span>Gaussian Splat</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="context-menu-separator" />
-                <div className="context-menu-item" onClick={() => { handleNewMathScene(); closeContextMenu(); }}>
-                  <span className="context-menu-icon"><FileTypeIcon type="math-scene" /></span>
-                  <span>Math Scene</span>
-                </div>
-                <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                  <span className="context-menu-icon"><FileTypeIcon type="motion-shape" /></span>
-                  <span>Motion Shape</span>
-                  <span className="submenu-arrow">&#9654;</span>
-                  <div className="context-submenu">
-                    <div className="context-menu-item" onClick={() => { handleNewMotionShape('rectangle'); closeContextMenu(); }}>
-                      Rectangle
-                    </div>
-                    <div className="context-menu-item" onClick={() => { handleNewMotionShape('ellipse'); closeContextMenu(); }}>
-                      Ellipse
-                    </div>
-                  </div>
-                </div>
-                <div className="context-menu-separator" />
-                <div className="context-menu-item disabled" onClick={closeContextMenu}>
-                  <span className="context-menu-icon"><FileTypeIcon type="solid" /></span>
-                  <span>Adjustment Layer</span>
-                  <span className="context-menu-hint">Coming soon</span>
-                </div>
-              </div>
-            </div>
-            <div className="context-menu-item" onClick={handleImport}>
-              Import Media...
-            </div>
-            {hasMediaClipboard() && (
-              <div className="context-menu-item" onClick={handlePasteItems}>
-                Paste
-              </div>
-            )}
-            {(contextMenu.itemId || multiSelect) && (
-              <>
-                <div className="context-menu-separator" />
-
-                {aiReferenceMediaFileIds.length > 0 && (
-                  <div
-                    className="context-menu-item"
-                    onClick={() => handleToggleAiPromptReferences(aiReferenceMediaFileIds)}
-                  >
-                    {allContextMediaReferenced ? 'Unreference from AI Prompt' : 'Reference in AI Prompt'}
-                    {aiReferenceMediaFileIds.length > 1 ? ` (${aiReferenceMediaFileIds.length})` : ''}
-                  </div>
-                )}
-
-                {/* Rename - only for single selection */}
-                {!multiSelect && selectedItem && (
-                  <div className="context-menu-item" onClick={() => {
-                    startRename(selectedItem.id, selectedItem.name);
-                  }}>
-                    Rename
-                  </div>
-                )}
-
-                {/* Move to Folder submenu */}
-                {availableFolders.length > 0 && (
-                  <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                    <span>Move to Folder{multiSelect ? ` (${selectedIds.length})` : ''}</span>
-                    <span className="submenu-arrow">▶</span>
-                    <div className="context-submenu">
-                      <div
-                        className="context-menu-item"
-                        onClick={() => {
-                          moveToFolder(selectedIds, null);
-                          closeContextMenu();
-                        }}
-                      >
-                        Root (no folder)
-                      </div>
-                      <div className="context-menu-separator" />
-                      {availableFolders.map(folder => (
-                        <div
-                          key={folder.id}
-                          className="context-menu-item"
-                          onClick={() => {
-                            moveToFolder(selectedIds, folder.id);
-                            closeContextMenu();
-                          }}
-                        >
-                          {folder.name}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Composition Settings - only for single composition */}
-                {!multiSelect && isComposition && composition && (
-                  <div className="context-menu-item" onClick={() => openCompositionSettings(composition)}>
-                    Composition Settings...
-                  </div>
-                )}
-
-                {/* Solid Settings - only for single solid */}
-                {!multiSelect && isSolidItem && solidItem && (
-                  <div className="context-menu-item" onClick={() => {
-                    setSolidSettingsDialog({
-                      solidItemId: solidItem.id,
-                      width: solidItem.width,
-                      height: solidItem.height,
-                      color: solidItem.color,
-                    });
-                    closeContextMenu();
-                  }}>
-                    Solid Settings...
-                  </div>
-                )}
-
-                {/* Regenerate cached artifacts - only for single media files */}
-                {!multiSelect && canRegenerateMediaArtifacts && mediaFile && (
-                  <>
-                    <div className="context-menu-separator" />
-                    <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                      <span>Regenerate</span>
-                      <span className="submenu-arrow">â–¶</span>
-                      <div className="context-submenu">
-                        {isVideoFile && (
-                          <div
-                            className={`context-menu-item ${!mediaFile.file && !isGenerating ? 'disabled' : ''}`}
-                            onClick={() => {
-                              if (!mediaFile.file && !isGenerating) return;
-                              if (isGenerating) {
-                                cancelProxyGeneration(mediaFile.id);
-                              } else {
-                                generateProxy(mediaFile.id, { force: hasProxy });
-                              }
-                              closeContextMenu();
-                            }}
-                          >
-                            {isGenerating
-                              ? `Stop Proxy Generation (${mediaFile.proxyProgress || 0}%)`
-                              : `Proxy${hasProxy ? ' (ready)' : ''}`}
-                          </div>
-                        )}
-                        {(isVideoFile || isImageFile) && (
-                          <div
-                            className="context-menu-item"
-                            onClick={() => handleRegenerateMediaThumbnails(mediaFile)}
-                          >
-                            Thumbnails{mediaFile.thumbnailUrl ? ' (ready)' : ''}
-                          </div>
-                        )}
-                        {hasAudio && (
-                          <div
-                            className={`context-menu-item ${isAudioProxyGenerating ? 'disabled' : ''}`}
-                            onClick={() => {
-                              if (isAudioProxyGenerating) return;
-                              handleRegenerateMediaAudioProxy(mediaFile, hasAudioProxy);
-                            }}
-                          >
-                            WAV Audio Proxy
-                            {isAudioProxyGenerating
-                              ? ` (${mediaFile.audioProxyProgress || 0}%)`
-                              : hasAudioProxy
-                              ? ' (ready)'
-                              : ''}
-                          </div>
-                        )}
-                        {hasAudio && (
-                          <div
-                            className={`context-menu-item ${isSourceAudioAnalysisGenerating ? 'disabled' : ''}`}
-                            onClick={() => {
-                              if (isSourceAudioAnalysisGenerating) return;
-                              handleRegenerateMediaWaveform(mediaFile);
-                            }}
-                          >
-                            Waveform
-                            {isSourceAudioAnalysisGenerating
-                              ? ` (${Math.round(mediaFile.waveformProgress || 0)}%)`
-                              : hasSourceWaveform
-                              ? ' (ready)'
-                              : ''}
-                          </div>
-                        )}
-                        {hasAudio && (
-                          <div
-                            className={`context-menu-item ${isSourceAudioAnalysisGenerating ? 'disabled' : ''}`}
-                            onClick={() => {
-                              if (isSourceAudioAnalysisGenerating) return;
-                              handleRegenerateMediaSpectrogram(mediaFile);
-                            }}
-                          >
-                            Spectral{hasSourceSpectrogram ? ' (ready)' : ''}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Show in Explorer submenu - only for single video with file */}
-                {!multiSelect && isVideoFile && mediaFile?.file && (
-                  <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
-                    <span>Show in Explorer</span>
-                    <span className="submenu-arrow">▶</span>
-                    <div className="context-submenu">
-                      <div
-                        className="context-menu-item"
-                        onClick={async () => {
-                          const result = await showInExplorer('raw', mediaFile.id);
-                          if (result.success) {
-                            alert(result.message);
-                          } else {
-                            if (mediaFile.file) {
-                              const url = URL.createObjectURL(mediaFile.file);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = mediaFile.name;
-                              document.body.appendChild(a);
-                              a.click();
-                              document.body.removeChild(a);
-                              URL.revokeObjectURL(url);
-                            }
-                          }
-                          closeContextMenu();
-                        }}
-                      >
-                        Raw {mediaFile.hasFileHandle && '(has path)'}
-                      </div>
-                      <div
-                        className={`context-menu-item ${!hasProxy ? 'disabled' : ''}`}
-                        onClick={async () => {
-                          if (hasProxy) {
-                            const result = await showInExplorer('proxy', mediaFile.id);
-                            alert(result.message);
-                          }
-                          closeContextMenu();
-                        }}
-                      >
-                        Proxy {!hasProxy ? '(not available)' : proxyFolderName ? `(${proxyFolderName})` : '(IndexedDB)'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Set Proxy Folder - for single video */}
-                {!multiSelect && isVideoFile && (
-                  <div
-                    className="context-menu-item"
-                    onClick={async () => {
-                      await pickProxyFolder();
-                      closeContextMenu();
-                    }}
-                  >
-                    Set Proxy Folder... {proxyFolderName && `(${proxyFolderName})`}
-                  </div>
-                )}
-
-                <div className="context-menu-separator" />
-                <div className="context-menu-item" onClick={handleCopySelected}>
-                  Copy{multiSelect ? ` (${selectedIds.length} items)` : ''}
-                </div>
-                <div className="context-menu-item" onClick={handleDuplicateSelected}>
-                  Duplicate{multiSelect ? ` (${selectedIds.length} items)` : ''}
-                </div>
-                <div className="context-menu-separator" />
-                <div className="context-menu-item danger" onClick={handleDelete}>
-                  Delete{multiSelect ? ` (${selectedIds.length} items)` : ''}
-                </div>
-              </>
-            )}
-          </div>
+            <MediaContextActionsMenu
+              showBoardAnnotationAction={contextActionState.showBoardAnnotationAction}
+              hasClipboard={hasMediaClipboard()}
+              hasSelection={Boolean(contextMenu.itemId || multiSelect)}
+              multiSelect={multiSelect}
+              selectedCount={selectedIds.length}
+              selectedItem={selectedItem}
+              selectedIds={selectedIds}
+              availableFolders={contextActionState.availableFolders}
+              aiReferenceMediaFileIds={contextActionState.aiReferenceMediaFileIds}
+              allContextMediaReferenced={contextActionState.allContextMediaReferenced}
+              composition={composition}
+              solidItem={solidItem}
+              mediaFile={mediaFile}
+              canRegenerateMediaArtifacts={contextActionState.canRegenerateMediaArtifacts}
+              isVideoFile={contextActionState.isVideoFile}
+              isImageFile={contextActionState.isImageFile}
+              isGenerating={contextActionState.isGenerating}
+              hasProxy={contextActionState.hasProxy}
+              hasAudio={contextActionState.hasAudio}
+              isAudioProxyGenerating={contextActionState.isAudioProxyGenerating}
+              hasAudioProxy={contextActionState.hasAudioProxy}
+              isSourceAudioAnalysisGenerating={contextActionState.isSourceAudioAnalysisGenerating}
+              hasSourceWaveform={contextActionState.hasSourceWaveform}
+              hasSourceSpectrogram={contextActionState.hasSourceSpectrogram}
+              proxyFolderName={proxyFolderName}
+              onNewBoardAnnotation={handleNewMediaBoardAnnotation}
+              onClose={closeContextMenu}
+              onImport={handleImport}
+              onPaste={handlePasteItems}
+              onToggleAiPromptReferences={handleToggleAiPromptReferences}
+              onStartRename={startRename}
+              onMoveToFolder={mediaContextLocalHandlers.onMoveToFolder}
+              onOpenCompositionSettings={openCompositionSettings}
+              onOpenSolidSettings={mediaContextLocalHandlers.onOpenSolidSettings}
+              onCancelProxyGeneration={cancelProxyGeneration}
+              onGenerateProxy={generateProxy}
+              onRegenerateThumbnails={handleRegenerateMediaThumbnails}
+              onRegenerateAudioProxy={handleRegenerateMediaAudioProxy}
+              onRegenerateWaveform={handleRegenerateMediaWaveform}
+              onRegenerateSpectrogram={handleRegenerateMediaSpectrogram}
+              onShowRawInExplorer={mediaContextExplorerHandlers.onShowRawInExplorer}
+              onShowProxyInExplorer={mediaContextExplorerHandlers.onShowProxyInExplorer}
+              onPickProxyFolder={mediaContextExplorerHandlers.onPickProxyFolder}
+              onCopy={handleCopySelected}
+              onDuplicate={handleDuplicateSelected}
+              onDelete={handleDelete}
+              onNewComposition={handleNewComposition}
+              onNewFolder={handleNewFolder}
+              onNewText={handleNewText}
+              onNewSolid={handleNewSolid}
+              onNewMesh={handleNewMesh}
+              onNewText3D={handleNewText3D}
+              onNewCamera={handleNewCamera}
+              onNewSplatEffector={handleNewSplatEffector}
+              onImportGaussianSplat={handleImportGaussianSplat}
+              onNewMathScene={handleNewMathScene}
+              onNewMotionShape={handleNewMotionShape}
+            />          </MediaContextMenuFrame>
         );
       })()}
 
@@ -6085,11 +4755,4 @@ export function MediaPanel() {
       )}
     </div>
   );
-}
-
-// Format duration as mm:ss
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }

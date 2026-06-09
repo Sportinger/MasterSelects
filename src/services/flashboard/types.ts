@@ -5,18 +5,18 @@ import type {
   FlashBoardService,
 } from '../../stores/flashboardStore/types';
 
-export interface SubmitNodeJobInput {
-  nodeId: string;
+export interface SubmitGenerationJobInput {
+  recordId: string;
   request: FlashBoardGenerationRequest;
 }
 
-export interface SubmitNodeJobResult {
-  nodeId: string;
+export interface SubmitGenerationJobResult {
+  recordId: string;
   remoteTaskId?: string;
 }
 
 export interface ImportGeneratedMediaInput {
-  nodeId: string;
+  recordId: string;
   file: File;
   mediaType: FlashBoardMediaType;
   metadata: {

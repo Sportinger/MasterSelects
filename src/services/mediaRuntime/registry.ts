@@ -595,4 +595,19 @@ export function createFrameHandle(params: {
   return new MediaRuntimeFrameHandle(params);
 }
 
-export const mediaRuntimeRegistry = new DefaultMediaRuntimeRegistry();
+let mediaRuntimeRegistryInstance: MediaRuntimeRegistry = new DefaultMediaRuntimeRegistry();
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  const hotData = (import.meta.hot.data ?? {}) as {
+    mediaRuntimeRegistry?: MediaRuntimeRegistry;
+  };
+  if (hotData.mediaRuntimeRegistry) {
+    mediaRuntimeRegistryInstance = hotData.mediaRuntimeRegistry;
+  }
+  import.meta.hot.dispose((data) => {
+    data.mediaRuntimeRegistry = mediaRuntimeRegistryInstance;
+  });
+}
+
+export const mediaRuntimeRegistry = mediaRuntimeRegistryInstance;

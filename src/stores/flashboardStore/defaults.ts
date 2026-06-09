@@ -23,7 +23,6 @@ export const DEFAULT_ELEVENLABS_VOICE_SETTINGS: Required<FlashBoardVoiceSettings
 
 export function createDefaultFlashBoardComposer(): FlashBoardComposerState {
   return {
-    draftNodeId: null,
     isOpen: false,
     service: DEFAULT_FLASHBOARD_SERVICE,
     providerId: DEFAULT_FLASHBOARD_PROVIDER_ID,

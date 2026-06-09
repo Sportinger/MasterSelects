@@ -7,7 +7,7 @@ import { useDockStore } from '../stores/dockStore';
 import { useFlashBoardStore } from '../stores/flashboardStore';
 import { useExportStore } from '../stores/exportStore';
 import type {
-  FlashBoard,
+  FlashBoardActiveGenerationRecord,
   FlashBoardComposerState,
   FlashBoardJobState,
 } from '../stores/flashboardStore';
@@ -69,20 +69,13 @@ function normalizeFlashBoardJobForHistory(job?: FlashBoardJobState) {
   };
 }
 
-function normalizeFlashBoardBoardsForHistory(boards: FlashBoard[]) {
-  return boards.map((board) => ({
-    id: board.id,
-    name: board.name,
-    viewport: board.viewport,
-    nodes: board.nodes.map((node) => ({
-      id: node.id,
-      kind: node.kind,
-      position: node.position,
-      size: node.size,
-      request: node.request ?? null,
-      result: node.result ?? null,
-      job: normalizeFlashBoardJobForHistory(node.job),
-    })),
+function normalizeFlashBoardRecordsForHistory(records: FlashBoardActiveGenerationRecord[]) {
+  return records.map((record) => ({
+    id: record.id,
+    kind: record.kind,
+    request: record.request ?? null,
+    result: record.result ?? null,
+    job: normalizeFlashBoardJobForHistory(record.job),
   }));
 }
 
@@ -503,27 +496,24 @@ export function useGlobalHistory() {
 
     const unsubFlashBoard = useFlashBoardStore.subscribe(
       (state) => ({
-        activeBoardId: state.activeBoardId,
-        boards: state.boards,
+        activeGenerationRecords: state.activeGenerationRecords,
         composer: state.composer,
       }),
       (curr, prev) => {
         if (isHistoryCaptureSuppressed()) return;
 
-        if (curr.activeBoardId !== prev.activeBoardId) {
-          debouncedCapture('Switch board');
-        } else if (
+        if (
           curr.composer !== prev.composer &&
           JSON.stringify(normalizeFlashBoardComposerForHistory(curr.composer)) !==
             JSON.stringify(normalizeFlashBoardComposerForHistory(prev.composer))
         ) {
           debouncedCapture('Modify composer');
         } else if (
-          curr.boards !== prev.boards &&
-          JSON.stringify(normalizeFlashBoardBoardsForHistory(curr.boards)) !==
-            JSON.stringify(normalizeFlashBoardBoardsForHistory(prev.boards))
+          curr.activeGenerationRecords !== prev.activeGenerationRecords &&
+          JSON.stringify(normalizeFlashBoardRecordsForHistory(curr.activeGenerationRecords)) !==
+            JSON.stringify(normalizeFlashBoardRecordsForHistory(prev.activeGenerationRecords))
         ) {
-          debouncedCapture('Modify board');
+          debouncedCapture('Modify generation records');
         }
       },
       { equalityFn: shallowEqual, fireImmediately: false }

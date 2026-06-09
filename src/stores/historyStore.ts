@@ -37,7 +37,7 @@ import type {
   ProjectHistoryState,
 } from '../types/history';
 import type {
-  FlashBoard,
+  FlashBoardActiveGenerationRecord,
   FlashBoardComposerState,
   FlashBoardGenerationMetadata,
 } from './flashboardStore/types';
@@ -158,10 +158,9 @@ interface StateSnapshot {
     layout: DockLayout | null;
   };
 
-  // FlashBoard state (boards + active board + composer config + generated-media metadata)
+  // FlashBoard state (active generation records + composer config + generated-media metadata)
   flashboard: {
-    activeBoardId: string | null;
-    boards: FlashBoard[];
+    activeGenerationRecords: FlashBoardActiveGenerationRecord[];
     composer: FlashBoardComposerState;
     generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata>;
   };
@@ -274,9 +273,8 @@ interface DockStoreSnapshot {
 }
 
 interface FlashBoardStoreSnapshot {
-  activeBoardId: string | null;
-  boards: FlashBoard[];
-  selectedNodeIds: string[];
+  activeGenerationRecords: FlashBoardActiveGenerationRecord[];
+  selectedActiveGenerationRecordIds: string[];
   composer: FlashBoardComposerState;
 }
 
@@ -996,15 +994,13 @@ function createDockSnapshot(): StateSnapshot['dock'] {
 
 function createFlashBoardSnapshot(): StateSnapshot['flashboard'] {
   const flashboard = getFlashBoardState?.() || {
-    activeBoardId: null,
-    boards: [],
-    selectedNodeIds: [],
+    activeGenerationRecords: [],
+    selectedActiveGenerationRecordIds: [],
     composer: createDefaultFlashBoardComposer(),
   };
 
   return {
-    activeBoardId: flashboard.activeBoardId ?? null,
-    boards: deepClone(flashboard.boards || []),
+    activeGenerationRecords: deepClone(flashboard.activeGenerationRecords || []),
     composer: deepClone(flashboard.composer || createDefaultFlashBoardComposer()),
     generationMetadataByMediaId: deepClone(flashBoardMediaBridge.serializeMetadata()),
   };
@@ -1129,9 +1125,8 @@ function applySnapshot(snapshot: StateSnapshot) {
 
   if (setFlashBoardState) {
     setFlashBoardState({
-      activeBoardId: snapshot.flashboard?.activeBoardId ?? null,
-      boards: deepClone(snapshot.flashboard?.boards || []),
-      selectedNodeIds: [],
+      activeGenerationRecords: deepClone(snapshot.flashboard?.activeGenerationRecords || []),
+      selectedActiveGenerationRecordIds: [],
       composer: deepClone(snapshot.flashboard?.composer || createDefaultFlashBoardComposer()),
     });
   }

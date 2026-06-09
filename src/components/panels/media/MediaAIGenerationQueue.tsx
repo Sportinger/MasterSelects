@@ -1,7 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
-import { useFlashBoardStore } from '../../../stores/flashboardStore';
+import {
+  useFlashBoardActiveGenerationRecords,
+  useRemoveFlashBoardActiveGenerationRecord,
+  type FlashBoardActiveGenerationRecord,
+} from '../../../stores/flashboardStore/activeGenerationRecords';
 import { useMediaStore, type MediaFile } from '../../../stores/mediaStore';
-import type { FlashBoardGenerationRequest, FlashBoardNode } from '../../../stores/flashboardStore/types';
+import type { FlashBoardGenerationRequest } from '../../../stores/flashboardStore/types';
 import { useMediaDownloadStore, type MediaDownloadJob } from '../../../stores/mediaDownloadStore';
 
 const VISIBLE_QUEUE_STATUSES = new Set(['queued', 'processing', 'completed', 'failed', 'canceled']);
@@ -9,7 +13,7 @@ const MAX_VISIBLE_GENERATIONS = 6;
 const MEDIA_QUEUE_FLY_MS = 620;
 
 type MediaQueueItem =
-  | { kind: 'generation'; id: string; createdAt: number; node: FlashBoardNode }
+  | { kind: 'generation'; id: string; createdAt: number; record: FlashBoardActiveGenerationRecord }
   | { kind: 'download'; id: string; createdAt: number; job: MediaDownloadJob };
 
 function formatElapsedDuration(durationMs: number): string {
@@ -25,7 +29,7 @@ function formatElapsedRange(startedAt: number, endedAt: number): string {
 }
 
 function getStatusLabel(
-  status: NonNullable<FlashBoardNode['job']>['status'] | MediaDownloadJob['status'] | undefined,
+  status: NonNullable<FlashBoardActiveGenerationRecord['job']>['status'] | MediaDownloadJob['status'] | undefined,
   kind: MediaQueueItem['kind'] = 'generation',
 ): string {
   switch (status) {
@@ -250,8 +254,8 @@ async function animateCardToMediaTarget(source: HTMLElement, mediaFileId: string
 }
 
 function MediaAIGenerationQueueImpl() {
-  const boards = useFlashBoardStore((state) => state.boards);
-  const removeNode = useFlashBoardStore((state) => state.removeNode);
+  const generationRecords = useFlashBoardActiveGenerationRecords();
+  const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
   const downloadJobs = useMediaDownloadStore((state) => state.jobs);
   const dismissDownloadJob = useMediaDownloadStore((state) => state.dismissJob);
   const retryDownloadJob = useMediaDownloadStore((state) => state.retryJob);
@@ -261,19 +265,17 @@ function MediaAIGenerationQueueImpl() {
   const [flyingItemIds, setFlyingItemIds] = useState<Set<string>>(() => new Set());
   const flyingItemIdsRef = useRef<Set<string>>(new Set());
 
-  const generationItems = useMemo<MediaQueueItem[]>(() => boards
-    .flatMap((board) => board.nodes)
-    .filter((node) => (
-      node.kind === 'generation'
-      && node.request
-      && VISIBLE_QUEUE_STATUSES.has(node.job?.status ?? '')
+  const generationItems = useMemo<MediaQueueItem[]>(() => generationRecords
+    .filter((record) => (
+      record.request
+      && VISIBLE_QUEUE_STATUSES.has(record.job?.status ?? '')
     ))
-    .map((node) => ({
+    .map((record) => ({
       kind: 'generation' as const,
-      id: node.id,
-      createdAt: node.createdAt,
-      node,
-    })), [boards]);
+      id: record.id,
+      createdAt: record.createdAt,
+      record,
+    })), [generationRecords]);
 
   const downloadItems = useMemo<MediaQueueItem[]>(() => downloadJobs
     .filter((job) => VISIBLE_QUEUE_STATUSES.has(job.status))
@@ -289,7 +291,7 @@ function MediaAIGenerationQueueImpl() {
     .slice(0, MAX_VISIBLE_GENERATIONS), [downloadItems, generationItems]);
 
   const hasRunningItem = items.some((item) => {
-    const status = item.kind === 'generation' ? item.node.job?.status : item.job.status;
+    const status = item.kind === 'generation' ? item.record.job?.status : item.job.status;
     return status === 'queued' || status === 'processing';
   });
 
@@ -335,17 +337,17 @@ function MediaAIGenerationQueueImpl() {
     <div className="media-ai-generation-queue" aria-label="Media task queue">
       {items.map((item) => {
         const isDownload = item.kind === 'download';
-        const node = item.kind === 'generation' ? item.node : null;
+        const record = item.kind === 'generation' ? item.record : null;
         const job = item.kind === 'download' ? item.job : null;
-        const request = node?.request;
+        const request = record?.request;
         if (!isDownload && !request) return null;
 
-        const status = isDownload ? job!.status : node!.job?.status;
-        const rawProgress = isDownload ? job!.progress : node!.job?.progress;
+        const status = isDownload ? job!.status : record!.job?.status;
+        const rawProgress = isDownload ? job!.progress : record!.job?.progress;
         const progress = typeof rawProgress === 'number'
           ? Math.max(0, Math.min(1, rawProgress))
           : null;
-        const mediaFileId = isDownload ? job!.mediaFileId : node!.result?.mediaFileId;
+        const mediaFileId = isDownload ? job!.mediaFileId : record!.result?.mediaFileId;
         const generatedMedia = mediaFileId
           ? mediaFilesById.get(mediaFileId)
           : undefined;
@@ -354,8 +356,8 @@ function MediaAIGenerationQueueImpl() {
           : status === 'completed'
             ? getGeneratedPreviewUrl(generatedMedia)
             : undefined;
-        const startedAt = isDownload ? job!.startedAt : node!.job?.startedAt;
-        const completedAt = isDownload ? job!.completedAt : node!.job?.completedAt;
+        const startedAt = isDownload ? job!.startedAt : record!.job?.startedAt;
+        const completedAt = isDownload ? job!.completedAt : record!.job?.completedAt;
         const hasGenerationTimer = (status === 'processing' || status === 'completed') && Boolean(startedAt);
         const queueTimerLabel = formatElapsedRange(item.createdAt, hasGenerationTimer && startedAt ? startedAt : now);
         const generationTimerLabel = hasGenerationTimer && startedAt
@@ -376,7 +378,7 @@ function MediaAIGenerationQueueImpl() {
           if (isDownload) {
             dismissDownloadJob(itemId);
           } else {
-            removeNode(itemId);
+            removeGenerationRecord(itemId);
           }
         };
         const handleClick = (event: MouseEvent<HTMLDivElement>) => {
@@ -401,7 +403,7 @@ function MediaAIGenerationQueueImpl() {
         const outputLabel = isDownload ? 'Download' : getOutputLabel(request!);
         const metaLabel = isDownload ? getDownloadMetaLabel(job!) : getMetaLabel(request!);
         const aspectRatio = isDownload ? '16 / 9' : getPreviewAspectRatio(request!);
-        const error = isDownload ? job!.error : node!.job?.error;
+        const error = isDownload ? job!.error : record!.job?.error;
 
         return (
           <div

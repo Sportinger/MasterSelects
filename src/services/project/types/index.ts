@@ -6,11 +6,13 @@ export type {
   ProjectSignalAssetItemState,
   ProjectSignalState,
   ProjectMIDIState,
-  ProjectYouTubeVideo,
-  ProjectYouTubeState,
 } from './project.types';
 
 export type { ProjectMediaFile } from './media.types';
+export type * from './schema.types';
+export type * from './clip-payload.types';
+export type * from './export.types';
+export type * from './flashboard.types';
 
 export type {
   ProjectComposition,

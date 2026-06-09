@@ -4,63 +4,38 @@ import type { FlashBoardStoreState } from '../../src/stores/flashboardStore/type
 
 function createState(): FlashBoardStoreState {
   return {
-    activeBoardId: 'board-1',
-    boards: [
+    activeGenerationRecords: [
       {
-        id: 'board-1',
-        name: 'Board 1',
+        id: 'gen-1',
+        kind: 'generation',
         createdAt: 1,
         updatedAt: 1,
-        viewport: { zoom: 1, panX: 0, panY: 0 },
-        nodes: [
-          {
-            id: 'gen-1',
-            kind: 'generation',
-            createdAt: 1,
-            updatedAt: 1,
-            position: { x: 0, y: 0 },
-            size: { width: 280, height: 157.5 },
-            request: {
-              service: 'kieai',
-              providerId: 'kling-3.0',
-              version: '3.0',
-              prompt: 'Prompt',
-              referenceMediaFileIds: ['frame-ref-1'],
-              startMediaFileId: 'frame-start-1',
-              endMediaFileId: 'frame-end-1',
-            },
-          },
-        ],
+        request: {
+          service: 'kieai',
+          providerId: 'kling-3.0',
+          version: '3.0',
+          prompt: 'Prompt',
+          referenceMediaFileIds: ['frame-ref-1'],
+          startMediaFileId: 'frame-start-1',
+          endMediaFileId: 'frame-end-1',
+        },
       },
       {
-        id: 'board-2',
-        name: 'Board 2',
+        id: 'gen-2',
+        kind: 'generation',
         createdAt: 1,
         updatedAt: 1,
-        viewport: { zoom: 1, panX: 0, panY: 0 },
-        nodes: [
-          {
-            id: 'gen-2',
-            kind: 'generation',
-            createdAt: 1,
-            updatedAt: 1,
-            position: { x: 0, y: 0 },
-            size: { width: 280, height: 157.5 },
-            request: {
-              service: 'kieai',
-              providerId: 'kling-3.0',
-              version: '3.0',
-              prompt: 'Other board',
-              referenceMediaFileIds: ['frame-other-board'],
-            },
-          },
-        ],
+        request: {
+          service: 'kieai',
+          providerId: 'kling-3.0',
+          version: '3.0',
+          prompt: 'Second active record',
+          referenceMediaFileIds: ['frame-second-record'],
+        },
       },
     ],
-    selectedNodeIds: [],
-    viewMode: 'board',
+    selectedActiveGenerationRecordIds: [],
     composer: {
-      draftNodeId: null,
       isOpen: false,
       generateAudio: false,
       multiShots: false,
@@ -69,11 +44,12 @@ function createState(): FlashBoardStoreState {
       endMediaFileId: 'frame-end-2',
       referenceMediaFileIds: ['frame-ref-1', 'frame-ref-2'],
     },
+    hoveredComposerReference: null,
   };
 }
 
 describe('selectActiveBoardReferenceUsageByMediaFileId', () => {
-  it('combines active board references with composer references', () => {
+  it('combines active generation record references with composer references', () => {
     const state = createState();
     const usage = selectActiveBoardReferenceUsageByMediaFileId(state);
     const cachedUsage = selectActiveBoardReferenceUsageByMediaFileId(state);
@@ -111,9 +87,13 @@ describe('selectActiveBoardReferenceUsageByMediaFileId', () => {
     expect(cachedUsage).toBe(usage);
   });
 
-  it('ignores generation references from inactive boards', () => {
+  it('includes references from every active generation record', () => {
     const usage = selectActiveBoardReferenceUsageByMediaFileId(createState());
 
-    expect(usage['frame-other-board']).toBeUndefined();
+    expect(usage['frame-second-record']).toEqual({
+      start: false,
+      end: false,
+      reference: true,
+    });
   });
 });

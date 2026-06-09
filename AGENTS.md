@@ -311,6 +311,11 @@ High-level rules:
   packets.
 - Up to 6 worker agents may run in parallel only when write sets and shared hubs
   are disjoint.
+- Doppelspitze is disabled for this repository. Do not use the Doppelspitze
+  MCP, skill, agent bus, file-lock bus, `lead-a`/`lead-b` coordination, or
+  Doppelspitze handoff/logging here unless the user explicitly re-enables it.
+  Coordinate through the checklist, active queue, normal chat updates, and
+  bounded packet docs instead.
 - Do not do broad unscoped source refactors. Every source change needs a lane,
   write set, forbidden files, gate/check, and short report.
 - If a needed gate, contract, or write set is missing, define the smallest
@@ -326,6 +331,14 @@ High-level rules:
   types, and cross-domain schema tiers.
 - Use focused gate checks and smokes during implementation; full build/lint/test
   follows the normal rules above.
+- Keep refactor bookkeeping lean: use the checklist as the user-visible status
+  source, avoid duplicating packet history across docs, and rerun broad
+  architecture/smoke checks only when the packet changes the covered contract or
+  reaches a coherent verification boundary.
+- Keep `execution-queue-and-lanes.md` as an active queue, not a full history
+  archive. It should hold the active packet plus only the next few queued
+  packets; completed packets should collapse to checklist status and any
+  reusable check profile instead of leaving long repeated packet specs.
 
 Timeline-specific refactor details are no longer kept here. For reopened
 timeline architecture work, read the completed timeline refactor docs under

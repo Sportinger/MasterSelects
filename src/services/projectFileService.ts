@@ -6,7 +6,6 @@ export {
   projectFileService,
   type ProjectFile,
   type ProjectSettings,
-  type ProjectYouTubeVideo,
   type ProjectMediaFile,
   type ProjectComposition,
   type ProjectTrack,

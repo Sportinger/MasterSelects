@@ -27,7 +27,7 @@ export function hasMeaningfulContent(project: ProjectFile): boolean {
     || project.compositions.length > 1
     || clipCount(project) > 0
     || generatedItemCount(project) > 0
-    || Boolean(project.flashboard?.boards?.some((board) => board.nodes.length > 0));
+    || Boolean(project.flashboard?.generationRecords.length);
 }
 
 export function looksLikeFreshEmptyProject(project: ProjectFile): boolean {

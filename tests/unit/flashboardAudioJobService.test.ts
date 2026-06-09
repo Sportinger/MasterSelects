@@ -60,7 +60,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     });
 
     const completed = new Promise<Parameters<Parameters<typeof flashBoardJobService.setUpdateCallback>[0]>[1]>((resolve, reject) => {
-      flashBoardJobService.setUpdateCallback((_nodeId, update) => {
+      flashBoardJobService.setUpdateCallback((_recordId, update) => {
         if (update.status === 'completed') {
           resolve(update);
         }
@@ -71,7 +71,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     });
 
     flashBoardJobService.submit({
-      nodeId: 'node-audio',
+      recordId: 'record-audio',
       request: {
         service: 'elevenlabs',
         providerId: 'elevenlabs-tts',
@@ -118,7 +118,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     });
 
     const completed = new Promise<Parameters<Parameters<typeof flashBoardJobService.setUpdateCallback>[0]>[1]>((resolve, reject) => {
-      flashBoardJobService.setUpdateCallback((_nodeId, update) => {
+      flashBoardJobService.setUpdateCallback((_recordId, update) => {
         if (update.status === 'completed') {
           resolve(update);
         }
@@ -129,7 +129,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
     });
 
     flashBoardJobService.submit({
-      nodeId: 'node-suno',
+      recordId: 'record-suno',
       request: {
         service: 'suno',
         providerId: 'suno-music',
@@ -148,7 +148,7 @@ describe('FlashBoardJobService ElevenLabs audio jobs', () => {
       instrumental: true,
       model: 'V5',
       prompt: 'A minimal synthwave intro',
-    }), expect.stringMatching(/^flashboard-suno:node-suno:/), expect.any(AbortSignal));
+    }), expect.stringMatching(/^flashboard-suno:record-suno:/), expect.any(AbortSignal));
     expect(cloudAiMock.pollSunoMusicTaskUntilComplete).toHaveBeenCalledWith(
       'suno-task-1',
       expect.any(Function),

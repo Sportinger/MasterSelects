@@ -1,10 +1,62 @@
 export type MediaRuntimeKind = 'video' | 'audio' | 'image';
 
+export type RuntimeSourceId = string;
+export type RuntimeSessionKey = string;
+
 export type DecodeSessionPolicy =
   | 'interactive'
   | 'background'
   | 'export'
   | 'ram-preview';
+
+export type MediaAssetRefKind =
+  | MediaRuntimeKind
+  | 'model'
+  | 'gaussian-splat'
+  | 'signal'
+  | 'unknown';
+
+export interface MediaAssetFingerprint {
+  fileHash?: string;
+  fileSize?: number;
+  fileLastModified?: number;
+  sourcePath?: string;
+  projectPath?: string;
+}
+
+export interface MediaAssetRef {
+  mediaFileId?: string;
+  kind: MediaAssetRefKind;
+  fileName?: string;
+  fingerprint?: MediaAssetFingerprint;
+  metadata?: MediaSourceMetadata;
+}
+
+export interface TimelineSourceRef {
+  clipId?: string;
+  mediaFileId?: string;
+  sourceType: string;
+  assetRef?: MediaAssetRef;
+  runtimeSourceId?: RuntimeSourceId;
+  runtimeSessionKey?: RuntimeSessionKey;
+}
+
+export interface MediaRuntimeLease {
+  runtimeSourceId: RuntimeSourceId;
+  runtimeSessionKey?: RuntimeSessionKey;
+  ownerId: string;
+  policy: DecodeSessionPolicy;
+  acquiredAt: number;
+}
+
+export interface RenderFrameSource {
+  runtimeSourceId: RuntimeSourceId;
+  runtimeSessionKey: RuntimeSessionKey;
+  sourceTime: number;
+  frameNumber?: number;
+  mediaFileId?: string;
+  kind: MediaRuntimeKind;
+}
 
 export interface MediaSourceMetadata {
   duration?: number;

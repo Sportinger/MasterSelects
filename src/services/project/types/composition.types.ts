@@ -1,42 +1,49 @@
 // Composition-related types
 
 import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, ProjectTransform } from './timeline.types';
-import type { LabelColor, MeshPrimitiveType, SceneCameraSettings } from '../../../stores/mediaStore/types';
-import type { GaussianSplatSettings } from '../../../engine/gaussian/types';
-import type { SplatEffectorSettings } from '../../../types/splatEffector';
 import type {
   ClipAudioState,
-  ClipAnalysis,
-  ClipVideoState,
-  ColorCorrectionState,
-  GaussianSplatSequenceData,
   MasterAudioState,
-  ModelSequenceData,
-  MathSceneDefinition,
-  MotionLayerDefinition,
-  ClipNodeGraph,
-  SceneSegment,
   TrackAudioState,
-  Text3DProperties,
-  TextClipProperties,
-  TranscriptWord,
-  VideoBakeRegion,
-} from '../../../types';
+} from '../../../types/audio';
+import type { ColorCorrectionState } from '../../../types/colorCorrection';
+import type { ClipNodeGraph } from '../../../types/nodeGraph';
+import type { MotionLayerDefinition } from '../../../types/motionDesign';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
+import type { MidiClipData, MidiInstrument } from '../../../types/midiClip';
+import type {
+  ProjectClipAnalysis,
+  ProjectClipVideoState,
+  ProjectMathSceneDefinition,
+  ProjectSceneSegment,
+  ProjectText3DProperties,
+  ProjectTextClipProperties,
+  ProjectTranscriptWord,
+  ProjectVideoBakeRegion,
+} from './clip-payload.types';
+import type {
+  ProjectGaussianSplatSequenceData,
+  ProjectGaussianSplatSettings,
+  ProjectLabelColor,
+  ProjectMeshPrimitiveType,
+  ProjectModelSequenceData,
+  ProjectSceneCameraSettings,
+  ProjectSplatEffectorSettings,
+} from './schema.types';
 
 export interface ProjectTrack {
   id: string;
   name: string;
   type: 'video' | 'audio' | 'midi';
   height: number;
-  labelColor?: LabelColor;
+  labelColor?: ProjectLabelColor;
   locked: boolean;
   visible: boolean;
   muted: boolean;
   solo: boolean;
   audioState?: TrackAudioState;
   // MIDI track instrument (issue #182)
-  midiInstrument?: import('../../../types/midiClip').MidiInstrument;
+  midiInstrument?: MidiInstrument;
 }
 
 export interface ProjectClip {
@@ -73,7 +80,7 @@ export interface ProjectClip {
   // Audio
   volume: number;
   audioEnabled: boolean;
-  videoState?: ClipVideoState;
+  videoState?: ProjectClipVideoState;
   audioState?: ClipAudioState;
 
   // Flags
@@ -91,32 +98,32 @@ export interface ProjectClip {
   // Additional clip metadata (for restoration)
   sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
-  midiData?: import('../../../types/midiClip').MidiClipData;
+  midiData?: MidiClipData;
   naturalDuration?: number;
   linkedClipId?: string;
   linkedGroupId?: string;
   thumbnails?: string[];
   waveform?: number[];
   waveformChannels?: number[][];
-  meshType?: MeshPrimitiveType;
-  cameraSettings?: SceneCameraSettings;
-  splatEffectorSettings?: SplatEffectorSettings;
+  meshType?: ProjectMeshPrimitiveType;
+  cameraSettings?: ProjectSceneCameraSettings;
+  splatEffectorSettings?: ProjectSplatEffectorSettings;
   gaussianBlendshapes?: Record<string, number>;
-  gaussianSplatSettings?: GaussianSplatSettings;
+  gaussianSplatSettings?: ProjectGaussianSplatSettings;
   is3D?: boolean;
-  modelSequence?: ModelSequenceData;
-  gaussianSplatSequence?: GaussianSplatSequenceData;
+  modelSequence?: ProjectModelSequenceData;
+  gaussianSplatSequence?: ProjectGaussianSplatSequenceData;
   threeDEffectorsEnabled?: boolean;
 
   // Text clip support
-  textProperties?: TextClipProperties;
-  text3DProperties?: Text3DProperties;
+  textProperties?: ProjectTextClipProperties;
+  text3DProperties?: ProjectText3DProperties;
 
   // Solid clip support
   solidColor?: string;
 
   // Math scene clip support
-  mathScene?: MathSceneDefinition;
+  mathScene?: ProjectMathSceneDefinition;
 
   // Motion design clip support
   motion?: MotionLayerDefinition;
@@ -124,15 +131,15 @@ export interface ProjectClip {
   vectorAnimationSettings?: VectorAnimationClipSettings;
 
   // Transcript data
-  transcript?: TranscriptWord[];
+  transcript?: ProjectTranscriptWord[];
   transcriptStatus?: string;
 
   // Analysis data
-  analysis?: ClipAnalysis;
+  analysis?: ProjectClipAnalysis;
   analysisStatus?: string;
 
   // AI scene description data
-  sceneDescriptions?: SceneSegment[];
+  sceneDescriptions?: ProjectSceneSegment[];
   sceneDescriptionStatus?: string;
 }
 
@@ -150,7 +157,7 @@ export interface ProjectComposition {
   // Tracks and clips
   tracks: ProjectTrack[];
   clips: ProjectClip[];
-  videoBakeRegions?: VideoBakeRegion[];
+  videoBakeRegions?: ProjectVideoBakeRegion[];
   masterAudioState?: MasterAudioState;
 
   // Markers

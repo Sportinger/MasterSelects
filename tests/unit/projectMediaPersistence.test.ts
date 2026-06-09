@@ -333,6 +333,31 @@ describe('project media persistence', () => {
     ]);
   }, 10_000);
 
+  it('drops obsolete YouTube panel payloads when syncing stores to the project file', async () => {
+    const projectData = {
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+      youtube: {
+        videos: [{ id: 'yt-legacy', title: 'Legacy' }],
+        lastQuery: 'legacy',
+      },
+    };
+    mocks.getProjectData.mockReturnValue(projectData);
+
+    const { syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
+
+    expect(projectData).not.toHaveProperty('youtube');
+    expect(mocks.youtubeState.getState).not.toHaveBeenCalled();
+  });
+
   it('restores existing WAV audio proxies from disk even when the project manifest was not resaved yet', async () => {
     const sourceFile = new File(['clip'], 'clip.mp4', { type: 'video/mp4' });
     mocks.getFileFromRaw.mockResolvedValue({ file: sourceFile });
@@ -380,6 +405,30 @@ describe('project media persistence', () => {
       audioProxyStorageKey: 'hash-clip-1',
     }));
   }, 10_000);
+
+  it('resets transient YouTube panel state instead of hydrating obsolete project payloads', async () => {
+    mocks.getProjectData.mockReturnValue({
+      media: [],
+      compositions: [],
+      folders: [],
+      settings: { width: 1920, height: 1080, frameRate: 30 },
+      activeCompositionId: null,
+      openCompositionIds: [],
+      expandedFolderIds: [],
+      slotAssignments: {},
+      uiState: {},
+      youtube: {
+        videos: [{ id: 'yt-legacy', title: 'Legacy' }],
+        lastQuery: 'legacy',
+      },
+    });
+
+    const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
+    await loadProjectToStores();
+
+    expect(mocks.youtubeState.reset).toHaveBeenCalledTimes(1);
+    expect(mocks.youtubeState.loadState).not.toHaveBeenCalled();
+  });
 
   it('persists advanced audio refs and state without embedding payload bytes', async () => {
     const projectData: {

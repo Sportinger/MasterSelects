@@ -1,6 +1,13 @@
 import { useEffect } from 'react';
-import { useFlashBoardStore } from '../../../stores/flashboardStore';
-import { selectActiveBoard } from '../../../stores/flashboardStore/selectors';
+import {
+  clearFlashBoardActiveGenerationSelection,
+  ensureFlashBoardActiveGenerationBoard,
+  failFlashBoardActiveGenerationRecord,
+  updateFlashBoardActiveGenerationJob,
+  useHasFlashBoardActiveGenerationBoard,
+  useRemoveFlashBoardActiveGenerationRecord,
+  useSelectedFlashBoardActiveGenerationRecordIds,
+} from '../../../stores/flashboardStore/activeGenerationRecords';
 import { flashBoardJobService } from '../../../services/flashboard/FlashBoardJobService';
 import { flashBoardMediaBridge } from '../../../services/flashboard/FlashBoardMediaBridge';
 
@@ -10,49 +17,41 @@ interface FlashBoardRuntimeOptions {
 
 export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const { enableKeyboardDelete = true } = options;
-  const board = useFlashBoardStore(selectActiveBoard);
-  const boards = useFlashBoardStore((s) => s.boards);
-  const createBoard = useFlashBoardStore((s) => s.createBoard);
-  const setActiveBoard = useFlashBoardStore((s) => s.setActiveBoard);
-  const updateNodeJob = useFlashBoardStore((s) => s.updateNodeJob);
-  const failNode = useFlashBoardStore((s) => s.failNode);
-  const selectedNodeIds = useFlashBoardStore((s) => s.selectedNodeIds);
-  const removeNode = useFlashBoardStore((s) => s.removeNode);
-  const clearSelection = useFlashBoardStore((s) => s.clearSelection);
+  const hasGenerationBoard = useHasFlashBoardActiveGenerationBoard();
+  const selectedRecordIds = useSelectedFlashBoardActiveGenerationRecordIds();
+  const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
 
   useEffect(() => {
-    if (boards.length === 0) {
-      createBoard('FlashBoard 1');
-    } else if (!board && boards.length > 0) {
-      setActiveBoard(boards[0].id);
+    if (!hasGenerationBoard) {
+      ensureFlashBoardActiveGenerationBoard();
     }
-  }, [boards, board, createBoard, setActiveBoard]);
+  }, [hasGenerationBoard]);
 
   useEffect(() => {
-    flashBoardJobService.setUpdateCallback((nodeId, update) => {
+    flashBoardJobService.setUpdateCallback((recordId, update) => {
       if (update.status === 'completed') {
         if (!update.mediaType || (!update.assetUrl && !update.assetFile)) {
-          failNode(nodeId, 'Generation finished without importable media.');
+          failFlashBoardActiveGenerationRecord(recordId, 'Generation finished without importable media.');
           return;
         }
 
         const importPromise = update.assetFile
-          ? flashBoardMediaBridge.importGeneratedFile(nodeId, update.assetFile, update.mediaType)
-          : flashBoardMediaBridge.importGeneratedMedia(nodeId, update.assetUrl as string, update.mediaType);
+          ? flashBoardMediaBridge.importGeneratedFile(recordId, update.assetFile, update.mediaType)
+          : flashBoardMediaBridge.importGeneratedMedia(recordId, update.assetUrl as string, update.mediaType);
 
         void importPromise.catch((error) => {
           const message = error instanceof Error ? error.message : 'Failed to import generated media';
-          failNode(nodeId, message);
+          failFlashBoardActiveGenerationRecord(recordId, message);
         });
         return;
       }
 
       if (update.status === 'failed') {
-        failNode(nodeId, update.error || 'Generation failed');
+        failFlashBoardActiveGenerationRecord(recordId, update.error || 'Generation failed');
         return;
       }
 
-      updateNodeJob(nodeId, {
+      updateFlashBoardActiveGenerationJob(recordId, {
         status: update.status,
         remoteTaskId: update.remoteTaskId,
         progress: update.progress,
@@ -62,7 +61,7 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
     return () => {
       flashBoardJobService.setUpdateCallback(null);
     };
-  }, [updateNodeJob, failNode]);
+  }, []);
 
   useEffect(() => {
     if (!enableKeyboardDelete) {
@@ -70,7 +69,7 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.key !== 'Delete' && event.key !== 'Backspace') || selectedNodeIds.length === 0) {
+      if ((event.key !== 'Delete' && event.key !== 'Backspace') || selectedRecordIds.length === 0) {
         return;
       }
 
@@ -80,11 +79,11 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
       }
 
       event.preventDefault();
-      selectedNodeIds.forEach((nodeId) => removeNode(nodeId));
-      clearSelection();
+      selectedRecordIds.forEach((recordId) => removeGenerationRecord(recordId));
+      clearFlashBoardActiveGenerationSelection();
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [clearSelection, enableKeyboardDelete, removeNode, selectedNodeIds]);
+  }, [enableKeyboardDelete, removeGenerationRecord, selectedRecordIds]);
 }

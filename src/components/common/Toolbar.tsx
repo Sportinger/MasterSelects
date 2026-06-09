@@ -12,7 +12,7 @@ import {
   isProtectedFactoryDockLayout,
   useDockStore,
 } from '../../stores/dockStore';
-import { PANEL_CONFIGS, AI_PANEL_TYPES, SCOPE_PANEL_TYPES, WIP_PANEL_TYPES, DEPRECATED_PANEL_TYPES, type PanelConfig, type PanelType } from '../../types/dock';
+import { PANEL_CONFIGS, AI_PANEL_TYPES, SCOPE_PANEL_TYPES, WIP_PANEL_TYPES, type PanelConfig, type PanelType } from '../../types/dock';
 import { useSettingsStore, type AutosaveInterval } from '../../stores/settingsStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useAccountStore } from '../../stores/accountStore';
@@ -42,7 +42,6 @@ import { openOutputManager } from '../outputManager/OutputManagerBoot';
 
 type MenuId = 'file' | 'edit' | 'view' | 'output' | 'info' | null;
 
-const VIEW_HIDDEN_PANEL_TYPES = new Set<PanelType>(['youtube', ...DEPRECATED_PANEL_TYPES]);
 const VIEW_CORE_PANEL_TYPE_ORDER: PanelType[] = [
   'preview',
   'multi-preview',
@@ -56,8 +55,7 @@ const VIEW_CORE_PANEL_TYPE_ORDER: PanelType[] = [
   'midi-mapping',
 ];
 const VIEW_CORE_PANEL_TYPES = VIEW_CORE_PANEL_TYPE_ORDER.filter((type) => (
-  !VIEW_HIDDEN_PANEL_TYPES.has(type)
-  && !SCOPE_PANEL_TYPES.includes(type)
+  !SCOPE_PANEL_TYPES.includes(type)
   && !WIP_PANEL_TYPES.includes(type)
   && !AI_PANEL_TYPES.includes(type)
 ));
