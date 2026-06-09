@@ -18,10 +18,9 @@ orchestrator or worker-agent execution run starts.
 - Handoff templates: prepared for execution only
 - Source implementation: current bounded source packet has explicit write set,
   forbidden files, and gates
-- Current bounded packet: none; wave 4 (packets 159-163 plus orchestrator
-  ratchet) completed and verified; type-barrel goal criterion met; next wave =
-  P1A webCodecsHelpers lease migration, next MediaPanel slice, then
-  P2-GETSTATE-ADAPTER-FREEZE formalization.
+- Current bounded packet: wave 7 running; render snapshot factories (P5/P6
+  freeze packet 2), historyStore folder split (P2 store split 2), and
+  MediaPanel continuation are the next active/queued packets.
 - Completed source/tooling packet: `P0-REG-001`; focused registry checks passed.
 - Completed bounded packet: `P0-BASELINE-REFRESH-001`, read-only plus docs.
 - Completed bounded packet: `P1-CONTRACT-001`, contracts and focused boundary
@@ -2021,8 +2020,48 @@ orchestrator or worker-agent execution run starts.
   access and ceiling increases. The runtime lease owner map remains accepted
   from the `P2-GETSTATE-CLASSIFICATION-SCOUT-162` blueprint for follow-up P2
   reduction packets.
-- Next eligible packet: render-contract scout / verification, then P2
-  `getState()` reduction packets against the executable freeze.
+- Completed bounded packet:
+  `P5P6-RENDER-CONTRACTS-170`; created `src/engine/render/contracts/` with
+  `renderFrameSnapshot.ts` (249), `renderTargetSnapshot.ts` (84),
+  `renderOutputRouter.ts` (59), `exportRenderSession.ts` (78), a barrel, and
+  `tests/unit/renderContracts.test.ts` boundary guard. Snapshot files are
+  proven runtime-handle-free with zero handle-token hits; descriptors replace
+  store types; `ExportRenderSession` models per-frame capture with no retained
+  frame arrays. P5/P6 freeze packet 1 of 5 is complete; adoption packets
+  (factories, router, session, ExportPanel) follow.
+- Completed bounded packet:
+  `P2-DOCKSTORE-SPLIT-171`; `dockStore.ts` (1972) converted to
+  `src/stores/dockStore/` with `index.ts` (1141, follow-up slice planned),
+  `panelRegistry` (47), `layoutDefaults` (222),
+  `timelineLayoutPersistence` (165), `layoutPersistence` (257), and
+  `layoutTree` (195). Public surface is preserved; the persist partialize
+  block is byte-identical so user layouts stay intact. This is the first P2
+  store split.
+- Completed bounded packet:
+  `P4-MEDIA-PANEL-SPLIT-172`; extracted context-menu wiring, relink status,
+  source-monitor badges, and item-renderer wiring into five modules (368
+  lines), reducing `MediaPanel.tsx` to 2829 raw lines. The worker redistributed
+  two `getState()` hits into the new badge hook without stopping; the new
+  getState guard correctly rejected it, and the orchestrator approved the
+  redistribution by policy update (`MediaPanel` 7 -> 5, badge hook 2; total
+  unchanged). This was the guard's first catch.
+- Orchestrator fixes: migrated the `getStateAccessPolicy` adapter grant from
+  `dockStore.ts` to `dockStore/**` after the folder conversion; updated
+  `classCHardTargetFileCount` 177 -> 178; moved the timeline architecture
+  registry evidence pointer for `TimelineClipDataSource` from
+  `src/types/index.ts` to `src/types/timeline.ts` in
+  `tests/unit/timelineArchitectureRegistry.test.ts` and
+  `src/timeline/architecture/exitCriteriaCoverage.ts` with assertion strength
+  unchanged. This was a location-only update after the sanctioned barrel move;
+  the protected-path edit was made by the orchestrator and flagged to the user.
+- Foreign-work note: an unrelated audio-mixer SVG/CSS plus Audio-Workstation
+  doc set was present in the worktree and included in commit `2ba29a04` to
+  avoid loss; a pre-commit foreign-file scan was added to orchestrator rules.
+- Wave 6 verification:
+  Orchestrator-verified: tsc clean; full suite 4144/4145 with one stale evidence pointer, fixed; registry + guards + render-contracts suites green (68 tests).
+- Next eligible packet: wave 7 is running with render snapshot factories
+  (freeze packet 2), historyStore folder split (P2 store split 2), and
+  MediaPanel continuation.
 - Product source refactors remain blocked outside approved packet write sets.
 
 ## Document Map

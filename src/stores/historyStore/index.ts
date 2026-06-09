@@ -3,55 +3,65 @@
 
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { Logger } from '../services/logger';
-import { flashBoardMediaBridge } from '../services/flashboard/FlashBoardMediaBridge';
-import { clonePersistedClipAudioState } from '../services/audio/clipAudioStatePersistence';
-import type {
-  ClipAudioState,
-  MasterAudioState,
-  MediaFileAudioAnalysisRefs,
-  TimelineClip,
-  TimelineTrack,
-  TrackAudioState,
-  Layer,
-  Keyframe,
-} from '../types';
-import type {
-  Composition,
-  MathSceneItem,
-  MediaFile,
-  MediaFolder,
-  MotionShapeItem,
-  SignalAssetItem,
-  SolidItem,
-  TextItem,
-} from './mediaStore/types';
-import type { SignalArtifact, SignalGraph, SignalOperatorDescriptor } from '../signals';
-import type { TimelineMarker } from './timeline/types';
-import type { DockLayout } from '../types/dock';
+import { Logger } from '../../services/logger';
+import { flashBoardMediaBridge } from '../../services/flashboard/FlashBoardMediaBridge';
+import type { Keyframe } from '../../types';
 import type {
   HistoryEventType,
   HistoryListEntry,
   HistoryTimelineEvent,
-  ProjectHistoryBranchState,
   ProjectHistoryState,
-} from '../types/history';
-import type {
-  FlashBoardActiveGenerationRecord,
-  FlashBoardComposerState,
-  FlashBoardGenerationMetadata,
-} from './flashboardStore/types';
-import { createDefaultFlashBoardComposer } from './flashboardStore/defaults';
-import type { ExportStoreData } from './exportStore';
-import { createDefaultExportStoreData, getExportStoreData } from './exportStore';
+} from '../../types/history';
+import { createDefaultFlashBoardComposer } from '../flashboardStore/defaults';
+import type { ExportStoreData } from '../exportStore';
+import { createDefaultExportStoreData, getExportStoreData } from '../exportStore';
 import {
   createHistoryTimelineEditState,
   type HistoryTimelineEditState,
-} from './timeline/historyTimelineEditState';
-import { createHistoryTimelineRestoreState } from './timeline/historyTimelineRestoreState';
-import { syncHistoryRehydratedTimelineRuntimeResources } from '../services/timeline/historyRuntimeRehydration';
-import { clearAINodeRuntimeCache } from '../services/nodeGraph';
-import { stopTimelineAudioPlayback } from '../services/audio/timelineAudioPlaybackStopper';
+} from '../timeline/historyTimelineEditState';
+import { createHistoryTimelineRestoreState } from '../timeline/historyTimelineRestoreState';
+import { syncHistoryRehydratedTimelineRuntimeResources } from '../../services/timeline/historyRuntimeRehydration';
+import { clearAINodeRuntimeCache } from '../../services/nodeGraph';
+import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
+import type {
+  DockStoreSnapshot,
+  ExportStoreSnapshot,
+  FlashBoardStoreSnapshot,
+  HistoryState,
+  MediaStoreState,
+  StateSnapshot,
+  TimelineStoreState,
+} from './historyStoreTypes';
+export type {
+  HistoryOperationResult,
+  HistoryRestoreResult,
+} from './historyStoreTypes';
+import {
+  cloneClipForHistory,
+  cloneCompositionForHistory,
+  cloneHistoryForProject,
+  cloneMasterAudioState,
+  cloneMediaFileForHistory,
+  cloneSnapshotStack,
+  cloneTrackForHistory,
+  deepClone,
+} from './snapshotCloning';
+import {
+  appendHistoryBranch,
+  createBranchFromRedoPath,
+  createHistoryEntries,
+  createHistoryNavigationState,
+  markActiveHistoryEntry,
+} from './historyNavigation';
+import {
+  limitBranchForProject,
+  limitSnapshotStackForProject,
+  normalizePersistedBranches,
+  normalizePersistedEventLog,
+  normalizePersistedSnapshot,
+  normalizePersistedSnapshotStack,
+  normalizePersistedVisibleEntries,
+} from './projectHistoryPersistence';
 
 const log = Logger.create('History');
 const MAX_HISTORY_EVENT_LOG_SIZE = 500;
@@ -115,171 +125,6 @@ function installHistoryDebugControls(): void {
 
 installHistoryDebugControls();
 
-// Snapshot of undoable state from all stores
-interface StateSnapshot {
-  timestamp: number;
-  label: string; // Description of the action (for debugging)
-
-  // Timeline state (including layers since they moved here from mixerStore)
-  timeline: {
-    clips: TimelineClip[];
-    tracks: TimelineTrack[];
-    selectedClipIds: string[];
-    zoom: number;
-    scrollX: number;
-    layers: Layer[];
-    selectedLayerId: string | null;
-    clipKeyframes: Record<string, Keyframe[]>;
-    markers: TimelineMarker[];
-    masterAudioState?: MasterAudioState;
-  };
-
-  timelineEditState?: HistoryTimelineEditState;
-
-  // Media state
-  media: {
-    files: MediaFile[];
-    compositions: Composition[];
-    folders: MediaFolder[];
-    selectedIds: string[];
-    expandedFolderIds: string[];
-    textItems: TextItem[];
-    solidItems: SolidItem[];
-    mathSceneItems: MathSceneItem[];
-    motionShapeItems: MotionShapeItem[];
-    signalAssets: SignalAssetItem[];
-    signalArtifacts: SignalArtifact[];
-    signalGraphs: SignalGraph[];
-    signalOperators: SignalOperatorDescriptor[];
-  };
-
-  // Dock layout state
-  dock: {
-    layout: DockLayout | null;
-  };
-
-  // FlashBoard state (active generation records + composer config + generated-media metadata)
-  flashboard: {
-    activeGenerationRecords: FlashBoardActiveGenerationRecord[];
-    composer: FlashBoardComposerState;
-    generationMetadataByMediaId: Record<string, FlashBoardGenerationMetadata>;
-  };
-
-  export: ExportStoreData;
-}
-
-interface HistoryState {
-  // Undo/redo stacks
-  undoStack: StateSnapshot[];
-  redoStack: StateSnapshot[];
-  eventLog: HistoryTimelineEvent[];
-  branches: HistoryBranch[];
-  navigationEntries: HistoryListEntry[] | null;
-  navigationSnapshotsByEntryId: Record<string, StateSnapshot>;
-  activeEntryId: string | null;
-
-  // Current state (for comparison to avoid duplicate snapshots)
-  currentSnapshot: StateSnapshot | null;
-
-  // Maximum history size
-  maxHistorySize: number;
-
-  // Whether we're currently applying undo/redo (to prevent capturing)
-  isApplying: boolean;
-
-  // Batch tracking - for grouping multiple changes into one undo step
-  batchId: number | null;
-  batchLabel: string | null;
-
-  // Actions
-  captureSnapshot: (label: string) => void;
-  undo: () => HistoryOperationResult | null;
-  redo: () => HistoryOperationResult | null;
-  canUndo: () => boolean;
-  canRedo: () => boolean;
-  getHistoryEntries: () => HistoryListEntry[];
-  recordEvent: (type: HistoryEventType, label: string) => void;
-  restoreEntry: (entry: HistoryListEntry) => HistoryRestoreResult | null;
-  restoreBranch: (branchId: string, snapshotIndex?: number) => HistoryRestoreResult | null;
-
-  // Batch operations
-  startBatch: (label: string) => void;
-  endBatch: () => void;
-
-  // Internal
-  setIsApplying: (value: boolean) => void;
-  clearHistory: () => void;
-  serializeForProject: () => ProjectHistoryState;
-  hydrateFromProject: (history: ProjectHistoryState | null | undefined) => void;
-}
-
-export interface HistoryOperationResult {
-  operation: 'undo' | 'redo';
-  label: string;
-}
-
-export interface HistoryRestoreResult {
-  operation: 'restore-branch';
-  label: string;
-}
-
-interface HistoryBranch {
-  id: string;
-  label: string;
-  createdAt: number;
-  baseSnapshot: StateSnapshot | null;
-  baseUndoStack: StateSnapshot[];
-  snapshots: StateSnapshot[];
-}
-
-interface HistoryNavigationState {
-  entries: HistoryListEntry[];
-  snapshotsByEntryId: Record<string, StateSnapshot>;
-}
-
-// Store state types for dynamic references
-interface TimelineStoreState {
-  clips: TimelineClip[];
-  tracks: TimelineTrack[];
-  selectedClipIds: Set<string>;
-  zoom: number;
-  scrollX: number;
-  layers: Layer[];
-  selectedLayerId: string | null;
-  clipKeyframes: Map<string, Keyframe[]>;
-  markers: TimelineMarker[];
-  masterAudioState?: MasterAudioState;
-  isExporting?: boolean;
-}
-
-interface MediaStoreState {
-  files: MediaFile[];
-  compositions: Composition[];
-  folders: MediaFolder[];
-  selectedIds: string[];
-  expandedFolderIds: string[];
-  textItems: TextItem[];
-  solidItems: SolidItem[];
-  mathSceneItems: MathSceneItem[];
-  motionShapeItems: MotionShapeItem[];
-  signalAssets: SignalAssetItem[];
-  signalArtifacts: SignalArtifact[];
-  signalGraphs: SignalGraph[];
-  signalOperators: SignalOperatorDescriptor[];
-}
-
-interface DockStoreSnapshot {
-  layout: DockLayout;
-}
-
-interface FlashBoardStoreSnapshot {
-  activeGenerationRecords: FlashBoardActiveGenerationRecord[];
-  selectedActiveGenerationRecordIds: string[];
-  composer: FlashBoardComposerState;
-}
-
-type ExportStoreSnapshot = ExportStoreData;
-
 // Callback to flush pending debounced captures before undo/redo (set by useGlobalHistory)
 // Flush = execute the pending capture immediately so its state isn't lost
 let flushPendingCaptureCallback: (() => void) | null = null;
@@ -329,563 +174,6 @@ export function initHistoryStoreRefs(stores: {
   setExportState = stores.export?.setState;
 }
 
-// Deep clone helper (handles most objects, excluding DOM elements and functions)
-// Uses a WeakSet to detect circular references and avoid infinite recursion
-function deepClone<T>(obj: T, seen?: WeakSet<object>): T {
-  if (obj === null || typeof obj !== 'object') return obj;
-  if (obj instanceof Date) return new Date(obj.getTime()) as T;
-  if (isBinaryPayload(obj)) return undefined as T;
-
-  // Skip cloning DOM elements, HTMLMediaElements, File objects, etc.
-  if (obj instanceof Element || obj instanceof HTMLMediaElement || obj instanceof File) {
-    return obj; // Return reference, don't clone
-  }
-
-  // Skip class instances (WebCodecsPlayer, MP4File, VideoDecoder, NativeDecoder, etc.)
-  // Only deep-clone plain objects {} and arrays [] — class instances keep reference
-  const proto = Object.getPrototypeOf(obj);
-  if (proto && proto !== Object.prototype && proto !== Array.prototype) {
-    return obj;
-  }
-
-  // Circular reference detection
-  if (!seen) seen = new WeakSet();
-  if (seen.has(obj as object)) return obj; // Break cycle, return reference
-  seen.add(obj as object);
-
-  if (Array.isArray(obj)) return obj.map(item => deepClone(item, seen)) as T;
-
-  const cloned = {} as T;
-  for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-      const value = obj[key];
-      // Skip functions, DOM elements, and binary media payloads
-      if (typeof value === 'function') continue;
-      if (isBinaryPayload(value)) continue;
-      if (value instanceof Element || value instanceof HTMLMediaElement) {
-        cloned[key] = value; // Keep reference
-      } else {
-        cloned[key] = deepClone(value, seen);
-      }
-    }
-  }
-  return cloned;
-}
-
-function isBinaryPayload(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return true;
-  if (typeof AudioBuffer !== 'undefined' && value instanceof AudioBuffer) return true;
-  return false;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object') return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
-function isAudioPayloadKey(key: string): boolean {
-  const normalized = key.replace(/[_-]/g, '').toLowerCase();
-
-  // Ref/id fields intentionally stay, even when their names mention payloads.
-  if (
-    normalized === 'payloadrefs' ||
-    normalized.endsWith('ref') ||
-    normalized.endsWith('refs') ||
-    normalized.endsWith('id') ||
-    normalized.endsWith('ids')
-  ) {
-    return false;
-  }
-
-  return (
-    normalized === 'payload' ||
-    normalized === 'bytes' ||
-    normalized === 'buffer' ||
-    normalized === 'blob' ||
-    normalized === 'file' ||
-    normalized === 'waveform' ||
-    normalized === 'samples' ||
-    normalized === 'sampledata' ||
-    normalized === 'audiobuffer' ||
-    normalized === 'arraybuffer' ||
-    normalized.endsWith('samples') ||
-    normalized.endsWith('bytes') ||
-    normalized.endsWith('buffer') ||
-    normalized.includes('channeldata') ||
-    normalized.includes('rawaudio') ||
-    normalized.includes('audiodata') ||
-    normalized.includes('pcm') ||
-    normalized.includes('fftdata') ||
-    normalized.includes('waveformdata') ||
-    normalized.includes('spectrogramdata') ||
-    normalized.includes('tilebytes')
-  );
-}
-
-function cloneJsonSafeAudioValue<T>(value: T, seen?: WeakSet<object>): T | undefined {
-  if (value === null) return value;
-  if (typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (typeof value !== 'object') return undefined;
-  if (isBinaryPayload(value)) return undefined;
-
-  if (!seen) seen = new WeakSet<object>();
-  if (seen.has(value as object)) return undefined;
-  seen.add(value as object);
-
-  if (Array.isArray(value)) {
-    const clonedArray: unknown[] = [];
-    for (const item of value) {
-      const clonedItem = cloneJsonSafeAudioValue(item, seen);
-      if (clonedItem !== undefined) {
-        clonedArray.push(clonedItem);
-      }
-    }
-    return clonedArray as T;
-  }
-
-  if (!isPlainObject(value)) return undefined;
-
-  const cloned: Record<string, unknown> = {};
-  for (const [key, nestedValue] of Object.entries(value)) {
-    if (isAudioPayloadKey(key)) continue;
-    const clonedValue = cloneJsonSafeAudioValue(nestedValue, seen);
-    if (clonedValue !== undefined) {
-      cloned[key] = clonedValue;
-    }
-  }
-
-  return cloned as T;
-}
-
-const AUDIO_ANALYSIS_REF_KEYS: Array<keyof MediaFileAudioAnalysisRefs> = [
-  'waveformPyramidId',
-  'processedWaveformPyramidId',
-  'spectrogramTileSetIds',
-  'loudnessEnvelopeId',
-  'beatGridId',
-  'onsetMapId',
-  'phaseCorrelationId',
-  'transcriptTimingId',
-  'frequencySummaryId',
-];
-
-function cloneAudioAnalysisRefs(
-  refs: MediaFileAudioAnalysisRefs | undefined
-): MediaFileAudioAnalysisRefs | undefined {
-  if (!refs) return undefined;
-
-  const cloned: Partial<Record<keyof MediaFileAudioAnalysisRefs, string | string[]>> = {};
-  for (const key of AUDIO_ANALYSIS_REF_KEYS) {
-    const value = refs[key];
-    if (key === 'spectrogramTileSetIds') {
-      if (Array.isArray(value)) {
-        cloned[key] = value.filter((id): id is string => typeof id === 'string');
-      }
-    } else if (typeof value === 'string') {
-      cloned[key] = value;
-    }
-  }
-
-  return Object.keys(cloned).length > 0
-    ? cloned as MediaFileAudioAnalysisRefs
-    : undefined;
-}
-
-function cloneClipAudioState(audioState: ClipAudioState | undefined): ClipAudioState | undefined {
-  const cloned = clonePersistedClipAudioState(cloneJsonSafeAudioValue(audioState) as ClipAudioState | undefined);
-  if (!cloned) return undefined;
-
-  const sourceAnalysisRefs = cloneAudioAnalysisRefs(audioState?.sourceAnalysisRefs);
-  const processedAnalysisRefs = cloneAudioAnalysisRefs(audioState?.processedAnalysisRefs);
-  if (sourceAnalysisRefs !== undefined) {
-    cloned.sourceAnalysisRefs = sourceAnalysisRefs;
-  } else {
-    delete cloned.sourceAnalysisRefs;
-  }
-  if (processedAnalysisRefs !== undefined) {
-    cloned.processedAnalysisRefs = processedAnalysisRefs;
-  } else {
-    delete cloned.processedAnalysisRefs;
-  }
-
-  return cloned;
-}
-
-function cloneTrackAudioState(audioState: TrackAudioState | undefined): TrackAudioState | undefined {
-  return cloneJsonSafeAudioValue(audioState) as TrackAudioState | undefined;
-}
-
-function cloneMasterAudioState(audioState: MasterAudioState | undefined): MasterAudioState | undefined {
-  return cloneJsonSafeAudioValue(audioState) as MasterAudioState | undefined;
-}
-
-function cloneClipForHistory<T extends { audioState?: ClipAudioState }>(clip: T): T {
-  const {
-    audioState,
-    waveform: _waveform,
-    waveformChannels: _waveformChannels,
-    waveformGenerating: _waveformGenerating,
-    waveformProgress: _waveformProgress,
-    audioAnalysisJob: _audioAnalysisJob,
-    ...rest
-  } = clip as T & {
-    waveform?: unknown;
-    waveformChannels?: unknown;
-    waveformGenerating?: unknown;
-    waveformProgress?: unknown;
-    audioAnalysisJob?: unknown;
-  };
-  const cloned = deepClone(rest) as T;
-  const clonedAudioState = cloneClipAudioState(audioState);
-  if (clonedAudioState !== undefined) {
-    cloned.audioState = clonedAudioState;
-  }
-  return cloned;
-}
-
-function cloneTrackForHistory<T extends { audioState?: TrackAudioState }>(track: T): T {
-  const { audioState, ...rest } = track;
-  const cloned = deepClone(rest) as T;
-  const clonedAudioState = cloneTrackAudioState(audioState);
-  if (clonedAudioState !== undefined) {
-    cloned.audioState = clonedAudioState;
-  }
-  return cloned;
-}
-
-function cloneTimelineDataForHistory(
-  timelineData: NonNullable<Composition['timelineData']>
-): NonNullable<Composition['timelineData']> {
-  const { clips, tracks, masterAudioState, ...rest } = timelineData;
-  const cloned = deepClone(rest) as NonNullable<Composition['timelineData']>;
-  cloned.clips = (clips || []).map(cloneClipForHistory);
-  cloned.tracks = (tracks || []).map(cloneTrackForHistory);
-
-  const clonedMasterAudioState = cloneMasterAudioState(masterAudioState);
-  if (clonedMasterAudioState !== undefined) {
-    cloned.masterAudioState = clonedMasterAudioState;
-  }
-
-  return cloned;
-}
-
-function cloneCompositionForHistory(composition: Composition): Composition {
-  const { timelineData, ...rest } = composition;
-  const cloned = deepClone(rest) as Composition;
-  if (timelineData) {
-    cloned.timelineData = cloneTimelineDataForHistory(timelineData);
-  }
-  return cloned;
-}
-
-function cloneMediaFileForHistory(file: MediaFile): MediaFile {
-  const {
-    audioAnalysisRefs,
-    waveform: _waveform,
-    waveformChannels: _waveformChannels,
-    waveformProgress: _waveformProgress,
-    waveformStatus: _waveformStatus,
-    ...rest
-  } = file;
-  const cloned = deepClone(rest) as MediaFile;
-  const clonedAudioAnalysisRefs = cloneAudioAnalysisRefs(audioAnalysisRefs);
-  if (clonedAudioAnalysisRefs !== undefined) {
-    cloned.audioAnalysisRefs = clonedAudioAnalysisRefs;
-  }
-  return cloned;
-}
-
-function createHistoryEntry(
-  snapshot: StateSnapshot,
-  kind: HistoryListEntry['kind'],
-  stackIndex: number
-): HistoryListEntry {
-  return {
-    id: `${kind}:${stackIndex}:${snapshot.timestamp}:${snapshot.label}`,
-    kind,
-    label: snapshot.label,
-    timestamp: snapshot.timestamp,
-    stackIndex,
-  };
-}
-
-function createHistoryEventEntry(event: HistoryTimelineEvent): HistoryListEntry {
-  return {
-    id: event.id,
-    kind: 'event',
-    label: event.label,
-    timestamp: event.timestamp,
-    eventType: event.type,
-    highlighted: event.type === 'manual-save',
-  };
-}
-
-function createHistoryBranchEntries(branch: HistoryBranch): HistoryListEntry[] {
-  const baseStackIndex = branch.baseUndoStack.length + (branch.baseSnapshot ? 1 : 0);
-
-  return branch.snapshots.map((snapshot, index) => ({
-    id: `branch:${branch.id}:${index}:${snapshot.timestamp}:${snapshot.label}`,
-    kind: 'branch',
-    label: snapshot.label || branch.label || 'Alternative branch',
-    timestamp: snapshot.timestamp,
-    stackIndex: index,
-    branchId: branch.id,
-    branchLabel: branch.label,
-    branchIndex: index,
-    branchBaseStackIndex: baseStackIndex,
-    branchBaseTimestamp: branch.baseSnapshot?.timestamp ?? branch.createdAt,
-    branchLength: branch.snapshots.length,
-  }));
-}
-
-function createHistoryEntries(
-  undoStack: StateSnapshot[],
-  currentSnapshot: StateSnapshot | null,
-  redoStack: StateSnapshot[],
-  eventLog: HistoryTimelineEvent[],
-  branches: HistoryBranch[]
-): HistoryListEntry[] {
-  return [
-    ...undoStack.map((snapshot, index) => createHistoryEntry(snapshot, 'undoable', index)),
-    ...(currentSnapshot ? [createHistoryEntry(currentSnapshot, 'current', undoStack.length)] : []),
-    ...redoStack
-      .slice()
-      .reverse()
-      .map((snapshot, index) => createHistoryEntry(snapshot, 'redoable', index)),
-    ...eventLog.filter((event) => event.type !== 'autosave').map(createHistoryEventEntry),
-    ...branches.flatMap(createHistoryBranchEntries),
-  ];
-}
-
-function createHistoryNavigationState(
-  undoStack: StateSnapshot[],
-  currentSnapshot: StateSnapshot | null,
-  redoStack: StateSnapshot[],
-  eventLog: HistoryTimelineEvent[],
-  branches: HistoryBranch[]
-): HistoryNavigationState {
-  const entries = createHistoryEntries(undoStack, currentSnapshot, redoStack, eventLog, branches);
-  const snapshotsByEntryId: Record<string, StateSnapshot> = {};
-
-  undoStack.forEach((snapshot, index) => {
-    const entry = createHistoryEntry(snapshot, 'undoable', index);
-    snapshotsByEntryId[entry.id] = snapshot;
-  });
-
-  if (currentSnapshot) {
-    const entry = createHistoryEntry(currentSnapshot, 'current', undoStack.length);
-    snapshotsByEntryId[entry.id] = currentSnapshot;
-  }
-
-  redoStack
-    .slice()
-    .reverse()
-    .forEach((snapshot, index) => {
-      const entry = createHistoryEntry(snapshot, 'redoable', index);
-      snapshotsByEntryId[entry.id] = snapshot;
-    });
-
-  for (const branch of branches) {
-    for (const entry of createHistoryBranchEntries(branch)) {
-      const index = entry.stackIndex;
-      if (typeof index !== 'number') continue;
-      const snapshot = branch.snapshots[index];
-      if (snapshot) {
-        snapshotsByEntryId[entry.id] = snapshot;
-      }
-    }
-  }
-
-  return { entries, snapshotsByEntryId };
-}
-
-function markActiveHistoryEntry(entries: HistoryListEntry[], activeEntryId: string | null): HistoryListEntry[] {
-  return entries.map((entry) => ({
-    ...entry,
-    active: entry.id === activeEntryId || (!activeEntryId && entry.kind === 'current'),
-  }));
-}
-
-function cloneSnapshotStack(snapshots: StateSnapshot[]): StateSnapshot[] {
-  return snapshots.map((snapshot) => deepClone(snapshot));
-}
-
-function createBranchId(type: string): string {
-  return `branch:${type}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function createBranchLabel(snapshots: StateSnapshot[], fallback = 'Alternative branch'): string {
-  const tip = snapshots[snapshots.length - 1];
-  return tip?.label ? `Branch: ${tip.label}` : fallback;
-}
-
-function createBranchFromRedoPath(
-  undoStack: StateSnapshot[],
-  currentSnapshot: StateSnapshot | null,
-  redoStack: StateSnapshot[]
-): HistoryBranch | null {
-  if (!currentSnapshot || redoStack.length === 0) return null;
-
-  const snapshots = cloneSnapshotStack(redoStack.slice().reverse());
-  if (snapshots.length === 0) return null;
-
-  return {
-    id: createBranchId('redo'),
-    label: createBranchLabel(snapshots),
-    createdAt: Date.now(),
-    baseSnapshot: deepClone(currentSnapshot),
-    baseUndoStack: cloneSnapshotStack(undoStack),
-    snapshots,
-  };
-}
-
-function appendHistoryBranch(branches: HistoryBranch[], branch: HistoryBranch | null): HistoryBranch[] {
-  if (!branch || branch.snapshots.length === 0) return branches;
-  return [...branches, branch].slice(-MAX_HISTORY_BRANCHES);
-}
-
-function isStateSnapshot(value: unknown): value is StateSnapshot {
-  if (!value || typeof value !== 'object') return false;
-  const snapshot = value as Partial<StateSnapshot>;
-  return (
-    typeof snapshot.timestamp === 'number' &&
-    typeof snapshot.label === 'string' &&
-    Boolean(snapshot.timeline && typeof snapshot.timeline === 'object') &&
-    Boolean(snapshot.media && typeof snapshot.media === 'object') &&
-    Boolean(snapshot.dock && typeof snapshot.dock === 'object') &&
-    Boolean(snapshot.flashboard && typeof snapshot.flashboard === 'object') &&
-    Boolean(snapshot.export && typeof snapshot.export === 'object')
-  );
-}
-
-function sanitizeHistoryValueForProject(key: string, value: unknown): unknown {
-  if (key === 'file') return undefined;
-  if (
-    (key === 'url' || key === 'thumbnailUrl' || key === 'proxyVideoUrl') &&
-    typeof value === 'string' &&
-    value.startsWith('blob:')
-  ) {
-    return undefined;
-  }
-  if (typeof File !== 'undefined' && value instanceof File) return undefined;
-  if (typeof Element !== 'undefined' && value instanceof Element) return undefined;
-  if (typeof HTMLMediaElement !== 'undefined' && value instanceof HTMLMediaElement) return undefined;
-  if (isBinaryPayload(value)) return undefined;
-  return value;
-}
-
-function cloneHistoryForProject<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value, sanitizeHistoryValueForProject)) as T;
-}
-
-function normalizePersistedSnapshot(value: unknown): StateSnapshot | null {
-  if (!isStateSnapshot(value)) return null;
-  return deepClone(value);
-}
-
-function normalizePersistedSnapshotStack(values: unknown[], maxHistorySize: number): StateSnapshot[] {
-  return values
-    .map(normalizePersistedSnapshot)
-    .filter((snapshot): snapshot is StateSnapshot => snapshot !== null)
-    .slice(-maxHistorySize);
-}
-
-function isHistoryTimelineEvent(value: unknown): value is HistoryTimelineEvent {
-  if (!value || typeof value !== 'object') return false;
-  const event = value as Partial<HistoryTimelineEvent>;
-  return (
-    typeof event.id === 'string' &&
-    typeof event.label === 'string' &&
-    typeof event.timestamp === 'number' &&
-    (event.type === 'manual-save' || event.type === 'autosave' || event.type === 'system')
-  );
-}
-
-function normalizePersistedEventLog(values: unknown): HistoryTimelineEvent[] {
-  if (!Array.isArray(values)) return [];
-  return values
-    .filter(isHistoryTimelineEvent)
-    .filter((event) => event.type !== 'autosave')
-    .slice(-MAX_HISTORY_EVENT_LOG_SIZE);
-}
-
-function isHistoryListEntry(value: unknown): value is HistoryListEntry {
-  if (!value || typeof value !== 'object') return false;
-  const entry = value as Partial<HistoryListEntry>;
-  return (
-    typeof entry.id === 'string' &&
-    typeof entry.kind === 'string' &&
-    typeof entry.label === 'string' &&
-    typeof entry.timestamp === 'number' &&
-    (
-      entry.kind === 'undoable' ||
-      entry.kind === 'current' ||
-      entry.kind === 'redoable' ||
-      entry.kind === 'event' ||
-      entry.kind === 'branch'
-    )
-  );
-}
-
-function normalizePersistedVisibleEntries(values: unknown): HistoryListEntry[] {
-  if (!Array.isArray(values)) return [];
-  return values
-    .filter(isHistoryListEntry)
-    .filter((entry) => entry.eventType !== 'autosave')
-    .slice(-MAX_HISTORY_EVENT_LOG_SIZE);
-}
-
-function isProjectHistoryBranchState(value: unknown): value is ProjectHistoryBranchState {
-  if (!value || typeof value !== 'object') return false;
-  const branch = value as Partial<ProjectHistoryBranchState>;
-  return (
-    typeof branch.id === 'string' &&
-    typeof branch.label === 'string' &&
-    typeof branch.createdAt === 'number' &&
-    Array.isArray(branch.baseUndoStack) &&
-    Array.isArray(branch.snapshots)
-  );
-}
-
-function normalizePersistedBranch(value: unknown, maxHistorySize: number): HistoryBranch | null {
-  if (!isProjectHistoryBranchState(value)) return null;
-
-  const snapshots = normalizePersistedSnapshotStack(value.snapshots, maxHistorySize);
-  if (snapshots.length === 0) return null;
-
-  return {
-    id: value.id,
-    label: value.label,
-    createdAt: value.createdAt,
-    baseSnapshot: normalizePersistedSnapshot(value.baseSnapshot),
-    baseUndoStack: normalizePersistedSnapshotStack(value.baseUndoStack, maxHistorySize),
-    snapshots,
-  };
-}
-
-function normalizePersistedBranches(values: unknown, maxHistorySize: number): HistoryBranch[] {
-  if (!Array.isArray(values)) return [];
-  return values
-    .map((value) => normalizePersistedBranch(value, maxHistorySize))
-    .filter((branch): branch is HistoryBranch => branch !== null)
-    .slice(-MAX_HISTORY_BRANCHES);
-}
-
-function limitSnapshotStackForProject(snapshots: StateSnapshot[], maxHistorySize: number): StateSnapshot[] {
-  return snapshots.slice(-Math.min(maxHistorySize, MAX_PERSISTED_HISTORY_SNAPSHOTS));
-}
-
-function limitBranchForProject(branch: HistoryBranch, maxHistorySize: number): HistoryBranch {
-  return {
-    ...branch,
-    baseSnapshot: branch.baseSnapshot,
-    baseUndoStack: limitSnapshotStackForProject(branch.baseUndoStack, maxHistorySize),
-    snapshots: limitSnapshotStackForProject(branch.snapshots, maxHistorySize),
-  };
-}
 
 function createInitialHistorySnapshot(): StateSnapshot | null {
   if (!getTimelineState || !getMediaState || !getDockState) return null;
@@ -1196,7 +484,7 @@ export const useHistoryStore = create<HistoryState>()(
         set({
           undoStack: newUndoStack,
           redoStack: [], // Clear redo stack on new action
-          branches: appendHistoryBranch(branches, branch),
+          branches: appendHistoryBranch(branches, branch, MAX_HISTORY_BRANCHES),
           currentSnapshot: newSnapshot,
           navigationEntries: null,
           navigationSnapshotsByEntryId: {},
@@ -1553,7 +841,7 @@ export const useHistoryStore = create<HistoryState>()(
         set({
           undoStack: newUndoStack,
           redoStack: [],
-          branches: appendHistoryBranch(branches, branch),
+          branches: appendHistoryBranch(branches, branch, MAX_HISTORY_BRANCHES),
           currentSnapshot: finalSnapshot,
           navigationEntries: null,
           navigationSnapshotsByEntryId: {},
@@ -1632,14 +920,26 @@ export const useHistoryStore = create<HistoryState>()(
 
       return cloneHistoryForProject({
         schemaVersion: 1,
-        undoStack: limitSnapshotStackForProject(undoStack, maxHistorySize),
-        redoStack: limitSnapshotStackForProject(redoStack, maxHistorySize),
+        undoStack: limitSnapshotStackForProject(
+          undoStack,
+          maxHistorySize,
+          MAX_PERSISTED_HISTORY_SNAPSHOTS
+        ),
+        redoStack: limitSnapshotStackForProject(
+          redoStack,
+          maxHistorySize,
+          MAX_PERSISTED_HISTORY_SNAPSHOTS
+        ),
         currentSnapshot,
         eventLog: persistentEventLog.slice(-MAX_HISTORY_EVENT_LOG_SIZE),
         visibleEntries,
         branches: branches
           .slice(-MAX_HISTORY_BRANCHES)
-          .map((branch) => limitBranchForProject(branch, maxHistorySize)),
+          .map((branch) => limitBranchForProject(
+            branch,
+            maxHistorySize,
+            MAX_PERSISTED_HISTORY_SNAPSHOTS
+          )),
         maxHistorySize: persistedMaxHistorySize,
       });
     },
@@ -1684,13 +984,16 @@ export const useHistoryStore = create<HistoryState>()(
       }
 
       if (!PERSIST_HISTORY_SNAPSHOTS) {
-        const visibleEntries = normalizePersistedVisibleEntries(history.visibleEntries);
+        const visibleEntries = normalizePersistedVisibleEntries(
+          history.visibleEntries,
+          MAX_HISTORY_EVENT_LOG_SIZE
+        );
         const activeEntry = visibleEntries.find((entry) => entry.active);
 
         set({
           undoStack: [],
           redoStack: [],
-          eventLog: normalizePersistedEventLog(history.eventLog),
+          eventLog: normalizePersistedEventLog(history.eventLog, MAX_HISTORY_EVENT_LOG_SIZE),
           branches: [],
           currentSnapshot: createInitialHistorySnapshot(),
           maxHistorySize,
@@ -1707,8 +1010,8 @@ export const useHistoryStore = create<HistoryState>()(
       set({
         undoStack: normalizePersistedSnapshotStack(history.undoStack, maxHistorySize),
         redoStack: normalizePersistedSnapshotStack(history.redoStack, maxHistorySize),
-        eventLog: normalizePersistedEventLog(history.eventLog),
-        branches: normalizePersistedBranches(history.branches, maxHistorySize),
+        eventLog: normalizePersistedEventLog(history.eventLog, MAX_HISTORY_EVENT_LOG_SIZE),
+        branches: normalizePersistedBranches(history.branches, maxHistorySize, MAX_HISTORY_BRANCHES),
         currentSnapshot: normalizePersistedSnapshot(history.currentSnapshot) ?? createInitialHistorySnapshot(),
         maxHistorySize,
         navigationEntries: null,

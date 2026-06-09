@@ -626,8 +626,26 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
   `P2-GETSTATE-ADAPTER-FREEZE-167`; executable policy now has 20 allowed
   adapter paths and 177 hard-target files frozen at 669 current hits. The guard
   fails unknown non-adapter access and hard-target ceiling increases.
-- Wave 4 verification:
-  Orchestrator-verified: npx tsc -b clean; 11 test files / 105 tests green (guards, mediaRuntime leases, mediaPanel, historyStore).
+- Wave 6 closure completed:
+  `P5P6-RENDER-CONTRACTS-170` created runtime-handle-free render snapshot,
+  target snapshot, output-router, and export-session contracts with tests;
+  `P2-DOCKSTORE-SPLIT-171` converted `dockStore.ts` into
+  `src/stores/dockStore/` while preserving the byte-identical persist partialize
+  block; `P4-MEDIA-PANEL-SPLIT-172` extracted context/relink/badge/item wiring
+  and reduced `MediaPanel.tsx` to 2829 raw lines.
+- Wave 6 orchestrator fixes completed:
+  migrated the getState adapter grant from `dockStore.ts` to `dockStore/**`,
+  updated class-(c) hard-target file count 177 -> 178, moved the
+  `TimelineClipDataSource` registry evidence pointer from `src/types/index.ts`
+  to `src/types/timeline.ts` after the sanctioned barrel move, and recorded the
+  guard's first catch: two `getState()` hits redistributed from `MediaPanel` to
+  the new badge hook with total count unchanged.
+- Wave 6 verification:
+  Orchestrator-verified: tsc clean; full suite 4144/4145 with one stale evidence pointer, fixed; registry + guards + render-contracts suites green (68 tests).
+- Foreign-work note:
+  audio-mixer SVG/CSS plus Audio-Workstation doc changes were already present
+  outside packet ownership and were included in commit `2ba29a04` to avoid
+  loss; orchestrator rules now include a pre-commit foreign-file scan.
 
 ## High-Conflict Ownership Snapshot
 
@@ -642,22 +660,20 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
 | `src/stores/timeline/**` | protected Timeline integration lane | read only | explicit integration packet for hydration/runtime/signal/render snapshot |
 | `src/components/timeline/**` | protected Timeline integration lane | read only | explicit integration packet for hydration/runtime/signal/render snapshot |
 | `src/timeline/architecture/**` | protected template/reference | read only | user-approved registry-template edit |
-| `src/stores/mediaStore/**`, `src/stores/historyStore.ts`, `src/stores/dockStore.ts`, `src/stores/renderTargetStore.ts` | `P2-STORE-RUNTIME-FREEZE-001` | read, scan | P2/P3 contract freeze accepted |
+| `src/stores/mediaStore/**`, `src/stores/historyStore.ts`, `src/stores/dockStore/**`, `src/stores/renderTargetStore.ts` | `P2-STORE-RUNTIME-FREEZE-001` | read, scan | P2/P3 contract freeze accepted |
 | `src/engine/**`, `src/components/preview/**`, `src/components/export/**` | later P5/P6 joint packets | read, smoke only | render snapshot/output-router contracts frozen |
 | `src/services/aiTools/**` | later P7 smoke quarantine packets | read, smoke inventory only | Phase 0 smoke thresholds accepted |
 
 ## Active Packet
 
-None.
+Wave 7 running: render snapshot factories (P5/P6 freeze packet 2).
 
 ## Queued Packets
 
-No worker-owned source packet is currently active. Next wave candidates:
-render-contract scout / verification, then P2 `getState()` reduction packets
-against `P2-GETSTATE-ADAPTER-FREEZE-167`.
+- historyStore folder split (P2 store split 2).
+- MediaPanel continuation.
 
 ## Immediate Next Step
 
-Orchestrator verifies the render-contract scout work and dispatches bounded P2
-reduction packets that lower hard-target ceilings without changing adapter
-policy.
+Finish wave 7 in order: render snapshot factories first, then historyStore
+folder split, then MediaPanel continuation.

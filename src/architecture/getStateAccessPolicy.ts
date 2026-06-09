@@ -9,7 +9,7 @@ export const allowedAdapterPaths = [
   'src/components/guidedActions/**',
   'src/services/project/**',
   'src/services/projectFileService.ts',
-  'src/stores/historyStore.ts',
+  'src/stores/historyStore/**',
   // dockStore became a folder in packet 171; the adapter grant follows it.
   'src/stores/dockStore/**',
   'src/services/midi/**',
@@ -24,6 +24,7 @@ export const allowedAdapterPaths = [
   'src/services/audio/AudioRecordingService.ts',
   'src/services/audio/timelineRecordingWorkflow.ts',
   'src/services/export/**',
+  'src/services/render/**',
   'src/editorBoot.ts',
 ] as const;
 
@@ -211,7 +212,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 20,
+  allowedAdapterPathCount: 21,
   // 178 since packet 172 redistributed two MediaPanel hits into the
   // extracted source-monitor badge hook (cluster total unchanged).
   classCHardTargetFileCount: 178,
