@@ -4,159 +4,72 @@ import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import type {
   DockLayout,
-  DockNode,
   DockPanel,
   DockDragState,
   DropTarget,
   FloatingPanel,
   PanelType,
-  DockTabGroup,
   PanelData,
   PreviewPanelData,
   HoveredDockTabTarget,
   SavedDockLayout,
   SavedDockTimelineLayout,
   SavedDockTimelineTrackSlotLayout,
-  PanelConfig,
-} from '../types/dock';
-import { MULTI_INSTANCE_PANEL_TYPES, PANEL_CONFIGS } from '../types/dock';
+} from '../../types/dock';
+import { MULTI_INSTANCE_PANEL_TYPES } from '../../types/dock';
 import {
   removePanel,
   insertPanelAtTarget,
   collapseSingleChildSplits,
   adjustDropTargetForMovedPanel,
-} from '../utils/dockLayout';
-import { Logger } from '../services/logger';
-import { createPreviewPanelDataPatch, createPreviewPanelSource } from '../utils/previewPanelSource';
-import { useMediaStore } from './mediaStore';
-import { useTimelineStore } from './timeline';
+} from '../../utils/dockLayout';
+import { Logger } from '../../services/logger';
+import { createPreviewPanelDataPatch, createPreviewPanelSource } from '../../utils/previewPanelSource';
+import { useMediaStore } from '../mediaStore';
+import { useTimelineStore } from '../timeline';
+import { DEFAULT_DRAG_STATE, DEFAULT_LAYOUT } from './layoutDefaults';
+import { getPanelConfig, VALID_PANEL_TYPES, FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
+import { cleanupSavedTimelineLayout, TIMELINE_TRACK_TYPES, type TimelineTrackType } from './timelineLayoutPersistence';
+import {
+  cleanupPersistedLayout,
+  cleanupRestoredCurrentLayout,
+  cleanupSavedLayout,
+  cloneDockLayout,
+  getFactoryDockLayouts,
+  getLayoutMaxZIndex,
+  getMatchingEditableSavedLayout,
+  isProtectedFactoryDockLayout,
+  mergeFactoryDockLayouts,
+} from './layoutPersistence';
+import {
+  collectPanelTypes,
+  findFirstTabGroup,
+  findGroupIdByPanelId,
+  findPanelAndGroup,
+  findPanelById,
+  findTabGroupById,
+  replacePanelInLayout,
+  updateNodeInLayout,
+  updatePanelDataInLayout,
+} from './layoutTree';
+
+export {
+  FACTORY_AUDIO_EDIT_LAYOUT_ID,
+  FACTORY_VIDEO_EDIT_LAYOUT_ID,
+  CAN_EDIT_FACTORY_DOCK_LAYOUTS,
+} from './panelRegistry';
+export {
+  getFactoryDockLayouts,
+  isFactoryDockLayout,
+  isFactoryDockLayoutId,
+  isProtectedFactoryDockLayout,
+} from './layoutPersistence';
 
 const log = Logger.create('DockStore');
 const LEGACY_DEFAULT_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default';
 const DEFAULT_TIMELINE_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default-timeline';
 export const DOCK_LAYOUT_TRANSITION_EVENT = 'masterselects:dock-layout-transition';
 const DOCK_LAYOUT_TRANSITION_DURATION_MS = 500;
-
-const BUILT_IN_PANEL_TYPES: PanelType[] = [
-  'preview',
-  'multi-preview',
-  'timeline',
-  'clip-properties',
-  'history',
-  'audio-mixer',
-  'node-workspace',
-  'media',
-  'export',
-  'midi-mapping',
-  'multicam',
-  'ai-chat',
-  'ai-segment',
-  'scene-description',
-  'transitions',
-  'scope-waveform',
-  'scope-histogram',
-  'scope-vectorscope',
-];
-const VALID_PANEL_TYPES = new Set(BUILT_IN_PANEL_TYPES);
-const PANEL_CONFIG_LOOKUP = PANEL_CONFIGS as Partial<Record<PanelType, PanelConfig>>;
-const VALID_TIMELINE_AUDIO_DISPLAY_MODES = new Set(['compact', 'detailed', 'spectral']);
-const VALID_TIMELINE_TRACK_FOCUS_MODES = new Set(['balanced', 'audio', 'video']);
-const TIMELINE_TRACK_TYPES = ['video', 'audio'] as const;
-type TimelineTrackType = (typeof TIMELINE_TRACK_TYPES)[number];
-const MAX_SAVED_TIMELINE_TRACKS_PER_TYPE = 64;
-interface NormalizedDockPanel {
-  panel: DockPanel;
-}
-
-interface NormalizedFloatingPanel {
-  floatingPanel: FloatingPanel;
-}
-
-function getPanelConfig(type: PanelType): PanelConfig {
-  return PANEL_CONFIG_LOOKUP[type] ?? {
-    type,
-    title: type
-      .split('-')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' '),
-    closable: false,
-  };
-}
-
-function normalizeDockPanel(panel: DockPanel): NormalizedDockPanel | null {
-  const normalizedType = panel.type;
-  if (!VALID_PANEL_TYPES.has(normalizedType)) {
-    return null;
-  }
-
-  return {
-    panel: {
-      ...panel,
-      type: normalizedType,
-    },
-  };
-}
-
-function normalizeFloatingPanel(floatingPanel: FloatingPanel): NormalizedFloatingPanel | null {
-  const normalizedDockPanel = normalizeDockPanel(floatingPanel.panel);
-  if (!normalizedDockPanel) {
-    return null;
-  }
-
-  return {
-    floatingPanel: {
-      ...floatingPanel,
-      panel: normalizedDockPanel.panel,
-    },
-  };
-}
-
-// Normalize legacy aliases and filter out invalid panel types from a layout node
-function filterInvalidPanels(node: DockNode): DockNode | null {
-  if (node.kind === 'tab-group') {
-    const validPanels = node.panels
-      .map(normalizeDockPanel)
-      .filter((panel): panel is NormalizedDockPanel => panel !== null)
-      .map((candidate) => candidate.panel);
-    if (validPanels.length === 0) return null;
-    return {
-      ...node,
-      panels: validPanels,
-      activeIndex: Math.min(node.activeIndex, validPanels.length - 1),
-    };
-  } else {
-    const [left, right] = node.children;
-    const filteredLeft = filterInvalidPanels(left);
-    const filteredRight = filterInvalidPanels(right);
-    if (!filteredLeft && !filteredRight) return null;
-    if (!filteredLeft) return filteredRight;
-    if (!filteredRight) return filteredLeft;
-    return { ...node, children: [filteredLeft, filteredRight] };
-  }
-}
-
-// Clean up a persisted layout by removing invalid panels
-function cleanupPersistedLayout(layout: DockLayout): DockLayout {
-  const cleanedRoot = filterInvalidPanels(layout.root);
-  return {
-    ...layout,
-    root: cleanedRoot || DEFAULT_LAYOUT.root,
-    floatingPanels: layout.floatingPanels
-      .map(normalizeFloatingPanel)
-      .filter((panel): panel is NormalizedFloatingPanel => panel !== null)
-      .map((candidate) => candidate.floatingPanel),
-  };
-}
-
-function cloneDockLayout(layout: DockLayout): DockLayout {
-  return JSON.parse(JSON.stringify(layout)) as DockLayout;
-}
-
-function getLayoutMaxZIndex(layout: DockLayout): number {
-  return layout.floatingPanels.reduce((maxZIndex, floatingPanel) => (
-    Math.max(maxZIndex, floatingPanel.zIndex)
-  ), 1000);
-}
 
 function requestDockLayoutTransition(durationMs = DOCK_LAYOUT_TRANSITION_DURATION_MS): void {
   if (typeof window === 'undefined') {
@@ -168,164 +81,6 @@ function requestDockLayoutTransition(durationMs = DOCK_LAYOUT_TRANSITION_DURATIO
   }));
 }
 
-function cleanupSavedTrackTypeCount(value: unknown): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return Math.max(0, Math.min(MAX_SAVED_TIMELINE_TRACKS_PER_TYPE, Math.floor(value)));
-}
-
-function cleanupSavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined): SavedDockTimelineLayout | undefined {
-  if (!timeline || typeof timeline !== 'object') {
-    return undefined;
-  }
-
-  const cleaned: SavedDockTimelineLayout = {};
-  if (
-    typeof timeline.audioDisplayMode === 'string'
-    && VALID_TIMELINE_AUDIO_DISPLAY_MODES.has(timeline.audioDisplayMode)
-  ) {
-    cleaned.audioDisplayMode = timeline.audioDisplayMode;
-  }
-  if (typeof timeline.audioLayerAdvancedMode === 'boolean') {
-    cleaned.audioLayerAdvancedMode = timeline.audioLayerAdvancedMode;
-  }
-  if (typeof timeline.audioFocusMode === 'boolean') {
-    cleaned.audioFocusMode = timeline.audioFocusMode;
-  }
-  if (
-    typeof timeline.trackFocusMode === 'string'
-    && VALID_TIMELINE_TRACK_FOCUS_MODES.has(timeline.trackFocusMode)
-  ) {
-    cleaned.trackFocusMode = timeline.trackFocusMode;
-  }
-  if (typeof timeline.trackHeaderWidth === 'number' && Number.isFinite(timeline.trackHeaderWidth)) {
-    cleaned.trackHeaderWidth = timeline.trackHeaderWidth;
-  }
-  if (timeline.timelineSplitRatio === null) {
-    cleaned.timelineSplitRatio = null;
-  } else if (typeof timeline.timelineSplitRatio === 'number' && Number.isFinite(timeline.timelineSplitRatio)) {
-    cleaned.timelineSplitRatio = Math.max(0, Math.min(1, timeline.timelineSplitRatio));
-  }
-
-  if (
-    timeline.trackHeights
-    && typeof timeline.trackHeights === 'object'
-    && !Array.isArray(timeline.trackHeights)
-  ) {
-    const trackHeights: Record<string, number> = {};
-    for (const [trackId, height] of Object.entries(timeline.trackHeights)) {
-      if (typeof height === 'number' && Number.isFinite(height)) {
-        trackHeights[trackId] = height;
-      }
-    }
-    if (Object.keys(trackHeights).length > 0) {
-      cleaned.trackHeights = trackHeights;
-    }
-  }
-  if (
-    timeline.trackTypeHeights
-    && typeof timeline.trackTypeHeights === 'object'
-    && !Array.isArray(timeline.trackTypeHeights)
-  ) {
-    const trackTypeHeights: Partial<Record<'video' | 'audio', number>> = {};
-    if (typeof timeline.trackTypeHeights.video === 'number' && Number.isFinite(timeline.trackTypeHeights.video)) {
-      trackTypeHeights.video = timeline.trackTypeHeights.video;
-    }
-    if (typeof timeline.trackTypeHeights.audio === 'number' && Number.isFinite(timeline.trackTypeHeights.audio)) {
-      trackTypeHeights.audio = timeline.trackTypeHeights.audio;
-    }
-    if (Object.keys(trackTypeHeights).length > 0) {
-      cleaned.trackTypeHeights = trackTypeHeights;
-    }
-  }
-  if (
-    timeline.trackVisibility
-    && typeof timeline.trackVisibility === 'object'
-    && !Array.isArray(timeline.trackVisibility)
-  ) {
-    const trackVisibility: Record<string, boolean> = {};
-    for (const [trackId, visible] of Object.entries(timeline.trackVisibility)) {
-      if (typeof visible === 'boolean') {
-        trackVisibility[trackId] = visible;
-      }
-    }
-    if (Object.keys(trackVisibility).length > 0) {
-      cleaned.trackVisibility = trackVisibility;
-    }
-  }
-  if (
-    timeline.trackTypeVisibility
-    && typeof timeline.trackTypeVisibility === 'object'
-    && !Array.isArray(timeline.trackTypeVisibility)
-  ) {
-    const trackTypeVisibility: Partial<Record<'video' | 'audio', boolean>> = {};
-    if (typeof timeline.trackTypeVisibility.video === 'boolean') {
-      trackTypeVisibility.video = timeline.trackTypeVisibility.video;
-    }
-    if (typeof timeline.trackTypeVisibility.audio === 'boolean') {
-      trackTypeVisibility.audio = timeline.trackTypeVisibility.audio;
-    }
-    if (Object.keys(trackTypeVisibility).length > 0) {
-      cleaned.trackTypeVisibility = trackTypeVisibility;
-    }
-  }
-  if (
-    timeline.trackTypeCounts
-    && typeof timeline.trackTypeCounts === 'object'
-    && !Array.isArray(timeline.trackTypeCounts)
-  ) {
-    const trackTypeCounts: Partial<Record<TimelineTrackType, number>> = {};
-    for (const type of TIMELINE_TRACK_TYPES) {
-      const count = cleanupSavedTrackTypeCount(timeline.trackTypeCounts[type]);
-      if (count !== null) {
-        trackTypeCounts[type] = count;
-      }
-    }
-    if (Object.keys(trackTypeCounts).length > 0) {
-      cleaned.trackTypeCounts = trackTypeCounts;
-    }
-  }
-  if (
-    timeline.trackTypeLayouts
-    && typeof timeline.trackTypeLayouts === 'object'
-    && !Array.isArray(timeline.trackTypeLayouts)
-  ) {
-    const trackTypeLayouts: Partial<Record<TimelineTrackType, SavedDockTimelineTrackSlotLayout[]>> = {};
-    for (const type of TIMELINE_TRACK_TYPES) {
-      const slots = timeline.trackTypeLayouts[type];
-      if (!Array.isArray(slots)) {
-        continue;
-      }
-
-      const cleanedSlots = slots
-        .slice(0, MAX_SAVED_TIMELINE_TRACKS_PER_TYPE)
-        .map((slot): SavedDockTimelineTrackSlotLayout => {
-          const cleanedSlot: SavedDockTimelineTrackSlotLayout = {};
-          if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
-            return cleanedSlot;
-          }
-          if (typeof slot.height === 'number' && Number.isFinite(slot.height)) {
-            cleanedSlot.height = slot.height;
-          }
-          if (typeof slot.visible === 'boolean') {
-            cleanedSlot.visible = slot.visible;
-          }
-          return cleanedSlot;
-        });
-
-      if (cleanedSlots.length > 0) {
-        trackTypeLayouts[type] = cleanedSlots;
-      }
-    }
-    if (Object.keys(trackTypeLayouts).length > 0) {
-      cleaned.trackTypeLayouts = trackTypeLayouts;
-    }
-  }
-
-  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
-}
 
 function captureTimelineLayout(): SavedDockTimelineLayout {
   const timelineState = useTimelineStore.getState();
@@ -515,399 +270,6 @@ function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | undefined)
   }
 }
 
-function cleanupSavedLayout(savedLayout: SavedDockLayout): SavedDockLayout {
-  return {
-    ...savedLayout,
-    layout: cleanupPersistedLayout(savedLayout.layout),
-    favorite: savedLayout.favorite === true,
-    factory: savedLayout.factory === true || isFactoryDockLayoutId(savedLayout.id),
-    timeline: cleanupSavedTimelineLayout(savedLayout.timeline),
-  };
-}
-
-function areDockLayoutsEqual(left: DockLayout, right: DockLayout): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function getMatchingEditableSavedLayout(
-  savedLayouts: SavedDockLayout[],
-  layout: DockLayout,
-): SavedDockLayout | null {
-  return savedLayouts.find((savedLayout) => (
-    areDockLayoutsEqual(savedLayout.layout, layout) && !isProtectedFactoryDockLayout(savedLayout)
-  )) ?? null;
-}
-
-// Default editing layout: Media left, Preview center, Properties right, Timeline bottom.
-const DEFAULT_LAYOUT: DockLayout = {
-  root: {
-    kind: 'split',
-    id: 'root-split',
-    direction: 'vertical',
-    ratio: 0.6698039215686274,
-    children: [
-      {
-        kind: 'split',
-        id: 'top-split',
-        direction: 'horizontal',
-        ratio: 0.29449423815621,
-        children: [
-          {
-            kind: 'tab-group',
-            id: 'left-group',
-            panels: [
-              { id: 'media', type: 'media', title: 'Media' },
-            ],
-            activeIndex: 0,
-          },
-          {
-                kind: 'split',
-                id: 'center-right-split',
-                direction: 'horizontal',
-                ratio: 0.7109300593133233,
-                children: [
-                  {
-                    kind: 'tab-group',
-                id: 'preview-group',
-                panels: [
-                  { id: 'preview', type: 'preview', title: 'Preview' },
-                ],
-                activeIndex: 0,
-              },
-              {
-                kind: 'tab-group',
-                id: 'right-group',
-                panels: [
-                  { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
-                  { id: 'history', type: 'history', title: 'History' },
-                ],
-                activeIndex: 0,
-              },
-            ],
-          },
-        ],
-      },
-      {
-        kind: 'tab-group',
-        id: 'timeline-group',
-        panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
-        activeIndex: 0,
-      },
-    ],
-  },
-  floatingPanels: [],
-  panelZoom: {
-    'clip-properties': 1,
-    history: 1,
-  },
-};
-
-const AUDIO_EDIT_LAYOUT: DockLayout = {
-  root: {
-    kind: 'split',
-    id: 'root-split',
-    direction: 'vertical',
-    ratio: 0.61,
-    children: [
-      {
-        kind: 'tab-group',
-        id: 'timeline-group',
-        panels: [{ id: 'timeline', type: 'timeline', title: 'Timeline' }],
-        activeIndex: 0,
-      },
-      {
-        kind: 'split',
-        id: 'audio-edit-bottom-split',
-        direction: 'horizontal',
-        ratio: 0.14,
-        children: [
-          {
-            kind: 'tab-group',
-            id: 'left-group',
-            panels: [
-              { id: 'media', type: 'media', title: 'Media' },
-            ],
-            activeIndex: 0,
-          },
-          {
-            kind: 'split',
-            id: 'audio-edit-mixer-properties-split',
-            direction: 'horizontal',
-            ratio: 0.8,
-            children: [
-              {
-                kind: 'tab-group',
-                id: 'audio-mixer-group',
-                panels: [
-                  { id: 'audio-mixer', type: 'audio-mixer', title: 'Audio Mixer' },
-                ],
-                activeIndex: 0,
-              },
-              {
-                kind: 'tab-group',
-                id: 'right-group',
-                panels: [
-                  { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
-                  { id: 'history', type: 'history', title: 'History' },
-                ],
-                activeIndex: 0,
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  floatingPanels: [],
-  panelZoom: {
-    'clip-properties': 1,
-    history: 1,
-    'audio-mixer': 1,
-  },
-};
-
-export const FACTORY_VIDEO_EDIT_LAYOUT_ID = 'factory-video-edit';
-export const FACTORY_AUDIO_EDIT_LAYOUT_ID = 'factory-audio-edit';
-const FACTORY_DOCK_LAYOUT_IDS = new Set([FACTORY_VIDEO_EDIT_LAYOUT_ID, FACTORY_AUDIO_EDIT_LAYOUT_ID]);
-const FACTORY_DOCK_LAYOUT_NAMES = new Map<string, string>([
-  [FACTORY_VIDEO_EDIT_LAYOUT_ID, 'VIDEO EDIT'],
-  [FACTORY_AUDIO_EDIT_LAYOUT_ID, 'AUDIO EDIT'],
-]);
-const FACTORY_DOCK_LAYOUT_NAME_TO_ID = new Map<string, string>(
-  Array.from(FACTORY_DOCK_LAYOUT_NAMES.entries()).map(([id, name]) => [name.toLowerCase(), id]),
-);
-export const CAN_EDIT_FACTORY_DOCK_LAYOUTS = import.meta.env.DEV;
-
-const VIDEO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
-  audioDisplayMode: 'detailed',
-  audioLayerAdvancedMode: true,
-  audioFocusMode: false,
-  trackFocusMode: 'balanced',
-  trackHeaderWidth: 210,
-  timelineSplitRatio: null,
-  trackTypeHeights: {
-    video: 70,
-    audio: 48,
-  },
-  trackTypeVisibility: {
-    video: true,
-    audio: true,
-  },
-  trackTypeCounts: {
-    video: 2,
-    audio: 1,
-  },
-  trackTypeLayouts: {
-    video: [
-      { height: 70, visible: true },
-      { height: 70, visible: true },
-    ],
-    audio: [
-      { height: 48, visible: true },
-    ],
-  },
-};
-
-const AUDIO_EDIT_TIMELINE_LAYOUT: SavedDockTimelineLayout = {
-  audioDisplayMode: 'detailed',
-  audioLayerAdvancedMode: true,
-  audioFocusMode: true,
-  trackFocusMode: 'audio',
-  trackHeaderWidth: 210,
-  timelineSplitRatio: null,
-  trackTypeHeights: {
-    video: 40,
-    audio: 96,
-  },
-  trackTypeVisibility: {
-    video: true,
-    audio: true,
-  },
-  trackTypeCounts: {
-    video: 2,
-    audio: 1,
-  },
-  trackTypeLayouts: {
-    video: [
-      { height: 40, visible: true },
-      { height: 40, visible: true },
-    ],
-    audio: [
-      { height: 96, visible: true },
-    ],
-  },
-};
-
-const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
-  {
-    id: FACTORY_VIDEO_EDIT_LAYOUT_ID,
-    name: 'VIDEO EDIT',
-    layout: DEFAULT_LAYOUT,
-    timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
-    createdAt: 0,
-    updatedAt: 3,
-    favorite: true,
-    factory: true,
-  },
-  {
-    id: FACTORY_AUDIO_EDIT_LAYOUT_ID,
-    name: 'AUDIO EDIT',
-    layout: AUDIO_EDIT_LAYOUT,
-    timeline: AUDIO_EDIT_TIMELINE_LAYOUT,
-    createdAt: 0,
-    updatedAt: 3,
-    favorite: true,
-    factory: true,
-  },
-];
-
-export function isFactoryDockLayoutId(layoutId: string | null | undefined): boolean {
-  return typeof layoutId === 'string' && FACTORY_DOCK_LAYOUT_IDS.has(layoutId);
-}
-
-export function isFactoryDockLayout(savedLayout: SavedDockLayout | null | undefined): boolean {
-  return savedLayout?.factory === true || isFactoryDockLayoutId(savedLayout?.id);
-}
-
-export function isProtectedFactoryDockLayout(savedLayout: SavedDockLayout | null | undefined): boolean {
-  return isFactoryDockLayout(savedLayout) && !CAN_EDIT_FACTORY_DOCK_LAYOUTS;
-}
-
-function getFactoryDockLayoutIdByName(name: string): string | null {
-  return FACTORY_DOCK_LAYOUT_NAME_TO_ID.get(name.trim().toLowerCase()) ?? null;
-}
-
-function getFactoryDockLayoutIdForSavedLayout(savedLayout: SavedDockLayout): string | null {
-  return isFactoryDockLayoutId(savedLayout.id)
-    ? savedLayout.id
-    : getFactoryDockLayoutIdByName(savedLayout.name);
-}
-
-function cloneSavedDockLayout(savedLayout: SavedDockLayout): SavedDockLayout {
-  return JSON.parse(JSON.stringify(savedLayout)) as SavedDockLayout;
-}
-
-export function getFactoryDockLayouts(): SavedDockLayout[] {
-  return FACTORY_SAVED_DOCK_LAYOUTS.map(cloneSavedDockLayout);
-}
-
-function mergeFactoryDockLayouts(savedLayouts: SavedDockLayout[]): SavedDockLayout[] {
-  const devOverrides = new Map<string, SavedDockLayout>();
-  const factoryFavoriteOverrides = new Map<string, boolean>();
-  const userLayouts: SavedDockLayout[] = [];
-
-  for (const savedLayout of savedLayouts) {
-    const factoryId = getFactoryDockLayoutIdForSavedLayout(savedLayout);
-    if (factoryId) {
-      factoryFavoriteOverrides.set(factoryId, savedLayout.favorite === true);
-      if (CAN_EDIT_FACTORY_DOCK_LAYOUTS) {
-        devOverrides.set(factoryId, {
-          ...savedLayout,
-          id: factoryId,
-          name: FACTORY_DOCK_LAYOUT_NAMES.get(factoryId) ?? savedLayout.name,
-          factory: true,
-          favorite: savedLayout.favorite === true,
-        });
-      }
-      continue;
-    }
-
-    userLayouts.push(savedLayout);
-  }
-
-  const factoryLayouts = FACTORY_SAVED_DOCK_LAYOUTS.map((factoryLayout) => {
-    const override = devOverrides.get(factoryLayout.id);
-    if (override) {
-      return cloneSavedDockLayout({
-        ...override,
-        factory: true,
-      });
-    }
-
-    return cloneSavedDockLayout({
-      ...factoryLayout,
-      favorite: factoryFavoriteOverrides.get(factoryLayout.id) ?? factoryLayout.favorite,
-    });
-  });
-
-  return [...factoryLayouts, ...userLayouts];
-}
-
-function panelTypesForGroup(layout: DockLayout, groupId: string): PanelType[] | null {
-  const group = findTabGroupById(layout.root, groupId);
-  if (!group) {
-    return null;
-  }
-  return group.panels.map((panel) => panel.type);
-}
-
-function arePanelTypeListsEqual(left: PanelType[] | null, right: PanelType[]): boolean {
-  return left !== null
-    && left.length === right.length
-    && left.every((type, index) => type === right[index]);
-}
-
-function isLegacyFactoryDefaultLayout(layout: DockLayout): boolean {
-  if (layout.floatingPanels.length > 0 || Object.keys(layout.panelZoom ?? {}).length > 0) {
-    return false;
-  }
-  const root = layout.root;
-  if (root.kind !== 'split' || root.id !== 'root-split' || root.direction !== 'vertical' || root.ratio !== 0.6) {
-    return false;
-  }
-  const top = root.children[0];
-  if (top.kind !== 'split' || top.id !== 'top-split' || top.direction !== 'horizontal' || top.ratio !== 0.15) {
-    return false;
-  }
-  const centerRight = top.children[1];
-  if (
-    centerRight.kind !== 'split'
-    || centerRight.id !== 'center-right-split'
-    || centerRight.direction !== 'horizontal'
-    || centerRight.ratio !== 0.67
-  ) {
-    return false;
-  }
-
-  const leftGroup = findTabGroupById(layout.root, 'left-group');
-  const previewGroup = findTabGroupById(layout.root, 'preview-group');
-  const rightGroup = findTabGroupById(layout.root, 'right-group');
-  const timelineGroup = findTabGroupById(layout.root, 'timeline-group');
-  const leftPanelTypes = panelTypesForGroup(layout, 'left-group');
-  return (
-    arePanelTypeListsEqual(leftPanelTypes, ['media', 'ai-chat'])
-    && arePanelTypeListsEqual(panelTypesForGroup(layout, 'preview-group'), ['preview'])
-    && arePanelTypeListsEqual(panelTypesForGroup(layout, 'timeline-group'), ['timeline'])
-    && leftGroup?.activeIndex === 0
-    && previewGroup?.activeIndex === 0
-    && rightGroup?.activeIndex === 3
-    && timelineGroup?.activeIndex === 0
-    && arePanelTypeListsEqual(panelTypesForGroup(layout, 'right-group'), [
-      'export',
-      'clip-properties',
-      'node-workspace',
-      'scope-waveform',
-      'scope-histogram',
-      'scope-vectorscope',
-    ])
-  );
-}
-
-function cleanupRestoredCurrentLayout(layout: DockLayout): DockLayout {
-  const cleanedLayout = cleanupPersistedLayout(layout);
-  return isLegacyFactoryDefaultLayout(cleanedLayout)
-    ? cloneDockLayout(DEFAULT_LAYOUT)
-    : cleanedLayout;
-}
-
-const DEFAULT_DRAG_STATE: DockDragState = {
-  isDragging: false,
-  draggedPanel: null,
-  sourceGroupId: null,
-  dropTarget: null,
-  dragOffset: { x: 0, y: 0 },
-  currentPos: { x: 0, y: 0 },
-};
 
 interface DockState {
   layout: DockLayout;
@@ -963,7 +325,7 @@ interface DockState {
   // Multiple preview panels. Optional targetGroupId places the new instance
   // side-by-side (split right) of that group — e.g. the tab bar whose "+" was clicked.
   addPreviewPanel: (compositionId: string | null, targetGroupId?: string) => void;
-  updatePanelData: (panelId: string, data: Partial<import('../types/dock').PanelData>) => void;
+  updatePanelData: (panelId: string, data: Partial<PanelData>) => void;
 
   // Layout management
   saveNamedLayout: (name: string) => SavedDockLayout | null;
@@ -1777,196 +1139,3 @@ export const useDockStore = create<DockState>()(
     )
   )
 );
-
-// Helper: Update a node in the layout tree
-function updateNodeInLayout(
-  layout: DockLayout,
-  nodeId: string,
-  updater: (node: DockNode) => DockNode
-): DockLayout {
-  return {
-    ...layout,
-    root: updateNodeRecursive(layout.root, nodeId, updater),
-  };
-}
-
-function updateNodeRecursive(
-  node: DockNode,
-  nodeId: string,
-  updater: (node: DockNode) => DockNode
-): DockNode {
-  if (node.id === nodeId) {
-    return updater(node);
-  }
-  if (node.kind === 'split') {
-    return {
-      ...node,
-      children: [
-        updateNodeRecursive(node.children[0], nodeId, updater),
-        updateNodeRecursive(node.children[1], nodeId, updater),
-      ] as [DockNode, DockNode],
-    };
-  }
-  return node;
-}
-
-// Helper: Find a panel by ID in the layout
-function findPanelById(layout: DockLayout, panelId: string): DockPanel | null {
-  // Check floating panels
-  for (const floating of layout.floatingPanels) {
-    if (floating.panel.id === panelId) {
-      return floating.panel;
-    }
-  }
-  // Check docked panels
-  return findPanelInNode(layout.root, panelId);
-}
-
-function findPanelInNode(node: DockNode, panelId: string): DockPanel | null {
-  if (node.kind === 'tab-group') {
-    return node.panels.find((p) => p.id === panelId) || null;
-  }
-  const left = findPanelInNode(node.children[0], panelId);
-  if (left) return left;
-  return findPanelInNode(node.children[1], panelId);
-}
-
-function replacePanelInLayout(layout: DockLayout, panelId: string, replacementPanel: DockPanel): DockLayout {
-  return {
-    ...layout,
-    root: replacePanelInNode(layout.root, panelId, replacementPanel),
-  };
-}
-
-function replacePanelInNode(node: DockNode, panelId: string, replacementPanel: DockPanel): DockNode {
-  if (node.kind === 'tab-group') {
-    const panelIndex = node.panels.findIndex((panel) => panel.id === panelId);
-    if (panelIndex < 0) {
-      return node;
-    }
-
-    const panels = [...node.panels];
-    panels[panelIndex] = replacementPanel;
-    return {
-      ...node,
-      panels,
-      activeIndex: panelIndex,
-    };
-  }
-
-  return {
-    ...node,
-    children: [
-      replacePanelInNode(node.children[0], panelId, replacementPanel),
-      replacePanelInNode(node.children[1], panelId, replacementPanel),
-    ] as [DockNode, DockNode],
-  };
-}
-
-// Helper: Collect all panel types in a node
-function collectPanelTypes(node: DockNode, types: PanelType[]): void {
-  if (node.kind === 'tab-group') {
-    node.panels.forEach((p) => {
-      if (VALID_PANEL_TYPES.has(p.type) && !types.includes(p.type)) {
-        types.push(p.type);
-      }
-    });
-  } else {
-    collectPanelTypes(node.children[0], types);
-    collectPanelTypes(node.children[1], types);
-  }
-}
-
-// Helper: Find a tab group by ID
-function findTabGroupById(node: DockNode, groupId: string): DockTabGroup | null {
-  if (node.kind === 'tab-group') {
-    return node.id === groupId ? node : null;
-  }
-  const left = findTabGroupById(node.children[0], groupId);
-  if (left) return left;
-  return findTabGroupById(node.children[1], groupId);
-}
-
-// Helper: Find the first tab group in the tree
-function findFirstTabGroup(node: DockNode): DockTabGroup | null {
-  if (node.kind === 'tab-group') {
-    return node;
-  }
-  const left = findFirstTabGroup(node.children[0]);
-  if (left) return left;
-  return findFirstTabGroup(node.children[1]);
-}
-
-// Helper: Find a panel and its group by panel type
-function findPanelAndGroup(
-  node: DockNode,
-  panelType: PanelType
-): { panel: DockPanel; groupId: string } | null {
-  if (node.kind === 'tab-group') {
-    const panel = node.panels.find((p) => p.type === panelType);
-    if (panel) {
-      return { panel, groupId: node.id };
-    }
-    return null;
-  }
-  const left = findPanelAndGroup(node.children[0], panelType);
-  if (left) return left;
-  return findPanelAndGroup(node.children[1], panelType);
-}
-
-// Helper: Find a panel's group ID by panel ID
-function findGroupIdByPanelId(node: DockNode, panelId: string): string | null {
-  if (node.kind === 'tab-group') {
-    const panel = node.panels.find((p) => p.id === panelId);
-    if (panel) {
-      return node.id;
-    }
-    return null;
-  }
-  const left = findGroupIdByPanelId(node.children[0], panelId);
-  if (left) return left;
-  return findGroupIdByPanelId(node.children[1], panelId);
-}
-
-// Helper: Update panel data in layout
-function updatePanelDataInLayout(
-  layout: DockLayout,
-  panelId: string,
-  data: Partial<PanelData>
-): DockLayout {
-  return {
-    ...layout,
-    root: updatePanelDataInNode(layout.root, panelId, data),
-    floatingPanels: layout.floatingPanels.map((f) =>
-      f.panel.id === panelId
-        ? { ...f, panel: { ...f.panel, data: { ...f.panel.data, ...data } as PanelData } }
-        : f
-    ),
-  };
-}
-
-function updatePanelDataInNode(
-  node: DockNode,
-  panelId: string,
-  data: Partial<PanelData>
-): DockNode {
-  if (node.kind === 'tab-group') {
-    const panelIndex = node.panels.findIndex((p) => p.id === panelId);
-    if (panelIndex >= 0) {
-      const newPanels = [...node.panels];
-      newPanels[panelIndex] = {
-        ...newPanels[panelIndex],
-        data: { ...newPanels[panelIndex].data, ...data } as PanelData,
-      };
-      return { ...node, panels: newPanels };
-    }
-    return node;
-  }
-  return {
-    ...node,
-    children: [
-      updatePanelDataInNode(node.children[0], panelId, data),
-      updatePanelDataInNode(node.children[1], panelId, data),
-    ] as [DockNode, DockNode],
-  };
-}

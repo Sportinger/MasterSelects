@@ -622,9 +622,9 @@
 
 .audio-mixer-fader-meter {
   display: grid;
-  grid-template-columns: minmax(24px, 1fr) 24px 28px;
+  grid-template-columns: 34px 24px 26px;
   align-items: stretch;
-  gap: 5px;
+  gap: 4px;
   min-height: 0;
   padding: 4px 2px;
   border: 1px solid #050607;
@@ -633,18 +633,76 @@
 }
 
 .audio-mixer-strip-fader {
-  width: 22px;
+  width: 34px;
   height: 100%;
   min-height: 0;
   margin: 0 auto;
   padding: 0;
   border: 0;
   outline: none;
+  -webkit-appearance: none;
+  appearance: none;
   background: transparent;
-  accent-color: #8a8f87;
   cursor: ns-resize;
   writing-mode: vertical-lr;
   direction: rtl;
+}
+
+.audio-mixer-strip-fader::-webkit-slider-runnable-track {
+  width: 8px;
+  height: 100%;
+  border: 1px solid #050607;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #060809 0 1px, #293132 1px 3px, #9aa39a 3px 5px, #293132 5px 7px, #060809 7px 8px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 2px 8px rgba(0, 0, 0, 0.62);
+}
+
+.audio-mixer-strip-fader::-webkit-slider-thumb {
+  width: 34px;
+  height: 22px;
+  border: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  background: url('./fadercap-topdown.svg') center / 100% 100% no-repeat;
+  cursor: ns-resize;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75));
+}
+
+.audio-mixer-strip-fader:hover::-webkit-slider-thumb,
+.audio-mixer-strip-fader:focus-visible::-webkit-slider-thumb {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75)) brightness(1.06);
+}
+
+.audio-mixer-strip-fader::-moz-range-track {
+  width: 8px;
+  height: 100%;
+  border: 1px solid #050607;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #060809 0 1px, #293132 1px 3px, #9aa39a 3px 5px, #293132 5px 7px, #060809 7px 8px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 2px 8px rgba(0, 0, 0, 0.62);
+}
+
+.audio-mixer-strip-fader::-moz-range-progress {
+  width: 8px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.audio-mixer-strip-fader::-moz-range-thumb {
+  width: 34px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: url('./fadercap-topdown.svg') center / 100% 100% no-repeat;
+  cursor: ns-resize;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75));
+}
+
+.audio-mixer-strip-fader:hover::-moz-range-thumb,
+.audio-mixer-strip-fader:focus-visible::-moz-range-thumb {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75)) brightness(1.06);
 }
 
 .audio-mixer-strip-fader:focus {

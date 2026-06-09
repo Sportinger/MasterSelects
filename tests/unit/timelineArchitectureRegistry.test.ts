@@ -2304,7 +2304,10 @@ describe('timeline architecture registry', () => {
   });
 
   it('routes timeline store source persistence through the runtime sanitizer', () => {
-    const typesSource = readRepoFile('src/types/index.ts');
+    // Evidence location updated 2026-06-10: the type-barrel split (packet
+    // 159) moved the timeline source contracts to src/types/timeline.ts;
+    // index.ts re-exports them. Assertion strength unchanged.
+    const typesSource = readRepoFile('src/types/timeline.ts');
     const sanitizerSource = readRepoFile('src/stores/timeline/sourceRuntimeSanitizer.ts');
     const serializationSource = readRepoFile('src/stores/timeline/serializationUtils.ts');
     const clipboardSource = readRepoFile('src/stores/timeline/clipboardSlice.ts');

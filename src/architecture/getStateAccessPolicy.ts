@@ -10,7 +10,8 @@ export const allowedAdapterPaths = [
   'src/services/project/**',
   'src/services/projectFileService.ts',
   'src/stores/historyStore.ts',
-  'src/stores/dockStore.ts',
+  // dockStore became a folder in packet 171; the adapter grant follows it.
+  'src/stores/dockStore/**',
   'src/services/midi/**',
   'src/hooks/useMIDIRuntime.ts',
   'src/services/sam2/**',
@@ -41,7 +42,10 @@ export const classCHardTargets = [
   { path: 'src/components/panels/audio-mixer/AudioMixerPanel.tsx', maxCurrentHits: 30 },
   { path: 'src/components/panels/color/ColorEditor.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/HistoryPanel.tsx', maxCurrentHits: 1 },
-  { path: 'src/components/panels/MediaPanel.tsx', maxCurrentHits: 7 },
+  // Redistributed by packet 172: two hits moved into the extracted
+  // source-monitor badge hook; MediaPanel-cluster total unchanged (7).
+  { path: 'src/components/panels/MediaPanel.tsx', maxCurrentHits: 5 },
+  { path: 'src/components/panels/media/panel/useMediaPanelSourceMonitorBadges.ts', maxCurrentHits: 2 },
   { path: 'src/components/panels/nodes/NodeWorkspacePanel.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/AnalysisTab.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/AudioBusPropertiesTabs.tsx', maxCurrentHits: 10 },
@@ -208,6 +212,8 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 20,
-  classCHardTargetFileCount: 177,
+  // 178 since packet 172 redistributed two MediaPanel hits into the
+  // extracted source-monitor badge hook (cluster total unchanged).
+  classCHardTargetFileCount: 178,
   classCHardTargetMaxHits: 669,
 } as const;

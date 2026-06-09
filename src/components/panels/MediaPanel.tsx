@@ -6,20 +6,15 @@ import { CompositionSettingsDialog } from './media/CompositionSettingsDialog';
 import { SolidSettingsDialog } from './media/SolidSettingsDialog';
 import { LabelColorPicker } from './media/LabelColorPicker';
 import { isImportedMediaFileItem } from './media/itemTypeGuards';
-import { getMediaContextActionState } from './media/context/contextActionState';
-import { getMediaContextSelectedItemState } from './media/context/contextSelectedItemState';
 import { renderMediaAnnotationContextMenuMount } from './media/context/MediaAnnotationContextMenuMount';
-import { MediaContextActionsMenu } from './media/context/MediaContextActionsMenu';
-import { MediaContextMenuFrame } from './media/context/MediaContextMenuFrame';
+import { MediaPanelProjectContextMenuMount } from './media/context/MediaPanelProjectContextMenuMount';
 import { useMediaContextExplorerHandlers } from './media/context/useMediaContextExplorerHandlers';
 import { useMediaContextLocalHandlers, type MediaContextSolidSettingsDialogState } from './media/context/useMediaContextLocalHandlers';
 import { formatMediaDuration as formatDuration } from './media/grid/format';
 import { MediaGridChrome } from './media/grid/MediaGridChrome';
-import { MediaGridItem } from './media/grid/MediaGridItem';
 import { MediaFloatingFeedbackPortal } from './media/panel/MediaFloatingFeedbackPortal';
 import { MediaGenerationTrayMount } from './media/panel/MediaGenerationTrayMount';
 import { MediaClassicListChrome } from './media/list/MediaClassicListChrome';
-import { MediaClassicListRow } from './media/list/MediaClassicListRow';
 import {
   MEDIA_CLASSIC_ROW_HEIGHT as CLASSIC_ROW_HEIGHT,
   formatMediaPanelBitrate as formatBitrate,
@@ -33,17 +28,20 @@ import {
   sortClassicMediaItems,
 } from './media/list/classicListPlanning';
 import type { MediaClassicColumnId } from './media/list/types';
-import type { MediaPanelContextMenu } from './media/context/types';
 import { MediaDropOverlay } from './media/panel/MediaDropOverlay';
 import { MediaPanelHeader } from './media/panel/MediaPanelHeader';
 import { MediaNoMediaEmptyState } from './media/panel/MediaNoMediaEmptyState';
 import { MediaNoSearchResultsEmptyState } from './media/panel/MediaNoSearchResultsEmptyState';
 import type { MediaPanelViewMode } from './media/panel/types';
 import { useMediaPanelAddImportCommands } from './media/panel/useMediaPanelAddImportCommands';
+import { useMediaPanelContextMenuState } from './media/panel/useMediaPanelContextMenuState';
 import { useMediaPanelDragDropMarquee, type MediaPanelMarquee } from './media/panel/useMediaPanelDragDropMarquee';
+import { useMediaPanelItemRenderers } from './media/panel/useMediaPanelItemRenderers';
 import { useMediaPanelProjectItems } from './media/panel/useMediaPanelProjectItems';
+import { useMediaPanelRelinkStatus } from './media/panel/useMediaPanelRelinkStatus';
 import { getMediaDeleteImpact, useMediaPanelRenameDeleteCommands } from './media/panel/useMediaPanelRenameDeleteCommands';
 import { useMediaPanelSelectionCommands } from './media/panel/useMediaPanelSelectionCommands';
+import { useMediaPanelSourceMonitorBadges } from './media/panel/useMediaPanelSourceMonitorBadges';
 import { useMediaPanelViewTransition } from './media/panel/useMediaPanelViewTransition';
 import { MediaBoardAnnotationLayer } from './media/board/MediaBoardAnnotationLayer';
 import { MediaBoardView } from './media/board/MediaBoardView';
@@ -120,7 +118,6 @@ import type {
   MediaBoardViewport,
   MediaBoardViewportSize,
 } from './media/board/types';
-import { isProxyFrameCountComplete } from '../../stores/mediaStore/helpers/proxyCompleteness';
 
 import { useMediaStore } from '../../stores/mediaStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
@@ -128,7 +125,6 @@ import type {
   CameraItem,
   Composition,
   MathSceneItem,
-  MediaFile,
   MediaFolder,
   MeshItem,
   MotionShapeItem,
@@ -139,8 +135,6 @@ import type {
   TextItem,
 } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { useDockStore } from '../../stores/dockStore';
-import { useContextMenuPosition } from '../../hooks/useContextMenuPosition';
 import { RelinkDialog } from '../common/RelinkDialog';
 import { mediaNeedsRelink } from '../../services/project/relinkMedia';
 import {
@@ -210,10 +204,6 @@ function getMediaPanelAnimatedTarget(root: HTMLElement | null, itemId: string): 
   }
 
   return root.querySelector<HTMLElement>(`[data-media-panel-anim-id="${CSS.escape(itemId)}"]`);
-}
-
-function isSignalAssetItem(item: ProjectItem): item is SignalAssetItem {
-  return 'type' in item && item.type === 'signal';
 }
 
 export function MediaPanel() {
@@ -319,14 +309,16 @@ export function MediaPanel() {
   const classicListScrollSnapTimerRef = useRef<number | null>(null);
   const classicListHorizontalSnapTimerRef = useRef<number | null>(null);
   const classicListScrollSettledTimerRef = useRef<number | null>(null);
-  const [contextMenu, setContextMenu] = useState<MediaPanelContextMenu | null>(null);
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(null);
-  }, []);
+  const {
+    contextMenu,
+    setContextMenu,
+    closeContextMenu,
+    contextMenuRef,
+    contextMenuPosition,
+  } = useMediaPanelContextMenuState();
 
   // Marquee selection state
   const [marquee, setMarquee] = useState<MediaPanelMarquee | null>(null);
-  const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const [settingsDialog, setSettingsDialog] = useState<{ compositionId: string; width: number; height: number; frameRate: number; duration: number } | null>(null);
   const [solidSettingsDialog, setSolidSettingsDialog] = useState<MediaContextSolidSettingsDialogState | null>(null);
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
@@ -784,22 +776,7 @@ export function MediaPanel() {
   });
   const mediaContextLocalHandlers = useMediaContextLocalHandlers({ moveToFolder, setSolidSettingsDialog, closeContextMenu });
 
-  // Handle badge click — select clip using this media file, open properties panel with target tab
-  const handleBadgeClick = useCallback((mediaFileId: string, tab: 'transcript' | 'analysis') => {
-    const timelineState = useTimelineStore.getState();
-    // Find a clip in the timeline that uses this media file
-    const clip = timelineState.clips.find(c =>
-      (c.source?.mediaFileId || c.mediaFileId) === mediaFileId
-    );
-    if (clip) {
-      timelineState.selectClip(clip.id);
-    }
-    // Open clip-properties panel and dispatch tab switch after React re-renders
-    useDockStore.getState().activatePanelType('clip-properties');
-    requestAnimationFrame(() => {
-      window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab } }));
-    });
-  }, []);
+  const handleBadgeClick = useMediaPanelSourceMonitorBadges();
 
   const {
     getActiveParentId,
@@ -977,121 +954,6 @@ export function MediaPanel() {
     document.body.style.userSelect = 'none';
   }, [nameColumnWidth]);
 
-  // Render a single classic-list row. Tree traversal is virtualized separately.
-  const renderClassicRow = (item: ProjectItem, depth: number = 0) => {
-    const isFolder = 'isExpanded' in item;
-    const isMediaFile = isImportedMediaFileItem(item);
-
-    return (
-      <MediaClassicListRow
-        key={item.id}
-        item={item}
-        depth={depth}
-        columnOrder={columnOrder}
-        selected={selectedIds.includes(item.id)}
-        renaming={renamingId === item.id}
-        expanded={isFolder && expandedFolderIds.includes(item.id)}
-        needsRelink={isMediaFile && mediaNeedsRelink(item)}
-        dragTarget={isFolder && dragOverFolderId === item.id}
-        beingDragged={internalDragId === item.id}
-        nameColumnWidth={nameColumnWidth}
-        renameValue={renameValue}
-        onOpenLabelPicker={(itemId, x, y) => {
-          setLabelPickerItemId(itemId);
-          setLabelPickerPos({ x, y });
-        }}
-        onToggleFolder={toggleFolderExpanded}
-        onRenameValueChange={setRenameValue}
-        onFinishRename={finishRename}
-        onCancelRename={() => setRenamingId(null)}
-        onNameClick={handleNameClick}
-        onBadgeClick={handleBadgeClick}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onFolderDragOver={handleFolderDragOver}
-        onFolderDragLeave={handleFolderDragLeave}
-        onFolderDrop={handleFolderDrop}
-        onClick={(event, itemId) => handleItemClick(itemId, event)}
-        onDoubleClick={handleItemDoubleClick}
-        onContextMenu={(event, itemId) => handleContextMenu(event, itemId)}
-        getProjectItemIconType={getProjectItemIconType}
-        getGaussianSplatResolutionLabel={getGaussianSplatResolutionLabel}
-        getMediaFileContainerLabel={getMediaFileContainerLabel}
-        getMediaFileCodecLabel={getMediaFileCodecLabel}
-        isProxyFrameCountComplete={isProxyFrameCountComplete}
-        formatDuration={formatDuration}
-        formatFileSize={formatFileSize}
-        formatBitrate={formatBitrate}
-      />
-    );
-  };
-
-  // Build hover tooltip for grid items
-  const buildGridTooltip = (item: ProjectItem, isFolder: boolean, isComp: boolean): string => {
-    const parts: string[] = [item.name];
-
-    if (isFolder) {
-      const children = getItemsForParent(item.id);
-      parts.push(`${children.length} item${children.length !== 1 ? 's' : ''}`);
-    } else if (isComp) {
-      const comp = item as Composition;
-      parts.push(`${comp.width}×${comp.height}`);
-      parts.push(`${comp.frameRate} fps`);
-      if (comp.duration) parts.push(formatDuration(comp.duration));
-    } else if (isSignalAssetItem(item)) {
-      if (item.signalKinds.length > 0) parts.push(item.signalKinds.join(', '));
-      if (item.providerId) parts.push(item.providerId);
-      if (item.fileSize) parts.push(formatFileSize(item.fileSize));
-      const warningCount = item.diagnostics?.filter((diagnostic) => diagnostic.severity !== 'info').length ?? 0;
-      if (warningCount > 0) parts.push(`${warningCount} warning${warningCount !== 1 ? 's' : ''}`);
-    } else if ('type' in item) {
-      const mf = item as MediaFile;
-      if (mf.type === 'gaussian-splat') {
-        parts.push(...getGaussianSplatDetailLines(mf));
-        const container = getMediaFileContainerLabel(mf);
-        if (container) parts.push(container);
-      } else if (mf.width && mf.height) {
-        parts.push(`${mf.width}×${mf.height}`);
-      }
-      if (mf.duration) parts.push(formatDuration(mf.duration));
-      const codec = getMediaFileCodecLabel(mf);
-      if (codec) parts.push(codec);
-      if (mf.audioCodec) parts.push(mf.audioCodec);
-      if (mf.fps) parts.push(`${mf.fps} fps`);
-      if (mf.fileSize) parts.push(formatFileSize(mf.fileSize));
-      if (mf.bitrate) parts.push(formatBitrate(mf.bitrate));
-      if (!mf.duration && 'duration' in item && item.duration) parts.push(formatDuration(item.duration));
-    }
-
-    return parts.join('\n');
-  };
-
-  // Render a single grid item
-  const renderGridItem = (item: ProjectItem) => {
-    const isFolder = 'isExpanded' in item;
-
-    return (
-      <MediaGridItem
-        key={item.id}
-        item={item}
-        selected={selectedIds.includes(item.id)}
-        dragTarget={isFolder && dragOverFolderId === item.id}
-        folderItemCount={isFolder ? getItemsForParent(item.id).length : 0}
-        getProjectItemIconType={getProjectItemIconType}
-        buildTooltip={buildGridTooltip}
-        onRefreshFileUrls={(mediaFileId) => { void refreshFileUrls(mediaFileId); }}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onFolderDragOver={handleFolderDragOver}
-        onFolderDragLeave={handleFolderDragLeave}
-        onFolderDrop={handleFolderDrop}
-        onClick={(event, itemId) => handleItemClick(itemId, event)}
-        onDoubleClick={handleItemDoubleClick}
-        onContextMenu={(event, itemId) => handleContextMenu(event, itemId)}
-      />
-    );
-  };
-
   const {
     allProjectItems,
     allProjectItemsById,
@@ -1124,6 +986,48 @@ export function MediaPanel() {
     gridFolderId,
     classicListViewport,
     sortItems,
+  });
+
+  const {
+    renderClassicRow,
+    buildGridTooltip,
+    renderGridItem,
+  } = useMediaPanelItemRenderers({
+    columnOrder,
+    selectedIds,
+    renamingId,
+    expandedFolderIds,
+    dragOverFolderId,
+    internalDragId,
+    nameColumnWidth,
+    renameValue,
+    setLabelPickerItemId,
+    setLabelPickerPos,
+    setRenameValue,
+    setRenamingId,
+    toggleFolderExpanded,
+    finishRename,
+    handleNameClick,
+    handleBadgeClick,
+    handleDragStart,
+    handleDragEnd,
+    handleFolderDragOver,
+    handleFolderDragLeave,
+    handleFolderDrop,
+    handleItemClick,
+    handleItemDoubleClick,
+    handleContextMenu,
+    getItemsForParent,
+    refreshFileUrls,
+    getProjectItemIconType,
+    getGaussianSplatDetailLines,
+    getGaussianSplatResolutionLabel,
+    getMediaFileContainerLabel,
+    getMediaFileCodecLabel,
+    mediaNeedsRelink,
+    formatDuration,
+    formatFileSize,
+    formatBitrate,
   });
 
   const mediaBoardItems = allProjectItems;
@@ -2911,14 +2815,13 @@ export function MediaPanel() {
       />
     </MediaBoardView>
   );
-  // Check if any files need relinking (lost permission after refresh).
-  // Native-helper projects can be linked by project/absolute paths without
-  // eagerly materializing browser File objects for every media item.
-  const filesNeedReload = files.some(mediaNeedsRelink);
-  const filesNeedReloadCount = files.filter(mediaNeedsRelink).length;
-
-  // Relink dialog state
-  const [showRelinkDialog, setShowRelinkDialog] = useState(false);
+  const {
+    filesNeedReload,
+    filesNeedReloadCount,
+    showRelinkDialog,
+    openRelinkDialog,
+    closeRelinkDialog,
+  } = useMediaPanelRelinkStatus(files);
 
   return (
     <div
@@ -2940,7 +2843,7 @@ export function MediaPanel() {
         totalItems={totalItems}
         filesNeedReload={filesNeedReload}
         filesNeedReloadCount={filesNeedReloadCount}
-        onOpenRelinkDialog={() => setShowRelinkDialog(true)}
+        onOpenRelinkDialog={openRelinkDialog}
         viewMode={viewMode}
         onViewModeChange={handleViewModeChange}
         onImport={handleImport}
@@ -3033,26 +2936,6 @@ export function MediaPanel() {
 
       {/* Context Menu */}
       {contextMenu && (() => {
-        const multiSelect = selectedIds.length > 1;
-        const {
-          selectedItem,
-          mediaFile,
-          composition,
-          solidItem,
-        } = getMediaContextSelectedItemState({
-          itemId: contextMenu.itemId,
-          items: allProjectItems,
-        });
-        const contextActionState = getMediaContextActionState({
-          contextMenu,
-          multiSelect,
-          selectedIds,
-          files,
-          folders,
-          composerReferenceMediaFileIds,
-          mediaFile,
-          viewMode,
-        });
         const annotationContextMenu = renderMediaAnnotationContextMenuMount({
           annotationId: contextMenu.annotationId,
           annotations: mediaBoardAnnotations,
@@ -3071,70 +2954,54 @@ export function MediaPanel() {
         }
 
         return (
-          <MediaContextMenuFrame
+          <MediaPanelProjectContextMenuMount
+            contextMenu={contextMenu}
             menuRef={contextMenuRef}
             x={contextMenuPosition?.x ?? contextMenu.x}
             y={contextMenuPosition?.y ?? contextMenu.y}
-          >
-            <MediaContextActionsMenu
-              showBoardAnnotationAction={contextActionState.showBoardAnnotationAction}
-              hasClipboard={hasMediaClipboard()}
-              hasSelection={Boolean(contextMenu.itemId || multiSelect)}
-              multiSelect={multiSelect}
-              selectedCount={selectedIds.length}
-              selectedItem={selectedItem}
-              selectedIds={selectedIds}
-              availableFolders={contextActionState.availableFolders}
-              aiReferenceMediaFileIds={contextActionState.aiReferenceMediaFileIds}
-              allContextMediaReferenced={contextActionState.allContextMediaReferenced}
-              composition={composition}
-              solidItem={solidItem}
-              mediaFile={mediaFile}
-              canRegenerateMediaArtifacts={contextActionState.canRegenerateMediaArtifacts}
-              isVideoFile={contextActionState.isVideoFile}
-              isImageFile={contextActionState.isImageFile}
-              isGenerating={contextActionState.isGenerating}
-              hasProxy={contextActionState.hasProxy}
-              hasAudio={contextActionState.hasAudio}
-              isAudioProxyGenerating={contextActionState.isAudioProxyGenerating}
-              hasAudioProxy={contextActionState.hasAudioProxy}
-              isSourceAudioAnalysisGenerating={contextActionState.isSourceAudioAnalysisGenerating}
-              hasSourceWaveform={contextActionState.hasSourceWaveform}
-              hasSourceSpectrogram={contextActionState.hasSourceSpectrogram}
-              proxyFolderName={proxyFolderName}
-              onNewBoardAnnotation={handleNewMediaBoardAnnotation}
-              onClose={closeContextMenu}
-              onImport={handleImport}
-              onPaste={handlePasteItems}
-              onToggleAiPromptReferences={handleToggleAiPromptReferences}
-              onStartRename={startRename}
-              onMoveToFolder={mediaContextLocalHandlers.onMoveToFolder}
-              onOpenCompositionSettings={openCompositionSettings}
-              onOpenSolidSettings={mediaContextLocalHandlers.onOpenSolidSettings}
-              onCancelProxyGeneration={cancelProxyGeneration}
-              onGenerateProxy={generateProxy}
-              onRegenerateThumbnails={handleRegenerateMediaThumbnails}
-              onRegenerateAudioProxy={handleRegenerateMediaAudioProxy}
-              onRegenerateWaveform={handleRegenerateMediaWaveform}
-              onRegenerateSpectrogram={handleRegenerateMediaSpectrogram}
-              onShowRawInExplorer={mediaContextExplorerHandlers.onShowRawInExplorer}
-              onShowProxyInExplorer={mediaContextExplorerHandlers.onShowProxyInExplorer}
-              onPickProxyFolder={mediaContextExplorerHandlers.onPickProxyFolder}
-              onCopy={handleCopySelected}
-              onDuplicate={handleDuplicateSelected}
-              onDelete={handleDelete}
-              onNewComposition={handleNewComposition}
-              onNewFolder={handleNewFolder}
-              onNewText={handleNewText}
-              onNewSolid={handleNewSolid}
-              onNewMesh={handleNewMesh}
-              onNewText3D={handleNewText3D}
-              onNewCamera={handleNewCamera}
-              onNewSplatEffector={handleNewSplatEffector}
-              onImportGaussianSplat={handleImportGaussianSplat}
-              onNewMathScene={handleNewMathScene}
-              onNewMotionShape={handleNewMotionShape}
-            />          </MediaContextMenuFrame>
+            selectedIds={selectedIds}
+            items={allProjectItems}
+            files={files}
+            folders={folders}
+            composerReferenceMediaFileIds={composerReferenceMediaFileIds}
+            viewMode={viewMode}
+            hasClipboard={hasMediaClipboard()}
+            proxyFolderName={proxyFolderName}
+            actions={{
+              onNewBoardAnnotation: handleNewMediaBoardAnnotation,
+              onClose: closeContextMenu,
+              onImport: handleImport,
+              onPaste: handlePasteItems,
+              onToggleAiPromptReferences: handleToggleAiPromptReferences,
+              onStartRename: startRename,
+              onMoveToFolder: mediaContextLocalHandlers.onMoveToFolder,
+              onOpenCompositionSettings: openCompositionSettings,
+              onOpenSolidSettings: mediaContextLocalHandlers.onOpenSolidSettings,
+              onCancelProxyGeneration: cancelProxyGeneration,
+              onGenerateProxy: generateProxy,
+              onRegenerateThumbnails: handleRegenerateMediaThumbnails,
+              onRegenerateAudioProxy: handleRegenerateMediaAudioProxy,
+              onRegenerateWaveform: handleRegenerateMediaWaveform,
+              onRegenerateSpectrogram: handleRegenerateMediaSpectrogram,
+              onShowRawInExplorer: mediaContextExplorerHandlers.onShowRawInExplorer,
+              onShowProxyInExplorer: mediaContextExplorerHandlers.onShowProxyInExplorer,
+              onPickProxyFolder: mediaContextExplorerHandlers.onPickProxyFolder,
+              onCopy: handleCopySelected,
+              onDuplicate: handleDuplicateSelected,
+              onDelete: handleDelete,
+              onNewComposition: handleNewComposition,
+              onNewFolder: handleNewFolder,
+              onNewText: handleNewText,
+              onNewSolid: handleNewSolid,
+              onNewMesh: handleNewMesh,
+              onNewText3D: handleNewText3D,
+              onNewCamera: handleNewCamera,
+              onNewSplatEffector: handleNewSplatEffector,
+              onImportGaussianSplat: handleImportGaussianSplat,
+              onNewMathScene: handleNewMathScene,
+              onNewMotionShape: handleNewMotionShape,
+            }}
+          />
         );
       })()}
 
@@ -3248,7 +3115,7 @@ export function MediaPanel() {
 
       {/* Relink Dialog */}
       {showRelinkDialog && (
-        <RelinkDialog onClose={() => setShowRelinkDialog(false)} />
+        <RelinkDialog onClose={closeRelinkDialog} />
       )}
     </div>
   );
