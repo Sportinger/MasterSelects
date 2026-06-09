@@ -36,17 +36,18 @@ OpenAI Codex CLI agents are dispatched as headless workers via `codex exec`
 
 | Role | Owns |
 |---|---|
-| Orchestrator (Claude) | Packet specs (lane, goal, write set, forbidden files, checks, stop conditions), dispatch, post-packet verification (focused vitest + diff review), gate closure, queue/lane strategy, merges and pushes |
-| Workers (Codex) | Full packet lifecycle: source edits, `npx tsc -b` + scoped rg scans, checklist/queue bookkeeping in repo style, one packet commit on the issue branch |
+| Orchestrator (Claude) | Packet specs (lane, goal, write set, forbidden files, checks, stop conditions), dispatch, post-packet verification (focused vitest + diff review), gate closure, queue/lane strategy, ALL git commits, merges and pushes |
+| Workers (Codex) | Source edits, `npx tsc -b` + scoped rg scans, checklist/queue bookkeeping in repo style, packet report |
 
 Rules:
 
-- Workers never push, never merge, never self-extend scope. Extra debt found
-  mid-packet is reported, not fixed.
-- The Codex sandbox cannot run vitest (esbuild fails with `spawn EPERM`), so
-  workers must not claim test results. The orchestrator runs the focused test
-  suite after each packet and reverts or dispatches a fix-forward packet when
-  red.
+- Workers never commit, never push, never merge, never self-extend scope.
+  Extra debt found mid-packet is reported, not fixed.
+- Verified sandbox limits: the Codex sandbox cannot run vitest (esbuild
+  `spawn EPERM`) and cannot write `.git/index.lock` (no `git add`/`commit`).
+  Workers must not claim test results; read-only git is fine. The orchestrator
+  runs the focused test suite after each packet, commits verified waves, and
+  reverts or dispatches a fix-forward packet when red.
 - Up to 6 parallel workers, only with disjoint write sets. At most one
   concurrently running worker may hold
   `docs/ongoing/Complete-refactor-checklist.md` and
