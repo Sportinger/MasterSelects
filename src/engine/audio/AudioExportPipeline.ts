@@ -16,21 +16,15 @@ import { AudioExtractor, audioExtractor } from './AudioExtractor';
 import { AudioEncoderWrapper, type EncodedAudioResult } from './AudioEncoder';
 import { AudioMixer, type AudioTrackData } from './AudioMixer';
 import { renderAudioGraph } from './AudioGraphRenderer';
-import type { AudioGraphEffectPlanStep, AudioGraphJsonValue, AudioGraphRenderPlan } from './AudioGraphTypes';
+import type { AudioGraphRenderPlan } from './AudioGraphTypes';
 import { AudioEffectRenderer } from './AudioEffectRenderer';
-import { getAudioEffect } from './AudioEffectRegistry';
-import { dbToLinearGain, finiteNumber } from './audioMath';
-import { ClipAudioRenderService, type ClipAudioRenderProgress } from '../../services/audio/ClipAudioRenderService';
+import { ClipAudioRenderService } from '../../services/audio/ClipAudioRenderService';
 import { renderMidiClipToBuffer } from './MidiClipRenderer';
 import { getGmSampleBank } from './GmSampleBank';
-import {
-  audioGraphPlanStepsToEffectInstances,
-} from '../../services/audio/audioGraphRouteSettings';
-import { analyzeAudioBufferLoudnessSummary } from '../../services/audio/LoudnessEnvelopeGenerator';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
-import type { AudioEffectInstance, Effect, MasterAudioState, TimelineClip, TimelineTrack, Keyframe } from '../../types';
+import type { MasterAudioState, TimelineClip, TimelineTrack, Keyframe } from '../../types';
 import {
   canRetainExportAudioBuffer,
   reportExportAudioBuffer,
@@ -42,9 +36,13 @@ import {
 } from '../../services/timeline/compositionAudioMixdownCache';
 import { applyCompositionAudioMixdownToTimelineClip } from '../../services/timeline/compositionAudioMixdownTimelineState';
 import { createBuffer as createAudioBufferLike } from './audioBufferFactory';
+import { encodeExportAudio } from './exportPipeline/encodeHandOff';
+import { renderExportClipAudioEffects } from './exportPipeline/effectStage';
+import { renderExportMasterBusAudio } from './exportPipeline/masterBusStage';
+import { getClipExportTailSeconds } from './exportPipeline/rangePlanning';
+import { prepareExportTrackData } from './exportPipeline/trackDataPlanning';
 
 const log = Logger.create('AudioExportPipeline');
-const MAX_EXPORT_EFFECT_TAIL_SECONDS = 30;
 
 export interface AudioExportSettings {
   sampleRate: number;       // 44100 or 48000
@@ -63,79 +61,6 @@ export type AudioExportProgressCallback = (progress: AudioExportProgress) => voi
 
 export interface AudioExportRuntimeOptions {
   exportRunId?: string;
-}
-
-function clampExportTailSeconds(seconds: number): number {
-  return Math.max(0, Math.min(MAX_EXPORT_EFFECT_TAIL_SECONDS, seconds));
-}
-
-function getParamNumber(params: Record<string, unknown> | undefined, key: string, fallback: number): number {
-  return finiteNumber(params?.[key], fallback);
-}
-
-function getEffectTailSeconds(descriptorId: string, params?: Record<string, unknown>): number {
-  const descriptor = getAudioEffect(descriptorId);
-  const descriptorTail = finiteNumber(descriptor?.tailSeconds, 0);
-
-  if (descriptorId === 'audio-reverb') {
-    return clampExportTailSeconds(Math.max(descriptorTail, getParamNumber(params, 'decaySeconds', 0)));
-  }
-
-  if (descriptorId === 'audio-delay') {
-    const delaySeconds = getParamNumber(params, 'delayMs', 0) / 1000;
-    const feedback = Math.max(0, Math.min(0.95, getParamNumber(params, 'feedback', 0)));
-    const repeats = feedback > 0.001
-      ? Math.ceil(Math.log(0.001) / Math.log(feedback))
-      : 1;
-    return clampExportTailSeconds(Math.max(descriptorTail, delaySeconds * Math.max(1, repeats)));
-  }
-
-  return clampExportTailSeconds(descriptorTail);
-}
-
-function getEffectStackTailSeconds(effectStack: readonly AudioEffectInstance[] | undefined): number {
-  return clampExportTailSeconds((effectStack ?? []).reduce((sum, effect) => {
-    const flags = effect as AudioEffectInstance & { disabled?: boolean; bypassed?: boolean };
-    if (effect.enabled === false || flags.disabled === true || flags.bypassed === true) return sum;
-    return sum + getEffectTailSeconds(effect.descriptorId, effect.params as Record<string, unknown> | undefined);
-  }, 0));
-}
-
-function getLegacyEffectTailSeconds(effects: readonly Effect[] | undefined): number {
-  return clampExportTailSeconds((effects ?? []).reduce((sum, effect) => {
-    if (effect.enabled === false) return sum;
-    return sum + getEffectTailSeconds(effect.type, effect.params as Record<string, unknown> | undefined);
-  }, 0));
-}
-
-function getPlanTailSeconds(effectChain: readonly AudioGraphEffectPlanStep[] | undefined): number {
-  return clampExportTailSeconds((effectChain ?? []).reduce((sum, effect) => (
-    sum + getEffectTailSeconds(effect.descriptorId, effect.params as Record<string, AudioGraphJsonValue>)
-  ), 0));
-}
-
-function getClipExportTailSeconds(
-  clip: TimelineClip,
-  track: TimelineTrack | undefined,
-  masterAudioState?: MasterAudioState,
-): number {
-  return clampExportTailSeconds(
-    getEffectStackTailSeconds(clip.audioState?.effectStack) +
-    getLegacyEffectTailSeconds(clip.effects) +
-    getEffectStackTailSeconds(track?.audioState?.effectStack) +
-    getEffectStackTailSeconds(masterAudioState?.effectStack)
-  );
-}
-
-function appendSilence(buffer: AudioBuffer, tailSeconds: number): AudioBuffer {
-  const tailSamples = Math.max(0, Math.ceil(clampExportTailSeconds(tailSeconds) * buffer.sampleRate));
-  if (tailSamples <= 0) return buffer;
-
-  const extended = createAudioBufferLike(buffer.numberOfChannels, buffer.length + tailSamples, buffer.sampleRate);
-  for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
-    extended.getChannelData(channel).set(buffer.getChannelData(channel));
-  }
-  return extended;
 }
 
 export class AudioExportPipeline {
@@ -654,73 +579,18 @@ export class AudioExportPipeline {
     audioGraphPlan: AudioGraphRenderPlan,
     onProgress?: AudioExportProgressCallback
   ): Promise<Map<string, AudioBuffer>> {
-    const processed = new Map<string, AudioBuffer>();
-    const clipPlanById = new Map(audioGraphPlan.clips.map(clip => [clip.clipId, clip]));
-    const trackPlanById = new Map(audioGraphPlan.tracks.map(track => [track.trackId, track]));
-
-    // Each clip renders through its own fresh OfflineAudioContext (the effect
-    // renderers create a new context per call), so clips are independent and can
-    // render concurrently. Bounded concurrency keeps memory in check.
-    const RENDER_CONCURRENCY = 4;
-    let completed = 0;
-
-    const renderOne = async (clip: TimelineClip, index: number): Promise<void> => {
-      const buffer = buffers.get(clip.id);
-      if (!buffer || this.cancelled) return;
-      this.assertAudioBufferAdmission('processed-buffer', buffer, clip);
-
-      const keyframes = clipKeyframes.get(clip.id) || [];
-      const clipPlan = clipPlanById.get(clip.id);
-      const clipTailSeconds = getPlanTailSeconds(clipPlan?.effectChain);
-
-      const rendered = await this.clipAudioRenderer.render({
-        clip,
-        sourceBuffer: buffer,
-        keyframes,
-        effectTailSeconds: clipTailSeconds,
-        onProgress: progress => this.emitClipRenderProgress(clip, index, clips.length, progress, onProgress),
-      });
-      if (this.cancelled) return;
-
-      const trackPlan = trackPlanById.get(clip.trackId);
-      const trackEffects = audioGraphPlanStepsToEffectInstances(trackPlan?.effectChain);
-      const trackInputBuffer = trackEffects.length > 0
-        ? appendSilence(rendered.buffer, getPlanTailSeconds(trackPlan?.effectChain))
-        : rendered.buffer;
-      const trackRenderedBuffer = trackEffects.length > 0
-        ? await this.graphEffectRenderer.renderEffectInstances(
-          trackInputBuffer,
-          trackEffects,
-          [],
-          trackInputBuffer.duration
-        )
-        : rendered.buffer;
-      if (this.cancelled) return;
-
-      this.assertAudioBufferAdmission('processed-buffer', trackRenderedBuffer, clip);
-      processed.set(clip.id, trackRenderedBuffer);
-      this.reportAudioBuffer('processed-buffer', trackRenderedBuffer, clip);
-      completed += 1;
-      onProgress?.({
-        phase: 'processing',
-        percent: Math.round((completed / clips.length) * 100),
-        currentClip: clip.name,
-        message: `Rendering audio: ${clip.name}`,
-      });
-    };
-
-    let cursor = 0;
-    const worker = async (): Promise<void> => {
-      while (cursor < clips.length && !this.cancelled) {
-        const index = cursor++;
-        await renderOne(clips[index], index);
-      }
-    };
-    await Promise.all(
-      Array.from({ length: Math.min(RENDER_CONCURRENCY, clips.length) }, () => worker())
-    );
-
-    return processed;
+    return renderExportClipAudioEffects({
+      clips,
+      buffers,
+      clipKeyframes,
+      audioGraphPlan,
+      clipAudioRenderer: this.clipAudioRenderer,
+      graphEffectRenderer: this.graphEffectRenderer,
+      shouldCancel: () => this.cancelled,
+      assertAudioBufferAdmission: (stage, buffer, clip) => this.assertAudioBufferAdmission(stage, buffer, clip),
+      reportAudioBuffer: (stage, buffer, clip) => this.reportAudioBuffer(stage, buffer, clip),
+      onProgress,
+    });
   }
 
   private async renderMasterBusAudio(
@@ -728,84 +598,14 @@ export class AudioExportPipeline {
     audioGraphPlan: AudioGraphRenderPlan,
     onProgress?: AudioExportProgressCallback
   ): Promise<AudioBuffer> {
-    if (this.cancelled) return mixedBuffer;
-
-    const masterEffects = audioGraphPlanStepsToEffectInstances(audioGraphPlan.master.effectChain);
-    let masteredBuffer = mixedBuffer;
-
-    if (masterEffects.length > 0) {
-      onProgress?.({ phase: 'effects', percent: 95, message: 'Rendering master audio effects...' });
-      masteredBuffer = await this.graphEffectRenderer.renderEffectInstances(
-        mixedBuffer,
-        masterEffects,
-        [],
-        mixedBuffer.duration
-      );
-    }
-
-    this.mixer.processMasterBuffer(masteredBuffer, {
-      normalize: false,
-      masterVolumeDb: audioGraphPlan.master.volumeDb,
-      masterLimiterEnabled: false,
-    });
-
-    const targetGainDb = this.applyTargetLoudness(masteredBuffer, audioGraphPlan.master.targetLufs);
-    if (targetGainDb !== null) {
-      onProgress?.({
-        phase: 'effects',
-        percent: 97,
-        message: `Applying target loudness: ${targetGainDb >= 0 ? '+' : ''}${targetGainDb.toFixed(2)} dB`,
-      });
-    }
-
-    return this.mixer.processMasterBuffer(masteredBuffer, {
+    return renderExportMasterBusAudio({
+      mixedBuffer,
+      audioGraphPlan,
+      graphEffectRenderer: this.graphEffectRenderer,
+      mixer: this.mixer,
       normalize: this.settings.normalize,
-      masterVolumeDb: 0,
-      masterLimiterEnabled: audioGraphPlan.master.limiterEnabled,
-      masterTruePeakCeilingDb: audioGraphPlan.master.truePeakCeilingDb,
-    });
-  }
-
-  private applyTargetLoudness(buffer: AudioBuffer, targetLufs: number | undefined): number | null {
-    if (typeof targetLufs !== 'number' || !Number.isFinite(targetLufs)) {
-      return null;
-    }
-
-    const summary = analyzeAudioBufferLoudnessSummary(buffer);
-    const integratedLufs = summary.integratedLufs;
-    if (typeof integratedLufs !== 'number' || !Number.isFinite(integratedLufs) || integratedLufs <= -90) {
-      return null;
-    }
-
-    const gainDb = Math.max(-24, Math.min(24, targetLufs - integratedLufs));
-    if (Math.abs(gainDb) <= 0.05) {
-      return null;
-    }
-
-    const gain = dbToLinearGain(gainDb);
-    for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
-      const data = buffer.getChannelData(channelIndex);
-      for (let sampleIndex = 0; sampleIndex < data.length; sampleIndex += 1) {
-        data[sampleIndex] *= gain;
-      }
-    }
-
-    return gainDb;
-  }
-
-  private emitClipRenderProgress(
-    clip: TimelineClip,
-    clipIndex: number,
-    totalClips: number,
-    progress: ClipAudioRenderProgress,
-    onProgress?: AudioExportProgressCallback,
-  ): void {
-    const phase: AudioExportProgress['phase'] = progress.phase === 'effects' ? 'effects' : 'processing';
-    onProgress?.({
-      phase,
-      percent: Math.round(((clipIndex + progress.percent / 100) / Math.max(1, totalClips)) * 100),
-      currentClip: clip.name,
-      message: progress.message ?? `Rendering audio: ${clip.name}`,
+      shouldCancel: () => this.cancelled,
+      onProgress,
     });
   }
 
@@ -819,53 +619,7 @@ export class AudioExportPipeline {
     exportStartTime: number,
     audioGraphPlan?: AudioGraphRenderPlan
   ): AudioTrackData[] {
-    const trackData: AudioTrackData[] = [];
-    const plan = audioGraphPlan ?? renderAudioGraph({ clips, tracks, mode: 'export' });
-    const clipPlanById = new Map(plan.clips.map(clip => [clip.clipId, clip]));
-    const trackPlanById = new Map(plan.tracks.map(track => [track.trackId, track]));
-
-    for (const clip of clips) {
-      const buffer = buffers.get(clip.id);
-      if (!buffer) continue;
-
-      const track = tracks.find(t => t.id === clip.trackId);
-      if (!track) continue;
-
-      const clipPlan = clipPlanById.get(clip.id);
-      const trackPlan = trackPlanById.get(clip.trackId);
-      if (!clipPlan?.active || !trackPlan?.active) continue;
-
-      const baseTrackData: AudioTrackData = {
-        clipId: clip.id,
-        buffer,
-        startTime: clip.startTime - exportStartTime, // Adjust for export range
-        sourceOffsetTime: Math.max(0, exportStartTime - clip.startTime),
-        trackId: clip.trackId,
-        trackMuted: trackPlan.muted || !trackPlan.active,
-        trackSolo: trackPlan.solo,
-        mixRole: 'main',
-        trackVolumeDb: trackPlan.volumeDb,
-        trackPan: trackPlan.pan,
-      };
-
-      trackData.push(baseTrackData);
-
-      for (const send of trackPlan.sends) {
-        if (send.enabled === false) continue;
-
-        trackData.push({
-          ...baseTrackData,
-          clipId: `${clip.id}:send:${send.id}`,
-          mixRole: 'send',
-          sendId: send.id,
-          sendTargetBusId: send.targetBusId,
-          sendPreFader: send.preFader,
-          trackVolumeDb: send.gainDb + (send.preFader ? 0 : trackPlan.volumeDb),
-        });
-      }
-    }
-
-    return trackData;
+    return prepareExportTrackData(clips, buffers, tracks, exportStartTime, audioGraphPlan);
   }
 
   /**
@@ -875,44 +629,16 @@ export class AudioExportPipeline {
     buffer: AudioBuffer,
     onProgress?: AudioExportProgressCallback
   ): Promise<EncodedAudioResult | null> {
-    // Ensure stereo
-    let stereoBuffer = buffer;
-    if (buffer.numberOfChannels === 1) {
-      stereoBuffer = this.extractor.convertToStereo(buffer);
-    }
-
-    // Resample if needed
-    if (stereoBuffer.sampleRate !== this.settings.sampleRate) {
-      stereoBuffer = await this.extractor.resampleBuffer(
-        stereoBuffer,
-        this.settings.sampleRate
-      );
-    }
-
-    // Create encoder
-    this.encoder = new AudioEncoderWrapper({
-      sampleRate: this.settings.sampleRate,
-      numberOfChannels: 2,
-      bitrate: this.settings.bitrate,
+    return encodeExportAudio({
+      buffer,
+      settings: this.settings,
+      extractor: this.extractor,
+      shouldCancel: () => this.cancelled,
+      setEncoder: encoder => {
+        this.encoder = encoder;
+      },
+      onProgress,
     });
-
-    const supported = await this.encoder.init();
-    if (!supported) {
-      throw new Error('AAC audio encoding is not supported in this browser');
-    }
-    if (this.cancelled) return null;
-
-    // Encode with progress
-    await this.encoder.encode(stereoBuffer, (progress) => {
-      onProgress?.({
-        phase: 'encoding',
-        percent: progress.percent,
-        message: `Encoding: ${progress.percent}%`,
-      });
-    }, () => this.cancelled);
-    if (this.cancelled) return null;
-
-    return await this.encoder.finalize();
   }
 
   /**

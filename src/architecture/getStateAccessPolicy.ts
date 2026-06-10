@@ -47,7 +47,12 @@ export const classCHardTargets = [
   { path: 'src/components/outputManager/SliceOutputOverlay.tsx', maxCurrentHits: 1 },
   { path: 'src/components/outputManager/TargetList.tsx', maxCurrentHits: 2 },
   { path: 'src/components/outputManager/TargetPreview.tsx', maxCurrentHits: 5 },
-  { path: 'src/components/panels/audio-mixer/AudioMixerPanel.tsx', maxCurrentHits: 30 },
+  // Packet 279: 30 -> 6+10+3+10+1 (mixer strip/fx modules), total conserved.
+  { path: 'src/components/panels/audio-mixer/AudioMixerPanel.tsx', maxCurrentHits: 6 },
+  { path: 'src/components/panels/audio-mixer/TrackMixerStrip.tsx', maxCurrentHits: 10 },
+  { path: 'src/components/panels/audio-mixer/MasterMixerStrip.tsx', maxCurrentHits: 3 },
+  { path: 'src/components/panels/audio-mixer/MixerFxWindow.tsx', maxCurrentHits: 10 },
+  { path: 'src/components/panels/audio-mixer/MixerTrackColorMenu.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/color/ColorEditor.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/HistoryPanel.tsx', maxCurrentHits: 1 },
   // Redistributed by packet 172: two hits moved into the extracted
@@ -278,19 +283,10 @@ export const getStateAccessPolicyBaselines = {
   // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
   // entries). Totals conserved per redistribution; max-hits ratchets DOWN
   // only (669 -> 665 via the packet-188 Preview ceiling cut).
-  // 192 -> 193: packet-218 redistribution added the composition-settings hook
-  // entry (MediaPanel 4 -> 3, hook 1; cluster total conserved).
-  // 193 -> 196: packet-227 Preview redistribution added three camera-hook
-  // entries (Preview 17 -> 1; cluster total conserved).
-  // 196 -> 199: packet-231 dispatcher facets (16 -> 6+2+2+1).
-  // 199 -> 203: packet-239 LayerCollector entry replaced by five collector
-  // modules (7 -> 1+1+1+1+3, total conserved).
-  // 203 -> 205: packet-246 nestedComp modules (10 -> 1+8+1, total conserved).
-  // 205 -> 206: packet-254 output-window controller entry (12 -> 5+7);
-  // packet-253 thumbnail entry replaced by sampling module (1 -> 1).
-  // 206 -> 207: packet-259 MatAnyone file helpers (32 -> 28+4).
-  // 207 -> 208: packet-267 transcription artifact persistence (4 -> 2+2).
-  classCHardTargetFileCount: 208,
+  // fileCount log (totals conserved per split redistribution):
+  // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
+  // ->207(259) ->208(267) ->212(279).
+  classCHardTargetFileCount: 212,
   // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit)
   // -> 659 (packet 231 retired the dispatcher ceiling slack: 16 -> 11 actual)
   // -> 658 (packet 237 retired one compositionRenderer hit).
