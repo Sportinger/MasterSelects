@@ -18,17 +18,17 @@ import {
 import { scrubSettleState } from '../../services/scrubSettleState';
 import { wcPipelineMonitor } from '../../services/wcPipelineMonitor';
 import { useTimelineStore } from '../../stores/timeline';
-import { getCopiedHtmlVideoPreviewFrame } from './htmlVideoPreviewFallback';
-import { splitLayerEffects } from './layerEffectStack';
-import { collectActiveSceneSplatEffectors } from '../scene/SceneEffectorUtils';
-import { collectScene3DLayers } from '../scene/SceneLayerCollector';
-import { resolveRenderableSharedSceneCamera } from '../scene/SceneCameraUtils';
-import { getNativeSceneRenderer } from '../native3d/NativeSceneRenderer';
 import type { MotionRenderer } from '../motion/MotionRenderer';
 import { getMotionRenderSize } from '../motion/MotionTypes';
+import { compositeNestedLayers } from './nestedComp/compositeNestedLayers';
+import { tryCollectHtmlVideoPreview } from './nestedComp/htmlVideoPreview';
+import { process3DLayersForNestedScene } from './nestedComp/sharedScene';
+import {
+  getFrameTimestampSeconds,
+  isPendingWebCodecsFrameStable,
+} from './nestedComp/videoProviderPolicy';
 
 const log = Logger.create('NestedCompRenderer');
-const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
 
 interface NestedCompTexture {
   texture: GPUTexture;
@@ -46,8 +46,6 @@ interface PooledTexturePair {
 }
 
 export class NestedCompRenderer {
-  private static readonly MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
-  private static readonly MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
   private device: GPUDevice;
   private compositorPipeline: CompositorPipeline;
   private effectsPipeline: EffectsPipeline;
@@ -69,62 +67,6 @@ export class NestedCompRenderer {
   private lastSuccessfulVideoProviderKey = new Map<string, string>();
   private lastCollectorState = new Map<string, 'render' | 'hold' | 'drop'>();
   private htmlHoldUntil = new Map<string, number>();
-  private static readonly HTML_HOLD_RECOVERY_MS = 120;
-
-  private getSafeLastFrameFallback(layer: Layer, video: HTMLVideoElement, targetTime: number) {
-    if (!this.scrubbingCache) {
-      return null;
-    }
-    const isDragging = useTimelineStore.getState().isDraggingPlayhead;
-    const tolerance = video.seeking || isDragging ? 0.35 : 0.2;
-    return this.scrubbingCache.getLastFrameNearTime(video, targetTime, tolerance, layer.sourceClipId);
-  }
-
-  private getTargetVideoTime(layer: Layer, video: HTMLVideoElement): number {
-    return layer.source?.mediaTime ?? video.currentTime;
-  }
-
-  private getFrameTimestampSeconds(timestamp: unknown, fallback?: number): number | undefined {
-    return typeof timestamp === 'number' && Number.isFinite(timestamp)
-      ? timestamp / 1_000_000
-      : fallback;
-  }
-
-  private getDragHoldFrame(layer: Layer, video: HTMLVideoElement) {
-    if (!layer.sourceClipId) {
-      return null;
-    }
-    return this.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
-  }
-
-  private isFrameNearTarget(
-    frame: { mediaTime?: number } | null | undefined,
-    targetTime: number,
-    maxDeltaSeconds: number = 0.35
-  ): boolean {
-    return (
-      typeof frame?.mediaTime === 'number' &&
-      Number.isFinite(frame.mediaTime) &&
-      Math.abs(frame.mediaTime - targetTime) <= maxDeltaSeconds
-    );
-  }
-
-  private isPendingWebCodecsFrameStable(
-    provider: NonNullable<Layer['source']>['webCodecsPlayer'] | undefined
-  ): boolean {
-    if (!provider) {
-      return true;
-    }
-
-    const pendingTarget = provider.getPendingSeekTime?.();
-    if (pendingTarget == null) {
-      return true;
-    }
-
-    const fps = provider.getFrameRate?.() ?? 30;
-    const tolerance = Math.max(1.5 / Math.max(fps, 1), 0.05);
-    return Math.abs(pendingTarget - provider.currentTime) <= tolerance;
-  }
 
   private getProviderObjectId(provider: object): number {
     const existing = this.providerIds.get(provider);
@@ -161,45 +103,6 @@ export class NestedCompRenderer {
 
   private canReuseLastSuccessfulVideoFrame(layerId: string, providerKey: string | null): boolean {
     return !!providerKey && this.lastSuccessfulVideoProviderKey.get(layerId) === providerKey;
-  }
-
-  private armHtmlHold(layerId: string): void {
-    this.htmlHoldUntil.set(
-      layerId,
-      performance.now() + NestedCompRenderer.HTML_HOLD_RECOVERY_MS
-    );
-  }
-
-  private clearHtmlHold(layerId: string): void {
-    this.htmlHoldUntil.delete(layerId);
-  }
-
-  private shouldPreferHtmlHold(
-    layerId: string,
-    options: {
-      hasHoldFrame: boolean;
-      isDragging: boolean;
-      isSettling: boolean;
-      awaitingPausedTargetFrame: boolean;
-      hasFreshPresentedFrame: boolean;
-    }
-  ): boolean {
-    if (!options.hasHoldFrame) {
-      this.clearHtmlHold(layerId);
-      return false;
-    }
-
-    if (
-      !options.isDragging &&
-      !options.isSettling &&
-      !options.awaitingPausedTargetFrame &&
-      options.hasFreshPresentedFrame
-    ) {
-      this.clearHtmlHold(layerId);
-      return false;
-    }
-
-    return (this.htmlHoldUntil.get(layerId) ?? 0) > performance.now();
   }
 
   private setCollectorState(
@@ -377,164 +280,25 @@ export class NestedCompRenderer {
         return compTexture.view;
       }
 
-      // Ping-pong compositing
-      let readView = nestedPingView;
-      let writeView = nestedPongView;
-
-      // Clear first buffer
-      const clearPass = commandEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: readView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
+      const sourceTexture = compositeNestedLayers({
+        layerData: nestedLayerData,
+        compositionId,
+        width,
+        height,
+        commandEncoder,
+        sampler,
+        compositorPipeline: this.compositorPipeline,
+        effectsPipeline: this.effectsPipeline,
+        colorPipeline: this.colorPipeline,
+        maskTextureManager: this.maskTextureManager,
+        skipEffects,
+        texturePair,
+        effectTexturePair,
+        nestedPingView,
+        nestedPongView,
+        effectTempView,
+        effectTempView2,
       });
-      clearPass.end();
-
-      // Composite nested layers
-      const outputAspect = width / height;
-      for (const data of nestedLayerData) {
-        const layer = data.layer;
-        const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(`nested-${compositionId}-${layer.id}`);
-        const sourceAspect = data.sourceWidth / data.sourceHeight;
-        const maskLookupId = layer.maskClipId || layer.id;
-        const maskInfo = this.maskTextureManager.getMaskInfo(maskLookupId);
-        const hasMask = maskInfo.hasMask;
-        const maskTextureView = maskInfo.view;
-        const { inlineEffects, complexEffects } = splitLayerEffects(layer.effects, skipEffects);
-
-        this.compositorPipeline.updateLayerUniforms(
-          layer,
-          sourceAspect,
-          outputAspect,
-          hasMask,
-          uniformBuffer,
-          inlineEffects
-        );
-
-        let sourceTextureView = data.textureView;
-        let sourceExternalTexture = data.externalTexture;
-        let useExternalTexture = data.isVideo && !!data.externalTexture;
-
-        const hasColorCorrection = !!this.colorPipeline && !skipEffects && !!layer.colorCorrection?.enabled;
-        const needsSourcePreprocess = hasColorCorrection || !!(complexEffects && complexEffects.length > 0);
-
-        if (needsSourcePreprocess) {
-          let copied = false;
-          let copiedToTempView = false;
-          if (useExternalTexture && sourceExternalTexture) {
-            const copyPipeline = this.compositorPipeline.getExternalCopyPipeline?.();
-            const copyBindGroup = copyPipeline
-              ? this.compositorPipeline.createExternalCopyBindGroup?.(
-                sampler,
-                sourceExternalTexture,
-                layer.id
-              )
-              : null;
-
-            if (copyPipeline && copyBindGroup) {
-              const copyPass = commandEncoder.beginRenderPass({
-                colorAttachments: [{
-                  view: effectTempView,
-                  loadOp: 'clear',
-                  storeOp: 'store',
-                }],
-              });
-              copyPass.setPipeline(copyPipeline);
-              copyPass.setBindGroup(0, copyBindGroup);
-              copyPass.draw(6);
-              copyPass.end();
-              copied = true;
-              copiedToTempView = true;
-            }
-          } else if (sourceTextureView) {
-            copied = true;
-          }
-
-          if (copied) {
-            if (copiedToTempView) {
-              sourceTextureView = effectTempView;
-            }
-            if (sourceTextureView) {
-              sourceExternalTexture = null;
-              useExternalTexture = false;
-
-              if (hasColorCorrection) {
-                const colorResult = this.colorPipeline!.applyGrade(
-                  commandEncoder,
-                  layer.colorCorrection,
-                  sampler,
-                  sourceTextureView,
-                  effectTempView2,
-                  `nested-${compositionId}-${layer.id}`
-                );
-                sourceTextureView = colorResult.finalView;
-              }
-
-              if (complexEffects && complexEffects.length > 0) {
-                const effectOutput = sourceTextureView === effectTempView
-                  ? effectTempView2
-                  : effectTempView;
-                const effectResult = this.effectsPipeline.applyEffects(
-                  commandEncoder,
-                  complexEffects,
-                  sampler,
-                  sourceTextureView,
-                  effectOutput,
-                  effectTempView,
-                  effectTempView2,
-                  width,
-                  height,
-                  effectTexturePair.pingTexture,
-                  effectTexturePair.pongTexture
-                );
-                sourceTextureView = effectResult.finalView;
-              }
-            }
-          }
-        }
-
-        let pipeline: GPURenderPipeline;
-        let bindGroup: GPUBindGroup;
-
-        if (useExternalTexture && sourceExternalTexture) {
-          pipeline = this.compositorPipeline.getExternalCompositePipeline()!;
-          bindGroup = this.compositorPipeline.createExternalCompositeBindGroup(
-            sampler,
-            readView,
-            sourceExternalTexture,
-            uniformBuffer,
-            maskTextureView
-          );
-        } else if (sourceTextureView) {
-          pipeline = this.compositorPipeline.getCompositePipeline()!;
-          bindGroup = this.compositorPipeline.createCompositeBindGroup(
-            sampler,
-            readView,
-            sourceTextureView,
-            uniformBuffer,
-            maskTextureView
-          );
-        } else {
-          continue;
-        }
-
-        const pass = commandEncoder.beginRenderPass({
-          colorAttachments: [{ view: writeView, loadOp: 'clear', storeOp: 'store' }],
-        });
-        pass.setPipeline(pipeline);
-        pass.setBindGroup(0, bindGroup);
-        pass.draw(6);
-        pass.end();
-
-        // Swap
-        [readView, writeView] = [writeView, readView];
-      }
-
-      // Copy result to output texture using efficient GPU copy
-      // Determine which texture readView came from
-      const sourceTexture = readView === nestedPingView ? texturePair.pingTexture : texturePair.pongTexture;
       commandEncoder.copyTextureToTexture(
         { texture: sourceTexture },
         { texture: compTexture.texture },
@@ -560,111 +324,17 @@ export class NestedCompRenderer {
     sceneClips?: TimelineClip[],
     sceneTracks?: TimelineTrack[],
   ): void {
-    const indices3D: number[] = [];
-    for (let i = 0; i < layerData.length; i++) {
-      if (layerData[i].layer.is3D && layerData[i].layer.source?.type !== 'gaussian-avatar') {
-        indices3D.push(i);
-      }
-    }
-    if (indices3D.length === 0) {
-      // Debug: log what layers we have and why none are 3D
-      if (layerData.length > 0) {
-        log.debug('No 3D layers in nested comp', {
-          totalLayers: layerData.length,
-          sourceTypes: layerData.map(d => d.layer.source?.type),
-          is3Ds: layerData.map(d => d.layer.is3D),
-        });
-      }
-      return;
-    }
-    log.debug('Processing 3D layers in nested comp', { count: indices3D.length });
-
-    const renderer = getNativeSceneRenderer();
-    if (!renderer.isInitialized) {
-      // Trigger lazy initialization (same as RenderDispatcher)
-      renderer.initialize(width, height).then((ok) => {
-        if (ok) log.info('Shared scene renderer initialized from nested comp');
-      });
-      // Remove 3D layers for this frame — next frame will render them
-      for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
-      return;
-    }
-
-    const timelineStore = useTimelineStore.getState();
-    const preciseSplatSorting = timelineStore.isExporting === true;
-    const isRealtimePlayback = timelineStore.isPlaying && timelineStore.isExporting !== true;
-    const includedLayers = new Set(indices3D.map((index) => layerData[index]));
-    const layers3D = collectScene3DLayers(layerData, {
+    process3DLayersForNestedScene({
+      layerData,
+      device: this.device,
+      maskTextureManager: this.maskTextureManager,
+      log,
       width,
       height,
-      preciseVideoSampling: !isRealtimePlayback,
-      preciseSplatSorting,
-      includeLayer: (data) => includedLayers.has(data),
-    });
-    const sceneContext = sceneClips && sceneTracks
-      ? {
-          clips: sceneClips,
-          tracks: sceneTracks,
-          clipKeyframes: timelineStore.clipKeyframes,
-          compositionId,
-          sceneNavClipId: null,
-        }
-      : (compositionId ? { compositionId } : undefined);
-    const activeSplatEffectors = sceneClips && sceneTracks
-      ? collectActiveSceneSplatEffectors(
-          width,
-          height,
-          currentTime ?? 0,
-          {
-            clips: sceneClips,
-            tracks: sceneTracks,
-            clipKeyframes: timelineStore.clipKeyframes,
-            compositionId,
-            sceneNavClipId: null,
-          },
-        )
-      : [];
-
-    const textureView = renderer.renderScene(
-      this.device,
-      layers3D,
-      resolveRenderableSharedSceneCamera({ width, height }, currentTime ?? 0, sceneContext),
-      activeSplatEffectors,
-      isRealtimePlayback,
-      null,
-      this.maskTextureManager,
-    );
-    if (!textureView) {
-      for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
-      return;
-    }
-
-    // Create synthetic layer and replace 3D layers
-    const insertIdx = indices3D[0];
-    const firstLayer = layerData[indices3D[0]].layer;
-    const isSingle = indices3D.length === 1;
-    const syntheticLayer: Layer = {
-      id: '__scene_3d_nested__',
-      name: '3D Scene (Nested)',
-      visible: true,
-      opacity: isSingle ? firstLayer.opacity : 1,
-      blendMode: isSingle ? firstLayer.blendMode : 'normal',
-      source: { type: 'image' },
-      effects: isSingle ? firstLayer.effects : [],
-      colorCorrection: isSingle ? firstLayer.colorCorrection : undefined,
-      position: { x: 0, y: 0, z: 0 },
-      scale: { x: 1, y: 1 },
-      rotation: { x: 0, y: 0, z: 0 },
-    };
-
-    for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);
-    layerData.splice(insertIdx, 0, {
-      layer: syntheticLayer,
-      isVideo: false,
-      externalTexture: null,
-      textureView,
-      sourceWidth: width,
-      sourceHeight: height,
+      currentTime,
+      compositionId,
+      sceneClips,
+      sceneTracks,
     });
   }
 
@@ -772,270 +442,24 @@ export class NestedCompRenderer {
       const clipProvider = layer.source.webCodecsPlayer?.isFullMode()
         ? layer.source.webCodecsPlayer
         : null;
-      const htmlPreviewDebugDisabled =
-        flags.useFullWebCodecsPlayback &&
-        flags.disableHtmlPreviewFallback;
-      const hasFullWebCodecsPreview =
-        flags.useFullWebCodecsPlayback &&
-        (!!clipProvider || !!runtimeProvider?.isFullMode());
-      const allowHtmlScrubPreview =
-        !htmlPreviewDebugDisabled &&
-        !hasFullWebCodecsPreview &&
-        (useTimelineStore.getState().isDraggingPlayhead || scrubSettleState.isPending(layer.sourceClipId)) &&
-        !!layer.source.videoElement;
-      const allowHtmlVideoPreview =
-        !!layer.source.videoElement &&
-        !htmlPreviewDebugDisabled &&
-        (!hasFullWebCodecsPreview ||
-          ENABLE_VISUAL_HTML_VIDEO_FALLBACK ||
-          allowHtmlScrubPreview);
-
-      if (allowHtmlVideoPreview) {
-        const video = layer.source.videoElement!;
-        const layerReuseKey = this.getLayerReuseKey(layer);
-        const targetTime = this.getTargetVideoTime(layer, video);
-        const isDragging = useTimelineStore.getState().isDraggingPlayhead;
-        this.scrubbingCache?.preloadAroundTime?.(video, targetTime, {
-          isDragging,
-          isPlaying: useTimelineStore.getState().isPlaying,
-        });
-        const isSettling = scrubSettleState.isPending(layer.sourceClipId);
-        const isPausedSettle = !useTimelineStore.getState().isPlaying && !isDragging && isSettling;
-        const lastPresentedTime = this.scrubbingCache?.getLastPresentedTime(video);
-        const lastPresentedOwner = this.scrubbingCache?.getLastPresentedOwner(video);
-        const hasPresentedOwnerMismatch =
-          !!layer.sourceClipId &&
-          !!lastPresentedOwner &&
-          lastPresentedOwner !== layer.sourceClipId;
-        const hasConfirmedPresentedFrame =
-          !hasPresentedOwnerMismatch &&
-          typeof lastPresentedTime === 'number' &&
-          Number.isFinite(lastPresentedTime);
-        const displayedTime = hasConfirmedPresentedFrame ? lastPresentedTime : undefined;
-        const reportedDisplayedTime =
-          useTimelineStore.getState().isPlaying &&
-          !video.paused &&
-          !video.seeking &&
-          Number.isFinite(video.currentTime)
-            ? video.currentTime
-            : displayedTime;
-        const hasFreshPresentedFrame =
-          hasConfirmedPresentedFrame &&
-          Math.abs(lastPresentedTime - targetTime) <= 0.12;
-        const presentedDriftSeconds = hasConfirmedPresentedFrame
-          ? Math.abs(lastPresentedTime - targetTime)
-          : undefined;
-        const awaitingPausedTargetFrame =
-          hasPresentedOwnerMismatch ||
-          !useTimelineStore.getState().isPlaying &&
-          !isDragging &&
-          (!isSettling &&
-            (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
-        const cacheSearchDistanceFrames = isDragging ? 12 : 6;
-        const lastSameClipFrame = this.getDragHoldFrame(layer, video);
-        const dragHoldFrame = isDragging
-          ? this.isFrameNearTarget(
-            lastSameClipFrame,
-            targetTime,
-            NestedCompRenderer.MAX_DRAG_FALLBACK_DRIFT_SECONDS
-          )
-            ? lastSameClipFrame
-            : null
-          : (isSettling || awaitingPausedTargetFrame) && this.isFrameNearTarget(lastSameClipFrame, targetTime)
-            ? lastSameClipFrame
-            : null;
-        const emergencyHoldFrame = dragHoldFrame;
-        const sameClipHoldFrame =
-          !useTimelineStore.getState().isPlaying &&
-          (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
-            ? lastSameClipFrame
-            : null;
-        const safeFallback = this.getSafeLastFrameFallback(layer, video, targetTime) ?? dragHoldFrame;
-        const shouldPreferStableHold = this.shouldPreferHtmlHold(layerReuseKey, {
-          hasHoldFrame: !!safeFallback || !!emergencyHoldFrame || !!sameClipHoldFrame,
-          isDragging,
-          isSettling,
-          awaitingPausedTargetFrame,
-          hasFreshPresentedFrame,
-        });
-        const allowDragLiveVideoImport =
-          !shouldPreferStableHold &&
-          !video.seeking &&
-          (
-            !hasConfirmedPresentedFrame ||
-            (presentedDriftSeconds ?? 0) <= NestedCompRenderer.MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS
-          );
-        const allowLiveVideoImport =
-          !shouldPreferStableHold &&
-          !hasPresentedOwnerMismatch &&
-          (isPausedSettle
-            ? hasFreshPresentedFrame
-            : !awaitingPausedTargetFrame &&
-              (((!isDragging && !isSettling) || hasFreshPresentedFrame || (isDragging ? allowDragLiveVideoImport : !safeFallback))));
-        const allowConfirmedFrameCaching = !hasPresentedOwnerMismatch && (isPausedSettle
-          ? hasFreshPresentedFrame
-          : !awaitingPausedTargetFrame &&
-            (((!isDragging && !isSettling) || hasFreshPresentedFrame)));
-        const captureOwnerId = allowConfirmedFrameCaching ? layer.sourceClipId : undefined;
-        if ((video.seeking || awaitingPausedTargetFrame) && this.scrubbingCache) {
-          const cachedView =
-            this.scrubbingCache.getCachedFrame(video.src, targetTime) ??
-            this.scrubbingCache.getNearestCachedFrame(video.src, targetTime, cacheSearchDistanceFrames);
-          if (cachedView) {
-            this.armHtmlHold(layerReuseKey);
-            result.push({
-              layer, isVideo: false, externalTexture: null, textureView: cachedView,
-              sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
-            });
-            continue;
-          }
-          if (!allowLiveVideoImport) {
-            if (safeFallback) {
-              this.armHtmlHold(layerReuseKey);
-              result.push({
-                layer, isVideo: false, externalTexture: null, textureView: safeFallback.view,
-                sourceWidth: safeFallback.width, sourceHeight: safeFallback.height,
-              });
-              continue;
-            }
-            if (emergencyHoldFrame) {
-              this.armHtmlHold(layerReuseKey);
-              result.push({
-                layer, isVideo: false, externalTexture: null, textureView: emergencyHoldFrame.view,
-                sourceWidth: emergencyHoldFrame.width, sourceHeight: emergencyHoldFrame.height,
-              });
-              continue;
-            }
-            if (sameClipHoldFrame) {
-              this.armHtmlHold(layerReuseKey);
-              result.push({
-                layer, isVideo: false, externalTexture: null, textureView: sameClipHoldFrame.view,
-                sourceWidth: sameClipHoldFrame.width, sourceHeight: sameClipHoldFrame.height,
-                displayedMediaTime: sameClipHoldFrame.mediaTime,
-                targetMediaTime: targetTime,
-                previewPath: 'same-clip-hold',
-              });
-              continue;
-            }
-            continue;
-          }
+      const htmlVideoPreview = tryCollectHtmlVideoPreview({
+        layer,
+        runtimeProvider,
+        clipProvider,
+        textureManager: this.textureManager,
+        scrubbingCache: this.scrubbingCache,
+        htmlHoldUntil: this.htmlHoldUntil,
+        debug: (message, context) => log.debug(message, context),
+        warn: (message, context) => log.warn(message, context),
+      });
+      if (htmlVideoPreview !== undefined) {
+        if (htmlVideoPreview) {
+          result.push(htmlVideoPreview);
         }
-        if (video.readyState >= 2) {
-          if (allowLiveVideoImport) {
-            const copiedFrame = getCopiedHtmlVideoPreviewFrame(
-              video,
-              this.scrubbingCache,
-              targetTime,
-              layer.sourceClipId,
-            captureOwnerId
-          );
-          if (copiedFrame) {
-            this.clearHtmlHold(layerReuseKey);
-            result.push({
-              layer, isVideo: false, externalTexture: null, textureView: copiedFrame.view,
-              sourceWidth: copiedFrame.width, sourceHeight: copiedFrame.height,
-                displayedMediaTime: copiedFrame.mediaTime ?? reportedDisplayedTime,
-                targetMediaTime: targetTime,
-                previewPath: 'copied-preview',
-              });
-              continue;
-            }
-          }
-
-          const extTex = allowLiveVideoImport
-            ? this.textureManager.importVideoTexture(video)
-            : null;
-          if (extTex) {
-            this.clearHtmlHold(layerReuseKey);
-            if (this.scrubbingCache) {
-              const now = performance.now();
-              const lastCapture = this.scrubbingCache.getLastCaptureTime(video);
-              if (allowConfirmedFrameCaching && now - lastCapture > 50) {
-                this.scrubbingCache.captureVideoFrame(video, captureOwnerId);
-                this.scrubbingCache.setLastCaptureTime(video, now);
-              }
-              if (allowConfirmedFrameCaching) {
-                this.scrubbingCache.cacheFrameAtTime(video, targetTime);
-              } else {
-                if (typeof displayedTime === 'number' && Number.isFinite(displayedTime)) {
-                  this.scrubbingCache.captureVideoFrameIfCloser(
-                    video,
-                    targetTime,
-                    displayedTime,
-                    layer.sourceClipId
-                  );
-                }
-                if (typeof displayedTime === 'number' && Number.isFinite(displayedTime)) {
-                  this.scrubbingCache.cacheFrameAtTime(video, displayedTime);
-                }
-              }
-            }
-            result.push({
-              layer, isVideo: true, externalTexture: extTex, textureView: null,
-              sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
-              displayedMediaTime: reportedDisplayedTime,
-              targetMediaTime: targetTime,
-              previewPath: 'live-import',
-            });
-            continue;
-          } else {
-            log.warn('Failed to import video texture', { layerId: layer.id });
-          }
-        }
-
-        const notReadyCachedFrame =
-          this.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
-          this.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
-        if (notReadyCachedFrame) {
-          this.armHtmlHold(layerReuseKey);
-          result.push({
-            layer,
-            isVideo: false,
-            externalTexture: null,
-            textureView: notReadyCachedFrame.view,
-            sourceWidth: video.videoWidth,
-            sourceHeight: video.videoHeight,
-            displayedMediaTime: notReadyCachedFrame.mediaTime,
-            targetMediaTime: targetTime,
-            previewPath: 'not-ready-scrub-cache',
-          });
-          continue;
-        }
-
-        if (safeFallback) {
-          this.armHtmlHold(layerReuseKey);
-          log.debug('Using cached frame fallback for nested video', { layerId: layer.id });
-          result.push({
-            layer, isVideo: false, externalTexture: null, textureView: safeFallback.view,
-            sourceWidth: safeFallback.width, sourceHeight: safeFallback.height,
-          });
-          continue;
-        }
-        if (emergencyHoldFrame) {
-          this.armHtmlHold(layerReuseKey);
-          result.push({
-            layer, isVideo: false, externalTexture: null, textureView: emergencyHoldFrame.view,
-            sourceWidth: emergencyHoldFrame.width, sourceHeight: emergencyHoldFrame.height,
-            displayedMediaTime: emergencyHoldFrame.mediaTime,
-            targetMediaTime: targetTime,
-            previewPath: 'emergency-hold',
-          });
-          continue;
-        }
-        if (sameClipHoldFrame) {
-          this.armHtmlHold(layerReuseKey);
-          result.push({
-            layer, isVideo: false, externalTexture: null, textureView: sameClipHoldFrame.view,
-            sourceWidth: sameClipHoldFrame.width, sourceHeight: sameClipHoldFrame.height,
-            displayedMediaTime: sameClipHoldFrame.mediaTime,
-            targetMediaTime: targetTime,
-            previewPath: 'same-clip-hold',
-          });
-          continue;
-        }
+        continue;
       }
 
-      const runtimeProviderStable = this.isPendingWebCodecsFrameStable(runtimeProvider ?? undefined);
+      const runtimeProviderStable = isPendingWebCodecsFrameStable(runtimeProvider ?? undefined);
       const runtimeHasFrame =
         (runtimeProvider?.hasFrame?.() ?? false) ||
         !!runtimeProvider?.getCurrentFrame?.();
@@ -1057,7 +481,7 @@ export class NestedCompRenderer {
         : providerKey;
       const layerReuseKey = this.getLayerReuseKey(layer);
       const canReuseLastFrame = this.canReuseLastSuccessfulVideoFrame(layerReuseKey, providerKey);
-      const frameProviderStable = this.isPendingWebCodecsFrameStable(frameProvider ?? undefined);
+      const frameProviderStable = isPendingWebCodecsFrameStable(frameProvider ?? undefined);
       const holdingFrame = !frameProviderStable && canReuseLastFrame;
       const allowRuntimeFrameReadDuringSettle =
         scrubSettleState.isPending(layer.sourceClipId) &&
@@ -1088,7 +512,7 @@ export class NestedCompRenderer {
           runtimeFrameRead?.binding.session.currentTime ??
           runtimeProvider?.getPendingSeekTime?.() ??
           runtimeProvider?.currentTime;
-        const displayedMediaTime = this.getFrameTimestampSeconds(
+        const displayedMediaTime = getFrameTimestampSeconds(
           runtimeFrameRead?.frameHandle?.timestamp,
           targetMediaTime
         );
@@ -1123,7 +547,7 @@ export class NestedCompRenderer {
             layer.source?.mediaTime ??
             frameProvider.getPendingSeekTime?.() ??
             frameProvider.currentTime;
-          const displayedMediaTime = this.getFrameTimestampSeconds(
+          const displayedMediaTime = getFrameTimestampSeconds(
             frame.timestamp,
             targetMediaTime
           );

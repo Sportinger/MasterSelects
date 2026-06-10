@@ -144,7 +144,11 @@ export const classCHardTargets = [
   { path: 'src/engine/render/layerCollector/htmlVideoNotReadyCollector.ts', maxCurrentHits: 1 },
   { path: 'src/engine/render/layerCollector/htmlVideoReadyCollector.ts', maxCurrentHits: 1 },
   { path: 'src/engine/render/layerCollector/webCodecsCollector.ts', maxCurrentHits: 3 },
-  { path: 'src/engine/render/NestedCompRenderer.ts', maxCurrentHits: 10 },
+  // Packet 246 split: 9 hits moved into the nestedComp preview/scene modules
+  // (10 -> 1 + 8 + 1, cluster total conserved).
+  { path: 'src/engine/render/NestedCompRenderer.ts', maxCurrentHits: 1 },
+  { path: 'src/engine/render/nestedComp/htmlVideoPreview.ts', maxCurrentHits: 8 },
+  { path: 'src/engine/render/nestedComp/sharedScene.ts', maxCurrentHits: 1 },
   // Packet 231 moved 5 hits into the scene-3D/target-preview facets and the
   // old 16-ceiling slack (actual was 11) is retired: 16 -> 6 + 2 + 2 + 1.
   { path: 'src/engine/render/RenderDispatcher.ts', maxCurrentHits: 6 },
@@ -274,7 +278,8 @@ export const getStateAccessPolicyBaselines = {
   // 196 -> 199: packet-231 dispatcher facets (16 -> 6+2+2+1).
   // 199 -> 203: packet-239 LayerCollector entry replaced by five collector
   // modules (7 -> 1+1+1+1+3, total conserved).
-  classCHardTargetFileCount: 203,
+  // 203 -> 205: packet-246 nestedComp modules (10 -> 1+8+1, total conserved).
+  classCHardTargetFileCount: 205,
   // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit)
   // -> 659 (packet 231 retired the dispatcher ceiling slack: 16 -> 11 actual)
   // -> 658 (packet 237 retired one compositionRenderer hit).
