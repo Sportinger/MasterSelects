@@ -44,16 +44,10 @@ export interface TimelineClipCanvasWorkerAnalysisOverlayResource {
   pointCount: number;
 }
 
-export interface TimelineClipCanvasWorkerWaveformChannelResource {
-  columns: Float32Array;
-  columnCount: number;
-}
-
 export interface TimelineClipCanvasWorkerWaveformResource {
   kind: 'waveform';
   columns: Float32Array;
   columnCount: number;
-  channels?: readonly TimelineClipCanvasWorkerWaveformChannelResource[];
   mode: 'compact' | 'detailed';
 }
 

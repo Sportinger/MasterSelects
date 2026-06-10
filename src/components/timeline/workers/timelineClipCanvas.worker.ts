@@ -201,7 +201,7 @@ function drawClipWaveform(
   context.fillRect(x, top, w, h);
   context.translate(x, top);
   if (waveform) {
-    drawWorkerWaveformColumns(context, waveform, w, h);
+    drawWorkerWaveformColumns(context, waveform.columns, waveform.columnCount, w, h, waveform.mode);
   } else {
     drawWorkerWaveformCenterLine(context, w, h, 0.18);
   }
@@ -313,7 +313,7 @@ function drawWorkerCompositionMixdownWaveform(
   context.rect(x, waveformTop, width, waveformHeight);
   context.clip();
   context.translate(x, waveformTop);
-  drawWorkerWaveformColumns(context, waveform, width, waveformHeight, 'compact');
+  drawWorkerWaveformColumns(context, waveform.columns, waveform.columnCount, width, waveformHeight, 'compact');
   context.restore();
 }
 

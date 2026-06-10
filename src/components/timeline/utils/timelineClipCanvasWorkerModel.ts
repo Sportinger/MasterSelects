@@ -20,10 +20,10 @@ import {
   clonePreparedFadeVisualsResource,
   clonePreparedMidiPreviewResource,
   clonePreparedSpectrogramResource,
+  clonePreparedWaveformResource,
   cloneTrimVisualsResource,
   getPreparedThumbnailStripResource,
   type TimelineClipCanvasWorkerPreparedClipResources,
-  type TimelineClipCanvasWorkerPreparedWaveformResource,
 } from './timelineClipCanvasWorkerPreparedResources';
 import {
   buildTimelinePaintPacket,
@@ -164,71 +164,6 @@ function createTimelinePaintResourceRef(
     ownerClipId: clipId,
     byteEstimate: options.byteEstimate,
     transferMode,
-  };
-}
-
-type TimelineClipCanvasWorkerPreparedWaveformChannelResource = {
-  columns: readonly number[] | Float32Array;
-  columnCount: number;
-};
-
-type TimelineClipCanvasWorkerPreparedWaveformResourceWithChannels = TimelineClipCanvasWorkerPreparedWaveformResource & {
-  channels?: readonly TimelineClipCanvasWorkerPreparedWaveformChannelResource[];
-};
-
-function clonePreparedWaveformColumns(columns: readonly number[] | Float32Array): Float32Array {
-  return columns instanceof Float32Array
-    ? new Float32Array(columns)
-    : Float32Array.from(columns);
-}
-
-function clonePreparedWaveformResource(
-  waveform: TimelineClipCanvasWorkerPreparedWaveformResource,
-): TimelineClipCanvasWorkerWaveformResource {
-  const sourceChannels = (waveform as TimelineClipCanvasWorkerPreparedWaveformResourceWithChannels).channels;
-  if (!sourceChannels || sourceChannels.length === 0) {
-    const columns = clonePreparedWaveformColumns(waveform.columns);
-    return {
-      kind: 'waveform',
-      columns,
-      columnCount: waveform.columnCount,
-      channels: [{ columns, columnCount: waveform.columnCount }],
-      mode: waveform.mode,
-    };
-  }
-
-  const packedLength = sourceChannels.reduce((total, channel) => (
-    total + Math.max(0, Math.min(channel.columns.length, channel.columnCount * 4))
-  ), 0);
-  const packedColumns = new Float32Array(packedLength);
-  let offset = 0;
-  const channels = sourceChannels.map((channel) => {
-    const expectedLength = Math.max(0, channel.columnCount * 4);
-    const length = Math.max(0, Math.min(channel.columns.length, expectedLength));
-    if (length > 0) {
-      if (channel.columns instanceof Float32Array) {
-        packedColumns.set(channel.columns.subarray(0, length), offset);
-      } else {
-        packedColumns.set(channel.columns.slice(0, length), offset);
-      }
-    }
-    const columns = packedColumns.subarray(offset, offset + length);
-    offset += length;
-    return {
-      columns,
-      columnCount: channel.columnCount,
-    };
-  });
-  const firstDrawableChannel = channels.find((channel) => (
-    channel.columnCount > 0 && channel.columns.length >= channel.columnCount * 4
-  ));
-
-  return {
-    kind: 'waveform',
-    columns: packedColumns,
-    columnCount: firstDrawableChannel?.columnCount ?? waveform.columnCount,
-    channels,
-    mode: waveform.mode,
   };
 }
 
