@@ -72,7 +72,7 @@ describe('timeline external drop file placement', () => {
   });
 
   it('places supported dropped files sequentially through injected clip actions', async () => {
-    const addClip = vi.fn();
+    const addClip = vi.fn().mockResolvedValue('clip-first');
     const addSignalAssetClip = vi.fn();
     const firstFile = new File(['video'], 'first.mp4', { type: 'video/mp4' });
     const secondFile = new File(['video'], 'second.mp4', { type: 'video/mp4' });
@@ -144,7 +144,7 @@ describe('timeline external drop file placement', () => {
   });
 
   it('uses source-specific media type overrides after media resolution', async () => {
-    const addClip = vi.fn();
+    const addClip = vi.fn().mockResolvedValue('clip-model');
     const addSignalAssetClip = vi.fn();
     const modelFile = new File(['model'], 'hero.glb', { type: 'model/gltf-binary' });
     getTimelineDropMediaTypeOverrideMock.mockReturnValue('model');

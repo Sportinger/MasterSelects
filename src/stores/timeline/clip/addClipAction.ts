@@ -19,8 +19,95 @@ import {
   hasVisualMediaType,
   loadSourceMediaFile,
 } from './addClipMediaSource';
+import {
+  createTimelineTrackForType,
+  insertTimelineTrack,
+} from '../trackSlice';
 
 const log = Logger.create('ClipAddAction');
+
+type AddClipTargetTrackType = 'video' | 'audio';
+
+function getRequiredTrackTypeForMedia(
+  mediaType: Awaited<ReturnType<typeof classifyMediaType>> | 'gaussian-avatar' | 'gaussian-splat',
+): AddClipTargetTrackType | null {
+  if (mediaType === 'audio') return 'audio';
+  if (mediaType === 'gaussian-avatar') return null;
+  if (hasVisualMediaType(mediaType)) return 'video';
+  return null;
+}
+
+function isUnlockedCompatibleTrack(
+  track: TimelineTrack,
+  requiredTrackType: AddClipTargetTrackType,
+): boolean {
+  return track.type === requiredTrackType && track.locked !== true;
+}
+
+function findUnlockedCompatibleTrackId(
+  tracks: readonly TimelineTrack[],
+  requestedTrackId: string,
+  requiredTrackType: AddClipTargetTrackType,
+): string | null {
+  const requestedIndex = tracks.findIndex(track => track.id === requestedTrackId);
+  const searchOrder = requestedIndex >= 0
+    ? [...tracks.slice(requestedIndex + 1), ...tracks.slice(0, requestedIndex)]
+    : tracks;
+
+  return searchOrder.find(track => isUnlockedCompatibleTrack(track, requiredTrackType))?.id ?? null;
+}
+
+function createUnlockedPlacementTrack(
+  context: ClipActionContext,
+  requiredTrackType: AddClipTargetTrackType,
+): string {
+  let createdTrackId = '';
+  const { set } = context;
+  set(state => {
+    const newTrack = createTimelineTrackForType(requiredTrackType, state.tracks);
+    createdTrackId = newTrack.id;
+    return insertTimelineTrack(state.tracks, state.expandedTracks, newTrack);
+  });
+  return createdTrackId;
+}
+
+function resolveUnlockedPlacementTrackId(
+  context: ClipActionContext,
+  requestedTrackId: string,
+  requiredTrackType: AddClipTargetTrackType,
+): string | null {
+  const { tracks } = context.get();
+  const requestedTrack = tracks.find(track => track.id === requestedTrackId);
+  if (!requestedTrack) {
+    log.warn('Track not found', { trackId: requestedTrackId });
+    return null;
+  }
+
+  if (isUnlockedCompatibleTrack(requestedTrack, requiredTrackType)) {
+    return requestedTrack.id;
+  }
+
+  if (requestedTrack.type !== requiredTrackType) {
+    return requestedTrack.id;
+  }
+
+  const fallbackTrackId = findUnlockedCompatibleTrackId(tracks, requestedTrackId, requiredTrackType);
+  if (fallbackTrackId) {
+    log.warn('Remapping clip placement away from locked track', {
+      requestedTrackId,
+      fallbackTrackId,
+    });
+    return fallbackTrackId;
+  }
+
+  const createdTrackId = createUnlockedPlacementTrack(context, requiredTrackType);
+  log.warn('Created unlocked track for clip placement away from locked track', {
+    requestedTrackId,
+    createdTrackId,
+    trackType: requiredTrackType,
+  });
+  return createdTrackId;
+}
 
 export async function applyAddClipAction(
   context: ClipActionContext,
@@ -38,14 +125,18 @@ export async function applyAddClipAction(
 
   log.debug('Adding clip', { mediaType, file: file.name });
 
+  const requiredTrackType = getRequiredTrackTypeForMedia(mediaType);
+  const resolvedTrackId = requiredTrackType
+    ? resolveUnlockedPlacementTrackId(context, trackId, requiredTrackType)
+    : trackId;
+
+  if (!resolvedTrackId) return undefined;
+  trackId = resolvedTrackId;
+
   const { tracks, clips, updateDuration, thumbnailsEnabled, waveformsEnabled, invalidateCache } = get();
   const targetTrack = tracks.find(t => t.id === trackId);
   if (!targetTrack) {
     log.warn('Track not found', { trackId });
-    return undefined;
-  }
-  if (targetTrack.locked) {
-    log.warn('Cannot add clip to locked track', { trackId });
     return undefined;
   }
 

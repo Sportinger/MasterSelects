@@ -128,7 +128,7 @@ function resolveTargetTrackId(
     : undefined;
   const usableTargetedTrack = isUsablePasteTargetTrack(targetedTrack) ? targetedTrack : undefined;
   if (usableTargetedTrack) return usableTargetedTrack.id;
-  if (originalTrack) return clipData.trackId;
+  if (isUsablePasteTargetTrack(originalTrack)) return clipData.trackId;
   return tracks.find(t => t.type === clipData.trackType && isUsablePasteTargetTrack(t))?.id ?? null;
 }
 
