@@ -1,16 +1,24 @@
 // TimelineRuler component - Time ruler at the top of the timeline
 
-import React, { memo } from 'react';
+import React, { memo, useLayoutEffect, useRef, useState } from 'react';
 import type { TimelineRulerProps } from './types';
 import {
+  alignTimelineGridPixel,
   createTimelineGridPlan,
   formatTimelineFrameNumber,
   formatTimelineTimecode,
+  getTimelineDevicePixelRatio,
 } from './utils/timelineGrid';
 
 const RULER_VIEWPORT_FALLBACK_PX = 1600;
 const RULER_VIEWPORT_MIN_PX = 1600;
 const RULER_RENDER_OVERSCAN_PX = 512;
+
+function getResizeObserverInlineSize(entry: ResizeObserverEntry): number {
+  const borderBox = entry.borderBoxSize;
+  const borderBoxSize = Array.isArray(borderBox) ? borderBox[0] : borderBox;
+  return borderBoxSize?.inlineSize ?? entry.contentRect.width;
+}
 
 function TimelineRulerComponent({
   duration,
@@ -24,14 +32,48 @@ function TimelineRulerComponent({
   videoBakeRegions = [],
   videoBakeRegionSelection = null,
 }: TimelineRulerProps) {
+  const rulerRef = useRef<HTMLDivElement | null>(null);
+  const [measuredViewportWidth, setMeasuredViewportWidth] = useState(RULER_VIEWPORT_FALLBACK_PX);
+
+  useLayoutEffect(() => {
+    const viewportElement = rulerRef.current?.parentElement;
+    if (!viewportElement) return undefined;
+
+    const commitViewportWidth = (width: number) => {
+      const nextWidth = Math.max(RULER_VIEWPORT_MIN_PX, Math.ceil(width || RULER_VIEWPORT_FALLBACK_PX));
+      setMeasuredViewportWidth((previous) => (previous === nextWidth ? previous : nextWidth));
+    };
+
+    commitViewportWidth(viewportElement.clientWidth || viewportElement.getBoundingClientRect().width);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries.find((candidate) => candidate.target === viewportElement) ?? entries[0];
+        commitViewportWidth(entry ? getResizeObserverInlineSize(entry) : viewportElement.clientWidth);
+      });
+      observer.observe(viewportElement);
+      return () => observer.disconnect();
+    }
+
+    if (typeof window !== 'undefined') {
+      const handleWindowResize = () => {
+        commitViewportWidth(viewportElement.clientWidth || viewportElement.getBoundingClientRect().width);
+      };
+      window.addEventListener('resize', handleWindowResize);
+      return () => window.removeEventListener('resize', handleWindowResize);
+    }
+
+    return undefined;
+  }, []);
+
   // Time to pixel conversion
   const timeToPixel = (time: number) => time * zoom;
+  const devicePixelRatio = getTimelineDevicePixelRatio();
+  const alignedScrollX = alignTimelineGridPixel(scrollX, devicePixelRatio);
 
   const width = timeToPixel(duration);
   const markers: React.ReactElement[] = [];
-  const viewportWidth = typeof window === 'undefined'
-    ? RULER_VIEWPORT_FALLBACK_PX
-    : Math.max(RULER_VIEWPORT_MIN_PX, window.innerWidth);
+  const viewportWidth = measuredViewportWidth;
   const visibleStartTime = Math.max(0, (scrollX - RULER_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001));
   const visibleEndTime = Math.min(
     duration,
@@ -80,7 +122,7 @@ function TimelineRulerComponent({
   for (let markerIndex = firstTimeMarkerIndex; markerIndex <= lastTimeMarkerIndex; markerIndex += 1) {
     const t = markerIndex * timeInterval;
     if (t < 0 || t > duration) continue;
-    const x = timeToPixel(t);
+    const x = alignTimelineGridPixel(timeToPixel(t), devicePixelRatio);
     const isMainMarker = markerIndex % gridPlan.timeMajorEveryMinor === 0;
 
     markers.push(
@@ -106,7 +148,7 @@ function TimelineRulerComponent({
     for (let markerIndex = firstFrameMarkerIndex; markerIndex <= lastFrameMarkerIndex; markerIndex += 1) {
       const t = markerIndex * frameInterval;
       if (t < 0 || t > duration) continue;
-      const x = timeToPixel(t);
+      const x = alignTimelineGridPixel(timeToPixel(t), devicePixelRatio);
       const isMainMarker = markerIndex % gridPlan.frameMajorEveryMinor === 0;
 
       markers.push(
@@ -127,9 +169,10 @@ function TimelineRulerComponent({
 
   return (
     <div
+      ref={rulerRef}
       className="time-ruler"
       data-ai-id="timeline-ruler"
-      style={{ width, transform: `translateX(-${scrollX}px)` }}
+      style={{ width, transform: `translateX(-${alignedScrollX}px)` }}
       onMouseDown={onRulerMouseDown}
     >
       {markers}

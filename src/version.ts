@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.2.0';
+export const APP_VERSION = '2.2.1';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.2.0',
-    message: 'Complete Refactor: the whole codebase now lives in focused role modules under a 700-line ceiling, guarded by down-only architecture ratchets — plus a fix for exports crawling at 1fps on videos with duration-0 track metadata.',
+    title: 'MasterSelects 2.2.1',
+    message: 'Timeline interaction pass: accurate cut-tool indicator, link-aware gap erasing, locked tracks reject new clips, drag ghosts always clean up, and a device-pixel-snapped canvas grid with no moire at any zoom.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.2.0',
-  message: 'Complete Refactor: the whole codebase now lives in focused role modules under a 700-line ceiling, guarded by down-only architecture ratchets — plus a fix for exports crawling at 1fps on videos with duration-0 track metadata.',
+  title: 'MasterSelects 2.2.1',
+  message: 'Timeline interaction pass: accurate cut-tool indicator, link-aware gap erasing, locked tracks reject new clips, drag ghosts always clean up, and a device-pixel-snapped canvas grid with no moire at any zoom.',
   animated: true,
 };
 

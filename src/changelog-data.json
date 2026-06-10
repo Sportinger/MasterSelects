@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-06-10",
+    "type": "fix",
+    "title": "MasterSelects 2.2.1",
+    "description": "Timeline interaction pass: the cut-tool indicator now sits exactly under the mouse at any zoom and horizontal scroll; erasing space between clips moves linked audio/video partners together (linked partners on locked tracks are skipped); locked tracks no longer receive dropped, pasted, or command-placed clips — content lands on the next unlocked compatible track or a new one; media drag ghosts clean up on every drag end path, including OS file drags that leave the media panel without dropping; and the timeline lane grid is now painted on a device-pixel-snapped canvas, eliminating moire, smeared bands, and missing lines at dense or fractional zoom levels (CSS repeating gradients could not snap individual lines to device pixels). Ruler and lane viewports also resize immediately via ResizeObserver instead of waiting for window resizes.",
+    "section": "Release",
+    "commits": ["93481deb", "c6b44730", "25be0e59", "f3eaa328", "fc4fd10c", "933bc4eb", "8e588898"]
+  },
+  {
+    "date": "2026-06-10",
     "type": "refactor",
     "title": "MasterSelects 2.2.0",
     "description": "Complete Refactor release: the entire codebase was restructured into focused role modules — the over-700-line file list went from 114 files to a single documented exception across 37 refactor waves (~200 work packets). Highlights: a single live-audio owner (the dual AudioContext is gone), consolidated audio decode ownership, lease-managed runtime handles, a frozen render contract, and down-only architecture ratchets (schema, runtime handles, getState policy, type barrel) that keep monoliths from regrowing. Quality gates on the release: production build green, lint at zero errors, 4176 unit tests green. Also fixes FAST exports crawling at ~1fps and eventually failing on videos whose MP4 track metadata reports duration=0 (frame-rate sanitization in the demuxer plus a defensive tolerance clamp).",

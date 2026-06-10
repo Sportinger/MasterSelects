@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import type { TimelineAudioDisplayMode, TimelineTrackFocusMode } from '../../../stores/timeline/types';
 import type { TimelineTrack as TimelineTrackType } from '../../../types';
@@ -32,14 +31,6 @@ interface UseTimelineSectionLayoutProps {
   getRenderedTrackBaseHeight: (track: TimelineTrackType) => number;
   getExpandedTrackHeight: (trackId: string, baseHeight: number) => number;
   isTrackExpandedForRender: (trackId: string) => boolean;
-}
-
-interface UseTimelineSectionViewportMeasurementProps {
-  scrollWrapperRef: RefObject<HTMLDivElement | null>;
-  timelineRef: RefObject<HTMLDivElement | null>;
-  timelineBodyRef: RefObject<HTMLDivElement | null>;
-  trackHeaderWidth: number;
-  setTimelineViewportWidth: Dispatch<SetStateAction<number>>;
 }
 
 interface TimelineSectionLayout {
@@ -248,52 +239,5 @@ export function useTimelineSectionLayout({
     audioScrollSnapPositions,
     videoSectionHeight,
     audioSectionHeight,
-  };
-}
-
-export function useTimelineSectionViewportMeasurement({
-  scrollWrapperRef,
-  timelineRef,
-  timelineBodyRef,
-  trackHeaderWidth,
-  setTimelineViewportWidth,
-}: UseTimelineSectionViewportMeasurementProps) {
-  const videoSectionViewportRef = useRef<HTMLDivElement>(null);
-  const audioSectionViewportRef = useRef<HTMLDivElement>(null);
-  const [videoViewportHeight, setVideoViewportHeight] = useState(160);
-  const [audioViewportHeight, setAudioViewportHeight] = useState(160);
-  const [splitViewportHeight, setSplitViewportHeight] = useState(320);
-
-  useEffect(() => {
-    const updateViewportHeights = () => {
-      if (scrollWrapperRef.current) setSplitViewportHeight(scrollWrapperRef.current.clientHeight);
-      if (videoSectionViewportRef.current) setVideoViewportHeight(videoSectionViewportRef.current.clientHeight);
-      if (audioSectionViewportRef.current) setAudioViewportHeight(audioSectionViewportRef.current.clientHeight);
-      const nextTimelineViewportWidth =
-        timelineRef.current?.clientWidth ??
-        (timelineBodyRef.current ? timelineBodyRef.current.clientWidth - trackHeaderWidth : null);
-      if (nextTimelineViewportWidth && nextTimelineViewportWidth > 0) {
-        setTimelineViewportWidth(Math.max(1, nextTimelineViewportWidth));
-      }
-    };
-    updateViewportHeights();
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateViewportHeights) : null;
-    [scrollWrapperRef.current, timelineRef.current, videoSectionViewportRef.current, audioSectionViewportRef.current]
-      .forEach((element) => {
-        if (element) observer?.observe(element);
-      });
-    window.addEventListener('resize', updateViewportHeights);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', updateViewportHeights);
-    };
-  }, [scrollWrapperRef, setTimelineViewportWidth, timelineBodyRef, timelineRef, trackHeaderWidth]);
-
-  return {
-    videoSectionViewportRef,
-    audioSectionViewportRef,
-    videoViewportHeight,
-    audioViewportHeight,
-    splitViewportHeight,
   };
 }

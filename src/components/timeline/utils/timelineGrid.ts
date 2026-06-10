@@ -25,9 +25,9 @@ interface CreateTimelineGridPlanInput {
 }
 
 const DEFAULT_FRAME_RATE = 30;
-const MIN_FRAME_LINE_PX = 6;
-const FRAME_GRID_FADE_START_PX = 3;
-const FRAME_GRID_FADE_END_PX = 9;
+const MIN_FRAME_LINE_PX = 16;
+const FRAME_GRID_FADE_START_PX = 10;
+const FRAME_GRID_FADE_END_PX = MIN_FRAME_LINE_PX;
 const TARGET_TIME_LINE_PX = 40;
 const TARGET_LABEL_PX = 120;
 const NICE_SECONDS = [1, 2, 5];
@@ -71,6 +71,16 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
+export function getTimelineDevicePixelRatio(): number {
+  if (typeof window === 'undefined') return 1;
+  return sanitizePositiveNumber(window.devicePixelRatio, 1);
+}
+
+export function alignTimelineGridPixel(value: number, devicePixelRatio = 1): number {
+  const safeDevicePixelRatio = sanitizePositiveNumber(devicePixelRatio, 1);
+  return Math.round(value * safeDevicePixelRatio) / safeDevicePixelRatio;
+}
+
 export function createTimelineGridPlan({
   zoom,
   frameRate,
@@ -85,9 +95,10 @@ export function createTimelineGridPlan({
   const timeMajorEveryMinor = getMajorEveryMinor(timeMajorIntervalSeconds, timeIntervalSeconds);
   const labelFrameStep = getNiceFrameStepAtLeast(TARGET_LABEL_PX / frameWidthPixels);
   const frameGridOpacity = smoothstep(FRAME_GRID_FADE_START_PX, FRAME_GRID_FADE_END_PX, frameWidthPixels);
-  const timeGridOpacity = 1 - frameGridOpacity;
+  const frameLinesResolvable = frameWidthPixels >= MIN_FRAME_LINE_PX;
+  const timeGridOpacity = frameLinesResolvable ? 0 : 1 - frameGridOpacity;
 
-  if (frameWidthPixels >= MIN_FRAME_LINE_PX) {
+  if (frameLinesResolvable) {
     const majorIntervalSeconds = labelFrameStep * frameDurationSeconds;
 
     return {
@@ -105,7 +116,7 @@ export function createTimelineGridPlan({
       frameIntervalSeconds: frameDurationSeconds,
       frameIntervalPixels: frameWidthPixels,
       frameMajorEveryMinor: labelFrameStep,
-      frameGridOpacity,
+      frameGridOpacity: 1,
       timeGridOpacity,
     };
   }

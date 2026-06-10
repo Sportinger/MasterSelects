@@ -31,6 +31,39 @@ function getRippleDeleteRangeByTrack(deletedClips: TimelineClip[]): Map<string, 
   return rangeByTrack;
 }
 
+function findLinkedClip(clip: TimelineClip, clips: TimelineClip[]): TimelineClip | undefined {
+  return clips.find((candidate) => candidate.id === clip.linkedClipId || candidate.linkedClipId === clip.id);
+}
+
+function addLinkedShiftTargets(
+  targetStartByClipId: Map<string, number>,
+  clips: TimelineClip[],
+  tracks: TimelineTrack[],
+  warnings: TimelineEditWarning[],
+): void {
+  for (const [clipId, targetStart] of [...targetStartByClipId.entries()]) {
+    const clip = clips.find((candidate) => candidate.id === clipId);
+    if (!clip) continue;
+
+    const linkedClip = findLinkedClip(clip, clips);
+    if (!linkedClip || targetStartByClipId.has(linkedClip.id)) continue;
+
+    if (isTrackLocked(tracks, linkedClip.trackId)) {
+      warnings.push({
+        code: 'track-locked',
+        message: 'Skipped locked linked clip while deleting gap.',
+        clipId: linkedClip.id,
+        trackId: linkedClip.trackId,
+      });
+      continue;
+    }
+
+    const delta = targetStart - clip.startTime;
+    if (Math.abs(delta) <= EPSILON) continue;
+    targetStartByClipId.set(linkedClip.id, Math.max(0, linkedClip.startTime + delta));
+  }
+}
+
 export function applyRippleDeleteSelectionOperation(
   operation: RippleDeleteSelectionOperation,
   clips: TimelineClip[],
@@ -132,15 +165,21 @@ export function applyDeleteGapAtTimeOperation(
     };
   }
 
-  const changedClipIds = new Set<string>();
-  const nextClips = clips.map((clip) => {
+  const targetStartByClipId = new Map<string, number>();
+  for (const clip of clips) {
     const shift = shiftByTrack.get(clip.trackId);
-    if (!shift || clip.startTime < shift.start - EPSILON) return clip;
-    changedClipIds.add(clip.id);
-    return { ...clip, startTime: Math.max(0, clip.startTime - shift.delta) };
+    if (!shift || clip.startTime < shift.start - EPSILON) continue;
+    targetStartByClipId.set(clip.id, Math.max(0, clip.startTime - shift.delta));
+  }
+
+  addLinkedShiftTargets(targetStartByClipId, clips, tracks, warnings);
+
+  const nextClips = clips.map((clip) => {
+    const nextStart = targetStartByClipId.get(clip.id);
+    return nextStart === undefined ? clip : { ...clip, startTime: nextStart };
   });
 
-  return { clips: nextClips, changedClipIds: [...changedClipIds], warnings };
+  return { clips: nextClips, changedClipIds: [...targetStartByClipId.keys()], warnings };
 }
 
 export function applyDeleteAllGapsOperation(
@@ -190,6 +229,8 @@ export function applyDeleteAllGapsOperation(
         : [{ code: 'no-op', message: 'No timeline gaps found.' }],
     };
   }
+
+  addLinkedShiftTargets(nextStartByClipId, clips, tracks, warnings);
 
   const nextClips = clips.map((clip) => {
     const nextStart = nextStartByClipId.get(clip.id);

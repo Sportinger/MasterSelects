@@ -310,14 +310,18 @@ function getSelectedTargetClip(state: TimelineStore, source: PlacementSource): T
     ? state.primarySelectedClipId
     : [...state.selectedClipIds][0];
   const preferred = preferredId ? state.clips.find((clip) => clip.id === preferredId) : undefined;
-  if (preferred && state.tracks.find((track) => track.id === preferred.trackId)?.type === source.trackType) {
+  const preferredTrack = preferred
+    ? state.tracks.find((track) => track.id === preferred.trackId)
+    : undefined;
+  if (preferred && preferredTrack && isTrackCompatible(preferredTrack, source)) {
     return preferred;
   }
 
-  return state.clips.find((clip) =>
-    state.selectedClipIds.has(clip.id) &&
-    state.tracks.find((track) => track.id === clip.trackId)?.type === source.trackType
-  ) ?? null;
+  return state.clips.find((clip) => {
+    if (!state.selectedClipIds.has(clip.id)) return false;
+    const track = state.tracks.find((item) => item.id === clip.trackId);
+    return track ? isTrackCompatible(track, source) : false;
+  }) ?? null;
 }
 
 function getCompatibleRangeTrackIds(state: TimelineStore, source: PlacementSource): string[] {

@@ -19,6 +19,10 @@ import {
   hasVisualMediaType,
   loadSourceMediaFile,
 } from './addClipMediaSource';
+import {
+  getRequiredTrackTypeForMedia,
+  resolveUnlockedPlacementTrackId,
+} from './unlockedPlacementTrack';
 
 const log = Logger.create('ClipAddAction');
 
@@ -38,14 +42,18 @@ export async function applyAddClipAction(
 
   log.debug('Adding clip', { mediaType, file: file.name });
 
+  const requiredTrackType = getRequiredTrackTypeForMedia(mediaType);
+  const resolvedTrackId = requiredTrackType
+    ? resolveUnlockedPlacementTrackId(context, trackId, requiredTrackType)
+    : trackId;
+
+  if (!resolvedTrackId) return undefined;
+  trackId = resolvedTrackId;
+
   const { tracks, clips, updateDuration, thumbnailsEnabled, waveformsEnabled, invalidateCache } = get();
   const targetTrack = tracks.find(t => t.id === trackId);
   if (!targetTrack) {
     log.warn('Track not found', { trackId });
-    return undefined;
-  }
-  if (targetTrack.locked) {
-    log.warn('Cannot add clip to locked track', { trackId });
     return undefined;
   }
 

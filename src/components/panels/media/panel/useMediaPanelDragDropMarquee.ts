@@ -1,4 +1,4 @@
-import { useCallback, useRef, type Dispatch, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, type Dispatch, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react';
 import { Logger } from '../../../../services/logger';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import type { MediaFolder, ProjectItem } from '../../../../stores/mediaStore';
@@ -65,6 +65,141 @@ export function useMediaPanelDragDropMarquee({
   getSlotGridProgress,
 }: UseMediaPanelDragDropMarqueeInput) {
   const marqueeRef = useRef<{ startX: number; startY: number; initialSelection: string[] } | null>(null);
+  const nativeDragGuardsRef = useRef<(() => void) | null>(null);
+  const externalOverGuardsRef = useRef<(() => void) | null>(null);
+
+  const removeExternalOverGuards = useCallback(() => {
+    externalOverGuardsRef.current?.();
+    externalOverGuardsRef.current = null;
+  }, []);
+
+  const clearExternalDragOver = useCallback(() => {
+    setIsExternalDragOver(false);
+    removeExternalOverGuards();
+  }, [removeExternalOverGuards, setIsExternalDragOver]);
+
+  // OS file drags fire no dragend in the page and dragleave coordinates are
+  // unreliable in Chromium, so the panel-local leave check alone can strand
+  // the import overlay. Watch the whole document while the overlay is up.
+  const installExternalOverGuards = useCallback((panelEl: HTMLElement) => {
+    if (externalOverGuardsRef.current) return;
+
+    const handleDocumentDragOver = (event: DragEvent) => {
+      if (!(event.target instanceof Node) || !panelEl.contains(event.target)) {
+        clearExternalDragOver();
+      }
+    };
+    const handleDrop = () => {
+      window.setTimeout(clearExternalDragOver, 0);
+    };
+    const handleWindowDragLeave = (event: DragEvent) => {
+      if (event.relatedTarget) return;
+      if (
+        event.clientX <= 0 ||
+        event.clientY <= 0 ||
+        event.clientX >= window.innerWidth ||
+        event.clientY >= window.innerHeight
+      ) {
+        clearExternalDragOver();
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') clearExternalDragOver();
+    };
+
+    document.addEventListener('dragover', handleDocumentDragOver, true);
+    document.addEventListener('drop', handleDrop, true);
+    document.addEventListener('dragend', clearExternalDragOver, true);
+    document.addEventListener('dragleave', handleWindowDragLeave, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+
+    externalOverGuardsRef.current = () => {
+      document.removeEventListener('dragover', handleDocumentDragOver, true);
+      document.removeEventListener('drop', handleDrop, true);
+      document.removeEventListener('dragend', clearExternalDragOver, true);
+      document.removeEventListener('dragleave', handleWindowDragLeave, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [clearExternalDragOver]);
+
+  const removeNativeDragGuards = useCallback(() => {
+    nativeDragGuardsRef.current?.();
+    nativeDragGuardsRef.current = null;
+  }, []);
+
+  const clearMediaPanelDragSession = useCallback(() => {
+    setInternalDragId(null);
+    setDragOverFolderId(null);
+    clearExternalDragOver();
+    clearMediaBoardInsertionPreview();
+    clearExternalDragPayload();
+  }, [
+    clearExternalDragOver,
+    clearMediaBoardInsertionPreview,
+    setDragOverFolderId,
+    setInternalDragId,
+  ]);
+
+  const finishNativeDragSession = useCallback(() => {
+    clearMediaPanelDragSession();
+    removeNativeDragGuards();
+  }, [clearMediaPanelDragSession, removeNativeDragGuards]);
+
+  const installNativeDragGuards = useCallback(() => {
+    removeNativeDragGuards();
+
+    let deferredDropCleanup: number | null = null;
+    const finishNow = () => {
+      if (deferredDropCleanup !== null) {
+        window.clearTimeout(deferredDropCleanup);
+        deferredDropCleanup = null;
+      }
+      finishNativeDragSession();
+    };
+    const finishAfterDropHandlers = () => {
+      if (deferredDropCleanup !== null) return;
+      deferredDropCleanup = window.setTimeout(() => {
+        deferredDropCleanup = null;
+        finishNativeDragSession();
+      }, 0);
+    };
+    const handleDocumentDragLeave = (event: DragEvent) => {
+      if (event.relatedTarget) return;
+      if (
+        event.clientX <= 0 ||
+        event.clientY <= 0 ||
+        event.clientX >= window.innerWidth ||
+        event.clientY >= window.innerHeight
+      ) {
+        finishNow();
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        finishNow();
+      }
+    };
+
+    document.addEventListener('drop', finishAfterDropHandlers, true);
+    document.addEventListener('dragend', finishNow, true);
+    document.addEventListener('dragleave', handleDocumentDragLeave, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+
+    nativeDragGuardsRef.current = () => {
+      if (deferredDropCleanup !== null) {
+        window.clearTimeout(deferredDropCleanup);
+      }
+      document.removeEventListener('drop', finishAfterDropHandlers, true);
+      document.removeEventListener('dragend', finishNow, true);
+      document.removeEventListener('dragleave', handleDocumentDragLeave, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [finishNativeDragSession, removeNativeDragGuards]);
+
+  useEffect(() => () => {
+    removeNativeDragGuards();
+    removeExternalOverGuards();
+  }, [removeExternalOverGuards, removeNativeDragGuards]);
 
   const handleExternalDropImport = useCallback(async (dataTransfer: DataTransfer, targetParentId: string | null) => {
     const droppedFiles = await collectDroppedMediaFiles(dataTransfer);
@@ -103,8 +238,11 @@ export function useMediaPanelDragDropMarquee({
     if (hasFiles && !isInternalDrag) {
       e.dataTransfer.dropEffect = 'copy';
       setIsExternalDragOver(true);
+      if (e.currentTarget instanceof HTMLElement) {
+        installExternalOverGuards(e.currentTarget);
+      }
     }
-  }, [setIsExternalDragOver]);
+  }, [installExternalOverGuards, setIsExternalDragOver]);
 
   const handleDragLeave = useCallback((e: ReactDragEvent) => {
     e.preventDefault();
@@ -113,9 +251,9 @@ export function useMediaPanelDragDropMarquee({
     const x = e.clientX;
     const y = e.clientY;
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      setIsExternalDragOver(false);
+      clearExternalDragOver();
     }
-  }, [setIsExternalDragOver]);
+  }, [clearExternalDragOver]);
 
   const handleMarqueeMouseDown = useCallback((e: ReactMouseEvent) => {
     if (e.button !== 0) return;
@@ -204,6 +342,7 @@ export function useMediaPanelDragDropMarquee({
 
     e.dataTransfer.setData('application/x-media-panel-item', item.id);
     setInternalDragId(item.id);
+    installNativeDragGuards();
 
     if (isFolder) {
       e.dataTransfer.effectAllowed = 'move';
@@ -238,14 +377,11 @@ export function useMediaPanelDragDropMarquee({
     if (e.currentTarget instanceof HTMLElement) {
       e.dataTransfer.setDragImage(e.currentTarget, 10, 10);
     }
-  }, [activeCompositionId, getSlotGridProgress, renameTimerRef, setInternalDragId]);
+  }, [activeCompositionId, getSlotGridProgress, installNativeDragGuards, renameTimerRef, setInternalDragId]);
 
   const handleDragEnd = useCallback(() => {
-    setInternalDragId(null);
-    setDragOverFolderId(null);
-    clearMediaBoardInsertionPreview();
-    clearExternalDragPayload();
-  }, [clearMediaBoardInsertionPreview, setDragOverFolderId, setInternalDragId]);
+    finishNativeDragSession();
+  }, [finishNativeDragSession]);
 
   const handleFolderDragOver = useCallback((e: ReactDragEvent, folderId: string) => {
     const isInternalDrag = e.dataTransfer.types.includes('application/x-media-panel-item');
@@ -274,8 +410,7 @@ export function useMediaPanelDragDropMarquee({
     if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
       setIsExternalDragOver(false);
       await handleExternalDropImport(e.dataTransfer, folderId);
-      setDragOverFolderId(null);
-      setInternalDragId(null);
+      clearMediaPanelDragSession();
       return;
     }
 
@@ -286,8 +421,7 @@ export function useMediaPanelDragDropMarquee({
         let parent = folders.find(f => f.id === folderId);
         while (parent) {
           if (parent.id === itemId) {
-            setDragOverFolderId(null);
-            setInternalDragId(null);
+            clearMediaPanelDragSession();
             return;
           }
           parent = folders.find(f => f.id === parent?.parentId);
@@ -298,9 +432,8 @@ export function useMediaPanelDragDropMarquee({
       moveToFolder(itemsToMove, folderId);
     }
 
-    setDragOverFolderId(null);
-    setInternalDragId(null);
-  }, [folders, handleExternalDropImport, moveToFolder, selectedIds, setDragOverFolderId, setInternalDragId, setIsExternalDragOver]);
+    clearMediaPanelDragSession();
+  }, [clearMediaPanelDragSession, folders, handleExternalDropImport, moveToFolder, selectedIds, setIsExternalDragOver]);
 
   const handleRootDrop = useCallback(async (e: ReactDragEvent) => {
     e.preventDefault();
@@ -311,6 +444,7 @@ export function useMediaPanelDragDropMarquee({
 
     if (!e.dataTransfer.types.includes('application/x-media-panel-item')) {
       await handleExternalDropImport(e.dataTransfer, null);
+      clearMediaPanelDragSession();
       return;
     }
 
@@ -320,9 +454,8 @@ export function useMediaPanelDragDropMarquee({
       moveToFolder(itemsToMove, null);
     }
 
-    setDragOverFolderId(null);
-    setInternalDragId(null);
-  }, [handleExternalDropImport, moveToFolder, selectedIds, setDragOverFolderId, setInternalDragId, setIsExternalDragOver]);
+    clearMediaPanelDragSession();
+  }, [clearMediaPanelDragSession, handleExternalDropImport, moveToFolder, selectedIds, setIsExternalDragOver]);
 
   return {
     handleExternalDropImport,

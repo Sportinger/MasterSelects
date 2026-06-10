@@ -15,6 +15,7 @@ import {
   type ClipInteractionShellRect,
 } from './interactionShell';
 import { TimelineCanvasClipRenameInput } from './components/TimelineCanvasClipRenameInput';
+import { TimelineTrackGridCanvas } from './components/TimelineTrackGridCanvas';
 import { TrackPropertyTracks } from './components/TrackPropertyTracks';
 import { TimelineTrackExternalDropPreviews } from './components/TimelineTrackExternalDropPreviews';
 import { TimelineTrackResizeHandle } from './components/TimelineTrackResizeHandle';
@@ -413,7 +414,6 @@ function TimelineTrackComponent({
     activeTimelineToolId,
     allTrackClips,
     clips,
-    scrollX,
     timelineClipGeometryById,
     track,
   });
@@ -511,6 +511,13 @@ function TimelineTrackComponent({
         style={{ height: baseHeight }}
         {...clipRowEvents}
       >
+        <TimelineTrackGridCanvas
+          height={baseHeight}
+          scrollX={scrollX}
+          trackType={track.type}
+          viewportWidth={viewportWidth}
+          zoom={zoom}
+        />
         {/* Render clips belonging to this track */}
         <TimelineClipCanvas
           clips={canvasClips}

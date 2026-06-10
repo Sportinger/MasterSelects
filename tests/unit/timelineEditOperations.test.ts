@@ -1330,6 +1330,31 @@ describe('timeline edit operations kernel', () => {
     ]);
   });
 
+  it('deletes a track gap without desyncing linked audio', () => {
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [
+        createMockClip({ id: 'video-a', trackId: 'video-1', startTime: 0, duration: 2 }),
+        createMockClip({ id: 'video-b', trackId: 'video-1', startTime: 5, duration: 2, linkedClipId: 'audio-b' }),
+        createMockClip({ id: 'audio-b', trackId: 'audio-1', startTime: 5, duration: 2, linkedClipId: 'video-b', source: { type: 'audio' } }),
+        createMockClip({ id: 'audio-free', trackId: 'audio-1', startTime: 8, duration: 1, source: { type: 'audio' } }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().deleteGapAtTime(3, ['video-1']);
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.startTime])).toEqual([
+      ['video-a', 0],
+      ['video-b', 2],
+      ['audio-b', 2],
+      ['audio-free', 8],
+    ]);
+  });
+
   it('deletes all gaps on unlocked visible tracks', () => {
     useTimelineStore.setState({
       tracks: [

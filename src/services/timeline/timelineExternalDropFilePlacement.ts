@@ -90,7 +90,7 @@ async function addTimelineExternalDropMediaClip(params: {
   setTimelineDroppedFilePath(timelineFile, mediaFile.absolutePath ?? filePath);
   const resolvedDuration = mediaFile.duration ?? duration;
 
-  actions.addClip(
+  const clipId = await actions.addClip(
     trackId,
     timelineFile,
     startTime,
@@ -98,6 +98,14 @@ async function addTimelineExternalDropMediaClip(params: {
     mediaFile.id,
     getTimelineDropMediaTypeOverride(mediaFile) ?? typeOverride,
   );
+  if (!clipId) {
+    log.warn('Could not place timeline drop media clip', {
+      mediaFileId: mediaFile.id,
+      name: mediaFile.name,
+      trackId,
+    });
+    return null;
+  }
 
   return { startTime, endTime: startTime + (resolvedDuration ?? 5) };
 }
@@ -147,7 +155,7 @@ async function addTimelineExternalDropSignalClip(params: {
       ? resolveStartTime(desiredStartTime, resolvedDuration)
       : desiredStartTime;
 
-    actions.addClip(
+    const clipId = await actions.addClip(
       trackId,
       timelineFile,
       startTime,
@@ -155,6 +163,14 @@ async function addTimelineExternalDropSignalClip(params: {
       mediaFile.id,
       getTimelineDropMediaTypeOverride(mediaFile),
     );
+    if (!clipId) {
+      log.warn('Could not place timeline drop media clip for signal import result', {
+        mediaFileId: mediaFile.id,
+        name: mediaFile.name,
+        trackId,
+      });
+      return null;
+    }
 
     return { startTime, endTime: startTime + resolvedDuration };
   }

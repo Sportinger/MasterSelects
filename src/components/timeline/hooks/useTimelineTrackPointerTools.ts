@@ -13,7 +13,6 @@ type TimelineTrackPointerClip = TimelineTrackProps['clips'][number];
 
 type UseTimelineTrackPointerToolsArgs = Pick<TimelineTrackProps, 'activeTimelineToolId' | 'clips' | 'track'> & {
   allTrackClips: readonly TimelineTrackPointerClip[];
-  scrollX: number;
   timelineClipGeometryById: ReadonlyMap<string, TimelineClipBodyGeometry>;
 };
 
@@ -23,7 +22,6 @@ export function useTimelineTrackPointerTools({
   activeTimelineToolId,
   allTrackClips,
   clips,
-  scrollX,
   timelineClipGeometryById,
   track,
 }: UseTimelineTrackPointerToolsArgs) {
@@ -52,7 +50,7 @@ export function useTimelineTrackPointerTools({
     const rowRect = rowEl.getBoundingClientRect();
     const clipGeometry = timelineClipGeometryById.get(clip.id);
     if (!clipGeometry) return null;
-    const clipLeft = rowRect.left + clipGeometry.bodyRect.x - scrollX;
+    const clipLeft = rowRect.left + clipGeometry.bodyRect.x;
     const timelineState = useTimelineStore.getState();
     return {
       toolId: activeTimelineToolId,
@@ -68,7 +66,7 @@ export function useTimelineTrackPointerTools({
       rectLeft: clipLeft,
       altKey,
     };
-  }, [activeTimelineToolId, allTrackClips, clips, scrollX, timelineClipGeometryById, track]);
+  }, [activeTimelineToolId, allTrackClips, clips, timelineClipGeometryById, track]);
 
   const clearPointerToolPreview = useCallback(() => {
     if (isTimelinePointerTool(activeTimelineToolId)) {

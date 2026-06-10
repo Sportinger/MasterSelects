@@ -205,6 +205,49 @@ describe('TimelineTrack empty lane right mouse behavior', () => {
     });
   });
 
+  it('keeps blade hover and click time aligned when the timeline is horizontally scrolled', () => {
+    const applyTimelineEditOperation = vi.fn(() => ({ success: true, warnings: [] }));
+    const setTimelineToolPreview = vi.fn();
+    useTimelineStore.setState({
+      applyTimelineEditOperation: applyTimelineEditOperation as never,
+      setTimelineToolPreview: setTimelineToolPreview as never,
+      playheadPosition: 0,
+      snappingEnabled: false,
+    });
+
+    const { row } = renderTimelineTrack({
+      clips: [createClip({ startTime: 14 })],
+      activeTimelineToolId: 'blade',
+      scrollX: 120,
+    });
+    row.getBoundingClientRect = () => ({
+      x: -100,
+      y: 0,
+      left: -100,
+      top: 0,
+      right: 700,
+      bottom: 64,
+      width: 800,
+      height: 64,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseMove(row, { clientX: 50, clientY: 24 });
+    fireEvent.mouseDown(row, { button: 0, clientX: 50, clientY: 24 });
+
+    expect(setTimelineToolPreview).toHaveBeenCalledWith(expect.objectContaining({
+      toolId: 'blade',
+      clipId: 'clip-video',
+      trackId: 'track-video',
+      time: 15,
+    }));
+    expect(applyTimelineEditOperation.mock.calls[0][0]).toMatchObject({
+      type: 'split-at-time',
+      clipIds: ['clip-video'],
+      time: 15,
+    });
+  });
+
   it('keeps the canvas renderer active at extreme zoom', () => {
 
     const { container } = renderTimelineTrack({

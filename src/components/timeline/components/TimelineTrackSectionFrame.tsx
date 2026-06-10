@@ -5,6 +5,10 @@ import type {
   RefObject,
   WheelEventHandler,
 } from 'react';
+import {
+  alignTimelineGridPixel,
+  getTimelineDevicePixelRatio,
+} from '../utils/timelineGrid';
 import type { TrackSectionKind } from '../utils/timelineHostTypes';
 
 interface TimelineTrackSectionFrameProps {
@@ -56,6 +60,10 @@ export function TimelineTrackSectionFrame({
   timeGridOpacity,
   zoom,
 }: TimelineTrackSectionFrameProps) {
+  const devicePixelRatio = getTimelineDevicePixelRatio();
+  const alignedScrollX = alignTimelineGridPixel(scrollX, devicePixelRatio);
+  const gridLineWidth = 1 / devicePixelRatio;
+
   return (
     <div
       className={`timeline-track-section ${sectionKind} ${sectionCollapsed ? 'collapsed' : ''}`}
@@ -83,10 +91,11 @@ export function TimelineTrackSectionFrame({
             <div
               className={`track-lanes-scroll ${sectionPhaseClass} timeline-grid-${gridMode}`}
               style={{
-                transform: `translateX(-${scrollX}px)`,
+                transform: `translateX(-${alignedScrollX}px)`,
                 minWidth: Math.max(duration * zoom + 500, 2000),
                 ['--grid-size' as string]: `${gridSize}px`,
                 ['--frame-grid-size' as string]: `${frameIntervalPixels}px`,
+                ['--timeline-grid-line-width' as string]: `${gridLineWidth}px`,
                 ['--frame-grid-strength' as string]: `${Math.round(frameGridOpacity * 100)}%`,
                 ['--time-grid-strength' as string]: `${Math.round(timeGridOpacity * 100)}%`,
                 ['--time-grid-muted-strength' as string]: `${Math.round(timeGridOpacity * 22)}%`,

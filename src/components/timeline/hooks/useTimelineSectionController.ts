@@ -5,7 +5,8 @@ import type { AnimatableProperty, Keyframe, TimelineClip as TimelineClipType, Ti
 import type { TimelineAudioDisplayMode, TimelinePropertiesSelection, TimelineTrackFocusMode } from '../../../stores/timeline/types';
 import type { ClipDragState, ExternalDragState } from '../types';
 import { TIMELINE_VIEWPORT_FALLBACK_PX } from '../utils/timelineHostConstants';
-import { useTimelineSectionLayout, useTimelineSectionViewportMeasurement } from './useTimelineSectionLayout';
+import { useTimelineSectionLayout } from './useTimelineSectionLayout';
+import { useTimelineSectionViewportMeasurement } from './useTimelineSectionViewportMeasurement';
 import { useTimelineSectionReveal } from './useTimelineSectionReveal';
 import { useTimelineSectionScroll } from './useTimelineSectionScroll';
 import { useTimelineSectionScrollPinning } from './useTimelineSectionScrollPinning';
