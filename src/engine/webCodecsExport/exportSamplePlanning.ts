@@ -28,7 +28,10 @@ export function normalizedSampleTimestampUs(sample: Sample, presentationOffsetUs
 
 /** Frame-duration based tolerance (us) for CTS matching. */
 export function frameToleranceUs(frameRate: number, multiplier = 1.5): number {
-  return (1_000_000 / Math.max(frameRate, 1)) * multiplier;
+  // Guard Infinity/NaN frame rates (duration=0 track metadata): Math.max alone
+  // passes them through and the resulting 0/NaN tolerance rejects every frame.
+  const safeRate = Number.isFinite(frameRate) && frameRate > 0 ? Math.min(frameRate, 480) : 30;
+  return (1_000_000 / safeRate) * multiplier;
 }
 
 /** Index of the sample whose normalized timestamp is closest to the target time. */

@@ -91,7 +91,16 @@ export function loadMp4ForWebCodecs(
         return;
       }
 
-      const frameRate = videoTrack.nb_samples / (videoTrack.duration / videoTrack.timescale);
+      // Tracks with duration=0 metadata make this Infinity/NaN, which poisons
+      // every frame-tolerance computation downstream (export CTS lookups get a
+      // zero tolerance and fall into a per-frame decode-restart crawl).
+      const rawFrameRate = videoTrack.nb_samples / (videoTrack.duration / videoTrack.timescale);
+      const frameRate = Number.isFinite(rawFrameRate) && rawFrameRate > 0 && rawFrameRate <= 480
+        ? rawFrameRate
+        : 30;
+      if (frameRate !== rawFrameRate) {
+        log.warn(`Track reports unusable frame rate (${String(rawFrameRate)}); falling back to 30fps`);
+      }
       const frameInterval = 1000 / frameRate;
       const codec = getCodecString(videoTrack);
       const description = extractCodecDescription(mp4File, videoTrack, log);
