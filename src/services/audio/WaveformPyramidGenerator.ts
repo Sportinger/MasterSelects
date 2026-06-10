@@ -15,20 +15,26 @@ import type {
 } from './audioArtifactTypes';
 import {
   DEFAULT_WAVEFORM_PYRAMID_BUCKET_SIZES,
-  WAVEFORM_PACKED_PAYLOAD_VERSION,
-  WAVEFORM_PYRAMID_MANIFEST_VERSION,
-  WAVEFORM_STAT_PAYLOAD_VERSION,
   createWaveformPyramidManifest,
-  encodeWaveformPyramidPackedPayload,
   type WaveformStatistic,
   type WaveformPyramidData,
-  type WaveformPyramidLevelManifest,
   type WaveformPyramidManifest,
 } from './waveformPyramidManifest';
+import { normalizeBucketSizes } from './waveformPyramid/bucketMath';
+import {
+  createPyramidDataFromLevelStats,
+  createWaveformPyramidAnalyzerVersion as buildWaveformPyramidAnalyzerVersion,
+  generateWaveformLevelStats,
+} from './waveformPyramid/pyramidAssembly';
+import {
+  WAVEFORM_PACKED_PAYLOAD_MIME_TYPE,
+  storeWaveformPyramidPayloads,
+} from './waveformPyramid/payloadEncoding';
+import type { WaveformPyramidAnalysisContext } from './waveformPyramid/waveformPyramidAnalysisTypes';
 
 export const WAVEFORM_PYRAMID_GENERATOR_VERSION = 'masterselects.waveform-pyramid-generator@1.0.0';
 export const WAVEFORM_STAT_PAYLOAD_MIME_TYPE = 'application/vnd.masterselects.waveform-stat';
-export const WAVEFORM_PACKED_PAYLOAD_MIME_TYPE = 'application/vnd.masterselects.waveform-pyramid-packed';
+export { WAVEFORM_PACKED_PAYLOAD_MIME_TYPE };
 
 export type WaveformPyramidGenerationPhase =
   | 'queued'
@@ -106,34 +112,8 @@ export interface WaveformPyramidGenerationResult {
   warnings: AudioAnalysisWarning[];
 }
 
-interface WaveformChannelStats {
-  channelIndex: number;
-  min: Float32Array;
-  max: Float32Array;
-  rms: Float32Array;
-  peak: Float32Array;
-}
-
-interface WaveformLevelStats {
-  samplesPerBucket: number;
-  bucketDuration: number;
-  bucketCount: number;
-  channels: WaveformChannelStats[];
-}
-
-interface GenerationContext {
-  jobId: string;
-  mediaFileId: string;
-  sourceFingerprint: string;
-  cacheKey: string;
-  signal?: AbortSignal;
-  onProgress?: (progress: WaveformPyramidGenerationProgress) => void;
-}
-
-const WAVEFORM_STATISTICS = ['min', 'max', 'rms', 'peak'] as const satisfies readonly WaveformStatistic[];
 const DEFAULT_DECODER_ID = 'audio-buffer';
 const DEFAULT_DECODER_VERSION = '1.0.0';
-const ANALYSIS_YIELD_SAMPLE_BUDGET = 262_144;
 const textEncoder = new TextEncoder();
 
 export class WaveformPyramidGeneratorError extends Error {
@@ -196,12 +176,6 @@ function throwIfCancelled(signal: AbortSignal | undefined, jobId: string): void 
   }
 }
 
-function yieldToMainThread(): Promise<void> {
-  return new Promise((resolve) => {
-    globalThis.setTimeout(resolve, 0);
-  });
-}
-
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
@@ -213,23 +187,6 @@ function toTimestamp(value: string): number {
 
 function finiteNumber(value: number): boolean {
   return typeof value === 'number' && Number.isFinite(value);
-}
-
-function normalizeBucketSizes(bucketSizes: readonly number[]): number[] {
-  const normalized = [...new Set(bucketSizes)]
-    .toSorted((a, b) => a - b);
-
-  if (normalized.length === 0) {
-    throw new Error('Waveform pyramid generation requires at least one bucket size.');
-  }
-
-  for (const samplesPerBucket of normalized) {
-    if (!Number.isInteger(samplesPerBucket) || samplesPerBucket < 1) {
-      throw new Error('Waveform pyramid bucket sizes must be positive integers.');
-    }
-  }
-
-  return normalized;
 }
 
 function describeChannelLayout(channelCount: number): AudioChannelLayout {
@@ -369,126 +326,6 @@ function describePyramidChannelLayout(pyramid: WaveformPyramidData): AudioChanne
   return describeChannelLayout(channelCount);
 }
 
-function safeSample(value: number): number {
-  return Number.isFinite(value) ? value : 0;
-}
-
-async function calculateChannelStats(
-  data: Float32Array,
-  bufferLength: number,
-  samplesPerBucket: number,
-  channelIndex: number,
-  context: GenerationContext,
-): Promise<WaveformChannelStats> {
-  const bucketCount = Math.ceil(bufferLength / samplesPerBucket);
-  const min = new Float32Array(bucketCount);
-  const max = new Float32Array(bucketCount);
-  const rms = new Float32Array(bucketCount);
-  const peak = new Float32Array(bucketCount);
-  let samplesSinceYield = 0;
-
-  for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex += 1) {
-    throwIfCancelled(context.signal, context.jobId);
-
-    const start = bucketIndex * samplesPerBucket;
-    const end = Math.min(start + samplesPerBucket, bufferLength, data.length);
-    let bucketMin = Number.POSITIVE_INFINITY;
-    let bucketMax = Number.NEGATIVE_INFINITY;
-    let bucketPeak = 0;
-    let squareSum = 0;
-    const count = Math.max(0, end - start);
-
-    for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
-      const sample = safeSample(data[sampleIndex] ?? 0);
-      bucketMin = Math.min(bucketMin, sample);
-      bucketMax = Math.max(bucketMax, sample);
-      bucketPeak = Math.max(bucketPeak, Math.abs(sample));
-      squareSum += sample * sample;
-    }
-
-    min[bucketIndex] = count > 0 ? bucketMin : 0;
-    max[bucketIndex] = count > 0 ? bucketMax : 0;
-    rms[bucketIndex] = count > 0 ? Math.sqrt(squareSum / count) : 0;
-    peak[bucketIndex] = bucketPeak;
-    samplesSinceYield += count;
-
-    if (samplesSinceYield >= ANALYSIS_YIELD_SAMPLE_BUDGET) {
-      await yieldToMainThread();
-      samplesSinceYield = 0;
-      throwIfCancelled(context.signal, context.jobId);
-    }
-  }
-
-  return { channelIndex, min, max, rms, peak };
-}
-
-async function aggregateChannelStats(
-  source: WaveformChannelStats,
-  sourceSamplesPerBucket: number,
-  bufferLength: number,
-  samplesPerBucket: number,
-  context: GenerationContext,
-): Promise<WaveformChannelStats> {
-  const bucketCount = Math.ceil(bufferLength / samplesPerBucket);
-  const min = new Float32Array(bucketCount);
-  const max = new Float32Array(bucketCount);
-  const rms = new Float32Array(bucketCount);
-  const peak = new Float32Array(bucketCount);
-  let sourceBucketsSinceYield = 0;
-
-  for (let bucketIndex = 0; bucketIndex < bucketCount; bucketIndex += 1) {
-    throwIfCancelled(context.signal, context.jobId);
-
-    const startSample = bucketIndex * samplesPerBucket;
-    const endSample = Math.min(startSample + samplesPerBucket, bufferLength);
-    const startSourceBucket = Math.floor(startSample / sourceSamplesPerBucket);
-    const endSourceBucket = Math.ceil(endSample / sourceSamplesPerBucket);
-    let bucketMin = Number.POSITIVE_INFINITY;
-    let bucketMax = Number.NEGATIVE_INFINITY;
-    let bucketPeak = 0;
-    let squareSum = 0;
-    let sampleCount = 0;
-
-    for (let sourceBucketIndex = startSourceBucket; sourceBucketIndex < endSourceBucket; sourceBucketIndex += 1) {
-      const sourceStart = sourceBucketIndex * sourceSamplesPerBucket;
-      const sourceEnd = Math.min(sourceStart + sourceSamplesPerBucket, bufferLength);
-      const sourceSampleCount = Math.max(0, sourceEnd - sourceStart);
-      if (sourceSampleCount <= 0) continue;
-
-      const sourceMin = safeSample(source.min[sourceBucketIndex] ?? 0);
-      const sourceMax = safeSample(source.max[sourceBucketIndex] ?? 0);
-      const sourcePeak = Math.abs(safeSample(source.peak[sourceBucketIndex] ?? 0));
-      const sourceRms = Math.abs(safeSample(source.rms[sourceBucketIndex] ?? 0));
-
-      bucketMin = sampleCount === 0 ? sourceMin : Math.min(bucketMin, sourceMin);
-      bucketMax = sampleCount === 0 ? sourceMax : Math.max(bucketMax, sourceMax);
-      bucketPeak = Math.max(bucketPeak, sourcePeak, Math.abs(sourceMin), Math.abs(sourceMax));
-      squareSum += sourceRms * sourceRms * sourceSampleCount;
-      sampleCount += sourceSampleCount;
-      sourceBucketsSinceYield += 1;
-    }
-
-    min[bucketIndex] = sampleCount > 0 ? bucketMin : 0;
-    max[bucketIndex] = sampleCount > 0 ? bucketMax : 0;
-    rms[bucketIndex] = sampleCount > 0 ? Math.sqrt(squareSum / sampleCount) : 0;
-    peak[bucketIndex] = bucketPeak;
-
-    if (sourceBucketsSinceYield >= ANALYSIS_YIELD_SAMPLE_BUDGET) {
-      await yieldToMainThread();
-      sourceBucketsSinceYield = 0;
-      throwIfCancelled(context.signal, context.jobId);
-    }
-  }
-
-  return {
-    channelIndex: source.channelIndex,
-    min,
-    max,
-    rms,
-    peak,
-  };
-}
-
 async function deterministicHashId(prefix: string, cacheKey: string): Promise<string> {
   const bytes = textEncoder.encode(cacheKey);
   const hash = await sha256ArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
@@ -499,38 +336,7 @@ export function createWaveformPyramidAnalyzerVersion(
   bucketSizes: readonly number[] = DEFAULT_WAVEFORM_PYRAMID_BUCKET_SIZES,
   baseVersion = WAVEFORM_PYRAMID_GENERATOR_VERSION,
 ): string {
-  const levels = normalizeBucketSizes(bucketSizes).join(',');
-  return [
-    baseVersion,
-    `manifest=v${WAVEFORM_PYRAMID_MANIFEST_VERSION}`,
-    `packedPayload=v${WAVEFORM_PACKED_PAYLOAD_VERSION}`,
-    `legacyPayload=v${WAVEFORM_STAT_PAYLOAD_VERSION}`,
-    `stats=${WAVEFORM_STATISTICS.join(',')}`,
-    `levels=${levels}`,
-  ].join(';');
-}
-
-function createPyramidDataFromLevelStats(
-  sampleRate: number,
-  duration: number,
-  levels: readonly WaveformLevelStats[],
-): WaveformPyramidData {
-  return {
-    sampleRate,
-    duration,
-    levels: levels.map(level => ({
-      samplesPerBucket: level.samplesPerBucket,
-      bucketDuration: level.bucketDuration,
-      bucketCount: level.bucketCount,
-      channels: level.channels.map(channel => ({
-        channelIndex: channel.channelIndex,
-        min: channel.min,
-        max: channel.max,
-        rms: channel.rms,
-        peak: channel.peak,
-      })),
-    })),
-  };
+  return buildWaveformPyramidAnalyzerVersion(bucketSizes, baseVersion);
 }
 
 export class WaveformPyramidGenerator {
@@ -557,7 +363,7 @@ export class WaveformPyramidGenerator {
   ): Promise<WaveformPyramidGenerationResult> {
     const jobId = request.jobId ?? this.createJobId();
     const generatedAt = this.now();
-    let progressContext: GenerationContext | null = null;
+    let progressContext: WaveformPyramidAnalysisContext | null = null;
 
     try {
       validateAudioBuffer(request.buffer, jobId);
@@ -589,7 +395,7 @@ export class WaveformPyramidGenerator {
         duration: request.buffer.duration,
         clipAudioStateHash: request.clipAudioStateHash,
       });
-      const context: GenerationContext = {
+      const context: WaveformPyramidAnalysisContext = {
         jobId,
         mediaFileId: request.mediaFileId,
         sourceFingerprint: request.sourceFingerprint,
@@ -607,14 +413,25 @@ export class WaveformPyramidGenerator {
       });
       throwIfCancelled(options.signal, jobId);
 
-      const levelStats = await this.generateLevelStats(request.buffer, bucketSizes, context);
+      const levelStats = await generateWaveformLevelStats({
+        buffer: request.buffer,
+        bucketSizes,
+        context,
+        now: this.now,
+        emitProgress: this.emitProgress,
+        throwIfCancelled,
+      });
       const pyramid = createPyramidDataFromLevelStats(request.buffer.sampleRate, request.buffer.duration, levelStats);
-      const stored = await this.storePayloads({
+      const stored = await storeWaveformPyramidPayloads({
+        artifactStore: this.artifactStore,
         request,
         analyzerVersion,
         generatedAt,
         context,
         pyramid,
+        now: this.now,
+        emitProgress: this.emitProgress,
+        throwIfCancelled,
       });
       const manifest = createWaveformPyramidManifest({
         mediaFileId: request.mediaFileId,
@@ -750,7 +567,7 @@ export class WaveformPyramidGenerator {
         duration: request.pyramid.duration,
         clipAudioStateHash: request.clipAudioStateHash,
       });
-      const context: GenerationContext = {
+      const context: WaveformPyramidAnalysisContext = {
         jobId,
         mediaFileId: request.mediaFileId,
         sourceFingerprint: request.sourceFingerprint,
@@ -767,12 +584,16 @@ export class WaveformPyramidGenerator {
       });
       throwIfCancelled(options.signal, jobId);
 
-      const stored = await this.storePayloads({
+      const stored = await storeWaveformPyramidPayloads({
+        artifactStore: this.artifactStore,
         request,
         analyzerVersion,
         generatedAt,
         context,
         pyramid: request.pyramid,
+        now: this.now,
+        emitProgress: this.emitProgress,
+        throwIfCancelled,
       });
       const manifest = createWaveformPyramidManifest({
         mediaFileId: request.mediaFileId,
@@ -856,133 +677,8 @@ export class WaveformPyramidGenerator {
     }
   }
 
-  private async generateLevelStats(
-    buffer: AudioBuffer,
-    bucketSizes: readonly number[],
-    context: GenerationContext,
-  ): Promise<WaveformLevelStats[]> {
-    const workUnits = bucketSizes.length * buffer.numberOfChannels;
-    let completedUnits = 0;
-    const levels: WaveformLevelStats[] = bucketSizes.map(samplesPerBucket => ({
-      samplesPerBucket,
-      bucketDuration: samplesPerBucket / buffer.sampleRate,
-      bucketCount: Math.ceil(buffer.length / samplesPerBucket),
-      channels: [],
-    }));
-
-    for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex += 1) {
-      const channelData = buffer.getChannelData(channelIndex);
-      let previousStats: WaveformChannelStats | null = null;
-      let previousSamplesPerBucket = 0;
-
-      for (let levelIndex = 0; levelIndex < levels.length; levelIndex += 1) {
-        const level = levels[levelIndex];
-        const samplesPerBucket = level.samplesPerBucket;
-        this.emitProgress(context, {
-          phase: 'analyzing',
-          percent: 5 + (completedUnits / workUnits) * 70,
-          timestamp: this.now(),
-          levelIndex,
-          channelIndex,
-          samplesPerBucket,
-          message: 'Analyzing waveform buckets',
-        });
-        throwIfCancelled(context.signal, context.jobId);
-
-        let channelStats: WaveformChannelStats;
-
-        if (
-          previousStats !== null
-          && previousSamplesPerBucket > 0
-          && samplesPerBucket % previousSamplesPerBucket === 0
-        ) {
-          channelStats = await aggregateChannelStats(
-            previousStats,
-            previousSamplesPerBucket,
-            buffer.length,
-            samplesPerBucket,
-            context,
-          );
-        } else {
-          channelStats = await calculateChannelStats(
-            channelData,
-            buffer.length,
-            samplesPerBucket,
-            channelIndex,
-            context,
-          );
-        }
-
-        level.channels.push(channelStats);
-        previousStats = channelStats;
-        previousSamplesPerBucket = samplesPerBucket;
-        completedUnits += 1;
-      }
-    }
-
-    return levels;
-  }
-
-  private async storePayloads(input: {
-    request: WaveformPyramidGenerateRequest | WaveformPyramidStoreRequest;
-    analyzerVersion: string;
-    generatedAt: string;
-    context: GenerationContext;
-    pyramid: WaveformPyramidData;
-  }): Promise<{
-    levels: WaveformPyramidLevelManifest[];
-    payloadRefs: AudioArtifactRef[];
-    packedPayload: AudioArtifactRef;
-    warnings: AudioAnalysisWarning[];
-  }> {
-    this.emitProgress(input.context, {
-      phase: 'storing-payloads',
-      percent: 86,
-      timestamp: this.now(),
-      message: 'Storing packed waveform pyramid payload',
-    });
-    throwIfCancelled(input.context.signal, input.context.jobId);
-
-    const packedPayload = await this.artifactStore.putPayload(
-      encodeWaveformPyramidPackedPayload(input.pyramid),
-      {
-        mediaFileId: input.request.mediaFileId,
-        kind: input.request.kind ?? 'waveform-pyramid',
-        sourceFingerprint: input.request.sourceFingerprint,
-        clipAudioStateHash: input.request.clipAudioStateHash,
-        mimeType: WAVEFORM_PACKED_PAYLOAD_MIME_TYPE,
-        encoding: 'raw',
-        analyzerVersion: input.analyzerVersion,
-        createdAt: input.generatedAt,
-        sourceRefs: [`audio-analysis-cache:${input.context.cacheKey}`],
-        metadata: {
-          cacheKey: input.context.cacheKey,
-          payloadLayout: 'packed-pyramid',
-          packedPayloadVersion: WAVEFORM_PACKED_PAYLOAD_VERSION,
-          levelCount: input.pyramid.levels.length,
-          channelCount: input.pyramid.levels[0]?.channels.length ?? 0,
-        },
-      },
-    );
-    const levels: WaveformPyramidLevelManifest[] = input.pyramid.levels.map(level => ({
-      samplesPerBucket: level.samplesPerBucket,
-      bucketDuration: level.bucketDuration,
-      bucketCount: level.bucketCount,
-      channels: level.channels.map(channel => ({
-        channelIndex: channel.channelIndex,
-      })),
-    }));
-
-    return {
-      levels,
-      payloadRefs: [packedPayload],
-      packedPayload,
-      warnings: [],
-    };
-  }
-
   private emitProgress(
-    context: GenerationContext,
+    context: WaveformPyramidAnalysisContext,
     update: Omit<
       WaveformPyramidGenerationProgress,
       'jobId' | 'mediaFileId' | 'sourceFingerprint' | 'cacheKey'
