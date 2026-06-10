@@ -1,3 +1,4 @@
+import { sha256ArrayBuffer } from '../../../artifacts';
 import type { AudioArtifactStore } from '../AudioArtifactStore';
 import type {
   AudioAnalysisArtifactKind,
@@ -13,6 +14,14 @@ import {
 import type { WaveformPyramidAnalysisContext } from './waveformPyramidAnalysisTypes';
 
 export const WAVEFORM_PACKED_PAYLOAD_MIME_TYPE = 'application/vnd.masterselects.waveform-pyramid-packed';
+
+const textEncoder = new TextEncoder();
+
+export async function deterministicHashId(prefix: string, cacheKey: string): Promise<string> {
+  const bytes = textEncoder.encode(cacheKey);
+  const hash = await sha256ArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  return `${prefix}:${hash}`;
+}
 
 export async function storeWaveformPyramidPayloads(input: {
   artifactStore: AudioArtifactStore;

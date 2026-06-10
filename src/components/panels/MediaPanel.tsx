@@ -3,15 +3,6 @@
 import { useCallback, useRef, useState, useEffect, useLayoutEffect } from 'react';
 import './MediaPanel.css';
 import type { MediaContextSolidSettingsDialogState } from './media/context/useMediaContextLocalHandlers';
-import { formatMediaDuration as formatDuration } from './media/grid/format';
-import {
-  formatMediaPanelBitrate as formatBitrate,
-  formatMediaPanelFileSize as formatFileSize,
-  getGaussianSplatDetailLines,
-  getGaussianSplatResolutionLabel,
-  getMediaFileCodecLabel,
-  getMediaFileContainerLabel,
-} from './media/list/classicListPlanning';
 import { useMediaClassicListUiState } from './media/list/useMediaClassicListUiState';
 import { MediaPanelContentView } from './media/panel/MediaPanelContentView';
 import { MediaPanelHeader } from './media/panel/MediaPanelHeader';
@@ -32,21 +23,9 @@ import { useMediaBoardController } from './media/board/useMediaBoardController';
 
 import { useMediaStore } from '../../stores/mediaStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
-import type { ProjectItem } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { mediaNeedsRelink } from '../../services/project/relinkMedia';
 
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
-
-function getProjectItemIconType(item: ProjectItem | undefined): string | undefined {
-  if (!item || !('type' in item)) return undefined;
-  if (item.type === 'model') {
-    return 'meshType' in item && item.meshType === 'text3d'
-      ? 'text-3d'
-      : 'mesh';
-  }
-  return item.type;
-}
 
 export function MediaPanel() {
   const {
@@ -443,15 +422,6 @@ export function MediaPanel() {
     handleContextMenu,
     getItemsForParent,
     refreshFileUrls,
-    getProjectItemIconType,
-    getGaussianSplatDetailLines,
-    getGaussianSplatResolutionLabel,
-    getMediaFileContainerLabel,
-    getMediaFileCodecLabel,
-    mediaNeedsRelink,
-    formatDuration,
-    formatFileSize,
-    formatBitrate,
   });
 
   const mediaBoardItems = allProjectItems;
@@ -464,11 +434,6 @@ export function MediaPanel() {
     ensureFileThumbnail,
     finishRename,
     folders,
-    formatDuration,
-    getGaussianSplatResolutionLabel,
-    getMediaFileCodecLabel,
-    getMediaFileContainerLabel,
-    getProjectItemIconType,
     handleContextMenu,
     handleExternalDropImport,
     handleItemClick,

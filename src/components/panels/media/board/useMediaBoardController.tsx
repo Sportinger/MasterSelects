@@ -1,7 +1,14 @@
 import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import type React from 'react';
 
-import type { MediaFile, MediaFolder, ProjectItem } from '../../../../stores/mediaStore';
+import type { MediaFolder, ProjectItem } from '../../../../stores/mediaStore';
+import { getProjectItemIconType } from '../itemTypeGuards';
+import { formatMediaDuration as formatDuration } from '../grid/format';
+import {
+  getGaussianSplatResolutionLabel,
+  getMediaFileCodecLabel,
+  getMediaFileContainerLabel,
+} from '../list/classicListPlanning';
 import { MediaBoardMount } from './MediaBoardMount';
 import { getVisibleMediaBoardAnnotations, type MediaBoardAnnotation } from './annotations';
 import type { MediaBoardAnnotationPatch, MediaBoardAnnotationPoint } from './useMediaBoardAnnotationState';
@@ -29,11 +36,6 @@ export interface UseMediaBoardControllerOptions {
   ensureFileThumbnail: (id: string) => void | Promise<unknown>;
   finishRename: () => void;
   folders: MediaFolder[];
-  formatDuration: (seconds: number) => string;
-  getGaussianSplatResolutionLabel: (item: ProjectItem) => string | null;
-  getMediaFileCodecLabel: (mediaFile: MediaFile | null) => string | undefined;
-  getMediaFileContainerLabel: (mediaFile: MediaFile | null) => string | undefined;
-  getProjectItemIconType: (item: ProjectItem | undefined) => string | undefined;
   handleContextMenu: MediaBoardContextMenuHandler;
   handleExternalDropImport: (dataTransfer: DataTransfer, folderId: string | null) => Promise<void>;
   handleItemClick: (itemId: string, event: React.MouseEvent) => void;
@@ -76,11 +78,6 @@ export function useMediaBoardController({
   ensureFileThumbnail,
   finishRename,
   folders,
-  formatDuration,
-  getGaussianSplatResolutionLabel,
-  getMediaFileCodecLabel,
-  getMediaFileContainerLabel,
-  getProjectItemIconType,
   handleContextMenu,
   handleExternalDropImport,
   handleItemClick,

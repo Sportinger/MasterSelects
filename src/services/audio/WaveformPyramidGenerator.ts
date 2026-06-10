@@ -1,4 +1,3 @@
-import { sha256ArrayBuffer } from '../../artifacts';
 import type { JsonValue, SignalMetadata } from '../../signals';
 import {
   createAudioAnalysisManifestRefFromArtifact,
@@ -28,6 +27,7 @@ import {
 } from './waveformPyramid/pyramidAssembly';
 import {
   WAVEFORM_PACKED_PAYLOAD_MIME_TYPE,
+  deterministicHashId,
   storeWaveformPyramidPayloads,
 } from './waveformPyramid/payloadEncoding';
 import type { WaveformPyramidAnalysisContext } from './waveformPyramid/waveformPyramidAnalysisTypes';
@@ -114,7 +114,6 @@ export interface WaveformPyramidGenerationResult {
 
 const DEFAULT_DECODER_ID = 'audio-buffer';
 const DEFAULT_DECODER_VERSION = '1.0.0';
-const textEncoder = new TextEncoder();
 
 export class WaveformPyramidGeneratorError extends Error {
   readonly code: WaveformPyramidGeneratorErrorCode;
@@ -324,12 +323,6 @@ function validatePyramidData(pyramid: WaveformPyramidData, jobId: string): void 
 function describePyramidChannelLayout(pyramid: WaveformPyramidData): AudioChannelLayout {
   const channelCount = pyramid.levels[0]?.channels.length ?? 0;
   return describeChannelLayout(channelCount);
-}
-
-async function deterministicHashId(prefix: string, cacheKey: string): Promise<string> {
-  const bytes = textEncoder.encode(cacheKey);
-  const hash = await sha256ArrayBuffer(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-  return `${prefix}:${hash}`;
 }
 
 export function createWaveformPyramidAnalyzerVersion(

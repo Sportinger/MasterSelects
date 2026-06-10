@@ -25,6 +25,16 @@ export function isImportedMediaFileItem(item: ProjectItem): item is MediaFile {
   return 'url' in item;
 }
 
+export function getProjectItemIconType(item: ProjectItem | undefined): string | undefined {
+  if (!item || !('type' in item)) return undefined;
+  if (item.type === 'model') {
+    return 'meshType' in item && item.meshType === 'text3d'
+      ? 'text-3d'
+      : 'mesh';
+  }
+  return item.type;
+}
+
 export function getItemImportProgress(item: ProjectItem): number | null {
   if (!isImportedMediaFileItem(item) || !item.isImporting) {
     return null;

@@ -1,6 +1,7 @@
 import { createMaskNumericProperty, type MaskNumericProperty } from "../../../../types/animationProperties";
 import type { ClipMask } from "../../../../types/masks";
-import { DraggableNumber, KeyframeToggle, PrecisionSlider } from '../shared';
+import { DraggableNumber, KeyframeToggle } from '../shared';
+import { PrecisionSlider } from '../DragValueInputs';
 import { MIDIParameterLabel } from '../MIDIParameterLabel';
 import { MaskPathKeyframeToggle } from './MaskPathKeyframeToggle';
 

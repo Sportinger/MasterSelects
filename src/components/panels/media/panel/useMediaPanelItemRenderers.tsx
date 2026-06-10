@@ -1,7 +1,17 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { isProxyFrameCountComplete } from '../../../../stores/mediaStore/helpers/proxyCompleteness';
 import type { Composition, MediaFile, ProjectItem } from '../../../../stores/mediaStore';
-import { isImportedMediaFileItem } from '../itemTypeGuards';
+import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
+import { getProjectItemIconType, isImportedMediaFileItem } from '../itemTypeGuards';
+import { formatMediaDuration as formatDuration } from '../grid/format';
+import {
+  formatMediaPanelBitrate as formatBitrate,
+  formatMediaPanelFileSize as formatFileSize,
+  getGaussianSplatDetailLines,
+  getGaussianSplatResolutionLabel,
+  getMediaFileCodecLabel,
+  getMediaFileContainerLabel,
+} from '../list/classicListPlanning';
 import { MediaGridItem } from '../grid/MediaGridItem';
 import { MediaClassicListRow, type MediaClassicListRowProps } from '../list/MediaClassicListRow';
 
@@ -32,15 +42,6 @@ interface UseMediaPanelItemRenderersInput {
   handleContextMenu: MediaClassicListRowProps['onContextMenu'];
   getItemsForParent: (parentId: string | null) => readonly ProjectItem[];
   refreshFileUrls: (mediaFileId: string) => Promise<unknown>;
-  getProjectItemIconType: MediaClassicListRowProps['getProjectItemIconType'];
-  getGaussianSplatDetailLines: (item: MediaFile) => string[];
-  getGaussianSplatResolutionLabel: MediaClassicListRowProps['getGaussianSplatResolutionLabel'];
-  getMediaFileContainerLabel: MediaClassicListRowProps['getMediaFileContainerLabel'];
-  getMediaFileCodecLabel: MediaClassicListRowProps['getMediaFileCodecLabel'];
-  mediaNeedsRelink: (mediaFile: MediaFile) => boolean;
-  formatDuration: MediaClassicListRowProps['formatDuration'];
-  formatFileSize: MediaClassicListRowProps['formatFileSize'];
-  formatBitrate: MediaClassicListRowProps['formatBitrate'];
 }
 
 export function useMediaPanelItemRenderers({
@@ -70,15 +71,6 @@ export function useMediaPanelItemRenderers({
   handleContextMenu,
   getItemsForParent,
   refreshFileUrls,
-  getProjectItemIconType,
-  getGaussianSplatDetailLines,
-  getGaussianSplatResolutionLabel,
-  getMediaFileContainerLabel,
-  getMediaFileCodecLabel,
-  mediaNeedsRelink,
-  formatDuration,
-  formatFileSize,
-  formatBitrate,
 }: UseMediaPanelItemRenderersInput) {
   const renderClassicRow = (item: ProjectItem, depth: number = 0) => {
     const isFolder = 'isExpanded' in item;
