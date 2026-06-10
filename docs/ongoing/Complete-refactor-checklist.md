@@ -18,9 +18,9 @@ orchestrator or worker-agent execution run starts.
 - Handoff templates: prepared for execution only
 - Source implementation: current bounded source packet has explicit write set,
   forbidden files, and gates
-- Current bounded packet: wave 11 running; waves 9-10 complete; render
-  contract freeze complete (5/5). Active: Preview router adoption, ExportPanel
-  runner split 1, and MediaPanel board joint packet.
+- Current bounded packet: wave 13 running; waves 11-12 complete. Active:
+  bridge transport split with explicit `vite.config.ts` grant, smoke scenario
+  split, and Preview split 2.
 - Completed source/tooling packet: `P0-REG-001`; focused registry checks passed.
 - Completed bounded packet: `P0-BASELINE-REFRESH-001`, read-only plus docs.
 - Completed bounded packet: `P1-CONTRACT-001`, contracts and focused boundary
@@ -2141,9 +2141,48 @@ orchestrator or worker-agent execution run starts.
   ~2255-2321.
 - Wave 10 verification:
   Orchestrator-verified: tsc clean; guards + export adoption + registry + mediaPanel + historyStore suites green.
+- Wave 11 closure completed:
+  `P5-PREVIEW-ROUTER-ADOPTION-188` moved registration sequences to
+  `services/render/previewTargetRegistration` with order-preservation proof;
+  `MultiPreviewSlot`/`TargetPreview` correctly stayed unadopted because their
+  sequences differ; Preview `getState` ceiling ratcheted 27 -> 23.
+  `P5-EXPORTPANEL-RUNNER-SPLIT-189` moved four session-based paths to runner
+  modules (`gif`/`ffmpegDirect`/`still`/`imageSequence` plus `runnerUtils`) and
+  centralized dispose; `ExportPanel` fell 3201 -> 2596, and the adoption test
+  survived unmodified. `P4-MEDIA-BOARD-CONTROLLER-JOINT-SPLIT-190` moved the
+  board controller block (~1570 lines) to 9 `media/board` hooks plus
+  `MediaBoardMount`; `MediaPanel` fell 2497 -> 742 raw (origin 5544, -87%)
+  while existing board contracts were composed, not modified.
+- Wave 11 guard events:
+  policy redistributions recorded runner + board-hook entries; max-hits
+  ratcheted 669 -> 665 from the Preview cut; registry evidence pointer now
+  follows the moved switch bridge (`timelineSwitchBridge.ts`).
+- Wave 11 verification:
+  Orchestrator-verified: tsc clean; full suite 4167/4170 -> guard/pointer fixes -> guards + registry + adoption + preview + mediaPanel suites green.
+- Wave 12 closure completed:
+  `P5-PREVIEW-SPLIT-191` extracted source-config, dropdowns, viewport,
+  canvas-mount, and status-overlays; `Preview` fell 2807 -> 2410, with
+  `getState` 20+3 at ceiling. `P5-EXPORTPANEL-SPLIT-192` extracted settings
+  state (398), summary state (180), and audio-only runner (161);
+  `ExportPanel` fell to 2269. `P6-PROXYCACHE-OBJECTURL-AUDIO-LEASES-193`
+  delegated all `proxyFrameCache` object-URL and scrub-audio handles to
+  mediaRuntime owners (`scrubAudioLeases.ts`, 330); zero direct
+  `createObjectURL`/`AudioContext` remain, the known `canplaythrough` leak is
+  preserved and diagnostically exposed, and `VideoFrame`/decoder work is
+  deferred. `P7-BRIDGE-QUARANTINE-SCOUT-194` mapped `bridge.ts` as
+  browser-side runtime, identified HTTP transport in `vite.config.ts`
+  (~803-1169), and proposed the quarantine module tree plus four-packet series:
+  transport vite-plugin extraction, smoke scenario split, gate thresholds, and
+  composer driver tool.
+- Wave 12 audit refresh:
+  over-700 audit is 111 files (from 114 at goal start); top files are now
+  `proxyFrameCache` 3266, `timelineCanvasSmoke` 3110, `bridge` 2995,
+  `Preview` 2410->, and `ExportPanel` 2269->, with `MediaPanel` at 742.
+- Wave 12 verification:
+  Orchestrator-verified: tsc clean; guards + adoption + preview + lease + mediaPanel + historyStore suites green.
 - Next active packets:
-  wave 11 is running Preview router adoption, ExportPanel runner split 1, and
-  the MediaPanel board joint packet.
+  wave 13 is running bridge transport split with explicit `vite.config.ts`
+  grant, smoke scenario split, and Preview split 2.
 - Product source refactors remain bounded by approved packet write sets.
 
 ## Document Map

@@ -32,7 +32,6 @@ import { engine } from '../../engine/WebGPUEngine';
 import {
   resolveOrbitCameraFrame,
   resolveOrbitCameraPose,
-  resolveOrbitCameraTranslationForFixedEye,
 } from '../../engine/gaussian/core/SplatCameraUtils';
 import { resolveSharedSceneCameraConfig } from '../../engine/scene/SceneCameraUtils';
 import type { SceneCameraConfig, SceneVector3, SceneViewport } from '../../engine/scene/types';
@@ -48,14 +47,9 @@ import {
 } from '../../utils/cameraLens';
 import { getFirstEditablePreviewPanelId, getPreviewPanelIdFromElement } from './previewPanelDom';
 import { usePreviewDropdownState } from './usePreviewDropdownState';
+import { usePreviewSceneNavigation } from './usePreviewSceneNavigation';
 import { usePreviewSourceConfig } from './usePreviewSourceConfig';
 import { usePreviewViewport } from './usePreviewViewport';
-
-const CAMERA_NAV_MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
-
-function isCameraNavMoveCode(code: string): code is 'KeyW' | 'KeyA' | 'KeyS' | 'KeyD' | 'KeyQ' | 'KeyE' {
-  return CAMERA_NAV_MOVE_CODES.has(code);
-}
 
 function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
   const worldHeight = 2.0;
@@ -63,7 +57,6 @@ function getSharedSceneDefaultCameraDistance(fovDegrees: number): number {
   return worldHeight / (2 * Math.tan(fovRadians * 0.5));
 }
 
-const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
 const EDIT_CAMERA_BLEND_MS = 320;
 const TIMELINE_TIME_EPSILON = 1e-4;
 const EDIT_CAMERA_ORTHO_MIN_SCALE = 0.05;
@@ -183,24 +176,6 @@ function getSceneBoundsCenter(bounds: { min: [number, number, number]; max: [num
 function clampEditCameraOrthoScale(scale: number): number {
   if (!Number.isFinite(scale)) return 2;
   return Math.max(EDIT_CAMERA_ORTHO_MIN_SCALE, Math.min(EDIT_CAMERA_ORTHO_MAX_SCALE, scale));
-}
-
-function getEditCameraViewModeFromKey(event: Pick<KeyboardEvent, 'code' | 'key'>): EditCameraViewMode | null {
-  if (event.code === 'Digit1' || event.code === 'Numpad1' || event.key === '1') return 'front';
-  if (event.code === 'Digit2' || event.code === 'Numpad2' || event.key === '2') return 'side';
-  if (event.code === 'Digit3' || event.code === 'Numpad3' || event.key === '3') return 'top';
-  if (event.code === 'Digit4' || event.code === 'Numpad4' || event.key === '4') return 'camera';
-  return null;
-}
-
-function isTextEntryTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement ||
-    target.isContentEditable
-  );
 }
 
 function isSceneObjectInteractionTarget(target: EventTarget | null): boolean {
@@ -1321,433 +1296,41 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     stopGaussianKeyboardMovement,
   ]);
 
-  const tickGaussianKeyboardMovement = useCallback((timestamp: number) => {
-    gaussianKeyboardFrameRef.current = null;
-
-    if (!sceneNavEnabled || !navigationSceneNavClip || document.activeElement !== containerRef.current) {
-      stopGaussianKeyboardMovement();
-      return;
-    }
-
-    const activeCodes = gaussianKeyboardMoveCodesRef.current;
-    if (activeCodes.size === 0) {
-      stopGaussianKeyboardLoop();
-      finishGaussianKeyboardBatch();
-      return;
-    }
-
-    const dt = gaussianKeyboardLastTimeRef.current === null
-      ? 1 / 60
-      : Math.min(0.05, (timestamp - gaussianKeyboardLastTimeRef.current) / 1000);
-    gaussianKeyboardLastTimeRef.current = timestamp;
-
-    const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
-    if (!freshTransform) {
-      stopGaussianKeyboardMovement();
-      return;
-    }
-
-    const rightInput = (activeCodes.has('KeyD') ? 1 : 0) - (activeCodes.has('KeyA') ? 1 : 0);
-    const upInput = (activeCodes.has('KeyE') ? 1 : 0) - (activeCodes.has('KeyQ') ? 1 : 0);
-    const forwardInput = (activeCodes.has('KeyW') ? 1 : 0) - (activeCodes.has('KeyS') ? 1 : 0);
-
-    if (rightInput === 0 && upInput === 0 && forwardInput === 0) {
-      stopGaussianKeyboardLoop();
-      finishGaussianKeyboardBatch();
-      return;
-    }
-
-    const clipSource = navigationSceneNavClip.source;
-    if (!clipSource || clipSource.type !== 'camera') {
-      stopGaussianKeyboardMovement();
-      return;
-    }
-    const timelineState = useTimelineStore.getState();
-    const cameraSettings = editCameraModeActiveRef.current && navigationSceneNavClip.id === editCameraClipIdRef.current
-      ? editCameraSettingsRef.current
-      : timelineState.getInterpolatedCameraSettings(
-          navigationSceneNavClip.id,
-          timelineState.playheadPosition - navigationSceneNavClip.startTime,
-        );
-    const frame = resolveOrbitCameraFrame(
-      freshTransform,
-      {
-        nearPlane: cameraSettings.near,
-        farPlane: cameraSettings.far,
-        fov: cameraSettings.fov,
-        minimumDistance: getSharedSceneDefaultCameraDistance(cameraSettings.fov),
-      },
-      { width: effectiveResolution.width, height: effectiveResolution.height },
-    );
-    const keyboardMoveSpeed = effectiveSceneNavFpsMode ? sceneNavFpsMoveSpeed : 1;
-    const panStep = 0.9 * dt * keyboardMoveSpeed;
-    const forwardStep = Math.max(0.15, frame.distance * 0.85) * dt * keyboardMoveSpeed;
-    const positionDelta = addSceneVectors(
-      addSceneVectors(
-        scaleSceneVector(frame.right, rightInput * panStep),
-        scaleSceneVector(frame.cameraUp, upInput * panStep),
-      ),
-      scaleSceneVector(frame.forward, forwardInput * forwardStep),
-    );
-
-    applyNavigationCameraValues(navigationSceneNavClip, {
-      positionX: freshTransform.position.x + positionDelta.x,
-      positionY: freshTransform.position.y + positionDelta.y,
-      positionZ: freshTransform.position.z + positionDelta.z,
-    });
-
-    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
-  }, [
+  const { handleSceneNavBlur, handleSceneNavKeyDown, handleSceneNavKeyUp } = usePreviewSceneNavigation({
     applyNavigationCameraValues,
-    finishGaussianKeyboardBatch,
-    sceneNavEnabled,
-    effectiveSceneNavFpsMode,
-    sceneNavFpsMoveSpeed,
-    effectiveResolution.height,
-    effectiveResolution.width,
-    getFreshSceneNavTransform,
-    navigationSceneNavClip,
-    stopGaussianKeyboardLoop,
-    stopGaussianKeyboardMovement,
-  ]);
-
-  const startGaussianKeyboardMovement = useCallback(() => {
-    if (gaussianKeyboardFrameRef.current !== null) return;
-    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
-  }, [tickGaussianKeyboardMovement]);
-
-  const handleSceneNavKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!sceneNavEnabled || !navigationSceneNavClip) return;
-    if (e.altKey || e.ctrlKey || e.metaKey) return;
-    if (!isCameraNavMoveCode(e.code)) return;
-
-    e.preventDefault();
-
-    if (!gaussianKeyboardBatchActiveRef.current) {
-      startSceneNavHistoryBatch('Scene move');
-      gaussianKeyboardBatchActiveRef.current = true;
-    }
-
-    gaussianKeyboardMoveCodesRef.current.add(e.code);
-    startGaussianKeyboardMovement();
-  }, [navigationSceneNavClip, sceneNavEnabled, startGaussianKeyboardMovement, startSceneNavHistoryBatch]);
-
-  const handleSceneNavKeyUp = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!isCameraNavMoveCode(e.code)) return;
-
-    e.preventDefault();
-    gaussianKeyboardMoveCodesRef.current.delete(e.code);
-
-    if (gaussianKeyboardMoveCodesRef.current.size === 0) {
-      stopGaussianKeyboardLoop();
-      finishGaussianKeyboardBatch();
-    }
-  }, [finishGaussianKeyboardBatch, stopGaussianKeyboardLoop]);
-
-  const handleSceneNavBlur = useCallback(() => {
-    stopGaussianFpsLook();
-    stopGaussianKeyboardMovement();
-    setIsEditCameraOrthoPanning(false);
-  }, [stopGaussianFpsLook, stopGaussianKeyboardMovement]);
-
-  useEffect(() => {
-    if (!editCameraModeActive) return;
-
-    const handleEditCameraViewShortcut = (event: KeyboardEvent) => {
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-      if (isTextEntryTarget(event.target)) return;
-
-      const mode = getEditCameraViewModeFromKey(event);
-      if (!mode) return;
-      if (!isPreviewShortcutTarget()) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-      stopGaussianFpsLook();
-      stopGaussianKeyboardMovement();
-      setEditCameraView(mode);
-      containerRef.current?.focus({ preventScroll: true });
-    };
-
-    window.addEventListener('keydown', handleEditCameraViewShortcut, { capture: true });
-    return () => window.removeEventListener('keydown', handleEditCameraViewShortcut, { capture: true });
-  }, [
+    containerRef,
     editCameraModeActive,
-    isPreviewShortcutTarget,
-    setEditCameraView,
-    stopGaussianFpsLook,
-    stopGaussianKeyboardMovement,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      if (gaussianWheelBatchTimerRef.current !== null) {
-        window.clearTimeout(gaussianWheelBatchTimerRef.current);
-        gaussianWheelBatchTimerRef.current = null;
-        endSceneNavHistoryBatch();
-      }
-      if (gaussianOrbitStart.current.clipId) {
-        gaussianOrbitStart.current.clipId = null;
-        endSceneNavHistoryBatch();
-      }
-      if (gaussianPanStart.current.clipId) {
-        gaussianPanStart.current.clipId = null;
-        endSceneNavHistoryBatch();
-      }
-      stopGaussianFpsLook();
-      stopGaussianKeyboardMovement();
-    };
-  }, [endSceneNavHistoryBatch, stopGaussianFpsLook, stopGaussianKeyboardMovement]);
-
-  useEffect(() => {
-    if (sceneNavEnabled) return;
-    stopGaussianFpsLook();
-    stopGaussianKeyboardMovement();
-    if (isGaussianOrbiting) {
-      gaussianOrbitStart.current.clipId = null;
-      setIsGaussianOrbiting(false);
-      endSceneNavHistoryBatch();
-    }
-    if (isGaussianPanning) {
-      gaussianPanStart.current.clipId = null;
-      setIsGaussianPanning(false);
-      endSceneNavHistoryBatch();
-    }
-  }, [endSceneNavHistoryBatch, sceneNavEnabled, isGaussianOrbiting, isGaussianPanning, stopGaussianFpsLook, stopGaussianKeyboardMovement]);
-
-  useEffect(() => {
-    if (effectiveSceneNavFpsMode) {
-      if (isGaussianOrbiting) {
-        gaussianOrbitStart.current.clipId = null;
-        setIsGaussianOrbiting(false);
-        endSceneNavHistoryBatch();
-      }
-      return;
-    }
-
-    if (isGaussianFpsLooking) {
-      stopGaussianFpsLook();
-    }
-  }, [effectiveSceneNavFpsMode, endSceneNavHistoryBatch, isGaussianFpsLooking, isGaussianOrbiting, stopGaussianFpsLook]);
-
-  useEffect(() => {
-    if (!isGaussianOrbiting) return;
-
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      const {
-        clipId,
-        x,
-        y,
-        pitch,
-        yaw,
-        roll,
-        startPosX,
-        startPosY,
-        startPosZ,
-        pivotX,
-        pivotY,
-        pivotZ,
-        radius,
-      } = gaussianOrbitStart.current;
-      if (!clipId) return;
-      if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
-
-      const dx = e.clientX - x;
-      const dy = e.clientY - y;
-      const nextPitch = pitch + dy * 0.25;
-      const nextYaw = yaw - dx * 0.25;
-      const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
-
-      let nextPosition = { x: startPosX, y: startPosY, z: startPosZ };
-      if (solveSettings && radius > 1e-6) {
-        const frame = resolveOrbitCameraFrame(
-          {
-            position: { x: startPosX, y: startPosY, z: startPosZ },
-            scale: { all: 1, x: 1, y: 1 },
-            rotation: { x: nextPitch, y: nextYaw, z: roll },
-          },
-          solveSettings.settings,
-          { width: effectiveResolution.width, height: effectiveResolution.height },
-          solveSettings.sceneBounds,
-        );
-        nextPosition = {
-          x: pivotX - frame.forward.x * radius,
-          y: pivotY - frame.forward.y * radius,
-          z: pivotZ - frame.forward.z * radius,
-        };
-      }
-
-      applyNavigationCameraValues(navigationSceneNavClip, {
-        positionX: nextPosition.x,
-        positionY: nextPosition.y,
-        positionZ: nextPosition.z,
-        rotationX: nextPitch,
-        rotationY: nextYaw,
-      });
-    };
-
-    const finishGaussianOrbit = () => {
-      gaussianOrbitStart.current.clipId = null;
-      setIsGaussianOrbiting(false);
-      endSceneNavHistoryBatch();
-    };
-
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', finishGaussianOrbit);
-
-    return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', finishGaussianOrbit);
-    };
-  }, [
-    applyNavigationCameraValues,
-    effectiveResolution.height,
-    effectiveResolution.width,
+    effectiveResolution,
+    effectiveSceneNavFpsMode,
     endSceneNavHistoryBatch,
-    getSceneNavSolveSettings,
-    isGaussianOrbiting,
-    navigationSceneNavClip,
-  ]);
-
-  useEffect(() => {
-    if (!isGaussianFpsLooking || !navigationSceneNavClip) return;
-
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      const { clipId, x, y } = gaussianFpsLookStart.current;
-      if (!clipId) return;
-
-      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
-      const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
-      if (!freshTransform || !solveSettings) return;
-
-      const pointerLockTarget = getSceneNavPointerLockTarget();
-      const pointerLockActive = pointerLockTarget !== null && document.pointerLockElement === pointerLockTarget;
-      const deltaX = pointerLockActive ? e.movementX : e.clientX - x;
-      const deltaY = pointerLockActive ? e.movementY : e.clientY - y;
-
-      if (!pointerLockActive) {
-        gaussianFpsLookStart.current.x = e.clientX;
-        gaussianFpsLookStart.current.y = e.clientY;
-      }
-
-      if (deltaX === 0 && deltaY === 0) return;
-
-      const nextPitch = freshTransform.rotation.x + deltaY * CAMERA_NAV_FPS_LOOK_SPEED;
-      const nextYaw = freshTransform.rotation.y - deltaX * CAMERA_NAV_FPS_LOOK_SPEED;
-      const nextTranslation = resolveOrbitCameraTranslationForFixedEye(
-        freshTransform,
-        {
-          x: nextPitch,
-          y: nextYaw,
-          z: freshTransform.rotation.z,
-        },
-        solveSettings.settings,
-        { width: effectiveResolution.width, height: effectiveResolution.height },
-        solveSettings.sceneBounds,
-      );
-
-      applyNavigationCameraValues(navigationSceneNavClip, {
-        positionX: nextTranslation.positionX,
-        positionY: nextTranslation.positionY,
-        positionZ: nextTranslation.positionZ,
-        rotationX: nextPitch,
-        rotationY: nextYaw,
-      });
-    };
-
-    const finishGaussianFpsLook = () => {
-      stopGaussianFpsLook();
-    };
-
-    const handlePointerLockChange = () => {
-      const pointerLockTarget = getSceneNavPointerLockTarget();
-      const pointerLockActive = pointerLockTarget !== null && document.pointerLockElement === pointerLockTarget;
-      if (!pointerLockActive && gaussianFpsLookStart.current.clipId) {
-        stopGaussianFpsLook(false);
-      }
-    };
-
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', finishGaussianFpsLook);
-    document.addEventListener('pointerlockchange', handlePointerLockChange);
-
-    return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', finishGaussianFpsLook);
-      document.removeEventListener('pointerlockchange', handlePointerLockChange);
-    };
-  }, [
-    applyNavigationCameraValues,
-    effectiveResolution.height,
-    effectiveResolution.width,
-    getSceneNavSolveSettings,
+    finishGaussianKeyboardBatch,
+    gaussianFpsLookStart,
+    gaussianWheelBatchTimerRef,
+    gaussianKeyboardBatchActiveRef,
+    gaussianKeyboardFrameRef,
+    gaussianKeyboardLastTimeRef,
+    gaussianKeyboardMoveCodesRef,
+    gaussianOrbitStart,
+    gaussianPanStart,
     getFreshSceneNavTransform,
     getSceneNavPointerLockTarget,
-    isGaussianFpsLooking,
-    navigationSceneNavClip,
-    stopGaussianFpsLook,
-  ]);
-
-  useEffect(() => {
-    if (!isGaussianPanning) return;
-
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      const { clipId, x, y, panX, panY, panZ } = gaussianPanStart.current;
-      if (!clipId) return;
-      if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
-
-      const dx = e.clientX - x;
-      const dy = e.clientY - y;
-      const freshTransform = getFreshSceneNavTransform(navigationSceneNavClip);
-      const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
-      if (!freshTransform || !solveSettings) return;
-
-      const frame = resolveOrbitCameraFrame(
-        {
-          ...freshTransform,
-          position: { x: panX, y: panY, z: panZ },
-        },
-        solveSettings.settings,
-        { width: effectiveResolution.width, height: effectiveResolution.height },
-        solveSettings.sceneBounds,
-      );
-      const worldPerPixel = (2 * frame.distance * Math.tan(((frame.fovDegrees * Math.PI) / 180) * 0.5)) /
-        Math.max(1, effectiveResolution.height);
-      const positionDelta = addSceneVectors(
-        scaleSceneVector(frame.right, -dx * worldPerPixel),
-        scaleSceneVector(frame.cameraUp, dy * worldPerPixel),
-      );
-
-      applyNavigationCameraValues(navigationSceneNavClip, {
-        positionX: panX + positionDelta.x,
-        positionY: panY + positionDelta.y,
-        positionZ: panZ + positionDelta.z,
-      });
-    };
-
-    const finishGaussianPan = () => {
-      gaussianPanStart.current.clipId = null;
-      setIsGaussianPanning(false);
-      endSceneNavHistoryBatch();
-    };
-
-    window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', finishGaussianPan);
-
-    return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', finishGaussianPan);
-    };
-  }, [
-    applyNavigationCameraValues,
-    endSceneNavHistoryBatch,
-    effectiveResolution.height,
-    effectiveResolution.width,
-    getFreshSceneNavTransform,
     getSceneNavSolveSettings,
+    isGaussianFpsLooking,
+    isGaussianOrbiting,
     isGaussianPanning,
+    isPreviewShortcutTarget,
     navigationSceneNavClip,
-  ]);
+    sceneNavEnabled,
+    sceneNavFpsMoveSpeed,
+    setEditCameraView,
+    setIsEditCameraOrthoPanning,
+    setIsGaussianOrbiting,
+    setIsGaussianPanning,
+    startSceneNavHistoryBatch,
+    stopGaussianFpsLook,
+    stopGaussianKeyboardLoop,
+    stopGaussianKeyboardMovement,
+  });
 
   // Sync layer selection when clip is selected in timeline (for edit mode)
   useEffect(() => {
