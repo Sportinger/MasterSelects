@@ -1,6 +1,6 @@
 // External file drag & drop handling for timeline
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMediaStore } from '../../../stores/mediaStore';
 import {
   isAudioFile,
@@ -15,7 +15,7 @@ import {
   initialVideoNewTrackGestureState,
   type VideoNewTrackGestureState,
 } from '../utils/externalDragNewTrackGesture';
-import { getExternalDragPayload } from '../utils/externalDragSession';
+import { clearExternalDragPayload, getExternalDragPayload } from '../utils/externalDragSession';
 import type { ExternalDragState } from '../types';
 import { useExternalDragBridgeRouting } from './useExternalDragBridgeRouting';
 import { resolveExternalDropImmediatePreview } from './externalDropImmediatePreview';
@@ -173,15 +173,71 @@ export function useExternalDrop({
     setExternalDrag(null);
   }, [resetVideoNewTrackGesture]);
 
+  const clearExternalDragSession = useCallback(() => {
+    dragCounterRef.current = 0;
+    clearExternalDragPayload();
+    clearExternalDragState();
+  }, [clearExternalDragState]);
+
+  useEffect(() => {
+    if (!externalDrag) return undefined;
+
+    let deferredDropCleanup: number | null = null;
+    const finishNow = () => {
+      if (deferredDropCleanup !== null) {
+        window.clearTimeout(deferredDropCleanup);
+        deferredDropCleanup = null;
+      }
+      clearExternalDragSession();
+    };
+    const finishAfterDropHandlers = () => {
+      if (deferredDropCleanup !== null) return;
+      deferredDropCleanup = window.setTimeout(() => {
+        deferredDropCleanup = null;
+        clearExternalDragSession();
+      }, 0);
+    };
+    const handleDocumentDragLeave = (event: DragEvent) => {
+      if (event.relatedTarget) return;
+      if (
+        event.clientX <= 0 ||
+        event.clientY <= 0 ||
+        event.clientX >= window.innerWidth ||
+        event.clientY >= window.innerHeight
+      ) {
+        finishNow();
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        finishNow();
+      }
+    };
+
+    document.addEventListener('drop', finishAfterDropHandlers, true);
+    document.addEventListener('dragend', finishNow, true);
+    document.addEventListener('dragleave', handleDocumentDragLeave, true);
+    document.addEventListener('keydown', handleKeyDown, true);
+
+    return () => {
+      if (deferredDropCleanup !== null) {
+        window.clearTimeout(deferredDropCleanup);
+      }
+      document.removeEventListener('drop', finishAfterDropHandlers, true);
+      document.removeEventListener('dragend', finishNow, true);
+      document.removeEventListener('dragleave', handleDocumentDragLeave, true);
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [clearExternalDragSession, externalDrag]);
+
   const rejectDropDuringExport = useCallback((e: React.DragEvent) => {
     if (!isExporting) return false;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'none';
-    dragCounterRef.current = 0;
-    clearExternalDragState();
+    clearExternalDragSession();
     return true;
-  }, [clearExternalDragState, isExporting]);
+  }, [clearExternalDragSession, isExporting]);
 
   const addSignalAssetClip = useCallback(async (
     trackId: string,
@@ -472,8 +528,7 @@ export function useExternalDrop({
         externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
       const dropCommand = planExternalDropCommand(e.dataTransfer);
 
-      dragCounterRef.current = 0;
-      clearExternalDragState();
+      clearExternalDragSession();
 
       if (!canRouteTimelineExternalDropCommandToTrack(dropCommand, trackType)) {
         log.debug('Drop command cannot be routed to the requested new track type', {
@@ -565,7 +620,7 @@ export function useExternalDrop({
         filePath,
       });
     },
-    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, timelineRef, clearExternalDragState, updateVideoNewTrackGesture, rejectDropDuringExport]
+    [scrollX, pixelToTime, addTrack, addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, timelineRef, clearExternalDragSession, updateVideoNewTrackGesture, rejectDropDuringExport]
   );
 
   // Handle external file drop on track
@@ -586,8 +641,7 @@ export function useExternalDrop({
       const cachedDuration =
         externalDrag?.duration ?? dragMetadataCacheRef.current?.duration;
 
-      dragCounterRef.current = 0;
-      clearExternalDragState();
+      clearExternalDragSession();
 
       // Get track type for validation
       const targetTrack = tracks.find((t) => t.id === trackId);
@@ -653,7 +707,7 @@ export function useExternalDrop({
         },
       });
     },
-    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragState]
+    [addCompClip, addClip, addTextClip, addSignalAssetClip, addSolidClip, addMeshClip, addCameraClip, addSplatEffectorClip, addMathSceneClip, addMotionShapeClip, placeDroppedTimelineMediaFiles, externalDrag, tracks, rejectDropDuringExport, getDesiredStartTime, resolveTrackStartTime, prepareDropPlacement, clearExternalDragSession]
   );
 
   useExternalDragBridgeRouting({
