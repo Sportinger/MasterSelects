@@ -183,6 +183,7 @@ export interface ExportBasicsActions {
   setImageExportMode: (mode: ExportImageMode) => void;
   setImageQuality: (quality: number) => void;
   handleQuickResolutionPreset: (value: string) => void;
+  handleResolutionChange: (value: string) => void;
   setUseCustomResolution: (enabled: boolean) => void;
   setCustomWidth: (width: number) => void;
   setCustomHeight: (height: number) => void;

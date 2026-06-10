@@ -4,26 +4,9 @@ import { useCallback, useRef, useState } from 'react';
 import './ExportPanel.css';
 import { Logger } from '../../services/logger';
 import { projectFileService } from '../../services/projectFileService';
-
-const log = Logger.create('ExportPanel');
-import { FrameExporter } from '../../engine/export';
-import type { VideoCodec, ContainerFormat } from '../../engine/export';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
-import {
-  PRORES_PROFILES,
-  DNXHR_PROFILES,
-} from '../../engine/ffmpeg';
-import { CodecSelector } from './CodecSelector';
-import {
-  getGifPaletteModeLabel,
-} from '../../engine/gif/gifOptions';
-import type {
-  FFmpegContainer,
-  ProResProfile,
-  DnxhrProfile,
-} from '../../engine/ffmpeg';
 import { resolveExportRange } from './exportRange';
 import { useExportState } from './useExportState';
 import { ExportAdvancedSummarySections } from './ExportAdvancedSummarySections';
@@ -37,6 +20,7 @@ import { useExportRunController } from './useExportRunController';
 import {
   useExportStore,
 } from '../../stores/exportStore';
+import { ExportAdvancedSections } from './panel/ExportAdvancedSections';
 import { ExportBasicsSection } from './panel/ExportBasicsSection';
 import {
   ExportPresetCommandSection,
@@ -54,6 +38,8 @@ import type {
   ExportBasicsTimeState,
   ExportBasicsVideoState,
 } from './panel/exportBasicsTypes';
+
+const log = Logger.create('ExportPanel');
 
 export function ExportPanel() {
   const summaryHighlightTimeoutsRef = useRef<Map<HTMLElement, number>>(new Map());
@@ -471,6 +457,7 @@ export function ExportPanel() {
     setImageExportMode,
     setImageQuality,
     handleQuickResolutionPreset,
+    handleResolutionChange,
     setUseCustomResolution,
     setCustomWidth,
     setCustomHeight,
@@ -564,389 +551,16 @@ export function ExportPanel() {
             actions={basicsActions}
           />
 
-          {/* Video Settings */}
-          <div className="export-section export-advanced-section">
-            <div className="export-section-header">Advanced Video</div>
-
-            {/* Filename */}
-            <div className="control-row">
-              <label>Filename</label>
-              <div className="export-input-group">
-                <input
-                  type="text"
-                  value={filename}
-                  onChange={(e) => setFilename(e.target.value)}
-                  placeholder="export"
-                />
-                <select
-                  className="export-extension-select"
-                  value={currentContainerId}
-                  onChange={(e) => {
-                    const nextContainer = e.target.value;
-                    if (nextContainer === 'gif') {
-                      setSpecialContainer('none');
-                      setVideoEnabled(true);
-                      setVisualMode('gif');
-                      setIncludeAudio(false);
-                    } else if (isWebCodecsEncoder) {
-                      setVisualMode('video');
-                      setContainerFormat(nextContainer as ContainerFormat);
-                    } else {
-                      setVisualMode('video');
-                      handleFFmpegContainerChange(nextContainer as FFmpegContainer);
-                    }
-                  }}
-                  title="Click to change container format"
-                >
-                  {videoContainerFormats.map(({ id }) => (
-                    <option key={id} value={id}>.{id}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Video Codec */}
-            <div className="control-row">
-              <label>Codec</label>
-              {isGifMode ? (
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                  {currentCodecLabel}
-                </span>
-              ) : (encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
-                <select
-                  value={videoCodec}
-                  onChange={(e) => setVideoCodec(e.target.value as VideoCodec)}
-                >
-                  {FrameExporter.getVideoCodecs(containerFormat).map(({ id, label }) => (
-                    <option key={id} value={id} disabled={!codecSupport[id]}>
-                      {label} {!codecSupport[id] ? '(not supported)' : ''}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <CodecSelector
-                  container={ffmpegContainer}
-                  value={ffmpegCodec}
-                  onChange={handleFFmpegCodecChange}
-                />
-              )}
-            </div>
-
-            {/* FFmpeg Codec description */}
-            {(encoder === 'ffmpeg' || isGifMode) && ffmpegCodecInfo && (
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '-4px', marginBottom: '8px', paddingLeft: '4px' }}>
-                {ffmpegCodecInfo.description}
-                {ffmpegCodecInfo.supportsAlpha && ' | Alpha'}
-                {ffmpegCodecInfo.supports10bit && ' | 10-bit'}
-              </div>
-            )}
-
-            {/* FFmpeg ProRes Profile */}
-            {encoder === 'ffmpeg' && !isGifMode && ffmpegCodec === 'prores' && (
-              <div className="control-row">
-                <label>Profile</label>
-                <select
-                  value={proresProfile}
-                  onChange={(e) => setProresProfile(e.target.value as ProResProfile)}
-                >
-                  {PRORES_PROFILES.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} - {p.description}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* FFmpeg DNxHR Profile */}
-            {encoder === 'ffmpeg' && !isGifMode && ffmpegCodec === 'dnxhd' && (
-              <div className="control-row">
-                <label>Profile</label>
-                <select
-                  value={dnxhrProfile}
-                  onChange={(e) => setDnxhrProfile(e.target.value as DnxhrProfile)}
-                >
-                  {DNXHR_PROFILES.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} - {p.description}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* HAP codec removed - requires snappy which doesn't build with ASYNCIFY */}
-
-            {/* Resolution */}
-            <div className="control-row">
-              <label>Resolution</label>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <select
-                  value={useCustomResolution ? 'custom' : `${width}x${height}`}
-                  onChange={(e) => {
-                    if (e.target.value === 'custom') {
-                      setUseCustomResolution(true);
-                    } else {
-                      setUseCustomResolution(false);
-                      handleResolutionChange(e.target.value);
-                    }
-                  }}
-                  disabled={useCustomResolution}
-                  style={{ flex: 1 }}
-                >
-                  {quickResolutionPresets.map(({ label, width: w, height: h }) => (
-                    <option key={`${w}x${h}`} value={`${w}x${h}`}>
-                      {label}
-                    </option>
-                  ))}
-                  <option value="custom">Custom...</option>
-                </select>
-                <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <input
-                    type="checkbox"
-                    checked={useCustomResolution}
-                    onChange={(e) => setUseCustomResolution(e.target.checked)}
-                  />
-                  Custom
-                </label>
-              </div>
-            </div>
-
-            {/* Custom Resolution Inputs */}
-            {useCustomResolution && (
-              <div className="control-row">
-                <label>Custom Size</label>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input
-                    type="number"
-                    value={customWidth}
-                    onChange={(e) => setCustomWidth(Math.max(1, parseInt(e.target.value) || 1920))}
-                    placeholder="Width"
-                    min="1"
-                    max="7680"
-                    style={{ flex: 1 }}
-                  />
-                  <span>×</span>
-                  <input
-                    type="number"
-                    value={customHeight}
-                    onChange={(e) => setCustomHeight(Math.max(1, parseInt(e.target.value) || 1080))}
-                    placeholder="Height"
-                    min="1"
-                    max="4320"
-                    style={{ flex: 1 }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Frame Rate */}
-            <div className="control-row">
-              <label>Frame Rate</label>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                {!useCustomFps ? (
-                  <select
-                    value={fps}
-                    onChange={(e) => setFps(Number(e.target.value))}
-                    style={{ flex: 1 }}
-                  >
-                    <option value={23.976}>23.976 fps (Film)</option>
-                    <option value={24}>24 fps (Cinema)</option>
-                    <option value={25}>25 fps (PAL)</option>
-                    <option value={29.97}>29.97 fps (NTSC)</option>
-                    <option value={30}>30 fps</option>
-                    <option value={48}>48 fps (HFR)</option>
-                    <option value={50}>50 fps (PAL)</option>
-                    <option value={59.94}>59.94 fps (NTSC)</option>
-                    <option value={60}>60 fps</option>
-                    <option value={120}>120 fps</option>
-                  </select>
-                ) : (
-                  <input
-                    type="number"
-                    value={customFps}
-                    onChange={(e) => setCustomFps(Math.max(1, Math.min(240, parseFloat(e.target.value) || 30)))}
-                    min={1}
-                    max={240}
-                    step={0.001}
-                    style={{ flex: 1 }}
-                  />
-                )}
-                <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
-                  <input
-                    type="checkbox"
-                    checked={useCustomFps}
-                    onChange={(e) => setUseCustomFps(e.target.checked)}
-                  />
-                  Custom
-                </label>
-              </div>
-            </div>
-
-            {/* Quality - different controls for each encoder */}
-            {isGifMode ? (
-              <div className="control-row">
-                <label>GIF Palette</label>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                  {gifColors} colors, {getGifPaletteModeLabel(gifPaletteMode)}, {estimatedSizeLabel}
-                </span>
-              </div>
-            ) : (encoder === 'webcodecs' || encoder === 'htmlvideo') ? (
-              <>
-                {/* Rate Control */}
-                <div className="control-row">
-                  <label>Rate Control</label>
-                  <select
-                    value={rateControl}
-                    onChange={(e) => setRateControl(e.target.value as 'vbr' | 'cbr')}
-                  >
-                    <option value="vbr">VBR (Variable Bitrate)</option>
-                    <option value="cbr">CBR (Constant Bitrate)</option>
-                  </select>
-                </div>
-
-                {/* Bitrate */}
-                <div className="control-row">
-                  <label>{rateControl === 'cbr' ? 'Bitrate' : 'Target Bitrate'}</label>
-                  <select
-                    value={bitrate}
-                    onChange={(e) => setBitrate(Number(e.target.value))}
-                  >
-                    <option value={5_000_000}>5 Mbps (Low)</option>
-                    <option value={10_000_000}>10 Mbps (Medium)</option>
-                    <option value={15_000_000}>15 Mbps (High)</option>
-                    <option value={20_000_000}>20 Mbps</option>
-                    <option value={25_000_000}>25 Mbps (Very High)</option>
-                    <option value={35_000_000}>35 Mbps</option>
-                    <option value={50_000_000}>50 Mbps (Max)</option>
-                  </select>
-                </div>
-
-                {/* Bitrate Slider */}
-                <div className="control-row">
-                  <label></label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1 }}>
-                    <input
-                      type="range"
-                      min={1_000_000}
-                      max={100_000_000}
-                      step={500_000}
-                      value={bitrate}
-                      onChange={(e) => setBitrate(Number(e.target.value))}
-                      style={{ flex: 1 }}
-                    />
-                    <span style={{ minWidth: '70px', fontSize: '12px', textAlign: 'right' }}>
-                      {(bitrate / 1_000_000).toFixed(1)} Mbps
-                    </span>
-                  </div>
-                </div>
-              </>
-            ) : showFFmpegQualityControl && (
-              /* MJPEG Quality Control - lower values = higher quality */
-              <div className="control-row">
-                <label>Quality</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                  <input
-                    type="range"
-                    min={1}
-                    max={31}
-                    value={ffmpegQuality}
-                    onChange={(e) => setFfmpegQuality(parseInt(e.target.value))}
-                    style={{ flex: 1 }}
-                  />
-                  <span style={{ minWidth: '60px', textAlign: 'right', fontSize: '12px' }}>
-                    {ffmpegQuality} {ffmpegQuality <= 5 ? '(High)' : ffmpegQuality <= 10 ? '(Good)' : ffmpegQuality <= 20 ? '(Med)' : '(Low)'}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Audio Settings */}
-          <div className="export-section export-advanced-section">
-            <div className="export-section-header">Advanced Audio</div>
-
-            <div className="control-row">
-              <label>
-                  <input
-                    type="checkbox"
-                    checked={includeAudio}
-                    onChange={(e) => setIncludeAudio(e.target.checked)}
-                    disabled={isGifMode || browserAudioUnavailable}
-                  />
-                  Include Audio
-                </label>
-              {isGifMode && (
-                <span style={{ color: 'var(--text-secondary)', fontSize: '11px', marginLeft: '8px' }}>
-                  GIF is silent
-                </span>
-              )}
-              {browserAudioUnavailable && (
-                <span style={{ color: 'var(--warning)', fontSize: '11px', marginLeft: '8px' }}>
-                  Not supported
-                </span>
-              )}
-            </div>
-
-            {includeAudio && !isGifMode && (
-              <>
-                <div className="control-row">
-                  <label>Sample Rate</label>
-                  <select
-                    value={audioSampleRate}
-                    onChange={(e) => setAudioSampleRate(Number(e.target.value) as 44100 | 48000)}
-                  >
-                    <option value={48000}>48 kHz (Video)</option>
-                    <option value={44100}>44.1 kHz (CD)</option>
-                  </select>
-                </div>
-
-                <div className="control-row">
-                  <label>Audio Quality</label>
-                  {isAudioOnlyMode && audioOnlyFormat === 'wav' ? (
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      16-bit PCM
-                    </span>
-                  ) : (
-                    <select
-                      value={audioBitrate}
-                      onChange={(e) => setAudioBitrate(Number(e.target.value))}
-                    >
-                      <option value={128000}>128 kbps</option>
-                      <option value={192000}>192 kbps</option>
-                      <option value={256000}>256 kbps (High)</option>
-                      <option value={320000}>320 kbps (Max)</option>
-                    </select>
-                  )}
-                </div>
-
-                {(encoder === 'ffmpeg' || isAudioOnlyMode) && (
-                  <div className="control-row">
-                    <label>Audio Codec</label>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      {isAudioOnlyMode
-                        ? currentAudioCodecLabel
-                        : `${ffmpegContainer === 'mov' ? 'AAC' :
-                           ffmpegContainer === 'mkv' ? 'FLAC' :
-                           ffmpegContainer === 'avi' ? 'PCM' :
-                           ffmpegContainer === 'mxf' ? 'PCM' : 'AAC'} (auto)`}
-                    </span>
-                  </div>
-                )}
-
-                <div className="control-row">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={normalizeAudio}
-                      onChange={(e) => setNormalizeAudio(e.target.checked)}
-                    />
-                    Normalize (prevent clipping)
-                  </label>
-                </div>
-              </>
-            )}
-          </div>
+          <ExportAdvancedSections
+            filename={filename}
+            mode={basicsMode}
+            display={basicsDisplay}
+            video={basicsVideo}
+            gif={basicsGif}
+            audio={basicsAudio}
+            options={basicsOptions}
+            actions={basicsActions}
+          />
 
           <ExportAdvancedSummarySections
             encoder={encoder}

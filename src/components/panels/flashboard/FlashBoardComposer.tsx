@@ -7,20 +7,11 @@ import {
   DEFAULT_FLASHBOARD_MODEL_VERSION,
 } from '../../../stores/flashboardStore/defaults';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { useSettingsStore } from '../../../stores/settingsStore';
-import { useAccountStore } from '../../../stores/accountStore';
 import {
   SUNO_PROVIDER_ID,
 } from '../../../services/sunoService';
 import type { CatalogEntry } from '../../../services/flashboard/types';
-import { FlashBoardActionStack } from './FlashBoardActionStack';
-import { FlashBoardChatControls } from './FlashBoardChatControls';
-import { FlashBoardChatOutput } from './FlashBoardChatOutput';
-import { FlashBoardElevenLabsSettingsPopovers } from './FlashBoardElevenLabsSettingsPopovers';
-import { FlashBoardElevenLabsVoicePopover } from './FlashBoardElevenLabsVoicePopover';
 import { buildFlashBoardGenerationActionState } from './FlashBoardGenerationActionStatePlanner';
-import { FlashBoardGenerationControls } from './FlashBoardGenerationControls';
-import { FlashBoardModelPopover } from './FlashBoardModelPopover';
 import {
   buildFlashBoardModelEntryOptions,
   buildFlashBoardModelCatalogState,
@@ -28,15 +19,14 @@ import {
   getFlashBoardModelCategory,
   type FlashBoardModelCategoryId,
 } from './FlashBoardModelOptionsPlanner';
-import { FlashBoardMultishotPanel } from './FlashBoardMultishotPanel';
 import {
   MAX_MULTI_SHOTS,
 } from './FlashBoardMultishotPlanner';
 import { buildFlashBoardParameterOptions } from './FlashBoardParameterOptionsPlanner';
-import { FlashBoardParameterPopovers } from './FlashBoardParameterPopovers';
-import { FlashBoardPromptEditor } from './FlashBoardPromptEditor';
-import { FlashBoardReferenceStrip } from './FlashBoardReferenceStrip';
-import { FlashBoardSunoPopovers } from './FlashBoardSunoPopovers';
+import { FlashBoardComposerControlBar } from './FlashBoardComposerControlBar';
+import { FlashBoardComposerMainSection } from './FlashBoardComposerMainSection';
+import { FlashBoardComposerWarnings } from './FlashBoardComposerWarnings';
+import { useFlashBoardComposerAccessState } from './useFlashBoardComposerAccessState';
 import { useFlashBoardMultishotController } from './useFlashBoardMultishotController';
 import { useFlashBoardComposerPopovers } from './useFlashBoardComposerPopovers';
 import { useFlashBoardPromptAutosize } from './useFlashBoardPromptAutosize';
@@ -51,10 +41,6 @@ import {
   useFlashBoardReferenceController,
   useFlashBoardReferenceValidationController,
 } from './useFlashBoardReferenceController';
-
-function normalizeApiKeyValue(value: unknown): string {
-  return typeof value === 'string' ? value : '';
-}
 
 interface FlashBoardComposerProps {
   initialProviderId?: string;
@@ -78,38 +64,15 @@ export function FlashBoardComposer({
   const updateComposer = useFlashBoardStore((s) => s.updateComposer);
   const setHoveredComposerReference = useFlashBoardStore((s) => s.setHoveredComposerReference);
   const mediaFiles = useMediaStore((s) => s.files);
-  const openAiApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.openai));
-  const anthropicApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.anthropic));
-  const piApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.piapi));
-  const kieAiApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.kieai));
-  const evolinkApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.evolink));
-  const elevenLabsApiKey = normalizeApiKeyValue(useSettingsStore((s) => s.apiKeys.elevenlabs));
-  const apiKeysUnlocked = useSettingsStore((s) => s.apiKeysUnlocked);
-  const apiKeyDefaults = useSettingsStore((s) => s.apiKeyDefaults);
-  const lemonadeEndpoint = useSettingsStore((s) => s.lemonadeEndpoint);
-  const openSettings = useSettingsStore((s) => s.openSettings);
-  const aiApprovalMode = useSettingsStore((s) => s.aiApprovalMode);
-  const setAiApprovalMode = useSettingsStore((s) => s.setAiApprovalMode);
-  const useOpenAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.openai && openAiApiKey.trim());
-  const useAnthropicKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.anthropic && anthropicApiKey.trim());
-  const usePiApiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.piapi && piApiKey.trim());
-  const useKieAiKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.kieai && kieAiApiKey.trim());
-  const useEvolinkKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.evolink && evolinkApiKey.trim());
-  const useElevenLabsKeyByDefault = Boolean(apiKeysUnlocked && apiKeyDefaults.elevenlabs && elevenLabsApiKey.trim());
-  const useHostedProductionProviders = import.meta.env.PROD;
-  const hasOpenAiKey = useOpenAiKeyByDefault;
-  const hasAnthropicKey = useAnthropicKeyByDefault;
-  const hasKieAiKey = useKieAiKeyByDefault;
-  const hasEvolinkKey = useEvolinkKeyByDefault;
-  const hasElevenLabsKey = useElevenLabsKeyByDefault;
-  const accountSession = useAccountStore((s) => s.session);
-  const hostedAIEnabled = useAccountStore((s) => s.hostedAIEnabled);
-  const openAuthDialog = useAccountStore((s) => s.openAuthDialog);
-  const openPricingDialog = useAccountStore((s) => s.openPricingDialog);
-  const hasHostedSession = accountSession?.authenticated === true;
-  const hasHostedAudioAccess = Boolean(accountSession?.authenticated && hostedAIEnabled);
-  const canUseHostedPromptRefiner = Boolean(accountSession?.authenticated && hostedAIEnabled);
-  const canUseByoPromptRefiner = !useHostedProductionProviders && hasOpenAiKey;
+  const {
+    accountSession, aiApprovalMode, anthropicApiKey, canUseByoPromptRefiner,
+    canUseHostedPromptRefiner, elevenLabsApiKey, hasAnthropicKey,
+    hasElevenLabsKey, hasEvolinkKey, hasHostedAudioAccess, hasHostedSession,
+    hasKieAiKey, hasOpenAiKey, hostedAIEnabled, lemonadeEndpoint, openAiApiKey,
+    openAuthDialog, openPricingDialog, openSettings, setAiApprovalMode,
+    useElevenLabsKeyByDefault, useEvolinkKeyByDefault, useHostedProductionProviders,
+    useKieAiKeyByDefault, useOpenAiKeyByDefault, usePiApiKeyByDefault,
+  } = useFlashBoardComposerAccessState();
 
   const modelCatalogState = useMemo(() => buildFlashBoardModelCatalogState({
     allowedServices,
@@ -167,38 +130,15 @@ export function FlashBoardComposer({
   const [version, setVersion] = useState(initialVersion ?? initialEntry?.versions[0] ?? DEFAULT_FLASHBOARD_MODEL_VERSION);
   const [mode, setMode] = useState('std');
   const {
-    activeChatModel,
-    activeChatModelId,
-    chatButtonLabel,
-    chatChargeTitle,
-    chatError,
-    chatMessages,
-    chatModelOptions,
-    chatPanelOpen,
-    chatPrompt,
-    chatProvider,
-    chatProviderLabel,
-    chatProviderOptions,
-    chatReasoningEffortOptions,
-    chatReasoningSupported,
-    chatTemperature,
-    chatTemperatureSupported,
-    clearChatError,
-    copiedChatMessageId,
-    handleChatButtonClick,
-    handleChatInputKeyDown,
-    handleChatMessageDoubleClick,
-    handleChatProviderSelect,
-    handleChatPromptChange,
-    handleClearChatHistory,
-    handleClearChatPrompt,
-    isChatting,
-    lemonadeStatus,
-    openAiReasoningEffort,
-    setChatModel,
-    setChatTemperature,
-    setOpenAiReasoningEffort,
-    showChatCloudActions,
+    activeChatModel, activeChatModelId, chatButtonLabel, chatChargeTitle, chatError,
+    chatMessages, chatModelOptions, chatPanelOpen, chatPrompt, chatProvider,
+    chatProviderLabel, chatProviderOptions, chatReasoningEffortOptions,
+    chatReasoningSupported, chatTemperature, chatTemperatureSupported, clearChatError,
+    copiedChatMessageId, handleChatButtonClick, handleChatInputKeyDown,
+    handleChatMessageDoubleClick, handleChatProviderSelect, handleChatPromptChange,
+    handleClearChatHistory, handleClearChatPrompt, isChatting, lemonadeStatus,
+    openAiReasoningEffort, setChatModel, setChatTemperature,
+    setOpenAiReasoningEffort, showChatCloudActions,
   } = useFlashBoardChatController({
     anthropicApiKey,
     closePopover,
@@ -259,46 +199,25 @@ export function FlashBoardComposer({
   const isElevenLabsMode = isAudioMode && !isSunoMode;
   const isHostedAudioMode = isElevenLabsMode && service === 'cloud';
   const {
-    hasVideoReferenceInput,
-    seedanceReferenceModeActive,
-    seedanceReferenceValidationError,
+    hasVideoReferenceInput, seedanceReferenceModeActive, seedanceReferenceValidationError,
   } = useFlashBoardReferenceValidationController({
     composer,
     mediaFiles,
     providerId,
   });
   const {
-    audioModelButtonLabel,
-    audioOutputButtonLabel,
-    audioVoiceButtonLabel,
-    elevenLabsVoicesError,
-    handleOutputFormatChange,
-    handlePreviewVoice,
-    handleRefreshVoices,
-    handleSelectVoice,
-    handleSpeakerBoostChange,
-    handleVoiceSettingNumberChange,
-    isLoadingElevenLabsVoices,
-    languageCode,
-    languageOverride,
-    modelMetaText: elevenLabsModelMetaText,
-    modelOptions: elevenLabsModelOptions,
-    outputFormat,
-    outputOptions: elevenLabsOutputOptions,
-    resetVoiceSettings,
+    audioModelButtonLabel, audioOutputButtonLabel, audioVoiceButtonLabel,
+    elevenLabsVoicesError, handleOutputFormatChange, handlePreviewVoice,
+    handleRefreshVoices, handleSelectVoice, handleSpeakerBoostChange,
+    handleVoiceSettingNumberChange, isLoadingElevenLabsVoices, languageCode,
+    languageOverride, modelMetaText: elevenLabsModelMetaText,
+    modelOptions: elevenLabsModelOptions, outputFormat,
+    outputOptions: elevenLabsOutputOptions, resetVoiceSettings,
     selectedModel: selectedElevenLabsModel,
     selectedModelCharacterLimit: selectedElevenLabsCharacterLimit,
-    setLanguageCode,
-    setLanguageOverride,
-    setVoiceId,
-    setVoiceName,
-    setVoiceSearch,
-    voiceId,
-    voiceName,
-    voiceOptions: elevenLabsVoiceOptions,
-    voiceSearch,
-    voiceSettings,
-    voiceSettingsChanged,
+    setLanguageCode, setLanguageOverride, setVoiceId, setVoiceName,
+    setVoiceSearch, voiceId, voiceName, voiceOptions: elevenLabsVoiceOptions,
+    voiceSearch, voiceSettings, voiceSettingsChanged,
   } = useFlashBoardElevenLabsController({
     elevenLabsApiKey,
     hasElevenLabsKey,
@@ -319,17 +238,9 @@ export function FlashBoardComposer({
     && !seedanceReferenceModeActive;
   const supportsMultiShot = !isAudioMode && selectedEntry?.supportsMultiShot === true;
   const {
-    canAddShot,
-    handleAddShot,
-    handleMultiShotToggle,
-    handleRemoveShot,
-    handleShotDurationChange,
-    handleShotPromptChange,
-    isMultiShotPanelClosing,
-    multiShotDurationTotal,
-    multiShots,
-    normalizedMultiPrompt,
-    renderMultiShotPanel,
+    canAddShot, handleAddShot, handleMultiShotToggle, handleRemoveShot,
+    handleShotDurationChange, handleShotPromptChange, isMultiShotPanelClosing,
+    multiShotDurationTotal, multiShots, normalizedMultiPrompt, renderMultiShotPanel,
   } = useFlashBoardMultishotController({
     duration,
     generateAudio,
@@ -340,38 +251,14 @@ export function FlashBoardComposer({
     supportsMultiShot,
   });
   const {
-    currentSunoModelId,
-    effectivePrompt,
-    handleClearPrompt,
-    handlePromptChange,
-    handleSunoNegativeTagsChange,
-    handleSunoStyleChange,
-    handleSunoVocalGenderChange,
-    prompt,
-    resetSunoTuning,
-    setPrompt,
-    setSunoAudioWeight,
-    setSunoCustomMode,
-    setSunoInstrumental,
-    setSunoNegativeTags,
-    setSunoStyle,
-    setSunoStyleWeight,
-    setSunoWeirdnessConstraint,
-    sunoAudioWeight,
-    sunoCustomMode,
-    sunoInstrumental,
-    sunoModelButtonLabel,
-    sunoModeButtonLabel,
-    sunoModelOptions,
-    sunoNegativeTags,
-    sunoStyle,
-    sunoStyleLimit,
-    sunoStyleWeight,
-    sunoTitle,
-    sunoTuningChanged,
-    sunoVocalGender,
-    sunoVocalGenderOptions,
-    sunoWeirdnessConstraint,
+    currentSunoModelId, effectivePrompt, handleClearPrompt, handlePromptChange,
+    handleSunoNegativeTagsChange, handleSunoStyleChange, handleSunoVocalGenderChange,
+    prompt, resetSunoTuning, setPrompt, setSunoAudioWeight, setSunoCustomMode,
+    setSunoInstrumental, setSunoNegativeTags, setSunoStyle, setSunoStyleWeight,
+    setSunoWeirdnessConstraint, sunoAudioWeight, sunoCustomMode, sunoInstrumental,
+    sunoModelButtonLabel, sunoModeButtonLabel, sunoModelOptions, sunoNegativeTags,
+    sunoStyle, sunoStyleLimit, sunoStyleWeight, sunoTitle, sunoTuningChanged,
+    sunoVocalGender, sunoVocalGenderOptions, sunoWeirdnessConstraint,
   } = useFlashBoardPromptSunoController({
     composer,
     isSunoMode,
@@ -516,23 +403,12 @@ export function FlashBoardComposer({
     service,
   ]);
   const {
-    composerReferenceBadges,
-    composerStyle,
-    effectiveReferenceMediaFileIds,
-    getPromptRefineMediaFile,
-    handleComposerReferenceRoleChange,
-    handleReferenceDragLeave,
-    handleReferenceDragOver,
-    handleReferenceDrop,
-    handleReferenceStripPointerLeave,
-    handleRemoveComposerReference,
-    isReferenceDragOver,
-    maxReferenceMedia,
-    referenceStripRef,
-    showComposerReferences,
-    supportsEndFrameReference,
-    supportsTimelineReferenceRoles,
-    updateReferenceCardFocus,
+    composerReferenceBadges, composerStyle, effectiveReferenceMediaFileIds,
+    getPromptRefineMediaFile, handleComposerReferenceRoleChange,
+    handleReferenceDragLeave, handleReferenceDragOver, handleReferenceDrop,
+    handleReferenceStripPointerLeave, handleRemoveComposerReference, isReferenceDragOver,
+    maxReferenceMedia, referenceStripRef, showComposerReferences, supportsEndFrameReference,
+    supportsTimelineReferenceRoles, updateReferenceCardFocus,
   } = useFlashBoardReferenceController({
     composer,
     isAudioMode,
@@ -543,14 +419,8 @@ export function FlashBoardComposer({
     updateComposer,
   });
   const {
-    canRestorePrompt,
-    clearPromptRefineError,
-    clearPromptRefineState,
-    handleRefinePrompt,
-    handleRestorePromptBeforeAiRewrite,
-    isRefiningPrompt,
-    promptRefineError,
-    promptRefineTitle,
+    canRestorePrompt, clearPromptRefineError, clearPromptRefineState, handleRefinePrompt,
+    handleRestorePromptBeforeAiRewrite, isRefiningPrompt, promptRefineError, promptRefineTitle,
   } = useFlashBoardPromptRefineController({
     aspectRatio,
     canUseByoPromptRefiner,
@@ -593,10 +463,7 @@ export function FlashBoardComposer({
   promptRefineCallbacksRef.current.clearPromptRefineState = clearPromptRefineState;
 
   const {
-    handleAudioToggle,
-    handleGenerate,
-    handleKeyDown,
-    handleProviderChange,
+    handleAudioToggle, handleGenerate, handleKeyDown, handleProviderChange,
   } = useFlashBoardGenerationFlowController({
     aspectRatio,
     canGenerate,
@@ -655,8 +522,6 @@ export function FlashBoardComposer({
 
   if (!hasGenerationBoard) return null;
 
-  const showGenerationCloudActions = Boolean(backendValidationError && service === 'cloud' && /sign in/i.test(backendValidationError));
-
   return (
     <div
       className={`fb-bubble ${showComposerReferences ? 'has-references' : ''} ${chatPanelOpen ? 'has-chat-panel' : ''} ${isReferenceDragOver ? 'reference-drop-active' : ''} ${isRefiningPrompt ? 'is-refining-prompt' : ''}`}
@@ -667,285 +532,141 @@ export function FlashBoardComposer({
       onDragLeave={handleReferenceDragLeave}
       onDrop={handleReferenceDrop}
     >
-      {chatPanelOpen && (
-        <FlashBoardChatOutput
-          chatError={chatError}
-          chatHistoryRef={chatHistoryRef}
-          copiedChatMessageId={copiedChatMessageId}
-          messages={chatMessages}
-          showChatCloudActions={showChatCloudActions}
-          onAuthClick={openAuthDialog}
-          onMessageDoubleClick={handleChatMessageDoubleClick}
-          onPricingClick={openPricingDialog}
-        />
-      )}
+      <FlashBoardComposerMainSection
+        chatPanelOpen={chatPanelOpen}
+        showComposerReferences={showComposerReferences}
+        showMultiShotPanel={Boolean(!chatPanelOpen && !isAudioMode && renderMultiShotPanel)}
+        chatOutput={{
+          chatError, chatHistoryRef, copiedChatMessageId, messages: chatMessages,
+          showChatCloudActions, onAuthClick: openAuthDialog,
+          onMessageDoubleClick: handleChatMessageDoubleClick, onPricingClick: openPricingDialog,
+        }}
+        referenceStrip={{
+          badges: composerReferenceBadges, referenceStripRef, supportsEndFrameReference,
+          supportsTimelineReferenceRoles, onHoverReference: setHoveredComposerReference,
+          onPointerLeave: handleReferenceStripPointerLeave, onPointerMove: updateReferenceCardFocus,
+          onReferenceRoleChange: handleComposerReferenceRoleChange, onRemoveReference: handleRemoveComposerReference,
+        }}
+        promptEditor={{
+          canRestorePrompt, chatInputRef, chatPanelOpen, chatPrompt, isAudioMode,
+          isRefiningPrompt, isSunoMode, maxReferenceMedia, multiShots, prompt,
+          promptInputRef, referenceMediaCount: effectiveReferenceMediaFileIds.length,
+          sunoNegativeTags, sunoStyle, sunoStyleLimit, onAutosizeInput: resizePromptInput,
+          onChatInputKeyDown: handleChatInputKeyDown, onChatPromptChange: handleChatPromptChange,
+          onClearChatPrompt: handleClearChatPrompt, onClearPrompt: handleClearPrompt,
+          onPromptChange: handlePromptChange, onRestorePromptBeforeAiRewrite: handleRestorePromptBeforeAiRewrite,
+          onSunoNegativeTagsChange: handleSunoNegativeTagsChange, onSunoStyleChange: handleSunoStyleChange,
+        }}
+        multishotPanel={{
+          canAddShot, duration, isClosing: isMultiShotPanelClosing,
+          shots: normalizedMultiPrompt, totalDuration: multiShotDurationTotal,
+          validationError: multiShotValidationError, onAddShot: handleAddShot,
+          onRemoveShot: handleRemoveShot, onShotDurationChange: handleShotDurationChange,
+          onShotPromptChange: handleShotPromptChange,
+        }}
+      />
 
-      <div className={`fb-bubble-main ${showComposerReferences ? 'has-references' : ''}`}>
-        {showComposerReferences && (
-          <FlashBoardReferenceStrip
-            badges={composerReferenceBadges}
-            referenceStripRef={referenceStripRef}
-            supportsEndFrameReference={supportsEndFrameReference}
-            supportsTimelineReferenceRoles={supportsTimelineReferenceRoles}
-            onHoverReference={setHoveredComposerReference}
-            onPointerLeave={handleReferenceStripPointerLeave}
-            onPointerMove={updateReferenceCardFocus}
-            onReferenceRoleChange={handleComposerReferenceRoleChange}
-            onRemoveReference={handleRemoveComposerReference}
-          />
-        )}
+      <FlashBoardComposerWarnings
+        audioValidationError={isAudioMode ? audioValidationError : null}
+        backendValidationError={backendValidationError}
+        chatPanelOpen={chatPanelOpen}
+        promptRefineError={promptRefineError}
+        seedanceReferenceValidationError={seedanceReferenceValidationError}
+        service={service}
+        onAuthClick={openAuthDialog}
+        onPricingClick={openPricingDialog}
+      />
 
-        <FlashBoardPromptEditor
-          canRestorePrompt={canRestorePrompt}
-          chatInputRef={chatInputRef}
-          chatPanelOpen={chatPanelOpen}
-          chatPrompt={chatPrompt}
-          isAudioMode={isAudioMode}
-          isRefiningPrompt={isRefiningPrompt}
-          isSunoMode={isSunoMode}
-          maxReferenceMedia={maxReferenceMedia}
-          multiShots={multiShots}
-          prompt={prompt}
-          promptInputRef={promptInputRef}
-          referenceMediaCount={effectiveReferenceMediaFileIds.length}
-          sunoNegativeTags={sunoNegativeTags}
-          sunoStyle={sunoStyle}
-          sunoStyleLimit={sunoStyleLimit}
-          onAutosizeInput={resizePromptInput}
-          onChatInputKeyDown={handleChatInputKeyDown}
-          onChatPromptChange={handleChatPromptChange}
-          onClearChatPrompt={handleClearChatPrompt}
-          onClearPrompt={handleClearPrompt}
-          onPromptChange={handlePromptChange}
-          onRestorePromptBeforeAiRewrite={handleRestorePromptBeforeAiRewrite}
-          onSunoNegativeTagsChange={handleSunoNegativeTagsChange}
-          onSunoStyleChange={handleSunoStyleChange}
-        />
-      </div>
-
-      {!chatPanelOpen && !isAudioMode && renderMultiShotPanel && (
-        <FlashBoardMultishotPanel
-          canAddShot={canAddShot}
-          duration={duration}
-          isClosing={isMultiShotPanelClosing}
-          shots={normalizedMultiPrompt}
-          totalDuration={multiShotDurationTotal}
-          validationError={multiShotValidationError}
-          onAddShot={handleAddShot}
-          onRemoveShot={handleRemoveShot}
-          onShotDurationChange={handleShotDurationChange}
-          onShotPromptChange={handleShotPromptChange}
-        />
-      )}
-
-      {!chatPanelOpen && isAudioMode && audioValidationError && (
-        <div className="fb-audio-warning compact">{audioValidationError}</div>
-      )}
-
-      {!chatPanelOpen && seedanceReferenceValidationError && (
-        <div className="fb-audio-warning compact">{seedanceReferenceValidationError}</div>
-      )}
-
-      {!chatPanelOpen && backendValidationError && (
-        <div className={`fb-audio-warning compact ${showGenerationCloudActions ? 'has-cloud-actions' : ''}`}>
-          <span>{backendValidationError}</span>
-          {showGenerationCloudActions && (
-            <div className="fb-cloud-warning-actions">
-              <button type="button" onClick={openPricingDialog}>
-                Prices
-              </button>
-              <button type="button" onClick={openAuthDialog}>
-                Sign in
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!chatPanelOpen && promptRefineError && (
-        <div className="fb-audio-warning compact">{promptRefineError}</div>
-      )}
-
-      <div className={`fb-bubble-bar ${inlineSubmenuStateClassName}`}>
-        {!chatPanelOpen && (
-          <FlashBoardGenerationControls
-            activePopover={popover}
-            aspectRatioLabel={aspectRatio}
-            audioModelButtonLabel={audioModelButtonLabel}
-            audioOutputButtonLabel={audioOutputButtonLabel}
-            audioVoiceButtonLabel={audioVoiceButtonLabel}
-            durationLabel={`${duration}s`}
-            effectiveGenerateAudio={effectiveGenerateAudio}
-            imageSizeLabel={imageSize}
-            isAudioMode={isAudioMode}
-            isElevenLabsMode={isElevenLabsMode}
-            isRefiningPrompt={isRefiningPrompt}
-            isSunoMode={isSunoMode}
-            modeLabel={mode}
-            modelButtonLabel={modelButtonLabel}
-            multiShots={multiShots}
-            popoverHostClassName={popoverHostClassName}
-            popoverRef={popoverRef}
-            promptRefineTitle={promptRefineTitle}
-            selectedEntryHasAspectRatios={Boolean(selectedEntry && selectedEntry.aspectRatios.length > 0)}
-            selectedEntryHasDurations={Boolean(selectedEntry && selectedEntry.durations.length > 0)}
-            selectedEntryHasImageSizes={Boolean(selectedEntry?.supportsTextToImage && selectedEntry.imageSizes?.length)}
-            selectedEntryHasMultipleModes={Boolean(selectedEntry && selectedEntry.modes.length > 1)}
-            sunoModelButtonLabel={sunoModelButtonLabel}
-            sunoModeButtonLabel={sunoModeButtonLabel}
-            sunoTuningChanged={sunoTuningChanged}
-            supportsAudio={supportsAudio}
-            supportsMultiShot={supportsMultiShot}
-            voiceSettingsChanged={voiceSettingsChanged}
-            onAudioToggle={handleAudioToggle}
-            onMultiShotToggle={handleMultiShotToggle}
-            onOpenPopover={togglePopover}
-            onRefinePrompt={handleRefinePrompt}
-          >
-
-          <FlashBoardModelPopover
-            activeCategoryId={effectiveModelCategory}
-            activePopover={renderedPopover}
-            categories={availableModelCategories}
-            entries={modelEntryOptions}
-            onCategoryChange={setActiveModelCategory}
-            onEntrySelect={(entryId) => {
-              const selectedProvider = modelEntryOptions.find((entry) => entry.id === entryId);
-              if (selectedProvider) {
-                handleProviderChange(selectedProvider.service, selectedProvider.providerId);
-              }
-            }}
-          />
-
-          <FlashBoardSunoPopovers
-            activePopover={renderedPopover}
-            audioWeight={sunoAudioWeight}
-            currentModelId={currentSunoModelId}
-            customMode={sunoCustomMode}
-            instrumental={sunoInstrumental}
-            isSunoMode={isSunoMode}
-            modelOptions={sunoModelOptions}
-            styleWeight={sunoStyleWeight}
-            vocalGender={sunoVocalGender}
-            vocalGenderOptions={sunoVocalGenderOptions}
-            weirdnessConstraint={sunoWeirdnessConstraint}
-            onAudioWeightChange={setSunoAudioWeight}
-            onClosePopover={closePopover}
-            onModeChange={(nextCustomMode, nextInstrumental) => {
-              setSunoCustomMode(nextCustomMode);
-              setSunoInstrumental(nextInstrumental);
-            }}
-            onModelChange={setVersion}
-            onResetTuning={resetSunoTuning}
-            onStyleWeightChange={setSunoStyleWeight}
-            onVocalGenderChange={handleSunoVocalGenderChange}
-            onWeirdnessConstraintChange={setSunoWeirdnessConstraint}
-          />
-
-          <FlashBoardElevenLabsSettingsPopovers
-            activePopover={renderedPopover}
-            isElevenLabsMode={isElevenLabsMode}
-            languageCode={languageCode}
-            languageOverride={languageOverride}
-            modelId={version}
-            modelMetaText={elevenLabsModelMetaText}
-            modelOptions={elevenLabsModelOptions}
-            outputFormat={outputFormat}
-            outputOptions={elevenLabsOutputOptions}
-            voiceSettings={voiceSettings}
-            onLanguageCodeChange={setLanguageCode}
-            onLanguageOverrideChange={setLanguageOverride}
-            onModelChange={setVersion}
-            onOutputFormatChange={handleOutputFormatChange}
-            onResetVoiceSettings={resetVoiceSettings}
-            onSpeakerBoostChange={handleSpeakerBoostChange}
-            onVoiceSettingNumberChange={handleVoiceSettingNumberChange}
-          />
-
-          <FlashBoardElevenLabsVoicePopover
-            activePopover={renderedPopover}
-            emptyMessage={
-              isHostedAudioMode
-                ? hasHostedAudioAccess ? 'No voices found.' : 'Sign in for Cloud voices.'
-                : hasElevenLabsKey ? 'No voices found.' : 'Configure ElevenLabs key.'
+      <FlashBoardComposerControlBar
+        chatPanelOpen={chatPanelOpen}
+        inlineSubmenuStateClassName={inlineSubmenuStateClassName}
+        generationControls={{
+          activePopover: popover, aspectRatioLabel: aspectRatio, audioModelButtonLabel,
+          audioOutputButtonLabel, audioVoiceButtonLabel, durationLabel: `${duration}s`,
+          effectiveGenerateAudio, imageSizeLabel: imageSize, isAudioMode, isElevenLabsMode,
+          isRefiningPrompt, isSunoMode, modeLabel: mode, modelButtonLabel, multiShots,
+          popoverHostClassName, popoverRef, promptRefineTitle,
+          selectedEntryHasAspectRatios: Boolean(selectedEntry && selectedEntry.aspectRatios.length > 0),
+          selectedEntryHasDurations: Boolean(selectedEntry && selectedEntry.durations.length > 0),
+          selectedEntryHasImageSizes: Boolean(selectedEntry?.supportsTextToImage && selectedEntry.imageSizes?.length),
+          selectedEntryHasMultipleModes: Boolean(selectedEntry && selectedEntry.modes.length > 1),
+          sunoModelButtonLabel, sunoModeButtonLabel, sunoTuningChanged, supportsAudio,
+          supportsMultiShot, voiceSettingsChanged, onAudioToggle: handleAudioToggle,
+          onMultiShotToggle: handleMultiShotToggle, onOpenPopover: togglePopover,
+          onRefinePrompt: handleRefinePrompt,
+        }}
+        modelPopover={{
+          activeCategoryId: effectiveModelCategory, activePopover: renderedPopover,
+          categories: availableModelCategories, entries: modelEntryOptions,
+          onCategoryChange: setActiveModelCategory,
+          onEntrySelect: (entryId) => {
+            const selectedProvider = modelEntryOptions.find((entry) => entry.id === entryId);
+            if (selectedProvider) {
+              handleProviderChange(selectedProvider.service, selectedProvider.providerId);
             }
-            error={elevenLabsVoicesError}
-            isElevenLabsMode={isElevenLabsMode}
-            isLoading={isLoadingElevenLabsVoices}
-            search={voiceSearch}
-            selectedVoiceId={voiceId}
-            voiceId={voiceId}
-            voiceName={voiceName}
-            voices={elevenLabsVoiceOptions}
-            onPreviewVoice={handlePreviewVoice}
-            onRefresh={handleRefreshVoices}
-            onSearchChange={setVoiceSearch}
-            onSelectVoice={handleSelectVoice}
-            onVoiceIdChange={setVoiceId}
-            onVoiceNameChange={setVoiceName}
-          />
-
-          <FlashBoardParameterPopovers
-            activePopover={renderedPopover}
-            aspectOptions={parameterOptions.aspectOptions}
-            durationOptions={parameterOptions.durationOptions}
-            imageSizeOptions={parameterOptions.imageSizeOptions}
-            modeOptions={parameterOptions.modeOptions}
-            onAspectRatioChange={setAspectRatio}
-            onClosePopover={closePopover}
-            onDurationChange={setDuration}
-            onImageSizeChange={setImageSize}
-            onModeChange={setMode}
-          />
-          </FlashBoardGenerationControls>
-        )}
-
-        {chatPanelOpen && (
-          <FlashBoardChatControls
-            activeChatModel={activeChatModel}
-            activeChatModelId={activeChatModelId}
-            activePopover={popover}
-            aiApprovalMode={aiApprovalMode}
-            chatError={chatError}
-            chatModelOptions={chatModelOptions}
-            chatPrompt={chatPrompt}
-            chatProvider={chatProvider}
-            chatProviderLabel={chatProviderLabel}
-            chatProviderOptions={chatProviderOptions}
-            chatReasoningEffortOptions={chatReasoningEffortOptions}
-            chatReasoningSupported={chatReasoningSupported}
-            chatTemperature={chatTemperature}
-            chatTemperatureSupported={chatTemperatureSupported}
-            hasChatMessages={chatMessages.length > 0}
-            isChatting={isChatting}
-            lemonadeStatus={lemonadeStatus}
-            openAiReasoningEffort={openAiReasoningEffort}
-            popoverHostClassName={popoverHostClassName}
-            popoverRef={popoverRef}
-            renderedPopover={renderedPopover}
-            onAiApprovalModeChange={setAiApprovalMode}
-            onChatErrorClear={clearChatError}
-            onChatModelChange={setChatModel}
-            onChatProviderSelect={handleChatProviderSelect}
-            onChatTemperatureChange={setChatTemperature}
-            onClearChatHistory={handleClearChatHistory}
-            onClosePopover={closePopover}
-            onOpenPopover={togglePopover}
-            onReasoningEffortChange={setOpenAiReasoningEffort}
-          />
-        )}
-
-        <FlashBoardActionStack
-          canGenerate={canGenerate}
-          chatButtonLabel={chatButtonLabel}
-          chatButtonTitle={chatChargeTitle ?? 'Send chat prompt'}
-          chatPanelOpen={chatPanelOpen}
-          generateButtonLabel={generateButtonLabel}
-          generateButtonTitle={generateButtonTitle}
-          onChatButtonClick={handleChatButtonClick}
-          onGenerate={handleGenerate}
-        />
-      </div>
+          },
+        }}
+        sunoPopovers={{
+          activePopover: renderedPopover, audioWeight: sunoAudioWeight,
+          currentModelId: currentSunoModelId, customMode: sunoCustomMode,
+          instrumental: sunoInstrumental, isSunoMode, modelOptions: sunoModelOptions,
+          styleWeight: sunoStyleWeight, vocalGender: sunoVocalGender,
+          vocalGenderOptions: sunoVocalGenderOptions, weirdnessConstraint: sunoWeirdnessConstraint,
+          onAudioWeightChange: setSunoAudioWeight, onClosePopover: closePopover,
+          onModeChange: (nextCustomMode, nextInstrumental) => {
+            setSunoCustomMode(nextCustomMode);
+            setSunoInstrumental(nextInstrumental);
+          },
+          onModelChange: setVersion, onResetTuning: resetSunoTuning,
+          onStyleWeightChange: setSunoStyleWeight, onVocalGenderChange: handleSunoVocalGenderChange,
+          onWeirdnessConstraintChange: setSunoWeirdnessConstraint,
+        }}
+        elevenLabsSettingsPopovers={{
+          activePopover: renderedPopover, isElevenLabsMode, languageCode, languageOverride,
+          modelId: version, modelMetaText: elevenLabsModelMetaText, modelOptions: elevenLabsModelOptions,
+          outputFormat, outputOptions: elevenLabsOutputOptions, voiceSettings,
+          onLanguageCodeChange: setLanguageCode, onLanguageOverrideChange: setLanguageOverride,
+          onModelChange: setVersion, onOutputFormatChange: handleOutputFormatChange,
+          onResetVoiceSettings: resetVoiceSettings, onSpeakerBoostChange: handleSpeakerBoostChange,
+          onVoiceSettingNumberChange: handleVoiceSettingNumberChange,
+        }}
+        elevenLabsVoicePopover={{
+          activePopover: renderedPopover,
+          emptyMessage: isHostedAudioMode
+            ? hasHostedAudioAccess ? 'No voices found.' : 'Sign in for Cloud voices.'
+            : hasElevenLabsKey ? 'No voices found.' : 'Configure ElevenLabs key.',
+          error: elevenLabsVoicesError, isElevenLabsMode, isLoading: isLoadingElevenLabsVoices,
+          search: voiceSearch, selectedVoiceId: voiceId, voiceId, voiceName,
+          voices: elevenLabsVoiceOptions, onPreviewVoice: handlePreviewVoice,
+          onRefresh: handleRefreshVoices, onSearchChange: setVoiceSearch,
+          onSelectVoice: handleSelectVoice, onVoiceIdChange: setVoiceId,
+          onVoiceNameChange: setVoiceName,
+        }}
+        parameterPopovers={{
+          activePopover: renderedPopover, aspectOptions: parameterOptions.aspectOptions,
+          durationOptions: parameterOptions.durationOptions, imageSizeOptions: parameterOptions.imageSizeOptions,
+          modeOptions: parameterOptions.modeOptions, onAspectRatioChange: setAspectRatio,
+          onClosePopover: closePopover, onDurationChange: setDuration,
+          onImageSizeChange: setImageSize, onModeChange: setMode,
+        }}
+        chatControls={{
+          activeChatModel, activeChatModelId, activePopover: popover, aiApprovalMode,
+          chatError, chatModelOptions, chatPrompt, chatProvider, chatProviderLabel,
+          chatProviderOptions, chatReasoningEffortOptions, chatReasoningSupported,
+          chatTemperature, chatTemperatureSupported, hasChatMessages: chatMessages.length > 0,
+          isChatting, lemonadeStatus, openAiReasoningEffort, popoverHostClassName,
+          popoverRef, renderedPopover, onAiApprovalModeChange: setAiApprovalMode,
+          onChatErrorClear: clearChatError, onChatModelChange: setChatModel,
+          onChatProviderSelect: handleChatProviderSelect, onChatTemperatureChange: setChatTemperature,
+          onClearChatHistory: handleClearChatHistory, onClosePopover: closePopover,
+          onOpenPopover: togglePopover, onReasoningEffortChange: setOpenAiReasoningEffort,
+        }}
+        actionStack={{
+          canGenerate, chatButtonLabel, chatButtonTitle: chatChargeTitle ?? 'Send chat prompt',
+          chatPanelOpen, generateButtonLabel, generateButtonTitle,
+          onChatButtonClick: handleChatButtonClick, onGenerate: handleGenerate,
+        }}
+      />
     </div>
   );
 }
