@@ -3,7 +3,6 @@
 
 import { Logger } from '../../services/logger';
 import { exportDiagnostics } from '../../services/export/exportDiagnostics';
-import { engine } from '../WebGPUEngine';
 
 const log = Logger.create('FrameExporter');
 import { AudioExportPipeline, type EncodedAudioResult } from '../audio';
@@ -15,7 +14,11 @@ import { VideoEncoderWrapper } from './VideoEncoderWrapper';
 import { prepareClipsForExport, cleanupExportMode } from './ClipPreparation';
 import { seekAllClipsToTime, waitForAllVideosReady } from './VideoSeeker';
 import { buildLayersAtTime, initializeLayerBuilder, cleanupLayerBuilder } from './ExportLayerBuilder';
-import { syncExportMaskTextures } from './ExportMaskTextures';
+import {
+  ExportFrameCaptureUnavailableError,
+  ExportRenderSessionImpl,
+  type ExportRenderSessionFrameCapture,
+} from './ExportRenderSessionImpl';
 import {
   collectRenderableExportClipsInRange,
   preloadGaussianSplatsForExport,
@@ -61,6 +64,7 @@ export class FrameExporter {
   private lastPreviewFramePublishMs = Number.NEGATIVE_INFINITY;
   private lastExportRuntimeReportMs = Number.NEGATIVE_INFINITY;
   private activeExportRunId: string | null = null;
+  private renderSession: ExportRenderSessionImpl | null = null;
 
   constructor(settings: FullExportSettings) {
     this.settings = settings;
@@ -94,14 +98,13 @@ export class FrameExporter {
   private abortExportSetup(
     runId: string,
     error: unknown,
-    originalDimensions?: { width: number; height: number }
+    renderSession?: ExportRenderSessionImpl
   ): void {
     this.encoder?.cancel();
     this.audioPipeline?.cancel();
-    if (originalDimensions) {
-      engine.cleanupExportCanvas();
-      engine.setExporting(false);
-      engine.setResolution(originalDimensions.width, originalDimensions.height);
+    renderSession?.dispose();
+    if (this.renderSession === renderSession) {
+      this.renderSession = null;
     }
     exportDiagnostics.finish('failed', error);
     releaseExportRunResources(runId);
@@ -121,6 +124,7 @@ export class FrameExporter {
     this.useParallelDecode = false;
     this.lastExportRuntimeReportMs = Number.NEGATIVE_INFINITY;
     this.activeExportRunId = null;
+    this.renderSession = null;
   }
 
   private shouldForcePreciseRendering(): boolean {
@@ -287,17 +291,25 @@ export class FrameExporter {
       throw error;
     }
 
-    const originalDimensions = engine.getOutputDimensions();
-    engine.setResolution(width, height);
-    engine.setExporting(true);
+    const renderSession = new ExportRenderSessionImpl({
+      runId: exportRunId,
+      width,
+      height,
+      stackedAlpha: !!this.settings.stackedAlpha,
+      preferZeroCopy: zeroCopySurfaceAdmission.admitted,
+    });
+    this.renderSession = renderSession;
+    try {
+      renderSession.begin();
+    } catch (error) {
+      this.abortExportSetup(exportRunId, error, renderSession);
+      throw error;
+    }
 
-    // Initialize export canvas for zero-copy VideoFrame creation
-    const useZeroCopy = zeroCopySurfaceAdmission.admitted
-      ? engine.initExportCanvas(width, height, this.settings.stackedAlpha)
-      : false;
+    const useZeroCopy = renderSession.usesZeroCopy;
     if (!useZeroCopy && !readbackSurfaceAdmission.admitted) {
       const error = this.createAdmissionError('readback output surface', readbackSurfaceAdmission);
-      this.abortExportSetup(exportRunId, error, originalDimensions);
+      this.abortExportSetup(exportRunId, error, renderSession);
       throw error;
     }
     reportExportOutputSurface(useZeroCopy ? zeroCopySurfaceReport : readbackSurfaceReport);
@@ -421,60 +433,41 @@ export class FrameExporter {
           log.warn(`No layers at time ${time}`);
         }
 
-        // Check GPU device validity
-        if (!engine.isDeviceValid()) {
-          throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
-        }
-
-        engine.setRenderTimeOverride(time);
-        const maskSyncStart = performance.now();
-        syncExportMaskTextures(layers, width, height, time);
-        const maskSyncMs = performance.now() - maskSyncStart;
-
-        const ensureLayersStart = performance.now();
-        await engine.ensureExportLayersReady(layers);
-        const ensureLayersMs = performance.now() - ensureLayersStart;
-
-        const renderStart = performance.now();
-        engine.render(layers);
-        const renderMs = performance.now() - renderStart;
-
         // Calculate timestamp and duration in microseconds
         const timestampMicros = Math.round(frame * (1_000_000 / fps));
         const durationMicros = Math.round(1_000_000 / fps);
 
-        let captureMs = 0;
-        let encodeMs = 0;
-        if (useZeroCopy) {
-          // Zero-copy path: create VideoFrame directly from OffscreenCanvas
-          // await ensures GPU has finished rendering before we capture
-          const captureStart = performance.now();
-          const videoFrame = await engine.createVideoFrameFromExport(timestampMicros, durationMicros);
-          captureMs = performance.now() - captureStart;
-          if (!videoFrame) {
-            if (!engine.isDeviceValid()) {
-              throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
+        let capture: ExportRenderSessionFrameCapture;
+        try {
+          capture = await renderSession.renderFrame({
+            time,
+            layers,
+            timestampMicros,
+            durationMicros,
+          });
+        } catch (error) {
+          if (error instanceof ExportFrameCaptureUnavailableError) {
+            if (error.captureKind === 'video-frame') {
+              log.error(`Failed to create VideoFrame at frame ${frame}`);
+            } else {
+              log.error(`Failed to read pixels at frame ${frame}`);
             }
-            log.error(`Failed to create VideoFrame at frame ${frame}`);
             continue;
           }
+          throw error;
+        }
+        const { maskSyncMs, ensureLayersMs, renderMs, captureMs } = capture.metrics;
+
+        let encodeMs = 0;
+        if (capture.kind === 'video-frame') {
+          const videoFrame = capture.frame;
           this.publishExportPreviewFrame(videoFrame, time);
           const encodeStart = performance.now();
           await this.encoder.encodeVideoFrame(videoFrame, frame, keyframeInterval);
           encodeMs = performance.now() - encodeStart;
           videoFrame.close();
         } else {
-          // Fallback: read pixels from GPU (slower)
-          const captureStart = performance.now();
-          const pixels = await engine.readPixels();
-          captureMs = performance.now() - captureStart;
-          if (!pixels) {
-            if (!engine.isDeviceValid()) {
-              throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
-            }
-            log.error(`Failed to read pixels at frame ${frame}`);
-            continue;
-          }
+          const pixels = capture.pixels;
           this.publishExportPreviewPixels(pixels, width, height, time);
           const encodeStart = performance.now();
           await this.encoder.encodeFrame(pixels, frame, keyframeInterval);
@@ -576,7 +569,7 @@ export class FrameExporter {
         this.audioPipeline?.cancel();
       }
       const cleanupStart = performance.now();
-      this.cleanup(originalDimensions);
+      this.cleanup(renderSession);
       exportDiagnostics.recordPhase('cleanup', performance.now() - cleanupStart);
       exportDiagnostics.finish(finalStatus, finalError);
       releaseExportRunResources(exportRunId);
@@ -585,11 +578,13 @@ export class FrameExporter {
       }
       this.encoder = null;
       this.audioPipeline = null;
+      this.renderSession = null;
     }
   }
 
   cancel(): void {
     this.isCancelled = true;
+    this.renderSession?.cancel('FrameExporter cancelled');
     this.audioPipeline?.cancel();
     cleanupExportMode(this.clipStates, this.parallelDecoder);
     if (this.activeExportRunId) {
@@ -708,15 +703,12 @@ export class FrameExporter {
     this.publishBitmapWhenStillExporting(createImageBitmap(imageData), currentTime);
   }
 
-  private cleanup(originalDimensions: { width: number; height: number }): void {
+  private cleanup(renderSession: ExportRenderSessionImpl): void {
     cleanupExportMode(this.clipStates, this.parallelDecoder);
     cleanupLayerBuilder();
     this.parallelDecoder = null;
     this.useParallelDecode = false;
-    engine.setRenderTimeOverride(null);
-    engine.cleanupExportCanvas();
-    engine.setExporting(false);
-    engine.setResolution(originalDimensions.width, originalDimensions.height);
+    renderSession.dispose();
   }
 
   /**

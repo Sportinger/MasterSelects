@@ -18,9 +18,9 @@ orchestrator or worker-agent execution run starts.
 - Handoff templates: prepared for execution only
 - Source implementation: current bounded source packet has explicit write set,
   forbidden files, and gates
-- Current bounded packet: wave 7 running; render snapshot factories (P5/P6
-  freeze packet 2), historyStore folder split (P2 store split 2), and
-  MediaPanel continuation are the next active/queued packets.
+- Current bounded packet: none; waves 7-8 complete; render freeze 3 of 5 done.
+  Next: `ExportRenderSession` freeze 4, mediaStore fileManageSlice split, and
+  MediaPanel continuation.
 - Completed source/tooling packet: `P0-REG-001`; focused registry checks passed.
 - Completed bounded packet: `P0-BASELINE-REFRESH-001`, read-only plus docs.
 - Completed bounded packet: `P1-CONTRACT-001`, contracts and focused boundary
@@ -2059,9 +2059,56 @@ orchestrator or worker-agent execution run starts.
   avoid loss; a pre-commit foreign-file scan was added to orchestrator rules.
 - Wave 6 verification:
   Orchestrator-verified: tsc clean; full suite 4144/4145 with one stale evidence pointer, fixed; registry + guards + render-contracts suites green (68 tests).
-- Next eligible packet: wave 7 is running with render snapshot factories
-  (freeze packet 2), historyStore folder split (P2 store split 2), and
-  MediaPanel continuation.
+- Wave 7 closure completed:
+  `P5P6-SNAPSHOT-FACTORIES-174` added `captureRenderFrameSnapshot` and
+  `captureRenderTargetSnapshot` in `src/services/render`; the adapter-sanctioned
+  policy grant for `src/services/render/**` raised the allowed count 20 -> 21.
+  Descriptor mapping is handle-free, and the orchestrator added a defensive
+  slot-settings mapper. Fix-forward note: the worker test harness initially used
+  live-store `setState`, which import-time subscriptions invalidate; it was
+  rewritten to `vi.mock` via codex session resume, the first session-resume
+  fix-forward, and resume syntax was documented in the dispatch skill.
+- Wave 7 closure completed:
+  `P2-HISTORYSTORE-SPLIT-175` converted `historyStore.ts` (1739) to a folder:
+  `index.ts` (1042), `snapshotCloning` (294), `historyStoreTypes` (171),
+  `historyNavigation` (155), and `projectHistoryPersistence` (156). The 71-test
+  suite is green; adapter path and highConflictOwnership registry entries now
+  follow the folder, and the orchestrator updated ownership entries for both
+  store folders.
+- Wave 7 closure completed:
+  `P4-MEDIA-PANEL-SPLIT-176` extracted the classic-list UI state hook (332);
+  `MediaPanel.tsx` is about 2954 raw lines. The worker explicitly avoided the
+  store-binding wall to respect the `getState` guard.
+- Wave 7 verification:
+  Orchestrator-verified: tsc clean; factories + contracts + policy + registry + historyStore suites green.
+- Wave 8 closure completed:
+  `P5P6-OUTPUT-ROUTER-ADAPTER-177` added `RenderOutputRouterAdapter` (200) to
+  route all three dispatcher output paths as behavior-identical delegation.
+  Orchestrator line-by-line review confirmed argument parity: om-preview slice
+  remap, no-pipeline fallback clear, export canvas clear, and cached-frame
+  semantics. `RenderDispatcher` `getState` hits fell 16 -> 11. Telemetry call
+  order moved after routing and stayed frame-identical. The `RenderDispatcher`
+  diff exceeded the 80-line preference at 177 lines; accepted after review
+  because all three blocks moved coherently.
+- Wave 8 closure completed:
+  `P2-DOCKSTORE-ACTIONS-SPLIT-179` made `dockStore/index.ts` facade-only, with
+  `storeTypes`, `timelineLayoutAdapter`, `layoutMutationActions`,
+  `dragAndPanelStateActions`, `panelVisibilityActions`, `savedLayoutActions`,
+  and `layoutTransition`; the persist shape is byte-identical.
+- Wave 8 closure completed:
+  `P4-MEDIA-PANEL-SPLIT-178` extracted shell state (63) and source reveal (240)
+  hooks; `MediaPanel.tsx` is 2665 raw lines.
+- Ratchet enforcement note:
+  the full-suite boundary run caught the type-barrel fan-in ratchet at 758 >
+  755. Seven new barrel imports across wave files (render mappers, historyStore
+  modules, factory test) were redirected by the orchestrator to role modules:
+  `colorCorrection`, `keyframes`, `timeline`, `audio`, `layers`, and
+  `timelineCore`; the ratchet is green again. Timeline registry evidence pointer
+  and getState policy redistribution events from wave 6 remain recorded there.
+- Wave 8 verification:
+  Orchestrator-verified: tsc clean; full-suite ratchet catch resolved; ratchet + historyStore + factory + router suites green.
+- Next eligible packet: `ExportRenderSession` adoption (freeze 4), mediaStore
+  `fileManageSlice` split, and MediaPanel continuation.
 - Product source refactors remain blocked outside approved packet write sets.
 
 ## Document Map

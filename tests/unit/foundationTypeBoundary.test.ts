@@ -17,6 +17,23 @@ const runtimeHandlePattern =
   /\b(File|Blob|FileSystemFileHandle|HTMLMediaElement|HTMLVideoElement|HTMLAudioElement|HTMLCanvasElement|AudioContext|VideoFrame|ImageBitmap|GPU[A-Za-z]+|Worker|WebCodecsPlayer|NativeDecoder)\b|createObjectURL|revokeObjectURL/g;
 const directTypeBarrelImportPattern =
   /from\s+['"]((?:\.\.\/)+src\/types|(?:\.\.\/)+types)['"]/g;
+
+// Precision upgrade 2026-06-10: the raw pattern also matches store-LOCAL
+// types modules (e.g. src/stores/mediaStore/types.ts via '../../types'),
+// which are legitimate and not barrel fan-in. Resolve each specifier against
+// the importing file and count only imports that land on src/types itself.
+// The baseline was re-measured to the true global count at the same commit —
+// a ratchet-down, not a relaxation.
+function countGlobalTypeBarrelImports(filePath: string, source: string): number {
+  const dir = path.dirname(filePath);
+  const barrelDir = path.resolve(repoRoot, 'src', 'types');
+  let count = 0;
+  for (const match of source.matchAll(directTypeBarrelImportPattern)) {
+    const resolved = path.resolve(dir, match[1]);
+    if (resolved === barrelDir) count += 1;
+  }
+  return count;
+}
 const projectSchemaProductImportPattern =
   /\.\.\/\.\.\/\.\.\/(stores|components|engine)|@\/(stores|components|engine)/g;
 
@@ -92,7 +109,7 @@ describe('foundation type boundary registry', () => {
     const files = [...filesUnder('src'), ...filesUnder('tests')];
     const directImportHits = files.reduce(
       (total, filePath) =>
-        total + countMatches(readFileSync(filePath, 'utf8'), directTypeBarrelImportPattern),
+        total + countGlobalTypeBarrelImports(filePath, readFileSync(filePath, 'utf8')),
       0,
     );
 

@@ -174,7 +174,13 @@ export const classCHardTargets = [
   { path: 'src/stores/mediaStore/helpers/modelSequenceImport.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/init.ts', maxCurrentHits: 6 },
   { path: 'src/stores/mediaStore/slices/compositionSlice.ts', maxCurrentHits: 10 },
-  { path: 'src/stores/mediaStore/slices/fileManageSlice.ts', maxCurrentHits: 8 },
+  // Redistributed by packet 183: the fileManageSlice split moved its 8 hits
+  // into five role modules; cluster total unchanged (8).
+  { path: 'src/stores/mediaStore/slices/fileManage/deleteActions.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/mediaStore/slices/fileManage/deleteRuntimeCleanup.ts', maxCurrentHits: 3 },
+  { path: 'src/stores/mediaStore/slices/fileManage/mediaUsagePlanner.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/mediaStore/slices/fileManage/sourceReplacementCache.ts', maxCurrentHits: 1 },
+  { path: 'src/stores/mediaStore/slices/fileManage/timelineClipReload.ts', maxCurrentHits: 2 },
   { path: 'src/stores/mediaStore/slices/projectSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/proxySlice.ts', maxCurrentHits: 3 },
   { path: 'src/stores/multicamStore.ts', maxCurrentHits: 2 },
@@ -213,8 +219,9 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 21,
-  // 178 since packet 172 redistributed two MediaPanel hits into the
-  // extracted source-monitor badge hook (cluster total unchanged).
-  classCHardTargetFileCount: 178,
+  // 178 after packet 172 (MediaPanel badge-hook redistribution); 182 after
+  // packet 183 (fileManageSlice split: 1 entry replaced by 5 role modules,
+  // cluster totals unchanged in both cases).
+  classCHardTargetFileCount: 182,
   classCHardTargetMaxHits: 669,
 } as const;

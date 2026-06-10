@@ -646,6 +646,41 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
   audio-mixer SVG/CSS plus Audio-Workstation doc changes were already present
   outside packet ownership and were included in commit `2ba29a04` to avoid
   loss; orchestrator rules now include a pre-commit foreign-file scan.
+- Wave 7 closure completed:
+  `P5P6-SNAPSHOT-FACTORIES-174` added render frame/target snapshot factories in
+  `src/services/render` with an adapter-sanctioned policy grant
+  (`src/services/render/**`, count 20 -> 21), handle-free descriptor mapping,
+  and an orchestrator defensive slot-settings mapper; the live-store `setState`
+  harness issue was fix-forwarded to `vi.mock` via codex session resume.
+  `P2-HISTORYSTORE-SPLIT-175` converted `historyStore.ts` (1739) into a folder
+  with `index.ts` (1042), `snapshotCloning` (294), `historyStoreTypes` (171),
+  `historyNavigation` (155), and `projectHistoryPersistence` (156), with the
+  71-test suite green and adapter/ownership registry entries following the
+  folder. `P4-MEDIA-PANEL-SPLIT-176` extracted classic-list UI state (332),
+  reduced `MediaPanel.tsx` to about 2954 raw lines, and avoided the
+  store-binding wall to respect the `getState` guard.
+- Wave 7 verification:
+  Orchestrator-verified: tsc clean; factories + contracts + policy + registry + historyStore suites green.
+- Wave 8 closure completed:
+  `P5P6-OUTPUT-ROUTER-ADAPTER-177` added `RenderOutputRouterAdapter` (200) for
+  all three dispatcher output paths with reviewed argument parity
+  (om-preview slice remap, no-pipeline fallback clear, export canvas clear,
+  cached-frame semantics); `RenderDispatcher` `getState` hits fell 16 -> 11,
+  telemetry moved after routing frame-identically, and the accepted
+  `RenderDispatcher` diff was 177 lines because the three blocks moved
+  coherently. `P2-DOCKSTORE-ACTIONS-SPLIT-179` made `dockStore/index.ts`
+  facade-only with action/layout modules and byte-identical persist shape.
+  `P4-MEDIA-PANEL-SPLIT-178` extracted shell state (63) and source reveal (240)
+  hooks, reducing `MediaPanel.tsx` to 2665 raw lines.
+- Ratchet enforcement note:
+  the full-suite boundary run caught type-barrel fan-in at 758 > 755; seven new
+  barrel imports across wave files were redirected by the orchestrator to role
+  modules (`colorCorrection`, `keyframes`, `timeline`, `audio`, `layers`,
+  `timelineCore`), and the ratchet is green again. Timeline registry evidence
+  pointer and getState policy redistribution events from wave 6 remain recorded
+  there.
+- Wave 8 verification:
+  Orchestrator-verified: tsc clean; full-suite ratchet catch resolved; ratchet + historyStore + factory + router suites green.
 
 ## High-Conflict Ownership Snapshot
 
@@ -660,20 +695,21 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
 | `src/stores/timeline/**` | protected Timeline integration lane | read only | explicit integration packet for hydration/runtime/signal/render snapshot |
 | `src/components/timeline/**` | protected Timeline integration lane | read only | explicit integration packet for hydration/runtime/signal/render snapshot |
 | `src/timeline/architecture/**` | protected template/reference | read only | user-approved registry-template edit |
-| `src/stores/mediaStore/**`, `src/stores/historyStore.ts`, `src/stores/dockStore/**`, `src/stores/renderTargetStore.ts` | `P2-STORE-RUNTIME-FREEZE-001` | read, scan | P2/P3 contract freeze accepted |
+| `src/stores/mediaStore/**`, `src/stores/historyStore/**`, `src/stores/dockStore/**`, `src/stores/renderTargetStore.ts` | `P2-STORE-RUNTIME-FREEZE-001` | read, scan | P2/P3 contract freeze accepted |
 | `src/engine/**`, `src/components/preview/**`, `src/components/export/**` | later P5/P6 joint packets | read, smoke only | render snapshot/output-router contracts frozen |
 | `src/services/aiTools/**` | later P7 smoke quarantine packets | read, smoke inventory only | Phase 0 smoke thresholds accepted |
 
 ## Active Packet
 
-Wave 7 running: render snapshot factories (P5/P6 freeze packet 2).
+None. Waves 7-8 are complete; render freeze 3 of 5 is done.
 
 ## Queued Packets
 
-- historyStore folder split (P2 store split 2).
+- `ExportRenderSession` adoption (P5/P6 freeze packet 4).
+- mediaStore `fileManageSlice` split.
 - MediaPanel continuation.
 
 ## Immediate Next Step
 
-Finish wave 7 in order: render snapshot factories first, then historyStore
-folder split, then MediaPanel continuation.
+Run the next eligible packet from the queued list: `ExportRenderSession`
+adoption, mediaStore `fileManageSlice` split, or MediaPanel continuation.
