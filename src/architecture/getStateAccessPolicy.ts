@@ -73,9 +73,10 @@ export const classCHardTargets = [
   { path: 'src/components/pianoRoll/PianoRollBoot.ts', maxCurrentHits: 1 },
   { path: 'src/components/preview/MaskOverlay.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/MultiPreviewSlot.tsx', maxCurrentHits: 4 },
-  // Ratcheted 27 -> 23 by packet 188: registration sequences moved into the
-  // adapter-sanctioned services/render layer.
-  { path: 'src/components/preview/Preview.tsx', maxCurrentHits: 23 },
+  // Ratcheted 27 -> 23 by packet 188 (registration moved to adapter layer);
+  // packet 191 redistributed 3 hits into the source-config hook (total 23).
+  { path: 'src/components/preview/Preview.tsx', maxCurrentHits: 20 },
+  { path: 'src/components/preview/usePreviewSourceConfig.ts', maxCurrentHits: 3 },
   { path: 'src/components/preview/SAM2Overlay.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/SceneObjectOverlay.tsx', maxCurrentHits: 3 },
   { path: 'src/components/preview/sceneObjectOverlayMath.ts', maxCurrentHits: 1 },
@@ -236,6 +237,6 @@ export const getStateAccessPolicyBaselines = {
   // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
   // entries). Totals conserved per redistribution; max-hits ratchets DOWN
   // only (669 -> 665 via the packet-188 Preview ceiling cut).
-  classCHardTargetFileCount: 189,
+  classCHardTargetFileCount: 190,
   classCHardTargetMaxHits: 665,
 } as const;

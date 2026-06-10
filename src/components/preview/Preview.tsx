@@ -20,19 +20,11 @@ import {
 } from '../../stores/engineStore';
 import type { SceneCameraLiveOverride } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { useMediaStore } from '../../stores/mediaStore';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../stores/mediaStore/types';
-import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { startBatch, endBatch } from '../../stores/historyStore';
-import { MaskOverlay } from './MaskOverlay';
-import { SAM2Overlay } from './SAM2Overlay';
-import { SourceMonitor } from './SourceMonitor';
-import { StatsOverlay } from './StatsOverlay';
 import { PreviewControls } from './PreviewControls';
-import { PreviewBottomControls } from './PreviewBottomControls';
-import { SceneObjectOverlay } from './SceneObjectOverlay';
-import { TextPreviewEditor } from './TextPreviewEditor';
+import { PreviewCanvasMount } from './PreviewCanvasMount';
 import { useEditModeOverlay } from './useEditModeOverlay';
 import { useLayerDrag } from './useLayerDrag';
 import { useSAM2Store } from '../../stores/sam2Store';
@@ -47,11 +39,6 @@ import type { SceneCameraConfig, SceneVector3, SceneViewport } from '../../engin
 import type { ClipTransform, TimelineClip, TimelineTrack } from '../../types';
 import type { PreviewPanelSource } from '../../types/dock';
 import {
-  createPreviewPanelDataPatch,
-  getPreviewSourceLabel,
-  resolvePreviewSourceCompositionId,
-} from '../../utils/previewPanelSource';
-import {
   registerPreviewTarget,
   setPreviewTargetTransparency,
   unregisterPreviewTarget,
@@ -59,6 +46,10 @@ import {
 import {
   fullFrameFocalLengthMmToFov,
 } from '../../utils/cameraLens';
+import { getFirstEditablePreviewPanelId, getPreviewPanelIdFromElement } from './previewPanelDom';
+import { usePreviewDropdownState } from './usePreviewDropdownState';
+import { usePreviewSourceConfig } from './usePreviewSourceConfig';
+import { usePreviewViewport } from './usePreviewViewport';
 
 const CAMERA_NAV_MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']);
 
@@ -100,22 +91,12 @@ const EDIT_CAMERA_VIEW_LABELS: Record<EditCameraViewMode, string> = {
   side: 'Side',
   top: 'Top',
 };
-const PREVIEW_CONTAINER_SELECTOR = '.preview-container[data-preview-panel-id]';
 const SCENE_OBJECT_INTERACTION_SELECTOR = [
   '.preview-scene-object-handle',
   '.preview-scene-gizmo-axis',
   '.preview-scene-gizmo-rotate',
   '.preview-scene-gizmo-toolbar',
 ].join(',');
-
-function getPreviewPanelIdFromElement(element: Element | null): string | null {
-  return element?.closest<HTMLElement>(PREVIEW_CONTAINER_SELECTOR)?.dataset.previewPanelId ?? null;
-}
-
-function getFirstEditablePreviewPanelId(): string | null {
-  if (typeof document === 'undefined') return null;
-  return document.querySelector<HTMLElement>('.preview-container[data-preview-editable="true"]')?.dataset.previewPanelId ?? null;
-}
 
 function cloneClipTransform(transform: ClipTransform): ClipTransform {
   return {
@@ -443,34 +424,6 @@ function buildPreviewCameraConfigFromTransform(
   };
 }
 
-function formatSplatLoadPercent(percent: number): number {
-  if (!Number.isFinite(percent)) {
-    return 0;
-  }
-  return Math.round(Math.max(0, Math.min(1, percent)) * 100);
-}
-
-function getSplatLoadPhaseLabel(phase: string): string {
-  switch (phase) {
-    case 'fetching':
-      return 'Fetching splat';
-    case 'reading':
-      return 'Reading splat';
-    case 'parsing':
-      return 'Parsing splat';
-    case 'normalizing':
-      return 'Preparing splat';
-    case 'uploading':
-      return 'Uploading splat';
-    case 'complete':
-      return 'Splat loaded';
-    case 'error':
-      return 'Splat load failed';
-    default:
-      return 'Loading splat';
-  }
-}
-
 interface PreviewProps {
   panelId: string;
   source: PreviewPanelSource;
@@ -542,13 +495,27 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     isExporting: s.isExporting,
     exportPreviewFrame: s.exportPreviewFrame,
   })));
-  const { compositions, activeCompositionId } = useMediaStore(useShallow(s => ({
-    compositions: s.compositions,
-    activeCompositionId: s.activeCompositionId,
-  })));
-  const { updatePanelData } = useDockStore(useShallow(s => ({
-    updatePanelData: s.updatePanelData,
-  })));
+  const {
+    activeCompositionId,
+    activeCompositionVideoTracks,
+    closeSourceMonitor,
+    compositions,
+    displayedCompId,
+    effectiveResolution,
+    isEditableSource,
+    setPanelSource,
+    sourceLabel,
+    sourceMonitorActive,
+    sourceMonitorFile,
+    sourceMonitorPlaybackRequestId,
+    stableRenderSource,
+    toggleTransparency,
+  } = usePreviewSourceConfig({
+    panelId,
+    source,
+    showTransparencyGrid,
+    tracks,
+  });
   const { previewQuality, setPreviewQuality } = useSettingsStore(useShallow(s => ({
     previewQuality: s.previewQuality,
     setPreviewQuality: s.setPreviewQuality,
@@ -567,100 +534,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [, setCompReady] = useState(false);
-
-  const previewCompositionId = useMediaStore(state => state.previewCompositionId);
-  const sourceMonitorFileId = useMediaStore(state => state.sourceMonitorFileId);
-  const sourceMonitorPlaybackRequestId = useMediaStore(state => state.sourceMonitorPlaybackRequestId);
-  const sourceMonitorFile = useMediaStore(state =>
-    state.sourceMonitorFileId ? state.files.find(f => f.id === state.sourceMonitorFileId) ?? null : null
-  );
-  const previousActiveCompositionIdRef = useRef(activeCompositionId);
-  const activeCompositionVideoTracks = useMemo(
-    () => tracks.filter((track) => track.type === 'video'),
-    [tracks],
-  );
-  const sourceLabel = useMemo(
-    () => getPreviewSourceLabel(source, compositions, activeCompositionId, activeCompositionVideoTracks),
-    [source, compositions, activeCompositionId, activeCompositionVideoTracks],
-  );
-
-  // Source monitor: show raw media file instead of composition. Only the first
-  // editable preview hosts it, so it never opens in multiple previews at once.
-  const sourceMonitorActive = source.type === 'activeComp'
-    && sourceMonitorFile !== null
-    && getFirstEditablePreviewPanelId() === panelId;
-
-  const closeSourceMonitor = useCallback(() => {
-    useMediaStore.getState().setSourceMonitorFile(null);
-  }, []);
-
-  // Clear source monitor when active composition changes
-  useEffect(() => {
-    const previousActiveCompositionId = previousActiveCompositionIdRef.current;
-    if (previousActiveCompositionId !== activeCompositionId) {
-      previousActiveCompositionIdRef.current = activeCompositionId;
-      if (sourceMonitorFileId) {
-        useMediaStore.getState().setSourceMonitorFile(null);
-      }
-    }
-  }, [activeCompositionId, sourceMonitorFileId]);
-
-  // Determine which composition this preview is showing
-  const slotPreviewActive = source.type === 'activeComp' && previewCompositionId !== null;
-  const renderSource = useMemo<PreviewPanelSource>(
-    () => (
-      slotPreviewActive && previewCompositionId
-        ? { type: 'composition', compositionId: previewCompositionId }
-        : source
-    ),
-    [source, slotPreviewActive, previewCompositionId],
-  );
-  const renderSourceCompositionId =
-    renderSource.type === 'composition' || renderSource.type === 'layer-index'
-      ? renderSource.compositionId
-      : null;
-  const renderSourceLayerIndex =
-    renderSource.type === 'layer-index'
-      ? renderSource.layerIndex
-      : null;
-  const stableRenderSource = useMemo<PreviewPanelSource>(() => {
-    switch (renderSource.type) {
-      case 'activeComp':
-        return { type: 'activeComp' };
-      case 'composition':
-        return { type: 'composition', compositionId: renderSourceCompositionId ?? activeCompositionId ?? '' };
-      case 'layer-index':
-        return {
-          type: 'layer-index',
-          compositionId: renderSourceCompositionId,
-          layerIndex: renderSourceLayerIndex ?? 0,
-        };
-    }
-  }, [activeCompositionId, renderSource.type, renderSourceCompositionId, renderSourceLayerIndex]);
-  const displayedCompId = resolvePreviewSourceCompositionId(renderSource, activeCompositionId);
-  const displayedComp = compositions.find(c => c.id === displayedCompId);
-  const isEditableSource =
-    renderSource.type === 'activeComp' ||
-    (renderSource.type === 'composition' && renderSource.compositionId === activeCompositionId);
-
-  // Engine resolution = active composition dimensions (fallback to settingsStore default)
-  const effectiveResolution = displayedComp
-    ? { width: displayedComp.width, height: displayedComp.height }
-    : useSettingsStore.getState().outputResolution;
-
-  const setPanelSource = useCallback(
-    (nextSource: PreviewPanelSource) => {
-      updatePanelData(panelId, createPreviewPanelDataPatch(nextSource, { showTransparencyGrid }));
-    },
-    [panelId, showTransparencyGrid, updatePanelData],
-  );
-
-  const toggleTransparency = useCallback(() => {
-    updatePanelData(
-      panelId,
-      createPreviewPanelDataPatch(source, { showTransparencyGrid: !showTransparencyGrid }),
-    );
-  }, [panelId, showTransparencyGrid, source, updatePanelData]);
 
   // Unified RenderTarget registration
   useEffect(() => {
@@ -692,59 +565,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     setPreviewTargetTransparency(panelId, showTransparencyGrid);
   }, [isEngineReady, panelId, showTransparencyGrid]);
 
-  // Composition selector state
-  const [selectorOpen, setSelectorOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
-
-  // Quality selector state
-  const [qualityOpen, setQualityOpen] = useState(false);
-  const qualityDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    if (!selectorOpen && !qualityOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (selectorOpen && dropdownRef.current && !dropdownRef.current.contains(target)) {
-        setSelectorOpen(false);
-      }
-      if (qualityOpen && qualityDropdownRef.current && !qualityDropdownRef.current.contains(target)) {
-        setQualityOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [selectorOpen, qualityOpen]);
-
-  // Adjust dropdown position when opened
-  useEffect(() => {
-    if (selectorOpen && dropdownRef.current) {
-      const rect = dropdownRef.current.getBoundingClientRect();
-      const style: React.CSSProperties = {};
-
-      if (rect.left < 8) {
-        style.left = '0';
-        style.right = 'auto';
-      }
-      if (rect.right > window.innerWidth - 8) {
-        style.right = '0';
-        style.left = 'auto';
-      }
-      if (rect.bottom > window.innerHeight - 8) {
-        style.bottom = '100%';
-        style.top = 'auto';
-        style.marginTop = '0';
-        style.marginBottom = '4px';
-      }
-
-      setDropdownStyle(style);
-    } else {
-      setDropdownStyle({});
-    }
-  }, [selectorOpen]);
+  const {
+    dropdownRef,
+    dropdownStyle,
+    qualityDropdownRef,
+    qualityOpen,
+    selectorOpen,
+    setQualityOpen,
+    setSelectorOpen,
+  } = usePreviewDropdownState();
 
   // Stats overlay state
   const [statsExpanded, setStatsExpanded] = useState(false);
@@ -1933,49 +1762,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     }
   }, [selectedClipId, layerEditMode, clips, layers, selectedLayerId, selectLayer]);
 
-  // Calculate canvas size to fit container while maintaining aspect ratio
-  useEffect(() => {
-    const updateSize = () => {
-      if (!containerRef.current) return;
-
-      const container = containerRef.current;
-      const containerWidth = container.clientWidth;
-      const containerHeight = container.clientHeight;
-
-      if (containerWidth === 0 || containerHeight === 0) return;
-
-      setContainerSize({ width: containerWidth, height: containerHeight });
-
-      const videoAspect = effectiveResolution.width / effectiveResolution.height;
-      const containerAspect = containerWidth / containerHeight;
-
-      let width: number;
-      let height: number;
-
-      if (containerAspect > videoAspect) {
-        height = containerHeight;
-        width = height * videoAspect;
-      } else {
-        width = containerWidth;
-        height = width / videoAspect;
-      }
-
-      setCanvasSize({
-        width: Math.floor(width),
-        height: Math.floor(height),
-      });
-    };
-
-    updateSize();
-
-    const resizeObserver = new ResizeObserver(updateSize);
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-
-    return () => resizeObserver.disconnect();
-  }, [effectiveResolution.width, effectiveResolution.height]);
-
   const exportPreviewDisplaySize = useMemo(() => {
     if (!exportPreviewFrame || containerSize.width <= 0 || containerSize.height <= 0) {
       return canvasSize;
@@ -1997,19 +1783,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     exportPreviewFrame,
   ]);
 
-  useEffect(() => {
-    const canvas = exportPreviewCanvasRef.current;
-    if (!canvas || !isExporting || !exportPreviewFrame) return;
-
-    if (canvas.width !== exportPreviewFrame.width) canvas.width = exportPreviewFrame.width;
-    if (canvas.height !== exportPreviewFrame.height) canvas.height = exportPreviewFrame.height;
-
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(exportPreviewFrame, 0, 0);
-  }, [exportPreviewFrame, isExporting]);
+  usePreviewViewport({
+    containerRef,
+    effectiveResolution,
+    exportPreviewCanvasRef,
+    exportPreviewFrame,
+    isExporting,
+    setCanvasSize,
+    setContainerSize,
+  });
 
   const zoomEditCameraOrthoView = useCallback((e: PreviewWheelEvent): boolean => {
     if (!editCameraOrthoViewActive || !activeEditCameraOrthoFrame || !editCameraOrthoMode) return false;
@@ -2431,12 +2213,6 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
   const viewTransform = freeCanvasNavigationMode ? {
     transform: `scale(${viewZoom}) translate(${viewPan.x / viewZoom}px, ${viewPan.y / viewZoom}px)`,
   } : {};
-  const splatLoadPercent = activeSplatLoadProgress
-    ? formatSplatLoadPercent(activeSplatLoadProgress.percent)
-    : 0;
-  const splatLoadPhaseLabel = activeSplatLoadProgress
-    ? getSplatLoadPhaseLabel(activeSplatLoadProgress.phase)
-    : '';
   const showSceneObjectOverlay = sceneObjectOverlayEnabled && activeSharedSceneOverlayContent && isEditableSource && !isPlaying;
   const textPreviewEditorEnabled = Boolean(
     isEditableSource &&
@@ -2463,10 +2239,15 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
     playbackWarmup
   );
   const playbackWaiterVideoCount = playbackWarmup?.pendingVideoCount ?? 0;
-  const playbackWaiterLabel = 'Preparing playback';
-  const playbackWaiterDetail = playbackWaiterVideoCount > 0
-    ? `${playbackWaiterVideoCount} video${playbackWaiterVideoCount === 1 ? '' : 's'}`
-    : '';
+  const editCameraOrthoHint = editCameraOrthoViewActive && activeEditCameraOrthoFrame
+    ? `${EDIT_CAMERA_VIEW_LABELS[activeEditCameraOrthoFrame.mode]} Ortho | 1 Front | 2 Side | 3 Top | 4 Camera | Wheel Zoom | Shift+Drag/MMB Pan`
+    : null;
+  const sceneObjectWorldGridPlane =
+    editCameraModeActive && editCameraViewMode === 'front'
+      ? 'xy'
+      : editCameraModeActive && editCameraViewMode === 'side'
+        ? 'yz'
+        : 'xz';
 
   // #206: leave text typing when the selection changes or edit mode is exited.
   useEffect(() => {
@@ -2544,264 +2325,86 @@ export function Preview({ panelId, source, showTransparencyGrid }: PreviewProps)
         setPanelSource={setPanelSource}
       />
 
-      {/* Source monitor overlay - shown on top when active */}
-      {sourceMonitorActive && (
-        <SourceMonitor
-          file={sourceMonitorFile!}
-          autoplayRequestId={sourceMonitorPlaybackRequestId}
-          onClose={closeSourceMonitor}
-        />
-      )}
-
-      {/* Engine canvas + overlays - always in DOM to keep WebGPU registration alive */}
-      <div style={{ display: sourceMonitorActive ? 'none' : 'contents' }}>
-        <div className="preview-top-right-overlays">
-          <div
-            ref={setSceneGizmoToolbarTarget}
-            className="preview-scene-gizmo-toolbar-slot"
-          />
-          <StatsOverlay
-            stats={engineStats}
-            resolution={effectiveResolution}
-            expanded={statsExpanded}
-            onToggle={() => setStatsExpanded(!statsExpanded)}
-          />
-        </div>
-
-        <div
-          ref={canvasWrapperRef}
-          className={`preview-canvas-wrapper ${showTransparencyGrid ? 'show-transparency-grid' : ''}`}
-          style={viewTransform}
-        >
-          {engineInitFailed ? (
-            <div className="loading">
-              <p style={{ color: '#ff6b6b', fontWeight: 'bold', marginBottom: 8 }}>WebGPU Initialization Failed</p>
-              <p style={{ fontSize: '0.85em', opacity: 0.8, maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
-                {engineInitError || 'Unknown error'}
-              </p>
-              <p style={{ fontSize: '0.75em', opacity: 0.5, marginTop: 12 }}>
-                Try: chrome://flags → #enable-unsafe-webgpu → Enabled
-              </p>
-            </div>
-          ) : !isEngineReady ? (
-            <div className="loading">
-              <div className="loading-spinner" />
-              <p>Initializing WebGPU...</p>
-            </div>
-          ) : (
-            <>
-              <canvas
-                ref={canvasRef}
-                width={effectiveResolution.width}
-                height={effectiveResolution.height}
-                className="preview-canvas"
-                style={{
-                  width: canvasSize.width,
-                  height: canvasSize.height,
-                }}
-              />
-              {isExporting && exportPreviewFrame && (
-                <canvas
-                  ref={exportPreviewCanvasRef}
-                  width={exportPreviewFrame.width}
-                  height={exportPreviewFrame.height}
-                  className="preview-export-frame"
-                  style={{
-                    width: exportPreviewDisplaySize.width,
-                    height: exportPreviewDisplaySize.height,
-                  }}
-                />
-              )}
-              {isEditableSource && maskPanelActive && maskEditMode !== 'none' && (
-                <MaskOverlay
-                  canvasWidth={effectiveResolution.width}
-                  canvasHeight={effectiveResolution.height}
-                  displayWidth={canvasSize.width}
-                  displayHeight={canvasSize.height}
-                />
-              )}
-              {isEditableSource && sam2Active && (
-                <SAM2Overlay
-                  canvasWidth={effectiveResolution.width}
-                  canvasHeight={effectiveResolution.height}
-                />
-              )}
-              {showSceneObjectOverlay && (
-                <SceneObjectOverlay
-                  clips={clips}
-                  tracks={tracks}
-                  selectedClipId={sceneObjectOverlaySelectedClipId}
-                  selectClip={selectClip}
-                  canvasSize={canvasSize}
-                  viewport={effectiveResolution}
-                  compositionId={displayedCompId}
-                  sceneNavClipId={sceneNavClipId}
-                  previewCameraOverride={previewCameraOverride}
-                  editCameraClip={editCameraModeActive ? activeCameraClipAtPlayhead : null}
-                  editCameraTransform={editCameraModeActive ? editCameraGizmoTransform : null}
-                  showOnlyEditCamera={false}
-                  showWorldGrid={editMode && activeSharedSceneOverlayContent}
-                  worldGridPlane={
-                    editCameraModeActive && editCameraViewMode === 'front'
-                      ? 'xy'
-                      : editCameraModeActive && editCameraViewMode === 'side'
-                        ? 'yz'
-                        : 'xz'
-                  }
-                  toolbarPortalTarget={sceneGizmoToolbarTarget}
-                  enabled
-                  canSetObjectOrbitPivot={editCameraModeActive}
-                  onSetObjectOrbitPivot={focusEditCameraOnSceneObject}
-                />
-              )}
-            </>
-          )}
-        </div>
-
-        {showPlaybackWaiter && (
-          <div
-            className="preview-playback-waiter-overlay"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="preview-playback-waiter">
-              <div className="preview-playback-waiter-spinner" aria-hidden="true" />
-              <div className="preview-playback-waiter-copy">
-                <span className="preview-playback-waiter-title">{playbackWaiterLabel}</span>
-                {playbackWaiterDetail && (
-                  <span className="preview-playback-waiter-detail">{playbackWaiterDetail}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* #206: grey pasteboard backdrop behind the text editor so typing mode
-            matches the layer/video edit look (grey surround, comp cut out). */}
-        {textPreviewEditorEnabled && isEngineReady && (
-          <div
-            className="preview-text-edit-backdrop"
-            style={{
-              position: 'absolute',
-              left: canvasInContainer.x,
-              top: canvasInContainer.y,
-              width: canvasInContainer.width,
-              height: canvasInContainer.height,
-              boxShadow: '0 0 0 9999px var(--preview-pasteboard-bg)',
-              pointerEvents: 'none',
-            }}
-          />
-        )}
-
-        {textPreviewEditorEnabled && selectedClip?.textProperties && selectedTextLayer && (
-          <TextPreviewEditor
-            clip={selectedClip}
-            layer={selectedTextLayer}
-            effectiveResolution={effectiveResolution}
-            canvasSize={canvasSize}
-            canvasInContainer={canvasInContainer}
-            viewZoom={viewZoom}
-            enabled={textPreviewEditorEnabled}
-            activeTextBounds={selectedTextBounds}
-            updateTextProperties={updateTextProperties}
-            updateTextBoundsVertex={updateTextBoundsVertex}
-            updateTextBoundsVertices={updateTextBoundsVertices}
-            setPropertyValue={setPropertyValue}
-          />
-        )}
-
-        {activeSplatLoadProgress && (
-          <div
-            className={`preview-splat-progress-overlay ${activeSplatLoadProgress.phase === 'error' ? 'error' : ''}`}
-            role="status"
-            aria-live="polite"
-          >
-            <div className="preview-splat-progress-header">
-              <span>{splatLoadPhaseLabel}</span>
-              <span>{splatLoadPercent}%</span>
-            </div>
-            <div className="preview-splat-progress-name">
-              {activeSplatLoadProgress.fileName}
-            </div>
-            <div className="preview-splat-progress-track">
-              <div
-                className="preview-splat-progress-fill"
-                style={{ width: `${splatLoadPercent}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Edit mode overlay - covers full container for pasteboard support */}
-        {layerTransformMode && isEngineReady && (
-          <canvas
-            ref={overlayRef}
-            width={containerSize.width || 100}
-            height={containerSize.height || 100}
-            className="preview-overlay-fullscreen"
-            onMouseDown={handleOverlayMouseDown}
-            onMouseMove={handleOverlayMouseMove}
-            onMouseUp={handleOverlayMouseUp}
-            onMouseLeave={handleOverlayMouseUp}
-            onDoubleClick={textClipEditMode ? () => setTextTyping(true) : undefined}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: containerSize.width || '100%',
-              height: containerSize.height || '100%',
-              cursor: isDragging
-                ? (dragMode === 'scale' ? getCursorForHandle(dragHandle) : 'grabbing')
-                : getCursorForHandle(hoverHandle),
-              pointerEvents: 'auto',
-            }}
-          />
-        )}
-
-        {layerTransformMode && !textClipEditMode && isEditableSource && (
-          <div className="preview-edit-hint">
-            Drag: Move | Handles: Scale (Shift: Lock Ratio) | Scroll: Zoom | Alt+Drag: Pan
-          </div>
-        )}
-        {textClipEditMode && !textTypingActive && isEditableSource && (
-          <div className="preview-edit-hint">
-            Text Layer: Drag Move | Handles Scale | Double-click: Edit text
-          </div>
-        )}
-        {textTypingActive && isEditableSource && (
-          <div className="preview-edit-hint">
-            Text Edit: Type in bounds | Drag handles: Resize | Ctrl+Drag handle: Free corner | Double-click edge: Straighten | Esc: Done
-          </div>
-        )}
-        {maskNavigationMode && isEditableSource && (
-          <div className="preview-edit-hint">
-            Mask Edit: Scroll Zoom | Alt+Drag/MMB Pan
-          </div>
-        )}
-        {editCameraOrthoViewActive && activeEditCameraOrthoFrame && (
-          <div className="preview-edit-hint">
-            {EDIT_CAMERA_VIEW_LABELS[activeEditCameraOrthoFrame.mode]} Ortho | 1 Front | 2 Side | 3 Top | 4 Camera | Wheel Zoom | Shift+Drag/MMB Pan
-          </div>
-        )}
-        {sceneNavEnabled && (
-          <div className="preview-edit-hint">
-            {effectiveSceneNavFpsMode
-              ? 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | click preview, hold LMB to look, WASD/QE move, MMB/RMB/Shift+LMB pan, wheel moves camera'
-              : 'Scene Nav: 1 Front | 2 Side | 3 Top | 4 Camera | WASD move, Q/E up-down, LMB orbit, MMB/RMB/Shift+LMB pan, wheel moves camera'}
-          </div>
-        )}
-
-        {/* Bottom-left controls */}
-        <PreviewBottomControls
-          showTransparencyGrid={showTransparencyGrid}
-          onToggleTransparency={toggleTransparency}
-          previewQuality={previewQuality}
-          setPreviewQuality={setPreviewQuality}
-          qualityOpen={qualityOpen}
-          setQualityOpen={setQualityOpen}
-          qualityDropdownRef={qualityDropdownRef}
-        />
-      </div>
+      <PreviewCanvasMount
+        activeSharedSceneOverlayContent={activeSharedSceneOverlayContent}
+        activeSplatLoadProgress={activeSplatLoadProgress}
+        canvasInContainer={canvasInContainer}
+        canvasRef={canvasRef}
+        canvasSize={canvasSize}
+        canvasWrapperRef={canvasWrapperRef}
+        clips={clips}
+        closeSourceMonitor={closeSourceMonitor}
+        containerSize={containerSize}
+        displayedCompId={displayedCompId}
+        dragHandle={dragHandle}
+        dragMode={dragMode}
+        editCameraClip={activeCameraClipAtPlayhead}
+        editCameraGizmoTransform={editCameraGizmoTransform}
+        editCameraModeActive={editCameraModeActive}
+        editCameraOrthoHint={editCameraOrthoHint}
+        editMode={editMode}
+        effectiveResolution={effectiveResolution}
+        effectiveSceneNavFpsMode={effectiveSceneNavFpsMode}
+        engineInitError={engineInitError}
+        engineInitFailed={engineInitFailed}
+        engineStats={engineStats}
+        exportPreviewCanvasRef={exportPreviewCanvasRef}
+        exportPreviewDisplaySize={exportPreviewDisplaySize}
+        exportPreviewFrame={exportPreviewFrame}
+        focusEditCameraOnSceneObject={focusEditCameraOnSceneObject}
+        getCursorForHandle={getCursorForHandle}
+        handleOverlayMouseDown={handleOverlayMouseDown}
+        handleOverlayMouseMove={handleOverlayMouseMove}
+        handleOverlayMouseUp={handleOverlayMouseUp}
+        hoverHandle={hoverHandle}
+        isDragging={isDragging}
+        isEditableSource={isEditableSource}
+        isEngineReady={isEngineReady}
+        isExporting={isExporting}
+        layerTransformMode={layerTransformMode}
+        maskEditMode={maskEditMode}
+        maskNavigationMode={maskNavigationMode}
+        maskPanelActive={maskPanelActive}
+        overlayRef={overlayRef}
+        playbackWaiterVideoCount={playbackWaiterVideoCount}
+        previewCameraOverride={previewCameraOverride}
+        previewQuality={previewQuality}
+        qualityDropdownRef={qualityDropdownRef}
+        qualityOpen={qualityOpen}
+        sam2Active={sam2Active}
+        sceneGizmoToolbarTarget={sceneGizmoToolbarTarget}
+        sceneNavClipId={sceneNavClipId}
+        sceneNavEnabled={sceneNavEnabled}
+        sceneObjectOverlaySelectedClipId={sceneObjectOverlaySelectedClipId}
+        selectClip={selectClip}
+        selectedClip={selectedClip}
+        selectedTextBounds={selectedTextBounds}
+        selectedTextLayer={selectedTextLayer}
+        setPropertyValue={setPropertyValue}
+        setPreviewQuality={setPreviewQuality}
+        setQualityOpen={setQualityOpen}
+        setSceneGizmoToolbarTarget={setSceneGizmoToolbarTarget}
+        setTextTyping={setTextTyping}
+        showPlaybackWaiter={showPlaybackWaiter}
+        showSceneObjectOverlay={showSceneObjectOverlay}
+        showTransparencyGrid={showTransparencyGrid}
+        sourceMonitorActive={sourceMonitorActive}
+        sourceMonitorFile={sourceMonitorFile}
+        sourceMonitorPlaybackRequestId={sourceMonitorPlaybackRequestId}
+        statsExpanded={statsExpanded}
+        textClipEditMode={textClipEditMode}
+        textPreviewEditorEnabled={textPreviewEditorEnabled}
+        textTypingActive={textTypingActive}
+        toggleTransparency={toggleTransparency}
+        tracks={tracks}
+        updateTextBoundsVertex={updateTextBoundsVertex}
+        updateTextBoundsVertices={updateTextBoundsVertices}
+        updateTextProperties={updateTextProperties}
+        viewTransform={viewTransform}
+        viewZoom={viewZoom}
+        worldGridPlane={sceneObjectWorldGridPlane}
+        onToggleStats={() => setStatsExpanded(!statsExpanded)}
+      />
     </div>
   );
 }

@@ -7,22 +7,16 @@ import { downloadFCPXML } from '../../services/export/fcpxmlExport';
 import { projectFileService } from '../../services/projectFileService';
 
 const log = Logger.create('ExportPanel');
-import { FrameExporter, RESOLUTION_PRESETS, downloadBlob } from '../../engine/export';
+import { FrameExporter, downloadBlob } from '../../engine/export';
 import type { VideoCodec, ContainerFormat } from '../../engine/export';
-import { AudioExportPipeline, encodeAudioBufferToWavBlob } from '../../engine/audio';
+import { AudioExportPipeline } from '../../engine/audio';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
-  getImageSequenceFolderName,
-  isImageSequenceFolderExportSupported,
-} from '../../engine/export/ImageSequenceExporter';
-import {
   getFFmpegBridge,
   PRORES_PROFILES,
   DNXHR_PROFILES,
-  CONTAINER_FORMATS,
-  getCodecInfo,
   getCodecsForContainer,
 } from '../../engine/ffmpeg';
 import { CodecSelector } from './CodecSelector';
@@ -31,8 +25,6 @@ import {
   GIF_COLOR_PRESETS,
   GIF_DITHER_OPTIONS,
   GIF_PALETTE_MODES,
-  estimateGifSize,
-  formatByteSize,
   getGifDitherLabel,
   getGifPaletteModeLabel,
 } from '../../engine/gif/gifOptions';
@@ -49,65 +41,17 @@ import { runBrowserGifExport } from './runners/gifExportRunner';
 import { runFfmpegDirectExport } from './runners/ffmpegDirectExportRunner';
 import { runStillImageExport } from './runners/stillImageExportRunner';
 import { runImageSequenceExport } from './runners/imageSequenceExportRunner';
+import { runAudioOnlyExport } from './runners/audioOnlyExportRunner';
+import {
+  buildExportSettingsState,
+  formatExportTime,
+  IMAGE_FORMATS,
+  IMAGE_QUALITY_PRESETS,
+} from './exportSettingsState';
+import type { ExportSummaryTarget } from './exportSummaryState';
 import {
   useExportStore,
-  type ExportImageFormat as ImageFormat,
 } from '../../stores/exportStore';
-import {
-  canRetainExportRunJob,
-  createExportRunId,
-  releaseExportRunResources,
-  reportExportRunJob,
-} from '../../services/timeline/exportRuntimeReporting';
-
-type ExportSummaryTarget =
-  | 'command-bar'
-  | 'basic-output'
-  | 'basic-container'
-  | 'basic-workflow'
-  | 'video-section'
-  | 'video-resolution'
-  | 'video-fps'
-  | 'video-rate'
-  | 'video-codec'
-  | 'video-alpha'
-  | 'gif-palette'
-  | 'image-section'
-  | 'image-mode'
-  | 'image-resolution'
-  | 'image-fps'
-  | 'image-quality'
-  | 'image-range'
-  | 'audio-section'
-  | 'audio-format'
-  | 'audio-quality'
-  | 'audio-processing';
-
-type ExportSummaryBadge = {
-  label: string;
-  target: ExportSummaryTarget;
-  warning?: boolean;
-};
-
-const IMAGE_FORMATS: Array<{
-  id: ImageFormat;
-  label: string;
-  mimeType: string;
-  supportsAlpha: boolean;
-  lossless: boolean;
-}> = [
-  { id: 'png', label: 'PNG', mimeType: 'image/png', supportsAlpha: true, lossless: true },
-  { id: 'jpg', label: 'JPG', mimeType: 'image/jpeg', supportsAlpha: false, lossless: false },
-  { id: 'webp', label: 'WebP', mimeType: 'image/webp', supportsAlpha: true, lossless: false },
-  { id: 'bmp', label: 'BMP', mimeType: 'image/bmp', supportsAlpha: false, lossless: true },
-];
-
-const IMAGE_QUALITY_PRESETS = [
-  { id: 'draft', label: 'Draft', value: 0.72 },
-  { id: 'standard', label: 'Standard', value: 0.85 },
-  { id: 'high', label: 'High', value: 0.92 },
-  { id: 'max', label: 'Max', value: 1 },
-] as const;
 
 export function ExportPanel() {
   const ffmpegFrameRendererRef = useRef<FFmpegFrameRenderer | null>(null);
@@ -422,131 +366,32 @@ export function ExportPanel() {
     const actualWidth = useCustomResolution ? customWidth : width;
     const actualHeight = useCustomResolution ? customHeight : height;
     const actualFps = useCustomFps ? customFps : fps;
-    const exportRunId = createExportRunId();
-    const runJobReport = {
-      runId: exportRunId,
-      settings: {
-        width: actualWidth,
-        height: actualHeight,
-        fps: actualFps,
-        codec: videoCodec,
-        container: containerFormat,
-        bitrate,
-        startTime,
-        endTime,
-        includeAudio: true,
-        audioSampleRate,
-        audioBitrate,
-        normalizeAudio,
-        exportMode: encoder === 'htmlvideo' ? 'precise' as const : 'fast' as const,
-        filename,
-      },
-      startedAtMs: Date.now(),
-      exportMode: 'audio-only',
-      requestedAudio: true,
-      effectiveAudio: true,
-    };
-    const runAdmission = canRetainExportRunJob(runJobReport);
-    if (!runAdmission.admitted) {
-      setError(`Audio export denied by runtime admission: ${runAdmission.reason ?? 'unknown'}`);
-      setIsExporting(false);
-      return;
-    }
-    setProgress({
-      phase: 'audio',
-      currentFrame: 0,
-      totalFrames: 0,
-      percent: 0,
-      estimatedTimeRemaining: 0,
-      currentTime: startTime,
-      audioPhase: 'extracting',
-      audioPercent: 0,
-    });
-
-    const audioPipeline = new AudioExportPipeline({
-      sampleRate: audioSampleRate,
-      bitrate: audioBitrate,
-      normalize: normalizeAudio,
-    }, {
-      exportRunId,
-    });
-    ffmpegAudioPipelineRef.current = audioPipeline;
     let timelineExportStarted = false;
 
     try {
-      reportExportRunJob(runJobReport);
-      startExport(startTime, endTime);
-      timelineExportStarted = true;
+      const result = await runAudioOnlyExport({
+        width: actualWidth, height: actualHeight, fps: actualFps, startTime, endTime,
+        filename, encoder, videoCodec, containerFormat, bitrate,
+        audioOnlyFormat, audioSampleRate, audioBitrate, normalizeAudio,
+        audioPipelineRef: ffmpegAudioPipelineRef,
+        onProgress: setProgress,
+        onTimelineProgress: setExportProgress,
+        onTimelineStart: (rangeStart, rangeEnd) => {
+          startExport(rangeStart, rangeEnd);
+          timelineExportStarted = true;
+        },
+      });
 
-      if (audioOnlyFormat === 'wav') {
-        const audioBuffer = await audioPipeline.exportRawAudio(
-          startTime,
-          endTime,
-          (audioProgress) => {
-            setProgress({
-              phase: 'audio',
-              currentFrame: 0,
-              totalFrames: 0,
-              percent: audioProgress.percent,
-              estimatedTimeRemaining: 0,
-              currentTime: endTime,
-              audioPhase: audioProgress.phase,
-              audioPercent: audioProgress.percent,
-            });
-            setExportProgress(audioProgress.percent, endTime);
-          }
-        );
-
-        if (audioBuffer && audioBuffer.length > 0) {
-          const audioBlob = encodeAudioBufferToWavBlob(audioBuffer);
-          downloadBlob(audioBlob, `${filename}.wav`);
-          return;
-        }
-
-        setError('No audio clips found in the selected range');
-        return;
-      }
-
-      const audioResult = await audioPipeline.exportAudio(
-        startTime,
-        endTime,
-        (audioProgress) => {
-          setProgress({
-            phase: 'audio',
-            currentFrame: 0,
-            totalFrames: 0,
-            percent: audioProgress.percent,
-            estimatedTimeRemaining: 0,
-            currentTime: endTime,
-            audioPhase: audioProgress.phase,
-            audioPercent: audioProgress.percent,
-          });
-          setExportProgress(audioProgress.percent, endTime);
-        }
-      );
-
-      if (audioResult && audioResult.chunks.length > 0) {
-        // Convert audio chunks to a downloadable file
-        // Use the codec from the result to determine mime type and extension
-        const audioBlobs: Blob[] = [];
-        for (const chunk of audioResult.chunks) {
-          const buffer = new ArrayBuffer(chunk.byteLength);
-          chunk.copyTo(buffer);
-          audioBlobs.push(new Blob([buffer]));
-        }
-        const mimeType = audioResult.codec === 'opus' ? 'audio/ogg' : 'audio/aac';
-        const extension = audioResult.codec === 'opus' ? 'ogg' : 'aac';
-        const audioBlob = new Blob(audioBlobs, { type: mimeType });
-        downloadBlob(audioBlob, `${filename}.${extension}`);
+      if (result.kind === 'download') {
+        downloadBlob(result.blob, result.filename);
       } else {
-        setError('No audio clips found in the selected range');
+        setError(result.message);
       }
     } catch (e) {
       log.error('Audio export failed', e);
       setError(e instanceof Error ? e.message : 'Audio export failed');
     } finally {
       ffmpegAudioPipelineRef.current = null;
-      releaseExportRunResources(exportRunId);
       setIsExporting(false);
       if (timelineExportStarted) {
         endExport();
@@ -666,296 +511,106 @@ export function ExportPanel() {
       }
     }
   }, [customFps, customHeight, customWidth, encoder, endExport, filename, fps, getCurrentExportRange, height, imageFormat, imageQuality, isExporting, setError, setExportPhase, setExportProgress, setIsExporting, setProgress, startExport, useCustomFps, useCustomResolution, width]);
-  // Format time as MM:SS.ff
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = (seconds % 60).toFixed(2);
-    return `${m}:${s.padStart(5, '0')}`;
-  };
-
-  // Get actual dimensions and FPS
-  const actualWidth = useCustomResolution ? customWidth : width;
-  const actualHeight = useCustomResolution ? customHeight : height;
-  const actualFps = useCustomFps ? customFps : fps;
-  const imageSequenceFrameCount = Math.max(1, Math.ceil(Math.max(0, endTime - startTime) * actualFps));
-  const gifSizeEstimate = estimateGifSize({
-    width: actualWidth,
-    height: actualHeight,
-    fps: actualFps,
-    durationSeconds: endTime - startTime,
+  const formatTime = formatExportTime;
+  const {
+    actualWidth,
+    actualHeight,
+    actualFps,
+    imageSequenceFrameCount,
+    gifSizeRangeLabel,
+    webCodecsAvailable,
+    ffmpegAvailable,
+    ffmpegCodecInfo,
+    showFFmpegQualityControl,
+    isWebCodecsEncoder,
+    isXmlMode,
+    isImageMode,
+    isImageSequenceMode,
+    imageSequenceFolderSupported,
+    imageSequenceOutputLabel,
+    isGifMode,
+    isVideoMode,
+    isAudioOnlyMode,
+    currentContainerId,
+    currentCodecLabel,
+    methodMeta,
+    selectedImageFormat,
+    browserAudioExtension,
+    browserAudioCodecLabel,
+    browserAudioUnavailable,
+    currentAudioCodecLabel,
+    outputHeight,
+    frameCount,
+    displayOutputName,
+    displayContainerLabel,
+    estimatedSizeLabel,
+    sizeStatLabel,
+    webCodecsRateNote,
+    exportDisabled,
+    primaryExportLabel,
+    usesBrowserProgress,
+    summaryBadges,
+    showRangeInVideo,
+    showRangeInAudio,
+    quickResolutionPresets,
+    quickFrameRatePresets,
+    videoContainerFormats,
+    webQualityPresets,
+    audioSampleRatePresets,
+    audioBitratePresets,
+    selectedPresetName,
+  } = buildExportSettingsState({
+    composition,
+    presets,
+    selectedPresetId,
+    durationStartTime: startTime,
+    durationEndTime: endTime,
+    playheadPosition,
+    encoder,
+    width,
+    height,
+    customWidth,
+    customHeight,
+    useCustomResolution,
+    fps,
+    customFps,
+    useCustomFps,
+    filename,
+    bitrate,
+    containerFormat,
+    videoCodec,
+    rateControl,
+    ffmpegCodec,
+    ffmpegContainer,
+    ffmpegQuality,
+    ffmpegBitrate,
+    ffmpegRateControl,
     gifColors,
     gifDither,
     gifLoop,
     gifPaletteMode,
     gifOptimize,
     gifAlphaThreshold,
+    stackedAlpha,
+    includeAudio,
+    audioOnlyFormat,
+    audioSampleRate,
+    audioBitrate,
+    normalizeAudio,
+    audioCodec,
+    isAudioSupported,
+    isSupported,
+    isFFmpegSupported,
+    isFFmpegLoading,
+    isFFmpegMultiThreaded,
+    videoEnabled,
+    visualMode,
+    imageFormat,
+    imageExportMode,
+    imageQuality,
+    specialContainer,
+    isExporting,
   });
-  const gifSizeRangeLabel = `${formatByteSize(gifSizeEstimate.minBytes)}-${formatByteSize(gifSizeEstimate.maxBytes)}`;
-
-  // Format file size estimate - works for both encoders
-  const estimatedSize = () => {
-    const durationSec = endTime - startTime;
-    if (durationSec <= 0) {
-      return '-';
-    }
-    if (visualMode === 'gif') {
-      return `~${formatByteSize(gifSizeEstimate.bytes)}`;
-    }
-    if (durationSec <= 0) return '—';
-
-    let estimatedBitrate: number;
-
-    if (!videoEnabled) {
-      estimatedBitrate = audioOnlyFormat === 'wav'
-        ? audioSampleRate * 2 * 16
-        : audioBitrate;
-    } else if (encoder === 'webcodecs' || encoder === 'htmlvideo') {
-      estimatedBitrate = bitrate;
-    } else if (ffmpegRateControl === 'crf') {
-      const pixels = (useCustomResolution ? customWidth * customHeight : width * height);
-      const qualityFactor = Math.pow(2, (51 - ffmpegQuality) / 6);
-      estimatedBitrate = (pixels * actualFps * qualityFactor) / 10000;
-      estimatedBitrate = Math.min(estimatedBitrate, 100_000_000);
-    } else {
-      estimatedBitrate = ffmpegBitrate;
-    }
-
-    if (videoEnabled && includeAudio && (encoder === 'webcodecs' || encoder === 'htmlvideo')) {
-      estimatedBitrate += audioBitrate;
-    }
-
-    const bytes = (estimatedBitrate / 8) * durationSec;
-    if (bytes > 1024 * 1024 * 1024) {
-      return `~${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-    }
-    return `~${(bytes / (1024 * 1024)).toFixed(0)} MB`;
-  };
-
-  // Check if current encoder is available
-  const webCodecsAvailable = isSupported;
-  const ffmpegAvailable = isFFmpegSupported;
-
-  // Get codec info for FFmpeg display
-  const ffmpegCodecInfo = getCodecInfo(visualMode === 'gif' ? 'gif' : ffmpegCodec);
-  // Only MJPEG has quality slider (q:v), professional codecs use profiles
-  const showFFmpegQualityControl = visualMode !== 'gif' && ffmpegCodec === 'mjpeg';
-  const isWebCodecsEncoder = encoder === 'webcodecs' || encoder === 'htmlvideo';
-  const isXmlMode = specialContainer === 'xml';
-  const isImageMode = !isXmlMode && videoEnabled && visualMode === 'image';
-  const isImageSequenceMode = isImageMode && imageExportMode === 'sequence';
-  const imageSequenceFolderSupported = isImageSequenceMode && isImageSequenceFolderExportSupported();
-  const imageSequenceOutputLabel = imageSequenceFolderSupported ? 'Folder' : 'ZIP';
-  const imageSequenceOutputName = imageSequenceFolderSupported
-    ? `${getImageSequenceFolderName(filename || 'export', imageFormat)}/`
-    : `${getImageSequenceFolderName(filename || 'export', imageFormat)}.zip`;
-  const isGifMode = !isXmlMode && videoEnabled && visualMode === 'gif';
-  const isVideoMode = !isXmlMode && videoEnabled && (visualMode === 'video' || isGifMode);
-  const isAudioOnlyMode = !isXmlMode && !videoEnabled;
-  const currentContainerId = isXmlMode ? 'fcpxml' : isGifMode ? 'gif' : (isWebCodecsEncoder ? containerFormat : ffmpegContainer);
-  const currentContainerLabel = isXmlMode
-    ? 'FCPXML'
-    : isGifMode
-      ? 'Animated GIF'
-    : isWebCodecsEncoder
-      ? FrameExporter.getContainerFormats().find(({ id }) => id === containerFormat)?.label ?? containerFormat.toUpperCase()
-      : CONTAINER_FORMATS.find(({ id }) => id === ffmpegContainer)?.name ?? ffmpegContainer.toUpperCase();
-  const currentCodecLabel = isGifMode
-    ? (encoder === 'ffmpeg' ? 'FFmpeg GIF' : 'Browser GIF')
-    : isWebCodecsEncoder
-    ? FrameExporter.getVideoCodecs(containerFormat).find(({ id }) => id === videoCodec)?.label ?? videoCodec.toUpperCase()
-    : ffmpegCodecInfo?.name ?? ffmpegCodec.toUpperCase();
-  const methodMeta = isGifMode
-    ? {
-        title: encoder === 'ffmpeg' ? 'FFmpeg GIF' : 'Browser GIF',
-        badge: encoder === 'ffmpeg' ? 'Palette' : 'Browser',
-        description: encoder === 'ffmpeg'
-          ? 'Palette and dither controlled animated GIF output.'
-          : 'Browser-side animated GIF output without loading FFmpeg.',
-      }
-    : encoder === 'webcodecs'
-    ? {
-        title: 'WebCodecs Fast',
-        badge: 'Fast',
-        description: 'Best for quick delivery renders directly in the browser.',
-      }
-    : encoder === 'htmlvideo'
-      ? {
-          title: 'HTMLVideo Precise',
-          badge: 'Precise',
-          description: 'Explicit HTMLVideo seeking for difficult timing cases.',
-        }
-      : {
-          title: 'FFmpeg CPU',
-          badge: isFFmpegMultiThreaded ? 'Intermediate' : 'CPU',
-          description: 'Professional intermediates and edit-friendly interchange formats.',
-        };
-  const ffmpegAudioCodecLabel = isGifMode
-    ? 'None'
-    : ffmpegContainer === 'mov'
-    ? 'AAC'
-    : ffmpegContainer === 'mkv'
-      ? 'FLAC'
-      : ffmpegContainer === 'avi'
-        ? 'PCM'
-        : ffmpegContainer === 'mxf'
-          ? 'PCM'
-          : 'AAC';
-  const effectiveIncludeAudio = (isVideoMode || isXmlMode) && includeAudio && !isGifMode;
-  const selectedImageFormat = IMAGE_FORMATS.find(({ id }) => id === imageFormat) ?? IMAGE_FORMATS[0];
-  const browserAudioExtension = audioCodec === 'opus' ? 'ogg' : 'aac';
-  const browserAudioCodecLabel = audioCodec?.toUpperCase() ?? 'AAC';
-  const audioOnlyExtension = audioOnlyFormat === 'wav' ? 'wav' : browserAudioExtension;
-  const audioOnlyCodecLabel = audioOnlyFormat === 'wav' ? 'WAV PCM' : browserAudioCodecLabel;
-  const browserAudioUnavailable = isWebCodecsEncoder && !isAudioSupported && !(isAudioOnlyMode && audioOnlyFormat === 'wav');
-  const currentAudioCodecLabel = isVideoMode && encoder === 'ffmpeg'
-    ? ffmpegAudioCodecLabel
-    : isAudioOnlyMode
-      ? audioOnlyCodecLabel
-      : browserAudioCodecLabel;
-  const outputHeight = stackedAlpha && isVideoMode && !isGifMode ? actualHeight * 2 : actualHeight;
-  const frameCount = isImageSequenceMode ? imageSequenceFrameCount : isVideoMode ? Math.ceil((endTime - startTime) * actualFps) : 1;
-  const displayExtension = isXmlMode ? 'fcpxml' : isAudioOnlyMode ? audioOnlyExtension : isImageMode ? (isImageSequenceMode ? imageSequenceOutputLabel.toLowerCase() : imageFormat) : isGifMode ? 'gif' : currentContainerId;
-  const displayOutputName = isImageSequenceMode ? imageSequenceOutputName : `${filename || 'export'}.${displayExtension}`;
-  const displayContainerLabel = isImageSequenceMode ? imageSequenceOutputLabel : `.${displayExtension}`;
-  const estimatedSizeLabel = isXmlMode ? 'Metadata only' : isImageMode ? (isImageSequenceMode ? `${imageSequenceFrameCount} frames ${imageSequenceOutputLabel}` : 'Current frame') : (!videoEnabled && !includeAudio && !isGifMode) ? '-' : estimatedSize();
-  const sizeLabelPrefix = isVideoMode && isWebCodecsEncoder && !isGifMode ? 'Target' : 'Size';
-  const sizeStatLabel = isVideoMode && isWebCodecsEncoder && !isGifMode ? 'Target Size' : 'Est. Size';
-  const webCodecsRateNote = rateControl === 'vbr'
-    ? 'VBR is only a bitrate target. Simple shots can encode much smaller than the selected Mbps.'
-    : 'CBR tries to stay closer, but browser encoders can still drift from the requested bitrate.';
-  const exportModeLabel = isXmlMode
-    ? 'Timeline XML'
-    : isImageMode
-    ? (isImageSequenceMode ? 'Image Sequence' : 'Image Frame')
-    : isGifMode
-      ? 'Animated GIF'
-    : isVideoMode
-      ? (effectiveIncludeAudio ? 'Video + Audio' : 'Video Only')
-      : (includeAudio ? 'Audio Only' : 'Nothing Selected');
-  const exportDisabled =
-    isExporting ||
-    (isImageSequenceMode && endTime <= startTime) ||
-    (!isImageMode && !isXmlMode && endTime <= startTime) ||
-    isAudioOnlyMode && (!includeAudio || (audioOnlyFormat === 'browser' && !isAudioSupported)) ||
-    (isVideoMode && encoder === 'ffmpeg' && isFFmpegLoading);
-  const primaryExportLabel = 'Export';
-  const usesBrowserProgress = isImageSequenceMode || encoder === 'webcodecs' || encoder === 'htmlvideo';
-  const audioSummaryBadges = (effectiveIncludeAudio || isAudioOnlyMode && includeAudio)
-    ? [
-        { label: currentAudioCodecLabel, target: 'audio-format' as const },
-        { label: `${audioSampleRate / 1000} kHz`, target: 'audio-format' as const },
-        { label: isAudioOnlyMode && audioOnlyFormat === 'wav' ? '16-bit PCM' : `${Math.round(audioBitrate / 1000)} kbps`, target: 'audio-quality' as const },
-        { label: normalizeAudio ? 'Normalized' : 'Unprocessed', target: 'audio-processing' as const },
-      ]
-    : [];
-  const summaryBadges: ExportSummaryBadge[] = isXmlMode
-    ? [
-        { label: exportModeLabel, target: 'basic-container' },
-        { label: currentContainerLabel, target: 'basic-container' },
-        { label: `${composition?.width ?? actualWidth}x${composition?.height ?? actualHeight}`, target: 'basic-output' },
-        { label: `${composition?.frameRate ?? actualFps} fps`, target: 'basic-output' },
-        { label: includeAudio ? 'With audio refs' : 'No audio refs', target: 'audio-section' },
-      ]
-    : isImageMode
-    ? [
-        { label: exportModeLabel, target: 'image-section' },
-        { label: isImageSequenceMode ? `Sequence ${imageSequenceOutputLabel}` : 'Single frame', target: 'image-mode' },
-        { label: selectedImageFormat.label, target: 'basic-container' },
-        { label: `${actualWidth}x${actualHeight}`, target: 'image-resolution' },
-        {
-          label: isImageSequenceMode
-            ? `${imageSequenceFrameCount} frames`
-            : `Frame ${formatTime(playheadPosition)}`,
-          target: isImageSequenceMode ? 'image-range' : 'image-section',
-        },
-        ...(isImageSequenceMode ? [{
-          label: `${actualFps} fps`,
-          target: 'image-fps' as const,
-        }] : []),
-        {
-          label: selectedImageFormat.lossless ? 'Lossless' : `${Math.round(imageQuality * 100)}% quality`,
-          target: 'image-quality',
-        },
-        {
-          label: selectedImageFormat.supportsAlpha ? 'Alpha kept' : 'Opaque export',
-          target: 'image-quality',
-          warning: !selectedImageFormat.supportsAlpha,
-        },
-      ]
-    : [
-        {
-          label: exportModeLabel,
-          target: isVideoMode ? 'video-section' : 'audio-section',
-        },
-        {
-          label: isVideoMode ? methodMeta.title : `Audio ${currentAudioCodecLabel}`,
-          target: isVideoMode ? 'video-section' : 'audio-format',
-        },
-        ...(isVideoMode ? [
-          { label: currentContainerLabel, target: 'basic-container' as const },
-          { label: currentCodecLabel, target: 'video-codec' as const },
-          { label: `${actualWidth}x${outputHeight}`, target: 'video-resolution' as const },
-          { label: `${actualFps} fps`, target: 'video-fps' as const },
-          {
-            label: isGifMode
-              ? `${gifColors} colors`
-              : encoder === 'ffmpeg'
-              ? (showFFmpegQualityControl ? `MJPEG Q${ffmpegQuality}` : currentCodecLabel)
-              : `${(bitrate / 1_000_000).toFixed(1)} Mbps`,
-            target: isGifMode
-              ? 'gif-palette' as const
-              : encoder === 'ffmpeg' && !showFFmpegQualityControl ? 'video-codec' as const : 'video-rate' as const,
-          },
-        ] : []),
-        ...audioSummaryBadges,
-        {
-          label: `Range ${formatTime(startTime)} - ${formatTime(endTime)}`,
-          target: isVideoMode ? (isGifMode ? 'gif-palette' : 'video-alpha') : 'audio-processing',
-        },
-        {
-          label: `Duration ${formatTime(endTime - startTime)}`,
-          target: isVideoMode ? (isGifMode ? 'gif-palette' : 'video-alpha') : 'audio-processing',
-        },
-        ...(stackedAlpha && isVideoMode && !isGifMode ? [{
-          label: 'Stacked alpha',
-          target: 'video-alpha' as const,
-          warning: true,
-        }] : []),
-        {
-          label: `${sizeLabelPrefix} ${estimatedSizeLabel}`,
-          target: isVideoMode
-            ? (isGifMode ? 'gif-palette' : isWebCodecsEncoder || showFFmpegQualityControl ? 'video-rate' : 'video-codec')
-            : 'audio-quality',
-          warning: true,
-        },
-      ];
-  const showRangeInVideo = isVideoMode;
-  const showRangeInAudio = isAudioOnlyMode && includeAudio;
-  const quickResolutionPresets = RESOLUTION_PRESETS;
-  const quickFrameRatePresets = [24, 30, 60];
-  const gifContainerFormat = CONTAINER_FORMATS.find(({ id }) => id === 'gif');
-  const videoContainerFormats = isWebCodecsEncoder && gifContainerFormat
-    ? [...FrameExporter.getContainerFormats(), gifContainerFormat]
-    : CONTAINER_FORMATS;
-  const webQualityPresets = [
-    { id: 'review', label: 'Review', detail: '8 Mbps', value: 8_000_000 },
-    { id: 'standard', label: 'Standard', detail: '15 Mbps', value: 15_000_000 },
-    { id: 'high', label: 'High', detail: '25 Mbps', value: 25_000_000 },
-    { id: 'master', label: 'Master', detail: '50 Mbps', value: 50_000_000 },
-  ] as const;
-  const audioSampleRatePresets = [
-    { value: 48000 as const, label: '48 kHz' },
-    { value: 44100 as const, label: '44.1 kHz' },
-  ] as const;
-  const audioBitratePresets = [
-    { value: 128000, label: '128 kbps' },
-    { value: 192000, label: '192 kbps' },
-    { value: 256000, label: '256 kbps' },
-    { value: 320000, label: '320 kbps' },
-  ] as const;
-  const selectedPreset = presets.find((preset) => preset.id === selectedPresetId) ?? null;
-  const selectedPresetName = selectedPreset?.name ?? '';
-
   const handleQuickResolutionPreset = useCallback((value: string) => {
     setUseCustomResolution(false);
     handleResolutionChange(value);
@@ -2360,7 +2015,7 @@ export function ExportPanel() {
                   disabled={useCustomResolution}
                   style={{ flex: 1 }}
                 >
-                  {RESOLUTION_PRESETS.map(({ label, width: w, height: h }) => (
+                  {quickResolutionPresets.map(({ label, width: w, height: h }) => (
                     <option key={`${w}x${h}`} value={`${w}x${h}`}>
                       {label}
                     </option>

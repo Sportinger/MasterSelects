@@ -8,6 +8,15 @@ import {
   getProjectRawPathCandidates,
   getStoredProjectFileHandle,
 } from './project/mediaSourceResolver';
+import {
+  mediaRuntimeObjectUrlLeaseOwner,
+  toObjectUrlRuntimeSourceId,
+} from './mediaRuntime/objectUrlLeases';
+import {
+  mediaRuntimeScrubAudioLeaseOwner,
+  toScrubAudioRuntimeSourceId,
+} from './mediaRuntime/scrubAudioLeases';
+import type { RuntimeSourceId } from './mediaRuntime/types';
 
 const log = Logger.create('ProxyFrameCache');
 import { fileSystemService } from './fileSystemService';
@@ -887,11 +896,13 @@ class ProxyFrameCache {
   private proxyVideoSourcePromises: Map<string, Promise<ProxyVideoSourceState | null>> = new Map();
   private preloadQueue: string[] = [];
   private isPreloading = false;
+  private objectUrlLeaseSequence = 0;
+  private scrubAudioLeaseSequence = 0;
 
   // Audio proxy cache
   private audioCache: Map<string, HTMLAudioElement> = new Map();
   private audioLoadingPromises: Map<string, Promise<HTMLAudioElement | null>> = new Map();
-  private ownedAudioUrls = new Set<string>();
+  private ownedAudioUrlLeaseIds = new Map<string, RuntimeSourceId>();
 
   // Audio buffer cache for instant scrubbing (Web Audio API)
   private audioBufferCache: Map<string, AudioBuffer> = new Map();
@@ -926,6 +937,102 @@ class ProxyFrameCache {
 
   private getVideoFrameResourceId(mediaFileId: string): string {
     return `proxy-frame-cache:${mediaFileId}:video-frames`;
+  }
+
+  private nextObjectUrlRuntimeSourceId(ownerId: string, type: string): RuntimeSourceId {
+    this.objectUrlLeaseSequence += 1;
+    return toObjectUrlRuntimeSourceId(`${ownerId}:${this.objectUrlLeaseSequence}`, type);
+  }
+
+  private nextScrubAudioRuntimeSourceId(ownerId: string, type: string): RuntimeSourceId {
+    this.scrubAudioLeaseSequence += 1;
+    return toScrubAudioRuntimeSourceId(`${ownerId}:${this.scrubAudioLeaseSequence}`, type);
+  }
+
+  private acquireObjectUrl(
+    runtimeSourceId: RuntimeSourceId,
+    ownerId: string,
+    blob: Blob
+  ): string {
+    const lease = mediaRuntimeObjectUrlLeaseOwner.acquire({
+      runtimeSourceId,
+      ownerId,
+      blob,
+      policy: 'interactive',
+    });
+    const url = lease.getRuntimeHandles()?.url;
+    if (!url) {
+      throw new Error('Object URL lease did not acquire a URL');
+    }
+    return url;
+  }
+
+  private releaseObjectUrl(runtimeSourceId: RuntimeSourceId, reason: string): void {
+    mediaRuntimeObjectUrlLeaseOwner.release(runtimeSourceId, reason);
+  }
+
+  private acquireLegacyFrameObjectUrl(
+    mediaFileId: string,
+    frameIndex: number,
+    blob: Blob
+  ): { runtimeSourceId: RuntimeSourceId; url: string } {
+    const runtimeSourceId = this.nextObjectUrlRuntimeSourceId(
+      `proxy-frame-cache:${mediaFileId}:${frameIndex}`,
+      'legacy-frame-image'
+    );
+    return {
+      runtimeSourceId,
+      url: this.acquireObjectUrl(
+        runtimeSourceId,
+        `proxy-frame-cache:${mediaFileId}:legacy-frame:${frameIndex}`,
+        blob
+      ),
+    };
+  }
+
+  private acquireAudioProxyObjectUrl(mediaFileId: string, audioFile: Blob): string {
+    const runtimeSourceId = this.nextObjectUrlRuntimeSourceId(
+      `proxy-frame-cache:${mediaFileId}`,
+      'audio-proxy'
+    );
+    const url = this.acquireObjectUrl(
+      runtimeSourceId,
+      `proxy-frame-cache:${mediaFileId}:audio-proxy`,
+      audioFile
+    );
+    this.ownedAudioUrlLeaseIds.set(url, runtimeSourceId);
+    return url;
+  }
+
+  private releaseOwnedAudioObjectUrl(src: string, reason: string): void {
+    const runtimeSourceId = this.ownedAudioUrlLeaseIds.get(src);
+    if (!runtimeSourceId) return;
+    this.releaseObjectUrl(runtimeSourceId, reason);
+    this.ownedAudioUrlLeaseIds.delete(src);
+  }
+
+  private getScrubAudioContextRuntimeSourceId(): RuntimeSourceId {
+    return toScrubAudioRuntimeSourceId('proxy-frame-cache', 'audio-context');
+  }
+
+  private getScrubAudioBufferRuntimeSourceId(mediaFileId: string): RuntimeSourceId {
+    return toScrubAudioRuntimeSourceId(`proxy-frame-cache:${mediaFileId}`, 'audio-buffer');
+  }
+
+  private createAudioProxyElement(mediaFileId: string): HTMLAudioElement {
+    const lease = mediaRuntimeScrubAudioLeaseOwner.acquireAudioElement({
+      runtimeSourceId: this.nextScrubAudioRuntimeSourceId(
+        `proxy-frame-cache:${mediaFileId}`,
+        'audio-proxy-element'
+      ),
+      ownerId: `proxy-frame-cache:${mediaFileId}:audio-proxy-element`,
+      policy: 'interactive',
+    });
+    const audio = lease.getRuntimeHandles()?.element;
+    if (!audio) {
+      throw new Error('Scrub audio element lease did not acquire an element');
+    }
+    return audio;
   }
 
   private getAudioProxySrcKind(src: string | undefined): 'blob-url' | 'file-path' | 'project-path' | 'remote-url' | 'media-source' | 'unknown' {
@@ -1096,6 +1203,13 @@ class ProxyFrameCache {
       return false;
     }
 
+    mediaRuntimeScrubAudioLeaseOwner.trackAudioBuffer({
+      runtimeSourceId: this.getScrubAudioBufferRuntimeSourceId(mediaFileId),
+      ownerId: `proxy-frame-cache:${mediaFileId}:audio-buffer`,
+      buffer,
+      mediaFileId,
+      policy: 'interactive',
+    });
     this.touchAudioBufferCacheEntry(mediaFileId, buffer);
     timelineRuntimeCoordinator.retainResource(resource);
     this.enforceAudioBufferCacheLimit();
@@ -1104,6 +1218,10 @@ class ProxyFrameCache {
 
   private releaseAudioBufferResource(mediaFileId: string): void {
     timelineRuntimeCoordinator.releaseResource(this.getAudioBufferResourceId(mediaFileId));
+    mediaRuntimeScrubAudioLeaseOwner.releaseAudioBuffer(
+      this.getScrubAudioBufferRuntimeSourceId(mediaFileId),
+      `proxy-frame-cache:${mediaFileId}:release-audio-buffer`
+    );
   }
 
   private createAudioProxyElementResource(
@@ -1288,13 +1406,12 @@ class ProxyFrameCache {
   }
 
   private disposeAudioProxyElement(mediaFileId: string, audio: HTMLAudioElement): void {
-    const src = audio.currentSrc || audio.src;
-    audio.pause();
-    audio.removeAttribute('src');
-    audio.load();
-    if (src && this.ownedAudioUrls.has(src)) {
-      URL.revokeObjectURL(src);
-      this.ownedAudioUrls.delete(src);
+    const src = mediaRuntimeScrubAudioLeaseOwner.releaseAudioElement(
+      audio,
+      `proxy-frame-cache:${mediaFileId}:dispose-audio-proxy`
+    );
+    if (src) {
+      this.releaseOwnedAudioObjectUrl(src, `proxy-frame-cache:${mediaFileId}:dispose-audio-proxy`);
     }
     this.audioCache.delete(mediaFileId);
     this.releaseAudioProxyElementResource(mediaFileId);
@@ -1683,16 +1800,20 @@ class ProxyFrameCache {
       if (!blob) return null;
 
       // Create image from blob
-      const url = URL.createObjectURL(blob);
+      const { runtimeSourceId, url } = this.acquireLegacyFrameObjectUrl(
+        mediaFileId,
+        frameIndex,
+        blob
+      );
       const image = new Image();
 
       return new Promise((resolve) => {
         image.onload = () => {
-          URL.revokeObjectURL(url);
+          this.releaseObjectUrl(runtimeSourceId, `proxy-frame-cache:${mediaFileId}:legacy-frame-loaded`);
           resolve(image);
         };
         image.onerror = () => {
-          URL.revokeObjectURL(url);
+          this.releaseObjectUrl(runtimeSourceId, `proxy-frame-cache:${mediaFileId}:legacy-frame-error`);
           resolve(null);
         };
         image.src = url;
@@ -1995,8 +2116,7 @@ class ProxyFrameCache {
         if (!audioFile) {
           return null;
         }
-        audioSrc = URL.createObjectURL(audioFile);
-        this.ownedAudioUrls.add(audioSrc);
+        audioSrc = this.acquireAudioProxyObjectUrl(mediaFileId, audioFile);
       }
 
       const admission = this.canRetainAudioProxyElement(mediaFileId, audioSrc);
@@ -2007,15 +2127,12 @@ class ProxyFrameCache {
           reason: admission.reason,
           rejectedUnits: admission.rejectedUnits,
         });
-        if (this.ownedAudioUrls.has(audioSrc)) {
-          URL.revokeObjectURL(audioSrc);
-          this.ownedAudioUrls.delete(audioSrc);
-        }
+        this.releaseOwnedAudioObjectUrl(audioSrc, `proxy-frame-cache:${mediaFileId}:audio-proxy-rejected`);
         return null;
       }
 
       // Create audio element with object URL
-      const audio = new Audio();
+      const audio = this.createAudioProxyElement(mediaFileId);
       audio.src = audioSrc;
       audio.preload = 'auto';
 
@@ -2042,9 +2159,8 @@ class ProxyFrameCache {
       return audio;
     } catch (e) {
       log.warn(`Failed to load audio proxy for ${mediaFileId}`, e);
-      if (audioSrc && this.ownedAudioUrls.has(audioSrc)) {
-        URL.revokeObjectURL(audioSrc);
-        this.ownedAudioUrls.delete(audioSrc);
+      if (audioSrc) {
+        this.releaseOwnedAudioObjectUrl(audioSrc, `proxy-frame-cache:${mediaFileId}:audio-proxy-error`);
       }
       this.releaseAudioProxyElementResource(mediaFileId);
       return null;
@@ -2081,7 +2197,16 @@ class ProxyFrameCache {
    */
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new AudioContext();
+      const lease = mediaRuntimeScrubAudioLeaseOwner.acquireAudioContext({
+        runtimeSourceId: this.getScrubAudioContextRuntimeSourceId(),
+        ownerId: 'proxy-frame-cache:scrub-audio-context',
+        policy: 'interactive',
+      });
+      const audioContext = lease.getRuntimeHandles()?.context;
+      if (!audioContext) {
+        throw new Error('Scrub audio context lease did not acquire a context');
+      }
+      this.audioContext = audioContext;
       this.scrubGain = this.audioContext.createGain();
       this.scrubAnalyser = this.audioContext.createAnalyser();
       this.scrubAnalyser.fftSize = 1024;
@@ -3015,7 +3140,7 @@ class ProxyFrameCache {
       this.disposeAudioProxyElement(mediaFileId, audio);
     }
     this.audioCache.clear();
-    this.ownedAudioUrls.clear();
+    this.ownedAudioUrlLeaseIds.clear();
 
     const audioBufferMediaIds = Array.from(this.audioBufferCache.keys());
     this.audioBufferCache.clear();
@@ -3047,8 +3172,11 @@ class ProxyFrameCache {
     this.stopScrubAudio();
 
     // Close the AudioContext
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      this.audioContext.close();
+    if (this.audioContext) {
+      mediaRuntimeScrubAudioLeaseOwner.releaseAudioContext(
+        this.getScrubAudioContextRuntimeSourceId(),
+        'proxy-frame-cache:dispose-audio-context'
+      );
     }
     this.audioContext = null;
     this.scrubGain = null;
