@@ -413,7 +413,6 @@ function TimelineTrackComponent({
     activeTimelineToolId,
     allTrackClips,
     clips,
-    scrollX,
     timelineClipGeometryById,
     track,
   });
