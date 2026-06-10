@@ -18,8 +18,9 @@ orchestrator or worker-agent execution run starts.
 - Handoff templates: prepared for execution only
 - Source implementation: current bounded source packet has explicit write set,
   forbidden files, and gates
-- Current bounded packet: wave 16 running; waves 13-15 complete. Active:
-  audio leak fixes, ExportPanel split 3, and Preview split 3.
+- Current bounded packet:
+  `P3-PROJECTLOAD-FLASHBOARD-HYDRATION-SPLIT-213`, source split packet with
+  explicit projectLoad FlashBoard hydration write set.
 - Completed source/tooling packet: `P0-REG-001`; focused registry checks passed.
 - Completed bounded packet: `P0-BASELINE-REFRESH-001`, read-only plus docs.
 - Completed bounded packet: `P1-CONTRACT-001`, contracts and focused boundary
@@ -2233,9 +2234,65 @@ orchestrator or worker-agent execution run starts.
   reset to the lease-owner seam. Full suite then 4173/4173.
 - Wave 15 verification:
   Orchestrator-verified: tsc clean; FULL suite green 4173/4173.
-- Next active packets:
-  wave 16 is running audio leak fixes, ExportPanel split 3, and Preview split
-  3.
+- Wave 16 closure completed:
+  `P6-AUDIO-CONTEXT-LEAK-FIXES-207` fixed all 4 census leak gaps:
+  `AudioProxyService` disposer + `beforeunload`; try/finally with
+  state-guards in `waveformHelpers`, `whisperService`, and `clipTranscriber`
+  x2; double-close is safe, and the granted surgical exception in
+  `stores/timeline` was honored as a finally-wrapper only.
+  `P5-EXPORTPANEL-SPLIT-208` extracted `useExportRunController` (384),
+  `webCodecsExportRunner`, `fcpxmlExportRunner`, `ExportProgressView`, and
+  `ExportAdvancedSummarySections`; `ExportPanel` fell 2399 -> 1890 and is now
+  getState-FREE, with the hard-target entry removed and hits living in
+  controller/runners. `P5-PREVIEW-SPLIT-209` extracted wheel handler (258),
+  mouse routing (340), context menu, playback display, view geometry, and
+  camera math; `Preview` fell 1993 -> 1630, one `getState` hit retired
+  outright (max-hits ratchet 665 -> 664), and native wheel capture/passive
+  flags stayed preserved in the host.
+- Wave 16 ops note:
+  Codex usage limit hit ~4:05 (after ~75 dispatches); wave re-dispatched on
+  `Start-Sleep` timers past the 4:31 reset; self-healing worked; failure mode
+  documented in the dispatch skill.
+- Wave 16 verification:
+  Orchestrator-verified: tsc clean; guards + adoption + dispatcher + proxy suites green.
+- Completed bounded packet:
+  `P6-AUDIOMANAGER-FACADE-MERGE-210`; collapsed deprecated `audioManager` Web
+  Audio ownership into an `audioRoutingManager` facade and extracted
+  `audioStatusTracker` into `src/services/audio/audioStatusTracker.ts`.
+  Current snapshots: `audioManager.ts` 117 LOC, `audioStatusTracker.ts` 46
+  LOC, `audioRoutingManager.ts` 1757 LOC, and
+  `tests/unit/audioManagerFacade.test.ts` 128 LOC. The Web Audio construction
+  scan now shows `new AudioContext`, `createMediaElementSource`, and EQ filter
+  creation only in `audioRoutingManager`; `audioManager` keeps the legacy
+  import surface. Focused audio facade tests passed with 1 file and 3 tests;
+  `npx tsc -b --pretty false`, `git diff --check` with only LF/CRLF warnings,
+  and `fc.exe /b AGENTS.md CLAUDE.md` passed.
+- Completed bounded packet:
+  `P5-SCENE-OBJECT-OVERLAY-SPLIT-211`; split Scene Object Overlay display,
+  projection, transform, type, and chrome helpers into
+  `src/components/preview/sceneOverlay/*`. Current snapshots:
+  `SceneObjectOverlay.tsx` 1186 LOC, `SceneOverlayChrome.tsx` 278 LOC,
+  `sceneOverlayDisplayPlans.ts` 116 LOC,
+  `sceneOverlayProjectionPlans.ts` 291 LOC,
+  `sceneOverlayTransformPlans.ts` 122 LOC, and `sceneOverlayTypes.ts` 85 LOC.
+  Pointer-lock/listener/getState scan keeps those runtime interactions in the
+  overlay host; no Preview host, Timeline, store, service, engine, or test
+  files were edited for this packet. `npx tsc -b --pretty false`,
+  `git diff --check` with only LF/CRLF warnings, and
+  `fc.exe /b AGENTS.md CLAUDE.md` passed.
+- Completed bounded packet:
+  `P3-PROJECTLOAD-SPLIT-PREFLIGHT-212`; read-only scan classified
+  `projectLoad.ts` at 1804 LOC with major clusters for progress UI,
+  project-media hydration and runtime handle restoration, composition/folder
+  conversion, FlashBoard generation-record hydration, store hydration, cached
+  thumbnail/background restoration, metadata refresh, auto-relink, nested-comp
+  reload, and clip-to-media status sync. The next safe source boundary is the
+  FlashBoard generation-record hydration/normalization cluster because it is
+  contiguous, already active-schema-only, and can move without touching
+  project schema, media hydration, Timeline, Media Board, stores, importers, or
+  media runtime.
+- Next eligible packet: execute
+  `P3-PROJECTLOAD-FLASHBOARD-HYDRATION-SPLIT-213`.
 - Product source refactors remain bounded by approved packet write sets.
 
 ## Document Map
@@ -2841,12 +2898,16 @@ Gates and subchecks:
 
 - [ ] `P5_PREVIEW_RUNTIME_BOUNDARY`
   - [ ] Preview shell separated from render target lifecycle owner
+  - [x] Preview wheel handler, mouse routing, context menu, playback display,
+        view geometry, and camera math split without changing native wheel
+        capture/passive host behavior
 - [x] `P5_RENDER_TARGET_SNAPSHOT_CONTRACT`
   - [x] render target snapshot input defined before implementation
 - [ ] `P5_PREVIEW_OVERLAY_REGISTRY`
   - [ ] overlays registered through focused contracts
-- [ ] `P5_EXPORT_PANEL_RUNNER_BOUNDARY`
-  - [ ] UI settings separated from runner adapters
+- [x] `P5_EXPORT_PANEL_RUNNER_BOUNDARY`
+  - [x] UI settings separated from runner adapters
+  - [x] ExportPanel is getState-free; live hits moved to controller/runners
 - [x] `P5_EXPORT_RENDER_SESSION_CONTRACT`
   - [x] export session transaction and cancellation contract defined
 - [ ] `P5_BOUNDED_MEMORY_EXPORT`
@@ -2905,8 +2966,9 @@ Gates and subchecks:
   - [x] playback, scrub, recording, export, diagnostics owners listed
 - [ ] `P6_AUDIO_RECORDING_AND_ROUTE_BOUNDARY`
   - [ ] recording/worklet/routing boundaries defined
-- [ ] `P6_SCRUB_AUDIOCONTEXT_DISPOSED`
-  - [ ] scrub context disposal check defined
+- [x] `P6_SCRUB_AUDIOCONTEXT_DISPOSED`
+  - [x] census AudioContext leak gaps fixed with disposer/beforeunload and
+        try/finally state-guard closes
 - [ ] `P6_EXPORT_AUDIO_SYNC_GUARD`
   - [ ] frame/audio sync smoke defined
 

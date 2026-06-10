@@ -810,6 +810,27 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
   reset to the lease-owner seam. Full suite then 4173/4173.
 - Wave 15 verification:
   Orchestrator-verified: tsc clean; FULL suite green 4173/4173.
+- Wave 16 closure completed:
+  `P6-AUDIO-CONTEXT-LEAK-FIXES-207` fixed all 4 census leak gaps:
+  `AudioProxyService` disposer + `beforeunload`; try/finally with
+  state-guards in `waveformHelpers`, `whisperService`, and `clipTranscriber`
+  x2; double-close is safe, and the granted surgical exception in
+  `stores/timeline` was honored as a finally-wrapper only.
+  `P5-EXPORTPANEL-SPLIT-208` extracted `useExportRunController` (384),
+  `webCodecsExportRunner`, `fcpxmlExportRunner`, `ExportProgressView`, and
+  `ExportAdvancedSummarySections`; `ExportPanel` fell 2399 -> 1890 and is now
+  getState-FREE, with the hard-target entry removed and hits living in
+  controller/runners. `P5-PREVIEW-SPLIT-209` extracted wheel handler (258),
+  mouse routing (340), context menu, playback display, view geometry, and
+  camera math; `Preview` fell 1993 -> 1630, one `getState` hit retired
+  outright (max-hits ratchet 665 -> 664), and native wheel capture/passive
+  flags stayed preserved in the host.
+- Wave 16 ops note:
+  Codex usage limit hit ~4:05 (after ~75 dispatches); wave re-dispatched on
+  `Start-Sleep` timers past the 4:31 reset; self-healing worked; failure mode
+  documented in the dispatch skill.
+- Wave 16 verification:
+  Orchestrator-verified: tsc clean; guards + adoption + dispatcher + proxy suites green.
 
 ## High-Conflict Ownership Snapshot
 
@@ -830,16 +851,82 @@ user-visible status remains in `docs/ongoing/Complete-refactor-checklist.md`.
 
 ## Active Packet
 
-Wave 16 running: audio leak fixes, ExportPanel split 3, and Preview split 3.
+```text
+Lane: P3 Project Persistence And Current Schema Boundary
+Packet: P3-PROJECTLOAD-FLASHBOARD-HYDRATION-SPLIT-213 Project Load FlashBoard Hydration Split
+Mode: source split
+Goal: extract only the FlashBoard generation-record normalization/hydration
+cluster from `projectLoad.ts` into `projectFlashBoardHydration.ts`.
+Read first:
+- src/services/project/projectLoad.ts
+- src/services/project/types/flashboard.types.ts
+- src/stores/flashboardStore/activeGenerationRecords.ts
+- src/stores/flashboardStore/types.ts
+Allowed write set:
+- src/services/project/projectLoad.ts
+- src/services/project/projectFlashBoardHydration.ts
+- docs/ongoing/Complete-refactor-checklist.md
+- docs/ongoing/complete-refactor/execution-queue-and-lanes.md
+Forbidden files:
+- src/services/project/projectSave.ts
+- src/services/project/projectLifecycle.ts
+- src/services/project/projectFileService.ts
+- src/services/project/types/**
+- src/services/project/core/**
+- src/stores/**
+- src/components/**
+- src/timeline/**
+- src/engine/**
+- src/importers/**
+- src/signals/**
+- src/services/mediaRuntime/**
+- tests/**
+- package.json
+- package-lock.json
+Current contract: `P3-PROJECTLOAD-SPLIT-PREFLIGHT-212` selected the
+FlashBoard generation-record hydration cluster as the next safe projectLoad
+split. The cluster owns `FLASHBOARD_SERVICES`, `FLASHBOARD_OUTPUT_TYPES`,
+`FLASHBOARD_MEDIA_TYPES`, `normalizeFlashBoardService`,
+`normalizeFlashBoardOutputType`, `normalizeFlashBoardMediaType`,
+`normalizeFlashBoardRequest`, `normalizeFlashBoardResult`,
+`normalizeFlashBoardJob`, `normalizeFlashBoardGenerationRecord`, and
+`hydrateFlashBoardGenerationRecordsFromProject`.
+Target contract: `projectFlashBoardHydration.ts` owns those constants,
+normalizers, and the active-generation record hydration call. `projectLoad.ts`
+imports only the hydrate function and keeps the load sequence decision
+(`if (projectData.flashboard) ... else reset ...`) plus media bridge metadata
+hydration. No project schema, migration compatibility, store model, Media
+Board, Timeline, importer, media hydration, runtime handle, or CSS behavior may
+change.
+Expected checks:
+- LOC/readability snapshot for `projectLoad.ts` and
+  `projectFlashBoardHydration.ts`
+- rg -n "FLASHBOARD_|normalizeFlashBoard|hydrateFlashBoardGenerationRecordsFromProject|hydrateFlashBoardActiveGenerationRecords|resetFlashBoardActiveGenerationState|flashBoardMediaBridge" src/services/project/projectLoad.ts src/services/project/projectFlashBoardHydration.ts
+- rg -n "useMediaStore|useTimelineStore|useDockStore|useSettingsStore|useExportStore|useMIDIStore|projectFileService|fileSystemService|createMediaObjectUrl|MediaBoard|Timeline|mediaRuntime|\\.css" src/services/project/projectFlashBoardHydration.ts
+- npm run test -- tests/unit/projectSchemaBoundary.test.ts tests/unit/persistedStateRuntimeHandles.test.ts tests/unit/flashboardActiveGenerationRecords.test.ts
+- npx tsc -b --pretty false
+- git diff --check
+- fc.exe /b AGENTS.md CLAUDE.md
+Expected report:
+- extracted FlashBoard hydration owner and dependency scan result
+- LOC delta for `projectLoad.ts` and new helper LOC
+- focused project/FlashBoard tests, TypeScript, diff-check, and AGENTS/CLAUDE
+  parity results
+Stop conditions:
+- extraction requires changing project schema/types, store contracts, media
+  hydration, reset semantics, FlashBoard media bridge metadata hydration,
+  Timeline, Media Board, importers, media runtime, tests, or old-project
+  compatibility branches outside the selected active current-schema behavior.
+```
 
 ## Queued Packets
 
-- Continue audio leak fixes.
-- Continue ExportPanel split 3.
-- Continue Preview split 3.
+No additional packet is queued until
+`P3-PROJECTLOAD-FLASHBOARD-HYDRATION-SPLIT-213` reports its result.
 
 ## Immediate Next Step
 
-Finish wave 16 active packets under their bounded write sets; do not reopen
-completed wave 13/14 smoke, Preview, bridge, dockStore, historyStore, or wave
-15 P6 closure packets.
+Execute `P3-PROJECTLOAD-FLASHBOARD-HYDRATION-SPLIT-213`. Do not reopen
+completed wave 13/14 smoke, Preview, bridge, dockStore, historyStore, wave 15
+P6 closure packets, wave 16 audio/export/preview closure packets, or completed
+wave 17 audio/SceneObjectOverlay packets.

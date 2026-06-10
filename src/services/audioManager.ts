@@ -1,278 +1,146 @@
-// Audio Manager - Master volume and EQ control using Web Audio API
+// Deprecated audio facade. Live Web Audio ownership is centralized in
+// audioRoutingManager; this module only preserves the old import surface.
 
-import { Logger } from './logger';
+import { audioRoutingManager } from './audioRoutingManager';
+import type { AudioRouteEffectSettings } from './audio/audioGraphRouteSettings';
 
-const log = Logger.create('AudioManager');
+export {
+  AudioStatusTracker,
+  audioStatusTracker,
+  type AudioStatus,
+} from './audio/audioStatusTracker';
 
 export interface EQBand {
   frequency: number;
-  gain: number; // -12 to +12 dB
+  gain: number;
 }
 
-// Audio playback status for stats display
-export interface AudioStatus {
-  playing: number;       // Number of audio elements currently playing
-  drift: number;         // Max audio drift from expected time in ms
-  status: 'sync' | 'drift' | 'silent' | 'error';
-}
-
-// 10-band EQ standard frequencies
 export const EQ_FREQUENCIES = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
-class AudioManager {
-  private audioContext: AudioContext | null = null;
-  private masterGain: GainNode | null = null;
-  private eqFilters: BiquadFilterNode[] = [];
-  private mediaElementSources: Map<HTMLMediaElement, MediaElementAudioSourceNode> = new Map();
-  private initialized = false;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
 
-  // EQ band gains (-12 to +12 dB)
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+class AudioManager {
+  private masterVolume = 1;
   private eqGains: number[] = EQ_FREQUENCIES.map(() => 0);
 
   async init(): Promise<void> {
-    if (this.initialized) return;
-
-    try {
-      this.audioContext = new AudioContext();
-
-      // Create master gain node
-      this.masterGain = this.audioContext.createGain();
-
-      // Create EQ filters (10-band parametric EQ)
-      this.eqFilters = EQ_FREQUENCIES.map((freq, index) => {
-        const filter = this.audioContext!.createBiquadFilter();
-        filter.type = 'peaking';
-        filter.frequency.value = freq;
-        filter.Q.value = 1.4; // Standard Q for 10-band EQ
-        filter.gain.value = this.eqGains[index];
-        return filter;
-      });
-
-      // Chain: input -> EQ filters -> master gain -> destination
-      // Connect EQ filters in series
-      for (let i = 0; i < this.eqFilters.length - 1; i++) {
-        this.eqFilters[i].connect(this.eqFilters[i + 1]);
-      }
-
-      // Connect last EQ filter to master gain
-      this.eqFilters[this.eqFilters.length - 1].connect(this.masterGain);
-
-      // Connect master gain to output
-      this.masterGain.connect(this.audioContext.destination);
-
-      this.initialized = true;
-      log.info('Initialized with 10-band EQ');
-    } catch (error) {
-      log.error('Failed to initialize', error);
-    }
+    audioRoutingManager.ensureSharedContext();
   }
 
-  // Connect a media element (video/audio) to the audio chain
   connectMediaElement(element: HTMLMediaElement): void {
-    if (!this.audioContext || !this.eqFilters.length) {
-      log.warn('Not initialized, cannot connect media element');
-      return;
-    }
-
-    // Don't reconnect if already connected
-    if (this.mediaElementSources.has(element)) {
-      return;
-    }
-
-    try {
-      // Resume context if suspended (autoplay policy)
-      if (this.audioContext.state === 'suspended') {
-        this.audioContext.resume();
-      }
-
-      // Create media element source
-      const source = this.audioContext.createMediaElementSource(element);
-
-      // Connect to first EQ filter
-      source.connect(this.eqFilters[0]);
-
-      // Store reference
-      this.mediaElementSources.set(element, source);
-
-      // Un-mute the element since we're handling audio through Web Audio
-      element.muted = false;
-
-      log.debug('Connected media element');
-    } catch (error) {
-      log.error('Failed to connect media element', error);
-    }
+    void audioRoutingManager
+      .applyEffects(element, 1, [], 0, [], this.getMasterRouteSettings())
+      .then((routed) => {
+        if (routed) {
+          element.muted = false;
+        }
+      })
+      .catch(() => undefined);
   }
 
-  // Disconnect a media element
   disconnectMediaElement(element: HTMLMediaElement): void {
-    const source = this.mediaElementSources.get(element);
-    if (source) {
-      try {
-        source.disconnect();
-      } catch (e) {
-        // Ignore disconnect errors
-      }
-      this.mediaElementSources.delete(element);
-      log.debug('Disconnected media element');
-    }
+    audioRoutingManager.removeRoute(element);
   }
 
-  // Set master volume (0-1)
   setMasterVolume(volume: number): void {
-    if (this.masterGain) {
-      this.masterGain.gain.value = Math.max(0, Math.min(1, volume));
-    }
+    this.masterVolume = Math.max(0, Math.min(1, volume));
   }
 
-  // Set EQ band gain (-12 to +12 dB)
   setEQBand(bandIndex: number, gainDB: number): void {
-    if (bandIndex >= 0 && bandIndex < this.eqFilters.length) {
-      const clampedGain = Math.max(-12, Math.min(12, gainDB));
-      this.eqGains[bandIndex] = clampedGain;
-      this.eqFilters[bandIndex].gain.value = clampedGain;
-    }
+    if (bandIndex < 0 || bandIndex >= this.eqGains.length) return;
+    this.eqGains[bandIndex] = Math.max(-12, Math.min(12, gainDB));
   }
 
-  // Get all EQ band values
   getEQBands(): EQBand[] {
-    return EQ_FREQUENCIES.map((freq, index) => ({
-      frequency: freq,
+    return EQ_FREQUENCIES.map((frequency, index) => ({
+      frequency,
       gain: this.eqGains[index],
     }));
   }
 
-  // Set all EQ bands at once
   setAllEQBands(gains: number[]): void {
-    gains.forEach((gain, index) => {
-      this.setEQBand(index, gain);
-    });
+    gains.forEach((gain, index) => this.setEQBand(index, gain));
   }
 
-  // Reset EQ to flat
   resetEQ(): void {
-    this.eqFilters.forEach((filter, index) => {
-      filter.gain.value = 0;
-      this.eqGains[index] = 0;
-    });
+    this.eqGains = EQ_FREQUENCIES.map(() => 0);
   }
 
-  // Get current master volume
   getMasterVolume(): number {
-    return this.masterGain?.gain.value ?? 1;
+    const routingSnapshot = audioRoutingManager.getDebugSnapshot();
+    const masterRoute = asRecord(routingSnapshot.masterRoute);
+    return numberValue(masterRoute?.gain, this.masterVolume);
   }
 
-  // Destroy and cleanup
   destroy(): void {
-    // Disconnect all media elements
-    this.mediaElementSources.forEach((source) => {
-      try {
-        source.disconnect();
-      } catch (e) {
-        // Ignore
-      }
-    });
-    this.mediaElementSources.clear();
-
-    // Close audio context
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-
-    this.masterGain = null;
-    this.eqFilters = [];
-    this.initialized = false;
+    audioRoutingManager.dispose();
   }
 
   isInitialized(): boolean {
-    return this.initialized;
+    return audioRoutingManager.getActiveContext() !== null;
   }
 
-  // Get AudioContext time for sync
   getCurrentTime(): number {
-    return this.audioContext?.currentTime ?? 0;
+    return audioRoutingManager.getActiveContext()?.currentTime ?? 0;
   }
 
-  // Get the shared AudioContext (e.g. for the MIDI synth to schedule against the
-  // live transport clock). May be null before init().
   getContext(): AudioContext | null {
-    return this.audioContext;
+    return audioRoutingManager.getActiveContext();
   }
 
-  // Input node of the master chain (input -> EQ -> master gain -> destination).
-  // Connect generated audio (e.g. the MIDI synth) here so it is shaped by the
-  // EQ and master volume like media element audio. Null before init().
   getMixerInput(): AudioNode | null {
-    return this.eqFilters[0] ?? this.masterGain;
+    return null;
   }
 
-  // Resume audio context if suspended
   async resume(): Promise<void> {
-    if (this.audioContext?.state === 'suspended') {
-      await this.audioContext.resume();
-    }
+    await audioRoutingManager.resumeContext();
   }
 
   getDebugSnapshot(): Record<string, unknown> {
-    const context = this.audioContext as (AudioContext & { outputLatency?: number }) | null;
+    const routingSnapshot = audioRoutingManager.getDebugSnapshot();
+    const masterRoute = asRecord(routingSnapshot.masterRoute);
+    const routingEqGains = Array.isArray(masterRoute?.eqGains)
+      ? [...masterRoute.eqGains]
+      : [...this.eqGains];
+
     return {
-      initialized: this.initialized,
-      mediaElementSourceCount: this.mediaElementSources.size,
+      deprecated: true,
+      owner: 'audioRoutingManager',
+      initialized: routingSnapshot.context !== null,
+      mediaElementSourceCount: numberValue(routingSnapshot.routeCount, 0),
+      eqGains: routingEqGains,
+      masterVolume: numberValue(masterRoute?.gain, this.masterVolume),
+      context: routingSnapshot.context ?? null,
+      routing: routingSnapshot,
+    };
+  }
+
+  private getMasterRouteSettings(): AudioRouteEffectSettings {
+    return {
+      volume: this.masterVolume,
       eqGains: [...this.eqGains],
-      masterVolume: this.getMasterVolume(),
-      context: context
-        ? {
-            state: context.state,
-            sampleRate: context.sampleRate,
-            currentTime: Math.round(context.currentTime * 1000) / 1000,
-            baseLatencyMs: Math.round((context.baseLatency ?? 0) * 100000) / 100,
-            outputLatencyMs: typeof context.outputLatency === 'number'
-              ? Math.round(context.outputLatency * 100000) / 100
-              : undefined,
-            destinationMaxChannelCount: context.destination.maxChannelCount,
-          }
-        : null,
+      processors: [],
     };
   }
 }
 
-// Audio status tracker for stats display
-class AudioStatusTracker {
-  private currentStatus: AudioStatus = {
-    playing: 0,
-    drift: 0,
-    status: 'silent'
-  };
+let audioManagerInstance = import.meta.hot?.data?.audioManager as AudioManager | undefined;
 
-  // Update status from audio sync loop
-  updateStatus(playing: number, maxDrift: number, hasError: boolean): void {
-    this.currentStatus.playing = playing;
-    this.currentStatus.drift = Math.round(maxDrift * 1000); // Convert to ms
+audioManagerInstance ??= new AudioManager();
 
-    if (hasError) {
-      this.currentStatus.status = 'error';
-    } else if (playing === 0) {
-      this.currentStatus.status = 'silent';
-    } else if (Math.abs(maxDrift) > 0.1) { // More than 100ms drift
-      this.currentStatus.status = 'drift';
-    } else {
-      this.currentStatus.status = 'sync';
-    }
-  }
+export const audioManager = audioManagerInstance;
 
-  getStatus(): AudioStatus {
-    return { ...this.currentStatus };
-  }
-
-  reset(): void {
-    this.currentStatus = {
-      playing: 0,
-      drift: 0,
-      status: 'silent'
-    };
-  }
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose((data) => {
+    data.audioManager = audioManager;
+  });
 }
-
-// Singleton instances
-export const audioManager = new AudioManager();
-export const audioStatusTracker = new AudioStatusTracker();

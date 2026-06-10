@@ -1198,6 +1198,10 @@ class AudioRoutingManager {
     return this.audioContext;
   }
 
+  async resumeContext(): Promise<void> {
+    await this.getContext();
+  }
+
   /**
    * Apply volume/EQ/pan/FX/master to an arbitrary node source (e.g. the MIDI
    * synth bus), keyed by a stable id. Builds/maintains a full per-track chain
