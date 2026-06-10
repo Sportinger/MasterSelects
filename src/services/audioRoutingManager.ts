@@ -14,13 +14,15 @@
 import { Logger } from './logger';
 import type { AudioRouteEffectSettings, LiveAudioRouteProcessor } from './audio/audioGraphRouteSettings';
 import { buildAudioRoutingDebugSnapshot } from './audio/routing/debugSnapshots';
-import { readRouteMeterSnapshot } from './audio/routing/meteringSnapshots';
+import { readRouteMeterSnapshot, type ReadRouteMeterSnapshotOptions } from './audio/routing/meteringSnapshots';
 import { reconnectCustomProcessorInternal } from './audio/routing/processorGraphReconnect';
 import { createProcessorNode } from './audio/routing/processorNodeFactory';
 import { updateProcessorNode } from './audio/routing/processorNodeUpdate';
 import {
   applyMasterRouteEffectState,
   applyTrackRouteEffectState,
+  isMasterRouteEffectStateApplied,
+  isTrackRouteEffectStateApplied,
   processorSignature,
 } from './audio/routing/routeEffectState';
 import { createAudioRouteGraph, createMasterRouteGraph } from './audio/routing/routeGraphFactory';
@@ -68,6 +70,7 @@ class AudioRoutingManager {
   private nodeRoutes = new Map<string, AudioRoute>();
   private routeCreateFailures = new WeakMap<HTMLMediaElement, { retryAt: number; lastLoggedAt: number }>();
   private contextResumePromise: Promise<void> | null = null;
+  private masterMeterMemo: { at: number; snapshot: AudioMeterSnapshot } | null = null;
   private readonly processorNodeDeps: ProcessorNodeUpdateDeps = {
     getOrCreateReverbImpulse: (ctx, roomSize, decaySeconds, damping) => getOrCreateReverbImpulse(
       reverbImpulseCache,
@@ -170,7 +173,7 @@ class AudioRoutingManager {
   async applyEffects(
     element: HTMLMediaElement,
     volume: number,
-    eqGains: number[], // Array of 10 gain values in dB (-12 to +12)
+    eqGains: readonly number[], // Array of 10 gain values in dB (-12 to +12)
     pan = 0,
     processors: readonly LiveAudioRouteProcessor[] = [],
     masterRoute?: AudioRouteEffectSettings,
@@ -244,7 +247,7 @@ class AudioRoutingManager {
     key: string,
     sourceNode: AudioNode,
     volume: number,
-    eqGains: number[],
+    eqGains: readonly number[],
     pan = 0,
     processors: readonly LiveAudioRouteProcessor[] = [],
     masterRoute?: AudioRouteEffectSettings,
@@ -259,11 +262,15 @@ class AudioRoutingManager {
     return true;
   }
 
-  getNodeMeterSnapshot(key: string, updatedAt = performance.now()): AudioMeterSnapshot | null {
+  getNodeMeterSnapshot(
+    key: string,
+    updatedAt = performance.now(),
+    options?: ReadRouteMeterSnapshotOptions,
+  ): AudioMeterSnapshot | null {
     const route = this.nodeRoutes.get(key);
     if (!route) return null;
 
-    return readRouteMeterSnapshot(route, updatedAt);
+    return readRouteMeterSnapshot(route, updatedAt, options);
   }
 
   /** Tear down a node route. Does not disconnect the source node (caller owns it). */
@@ -315,24 +322,74 @@ class AudioRoutingManager {
     return this.routes.has(element);
   }
 
+  /**
+   * Sync check whether a routed element already has the requested effect state
+   * fully applied, so per-frame callers can skip the async applyEffects() path
+   * (and its promise churn) entirely. Conservative: any active processors —
+   * track or master — return false, because processor parameter updates must
+   * keep flowing through applyEffects() every frame.
+   */
+  isRouteEffectStateApplied(
+    element: HTMLMediaElement,
+    volume: number,
+    eqGains: readonly number[],
+    pan: number,
+    processors: readonly LiveAudioRouteProcessor[] = [],
+    masterRoute?: AudioRouteEffectSettings,
+  ): boolean {
+    const route = this.routes.get(element);
+    if (!route || !route.isConnected) return false;
+    // applyEffects() pins element volume to 1 while routed; a drifted element
+    // volume means the invariant must be restored through the full path.
+    if (element.volume !== 1) return false;
+    if (processors.length > 0 || route.lastProcessorSignature !== '') return false;
+    if (!isTrackRouteEffectStateApplied(route, volume, eqGains, pan)) return false;
+
+    const master = this.masterRoute;
+    if (!master) return false;
+    if ((masterRoute?.processors?.length ?? 0) > 0 || master.lastProcessorSignature !== '') return false;
+    return isMasterRouteEffectStateApplied(master, masterRoute?.volume ?? 1, masterRoute?.eqGains ?? []);
+  }
+
   pauseAllRoutedMedia(): void {
     for (const element of this.routes.keys()) {
       element.pause();
     }
   }
 
-  getMeterSnapshot(element: HTMLMediaElement, updatedAt = performance.now()): AudioMeterSnapshot | null {
+  getMeterSnapshot(
+    element: HTMLMediaElement,
+    updatedAt = performance.now(),
+    options?: ReadRouteMeterSnapshotOptions,
+  ): AudioMeterSnapshot | null {
     const route = this.routes.get(element);
     if (!route) return null;
 
-    return readRouteMeterSnapshot(route, updatedAt);
+    return readRouteMeterSnapshot(route, updatedAt, options);
   }
 
-  getMasterMeterSnapshot(updatedAt = performance.now()): AudioMeterSnapshot | null {
+  getMasterMeterSnapshot(
+    updatedAt = performance.now(),
+    options?: ReadRouteMeterSnapshotOptions,
+  ): AudioMeterSnapshot | null {
     const route = this.masterRoute;
     if (!route) return null;
 
-    return readRouteMeterSnapshot(route, updatedAt);
+    // Every routed element publishes its meter alongside the master snapshot,
+    // so without a memo the master analysers get re-read once per element per
+    // tick. Sub-16ms granularity carries no information for meters.
+    const memo = this.masterMeterMemo;
+    if (
+      memo
+      && updatedAt - memo.at < 16
+      && (!options?.includeSpectrum || memo.snapshot.spectrumDb !== undefined)
+    ) {
+      return memo.snapshot;
+    }
+
+    const snapshot = readRouteMeterSnapshot(route, updatedAt, options);
+    this.masterMeterMemo = { at: updatedAt, snapshot };
+    return snapshot;
   }
 
   /**

@@ -6,6 +6,38 @@ export function processorSignature(processors: readonly LiveAudioRouteProcessor[
   return processors.map(processor => `${processor.id}:${processor.type}`).join('|');
 }
 
+// Thresholds must mirror the apply functions below: "applied" means the apply
+// call would be a no-op, so per-frame callers can skip it entirely.
+const VOLUME_EPSILON = 0.001;
+const PAN_EPSILON = 0.001;
+const EQ_GAIN_EPSILON = 0.01;
+
+export function isTrackRouteEffectStateApplied(
+  route: AudioRoute,
+  volume: number,
+  eqGains: readonly number[],
+  pan: number,
+): boolean {
+  if (Math.abs(route.lastVolume - volume) > VOLUME_EPSILON) return false;
+  if (Math.abs(route.lastPan - clampAudioPan(pan)) > PAN_EPSILON) return false;
+  for (let index = 0; index < 10; index += 1) {
+    if (Math.abs(route.lastEQGains[index] - (eqGains[index] ?? 0)) > EQ_GAIN_EPSILON) return false;
+  }
+  return true;
+}
+
+export function isMasterRouteEffectStateApplied(
+  route: MasterAudioRoute,
+  volume: number,
+  eqGains: readonly number[],
+): boolean {
+  if (Math.abs(route.lastVolume - volume) > VOLUME_EPSILON) return false;
+  for (let index = 0; index < route.eqFilters.length; index += 1) {
+    if (Math.abs(route.lastEQGains[index] - (eqGains[index] ?? 0)) > EQ_GAIN_EPSILON) return false;
+  }
+  return true;
+}
+
 export function applyTrackRouteEffectState(
   route: AudioRoute,
   volume: number,

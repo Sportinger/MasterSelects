@@ -8,6 +8,7 @@ import { LAYER_BUILDER_CONSTANTS } from './types';
 import { playheadState, setMasterAudio } from './PlayheadState';
 import { audioManager, audioStatusTracker } from '../audioManager';
 import { audioRoutingManager } from '../audioRoutingManager';
+import { runtimeAudioMeterBus } from '../audio/runtimeAudioMeterBus';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import { useTimelineStore } from '../../stores/timeline';
 import { createSilentAudioMeterSnapshot } from '../audio/audioMetering';
@@ -17,6 +18,14 @@ const TAIL_METER_POLL_INTERVAL_MS = 50;
 const TAIL_METER_SILENCE_HOLD_MS = 700;
 const TAIL_METER_MAX_DURATION_MS = 30_000;
 const TAIL_METER_SILENCE_LINEAR = 0.0003; // roughly -70 dBFS
+// Cap meter publishing at display rate (~60Hz). Without the cap, high-refresh
+// displays publish per render frame (120Hz+), burning analyser reads and
+// snapshot allocations per element. Below ~60Hz large mixer meters visibly
+// stutter, so this must not be raised without UI-side interpolation.
+const METER_PUBLISH_INTERVAL_MS = 16;
+// Per-frame default for applyEffects callers; hoisted so the per-frame path
+// does not allocate a fresh zero array per element.
+const EMPTY_EQ_GAINS: readonly number[] = Object.freeze(new Array(10).fill(0));
 
 function hasActiveRouteEffects(route: AudioSyncTarget['masterRoute']): boolean {
   if (!route) return false;
@@ -55,6 +64,11 @@ export class AudioSyncHandler {
   private scrubStates = new WeakMap<HTMLMediaElement, { lastPosition: number; lastTime: number; lastSeenPosition: number }>();
   private scrubAudioTimeouts = new Map<HTMLMediaElement, ReturnType<typeof setTimeout>>();
   private tailMeterPolls = new Map<string, TailMeterPoll>();
+  // Meter publish gating: per-track publish tick plus once-per-silence-period
+  // dedup, so paused/muted elements do not publish identical silent snapshots
+  // every render frame.
+  private meterPublishAt = new Map<string, number>();
+  private silentMeterPublished = new Set<string>();
 
   /**
    * Sync a single audio element with unified logic
@@ -85,7 +99,7 @@ export class AudioSyncHandler {
     element.muted = effectivelyMuted;
     if (effectivelyMuted) {
       this.cancelTailMeterPolling(meterTrackId);
-      this.publishMeter(meterTrackId, createSilentAudioMeterSnapshot(ctx.now));
+      this.publishSilentMeterOnce(meterTrackId, ctx.now);
       this.pauseIfPlaying(element);
       return;
     }
@@ -110,7 +124,7 @@ export class AudioSyncHandler {
         ctx.now,
         hasTailMeterCandidate(processors, masterRoute) || Boolean(meterTrackId),
       )) {
-        this.publishMeter(meterTrackId, createSilentAudioMeterSnapshot(ctx.now));
+        this.publishSilentMeterOnce(meterTrackId, ctx.now);
       }
     }
   }
@@ -174,9 +188,17 @@ export class AudioSyncHandler {
     const hasExistingRoute = audioRoutingManager.hasRoute(element);
 
     if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter || hasExistingRoute) {
+      const effectiveEqGains = eqGains ?? EMPTY_EQ_GAINS;
+      if (
+        hasExistingRoute
+        && audioRoutingManager.isRouteEffectStateApplied(element, volume, effectiveEqGains, pan, processors, masterRoute)
+      ) {
+        this.publishRouteMeterGated(meterTrackId, element);
+        return;
+      }
       void audioRoutingManager
-        .applyEffects(element, volume, eqGains ?? new Array(10).fill(0), pan, processors, masterRoute)
-        .then((routed) => this.publishRouteMeter(meterTrackId, routed ? element : null));
+        .applyEffects(element, volume, effectiveEqGains, pan, processors, masterRoute)
+        .then((routed) => this.publishRouteMeterGated(meterTrackId, routed ? element : null));
       return;
     }
 
@@ -235,11 +257,21 @@ export class AudioSyncHandler {
     const hasExistingRoute = audioRoutingManager.hasRoute(element);
 
     if (hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter || hasExistingRoute) {
-      // Use Web Audio routing for volume + EQ
-      // This handles both volume and EQ through the audio graph
-      audioRoutingManager
-        .applyEffects(element, volume, eqGains ?? new Array(10).fill(0), pan, processors, masterRoute)
-        .then((routed) => this.publishRouteMeter(meterTrackId, routed ? element : null));
+      const effectiveEqGains = eqGains ?? EMPTY_EQ_GAINS;
+      if (
+        hasExistingRoute
+        && audioRoutingManager.isRouteEffectStateApplied(element, volume, effectiveEqGains, pan, processors, masterRoute)
+      ) {
+        // Route graph already reflects this frame's state: skip the async
+        // applyEffects() round-trip and only service the meter on its tick.
+        this.publishRouteMeterGated(meterTrackId, element);
+      } else {
+        // Use Web Audio routing for volume + EQ
+        // This handles both volume and EQ through the audio graph
+        audioRoutingManager
+          .applyEffects(element, volume, effectiveEqGains, pan, processors, masterRoute)
+          .then((routed) => this.publishRouteMeterGated(meterTrackId, routed ? element : null));
+      }
     } else {
       // Simple volume-only path (no Web Audio overhead)
       // HTMLMediaElement.volume only accepts [0, 1] range - clamp to prevent errors
@@ -363,11 +395,14 @@ export class AudioSyncHandler {
   ): boolean {
     if (!allowTailMeter || !trackId || !audioRoutingManager.hasRoute(element)) return false;
 
+    // An active poll already services this track on its own interval — bail
+    // before reading the analysers so paused frames stay free of meter work.
+    const existing = this.tailMeterPolls.get(trackId);
+    if (existing?.element === element) return true;
+
     const firstSnapshot = this.publishRouteMeter(trackId, element);
     if (!firstSnapshot) return false;
 
-    const existing = this.tailMeterPolls.get(trackId);
-    if (existing?.element === element) return true;
     this.cancelTailMeterPolling(trackId);
 
     const poll: TailMeterPoll = {
@@ -416,13 +451,41 @@ export class AudioSyncHandler {
     this.tailMeterPolls.delete(trackId);
   }
 
+  /**
+   * Per-frame meter publishing funnel: rate-limited to METER_PUBLISH_INTERVAL_MS
+   * per track so render-frame callers (playback/scrub sync) cannot exceed the
+   * meter tick regardless of display refresh rate.
+   */
+  private publishRouteMeterGated(
+    trackId: string | undefined,
+    element: HTMLMediaElement | null,
+    now = performance.now(),
+  ): void {
+    if (!trackId || !element) return;
+    const last = this.meterPublishAt.get(trackId);
+    if (last !== undefined && now - last < METER_PUBLISH_INTERVAL_MS) return;
+    if (this.meterPublishAt.size > 256) this.meterPublishAt.clear();
+    this.meterPublishAt.set(trackId, now);
+    this.publishRouteMeter(trackId, element);
+  }
+
+  private publishSilentMeterOnce(trackId: string | undefined, now: number): void {
+    if (!trackId || this.silentMeterPublished.has(trackId)) return;
+    this.publishMeter(trackId, createSilentAudioMeterSnapshot(now));
+    this.silentMeterPublished.add(trackId);
+  }
+
   private publishRouteMeter(
     trackId: string | undefined,
     element: HTMLMediaElement | null,
   ): { trackSnapshot: AudioMeterSnapshot; masterSnapshot: AudioMeterSnapshot | null } | null {
     if (!trackId || !element) return null;
-    const snapshot = audioRoutingManager.getMeterSnapshot(element);
-    const masterSnapshot = audioRoutingManager.getMasterMeterSnapshot(snapshot?.updatedAt);
+    const snapshot = audioRoutingManager.getMeterSnapshot(element, performance.now(), {
+      includeSpectrum: runtimeAudioMeterBus.hasDemand({ kind: 'track', trackId }, 'spectrum'),
+    });
+    const masterSnapshot = audioRoutingManager.getMasterMeterSnapshot(snapshot?.updatedAt, {
+      includeSpectrum: runtimeAudioMeterBus.hasDemand({ kind: 'master' }, 'spectrum'),
+    });
     if (snapshot) {
       this.publishMeter(trackId, snapshot, masterSnapshot ?? undefined);
       return { trackSnapshot: snapshot, masterSnapshot };
@@ -436,6 +499,9 @@ export class AudioSyncHandler {
     masterSnapshot?: AudioMeterSnapshot,
   ): void {
     if (!trackId) return;
+    // Any explicit publish ends the per-track silence period; the next silent
+    // frame is allowed to publish one fresh silent snapshot again.
+    this.silentMeterPublished.delete(trackId);
     useTimelineStore.getState().updateRuntimeAudioMeter(trackId, snapshot, masterSnapshot);
   }
 
