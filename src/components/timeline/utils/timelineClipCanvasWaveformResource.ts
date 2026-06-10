@@ -8,11 +8,17 @@ import {
   resolveWaveformDisplayReferencePeak,
   smoothWaveformColumns,
   type TimelineWaveformPyramid,
+  type WaveformColumn,
 } from './waveformLod';
 import { isTimelineClipCanvasAudioClip } from './timelineClipCanvasAudio';
 import type { TimelineClipCanvasWorkerPreparedClipResources } from './timelineClipCanvasWorkerModel';
 
 const MAX_RENDERED_WAVEFORM_CHANNELS = 2;
+
+interface TimelineClipCanvasPreparedWaveformChannelResource {
+  columns: number[];
+  columnCount: number;
+}
 
 export type TimelineClipCanvasWaveformPyramidMap = ReadonlyMap<string, TimelineWaveformPyramid | null>;
 
@@ -60,6 +66,61 @@ export function resolveTimelineClipCanvasWaveformChannelIndexes(
   return indexes.slice(0, maxChannels);
 }
 
+function packTimelineClipCanvasWorkerWaveformColumns(columns: readonly WaveformColumn[]): number[] {
+  const packedColumns: number[] = [];
+  columns.forEach((column) => {
+    packedColumns.push(column.min, column.max, column.rms, column.peak);
+  });
+  return packedColumns;
+}
+
+function createTimelineClipCanvasWorkerWaveformChannelResource(input: {
+  clip: TimelineClipCanvasWaveformResourceClipInput;
+  pyramid: TimelineWaveformPyramid | null;
+  width: number;
+  inPoint: number;
+  outPoint: number;
+  naturalDuration: number;
+  pixelsPerSecond: number;
+  channelIndex: number;
+  mode: 'compact' | 'detailed';
+}): TimelineClipCanvasPreparedWaveformChannelResource | null {
+  const lod = buildWaveformLod({
+    waveform: input.clip.waveform ?? [],
+    waveformChannels: input.clip.waveformChannels,
+    pyramid: input.pyramid,
+    width: input.width,
+    inPoint: input.inPoint,
+    outPoint: input.outPoint,
+    naturalDuration: input.naturalDuration,
+    pixelsPerSecond: input.pixelsPerSecond,
+    channelIndex: input.channelIndex,
+  });
+  if (!lod || lod.columns.length === 0) return null;
+
+  const smoothed = smoothWaveformColumns(lod.columns, lod.source === 'pyramid' ? 1 : 2, 0.45);
+  const normalized = normalizeWaveformColumnsForDisplay(smoothed, {
+    targetPeak: input.mode === 'compact' ? 0.52 : 0.66,
+    minReferencePeak: 0.032,
+    maxGain: 16,
+    referencePeak: resolveWaveformDisplayReferencePeak(smoothed, { minReferencePeak: 0.032 }),
+    perceptualScale: input.mode !== 'compact',
+    noiseFloorDb: -30,
+  });
+  if (normalized.length === 0) return null;
+
+  return {
+    columns: packTimelineClipCanvasWorkerWaveformColumns(normalized),
+    columnCount: normalized.length,
+  };
+}
+
+function hasDrawableTimelineClipCanvasWorkerWaveformChannel(
+  channel: TimelineClipCanvasPreparedWaveformChannelResource,
+): boolean {
+  return channel.columnCount > 0 && channel.columns.length >= channel.columnCount * 4;
+}
+
 export function createTimelineClipCanvasWorkerWaveformResource(
   clip: TimelineClipCanvasWaveformResourceClipInput,
   waveformPyramids: TimelineClipCanvasWaveformPyramidMap | undefined,
@@ -81,40 +142,29 @@ export function createTimelineClipCanvasWorkerWaveformResource(
   const naturalDuration = Math.max(0.001, pyramid?.duration ?? clip.source?.naturalDuration ?? clip.outPoint ?? clip.duration);
   const inPoint = Math.max(0, Math.min(naturalDuration, clip.inPoint ?? 0));
   const outPoint = Math.max(inPoint + 0.001, Math.min(naturalDuration, clip.outPoint ?? inPoint + clip.duration));
-  const channelIndex = resolveTimelineClipCanvasWaveformChannelIndexes(pyramid, clip.waveformChannels, height)[0] ?? 0;
-  const lod = buildWaveformLod({
-    waveform: clip.waveform ?? [],
-    waveformChannels: clip.waveformChannels,
-    pyramid,
-    width,
-    inPoint,
-    outPoint,
-    naturalDuration,
-    pixelsPerSecond: Math.max(1, timeToPixel(1) - timeToPixel(0)),
-    channelIndex,
-  });
-  if (!lod || lod.columns.length === 0) return undefined;
+  const workerMode: 'compact' | 'detailed' = mode === 'compact' ? 'compact' : 'detailed';
+  const pixelsPerSecond = Math.max(1, timeToPixel(1) - timeToPixel(0));
+  const channels = resolveTimelineClipCanvasWaveformChannelIndexes(pyramid, clip.waveformChannels, height)
+    .map((channelIndex) => createTimelineClipCanvasWorkerWaveformChannelResource({
+      clip,
+      pyramid,
+      width,
+      inPoint,
+      outPoint,
+      naturalDuration,
+      pixelsPerSecond,
+      channelIndex,
+      mode: workerMode,
+    }) ?? { columns: [], columnCount: 0 });
+  const firstDrawableChannel = channels.find(hasDrawableTimelineClipCanvasWorkerWaveformChannel);
+  if (!firstDrawableChannel) return undefined;
 
-  const workerMode = mode === 'compact' ? 'compact' : 'detailed';
-  const smoothed = smoothWaveformColumns(lod.columns, lod.source === 'pyramid' ? 1 : 2, 0.45);
-  const normalized = normalizeWaveformColumnsForDisplay(smoothed, {
-    targetPeak: workerMode === 'compact' ? 0.52 : 0.66,
-    minReferencePeak: 0.032,
-    maxGain: 16,
-    referencePeak: resolveWaveformDisplayReferencePeak(smoothed, { minReferencePeak: 0.032 }),
-    perceptualScale: workerMode !== 'compact',
-    noiseFloorDb: -30,
-  });
-  if (normalized.length === 0) return undefined;
-
-  const columns: number[] = [];
-  normalized.forEach((column) => {
-    columns.push(column.min, column.max, column.rms, column.peak);
-  });
-  return {
-    kind: 'waveform',
-    columns,
-    columnCount: normalized.length,
+  const resource = {
+    kind: 'waveform' as const,
+    columns: firstDrawableChannel.columns,
+    columnCount: firstDrawableChannel.columnCount,
+    channels,
     mode: workerMode,
   };
+  return resource;
 }

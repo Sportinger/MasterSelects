@@ -1,6 +1,11 @@
 import type { TimelineClipCanvasWorkerWaveformResource } from '../utils/timelineClipCanvasWorkerContract';
 import { drawTransientPeakSpikes } from '../utils/timelineClipCanvasWaveformSpikes';
 
+type WorkerWaveformChannel = {
+  columns: Float32Array;
+  columnCount: number;
+};
+
 export function drawWorkerWaveformCenterLine(
   context: OffscreenCanvasRenderingContext2D,
   width: number,
@@ -18,12 +23,44 @@ export function drawWorkerWaveformCenterLine(
 
 export function drawWorkerWaveformColumns(
   context: OffscreenCanvasRenderingContext2D,
-  columns: Float32Array,
-  columnCount: number,
+  waveform: TimelineClipCanvasWorkerWaveformResource,
+  width: number,
+  height: number,
+  modeOverride?: TimelineClipCanvasWorkerWaveformResource['mode'],
+): void {
+  const channels = waveform.channels && waveform.channels.length > 0
+    ? waveform.channels
+    : [{ columns: waveform.columns, columnCount: waveform.columnCount }];
+  const laneGap = channels.length > 1 ? 2 : 0;
+  const laneHeight = Math.max(8, (height - laneGap * (channels.length - 1)) / channels.length);
+  const mode = modeOverride ?? waveform.mode;
+
+  channels.forEach((channel, laneIndex) => {
+    const laneTop = laneIndex * (laneHeight + laneGap);
+    if (laneIndex > 0) {
+      context.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(0, laneTop - laneGap / 2);
+      context.lineTo(width, laneTop - laneGap / 2);
+      context.stroke();
+    }
+
+    context.save();
+    context.translate(0, laneTop);
+    drawWorkerWaveformLane(context, channel, width, laneHeight, mode);
+    context.restore();
+  });
+}
+
+function drawWorkerWaveformLane(
+  context: OffscreenCanvasRenderingContext2D,
+  channel: WorkerWaveformChannel,
   width: number,
   height: number,
   mode: TimelineClipCanvasWorkerWaveformResource['mode'],
 ): void {
+  const { columns, columnCount } = channel;
   if (columnCount <= 0 || columns.length < columnCount * 4) {
     drawWorkerWaveformCenterLine(context, width, height, 0.18);
     return;
