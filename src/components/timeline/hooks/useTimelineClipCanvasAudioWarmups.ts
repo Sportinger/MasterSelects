@@ -22,6 +22,7 @@ import {
 } from '../../../services/timeline/timelineWaveformArtifactWarmup';
 import type { TimelineAudioDisplayMode } from '../../../stores/timeline/types';
 import type { TimelinePaintSourceClip } from '../../../timeline';
+import { createTimelineArtifactRetrySession } from '../utils/timelineArtifactRetrySession';
 import { isTimelineClipCanvasAudioClip } from '../utils/timelineClipCanvasAudio';
 import type { TimelineClipCanvasSpectrogramTileSetMap } from '../utils/timelineClipCanvasSpectrogramResource';
 import type { TimelineClipCanvasWaveformPyramidMap } from '../utils/timelineClipCanvasWaveformResource';
@@ -30,6 +31,7 @@ import type { TimelineWaveformPyramid } from '../utils/waveformLod';
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_ZOOM = 250;
 const WAVEFORM_PYRAMID_AUTO_UPGRADE_WIDTH = 16_384;
 const WAVEFORM_GENERATION_DELAY_MS = 300;
+const WAVEFORM_ARTIFACT_RETRY_MS = 2000;
 const SPECTROGRAM_ARTIFACT_RETRY_MS = 2000;
 
 export interface TimelineClipCanvasAudioWarmupsInput {
@@ -67,11 +69,13 @@ export function useTimelineClipCanvasAudioWarmups(
     visibleAudioArtifactClipIds,
     requestRedraw,
   } = input;
+  const [waveformRetryNonce, bumpWaveformRetry] = useReducer((n: number) => n + 1, 0);
   const [spectrogramRetryNonce, bumpSpectrogramRetry] = useReducer((n: number) => n + 1, 0);
   const [waveformPyramids, setWaveformPyramids] = useState<Map<string, TimelineWaveformPyramid | null>>(() => new Map());
   const [spectrogramTileSets, setSpectrogramTileSets] = useState<Map<string, TimelineSpectrogramTileSet | null>>(() => new Map());
   const waveformPyramidsRef = useRef<TimelineClipCanvasWaveformPyramidMap>(waveformPyramids);
   const spectrogramTileSetsRef = useRef<TimelineClipCanvasSpectrogramTileSetMap>(spectrogramTileSets);
+  const waveformMissedAtRef = useRef<Map<string, number>>(new Map());
   const spectrogramMissedAtRef = useRef<Map<string, number>>(new Map());
 
   const visibleWaveformClips = useMemo(() => {
@@ -157,84 +161,72 @@ export function useTimelineClipCanvasAudioWarmups(
   useEffect(() => {
     if (!waveformsEnabled || !waveformRefKey) return;
     const controller = new AbortController();
-    const refs = waveformRefKey
-      .split('|')
-      .filter((refId) => refId && !waveformPyramidsRef.current.has(refId));
-    if (refs.length === 0) return;
-
-    const publish = (refId: string, pyramid: TimelineWaveformPyramid | null) => {
-      if (controller.signal.aborted) return;
-      setWaveformPyramids((prev) => {
-        if (prev.has(refId) && prev.get(refId) === pyramid) return prev;
-        const next = new Map(prev);
-        next.set(refId, pyramid);
-        return next;
-      });
-      requestRedraw();
-    };
+    const session = createTimelineArtifactRetrySession<TimelineWaveformPyramid>({
+      refKey: waveformRefKey,
+      retryMs: WAVEFORM_ARTIFACT_RETRY_MS,
+      hasArtifact: (refId) => Boolean(waveformPyramidsRef.current.get(refId)),
+      missedAt: waveformMissedAtRef.current,
+      bumpRetry: bumpWaveformRetry,
+      signal: controller.signal,
+      commit: (refId, pyramid) => {
+        setWaveformPyramids((prev) => {
+          if (prev.has(refId) && prev.get(refId) === pyramid) return prev;
+          const next = new Map(prev);
+          next.set(refId, pyramid);
+          return next;
+        });
+        requestRedraw();
+      },
+    });
+    if (session.refs.length === 0) return;
 
     void warmTimelineWaveformArtifacts(
-      refs,
+      session.refs,
       {
         signal: controller.signal,
-        onResult: ({ refId, pyramid }) => publish(refId, pyramid),
+        onResult: ({ refId, pyramid }) => session.publish(refId, pyramid),
       },
     );
 
     return () => {
       controller.abort();
+      session.dispose();
     };
-  }, [requestRedraw, waveformRefKey, waveformsEnabled]);
+  }, [requestRedraw, waveformRefKey, waveformRetryNonce, waveformsEnabled]);
 
   useEffect(() => {
     if (!waveformsEnabled || audioDisplayMode !== 'spectral' || !spectrogramRefKey) return;
     const controller = new AbortController();
-    const now = Date.now();
-    const refs = spectrogramRefKey
-      .split('|')
-      .filter((refId) => {
-        if (!refId || spectrogramTileSetsRef.current.get(refId)) return false;
-        const missedAt = spectrogramMissedAtRef.current.get(refId);
-        return missedAt === undefined || now - missedAt >= SPECTROGRAM_ARTIFACT_RETRY_MS;
-      });
-    if (refs.length === 0) return;
-    let retryTimer: number | null = null;
-
-    const publish = (refId: string, tileSet: TimelineSpectrogramTileSet | null) => {
-      if (controller.signal.aborted) return;
-      if (!tileSet) {
-        spectrogramMissedAtRef.current.set(refId, Date.now());
-        if (retryTimer === null && typeof window !== 'undefined') {
-          retryTimer = window.setTimeout(() => {
-            retryTimer = null;
-            bumpSpectrogramRetry();
-          }, SPECTROGRAM_ARTIFACT_RETRY_MS);
-        }
-        return;
-      }
-      spectrogramMissedAtRef.current.delete(refId);
-      setSpectrogramTileSets((prev) => {
-        if (prev.has(refId) && prev.get(refId) === tileSet) return prev;
-        const next = new Map(prev);
-        next.set(refId, tileSet);
-        return next;
-      });
-      requestRedraw();
-    };
+    const session = createTimelineArtifactRetrySession<TimelineSpectrogramTileSet>({
+      refKey: spectrogramRefKey,
+      retryMs: SPECTROGRAM_ARTIFACT_RETRY_MS,
+      hasArtifact: (refId) => Boolean(spectrogramTileSetsRef.current.get(refId)),
+      missedAt: spectrogramMissedAtRef.current,
+      bumpRetry: bumpSpectrogramRetry,
+      signal: controller.signal,
+      commit: (refId, tileSet) => {
+        setSpectrogramTileSets((prev) => {
+          if (prev.has(refId) && prev.get(refId) === tileSet) return prev;
+          const next = new Map(prev);
+          next.set(refId, tileSet);
+          return next;
+        });
+        requestRedraw();
+      },
+    });
+    if (session.refs.length === 0) return;
 
     void warmTimelineSpectrogramArtifacts(
-      refs,
+      session.refs,
       {
         signal: controller.signal,
-        onResult: ({ refId, tileSet }) => publish(refId, tileSet),
+        onResult: ({ refId, tileSet }) => session.publish(refId, tileSet),
       },
     );
 
     return () => {
       controller.abort();
-      if (retryTimer !== null && typeof window !== 'undefined') {
-        window.clearTimeout(retryTimer);
-      }
+      session.dispose();
     };
   }, [audioDisplayMode, requestRedraw, spectrogramRefKey, spectrogramRetryNonce, waveformsEnabled]);
 
