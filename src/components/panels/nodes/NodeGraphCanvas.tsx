@@ -3,23 +3,22 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, WheelEvent } fro
 import type {
   NodeGraph,
   NodeGraphConnectionRequest,
-  NodeGraphEdge,
   NodeGraphLayout,
   NodeGraphNode,
   NodeGraphPort,
 } from '../../../services/nodeGraph';
-
-const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
-const MIN_ZOOM = 0.18;
-const MAX_ZOOM = 2.4;
-const NODE_WIDTH = 184;
-const NODE_MIN_HEIGHT = 126;
-const PORT_ROW_HEIGHT = 18;
-const PORT_START_Y = 86;
-const BADGED_PORT_START_Y = 116;
-const PORT_DOT_CENTER_X = 12;
-const PORT_DOT_CENTER_Y = 7;
-const FIT_MARGIN = 42;
+import { NodeGraphEdges } from './canvas/NodeGraphEdges';
+import { NodeGraphNodeCard } from './canvas/NodeGraphNodeCard';
+import type { ConnectionDraft, NodeGraphPoint, PortReference, Viewport } from './canvas/canvasGeometry';
+import {
+  clamp,
+  DEFAULT_VIEWPORT,
+  FIT_MARGIN,
+  getGraphBounds,
+  getPortCenter,
+  MAX_ZOOM,
+  MIN_ZOOM,
+} from './canvas/canvasGeometry';
 
 interface NodeGraphCanvasProps {
   graph: NodeGraph;
@@ -31,12 +30,6 @@ interface NodeGraphCanvasProps {
   onDeleteNode?: (nodeId: string) => void;
   onToggleNodeBypass?: (nodeId: string) => void;
   onOpenAddMenu?: (position: { x: number; y: number; layout: NodeGraphLayout; nodeId?: string | null }) => void;
-}
-
-interface Viewport {
-  zoom: number;
-  panX: number;
-  panY: number;
 }
 
 interface PanGesture {
@@ -54,162 +47,6 @@ interface NodeDragGesture {
   clientY: number;
   startX: number;
   startY: number;
-}
-
-interface NodeBounds {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-}
-
-interface NodeGraphPoint {
-  x: number;
-  y: number;
-}
-
-interface PortReference {
-  nodeId: string;
-  portId: string;
-  direction: NodeGraphPort['direction'];
-  type: NodeGraphPort['type'];
-}
-
-interface NodeBadge {
-  label: string;
-  tone: 'ready' | 'partial' | 'empty' | 'processed' | 'stale';
-  title?: string;
-}
-
-interface ConnectionDraft extends PortReference {
-  pointerId: number;
-  start: NodeGraphPoint;
-  end: NodeGraphPoint;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function getNodeParamNumber(node: NodeGraphNode, key: string): number {
-  const value = node.params?.[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function getNodeParamString(node: NodeGraphNode, key: string): string {
-  const value = node.params?.[key];
-  return typeof value === 'string' ? value : '';
-}
-
-function getAudioAnalysisBadges(node: NodeGraphNode): NodeBadge[] {
-  if (!node.params || typeof node.params.status !== 'string' || typeof node.params.artifactPorts !== 'number') {
-    return [];
-  }
-
-  const status = getNodeParamString(node, 'status');
-  const total = getNodeParamNumber(node, 'artifactPorts');
-  const available = getNodeParamNumber(node, 'availableArtifacts');
-  const missing = getNodeParamNumber(node, 'missingArtifacts');
-  const stale = getNodeParamNumber(node, 'staleArtifacts');
-  const processed = getNodeParamNumber(node, 'processedArtifacts');
-  const statusTone: NodeBadge['tone'] = status === 'ready' ? 'ready' : status === 'partial' ? 'partial' : 'empty';
-  const statusLabel = status === 'ready' ? 'Ready' : status === 'partial' ? 'Partial' : 'Missing';
-  const badges: NodeBadge[] = [
-    {
-      label: statusLabel,
-      tone: stale > 0 ? 'stale' : statusTone,
-      title: `${available}/${total} analysis artifacts available${missing > 0 ? `, ${missing} missing` : ''}${stale > 0 ? `, ${stale} stale` : ''}`,
-    },
-    {
-      label: `${available}/${total}`,
-      tone: missing > 0 || stale > 0 ? 'partial' : 'ready',
-      title: 'Available analysis artifacts',
-    },
-  ];
-
-  if (processed > 0) {
-    badges.push({
-      label: `${processed} processed`,
-      tone: 'processed',
-      title: 'Processed audio analysis artifacts are active',
-    });
-  }
-
-  return badges;
-}
-
-function getNodePortStartY(node: NodeGraphNode): number {
-  return getAudioAnalysisBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y;
-}
-
-function getNodeHeight(node: NodeGraphNode): number {
-  const portRows = Math.max(node.inputs.length, node.outputs.length, 1);
-  return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows * PORT_ROW_HEIGHT) + 16);
-}
-
-function getGraphBounds(graph: NodeGraph): NodeBounds {
-  if (graph.nodes.length === 0) {
-    return { left: 0, top: 0, right: 400, bottom: 260 };
-  }
-
-  return graph.nodes.reduce<NodeBounds>((bounds, node) => {
-    const nodeHeight = getNodeHeight(node);
-    return {
-      left: Math.min(bounds.left, node.layout.x),
-      top: Math.min(bounds.top, node.layout.y),
-      right: Math.max(bounds.right, node.layout.x + NODE_WIDTH),
-      bottom: Math.max(bounds.bottom, node.layout.y + nodeHeight),
-    };
-  }, {
-    left: graph.nodes[0].layout.x,
-    top: graph.nodes[0].layout.y,
-    right: graph.nodes[0].layout.x + NODE_WIDTH,
-    bottom: graph.nodes[0].layout.y + getNodeHeight(graph.nodes[0]),
-  });
-}
-
-function getPortCenter(node: NodeGraphNode, portId: string, direction: 'input' | 'output'): { x: number; y: number } {
-  const ports = direction === 'input' ? node.inputs : node.outputs;
-  const portIndex = Math.max(0, ports.findIndex((port) => port.id === portId));
-  return {
-    x: node.layout.x + (direction === 'input' ? PORT_DOT_CENTER_X : NODE_WIDTH - PORT_DOT_CENTER_X),
-    y: node.layout.y + getNodePortStartY(node) + (portIndex * PORT_ROW_HEIGHT) + PORT_DOT_CENTER_Y,
-  };
-}
-
-function getConnectionPath(from: NodeGraphPoint, to: NodeGraphPoint): string {
-  const handle = Math.max(72, Math.abs(to.x - from.x) * 0.42);
-  return `M ${from.x} ${from.y} C ${from.x + handle} ${from.y}, ${to.x - handle} ${to.y}, ${to.x} ${to.y}`;
-}
-
-function getEdgePath(edge: NodeGraphEdge, nodesById: Map<string, NodeGraphNode>): string | null {
-  const fromNode = nodesById.get(edge.fromNodeId);
-  const toNode = nodesById.get(edge.toNodeId);
-  if (!fromNode || !toNode) return null;
-
-  const from = getPortCenter(fromNode, edge.fromPortId, 'output');
-  const to = getPortCenter(toNode, edge.toPortId, 'input');
-  return getConnectionPath(from, to);
-}
-
-function getPortTitle(port: NodeGraphPort): string {
-  return `${port.label} (${port.type})`;
-}
-
-function isNodeBypassable(node: NodeGraphNode): boolean {
-  return node.kind === 'effect' || node.kind === 'custom';
-}
-
-function isNodeBypassed(node: NodeGraphNode): boolean {
-  if (node.kind === 'effect') {
-    return node.params?.enabled === false;
-  }
-
-  if (node.kind === 'custom') {
-    return node.params?.bypassed === true;
-  }
-
-  return false;
 }
 
 export function NodeGraphCanvas({
@@ -527,39 +364,6 @@ export function NodeGraphCanvas({
     }
   }, [graph.edges, onDisconnectEdge]);
 
-  const renderPort = useCallback((node: NodeGraphNode, port: NodeGraphPort) => {
-    const isConnectableTarget = !!connectionDraft &&
-      connectionDraft.nodeId !== node.id &&
-      connectionDraft.direction !== port.direction &&
-      connectionDraft.type === port.type;
-    const isDraftStart = connectionDraft?.nodeId === node.id && connectionDraft.portId === port.id;
-
-    return (
-      <div
-        key={port.id}
-        className={[
-          'node-workspace-port',
-          `node-workspace-port-${port.direction}`,
-          isConnectableTarget ? 'connectable' : '',
-          isDraftStart ? 'connecting' : '',
-        ].filter(Boolean).join(' ')}
-        title={`${getPortTitle(port)} - drag to connect, right-click to disconnect`}
-        data-node-id={node.id}
-        data-port-id={port.id}
-        data-direction={port.direction}
-        onPointerDown={(event) => startConnectionDrag(event, node, port)}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          disconnectPortEdges(node, port);
-        }}
-      >
-        <span className="node-workspace-port-dot" />
-        <span className="node-workspace-port-label">{port.label}</span>
-      </div>
-    );
-  }, [connectionDraft, disconnectPortEdges, startConnectionDrag]);
-
   const disconnectSelectedEdge = useCallback(() => {
     if (!selectedEdge || !onDisconnectEdge) return;
     onDisconnectEdge(selectedEdge.id);
@@ -653,149 +457,32 @@ export function NodeGraphCanvas({
             transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
           }}
         >
-          <svg
-            className="node-workspace-edges"
-            style={{
-              left: graphBounds.left - 96,
-              top: graphBounds.top - 96,
-              width: graphBounds.right - graphBounds.left + 192,
-              height: graphBounds.bottom - graphBounds.top + 192,
-            }}
-            viewBox={`${graphBounds.left - 96} ${graphBounds.top - 96} ${graphBounds.right - graphBounds.left + 192} ${graphBounds.bottom - graphBounds.top + 192}`}
-            aria-hidden="true"
-          >
-            {graph.edges.map((edge) => {
-              const path = getEdgePath(edge, nodesById);
-              if (!path) return null;
-              return (
-                <g
-                  key={edge.id}
-                  className="node-workspace-edge-group"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setSelectedEdgeId(edge.id);
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onDisconnectEdge?.(edge.id);
-                    setSelectedEdgeId(null);
-                  }}
-                >
-                  <path className="node-workspace-edge-hit" d={path} />
-                  <path
-                    className={[
-                      'node-workspace-edge',
-                      `node-workspace-edge-${edge.type}`,
-                      edge.id === selectedEdgeId ? 'selected' : '',
-                    ].filter(Boolean).join(' ')}
-                    d={path}
-                  />
-                </g>
-              );
-            })}
-            {connectionDraft && (
-              <path
-                className={`node-workspace-edge node-workspace-edge-${connectionDraft.type} node-workspace-edge-draft`}
-                d={getConnectionPath(connectionDraft.start, connectionDraft.end)}
-              />
-            )}
-          </svg>
+          <NodeGraphEdges
+            graphBounds={graphBounds}
+            edges={graph.edges}
+            nodesById={nodesById}
+            selectedEdgeId={selectedEdgeId}
+            connectionDraft={connectionDraft}
+            onSelectEdge={setSelectedEdgeId}
+            onClearSelectedEdge={() => setSelectedEdgeId(null)}
+            onDisconnectEdge={onDisconnectEdge}
+          />
 
-          {displayNodes.map((node) => {
-            const nodeHeight = getNodeHeight(node);
-            const isSelected = node.id === selectedNodeId;
-            const isBypassable = isNodeBypassable(node);
-            const isBypassed = isNodeBypassed(node);
-            const nodeBadges = getAudioAnalysisBadges(node);
-            const analysisProgress = clamp(getNodeParamNumber(node, 'progressPercent'), 0, 100);
-            return (
-              <div
-                key={node.id}
-                role="button"
-                tabIndex={0}
-                className={[
-                  'node-workspace-node',
-                  `node-workspace-node-${node.kind}`,
-                  isSelected ? 'selected' : '',
-                  isBypassed ? 'bypassed' : '',
-                ].filter(Boolean).join(' ')}
-                data-node-id={node.id}
-                style={{
-                  left: node.layout.x,
-                  top: node.layout.y,
-                  width: NODE_WIDTH,
-                  height: nodeHeight,
-                }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelectNode(node.id);
-                }}
-                onPointerDown={(event) => startNodeDrag(event, node)}
-                onPointerMove={handleNodePointerMove}
-                onPointerUp={finishNodeDrag}
-                onPointerCancel={finishNodeDrag}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onSelectNode(node.id);
-                  }
-                }}
-              >
-                <div className="node-workspace-node-header">
-                  <span>{node.kind}</span>
-                  <div className="node-workspace-node-header-actions">
-                    {isBypassable && onToggleNodeBypass && (
-                      <button
-                        type="button"
-                        className={`node-workspace-bypass-button${isBypassed ? ' active' : ''}`}
-                        title={isBypassed ? 'Bypassed; click to enable' : 'Bypass node'}
-                        onPointerDown={(event) => {
-                          event.stopPropagation();
-                        }}
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          onToggleNodeBypass(node.id);
-                        }}
-                      >
-                        Byp
-                      </button>
-                    )}
-                    <span>{node.runtime}</span>
-                  </div>
-                </div>
-                <div className="node-workspace-node-title" title={node.label}>{node.label}</div>
-                <div className="node-workspace-node-description" title={node.description}>
-                  {node.description ?? 'Built-in processing node'}
-                </div>
-                {nodeBadges.length > 0 && (
-                  <div className="node-workspace-node-badges">
-                    {nodeBadges.map((badge) => (
-                      <span
-                        key={`${badge.tone}:${badge.label}`}
-                        className={`node-workspace-node-badge tone-${badge.tone}`}
-                        title={badge.title}
-                      >
-                        {badge.label}
-                      </span>
-                    ))}
-                    <span className="node-workspace-node-progress" title={`${analysisProgress}% available`}>
-                      <span style={{ width: `${analysisProgress}%` }} />
-                    </span>
-                  </div>
-                )}
-                <div className="node-workspace-node-ports" style={{ top: getNodePortStartY(node) }}>
-                  <div className="node-workspace-port-column">
-                    {node.inputs.map((port) => renderPort(node, port))}
-                  </div>
-                  <div className="node-workspace-port-column node-workspace-port-column-output">
-                    {node.outputs.map((port) => renderPort(node, port))}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {displayNodes.map((node) => (
+            <NodeGraphNodeCard
+              key={node.id}
+              node={node}
+              selectedNodeId={selectedNodeId}
+              connectionDraft={connectionDraft}
+              onSelectNode={onSelectNode}
+              onStartNodeDrag={startNodeDrag}
+              onNodePointerMove={handleNodePointerMove}
+              onFinishNodeDrag={finishNodeDrag}
+              onStartConnectionDrag={startConnectionDrag}
+              onDisconnectPortEdges={disconnectPortEdges}
+              onToggleNodeBypass={onToggleNodeBypass}
+            />
+          ))}
         </div>
       </div>
     </div>

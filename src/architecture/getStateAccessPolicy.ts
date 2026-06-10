@@ -22,8 +22,7 @@ export const allowedAdapterPaths = [
   'src/services/timeline/runtimeCoordinatorTypes.ts',
   'src/services/timeline/runtimeCoordinatorContracts.ts',
   'src/services/audio/AudioRecordingService.ts',
-  // Packet 221 split: the commit-to-timeline adapter moved out of the
-  // recording service; the grant follows it (entry itself is getState-free).
+  // Packet 221: commit-to-timeline adapter grant follows the split module.
   'src/services/audio/recording/commitRecording.ts',
   'src/services/audio/timelineRecordingWorkflow.ts',
   'src/services/export/**',
@@ -35,8 +34,7 @@ export const classCHardTargets = [
   { path: 'src/components/common/MatAnyoneSetupDialog.tsx', maxCurrentHits: 4 },
   { path: 'src/components/common/Toolbar.tsx', maxCurrentHits: 2 },
   { path: 'src/components/export/exportHelpers.ts', maxCurrentHits: 2 },
-  // Packets 189/208: ExportPanel is now getState-FREE (3 -> 0, entry
-  // removed); hits live in the run controller + runners.
+  // 189/208: ExportPanel getState-FREE; hits live in run controller/runners.
   { path: 'src/components/export/runners/ffmpegDirectExportRunner.ts', maxCurrentHits: 1 },
   { path: 'src/components/export/runners/fcpxmlExportRunner.ts', maxCurrentHits: 1 },
   { path: 'src/components/export/useExportRunController.ts', maxCurrentHits: 2 },
@@ -169,7 +167,13 @@ export const classCHardTargets = [
   // Packet 254: 12 -> 5 + 7 (output-window controller), total conserved.
   { path: 'src/engine/WebGPUEngine.ts', maxCurrentHits: 5 },
   { path: 'src/engine/engineCore/outputWindowController.ts', maxCurrentHits: 7 },
-  { path: 'src/hooks/useEngine.ts', maxCurrentHits: 25 },
+  // Packet 306: 25 -> 12+4+3+3+2 (engine sync hooks; one site consolidated,
+  // maxHits ratchets 657 -> 656).
+  { path: 'src/hooks/useEngine.ts', maxCurrentHits: 12 },
+  { path: 'src/hooks/engine/useEngineMaskTextureSync.ts', maxCurrentHits: 4 },
+  { path: 'src/hooks/engine/useEngineRenderWakeSubscriptions.ts', maxCurrentHits: 3 },
+  { path: 'src/hooks/engine/useEngineResolutionSync.ts', maxCurrentHits: 3 },
+  { path: 'src/hooks/engine/useEngineTimelineStateSync.ts', maxCurrentHits: 2 },
   { path: 'src/hooks/useGlobalHistory.ts', maxCurrentHits: 3 },
   { path: 'src/services/audio/audioDiagnostics.ts', maxCurrentHits: 1 },
   { path: 'src/services/audio/ClipAudioAnalysisOrchestrator.ts', maxCurrentHits: 1 },
@@ -227,16 +231,14 @@ export const classCHardTargets = [
   { path: 'src/stores/mediaStore/helpers/importPipeline.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/helpers/modelSequenceImport.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/init.ts', maxCurrentHits: 6 },
-  // Redistributed by packet 186: the compositionSlice split moved its 10
-  // hits into six role modules; cluster total unchanged (10).
+  // Packet 186: compositionSlice 10 -> six role modules, conserved.
   { path: 'src/stores/mediaStore/slices/composition/activeTimelineSync.ts', maxCurrentHits: 2 },
   { path: 'src/stores/mediaStore/slices/composition/crudActions.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/composition/resizeTransforms.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/composition/slotAssignmentActions.ts', maxCurrentHits: 3 },
   { path: 'src/stores/mediaStore/slices/composition/tabActions.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/composition/timelineSwitchBridge.ts', maxCurrentHits: 2 },
-  // Redistributed by packet 183: the fileManageSlice split moved its 8 hits
-  // into five role modules; cluster total unchanged (8).
+  // Packet 183: fileManageSlice 8 -> five role modules, conserved.
   { path: 'src/stores/mediaStore/slices/fileManage/deleteActions.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/fileManage/deleteRuntimeCleanup.ts', maxCurrentHits: 3 },
   { path: 'src/stores/mediaStore/slices/fileManage/mediaUsagePlanner.ts', maxCurrentHits: 1 },
@@ -279,8 +281,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  // 21 -> 22: packet-221 recording split moved the commit-to-timeline
-  // adapter into recording/commitRecording.ts (grant follows the move).
+  // 21 -> 22: packet-221 grant moved into recording/commitRecording.ts.
   allowedAdapterPathCount: 22,
   // Running redistribution log: 178 (packet 172), 182 (183), 187 (186),
   // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
@@ -289,9 +290,9 @@ export const getStateAccessPolicyBaselines = {
   // fileCount log (totals conserved per split redistribution):
   // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
   // ->207(259) ->208(267) ->212(279) ->216(287).
-  classCHardTargetFileCount: 218,
+  classCHardTargetFileCount: 222,
   // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit)
   // -> 659 (packet 231 retired the dispatcher ceiling slack: 16 -> 11 actual)
   // -> 658 (packet 237 retired one compositionRenderer hit).
-  classCHardTargetMaxHits: 657,
+  classCHardTargetMaxHits: 656,
 } as const;
