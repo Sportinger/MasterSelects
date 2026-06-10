@@ -24,6 +24,14 @@ export class RamPreviewCache {
   private gpuFrameCache: Map<number, GpuFrameCacheEntry> = new Map();
   private maxGpuFrames = 60;
 
+  get maxGpuCacheFrames(): number {
+    return this.maxGpuFrames;
+  }
+
+  set maxGpuCacheFrames(value: number) {
+    this.maxGpuFrames = value;
+  }
+
   createCompositeCacheReport(
     frameCount: number,
     heapBytes: number,

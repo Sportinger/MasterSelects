@@ -1,4 +1,14 @@
-import type { GaussianSplatRenderDebugSnapshot } from '../GaussianSplatGpuRenderer';
+export interface GaussianSplatRenderDebugSnapshot {
+  clipId: string;
+  sceneSplatCount: number;
+  activeSplatCount: number;
+  effectiveSplatCount: number;
+  drawCount: number;
+  viewport: { width: number; height: number };
+  backgroundColor?: string;
+  usedCull: boolean;
+  usedSort: boolean;
+}
 
 interface RenderDebugLogger {
   info(message: string, data?: unknown): void;

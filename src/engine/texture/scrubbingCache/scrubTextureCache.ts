@@ -25,7 +25,7 @@ export class ScrubTextureCache {
   private readonly cache: Map<string, ScrubbingTextureEntry> = new Map();
   private readonly maxFrames = 480;
   private readonly maxBytes = 1024 * 1024 * 1024;
-  private readonly maxDimension = 960;
+  readonly maxDimension = 960;
   private bytes = 0;
   private evictions = 0;
   private pendingCaptures = new Set<string>();

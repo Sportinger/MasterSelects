@@ -110,14 +110,14 @@ export function usePreviewMouseRouting({
   canvasSize,
   containerRef,
   editCameraOrthoMode,
-  editCameraOrthoPanStart,
+  editCameraOrthoPanStart: editCameraOrthoPanStartRef,
   editCameraOrthoViewActive,
   effectiveSceneNavFpsMode,
   endGaussianWheelBatch,
   freeCanvasNavigationMode,
-  gaussianFpsLookStart,
-  gaussianOrbitStart,
-  gaussianPanStart,
+  gaussianFpsLookStart: gaussianFpsLookStartRef,
+  gaussianOrbitStart: gaussianOrbitStartRef,
+  gaussianPanStart: gaussianPanStartRef,
   getFreshSceneNavTransform,
   getSceneNavPointerLockTarget,
   getSceneNavSolveSettings,
@@ -126,7 +126,7 @@ export function usePreviewMouseRouting({
   isPanning,
   isSceneObjectInteractionTarget,
   navigationSceneNavClip,
-  panStart,
+  panStart: panStartRef,
   sceneNavEnabled,
   setEditCameraOrthoFrame,
   setIsEditCameraOrthoPanning,
@@ -146,7 +146,7 @@ export function usePreviewMouseRouting({
 
     const handleWindowMouseMove = (event: MouseEvent) => {
       event.preventDefault();
-      const { x, y, center, scale, mode } = editCameraOrthoPanStart.current;
+      const { x, y, center, scale, mode } = editCameraOrthoPanStartRef.current;
       const basis = getEditCameraOrthoBasis(mode);
       const worldPerPixel = scale / Math.max(1, canvasSize.height);
       const dx = event.clientX - x;
@@ -173,7 +173,7 @@ export function usePreviewMouseRouting({
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [canvasSize.height, editCameraOrthoPanStart, isEditCameraOrthoPanning, setEditCameraOrthoFrame, setIsEditCameraOrthoPanning]);
+  }, [canvasSize.height, editCameraOrthoPanStartRef, isEditCameraOrthoPanning, setEditCameraOrthoFrame, setIsEditCameraOrthoPanning]);
 
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
     if (isCanvasInteractionTarget(event.target)) {
@@ -191,7 +191,7 @@ export function usePreviewMouseRouting({
       event.preventDefault();
       stopGaussianFpsLook();
       stopGaussianKeyboardMovement();
-      editCameraOrthoPanStart.current = {
+      editCameraOrthoPanStartRef.current = {
         x: event.clientX,
         y: event.clientY,
         center: cloneSceneVector(activeEditCameraOrthoFrame.center),
@@ -211,7 +211,7 @@ export function usePreviewMouseRouting({
           event.preventDefault();
           endGaussianWheelBatch();
           startSceneNavHistoryBatch('Scene pan');
-          gaussianPanStart.current = {
+          gaussianPanStartRef.current = {
             clipId: navigationSceneNavClip.id,
             x: event.clientX,
             y: event.clientY,
@@ -226,7 +226,7 @@ export function usePreviewMouseRouting({
         endGaussianWheelBatch();
         if (effectiveSceneNavFpsMode) {
           startSceneNavHistoryBatch('Scene look');
-          gaussianFpsLookStart.current = { clipId: navigationSceneNavClip.id, x: event.clientX, y: event.clientY };
+          gaussianFpsLookStartRef.current = { clipId: navigationSceneNavClip.id, x: event.clientX, y: event.clientY };
           getSceneNavPointerLockTarget()?.requestPointerLock?.();
           setIsGaussianFpsLooking(true);
         } else {
@@ -238,7 +238,7 @@ export function usePreviewMouseRouting({
             freshTransform.position.y - pivot.y,
             freshTransform.position.z - pivot.z,
           );
-          gaussianOrbitStart.current = {
+          gaussianOrbitStartRef.current = {
             clipId: navigationSceneNavClip.id,
             x: event.clientX,
             y: event.clientY,
@@ -262,7 +262,7 @@ export function usePreviewMouseRouting({
         event.preventDefault();
         endGaussianWheelBatch();
         startSceneNavHistoryBatch('Scene pan');
-        gaussianPanStart.current = {
+        gaussianPanStartRef.current = {
           clipId: navigationSceneNavClip.id,
           x: event.clientX,
           y: event.clientY,
@@ -280,27 +280,27 @@ export function usePreviewMouseRouting({
     if (event.button === 1 || (event.button === 0 && event.altKey)) {
       event.preventDefault();
       setIsPanning(true);
-      panStart.current = { x: event.clientX, y: event.clientY, panX: viewPan.x, panY: viewPan.y };
+      panStartRef.current = { x: event.clientX, y: event.clientY, panX: viewPan.x, panY: viewPan.y };
     }
   }, [
     activeEditCameraOrthoFrame,
     containerRef,
     editCameraOrthoMode,
-    editCameraOrthoPanStart,
+    editCameraOrthoPanStartRef,
     editCameraOrthoViewActive,
     effectiveSceneNavFpsMode,
     endGaussianWheelBatch,
     freeCanvasNavigationMode,
-    gaussianFpsLookStart,
-    gaussianOrbitStart,
-    gaussianPanStart,
+    gaussianFpsLookStartRef,
+    gaussianOrbitStartRef,
+    gaussianPanStartRef,
     getFreshSceneNavTransform,
     getSceneNavPointerLockTarget,
     getSceneNavSolveSettings,
     isCanvasInteractionTarget,
     isSceneObjectInteractionTarget,
     navigationSceneNavClip,
-    panStart,
+    panStartRef,
     sceneNavEnabled,
     setIsEditCameraOrthoPanning,
     setIsGaussianFpsLooking,
@@ -316,10 +316,10 @@ export function usePreviewMouseRouting({
 
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
     if (!isPanning) return;
-    const dx = event.clientX - panStart.current.x;
-    const dy = event.clientY - panStart.current.y;
-    setViewPan({ x: panStart.current.panX + dx, y: panStart.current.panY + dy });
-  }, [isPanning, panStart, setViewPan]);
+    const dx = event.clientX - panStartRef.current.x;
+    const dy = event.clientY - panStartRef.current.y;
+    setViewPan({ x: panStartRef.current.panX + dx, y: panStartRef.current.panY + dy });
+  }, [isPanning, panStartRef, setViewPan]);
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);

@@ -9,6 +9,7 @@ import {
   BackgroundPreloadController,
   type BackgroundScrubCacheStats,
 } from './scrubbingCache/backgroundPreload';
+import type { BackgroundPreloadSession } from './scrubbingCache/backgroundSession';
 import { quantizeTime } from './scrubbingCache/cacheKeys';
 import { LastFrameCache } from './scrubbingCache/lastFrameCache';
 import { RamPreviewCache } from './scrubbingCache/ramPreviewCache';
@@ -41,6 +42,31 @@ export class ScrubbingCache {
       onBackgroundFrameCached
     );
     this.lastFrameCache = new LastFrameCache(device);
+  }
+
+  // Compat surface restored after the scrubbingCache/ split: thin delegation
+  // so the entry class keeps its de-facto public API (tests and external
+  // callers reach these members on the instance).
+  get SCRUB_CACHE_MAX_DIMENSION(): number {
+    return this.scrubTextureCache.maxDimension;
+  }
+
+  get maxGpuCacheFrames(): number {
+    return this.ramPreviewCache.maxGpuCacheFrames;
+  }
+
+  set maxGpuCacheFrames(value: number) {
+    this.ramPreviewCache.maxGpuCacheFrames = value;
+  }
+
+  // Resolution-aware downscale to the longest-side cap; returns the original
+  // size when already within the cap. Delegates to ScrubTextureCache.
+  computeScrubCacheSize(width: number, height: number): { width: number; height: number } {
+    return this.scrubTextureCache.computeSize(width, height);
+  }
+
+  getOrCreateBackgroundSession(video: HTMLVideoElement): BackgroundPreloadSession | null {
+    return this.backgroundPreload.getOrCreateSession(video);
   }
 
   cacheFrameAtTime(video: HTMLVideoElement, time: number): void {

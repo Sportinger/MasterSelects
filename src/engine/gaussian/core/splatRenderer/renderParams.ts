@@ -1,4 +1,47 @@
-import type { SplatRenderOptions } from '../GaussianSplatGpuRenderer';
+import type { SceneSplatEffectorRuntimeData } from '../../../scene/types';
+import type { GaussianSplatParticleSettings, GaussianSplatTemporalSettings } from '../../types';
+
+/** Optional parameters for temporal + particle pipeline steps */
+export interface SplatRenderOptions {
+  /** Clip-local time in seconds (for particle effects) */
+  clipLocalTime?: number;
+  /** Clear color for the render target. Use "transparent" to preserve alpha. */
+  backgroundColor?: string;
+  /** Render into an existing color attachment instead of an internal pooled target. */
+  outputView?: GPUTextureView;
+  /** Color load operation for the target render pass. */
+  colorLoadOp?: GPULoadOp;
+  /** Optional shared scene depth attachment. */
+  depthView?: GPUTextureView;
+  /** Whether splat fragments should update the shared depth attachment. */
+  depthWrite?: boolean;
+  /** Whether the splat pass writes color; false is used for depth-mask-only passes. */
+  colorWrite?: boolean;
+  /** Depth load operation for the render pass. */
+  depthLoadOp?: GPULoadOp;
+  /** Depth store operation for the render pass. */
+  depthStoreOp?: GPUStoreOp;
+  /** Depth clear value used when depthLoadOp is 'clear'. */
+  depthClearValue?: number;
+  /** Optional per-layer world transform for shared-scene rendering. */
+  worldMatrix?: Float32Array;
+  /** Layer opacity multiplier applied before premultiplied-alpha output. */
+  layerOpacity?: number;
+  /** Fragment alpha cutoff for depth-mask passes. Color passes should leave this at the default. */
+  depthAlphaCutoff?: number;
+  /** Object-level 3D effectors in shared scene space. */
+  effectors?: SceneSplatEffectorRuntimeData[];
+  /** Max splat budget (0 = unlimited) */
+  maxSplats?: number;
+  /** Particle effect settings */
+  particleSettings?: GaussianSplatParticleSettings;
+  /** Sort every N frames (1 = every frame, 0 = never) */
+  sortFrequency?: number;
+  /** Temporal playback settings (informational — frame switching handled externally via uploadScene) */
+  temporalSettings?: GaussianSplatTemporalSettings;
+  /** Prefer correctness over throughput (used for offline export). */
+  precise?: boolean;
+}
 
 export const IDENTITY_MATRIX = new Float32Array([
   1, 0, 0, 0,

@@ -273,7 +273,7 @@ class ThumbnailCacheService {
           sourceUrl,
           element: thumbnailVideo,
         });
-        const generated = await this.generator.generateThumbnails(
+        const generated = await this.generateThumbnails(
           mediaFileId,
           thumbnailVideo,
           duration,
@@ -321,6 +321,37 @@ class ThumbnailCacheService {
     await this.invalidation.clearAll();
   }
 
+  /**
+   * Generate thumbnail frames from a prepared video element.
+   * Instance seam kept on the service (delegates to the generation module) so
+   * existing spies/overrides on the service surface keep intercepting calls.
+   */
+  private generateThumbnails(
+    mediaFileId: string,
+    video: HTMLVideoElement,
+    duration: number,
+    fileHash: string | undefined,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    return this.generator.generateThumbnails(mediaFileId, video, duration, fileHash, signal);
+  }
+
+  /**
+   * Load decoded frames into the in-memory tier and emit the frames-loaded
+   * event. Instance seam kept on the service for compat with existing callers.
+   */
+  private loadFramesIntoCache(
+    mediaFileId: string,
+    frames: Array<{ secondIndex: number; blob: Blob }>,
+  ): void {
+    const result = this.memory.loadFrames(mediaFileId, frames);
+    this.events.notify(mediaFileId, 'ready', {
+      type: 'frames-loaded',
+      secondIndices: result.secondIndices,
+      count: result.count,
+    });
+  }
+
   /** Load thumbnails from IndexedDB into memory cache */
   private async loadFromDB(
     mediaFileId: string,
@@ -332,12 +363,7 @@ class ThumbnailCacheService {
       return false;
     }
 
-    const result = this.memory.loadFrames(mediaFileId, frames);
-    this.events.notify(mediaFileId, 'ready', {
-      type: 'frames-loaded',
-      secondIndices: result.secondIndices,
-      count: result.count,
-    });
+    this.loadFramesIntoCache(mediaFileId, frames);
     return true;
   }
 }

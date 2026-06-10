@@ -39,7 +39,7 @@ export function getAudioProxySrcKind(src: string | undefined): 'blob-url' | 'fil
   if (src.startsWith('blob:')) return 'blob-url';
   if (src.startsWith('http')) return 'remote-url';
   if (src.startsWith('mediastream:')) return 'media-source';
-  if (src.startsWith('/') || /^[A-Za-z]:[\/]/.test(src)) return 'file-path';
+  if (src.startsWith('/') || /^[A-Za-z]:[/]/.test(src)) return 'file-path';
   return 'unknown';
 }
 

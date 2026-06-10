@@ -174,7 +174,7 @@ export function usePreviewSceneNavigation({
   stopGaussianKeyboardLoop,
   stopGaussianKeyboardMovement,
 }: UsePreviewSceneNavigationOptions): PreviewSceneNavigationHandlers {
-  const tickGaussianKeyboardMovement = useCallback((timestamp: number) => {
+  const tickGaussianKeyboardMovement = useCallback(function tickGaussianKeyboard(timestamp: number) {
     gaussianKeyboardFrameRef.current = null;
 
     if (!sceneNavEnabled || !navigationSceneNavClip || document.activeElement !== containerRef.current) {
@@ -242,7 +242,7 @@ export function usePreviewSceneNavigation({
       positionZ: freshTransform.position.z + positionDelta.z,
     });
 
-    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
+    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboard);
   }, [
     applyNavigationCameraValues,
     containerRef,

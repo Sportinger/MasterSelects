@@ -1,4 +1,11 @@
-import type { SplatCameraParams } from '../GaussianSplatGpuRenderer';
+export interface SplatCameraParams {
+  viewMatrix: Float32Array;       // 4x4 column-major
+  projectionMatrix: Float32Array; // 4x4 column-major
+  viewport: { width: number; height: number };
+  fov: number;
+  near: number;
+  far: number;
+}
 
 export const CAMERA_UNIFORM_SIZE = 224;
 

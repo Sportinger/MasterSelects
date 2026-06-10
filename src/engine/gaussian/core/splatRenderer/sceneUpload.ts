@@ -1,4 +1,9 @@
-import type { UploadableSplatData } from '../GaussianSplatGpuRenderer';
+export interface UploadableSplatData {
+  splatCount: number;
+  /** Canonical Float32Array: 14 floats per splat
+   *  [x,y,z, sx,sy,sz, rw,rx,ry,rz, r,g,b, opacity] */
+  data: Float32Array;
+}
 
 export const FLOATS_PER_SPLAT = 14;
 

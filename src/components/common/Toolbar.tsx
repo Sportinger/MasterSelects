@@ -291,7 +291,7 @@ export function Toolbar({ onOpenChangelog, onOpenSplash }: ToolbarProps) {
     toggleFavoriteSavedLayout,
   });
 
-  const shortcutLabels = useMemo(getToolbarShortcutLabels, []);
+  const shortcutLabels = useMemo(() => getToolbarShortcutLabels(), []);
 
   const handleNewOutput = useCallback(() => {
     const output = createOutputWindow(`Output ${Date.now()}`);

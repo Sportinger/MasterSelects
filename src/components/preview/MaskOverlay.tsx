@@ -466,6 +466,11 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
     updateMask,
   ]);
 
+  const shapePreviewPath = useMemo(
+    () => buildShapePreviewPath(shapeDrawState, maskEditMode, projectMaskPoint),
+    [maskEditMode, projectMaskPoint, shapeDrawState],
+  );
+
   // Don't render if not in mask editing mode
   const isShapeDrawingMode = maskEditMode === 'drawingRect' || maskEditMode === 'drawingEllipse' || maskEditMode === 'drawingPen';
   if (maskEditMode === 'none' || !selectedClip) {
@@ -474,11 +479,6 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
   if (!isShapeDrawingMode && !activeMask) {
     return null;
   }
-
-  const shapePreviewPath = useMemo(
-    () => buildShapePreviewPath(shapeDrawState, maskEditMode, projectMaskPoint),
-    [maskEditMode, projectMaskPoint, shapeDrawState],
-  );
 
   return (
     <MaskOverlayChrome

@@ -1,31 +1,17 @@
 import {
-  getAudioEffect,
-  getAudioEffectDefaultParams,
-  type AudioEffectParamValue,
-} from './AudioEffectRegistry';
-import { normalizeAudioEqParams } from './eq/AudioEqLegacy';
-import {
   AUDIO_GRAPH_SCHEMA_VERSION,
-  type AudioEffectInstanceWithBypass,
   type AudioGraphAnalysisRefsDescriptor,
   type AudioGraphClipDescriptor,
   type AudioGraphClipPlan,
   type AudioGraphClipSourceDescriptor,
   type AudioGraphDescriptor,
   type AudioGraphDiagnostic,
-  type AudioGraphEffectDescriptor,
-  type AudioGraphEffectPlanStep,
-  type AudioGraphEffectStatus,
-  type AudioGraphJsonPrimitive,
-  type AudioGraphJsonValue,
   type AudioGraphMasterDescriptor,
   type AudioGraphMasterPlan,
   type AudioGraphRenderInput,
   type AudioGraphRenderPlan,
   type AudioGraphRenderStep,
-  type AudioGraphScope,
   type AudioGraphSendDescriptor,
-  type AudioGraphSkippedEffect,
   type AudioGraphTimeRangeDescriptor,
   type AudioGraphTrackDescriptor,
   type AudioGraphTrackPlan,
@@ -35,57 +21,26 @@ import {
   type TrackAudioStateInput,
 } from './AudioGraphTypes';
 import type {
-  Effect,
-  AudioEffectInstance,
   MasterAudioState,
   MediaFileAudioAnalysisRefs,
   TimelineClip,
   TimelineTrack,
   TrackAudioState,
 } from '../../types';
+import {
+  compactObject,
+  descriptorKey,
+  isAudioGraphDescriptor,
+  isRecord,
+  stringValue,
+} from './graphRender/graphValueNormalization';
+import {
+  createEffectPlanSteps,
+  normalizeEffectStack,
+  normalizeLegacyClipAudioEffects,
+} from './graphRender/effectStackNormalization';
 
-export const AUDIO_GRAPH_PAYLOAD_FIELD_NAMES = Object.freeze([
-  'audioBuffer',
-  'buffer',
-  'buffers',
-  'file',
-  'manifestRef',
-  'payloadBytes',
-  'payloadRefs',
-  'rawBytes',
-  'rawSamples',
-  'renderedBuffer',
-  'sampleData',
-  'samples',
-  'source',
-  'thumbnails',
-  'videoElement',
-  'waveform',
-]);
-
-const PAYLOAD_FIELD_NAMES = new Set<string>(AUDIO_GRAPH_PAYLOAD_FIELD_NAMES);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isJsonPrimitive(value: unknown): value is AudioGraphJsonPrimitive {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
-    return true;
-  }
-
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function compactObject<T extends object>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined)
-  ) as T;
-}
-
-function stringValue(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value.length > 0 ? value : fallback;
-}
+export { AUDIO_GRAPH_PAYLOAD_FIELD_NAMES } from './graphRender/graphValueNormalization';
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
@@ -163,253 +118,6 @@ function normalizeClipSource(clip: TimelineClip): AudioGraphClipSourceDescriptor
   });
 }
 
-function normalizeEffectParamValue(value: AudioEffectParamValue): AudioGraphJsonPrimitive {
-  return isJsonPrimitive(value) ? value : null;
-}
-
-function normalizeGraphJsonValue(value: unknown): AudioGraphJsonValue | undefined {
-  if (isJsonPrimitive(value)) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .map(entry => normalizeGraphJsonValue(entry))
-      .filter((entry): entry is AudioGraphJsonValue => entry !== undefined);
-  }
-
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const normalized: Record<string, AudioGraphJsonValue> = {};
-  for (const key of Object.keys(value).toSorted()) {
-    if (PAYLOAD_FIELD_NAMES.has(key)) {
-      continue;
-    }
-
-    const nested = normalizeGraphJsonValue(value[key]);
-    if (nested !== undefined) {
-      normalized[key] = nested;
-    }
-  }
-
-  return normalized;
-}
-
-function normalizeLooseParams(
-  params: unknown,
-  effectId: string,
-  scope: AudioGraphScope,
-  ownerId: string,
-  diagnostics: AudioGraphDiagnostic[]
-): Record<string, AudioGraphJsonValue> {
-  if (!isRecord(params)) {
-    return {};
-  }
-
-  const normalized: Record<string, AudioGraphJsonValue> = {};
-  for (const key of Object.keys(params).toSorted()) {
-    if (PAYLOAD_FIELD_NAMES.has(key)) {
-      diagnostics.push({
-        severity: 'warning',
-        code: 'audio-graph-effect-payload-param-dropped',
-        message: `Dropped payload-shaped audio effect param from ${effectId}.`,
-        scope,
-        refId: ownerId,
-      });
-      continue;
-    }
-
-    const value = params[key];
-    const normalizedValue = normalizeGraphJsonValue(value);
-    if (normalizedValue === undefined) {
-      diagnostics.push({
-        severity: 'warning',
-        code: 'audio-graph-effect-param-dropped',
-        message: `Dropped non-JSON audio effect param "${key}" from ${effectId}.`,
-        scope,
-        refId: ownerId,
-      });
-      continue;
-    }
-
-    normalized[key] = normalizedValue;
-  }
-
-  return normalized;
-}
-
-function normalizeRegisteredParams(
-  params: unknown,
-  descriptorId: string,
-  effectId: string,
-  scope: AudioGraphScope,
-  ownerId: string,
-  diagnostics: AudioGraphDiagnostic[]
-): Record<string, AudioGraphJsonValue> {
-  if (descriptorId === 'audio-eq') {
-    return {
-      eq: normalizeAudioEqParams(params) as unknown as AudioGraphJsonValue,
-    };
-  }
-
-  const descriptor = getAudioEffect(descriptorId);
-  const defaults = getAudioEffectDefaultParams(descriptorId);
-  const paramNames = descriptor?.paramNames ?? [];
-  const allowedParams = new Set(paramNames);
-  const normalized: Record<string, AudioGraphJsonValue> = {};
-
-  for (const paramName of paramNames) {
-    normalized[paramName] = normalizeEffectParamValue(defaults[paramName]);
-  }
-
-  if (!isRecord(params)) {
-    return normalized;
-  }
-
-  for (const key of Object.keys(params).toSorted()) {
-    if (PAYLOAD_FIELD_NAMES.has(key)) {
-      diagnostics.push({
-        severity: 'warning',
-        code: 'audio-graph-effect-payload-param-dropped',
-        message: `Dropped payload-shaped audio effect param from ${effectId}.`,
-        scope,
-        refId: ownerId,
-      });
-      continue;
-    }
-
-    if (!allowedParams.has(key)) {
-      diagnostics.push({
-        severity: 'warning',
-        code: 'audio-graph-effect-param-unknown',
-        message: `Dropped unknown param "${key}" for audio effect descriptor "${descriptorId}".`,
-        scope,
-        refId: ownerId,
-      });
-      continue;
-    }
-
-    const value = params[key];
-    const normalizedValue = normalizeGraphJsonValue(value);
-    if (normalizedValue === undefined) {
-      diagnostics.push({
-        severity: 'warning',
-        code: 'audio-graph-effect-param-dropped',
-        message: `Dropped non-JSON audio effect param "${key}" from ${effectId}.`,
-        scope,
-        refId: ownerId,
-      });
-      continue;
-    }
-
-    normalized[key] = normalizedValue;
-  }
-
-  return normalized;
-}
-
-function effectStatus(
-  effect: AudioEffectInstanceWithBypass,
-  descriptorExists: boolean
-): AudioGraphEffectStatus {
-  if (!descriptorExists) {
-    return 'invalid';
-  }
-
-  if (effect.enabled === false || effect.disabled === true) {
-    return 'disabled';
-  }
-
-  if (effect.bypassed === true) {
-    return 'bypassed';
-  }
-
-  return 'active';
-}
-
-function normalizeEffectStack(
-  effects: readonly AudioEffectInstance[] | undefined,
-  scope: AudioGraphScope,
-  ownerId: string,
-  diagnostics: AudioGraphDiagnostic[]
-): AudioGraphEffectDescriptor[] {
-  if (!effects || effects.length === 0) {
-    return [];
-  }
-
-  const seenEffectIds = new Set<string>();
-
-  return effects.map((effect, order) => {
-    const input = effect as AudioEffectInstanceWithBypass;
-    const id = stringValue(input.id, `${scope}-${ownerId}-effect-${order}`);
-    const descriptorId = stringValue(input.descriptorId, 'unknown');
-    const descriptor = getAudioEffect(descriptorId);
-
-    if (seenEffectIds.has(id)) {
-      diagnostics.push({
-        severity: 'warning',
-        code: 'audio-graph-effect-id-duplicate',
-        message: `Duplicate audio effect id "${id}" in ${scope} "${ownerId}".`,
-        scope,
-        refId: ownerId,
-      });
-    }
-    seenEffectIds.add(id);
-
-    if (!descriptor) {
-      diagnostics.push({
-        severity: 'error',
-        code: 'audio-graph-effect-descriptor-unknown',
-        message: `Unknown audio effect descriptor "${descriptorId}" for effect "${id}".`,
-        scope,
-        refId: ownerId,
-      });
-    }
-
-    const status = effectStatus(input, Boolean(descriptor));
-    const params = descriptor
-      ? normalizeRegisteredParams(input.params, descriptorId, id, scope, ownerId, diagnostics)
-      : normalizeLooseParams(input.params, id, scope, ownerId, diagnostics);
-
-    return compactObject<AudioGraphEffectDescriptor>({
-      id,
-      descriptorId,
-      order,
-      enabled: input.enabled !== false && input.disabled !== true,
-      bypassed: input.bypassed === true,
-      status,
-      params,
-      automationMode: input.automationMode,
-    });
-  });
-}
-
-function normalizeLegacyClipAudioEffects(
-  effects: readonly Effect[] | undefined,
-  existingEffectIds: ReadonlySet<string>
-): AudioEffectInstance[] {
-  if (!effects || effects.length === 0) {
-    return [];
-  }
-
-  return effects.flatMap((effect) => {
-    const descriptor = getAudioEffect(effect.type);
-    if (!descriptor || existingEffectIds.has(effect.id)) {
-      return [];
-    }
-
-    return [{
-      id: effect.id,
-      descriptorId: descriptor.id,
-      enabled: effect.enabled !== false,
-      params: effect.params ?? {},
-      automationMode: 'clip',
-    } satisfies AudioEffectInstance];
-  });
-}
-
 function normalizeSends(sends: TrackAudioState['sends'] | undefined): AudioGraphSendDescriptor[] {
   if (!sends || sends.length === 0) {
     return [];
@@ -423,87 +131,6 @@ function normalizeSends(sends: TrackAudioState['sends'] | undefined): AudioGraph
     enabled: send.enabled !== false,
     order,
   }));
-}
-
-function createEffectPlanSteps(
-  effects: AudioGraphEffectDescriptor[],
-  scope: AudioGraphScope,
-  ownerId: string
-): { active: AudioGraphEffectPlanStep[]; skipped: AudioGraphSkippedEffect[] } {
-  const active: AudioGraphEffectPlanStep[] = [];
-  const skipped: AudioGraphSkippedEffect[] = [];
-
-  for (const effect of effects) {
-    if (effect.status !== 'active') {
-      skipped.push({
-        effectId: effect.id,
-        descriptorId: effect.descriptorId,
-        order: effect.order,
-        status: effect.status,
-      });
-      continue;
-    }
-
-    active.push(compactObject<AudioGraphEffectPlanStep>({
-      nodeId: `${scope}:${ownerId}:effect:${effect.id}`,
-      scope,
-      ownerId,
-      effectId: effect.id,
-      descriptorId: effect.descriptorId,
-      order: effect.order,
-      params: effect.params,
-      automationMode: effect.automationMode,
-    }));
-  }
-
-  return { active, skipped };
-}
-
-function canonicalizeJson(value: unknown): AudioGraphJsonValue {
-  if (isJsonPrimitive(value)) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(item => canonicalizeJson(item));
-  }
-
-  if (isRecord(value)) {
-    const normalized: Record<string, AudioGraphJsonValue> = {};
-    for (const key of Object.keys(value).toSorted()) {
-      const entry = value[key];
-      if (entry !== undefined) {
-        normalized[key] = canonicalizeJson(entry);
-      }
-    }
-    return normalized;
-  }
-
-  return null;
-}
-
-function stableJsonString(value: unknown): string {
-  return JSON.stringify(canonicalizeJson(value));
-}
-
-function hashString(input: string): string {
-  let hash = 0x811c9dc5;
-
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-
-  return hash.toString(36).padStart(7, '0');
-}
-
-function descriptorKey(descriptor: AudioGraphDescriptor): string {
-  const json = stableJsonString(descriptor);
-  return `audio-graph:v${AUDIO_GRAPH_SCHEMA_VERSION}:${hashString(json)}:${json.length}`;
-}
-
-function isAudioGraphDescriptor(value: AudioGraphDescriptor | AudioGraphRenderInput): value is AudioGraphDescriptor {
-  return isRecord(value) && value.schemaVersion === AUDIO_GRAPH_SCHEMA_VERSION && isRecord(value.master);
 }
 
 export class AudioGraphRenderer {

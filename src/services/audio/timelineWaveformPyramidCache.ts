@@ -5,7 +5,7 @@ import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
 import { Logger } from '../logger';
 import { AudioArtifactStore } from './AudioArtifactStore';
-import { getSharedAudioDecodeService } from './AudioDecodeService';
+import { AudioDecodeService } from './AudioDecodeService';
 import type { AudioAnalysisArtifact, AudioArtifactRef, AudioChannelLayout } from './audioArtifactTypes';
 import { isAudioAnalysisArtifactStaleForInput } from './audioAnalysisManifestKeys';
 import {
@@ -503,31 +503,55 @@ async function generateTimelineWaveformAnalysisForFileUncached(
   file: File,
   options: GenerateTimelineWaveformAnalysisOptions = {},
 ): Promise<TimelineWaveformAnalysisResult> {
-  throwIfAborted(options.signal);
-  const arrayBuffer = await file.arrayBuffer();
-  throwIfAborted(options.signal);
+  // One AudioContext per source waveform job, created synchronously when the
+  // job starts: later callers join the active job and share this context,
+  // and it is closed when the job settles (decode-service dispose below).
+  const audioContext = new AudioContext();
+  const decodeService = new AudioDecodeService({
+    limits: {
+      maxSourceBytes: Number.MAX_SAFE_INTEGER,
+      maxDecodedPcmBytes: Number.MAX_SAFE_INTEGER,
+    },
+    createAudioContext: () => audioContext,
+  });
+  try {
+    throwIfAborted(options.signal);
+    const arrayBuffer = await file.arrayBuffer();
+    throwIfAborted(options.signal);
 
-  const audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
-    {
-      kind: 'array-buffer',
-      arrayBuffer,
-      name: file.name,
-      mimeType: file.type || undefined,
-    },
-    {
-      mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
-      sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
-      clipAudioStateHash: options.clipAudioStateHash,
-      signal: options.signal,
-      metadata: {
-        source: 'timeline-waveform-pyramid',
-        sourceFileName: file.name,
-        sourceFileSize: file.size,
-        sourceLastModified: file.lastModified,
+    const audioBuffer = await decodeService.decodeAudioBuffer(
+      {
+        kind: 'array-buffer',
+        arrayBuffer,
+        name: file.name,
+        mimeType: file.type || undefined,
       },
-    },
-  );
-  throwIfAborted(options.signal);
+      {
+        mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
+        sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
+        clipAudioStateHash: options.clipAudioStateHash,
+        signal: options.signal,
+        metadata: {
+          source: 'timeline-waveform-pyramid',
+          sourceFileName: file.name,
+          sourceFileSize: file.size,
+          sourceLastModified: file.lastModified,
+        },
+      },
+    );
+    throwIfAborted(options.signal);
+    return await generateTimelineWaveformAnalysisFromBuffer(file, arrayBuffer, audioBuffer, options);
+  } finally {
+    decodeService.dispose();
+  }
+}
+
+async function generateTimelineWaveformAnalysisFromBuffer(
+  file: File,
+  arrayBuffer: ArrayBuffer,
+  audioBuffer: AudioBuffer,
+  options: GenerateTimelineWaveformAnalysisOptions,
+): Promise<TimelineWaveformAnalysisResult> {
   const preview = generateLegacyWaveformPreviewFromBuffer(
     audioBuffer,
     options.samplesPerSecond ?? DEFAULT_LEGACY_SAMPLES_PER_SECOND,

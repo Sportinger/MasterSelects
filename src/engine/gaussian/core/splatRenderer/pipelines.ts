@@ -76,24 +76,6 @@ export function createSplatRenderPipelines(device: GPUDevice): SplatRenderPipeli
   };
 }
 
-export function selectSplatRenderPipeline(
-  pipelines: SplatRenderPipelineBundle,
-  hasDepth: boolean,
-  depthWrite: boolean,
-  colorWrite: boolean,
-): GPURenderPipeline {
-  if (!hasDepth) {
-    return pipelines.pipeline;
-  }
-  if (depthWrite) {
-    if (!colorWrite) {
-      return pipelines.pipelineWithDepthWriteMask;
-    }
-    return pipelines.pipelineWithDepthWrite;
-  }
-  return pipelines.pipelineWithDepth;
-}
-
 function createColorPipeline(
   device: GPUDevice,
   layout: GPUPipelineLayout,

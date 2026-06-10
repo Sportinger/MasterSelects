@@ -1,4 +1,10 @@
-import type { GaussianSplatRenderTargetSummary } from '../GaussianSplatGpuRenderer';
+export interface GaussianSplatRenderTargetSummary {
+  width: number;
+  height: number;
+  centerPixel: [number, number, number, number];
+  nonTransparentSampled: number;
+  nonBlackSampled: number;
+}
 
 const BYTES_PER_PIXEL = 4;
 

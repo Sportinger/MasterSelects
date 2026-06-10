@@ -100,8 +100,8 @@ export function usePreviewSceneNavigationPointerEffects({
   effectiveSceneNavFpsMode,
   endSceneNavHistoryBatch,
   gaussianFpsLookStart,
-  gaussianOrbitStart,
-  gaussianPanStart,
+  gaussianOrbitStart: gaussianOrbitStartRef,
+  gaussianPanStart: gaussianPanStartRef,
   getFreshSceneNavTransform,
   getSceneNavPointerLockTarget,
   getSceneNavSolveSettings,
@@ -120,19 +120,19 @@ export function usePreviewSceneNavigationPointerEffects({
     stopGaussianFpsLook();
     stopGaussianKeyboardMovement();
     if (isGaussianOrbiting) {
-      gaussianOrbitStart.current.clipId = null;
+      gaussianOrbitStartRef.current.clipId = null;
       setIsGaussianOrbiting(false);
       endSceneNavHistoryBatch();
     }
     if (isGaussianPanning) {
-      gaussianPanStart.current.clipId = null;
+      gaussianPanStartRef.current.clipId = null;
       setIsGaussianPanning(false);
       endSceneNavHistoryBatch();
     }
   }, [
     endSceneNavHistoryBatch,
-    gaussianOrbitStart,
-    gaussianPanStart,
+    gaussianOrbitStartRef,
+    gaussianPanStartRef,
     isGaussianOrbiting,
     isGaussianPanning,
     sceneNavEnabled,
@@ -145,7 +145,7 @@ export function usePreviewSceneNavigationPointerEffects({
   useEffect(() => {
     if (effectiveSceneNavFpsMode) {
       if (isGaussianOrbiting) {
-        gaussianOrbitStart.current.clipId = null;
+        gaussianOrbitStartRef.current.clipId = null;
         setIsGaussianOrbiting(false);
         endSceneNavHistoryBatch();
       }
@@ -158,7 +158,7 @@ export function usePreviewSceneNavigationPointerEffects({
   }, [
     effectiveSceneNavFpsMode,
     endSceneNavHistoryBatch,
-    gaussianOrbitStart,
+    gaussianOrbitStartRef,
     isGaussianFpsLooking,
     isGaussianOrbiting,
     setIsGaussianOrbiting,
@@ -183,7 +183,7 @@ export function usePreviewSceneNavigationPointerEffects({
         pivotY,
         pivotZ,
         radius,
-      } = gaussianOrbitStart.current;
+      } = gaussianOrbitStartRef.current;
       if (!clipId) return;
       if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
 
@@ -222,7 +222,7 @@ export function usePreviewSceneNavigationPointerEffects({
     };
 
     const finishGaussianOrbit = () => {
-      gaussianOrbitStart.current.clipId = null;
+      gaussianOrbitStartRef.current.clipId = null;
       setIsGaussianOrbiting(false);
       endSceneNavHistoryBatch();
     };
@@ -239,7 +239,7 @@ export function usePreviewSceneNavigationPointerEffects({
     effectiveResolution.height,
     effectiveResolution.width,
     endSceneNavHistoryBatch,
-    gaussianOrbitStart,
+    gaussianOrbitStartRef,
     getSceneNavSolveSettings,
     isGaussianOrbiting,
     navigationSceneNavClip,
@@ -330,7 +330,7 @@ export function usePreviewSceneNavigationPointerEffects({
     if (!isGaussianPanning) return;
 
     const handleWindowMouseMove = (event: MouseEvent) => {
-      const { clipId, x, y, panX, panY, panZ } = gaussianPanStart.current;
+      const { clipId, x, y, panX, panY, panZ } = gaussianPanStartRef.current;
       if (!clipId) return;
       if (!navigationSceneNavClip || navigationSceneNavClip.id !== clipId) return;
 
@@ -364,7 +364,7 @@ export function usePreviewSceneNavigationPointerEffects({
     };
 
     const finishGaussianPan = () => {
-      gaussianPanStart.current.clipId = null;
+      gaussianPanStartRef.current.clipId = null;
       setIsGaussianPanning(false);
       endSceneNavHistoryBatch();
     };
@@ -381,7 +381,7 @@ export function usePreviewSceneNavigationPointerEffects({
     effectiveResolution.height,
     effectiveResolution.width,
     endSceneNavHistoryBatch,
-    gaussianPanStart,
+    gaussianPanStartRef,
     getFreshSceneNavTransform,
     getSceneNavSolveSettings,
     isGaussianPanning,

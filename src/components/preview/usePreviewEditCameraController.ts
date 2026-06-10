@@ -57,8 +57,8 @@ export function usePreviewEditCameraController({
   effectiveResolution,
   endGaussianWheelBatch,
   endSceneNavHistoryBatch,
-  gaussianOrbitStart,
-  gaussianPanStart,
+  gaussianOrbitStart: gaussianOrbitStartRef,
+  gaussianPanStart: gaussianPanStartRef,
   hasKeyframes,
   isRecording,
   sceneNavNoKeyframes,
@@ -269,13 +269,13 @@ export function usePreviewEditCameraController({
     stopGaussianFpsLook();
     stopGaussianKeyboardMovement();
     endGaussianWheelBatch();
-    if (gaussianOrbitStart.current.clipId) {
-      gaussianOrbitStart.current.clipId = null;
+    if (gaussianOrbitStartRef.current.clipId) {
+      gaussianOrbitStartRef.current.clipId = null;
       setIsGaussianOrbiting(false);
       endSceneNavHistoryBatch();
     }
-    if (gaussianPanStart.current.clipId) {
-      gaussianPanStart.current.clipId = null;
+    if (gaussianPanStartRef.current.clipId) {
+      gaussianPanStartRef.current.clipId = null;
       setIsGaussianPanning(false);
       endSceneNavHistoryBatch();
     }
@@ -306,8 +306,8 @@ export function usePreviewEditCameraController({
     effectiveResolution.width,
     endGaussianWheelBatch,
     endSceneNavHistoryBatch,
-    gaussianOrbitStart,
-    gaussianPanStart,
+    gaussianOrbitStartRef,
+    gaussianPanStartRef,
     getEditSceneCameraConfig,
     setIsGaussianOrbiting,
     setIsGaussianPanning,

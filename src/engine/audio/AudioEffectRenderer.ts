@@ -24,10 +24,12 @@ import {
   AUDIO_VOLUME_EFFECT_ID,
   AUDIO_VOLUME_PARAM,
   LEGACY_AUDIO_EFFECT_RENDER_ORDER,
+  bezierInterpolate,
   getNumericEffectParamDefault,
   hasEffectKeyframes,
   hasNonDefaultRegistryParams,
   hasRenderableAudioEffect,
+  interpolateValue,
   type RenderableAudioEffectInstance,
 } from './effectRender/audioEffectRenderContracts';
 import { applySampleAccurateEQ } from './effectRender/eqSampleRenderer';
@@ -271,6 +273,32 @@ export class AudioEffectRenderer {
     };
   }
 
+  /**
+   * Test seams: the audio effect renderer suites exercise these behaviors
+   * through renderer instances. They are thin delegations to the extracted
+   * effectRender helpers and the module-level default detectors.
+   * (`protected` keeps them off the public API without tripping
+   * noUnusedLocals on never-called private members.)
+   */
+  protected hasEffectKeyframes(keyframes: Keyframe[], effectId: string): boolean {
+    return hasEffectKeyframes(keyframes, effectId);
+  }
+
+  protected hasNonDefaultEQ(eqEffect: Effect): boolean {
+    return hasNonDefaultEQ(eqEffect);
+  }
+
+  protected hasNonDefaultVolume(volumeEffect: Effect): boolean {
+    return hasNonDefaultVolume(volumeEffect);
+  }
+
+  protected interpolateValue(keyframes: Keyframe[], time: number, defaultValue: number): number {
+    return interpolateValue(keyframes, time, defaultValue);
+  }
+
+  protected bezierInterpolate(prevKf: Keyframe, kf: Keyframe, t: number): number {
+    return bezierInterpolate(prevKf, kf, t);
+  }
 
   /**
    * Apply simple gain without automation (utility function)

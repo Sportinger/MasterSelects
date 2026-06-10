@@ -158,7 +158,7 @@ export class BackgroundPreloadController {
     };
   }
 
-  private getOrCreateSession(video: HTMLVideoElement): BackgroundPreloadSession | null {
+  getOrCreateSession(video: HTMLVideoElement): BackgroundPreloadSession | null {
     const videoSrc = video.currentSrc || video.src;
     if (!videoSrc) return null;
     const existing = this.sessions.get(videoSrc);
