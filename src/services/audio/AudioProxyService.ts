@@ -2,6 +2,7 @@ import type { MediaFile, ProxyStatus } from '../../stores/mediaStore/types';
 import { encodeAudioBufferToWavBlob } from '../../engine/audio/AudioFileEncoder';
 import { projectFileService } from '../projectFileService';
 import { Logger } from '../logger';
+import { AudioDecodeServiceError, getSharedAudioDecodeService } from './AudioDecodeService';
 
 const log = Logger.create('AudioProxy');
 
@@ -18,29 +19,7 @@ export interface AudioProxyGenerationCallbacks {
   force?: boolean;
 }
 
-let decodeContext: AudioContext | null = null;
 const activeJobs = new Map<string, Promise<void>>();
-
-function getDecodeContext(): AudioContext {
-  if (!decodeContext || decodeContext.state === 'closed') {
-    decodeContext = new AudioContext();
-  }
-  return decodeContext;
-}
-
-function disposeDecodeContext(): void {
-  const context = decodeContext;
-  decodeContext = null;
-  if (context && context.state !== 'closed') {
-    void context.close().catch((error) => {
-      log.warn('Failed to close audio proxy decode context', error);
-    });
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', disposeDecodeContext);
-}
 
 export function getAudioProxyStorageKey(mediaFile: Pick<MediaFile, 'id' | 'fileHash' | 'audioProxyStorageKey'>): string {
   return mediaFile.audioProxyStorageKey || mediaFile.fileHash || mediaFile.id;
@@ -78,7 +57,13 @@ async function resolveSourceFile(mediaFile: MediaFile): Promise<File | null> {
 }
 
 function isDecodeMissingAudio(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'EncodingError';
+  if (error instanceof DOMException && error.name === 'EncodingError') {
+    return true;
+  }
+
+  return error instanceof AudioDecodeServiceError
+    && error.cause instanceof DOMException
+    && error.cause.name === 'EncodingError';
 }
 
 export async function ensureAudioProxyForMediaFile(
@@ -122,9 +107,19 @@ export async function ensureAudioProxyForMediaFile(
 
     let audioBuffer: AudioBuffer;
     try {
-      const arrayBuffer = await sourceFile.arrayBuffer();
       callbacks.onUpdate?.({ status: 'generating', progress: 35, storageKey });
-      audioBuffer = await getDecodeContext().decodeAudioData(arrayBuffer.slice(0));
+      audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
+        { kind: 'file', file: sourceFile },
+        {
+          mediaFileId: mediaFile.id,
+          sourceFingerprint: storageKey,
+          metadata: {
+            source: 'audio-proxy',
+            sourceFileName: sourceFile.name,
+            sourceFileSize: sourceFile.size,
+          },
+        },
+      );
     } catch (error) {
       if (mediaFile.type === 'video' && isDecodeMissingAudio(error)) {
         callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });

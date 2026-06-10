@@ -38,6 +38,7 @@ import {
 } from './eq/AudioEqLinearPhase';
 import type { AudioEqBand, AudioEqBandType } from './eq/AudioEqTypes';
 import { createSpectralGateState, processSpectralGateBlock } from './spectralGateProcessor';
+import { createBufferLike } from './audioBufferFactory';
 
 const log = Logger.create('AudioEffectRenderer');
 
@@ -1157,22 +1158,7 @@ export class AudioEffectRenderer {
   }
 
   private createMutableAudioBufferLike(buffer: AudioBuffer): AudioBuffer {
-    const maybeWindow = globalThis as typeof globalThis & {
-      webkitAudioContext?: typeof AudioContext;
-    };
-    const AudioContextCtor = globalThis.AudioContext ?? maybeWindow.webkitAudioContext;
-    if (!AudioContextCtor) {
-      throw new Error('AudioContext is required for audio effect sample processing.');
-    }
-
-    const audioContext = new AudioContextCtor();
-    const nextBuffer = audioContext.createBuffer(
-      buffer.numberOfChannels,
-      buffer.length,
-      buffer.sampleRate
-    );
-    audioContext.close();
-    return nextBuffer;
+    return createBufferLike(buffer);
   }
 
   private applyPeakLimiter(
@@ -1948,12 +1934,7 @@ export class AudioEffectRenderer {
       return buffer;
     }
 
-    const audioContext = new AudioContext();
-    const newBuffer = audioContext.createBuffer(
-      buffer.numberOfChannels,
-      buffer.length,
-      buffer.sampleRate
-    );
+    const newBuffer = createBufferLike(buffer);
 
     for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
       const inputData = buffer.getChannelData(ch);
@@ -1964,7 +1945,6 @@ export class AudioEffectRenderer {
       }
     }
 
-    audioContext.close();
     return newBuffer;
   }
 

@@ -6,6 +6,7 @@ import {
   STEM_PCM_F32_MIME_TYPE,
 } from './stemPcm';
 import { STEM_SOURCE_LAYER_ID } from './stemSourceLayer';
+import { createBuffer } from '../../../engine/audio/audioBufferFactory';
 
 export interface StemAudioBufferFactory {
   createBuffer(numberOfChannels: number, length: number, sampleRate: number): AudioBuffer;
@@ -39,12 +40,7 @@ function getAudioContextConstructor(): AudioContextConstructor {
 
 function defaultAudioBufferFactory(): StemAudioBufferFactory {
   return {
-    createBuffer(numberOfChannels, length, sampleRate) {
-      const context = new (getAudioContextConstructor())();
-      const buffer = context.createBuffer(numberOfChannels, Math.max(1, length), sampleRate);
-      void context.close();
-      return buffer;
-    },
+    createBuffer,
     async decodeAudioData(audioData) {
       const context = new (getAudioContextConstructor())();
       try {

@@ -17,6 +17,7 @@ import {
   finiteNumber,
   hasNonDefaultAudioPan,
 } from './audioMath';
+import { createBuffer } from './audioBufferFactory';
 
 const log = Logger.create('AudioMixer');
 
@@ -274,8 +275,7 @@ export class AudioMixer {
    * Convert mono buffer to stereo
    */
   private convertToStereo(buffer: AudioBuffer): AudioBuffer {
-    const audioContext = new AudioContext();
-    const stereoBuffer = audioContext.createBuffer(
+    const stereoBuffer = createBuffer(
       2,
       buffer.length,
       buffer.sampleRate
@@ -290,7 +290,6 @@ export class AudioMixer {
       rightData[i] = monoData[i];
     }
 
-    audioContext.close();
     return stereoBuffer;
   }
 
@@ -298,14 +297,11 @@ export class AudioMixer {
    * Create a silent buffer
    */
   private createSilentBuffer(duration: number): AudioBuffer {
-    const audioContext = new AudioContext();
-    const buffer = audioContext.createBuffer(
+    return createBuffer(
       this.settings.numberOfChannels,
       Math.ceil(duration * this.settings.sampleRate),
       this.settings.sampleRate
     );
-    audioContext.close();
-    return buffer;
   }
 
   /**

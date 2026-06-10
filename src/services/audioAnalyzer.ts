@@ -3,6 +3,7 @@
 
 import { Logger } from './logger';
 import { useMediaStore } from '../stores/mediaStore';
+import { getSharedAudioDecodeService } from './audio/AudioDecodeService';
 
 const log = Logger.create('AudioAnalyzer');
 
@@ -26,15 +27,6 @@ export interface AudioFingerprint {
 }
 
 class AudioAnalyzer {
-  private audioContext: AudioContext | null = null;
-
-  private getAudioContext(): AudioContext {
-    if (!this.audioContext) {
-      this.audioContext = new AudioContext();
-    }
-    return this.audioContext;
-  }
-
   /**
    * Extract audio buffer from a media file
    */
@@ -48,10 +40,18 @@ class AudioAnalyzer {
     }
 
     try {
-      const ctx = this.getAudioContext();
-      const arrayBuffer = await mediaFile.file.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      return audioBuffer;
+      return await getSharedAudioDecodeService().decodeAudioBuffer(
+        { kind: 'file', file: mediaFile.file },
+        {
+          mediaFileId,
+          sourceFingerprint: mediaFile.fileHash || mediaFile.id,
+          metadata: {
+            source: 'audio-analyzer',
+            sourceFileName: mediaFile.file.name,
+            sourceFileSize: mediaFile.file.size,
+          },
+        },
+      );
     } catch (error) {
       log.error('Failed to decode audio', error);
       return null;
@@ -191,10 +191,7 @@ class AudioAnalyzer {
    * Cleanup
    */
   dispose(): void {
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
+    // Decode context ownership lives in AudioDecodeService.
   }
 }
 

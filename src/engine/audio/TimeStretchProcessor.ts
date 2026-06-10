@@ -17,6 +17,7 @@ import { SoundTouch } from 'soundtouch-ts';
 const log = Logger.create('TimeStretchProcessor');
 import type { Keyframe } from '../../types';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
+import { createBuffer } from './audioBufferFactory';
 
 export interface TimeStretchSettings {
   preservePitch: boolean;  // Keep original pitch when changing speed
@@ -142,8 +143,7 @@ export class TimeStretchProcessor {
     const outputSamples = Math.ceil(clipDuration * sampleRate);
 
     // Create output buffer
-    const audioContext = new AudioContext();
-    const outputBuffer = audioContext.createBuffer(channels, outputSamples, sampleRate);
+    const outputBuffer = createBuffer(channels, outputSamples, sampleRate);
 
     // Segment size for processing (100ms segments)
     const segmentDuration = 0.1; // seconds
@@ -231,7 +231,6 @@ export class TimeStretchProcessor {
       }
     }
 
-    audioContext.close();
     return outputBuffer;
   }
 
@@ -409,9 +408,8 @@ export class TimeStretchProcessor {
     const processed = await this.stretchSegment(segments, speed, buffer.sampleRate, channels);
 
     // Create output buffer
-    const audioContext = new AudioContext();
     const outputLength = processed[0]?.length || 0;
-    const outputBuffer = audioContext.createBuffer(channels, outputLength, buffer.sampleRate);
+    const outputBuffer = createBuffer(channels, outputLength, buffer.sampleRate);
 
     for (let ch = 0; ch < channels; ch++) {
       const outputData = outputBuffer.getChannelData(ch);
@@ -421,7 +419,6 @@ export class TimeStretchProcessor {
       }
     }
 
-    audioContext.close();
     return outputBuffer;
   }
 
@@ -430,8 +427,7 @@ export class TimeStretchProcessor {
    */
   private async resampleForSpeed(buffer: AudioBuffer, speed: number): Promise<AudioBuffer> {
     const outputLength = Math.ceil(buffer.length / speed);
-    const audioContext = new AudioContext();
-    const outputBuffer = audioContext.createBuffer(
+    const outputBuffer = createBuffer(
       buffer.numberOfChannels,
       outputLength,
       buffer.sampleRate
@@ -452,7 +448,6 @@ export class TimeStretchProcessor {
       }
     }
 
-    audioContext.close();
     return outputBuffer;
   }
 

@@ -15,11 +15,9 @@ import {
 import { useMediaClassicListUiState } from './media/list/useMediaClassicListUiState';
 import { MediaPanelContentView } from './media/panel/MediaPanelContentView';
 import { MediaPanelHeader } from './media/panel/MediaPanelHeader';
-import {
-  MediaPanelOverlayMounts,
-  type MediaPanelCompositionSettingsDialogState,
-} from './media/panel/MediaPanelOverlayMounts';
+import { MediaPanelOverlayMounts } from './media/panel/MediaPanelOverlayMounts';
 import { useMediaPanelCommandBindings } from './media/panel/useMediaPanelCommandBindings';
+import { useMediaPanelCompositionSettings } from './media/panel/useMediaPanelCompositionSettings';
 import { useMediaPanelContextMenuState } from './media/panel/useMediaPanelContextMenuState';
 import { useMediaPanelDragDropMarquee, type MediaPanelMarquee } from './media/panel/useMediaPanelDragDropMarquee';
 import { useMediaPanelItemRenderers } from './media/panel/useMediaPanelItemRenderers';
@@ -34,10 +32,7 @@ import { useMediaBoardController } from './media/board/useMediaBoardController';
 
 import { useMediaStore } from '../../stores/mediaStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
-import type {
-  Composition,
-  ProjectItem,
-} from '../../stores/mediaStore';
+import type { ProjectItem } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { mediaNeedsRelink } from '../../services/project/relinkMedia';
 
@@ -152,7 +147,6 @@ export function MediaPanel() {
 
   // Marquee selection state
   const [marquee, setMarquee] = useState<MediaPanelMarquee | null>(null);
-  const [settingsDialog, setSettingsDialog] = useState<MediaPanelCompositionSettingsDialogState | null>(null);
   const [solidSettingsDialog, setSolidSettingsDialog] = useState<MediaContextSolidSettingsDialogState | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [internalDragId, setInternalDragId] = useState<string | null>(null);
@@ -373,32 +367,16 @@ export function MediaPanel() {
     handleDelete,
   });
 
-  // Composition settings
-  const openCompositionSettings = useCallback((comp: Composition) => {
-    setSettingsDialog({
-      compositionId: comp.id,
-      width: comp.width,
-      height: comp.height,
-      frameRate: comp.frameRate,
-      duration: comp.duration,
-    });
-    closeContextMenu();
-  }, [closeContextMenu]);
-
-  const saveCompositionSettings = useCallback(() => {
-    if (!settingsDialog) return;
-    updateComposition(settingsDialog.compositionId, {
-      width: settingsDialog.width,
-      height: settingsDialog.height,
-      frameRate: settingsDialog.frameRate,
-      duration: settingsDialog.duration,
-    });
-    // If this is the active composition, also update timeline duration
-    if (settingsDialog.compositionId === activeCompositionId) {
-      useTimelineStore.getState().setDuration(settingsDialog.duration);
-    }
-    setSettingsDialog(null);
-  }, [settingsDialog, updateComposition, activeCompositionId]);
+  const {
+    settingsDialog,
+    setSettingsDialog,
+    openCompositionSettings,
+    saveCompositionSettings,
+  } = useMediaPanelCompositionSettings({
+    activeCompositionId,
+    closeContextMenu,
+    updateComposition,
+  });
 
   const {
     allProjectItems,

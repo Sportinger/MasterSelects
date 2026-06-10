@@ -41,6 +41,7 @@ import {
   requestCompositionAudioMixdown,
 } from '../../services/timeline/compositionAudioMixdownCache';
 import { applyCompositionAudioMixdownToTimelineClip } from '../../services/timeline/compositionAudioMixdownTimelineState';
+import { createBuffer as createAudioBufferLike } from './audioBufferFactory';
 
 const log = Logger.create('AudioExportPipeline');
 const MAX_EXPORT_EFFECT_TAIL_SECONDS = 30;
@@ -124,32 +125,6 @@ function getClipExportTailSeconds(
     getEffectStackTailSeconds(track?.audioState?.effectStack) +
     getEffectStackTailSeconds(masterAudioState?.effectStack)
   );
-}
-
-function createAudioBufferLike(numberOfChannels: number, length: number, sampleRate: number): AudioBuffer {
-  const maybeWindow = globalThis as typeof globalThis & {
-    webkitAudioContext?: typeof AudioContext;
-  };
-  const AudioContextCtor = globalThis.AudioContext ?? maybeWindow.webkitAudioContext;
-  if (AudioContextCtor) {
-    const context = new AudioContextCtor();
-    const createBuffer = (context as AudioContext & { createBuffer?: BaseAudioContext['createBuffer'] }).createBuffer;
-    if (typeof createBuffer === 'function') {
-      const buffer = createBuffer.call(context, numberOfChannels, Math.max(1, length), sampleRate);
-      void context.close();
-      return buffer;
-    }
-    void context.close();
-  }
-
-  const channelData = Array.from({ length: numberOfChannels }, () => new Float32Array(Math.max(1, length)));
-  return {
-    numberOfChannels,
-    sampleRate,
-    length: Math.max(1, length),
-    duration: Math.max(1, length) / sampleRate,
-    getChannelData: (channelIndex: number) => channelData[channelIndex] ?? channelData[0],
-  } as unknown as AudioBuffer;
 }
 
 function appendSilence(buffer: AudioBuffer, tailSeconds: number): AudioBuffer {

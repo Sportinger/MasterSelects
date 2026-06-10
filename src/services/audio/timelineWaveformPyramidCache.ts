@@ -5,6 +5,7 @@ import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
 import { Logger } from '../logger';
 import { AudioArtifactStore } from './AudioArtifactStore';
+import { getSharedAudioDecodeService } from './AudioDecodeService';
 import type { AudioAnalysisArtifact, AudioArtifactRef, AudioChannelLayout } from './audioArtifactTypes';
 import { isAudioAnalysisArtifactStaleForInput } from './audioAnalysisManifestKeys';
 import {
@@ -502,98 +503,112 @@ async function generateTimelineWaveformAnalysisForFileUncached(
   file: File,
   options: GenerateTimelineWaveformAnalysisOptions = {},
 ): Promise<TimelineWaveformAnalysisResult> {
-  const audioContext = new AudioContext();
   throwIfAborted(options.signal);
   const arrayBuffer = await file.arrayBuffer();
   throwIfAborted(options.signal);
 
+  const audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
+    {
+      kind: 'array-buffer',
+      arrayBuffer,
+      name: file.name,
+      mimeType: file.type || undefined,
+    },
+    {
+      mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
+      sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
+      clipAudioStateHash: options.clipAudioStateHash,
+      signal: options.signal,
+      metadata: {
+        source: 'timeline-waveform-pyramid',
+        sourceFileName: file.name,
+        sourceFileSize: file.size,
+        sourceLastModified: file.lastModified,
+      },
+    },
+  );
+  throwIfAborted(options.signal);
+  const preview = generateLegacyWaveformPreviewFromBuffer(
+    audioBuffer,
+    options.samplesPerSecond ?? DEFAULT_LEGACY_SAMPLES_PER_SECOND,
+    options.onProgress,
+    options.maxPreviewSamples,
+  );
+  if (options.includePyramid === false) {
+    options.onProgress?.(100, preview.waveform);
+    return preview;
+  }
+
   try {
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    const hash = await sha256ArrayBuffer(arrayBuffer);
     throwIfAborted(options.signal);
-    const preview = generateLegacyWaveformPreviewFromBuffer(
-      audioBuffer,
-      options.samplesPerSecond ?? DEFAULT_LEGACY_SAMPLES_PER_SECOND,
-      options.onProgress,
-      options.maxPreviewSamples,
-    );
-    if (options.includePyramid === false) {
+    const mediaFileId = options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`;
+    const sourceFingerprint = `sha256:${hash}`;
+    const store = createCurrentAudioArtifactStore();
+    const reusable = await findReusableSourceWaveformPyramid({
+      store,
+      mediaFileId,
+      sourceFingerprint,
+      clipAudioStateHash: options.clipAudioStateHash,
+      sampleRate: audioBuffer.sampleRate,
+      channelLayout: describeSourceWaveformChannelLayout(audioBuffer.numberOfChannels),
+      duration: audioBuffer.duration,
+    });
+    if (reusable) {
       options.onProgress?.(100, preview.waveform);
-      return preview;
-    }
-
-    try {
-      const hash = await sha256ArrayBuffer(arrayBuffer);
-      throwIfAborted(options.signal);
-      const mediaFileId = options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`;
-      const sourceFingerprint = `sha256:${hash}`;
-      const store = createCurrentAudioArtifactStore();
-      const reusable = await findReusableSourceWaveformPyramid({
-        store,
-        mediaFileId,
-        sourceFingerprint,
-        clipAudioStateHash: options.clipAudioStateHash,
-        sampleRate: audioBuffer.sampleRate,
-        channelLayout: describeSourceWaveformChannelLayout(audioBuffer.numberOfChannels),
-        duration: audioBuffer.duration,
-      });
-      if (reusable) {
-        options.onProgress?.(100, preview.waveform);
-        return {
-          ...preview,
-          pyramid: reusable.pyramid,
-          audioAnalysisRefs: reusable.audioAnalysisRefs,
-        };
-      }
-
-      const generator = new WaveformPyramidGenerator({ artifactStore: store });
-      const pyramidSignal = createPyramidTimeoutSignal(
-        options.signal,
-        options.pyramidTimeoutMs ?? DEFAULT_PYRAMID_TIMEOUT_MS,
-      );
-      const generation = generator.generate({
-        mediaFileId,
-        sourceFingerprint,
-        buffer: audioBuffer,
-        clipAudioStateHash: options.clipAudioStateHash,
-        decoderId: 'browser-audio-context',
-        decoderVersion: '1.0.0',
-        metadata: {
-          sourceFileName: file.name,
-          sourceFileSize: file.size,
-          sourceLastModified: file.lastModified,
-        },
-      }, {
-        signal: pyramidSignal.signal,
-        onProgress: options.onPyramidProgress,
-      });
-      generation.catch(() => undefined);
-      const generated = await Promise.race([
-        generation,
-        abortSignalPromise(pyramidSignal.signal),
-      ]).finally(() => {
-        pyramidSignal.dispose();
-      });
-
-      const pyramid = await readTimelineWaveformPyramid(generated.manifest, store);
-
-      primeTimelineWaveformPyramidCache([
-        generated.artifact.id,
-        generated.artifact.manifestRef.artifactId,
-        generated.analysisRef.artifactId,
-      ], pyramid);
-
       return {
         ...preview,
-        pyramid,
-        audioAnalysisRefs: {
-          waveformPyramidId: generated.artifact.manifestRef.artifactId,
-        },
+        pyramid: reusable.pyramid,
+        audioAnalysisRefs: reusable.audioAnalysisRefs,
       };
-    } catch (error) {
-      log.warn('Waveform pyramid generation failed; using legacy waveform fallback.', error);
-      return preview;
     }
-  } finally {
-    await audioContext.close();
+
+    const generator = new WaveformPyramidGenerator({ artifactStore: store });
+    const pyramidSignal = createPyramidTimeoutSignal(
+      options.signal,
+      options.pyramidTimeoutMs ?? DEFAULT_PYRAMID_TIMEOUT_MS,
+    );
+    const generation = generator.generate({
+      mediaFileId,
+      sourceFingerprint,
+      buffer: audioBuffer,
+      clipAudioStateHash: options.clipAudioStateHash,
+      decoderId: 'browser-audio-context',
+      decoderVersion: '1.0.0',
+      metadata: {
+        sourceFileName: file.name,
+        sourceFileSize: file.size,
+        sourceLastModified: file.lastModified,
+      },
+    }, {
+      signal: pyramidSignal.signal,
+      onProgress: options.onPyramidProgress,
+    });
+    generation.catch(() => undefined);
+    const generated = await Promise.race([
+      generation,
+      abortSignalPromise(pyramidSignal.signal),
+    ]).finally(() => {
+      pyramidSignal.dispose();
+    });
+
+    const pyramid = await readTimelineWaveformPyramid(generated.manifest, store);
+
+    primeTimelineWaveformPyramidCache([
+      generated.artifact.id,
+      generated.artifact.manifestRef.artifactId,
+      generated.analysisRef.artifactId,
+    ], pyramid);
+
+    return {
+      ...preview,
+      pyramid,
+      audioAnalysisRefs: {
+        waveformPyramidId: generated.artifact.manifestRef.artifactId,
+      },
+    };
+  } catch (error) {
+    log.warn('Waveform pyramid generation failed; using legacy waveform fallback.', error);
+    return preview;
   }
 }

@@ -49,6 +49,17 @@ export interface AudioDecodeServiceOptions extends BrowserAudioDecodeRuntimeOpti
   createJobId?: () => string;
 }
 
+export interface DecodeAudioBufferOptions {
+  jobId?: string;
+  mediaFileId?: string;
+  sourceFingerprint?: string;
+  clipAudioStateHash?: string;
+  targetSampleRate?: number;
+  metadata?: SignalMetadata;
+  signal?: AbortSignal;
+  onProgress?: (progress: AudioDecodeProgress) => void;
+}
+
 interface MutableJobState {
   snapshot: AudioDecodeJobSnapshot;
   controller: AbortController;
@@ -500,6 +511,28 @@ export class AudioDecodeService {
     };
   }
 
+  async decodeAudioBuffer(
+    source: AudioDecodeSource,
+    options: DecodeAudioBufferOptions = {},
+  ): Promise<AudioBuffer> {
+    const sourceInfo = getAudioDecodeSourceInfo(source);
+    const request: AudioDecodeRequest = {
+      jobId: options.jobId,
+      mediaFileId: options.mediaFileId ?? sourceInfo.name ?? `${sourceInfo.kind}:${sourceInfo.size}`,
+      sourceFingerprint: options.sourceFingerprint ?? this.createSourceFingerprint(sourceInfo),
+      source,
+      clipAudioStateHash: options.clipAudioStateHash,
+      targetSampleRate: options.targetSampleRate,
+      metadata: options.metadata,
+    };
+
+    const result = await this.runDecodeJob(request, {
+      signal: options.signal,
+      onProgress: options.onProgress,
+    }).promise;
+    return result.buffer;
+  }
+
   getJobSnapshot(jobId: string): AudioDecodeJobSnapshot | null {
     const state = this.jobs.get(jobId);
     return state ? { ...state.snapshot, progress: { ...state.snapshot.progress } } : null;
@@ -880,6 +913,12 @@ export class AudioDecodeService {
     onProgress?.(progress);
   }
 
+  private createSourceFingerprint(sourceInfo: AudioDecodeSourceInfo): string {
+    const name = sourceInfo.name ? `:${sourceInfo.name}` : '';
+    const mimeType = sourceInfo.mimeType ? `:${sourceInfo.mimeType}` : '';
+    return `${sourceInfo.kind}:${sourceInfo.size}${name}${mimeType}`;
+  }
+
   private raceWithCancellation<T>(
     work: Promise<T>,
     signal: AbortSignal,
@@ -905,4 +944,53 @@ export class AudioDecodeService {
       );
     });
   }
+}
+
+interface AudioDecodeServiceGlobal {
+  __masterselectsAudioDecodeService?: AudioDecodeService | null;
+  __masterselectsAudioDecodeServiceBeforeUnloadHandler?: () => void;
+}
+
+function getAudioDecodeServiceGlobal(): AudioDecodeServiceGlobal {
+  return globalThis as typeof globalThis & AudioDecodeServiceGlobal;
+}
+
+function ensureSharedAudioDecodeServiceCleanup(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const globalState = getAudioDecodeServiceGlobal();
+  if (globalState.__masterselectsAudioDecodeServiceBeforeUnloadHandler) {
+    return;
+  }
+
+  globalState.__masterselectsAudioDecodeServiceBeforeUnloadHandler = () => {
+    disposeSharedAudioDecodeService();
+  };
+  window.addEventListener('beforeunload', globalState.__masterselectsAudioDecodeServiceBeforeUnloadHandler);
+}
+
+export function getSharedAudioDecodeService(): AudioDecodeService {
+  const globalState = getAudioDecodeServiceGlobal();
+  if (!globalState.__masterselectsAudioDecodeService) {
+    globalState.__masterselectsAudioDecodeService = new AudioDecodeService({
+      limits: {
+        maxSourceBytes: Number.MAX_SAFE_INTEGER,
+        maxDecodedPcmBytes: Number.MAX_SAFE_INTEGER,
+      },
+    });
+  }
+  ensureSharedAudioDecodeServiceCleanup();
+  return globalState.__masterselectsAudioDecodeService;
+}
+
+export function disposeSharedAudioDecodeService(): void {
+  const globalState = getAudioDecodeServiceGlobal();
+  globalState.__masterselectsAudioDecodeService?.dispose();
+  globalState.__masterselectsAudioDecodeService = null;
+}
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
 }

@@ -2,6 +2,7 @@ import type { EffectRenderProgress } from '../../engine/audio/AudioEffectRendere
 import { AudioEffectRenderer, audioEffectRenderer } from '../../engine/audio/AudioEffectRenderer';
 import { AudioExtractor, audioExtractor } from '../../engine/audio/AudioExtractor';
 import { TimeStretchProcessor, timeStretchProcessor, type TimeStretchProgress } from '../../engine/audio/TimeStretchProcessor';
+import { createBuffer as createAudioBuffer } from '../../engine/audio/audioBufferFactory';
 import type { ClipAudioEditOperation, Keyframe, SpectralImageLayer, TimelineClip } from '../../types';
 import { useMediaStore } from '../../stores/mediaStore';
 import { createCurrentAudioArtifactStore } from './timelineWaveformPyramidCache';
@@ -65,35 +66,11 @@ export interface ClipAudioRenderServiceOptions {
   stemAudioSourceResolver?: Pick<StemAudioSourceResolver, 'resolveStemMix'>;
 }
 
-type AudioContextConstructor = new () => AudioContext;
-
 function emitProgress(
   onProgress: ((progress: ClipAudioRenderProgress) => void) | undefined,
   progress: ClipAudioRenderProgress,
 ): void {
   onProgress?.(progress);
-}
-
-function getAudioContextConstructor(): AudioContextConstructor {
-  const maybeWindow = globalThis as typeof globalThis & {
-    webkitAudioContext?: AudioContextConstructor;
-  };
-  const ctor = globalThis.AudioContext ?? maybeWindow.webkitAudioContext;
-  if (!ctor) {
-    throw new Error('AudioContext is required for clip audio render buffer allocation.');
-  }
-  return ctor;
-}
-
-function createAudioBuffer(
-  numberOfChannels: number,
-  length: number,
-  sampleRate: number,
-): AudioBuffer {
-  const context = new (getAudioContextConstructor())();
-  const buffer = context.createBuffer(numberOfChannels, Math.max(1, length), sampleRate);
-  void context.close();
-  return buffer;
 }
 
 function reverseAudioBuffer(buffer: AudioBuffer): AudioBuffer {

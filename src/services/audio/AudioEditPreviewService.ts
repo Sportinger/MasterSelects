@@ -1,6 +1,12 @@
 import { AudioExtractor, audioExtractor } from '../../engine/audio/AudioExtractor';
 import type { ClipAudioEditOperation, SpectralImageLayer, TimelineClip } from '../../types';
 import { Logger } from '../logger';
+import type { MediaRuntimeLease, RuntimeSourceId } from '../mediaRuntime/contracts';
+import {
+  mediaRuntimeScrubAudioLeaseOwner,
+  toScrubAudioRuntimeSourceId,
+  type ScrubAudioContextRuntimeHandles,
+} from '../mediaRuntime/scrubAudioLeases';
 import { ClipAudioRenderService, type ClipAudioRenderProgress } from './ClipAudioRenderService';
 import { getClipAudioSourceRange } from './audioRepairSuggestionOperations';
 
@@ -39,7 +45,7 @@ export interface AudioEditPreviewServiceOptions {
 
 interface ActivePreview {
   token: number;
-  context?: AudioContext;
+  contextLease?: MediaRuntimeLease<ScrubAudioContextRuntimeHandles>;
   source?: AudioBufferSourceNode;
   stopped: boolean;
 }
@@ -267,8 +273,44 @@ export class AudioEditPreviewService {
     } catch {
       // Source may already be disconnected by the browser.
     }
-    void active.context?.close();
+    this.releasePlaybackContext(active, 'audio-edit-preview:stop');
     this.activePreview = null;
+  }
+
+  private getPlaybackContextRuntimeSourceId(): RuntimeSourceId {
+    return toScrubAudioRuntimeSourceId('audio-edit-preview', 'playback-context');
+  }
+
+  private acquirePlaybackContext(active: ActivePreview): AudioContext {
+    const lease = mediaRuntimeScrubAudioLeaseOwner.acquireAudioContext({
+      runtimeSourceId: this.getPlaybackContextRuntimeSourceId(),
+      ownerId: 'audio-edit-preview:playback-context',
+      policy: 'interactive',
+      createContext: this.createAudioContext,
+    });
+    const context = lease.getRuntimeHandles()?.context;
+    if (!context) {
+      lease.release('audio-edit-preview:missing-context');
+      throw new Error('Audio edit preview context lease did not acquire a context');
+    }
+    active.contextLease = lease;
+    return context;
+  }
+
+  private releasePlaybackContext(active: ActivePreview, reason: string): void {
+    active.contextLease?.release(reason);
+    active.contextLease = undefined;
+  }
+
+  private disconnectSource(active: ActivePreview, source: AudioBufferSourceNode): void {
+    if (active.source === source) {
+      active.source = undefined;
+    }
+    try {
+      source.disconnect();
+    } catch {
+      // Source may already be disconnected by the browser.
+    }
   }
 
   private async playRenderedBuffer(
@@ -278,50 +320,59 @@ export class AudioEditPreviewService {
     previewId: string,
     maxDurationSeconds: number,
   ): Promise<void> {
-    const context = this.createAudioContext();
-    active.context = context;
-    if (context.state === 'suspended') {
-      await context.resume();
-    }
-    if (this.activePreview !== active || active.stopped) {
-      void context.close();
-      return;
-    }
+    try {
+      const context = this.acquirePlaybackContext(active);
+      if (context.state === 'suspended') {
+        await context.resume();
+      }
+      if (this.activePreview !== active || active.stopped) {
+        this.releasePlaybackContext(active, 'audio-edit-preview:cancelled-before-start');
+        return;
+      }
 
-    const source = context.createBufferSource();
-    active.source = source;
-    source.buffer = buffer;
-    source.connect(context.destination);
+      const source = context.createBufferSource();
+      active.source = source;
+      source.buffer = buffer;
+      source.connect(context.destination);
 
-    const playbackDuration = Math.min(buffer.duration, maxDurationSeconds);
+      const playbackDuration = Math.min(buffer.duration, maxDurationSeconds);
 
-    request.onStatus?.({
-      phase: 'playing',
-      previewId,
-      message: `Playing ${playbackDuration.toFixed(1)}s preview`,
-    });
+      request.onStatus?.({
+        phase: 'playing',
+        previewId,
+        message: `Playing ${playbackDuration.toFixed(1)}s preview`,
+      });
 
-    await new Promise<void>((resolve) => {
-      source.onended = () => {
-        if (this.activePreview === active) {
-          this.activePreview = null;
-        }
-        active.stopped = true;
+      await new Promise<void>((resolve, reject) => {
+        source.onended = () => {
+          if (this.activePreview === active) {
+            this.activePreview = null;
+          }
+          active.stopped = true;
+          this.disconnectSource(active, source);
+          this.releasePlaybackContext(active, 'audio-edit-preview:ended');
+          request.onStatus?.({
+            phase: 'stopped',
+            previewId,
+            message: 'Preview stopped',
+          });
+          resolve();
+        };
         try {
-          source.disconnect();
-        } catch {
-          // Source may already be disconnected by the browser.
+          source.start(0, 0, playbackDuration);
+        } catch (error) {
+          source.onended = null;
+          this.disconnectSource(active, source);
+          reject(error);
         }
-        void context.close();
-        request.onStatus?.({
-          phase: 'stopped',
-          previewId,
-          message: 'Preview stopped',
-        });
-        resolve();
-      };
-      source.start(0, 0, playbackDuration);
-    });
+      });
+    } catch (error) {
+      if (active.source) {
+        this.disconnectSource(active, active.source);
+      }
+      this.releasePlaybackContext(active, 'audio-edit-preview:error');
+      throw error;
+    }
   }
 }
 

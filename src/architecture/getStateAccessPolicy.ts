@@ -50,8 +50,10 @@ export const classCHardTargets = [
   // Redistributed by packet 172: two hits moved into the extracted
   // source-monitor badge hook; MediaPanel-cluster total unchanged (7).
   // Packet 190 moved one hit into the board node-move gesture hook.
-  { path: 'src/components/panels/MediaPanel.tsx', maxCurrentHits: 4 },
+  // Packet 218 moved one hit into the composition-settings hook.
+  { path: 'src/components/panels/MediaPanel.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/media/board/useMediaBoardNodeMoveGesture.ts', maxCurrentHits: 1 },
+  { path: 'src/components/panels/media/panel/useMediaPanelCompositionSettings.ts', maxCurrentHits: 1 },
   { path: 'src/components/panels/media/panel/useMediaPanelSourceMonitorBadges.ts', maxCurrentHits: 2 },
   { path: 'src/components/panels/nodes/NodeWorkspacePanel.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/AnalysisTab.tsx', maxCurrentHits: 1 },
@@ -241,7 +243,9 @@ export const getStateAccessPolicyBaselines = {
   // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
   // entries). Totals conserved per redistribution; max-hits ratchets DOWN
   // only (669 -> 665 via the packet-188 Preview ceiling cut).
-  classCHardTargetFileCount: 192,
+  // 192 -> 193: packet-218 redistribution added the composition-settings hook
+  // entry (MediaPanel 4 -> 3, hook 1; cluster total conserved).
+  classCHardTargetFileCount: 193,
   // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit).
   classCHardTargetMaxHits: 664,
 } as const;
