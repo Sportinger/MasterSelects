@@ -45,6 +45,12 @@ vi.mock('../../src/services/vectorAnimation/lottieMetadata', () => ({
   })),
 }));
 
+function getInteractivePolicyBudget() {
+  const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
+  if (!budget) throw new Error('Missing interactive runtime policy budget');
+  return budget;
+}
+
 function createLottieClip(id: string): TimelineClip {
   return {
     id,
@@ -123,7 +129,8 @@ describe('vector runtime reporting', () => {
   });
 
   it('denies Lottie runtime preparation before allocating a canvas when the policy is full', async () => {
-    for (let index = 0; index < 48; index += 1) {
+    const maxImageBitmaps = getInteractivePolicyBudget().maxImageBitmaps ?? 0;
+    for (let index = 0; index < maxImageBitmaps; index += 1) {
       timelineRuntimeCoordinator.retainResource(createVectorRuntimeCanvasResource({
         clip: createLottieClip(`retained-${index}`),
         provider: 'lottie',
@@ -142,6 +149,7 @@ describe('vector runtime reporting', () => {
       name: 'VectorRuntimeAdmissionError',
     });
     expect(createElement).not.toHaveBeenCalledWith('canvas');
-    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources).toHaveLength(48);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+      .toHaveLength(maxImageBitmaps);
   });
 });

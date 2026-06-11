@@ -193,9 +193,10 @@ export const classCHardTargets = [
   { path: 'src/services/compositionRenderer.ts', maxCurrentHits: 11 },
   { path: 'src/services/layerBuilder/AudioSyncHandler.ts', maxCurrentHits: 2 },
   { path: 'src/services/layerBuilder/audioTrackRuntimeElements.ts', maxCurrentHits: 1 },
-  { path: 'src/services/layerBuilder/audioTrackStemBufferMixerSessions.ts', maxCurrentHits: 1 },
+  { path: 'src/services/layerBuilder/audioTrackStemBufferMixerSessionControls.ts', maxCurrentHits: 1 },
+  { path: 'src/services/layerBuilder/audioTrackVideoClipAudioSync.ts', maxCurrentHits: 2 },
   { path: 'src/services/layerBuilder/audioTrackStemPreviewElements.ts', maxCurrentHits: 1 },
-  { path: 'src/services/layerBuilder/AudioTrackSyncManager.ts', maxCurrentHits: 7 },
+  { path: 'src/services/layerBuilder/AudioTrackSyncManager.ts', maxCurrentHits: 5 },
   { path: 'src/services/layerBuilder/FrameContext.ts', maxCurrentHits: 2 },
   { path: 'src/services/layerBuilder/layerBuilder3dLayers.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerBuilder/layerBuilder3dSources.ts', maxCurrentHits: 3 },
@@ -288,8 +289,8 @@ export const getStateAccessPolicyBaselines = {
   // only (669 -> 665 via the packet-188 Preview ceiling cut).
   // fileCount log (totals conserved per split redistribution):
   // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
-  // ->207(259) ->208(267) ->212(279) ->216(287).
-  classCHardTargetFileCount: 229,
+  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer split).
+  classCHardTargetFileCount: 230,
   // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit)
   // -> 659 (packet 231 retired the dispatcher ceiling slack: 16 -> 11 actual)
   // -> 658 (packet 237 retired one compositionRenderer hit).

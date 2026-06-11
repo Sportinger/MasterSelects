@@ -126,6 +126,7 @@ function isDemandEmpty(demand: InternalDemand): boolean {
 export class RuntimeAudioMeterBus {
   private trackMeters = new Map<string, AudioMeterSnapshot>();
   private master: AudioMeterSnapshot | undefined = undefined;
+  private masterSource: 'aggregate' | 'explicit' = 'aggregate';
 
   private trackListeners = new Map<string, Set<MeterListener>>();
   private masterListeners = new Set<MeterListener>();
@@ -158,7 +159,7 @@ export class RuntimeAudioMeterBus {
     const next = this.ageTrackMeters(snapshot.updatedAt, RUNTIME_AUDIO_METER_MAX_AGE_MS);
     next.set(trackId, snapshot);
     const nextMaster = this.resolveMasterSnapshot(next, snapshot.updatedAt, masterSnapshot);
-    this.commit(next, nextMaster);
+    this.commit(next, nextMaster, this.resolveMasterSource(nextMaster, masterSnapshot));
   }
 
   publishTracks(
@@ -184,11 +185,11 @@ export class RuntimeAudioMeterBus {
       return;
     }
     const nextMaster = this.resolveMasterSnapshot(next, updatedAt, masterSnapshot);
-    this.commit(next, nextMaster);
+    this.commit(next, nextMaster, this.resolveMasterSource(nextMaster, masterSnapshot));
   }
 
   publishMaster(snapshot: AudioMeterSnapshot): void {
-    this.commit(new Map(this.trackMeters), snapshot);
+    this.commit(new Map(this.trackMeters), snapshot, 'explicit');
   }
 
   clearTrack(trackId: string): void {
@@ -219,7 +220,7 @@ export class RuntimeAudioMeterBus {
     const nextMaster = this.master && now - this.master.updatedAt <= maxAgeMs
       ? this.master
       : aggregateAudioMeterSnapshots([...next.values()], now);
-    this.commit(next, nextMaster);
+    this.commit(next, nextMaster, this.resolveMasterSource(nextMaster));
   }
 
   // ── Reads ───────────────────────────────────────────────────────────────
@@ -405,15 +406,28 @@ export class RuntimeAudioMeterBus {
     masterSnapshot?: AudioMeterSnapshot,
   ): AudioMeterSnapshot {
     if (masterSnapshot) return masterSnapshot;
-    if (this.master && updatedAt - this.master.updatedAt <= RUNTIME_AUDIO_METER_MAX_AGE_MS) {
+    if (
+      this.masterSource === 'explicit' &&
+      this.master &&
+      updatedAt - this.master.updatedAt <= RUNTIME_AUDIO_METER_MAX_AGE_MS
+    ) {
       return this.master;
     }
     return aggregateAudioMeterSnapshots([...tracks.values()], updatedAt);
   }
 
+  private resolveMasterSource(
+    nextMaster: AudioMeterSnapshot | undefined,
+    explicitMasterSnapshot?: AudioMeterSnapshot,
+  ): 'aggregate' | 'explicit' {
+    if (explicitMasterSnapshot) return 'explicit';
+    return nextMaster && nextMaster === this.master ? this.masterSource : 'aggregate';
+  }
+
   private commit(
     nextTracks: Map<string, AudioMeterSnapshot>,
     nextMaster: AudioMeterSnapshot | undefined,
+    nextMasterSource: 'aggregate' | 'explicit' = 'aggregate',
   ): void {
     const changedTrackIds: string[] = [];
     const seen = new Set<string>();
@@ -435,6 +449,7 @@ export class RuntimeAudioMeterBus {
 
     this.trackMeters = nextTracks;
     this.master = nextMaster;
+    this.masterSource = nextMaster ? nextMasterSource : 'aggregate';
     this.stateDirty = true;
 
     for (const trackId of changedTrackIds) {
@@ -489,6 +504,7 @@ export class RuntimeAudioMeterBus {
   resetForTest(): void {
     this.trackMeters = new Map();
     this.master = undefined;
+    this.masterSource = 'aggregate';
     this.trackListeners.clear();
     this.masterListeners.clear();
     this.allListeners.clear();

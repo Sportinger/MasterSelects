@@ -117,6 +117,7 @@ describe('playbackSlice HTML readiness gate', () => {
       clips: [
         {
           id: 'clip-1',
+          trackId: 'video-1',
           startTime: 0,
           duration: 10,
           source: {
@@ -124,6 +125,7 @@ describe('playbackSlice HTML readiness gate', () => {
           },
         },
       ],
+      tracks: [{ id: 'video-1', type: 'video', visible: true }],
       playheadPosition: 1,
       duration: 60,
       isPlaying: false,
@@ -161,6 +163,7 @@ describe('playbackSlice HTML readiness gate', () => {
       clips: [
         {
           id: 'clip-1',
+          trackId: 'video-1',
           startTime: 0,
           duration: 10,
           source: {
@@ -168,6 +171,7 @@ describe('playbackSlice HTML readiness gate', () => {
           },
         },
       ],
+      tracks: [{ id: 'video-1', type: 'video', visible: true }],
       playheadPosition: 1,
       duration: 60,
       isPlaying: false,

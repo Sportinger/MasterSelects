@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-06-11",
+    "type": "fix",
+    "title": "MasterSelects 2.2.2",
+    "description": "Audio mixer release: playback meters now update smoothly with stereo lanes, LED-style decay/attack, and active colors that follow the actual level. Master fader metering is separated from per-track levels so pulling the master down no longer drags every track meter with it, while the master output can still meter the summed post-master signal. Stereo waveform rendering is aligned between worker and fallback paths, and the audio playback runtime was split into smaller focused modules with updated runtime budget gates.",
+    "section": "Release"
+  },
+  {
     "date": "2026-06-10",
     "type": "fix",
     "title": "MasterSelects 2.2.1",

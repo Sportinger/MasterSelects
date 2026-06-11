@@ -9,6 +9,7 @@ vi.unmock('../../src/services/proxyFrameCache');
 import { proxyFrameCache } from '../../src/services/proxyFrameCache';
 import { mediaRuntimeObjectUrlLeaseOwner } from '../../src/services/mediaRuntime/objectUrlLeases';
 import { mediaRuntimeScrubAudioLeaseOwner } from '../../src/services/mediaRuntime/scrubAudioLeases';
+import { MAX_AUDIO_BUFFER_CACHE_ENTRIES } from '../../src/services/proxyFrame/audioBufferLoader';
 
 type ProxyFrameCacheInternals = typeof proxyFrameCache & {
   cache: Map<string, {
@@ -42,6 +43,12 @@ type ProxyFrameCacheInternals = typeof proxyFrameCache & {
 };
 
 const cache = proxyFrameCache as ProxyFrameCacheInternals;
+
+function getInteractivePolicyBudget() {
+  const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
+  if (!budget) throw new Error('Missing interactive runtime policy budget');
+  return budget;
+}
 
 function resetProxyFrameCacheInternals(): void {
   cache.disposeAudioContext();
@@ -477,7 +484,7 @@ describe('proxyFrameCache decoded audio buffer runtime reporting', () => {
   });
 
   it('releases decoded audio buffer resources when the cache evicts old entries', () => {
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < MAX_AUDIO_BUFFER_CACHE_ENTRIES + 1; index += 1) {
       expect(cache.cacheDecodedAudioBuffer(`audio-${index}`, createMockAudioBuffer(1))).toBe(true);
     }
 
@@ -490,12 +497,16 @@ describe('proxyFrameCache decoded audio buffer runtime reporting', () => {
     expect(resources).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'proxy-frame-cache:audio-1:audio-buffer' }),
       expect.objectContaining({ id: 'proxy-frame-cache:audio-2:audio-buffer' }),
-      expect.objectContaining({ id: 'proxy-frame-cache:audio-3:audio-buffer' }),
+      expect.objectContaining({
+        id: `proxy-frame-cache:audio-${MAX_AUDIO_BUFFER_CACHE_ENTRIES}:audio-buffer`,
+      }),
     ]));
   });
 
   it('denies decoded audio buffer cache retention before inserting when the interactive heap budget is full', () => {
-    timelineRuntimeCoordinator.retainResource(createRetainedInteractiveAudioResource(512 * 1024 * 1024));
+    timelineRuntimeCoordinator.retainResource(
+      createRetainedInteractiveAudioResource(getInteractivePolicyBudget().maxHeapBytes ?? 0)
+    );
 
     expect(cache.cacheDecodedAudioBuffer('denied-audio', createMockAudioBuffer(1))).toBe(false);
 
@@ -582,7 +593,8 @@ describe('proxyFrameCache audio proxy element runtime reporting', () => {
   });
 
   it('revokes owned proxy URLs and skips Audio construction when html-media admission is denied', async () => {
-    for (let index = 0; index < 12; index += 1) {
+    const maxHtmlMediaElements = getInteractivePolicyBudget().maxHtmlMediaElements ?? 0;
+    for (let index = 0; index < maxHtmlMediaElements; index += 1) {
       timelineRuntimeCoordinator.retainResource(createRetainedInteractiveHtmlAudioResource(index));
     }
     const AudioMock = vi.fn(function AudioConstructor() {
@@ -696,7 +708,9 @@ describe('proxyFrameCache WebCodecs VideoFrame runtime reporting', () => {
   });
 
   it('denies proxy VideoFrame retention before inserting when the interactive heap budget is full', () => {
-    timelineRuntimeCoordinator.retainResource(createRetainedInteractiveVideoProviderResource(512 * 1024 * 1024));
+    timelineRuntimeCoordinator.retainResource(
+      createRetainedInteractiveVideoProviderResource(getInteractivePolicyBudget().maxHeapBytes ?? 0)
+    );
     const deniedFrame = createMockVideoFrame(1, 1);
 
     expect(cache.addVideoFrameToCache('denied-video', 0, deniedFrame)).toBe(false);

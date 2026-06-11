@@ -24,6 +24,12 @@ vi.mock('../../src/services/compositionAudioMixer', () => ({
   compositionAudioMixer: compositionAudioMixerMocks,
 }));
 
+function getInteractivePolicyBudget() {
+  const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
+  if (!budget) throw new Error('Missing interactive runtime policy budget');
+  return budget;
+}
+
 function clip(overrides: Partial<TimelineClip> = {}): TimelineClip {
   return {
     id: 'comp-audio',
@@ -247,7 +253,9 @@ describe('compositionAudioMixdownCache', () => {
   });
 
   it('skips completed mixdown cache retention when the interactive heap budget is full', async () => {
-    timelineRuntimeCoordinator.retainResource(retainedInteractiveHeapResource(512 * 1024 * 1024));
+    timelineRuntimeCoordinator.retainResource(
+      retainedInteractiveHeapResource(getInteractivePolicyBudget().maxHeapBytes ?? 0)
+    );
     compositionAudioMixerMocks.mixdownComposition.mockResolvedValue({
       buffer: audioBuffer(),
       waveform: [0, 0.25],
@@ -350,7 +358,8 @@ describe('compositionAudioMixdownCache', () => {
   });
 
   it('denies composition mixdown playback audio before creating an element when the policy is full', () => {
-    for (let index = 0; index < 8; index += 1) {
+    const maxAudioSources = getInteractivePolicyBudget().maxAudioSources ?? 0;
+    for (let index = 0; index < maxAudioSources; index += 1) {
       timelineRuntimeCoordinator.retainResource(retainedInteractiveAudioResource(index));
     }
 

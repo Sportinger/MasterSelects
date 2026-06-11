@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.2.1';
+export const APP_VERSION = '2.2.2';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.2.1',
-    message: 'Timeline interaction pass: accurate cut-tool indicator, link-aware gap erasing, locked tracks reject new clips, drag ghosts always clean up, and a device-pixel-snapped canvas grid with no moire at any zoom.',
+    title: 'MasterSelects 2.2.2',
+    message: 'Audio mixer pass: smoother real-time stereo meters, LED-style meter decay and attack, corrected master-vs-track metering, stereo waveform rendering, and leaner playback audio runtime modules.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.2.1',
-  message: 'Timeline interaction pass: accurate cut-tool indicator, link-aware gap erasing, locked tracks reject new clips, drag ghosts always clean up, and a device-pixel-snapped canvas grid with no moire at any zoom.',
+  title: 'MasterSelects 2.2.2',
+  message: 'Audio mixer pass: smoother real-time stereo meters, LED-style meter decay and attack, corrected master-vs-track metering, stereo waveform rendering, and leaner playback audio runtime modules.',
   animated: true,
 };
 

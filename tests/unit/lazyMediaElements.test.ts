@@ -23,6 +23,12 @@ import { timelineRuntimeCoordinator } from '../../src/services/timeline/timeline
 
 const noop = () => undefined;
 
+function getInteractivePolicyBudget() {
+  const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
+  if (!budget) throw new Error('Missing interactive runtime policy budget');
+  return budget;
+}
+
 function makeTrack(type: TimelineTrack['type'], id = `track-${type}`): TimelineTrack {
   return {
     id,
@@ -254,7 +260,8 @@ describe('lazy timeline media elements', () => {
   });
 
   it('skips file-backed lazy video allocation when interactive html-media admission is over budget', () => {
-    for (let index = 0; index < 12; index += 1) {
+    const maxHtmlMediaElements = getInteractivePolicyBudget().maxHtmlMediaElements ?? 0;
+    for (let index = 0; index < maxHtmlMediaElements; index += 1) {
       timelineRuntimeCoordinator.retainResource({
         id: `interactive-html-media-${index}`,
         kind: 'html-media',
@@ -289,11 +296,13 @@ describe('lazy timeline media elements', () => {
     expect(videoClip.source?.videoElement).toBeUndefined();
     expect(createObjectURL).not.toHaveBeenCalled();
     expect(createElement).not.toHaveBeenCalledWith('video');
-    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.budgetReport.usage.htmlMediaElements).toBe(12);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.budgetReport.usage.htmlMediaElements)
+      .toBe(maxHtmlMediaElements);
   });
 
   it('admits lazy audio after interactive html-media budget is released', () => {
-    for (let index = 0; index < 12; index += 1) {
+    const maxHtmlMediaElements = getInteractivePolicyBudget().maxHtmlMediaElements ?? 0;
+    for (let index = 0; index < maxHtmlMediaElements; index += 1) {
       timelineRuntimeCoordinator.retainResource({
         id: `interactive-html-media-${index}`,
         kind: 'html-media',
@@ -335,7 +344,8 @@ describe('lazy timeline media elements', () => {
   });
 
   it('skips lazy audio allocation when interactive audio-source admission is over budget', () => {
-    for (let index = 0; index < 8; index += 1) {
+    const maxAudioSources = getInteractivePolicyBudget().maxAudioSources ?? 0;
+    for (let index = 0; index < maxAudioSources; index += 1) {
       timelineRuntimeCoordinator.retainResource({
         id: `interactive-audio-source-${index}`,
         kind: 'html-media',
@@ -371,8 +381,8 @@ describe('lazy timeline media elements', () => {
     expect(createObjectURL).not.toHaveBeenCalled();
     expect(createElement).not.toHaveBeenCalledWith('audio');
     const usage = timelineRuntimeCoordinator.getBridgeStats().policies.interactive.budgetReport.usage;
-    expect(usage.htmlMediaElements).toBe(8);
-    expect(usage.audioSources).toBe(8);
+    expect(usage.htmlMediaElements).toBe(maxAudioSources);
+    expect(usage.audioSources).toBe(maxAudioSources);
   });
 
   it('releaseAll clears source element refs without a frame context', () => {

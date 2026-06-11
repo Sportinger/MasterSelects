@@ -246,7 +246,7 @@ class MidiPlaybackScheduler {
     void this.context.resume?.().catch(() => {});
     // Preload GM samples for current tracks (covers a freshly loaded project where no
     // instrument-change event fired since init).
-    this.preloadGmSounds(useTimelineStore.getState().tracks);
+    this.preloadGmSounds(state.tracks);
     this.running = true;
     this.needReanchor = false;
     this.reanchor();

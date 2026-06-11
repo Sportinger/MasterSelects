@@ -25,9 +25,9 @@ import { AudioTrackStemBufferMixerManager } from './audioTrackStemBufferMixers';
 import { AudioTrackStemLayerBufferCache } from './audioTrackStemLayerBuffers';
 import { AudioTrackStemPreviewElementManager } from './audioTrackStemPreviewElements';
 import { AudioTrackPrebufferManager } from './audioTrackPrebuffering';
+import { AudioTrackVideoClipAudioSync } from './audioTrackVideoClipAudioSync';
 import {
   dbToLinearGain,
-  hasUsableAudioProxy,
   pauseAudioElement,
 } from './audioTrackElementUtils';
 import {
@@ -81,6 +81,15 @@ export class AudioTrackSyncManager {
 
   private compositionPlaybackMixdowns = new AudioTrackCompositionPlaybackMixdownManager();
   private audioHandoffs = new AudioTrackHandoffManager();
+  private videoClipAudioSync = new AudioTrackVideoClipAudioSync({
+    getClipVideoElement: (clip) => this.getClipVideoElement(clip),
+    getLinkedAudioClipAtPlayhead: (ctx, clip) => this.getLinkedAudioClipAtPlayhead(ctx, clip),
+    getVideoAudioProxyElementForClip: (mediaFileId, clipId) =>
+      this.getVideoAudioProxyElementForClip(mediaFileId, clipId),
+    getClipAudioRouteSettings,
+    syncPreviewAudioElement: (target, ctx, state) =>
+      this.syncPreviewAudioElement(target, ctx, state),
+  });
 
   constructor() {
     registerTimelineAudioPlaybackStopper(() => this.stopAllAudioPlayback());
@@ -445,124 +454,8 @@ export class AudioTrackSyncManager {
    * Sync video clip audio (proxies and varispeed scrubbing)
    */
   private syncVideoClipAudio(ctx: FrameContext, state: AudioSyncState): void {
-    const activeVideoClipIds = new Set<string>();
-    let hasScrubAudioSource = false;
-    const regionGainPreview = useTimelineStore.getState().audioRegionGainPreview;
-
-    for (const track of ctx.videoTracks) {
-      const clip = getClipForTrack(ctx, track.id);
-      if (!clip || clip.isComposition) continue;
-      const videoElement = this.getClipVideoElement(clip);
-      if (!videoElement) continue;
-
-      const mediaFile = getMediaFileForClip(ctx, clip);
-      const timeInfo = getClipTimeInfo(ctx, clip);
-      const isMuted = !isVideoTrackVisible(ctx, track.id);
-      const mediaFileId = mediaFile?.id || clip.mediaFileId || clip.id;
-      const linkedAudioClip = this.getLinkedAudioClipAtPlayhead(ctx, clip);
-      const audioSettingsClip = linkedAudioClip ?? clip;
-      const audioSettingsTimeInfo = linkedAudioClip ? getClipTimeInfo(ctx, linkedAudioClip) : timeInfo;
-      const linkedAudioTrack = linkedAudioClip
-        ? ctx.audioTracks.find(candidate => candidate.id === linkedAudioClip.trackId)
-        : undefined;
-      const audioSettingsTrack = linkedAudioTrack ?? track;
-
-      // Varispeed scrubbing should follow the effective audio clip settings.
-      const routeSettings = getClipAudioRouteSettings(
-        ctx,
-        audioSettingsClip,
-        audioSettingsTrack,
-        audioSettingsTimeInfo.clipLocalTime,
-        audioSettingsTimeInfo.clipTime,
-      );
-      const editPreviewVolume = getClipAudioEditPreviewVolumeMultiplier(
-        audioSettingsClip,
-        audioSettingsTimeInfo.clipTime,
-        regionGainPreview,
-      );
-      const effectiveVolume = routeSettings.volume * editPreviewVolume;
-      let audioMuted = isMuted || routeSettings.muted || effectiveVolume <= 0.01;
-
-      if (!audioMuted && linkedAudioClip) {
-        const linkedTrackMuted = !ctx.unmutedAudioTrackIds.has(linkedAudioClip.trackId);
-        if (linkedTrackMuted) audioMuted = true;
-      } else if (!audioMuted && clip.linkedClipId && !ctx.clips.some(c => c.id === clip.linkedClipId)) {
-        // Linked audio clip was deleted - mute scrub audio.
-        audioMuted = true;
-      }
-
-      const useVarispeedScrubAudio = ctx.isDraggingPlayhead && !audioMuted && proxyFrameCache.hasAudioBuffer(mediaFileId);
-
-      if (ctx.isDraggingPlayhead && !audioMuted) {
-        hasScrubAudioSource = true;
-        if (!videoElement.muted) videoElement.muted = true;
-        proxyFrameCache.playScrubAudio(
-          mediaFileId,
-          timeInfo.clipTime,
-          undefined,
-          videoElement.currentSrc || videoElement.src,
-          {
-            volume: effectiveVolume,
-            eqGains: routeSettings.eqGains,
-            pan: routeSettings.pan,
-            processors: routeSettings.processors,
-            masterRoute: routeSettings.master,
-          }
-        );
-        const scrubMeter = proxyFrameCache.getScrubMeterSnapshot(ctx.now);
-        if (scrubMeter) {
-          useTimelineStore.getState().updateRuntimeAudioMeter(audioSettingsTrack.id, scrubMeter);
-        }
-      }
-
-      // Audio proxy handling. Audio proxies are independent from the video
-      // proxy switch because they make timeline playback/scrubbing predictable.
-      const shouldUseAudioProxy = hasUsableAudioProxy(mediaFile);
-
-      if (shouldUseAudioProxy && mediaFile && !linkedAudioClip) {
-        activeVideoClipIds.add(clip.id);
-
-        if (!videoElement.muted) videoElement.muted = true;
-
-        const audioProxy = this.getVideoAudioProxyElementForClip(mediaFile.id, clip.id);
-        if (audioProxy) {
-          const shouldUseAudioProxyScrubFallback =
-            ctx.isDraggingPlayhead &&
-            !linkedAudioClip &&
-            !useVarispeedScrubAudio;
-
-          if (!ctx.isDraggingPlayhead || shouldUseAudioProxyScrubFallback) {
-            this.syncPreviewAudioElement({
-              element: audioProxy,
-              clip,
-              clipTime: timeInfo.clipTime,
-              absSpeed: timeInfo.absSpeed,
-              isMuted: audioMuted,
-              canBeMaster: !state.masterSet,
-              type: 'audioProxy',
-              volume: effectiveVolume,
-              eqGains: routeSettings.eqGains,
-              pan: routeSettings.pan,
-              processors: routeSettings.processors,
-              masterRoute: routeSettings.master,
-              meterTrackId: audioSettingsTrack.id,
-            }, ctx, state);
-          } else if (!audioProxy.paused) {
-            audioProxy.pause();
-          }
-        } else {
-          // Trigger preload
-          proxyFrameCache.preloadAudioProxy(mediaFile.id);
-        }
-      }
-    }
-
-    // Pause inactive audio proxies
+    const activeVideoClipIds = this.videoClipAudioSync.sync(ctx, state);
     this.runtimeElements.removeVideoAudioProxiesNotIn(activeVideoClipIds);
-
-    if (!ctx.isDraggingPlayhead || !hasScrubAudioSource) {
-      proxyFrameCache.stopScrubAudio();
-    }
   }
 
   /**

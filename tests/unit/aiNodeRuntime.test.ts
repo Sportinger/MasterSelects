@@ -24,6 +24,12 @@ import {
 } from '../../src/services/audio/timelineBeatOnsetCache';
 import { createMockTrack } from '../helpers/mockData';
 
+function getInteractivePolicyBudget() {
+  const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
+  if (!budget) throw new Error('Missing interactive runtime policy budget');
+  return budget;
+}
+
 function createClip(): TimelineClip {
   return {
     id: 'clip-1',
@@ -189,7 +195,8 @@ describe('AI node runtime', () => {
   });
 
   it('skips AI node canvas allocation when the interactive canvas budget cannot retain both canvases', () => {
-    for (let index = 0; index < 47; index += 1) {
+    const retainedCanvasCount = Math.max(0, (getInteractivePolicyBudget().maxImageBitmaps ?? 0) - 1);
+    for (let index = 0; index < retainedCanvasCount; index += 1) {
       timelineRuntimeCoordinator.retainResource(createRetainedInteractiveCanvasResource(index));
     }
 
@@ -205,7 +212,7 @@ describe('AI node runtime', () => {
     expect(outputCanvas).toBeNull();
     expect(createElement).not.toHaveBeenCalledWith('canvas');
     const interactiveResources = timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources;
-    expect(interactiveResources).toHaveLength(47);
+    expect(interactiveResources).toHaveLength(retainedCanvasCount);
     expect(interactiveResources.some((resource) => resource.tags?.includes('ai-node-runtime'))).toBe(false);
   });
 

@@ -10,6 +10,12 @@ import type { TimelineSpectrogramTileSet } from '../../src/services/audio/timeli
 import { timelineRuntimeCoordinator } from '../../src/services/timeline/timelineRuntimeCoordinator';
 import type { RenderResourceDescriptor } from '../../src/services/timeline/runtimeCoordinatorTypes';
 
+function getInteractivePolicyBudget() {
+  const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
+  if (!budget) throw new Error('Missing interactive runtime policy budget');
+  return budget;
+}
+
 function createTileSet(): TimelineSpectrogramTileSet {
   return {
     sampleRate: 48_000,
@@ -166,7 +172,8 @@ describe('drawTimelineSpectrogram', () => {
   });
 
   it('draws transient rasters without caching them when runtime admission is denied', () => {
-    for (let index = 0; index < 48; index += 1) {
+    const maxImageBitmaps = getInteractivePolicyBudget().maxImageBitmaps ?? 0;
+    for (let index = 0; index < maxImageBitmaps; index += 1) {
       timelineRuntimeCoordinator.retainResource(createRetainedInteractiveCanvas(index));
     }
 
@@ -191,7 +198,8 @@ describe('drawTimelineSpectrogram', () => {
     expect(second).toMatchObject({ drawn: true, cacheHit: false });
     expect(getContextSpy).toHaveBeenCalledTimes(2);
     expect(createImageData).toHaveBeenCalledTimes(2);
-    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources).toHaveLength(48);
+    expect(timelineRuntimeCoordinator.getBridgeStats().policies.interactive.resources)
+      .toHaveLength(maxImageBitmaps);
   });
 
   it('draws the full visible CSS span while keeping raster pixels bounded', () => {

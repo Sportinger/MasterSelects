@@ -34,6 +34,7 @@ vi.mock('../../src/services/compositionAudioMixer', () => ({
 type ProxyFrameCacheTestAccess = typeof proxyFrameCache & {
   playScrubAudio: typeof proxyFrameCache.playScrubAudio;
   hasAudioBuffer: typeof proxyFrameCache.hasAudioBuffer;
+  getCachedAudioBuffer: typeof proxyFrameCache.getCachedAudioBuffer;
   getCachedAudioProxy: typeof proxyFrameCache.getCachedAudioProxy;
   getAudioProxy: typeof proxyFrameCache.getAudioProxy;
   preloadAudioProxy: typeof proxyFrameCache.preloadAudioProxy;
@@ -53,6 +54,12 @@ type AudioTrackSyncManagerRuntimeTestAccess = AudioTrackSyncManagerTestAccess & 
 };
 
 const testProxyFrameCache = proxyFrameCache as ProxyFrameCacheTestAccess;
+
+function getInteractivePolicyBudget() {
+  const budget = timelineRuntimeCoordinator.getPolicy('interactive')?.defaultBudget;
+  if (!budget) throw new Error('Missing interactive runtime policy budget');
+  return budget;
+}
 
 function makeClip(overrides: Partial<TimelineClip> = {}): TimelineClip {
   return createMockClip({
@@ -200,6 +207,7 @@ function installObjectUrlMocks(url = 'blob:stem-preview-audio'): {
 function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
   const originalPlayScrubAudio = testProxyFrameCache.playScrubAudio;
   const originalHasAudioBuffer = testProxyFrameCache.hasAudioBuffer;
+  const originalGetCachedAudioBuffer = testProxyFrameCache.getCachedAudioBuffer;
   const originalGetCachedAudioProxy = testProxyFrameCache.getCachedAudioProxy;
   const originalGetAudioProxy = testProxyFrameCache.getAudioProxy;
   const originalPreloadAudioProxy = testProxyFrameCache.preloadAudioProxy;
@@ -208,6 +216,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
   const originalGetScrubMeterSnapshot = testProxyFrameCache.getScrubMeterSnapshot;
   const playScrubAudio = vi.fn();
   const hasAudioBuffer = vi.fn(() => overrides.hasAudioBuffer ?? true);
+  const getCachedAudioBuffer = vi.fn(() => null);
   const getCachedAudioProxy = vi.fn(() => null);
   const getAudioProxy = vi.fn(async () => null);
   const preloadAudioProxy = vi.fn();
@@ -217,6 +226,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
 
   testProxyFrameCache.playScrubAudio = playScrubAudio;
   testProxyFrameCache.hasAudioBuffer = hasAudioBuffer;
+  testProxyFrameCache.getCachedAudioBuffer = getCachedAudioBuffer;
   testProxyFrameCache.getCachedAudioProxy = getCachedAudioProxy;
   testProxyFrameCache.getAudioProxy = getAudioProxy;
   testProxyFrameCache.preloadAudioProxy = preloadAudioProxy;
@@ -227,6 +237,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
   return {
     playScrubAudio,
     hasAudioBuffer,
+    getCachedAudioBuffer,
     getCachedAudioProxy,
     getAudioProxy,
     preloadAudioProxy,
@@ -236,6 +247,7 @@ function stubProxyFrameCache(overrides: { hasAudioBuffer?: boolean } = {}) {
     restore: () => {
       testProxyFrameCache.playScrubAudio = originalPlayScrubAudio;
       testProxyFrameCache.hasAudioBuffer = originalHasAudioBuffer;
+      testProxyFrameCache.getCachedAudioBuffer = originalGetCachedAudioBuffer;
       testProxyFrameCache.getCachedAudioProxy = originalGetCachedAudioProxy;
       testProxyFrameCache.getAudioProxy = originalGetAudioProxy;
       testProxyFrameCache.preloadAudioProxy = originalPreloadAudioProxy;
@@ -573,6 +585,7 @@ describe('scrub audio sync', () => {
 
   it('applies live region gain preview to normal audio-track playback', () => {
     const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerTestAccess;
+    const cacheStub = stubProxyFrameCache({ hasAudioBuffer: false });
     const syncAudioElement = vi.fn();
     manager.audioSyncHandler = { syncAudioElement, stopScrubAudio: vi.fn() };
 
@@ -633,6 +646,7 @@ describe('scrub audio sync', () => {
     }));
     expect(target.volume).toBeCloseTo(10 ** (-12 / 20), 4);
     expect(passedCtx).toBe(ctx);
+    cacheStub.restore();
   });
 
   it('lazily hydrates data-only composition audio for audio-track playback', async () => {
@@ -829,7 +843,7 @@ describe('AudioTrackSyncManager stem layer buffer runtime reporting', () => {
       },
       audioSourceId: 'retained-stem-budget',
       memoryCost: {
-        heapBytes: 512 * 1024 * 1024,
+        heapBytes: getInteractivePolicyBudget().maxHeapBytes ?? 0,
       },
     });
     const manager = new AudioTrackSyncManager() as unknown as AudioTrackSyncManagerRuntimeTestAccess;

@@ -13,8 +13,8 @@ import { estimateAudioBufferBytes } from './runtimeResources';
 
 const log = Logger.create('ProxyFrameCache');
 
-const MAX_AUDIO_BUFFER_CACHE_BYTES = 1536 * 1024 * 1024;
-const MAX_AUDIO_BUFFER_CACHE_ENTRIES = 16;
+export const MAX_AUDIO_BUFFER_CACHE_BYTES = 1536 * 1024 * 1024;
+export const MAX_AUDIO_BUFFER_CACHE_ENTRIES = 16;
 const AUDIO_BUFFER_RETRY_COOLDOWN_MS = 3000;
 const SCRUB_AUDIO_WARM_BACKOFF_MS = 5000;
 
