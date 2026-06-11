@@ -107,6 +107,7 @@ export class AudioTrackSyncManager {
     this.audioHandoffs.reset();
     audioRoutingManager.pauseAllRoutedMedia();
     this.audioSyncHandler.stopScrubAudio();
+    this.audioSyncHandler.stopAllRuntimeMeterPolling();
     const timelineState = useTimelineStore.getState();
     for (const clip of timelineState.clips) {
       pauseAudioElement(this.getClipAudioElement(clip));
@@ -266,15 +267,14 @@ export class AudioTrackSyncManager {
           canBeMaster: canBeStemMaster,
         });
         if (mixerSourceCount > 0) {
+          this.audioSyncHandler.stopRuntimeMeterPolling(track.id);
           this.runtimeElements.removeAudioTrackProxy(clip.id);
-          pauseAudioElement(this.getClipAudioElement(clip));
+          this.pauseAndDisposeRoute(this.getClipAudioElement(clip));
           this.stemPreviewElements.pauseStemAudioElements(clip.id);
           state.audioPlayingCount += mixerSourceCount;
           if (canBeStemMaster) state.masterSet = true;
           continue;
         }
-      } else {
-        this.stemBufferMixers.stop(clip.id);
       }
 
       if (stemSeparation && !shouldUseStemAudio) {
@@ -300,11 +300,57 @@ export class AudioTrackSyncManager {
       const compositionAudioElement = needsSourceElement
         ? this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'source')
         : null;
-      const sourceAudioProxy = needsSourceElement ? this.getAudioProxyElementForClip(clip, !ctx.isPlaying) : null;
+      const sourceAudioProxy = needsSourceElement ? this.getAudioProxyElementForClip(clip) : null;
       const sourceAudioElement = sourceAudioProxy ?? compositionAudioElement ?? this.getClipAudioElement(clip);
+      const sourceMediaFileId = needsSourceElement ? this.getClipSourceMediaFileId(clip) : undefined;
+      const canUseSourceBufferMixer = Boolean(
+        sourceMediaFileId &&
+        needsSourceElement &&
+        ctx.isPlaying &&
+        !ctx.isDraggingPlayhead &&
+        this.stemBufferMixers.canUseRouteSettings(routeSettings, timeInfo.absSpeed, timeInfo.speed),
+      );
+      const sourceAudioBuffer = sourceMediaFileId && canUseSourceBufferMixer
+        ? proxyFrameCache.getCachedAudioBuffer(sourceMediaFileId)
+        : null;
+
+      if (canUseSourceBufferMixer && sourceMediaFileId && sourceAudioBuffer) {
+        const canBeSourceMaster = !state.masterSet;
+        const mixerSourceCount = this.stemBufferMixers.syncSource({
+          clip,
+          mediaFileId: sourceMediaFileId,
+          buffer: sourceAudioBuffer,
+          routeSettings,
+          timeInfo,
+          effectiveVolume,
+          sourceGain,
+          trackMuted,
+          meterTrackId: track.id,
+          canBeMaster: canBeSourceMaster,
+        });
+        if (mixerSourceCount > 0) {
+          this.audioSyncHandler.stopRuntimeMeterPolling(track.id);
+          this.runtimeElements.removeAudioTrackProxy(clip.id);
+          this.pauseAndDisposeRoute(sourceAudioElement);
+          const clipAudioElement = this.getClipAudioElement(clip);
+          if (clipAudioElement !== sourceAudioElement) {
+            this.pauseAndDisposeRoute(clipAudioElement);
+          }
+          this.stemPreviewElements.pauseStemAudioElements(clip.id);
+          state.audioPlayingCount += mixerSourceCount;
+          if (canBeSourceMaster) state.masterSet = true;
+          continue;
+        }
+      }
 
       if (needsSourceElement) {
-        if (!sourceAudioElement) continue;
+        if (!sourceAudioElement) {
+          if (canUseSourceBufferMixer && sourceMediaFileId) {
+            void proxyFrameCache.warmScrubAudioBuffer(sourceMediaFileId);
+          }
+          this.stemBufferMixers.stop(clip.id);
+          continue;
+        }
 
         if (this.shouldSuppressLinkedAudioClipScrub(ctx, clip)) {
           if (!sourceAudioElement.paused) {
@@ -314,8 +360,16 @@ export class AudioTrackSyncManager {
         }
 
         // Skip audio elements without a valid source (e.g., empty audio from nested comps without audio)
-        if (!sourceAudioElement.src && sourceAudioElement.readyState === 0) continue;
+        if (!sourceAudioElement.src && sourceAudioElement.readyState === 0) {
+          this.stemBufferMixers.stop(clip.id);
+          continue;
+        }
+        if (canUseSourceBufferMixer && sourceMediaFileId) {
+          void proxyFrameCache.warmScrubAudioBuffer(sourceMediaFileId, sourceAudioElement.currentSrc || sourceAudioElement.src);
+        }
       }
+
+      this.stemBufferMixers.stop(clip.id);
 
       if (sourceAudioProxy) {
         const clipAudioElement = this.getClipAudioElement(clip);
@@ -461,10 +515,6 @@ export class AudioTrackSyncManager {
         }
       }
 
-      if (!ctx.isPlaying && mediaFile && (mediaFile.audioProxyStatus === 'generating' || hasUsableAudioProxy(mediaFile))) {
-        void proxyFrameCache.warmScrubAudioBuffer(mediaFile.id);
-      }
-
       // Audio proxy handling. Audio proxies are independent from the video
       // proxy switch because they make timeline playback/scrubbing predictable.
       const shouldUseAudioProxy = hasUsableAudioProxy(mediaFile);
@@ -474,7 +524,7 @@ export class AudioTrackSyncManager {
 
         if (!videoElement.muted) videoElement.muted = true;
 
-        const audioProxy = this.getVideoAudioProxyElementForClip(mediaFile.id, clip.id, !ctx.isPlaying);
+        const audioProxy = this.getVideoAudioProxyElementForClip(mediaFile.id, clip.id);
         if (audioProxy) {
           const shouldUseAudioProxyScrubFallback =
             ctx.isDraggingPlayhead &&
@@ -503,9 +553,6 @@ export class AudioTrackSyncManager {
         } else {
           // Trigger preload
           proxyFrameCache.preloadAudioProxy(mediaFile.id);
-          if (!ctx.isPlaying) {
-            void proxyFrameCache.warmScrubAudioBuffer(mediaFile.id);
-          }
         }
       }
     }
@@ -640,15 +687,19 @@ export class AudioTrackSyncManager {
     return linkedClip && this.getClipVideoElement(linkedClip) && !linkedClip.isComposition ? linkedClip : undefined;
   }
 
-  // allowScrubWarmup opts into decoding a varispeed scrub buffer (~100MB for a
-  // long WAV) as a side effect — never implicit, never during playback.
-  private getAudioProxyElementForClip(clip: TimelineClip, allowScrubWarmup = false): HTMLAudioElement | null {
+  private getAudioProxyElementForClip(clip: TimelineClip): HTMLAudioElement | null {
     const mediaFileId = this.getClipSourceMediaFileId(clip);
-    return this.runtimeElements.getAudioTrackProxyForClip(mediaFileId, clip.id, allowScrubWarmup);
+    return this.runtimeElements.getAudioTrackProxyForClip(mediaFileId, clip.id);
   }
 
-  private getVideoAudioProxyElementForClip(mediaFileId: string, clipId: string, allowScrubWarmup = false): HTMLAudioElement | null {
-    return this.runtimeElements.getVideoAudioProxyForClip(mediaFileId, clipId, allowScrubWarmup);
+  private pauseAndDisposeRoute(element: HTMLMediaElement | null | undefined): void {
+    if (!element) return;
+    pauseAudioElement(element);
+    audioRoutingManager.disposeRoute(element);
+  }
+
+  private getVideoAudioProxyElementForClip(mediaFileId: string, clipId: string): HTMLAudioElement | null {
+    return this.runtimeElements.getVideoAudioProxyForClip(mediaFileId, clipId);
   }
 
   private shouldSuppressLinkedAudioClipScrub(ctx: FrameContext, clip: TimelineClip): boolean {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { engine } from '../../src/engine/WebGPUEngine';
+import { useEngineStore } from '../../src/stores/engineStore';
 import {
   handleGetStats,
   handleGetStatsHistory,
@@ -85,6 +86,30 @@ describe('AI stats timeline runtime coordinator bridge field', () => {
 
   it('includes plain coordinator stats in getStats and getStatsHistory', async () => {
     timelineRuntimeCoordinator.retainResource(htmlMediaResource);
+    useEngineStore.getState().setEngineStats({
+      ...useEngineStore.getState().engineStats,
+      mainThread: {
+        windowMs: 5000,
+        samples: 3,
+        liveSamples: 2,
+        cachedSamples: 1,
+        skippedSamples: 0,
+        avgTotalMs: 4,
+        p95TotalMs: 6,
+        maxTotalMs: 7,
+        avgStatsMs: 0,
+        avgBuildMs: 1,
+        avgRenderMs: 1,
+        avgSyncVideoMs: 0.5,
+        avgSyncAudioMs: 1.5,
+        avgCacheMs: 0,
+        maxBuildMs: 2,
+        maxRenderMs: 2,
+        maxSyncVideoMs: 1,
+        maxSyncAudioMs: 3,
+        maxCacheMs: 0,
+      },
+    });
 
     const statsResult = await handleGetStats();
     expect(statsResult.success).toBe(true);
@@ -92,6 +117,10 @@ describe('AI stats timeline runtime coordinator bridge field', () => {
       projectLoadProgress: {
         active: false,
         phase: 'idle',
+      },
+      mainThread: {
+        samples: 3,
+        avgSyncAudioMs: 1.5,
       },
     });
     const stats = readTimelineRuntimeCoordinatorStats(statsResult.data);

@@ -58,24 +58,22 @@ export class AudioTrackRuntimeElementManager {
   getAudioTrackProxyForClip(
     mediaFileId: string | undefined,
     clipId: string,
-    allowScrubWarmup = false,
   ): HTMLAudioElement | null {
     if (!mediaFileId) return null;
     return this.getAudioProxyInstanceForClip(mediaFileId, clipId, {
       elements: this.activeAudioTrackProxies,
       mediaFileIds: this.activeAudioTrackProxyMediaFileIds,
-    }, allowScrubWarmup);
+    });
   }
 
   getVideoAudioProxyForClip(
     mediaFileId: string,
     clipId: string,
-    allowScrubWarmup = false,
   ): HTMLAudioElement | null {
     return this.getAudioProxyInstanceForClip(mediaFileId, clipId, {
       elements: this.activeVideoAudioProxies,
       mediaFileIds: this.activeVideoAudioProxyMediaFileIds,
-    }, allowScrubWarmup);
+    });
   }
 
   getAudioTrackProxy(clipId: string): HTMLAudioElement | undefined {
@@ -139,7 +137,6 @@ export class AudioTrackRuntimeElementManager {
     mediaFileId: string,
     clipId: string,
     activeStore: ActiveProxyStore,
-    allowScrubWarmup = false,
   ): HTMLAudioElement | null {
     const existingMediaFileId = activeStore.mediaFileIds.get(clipId);
     if (existingMediaFileId && existingMediaFileId !== mediaFileId) {
@@ -162,9 +159,6 @@ export class AudioTrackRuntimeElementManager {
     const sharedProxy = proxyFrameCache.getCachedAudioProxy(mediaFileId);
     if (!sharedProxy) {
       void proxyFrameCache.preloadAudioProxy(mediaFileId);
-      if (allowScrubWarmup) {
-        void proxyFrameCache.warmScrubAudioBuffer(mediaFileId);
-      }
       return null;
     }
 

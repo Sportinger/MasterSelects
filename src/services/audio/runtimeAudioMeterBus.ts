@@ -162,6 +162,33 @@ export class RuntimeAudioMeterBus {
     this.commit(next, nextMaster);
   }
 
+  publishTracks(
+    entries: readonly { trackId: string; snapshot: AudioMeterSnapshot }[],
+    masterSnapshot?: AudioMeterSnapshot,
+  ): void {
+    if (entries.length === 0) return;
+    const updatedAt = entries.reduce((latest, entry) => Math.max(latest, entry.snapshot.updatedAt), 0);
+    const next = this.ageTrackMeters(updatedAt, RUNTIME_AUDIO_METER_MAX_AGE_MS);
+    let hasNonSilentUpdate = false;
+    for (const { trackId, snapshot } of entries) {
+      const current = this.trackMeters.get(trackId);
+      if (!isSilentSnapshot(snapshot) || !isSilentSnapshot(current)) {
+        hasNonSilentUpdate = true;
+      }
+      next.set(trackId, snapshot);
+    }
+    if (
+      !hasNonSilentUpdate &&
+      isSilentSnapshot(masterSnapshot) &&
+      isSilentSnapshot(this.master)
+    ) {
+      return;
+    }
+    const nextMaster = masterSnapshot
+      ?? aggregateAudioMeterSnapshots([...next.values()], updatedAt);
+    this.commit(next, nextMaster);
+  }
+
   publishMaster(snapshot: AudioMeterSnapshot): void {
     this.commit(new Map(this.trackMeters), snapshot);
   }
@@ -301,6 +328,30 @@ export class RuntimeAudioMeterBus {
     };
   }
 
+  retainDemand(
+    scope: RuntimeAudioMeterScope,
+    options?: RuntimeAudioMeterSubscriptionOptions,
+  ): () => void {
+    const demand = scope.kind === 'master'
+      ? this.masterDemand
+      : this.getOrCreateTrackDemand(scope.trackId);
+    this.addDemand(demand, options);
+
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      this.removeDemand(demand, options);
+      if (
+        scope.kind === 'track' &&
+        isDemandEmpty(demand) &&
+        !this.trackListeners.has(scope.trackId)
+      ) {
+        this.trackDemand.delete(scope.trackId);
+      }
+    };
+  }
+
   /**
    * Fired (without payload) after any bus mutation. Used by the Zustand mirror.
    * Does not participate in demand accounting.
@@ -339,6 +390,15 @@ export class RuntimeAudioMeterBus {
       next.set(trackId, snapshot);
     }
     return next;
+  }
+
+  private getOrCreateTrackDemand(trackId: string): InternalDemand {
+    let demand = this.trackDemand.get(trackId);
+    if (!demand) {
+      demand = createEmptyDemand();
+      this.trackDemand.set(trackId, demand);
+    }
+    return demand;
   }
 
   private commit(

@@ -1667,6 +1667,19 @@ describe('timeline architecture registry', () => {
     expect(lineCount(hookSource)).toBeLessThanOrEqual(360);
   });
 
+  it('keeps TimelineClipCanvas worker audio resources responsive to warmup redraws', () => {
+    const canvasSource = readRepoFile('src/components/timeline/TimelineClipCanvas.tsx');
+    const preparedResourceBlock = canvasSource.match(
+      /const workerPreparedResourcesByClipId = useMemo\([\s\S]*?const workerDrawableClips = useMemo/,
+    )?.[0] ?? '';
+
+    expect(preparedResourceBlock).toContain('createTimelineClipCanvasWorkerPreparedResourcesByClipId');
+    expect(preparedResourceBlock).toContain('redrawNonce');
+    expect(preparedResourceBlock.indexOf('redrawNonce')).toBeGreaterThan(
+      preparedResourceBlock.indexOf('mediaFileStatusById'),
+    );
+  });
+
   it('keeps the timeline schema contract runtime-free', () => {
     const schemaFiles = sourceFilesUnder(path.join(srcTimelineRoot, 'contracts', 'schema'));
     expect(schemaFiles.length).toBeGreaterThan(0);

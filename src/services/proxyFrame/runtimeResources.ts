@@ -204,7 +204,7 @@ export function createAudioBufferResource(mediaFileId: string, buffer: AudioBuff
       channelCount: buffer.numberOfChannels,
     },
     priority: 'background',
-    tags: ['proxy-frame-cache', 'decoded-audio-buffer', 'scrub-audio'],
+    tags: ['proxy-frame-cache', 'decoded-audio-buffer', 'scrub-audio', 'source-playback-audio'],
   };
   return createRenderResourceDescriptorFromDemand(demand, {
     resourceKind: 'audio-source-clock',
@@ -213,7 +213,7 @@ export function createAudioBufferResource(mediaFileId: string, buffer: AudioBuff
     },
     audioSourceId: mediaFileId,
     clockId: resourceId,
-    label: 'Decoded proxy audio buffer',
+    label: 'Decoded proxy/source audio buffer',
   });
 }
 

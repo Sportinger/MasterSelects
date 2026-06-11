@@ -1,0 +1,26 @@
+perf(audio): stop playback-time decoded scrub buffer thrash
+
+During playback with many audio lanes, opportunistic scrub-buffer
+warmups re-decoded ~100MB WAV AudioBuffers every cycle: the 192MB/3-
+entry cache cannot hold stacked 5-minute stems, evicted buffers were
+re-requested immediately, and successful-but-unretainable decodes had
+no backoff. Measured ~60MB/s heap growth and 19fps UI during playback.
+
+- proxyFrameCache.warmScrubAudioBuffer(): explicit opportunistic
+  warmup entry point with a 5s per-file backoff set when a decode is
+  not retained (incl. runtime admission rejection) or a cached buffer
+  is evicted; getAudioBuffer() keeps demand semantics for stem mixer,
+  export, and scrub playback
+- retryTime semantics converted to next-allowed-attempt-at
+- warmup call sites in AudioTrackSyncManager and
+  audioTrackRuntimeElements now opt in explicitly and never warm while
+  playback is active (flag threaded from FrameContext instead of a new
+  store read, keeping the getState access policy ceiling)
+- element preloads (preloadAudioProxy) unchanged
+
+Implemented by a Codex worker from a reviewed packet; orchestrator
+added the opt-in flag threading, test-setup mock, and verification.
+Verified live: heap stable during playback (was +60MB/s), long tasks
+35 -> 5 per 10s window, decode loop gone from LoAF attribution.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

@@ -267,6 +267,7 @@
   border: 1px solid #050607;
   border-radius: 4px;
   background: #191b1c;
+  contain: layout paint;
   outline: none;
 }
 
@@ -630,10 +631,10 @@
   border: 1px solid #050607;
   border-radius: 3px;
   background: #101213;
+  contain: paint;
 }
 
 .audio-mixer-strip-fader {
-  --audio-mixer-fader-thumb-offset-x: -11px;
   --audio-mixer-fader-thumb-width: 52px;
   --audio-mixer-fader-thumb-height: 34px;
   --audio-mixer-fader-rail: linear-gradient(
@@ -644,6 +645,8 @@
     #15191b 5px 7px,
     #2e3537 7px 8px
   );
+  position: relative;
+  display: block;
   width: 30px;
   height: 100%;
   min-height: 0;
@@ -651,76 +654,40 @@
   padding: 0;
   border: 0;
   outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-  background:
-    var(--audio-mixer-fader-rail)
-    center
-    center / 8px calc(100% - var(--audio-mixer-fader-thumb-height)) no-repeat;
-  cursor: ns-resize;
-  writing-mode: vertical-lr;
-  direction: rtl;
-}
-
-.audio-mixer-strip-fader::-webkit-slider-runnable-track {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 999px;
   background: transparent;
-  box-shadow: none;
+  cursor: ns-resize;
+  contain: layout paint;
+  touch-action: none;
+  user-select: none;
 }
 
-.audio-mixer-strip-fader::-webkit-slider-thumb {
+.audio-mixer-strip-fader-rail {
+  position: absolute;
+  top: calc(var(--audio-mixer-fader-thumb-height) / 2);
+  bottom: calc(var(--audio-mixer-fader-thumb-height) / 2);
+  left: 50%;
+  width: 8px;
+  border-radius: 999px;
+  background: var(--audio-mixer-fader-rail);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.audio-mixer-strip-fader-thumb {
+  position: absolute;
+  left: 50%;
+  top: 0;
   width: var(--audio-mixer-fader-thumb-width);
   height: var(--audio-mixer-fader-thumb-height);
-  border: 0;
-  -webkit-appearance: none;
-  appearance: none;
   background: url('./fadercap-topdown.svg') center / 100% 100% no-repeat;
-  cursor: ns-resize;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75));
-  translate: var(--audio-mixer-fader-thumb-offset-x) 0;
-  transform: rotate(90deg);
+  transform: translate3d(-50%, var(--audio-mixer-fader-thumb-y, 0px), 0) rotate(90deg);
   transform-origin: center;
+  pointer-events: none;
 }
 
-.audio-mixer-strip-fader:hover::-webkit-slider-thumb,
-.audio-mixer-strip-fader:focus-visible::-webkit-slider-thumb {
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75)) brightness(1.06);
-}
-
-.audio-mixer-strip-fader::-moz-range-track {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: none;
-}
-
-.audio-mixer-strip-fader::-moz-range-progress {
-  width: 100%;
-  border-radius: 999px;
-  background: transparent;
-}
-
-.audio-mixer-strip-fader::-moz-range-thumb {
-  width: var(--audio-mixer-fader-thumb-width);
-  height: var(--audio-mixer-fader-thumb-height);
-  border: 0;
-  border-radius: 0;
-  background: url('./fadercap-topdown.svg') center / 100% 100% no-repeat;
-  cursor: ns-resize;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75));
-  translate: var(--audio-mixer-fader-thumb-offset-x) 0;
-  transform: rotate(90deg);
-  transform-origin: center;
-}
-
-.audio-mixer-strip-fader:hover::-moz-range-thumb,
-.audio-mixer-strip-fader:focus-visible::-moz-range-thumb {
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.75)) brightness(1.06);
+.audio-mixer-strip-fader:hover .audio-mixer-strip-fader-thumb,
+.audio-mixer-strip-fader:focus-visible .audio-mixer-strip-fader-thumb {
+  opacity: 0.96;
 }
 
 .audio-mixer-strip-fader:focus {
@@ -740,6 +707,7 @@
   overflow: hidden;
   border-radius: 2px;
   background: #080a0b;
+  contain: strict;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -816,11 +784,19 @@
 .audio-mixer-meter.stereo .audio-level-meter-rms {
   inset: 0;
   height: auto;
-  transform: none;
   transform-origin: center bottom;
 }
 
+.audio-mixer-meter.stereo .audio-level-meter-peak-fill,
+.audio-mixer-meter.stereo .audio-level-meter-rms {
+  inset: auto 0 0 0;
+  height: 100%;
+  will-change: transform, opacity;
+  transition: transform 55ms linear, opacity 100ms linear;
+}
+
 .audio-mixer-meter.stereo .audio-level-meter-scale {
+  transform: none;
   background:
     linear-gradient(0deg, rgba(67, 205, 139, 0.26) 0 58%, rgba(255, 219, 92, 0.29) 69% 86%, rgba(255, 87, 72, 0.38) 88%),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.17) 0 1px, transparent 1px 8px);
@@ -829,20 +805,10 @@
 
 .audio-mixer-meter.stereo .audio-level-meter-peak-fill {
   background: linear-gradient(0deg, #32d982 0%, #78dd73 58%, #ffd052 76%, #ff6354 100%);
-  clip-path: inset(var(--meter-peak-top, 100%) 0 0 0);
-  opacity: var(--meter-active, 0);
-  transition: clip-path 65ms linear, opacity 120ms ease;
 }
 
 .audio-mixer-meter.stereo .audio-level-meter-rms {
-  inset: auto -1px auto -1px;
-  bottom: var(--meter-rms-pos, 0%);
-  height: 1px;
-  width: auto;
-  background: rgba(230, 242, 235, 0.92);
-  opacity: calc(var(--meter-rms-active, 0) * 0.72);
-  transform: translateY(50%);
-  transition: bottom 80ms linear, opacity 120ms ease;
+  background: linear-gradient(0deg, rgba(230, 242, 235, 0.32), rgba(255, 238, 176, 0.4) 76%, rgba(255, 133, 116, 0.46));
 }
 
 .audio-mixer-meter .audio-level-meter-phase {
@@ -871,11 +837,11 @@
   right: 0;
   width: auto;
   height: 1px;
-  bottom: var(--meter-peak-pos, 0%);
+  top: auto;
+  bottom: 0;
   transform: translateY(50%);
   background: rgba(255, 77, 66, 0.95);
-  opacity: var(--meter-active, 0);
-  transition: bottom 55ms linear, opacity 120ms ease;
+  transition: opacity 100ms linear;
 }
 
 .audio-mixer-meter.clipping {

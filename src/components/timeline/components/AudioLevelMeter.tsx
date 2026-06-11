@@ -7,7 +7,6 @@ import type {
 } from '../../../services/audio/runtimeAudioMeterBus';
 import {
   useRuntimeAudioMeterFrame,
-  useRuntimeAudioMeterSnapshot,
 } from '../../../services/audio/runtimeAudioMeterHooks';
 
 interface AudioLevelMeterProps {
@@ -34,6 +33,62 @@ function formatUnit(value: number): string {
 function clampUnit(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(1, value));
+}
+
+const METER_ATTACK_MS = 55;
+const METER_DECAY_MS = 500;
+const METER_DECAY_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)';
+const METER_ATTACK_EASING = 'linear';
+
+function updateMeterTransition(
+  element: HTMLElement,
+  unit: number,
+  properties: readonly string[],
+): void {
+  const previousUnit = Number.parseFloat(element.dataset.meterUnit ?? '');
+  const decaying = Number.isFinite(previousUnit) && unit < previousUnit;
+  const mode = decaying ? 'decay' : 'attack';
+  if (element.dataset.meterTransitionMode !== mode) {
+    const duration = decaying ? METER_DECAY_MS : METER_ATTACK_MS;
+    const easing = decaying ? METER_DECAY_EASING : METER_ATTACK_EASING;
+    const opacityDuration = decaying ? METER_DECAY_MS : 100;
+    element.style.transition = [
+      ...properties.map((property) => `${property} ${duration}ms ${easing}`),
+      `opacity ${opacityDuration}ms ease`,
+    ].join(', ');
+    element.dataset.meterTransitionMode = mode;
+  }
+  element.dataset.meterUnit = String(unit);
+}
+
+function meterFillStyle(
+  unit: number,
+  hasMeter: boolean,
+  orientation: 'horizontal' | 'vertical',
+  opacity: number,
+): CSSProperties {
+  return {
+    transform: orientation === 'vertical' ? `scaleY(${unit})` : `scaleX(${unit})`,
+    opacity: hasMeter && unit > 0 ? opacity : 0,
+  };
+}
+
+function meterMarkerStyle(
+  unit: number,
+  hasMeter: boolean,
+  orientation: 'horizontal' | 'vertical',
+): CSSProperties {
+  return orientation === 'vertical'
+    ? {
+        bottom: `${unit * 100}%`,
+        transform: 'translateY(50%)',
+        opacity: hasMeter && unit > 0 ? 1 : 0,
+      }
+    : {
+        left: `${unit * 100}%`,
+        transform: 'translateX(-50%)',
+        opacity: hasMeter && unit > 0 ? 1 : 0,
+      };
 }
 
 function buildMeterTitle(label: string, meter: AudioMeterSnapshot | undefined, resolvedDisplay: 'mono' | 'stereo'): string {
@@ -103,15 +158,7 @@ function StaticAudioLevelMeter({
         opacity: phaseCorrelation !== undefined ? 0.95 : 0,
       };
   const title = buildMeterTitle(label, meter, resolvedDisplay);
-  const stereoBarStyle = (peakUnit: number, rmsUnit: number) => ({
-    '--meter-peak-top': `${(1 - peakUnit) * 100}%`,
-    '--meter-peak-right': `${(1 - peakUnit) * 100}%`,
-    '--meter-rms-top': `${(1 - rmsUnit) * 100}%`,
-    '--meter-peak-pos': `${peakUnit * 100}%`,
-    '--meter-rms-pos': `${rmsUnit * 100}%`,
-    '--meter-active': meter && peakUnit > 0 ? 1 : 0,
-    '--meter-rms-active': meter && rmsUnit > 0 ? 1 : 0,
-  }) as CSSProperties;
+  const hasMeter = Boolean(meter);
 
   if (resolvedDisplay === 'stereo') {
     return (
@@ -124,17 +171,17 @@ function StaticAudioLevelMeter({
         aria-valuenow={meter?.peakDb ?? AUDIO_METER_FLOOR_DB}
         title={title}
       >
-        <div className="audio-level-meter-stereo-channel left" style={stereoBarStyle(leftPeak, leftRms)}>
+        <div className="audio-level-meter-stereo-channel left">
           <div className="audio-level-meter-scale" />
-          <div className="audio-level-meter-peak-fill" />
-          <div className="audio-level-meter-rms" />
-          <div className="audio-level-meter-peak" />
+          <div className="audio-level-meter-peak-fill" style={meterFillStyle(leftPeak, hasMeter, orientation, 0.68)} />
+          <div className="audio-level-meter-rms" style={meterFillStyle(leftRms, hasMeter, orientation, 0.52)} />
+          <div className="audio-level-meter-peak" style={meterMarkerStyle(leftPeak, hasMeter, orientation)} />
         </div>
-        <div className="audio-level-meter-stereo-channel right" style={stereoBarStyle(rightPeak, rightRms)}>
+        <div className="audio-level-meter-stereo-channel right">
           <div className="audio-level-meter-scale" />
-          <div className="audio-level-meter-peak-fill" />
-          <div className="audio-level-meter-rms" />
-          <div className="audio-level-meter-peak" />
+          <div className="audio-level-meter-peak-fill" style={meterFillStyle(rightPeak, hasMeter, orientation, 0.68)} />
+          <div className="audio-level-meter-rms" style={meterFillStyle(rightRms, hasMeter, orientation, 0.52)} />
+          <div className="audio-level-meter-peak" style={meterMarkerStyle(rightPeak, hasMeter, orientation)} />
         </div>
       </div>
     );
@@ -177,14 +224,17 @@ function applyMonoMeterStyles(
   const vertical = orientation === 'vertical';
 
   if (peakFill) {
+    updateMeterTransition(peakFill, peak, ['transform']);
     peakFill.style.transform = vertical ? `scaleY(${peak})` : `scaleX(${peak})`;
     peakFill.style.opacity = String(hasMeter && peak > 0 ? 0.68 : 0);
   }
   if (rms) {
+    updateMeterTransition(rms, rmsUnit, ['transform']);
     rms.style.transform = vertical ? `scaleY(${rmsUnit})` : `scaleX(${rmsUnit})`;
     rms.style.opacity = String(hasMeter && rmsUnit > 0 ? 0.9 : 0);
   }
   if (peakMarker) {
+    updateMeterTransition(peakMarker, peak, [vertical ? 'bottom' : 'left']);
     if (vertical) {
       peakMarker.style.bottom = `${peak * 100}%`;
       peakMarker.style.transform = 'translateY(50%)';
@@ -195,6 +245,7 @@ function applyMonoMeterStyles(
     peakMarker.style.opacity = String(hasMeter && peak > 0 ? 1 : 0);
   }
   if (phase) {
+    updateMeterTransition(phase, phaseCorrelation !== undefined ? phaseUnit : 0, [vertical ? 'bottom' : 'left']);
     if (vertical) {
       phase.style.bottom = `${phaseUnit * 100}%`;
       phase.style.transform = 'translateY(50%)';
@@ -206,23 +257,42 @@ function applyMonoMeterStyles(
   }
 }
 
-function applyStereoChannelVars(
-  element: HTMLElement | null,
+interface StereoChannelRefs {
+  peakFill: HTMLElement | null;
+  rms: HTMLElement | null;
+  peakMarker: HTMLElement | null;
+}
+
+function applyStereoChannelStyles(
+  elements: StereoChannelRefs,
   peakUnit: number,
   rmsUnit: number,
   hasMeter: boolean,
+  orientation: 'horizontal' | 'vertical',
 ): void {
-  if (!element) return;
-  element.style.setProperty('--meter-peak-top', `${(1 - peakUnit) * 100}%`);
-  element.style.setProperty('--meter-peak-right', `${(1 - peakUnit) * 100}%`);
-  element.style.setProperty('--meter-rms-top', `${(1 - rmsUnit) * 100}%`);
-  element.style.setProperty('--meter-peak-pos', `${peakUnit * 100}%`);
-  element.style.setProperty('--meter-rms-pos', `${rmsUnit * 100}%`);
-  element.style.setProperty('--meter-active', String(hasMeter && peakUnit > 0 ? 1 : 0));
-  element.style.setProperty('--meter-rms-active', String(hasMeter && rmsUnit > 0 ? 1 : 0));
+  const vertical = orientation === 'vertical';
+  if (elements.peakFill) {
+    updateMeterTransition(elements.peakFill, peakUnit, ['transform']);
+    elements.peakFill.style.transform = vertical ? `scaleY(${peakUnit})` : `scaleX(${peakUnit})`;
+    elements.peakFill.style.opacity = String(hasMeter && peakUnit > 0 ? 0.68 : 0);
+  }
+  if (elements.rms) {
+    updateMeterTransition(elements.rms, rmsUnit, ['transform']);
+    elements.rms.style.transform = vertical ? `scaleY(${rmsUnit})` : `scaleX(${rmsUnit})`;
+    elements.rms.style.opacity = String(hasMeter && rmsUnit > 0 ? 0.52 : 0);
+  }
+  if (elements.peakMarker) {
+    updateMeterTransition(elements.peakMarker, peakUnit, [vertical ? 'bottom' : 'left']);
+    if (vertical) {
+      elements.peakMarker.style.bottom = `${peakUnit * 100}%`;
+      elements.peakMarker.style.transform = 'translateY(50%)';
+    } else {
+      elements.peakMarker.style.left = `${peakUnit * 100}%`;
+      elements.peakMarker.style.transform = 'translateX(-50%)';
+    }
+    elements.peakMarker.style.opacity = String(hasMeter && peakUnit > 0 ? 1 : 0);
+  }
 }
-
-const SLOW_META_FPS = 4;
 
 function StreamingAudioLevelMeter({
   streamScope,
@@ -237,18 +307,24 @@ function StreamingAudioLevelMeter({
   const rmsRef = useRef<HTMLDivElement | null>(null);
   const peakRef = useRef<HTMLDivElement | null>(null);
   const phaseRef = useRef<HTMLDivElement | null>(null);
-  const leftChannelRef = useRef<HTMLDivElement | null>(null);
-  const rightChannelRef = useRef<HTMLDivElement | null>(null);
+  const leftPeakFillRef = useRef<HTMLDivElement | null>(null);
+  const leftRmsRef = useRef<HTMLDivElement | null>(null);
+  const leftPeakRef = useRef<HTMLDivElement | null>(null);
+  const rightPeakFillRef = useRef<HTMLDivElement | null>(null);
+  const rightRmsRef = useRef<HTMLDivElement | null>(null);
+  const rightPeakRef = useRef<HTMLDivElement | null>(null);
+  const latestMeterRef = useRef<AudioMeterSnapshot | undefined>(undefined);
 
-  // Resolved display + accessibility/title text update on a slow human-visible cadence
-  // so the structure stays stable while the bars animate through refs.
-  const slowFeatures = streamFeatures ?? (display === 'stereo' ? (['level', 'stereo', 'phase'] as const) : (['level', 'phase'] as const));
-  const slowMeter = useRuntimeAudioMeterSnapshot(streamScope, { features: slowFeatures, maxFps: SLOW_META_FPS });
+  // Keep structure stable while the bars animate through refs. Dynamic readouts
+  // are rendered separately; this hot path must not trigger React commits.
+  const slowFeatures = streamFeatures ?? (display === 'stereo' ? (['level', 'stereo', 'phase'] as const) : (['level'] as const));
   const resolvedDisplay = display === 'auto'
-    ? (slowMeter?.channels ? 'stereo' : 'mono')
+    ? (slowFeatures.includes('stereo') ? 'stereo' : 'mono')
     : display;
 
   const applyStyles = useCallback((meter: AudioMeterSnapshot | undefined) => {
+    latestMeterRef.current = meter;
+
     const root = rootRef.current;
     if (root) root.classList.toggle('clipping', Boolean(meter?.clipping));
 
@@ -258,8 +334,20 @@ function StreamingAudioLevelMeter({
       const leftRms = clampUnit(meter ? audioMeterDbToUnit(meter.channels?.left.rmsDb ?? meter.rmsDb) : 0);
       const rightPeak = clampUnit(meter ? audioMeterDbToUnit(meter.channels?.right.peakDb ?? meter.peakDb) : 0);
       const rightRms = clampUnit(meter ? audioMeterDbToUnit(meter.channels?.right.rmsDb ?? meter.rmsDb) : 0);
-      applyStereoChannelVars(leftChannelRef.current, leftPeak, leftRms, hasMeter);
-      applyStereoChannelVars(rightChannelRef.current, rightPeak, rightRms, hasMeter);
+      applyStereoChannelStyles(
+        { peakFill: leftPeakFillRef.current, rms: leftRmsRef.current, peakMarker: leftPeakRef.current },
+        leftPeak,
+        leftRms,
+        hasMeter,
+        orientation,
+      );
+      applyStereoChannelStyles(
+        { peakFill: rightPeakFillRef.current, rms: rightRmsRef.current, peakMarker: rightPeakRef.current },
+        rightPeak,
+        rightRms,
+        hasMeter,
+        orientation,
+      );
       return;
     }
 
@@ -271,11 +359,10 @@ function StreamingAudioLevelMeter({
   // Re-apply the latest snapshot when the rendered structure changes (mono<->stereo,
   // orientation) so the freshly mounted elements are styled before the next publish.
   useEffect(() => {
-    applyStyles(slowMeter);
-  }, [applyStyles, slowMeter]);
+    applyStyles(latestMeterRef.current);
+  }, [applyStyles]);
 
-  const title = buildMeterTitle(label, slowMeter, resolvedDisplay);
-  const ariaValueNow = slowMeter?.peakDb ?? AUDIO_METER_FLOOR_DB;
+  const title = `${label}: live signal`;
 
   if (resolvedDisplay === 'stereo') {
     return (
@@ -286,20 +373,20 @@ function StreamingAudioLevelMeter({
         aria-label={label}
         aria-valuemin={AUDIO_METER_FLOOR_DB}
         aria-valuemax={0}
-        aria-valuenow={ariaValueNow}
+        aria-valuenow={AUDIO_METER_FLOOR_DB}
         title={title}
       >
-        <div ref={leftChannelRef} className="audio-level-meter-stereo-channel left">
+        <div className="audio-level-meter-stereo-channel left">
           <div className="audio-level-meter-scale" />
-          <div className="audio-level-meter-peak-fill" />
-          <div className="audio-level-meter-rms" />
-          <div className="audio-level-meter-peak" />
+          <div ref={leftPeakFillRef} className="audio-level-meter-peak-fill" style={{ opacity: 0 }} />
+          <div ref={leftRmsRef} className="audio-level-meter-rms" style={{ opacity: 0 }} />
+          <div ref={leftPeakRef} className="audio-level-meter-peak" style={{ opacity: 0 }} />
         </div>
-        <div ref={rightChannelRef} className="audio-level-meter-stereo-channel right">
+        <div className="audio-level-meter-stereo-channel right">
           <div className="audio-level-meter-scale" />
-          <div className="audio-level-meter-peak-fill" />
-          <div className="audio-level-meter-rms" />
-          <div className="audio-level-meter-peak" />
+          <div ref={rightPeakFillRef} className="audio-level-meter-peak-fill" style={{ opacity: 0 }} />
+          <div ref={rightRmsRef} className="audio-level-meter-rms" style={{ opacity: 0 }} />
+          <div ref={rightPeakRef} className="audio-level-meter-peak" style={{ opacity: 0 }} />
         </div>
       </div>
     );
@@ -313,14 +400,11 @@ function StreamingAudioLevelMeter({
       aria-label={label}
       aria-valuemin={AUDIO_METER_FLOOR_DB}
       aria-valuemax={0}
-      aria-valuenow={ariaValueNow}
+      aria-valuenow={AUDIO_METER_FLOOR_DB}
       title={title}
     >
       <div className="audio-level-meter-scale" />
       <div ref={peakFillRef} className="audio-level-meter-peak-fill" style={{ opacity: 0 }} />
-      <div ref={rmsRef} className="audio-level-meter-rms" style={{ opacity: 0 }} />
-      <div ref={phaseRef} className="audio-level-meter-phase" style={{ opacity: 0 }} />
-      <div ref={peakRef} className="audio-level-meter-peak" style={{ opacity: 0 }} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useDockStore } from '../../../../../stores/dockStore';
 import {
+  summarizeLongAnimationFrameEntry,
   summarizeNumberList,
   summarizePerformanceMemory,
   summarizeProxyAudioCache,
@@ -111,12 +112,7 @@ export async function measureDockResizeInteraction(args: Record<string, unknown>
     try {
       animationFrameObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          longAnimationFrames.push({
-            name: entry.name,
-            startTime: Math.round(entry.startTime * 100) / 100,
-            durationMs: Math.round(entry.duration * 100) / 100,
-            entryType: entry.entryType,
-          });
+          longAnimationFrames.push(summarizeLongAnimationFrameEntry(entry, startedAt));
         }
       });
       animationFrameObserver.observe({ entryTypes: ['long-animation-frame'] });

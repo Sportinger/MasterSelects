@@ -68,7 +68,7 @@ export interface StemBufferMixerSyncOptions {
 
 export const STEM_MIXER_START_DELAY_SECONDS = 0.035;
 export const STEM_MIXER_RESTART_DRIFT_SECONDS = 0.2;
-export const STEM_MIXER_METER_INTERVAL_MS = 100;
+export const STEM_MIXER_METER_INTERVAL_MS = 50;
 export const STEM_MIXER_BUFFER_SET_MAX_BYTES = 512 * 1024 * 1024;
 export const STEM_LAYER_BUFFER_CACHE_MAX_BYTES = 768 * 1024 * 1024;
 export const STEM_LAYER_BUFFER_CACHE_MAX_ENTRIES = 12;

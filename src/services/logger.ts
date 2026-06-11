@@ -86,6 +86,8 @@ const LEVEL_ICONS: Record<LogLevel, string> = {
 const logBuffer: LogEntry[] = [];
 const registeredModules = new Set<string>();
 let syncLogsToServer: (() => void) | null = null;
+let logRevision = 0;
+let lastSyncedLogRevision = 0;
 
 let config: LoggerConfig = {
   enabled: [],
@@ -268,6 +270,7 @@ class ModuleLogger {
 
   private addToBuffer(entry: LogEntry): void {
     logBuffer.push(entry);
+    logRevision++;
     if (logBuffer.length > config.bufferSize) {
       logBuffer.shift();
     }
@@ -450,6 +453,8 @@ if (typeof window !== 'undefined') {
   // so no additional redaction is needed before syncing to the server.
   syncLogsToServer = () => {
     try {
+      if (logRevision === lastSyncedLogRevision) return;
+      lastSyncedLogRevision = logRevision;
       const summary = Logger.summary();
       const recentLogs = logBuffer.slice(-100);
       const payload = JSON.stringify({ ...summary, recentLogs });

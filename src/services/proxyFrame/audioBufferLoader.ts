@@ -1,5 +1,5 @@
-// Decoded scrub audio buffer loading: multi-source ArrayBuffer resolution,
-// decode bookkeeping (loading/failed/retry state), and LRU cache limits.
+// Decoded audio buffer loading for scrub and live source playback: multi-source
+// ArrayBuffer resolution, decode bookkeeping, and LRU cache limits.
 
 import { Logger } from '../logger';
 import { projectFileService } from '../projectFileService';
@@ -13,8 +13,8 @@ import { estimateAudioBufferBytes } from './runtimeResources';
 
 const log = Logger.create('ProxyFrameCache');
 
-const MAX_AUDIO_BUFFER_CACHE_BYTES = 192 * 1024 * 1024;
-const MAX_AUDIO_BUFFER_CACHE_ENTRIES = 3;
+const MAX_AUDIO_BUFFER_CACHE_BYTES = 1536 * 1024 * 1024;
+const MAX_AUDIO_BUFFER_CACHE_ENTRIES = 16;
 const AUDIO_BUFFER_RETRY_COOLDOWN_MS = 3000;
 const SCRUB_AUDIO_WARM_BACKOFF_MS = 5000;
 

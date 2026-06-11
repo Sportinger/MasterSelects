@@ -1,5 +1,6 @@
 import type { TimelineClip } from '../../types';
 import { calculateAudioMeterSnapshot } from '../audio/audioMetering';
+import { runtimeAudioMeterBus } from '../audio/runtimeAudioMeterBus';
 import { useTimelineStore } from '../../stores/timeline';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import { clearMasterAudio, playheadState, setMasterAudioClock } from './PlayheadState';
@@ -22,6 +23,32 @@ type CreateStemBufferMixerSessionParams = {
   meterTrackId: string;
 };
 
+type StemBufferMixerMeterEntry = {
+  trackId: string;
+  snapshot: ReturnType<typeof calculateAudioMeterSnapshot>;
+};
+
+type StemBufferMixerPublishDebug = {
+  at: number;
+  sessionCount: number;
+  entryCount: number;
+  trackIds: string[];
+  peaks: Array<{ trackId: string; peakLinear: number; rmsLinear: number }>;
+};
+
+const activeDebugSessions = new Set<StemBufferMixerSession>();
+const stemBufferMixerDebugState: {
+  starts: number;
+  stops: number;
+  lastSinglePublish: StemBufferMixerPublishDebug | null;
+  lastBatchPublish: StemBufferMixerPublishDebug | null;
+} = {
+  starts: 0,
+  stops: 0,
+  lastSinglePublish: null,
+  lastBatchPublish: null,
+};
+
 function clampGain(value: number): number {
   return Math.max(0, Math.min(4, value));
 }
@@ -35,6 +62,8 @@ function disconnectAudioNode(node: AudioNode): void {
 }
 
 export function stopStemBufferMixerSession(session: StemBufferMixerSession): void {
+  activeDebugSessions.delete(session);
+  stemBufferMixerDebugState.stops += 1;
   if (playheadState.masterAudioClock === session.getSourceTime) clearMasterAudio();
   for (const source of session.sources) {
     try {
@@ -92,7 +121,7 @@ export function createStemBufferMixerSession(
     return null;
   }
 
-  return {
+  const session: StemBufferMixerSession = {
     key,
     clipId,
     context,
@@ -118,6 +147,9 @@ export function createStemBufferMixerSession(
     lastGainSignature: '',
     lastMeterPublishAt: 0,
   };
+  activeDebugSessions.add(session);
+  stemBufferMixerDebugState.starts += 1;
+  return session;
 }
 
 export function updateStemBufferMixerGains(
@@ -140,18 +172,115 @@ export function updateStemBufferMixerGains(
   }
 }
 
-export function publishStemBufferMixerMeter(session: StemBufferMixerSession, force = false): void {
-  const now = performance.now();
-  if (!force && now - session.lastMeterPublishAt < STEM_MIXER_METER_INTERVAL_MS) return;
+export function readStemBufferMixerMeter(
+  session: StemBufferMixerSession,
+  force = false,
+  now = performance.now(),
+): StemBufferMixerMeterEntry | null {
+  if (!force && now - session.lastMeterPublishAt < STEM_MIXER_METER_INTERVAL_MS) return null;
   session.lastMeterPublishAt = now;
   session.analyser.getFloatTimeDomainData(session.meterSamples);
-  session.leftAnalyser.getFloatTimeDomainData(session.leftMeterSamples);
-  session.rightAnalyser.getFloatTimeDomainData(session.rightMeterSamples);
-  const snapshot = calculateAudioMeterSnapshot(session.meterSamples, now, undefined, {
-    left: session.leftMeterSamples,
-    right: session.rightMeterSamples,
+  const scope = { kind: 'track' as const, trackId: session.meterTrackId };
+  const masterScope = { kind: 'master' as const };
+  const includeStereo =
+    runtimeAudioMeterBus.hasDemand(scope, 'stereo') ||
+    runtimeAudioMeterBus.hasDemand(scope, 'phase') ||
+    runtimeAudioMeterBus.hasDemand(masterScope, 'stereo') ||
+    runtimeAudioMeterBus.hasDemand(masterScope, 'phase');
+  if (includeStereo) {
+    session.leftAnalyser.getFloatTimeDomainData(session.leftMeterSamples);
+    session.rightAnalyser.getFloatTimeDomainData(session.rightMeterSamples);
+  }
+  const stereoSamples = includeStereo
+    ? {
+        left: session.leftMeterSamples,
+        right: session.rightMeterSamples,
+      }
+    : undefined;
+  const snapshot = calculateAudioMeterSnapshot(session.meterSamples, now, undefined, stereoSamples);
+  return { trackId: session.meterTrackId, snapshot };
+}
+
+export function publishStemBufferMixerMeter(session: StemBufferMixerSession, force = false): void {
+  const entry = readStemBufferMixerMeter(session, force);
+  if (!entry) return;
+  stemBufferMixerDebugState.lastSinglePublish = {
+    at: performance.now(),
+    sessionCount: 1,
+    entryCount: 1,
+    trackIds: [entry.trackId],
+    peaks: [{
+      trackId: entry.trackId,
+      peakLinear: entry.snapshot.peakLinear,
+      rmsLinear: entry.snapshot.rmsLinear,
+    }],
+  };
+  useTimelineStore.getState().updateRuntimeAudioMeter(entry.trackId, entry.snapshot);
+}
+
+export function publishStemBufferMixerMeters(sessions: Iterable<StemBufferMixerSession>): void {
+  const sessionList = Array.from(sessions);
+  const entries: StemBufferMixerMeterEntry[] = [];
+  const now = performance.now();
+  for (const session of sessionList) {
+    const entry = readStemBufferMixerMeter(session, true, now);
+    if (entry) entries.push(entry);
+  }
+  stemBufferMixerDebugState.lastBatchPublish = {
+    at: now,
+    sessionCount: sessionList.length,
+    entryCount: entries.length,
+    trackIds: entries.map(entry => entry.trackId),
+    peaks: entries.map(entry => ({
+      trackId: entry.trackId,
+      peakLinear: entry.snapshot.peakLinear,
+      rmsLinear: entry.snapshot.rmsLinear,
+    })),
+  };
+  if (entries.length === 0) return;
+  useTimelineStore.getState().updateRuntimeAudioMeters(entries);
+}
+
+export function getStemBufferMixerDebugSnapshot() {
+  const now = performance.now();
+  const sessions = Array.from(activeDebugSessions).map((session) => {
+    let samplePeakLinear = 0;
+    let sampleRmsLinear = 0;
+    try {
+      session.analyser.getFloatTimeDomainData(session.meterSamples);
+      let sumSquares = 0;
+      for (const sample of session.meterSamples) {
+        const abs = Math.abs(sample);
+        if (abs > samplePeakLinear) samplePeakLinear = abs;
+        sumSquares += sample * sample;
+      }
+      sampleRmsLinear = Math.sqrt(sumSquares / Math.max(1, session.meterSamples.length));
+    } catch {
+      samplePeakLinear = -1;
+      sampleRmsLinear = -1;
+    }
+    return {
+      clipId: session.clipId,
+      meterTrackId: session.meterTrackId,
+      contextState: session.context.state,
+      contextCurrentTime: Math.round(session.context.currentTime * 1000) / 1000,
+      startedAtContextTime: Math.round(session.startedAtContextTime * 1000) / 1000,
+      startedClipTime: Math.round(session.startedClipTime * 1000) / 1000,
+      sourceTime: Math.round((session.getSourceTime() ?? -1) * 1000) / 1000,
+      sourceCount: session.sourceCount,
+      lastMeterAgeMs: Math.round(now - session.lastMeterPublishAt),
+      samplePeakLinear: Math.round(samplePeakLinear * 100000) / 100000,
+      sampleRmsLinear: Math.round(sampleRmsLinear * 100000) / 100000,
+    };
   });
-  useTimelineStore.getState().updateRuntimeAudioMeter(session.meterTrackId, snapshot);
+  return {
+    starts: stemBufferMixerDebugState.starts,
+    stops: stemBufferMixerDebugState.stops,
+    activeSessionCount: sessions.length,
+    sessions,
+    lastSinglePublish: stemBufferMixerDebugState.lastSinglePublish,
+    lastBatchPublish: stemBufferMixerDebugState.lastBatchPublish,
+  };
 }
 
 export function setStemBufferMixerMasterClock(

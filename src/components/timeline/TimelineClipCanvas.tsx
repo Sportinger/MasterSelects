@@ -322,7 +322,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
       resolveGeometry: (clip) => resolveClipGeometry(clip as TimelinePaintSourceClip, geometryProps),
       getMediaStatus: (clip) => getMediaFileCanvasStatus(clip as TimelinePaintSourceClip, mediaFileStatusById),
     }),
-    [audioDisplayMode, canvasOffsetX, clipTrim, clips, cssWidth, geometryProps, height, mediaFileStatusById, scrollX, spectrogramTileSets, timeToPixel, viewportWidth, waveformPyramids, waveformsEnabled],
+    [audioDisplayMode, canvasOffsetX, clipTrim, clips, cssWidth, geometryProps, height, mediaFileStatusById, redrawNonce, scrollX, spectrogramTileSets, timeToPixel, viewportWidth, waveformPyramids, waveformsEnabled],
   );
   const workerDrawableClips = useMemo(
     () => createWorkerDrawableClips(clips, geometryProps),

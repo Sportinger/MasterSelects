@@ -92,6 +92,15 @@
   --timeline-switch-base-x: -1px;
 }
 
+.playhead.playhead-live-transform {
+  contain: layout paint style;
+  isolation: isolate;
+}
+
+.playhead.playhead-live-transform .playhead-head {
+  position: absolute;
+}
+
 .playhead-head {
   width: 14px;
   height: 14px;

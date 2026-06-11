@@ -5,6 +5,7 @@ import type { AudioTrackStemLayerBufferCache } from './audioTrackStemLayerBuffer
 import {
   createStemBufferMixerSession,
   publishStemBufferMixerMeter,
+  publishStemBufferMixerMeters,
   recordStemBufferMixerLifecycle,
   setStemBufferMixerMasterClock,
   stopStemBufferMixerSession,
@@ -12,6 +13,7 @@ import {
 } from './audioTrackStemBufferMixerSessions';
 import {
   STEM_MIXER_BUFFER_SET_MAX_BYTES,
+  STEM_MIXER_METER_INTERVAL_MS,
   STEM_MIXER_RESTART_DRIFT_SECONDS,
   STEM_MIXER_START_DELAY_SECONDS,
   STEM_SOURCE_LAYER_ID,
@@ -30,9 +32,37 @@ type AudioTrackStemBufferMixerManagerOptions = {
   stemLayerBuffers: AudioTrackStemLayerBufferCache;
 };
 
+const stemBufferMixerPumpDebugState = {
+  ensureCalls: 0,
+  ensureSkippedExisting: 0,
+  ensureSkippedNoWindow: 0,
+  scheduledAt: 0,
+  firedAt: 0,
+  tickCount: 0,
+  emptyTickCount: 0,
+  publishTickCount: 0,
+  lastKnownSessionCount: 0,
+  timerActive: false,
+  lastError: null as string | null,
+  fallbackSinglePublishCount: 0,
+};
+
+export function getStemBufferMixerPumpDebugSnapshot() {
+  return {
+    ...stemBufferMixerPumpDebugState,
+    scheduledAgeMs: stemBufferMixerPumpDebugState.scheduledAt > 0
+      ? Math.round(performance.now() - stemBufferMixerPumpDebugState.scheduledAt)
+      : null,
+    firedAgeMs: stemBufferMixerPumpDebugState.firedAt > 0
+      ? Math.round(performance.now() - stemBufferMixerPumpDebugState.firedAt)
+      : null,
+  };
+}
+
 export class AudioTrackStemBufferMixerManager {
   private stemBufferMixerContext: AudioContext | null = null;
   private stemBufferMixers = new Map<string, StemBufferMixerSession>();
+  private meterTimerId: number | null = null;
   private getClipSourceMediaFileId: (clip: TimelineClip) => string | undefined;
   private markRuntimeActive: () => void;
   private stemLayerBuffers: AudioTrackStemLayerBufferCache;
@@ -120,11 +150,62 @@ export class AudioTrackStemBufferMixerManager {
     return this.startMixerSession(clip, context, key, layers, buffers, timeInfo, routeSettings.master.volume, meterTrackId, canBeMaster, Boolean(current), restartDriftSeconds);
   }
 
+  syncSource(options: {
+    clip: TimelineClip;
+    mediaFileId: string;
+    buffer: AudioBuffer;
+    routeSettings: StemBufferMixerSyncOptions['routeSettings'];
+    timeInfo: StemBufferMixerSyncOptions['timeInfo'];
+    effectiveVolume: number;
+    sourceGain: number;
+    trackMuted: boolean;
+    meterTrackId: string;
+    canBeMaster: boolean;
+  }): number {
+    const {
+      clip,
+      mediaFileId,
+      buffer,
+      routeSettings,
+      timeInfo,
+      effectiveVolume,
+      sourceGain,
+      trackMuted,
+      meterTrackId,
+      canBeMaster,
+    } = options;
+    if (trackMuted || effectiveVolume <= 0 || !this.canUseRouteSettings(routeSettings, timeInfo.absSpeed, timeInfo.speed)) {
+      this.stop(clip.id);
+      return 0;
+    }
+    this.markRuntimeActive();
+
+    const layer: StemBufferMixerLayer = {
+      id: STEM_SOURCE_LAYER_ID,
+      mediaFileId,
+      gain: effectiveVolume * sourceGain,
+      required: true,
+    };
+    const layers = [layer];
+    const buffers = new Map<string, AudioBuffer>([[STEM_SOURCE_LAYER_ID, buffer]]);
+    const key = JSON.stringify({ clipId: clip.id, source: mediaFileId });
+    const context = this.getStemBufferMixerContext();
+    if (context.state === 'suspended') void context.resume();
+
+    const current = this.stemBufferMixers.get(clip.id);
+    const restartDriftSeconds = this.getRestartDriftSeconds(current, key, context, timeInfo.clipTime);
+    const reused = this.tryReuseCurrentMixer(current, key, context, layers, clip, timeInfo, routeSettings.master.volume, canBeMaster, restartDriftSeconds);
+    if (reused !== null) return reused;
+
+    return this.startMixerSession(clip, context, key, layers, buffers, timeInfo, routeSettings.master.volume, meterTrackId, canBeMaster, Boolean(current), restartDriftSeconds);
+  }
+
   stop(clipId: string): void {
     const session = this.stemBufferMixers.get(clipId);
     if (!session) return;
     stopStemBufferMixerSession(session);
     this.stemBufferMixers.delete(clipId);
+    this.stopMeterPumpIfIdle();
     recordStemBufferMixerLifecycle({
       action: 'stop',
       clipId,
@@ -149,11 +230,68 @@ export class AudioTrackStemBufferMixerManager {
 
   releaseIdleRuntime(onCloseError: (error: unknown) => void): void {
     this.stopAll();
+    this.stopMeterPump();
     const context = this.stemBufferMixerContext;
     this.stemBufferMixerContext = null;
     if (context && context.state !== 'closed') {
       void context.close().catch(onCloseError);
     }
+  }
+
+  private ensureMeterPump(): void {
+    stemBufferMixerPumpDebugState.ensureCalls += 1;
+    stemBufferMixerPumpDebugState.lastKnownSessionCount = this.stemBufferMixers.size;
+    if (typeof window === 'undefined') {
+      stemBufferMixerPumpDebugState.ensureSkippedNoWindow += 1;
+      stemBufferMixerPumpDebugState.timerActive = false;
+      return;
+    }
+    if (this.meterTimerId !== null) {
+      stemBufferMixerPumpDebugState.ensureSkippedExisting += 1;
+      stemBufferMixerPumpDebugState.timerActive = true;
+      return;
+    }
+    const tick = () => {
+      stemBufferMixerPumpDebugState.firedAt = performance.now();
+      stemBufferMixerPumpDebugState.tickCount += 1;
+      this.meterTimerId = null;
+      stemBufferMixerPumpDebugState.timerActive = false;
+      stemBufferMixerPumpDebugState.lastKnownSessionCount = this.stemBufferMixers.size;
+      if (this.stemBufferMixers.size === 0) {
+        stemBufferMixerPumpDebugState.emptyTickCount += 1;
+        return;
+      }
+      stemBufferMixerPumpDebugState.publishTickCount += 1;
+      try {
+        publishStemBufferMixerMeters(this.stemBufferMixers.values());
+      } catch (error) {
+        stemBufferMixerPumpDebugState.lastError = error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error);
+        for (const session of this.stemBufferMixers.values()) {
+          publishStemBufferMixerMeter(session, true);
+          stemBufferMixerPumpDebugState.fallbackSinglePublishCount += 1;
+        }
+      } finally {
+        this.ensureMeterPump();
+      }
+    };
+    stemBufferMixerPumpDebugState.scheduledAt = performance.now();
+    stemBufferMixerPumpDebugState.timerActive = true;
+    this.meterTimerId = window.setTimeout(tick, STEM_MIXER_METER_INTERVAL_MS);
+  }
+
+  private stopMeterPumpIfIdle(): void {
+    if (this.stemBufferMixers.size === 0) {
+      this.stopMeterPump();
+    }
+  }
+
+  private stopMeterPump(): void {
+    if (this.meterTimerId === null || typeof window === 'undefined') return;
+    window.clearTimeout(this.meterTimerId);
+    this.meterTimerId = null;
+    stemBufferMixerPumpDebugState.timerActive = false;
   }
 
   private buildDesiredLayers(
@@ -218,7 +356,6 @@ export class AudioTrackStemBufferMixerManager {
     if (restartDriftSeconds === null || Math.abs(restartDriftSeconds) > STEM_MIXER_RESTART_DRIFT_SECONDS) return null;
     updateStemBufferMixerGains(current, layers, masterVolume);
     if (canBeMaster) setStemBufferMixerMasterClock(current, clip, timeInfo);
-    publishStemBufferMixerMeter(current);
     return current.sourceCount;
   }
 
@@ -251,6 +388,7 @@ export class AudioTrackStemBufferMixerManager {
     });
     if (!session) return 0;
     this.stemBufferMixers.set(clip.id, session);
+    this.ensureMeterPump();
     updateStemBufferMixerGains(session, layers, masterVolume);
     if (canBeMaster) setStemBufferMixerMasterClock(session, clip, timeInfo);
     recordStemBufferMixerLifecycle({
@@ -274,12 +412,14 @@ export class AudioTrackStemBufferMixerManager {
   }
 
   private requestStemMixerLayerBuffer(layer: StemBufferMixerLayer): void {
-    if (layer.stemLayer) {
-      this.markRuntimeActive();
-      void this.stemLayerBuffers.ensure(layer.stemLayer);
-    } else if (layer.mediaFileId) {
-      void proxyFrameCache.getAudioBuffer(layer.mediaFileId);
+    if (!layer.stemLayer) {
+      // sync() runs on the playback path. Source media buffers are an
+      // optimization for the stem mixer; missing ones fall back to media/proxy
+      // elements instead of starting decodeAudioData while playback is active.
+      return;
     }
+    this.markRuntimeActive();
+    void this.stemLayerBuffers.ensure(layer.stemLayer);
   }
 
   private getStemBufferMixerContext(): AudioContext {

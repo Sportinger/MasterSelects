@@ -1,0 +1,771 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 1240" width="220" height="1240" font-family="Futura, 'Trebuchet MS', Verdana, sans-serif">
+  <defs>
+    <!-- ====================== WOOD (dark walnut) ====================== -->
+    <clipPath id="bodyClip"><rect x="5" y="5" width="210" height="1230" rx="10"/></clipPath>
+    <linearGradient id="woodBase" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#4a2d17"/>
+      <stop offset="0.18" stop-color="#3e2511"/>
+      <stop offset="0.45" stop-color="#34200e"/>
+      <stop offset="0.72" stop-color="#3c2511"/>
+      <stop offset="1"    stop-color="#2b1a0b"/>
+    </linearGradient>
+    <filter id="woodMottle" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02 0.004" numOctaves="2" seed="21" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0.08  0 0 0 0 0.04  0 0 0 0 0.012  0.7 0.7 0.7 0 -0.82"/>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+    <!-- dense fine growth lines -->
+    <pattern id="grainLines" width="7" height="8" patternUnits="userSpaceOnUse">
+      <rect x="1.4" width="1.0"  height="8" fill="#190e05" opacity="0.55"/>
+      <rect x="4.2" width="0.6"  height="8" fill="#241409" opacity="0.5"/>
+      <rect x="6.0" width="0.45" height="8" fill="#6b4a2a" opacity="0.20"/>
+    </pattern>
+    <pattern id="grainLines2" width="13" height="8" patternUnits="userSpaceOnUse">
+      <rect x="2"    width="1.8" height="8" fill="#150c04" opacity="0.5"/>
+      <rect x="8"    width="1.0" height="8" fill="#20120a" opacity="0.45"/>
+      <rect x="11.5" width="0.6" height="8" fill="#7a5530" opacity="0.16"/>
+    </pattern>
+    <filter id="grainWarpA" x="-12%" y="-6%" width="124%" height="112%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.014 0.004" numOctaves="3" seed="9" result="w"/>
+      <feDisplacementMap in="SourceGraphic" in2="w" scale="14" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="grainWarpB" x="-15%" y="-8%" width="130%" height="116%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.007 0.0022" numOctaves="3" seed="17" result="w"/>
+      <feDisplacementMap in="SourceGraphic" in2="w" scale="26" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="pores" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="turbulence" baseFrequency="0.25 0.9" numOctaves="2" seed="31" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0.05  0 0 0 0 0.025  0 0 0 0 0.01  0 0 0.85 0 -0.52"/>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+    <!-- photographic grain -->
+    <filter id="photoGrain" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="44" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.4 0.4 0.4 0 -0.45"/>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+    <linearGradient id="woodSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"    stop-color="#0e0701" stop-opacity="0.8"/>
+      <stop offset="0.05" stop-color="#0e0701" stop-opacity="0.25"/>
+      <stop offset="0.11" stop-color="#0e0701" stop-opacity="0"/>
+      <stop offset="0.89" stop-color="#0e0701" stop-opacity="0"/>
+      <stop offset="0.95" stop-color="#0e0701" stop-opacity="0.32"/>
+      <stop offset="1"    stop-color="#0e0701" stop-opacity="0.85"/>
+    </linearGradient>
+    <linearGradient id="woodEnds" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#ffdfae" stop-opacity="0.10"/>
+      <stop offset="0.02" stop-color="#ffdfae" stop-opacity="0"/>
+      <stop offset="0.97" stop-color="#0a0501" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#0a0501" stop-opacity="0.6"/>
+    </linearGradient>
+    <!-- satin finish, very restrained -->
+    <linearGradient id="varnish" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0"    stop-color="#ffeccb" stop-opacity="0.07"/>
+      <stop offset="0.12" stop-color="#ffeccb" stop-opacity="0.02"/>
+      <stop offset="0.30" stop-color="#ffffff" stop-opacity="0.045"/>
+      <stop offset="0.50" stop-color="#ffffff" stop-opacity="0.01"/>
+      <stop offset="0.75" stop-color="#ffffff" stop-opacity="0.03"/>
+      <stop offset="1"    stop-color="#ffffff" stop-opacity="0.015"/>
+    </linearGradient>
+    <!-- warm studio lamp pooling on the upper-middle of the strip -->
+    <radialGradient id="warmLight" cx="0.5" cy="0.32" r="0.95">
+      <stop offset="0"    stop-color="#ffd9a0" stop-opacity="0.13"/>
+      <stop offset="0.45" stop-color="#ffd9a0" stop-opacity="0.05"/>
+      <stop offset="0.8"  stop-color="#ffd9a0" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#ffd9a0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bodyVignette" cx="0.5" cy="0.38" r="0.9">
+      <stop offset="0"    stop-color="#0c0601" stop-opacity="0"/>
+      <stop offset="0.6"  stop-color="#0c0601" stop-opacity="0.02"/>
+      <stop offset="0.85" stop-color="#0c0601" stop-opacity="0.2"/>
+      <stop offset="1"    stop-color="#0c0601" stop-opacity="0.45"/>
+    </radialGradient>
+
+    <!-- ====================== HARDWARE ====================== -->
+    <linearGradient id="pocketWood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#1a1006"/>
+      <stop offset="0.5" stop-color="#231509"/>
+      <stop offset="1"   stop-color="#190f06"/>
+    </linearGradient>
+    <filter id="innerShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feFlood flood-color="#000000" flood-opacity="0.9"/>
+      <feComposite in2="SourceAlpha" operator="out" result="ring"/>
+      <feGaussianBlur in="ring" stdDeviation="2.2" result="blur"/>
+      <feOffset in="blur" dy="2" result="off"/>
+      <feComposite in="off" in2="SourceAlpha" operator="in"/>
+    </filter>
+    <filter id="innerShadowDeep" x="-30%" y="-30%" width="160%" height="160%">
+      <feFlood flood-color="#000000" flood-opacity="0.7"/>
+      <feComposite in2="SourceAlpha" operator="out" result="ring"/>
+      <feGaussianBlur in="ring" stdDeviation="6" result="blur"/>
+      <feOffset in="blur" dy="5" result="off"/>
+      <feComposite in="off" in2="SourceAlpha" operator="in"/>
+    </filter>
+    <!-- bronze plates -->
+    <linearGradient id="plateBrass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#cda35e"/>
+      <stop offset="0.22" stop-color="#b08743"/>
+      <stop offset="0.50" stop-color="#8d672e"/>
+      <stop offset="0.72" stop-color="#a37c3a"/>
+      <stop offset="0.90" stop-color="#7e5d26"/>
+      <stop offset="1"    stop-color="#684c1e"/>
+    </linearGradient>
+    <linearGradient id="plateSheen" x1="0" y1="0" x2="1" y2="0.55">
+      <stop offset="0"    stop-color="#fff" stop-opacity="0"/>
+      <stop offset="0.28" stop-color="#fff" stop-opacity="0.24"/>
+      <stop offset="0.44" stop-color="#fff" stop-opacity="0.02"/>
+      <stop offset="0.74" stop-color="#fff" stop-opacity="0.09"/>
+      <stop offset="1"    stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="plateAge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"   stop-color="#33260e" stop-opacity="0.32"/>
+      <stop offset="0.2" stop-color="#33260e" stop-opacity="0"/>
+      <stop offset="0.8" stop-color="#33260e" stop-opacity="0"/>
+      <stop offset="1"   stop-color="#33260e" stop-opacity="0.38"/>
+    </linearGradient>
+    <filter id="brassBrush" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.55" numOctaves="2" seed="3" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 1  0 0 0 0 0.92  0 0 0 0 0.68  0 0 0 0.45 0"/>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+    <radialGradient id="screwBrass" cx="0.35" cy="0.3" r="0.95">
+      <stop offset="0"   stop-color="#eed79e"/>
+      <stop offset="0.5" stop-color="#a8823f"/>
+      <stop offset="1"   stop-color="#473512"/>
+    </radialGradient>
+    <!-- ivory keycaps, photographed warm -->
+    <linearGradient id="btnCream" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#f6eed8"/>
+      <stop offset="0.4"  stop-color="#eadcba"/>
+      <stop offset="0.78" stop-color="#dccaa1"/>
+      <stop offset="1"    stop-color="#c9b68a"/>
+    </linearGradient>
+    <linearGradient id="btnLower" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#8d7a52" stop-opacity="0"/>
+      <stop offset="0.7" stop-color="#8d7a52" stop-opacity="0.18"/>
+      <stop offset="1"   stop-color="#6e5c3a" stop-opacity="0.5"/>
+    </linearGradient>
+    <radialGradient id="btnGlow" cx="0.32" cy="0.15" r="1.15">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="0.4" stop-color="#ffffff" stop-opacity="0.1"/>
+      <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <!-- diagonal gloss sweep like on photographed keycaps -->
+    <linearGradient id="btnGloss" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0"    stop-color="#ffffff" stop-opacity="0.5"/>
+      <stop offset="0.22" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.42" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- fine plastic grain -->
+    <filter id="plasticNoise" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" seed="19" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0 0.2  0.35 0.35 0.35 0 -0.42"/>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+    <filter id="soft2" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+    <g id="btnHalf">
+      <rect x="2" y="4" width="90" height="38" rx="8" fill="#000" opacity="0.5" filter="url(#soft2)"/>
+      <rect x="0" y="0" width="92" height="40" rx="8" fill="#160d05"/>
+      <rect x="1.2" y="1.2" width="89.6" height="37.6" rx="7" fill="url(#btnCream)"/>
+      <rect x="1.2" y="1.2" width="89.6" height="37.6" rx="7" fill="url(#btnLower)"/>
+      <rect x="1.2" y="1.2" width="89.6" height="37.6" rx="7" fill="url(#btnGlow)"/>
+      <rect x="1.2" y="1.2" width="89.6" height="37.6" rx="7" fill="url(#btnGloss)"/>
+      <rect x="1.2" y="1.2" width="89.6" height="37.6" rx="7" fill="#fff" filter="url(#plasticNoise)" opacity="0.3"/>
+      <rect x="2.6" y="2.6" width="86.8" height="34.8" rx="6" fill="none" stroke="#4a3a20" stroke-opacity="0.3" stroke-width="2" filter="url(#fcSoft1)"/>
+      <line x1="14" y1="9" x2="33" y2="7.5" stroke="#fffbe9" stroke-width="0.4" opacity="0.5"/>
+      <line x1="52" y1="31" x2="74" y2="29.6" stroke="#6e5c3a" stroke-width="0.45" opacity="0.45"/>
+      <line x1="68" y1="12" x2="80" y2="13.2" stroke="#6e5c3a" stroke-width="0.35" opacity="0.35"/>
+      <rect x="2.2" y="2.2" width="87.6" height="35.6" rx="6.2" fill="none" stroke="#fffbe9" stroke-opacity="0.45" stroke-width="0.7"/>
+    </g>
+    <g id="btnWide">
+      <rect x="2" y="4" width="152" height="32" rx="8" fill="#000" opacity="0.5" filter="url(#soft2)"/>
+      <rect x="0" y="0" width="154" height="34" rx="8" fill="#160d05"/>
+      <rect x="1.2" y="1.2" width="151.6" height="31.6" rx="7" fill="url(#btnCream)"/>
+      <rect x="1.2" y="1.2" width="151.6" height="31.6" rx="7" fill="url(#btnLower)"/>
+      <rect x="1.2" y="1.2" width="151.6" height="31.6" rx="7" fill="url(#btnGlow)"/>
+      <rect x="1.2" y="1.2" width="151.6" height="31.6" rx="7" fill="url(#btnGloss)"/>
+      <rect x="1.2" y="1.2" width="151.6" height="31.6" rx="7" fill="#fff" filter="url(#plasticNoise)" opacity="0.3"/>
+      <rect x="2.6" y="2.6" width="148.8" height="28.8" rx="6" fill="none" stroke="#4a3a20" stroke-opacity="0.3" stroke-width="2" filter="url(#fcSoft1)"/>
+      <line x1="22" y1="8" x2="56" y2="6.8" stroke="#fffbe9" stroke-width="0.4" opacity="0.5"/>
+      <line x1="88" y1="26" x2="124" y2="24.4" stroke="#6e5c3a" stroke-width="0.45" opacity="0.45"/>
+      <line x1="112" y1="10" x2="132" y2="11.4" stroke="#6e5c3a" stroke-width="0.35" opacity="0.35"/>
+      <rect x="2.2" y="2.2" width="149.6" height="29.6" rx="6.2" fill="none" stroke="#fffbe9" stroke-opacity="0.45" stroke-width="0.7"/>
+    </g>
+    <!-- button LEDs -->
+    <filter id="ledDotGlow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur stdDeviation="1.4" result="b1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="b2"/>
+      <feMerge><feMergeNode in="b2"/><feMergeNode in="b2"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- metal -->
+    <linearGradient id="slotMetal" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"    stop-color="#000000"/>
+      <stop offset="0.5"  stop-color="#0c0805"/>
+      <stop offset="1"    stop-color="#2e2418"/>
+    </linearGradient>
+    <radialGradient id="chromeDot" cx="0.35" cy="0.28" r="0.95">
+      <stop offset="0"    stop-color="#ffffff"/>
+      <stop offset="0.4"  stop-color="#cfd4d9"/>
+      <stop offset="0.72" stop-color="#8d949b"/>
+      <stop offset="1"    stop-color="#3a4046"/>
+    </radialGradient>
+    <linearGradient id="faderRod" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#5d6469"/>
+      <stop offset="0.4" stop-color="#e8ecef"/>
+      <stop offset="0.6" stop-color="#b9bfc5"/>
+      <stop offset="1"   stop-color="#4a5054"/>
+    </linearGradient>
+    <!-- ====================== LED METER (discrete cells) ====================== -->
+    <pattern id="ledCellRedOff" x="117.25" y="544" width="9" height="7" patternUnits="userSpaceOnUse">
+      <rect width="6.5" height="5" rx="0.9" fill="#360c07"/>
+      <rect x="0.6" y="0.6" width="5.3" height="1.6" rx="0.8" fill="#4a130b" opacity="0.6"/>
+    </pattern>
+    <pattern id="ledCellAmberOff" x="117.25" y="544" width="9" height="7" patternUnits="userSpaceOnUse">
+      <rect width="6.5" height="5" rx="0.9" fill="#33230a"/>
+      <rect x="0.6" y="0.6" width="5.3" height="1.6" rx="0.8" fill="#46300e" opacity="0.6"/>
+    </pattern>
+    <pattern id="ledCellRed" x="117.25" y="544" width="9" height="7" patternUnits="userSpaceOnUse">
+      <rect width="6.5" height="5" rx="0.9" fill="#ff3a26"/>
+      <rect x="0.8" y="0.7" width="4.9" height="1.7" rx="0.85" fill="#ff8d7a" opacity="0.9"/>
+    </pattern>
+    <pattern id="ledCellAmber" x="117.25" y="544" width="9" height="7" patternUnits="userSpaceOnUse">
+      <rect width="6.5" height="5" rx="0.9" fill="#ffc41e"/>
+      <rect x="0.8" y="0.7" width="4.9" height="1.7" rx="0.85" fill="#ffeb9a" opacity="0.9"/>
+    </pattern>
+    <pattern id="ledCellGreen" x="117.25" y="544" width="9" height="7" patternUnits="userSpaceOnUse">
+      <rect width="6.5" height="5" rx="0.9" fill="#2fe06c"/>
+      <rect x="0.8" y="0.7" width="4.9" height="1.7" rx="0.85" fill="#a4ffc2" opacity="0.9"/>
+    </pattern>
+    <filter id="ledBloom2" x="-40%" y="-15%" width="180%" height="130%">
+      <feGaussianBlur stdDeviation="1.4" result="b1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b2"/>
+      <feMerge>
+        <feMergeNode in="b2"/>
+        <feMergeNode in="b1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- ====================== 7-SEGMENT DISPLAY ====================== -->
+    <pattern id="dotMatrix" width="3" height="3" patternUnits="userSpaceOnUse">
+      <rect width="3" height="3" fill="#070402"/>
+      <rect x="0.45" y="0.45" width="2.1" height="2.1" fill="#0e0805"/>
+    </pattern>
+    <filter id="amberGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- digit cell 12x19, segment thickness 2.5 -->
+    <g id="sgGhost">
+      <rect x="2.2" y="0"    width="7.6" height="2.5" rx="1.1"/>
+      <rect x="0"   y="1.8"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="9.5" y="1.8"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="2.2" y="8.25" width="7.6" height="2.5" rx="1.1"/>
+      <rect x="0"   y="9.9"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="9.5" y="9.9"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="2.2" y="16.5" width="7.6" height="2.5" rx="1.1"/>
+    </g>
+    <g id="sgOne">
+      <rect x="9.5" y="1.8" width="2.5" height="7.2" rx="1.1"/>
+      <rect x="9.5" y="9.9" width="2.5" height="7.2" rx="1.1"/>
+    </g>
+    <g id="sgFive">
+      <rect x="2.2" y="0"    width="7.6" height="2.5" rx="1.1"/>
+      <rect x="0"   y="1.8"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="2.2" y="8.25" width="7.6" height="2.5" rx="1.1"/>
+      <rect x="9.5" y="9.9"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="2.2" y="16.5" width="7.6" height="2.5" rx="1.1"/>
+    </g>
+    <g id="sgDash">
+      <rect x="2.2" y="8.25" width="7.6" height="2.5" rx="1.1"/>
+    </g>
+    <g id="sgC">
+      <rect x="2.2" y="0"    width="7.6" height="2.5" rx="1.1"/>
+      <rect x="0"   y="1.8"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="0"   y="9.9"  width="2.5" height="7.2" rx="1.1"/>
+      <rect x="2.2" y="16.5" width="7.6" height="2.5" rx="1.1"/>
+    </g>
+
+    <!-- ============ ORIGINAL FADER CAP (fadercap-topdown.svg, ids prefixed fc) ============ -->
+    <linearGradient id="fcBodyChrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#fdfefe"/>
+      <stop offset="0.14" stop-color="#eceef0"/>
+      <stop offset="0.34" stop-color="#b4bac0"/>
+      <stop offset="0.50" stop-color="#878e95"/>
+      <stop offset="0.60" stop-color="#6b727a"/>
+      <stop offset="0.72" stop-color="#aab0b6"/>
+      <stop offset="0.88" stop-color="#dfe2e5"/>
+      <stop offset="1"    stop-color="#f4f5f6"/>
+    </linearGradient>
+    <linearGradient id="fcSaddleShade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"    stop-color="#000" stop-opacity="0"/>
+      <stop offset="0.18" stop-color="#000" stop-opacity="0"/>
+      <stop offset="0.36" stop-color="#000" stop-opacity="0.2"/>
+      <stop offset="0.5"  stop-color="#000" stop-opacity="0.38"/>
+      <stop offset="0.64" stop-color="#000" stop-opacity="0.2"/>
+      <stop offset="0.82" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#000" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fcRidge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"    stop-color="#15181b"/>
+      <stop offset="0.30" stop-color="#4a5157"/>
+      <stop offset="0.52" stop-color="#aab1b7"/>
+      <stop offset="0.60" stop-color="#ffffff"/>
+      <stop offset="0.70" stop-color="#f2f4f6"/>
+      <stop offset="0.90" stop-color="#aeb4ba"/>
+      <stop offset="1"    stop-color="#c6cbd0"/>
+    </linearGradient>
+    <pattern id="fcRidges" x="0" y="0" width="15" height="260" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="15" height="260" fill="url(#fcRidge)"/>
+    </pattern>
+    <pattern id="fcRidgeLines" x="0" y="0" width="15" height="260" patternUnits="userSpaceOnUse">
+      <rect x="8.4" y="0" width="1.8" height="260" fill="#ffffff"/>
+    </pattern>
+    <filter id="fcBrushed" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008 0.45" numOctaves="3" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="matrix"
+        values="0 0 0 0 0.85  0 0 0 0 0.86  0 0 0 0 0.88  0 0 0 0.5 0"/>
+      <feComposite operator="in" in2="SourceGraphic"/>
+    </filter>
+    <radialGradient id="fcEndGlowL" cx="0.30" cy="0.26" r="0.95">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="fcEndGlowR" cx="0.70" cy="0.30" r="0.95">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0.75"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.2"/>
+      <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fcEndFallL" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0"   stop-color="#000" stop-opacity="0"/>
+      <stop offset="0.6" stop-color="#6e757b" stop-opacity="0.3"/>
+      <stop offset="1"   stop-color="#3a4046" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="fcEndFallR" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#000" stop-opacity="0"/>
+      <stop offset="0.6" stop-color="#666d74" stop-opacity="0.35"/>
+      <stop offset="1"   stop-color="#33393f" stop-opacity="0.7"/>
+    </linearGradient>
+    <linearGradient id="fcFlankTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#3f454b" stop-opacity="0.9"/>
+      <stop offset="0.55" stop-color="#878e95" stop-opacity="0.4"/>
+      <stop offset="1"   stop-color="#c8cdd2" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fcFlankBottom" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0"   stop-color="#4a5157" stop-opacity="0.8"/>
+      <stop offset="0.5" stop-color="#9aa1a8" stop-opacity="0.35"/>
+      <stop offset="1"   stop-color="#d4d8dc" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fcHorizon" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#23282d" stop-opacity="0"/>
+      <stop offset="0.52" stop-color="#23282d" stop-opacity="0"/>
+      <stop offset="0.60" stop-color="#23282d" stop-opacity="0.32"/>
+      <stop offset="0.70" stop-color="#2c3137" stop-opacity="0.22"/>
+      <stop offset="0.80" stop-color="#23282d" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#23282d" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fcSheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.22" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.33" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.42" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.58" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.66" stop-color="#ffffff" stop-opacity="0.08"/>
+      <stop offset="0.76" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="fcDropShadow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"    stop-color="#000" stop-opacity="0.32"/>
+      <stop offset="0.7"  stop-color="#000" stop-opacity="0.13"/>
+      <stop offset="1"    stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fcSlot" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"    stop-color="#3a3f44"/>
+      <stop offset="0.25" stop-color="#08090b"/>
+      <stop offset="0.75" stop-color="#08090b"/>
+      <stop offset="1"    stop-color="#50565c"/>
+    </linearGradient>
+    <filter id="fcSoft1" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <filter id="fcSoft3" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <path id="fcCapOutline" d="
+      M 24 100
+      C 24 68, 38 48, 68 48
+      C 116 48, 154 54, 200 54
+      C 246 54, 284 48, 332 48
+      C 362 48, 376 68, 376 100
+      L 376 160
+      C 376 192, 362 212, 332 212
+      C 284 212, 246 206, 200 206
+      C 154 206, 116 212, 68 212
+      C 38 212, 24 192, 24 160
+      Z"/>
+    <clipPath id="fcCapClip"><use href="#fcCapOutline"/></clipPath>
+    <clipPath id="fcGripClip"><rect x="100" y="40" width="200" height="180"/></clipPath>
+    <clipPath id="fcEndZonesClip">
+      <rect x="24"  y="40" width="84" height="180"/>
+      <rect x="292" y="40" width="84" height="180"/>
+    </clipPath>
+
+    <g id="fcCap">
+      <ellipse cx="202" cy="140" rx="196" ry="100" fill="url(#fcDropShadow)"/>
+      <ellipse cx="202" cy="146" rx="178" ry="84" fill="url(#fcDropShadow)" opacity="0.7"/>
+      <use href="#fcCapOutline" fill="url(#fcBodyChrome)"/>
+      <g clip-path="url(#fcCapClip)">
+        <g clip-path="url(#fcGripClip)">
+          <rect x="100" y="40" width="200" height="180" fill="url(#fcRidges)"/>
+          <rect x="100" y="40" width="200" height="180" fill="url(#fcSaddleShade)" transform="rotate(90 200 130)" opacity="0.6"/>
+        </g>
+        <rect x="86"  y="40" width="22" height="180" fill="#aeb4ba" opacity="0.7"/>
+        <rect x="292" y="40" width="22" height="180" fill="#aeb4ba" opacity="0.7"/>
+        <rect x="24" y="40" width="352" height="180" fill="url(#fcSaddleShade)"/>
+        <rect x="24" y="40" width="352" height="180" fill="url(#fcSaddleShade)" opacity="0.5"/>
+        <g clip-path="url(#fcGripClip)">
+          <rect x="100" y="40" width="200" height="180" fill="url(#fcRidgeLines)" opacity="0.55"/>
+        </g>
+        <g clip-path="url(#fcEndZonesClip)">
+          <use href="#fcCapOutline" fill="url(#fcHorizon)"/>
+        </g>
+        <path d="
+          M 68 48
+          C 116 48, 154 54, 200 54
+          C 246 54, 284 48, 332 48
+          C 302 56, 254 72, 200 72
+          C 146 72, 98 56, 68 48
+          Z" fill="url(#fcFlankTop)" opacity="0.85"/>
+        <path d="
+          M 68 212
+          C 116 212, 154 206, 200 206
+          C 246 206, 284 212, 332 212
+          C 302 204, 254 190, 200 190
+          C 146 190, 98 204, 68 212
+          Z" fill="url(#fcFlankBottom)" opacity="0.8"/>
+        <path d="M 82 56 C 116 61, 152 75, 200 75 C 248 75, 284 61, 318 56"
+              fill="none" stroke="#22272c" stroke-width="3" stroke-opacity="0.3"
+              stroke-linecap="round" filter="url(#fcSoft3)"/>
+        <path d="M 78 51 C 112 56, 150 70, 200 70 C 250 70, 288 56, 322 51"
+              fill="none" stroke="#ffffff" stroke-width="2.4" stroke-opacity="0.9"
+              stroke-linecap="round" filter="url(#fcSoft1)"/>
+        <path d="M 84 208 C 118 204, 154 192, 200 192 C 246 192, 282 204, 316 208"
+              fill="none" stroke="#ffffff" stroke-width="1.8" stroke-opacity="0.5"
+              stroke-linecap="round" filter="url(#fcSoft1)"/>
+        <rect x="24"  y="40" width="112" height="180" fill="url(#fcEndGlowL)"/>
+        <rect x="264" y="40" width="112" height="180" fill="url(#fcEndGlowR)"/>
+        <rect x="24"  y="40" width="44" height="180" fill="url(#fcEndFallL)"/>
+        <rect x="332" y="40" width="44" height="180" fill="url(#fcEndFallR)"/>
+        <rect x="52"  y="40" width="9" height="180" fill="#3f454b" opacity="0.16" filter="url(#fcSoft3)"/>
+        <rect x="74"  y="40" width="5" height="180" fill="#ffffff" opacity="0.35" filter="url(#fcSoft1)"/>
+        <rect x="338" y="40" width="9" height="180" fill="#3f454b" opacity="0.14" filter="url(#fcSoft3)"/>
+        <rect x="322" y="40" width="5" height="180" fill="#ffffff" opacity="0.3" filter="url(#fcSoft1)"/>
+        <use href="#fcCapOutline" fill="#ffffff" filter="url(#fcBrushed)" opacity="0.14"/>
+        <use href="#fcCapOutline" fill="url(#fcSheen)"/>
+        <rect x="193" y="40" width="14" height="180" fill="url(#fcSlot)"/>
+        <rect x="188" y="40" width="4"  height="180" fill="#ffffff" opacity="0.9"/>
+        <rect x="208" y="40" width="4"  height="180" fill="#eef1f3" opacity="0.8"/>
+        <use href="#fcCapOutline" fill="none" stroke="#1c2126" stroke-width="5"
+             stroke-opacity="0.18" filter="url(#fcSoft1)"/>
+        <use href="#fcCapOutline" fill="none" stroke="#ffffff" stroke-opacity="0.8" stroke-width="2.5"
+             transform="translate(200 130) scale(0.988) translate(-200 -130)"/>
+      </g>
+      <use href="#fcCapOutline" fill="none" stroke="#3c4248" stroke-width="1.6"/>
+    </g>
+  </defs>
+
+  <!-- ====================== BODY ====================== -->
+  <rect x="2" y="2" width="216" height="1236" rx="12" fill="#0a0400"/>
+  <g clip-path="url(#bodyClip)">
+    <!-- real photo texture (wood-theme/wood-body.png) -->
+    <image href="wood-theme/wood-body.png" x="5" y="5" width="210" height="1230" preserveAspectRatio="none"/>
+    <!-- darken toward the reference photo -->
+    <rect x="5" y="5" width="210" height="1230" fill="#5a3617" opacity="0.20" style="mix-blend-mode:multiply"/>
+    <rect x="5" y="5" width="210" height="1230" fill="url(#woodSide)"/>
+    <rect x="5" y="5" width="210" height="1230" fill="url(#woodEnds)"/>
+    <rect x="5" y="5" width="210" height="1230" fill="url(#varnish)"/>
+    <rect x="5" y="5" width="210" height="1230" fill="url(#warmLight)"/>
+  </g>
+  <rect x="6.5" y="6.5" width="207" height="1227" rx="9" fill="none" stroke="#ffd9a3" stroke-opacity="0.14"/>
+  <rect x="4" y="4" width="212" height="1232" rx="11" fill="none" stroke="#0e0701" stroke-width="2.4"/>
+
+  <!-- corner screws -->
+  <g>
+    <g transform="translate(18 17)">
+      <ellipse cx="0.8" cy="1.6" rx="5.4" ry="4.8" fill="#000" opacity="0.45" filter="url(#fcSoft1)"/>
+      <circle r="5" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.8"/>
+      <line x1="-3.2" y1="-1.6" x2="3.2" y2="1.6" stroke="#2b1b06" stroke-width="1.5"/>
+      <line x1="-3" y1="-2.2" x2="3" y2="1" stroke="#ffe9b0" stroke-width="0.5" opacity="0.5"/>
+    </g>
+    <g transform="translate(202 17)">
+      <ellipse cx="0.8" cy="1.6" rx="5.4" ry="4.8" fill="#000" opacity="0.45" filter="url(#fcSoft1)"/>
+      <circle r="5" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.8"/>
+      <line x1="-2.6" y1="2.4" x2="2.6" y2="-2.4" stroke="#2b1b06" stroke-width="1.5"/>
+    </g>
+    <g transform="translate(18 1223)">
+      <ellipse cx="0.8" cy="1.6" rx="5.4" ry="4.8" fill="#000" opacity="0.45" filter="url(#fcSoft1)"/>
+      <circle r="5" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.8"/>
+      <line x1="-3.4" y1="0.8" x2="3.4" y2="-0.8" stroke="#2b1b06" stroke-width="1.5"/>
+    </g>
+    <g transform="translate(202 1223)">
+      <ellipse cx="0.8" cy="1.6" rx="5.4" ry="4.8" fill="#000" opacity="0.45" filter="url(#fcSoft1)"/>
+      <circle r="5" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.8"/>
+      <line x1="-1.4" y1="-3.1" x2="1.4" y2="3.1" stroke="#2b1b06" stroke-width="1.5"/>
+    </g>
+  </g>
+
+  <!-- track color inlay -->
+  <g>
+    <rect x="29" y="12" width="162" height="11" rx="4" fill="#0a0500"/>
+    <rect x="30" y="13" width="160" height="9" rx="3.4" fill="#51647d"/>
+    <rect x="30" y="13" width="160" height="9" rx="3.4" fill="#000" filter="url(#innerShadow)"/>
+    <rect x="32" y="14.2" width="156" height="2.8" rx="1.4" fill="#ffffff" opacity="0.25"/>
+  </g>
+
+  <!-- ====================== NAME PLATE ====================== -->
+  <g>
+    <rect x="15" y="29" width="190" height="62" rx="7" fill="#000" opacity="0.5" filter="url(#fcSoft3)"/>
+    <clipPath id="namePlateClip"><rect x="16" y="30" width="188" height="60" rx="6"/></clipPath>
+    <rect x="16" y="30" width="188" height="60" rx="6" fill="url(#plateBrass)" stroke="#190d01" stroke-width="1.2"/>
+    <g clip-path="url(#namePlateClip)">
+      <image href="wood-theme/plate-bronze.jpg" x="16" y="30" width="188" height="126" preserveAspectRatio="xMidYMin slice"/>
+    </g>
+    <rect x="16" y="30" width="188" height="60" rx="6" fill="url(#plateSheen)"/>
+    <rect x="16" y="30" width="188" height="60" rx="6" fill="url(#plateAge)"/>
+    <g stroke-linecap="round">
+      <line x1="44" y1="44.5" x2="79" y2="42.8" stroke="#fff3cf" stroke-width="0.4" opacity="0.4"/>
+      <line x1="122" y1="84" x2="166" y2="81.5" stroke="#4d390f" stroke-width="0.5" opacity="0.5"/>
+      <line x1="58" y1="73.5" x2="86" y2="74.6" stroke="#fff3cf" stroke-width="0.35" opacity="0.3"/>
+    </g>
+    <rect x="17.5" y="31.5" width="185" height="57" rx="5" fill="none" stroke="#ffeec2" stroke-opacity="0.45"/>
+    <g transform="translate(26 60)">
+      <circle r="3.2" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.6"/>
+      <line x1="-2" y1="-1.2" x2="2" y2="1.2" stroke="#2b1b06" stroke-width="1"/>
+    </g>
+    <g transform="translate(194 60)">
+      <circle r="3.2" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.6"/>
+      <line x1="-1" y1="2.2" x2="1" y2="-2.2" stroke="#2b1b06" stroke-width="1"/>
+    </g>
+    <text x="110" y="63.3" text-anchor="middle" font-size="20" font-weight="700" fill="#ffeec2" opacity="0.4">Audio 8</text>
+    <text x="110" y="62.4" text-anchor="middle" font-size="20" font-weight="700" fill="#291c07">Audio 8</text>
+    <text x="110" y="80.8" text-anchor="middle" font-size="8.5" letter-spacing="3" fill="#ffeec2" opacity="0.4">AUDIO</text>
+    <text x="110" y="80" text-anchor="middle" font-size="8.5" letter-spacing="3" fill="#33250c">AUDIO</text>
+  </g>
+
+  <!-- ====================== FX RACK POCKET ====================== -->
+  <clipPath id="fxPocketClip"><rect x="16" y="100" width="188" height="218" rx="8"/></clipPath>
+  <rect x="16" y="100" width="188" height="218" rx="8" fill="url(#pocketWood)" stroke="#080401" stroke-width="1.4"/>
+  <g clip-path="url(#fxPocketClip)">
+    <image href="wood-theme/pocket-leather.jpg" x="16" y="100" width="188" height="758" preserveAspectRatio="xMidYMin slice"/>
+    <rect x="16" y="100" width="188" height="218" fill="#0e0803" opacity="0.35"/>
+  </g>
+  <rect x="16" y="100" width="188" height="218" rx="8" fill="#000" filter="url(#innerShadowDeep)"/>
+  <rect x="16" y="100" width="188" height="218" rx="8" fill="#000" filter="url(#innerShadow)"/>
+  <line x1="20" y1="319" x2="200" y2="319" stroke="#caa06a" stroke-opacity="0.14"/>
+  <use href="#btnWide" x="33" y="113"/>
+  <text x="110" y="134.5" text-anchor="middle" font-size="13" font-weight="600" letter-spacing="2" fill="#3c2c16">FX</text>
+  <g>
+    <rect x="32" y="164" width="156" height="14" rx="3" fill="#0a0703" stroke="#000" stroke-width="0.8"/>
+    <rect x="32" y="164" width="156" height="14" rx="3" fill="#000" filter="url(#innerShadow)"/>
+    <rect x="32" y="188" width="156" height="14" rx="3" fill="#0a0703" stroke="#000" stroke-width="0.8"/>
+    <rect x="32" y="188" width="156" height="14" rx="3" fill="#000" filter="url(#innerShadow)"/>
+    <rect x="32" y="212" width="156" height="14" rx="3" fill="#0a0703" stroke="#000" stroke-width="0.8"/>
+    <rect x="32" y="212" width="156" height="14" rx="3" fill="#000" filter="url(#innerShadow)"/>
+    <line x1="33" y1="178.6" x2="187" y2="178.6" stroke="#caa06a" stroke-opacity="0.12"/>
+    <line x1="33" y1="202.6" x2="187" y2="202.6" stroke="#caa06a" stroke-opacity="0.12"/>
+    <line x1="33" y1="226.6" x2="187" y2="226.6" stroke="#caa06a" stroke-opacity="0.12"/>
+  </g>
+  <use href="#btnWide" x="33" y="269"/>
+  <text x="110" y="290.5" text-anchor="middle" font-size="12.5" font-weight="600" letter-spacing="0.5" fill="#3c2c16">Send</text>
+
+  <!-- ====================== PAN ====================== -->
+  <g>
+    <!-- L/R branded into the wood: scorch halo + black letter -->
+    <text x="21" y="358.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="#000" opacity="0.55" filter="url(#fcSoft1)">L</text>
+    <text x="21" y="358.2" text-anchor="middle" font-size="8.5" font-weight="700" fill="#150b03">L</text>
+    <text x="199" y="358.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="#000" opacity="0.55" filter="url(#fcSoft1)">R</text>
+    <text x="199" y="358.2" text-anchor="middle" font-size="8.5" font-weight="700" fill="#150b03">R</text>
+    <!-- wide routed channel with a thin slit, like the reference photo -->
+    <rect x="30" y="349" width="160" height="11" rx="5.5" fill="#1d1208"/>
+    <rect x="30" y="349" width="160" height="11" rx="5.5" fill="#000" filter="url(#innerShadow)"/>
+    <rect x="37" y="353.3" width="146" height="2.4" rx="1.2" fill="#060301"/>
+    <rect x="32" y="360.2" width="156" height="1" rx="0.5" fill="#8a6a45" opacity="0.3"/>
+    <!-- brass knurled knob (photo asset) -->
+    <ellipse cx="119" cy="358" rx="10" ry="9" fill="#000" opacity="0.5" filter="url(#fcSoft3)"/>
+    <ellipse cx="113" cy="356.5" rx="11" ry="10" fill="#000" opacity="0.3" filter="url(#fcSoft1)"/>
+    <image href="wood-theme/pan-knob.png" x="98" y="342.5" width="24" height="24"/>
+  </g>
+
+  <!-- ====================== R / IN ====================== -->
+  <use href="#btnHalf" x="15" y="382"/>
+  <text x="56" y="409" text-anchor="middle" font-size="17" font-weight="600" fill="#241809">R</text>
+  <g transform="translate(95 391)">
+    <circle r="2.9" fill="#1a0b06" stroke="#c9b68a" stroke-width="0.5" stroke-opacity="0.5"/>
+    <circle r="2.2" fill="#8d1f14"/>
+    <circle r="1.3" fill="#c43325"/>
+    <circle cx="-0.6" cy="-0.7" r="0.7" fill="#ffd2c8" opacity="0.9"/>
+  </g>
+  <use href="#btnHalf" x="113" y="382"/>
+  <text x="154" y="409" text-anchor="middle" font-size="17" font-weight="600" fill="#241809">In</text>
+  <g transform="translate(193 391)">
+    <circle r="2.9" fill="#0a1409" stroke="#c9b68a" stroke-width="0.5" stroke-opacity="0.5"/>
+    <circle r="2.2" fill="#1f5a23"/>
+    <circle r="1.3" fill="#3f8f3c"/>
+    <circle cx="-0.6" cy="-0.7" r="0.7" fill="#e8ffd9" opacity="0.9"/>
+  </g>
+
+  <!-- ====================== MUTE / SOLO ====================== -->
+  <use href="#btnHalf" x="15" y="430"/>
+  <text x="61" y="456" text-anchor="middle" font-size="15.5" font-weight="600" fill="#241809">Mute</text>
+  <use href="#btnHalf" x="113" y="430"/>
+  <text x="159" y="456" text-anchor="middle" font-size="15.5" font-weight="600" fill="#241809">Solo</text>
+
+  <!-- ====================== 7-SEGMENT VALUE DISPLAYS ====================== -->
+  <g>
+    <!-- volume display -->
+    <rect x="15" y="477" width="92" height="32" rx="5" fill="#0c0702"/>
+    <rect x="16.2" y="478.2" width="89.6" height="29.6" rx="4.4" fill="#1c130a"/>
+    <rect x="17.5" y="479.5" width="87" height="27" rx="3.6" fill="url(#dotMatrix)"/>
+    <rect x="17.5" y="479.5" width="87" height="27" rx="3.6" fill="#000" filter="url(#innerShadow)"/>
+    <g transform="translate(38.5 483.5) skewX(-4)" fill="#241204" opacity="0.85">
+      <use href="#sgGhost" x="0"/>
+      <use href="#sgGhost" x="15"/>
+      <use href="#sgGhost" x="33"/>
+    </g>
+    <g transform="translate(38.5 483.5) skewX(-4)" fill="#ffa42e" filter="url(#amberGlow)">
+      <use href="#sgDash" x="0"/>
+      <use href="#sgOne" x="15"/>
+      <circle cx="29.8" cy="17.8" r="1.5"/>
+      <use href="#sgFive" x="33"/>
+    </g>
+    <polygon points="19,480 52,480 32,506 19,506" fill="#ffffff" opacity="0.04"/>
+
+    <!-- pan display -->
+    <rect x="113" y="477" width="92" height="32" rx="5" fill="#0c0702"/>
+    <rect x="114.2" y="478.2" width="89.6" height="29.6" rx="4.4" fill="#1c130a"/>
+    <rect x="115.5" y="479.5" width="87" height="27" rx="3.6" fill="url(#dotMatrix)"/>
+    <rect x="115.5" y="479.5" width="87" height="27" rx="3.6" fill="#000" filter="url(#innerShadow)"/>
+    <g transform="translate(153 483.5) skewX(-4)" fill="#241204" opacity="0.85">
+      <use href="#sgGhost" x="0"/>
+    </g>
+    <g transform="translate(153 483.5) skewX(-4)" fill="#ffa42e" filter="url(#amberGlow)">
+      <use href="#sgC" x="0"/>
+    </g>
+    <polygon points="117,480 150,480 130,506 117,506" fill="#ffffff" opacity="0.04"/>
+  </g>
+
+  <!-- ====================== FADER + METER POCKET ====================== -->
+  <clipPath id="faderPocketClip"><rect x="16" y="518" width="188" height="608" rx="8"/></clipPath>
+  <rect x="16" y="518" width="188" height="608" rx="8" fill="url(#pocketWood)" stroke="#080401" stroke-width="1.4"/>
+  <g clip-path="url(#faderPocketClip)">
+    <image href="wood-theme/pocket-leather.jpg" x="16" y="518" width="188" height="758" preserveAspectRatio="xMidYMin slice"/>
+    <rect x="16" y="518" width="188" height="608" fill="#0e0803" opacity="0.35"/>
+  </g>
+  <rect x="16" y="518" width="188" height="608" rx="8" fill="#000" filter="url(#innerShadowDeep)"/>
+  <rect x="16" y="518" width="188" height="608" rx="8" fill="#000" filter="url(#innerShadow)"/>
+  <line x1="20" y1="1127" x2="200" y2="1127" stroke="#caa06a" stroke-opacity="0.14"/>
+
+  <!-- fader: slot routed straight into the wood -->
+  <g>
+    <!-- amber status LED above the slot -->
+    <circle cx="60" cy="534" r="2.6" fill="#1a0e02"/>
+    <circle cx="60" cy="534" r="1.7" fill="#ffb14d" filter="url(#ledDotGlow)"/>
+    <!-- slot -->
+    <rect x="56.5" y="545" width="7" height="556" rx="3.5" fill="url(#slotMetal)"/>
+    <rect x="56.5" y="545" width="7" height="556" rx="3.5" fill="#000" filter="url(#innerShadow)"/>
+    <line x1="55.6" y1="549" x2="55.6" y2="1097" stroke="#000" stroke-opacity="0.8"/>
+    <line x1="64.4" y1="549" x2="64.4" y2="1097" stroke="#8a6a45" stroke-opacity="0.3"/>
+    <!-- guide rod -->
+    <rect x="59.1" y="551" width="1.8" height="544" fill="url(#faderRod)" opacity="0.95"/>
+  </g>
+
+  <!-- discrete LED meter -->
+  <g>
+    <rect x="111" y="541" width="46" height="560" rx="4" fill="#000" opacity="0.5" filter="url(#fcSoft1)"/>
+    <rect x="113" y="543" width="42" height="556" rx="3" fill="#050302" stroke="#000" stroke-width="1"/>
+    <!-- unlit headroom cells -->
+    <rect x="117.25" y="544" width="33.5" height="63"  fill="url(#ledCellRedOff)"/>
+    <rect x="117.25" y="621" width="33.5" height="14"  fill="url(#ledCellAmberOff)"/>
+    <!-- lit cells -->
+    <g filter="url(#ledBloom2)">
+      <rect x="117.25" y="607" width="33.5" height="14"  fill="url(#ledCellRed)"/>
+      <rect x="117.25" y="635" width="33.5" height="98"  fill="url(#ledCellAmber)"/>
+      <rect x="117.25" y="733" width="33.5" height="361" fill="url(#ledCellGreen)"/>
+    </g>
+    <rect x="113" y="543" width="42" height="556" rx="3" fill="#000" filter="url(#innerShadow)"/>
+    <!-- glass -->
+    <polygon points="113,543 136,543 121,1099 113,1099" fill="#ffffff" opacity="0.045"/>
+    <rect x="113.8" y="543.8" width="40.4" height="554.4" rx="2.6" fill="none" stroke="#ffffff" stroke-opacity="0.07"/>
+    <!-- glow spilling onto the wood -->
+    <ellipse cx="162" cy="880" rx="20" ry="190" fill="#2fe06c" opacity="0.05" filter="url(#fcSoft3)"/>
+    <ellipse cx="162" cy="680" rx="16" ry="70"  fill="#ffb31e" opacity="0.05" filter="url(#fcSoft3)"/>
+  </g>
+
+  <!-- dB scale -->
+  <g font-size="10" text-anchor="end">
+    <g stroke="#d8cfc0" stroke-opacity="0.6">
+      <line x1="165" y1="552" x2="172" y2="552"/>
+      <line x1="165" y1="641.7" x2="172" y2="641.7"/>
+      <line x1="165" y1="731.3" x2="172" y2="731.3"/>
+      <line x1="165" y1="821" x2="172" y2="821"/>
+      <line x1="165" y1="910.7" x2="172" y2="910.7"/>
+      <line x1="165" y1="1000.3" x2="172" y2="1000.3"/>
+      <line x1="165" y1="1090" x2="172" y2="1090"/>
+    </g>
+    <g fill="#d8cfc0">
+      <text x="197" y="555.5">+3</text>
+      <text x="197" y="645.2">0</text>
+      <text x="197" y="734.8">-5</text>
+      <text x="197" y="824.5">-10</text>
+      <text x="197" y="914.2">-18</text>
+      <text x="197" y="1003.8">-30</text>
+      <text x="197" y="1093.5">-50</text>
+    </g>
+  </g>
+
+  <!-- new photographed steel fader cap -->
+  <ellipse cx="82" cy="717" rx="26" ry="45" fill="#000" opacity="0.5" filter="url(#fcSoft3)"/>
+  <ellipse cx="64" cy="714" rx="24" ry="45" fill="#000" opacity="0.35" filter="url(#fcSoft1)"/>
+  <image href="wood-theme/fadercap-steel.png" x="36" y="666" width="48" height="91" preserveAspectRatio="xMidYMid meet"/>
+
+  <!-- ====================== OUTPUT PLATE ====================== -->
+  <g>
+    <rect x="15" y="1137" width="190" height="60" rx="7" fill="#000" opacity="0.5" filter="url(#fcSoft3)"/>
+    <clipPath id="outPlateClip"><rect x="16" y="1138" width="188" height="58" rx="6"/></clipPath>
+    <rect x="16" y="1138" width="188" height="58" rx="6" fill="url(#plateBrass)" stroke="#190d01" stroke-width="1.2"/>
+    <g clip-path="url(#outPlateClip)">
+      <image href="wood-theme/plate-bronze.jpg" x="16" y="1138" width="188" height="126" preserveAspectRatio="xMidYMin slice"/>
+    </g>
+    <rect x="16" y="1138" width="188" height="58" rx="6" fill="url(#plateSheen)"/>
+    <rect x="16" y="1138" width="188" height="58" rx="6" fill="url(#plateAge)"/>
+    <g stroke-linecap="round">
+      <line x1="48" y1="1150" x2="84" y2="1148.4" stroke="#fff3cf" stroke-width="0.4" opacity="0.35"/>
+      <line x1="118" y1="1190" x2="160" y2="1187.8" stroke="#4d390f" stroke-width="0.5" opacity="0.5"/>
+    </g>
+    <rect x="17.5" y="1139.5" width="185" height="55" rx="5" fill="none" stroke="#ffeec2" stroke-opacity="0.45"/>
+    <g transform="translate(26 1167)">
+      <circle r="3.2" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.6"/>
+      <line x1="-2" y1="-1.2" x2="2" y2="1.2" stroke="#2b1b06" stroke-width="1"/>
+    </g>
+    <g transform="translate(194 1167)">
+      <circle r="3.2" fill="url(#screwBrass)" stroke="#190d01" stroke-width="0.6"/>
+      <line x1="-1" y1="2.2" x2="1" y2="-2.2" stroke="#2b1b06" stroke-width="1"/>
+    </g>
+    <text x="110" y="1158" text-anchor="middle" font-size="9" letter-spacing="2.5" fill="#ffeec2" opacity="0.4">POST</text>
+    <text x="110" y="1157.2" text-anchor="middle" font-size="9" letter-spacing="2.5" fill="#33250c">POST</text>
+    <text x="110" y="1183.3" text-anchor="middle" font-size="17" font-weight="700" fill="#ffeec2" opacity="0.4">-inf</text>
+    <text x="110" y="1182.4" text-anchor="middle" font-size="17" font-weight="700" fill="#291c07">-inf</text>
+  </g>
+
+  <!-- photographic finish -->
+  <rect x="5" y="5" width="210" height="1230" rx="10" fill="#fff" filter="url(#photoGrain)" opacity="0.12"/>
+  <rect x="5" y="5" width="210" height="1230" rx="10" fill="url(#bodyVignette)"/>
+</svg>

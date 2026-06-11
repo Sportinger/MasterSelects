@@ -1,16 +1,22 @@
-import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { memo, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import {
+  clearRuntimeMasterVolumeDbOverride,
+  setRuntimeMasterVolumeDbOverride,
+} from '../../../services/audio/runtimeAudioParamOverrides';
 import type { MasterAudioState } from '../../../types/audio';
 import { AudioLevelMeter } from '../../timeline/components/AudioLevelMeter';
 import type { FxWindowTarget } from './audioMixerTypes';
-import { formatDb, formatDbLong, getPreflightStatus } from './audioMixerMath';
+import { formatDb, getPreflightStatus } from './audioMixerMath';
 import {
   getMixerRuntimeAudioMeterScope,
+  MixerMeterReadout,
   MixerMeterScale,
   MIXER_METER_VISUAL_FEATURES,
-  useMixerRuntimeAudioMeter,
 } from './MixerMeter';
 import { MixerRack, stopPropagation } from './MixerRack';
+import { MixerVolumeFader } from './MixerVolumeFader';
+import { useMixerFaderDraft } from './useMixerFaderDraft';
 
 type MixerCssProperties = CSSProperties & {
   '--strip-color'?: string;
@@ -34,15 +40,24 @@ function MasterMixerStripComponent({
   onRenderedPreflight: () => void;
 }) {
   const meterScope = getMixerRuntimeAudioMeterScope('master');
-  const meter = useMixerRuntimeAudioMeter('master');
   const status = getPreflightStatus(masterAudio.exportPreflight);
   const measurement = masterAudio.exportPreflight?.measurement;
   const effects = masterAudio.effectStack ?? [];
   const stripStyle: MixerCssProperties = { '--strip-color': '#4a9eff' };
-  const resetMasterVolume = (event: ReactMouseEvent<HTMLInputElement>) => {
+  const commitMasterVolume = useCallback((volumeDb: number) => {
+    useTimelineStore.getState().setMasterAudioVolumeDb(volumeDb);
+  }, []);
+  const previewMasterVolume = useCallback((volumeDb: number) => {
+    setRuntimeMasterVolumeDbOverride(volumeDb);
+  }, []);
+  const volumeDraft = useMixerFaderDraft(masterAudio.volumeDb, commitMasterVolume, {
+    onPreviewValue: previewMasterVolume,
+    onPreviewEnd: clearRuntimeMasterVolumeDbOverride,
+  });
+  const resetMasterVolume = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    useTimelineStore.getState().setMasterAudioVolumeDb(0);
+    volumeDraft.commitNow(0);
   };
 
   return (
@@ -90,21 +105,18 @@ function MasterMixerStripComponent({
       </div>
 
       <div className="audio-mixer-value-row">
-        <span>{formatDb(masterAudio.volumeDb)}</span>
+        <span>{formatDb(volumeDraft.value)}</span>
         <span>TP {masterAudio.truePeakCeilingDb.toFixed(1)}</span>
       </div>
 
       <div className="audio-mixer-fader-meter master" onPointerDown={stopPropagation}>
-        <input
-          className="audio-mixer-strip-fader"
-          type="range"
-          min="-60"
-          max="18"
-          step="0.5"
-          value={masterAudio.volumeDb}
-          aria-label="Master volume"
+        <MixerVolumeFader
+          value={volumeDraft.value}
+          ariaLabel="Master volume"
           title="Double-click to reset volume to 0 dB"
-          onChange={(event) => useTimelineStore.getState().setMasterAudioVolumeDb(Number(event.currentTarget.value))}
+          onBeginDrag={volumeDraft.beginDrag}
+          onEndDrag={volumeDraft.endDrag}
+          onChange={volumeDraft.setDraft}
           onDoubleClick={resetMasterVolume}
         />
         <AudioLevelMeter
@@ -113,14 +125,14 @@ function MasterMixerStripComponent({
           label="Master level"
           className="audio-mixer-meter"
           orientation="vertical"
-          display="stereo"
+          display="mono"
         />
         <MixerMeterScale />
       </div>
 
       <div className="audio-mixer-strip-output">
         <span>Master</span>
-        <strong>{meter ? formatDbLong(meter.peakDb) : '-inf'}</strong>
+        <MixerMeterReadout scope="master" />
       </div>
     </section>
   );

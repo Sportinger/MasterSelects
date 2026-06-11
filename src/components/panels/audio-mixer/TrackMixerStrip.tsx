@@ -1,18 +1,24 @@
-import { memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { memo, useCallback, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import {
+  clearRuntimeTrackVolumeDbOverride,
+  setRuntimeTrackVolumeDbOverride,
+} from '../../../services/audio/runtimeAudioParamOverrides';
 import type { TimelineTrack } from '../../../types/timeline';
 import { AudioLevelMeter } from '../../timeline/components/AudioLevelMeter';
 import { getAudioPanSliderStyle } from '../../timeline/utils/audioPanSliderStyle';
 import { getTimelineTrackColor } from '../../timeline/trackColor';
 import type { FxWindowTarget } from './audioMixerTypes';
-import { formatDb, formatDbLong, formatPan, getTrackAudioState } from './audioMixerMath';
+import { formatDb, formatPan, getTrackAudioState } from './audioMixerMath';
 import {
   getMixerRuntimeAudioMeterScope,
+  MixerMeterReadout,
   MixerMeterScale,
   MIXER_METER_VISUAL_FEATURES,
-  useMixerRuntimeAudioMeter,
 } from './MixerMeter';
 import { MixerRack, stopPropagation } from './MixerRack';
+import { MixerVolumeFader } from './MixerVolumeFader';
+import { useMixerFaderDraft } from './useMixerFaderDraft';
 
 type MixerCssProperties = CSSProperties & {
   '--strip-color'?: string;
@@ -34,22 +40,34 @@ function TrackMixerStripComponent({
   onOpenColorMenu: (event: ReactMouseEvent, trackId: string) => void;
 }) {
   const meterScope = getMixerRuntimeAudioMeterScope('track', track.id);
-  const meter = useMixerRuntimeAudioMeter('track', track.id);
   const audioState = getTrackAudioState(track);
   const effectiveMuted = audioState.muted;
   const effectiveSolo = audioState.solo;
   const effects = audioState.effectStack ?? [];
   const sends = audioState.sends ?? [];
   const stripStyle: MixerCssProperties = { '--strip-color': getTimelineTrackColor(track, index) };
+  const commitTrackVolume = useCallback((volumeDb: number) => {
+    useTimelineStore.getState().setTrackAudioVolumeDb(track.id, volumeDb);
+  }, [track.id]);
+  const previewTrackVolume = useCallback((volumeDb: number) => {
+    setRuntimeTrackVolumeDbOverride(track.id, volumeDb);
+  }, [track.id]);
+  const clearTrackVolumePreview = useCallback(() => {
+    clearRuntimeTrackVolumeDbOverride(track.id);
+  }, [track.id]);
+  const volumeDraft = useMixerFaderDraft(audioState.volumeDb, commitTrackVolume, {
+    onPreviewValue: previewTrackVolume,
+    onPreviewEnd: clearTrackVolumePreview,
+  });
   const resetTrackPan = (event: ReactMouseEvent<HTMLInputElement>) => {
     event.preventDefault();
     event.stopPropagation();
     useTimelineStore.getState().setTrackAudioPan(track.id, 0);
   };
-  const resetTrackVolume = (event: ReactMouseEvent<HTMLInputElement>) => {
+  const resetTrackVolume = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    useTimelineStore.getState().setTrackAudioVolumeDb(track.id, 0);
+    volumeDraft.commitNow(0);
   };
 
   return (
@@ -135,21 +153,18 @@ function TrackMixerStripComponent({
       </div>
 
       <div className="audio-mixer-value-row">
-        <span>{formatDb(audioState.volumeDb)}</span>
+        <span>{formatDb(volumeDraft.value)}</span>
         <span>{formatPan(audioState.pan)}</span>
       </div>
 
       <div className="audio-mixer-fader-meter" onPointerDown={stopPropagation}>
-        <input
-          className="audio-mixer-strip-fader"
-          type="range"
-          min="-60"
-          max="18"
-          step="0.5"
-          value={audioState.volumeDb}
-          aria-label={`${track.name} volume`}
+        <MixerVolumeFader
+          value={volumeDraft.value}
+          ariaLabel={`${track.name} volume`}
           title="Double-click to reset volume to 0 dB"
-          onChange={(event) => useTimelineStore.getState().setTrackAudioVolumeDb(track.id, Number(event.currentTarget.value))}
+          onBeginDrag={volumeDraft.beginDrag}
+          onEndDrag={volumeDraft.endDrag}
+          onChange={volumeDraft.setDraft}
           onDoubleClick={resetTrackVolume}
         />
         <AudioLevelMeter
@@ -158,14 +173,14 @@ function TrackMixerStripComponent({
           label={`${track.name} level`}
           className="audio-mixer-meter"
           orientation="vertical"
-          display="stereo"
+          display="mono"
         />
         <MixerMeterScale />
       </div>
 
       <div className="audio-mixer-strip-output">
         <span>Post</span>
-        <strong>{meter ? formatDbLong(meter.peakDb) : '-inf'}</strong>
+        <MixerMeterReadout scope="track" trackId={track.id} />
       </div>
     </section>
   );

@@ -1,0 +1,17 @@
+fix(timeline): retry waveform pyramid loads so clips render after refresh
+
+Right after a page refresh the audio artifact store is often not ready
+yet; the first pyramid load missed and the warmup hook cached the miss
+forever, so audio clips stayed blank until a hover forced a redraw
+that fell through to the by-then-primed module cache.
+
+Waveform pyramid loads now use the same 2s retry pattern the
+spectrogram path already had. The retry bookkeeping (miss timestamps,
+single retry timer, nonce bump) is shared between both effects via the
+new timelineArtifactRetrySession util, which also keeps the hook
+within its 300-line architecture budget.
+
+Implemented by a Codex worker from a bounded packet; orchestrator
+extracted the shared retry session.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

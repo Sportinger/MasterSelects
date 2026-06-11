@@ -1,9 +1,12 @@
 import { useRuntimeAudioMeterSnapshot } from '../../../services/audio/runtimeAudioMeterHooks';
 import type { RuntimeAudioMeterFeature, RuntimeAudioMeterScope } from '../../../services/audio/runtimeAudioMeterBus';
 import type { AudioMeterSnapshot } from '../../../types/audio';
+import { formatDbLong } from './audioMixerMath';
 import type { FxWindowTarget } from './audioMixerTypes';
 
-export const MIXER_METER_VISUAL_FEATURES = ['level', 'stereo', 'phase'] as const;
+// Mixer strips render many meters at once. Keep the default strip path on the
+// cheap level analyser; detailed panels opt into stereo/phase when needed.
+export const MIXER_METER_VISUAL_FEATURES = ['level'] as const;
 export const MIXER_METER_READOUT_FEATURES = ['level'] as const;
 export const MIXER_METER_DYNAMICS_FEATURES = ['dynamics'] as const;
 
@@ -44,4 +47,15 @@ export function MixerMeterScale() {
       <span>-50</span>
     </div>
   );
+}
+
+export function MixerMeterReadout({
+  scope,
+  trackId,
+}: {
+  scope: FxWindowTarget['scope'];
+  trackId?: string;
+}) {
+  const meter = useMixerRuntimeAudioMeter(scope, trackId);
+  return <strong>{meter ? formatDbLong(meter.peakDb) : '-inf'}</strong>;
 }

@@ -1,0 +1,291 @@
+/* Wood theme for the audio mixer — pure reskin over the existing markup.
+   Enable with: localStorage.setItem('msWoodMixer', '1') + reopen the mixer panel.
+   Assets live in this folder; dynamic parts (meter, fader, values) keep their
+   existing DOM and behaviour. */
+@layer features {
+
+.audio-mixer-panel.wood {
+  background: #14100b;
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip {
+  /* keep the FX rack as small as possible; give the freed space to fader + meters */
+  grid-template-rows: 8px 38px minmax(0, 0.28fr) 22px 23px 23px 21px minmax(0, 2fr) 24px;
+  border: 1px solid #0e0701;
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(90, 54, 23, 0.2), rgba(90, 54, 23, 0.2)),
+    url('./wood-body.png');
+  background-size: 100% 100%;
+  background-blend-mode: multiply, normal;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 217, 163, 0.18),
+    inset 1px 0 2px rgba(0, 0, 0, 0.4),
+    inset -1px 0 2px rgba(0, 0, 0, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip.focused {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 217, 163, 0.18),
+    inset 0 0 0 1px color-mix(in srgb, var(--strip-color) 55%, transparent),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* name plate -> brass */
+.audio-mixer-panel.wood .audio-mixer-strip-name {
+  border: 1px solid #190d01;
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(255, 238, 194, 0.30) 0%, rgba(130, 95, 40, 0.18) 50%, rgba(60, 40, 12, 0.38) 100%),
+    url('./plate-bronze.jpg');
+  background-size: 100% 100%, 130% auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 238, 194, 0.5),
+    0 2px 3px rgba(0, 0, 0, 0.45);
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip-name strong {
+  color: #291c07;
+  text-shadow: 0 1px 0 rgba(255, 238, 194, 0.4);
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip-name span {
+  color: #33250c;
+}
+
+/* fx rack + fader area -> routed pockets */
+.audio-mixer-panel.wood .audio-mixer-rack,
+.audio-mixer-panel.wood .audio-mixer-fader-meter {
+  border: 1px solid #080401;
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(14, 8, 3, 0.35), rgba(14, 8, 3, 0.35)),
+    url('./pocket-leather.jpg');
+  background-size: 100% auto;
+  box-shadow:
+    inset 0 4px 8px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(202, 160, 106, 0.14);
+}
+
+/* the tall fader pocket stretches the leather a lot — flatten its blotches
+   (they read as fake shadows) by zooming into a calm region and darkening more */
+.audio-mixer-panel.wood .audio-mixer-fader-meter {
+  background:
+    linear-gradient(rgba(14, 8, 3, 0.55), rgba(14, 8, 3, 0.55)),
+    url('./pocket-leather.jpg');
+  background-size: 100% auto, 220% auto;
+  background-position: center, 30% 12%;
+}
+
+/* buttons -> hand-built ivory keycaps, with wear: grain noise, corner grime,
+   slightly uneven tone per button */
+.audio-mixer-panel.wood .audio-mixer-strip button {
+  position: relative;
+  border: 1px solid #160d05;
+  border-radius: 6px;
+  background:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2"/><feColorMatrix type="matrix" values="0 0 0 0 0.25 0 0 0 0 0.2 0 0 0 0 0.1 0 0 0 0.16 0"/></filter><rect width="64" height="64" filter="url(%23n)"/></svg>'),
+    radial-gradient(circle at 4% 96%, rgba(96, 76, 44, 0.30), transparent 26%),
+    radial-gradient(circle at 97% 92%, rgba(96, 76, 44, 0.24), transparent 22%),
+    radial-gradient(circle at 92% 6%, rgba(96, 76, 44, 0.14), transparent 18%),
+    linear-gradient(168deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.12) 28%, rgba(255, 255, 255, 0) 45%),
+    linear-gradient(180deg, #f4ebd2 0%, #e8d9b4 40%, #d9c69b 78%, #c4b083 100%);
+  color: #3c2c16;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 251, 233, 0.75),
+    inset 0 -2px 3px rgba(110, 92, 58, 0.45),
+    inset 1px 0 1px rgba(255, 251, 233, 0.28),
+    inset -1px -1px 2px rgba(90, 70, 40, 0.25),
+    0 2px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* no two caps age identically */
+.audio-mixer-panel.wood .audio-mixer-io-row button:first-child,
+.audio-mixer-panel.wood .audio-mixer-mode-row button:last-child {
+  filter: brightness(0.97) saturate(1.05);
+}
+
+.audio-mixer-panel.wood .audio-mixer-mode-row button:first-child {
+  filter: brightness(1.015) hue-rotate(-3deg);
+}
+
+.audio-mixer-panel.wood .audio-mixer-io-row button.active,
+.audio-mixer-panel.wood .audio-mixer-mode-row button.active {
+  color: #2c5b1f;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 40%),
+    linear-gradient(180deg, #e3d7b4 0%, #d4c69e 60%, #c2b083 100%);
+  box-shadow:
+    inset 0 2px 4px rgba(80, 64, 36, 0.5),
+    0 1px 1px rgba(0, 0, 0, 0.4);
+  transform: translateY(1px);
+}
+
+.audio-mixer-panel.wood .audio-mixer-io-row button.record-active {
+  color: #8d1f14;
+}
+
+/* self-built LED lamps on the R / In buttons */
+.audio-mixer-panel.wood .audio-mixer-io-row button::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #6a2620, #38100b 70%);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.audio-mixer-panel.wood .audio-mixer-io-row button:last-child::after {
+  background: radial-gradient(circle at 35% 30%, #2a5a2c, #122a14 70%);
+}
+
+.audio-mixer-panel.wood .audio-mixer-io-row button.record-active::after {
+  background: radial-gradient(circle at 35% 30%, #ffb3a8, #ff4b35 55%, #a01408);
+  box-shadow: 0 0 7px 2px rgba(255, 75, 53, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.audio-mixer-panel.wood .audio-mixer-io-row button.active::after {
+  background: radial-gradient(circle at 35% 30%, #d6ffc8, #7dff5a 55%, #1f7a1a);
+  box-shadow: 0 0 7px 2px rgba(125, 255, 90, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+/* value readouts -> 7-seg style displays */
+.audio-mixer-panel.wood .audio-mixer-value-row span {
+  border: 1px solid #0c0702;
+  border-radius: 4px;
+  background: radial-gradient(ellipse at center, #0e0805 0%, #070402 100%);
+  color: #ffa42e;
+  text-shadow: 0 0 4px rgba(255, 164, 46, 0.7);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* pan row -> routed slot + brass knurled knob.
+   L/R: small, black, branded into the wood. Narrow side columns = longer track. */
+.audio-mixer-panel.wood .audio-mixer-pan-row {
+  grid-template-columns: 9px minmax(0, 1fr) 9px;
+  gap: 2px;
+  color: #150b03;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.audio-mixer-panel.wood .audio-mixer-pan-row span {
+  text-align: center;
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.65),
+    0 1px 1px rgba(255, 214, 156, 0.14);
+}
+
+.audio-mixer-panel.wood .audio-mixer-pan-row input {
+  height: 20px;
+}
+
+.audio-mixer-panel.wood .audio-mixer-pan-row input::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 var(--pan-fill-start, 50%),
+      rgba(205, 163, 94, 0.45) var(--pan-fill-start, 50%) var(--pan-fill-end, 50%),
+      transparent var(--pan-fill-end, 50%) 100%
+    ),
+    #0a0501;
+  box-shadow: inset 0 2px 2px rgba(0, 0, 0, 0.85), 0 1px 0 rgba(138, 106, 69, 0.3);
+}
+
+.audio-mixer-panel.wood .audio-mixer-pan-row input::-webkit-slider-thumb {
+  width: 32px;
+  height: 27px;
+  margin-top: -11px;
+  border: 0;
+  border-radius: 0;
+  background:
+    url('./pan-knob.png') left 0 top 0 / 22px 22px no-repeat,
+    radial-gradient(ellipse 13px 10px at 17px 14px, rgba(0, 0, 0, 0.6) 32%, rgba(0, 0, 0, 0.32) 62%, transparent 100%);
+  box-shadow: none;
+  filter: none;
+}
+
+.audio-mixer-panel.wood .audio-mixer-pan-row input::-moz-range-track {
+  height: 5px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0 var(--pan-fill-start, 50%),
+      rgba(205, 163, 94, 0.45) var(--pan-fill-start, 50%) var(--pan-fill-end, 50%),
+      transparent var(--pan-fill-end, 50%) 100%
+    ),
+    #0a0501;
+  box-shadow: inset 0 2px 2px rgba(0, 0, 0, 0.85), 0 1px 0 rgba(138, 106, 69, 0.3);
+}
+
+.audio-mixer-panel.wood .audio-mixer-pan-row input::-moz-range-thumb {
+  width: 32px;
+  height: 27px;
+  border: 0;
+  border-radius: 0;
+  background:
+    url('./pan-knob.png') left 0 top 0 / 22px 22px no-repeat,
+    radial-gradient(ellipse 13px 10px at 17px 14px, rgba(0, 0, 0, 0.6) 32%, rgba(0, 0, 0, 0.32) 62%, transparent 100%);
+  box-shadow: none;
+  filter: none;
+}
+
+/* output plate -> brass */
+.audio-mixer-panel.wood .audio-mixer-strip-output {
+  border: 1px solid #190d01;
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(255, 238, 194, 0.30) 0%, rgba(130, 95, 40, 0.18) 50%, rgba(60, 40, 12, 0.38) 100%),
+    url('./plate-bronze.jpg');
+  background-size: 100% 100%, 130% auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 238, 194, 0.5),
+    0 2px 3px rgba(0, 0, 0, 0.45);
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip-output span {
+  color: #33250c;
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip-output strong {
+  color: #291c07;
+  text-shadow: 0 1px 0 rgba(255, 238, 194, 0.4);
+}
+
+/* fader cap -> photographed steel cap (image is upright, so no 90° rotation) */
+.audio-mixer-panel.wood .audio-mixer-strip-fader-thumb {
+  width: 52px;
+  height: 63px;
+  background:
+    url('./fadercap-steel.png') left 1px top 2px / 26px 49px no-repeat,
+    radial-gradient(ellipse 28px 30px at 26px 32px, rgba(0, 0, 0, 0.62) 32%, rgba(0, 0, 0, 0.34) 60%, transparent 100%);
+  transform: translate3d(-49%, var(--audio-mixer-fader-thumb-y, 0px), 0);
+  filter: none;
+}
+
+/* let the cap shadow fall over the meter next to it */
+.audio-mixer-panel.wood .audio-mixer-strip-fader {
+  position: relative;
+  z-index: 2;
+}
+
+/* base theme re-adds a drop-shadow on hover/focus — keep it off here too */
+.audio-mixer-panel.wood .audio-mixer-strip-fader:hover .audio-mixer-strip-fader-thumb,
+.audio-mixer-panel.wood .audio-mixer-strip-fader:focus-visible .audio-mixer-strip-fader-thumb {
+  opacity: 0.96;
+}
+
+/* meter scale silkscreen */
+.audio-mixer-panel.wood .audio-mixer-meter-scale-labels {
+  color: #d8cfc0;
+}
+
+}

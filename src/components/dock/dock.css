@@ -104,6 +104,7 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
+  position: relative;
 }
 
 .dock-split.horizontal {
@@ -121,6 +122,10 @@
 
 .dock-split.vertical.resizing {
   cursor: row-resize;
+}
+
+.dock-split.resizing > .dock-split-child {
+  pointer-events: none;
 }
 
 .dock-split-child {

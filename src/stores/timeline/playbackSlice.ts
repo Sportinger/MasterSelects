@@ -71,7 +71,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   },
 
   play: async () => {
-    const { clips, inPoint, outPoint, duration, playbackSpeed } = get();
+    const { clips, tracks, inPoint, outPoint, duration, playbackSpeed } = get();
     set({ playbackWarmup: null });
 
     const playheadPosition = sanitizePlayheadPosition(
@@ -91,8 +91,16 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       playheadState.position = playbackStartPosition;
     }
 
-    // Find all video clips at current playhead position that need to be ready
+    const visibleVideoTrackIds = new Set(
+      tracks
+        .filter((track) => track.type === 'video' && track.visible !== false)
+        .map((track) => track.id)
+    );
+
+    // Find visible video clips at current playhead position that need to be ready.
+    // Audio-only / hidden-video playback must not wake video decoders.
     const clipsAtPlayhead = clips.filter(clip => {
+      if (!visibleVideoTrackIds.has(clip.trackId)) return false;
       const isAtPlayhead = playbackStartPosition >= clip.startTime &&
                            playbackStartPosition < clip.startTime + clip.duration;
       const hasVideo = getTimelinePlaybackWarmupVideo(clip.source) !== null;
@@ -102,7 +110,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     // Also check nested composition clips
     const nestedVideos: HTMLVideoElement[] = [];
     for (const clip of clips) {
-      if (clip.isComposition && clip.nestedClips) {
+      if (clip.isComposition && clip.nestedClips && visibleVideoTrackIds.has(clip.trackId)) {
         const isAtPlayhead = playbackStartPosition >= clip.startTime &&
                              playbackStartPosition < clip.startTime + clip.duration;
         if (isAtPlayhead) {

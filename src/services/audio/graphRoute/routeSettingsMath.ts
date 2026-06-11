@@ -1,6 +1,7 @@
 import { AUDIO_EQ_BAND_PARAMS } from '../../../engine/audio/AudioEffectRegistry';
 import { clampAudioPan, dbToLinearGain, finiteNumber } from '../../../engine/audio/audioMath';
 import type { TimelineTrack } from '../../nodeGraph/clipGraphProjectionDomain';
+import { getRuntimeTrackVolumeDbOverride } from '../runtimeAudioParamOverrides';
 import type { AudioRouteEffectSettings } from './routeSettingsModel';
 
 export function createNeutralEffectSettings(): AudioRouteEffectSettings {
@@ -31,6 +32,8 @@ export function getTrackAudioSolo(track: TimelineTrack): boolean {
 }
 
 export function getTrackVolumeDb(track: TimelineTrack): number {
+  const runtimeVolumeDb = getRuntimeTrackVolumeDbOverride(track.id);
+  if (runtimeVolumeDb !== undefined) return runtimeVolumeDb;
   return finiteNumber(track.audioState?.volumeDb, 0);
 }
 

@@ -317,7 +317,7 @@ function TimelineControlsComponent({
         >
           Master {masterAudio.volumeDb.toFixed(1)} dB
         </button>
-        <AudioLevelMeter streamScope={{ kind: 'master' }} streamFeatures={['level', 'phase']} label="Master level" className="timeline-master-audio-meter" />
+        <AudioLevelMeter streamScope={{ kind: 'master' }} streamFeatures={['level']} label="Master level" className="timeline-master-audio-meter" display="mono" />
         {masterDropdownOpen && (
           <div
             className="timeline-master-audio-popover"

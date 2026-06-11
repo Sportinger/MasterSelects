@@ -39,6 +39,57 @@ export interface TimelineWaveformArtifactWarmupOptions {
 
 const inFlightWaveformArtifactLoads = new Map<string, Promise<TimelineWaveformPyramid | null>>();
 
+// Artifact store reads can stall right after a page reload (store still
+// initializing). A stalled load would otherwise never resolve, so the caller's
+// miss/retry path never fires AND the stuck promise stays cached as in-flight,
+// poisoning every later attempt. Treat a slow load as a miss and evict it from
+// the in-flight map so the next retry starts a fresh load (which also sees the
+// module cache if another path primed it meanwhile).
+const WAVEFORM_ARTIFACT_LOAD_TIMEOUT_MS = 4000;
+
+function raceLoadWithTimeout(
+  key: string,
+  loadPromise: Promise<TimelineWaveformPyramid | null>,
+  timeoutMs: number,
+  onLatePyramid?: (pyramid: TimelineWaveformPyramid) => void,
+): Promise<TimelineWaveformPyramid | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timedOut = false;
+    const timer = globalThis.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      timedOut = true;
+      // Drop the stalled promise so retries create a fresh load. If the
+      // stalled load settles later it still primes the pyramid cache itself.
+      if (inFlightWaveformArtifactLoads.get(key) === loadPromise) {
+        inFlightWaveformArtifactLoads.delete(key);
+      }
+      resolve(null);
+    }, timeoutMs);
+
+    loadPromise.then(
+      (pyramid) => {
+        if (settled) {
+          if (timedOut && pyramid) {
+            onLatePyramid?.(pyramid);
+          }
+          return;
+        }
+        settled = true;
+        globalThis.clearTimeout(timer);
+        resolve(pyramid);
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        globalThis.clearTimeout(timer);
+        resolve(null);
+      },
+    );
+  });
+}
+
 const defaultDeps: TimelineWaveformArtifactWarmupDeps = {
   getCachedPyramid: getCachedTimelineWaveformPyramid,
   loadPyramid: loadTimelineWaveformPyramid,
@@ -87,15 +138,26 @@ export async function warmTimelineWaveformArtifacts(
     );
     let loadPromise = inFlightWaveformArtifactLoads.get(key);
     if (!loadPromise) {
-      loadPromise = deps.loadPyramid(refId)
+      const nextLoadPromise = deps.loadPyramid(refId)
         .finally(() => {
-          inFlightWaveformArtifactLoads.delete(key);
+          if (inFlightWaveformArtifactLoads.get(key) === nextLoadPromise) {
+            inFlightWaveformArtifactLoads.delete(key);
+          }
         });
+      loadPromise = nextLoadPromise;
       inFlightWaveformArtifactLoads.set(key, loadPromise);
     }
 
     try {
-      const pyramid = await loadPromise;
+      const pyramid = await raceLoadWithTimeout(
+        key,
+        loadPromise,
+        WAVEFORM_ARTIFACT_LOAD_TIMEOUT_MS,
+        (latePyramid) => {
+          if (options.signal?.aborted) return;
+          options.onResult?.(createWaveformArtifactResult(refId, latePyramid));
+        },
+      );
       if (options.signal?.aborted) break;
 
       const result = createWaveformArtifactResult(refId, pyramid);

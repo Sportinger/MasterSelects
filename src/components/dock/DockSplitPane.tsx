@@ -19,8 +19,9 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
   const setSplitRatio = useDockStore((state) => state.setSplitRatio);
   const maximizedPanelId = useDockStore((state) => state.maximizedPanelId);
   const [isResizing, setIsResizing] = useState(false);
-  const [liveRatio, setLiveRatio] = useState(split.ratio);
   const containerRef = useRef<HTMLDivElement>(null);
+  const firstChildRef = useRef<HTMLDivElement>(null);
+  const secondChildRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
   const liveRatioRef = useRef(split.ratio);
   const pendingLiveRatioRef = useRef<number | null>(null);
@@ -34,6 +35,16 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     : null;
   const isMaximizedPath = maximizedChildIndex !== null;
 
+  const applyLiveRatioToDom = useCallback((ratio: number) => {
+    if (isMaximizedPath) return;
+    const firstChild = firstChildRef.current;
+    const secondChild = secondChildRef.current;
+    if (!firstChild || !secondChild) return;
+    const sizeProperty = isHorizontal ? 'width' : 'height';
+    firstChild.style.setProperty(sizeProperty, `calc(${ratio * 100}% - 2px)`);
+    secondChild.style.setProperty(sizeProperty, `calc(${(1 - ratio) * 100}% - 2px)`);
+  }, [isHorizontal, isMaximizedPath]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -41,9 +52,9 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
     resizeBatchActiveRef.current = true;
     liveRatioRef.current = split.ratio;
     pendingLiveRatioRef.current = null;
-    setLiveRatio(split.ratio);
+    applyLiveRatioToDom(split.ratio);
     setIsResizing(true);
-  }, [split.ratio]);
+  }, [applyLiveRatioToDom, split.ratio]);
 
   useEffect(() => {
     if (isResizing) return;
@@ -85,7 +96,7 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       if (nextRatio === null) return;
       pendingLiveRatioRef.current = null;
       liveRatioRef.current = nextRatio;
-      setLiveRatio(nextRatio);
+      applyLiveRatioToDom(nextRatio);
     };
 
     const scheduleLiveRatio = (ratio: number) => {
@@ -104,16 +115,22 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       pendingPointerRef.current = null;
       pendingLiveRatioRef.current = null;
       liveRatioRef.current = finalRatio;
-      setLiveRatio(finalRatio);
+      applyLiveRatioToDom(finalRatio);
       return finalRatio;
     };
 
     const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       pendingPointerRef.current = { clientX: e.clientX, clientY: e.clientY };
       scheduleLiveRatio(liveRatioRef.current);
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       const finalRatio = flushLiveRatio();
       setSplitRatio(split.id, finalRatio);
       setIsResizing(false);
@@ -123,12 +140,12 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove, true);
+    window.addEventListener('mouseup', handleMouseUp, true);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove, true);
+      window.removeEventListener('mouseup', handleMouseUp, true);
       if (liveRatioFrameRef.current !== null) {
         window.cancelAnimationFrame(liveRatioFrameRef.current);
         liveRatioFrameRef.current = null;
@@ -139,9 +156,9 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
         endBatch();
       }
     };
-  }, [isResizing, isHorizontal, split.id, setSplitRatio]);
+  }, [applyLiveRatioToDom, isResizing, isHorizontal, split.id, setSplitRatio]);
 
-  const effectiveRatio = isResizing ? liveRatio : split.ratio;
+  const effectiveRatio = split.ratio;
   const firstChildStyle = isMaximizedPath
     ? {
       [isHorizontal ? 'width' : 'height']: maximizedChildIndex === 0 ? '100%' : '0px',
@@ -172,7 +189,7 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
       className={`dock-split ${isHorizontal ? 'horizontal' : 'vertical'} ${isResizing ? 'resizing' : ''} ${isMaximizedPath ? 'maximized-path' : ''}`}
       data-split-id={split.id}
     >
-      <div className={`dock-split-child ${isMaximizedPath && maximizedChildIndex !== 0 ? 'is-collapsed' : ''}`} style={firstChildStyle}>
+      <div ref={firstChildRef} className={`dock-split-child ${isMaximizedPath && maximizedChildIndex !== 0 ? 'is-collapsed' : ''}`} style={firstChildStyle}>
         <DockNode node={split.children[0]} />
       </div>
       {!isMaximizedPath && (
@@ -182,7 +199,7 @@ export function DockSplitPane({ split }: DockSplitPaneProps) {
           onMouseDown={handleMouseDown}
         />
       )}
-      <div className={`dock-split-child ${isMaximizedPath && maximizedChildIndex !== 1 ? 'is-collapsed' : ''}`} style={secondChildStyle}>
+      <div ref={secondChildRef} className={`dock-split-child ${isMaximizedPath && maximizedChildIndex !== 1 ? 'is-collapsed' : ''}`} style={secondChildStyle}>
         <DockNode node={split.children[1]} />
       </div>
     </div>

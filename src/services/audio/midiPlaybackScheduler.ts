@@ -20,7 +20,7 @@
 // at non-standard speeds). Voices flush on stop/pause/seek.
 
 import { useTimelineStore } from '../../stores/timeline';
-import type { TimelineTrack } from '../../types';
+import type { TimelineClip, TimelineTrack } from '../../types';
 import type { IMidiSynth } from '../../engine/audio/IMidiSynth';
 import { createSynthForInstrument } from '../../engine/audio/createSynthForInstrument';
 import { getGmSampleBank, type GmSoundRef } from '../../engine/audio/GmSampleBank';
@@ -105,6 +105,16 @@ class MidiPlaybackScheduler {
       refs.push({ program: instrument.program, isDrum });
     }
     if (refs.length > 0) void getGmSampleBank().ensureLoaded(refs);
+  }
+
+  private hasPlayableMidiContent(tracks: TimelineTrack[], clips: TimelineClip[]): boolean {
+    const midiTrackIds = new Set(tracks.filter((track) => track.type === 'midi').map((track) => track.id));
+    if (midiTrackIds.size === 0) return false;
+    return clips.some((clip) =>
+      midiTrackIds.has(clip.trackId) &&
+      clip.source?.type === 'midi' &&
+      (clip.midiData?.notes?.length ?? 0) > 0
+    );
   }
 
   /**
@@ -216,6 +226,8 @@ class MidiPlaybackScheduler {
 
   private start(): void {
     if (this.running) return;
+    const state = useTimelineStore.getState();
+    if (!this.hasPlayableMidiContent(state.tracks, state.clips)) return;
     if (!this.ensureAudio() || !this.context) return;
     void this.context.resume?.().catch(() => {});
     // Preload GM samples for current tracks (covers a freshly loaded project where no
@@ -258,6 +270,10 @@ class MidiPlaybackScheduler {
     if (!this.running || !this.context) return;
     const state = useTimelineStore.getState();
     if (!state.isPlaying) {
+      this.stop();
+      return;
+    }
+    if (!this.hasPlayableMidiContent(state.tracks, state.clips)) {
       this.stop();
       return;
     }

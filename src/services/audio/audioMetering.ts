@@ -24,6 +24,11 @@ export interface AudioMeterStereoSamples {
   right: ArrayLike<number>;
 }
 
+export interface AudioMeterSnapshotOptions {
+  includeStereoChannels?: boolean;
+  includePhaseMetrics?: boolean;
+}
+
 function finiteSample(samples: ArrayLike<number>, index: number): number {
   const sample = samples[index];
   return Number.isFinite(sample) ? sample : 0;
@@ -104,6 +109,7 @@ export function calculateAudioMeterSnapshot(
   dynamics?: Record<string, AudioDynamicsReductionSnapshot>,
   stereoSamples?: AudioMeterStereoSamples,
   spectrumDb?: Float32Array,
+  options: AudioMeterSnapshotOptions = {},
 ): AudioMeterSnapshot {
   if (samples.length === 0) {
     return {
@@ -123,9 +129,11 @@ export function calculateAudioMeterSnapshot(
   }
 
   const rmsLinear = Math.sqrt(sumSquares / samples.length);
-  const phaseCorrelation = stereoSamples ? calculateStereoPhaseCorrelation(stereoSamples) : undefined;
-  const stereoWidth = stereoSamples ? calculateStereoWidth(stereoSamples) : undefined;
-  const channels = stereoSamples
+  const includeStereoChannels = Boolean(stereoSamples) && options.includeStereoChannels !== false;
+  const includePhaseMetrics = Boolean(stereoSamples) && options.includePhaseMetrics !== false;
+  const phaseCorrelation = stereoSamples && includePhaseMetrics ? calculateStereoPhaseCorrelation(stereoSamples) : undefined;
+  const stereoWidth = stereoSamples && includePhaseMetrics ? calculateStereoWidth(stereoSamples) : undefined;
+  const channels = stereoSamples && includeStereoChannels
     ? {
         left: calculateAudioMeterChannelSnapshot(stereoSamples.left),
         right: calculateAudioMeterChannelSnapshot(stereoSamples.right),

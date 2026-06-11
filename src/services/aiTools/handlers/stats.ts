@@ -150,6 +150,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
       submit: round(s.timing.submit),
       total: round(s.timing.total),
     },
+    mainThread: s.mainThread,
     drops: s.drops,
     decoder: s.decoder,
     layerCount: s.layerCount,

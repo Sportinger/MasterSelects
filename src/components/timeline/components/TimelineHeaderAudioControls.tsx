@@ -24,6 +24,7 @@ export function TimelineHeaderAudioSummaryMeter() {
       streamFeatures={['level']}
       label="Summed audio level"
       className="audio-summary-background-meter"
+      display="mono"
     />
   );
 }
@@ -300,11 +301,11 @@ export function TimelineHeaderMixerControls({
         >
           <AudioLevelMeter
             streamScope={{ kind: 'track', trackId: track.id }}
-            streamFeatures={['level', 'stereo']}
+            streamFeatures={['level']}
             label={`${track.name} level`}
             className="audio-track-level-meter"
             orientation="vertical"
-            display="stereo"
+            display="mono"
           />
           {showAudioTrackVolumeFader && (
             <div className="audio-track-fader-column">

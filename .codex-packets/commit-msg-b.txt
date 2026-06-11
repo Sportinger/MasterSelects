@@ -1,0 +1,16 @@
+fix(timeline): restore transient peak spikes in detailed waveforms
+
+The detailed audio display lost its crisp look when waveform drawing
+moved into the clip canvas painters (3d71d3c6): drawTransientPeakSpikes
+was dropped, leaving only the smoothed envelope + RMS band.
+
+Port the spike pass back faithfully from the pre-move implementation
+(same percentile thresholds, min gap, line widths, alpha and inner-gap
+math) as a shared module used by both the main-thread painter and the
+worker painter, keeping worker/main rendering parity. Compact and
+spectral modes unchanged.
+
+Implemented by a Codex worker from a bounded packet with the original
+implementation provided as reference.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

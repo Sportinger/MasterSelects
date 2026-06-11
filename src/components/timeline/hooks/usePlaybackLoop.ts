@@ -81,10 +81,10 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
     let lastStateUpdate = 0;
     let lastAudioSync = 0;
     const VISUAL_STATE_UPDATE_INTERVAL = 33; // ~30fps while video/visual playback is active
-    const AUDIO_ONLY_STATE_UPDATE_INTERVAL = 33; // audio clock stays smooth; UI follows at ~30fps
+    const AUDIO_ONLY_STATE_UPDATE_INTERVAL = 100; // live playhead uses refs; React state can stay lower cadence
     const INTERACTIVE_LAYOUT_STATE_UPDATE_INTERVAL = 90;
-    const AUDIO_SYNC_INTERVAL = 50;
-    const AUDIO_STARTUP_SYNC_INTERVAL = 16;
+    const AUDIO_SYNC_INTERVAL = 150;
+    const AUDIO_STARTUP_SYNC_INTERVAL = 33;
     const MAX_PLAYBACK_DELTA_SECONDS = 0.5;
 
     // Preserve any wall-clock progress already started by timelineStore.play().
@@ -268,7 +268,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
         const audioSyncInterval = playheadState.playbackJustStarted
           ? AUDIO_STARTUP_SYNC_INTERVAL
           : AUDIO_SYNC_INTERVAL;
-        if (!hasVisualRenderDemand && currentTime - lastAudioSync >= audioSyncInterval) {
+        if (currentTime - lastAudioSync >= audioSyncInterval) {
           layerBuilder.syncAudioElements();
           lastAudioSync = currentTime;
         }

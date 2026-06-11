@@ -5,6 +5,8 @@
   min-width: 0;
   height: 100%;
   overflow: hidden;
+  contain: layout paint style;
+  isolation: isolate;
   border-radius: 4px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 18%),
@@ -133,13 +135,22 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
 }
 
-.audio-level-meter.stereo .audio-level-meter-scale,
-.audio-level-meter.stereo .audio-level-meter-peak-fill,
-.audio-level-meter.stereo .audio-level-meter-rms,
-.audio-level-meter.stereo .audio-level-meter-peak {
+.audio-level-meter.stereo .audio-level-meter-scale {
   inset: 0;
   height: auto;
   transform: none;
+}
+
+.audio-level-meter.stereo .audio-level-meter-peak-fill,
+.audio-level-meter.stereo .audio-level-meter-rms {
+  will-change: transform, opacity;
+  transition: transform 55ms linear, opacity 100ms linear;
+}
+
+.audio-level-meter.stereo.vertical .audio-level-meter-peak-fill,
+.audio-level-meter.stereo.vertical .audio-level-meter-rms {
+  inset: auto 0 0 0;
+  height: 100%;
   transform-origin: center bottom;
 }
 
@@ -151,19 +162,10 @@
 
 .audio-level-meter.stereo.vertical .audio-level-meter-peak-fill {
   background: linear-gradient(0deg, #31d681 0%, #77dd72 58%, #ffd052 76%, #ff6354 100%);
-  clip-path: inset(var(--meter-peak-top, 100%) 0 0 0);
-  opacity: var(--meter-active, 0);
-  transition: clip-path 65ms linear, opacity 120ms ease;
 }
 
 .audio-level-meter.stereo.vertical .audio-level-meter-rms {
-  inset: auto -1px auto -1px;
-  bottom: var(--meter-rms-pos, 0%);
-  height: 1px;
-  background: rgba(230, 242, 235, 0.92);
-  opacity: calc(var(--meter-rms-active, 0) * 0.72);
-  transform: translateY(50%);
-  transition: bottom 80ms linear, opacity 120ms ease;
+  background: linear-gradient(0deg, rgba(230, 242, 235, 0.34), rgba(255, 238, 176, 0.42) 76%, rgba(255, 133, 116, 0.48));
 }
 
 .audio-level-meter.stereo.vertical .audio-level-meter-peak {
@@ -171,11 +173,11 @@
   right: -1px;
   width: auto;
   height: 1px;
-  bottom: var(--meter-peak-pos, 0%);
+  top: auto;
+  bottom: 0;
   transform: translateY(50%);
   background: rgba(255, 77, 66, 0.95);
-  opacity: var(--meter-active, 0);
-  transition: bottom 55ms linear, opacity 120ms ease;
+  transition: opacity 100ms linear;
 }
 
 .audio-level-meter.stereo.horizontal .audio-level-meter-scale {
@@ -185,33 +187,29 @@
 }
 
 .audio-level-meter.stereo.horizontal .audio-level-meter-peak-fill {
+  inset: 0 auto 0 0;
+  width: 100%;
   background: linear-gradient(90deg, #31d681 0%, #77dd72 58%, #ffd052 76%, #ff6354 100%);
-  clip-path: inset(0 var(--meter-peak-right, 100%) 0 0);
-  opacity: var(--meter-active, 0);
-  transition: clip-path 65ms linear, opacity 120ms ease;
+  transform-origin: left center;
 }
 
 .audio-level-meter.stereo.horizontal .audio-level-meter-rms {
-  inset: -1px auto -1px auto;
-  left: var(--meter-rms-pos, 0%);
-  width: 1px;
+  inset: 0 auto 0 0;
+  width: 100%;
   height: auto;
-  background: rgba(230, 242, 235, 0.92);
-  opacity: calc(var(--meter-rms-active, 0) * 0.72);
-  transform: translateX(-50%);
-  transition: left 80ms linear, opacity 120ms ease;
+  background: linear-gradient(90deg, rgba(230, 242, 235, 0.34), rgba(255, 238, 176, 0.42) 76%, rgba(255, 133, 116, 0.48));
+  transform-origin: left center;
 }
 
 .audio-level-meter.stereo.horizontal .audio-level-meter-peak {
   top: -1px;
   bottom: -1px;
-  left: var(--meter-peak-pos, 0%);
+  left: 0;
   width: 1px;
   height: auto;
   transform: translateX(-50%);
   background: rgba(255, 77, 66, 0.95);
-  opacity: var(--meter-active, 0);
-  transition: left 55ms linear, opacity 120ms ease;
+  transition: opacity 100ms linear;
 }
 
 .audio-level-meter.clipping {

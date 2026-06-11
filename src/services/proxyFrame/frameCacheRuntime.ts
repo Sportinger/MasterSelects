@@ -115,7 +115,7 @@ export function releaseAudioProxyElementResource(mediaFileId: string): void {
   timelineRuntimeCoordinator.releaseResource(getAudioProxyElementResourceId(mediaFileId));
 }
 
-// --- Decoded scrub audio buffer resource ---
+// --- Decoded scrub/source playback audio buffer resource ---
 
 export function canRetainAudioBufferResource(
   mediaFileId: string,

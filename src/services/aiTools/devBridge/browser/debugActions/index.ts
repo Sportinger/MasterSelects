@@ -15,8 +15,20 @@ import { measureClipDragInteraction } from './clipDragInteraction';
 import { measureDockResizeInteraction } from './dock';
 import { measureTimelineInteraction } from './interaction';
 import {
+  armMixerFaderRecording,
+  clearMixerFaderRecording,
+  getMixerFaderRecording,
+  inspectMixerMeters,
+  measureMixerFaderInteraction,
+  recordMixerFaderInteraction,
+} from './mixer';
+import {
   measureIdleMainThread,
+  measurePlaybackFrameLoop,
+  measureRafCallbacks,
+  measureScheduledCallbacks,
   measureUiFrameLoop,
+  summarizeSourceBufferMixerEligibility,
   summarizePerformanceMemory,
   summarizeProxyAudioCache,
 } from './performance';
@@ -44,6 +56,39 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       return measureStoreChurn(args);
     case 'measure-ui-frame-loop':
       return measureUiFrameLoop(args);
+    case 'measure-playback-frame-loop':
+      return measurePlaybackFrameLoop(args);
+    case 'pause-playback': {
+      timelineState.pause();
+      return {
+        success: true,
+        data: {
+          action,
+          isPlaying: useTimelineStore.getState().isPlaying,
+          playheadPosition: useTimelineStore.getState().playheadPosition,
+        },
+      };
+    }
+    case 'set-playhead-position': {
+      const position = typeof args.position === 'number' && Number.isFinite(args.position)
+        ? Math.max(0, args.position)
+        : 0;
+      timelineState.pause();
+      timelineState.setPlayheadPosition(position);
+      return {
+        success: true,
+        data: {
+          action,
+          requestedPosition: position,
+          playheadPosition: useTimelineStore.getState().playheadPosition,
+          isPlaying: useTimelineStore.getState().isPlaying,
+        },
+      };
+    }
+    case 'measure-raf-callbacks':
+      return measureRafCallbacks(args);
+    case 'measure-scheduled-callbacks':
+      return measureScheduledCallbacks(args);
     case 'measure-timeline-interaction':
       return measureTimelineInteraction(args);
     case 'measure-clip-drag-interaction':
@@ -117,6 +162,18 @@ export async function runDebugAction(action: string, args: Record<string, unknow
       };
     case 'measure-dock-resize-interaction':
       return measureDockResizeInteraction(args);
+    case 'measure-mixer-fader-interaction':
+      return measureMixerFaderInteraction(args);
+    case 'inspect-mixer-meters':
+      return inspectMixerMeters();
+    case 'arm-mixer-fader-recording':
+      return armMixerFaderRecording(args);
+    case 'get-mixer-fader-recording':
+      return getMixerFaderRecording(args);
+    case 'clear-mixer-fader-recording':
+      return clearMixerFaderRecording();
+    case 'record-mixer-fader-interaction':
+      return recordMixerFaderInteraction(args);
     case 'set-history-disabled': {
       const disabled = args.disabled !== false;
       setHistoryDisabledForDebug(disabled);
@@ -151,6 +208,11 @@ export async function runDebugAction(action: string, args: Record<string, unknow
           memory: summarizePerformanceMemory(),
           proxyAudioCache: summarizeProxyAudioCache(),
         },
+      };
+    case 'get-source-buffer-mixer-eligibility':
+      return {
+        success: true,
+        data: summarizeSourceBufferMixerEligibility(),
       };
     case 'clear-proxy-audio-buffer-cache': {
       const before = summarizeProxyAudioCache();

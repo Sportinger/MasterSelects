@@ -1,5 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import './AudioMixerPanel.css';
+import './wood-theme/wood-theme.css';
 import { useTimelineStore } from '../../../stores/timeline';
 import { AudioExportPipeline } from '../../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../../services/audio/AudioRecordingService';
@@ -11,6 +12,10 @@ import { MasterMixerStrip } from './MasterMixerStrip';
 import { MixerFxWindow } from './MixerFxWindow';
 import { MixerTrackColorMenu } from './MixerTrackColorMenu';
 import { TrackMixerStrip } from './TrackMixerStrip';
+
+function readWoodMixerEnabled(): boolean {
+  return typeof window !== 'undefined' && window.localStorage.getItem('msWoodMixer') === '1';
+}
 
 export function AudioMixerPanel() {
   const tracks = useTimelineStore(state => state.tracks);
@@ -27,6 +32,7 @@ export function AudioMixerPanel() {
   const [focusedStripId, setFocusedStripId] = useState<string>(MASTER_FOCUS_ID);
   const [fxWindowTarget, setFxWindowTarget] = useState<FxWindowTarget | null>(null);
   const [trackColorMenuTarget, setTrackColorMenuTarget] = useState<TrackColorMenuTarget | null>(null);
+  const [woodMixerEnabled] = useState(readWoodMixerEnabled);
 
   useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
 
@@ -151,7 +157,7 @@ export function AudioMixerPanel() {
   const focusedIsMaster = focusedStripId === MASTER_FOCUS_ID;
 
   return (
-    <div className="audio-mixer-panel">
+    <div className={`audio-mixer-panel${woodMixerEnabled ? ' wood' : ''}`}>
       {recoveryEntries.length > 0 && (
         <div className="audio-mixer-recovery-list">
           {recoveryEntries.slice(0, 4).map(entry => (

@@ -1,0 +1,23 @@
+fix(timeline): render stereo waveform lanes in the worker painter
+
+The canvas worker waveform resource carried only channel 0, so
+worker-rendered clips showed mono waveforms while the main-thread
+fallback painter rendered proper per-channel stereo lanes. Users saw
+the correct stereo view only while tracks were temporarily in
+main-thread fallback (e.g. right after a reload or while spectral
+tiles rendered), then the view silently degraded to mono once the
+worker took over.
+
+The worker resource now carries per-channel column sets (legacy
+columns field kept as the packed transfer buffer), the resource
+builder runs the LOD/smooth/normalize pipeline per resolved render
+channel, and the worker painter replicates the main painter's lane
+layout (laneGap 2, separator stroke, per-lane envelope/RMS/center
+line/transient spikes). Worker and main-thread rendering are now
+visually equivalent for stereo clips; composition mixdowns remain
+mono as before.
+
+Implemented by a Codex worker from a bounded packet; orchestrator
+verified via diff review and the full check chain.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

@@ -44,6 +44,78 @@ function dynamicsKeyOf(options: RuntimeAudioMeterSubscriptionOptions | undefined
   return options?.dynamicsEffectIds ? [...options.dynamicsEffectIds].join(',') : '';
 }
 
+type RuntimeAudioMeterFrameFlush = () => void;
+
+const pendingFrameFlushes = new Set<RuntimeAudioMeterFrameFlush>();
+let pendingMeterFrame: number | null = null;
+const activeFramePollers = new Set<RuntimeAudioMeterFrameFlush>();
+let framePollTimer: number | null = null;
+let framePollRaf: number | null = null;
+const RUNTIME_AUDIO_METER_VISUAL_INTERVAL_MS = 50;
+
+function flushRuntimeAudioMeterFrames(): void {
+  pendingMeterFrame = null;
+  const flushes = Array.from(pendingFrameFlushes);
+  pendingFrameFlushes.clear();
+  for (const flush of flushes) {
+    flush();
+  }
+}
+
+function scheduleRuntimeAudioMeterFrame(flush: RuntimeAudioMeterFrameFlush): void {
+  pendingFrameFlushes.add(flush);
+  if (pendingMeterFrame !== null) return;
+  pendingMeterFrame = window.requestAnimationFrame(flushRuntimeAudioMeterFrames);
+}
+
+function cancelRuntimeAudioMeterFrame(flush: RuntimeAudioMeterFrameFlush): void {
+  pendingFrameFlushes.delete(flush);
+  if (pendingFrameFlushes.size === 0 && pendingMeterFrame !== null) {
+    window.cancelAnimationFrame(pendingMeterFrame);
+    pendingMeterFrame = null;
+  }
+}
+
+function runRuntimeAudioMeterFramePollers(): void {
+  framePollRaf = null;
+  const flushes = Array.from(activeFramePollers);
+  for (const flush of flushes) {
+    flush();
+  }
+  scheduleRuntimeAudioMeterFramePoll();
+}
+
+function scheduleRuntimeAudioMeterFramePoll(): void {
+  if (activeFramePollers.size === 0 || framePollTimer !== null || framePollRaf !== null) return;
+  if (typeof window === 'undefined') return;
+  framePollTimer = window.setTimeout(() => {
+    framePollTimer = null;
+    if (typeof window.requestAnimationFrame === 'function') {
+      framePollRaf = window.requestAnimationFrame(runRuntimeAudioMeterFramePollers);
+      return;
+    }
+    runRuntimeAudioMeterFramePollers();
+  }, RUNTIME_AUDIO_METER_VISUAL_INTERVAL_MS);
+}
+
+function addRuntimeAudioMeterFramePoller(flush: RuntimeAudioMeterFrameFlush): void {
+  activeFramePollers.add(flush);
+  scheduleRuntimeAudioMeterFramePoll();
+}
+
+function removeRuntimeAudioMeterFramePoller(flush: RuntimeAudioMeterFrameFlush): void {
+  activeFramePollers.delete(flush);
+  if (activeFramePollers.size > 0) return;
+  if (framePollTimer !== null) {
+    window.clearTimeout(framePollTimer);
+    framePollTimer = null;
+  }
+  if (framePollRaf !== null && typeof window.cancelAnimationFrame === 'function') {
+    window.cancelAnimationFrame(framePollRaf);
+    framePollRaf = null;
+  }
+}
+
 /**
  * Keep the latest meter snapshot for `scope` in a ref. The caller drives its own
  * animation/read cadence. No React render is triggered when snapshots change.
@@ -92,7 +164,6 @@ export function useRuntimeAudioMeterFrame(
 ): boolean {
   const onFrameRef = useRef(onFrame);
   const latestRef = useRef<AudioMeterSnapshot | undefined>(undefined);
-  const frameRef = useRef<number | null>(null);
   const optionsRef = useRef(options);
   useEffect(() => {
     optionsRef.current = options;
@@ -117,34 +188,21 @@ export function useRuntimeAudioMeterFrame(
       ? { kind: 'master' }
       : { kind: 'track', trackId: trackId as string };
 
-    const canRaf = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function';
     const flush = () => {
-      frameRef.current = null;
+      const next = getScopeSnapshot(scopeArg);
+      if (Object.is(next, latestRef.current)) return;
+      latestRef.current = next;
       onFrameRef.current?.(latestRef.current);
-    };
-    const schedule = () => {
-      if (!canRaf) {
-        flush();
-        return;
-      }
-      if (frameRef.current !== null) return;
-      frameRef.current = window.requestAnimationFrame(flush);
     };
 
     latestRef.current = getScopeSnapshot(scopeArg);
     onFrameRef.current?.(latestRef.current);
-
-    const unsubscribe = subscribeScope(scopeArg, (snapshot) => {
-      latestRef.current = snapshot;
-      schedule();
-    }, optionsRef.current);
+    const releaseDemand = runtimeAudioMeterBus.retainDemand(scopeArg, optionsRef.current);
+    addRuntimeAudioMeterFramePoller(flush);
 
     return () => {
-      unsubscribe();
-      if (frameRef.current !== null && canRaf) {
-        window.cancelAnimationFrame(frameRef.current);
-      }
-      frameRef.current = null;
+      releaseDemand();
+      removeRuntimeAudioMeterFramePoller(flush);
     };
   }, [kind, trackId, featuresKey, dynamicsKey]);
 
@@ -192,12 +250,51 @@ export function useRuntimeAudioMeterSnapshot(
     const commit = () => {
       setSnapshot((current) => (Object.is(current, latestRef.current) ? current : latestRef.current));
     };
+    const subscriptionOptions = optionsRef.current
+      ? { features: optionsRef.current.features, dynamicsEffectIds: optionsRef.current.dynamicsEffectIds }
+      : undefined;
 
     latestRef.current = getScopeSnapshot(scopeArg);
     commit();
     lastCommittedAtRef.current = nowMs();
 
     const canRaf = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function';
+    if (intervalMs > 0) {
+      let timerId: number | null = null;
+      let rafId: number | null = null;
+      let disposed = false;
+      const releaseDemand = runtimeAudioMeterBus.retainDemand(scopeArg, subscriptionOptions);
+      const poll = () => {
+        if (disposed) return;
+        latestRef.current = getScopeSnapshot(scopeArg);
+        lastCommittedAtRef.current = nowMs();
+        commit();
+        timerId = window.setTimeout(() => {
+          timerId = null;
+          if (canRaf) {
+            rafId = window.requestAnimationFrame(() => {
+              rafId = null;
+              poll();
+            });
+            return;
+          }
+          poll();
+        }, intervalMs);
+      };
+      timerId = window.setTimeout(() => {
+        timerId = null;
+        poll();
+      }, intervalMs);
+      return () => {
+        disposed = true;
+        releaseDemand();
+        if (timerId !== null) window.clearTimeout(timerId);
+        if (rafId !== null && canRaf) window.cancelAnimationFrame(rafId);
+        timerId = null;
+        rafId = null;
+      };
+    }
+
     const flush = (timestamp: number) => {
       frameRef.current = null;
       if (intervalMs > 0 && timestamp - lastCommittedAtRef.current < intervalMs) {
@@ -215,10 +312,6 @@ export function useRuntimeAudioMeterSnapshot(
       if (frameRef.current !== null) return;
       frameRef.current = window.requestAnimationFrame(flush);
     };
-
-    const subscriptionOptions = optionsRef.current
-      ? { features: optionsRef.current.features, dynamicsEffectIds: optionsRef.current.dynamicsEffectIds }
-      : undefined;
     const unsubscribe = subscribeScope(scopeArg, (next) => {
       latestRef.current = next;
       schedule();

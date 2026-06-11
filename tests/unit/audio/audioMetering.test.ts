@@ -87,6 +87,37 @@ describe('audioMetering', () => {
     expect(meter.channels?.right.peakLinear).toBeCloseTo(0.75);
   });
 
+  it('can skip stereo channel and phase analysis independently', () => {
+    const stereoSamples = {
+      left: [0.25, -0.5, 0.75, -0.25],
+      right: [-0.25, 0.5, -0.75, 0.25],
+    };
+
+    const levelOnly = calculateAudioMeterSnapshot(stereoSamples.left, 1000, undefined, stereoSamples, undefined, {
+      includeStereoChannels: false,
+      includePhaseMetrics: false,
+    });
+    expect(levelOnly.channels).toBeUndefined();
+    expect(levelOnly.phaseCorrelation).toBeUndefined();
+    expect(levelOnly.stereoWidth).toBeUndefined();
+
+    const stereoOnly = calculateAudioMeterSnapshot(stereoSamples.left, 1000, undefined, stereoSamples, undefined, {
+      includeStereoChannels: true,
+      includePhaseMetrics: false,
+    });
+    expect(stereoOnly.channels?.left.peakLinear).toBeCloseTo(0.75);
+    expect(stereoOnly.phaseCorrelation).toBeUndefined();
+    expect(stereoOnly.stereoWidth).toBeUndefined();
+
+    const phaseOnly = calculateAudioMeterSnapshot(stereoSamples.left, 1000, undefined, stereoSamples, undefined, {
+      includeStereoChannels: false,
+      includePhaseMetrics: true,
+    });
+    expect(phaseOnly.channels).toBeUndefined();
+    expect(phaseOnly.phaseCorrelation).toBeCloseTo(-1);
+    expect(phaseOnly.stereoWidth).toBeCloseTo(2);
+  });
+
   it('detects inverted stereo channels as negative correlation', () => {
     const stereoSamples = {
       left: [0.25, -0.5, 0.75, -0.25],

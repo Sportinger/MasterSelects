@@ -19,6 +19,8 @@ export interface ReadRouteMeterSnapshotOptions {
   // copy (snapshots outlive the shared route buffer), so it is only gathered
   // when a spectrum consumer actually demands it.
   includeSpectrum?: boolean;
+  includeStereo?: boolean;
+  includePhase?: boolean;
 }
 
 export function readRouteMeterSnapshot(
@@ -27,8 +29,12 @@ export function readRouteMeterSnapshot(
   options: ReadRouteMeterSnapshotOptions = {},
 ): AudioMeterSnapshot {
   route.analyserNode.getFloatTimeDomainData(route.meterBuffer);
-  route.leftAnalyserNode.getFloatTimeDomainData(route.leftMeterBuffer);
-  route.rightAnalyserNode.getFloatTimeDomainData(route.rightMeterBuffer);
+
+  const includeStereoSamples = options.includeStereo === true || options.includePhase === true;
+  if (includeStereoSamples) {
+    route.leftAnalyserNode.getFloatTimeDomainData(route.leftMeterBuffer);
+    route.rightAnalyserNode.getFloatTimeDomainData(route.rightMeterBuffer);
+  }
 
   let spectrumDb: Float32Array | undefined;
   if (options.includeSpectrum) {
@@ -40,7 +46,11 @@ export function readRouteMeterSnapshot(
     route.meterBuffer,
     updatedAt,
     getRouteDynamicsSnapshot(route, updatedAt),
-    { left: route.leftMeterBuffer, right: route.rightMeterBuffer },
+    includeStereoSamples ? { left: route.leftMeterBuffer, right: route.rightMeterBuffer } : undefined,
     spectrumDb,
+    {
+      includeStereoChannels: options.includeStereo === true,
+      includePhaseMetrics: options.includePhase === true,
+    },
   );
 }

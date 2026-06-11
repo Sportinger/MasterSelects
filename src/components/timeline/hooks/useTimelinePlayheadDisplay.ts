@@ -55,10 +55,18 @@ export function useTimelinePlayheadDisplay({
 
     if (!isPlaying || isDraggingPlayhead) {
       playhead.style.left = `${playheadMetricsRef.current.playheadLeft}px`;
+      playhead.classList.remove('playhead-live-transform');
+      playhead.style.transform = '';
+      playhead.style.willChange = '';
+      delete playhead.dataset.liveLeft;
       return;
     }
 
     let rafId = 0;
+    playhead.classList.add('playhead-live-transform');
+    playhead.style.transform = '';
+    playhead.style.willChange = 'left';
+
     const updateLivePlayhead = () => {
       const timelineState = useTimelineStore.getState();
       const storePosition = timelineState.playheadPosition;
@@ -80,9 +88,13 @@ export function useTimelinePlayheadDisplay({
     };
 
     updateLivePlayhead();
+
     return () => {
       cancelAnimationFrame(rafId);
       delete playhead.dataset.liveLeft;
+      playhead.classList.remove('playhead-live-transform');
+      playhead.style.transform = '';
+      playhead.style.willChange = '';
     };
   }, [isPlaying, isDraggingPlayhead, playheadRef]);
 

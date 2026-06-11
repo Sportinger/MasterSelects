@@ -42,6 +42,10 @@ export interface TrackActions {
   setMasterAudioEffectInstanceEnabled: (effectId: string, enabled: boolean) => void;
   reorderMasterAudioEffectInstance: (effectId: string, newIndex: number) => void;
   updateRuntimeAudioMeter: (trackId: string, snapshot: AudioMeterSnapshot, masterSnapshot?: AudioMeterSnapshot) => void;
+  updateRuntimeAudioMeters: (
+    entries: readonly { trackId: string; snapshot: AudioMeterSnapshot }[],
+    masterSnapshot?: AudioMeterSnapshot,
+  ) => void;
   clearStaleRuntimeAudioMeters: (maxAgeMs?: number, now?: number) => void;
   setTrackLocked: (id: string, locked: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;

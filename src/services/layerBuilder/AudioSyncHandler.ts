@@ -451,6 +451,16 @@ export class AudioSyncHandler {
     this.tailMeterPolls.delete(trackId);
   }
 
+  stopRuntimeMeterPolling(trackId: string | undefined): void {
+    this.cancelTailMeterPolling(trackId);
+  }
+
+  stopAllRuntimeMeterPolling(): void {
+    for (const trackId of Array.from(this.tailMeterPolls.keys())) {
+      this.cancelTailMeterPolling(trackId);
+    }
+  }
+
   /**
    * Per-frame meter publishing funnel: rate-limited to METER_PUBLISH_INTERVAL_MS
    * per track so render-frame callers (playback/scrub sync) cannot exceed the
@@ -480,11 +490,17 @@ export class AudioSyncHandler {
     element: HTMLMediaElement | null,
   ): { trackSnapshot: AudioMeterSnapshot; masterSnapshot: AudioMeterSnapshot | null } | null {
     if (!trackId || !element) return null;
+    const trackScope = { kind: 'track' as const, trackId };
+    const masterScope = { kind: 'master' as const };
     const snapshot = audioRoutingManager.getMeterSnapshot(element, performance.now(), {
-      includeSpectrum: runtimeAudioMeterBus.hasDemand({ kind: 'track', trackId }, 'spectrum'),
+      includeStereo: runtimeAudioMeterBus.hasDemand(trackScope, 'stereo'),
+      includePhase: runtimeAudioMeterBus.hasDemand(trackScope, 'phase'),
+      includeSpectrum: runtimeAudioMeterBus.hasDemand(trackScope, 'spectrum'),
     });
     const masterSnapshot = audioRoutingManager.getMasterMeterSnapshot(snapshot?.updatedAt, {
-      includeSpectrum: runtimeAudioMeterBus.hasDemand({ kind: 'master' }, 'spectrum'),
+      includeStereo: runtimeAudioMeterBus.hasDemand(masterScope, 'stereo'),
+      includePhase: runtimeAudioMeterBus.hasDemand(masterScope, 'phase'),
+      includeSpectrum: runtimeAudioMeterBus.hasDemand(masterScope, 'spectrum'),
     });
     if (snapshot) {
       this.publishMeter(trackId, snapshot, masterSnapshot ?? undefined);

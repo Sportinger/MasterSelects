@@ -509,6 +509,15 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     );
   },
 
+  updateRuntimeAudioMeters: (entries, masterSnapshot) => {
+    if (entries.length === 0) return;
+    runtimeAudioMeterBus.publishTracks(entries, masterSnapshot);
+    scheduleRuntimeAudioMeterMirrorFlush(
+      () => get().runtimeAudioMeters,
+      (runtimeAudioMeters) => set({ runtimeAudioMeters }),
+    );
+  },
+
   clearStaleRuntimeAudioMeters: (maxAgeMs, now) => {
     runtimeAudioMeterBus.clearStale(maxAgeMs, now);
     if (maxAgeMs !== undefined && maxAgeMs <= 0) {
