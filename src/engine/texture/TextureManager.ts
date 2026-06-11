@@ -224,6 +224,9 @@ export class TextureManager {
 
   // Import external texture - true zero-copy from video decoder
   // Supports both HTMLVideoElement and VideoFrame (from WebCodecs)
+  // NOTE (Linux/Mesa): importExternalTexture can return an invalid-but-not-null
+  // texture on open-source Mesa drivers (issue #46) — it does not throw and is
+  // not caught below. See docs/Features/Linux-Mesa-GPU.md (mode 4).
   importVideoTexture(source: HTMLVideoElement | VideoFrame): GPUExternalTexture | null {
     // Check if source is valid
     if (source instanceof HTMLVideoElement) {

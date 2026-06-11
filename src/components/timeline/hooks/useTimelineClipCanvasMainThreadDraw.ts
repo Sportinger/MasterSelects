@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import { flags } from '../../../engine/featureFlags';
+import { prefersSoftwareTimelineCanvas } from '../utils/timelineCanvasPlatform';
 import {
   reportTimelineCanvasDrawDiagnostics,
   unregisterTimelineCanvasDrawDiagnostics,
@@ -107,7 +108,12 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     if (!canvas) return;
     let ctx: CanvasRenderingContext2D | null = null;
     try {
-      ctx = canvas.getContext('2d');
+      // On Linux/Mesa a GPU-accelerated 2D canvas loses its contents when the
+      // window is minimized/restored (repainting only on the next interaction).
+      // `willReadFrequently` forces a CPU raster surface that survives visibility
+      // changes and composites reliably.
+      // See docs/Features/Linux-Mesa-GPU.md (mode 3) and issue #259.
+      ctx = canvas.getContext('2d', prefersSoftwareTimelineCanvas() ? { willReadFrequently: true } : undefined);
     } catch {
       return;
     }

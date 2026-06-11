@@ -51,6 +51,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | Document | Description |
 |---|---|
 | [GPU Engine](./GPU-Engine.md) | WebGPU engine, render loop, fallback paths, caches, and export boundary |
+| [Linux / Mesa GPU](./Linux-Mesa-GPU.md) | **Read before touching any canvas/GPU code** — Mesa silent-failure modes and the rules/gates that prevent "blank on Linux" regressions |
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
 | [Effects](./Effects.md) | Current effect registry, categories, quality controls, and inline effect behavior |
 | [Color Correction](./Color-Correction.md) | Planned node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |

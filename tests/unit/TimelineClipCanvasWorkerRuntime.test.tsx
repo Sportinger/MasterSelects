@@ -17,6 +17,15 @@ import {
 } from '../../src/services/timeline/timelineCanvasDiagnostics';
 import type { TimelineAudioDisplayMode, TimelineClipDragPreview } from '../../src/stores/timeline/types';
 
+// The OffscreenCanvas worker path is gated off on Linux/Mesa
+// (prefersSoftwareTimelineCanvas). The test environment reports Linux, which
+// would disable the worker and make these worker-path assertions fail, so force
+// the gate to non-Linux here. The Linux software-path behavior is intentional in
+// production (see docs/Features/Linux-Mesa-GPU.md).
+vi.mock('../../src/components/timeline/utils/timelineCanvasPlatform', () => ({
+  prefersSoftwareTimelineCanvas: () => false,
+}));
+
 interface WorkerTotals {
   workerTrackCount: number;
   workerEligibleTrackCount: number;

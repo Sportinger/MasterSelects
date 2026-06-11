@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, type RefObject } from 'react';
 import { flags } from '../../../engine/featureFlags';
+import { prefersSoftwareTimelineCanvas } from '../utils/timelineCanvasPlatform';
 import { reportTimelineCanvasDrawDiagnostics } from '../../../services/timeline/timelineCanvasDiagnostics';
 import type { TimelineAudioDisplayMode } from '../../../stores/timeline/types';
 import type { TimelineClipCanvasWorkerThumbnailPreparation } from '../utils/timelineClipCanvasThumbnailPreparation';
@@ -79,7 +80,11 @@ export function useTimelineClipCanvasWorkerRuntime(
   } = input;
   const hasWorkerCanvasSupport = typeof Worker !== 'undefined' &&
     typeof HTMLCanvasElement !== 'undefined' &&
-    typeof HTMLCanvasElement.prototype.transferControlToOffscreen === 'function';
+    typeof HTMLCanvasElement.prototype.transferControlToOffscreen === 'function' &&
+    // Linux/Mesa silently fails to composite a worker-driven OffscreenCanvas for
+    // taller lanes; the main-thread software path renders them reliably.
+    // See docs/Features/Linux-Mesa-GPU.md (mode 2) and issue #259.
+    !prefersSoftwareTimelineCanvas();
   const rawWorkerMode = flags.timelineCanvasWorker && hasWorkerCanvasSupport && workerEligibility.eligible;
   const workerEligibilityReasonKey = workerEligibility.reasons.join('|');
   const workerRuntimeKey = `${hasWorkerCanvasSupport}:${trackId}:${workerEligibility.eligible}:${workerEligibilityReasonKey}`;

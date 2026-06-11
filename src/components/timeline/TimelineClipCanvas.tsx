@@ -8,7 +8,6 @@ import { memo, useMemo, useReducer, useRef } from 'react';
 import type { TimelineAudioDisplayMode, TimelineClipDragPreview } from '../../stores/timeline/types';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
-  MIN_CLIP_DURATION,
   TIMELINE_CLIP_CANVAS_LOD_BAR_PX,
   TIMELINE_CLIP_CANVAS_LOD_LABEL_PX,
 } from './timelineRenderConstants';
@@ -17,19 +16,22 @@ import type { TimelinePaintSourceClip } from '../../timeline';
 import { useTimelineClipCanvasAudioWarmups } from './hooks/useTimelineClipCanvasAudioWarmups';
 import { useTimelineClipCanvasMainThreadDraw } from './hooks/useTimelineClipCanvasMainThreadDraw';
 import { useTimelineClipCanvasThumbnailWarmups } from './hooks/useTimelineClipCanvasThumbnailWarmups';
+import { useTimelineClipCanvasViewport } from './hooks/useTimelineClipCanvasViewport';
 import { useTimelineClipCanvasWorkerRuntime } from './hooks/useTimelineClipCanvasWorkerRuntime';
-import type { TimelineClipCanvasSpectrogramTileSetMap } from './utils/timelineClipCanvasSpectrogramResource';
 import {
-  canLoopExtendTimelineVectorClip,
-  getTimelineClipSourceDuration,
-  isInfiniteTimelineSourceType,
-} from './utils/clipSourceTiming';
+  createWorkerDrawableClips,
+  resolveClipGeometry,
+} from './utils/timelineClipCanvasClipGeometry';
+import {
+  buildSourceWaveformPyramidIdMap,
+  enrichClipsWithSourceWaveformRef,
+} from './utils/timelineClipCanvasSourceWaveformRef';
+import type { TimelineClipCanvasSpectrogramTileSetMap } from './utils/timelineClipCanvasSpectrogramResource';
 import type { TimelineClipCanvasWaveformPyramidMap } from './utils/timelineClipCanvasWaveformResource';
 import {
   hasTimelineClipCanvasPassiveDecorations,
   type TimelineClipCanvasMediaStatus,
 } from './utils/timelineClipCanvasPassiveDecorations';
-import type { TimelineClipCanvasTrimGeometry } from './utils/timelineClipCanvasTrimResource';
 import {
   collectTimelineClipCanvasWorkerThumbnailPreparation,
 } from './utils/timelineClipCanvasThumbnailPreparation';
@@ -44,6 +46,8 @@ import {
   getTimelineClipCanvasWorkerEligibility,
 } from './utils/timelineClipCanvasWorkerModel';
 
+// Viewport-bounded canvas sizing (the Linux/Mesa blank-canvas guard) lives in
+// useTimelineClipCanvasViewport; see docs/Features/Linux-Mesa-GPU.md.
 export const MAX_CANVAS_WIDTH_PX = 16000;
 
 const LOD_BAR_PX = TIMELINE_CLIP_CANVAS_LOD_BAR_PX;
@@ -77,109 +81,6 @@ interface TimelineClipCanvasProps {
 
 type MediaFileCanvasStatusMap = ReadonlyMap<string, TimelineClipCanvasMediaStatus>;
 
-function resolveClipGeometry(
-  clip: TimelinePaintSourceClip,
-  props: Pick<TimelineClipCanvasProps, 'clipDrag' | 'clipDragPreview' | 'clipTrim' | 'trackId'>,
-): TimelineClipCanvasTrimGeometry {
-  const { clipDrag, clipDragPreview, clipTrim, trackId } = props;
-  let startTime = clip.startTime;
-  let duration = clip.duration;
-  let inPoint = clip.inPoint ?? 0;
-  let outPoint = clip.outPoint ?? inPoint + duration;
-  let visible = clip.trackId === trackId;
-  let trimEdge: 'left' | 'right' | undefined;
-  const sourceDuration = getTimelineClipSourceDuration(clip);
-  const dragPreviewPatch = clipDragPreview?.patches[clip.id];
-  const isPrimaryDragClip = clipDrag?.clipId === clip.id;
-  const isLinkedSlipClip = Boolean(
-    clipDrag?.toolGesture === 'slip' &&
-      !clipDrag.altKeyPressed &&
-      clip.linkedClipId === clipDrag.clipId,
-  );
-
-  if (isPrimaryDragClip) {
-    visible = clipDrag.currentTrackId === trackId;
-    const previewStartTime = dragPreviewPatch ? Math.max(0, dragPreviewPatch.startTime) : startTime;
-    startTime = clipDrag.snappedTime !== null ? clipDrag.snappedTime : previewStartTime;
-  } else if (clipDrag?.multiSelectClipIds?.includes(clip.id) && clipDrag.multiSelectTimeDelta !== undefined) {
-    startTime = Math.max(0, clip.startTime + clipDrag.multiSelectTimeDelta);
-  } else if (dragPreviewPatch) {
-    startTime = Math.max(0, dragPreviewPatch.startTime);
-    visible = (dragPreviewPatch.trackId ?? clip.trackId) === trackId;
-  }
-
-  if (
-    clipDrag?.toolGesture === 'slip' &&
-    (isPrimaryDragClip || isLinkedSlipClip) &&
-    typeof clipDrag.sourceTimeDelta === 'number'
-  ) {
-    const visibleSourceDuration = Math.max(0.001, outPoint - inPoint);
-    const maxInPoint = Math.max(0, sourceDuration - visibleSourceDuration);
-    const nextInPoint = Math.max(0, Math.min(maxInPoint, inPoint + clipDrag.sourceTimeDelta));
-    inPoint = nextInPoint;
-    outPoint = nextInPoint + visibleSourceDuration;
-  }
-
-  if (clipTrim?.clipId === clip.id) {
-    trimEdge = clipTrim.edge;
-    const deltaTime = clipTrim.appliedDelta;
-    const sourceType = clip.source?.type;
-    const isInfiniteClip = isInfiniteTimelineSourceType(sourceType);
-    if (clipTrim.edge === 'left') {
-      const maxTrim = clipTrim.originalDuration - MIN_CLIP_DURATION;
-      const minTrim = isInfiniteClip
-        ? -clipTrim.originalStartTime
-        : -clipTrim.originalInPoint;
-      const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
-      startTime = clipTrim.originalStartTime + clampedDelta;
-      duration = clipTrim.originalDuration - clampedDelta;
-      inPoint = clipTrim.originalInPoint + clampedDelta;
-      outPoint = clipTrim.originalOutPoint;
-    } else {
-      const maxExtend = isInfiniteClip || canLoopExtendTimelineVectorClip(clip)
-        ? Number.MAX_SAFE_INTEGER
-        : sourceDuration - clipTrim.originalOutPoint;
-      const minTrim = -(clipTrim.originalDuration - MIN_CLIP_DURATION);
-      const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
-      startTime = clipTrim.originalStartTime;
-      duration = clipTrim.originalDuration + clampedDelta;
-      inPoint = clipTrim.originalInPoint;
-      outPoint = clipTrim.originalOutPoint + clampedDelta;
-    }
-  }
-
-  return {
-    startTime,
-    duration: Math.max(0.001, duration),
-    inPoint,
-    outPoint,
-    visible,
-    trimEdge,
-    originalStartTime: clip.startTime,
-    originalEndTime: clip.startTime + clip.duration,
-    sourceDuration,
-  };
-}
-
-function createWorkerDrawableClips(
-  clips: readonly TimelinePaintSourceClip[],
-  props: Pick<TimelineClipCanvasProps, 'clipDrag' | 'clipDragPreview' | 'clipTrim' | 'trackId'>,
-): readonly TimelinePaintSourceClip[] {
-  const drawableClips: TimelinePaintSourceClip[] = [];
-  for (const clip of clips) {
-    const geometry = resolveClipGeometry(clip, props);
-    if (!geometry.visible) continue;
-    drawableClips.push({
-      ...clip,
-      startTime: geometry.startTime,
-      duration: geometry.duration,
-      inPoint: geometry.inPoint,
-      outPoint: geometry.outPoint,
-    });
-  }
-  return drawableClips;
-}
-
 function getCanvasClipMediaFileId(clip: TimelinePaintSourceClip): string | null {
   return clip.source?.mediaFileId ?? clip.mediaFileId ?? null;
 }
@@ -196,7 +97,7 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [redrawNonce, bumpRedraw] = useReducer((n: number) => n + 1, 0);
   const {
-    clips,
+    clips: rawClips,
     trackId,
     height,
     timeToPixel,
@@ -211,21 +112,32 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     clipDragPreview,
     clipTrim,
   } = props;
+  const mediaFilesState = useMediaStore((state) => state.files);
+  const mediaFiles = useMemo(
+    () => (Array.isArray(mediaFilesState) ? mediaFilesState : []),
+    [mediaFilesState],
+  );
+  const sourceWaveformPyramidIds = useMemo(
+    () => buildSourceWaveformPyramidIdMap(mediaFiles),
+    [mediaFiles],
+  );
+  const clips = useMemo(
+    () => enrichClipsWithSourceWaveformRef(rawClips, sourceWaveformPyramidIds),
+    [rawClips, sourceWaveformPyramidIds],
+  );
   const geometryProps = useMemo(() => ({
     trackId,
     clipDrag,
     clipDragPreview,
     clipTrim,
   }), [clipDrag, clipDragPreview, clipTrim, trackId]);
-  const scrollBucket = Math.round(scrollX / 200);
-  const canvasOffsetX = Math.max(0, scrollBucket * 200 - CANVAS_RENDER_OVERSCAN_PX);
-  const cssWidth = Math.max(
-    1,
-    Math.min(
-      MAX_CANVAS_WIDTH_PX,
-      Math.ceil(viewportWidth + CANVAS_RENDER_OVERSCAN_PX * 2),
-    ),
-  );
+  const { cssWidth, canvasOffsetX, scrollBucket } = useTimelineClipCanvasViewport({
+    canvasRef,
+    scrollX,
+    viewportWidth,
+    overscanPx: CANVAS_RENDER_OVERSCAN_PX,
+    maxCanvasWidthPx: MAX_CANVAS_WIDTH_PX,
+  });
   const visibleAudioArtifactClipIds = useMemo(
     () => collectTimelineClipCanvasVisibleAudioArtifactClipIds({
       clips,
@@ -251,11 +163,6 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     requestRedraw: bumpRedraw,
   });
 
-  const mediaFilesState = useMediaStore((state) => state.files);
-  const mediaFiles = useMemo(
-    () => (Array.isArray(mediaFilesState) ? mediaFilesState : []),
-    [mediaFilesState],
-  );
   const mediaFileStatusById = useMemo(() => {
     const map = new Map<string, TimelineClipCanvasMediaStatus>();
     for (const file of mediaFiles) {

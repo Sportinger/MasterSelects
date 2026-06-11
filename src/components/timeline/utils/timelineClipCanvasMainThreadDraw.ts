@@ -310,7 +310,11 @@ export function drawTimelineClipCanvasMainThread(
       ctx.rect(labelLeft, top, labelW, h);
       ctx.clip();
       ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-      ctx.fillText(clip.name, labelLeft + 1, mediaFileId ? top + h - 8 : top + h / 2);
+      // MIDI clips show their name top-left (the lane body is the piano-roll
+      // preview); media clips put it at the bottom over the thumbnail/waveform,
+      // everything else centers it.
+      const labelY = clip.trackType === 'midi' ? top + 9 : mediaFileId ? top + h - 8 : top + h / 2;
+      ctx.fillText(clip.name, labelLeft + 1, labelY);
       ctx.restore();
     }
   }

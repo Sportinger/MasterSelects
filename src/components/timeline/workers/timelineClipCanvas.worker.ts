@@ -528,6 +528,10 @@ function draw(msg: DrawMessage): DrawnMessage {
   ctx.clearRect(0, 0, cssWidth, height);
 
   const radius = Math.min(4, height / 4);
+  // Clip body color comes from `trackColor` (resolved by getTimelineTrackColor),
+  // NOT from `.timeline-clip.*` CSS. Per-type clip colors (e.g. MIDI's identity
+  // blue) live in getTimelineTrackColor — do not reintroduce them as CSS, it will
+  // not apply here. See docs/Features/Timeline.md "Track and Clip Colors".
   const fill = withAlpha(trackColor, 0.55);
   const fillSelected = withAlpha(trackColor, 0.85);
   const border = withAlpha(trackColor, 0.9);
@@ -612,7 +616,10 @@ function draw(msg: DrawMessage): DrawnMessage {
       ctx.rect(x + 5, top, w - 10, h);
       ctx.clip();
       ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-      ctx.fillText(label, x + 6, top + h / 2);
+      // MIDI clips show their name top-left (the lane body is the piano-roll
+      // preview); other clips keep it centered.
+      const labelY = workerClipPaintFacet(clip, 'midi-preview') ? top + 9 : top + h / 2;
+      ctx.fillText(label, x + 6, labelY);
       ctx.restore();
     }
   }

@@ -75,6 +75,10 @@ export class WebGPUContext {
   }
 
   /** Race a promise against a timeout */
+  // NOTE: the timer is not cleared when `promise` wins the race, so the warning
+  // below can fire even after a successful adapter/device request. The log line
+  // is therefore not proof of failure — `engineReady`/`isInitialized` is the
+  // source of truth. See docs/Features/Linux-Mesa-GPU.md (mode 5).
   private withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
     return Promise.race([
       promise,

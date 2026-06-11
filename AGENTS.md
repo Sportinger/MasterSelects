@@ -284,6 +284,30 @@ video.onload = () => {
   use `persist`; `mediaStore` uses a slice-creator signature that differs from
   Timeline.
 
+### Linux / Mesa GPU canvas constraints (read before any canvas/GPU change)
+
+We develop on Windows; many users run open-source Mesa (RADV/radeonsi/NVK/
+llvmpipe), where GPU-accelerated `<canvas>`, worker `OffscreenCanvas`, and
+WebGPU paths fail **silently** — no throw, no null, diagnostics report success,
+the pixels just never composite. This is the top recurring "works here, blank on
+Linux" regression class. New/refactored canvas or GPU code MUST design for it,
+not patch it after shipping. Rules:
+
+- Size scrolling canvases to the **visible viewport + overscan** and slide with
+  scroll; never allocate the full content width/height (blanks at zoom on Mesa).
+- Clamp the backing store (`width*dpr`, `height*dpr`) well below the hardware
+  max (use 8192; `MAX_TEXTURE_SIZE` is not a safe target).
+- Treat worker `OffscreenCanvas` as an optimization with a real, exercised
+  main-thread fallback; on Linux prefer a software raster
+  (`getContext('2d', { willReadFrequently: true })`).
+- Route platform decisions through `prefersSoftwareTimelineCanvas()`
+  (`src/components/timeline/utils/timelineCanvasPlatform.ts`); don't scatter
+  `navigator.platform` checks.
+- Never trust silent success — completed draw calls or `getImageData` pixels do
+  not prove the canvas is on screen.
+
+Full reference and failure-mode table: `docs/Features/Linux-Mesa-GPU.md`.
+
 ---
 
 ## 10. Debugging

@@ -4,6 +4,10 @@
 
 WebGPU rendering, texture management, preview output, export capture, and GPU-backed analysis.
 
+> **Linux/Mesa:** GPU-accelerated canvas, worker `OffscreenCanvas`, and WebGPU
+> paths fail silently on open-source Mesa drivers. Before changing any
+> canvas/GPU code, read [Linux / Mesa GPU](./Linux-Mesa-GPU.md).
+
 ---
 
 ## Overview

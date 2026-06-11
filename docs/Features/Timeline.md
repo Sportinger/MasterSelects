@@ -38,6 +38,23 @@ getTrackChildren()  // Query child tracks
 - Curve editors clamp to 80-600 px.
 - Expanded track height depends on the selected clip, visible property rows, and open curve editors.
 
+### Track and Clip Colors
+- A single resolver, `getTimelineTrackColor()` (`src/components/timeline/trackColor.ts`),
+  is the source of truth for a track's color. Precedence: a user-picked
+  **label color** wins; otherwise a **per-type default** applies; otherwise the
+  generic `#303030`.
+- **MIDI identity:** MIDI tracks with no custom label color resolve to
+  `MIDI_TRACK_COLOR` (`#3a4050`), which must stay in sync with the `--midi-color`
+  token in `src/styles/tokens.css`. The token also drives the MIDI **track-header**
+  tint (`TimelineHeader` `isMidiDefaultTint` + `.track-header.midi.midi-default-tint`
+  in `TimelineTracks.css`). Keep header and clip in sync from these two anchors.
+- **Pitfall (issue #259 / #228 fallout):** clip **bodies** are painted by the
+  **canvas** renderer (`TimelineClipCanvas`) using the color from
+  `getTimelineTrackColor()`. They are **not** styled by `.timeline-clip.*` CSS
+  anymore — that DOM path is dead for clip bodies. So any per-type clip color
+  (like MIDI's) must live in `getTimelineTrackColor()`, not in CSS, or it will be
+  silently lost the next time clip rendering is touched.
+
 ---
 
 ## Clip Types
@@ -63,6 +80,7 @@ getTrackChildren()  // Query child tracks
 - Simple detailed-waveform updates for those non-destructive region edits derive from the source waveform pyramid when possible, and region gain/silence preview is applied directly to the visible waveform columns while dragging. The lane keeps high-resolution detail without waiting for a full processed-audio render, and derivable processed-waveform refreshes run as background cache updates without showing the red waveform-generation border or progress bar. Scrub and playback preview also follow simple region gain/silence changes instead of always using the raw source level.
 - Audio edit-stack chips appear on edited audio clips for quick state, while the selected clip Properties panel exposes an `Audio Edits` tab for inspection, bypass, removal, clear, bake, unbake, and bake history.
 - Bake renders active region edits into a new WAV media source in the Media Panel `Baked Audio` folder, stores the project-local file under `Raw/Baked Audio/`, and resets the clip edit stack. Unbake restores the latest reversible bake to the original source media and the pre-bake region edit stack when that source media is still present in the project.
+- **Waveform pyramid resolution:** the displayed waveform comes from a pyramid that is content-addressed by the **source** (one pyramid per media file, shared by all its clips). The reference is stored per clip (`audioState.sourceAnalysisRefs.waveformPyramidId`) and is only back-filled onto the clip that triggered analysis (`clipWaveformAnalysisActions.ts`). A clip created/rebuilt before the source finished analysing can therefore end up with an empty ref and fall back to a **single-channel (mono)** render while its siblings render full stereo. `TimelineClipCanvas` guards against this by back-filling a missing ref at render time from the media file or any sibling clip of the same source (`enrichClipsWithSourceWaveformRef`). Per-clip refs are a cache, not the source of truth — never assume a clip without one has no waveform.
 
 ### Text
 - Created through the timeline text slice.
