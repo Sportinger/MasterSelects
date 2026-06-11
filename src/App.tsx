@@ -55,6 +55,9 @@ const ParallelDecodeTest = lazy(() =>
 const FlexEqVisualQa = lazy(() =>
   import('./test/FlexEqVisualQa').then(m => ({ default: m.FlexEqVisualQa }))
 );
+const KeyframeCurveVisualQa = lazy(() =>
+  import('./test/KeyframeCurveVisualQa').then(m => ({ default: m.KeyframeCurveVisualQa }))
+);
 
 function App() {
   // Check for test mode via URL param
@@ -432,6 +435,14 @@ function App() {
     return (
       <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
         <FlexEqVisualQa />
+      </Suspense>
+    );
+  }
+
+  if (testMode === 'keyframe-curve') {
+    return (
+      <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
+        <KeyframeCurveVisualQa />
       </Suspense>
     );
   }

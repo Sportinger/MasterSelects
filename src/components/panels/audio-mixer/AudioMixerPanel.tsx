@@ -2,6 +2,7 @@ import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, us
 import './AudioMixerPanel.css';
 import './wood-theme/wood-theme.css';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { AudioExportPipeline } from '../../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../../services/audio/AudioRecordingService';
 import { collectAudioEqInstances, type AudioEqInstanceDescriptor } from '../../../engine/audio';
@@ -12,10 +13,6 @@ import { MasterMixerStrip } from './MasterMixerStrip';
 import { MixerFxWindow } from './MixerFxWindow';
 import { MixerTrackColorMenu } from './MixerTrackColorMenu';
 import { TrackMixerStrip } from './TrackMixerStrip';
-
-function readWoodMixerEnabled(): boolean {
-  return typeof window !== 'undefined' && window.localStorage.getItem('msWoodMixer') === '1';
-}
 
 export function AudioMixerPanel() {
   const tracks = useTimelineStore(state => state.tracks);
@@ -32,7 +29,7 @@ export function AudioMixerPanel() {
   const [focusedStripId, setFocusedStripId] = useState<string>(MASTER_FOCUS_ID);
   const [fxWindowTarget, setFxWindowTarget] = useState<FxWindowTarget | null>(null);
   const [trackColorMenuTarget, setTrackColorMenuTarget] = useState<TrackColorMenuTarget | null>(null);
-  const [woodMixerEnabled] = useState(readWoodMixerEnabled);
+  const woodMixerEnabled = useSettingsStore(state => state.audioMixerWoodThemeEnabled);
 
   useEffect(() => audioRecordingService.subscribe(setRecordingState), []);
 

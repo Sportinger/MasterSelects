@@ -23,6 +23,7 @@
     "test:unit": "vitest run tests/unit",
     "test:security": "vitest run tests/security/ tests/unit/aiToolPolicy.test.ts tests/unit/logRedaction.test.ts tests/unit/redact.test.ts --reporter=verbose",
     "fixtures:stress-test-media": "node scripts/prepare-stress-test-media.mjs",
+    "docs:screenshots": "node scripts/capture-feature-doc-screenshots.mjs",
     "stress-test:bridge-fast": "node scripts/run-stress-test-bridge-fast.mjs",
     "timeline:canvas:verify": "node scripts/run-timeline-canvas-verification.mjs",
     "swarm:status": "node scripts/swarm-status.mjs once",

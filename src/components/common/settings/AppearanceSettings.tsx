@@ -23,6 +23,8 @@ export function AppearanceSettings() {
   const customBrightness = useSettingsStore((s) => s.customBrightness);
   const setCustomHue = useSettingsStore((s) => s.setCustomHue);
   const setCustomBrightness = useSettingsStore((s) => s.setCustomBrightness);
+  const audioMixerWoodThemeEnabled = useSettingsStore((s) => s.audioMixerWoodThemeEnabled);
+  const setAudioMixerWoodThemeEnabled = useSettingsStore((s) => s.setAudioMixerWoodThemeEnabled);
 
   return (
     <div className="settings-category-content">
@@ -124,6 +126,23 @@ export function AppearanceSettings() {
           </div>
         </div>
       )}
+
+      <div className="settings-group">
+        <div className="settings-group-title">Audio Mixer</div>
+
+        <label className="settings-row">
+          <span className="settings-label">Wooden mixer theme</span>
+          <input
+            type="checkbox"
+            checked={audioMixerWoodThemeEnabled}
+            onChange={(event) => setAudioMixerWoodThemeEnabled(event.target.checked)}
+            className="settings-checkbox"
+          />
+        </label>
+        <p className="settings-hint">
+          Uses the wood, leather, and metal skin for the docked Audio Mixer.
+        </p>
+      </div>
     </div>
   );
 }

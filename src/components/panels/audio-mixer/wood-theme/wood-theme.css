@@ -1,5 +1,5 @@
-/* Wood theme for the audio mixer — pure reskin over the existing markup.
-   Enable with: localStorage.setItem('msWoodMixer', '1') + reopen the mixer panel.
+/* Wood theme for the audio mixer: pure reskin over the existing markup.
+   Toggle from Preferences > Appearance > Wooden mixer theme.
    Assets live in this folder; dynamic parts (meter, fader, values) keep their
    existing DOM and behaviour. */
 @layer features {

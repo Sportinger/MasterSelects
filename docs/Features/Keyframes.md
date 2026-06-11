@@ -178,6 +178,8 @@ When recording is enabled:
 
 ### Curve Editor
 
+![Bezier curve editor with selected keyframe handles](./assets/keyframes/bezier-curve-editor.png)
+
 - Double-click a property row to open the curve editor.
 - Only one curve editor can be open at a time.
 - The curve editor renders a value axis that auto-scales to the current keyframes.
@@ -188,6 +190,12 @@ When recording is enabled:
 - Right-clicking a handle resets it to the default 1/3-distance handle for that segment.
 - Vector animation state keyframes show state labels on the value axis and draw stepped segments instead of Bezier curves.
 - Mask path rows expose timing and easing in the timeline; their value is a whole shape snapshot rather than a numeric scalar.
+
+Regenerate the documentation image with:
+
+```powershell
+npm run docs:screenshots -- --id=keyframes-bezier-curve-editor
+```
 
 ### Delete and Copy/Paste
 
