@@ -81,40 +81,54 @@ export function createTimelineClipCanvasWorkerWaveformResource(
   const naturalDuration = Math.max(0.001, pyramid?.duration ?? clip.source?.naturalDuration ?? clip.outPoint ?? clip.duration);
   const inPoint = Math.max(0, Math.min(naturalDuration, clip.inPoint ?? 0));
   const outPoint = Math.max(inPoint + 0.001, Math.min(naturalDuration, clip.outPoint ?? inPoint + clip.duration));
-  const channelIndex = resolveTimelineClipCanvasWaveformChannelIndexes(pyramid, clip.waveformChannels, height)[0] ?? 0;
-  const lod = buildWaveformLod({
-    waveform: clip.waveform ?? [],
-    waveformChannels: clip.waveformChannels,
-    pyramid,
-    width,
-    inPoint,
-    outPoint,
-    naturalDuration,
-    pixelsPerSecond: Math.max(1, timeToPixel(1) - timeToPixel(0)),
-    channelIndex,
-  });
-  if (!lod || lod.columns.length === 0) return undefined;
-
   const workerMode = mode === 'compact' ? 'compact' : 'detailed';
-  const smoothed = smoothWaveformColumns(lod.columns, lod.source === 'pyramid' ? 1 : 2, 0.45);
-  const normalized = normalizeWaveformColumnsForDisplay(smoothed, {
-    targetPeak: workerMode === 'compact' ? 0.52 : 0.66,
-    minReferencePeak: 0.032,
-    maxGain: 16,
-    referencePeak: resolveWaveformDisplayReferencePeak(smoothed, { minReferencePeak: 0.032 }),
-    perceptualScale: workerMode !== 'compact',
-    noiseFloorDb: -30,
-  });
-  if (normalized.length === 0) return undefined;
-
+  const pixelsPerSecond = Math.max(1, timeToPixel(1) - timeToPixel(0));
+  const channelIndexes = resolveTimelineClipCanvasWaveformChannelIndexes(pyramid, clip.waveformChannels, height);
+  const channels: number[][] = [];
+  let columnCount = 0;
   const columns: number[] = [];
-  normalized.forEach((column) => {
-    columns.push(column.min, column.max, column.rms, column.peak);
+
+  channelIndexes.forEach((channelIndex) => {
+    const lod = buildWaveformLod({
+      waveform: clip.waveform ?? [],
+      waveformChannels: clip.waveformChannels,
+      pyramid,
+      width,
+      inPoint,
+      outPoint,
+      naturalDuration,
+      pixelsPerSecond,
+      channelIndex,
+    });
+    if (!lod || lod.columns.length === 0) return;
+
+    const smoothed = smoothWaveformColumns(lod.columns, lod.source === 'pyramid' ? 1 : 2, 0.45);
+    const normalized = normalizeWaveformColumnsForDisplay(smoothed, {
+      targetPeak: workerMode === 'compact' ? 0.52 : 0.66,
+      minReferencePeak: 0.032,
+      maxGain: 16,
+      referencePeak: resolveWaveformDisplayReferencePeak(smoothed, { minReferencePeak: 0.032 }),
+      perceptualScale: workerMode !== 'compact',
+      noiseFloorDb: -30,
+    });
+    if (normalized.length === 0) return;
+    if (columnCount > 0 && normalized.length !== columnCount) return;
+
+    columnCount = normalized.length;
+    const channelColumns: number[] = [];
+    normalized.forEach((column) => {
+      channelColumns.push(column.min, column.max, column.rms, column.peak);
+    });
+    channels.push(channelColumns);
   });
+  if (channels.length === 0 || columnCount === 0) return undefined;
+
+  channels.forEach((channelColumns) => columns.push(...channelColumns));
   return {
     kind: 'waveform',
     columns,
-    columnCount: normalized.length,
+    columnCount,
+    channelCount: channels.length,
     mode: workerMode,
   };
 }

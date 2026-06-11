@@ -29,7 +29,7 @@ import { drawWorkerPassiveDecorations } from './timelineClipCanvasWorkerPassiveP
 import { estimateWorkerPayloadResourceBytes } from './timelineClipCanvasWorkerPayloadMetrics';
 import {
   drawWorkerWaveformCenterLine,
-  drawWorkerWaveformColumns,
+  drawWorkerWaveformResource,
 } from './timelineClipCanvasWorkerWaveformPainter';
 
 const LOD_BAR_PX = TIMELINE_CLIP_CANVAS_LOD_BAR_PX;
@@ -201,7 +201,7 @@ function drawClipWaveform(
   context.fillRect(x, top, w, h);
   context.translate(x, top);
   if (waveform) {
-    drawWorkerWaveformColumns(context, waveform.columns, waveform.columnCount, w, h, waveform.mode);
+    drawWorkerWaveformResource(context, waveform, w, h);
   } else {
     drawWorkerWaveformCenterLine(context, w, h, 0.18);
   }
@@ -313,7 +313,7 @@ function drawWorkerCompositionMixdownWaveform(
   context.rect(x, waveformTop, width, waveformHeight);
   context.clip();
   context.translate(x, waveformTop);
-  drawWorkerWaveformColumns(context, waveform.columns, waveform.columnCount, width, waveformHeight, 'compact');
+  drawWorkerWaveformResource(context, waveform, width, waveformHeight);
   context.restore();
 }
 

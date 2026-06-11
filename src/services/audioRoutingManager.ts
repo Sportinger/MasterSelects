@@ -512,6 +512,12 @@ class AudioRoutingManager {
     const volume = settings?.volume ?? 1;
     const eqGains = settings?.eqGains ?? [];
     const processors = settings?.processors ?? [];
+    const masterRouteChanged =
+      !isMasterRouteEffectStateApplied(route, volume, eqGains) ||
+      processorSignature(processors) !== route.lastProcessorSignature;
+    if (masterRouteChanged) {
+      this.masterMeterMemo = null;
+    }
 
     applyMasterRouteEffectState(route, volume, eqGains);
 

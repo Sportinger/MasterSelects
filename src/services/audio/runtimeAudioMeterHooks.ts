@@ -46,35 +46,10 @@ function dynamicsKeyOf(options: RuntimeAudioMeterSubscriptionOptions | undefined
 
 type RuntimeAudioMeterFrameFlush = () => void;
 
-const pendingFrameFlushes = new Set<RuntimeAudioMeterFrameFlush>();
-let pendingMeterFrame: number | null = null;
 const activeFramePollers = new Set<RuntimeAudioMeterFrameFlush>();
 let framePollTimer: number | null = null;
 let framePollRaf: number | null = null;
 const RUNTIME_AUDIO_METER_VISUAL_INTERVAL_MS = 50;
-
-function flushRuntimeAudioMeterFrames(): void {
-  pendingMeterFrame = null;
-  const flushes = Array.from(pendingFrameFlushes);
-  pendingFrameFlushes.clear();
-  for (const flush of flushes) {
-    flush();
-  }
-}
-
-function scheduleRuntimeAudioMeterFrame(flush: RuntimeAudioMeterFrameFlush): void {
-  pendingFrameFlushes.add(flush);
-  if (pendingMeterFrame !== null) return;
-  pendingMeterFrame = window.requestAnimationFrame(flushRuntimeAudioMeterFrames);
-}
-
-function cancelRuntimeAudioMeterFrame(flush: RuntimeAudioMeterFrameFlush): void {
-  pendingFrameFlushes.delete(flush);
-  if (pendingFrameFlushes.size === 0 && pendingMeterFrame !== null) {
-    window.cancelAnimationFrame(pendingMeterFrame);
-    pendingMeterFrame = null;
-  }
-}
 
 function runRuntimeAudioMeterFramePollers(): void {
   framePollRaf = null;

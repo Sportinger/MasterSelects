@@ -125,7 +125,7 @@ function MasterMixerStripComponent({
           label="Master level"
           className="audio-mixer-meter"
           orientation="vertical"
-          display="mono"
+          display="stereo"
         />
         <MixerMeterScale />
       </div>

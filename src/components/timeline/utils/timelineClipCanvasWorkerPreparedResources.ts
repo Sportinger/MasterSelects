@@ -32,6 +32,7 @@ export interface TimelineClipCanvasWorkerPreparedWaveformResource {
   kind: 'waveform';
   columns: readonly number[] | Float32Array;
   columnCount: number;
+  channelCount?: number;
   mode: 'compact' | 'detailed';
 }
 
@@ -73,6 +74,7 @@ export function clonePreparedWaveformResource(
       ? new Float32Array(waveform.columns)
       : Float32Array.from(waveform.columns),
     columnCount: waveform.columnCount,
+    channelCount: waveform.channelCount,
     mode: waveform.mode,
   };
 }

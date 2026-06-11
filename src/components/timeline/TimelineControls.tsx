@@ -29,6 +29,11 @@ import {
   toggleTimelineAudioRecording,
 } from '../../services/audio/timelineRecordingWorkflow';
 
+function formatMasterVolumeDb(value: number): string {
+  if (!Number.isFinite(value) || value <= -59.95) return '-inf';
+  return `${value.toFixed(1)} dB`;
+}
+
 function TimelineControlsComponent({
   variant = 'full',
   isPlaying,
@@ -315,7 +320,7 @@ function TimelineControlsComponent({
           }}
           title="Master audio bus"
         >
-          Master {masterAudio.volumeDb.toFixed(1)} dB
+          Master {formatMasterVolumeDb(masterAudio.volumeDb)}
         </button>
         <AudioLevelMeter streamScope={{ kind: 'master' }} streamFeatures={['level']} label="Master level" className="timeline-master-audio-meter" display="mono" />
         {masterDropdownOpen && (

@@ -4,9 +4,9 @@ import type { AudioMeterSnapshot } from '../../../types/audio';
 import { formatDbLong } from './audioMixerMath';
 import type { FxWindowTarget } from './audioMixerTypes';
 
-// Mixer strips render many meters at once. Keep the default strip path on the
-// cheap level analyser; detailed panels opt into stereo/phase when needed.
-export const MIXER_METER_VISUAL_FEATURES = ['level'] as const;
+// Mixer strips render many meters at once. Keep the hot strip path to level +
+// stereo only; detailed panels opt into phase/dynamics/spectrum when needed.
+export const MIXER_METER_VISUAL_FEATURES = ['level', 'stereo'] as const;
 export const MIXER_METER_READOUT_FEATURES = ['level'] as const;
 export const MIXER_METER_DYNAMICS_FEATURES = ['dynamics'] as const;
 

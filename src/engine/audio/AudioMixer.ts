@@ -16,6 +16,7 @@ import {
   dbToLinearGain,
   finiteNumber,
   hasNonDefaultAudioPan,
+  volumeDbToLinearGain,
 } from './audioMath';
 import { createBuffer } from './audioBufferFactory';
 
@@ -208,7 +209,7 @@ export class AudioMixer {
     source.buffer = buffer;
 
     const clipGain = clampLinearGain(track.clipVolume, 1);
-    const trackGain = dbToLinearGain(track.trackVolumeDb);
+    const trackGain = volumeDbToLinearGain(track.trackVolumeDb);
     const combinedGain = clipGain * trackGain;
     let outputNode: AudioNode = source;
 
@@ -352,7 +353,7 @@ export class AudioMixer {
     );
     const normalize = settings?.normalize ?? this.settings.normalize;
 
-    const masterGain = dbToLinearGain(masterVolumeDb);
+    const masterGain = volumeDbToLinearGain(masterVolumeDb);
     if (Math.abs(masterGain - 1) > 0.001) {
       this.applyLinearGain(buffer, masterGain);
     }

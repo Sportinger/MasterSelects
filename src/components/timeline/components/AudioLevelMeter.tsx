@@ -35,8 +35,8 @@ function clampUnit(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-const METER_ATTACK_MS = 55;
-const METER_DECAY_MS = 500;
+const METER_ATTACK_MS = 300;
+const METER_DECAY_MS = 1000;
 const METER_DECAY_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)';
 const METER_ATTACK_EASING = 'linear';
 

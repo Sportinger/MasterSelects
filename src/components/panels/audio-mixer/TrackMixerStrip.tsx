@@ -173,7 +173,7 @@ function TrackMixerStripComponent({
           label={`${track.name} level`}
           className="audio-mixer-meter"
           orientation="vertical"
-          display="mono"
+          display="stereo"
         />
         <MixerMeterScale />
       </div>

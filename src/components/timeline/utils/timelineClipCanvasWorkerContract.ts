@@ -48,6 +48,7 @@ export interface TimelineClipCanvasWorkerWaveformResource {
   kind: 'waveform';
   columns: Float32Array;
   columnCount: number;
+  channelCount?: number;
   mode: 'compact' | 'detailed';
 }
 

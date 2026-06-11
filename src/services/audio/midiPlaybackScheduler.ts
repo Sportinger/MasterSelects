@@ -32,6 +32,7 @@ import {
   getTrackAudioMuted,
   getTrackAudioSolo,
 } from './audioGraphRouteSettings';
+import { runtimeAudioMeterBus } from './runtimeAudioMeterBus';
 import { Logger } from '../logger';
 
 const log = Logger.create('MidiPlayback');
@@ -207,8 +208,21 @@ class MidiPlaybackScheduler {
   }
 
   private publishBusMeter(trackId: string): void {
-    const snapshot = audioRoutingManager.getNodeMeterSnapshot(trackId);
-    if (snapshot) useTimelineStore.getState().updateRuntimeAudioMeter(trackId, snapshot);
+    const trackScope = { kind: 'track' as const, trackId };
+    const masterScope = { kind: 'master' as const };
+    const snapshot = audioRoutingManager.getNodeMeterSnapshot(trackId, performance.now(), {
+      includeStereo: runtimeAudioMeterBus.hasDemand(trackScope, 'stereo'),
+      includePhase: runtimeAudioMeterBus.hasDemand(trackScope, 'phase'),
+      includeSpectrum: runtimeAudioMeterBus.hasDemand(trackScope, 'spectrum'),
+    });
+    if (!snapshot) return;
+
+    const masterSnapshot = audioRoutingManager.getMasterMeterSnapshot(snapshot.updatedAt, {
+      includeStereo: runtimeAudioMeterBus.hasDemand(masterScope, 'stereo'),
+      includePhase: runtimeAudioMeterBus.hasDemand(masterScope, 'phase'),
+      includeSpectrum: runtimeAudioMeterBus.hasDemand(masterScope, 'spectrum'),
+    });
+    useTimelineStore.getState().updateRuntimeAudioMeter(trackId, snapshot, masterSnapshot ?? undefined);
   }
 
   private disposeBus(trackId: string): void {

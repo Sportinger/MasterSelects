@@ -623,7 +623,7 @@
 
 .audio-mixer-fader-meter {
   display: grid;
-  grid-template-columns: 30px 18px 18px;
+  grid-template-columns: 30px 24px 18px;
   align-items: stretch;
   gap: 1px;
   min-height: 0;
@@ -712,9 +712,10 @@
 }
 
 .audio-mixer-meter.stereo {
+  width: 24px;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1px;
+  gap: 2px;
   padding: 2px;
 }
 
@@ -775,8 +776,26 @@
 }
 
 .audio-mixer-meter .audio-level-meter-peak-fill {
-  background: linear-gradient(0deg, rgba(49, 214, 129, 0.72), rgba(255, 208, 82, 0.78) 76%, rgba(255, 99, 84, 0.84));
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.2), transparent 46%, rgba(0, 0, 0, 0.18)),
+    linear-gradient(0deg, rgba(49, 214, 129, 0.72), rgba(255, 208, 82, 0.78) 76%, rgba(255, 99, 84, 0.84));
   transition: transform 65ms linear, opacity 120ms ease;
+}
+
+.audio-mixer-meter .audio-level-meter-peak-fill,
+.audio-mixer-meter .audio-level-meter-rms {
+  --audio-mixer-led-cell-size: 10px;
+  --audio-mixer-led-gap-size: 1px;
+  -webkit-mask-image: repeating-linear-gradient(
+    0deg,
+    transparent 0 var(--audio-mixer-led-gap-size),
+    #000 var(--audio-mixer-led-gap-size) var(--audio-mixer-led-cell-size)
+  );
+  mask-image: repeating-linear-gradient(
+    0deg,
+    transparent 0 var(--audio-mixer-led-gap-size),
+    #000 var(--audio-mixer-led-gap-size) var(--audio-mixer-led-cell-size)
+  );
 }
 
 .audio-mixer-meter.stereo .audio-level-meter-scale,
@@ -789,6 +808,8 @@
 
 .audio-mixer-meter.stereo .audio-level-meter-peak-fill,
 .audio-mixer-meter.stereo .audio-level-meter-rms {
+  --audio-mixer-led-cell-size: 8px;
+  --audio-mixer-led-gap-size: 1px;
   inset: auto 0 0 0;
   height: 100%;
   will-change: transform, opacity;
@@ -800,11 +821,13 @@
   background:
     linear-gradient(0deg, rgba(67, 205, 139, 0.26) 0 58%, rgba(255, 219, 92, 0.29) 69% 86%, rgba(255, 87, 72, 0.38) 88%),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.17) 0 1px, transparent 1px 8px);
-  opacity: 0.55;
+  opacity: 0.72;
 }
 
 .audio-mixer-meter.stereo .audio-level-meter-peak-fill {
-  background: linear-gradient(0deg, #32d982 0%, #78dd73 58%, #ffd052 76%, #ff6354 100%);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.24), transparent 46%, rgba(0, 0, 0, 0.2)),
+    linear-gradient(0deg, #32d982 0%, #78dd73 58%, #ffd052 76%, #ff6354 100%);
 }
 
 .audio-mixer-meter.stereo .audio-level-meter-rms {

@@ -157,8 +157,7 @@ export class RuntimeAudioMeterBus {
 
     const next = this.ageTrackMeters(snapshot.updatedAt, RUNTIME_AUDIO_METER_MAX_AGE_MS);
     next.set(trackId, snapshot);
-    const nextMaster = masterSnapshot
-      ?? aggregateAudioMeterSnapshots([...next.values()], snapshot.updatedAt);
+    const nextMaster = this.resolveMasterSnapshot(next, snapshot.updatedAt, masterSnapshot);
     this.commit(next, nextMaster);
   }
 
@@ -184,8 +183,7 @@ export class RuntimeAudioMeterBus {
     ) {
       return;
     }
-    const nextMaster = masterSnapshot
-      ?? aggregateAudioMeterSnapshots([...next.values()], updatedAt);
+    const nextMaster = this.resolveMasterSnapshot(next, updatedAt, masterSnapshot);
     this.commit(next, nextMaster);
   }
 
@@ -399,6 +397,18 @@ export class RuntimeAudioMeterBus {
       this.trackDemand.set(trackId, demand);
     }
     return demand;
+  }
+
+  private resolveMasterSnapshot(
+    tracks: Map<string, AudioMeterSnapshot>,
+    updatedAt: number,
+    masterSnapshot?: AudioMeterSnapshot,
+  ): AudioMeterSnapshot {
+    if (masterSnapshot) return masterSnapshot;
+    if (this.master && updatedAt - this.master.updatedAt <= RUNTIME_AUDIO_METER_MAX_AGE_MS) {
+      return this.master;
+    }
+    return aggregateAudioMeterSnapshots([...tracks.values()], updatedAt);
   }
 
   private commit(

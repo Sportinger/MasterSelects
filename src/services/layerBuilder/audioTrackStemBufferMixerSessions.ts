@@ -1,5 +1,10 @@
 import type { TimelineClip } from '../../types';
-import { calculateAudioMeterSnapshot } from '../audio/audioMetering';
+import type { AudioMeterChannelSnapshot, AudioMeterSnapshot } from '../../types/audio';
+import {
+  aggregateAudioMeterSnapshots,
+  audioMeterLinearToDb,
+  calculateAudioMeterSnapshot,
+} from '../audio/audioMetering';
 import { runtimeAudioMeterBus } from '../audio/runtimeAudioMeterBus';
 import { useTimelineStore } from '../../stores/timeline';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
@@ -25,7 +30,8 @@ type CreateStemBufferMixerSessionParams = {
 
 type StemBufferMixerMeterEntry = {
   trackId: string;
-  snapshot: ReturnType<typeof calculateAudioMeterSnapshot>;
+  snapshot: AudioMeterSnapshot;
+  masterSnapshot: AudioMeterSnapshot;
 };
 
 type StemBufferMixerPublishDebug = {
@@ -94,11 +100,11 @@ export function createStemBufferMixerSession(
   leftAnalyser.fftSize = analyser.fftSize;
   rightAnalyser.fftSize = analyser.fftSize;
   masterGain.gain.value = clampGain(masterVolume);
-  masterGain.connect(analyser);
-  masterGain.connect(stereoSplitter);
+  analyser.connect(masterGain);
+  analyser.connect(stereoSplitter);
   stereoSplitter.connect(leftAnalyser, 0);
   stereoSplitter.connect(rightAnalyser, 1);
-  analyser.connect(context.destination);
+  masterGain.connect(context.destination);
 
   const gains = new Map<string, GainNode>();
   const sources: AudioBufferSourceNode[] = [];
@@ -111,7 +117,7 @@ export function createStemBufferMixerSession(
     source.buffer = buffer;
     source.playbackRate.value = 1;
     source.connect(gain);
-    gain.connect(masterGain);
+    gain.connect(analyser);
     source.start(startAt, Math.min(startOffset, Math.max(0, buffer.duration - 0.02)));
     gains.set(layer.id, gain);
     sources.push(source);
@@ -150,6 +156,43 @@ export function createStemBufferMixerSession(
   activeDebugSessions.add(session);
   stemBufferMixerDebugState.starts += 1;
   return session;
+}
+
+function scaleMeterChannelForMaster(
+  channel: AudioMeterChannelSnapshot,
+  gain: number,
+): AudioMeterChannelSnapshot {
+  const peakLinear = channel.peakLinear * gain;
+  const rmsLinear = channel.rmsLinear * gain;
+  return {
+    peakLinear,
+    rmsLinear,
+    peakDb: audioMeterLinearToDb(peakLinear),
+    rmsDb: audioMeterLinearToDb(rmsLinear),
+  };
+}
+
+function scaleMeterSnapshotForMaster(
+  snapshot: AudioMeterSnapshot,
+  gain: number,
+): AudioMeterSnapshot {
+  const peakLinear = snapshot.peakLinear * gain;
+  const rmsLinear = snapshot.rmsLinear * gain;
+  const channels = snapshot.channels
+    ? {
+        left: scaleMeterChannelForMaster(snapshot.channels.left, gain),
+        right: scaleMeterChannelForMaster(snapshot.channels.right, gain),
+      }
+    : undefined;
+  return {
+    ...snapshot,
+    peakLinear,
+    rmsLinear,
+    peakDb: audioMeterLinearToDb(peakLinear),
+    rmsDb: audioMeterLinearToDb(rmsLinear),
+    clipping: peakLinear >= 0.999,
+    ...(channels ? { channels } : {}),
+  };
 }
 
 export function updateStemBufferMixerGains(
@@ -198,7 +241,11 @@ export function readStemBufferMixerMeter(
       }
     : undefined;
   const snapshot = calculateAudioMeterSnapshot(session.meterSamples, now, undefined, stereoSamples);
-  return { trackId: session.meterTrackId, snapshot };
+  return {
+    trackId: session.meterTrackId,
+    snapshot,
+    masterSnapshot: scaleMeterSnapshotForMaster(snapshot, clampGain(session.masterGain.gain.value)),
+  };
 }
 
 export function publishStemBufferMixerMeter(session: StemBufferMixerSession, force = false): void {
@@ -215,7 +262,7 @@ export function publishStemBufferMixerMeter(session: StemBufferMixerSession, for
       rmsLinear: entry.snapshot.rmsLinear,
     }],
   };
-  useTimelineStore.getState().updateRuntimeAudioMeter(entry.trackId, entry.snapshot);
+  useTimelineStore.getState().updateRuntimeAudioMeter(entry.trackId, entry.snapshot, entry.masterSnapshot);
 }
 
 export function publishStemBufferMixerMeters(sessions: Iterable<StemBufferMixerSession>): void {
@@ -238,7 +285,9 @@ export function publishStemBufferMixerMeters(sessions: Iterable<StemBufferMixerS
     })),
   };
   if (entries.length === 0) return;
-  useTimelineStore.getState().updateRuntimeAudioMeters(entries);
+  const masterSnapshot = aggregateAudioMeterSnapshots(entries.map(entry => entry.masterSnapshot), now);
+  const trackEntries = entries.map(({ trackId, snapshot }) => ({ trackId, snapshot }));
+  useTimelineStore.getState().updateRuntimeAudioMeters(trackEntries, masterSnapshot);
 }
 
 export function getStemBufferMixerDebugSnapshot() {

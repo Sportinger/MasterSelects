@@ -20,7 +20,7 @@ function createMeter(overrides: Partial<AudioMeterSnapshot> = {}): AudioMeterSna
 }
 
 describe('AudioLevelMeter', () => {
-  it('uses vertical transform fills for track header meters', () => {
+  it('uses vertical clip-path fills for track header meters', () => {
     const { container } = render(
       <AudioLevelMeter
         meter={createMeter({ phaseCorrelation: -0.25, stereoWidth: 0.6 })}
@@ -35,9 +35,11 @@ describe('AudioLevelMeter', () => {
     const phaseMarker = container.querySelector<HTMLElement>('.audio-level-meter-phase');
     const meter = container.querySelector<HTMLElement>('.audio-level-meter');
 
-    expect(peakFill?.style.transform).toBe('scaleY(0.9)');
+    expect(peakFill?.style.transform).toBe('none');
+    expect(peakFill?.style.clipPath).toBe('inset(9.999999999999998% 0 0 0)');
     expect(peakFill?.style.opacity).toBe('0.68');
-    expect(rmsFill?.style.transform).toBe('scaleY(0.8)');
+    expect(rmsFill?.style.transform).toBe('none');
+    expect(rmsFill?.style.clipPath).toBe('inset(19.999999999999996% 0 0 0)');
     expect(rmsFill?.style.opacity).toBe('0.9');
     expect(peakMarker?.style.bottom).toBe('90%');
     expect(peakMarker?.style.opacity).toBe('1');
@@ -55,9 +57,11 @@ describe('AudioLevelMeter', () => {
     const peakMarker = container.querySelector<HTMLElement>('.audio-level-meter-peak');
     const phaseMarker = container.querySelector<HTMLElement>('.audio-level-meter-phase');
 
-    expect(peakFill?.style.transform).toBe('scaleY(0)');
+    expect(peakFill?.style.transform).toBe('none');
+    expect(peakFill?.style.clipPath).toBe('inset(100% 0 0 0)');
     expect(peakFill?.style.opacity).toBe('0');
-    expect(rmsFill?.style.transform).toBe('scaleY(0)');
+    expect(rmsFill?.style.transform).toBe('none');
+    expect(rmsFill?.style.clipPath).toBe('inset(100% 0 0 0)');
     expect(rmsFill?.style.opacity).toBe('0');
     expect(peakMarker?.style.opacity).toBe('0');
     expect(phaseMarker?.style.opacity).toBe('0');
@@ -91,14 +95,16 @@ describe('AudioLevelMeter', () => {
 
     const meter = container.querySelector<HTMLElement>('.audio-level-meter.stereo.vertical');
     const channels = container.querySelectorAll<HTMLElement>('.audio-level-meter-stereo-channel');
+    const peakFills = container.querySelectorAll<HTMLElement>('.audio-level-meter-peak-fill');
+    const rmsFills = container.querySelectorAll<HTMLElement>('.audio-level-meter-rms');
     const phaseMarker = container.querySelector<HTMLElement>('.audio-level-meter-phase');
 
     expect(meter).not.toBeNull();
     expect(channels).toHaveLength(2);
-    expect(channels[0].style.getPropertyValue('--meter-peak-top')).toBe('0%');
-    expect(channels[0].style.getPropertyValue('--meter-rms-top')).toBe('100%');
-    expect(channels[1].style.getPropertyValue('--meter-peak-top')).toBe('100%');
-    expect(channels[1].style.getPropertyValue('--meter-rms-top')).toBe('100%');
+    expect(peakFills[0].style.clipPath).toBe('inset(0% 0 0 0)');
+    expect(rmsFills[0].style.clipPath).toBe('inset(100% 0 0 0)');
+    expect(peakFills[1].style.clipPath).toBe('inset(100% 0 0 0)');
+    expect(rmsFills[1].style.clipPath).toBe('inset(100% 0 0 0)');
     expect(meter?.title).toContain('L 0.0 dB');
     expect(meter?.title).toContain('R -60.0 dB');
     expect(phaseMarker).toBeNull();

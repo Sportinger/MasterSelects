@@ -1,5 +1,5 @@
 import { AUDIO_EQ_BAND_PARAMS } from '../../../engine/audio/AudioEffectRegistry';
-import { clampAudioPan, dbToLinearGain, finiteNumber } from '../../../engine/audio/audioMath';
+import { clampAudioPan, finiteNumber, volumeDbToLinearGain } from '../../../engine/audio/audioMath';
 import type { TimelineTrack } from '../../nodeGraph/clipGraphProjectionDomain';
 import { getRuntimeTrackVolumeDbOverride } from '../runtimeAudioParamOverrides';
 import type { AudioRouteEffectSettings } from './routeSettingsModel';
@@ -42,13 +42,13 @@ export function getTrackPan(track: TimelineTrack): number {
 }
 
 export function getTrackLinearVolume(track: TimelineTrack): number {
-  return dbToLinearGain(getTrackVolumeDb(track));
+  return volumeDbToLinearGain(getTrackVolumeDb(track));
 }
 
 export function getTrackSendReturnGain(track: TimelineTrack, trackVolume: number): number {
   return (track.audioState?.sends ?? []).reduce((total, send) => {
     if (send.enabled === false) return total;
-    const sendGain = dbToLinearGain(send.gainDb);
+    const sendGain = volumeDbToLinearGain(send.gainDb);
     const faderGain = send.preFader ? 1 : trackVolume;
     return total + sendGain * faderGain;
   }, 0);

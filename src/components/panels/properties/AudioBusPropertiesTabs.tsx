@@ -29,7 +29,7 @@ function getTrackAudioState(track: TimelineTrack): TrackAudioState {
 
 function formatDb(value: number): string {
   if (!Number.isFinite(value)) return '-inf';
-  return value <= -99 ? '-inf' : value.toFixed(1);
+  return value <= -59.95 ? '-inf' : value.toFixed(1);
 }
 
 function formatDbLong(value: number): string {
