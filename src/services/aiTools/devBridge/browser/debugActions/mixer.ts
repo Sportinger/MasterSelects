@@ -519,7 +519,8 @@ export async function measureMixerFaderInteraction(args: Record<string, unknown>
     const normalized = (next - min) / Math.max(1, max - min);
     const clientY = rect.top + (1 - Math.max(0, Math.min(1, normalized))) * rect.height;
     if (nativeOnly) {
-      const thumbY = (1 - Math.max(0, Math.min(1, normalized))) * rect.height - (faderThumbHeight / 2);
+      const thumbTravelPx = Math.max(0, rect.height - faderThumbHeight);
+      const thumbY = (1 - Math.max(0, Math.min(1, normalized))) * thumbTravelPx;
       fader.style.setProperty('--audio-mixer-fader-thumb-y', `${thumbY}px`);
       fader.setAttribute('data-value', String(next));
       fader.setAttribute('aria-valuenow', String(next));

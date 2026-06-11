@@ -11,6 +11,8 @@ type MixerVolumeFaderStyle = CSSProperties & {
   '--audio-mixer-fader-thumb-y'?: string;
 };
 
+const DEFAULT_THUMB_HEIGHT = 34;
+
 interface MixerVolumeFaderProps {
   value: number;
   min?: number;
@@ -52,7 +54,12 @@ function getPositionPercent(value: number, min: number, max: number): number {
 
 function getThumbTranslateY(value: number, min: number, max: number, height: number, thumbHeight: number): number {
   const normalized = getPositionPercent(value, min, max) / 100;
-  return (1 - normalized) * Math.max(1, height) - (thumbHeight / 2);
+  return (1 - normalized) * Math.max(0, Math.max(1, height) - thumbHeight);
+}
+
+function readThumbHeight(element: HTMLSpanElement | null, fallback: number): number {
+  const measured = element?.offsetHeight ?? 0;
+  return measured > 0 ? measured : fallback;
 }
 
 export function MixerVolumeFader({
@@ -71,7 +78,7 @@ export function MixerVolumeFader({
   const thumbRef = useRef<HTMLSpanElement>(null);
   const draggingRef = useRef(false);
   const dragRectRef = useRef<DOMRect | null>(null);
-  const thumbHeightRef = useRef(34);
+  const thumbHeightRef = useRef(DEFAULT_THUMB_HEIGHT);
   const style: MixerVolumeFaderStyle = {
     '--audio-mixer-fader-thumb-y': '0px',
   };
@@ -80,7 +87,8 @@ export function MixerVolumeFader({
     const root = rootRef.current;
     if (!root) return;
     const height = rectOverride?.height ?? dragRectRef.current?.height ?? root.clientHeight;
-    const thumbHeight = thumbHeightRef.current || thumbRef.current?.offsetHeight || 34;
+    const thumbHeight = readThumbHeight(thumbRef.current, thumbHeightRef.current || DEFAULT_THUMB_HEIGHT);
+    thumbHeightRef.current = thumbHeight;
     root.style.setProperty(
       '--audio-mixer-fader-thumb-y',
       `${getThumbTranslateY(nextValue, min, max, height, thumbHeight)}px`,
@@ -111,7 +119,7 @@ export function MixerVolumeFader({
     const target = event.currentTarget as HTMLDivElement;
     const rect = target.getBoundingClientRect();
     dragRectRef.current = rect;
-    thumbHeightRef.current = thumbRef.current?.offsetHeight ?? thumbHeightRef.current;
+    thumbHeightRef.current = readThumbHeight(thumbRef.current, thumbHeightRef.current);
     onBeginDrag();
     try {
       target.setPointerCapture(event.pointerId);

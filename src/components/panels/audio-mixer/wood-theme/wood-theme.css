@@ -261,20 +261,25 @@
 }
 
 /* fader cap -> photographed steel cap (image is upright, so no 90° rotation) */
-.audio-mixer-panel.wood .audio-mixer-strip-fader-thumb {
-  width: 52px;
-  height: 63px;
-  background:
-    url('./fadercap-steel.png') left 1px top 2px / 26px 49px no-repeat,
-    radial-gradient(ellipse 28px 30px at 26px 32px, rgba(0, 0, 0, 0.62) 32%, rgba(0, 0, 0, 0.34) 60%, transparent 100%);
-  transform: translate3d(-49%, var(--audio-mixer-fader-thumb-y, 0px), 0);
-  filter: none;
-}
-
-/* let the cap shadow fall over the meter next to it */
 .audio-mixer-panel.wood .audio-mixer-strip-fader {
+  --audio-mixer-fader-thumb-width: 34px;
+  --audio-mixer-fader-thumb-height: 64px;
   position: relative;
   z-index: 2;
+  overflow: visible;
+  contain: layout;
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip-fader-thumb {
+  width: var(--audio-mixer-fader-thumb-width);
+  height: var(--audio-mixer-fader-thumb-height);
+  background:
+    url('./fadercap-steel.png') center / 100% 100% no-repeat,
+    radial-gradient(ellipse 38px 56px at 50% 54%, rgba(0, 0, 0, 0.42) 34%, rgba(0, 0, 0, 0.2) 64%, transparent 100%);
+  transform: translate3d(-50%, var(--audio-mixer-fader-thumb-y, 0px), 0);
+  border-radius: 4px;
+  box-shadow: 10px 12px 16px rgba(0, 0, 0, 0.4);
+  filter: drop-shadow(6px 8px 10px rgba(0, 0, 0, 0.34));
 }
 
 /* base theme re-adds a drop-shadow on hover/focus — keep it off here too */
