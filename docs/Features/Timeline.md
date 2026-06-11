@@ -38,6 +38,23 @@ getTrackChildren()  // Query child tracks
 - Curve editors clamp to 80-600 px.
 - Expanded track height depends on the selected clip, visible property rows, and open curve editors.
 
+### Track and Clip Colors
+- A single resolver, `getTimelineTrackColor()` (`src/components/timeline/trackColor.ts`),
+  is the source of truth for a track's color. Precedence: a user-picked
+  **label color** wins; otherwise a **per-type default** applies; otherwise the
+  generic `#303030`.
+- **MIDI identity:** MIDI tracks with no custom label color resolve to
+  `MIDI_TRACK_COLOR` (`#3a4050`), which must stay in sync with the `--midi-color`
+  token in `src/styles/tokens.css`. The token also drives the MIDI **track-header**
+  tint (`TimelineHeader` `isMidiDefaultTint` + `.track-header.midi.midi-default-tint`
+  in `TimelineTracks.css`). Keep header and clip in sync from these two anchors.
+- **Pitfall (issue #259 / #228 fallout):** clip **bodies** are painted by the
+  **canvas** renderer (`TimelineClipCanvas`) using the color from
+  `getTimelineTrackColor()`. They are **not** styled by `.timeline-clip.*` CSS
+  anymore — that DOM path is dead for clip bodies. So any per-type clip color
+  (like MIDI's) must live in `getTimelineTrackColor()`, not in CSS, or it will be
+  silently lost the next time clip rendering is touched.
+
 ---
 
 ## Clip Types

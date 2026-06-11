@@ -137,7 +137,11 @@
 
   /* MIDI identity — shared blue-gray used by both MIDI clips and MIDI track
      headers so the two stay visually linked from a single source of truth.
-     The header tint is derived from this by darkening toward --bg-tertiary. */
+     The header tint is derived from this by darkening toward --bg-tertiary.
+     IMPORTANT: clip bodies are canvas-rendered and cannot read this CSS var, so
+     the same value is duplicated as MIDI_TRACK_COLOR in
+     src/components/timeline/trackColor.ts. Keep the two in sync. See
+     docs/Features/Timeline.md "Track and Clip Colors". */
   --midi-color: #3a4050;
 
   /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
