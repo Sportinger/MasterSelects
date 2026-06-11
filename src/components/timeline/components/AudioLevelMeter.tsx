@@ -48,7 +48,11 @@ function updateMeterTransition(
   const previousUnit = Number.parseFloat(element.dataset.meterUnit ?? '');
   const decaying = Number.isFinite(previousUnit) && unit < previousUnit;
   const mode = decaying ? 'decay' : 'attack';
-  if (element.dataset.meterTransitionMode !== mode) {
+  const propertyKey = properties.join(',');
+  if (
+    element.dataset.meterTransitionMode !== mode ||
+    element.dataset.meterTransitionProperties !== propertyKey
+  ) {
     const duration = decaying ? METER_DECAY_MS : METER_ATTACK_MS;
     const easing = decaying ? METER_DECAY_EASING : METER_ATTACK_EASING;
     const opacityDuration = decaying ? METER_DECAY_MS : 100;
@@ -57,8 +61,17 @@ function updateMeterTransition(
       `opacity ${opacityDuration}ms ease`,
     ].join(', ');
     element.dataset.meterTransitionMode = mode;
+    element.dataset.meterTransitionProperties = propertyKey;
   }
   element.dataset.meterUnit = String(unit);
+}
+
+function meterFillTransform(unit: number, orientation: 'horizontal' | 'vertical'): string {
+  return orientation === 'vertical' ? 'none' : `scaleX(${unit})`;
+}
+
+function meterFillClipPath(unit: number, orientation: 'horizontal' | 'vertical'): string | undefined {
+  return orientation === 'vertical' ? `inset(${(1 - unit) * 100}% 0 0 0)` : undefined;
 }
 
 function meterFillStyle(
@@ -68,7 +81,8 @@ function meterFillStyle(
   opacity: number,
 ): CSSProperties {
   return {
-    transform: orientation === 'vertical' ? `scaleY(${unit})` : `scaleX(${unit})`,
+    transform: meterFillTransform(unit, orientation),
+    clipPath: meterFillClipPath(unit, orientation),
     opacity: hasMeter && unit > 0 ? opacity : 0,
   };
 }
@@ -125,14 +139,14 @@ function StaticAudioLevelMeter({
   const rightRms = clampUnit(meter ? audioMeterDbToUnit(meter.channels?.right.rmsDb ?? meter.rmsDb) : 0);
   const phaseCorrelation = meter && Number.isFinite(meter.phaseCorrelation) ? meter.phaseCorrelation : undefined;
   const phaseUnit = phaseCorrelation !== undefined ? clampUnit((phaseCorrelation + 1) / 2) : 0.5;
-  const peakTransform = orientation === 'vertical' ? `scaleY(${peak})` : `scaleX(${peak})`;
-  const rmsTransform = orientation === 'vertical' ? `scaleY(${rms})` : `scaleX(${rms})`;
   const peakFillStyle = {
-    transform: peakTransform,
+    transform: meterFillTransform(peak, orientation),
+    clipPath: meterFillClipPath(peak, orientation),
     opacity: meter && peak > 0 ? 0.68 : 0,
   } as CSSProperties;
   const rmsStyle = {
-    transform: rmsTransform,
+    transform: meterFillTransform(rms, orientation),
+    clipPath: meterFillClipPath(rms, orientation),
     opacity: meter && rms > 0 ? 0.9 : 0,
   } as CSSProperties;
   const peakStyle = orientation === 'vertical'
@@ -222,15 +236,18 @@ function applyMonoMeterStyles(
   const phaseCorrelation = meter && Number.isFinite(meter.phaseCorrelation) ? meter.phaseCorrelation : undefined;
   const phaseUnit = phaseCorrelation !== undefined ? clampUnit((phaseCorrelation + 1) / 2) : 0.5;
   const vertical = orientation === 'vertical';
+  const fillTransitionProperties = vertical ? ['clip-path'] : ['transform'];
 
   if (peakFill) {
-    updateMeterTransition(peakFill, peak, ['transform']);
-    peakFill.style.transform = vertical ? `scaleY(${peak})` : `scaleX(${peak})`;
+    updateMeterTransition(peakFill, peak, fillTransitionProperties);
+    peakFill.style.transform = meterFillTransform(peak, orientation);
+    peakFill.style.clipPath = meterFillClipPath(peak, orientation) ?? '';
     peakFill.style.opacity = String(hasMeter && peak > 0 ? 0.68 : 0);
   }
   if (rms) {
-    updateMeterTransition(rms, rmsUnit, ['transform']);
-    rms.style.transform = vertical ? `scaleY(${rmsUnit})` : `scaleX(${rmsUnit})`;
+    updateMeterTransition(rms, rmsUnit, fillTransitionProperties);
+    rms.style.transform = meterFillTransform(rmsUnit, orientation);
+    rms.style.clipPath = meterFillClipPath(rmsUnit, orientation) ?? '';
     rms.style.opacity = String(hasMeter && rmsUnit > 0 ? 0.9 : 0);
   }
   if (peakMarker) {
@@ -271,14 +288,17 @@ function applyStereoChannelStyles(
   orientation: 'horizontal' | 'vertical',
 ): void {
   const vertical = orientation === 'vertical';
+  const fillTransitionProperties = vertical ? ['clip-path'] : ['transform'];
   if (elements.peakFill) {
-    updateMeterTransition(elements.peakFill, peakUnit, ['transform']);
-    elements.peakFill.style.transform = vertical ? `scaleY(${peakUnit})` : `scaleX(${peakUnit})`;
+    updateMeterTransition(elements.peakFill, peakUnit, fillTransitionProperties);
+    elements.peakFill.style.transform = meterFillTransform(peakUnit, orientation);
+    elements.peakFill.style.clipPath = meterFillClipPath(peakUnit, orientation) ?? '';
     elements.peakFill.style.opacity = String(hasMeter && peakUnit > 0 ? 0.68 : 0);
   }
   if (elements.rms) {
-    updateMeterTransition(elements.rms, rmsUnit, ['transform']);
-    elements.rms.style.transform = vertical ? `scaleY(${rmsUnit})` : `scaleX(${rmsUnit})`;
+    updateMeterTransition(elements.rms, rmsUnit, fillTransitionProperties);
+    elements.rms.style.transform = meterFillTransform(rmsUnit, orientation);
+    elements.rms.style.clipPath = meterFillClipPath(rmsUnit, orientation) ?? '';
     elements.rms.style.opacity = String(hasMeter && rmsUnit > 0 ? 0.52 : 0);
   }
   if (elements.peakMarker) {
