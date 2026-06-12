@@ -147,6 +147,8 @@
 .audio-mixer-panel.wood .audio-mixer-strip {
   /* keep the FX rack as small as possible; give the freed space to fader + meters */
   grid-template-rows: 8px 38px minmax(56px, 0.28fr) 22px 23px 23px 21px minmax(0, 2fr) 24px;
+  position: relative;
+  isolation: isolate;
   overflow: visible;
   contain: layout;
   border: 1px solid rgba(23, 12, 3, 0.48);
@@ -159,6 +161,42 @@
     inset 0 1px 0 rgba(255, 217, 163, 0.11),
     inset 1px 0 1px rgba(255, 213, 148, 0.04),
     inset -1px 0 2px rgba(0, 0, 0, 0.18);
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip::before {
+  --wood-strip-control-gap-height: 104px;
+  --wood-strip-rack-pocket-height: max(56px, calc((100% - var(--wood-strip-control-gap-height)) * 0.122807));
+  --wood-strip-fader-pocket-height: calc(100% - var(--wood-strip-control-gap-height) - var(--wood-strip-rack-pocket-height));
+  content: '';
+  position: absolute;
+  z-index: 0;
+  grid-row: 3 / 9;
+  grid-column: 1;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid #080401;
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(14, 8, 3, 0.42), rgba(14, 8, 3, 0.42)),
+    url('./dark-leather.png');
+  background-size: 100% 100%, auto 100%;
+  background-position: center, calc(var(--strip-leather-x, 0px) - 16px) center;
+  background-repeat: no-repeat, repeat-x;
+  box-shadow:
+    inset 0 4px 8px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(202, 160, 106, 0.14);
+  -webkit-mask:
+    linear-gradient(#000 0 0) top / 100% var(--wood-strip-rack-pocket-height) no-repeat,
+    linear-gradient(#000 0 0) bottom / 100% var(--wood-strip-fader-pocket-height) no-repeat;
+  mask:
+    linear-gradient(#000 0 0) top / 100% var(--wood-strip-rack-pocket-height) no-repeat,
+    linear-gradient(#000 0 0) bottom / 100% var(--wood-strip-fader-pocket-height) no-repeat;
+  pointer-events: none;
+}
+
+.audio-mixer-panel.wood .audio-mixer-strip > * {
+  position: relative;
+  z-index: 1;
 }
 
 .audio-mixer-panel.wood .audio-mixer-strip-grid .audio-mixer-strip + .audio-mixer-strip,
@@ -246,6 +284,8 @@
 /* fx rack + fader area -> routed pockets */
 .audio-mixer-panel.wood .audio-mixer-rack,
 .audio-mixer-panel.wood .audio-mixer-fader-meter {
+  position: relative;
+  background: transparent;
   border: 1px solid #080401;
   border-radius: 6px;
   box-shadow:
@@ -258,11 +298,10 @@
   gap: 3px;
   background:
     radial-gradient(circle at 22% 14%, rgba(255, 220, 170, 0.12), transparent 34%),
-    linear-gradient(rgba(15, 7, 3, 0.12), rgba(2, 1, 0, 0.30)),
-    url('./dark-leather.png');
-  background-size: 100% 100%, 100% 100%, 960px auto;
-  background-position: center, center, calc(var(--strip-leather-x, 0px) - 16px) 28%;
-  background-repeat: no-repeat, no-repeat, repeat-x;
+    linear-gradient(rgba(15, 7, 3, 0.08), rgba(2, 1, 0, 0.20));
+  background-size: 100% 100%, 100% 100%;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
 }
 
 .audio-mixer-panel.wood .audio-mixer-rack-slot {
@@ -275,11 +314,10 @@
   overflow: visible;
   contain: layout;
   background:
-    linear-gradient(rgba(14, 8, 3, 0.55), rgba(14, 8, 3, 0.55)),
-    url('./dark-leather.png');
-  background-size: 100% 100%, 960px auto;
-  background-position: center, calc(var(--strip-leather-x, 0px) - 16px) 62%;
-  background-repeat: no-repeat, repeat-x;
+    linear-gradient(rgba(14, 8, 3, 0.26), rgba(14, 8, 3, 0.26));
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .audio-mixer-panel.wood .audio-mixer-meter.stereo {
