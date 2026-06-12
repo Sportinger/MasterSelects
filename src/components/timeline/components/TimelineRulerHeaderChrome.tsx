@@ -1,4 +1,4 @@
-import type { ComponentProps, PointerEvent } from 'react';
+import type { ComponentProps, CSSProperties, PointerEvent } from 'react';
 import { TimelineControls } from '../TimelineControls';
 import { TimelineRuler } from '../TimelineRuler';
 import type { TimelineControlsProps } from '../types';
@@ -11,10 +11,11 @@ import {
 
 type TimelineRulerProps = ComponentProps<typeof TimelineRuler>;
 
+const RULER_LANE_HEIGHT_PX = 30;
+
 interface TimelineRulerHeaderChromeProps {
   cacheRanges: TimelineRulerProps['cacheRanges'];
   clipAnimationPhase: string;
-  displayMode: TimelineRulerProps['displayMode'];
   duration: number;
   formatTime: TimelineRulerProps['formatTime'];
   frameRate: TimelineRulerProps['frameRate'];
@@ -31,7 +32,6 @@ interface TimelineRulerHeaderChromeProps {
 export function TimelineRulerHeaderChrome({
   cacheRanges,
   clipAnimationPhase,
-  displayMode,
   duration,
   formatTime,
   frameRate,
@@ -45,16 +45,20 @@ export function TimelineRulerHeaderChrome({
   zoom,
 }: TimelineRulerHeaderChromeProps) {
   // Ruler lanes / tempo map are timeline view state; read them here so the ruler
-  // stays a pure props component (issue #257). displayMode is kept for type
-  // compatibility but ignored once lanes drive rendering (retired in Packet 5).
+  // stays a pure props component (issue #257).
   const rulerLanes = useTimelineStore(selectRulerLanes);
   const tempoMap = useTimelineStore(selectTempoMap);
   const activeRulerLaneId = useTimelineStore(selectActiveRulerLaneId);
-  void displayMode;
+
+  // Header + ruler heights track the lane count so the columns stay aligned.
+  const laneCount = Math.max(1, rulerLanes.length);
+  const rulerHeightStyle = {
+    '--timeline-ruler-height': `${laneCount * RULER_LANE_HEIGHT_PX}px`,
+  } as CSSProperties;
 
   return (
     <>
-      <div className="timeline-header-row">
+      <div className="timeline-header-row" style={rulerHeightStyle}>
         <div className="ruler-header">
           <div className="timeline-ruler-control-strip">
             <TimelineControls variant="main" {...timelineControlsProps} />

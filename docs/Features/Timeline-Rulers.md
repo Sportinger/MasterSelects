@@ -235,7 +235,21 @@ Original spec:
 - **Check:** focused render test — a 2-lane (time+bars) stack emits both tick
   sets; bars labels land at the right pixels for 4/4@60.
 
-### Packet 5 — Menu + layout
+### Packet 5 — Menu + layout — ✅ Implemented
+Done. `RulerLanesMenu.tsx` is a checklist dropdown (Time / Timecode / Frames /
+Bars+Beats) that toggles `addRulerLane` / `removeRulerLane`, reusing the View
+dropdown styling. Placed **immediately before the View dropdown** in the
+`showUtilityControls` section of `TimelineControls.tsx` (per user request);
+the timeline tool palette is intentionally untouched (reworked in a separate
+branch). Header/wrapper/container/ruler heights are driven by a
+`--timeline-ruler-height` CSS var (`lanes × 30px`) set on `.timeline-header-row`,
+so the header column and ruler grow together. The old global `displayMode`
+time/frames toggle is retired from the **ruler** plumbing (removed from
+`TimelineRulerProps`, the chrome, `useTimelineBodySurfaceProps` /
+`...Controller`, and `Timeline.tsx`); the toolbar's own time/frames readout is
+unaffected — it sources its mode via `timelineToolbarProps`, a separate path.
+
+Original spec:
 - Small checklist dropdown in the `.ruler-header` control strip
   (`components/TimelineRulerHeaderChrome.tsx`) toggling each format →
   `add/removeRulerLane`.
