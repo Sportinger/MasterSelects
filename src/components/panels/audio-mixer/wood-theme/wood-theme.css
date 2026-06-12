@@ -328,7 +328,7 @@
   filter: blur(9px) saturate(1.22);
   mix-blend-mode: screen;
   z-index: 1;
-  will-change: clip-path, opacity;
+  will-change: transform, opacity;
 }
 
 .audio-mixer-panel.wood .audio-mixer-meter.stereo .audio-level-meter-scale {
@@ -446,10 +446,21 @@
 .audio-mixer-panel.wood .audio-mixer-value-row span {
   border: 1px solid #0c0702;
   border-radius: 4px;
-  background: radial-gradient(ellipse at center, #0e0805 0%, #070402 100%);
-  color: #ffa42e;
-  text-shadow: 0 0 4px rgba(255, 164, 46, 0.7);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+  background:
+    radial-gradient(ellipse at center, rgba(54, 25, 2, 0.55) 0%, rgba(14, 8, 5, 0.92) 58%, #050301 100%),
+    #070402;
+  color: #ffad2f;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.05;
+  text-shadow:
+    0 0 3px rgba(255, 172, 48, 0.95),
+    0 0 8px rgba(255, 126, 0, 0.55),
+    0 1px 0 rgba(0, 0, 0, 0.95);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.86),
+    inset 0 0 7px rgba(255, 122, 0, 0.12),
+    0 0 6px rgba(255, 122, 0, 0.20);
 }
 
 /* pan row -> routed slot + brass knurled knob.

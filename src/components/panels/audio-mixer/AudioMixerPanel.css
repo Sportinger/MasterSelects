@@ -634,6 +634,24 @@
   contain: paint;
 }
 
+.audio-mixer-fader-meter.master {
+  grid-template-columns: minmax(34px, 1fr) 30px 20px;
+  gap: 3px;
+  padding-inline: 4px;
+}
+
+.audio-mixer-fader-meter.master .audio-mixer-strip-fader {
+  width: 100%;
+}
+
+.audio-mixer-fader-meter.master .audio-mixer-meter.stereo {
+  width: 30px;
+}
+
+.audio-mixer-fader-meter.master .audio-mixer-meter-scale-labels {
+  min-width: 20px;
+}
+
 .audio-mixer-strip-fader {
   --audio-mixer-fader-thumb-width: 52px;
   --audio-mixer-fader-thumb-height: 34px;

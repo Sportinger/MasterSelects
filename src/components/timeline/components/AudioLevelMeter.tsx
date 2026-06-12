@@ -297,7 +297,7 @@ function applyStereoChannelStyles(
     updateMeterTransition(elements.glowFill, peakUnit, ['transform']);
     elements.glowFill.style.transform = orientation === 'vertical' ? `scaleY(${peakUnit})` : `scaleX(${peakUnit})`;
     elements.glowFill.style.clipPath = '';
-    elements.glowFill.style.opacity = String(woodMixerBoost && hasMeter && peakUnit > 0 ? Math.min(0.34, 0.07 + peakUnit * 0.30) : 0);
+    elements.glowFill.style.opacity = String(woodMixerBoost && hasMeter && peakUnit > 0 ? 0.28 : 0);
   }
   if (elements.peakFill) {
     updateMeterTransition(elements.peakFill, peakUnit, fillTransitionProperties);
