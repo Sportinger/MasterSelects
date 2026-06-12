@@ -146,7 +146,7 @@
 
 .audio-mixer-panel.wood .audio-mixer-strip {
   /* keep the FX rack as small as possible; give the freed space to fader + meters */
-  grid-template-rows: 8px 38px minmax(48px, 0.28fr) 22px 23px 23px 21px minmax(0, 2fr) 24px;
+  grid-template-rows: 8px 38px minmax(56px, 0.28fr) 22px 23px 23px 21px minmax(0, 2fr) 24px;
   overflow: visible;
   contain: layout;
   border: 1px solid rgba(23, 12, 3, 0.48);
@@ -254,6 +254,8 @@
 }
 
 .audio-mixer-panel.wood .audio-mixer-rack {
+  grid-template-rows: minmax(22px, 1fr) 22px;
+  gap: 3px;
   background:
     radial-gradient(circle at 22% 14%, rgba(255, 220, 170, 0.12), transparent 34%),
     linear-gradient(rgba(15, 7, 3, 0.12), rgba(2, 1, 0, 0.30)),
@@ -261,6 +263,10 @@
   background-size: 100% 100%, 100% 100%, 960px auto;
   background-position: center, center, calc(var(--strip-leather-x, 0px) - 16px) 28%;
   background-repeat: no-repeat, no-repeat, repeat-x;
+}
+
+.audio-mixer-panel.wood .audio-mixer-rack-slot {
+  min-height: 22px;
 }
 
 /* the tall fader pocket stretches the leather a lot — flatten its blotches
