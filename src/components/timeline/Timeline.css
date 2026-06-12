@@ -593,6 +593,23 @@
   background: var(--bg-hover);
 }
 
+/* Multi-ruler infrastructure (issue #257): one stacked row per lane. The
+   container height grows with lane count in Packet 5; a single default lane
+   keeps the original 30px look. */
+.ruler-lane {
+  position: relative;
+  height: 30px;
+  width: 100%;
+}
+
+.ruler-lane + .ruler-lane {
+  border-top: 1px solid var(--border-color);
+}
+
+.ruler-lane.is-active {
+  background: color-mix(in srgb, var(--accent, var(--border-strong)) 7%, transparent);
+}
+
 .time-marker {
   position: absolute;
   top: 0;

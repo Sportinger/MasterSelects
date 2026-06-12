@@ -2,6 +2,12 @@ import type { ComponentProps, PointerEvent } from 'react';
 import { TimelineControls } from '../TimelineControls';
 import { TimelineRuler } from '../TimelineRuler';
 import type { TimelineControlsProps } from '../types';
+import { useTimelineStore } from '../../../stores/timeline';
+import {
+  selectActiveRulerLaneId,
+  selectRulerLanes,
+  selectTempoMap,
+} from '../../../stores/timeline/selectors';
 
 type TimelineRulerProps = ComponentProps<typeof TimelineRuler>;
 
@@ -38,6 +44,14 @@ export function TimelineRulerHeaderChrome({
   videoBakeRegions,
   zoom,
 }: TimelineRulerHeaderChromeProps) {
+  // Ruler lanes / tempo map are timeline view state; read them here so the ruler
+  // stays a pure props component (issue #257). displayMode is kept for type
+  // compatibility but ignored once lanes drive rendering (retired in Packet 5).
+  const rulerLanes = useTimelineStore(selectRulerLanes);
+  const tempoMap = useTimelineStore(selectTempoMap);
+  const activeRulerLaneId = useTimelineStore(selectActiveRulerLaneId);
+  void displayMode;
+
   return (
     <>
       <div className="timeline-header-row">
@@ -51,7 +65,9 @@ export function TimelineRulerHeaderChrome({
             duration={duration}
             zoom={zoom}
             frameRate={frameRate}
-            displayMode={displayMode}
+            lanes={rulerLanes}
+            tempoMap={tempoMap}
+            activeRulerLaneId={activeRulerLaneId}
             scrollX={scrollX}
             onRulerMouseDown={onRulerMouseDown}
             formatTime={formatTime}

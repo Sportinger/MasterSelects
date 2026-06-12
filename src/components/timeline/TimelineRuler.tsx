@@ -1,14 +1,23 @@
-// TimelineRuler component - Time ruler at the top of the timeline
+// TimelineRuler component - stacked ruler lanes at the top of the timeline.
+//
+// Renders one DOM row per ruler lane (issue #257). Each row keeps the Mesa-safe
+// pattern: plain <div> ticks for the visible window only (viewport + overscan,
+// dpr-aligned), never the full content width. Linear lanes (time / timecode /
+// frames) use createLinearLaneTicks; the bars lane projects time through the
+// TempoMap via createBarsLaneTicks. No frame<->time crossfade — each lane's
+// format is fixed and only tick density adapts to zoom.
 
-import React, { memo, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useLayoutEffect, useRef, useState } from 'react';
+import type { RulerLane } from '../../types';
 import type { TimelineRulerProps } from './types';
 import {
   alignTimelineGridPixel,
-  createTimelineGridPlan,
-  formatTimelineFrameNumber,
-  formatTimelineTimecode,
+  createBarsLaneTicks,
+  createLinearLaneTicks,
   getTimelineDevicePixelRatio,
+  type RulerTick,
 } from './utils/timelineGrid';
+import { createDefaultRulerLanes, createDefaultTempoMap } from '../../timeline/tempo/rulerDefaults';
 
 const RULER_VIEWPORT_FALLBACK_PX = 1600;
 const RULER_VIEWPORT_MIN_PX = 1600;
@@ -24,7 +33,9 @@ function TimelineRulerComponent({
   duration,
   zoom,
   frameRate,
-  displayMode = 'time',
+  lanes,
+  tempoMap,
+  activeRulerLaneId = null,
   scrollX,
   onRulerMouseDown,
   formatTime,
@@ -72,13 +83,13 @@ function TimelineRulerComponent({
   const alignedScrollX = alignTimelineGridPixel(scrollX, devicePixelRatio);
 
   const width = timeToPixel(duration);
-  const markers: React.ReactElement[] = [];
   const viewportWidth = measuredViewportWidth;
   const visibleStartTime = Math.max(0, (scrollX - RULER_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001));
   const visibleEndTime = Math.min(
     duration,
     (scrollX + viewportWidth + RULER_RENDER_OVERSCAN_PX) / Math.max(zoom, 0.001),
   );
+
   const visibleCacheRanges = cacheRanges
     .map((range) => {
       const start = Math.max(0, Math.min(duration, range.start));
@@ -113,59 +124,29 @@ function TimelineRulerComponent({
     })
     .filter((region) => region.end > region.start && region.end >= visibleStartTime && region.start <= visibleEndTime);
 
-  const gridPlan = createTimelineGridPlan({ zoom, frameRate });
-  const showFrameLabels = displayMode === 'frames';
-  const timeInterval = gridPlan.timeIntervalSeconds;
-  const firstTimeMarkerIndex = Math.max(0, Math.floor(visibleStartTime / timeInterval));
-  const lastTimeMarkerIndex = Math.max(firstTimeMarkerIndex, Math.ceil(visibleEndTime / timeInterval));
+  const effectiveLanes: RulerLane[] = lanes && lanes.length > 0 ? lanes : createDefaultRulerLanes();
+  const effectiveTempoMap = tempoMap ?? createDefaultTempoMap();
 
-  for (let markerIndex = firstTimeMarkerIndex; markerIndex <= lastTimeMarkerIndex; markerIndex += 1) {
-    const t = markerIndex * timeInterval;
-    if (t < 0 || t > duration) continue;
-    const x = alignTimelineGridPixel(timeToPixel(t), devicePixelRatio);
-    const isMainMarker = markerIndex % gridPlan.timeMajorEveryMinor === 0;
-
-    markers.push(
-      <div
-        key={`time-${markerIndex}`}
-        className={`time-marker time ${isMainMarker ? 'main' : 'sub'}`}
-        style={{ left: x, opacity: gridPlan.timeGridOpacity }}
-      >
-        {gridPlan.mode === 'time' && isMainMarker && (
-          <span className={`time-label ${showFrameLabels ? 'frame-label' : ''}`}>
-            {showFrameLabels ? formatTimelineFrameNumber(t, gridPlan.frameRate) : formatTime(t)}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  if (gridPlan.frameGridOpacity > 0) {
-    const frameInterval = gridPlan.frameIntervalSeconds;
-    const firstFrameMarkerIndex = Math.max(0, Math.floor(visibleStartTime / frameInterval));
-    const lastFrameMarkerIndex = Math.max(firstFrameMarkerIndex, Math.ceil(visibleEndTime / frameInterval));
-
-    for (let markerIndex = firstFrameMarkerIndex; markerIndex <= lastFrameMarkerIndex; markerIndex += 1) {
-      const t = markerIndex * frameInterval;
-      if (t < 0 || t > duration) continue;
-      const x = alignTimelineGridPixel(timeToPixel(t), devicePixelRatio);
-      const isMainMarker = markerIndex % gridPlan.frameMajorEveryMinor === 0;
-
-      markers.push(
-        <div
-          key={`frame-${markerIndex}`}
-          className={`time-marker frame ${isMainMarker ? 'main' : 'sub'}`}
-          style={{ left: x, opacity: gridPlan.frameGridOpacity }}
-        >
-          {gridPlan.mode === 'frame' && isMainMarker && (
-            <span className={`time-label ${showFrameLabels ? 'frame-label' : ''}`}>
-              {showFrameLabels ? formatTimelineFrameNumber(t, gridPlan.frameRate) : formatTimelineTimecode(t, gridPlan.frameRate)}
-            </span>
-          )}
-        </div>
-      );
+  const renderLaneTicks = (lane: RulerLane): RulerTick[] => {
+    if (lane.format === 'bars') {
+      return createBarsLaneTicks({
+        tempoMap: effectiveTempoMap,
+        zoom,
+        startTime: visibleStartTime,
+        endTime: visibleEndTime,
+        duration,
+      });
     }
-  }
+    return createLinearLaneTicks({
+      format: lane.format,
+      zoom,
+      frameRate,
+      startTime: visibleStartTime,
+      endTime: visibleEndTime,
+      duration,
+      formatTime,
+    });
+  };
 
   return (
     <div
@@ -175,7 +156,35 @@ function TimelineRulerComponent({
       style={{ width, transform: `translateX(-${alignedScrollX}px)` }}
       onMouseDown={onRulerMouseDown}
     >
-      {markers}
+      {effectiveLanes.map((lane) => {
+        const isActive = lane.id === activeRulerLaneId;
+        const ticks = renderLaneTicks(lane);
+        return (
+          <div
+            key={lane.id}
+            className={`ruler-lane ${lane.format}${isActive ? ' is-active' : ''}`}
+            data-ruler-lane-format={lane.format}
+            data-ruler-lane-id={lane.id}
+          >
+            {ticks.map((tick, tickIndex) => {
+              const x = alignTimelineGridPixel(timeToPixel(tick.time), devicePixelRatio);
+              return (
+                <div
+                  key={`${lane.id}-${tickIndex}-${tick.time.toFixed(4)}`}
+                  className={`time-marker ${lane.format} ${tick.kind === 'major' ? 'main' : 'sub'}`}
+                  style={{ left: x }}
+                >
+                  {tick.label !== null && (
+                    <span className={`time-label ${lane.format === 'frames' ? 'frame-label' : ''}`}>
+                      {tick.label}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
       {visibleVideoBakeRegions.map((region) => (
         <div
           key={region.key}

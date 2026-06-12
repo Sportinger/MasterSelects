@@ -195,7 +195,24 @@ Original spec:
 - **Check:** add/remove/uniqueness/active-selection unit tests; an undo across a
   lane toggle does not resurrect/clobber the lane set.
 
-### Packet 4 — Ruler rendering (core) — the one real refactor
+### Packet 4 — Ruler rendering (core) — ✅ Implemented
+Done. Format-selection is decoupled from tick-density: `timelineGrid.ts` adds the
+pure `createLinearLaneTicks` (time / timecode / frames — fixed format, density
+only, no frame↔time crossfade) and `createBarsLaneTicks` (projects the window
+through `iterateBarBeatLines`, thinning beats/bars by pixel spacing). The old
+`createTimelineGridPlan` is untouched and still drives the timeline *body* grid
+(`TimelineTrackGridCanvas`), not the ruler. `TimelineRuler.tsx` now renders one
+`.ruler-lane` row per lane (each keeping the viewport-window + overscan + dpr
+logic), driven by `lanes` / `tempoMap` / `activeRulerLaneId` props;
+`TimelineRulerHeaderChrome` reads those from the store (via `selectRulerLanes` /
+`selectTempoMap` / `selectActiveRulerLaneId`) so the ruler stays a pure, testable
+component. `.ruler-lane` base CSS added; container height stays 30px (single
+default lane) until Packet 5. The old `displayMode` prop is ignored (retired in
+Packet 5). Covered by `tests/unit/timelineRulerLanes.test.ts`. **Visually inert
+until Packet 5** — the default single Time lane renders identically; the menu is
+needed to add a second lane and to grow the container height.
+
+Original spec:
 - **This is not "reuse today's logic."** `createTimelineGridPlan` currently
   couples *format selection* with *tick density* (the `mode: 'frame' | 'time'`
   pick + the opacity crossfade), and `TimelineRuler` gates labels on

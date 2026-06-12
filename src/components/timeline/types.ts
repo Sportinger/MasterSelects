@@ -10,6 +10,8 @@ import type {
   EasingType,
   RotationInterpolationMode,
   ClipAudioRegionGainPreview,
+  RulerLane,
+  TempoMap,
 } from '../../types';
 import type {
   ClipStemSeparationJobState,
@@ -143,7 +145,15 @@ export interface TimelineRulerProps {
   duration: number;
   zoom: number;
   frameRate?: number | null;
+  // Deprecated single time/frames toggle — subsumed by ruler lanes; retired in
+  // Packet 5. Ignored while `lanes` is present.
   displayMode?: 'time' | 'frames';
+  // Multi-ruler infrastructure (issue #257). One stacked row per lane; bars lanes
+  // project through `tempoMap`. `activeRulerLaneId` highlights the authoritative
+  // lane (selection interaction lands in Packet 6).
+  lanes?: RulerLane[];
+  tempoMap?: TempoMap;
+  activeRulerLaneId?: string | null;
   scrollX: number;
   onRulerMouseDown: (e: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;
