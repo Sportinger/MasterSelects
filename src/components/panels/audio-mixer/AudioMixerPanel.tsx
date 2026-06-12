@@ -5,8 +5,6 @@ import { useTimelineStore } from '../../../stores/timeline';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { AudioExportPipeline } from '../../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../../services/audio/AudioRecordingService';
-import { collectAudioEqInstances, type AudioEqInstanceDescriptor } from '../../../engine/audio';
-import { AudioEqualizerInstanceList } from '../properties/AudioEqualizerInstanceList';
 import { DEFAULT_MASTER_AUDIO_STATE, formatSeconds, MASTER_FOCUS_ID } from './audioMixerMath';
 import type { FxWindowTarget, TrackColorMenuTarget } from './audioMixerTypes';
 import { MasterMixerStrip } from './MasterMixerStrip';
@@ -16,8 +14,6 @@ import { TrackMixerStrip } from './TrackMixerStrip';
 
 export function AudioMixerPanel() {
   const tracks = useTimelineStore(state => state.tracks);
-  const clips = useTimelineStore(state => state.clips);
-  const selectClip = useTimelineStore(state => state.selectClip);
   const duration = useTimelineStore(state => state.duration);
   const inPoint = useTimelineStore(state => state.inPoint);
   const outPoint = useTimelineStore(state => state.outPoint);
@@ -81,10 +77,6 @@ export function AudioMixerPanel() {
   }, [audioTracks, fxWindowTarget]);
 
   const masterAudio = masterAudioState ?? DEFAULT_MASTER_AUDIO_STATE;
-  const eqInstances = useMemo(
-    () => collectAudioEqInstances({ clips, tracks: audioTracks, masterAudioState: masterAudio }),
-    [audioTracks, clips, masterAudio],
-  );
   const recoveryEntries = recordingState.recoveryEntries ?? audioRecordingService.listRecoveryEntries();
 
   const handleStaticPreflight = useCallback(() => {
@@ -116,18 +108,6 @@ export function AudioMixerPanel() {
       setPreflightMeasuring(false);
     }
   }, [duration, inPoint, outPoint, preflightMeasuring, runAudioExportPreflight]);
-
-  const handleJumpToEqInstance = useCallback((instance: AudioEqInstanceDescriptor) => {
-    if (instance.scope === 'clip') {
-      selectClip(instance.ownerId);
-    } else if (instance.scope === 'track') {
-      setFocusedStripId(instance.ownerId);
-      useTimelineStore.getState().selectTrackProperties(instance.ownerId);
-    } else if (instance.scope === 'master') {
-      setFocusedStripId(MASTER_FOCUS_ID);
-      useTimelineStore.getState().selectMasterProperties();
-    }
-  }, [selectClip]);
 
   const handleFocusTrack = useCallback((trackId: string) => {
     setFocusedStripId(trackId);
@@ -201,13 +181,6 @@ export function AudioMixerPanel() {
             </div>
           ))}
         </div>
-      )}
-
-      {eqInstances.length > 0 && (
-        <AudioEqualizerInstanceList
-          instances={eqInstances}
-          onJump={handleJumpToEqInstance}
-        />
       )}
 
       <div className="audio-mixer-body">
