@@ -94,6 +94,7 @@ interface SettingsState {
   customHue: number;        // 0-360 hue for custom theme
   customBrightness: number; // 0-100 brightness (0=dark, 100=light)
   audioMixerWoodThemeEnabled: boolean;
+  mediaPanelWoodThemeEnabled: boolean;
 
   // API Keys
   apiKeys: APIKeys;
@@ -185,6 +186,7 @@ interface SettingsState {
   setCustomHue: (hue: number) => void;
   setCustomBrightness: (brightness: number) => void;
   setAudioMixerWoodThemeEnabled: (enabled: boolean) => void;
+  setMediaPanelWoodThemeEnabled: (enabled: boolean) => void;
   setApiKey: (provider: keyof APIKeys, key: string) => void;
   setApiKeysUnlocked: (unlocked: boolean) => void;
   toggleApiKeysUnlocked: () => void;
@@ -258,6 +260,7 @@ export const useSettingsStore = create<SettingsState>()(
       customHue: 210,       // Default: blue
       customBrightness: 15, // Default: dark
       audioMixerWoodThemeEnabled: true,
+      mediaPanelWoodThemeEnabled: false,
       apiKeys: {
         openai: '',
         anthropic: '',
@@ -322,6 +325,7 @@ export const useSettingsStore = create<SettingsState>()(
       setCustomHue: (hue) => set({ customHue: hue }),
       setCustomBrightness: (brightness) => set({ customBrightness: brightness }),
       setAudioMixerWoodThemeEnabled: (enabled) => set({ audioMixerWoodThemeEnabled: enabled }),
+      setMediaPanelWoodThemeEnabled: (enabled) => set({ mediaPanelWoodThemeEnabled: enabled }),
 
       setApiKey: (provider, key) => {
         set((state) => ({
@@ -632,6 +636,7 @@ export const useSettingsStore = create<SettingsState>()(
         customHue: state.customHue,
         customBrightness: state.customBrightness,
         audioMixerWoodThemeEnabled: state.audioMixerWoodThemeEnabled,
+        mediaPanelWoodThemeEnabled: state.mediaPanelWoodThemeEnabled,
         apiKeysUnlocked: state.apiKeysUnlocked,
         apiKeyDefaults: state.apiKeyDefaults,
         transcriptionProvider: state.transcriptionProvider,

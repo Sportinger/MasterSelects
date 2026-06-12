@@ -216,6 +216,7 @@ export function AudioMixerPanel() {
               masterAudio={masterAudio}
               focused={focusedIsMaster}
               preflightMeasuring={preflightMeasuring}
+              leatherIndex={audioTracks.length}
               onFocus={handleFocusMaster}
               onOpenFx={setFxWindowTarget}
               onStaticPreflight={handleStaticPreflight}

@@ -1,0 +1,532 @@
+@layer features {
+
+.media-panel.wood {
+  --media-wood-edge: #0b0502;
+  --media-wood-cream: #eee2c0;
+  --media-wood-line: rgba(137, 99, 48, 0.72);
+  box-sizing: border-box;
+  padding: 8px 9px 10px;
+  border: 1px solid var(--media-wood-edge);
+  border-radius: 9px;
+  background:
+    linear-gradient(90deg, rgba(40, 18, 7, 0.34), rgba(120, 70, 30, 0.14), rgba(35, 16, 7, 0.36)),
+    url('../audio-mixer/wood-theme/wood-body.png');
+  background-size: 100% 100%;
+  color: var(--media-wood-cream);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 158, 0.2),
+    inset 0 0 0 2px rgba(98, 52, 22, 0.44),
+    inset 0 -20px 34px rgba(0, 0, 0, 0.22),
+    0 8px 20px rgba(0, 0, 0, 0.42);
+}
+
+.media-panel.wood::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 7px;
+  background:
+    radial-gradient(circle at 12px 12px, #e0c990 0 2px, #8a5b28 2px 5px, #1a0d05 5px 6px, transparent 6px),
+    radial-gradient(circle at calc(100% - 12px) 12px, #e0c990 0 2px, #8a5b28 2px 5px, #1a0d05 5px 6px, transparent 6px),
+    radial-gradient(circle at 12px calc(100% - 12px), #e0c990 0 2px, #8a5b28 2px 5px, #1a0d05 5px 6px, transparent 6px),
+    radial-gradient(circle at calc(100% - 12px) calc(100% - 12px), #e0c990 0 2px, #8a5b28 2px 5px, #1a0d05 5px 6px, transparent 6px);
+  box-shadow: inset 0 0 0 1px rgba(6, 3, 1, 0.62);
+}
+
+.media-panel.wood > * {
+  position: relative;
+  z-index: 1;
+}
+
+.media-panel.wood.drop-target {
+  background:
+    linear-gradient(rgba(74, 144, 226, 0.16), rgba(74, 144, 226, 0.16)),
+    linear-gradient(90deg, rgba(40, 18, 7, 0.34), rgba(120, 70, 30, 0.14), rgba(35, 16, 7, 0.36)),
+    url('../audio-mixer/wood-theme/wood-body.png');
+  background-size: 100% 100%, 100% 100%, 100% 100%;
+}
+
+.media-panel.wood .media-panel-header {
+  gap: 12px;
+  min-height: 34px;
+  margin: 0 14px 7px;
+  padding: 6px 7px;
+  border: 1px solid #160b03;
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255, 238, 194, 0.34) 0%, rgba(154, 113, 48, 0.18) 52%, rgba(44, 27, 7, 0.38) 100%),
+    url('../audio-mixer/wood-theme/plate-bronze.jpg');
+  background-size: 100% 100%, 150% auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 238, 194, 0.5),
+    inset 0 -1px 0 rgba(54, 30, 8, 0.58),
+    0 2px 5px rgba(0, 0, 0, 0.48);
+}
+
+.media-panel.wood .media-panel-count {
+  color: #2d1f0b;
+  font-size: 12px;
+  text-shadow: 0 1px 0 rgba(255, 238, 194, 0.32);
+}
+
+.media-panel.wood .media-panel-search {
+  height: 28px;
+  min-width: 160px;
+  color: #cfbb8c;
+}
+
+.media-panel.wood .media-panel-search input {
+  height: 28px;
+  border-color: #110802;
+  border-radius: 6px;
+  background:
+    linear-gradient(rgba(7, 4, 2, 0.56), rgba(7, 4, 2, 0.56)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% auto, 190% auto;
+  background-position: center, 42% 26%;
+  color: #efdec1;
+  font-size: 12px;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.74),
+    0 1px 0 rgba(255, 235, 181, 0.2);
+}
+
+.media-panel.wood .media-panel-search input::placeholder {
+  color: rgba(237, 216, 178, 0.76);
+}
+
+.media-panel.wood .media-panel-search input:focus {
+  border-color: #a67a35;
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.74),
+    0 0 0 1px rgba(242, 200, 121, 0.38);
+}
+
+.media-panel.wood .media-panel-search-clear {
+  color: #e9d7ac;
+}
+
+.media-panel.wood .media-panel-search-clear:hover {
+  background: rgba(238, 215, 169, 0.16);
+  color: #fff0c8;
+}
+
+.media-panel.wood .media-view-segment,
+.media-panel.wood .media-board-toolbar-actions,
+.media-panel.wood .media-panel-actions .btn-reload-all {
+  border: 1px solid #1b0e04;
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(255, 238, 194, 0.28), rgba(91, 59, 19, 0.36)),
+    url('../audio-mixer/wood-theme/plate-bronze.jpg');
+  background-size: 100% 100%, 150% auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 245, 213, 0.44),
+    0 1px 3px rgba(0, 0, 0, 0.48);
+}
+
+.media-panel.wood .media-view-toggle,
+.media-panel.wood .media-panel-actions .btn,
+.media-panel.wood .media-board-toolbar .btn {
+  color: #3b2a12;
+  opacity: 0.82;
+}
+
+.media-panel.wood .media-view-toggle:hover,
+.media-panel.wood .media-view-toggle.active,
+.media-panel.wood .media-panel-actions .btn:hover:not(:disabled),
+.media-panel.wood .media-board-toolbar .btn:hover:not(:disabled) {
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, #f3e7c8 0%, #d8c293 100%);
+  color: #241606;
+  opacity: 1;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 251, 233, 0.68),
+    inset 0 -1px 2px rgba(98, 74, 39, 0.42);
+}
+
+.media-panel.wood .media-view-toggle.active {
+  transform: translateY(1px);
+}
+
+.media-panel.wood .media-panel-content {
+  border: 1px solid #090401;
+  border-radius: 8px;
+  background:
+    linear-gradient(rgba(12, 7, 3, 0.52), rgba(12, 7, 3, 0.52)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% auto, 160% auto;
+  background-position: center, 50% 20%;
+  box-shadow:
+    inset 0 6px 16px rgba(0, 0, 0, 0.68),
+    inset 0 0 0 1px rgba(203, 152, 84, 0.12),
+    0 2px 5px rgba(0, 0, 0, 0.48);
+}
+
+.media-panel.wood .media-panel-table-wrapper {
+  background: transparent;
+  scrollbar-color: rgba(211, 166, 96, 0.56) rgba(12, 7, 3, 0.62);
+}
+
+.media-panel.wood .media-column-headers {
+  min-height: 28px;
+  padding: 5px 0 4px;
+  border-bottom-color: rgba(188, 137, 70, 0.58);
+  background:
+    linear-gradient(180deg, rgba(47, 31, 16, 0.88), rgba(18, 10, 5, 0.84)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% 100%, 160% auto;
+  color: #d7c29a;
+  letter-spacing: 0;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.74);
+}
+
+.media-panel.wood .media-column-headers .media-col {
+  color: #d8c29a;
+}
+
+.media-panel.wood .media-column-headers .media-col:hover,
+.media-panel.wood .media-column-headers .media-col.sorted {
+  color: #fff1c7;
+}
+
+.media-panel.wood .media-panel-table-wrapper .media-col-name,
+.media-panel.wood .media-panel-table-wrapper .media-column-headers .media-col-name {
+  background:
+    linear-gradient(90deg, rgba(18, 10, 5, 0.92), rgba(28, 16, 8, 0.86)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% 100%, 180% auto;
+  box-shadow:
+    1px 0 0 var(--media-wood-line),
+    12px 0 20px -18px rgba(0, 0, 0, 0.9);
+}
+
+.media-panel.wood .media-col {
+  color: #cdbb9a;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.62);
+}
+
+.media-panel.wood .media-col-resize-handle {
+  background: rgba(190, 139, 70, 0.72);
+}
+
+.media-panel.wood .media-item {
+  height: 23px;
+  border-left-color: rgba(0, 0, 0, 0);
+  color: #eadcc0;
+}
+
+.media-panel.wood .media-item:hover {
+  background: rgba(215, 172, 105, 0.12);
+}
+
+.media-panel.wood .media-panel-table-wrapper .media-item:hover .media-col-name {
+  background:
+    linear-gradient(90deg, rgba(44, 25, 10, 0.94), rgba(32, 18, 8, 0.9)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+}
+
+.media-panel.wood .media-item.selected {
+  border-left-color: #d8ae62;
+  background:
+    linear-gradient(180deg, rgba(255, 237, 187, 0.5), rgba(176, 129, 54, 0.58) 48%, rgba(92, 62, 22, 0.62)),
+    url('../audio-mixer/wood-theme/plate-bronze.jpg');
+  background-size: 100% 100%, 160% auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 195, 0.5),
+    inset 0 -1px 0 rgba(52, 31, 8, 0.52);
+}
+
+.media-panel.wood .media-item.selected:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 241, 199, 0.58), rgba(196, 145, 62, 0.66) 48%, rgba(102, 68, 25, 0.66)),
+    url('../audio-mixer/wood-theme/plate-bronze.jpg');
+}
+
+.media-panel.wood .media-panel-table-wrapper .media-item.selected .media-col-name,
+.media-panel.wood .media-panel-table-wrapper .media-item.selected:hover .media-col-name {
+  background: transparent;
+  box-shadow: 1px 0 0 rgba(70, 44, 15, 0.52);
+}
+
+.media-panel.wood .media-item.selected .media-col,
+.media-panel.wood .media-item.selected .media-item-name,
+.media-panel.wood .media-item.selected .media-folder-arrow {
+  color: #261808;
+  text-shadow: 0 1px 0 rgba(255, 238, 194, 0.28);
+}
+
+.media-panel.wood .media-item-name {
+  color: #efe1c7;
+}
+
+.media-panel.wood .media-item-name.editable:hover {
+  background: rgba(238, 215, 169, 0.12);
+}
+
+.media-panel.wood .media-folder-arrow,
+.media-panel.wood .media-folder-icon {
+  color: #d9c290;
+  filter: saturate(0.95) brightness(0.95);
+}
+
+.media-panel.wood .media-item-rename {
+  border-color: #c99b4d;
+  background: rgba(17, 9, 3, 0.92);
+  color: #f3e5c7;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.58);
+}
+
+.media-panel.wood .media-item-proxy-badge,
+.media-panel.wood .media-item-audio-proxy-badge,
+.media-panel.wood .media-item-waveform-badge,
+.media-panel.wood .media-item-transcript-badge,
+.media-panel.wood .media-item-analysis-badge,
+.media-panel.wood .coverage-fill-badge,
+.media-panel.wood .audio-proxy-fill-badge,
+.media-panel.wood .waveform-fill-badge,
+.media-panel.wood .waveform-progress-mark {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 1px 2px rgba(0, 0, 0, 0.52);
+}
+
+.media-panel.wood .media-grid-wrapper,
+.media-panel.wood .media-board-wrapper {
+  background:
+    linear-gradient(rgba(12, 7, 3, 0.54), rgba(12, 7, 3, 0.54)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% auto, 180% auto;
+  background-position: center, 44% 24%;
+  scrollbar-color: rgba(211, 166, 96, 0.56) rgba(12, 7, 3, 0.62);
+}
+
+.media-panel.wood .media-grid-breadcrumb {
+  color: #cdbb9a;
+}
+
+.media-panel.wood .media-grid-breadcrumb-btn {
+  color: #d8c29a;
+}
+
+.media-panel.wood .media-grid-breadcrumb-btn:hover {
+  background: rgba(215, 172, 105, 0.14);
+  color: #fff0c8;
+}
+
+.media-panel.wood .media-grid-item {
+  border: 1px solid rgba(122, 79, 35, 0.72);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(83, 49, 21, 0.52), rgba(28, 15, 6, 0.78)),
+    url('../audio-mixer/wood-theme/wood-body.png');
+  background-size: 100% 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 221, 163, 0.14),
+    0 3px 8px rgba(0, 0, 0, 0.32);
+}
+
+.media-panel.wood .media-grid-item:hover {
+  border-color: rgba(213, 163, 88, 0.78);
+  background:
+    linear-gradient(180deg, rgba(103, 61, 26, 0.58), rgba(33, 18, 8, 0.74)),
+    url('../audio-mixer/wood-theme/wood-body.png');
+}
+
+.media-panel.wood .media-grid-item.selected {
+  border-color: #d7ac62;
+  background:
+    linear-gradient(180deg, rgba(255, 237, 187, 0.36), rgba(176, 129, 54, 0.44)),
+    url('../audio-mixer/wood-theme/plate-bronze.jpg');
+  box-shadow:
+    inset 0 1px 0 rgba(255, 241, 199, 0.48),
+    0 0 0 1px rgba(49, 29, 8, 0.78),
+    0 8px 14px rgba(0, 0, 0, 0.36);
+}
+
+.media-panel.wood .media-grid-thumb {
+  margin: 5px 5px 0;
+  border: 1px solid #090401;
+  border-radius: 5px;
+  background:
+    linear-gradient(rgba(7, 4, 2, 0.42), rgba(7, 4, 2, 0.42)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% auto, 190% auto;
+  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.72);
+}
+
+.media-panel.wood .media-grid-name {
+  color: #eadcc0;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.7);
+}
+
+.media-panel.wood .media-grid-item.selected .media-grid-name {
+  background: rgba(38, 24, 8, 0.22);
+  color: #241706;
+  text-shadow: 0 1px 0 rgba(255, 238, 194, 0.32);
+}
+
+.media-panel.wood .media-board-wrapper {
+  background-image:
+    linear-gradient(rgba(210, 165, 96, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(210, 165, 96, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(12, 7, 3, 0.54), rgba(12, 7, 3, 0.54)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size:
+    var(--media-board-grid-size, 32px) var(--media-board-grid-size, 32px),
+    var(--media-board-grid-size, 32px) var(--media-board-grid-size, 32px),
+    100% auto,
+    180% auto;
+  background-position:
+    var(--media-board-grid-x, 0px) var(--media-board-grid-y, 0px),
+    var(--media-board-grid-x, 0px) var(--media-board-grid-y, 0px),
+    center,
+    44% 24%;
+}
+
+.media-panel.wood .media-board-toolbar {
+  border-bottom-color: rgba(188, 137, 70, 0.58);
+  background:
+    linear-gradient(180deg, rgba(255, 238, 194, 0.25), rgba(73, 46, 15, 0.42)),
+    url('../audio-mixer/wood-theme/plate-bronze.jpg');
+  background-size: 100% 100%, 150% auto;
+}
+
+.media-panel.wood .media-board-toolbar-title span:first-child {
+  color: #271907;
+  text-shadow: 0 1px 0 rgba(255, 238, 194, 0.32);
+}
+
+.media-panel.wood .media-board-toolbar-title span:last-child {
+  color: #4d3814;
+}
+
+.media-panel.wood .media-board-group,
+.media-panel.wood .media-board-node {
+  border-color: rgba(129, 83, 36, 0.74);
+  background:
+    linear-gradient(180deg, rgba(80, 47, 19, 0.48), rgba(28, 15, 6, 0.76)),
+    url('../audio-mixer/wood-theme/wood-body.png');
+  background-size: 100% 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 221, 163, 0.13),
+    0 8px 18px rgba(0, 0, 0, 0.32);
+}
+
+.media-panel.wood .media-board-node-thumb {
+  background:
+    linear-gradient(rgba(7, 4, 2, 0.48), rgba(7, 4, 2, 0.48)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% auto, 180% auto;
+}
+
+.media-panel.wood .media-board-group-header {
+  border-bottom-color: rgba(188, 137, 70, 0.46);
+  color: #d4c098;
+}
+
+.media-panel.wood .media-board-group-header span:first-child {
+  color: #efe1c7;
+}
+
+.media-panel.wood .media-board-node.selected,
+.media-panel.wood .media-board-group.folder-group.selected {
+  border-color: #d7ac62;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 241, 199, 0.26),
+    0 0 0 2px rgba(215, 172, 98, 0.24),
+    0 10px 22px rgba(0, 0, 0, 0.32);
+}
+
+.media-panel.wood .add-dropdown-menu,
+.media-panel.wood .media-context-menu,
+.media-panel.wood .label-picker-popup {
+  border-color: #140a03;
+  background:
+    linear-gradient(rgba(12, 7, 3, 0.58), rgba(12, 7, 3, 0.58)),
+    url('../audio-mixer/wood-theme/pocket-leather.jpg');
+  background-size: 100% auto, 160% auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 224, 163, 0.12),
+    0 10px 24px rgba(0, 0, 0, 0.54);
+}
+
+.media-panel.wood .add-dropdown-item,
+.media-panel.wood .media-context-menu button {
+  color: #eadcc0;
+}
+
+.media-panel.wood .add-dropdown-item:hover,
+.media-panel.wood .media-context-menu button:hover {
+  background: rgba(215, 172, 105, 0.16);
+}
+
+}
+
+/* MediaAIGenerativeTray.css is unlayered, so tray overrides must be unlayered too. */
+.media-panel.wood .media-ai-tray-collapsed {
+  top: 96px;
+  right: 10px;
+  bottom: auto;
+  width: 104px;
+  gap: 54px;
+  align-items: stretch;
+}
+
+.media-panel.wood .media-ai-tray-launch {
+  min-width: 0;
+  width: 100%;
+  min-height: 86px;
+  height: auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 8px;
+  border: 1px solid #160d05;
+  border-radius: 12px;
+  background:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2"/><feColorMatrix type="matrix" values="0 0 0 0 0.25 0 0 0 0 0.2 0 0 0 0 0.1 0 0 0 0.16 0"/></filter><rect width="64" height="64" filter="url(%23n)"/></svg>'),
+    radial-gradient(circle at 6% 95%, rgba(96, 76, 44, 0.3), transparent 28%),
+    linear-gradient(168deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.1) 42%, transparent 62%),
+    linear-gradient(180deg, #f4ebd2 0%, #e7d7b2 42%, #d2bd8d 100%);
+  color: #3c2c16;
+  font-size: 12px;
+  line-height: 1.15;
+  text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 251, 233, 0.75),
+    inset 0 -2px 4px rgba(110, 92, 58, 0.42),
+    0 4px 10px rgba(0, 0, 0, 0.52);
+}
+
+.media-panel.wood .media-ai-tray-launch:hover {
+  border-color: #3f2a12;
+  background:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2"/><feColorMatrix type="matrix" values="0 0 0 0 0.25 0 0 0 0 0.2 0 0 0 0 0.1 0 0 0 0.16 0"/></filter><rect width="64" height="64" filter="url(%23n)"/></svg>'),
+    linear-gradient(168deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.08) 46%, transparent 66%),
+    linear-gradient(180deg, #fff1d4 0%, #e9d7ac 48%, #cab17c 100%);
+}
+
+.media-panel.wood .media-ai-tray-launch svg {
+  color: #4c3317;
+}
+
+@container (max-width: 260px) {
+  .media-panel.wood .media-ai-tray-collapsed {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    width: min(220px, calc(100% - 20px));
+    gap: 6px;
+  }
+
+  .media-panel.wood .media-ai-tray-launch {
+    min-height: 34px;
+    flex-direction: row;
+    padding: 7px 8px;
+    border-radius: 10px;
+  }
+}

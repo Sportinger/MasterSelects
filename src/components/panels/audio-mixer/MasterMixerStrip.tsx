@@ -20,7 +20,10 @@ import { useMixerFaderDraft } from './useMixerFaderDraft';
 
 type MixerCssProperties = CSSProperties & {
   '--strip-color'?: string;
+  '--strip-leather-x'?: string;
 };
+
+const MIXER_STRIP_TEXTURE_STEP_PX = 83;
 
 function MasterMixerStripComponent({
   masterAudio,
@@ -30,6 +33,7 @@ function MasterMixerStripComponent({
   onOpenFx,
   onStaticPreflight,
   onRenderedPreflight,
+  leatherIndex,
 }: {
   masterAudio: MasterAudioState;
   focused: boolean;
@@ -38,12 +42,16 @@ function MasterMixerStripComponent({
   onOpenFx: (target: FxWindowTarget) => void;
   onStaticPreflight: () => void;
   onRenderedPreflight: () => void;
+  leatherIndex: number;
 }) {
   const meterScope = getMixerRuntimeAudioMeterScope('master');
   const status = getPreflightStatus(masterAudio.exportPreflight);
   const measurement = masterAudio.exportPreflight?.measurement;
   const effects = masterAudio.effectStack ?? [];
-  const stripStyle: MixerCssProperties = { '--strip-color': '#4a9eff' };
+  const stripStyle: MixerCssProperties = {
+    '--strip-color': '#4a9eff',
+    '--strip-leather-x': `${-(leatherIndex * MIXER_STRIP_TEXTURE_STEP_PX)}px`,
+  };
   const commitMasterVolume = useCallback((volumeDb: number) => {
     useTimelineStore.getState().setMasterAudioVolumeDb(volumeDb);
   }, []);
@@ -145,4 +153,5 @@ export const MasterMixerStrip = memo(MasterMixerStripComponent, (prev, next) => 
   && prev.onOpenFx === next.onOpenFx
   && prev.onStaticPreflight === next.onStaticPreflight
   && prev.onRenderedPreflight === next.onRenderedPreflight
+  && prev.leatherIndex === next.leatherIndex
 ));

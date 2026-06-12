@@ -275,6 +275,7 @@ function applyMonoMeterStyles(
 }
 
 interface StereoChannelRefs {
+  glowFill: HTMLElement | null;
   peakFill: HTMLElement | null;
   rms: HTMLElement | null;
   peakMarker: HTMLElement | null;
@@ -289,17 +290,26 @@ function applyStereoChannelStyles(
 ): void {
   const vertical = orientation === 'vertical';
   const fillTransitionProperties = vertical ? ['clip-path'] : ['transform'];
+  const woodMixerBoost = Boolean(elements.peakFill?.closest('.audio-mixer-panel.wood'));
+  const peakOpacity = woodMixerBoost ? 0.94 : 0.68;
+  const rmsOpacity = woodMixerBoost ? 0.76 : 0.52;
+  if (elements.glowFill) {
+    updateMeterTransition(elements.glowFill, peakUnit, ['transform']);
+    elements.glowFill.style.transform = orientation === 'vertical' ? `scaleY(${peakUnit})` : `scaleX(${peakUnit})`;
+    elements.glowFill.style.clipPath = '';
+    elements.glowFill.style.opacity = String(woodMixerBoost && hasMeter && peakUnit > 0 ? Math.min(0.34, 0.07 + peakUnit * 0.30) : 0);
+  }
   if (elements.peakFill) {
     updateMeterTransition(elements.peakFill, peakUnit, fillTransitionProperties);
     elements.peakFill.style.transform = meterFillTransform(peakUnit, orientation);
     elements.peakFill.style.clipPath = meterFillClipPath(peakUnit, orientation) ?? '';
-    elements.peakFill.style.opacity = String(hasMeter && peakUnit > 0 ? 0.68 : 0);
+    elements.peakFill.style.opacity = String(hasMeter && peakUnit > 0 ? peakOpacity : 0);
   }
   if (elements.rms) {
     updateMeterTransition(elements.rms, rmsUnit, fillTransitionProperties);
     elements.rms.style.transform = meterFillTransform(rmsUnit, orientation);
     elements.rms.style.clipPath = meterFillClipPath(rmsUnit, orientation) ?? '';
-    elements.rms.style.opacity = String(hasMeter && rmsUnit > 0 ? 0.52 : 0);
+    elements.rms.style.opacity = String(hasMeter && rmsUnit > 0 ? rmsOpacity : 0);
   }
   if (elements.peakMarker) {
     updateMeterTransition(elements.peakMarker, peakUnit, [vertical ? 'bottom' : 'left']);
@@ -327,9 +337,11 @@ function StreamingAudioLevelMeter({
   const rmsRef = useRef<HTMLDivElement | null>(null);
   const peakRef = useRef<HTMLDivElement | null>(null);
   const phaseRef = useRef<HTMLDivElement | null>(null);
+  const leftGlowFillRef = useRef<HTMLDivElement | null>(null);
   const leftPeakFillRef = useRef<HTMLDivElement | null>(null);
   const leftRmsRef = useRef<HTMLDivElement | null>(null);
   const leftPeakRef = useRef<HTMLDivElement | null>(null);
+  const rightGlowFillRef = useRef<HTMLDivElement | null>(null);
   const rightPeakFillRef = useRef<HTMLDivElement | null>(null);
   const rightRmsRef = useRef<HTMLDivElement | null>(null);
   const rightPeakRef = useRef<HTMLDivElement | null>(null);
@@ -355,14 +367,24 @@ function StreamingAudioLevelMeter({
       const rightPeak = clampUnit(meter ? audioMeterDbToUnit(meter.channels?.right.peakDb ?? meter.peakDb) : 0);
       const rightRms = clampUnit(meter ? audioMeterDbToUnit(meter.channels?.right.rmsDb ?? meter.rmsDb) : 0);
       applyStereoChannelStyles(
-        { peakFill: leftPeakFillRef.current, rms: leftRmsRef.current, peakMarker: leftPeakRef.current },
+        {
+          glowFill: leftGlowFillRef.current,
+          peakFill: leftPeakFillRef.current,
+          rms: leftRmsRef.current,
+          peakMarker: leftPeakRef.current,
+        },
         leftPeak,
         leftRms,
         hasMeter,
         orientation,
       );
       applyStereoChannelStyles(
-        { peakFill: rightPeakFillRef.current, rms: rightRmsRef.current, peakMarker: rightPeakRef.current },
+        {
+          glowFill: rightGlowFillRef.current,
+          peakFill: rightPeakFillRef.current,
+          rms: rightRmsRef.current,
+          peakMarker: rightPeakRef.current,
+        },
         rightPeak,
         rightRms,
         hasMeter,
@@ -397,12 +419,14 @@ function StreamingAudioLevelMeter({
         title={title}
       >
         <div className="audio-level-meter-stereo-channel left">
+          <div ref={leftGlowFillRef} className="audio-level-meter-glow-fill" style={{ opacity: 0 }} />
           <div className="audio-level-meter-scale" />
           <div ref={leftPeakFillRef} className="audio-level-meter-peak-fill" style={{ opacity: 0 }} />
           <div ref={leftRmsRef} className="audio-level-meter-rms" style={{ opacity: 0 }} />
           <div ref={leftPeakRef} className="audio-level-meter-peak" style={{ opacity: 0 }} />
         </div>
         <div className="audio-level-meter-stereo-channel right">
+          <div ref={rightGlowFillRef} className="audio-level-meter-glow-fill" style={{ opacity: 0 }} />
           <div className="audio-level-meter-scale" />
           <div ref={rightPeakFillRef} className="audio-level-meter-peak-fill" style={{ opacity: 0 }} />
           <div ref={rightRmsRef} className="audio-level-meter-rms" style={{ opacity: 0 }} />

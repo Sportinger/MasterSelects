@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState, useEffect, useLayoutEffect } from 'react';
 import './MediaPanel.css';
+import './media/MediaPanelWoodTheme.css';
 import type { MediaContextSolidSettingsDialogState } from './media/context/useMediaContextLocalHandlers';
 import { useMediaClassicListUiState } from './media/list/useMediaClassicListUiState';
 import { MediaPanelContentView } from './media/panel/MediaPanelContentView';
@@ -24,6 +25,7 @@ import { useMediaBoardController } from './media/board/useMediaBoardController';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const MEDIA_PANEL_PROJECT_UI_LOADED_EVENT = 'media-panel-project-ui-loaded';
 
@@ -54,6 +56,7 @@ export function MediaPanel() {
   } = useMediaPanelStoreBindings();
   const composerReferenceMediaFileIds = useFlashBoardStore(state => state.composer.referenceMediaFileIds);
   const updateFlashBoardComposer = useFlashBoardStore(state => state.updateComposer);
+  const woodThemeEnabled = useSettingsStore(state => state.mediaPanelWoodThemeEnabled);
 
   // Actions from getState() - stable, no subscription needed
   const {
@@ -514,11 +517,16 @@ export function MediaPanel() {
     openRelinkDialog,
     closeRelinkDialog,
   } = useMediaPanelRelinkStatus(files);
+  const mediaPanelClassName = [
+    'media-panel',
+    woodThemeEnabled ? 'wood' : '',
+    isExternalDragOver ? 'drop-target' : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <div
       ref={mediaPanelRootRef}
-      className={`media-panel ${isExternalDragOver ? 'drop-target' : ''}`}
+      className={mediaPanelClassName}
       onDrop={handleRootDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}

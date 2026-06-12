@@ -25,6 +25,8 @@ export function AppearanceSettings() {
   const setCustomBrightness = useSettingsStore((s) => s.setCustomBrightness);
   const audioMixerWoodThemeEnabled = useSettingsStore((s) => s.audioMixerWoodThemeEnabled);
   const setAudioMixerWoodThemeEnabled = useSettingsStore((s) => s.setAudioMixerWoodThemeEnabled);
+  const mediaPanelWoodThemeEnabled = useSettingsStore((s) => s.mediaPanelWoodThemeEnabled);
+  const setMediaPanelWoodThemeEnabled = useSettingsStore((s) => s.setMediaPanelWoodThemeEnabled);
 
   return (
     <div className="settings-category-content">
@@ -128,10 +130,10 @@ export function AppearanceSettings() {
       )}
 
       <div className="settings-group">
-        <div className="settings-group-title">Audio Mixer</div>
+        <div className="settings-group-title">Studio Surfaces</div>
 
         <label className="settings-row">
-          <span className="settings-label">Wooden mixer theme</span>
+          <span className="settings-label">Wooden audio mixer theme</span>
           <input
             type="checkbox"
             checked={audioMixerWoodThemeEnabled}
@@ -139,8 +141,18 @@ export function AppearanceSettings() {
             className="settings-checkbox"
           />
         </label>
+
+        <label className="settings-row">
+          <span className="settings-label">Wooden media panel theme</span>
+          <input
+            type="checkbox"
+            checked={mediaPanelWoodThemeEnabled}
+            onChange={(event) => setMediaPanelWoodThemeEnabled(event.target.checked)}
+            className="settings-checkbox"
+          />
+        </label>
         <p className="settings-hint">
-          Uses the wood, leather, and metal skin for the docked Audio Mixer.
+          Uses the wood, leather, brass, and metal skins for studio panels.
         </p>
       </div>
     </div>

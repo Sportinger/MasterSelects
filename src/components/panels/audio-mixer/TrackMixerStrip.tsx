@@ -22,7 +22,10 @@ import { useMixerFaderDraft } from './useMixerFaderDraft';
 
 type MixerCssProperties = CSSProperties & {
   '--strip-color'?: string;
+  '--strip-leather-x'?: string;
 };
+
+const MIXER_STRIP_TEXTURE_STEP_PX = 83;
 
 function TrackMixerStripComponent({
   track,
@@ -45,7 +48,10 @@ function TrackMixerStripComponent({
   const effectiveSolo = audioState.solo;
   const effects = audioState.effectStack ?? [];
   const sends = audioState.sends ?? [];
-  const stripStyle: MixerCssProperties = { '--strip-color': getTimelineTrackColor(track, index) };
+  const stripStyle: MixerCssProperties = {
+    '--strip-color': getTimelineTrackColor(track, index),
+    '--strip-leather-x': `${-(index * MIXER_STRIP_TEXTURE_STEP_PX)}px`,
+  };
   const commitTrackVolume = useCallback((volumeDb: number) => {
     useTimelineStore.getState().setTrackAudioVolumeDb(track.id, volumeDb);
   }, [track.id]);

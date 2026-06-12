@@ -172,6 +172,7 @@ MasterSelects currently exposes 18 active dockable panel types, plus the Slot Gr
 - Type-specific project items for text, solids, meshes, cameras, and splat effectors
 - Board mode right-drag supports smooth edge autopan; dragging far out onto a timeline lane hands off to the same timeline drag preview/drop path as list-view media drags, then restores the item at its original board position
 - Bottom-right **Generate** tray expands into the FlashBoard prompt composer for video, image, speech, and music generation without opening a separate dock tab
+- Appearance settings include a separate **Wooden media panel theme** checkbox, default off, that switches the Media Panel to the wooden studio skin; disabling it leaves the standard dark panel chrome unchanged
 
 ### Export Panel
 

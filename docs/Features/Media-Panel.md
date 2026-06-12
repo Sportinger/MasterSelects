@@ -131,6 +131,7 @@ When supported (Chrome/Edge):
 ## View Modes
 
 The panel supports three view modes through the header mode control. The selected mode is persisted in `localStorage`.
+When **Wooden media panel theme** is enabled in Appearance settings, the Classic, Icons, Board, and Media generator tray chrome use the same wood/leather/brass skin family as the Audio Mixer; the setting defaults off and turning it off keeps the standard dark panel styling.
 
 ### Classic View (default)
 - Table layout with sortable, reorderable columns
