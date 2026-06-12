@@ -44,6 +44,7 @@ describe('timeline tool components', () => {
         label="Selection"
         title="Selection tools"
         active={false}
+        open={false}
         icon={TestIcon}
         onActivate={onActivate}
         onOpen={onOpen}
@@ -51,18 +52,14 @@ describe('timeline tool components', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Selection' });
-    Object.defineProperty(button, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => createRect({ left: 0, right: 32, width: 32 }),
-    });
-    fireEvent.pointerDown(button, { button: 0, clientX: 10 });
-    fireEvent.pointerUp(button, { button: 0, clientX: 10 });
+    fireEvent.pointerDown(button, { button: 0, clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(button, { button: 0, clientX: 10, clientY: 10 });
 
     expect(onActivate).toHaveBeenCalledWith('selection');
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it('opens the tool flyout from long press, chevron, or right-click without activating the root', () => {
+  it('opens the flyout on long press or right-click, and activates on release back on the button', () => {
     vi.useFakeTimers();
     const onActivate = vi.fn();
     const onOpen = vi.fn();
@@ -73,6 +70,7 @@ describe('timeline tool components', () => {
         label="Cut"
         title="Cut tools"
         active={false}
+        open={false}
         icon={TestIcon}
         onActivate={onActivate}
         onOpen={onOpen}
@@ -80,25 +78,27 @@ describe('timeline tool components', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Cut' });
-    Object.defineProperty(button, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => createRect({ left: 0, right: 32, width: 32 }),
-    });
 
-    fireEvent.pointerDown(button, { button: 0, clientX: 12 });
+    // Holding past the threshold opens the flyout armed for press-drag.
+    fireEvent.pointerDown(button, { button: 0, clientX: 12, clientY: 40 });
     act(() => {
-      vi.advanceTimersByTime(350);
+      vi.advanceTimersByTime(200);
     });
-    fireEvent.pointerUp(button, { button: 0, clientX: 12 });
-
     expect(onOpen).toHaveBeenCalledTimes(1);
-    expect(onActivate).not.toHaveBeenCalled();
+    expect(onOpen).toHaveBeenLastCalledWith('cut', button, { armPressDrag: true });
 
-    fireEvent.pointerDown(button, { button: 0, clientX: 30 });
-    expect(onOpen).toHaveBeenCalledTimes(2);
+    // Releasing back on the root button activates the current tool, so a
+    // hold-and-release without choosing never swallows the click. (Releases over
+    // a flyout item / empty space happen off the button and are resolved there.)
+    fireEvent.pointerUp(button, { button: 0, clientX: 12, clientY: 40 });
+    expect(onActivate).toHaveBeenCalledWith('cut');
 
+    // Right-click opens a sticky (non-armed) flyout without activating.
+    onActivate.mockClear();
     fireEvent.contextMenu(button);
-    expect(onOpen).toHaveBeenCalledTimes(3);
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onOpen).toHaveBeenLastCalledWith('cut', button, { armPressDrag: false });
+    expect(onActivate).not.toHaveBeenCalled();
   });
 
   it('shows active flyout state, shortcut labels, and blocks disabled commands', () => {

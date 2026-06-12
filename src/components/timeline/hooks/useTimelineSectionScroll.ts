@@ -171,6 +171,9 @@ export function useTimelineSectionScroll({
     event: ReactWheelEvent,
     sectionKind: TrackSectionKind,
   ) => {
+    // Bail without preventDefault on any modifier so it falls through to the body
+    // wheel handler (useTimelineZoom): Ctrl/Alt = zoom, Shift = scroll. Ctrl+wheel
+    // is the only zoom Linux users can rely on (WMs eat Alt+wheel) — never swallow it.
     if (event.deltaY === 0 || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return;
     if (isSectionCollapsed(sectionKind)) return;
 

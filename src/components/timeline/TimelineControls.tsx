@@ -13,7 +13,6 @@ import {
   IconPlayerStopFilled,
   IconPlus,
   IconRepeat,
-  IconTools,
 } from '@tabler/icons-react';
 import './TimelineControls.css';
 import type { TimelineControlsProps } from './types';
@@ -83,7 +82,6 @@ function TimelineControlsComponent({
   const viewDropdownRef = useRef<HTMLDivElement>(null);
   const masterDropdownRef = useRef<HTMLDivElement>(null);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
-  const openTimelineToolGroupId = useTimelineStore(state => state.openTimelineToolGroupId);
   const runAudioExportPreflight = useTimelineStore(state => state.runAudioExportPreflight);
   const timelineTracks = useTimelineStore(state => state.tracks);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
@@ -281,10 +279,7 @@ function TimelineControlsComponent({
           </span>
         )}
       </div>
-      <div className={`timeline-edit-tools ${openTimelineToolGroupId ? 'timeline-edit-tools-open' : ''}`}>
-        <span className="timeline-edit-tools-hub" aria-hidden="true">
-          <IconTools className="timeline-edit-tools-hub-icon" size={18} stroke={2.15} />
-        </span>
+      <div className="timeline-edit-tools">
         <div className="timeline-edit-tools-items">
           <TimelineToolPalette />
           <button

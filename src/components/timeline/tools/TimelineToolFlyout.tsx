@@ -8,6 +8,7 @@ interface TimelineToolFlyoutProps {
   anchorRect: DOMRect;
   activeToolId: TimelineToolId;
   initialHighlightedToolId?: TimelineToolId | null;
+  armPressDrag?: boolean;
   tools: TimelineToolDefinition[];
   isExporting: boolean;
   onSelect: (tool: TimelineToolDefinition) => void;
@@ -65,6 +66,7 @@ export function TimelineToolFlyout({
   anchorRect,
   activeToolId,
   initialHighlightedToolId,
+  armPressDrag = false,
   tools,
   isExporting,
   onSelect,
@@ -114,6 +116,50 @@ export function TimelineToolFlyout({
     document.addEventListener('pointerdown', handlePointerDown, true);
     return () => document.removeEventListener('pointerdown', handlePointerDown, true);
   }, [onClose]);
+
+  // Press-drag-release: when the flyout is opened by holding the root button (the
+  // pointer is still down), let the user slide onto an item and release to pick it.
+  // Releasing anywhere else leaves the menu open as a normal sticky menu.
+  useEffect(() => {
+    if (!armPressDrag) return;
+
+    const indexFromPoint = (clientX: number, clientY: number): number => {
+      const element = document.elementFromPoint(clientX, clientY);
+      const item = element?.closest('.timeline-tool-flyout-item') as HTMLElement | null;
+      const raw = item?.getAttribute('data-flyout-index');
+      return raw == null ? -1 : Number(raw);
+    };
+
+    function handleMove(event: PointerEvent) {
+      const index = indexFromPoint(event.clientX, event.clientY);
+      if (index >= 0) setHighlightedIndex(index);
+    }
+
+    function handleUp(event: PointerEvent) {
+      stopTracking();
+      const index = indexFromPoint(event.clientX, event.clientY);
+      const tool = index >= 0 ? tools[index] : undefined;
+      const blocked = tool ? isExporting && tool.mutatesTimeline : false;
+      if (tool && tool.availability === 'enabled' && !blocked) {
+        onSelect(tool);
+        return;
+      }
+      // Released off an actionable item: cancel the gesture. (Releasing back on
+      // the root button activates the current tool via the button handler.)
+      onClose();
+    }
+
+    function stopTracking() {
+      document.removeEventListener('pointermove', handleMove, true);
+      document.removeEventListener('pointerup', handleUp, true);
+      document.removeEventListener('pointercancel', stopTracking, true);
+    }
+
+    document.addEventListener('pointermove', handleMove, true);
+    document.addEventListener('pointerup', handleUp, true);
+    document.addEventListener('pointercancel', stopTracking, true);
+    return stopTracking;
+  }, [armPressDrag, isExporting, onClose, onSelect, tools]);
 
   const moveHighlight = (direction: 1 | -1) => {
     if (enabledIndexes.length === 0) return;
@@ -170,6 +216,7 @@ export function TimelineToolFlyout({
             type="button"
             role="menuitem"
             className={`timeline-tool-flyout-item ${tool.id === activeToolId ? 'active' : ''} ${index === highlightedIndex ? 'highlighted' : ''}`}
+            data-flyout-index={index}
             data-guided-button={`timeline-tool:${tool.id}`}
             data-guided-target={`button:timeline-tool:${tool.id}`}
             disabled={disabled}

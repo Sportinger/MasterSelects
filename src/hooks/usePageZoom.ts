@@ -13,6 +13,13 @@ export function usePageZoom(): void {
       if (!event.ctrlKey) return;
       const target = event.target as HTMLElement | null;
       if (target?.closest?.('[data-browser-zoom-area]')) return; // allow native zoom here
+      // The timeline owns Ctrl+wheel as its horizontal zoom over the scrollable
+      // lanes and blocks the page zoom itself (it calls preventDefault in its own
+      // handler). If we preventDefault here first, its handler bails on
+      // defaultPrevented and the zoom never runs — which on Linux left users with
+      // no working zoom at all, since Alt+wheel is grabbed by the window manager.
+      // Mirror the timeline's eligibility (everything but the track headers).
+      if (target?.closest?.('.timeline-body') && !target.closest?.('.track-headers')) return;
       event.preventDefault();
     };
     // Capture + non-passive so we can preventDefault before the browser zooms.

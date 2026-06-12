@@ -160,9 +160,10 @@ getTrackChildren()  // Query child tracks
 
 ### Timeline Tool Palette
 - The ruler/header strip contains a compact grouped timeline tool palette.
+- UX: the palette is always visible. It no longer hides behind a single tools-icon "hub" that fanned the buttons out on hover; that reveal/collapse animation was removed so every tool button sits in place at full size like a normal toolbar (issue #256). The hold-to-open grouped-tool flyout is unaffected.
 - Root groups are Selection, Cut, Trim, Placement, and Navigation/Marking.
 - Clicking a root button activates the last enabled child tool for that group.
-- Holding a root button, right-clicking it, or using its chevron opens an unclipped portal flyout.
+- UX press-drag-release (issue #256): the whole root button is one target — there is no chevron/edge hit-zone. A short click just activates the group's current tool. Pressing and holding past `HOLD_TO_OPEN_MS` (200ms, pointer still down) opens the unclipped portal flyout; the pointer is captured so the user can slide off the small button onto the items and release over the desired tool to select it in one continuous gesture. Releasing back on the root button activates the current tool (a hold-and-release without choosing never swallows the click); releasing over empty space cancels. Right-click and the keyboard (`ArrowDown`) open a sticky, click-to-pick flyout instead (no held pointer to drag with).
 - The first enabled tools are Select, Track Select Forward/Backward/Forward All Tracks, Range Selection, Blade, Blade All Tracks, Split at Playhead, Split All at Playhead, Trim Start/End to Playhead, Ripple Trim Start/End to Playhead, Ripple Delete, Delete Gap, Edge Trim, Ripple Trim, Rolling Edit, Slip, Slide, Rate Stretch, Position/Overwrite, Hand/Pan, Zoom, Marker, In Point, Out Point, and Pen/Keyframe. Planned tools are visible but disabled until their operation-kernel migration exists.
 - Track Select Forward, Track Select Backward, and Track Select Forward All Tracks are enabled selection subtools; their clip clicks route through the shared pointer dispatcher and `select-clips-from-time` operation.
 - Range Selection is an enabled selection mode. Dragging on timeline space stores a timeline range with the affected unlocked visible track IDs and leaves a persistent range overlay for later lift/extract/copy commands.

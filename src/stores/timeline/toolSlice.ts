@@ -33,9 +33,16 @@ export const createToolSlice: SliceCreator<TimelineToolActions> = (set, get) => 
 
   activateTimelineToolGroup: (groupId) => {
     const { lastTimelineToolByGroup } = get();
-    const lastTool = lastTimelineToolByGroup[groupId] ?? DEFAULT_TIMELINE_TOOL_BY_GROUP[groupId];
-    if (!AVAILABLE_TIMELINE_MODE_TOOL_IDS.has(lastTool)) return;
-    get().setActiveTimelineTool(lastTool);
+    // Prefer the last-used tool, then the group default, then the first available
+    // mode tool — so a root-button click always lands on a real tool instead of
+    // silently doing nothing when the remembered tool is unavailable.
+    const target = [
+      lastTimelineToolByGroup[groupId],
+      DEFAULT_TIMELINE_TOOL_BY_GROUP[groupId],
+      ...TIMELINE_TOOL_IDS_BY_GROUP[groupId],
+    ].find((toolId): toolId is TimelineToolId => !!toolId && AVAILABLE_TIMELINE_MODE_TOOL_IDS.has(toolId));
+    if (!target) return;
+    get().setActiveTimelineTool(target);
   },
 
   cycleTimelineToolGroup: (groupId, direction = 1) => {

@@ -184,7 +184,12 @@ export function getLiveSectionScrollY(
 }
 
 export function shouldIgnoreTimelineSurfaceToolTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
+  // Use Element (not HTMLElement) so clicks that land on an SVG icon inside a
+  // control — e.g. a tool-palette button's glyph — are still recognized as UI
+  // targets. SVGElement is an Element and supports closest(); it is not an
+  // HTMLElement, so an HTMLElement check would let hand/zoom pan-capture steal
+  // the click and prevent the palette button from activating.
+  if (!(target instanceof Element)) return false;
   return Boolean(target.closest([
     'button',
     'input',

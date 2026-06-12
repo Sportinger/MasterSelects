@@ -94,6 +94,7 @@ export function TimelineToolPalette() {
   })));
   const [flyoutAnchorRect, setFlyoutAnchorRect] = useState<DOMRect | null>(null);
   const [guidedHighlightedToolId, setGuidedHighlightedToolId] = useState<TimelineToolId | null>(null);
+  const [armPressDrag, setArmPressDrag] = useState(false);
   const [flyoutOwnerId, setFlyoutOwnerId] = useState<string | null>(() => getToolFlyoutOwner());
   const toolButtonRefs = useRef(new Map<TimelineToolGroupId, HTMLButtonElement>());
   const shortcutRegistry = getShortcutRegistry();
@@ -123,13 +124,19 @@ export function TimelineToolPalette() {
     setOpenTimelineToolGroup(null);
     setFlyoutAnchorRect(null);
     setGuidedHighlightedToolId(null);
+    setArmPressDrag(false);
     clearTimelinePlacementCommandPreview();
   }, [ownerId, setOpenTimelineToolGroup]);
 
-  const openFlyout = useCallback((groupId: TimelineToolGroupId, anchor: HTMLButtonElement, highlightedToolId?: TimelineToolId | null) => {
+  const openFlyout = useCallback((
+    groupId: TimelineToolGroupId,
+    anchor: HTMLButtonElement,
+    options?: { highlightedToolId?: TimelineToolId | null; armPressDrag?: boolean },
+  ) => {
     setToolFlyoutOwner(ownerId);
     setFlyoutAnchorRect(anchor.getBoundingClientRect());
-    setGuidedHighlightedToolId(highlightedToolId ?? null);
+    setGuidedHighlightedToolId(options?.highlightedToolId ?? null);
+    setArmPressDrag(options?.armPressDrag ?? false);
     setOpenTimelineToolGroup(groupId);
   }, [ownerId, setOpenTimelineToolGroup]);
 
@@ -174,12 +181,47 @@ export function TimelineToolPalette() {
       const anchor = toolButtonRefs.current.get(groupId);
       if (!anchor) return;
       if (detail?.anchorElement && detail.anchorElement !== anchor) return;
-      openFlyout(groupId, anchor, detail?.targetToolId ?? null);
+      openFlyout(groupId, anchor, { highlightedToolId: detail?.targetToolId ?? null });
     };
 
     window.addEventListener('guidedOpenTimelineToolGroup', handleGuidedOpenToolGroup);
     return () => window.removeEventListener('guidedOpenTimelineToolGroup', handleGuidedOpenToolGroup);
   }, [openFlyout]);
+
+  // While the flyout is held open (press-drag), sliding the pointer onto another
+  // category's root button swaps the dropdown to that category — like dragging
+  // across a menu bar — so the open menu always tracks the pointer's column.
+  useEffect(() => {
+    if (!armPressDrag || !ownsFlyout || !openTimelineToolGroupId) return;
+
+    const rootButtonGroupAt = (clientX: number, clientY: number): TimelineToolGroupId | null => {
+      const element = document.elementFromPoint(clientX, clientY);
+      const rootButton = element?.closest('.timeline-tool-button[data-tool-group]') as HTMLButtonElement | null;
+      return (rootButton?.dataset.toolGroup as TimelineToolGroupId | undefined) ?? null;
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const groupId = rootButtonGroupAt(event.clientX, event.clientY);
+      if (!groupId || groupId === openTimelineToolGroupId) return;
+      const rootButton = toolButtonRefs.current.get(groupId);
+      if (rootButton) openFlyout(groupId, rootButton, { armPressDrag: true });
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      // Released over a category root (the original or one dragged onto): activate
+      // that group. Releases over a flyout item (select) or empty space (cancel)
+      // are resolved by the flyout itself.
+      const groupId = rootButtonGroupAt(event.clientX, event.clientY);
+      if (groupId) activateTimelineToolGroup(groupId);
+    };
+
+    document.addEventListener('pointermove', handlePointerMove, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    return () => {
+      document.removeEventListener('pointermove', handlePointerMove, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+    };
+  }, [activateTimelineToolGroup, armPressDrag, ownsFlyout, openTimelineToolGroupId, openFlyout]);
 
   const runCommand = useCallback((tool: TimelineToolDefinition) => {
     if (isExporting && tool.mutatesTimeline) return;
@@ -213,6 +255,7 @@ export function TimelineToolPalette() {
         const displayTool = TIMELINE_TOOL_DEFINITION_BY_ID[lastToolId] ?? TIMELINE_TOOL_DEFINITION_BY_ID[group.defaultToolId];
         const groupShortcut = group.shortcutActionId ? shortcutRegistry.getLabel(group.shortcutActionId) : '';
         const active = group.tools.includes(activeTimelineToolId);
+        const open = ownsFlyout && openTimelineToolGroupId === group.id;
         const title = `${group.tooltipLabel}${groupShortcut ? ` (${groupShortcut})` : ''}\nClick: ${displayTool.label}\nHold: show grouped tools`;
 
         return (
@@ -222,6 +265,7 @@ export function TimelineToolPalette() {
             label={group.label}
             title={title}
             active={active}
+            open={open}
             icon={displayTool.icon}
             onActivate={activateTimelineToolGroup}
             onOpen={openFlyout}
@@ -235,6 +279,7 @@ export function TimelineToolPalette() {
           activeToolId={activeTimelineToolId}
           tools={openGroupTools}
           initialHighlightedToolId={guidedHighlightedToolId}
+          armPressDrag={armPressDrag}
           isExporting={isExporting}
           onSelect={selectTool}
           onPreview={previewTool}

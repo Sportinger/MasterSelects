@@ -147,6 +147,12 @@ export function useTimelineZoom({
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
+      // Coordinates with usePageZoom (src/hooks/usePageZoom.ts): that window-level
+      // capture guard blocks the browser's Ctrl+wheel page zoom everywhere, but it
+      // deliberately does NOT preventDefault over `.timeline-body` lanes so this
+      // handler can run our own Ctrl+wheel zoom. If that exception is ever removed,
+      // e.defaultPrevented will be true here and timeline zoom dies silently — and
+      // on Linux that leaves no working zoom at all (see the Alt+wheel note below).
       if (e.defaultPrevented) return;
 
       // Don't zoom when hovering over track headers (first column for height adjustment)
@@ -161,6 +167,11 @@ export function useTimelineZoom({
         return;
       }
 
+      // Ctrl+wheel and Alt+wheel both zoom horizontally. Ctrl is the primary,
+      // reliable binding cross-platform; Alt+wheel is a fallback that is commonly
+      // unusable on Linux because GNOME/KDE window managers grab Alt+scroll for
+      // window actions, so it never reaches the page. Keep Ctrl working at all
+      // costs — it is the only zoom modifier Linux users can count on.
       if ((e.ctrlKey || e.altKey) && !isOverTrackHeaders) {
         e.preventDefault();
         // Get the track lanes container width for accurate centering
