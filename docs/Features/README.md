@@ -39,6 +39,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | Document | Description |
 |---|---|
 | [Timeline](./Timeline.md) | Tracks, clips, nested comps, markers, selection, and editing flow |
+| [Timeline Rulers](./Timeline-Rulers.md) | Stacked multi-ruler lanes (time/timecode/frames/bars) via the **Rulers** checklist, TempoMap-driven bars+beats, per-composition persistence, and the click-to-select active-lane seam (#257) |
 | [Slot Grid](./Slot-Grid.md) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |
 | [Keyframes](./Keyframes.md) | Animated properties, effect params, masks, fades, easing, and visibility rules |
 | [Preview](./Preview.md) | Main preview, source monitor, output windows, RAM preview, and target routing |

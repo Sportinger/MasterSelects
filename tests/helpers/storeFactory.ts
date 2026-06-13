@@ -22,6 +22,8 @@ import { createSelectionSlice } from '../../src/stores/timeline/selectionSlice';
 import { createTrackSlice } from '../../src/stores/timeline/trackSlice';
 import { createKeyframeSlice } from '../../src/stores/timeline/keyframeSlice';
 import { createMarkerSlice } from '../../src/stores/timeline/markerSlice';
+import { createRulerSlice } from '../../src/stores/timeline/rulerSlice';
+import { createDefaultRulerLaneState } from '../../src/timeline/tempo/rulerDefaults';
 import { createMaskSlice } from '../../src/stores/timeline/maskSlice';
 import { createClipSlice } from '../../src/stores/timeline/clipSlice';
 import { createTextClipSlice } from '../../src/stores/timeline/textClipSlice';
@@ -75,6 +77,7 @@ function getInitialState(): Partial<TimelineStore> {
     expandedCurveProperties: new Map<string, Set<AnimatableProperty>>(),
     curveEditorHeight: 250,
     markers: [] as TimelineMarker[],
+    ...createDefaultRulerLaneState(),
     toolMode: 'select' as const,
     activeTimelineToolId: 'select' as const,
     previousTimelineToolId: null,
@@ -143,6 +146,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
     const trackActions = createTrackSlice(set, get);
     const keyframeActions = createKeyframeSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
+    const rulerActions = createRulerSlice(set, get);
     const maskActions = createMaskSlice(set, get);
     const clipActions = createClipSlice(set, get);
     const textClipActions = createTextClipSlice(set, get);
@@ -385,6 +389,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
       ...trackActions,
       ...keyframeActions,
       ...markerActions,
+      ...rulerActions,
       ...maskActions,
       ...clipActions,
       ...textClipActions,

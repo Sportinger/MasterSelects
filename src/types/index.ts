@@ -114,8 +114,12 @@ export type {
 export type { Text3DProperties, TextClipProperties } from './text';
 export type {
   CompositionTimelineData,
+  RulerLane,
+  RulerLaneFormat,
   SerializableClip,
   SerializableMarker,
+  TempoEvent,
+  TempoMap,
   TimelineClip,
   TimelineClipDataSource,
   TimelineClipSource,

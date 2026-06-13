@@ -474,7 +474,6 @@ export function Timeline() {
 
   const {
     timelineControlsProps,
-    timelineTimeDisplayMode,
     timelineToolbarProps,
   } = useTimelineToolbarChromeController({
     isPlaying,
@@ -547,7 +546,6 @@ export function Timeline() {
     clipTrim,
     compositionSwitchDirection,
     contextMenu,
-    displayMode: timelineTimeDisplayMode,
     displayedAudioTracks,
     displayedVideoTracks,
     duration,

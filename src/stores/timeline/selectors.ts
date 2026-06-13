@@ -19,6 +19,11 @@ export const selectSelectedClipIds = (state: TimelineStore) => state.selectedCli
 export const selectPropertiesSelection = (state: TimelineStore) => state.propertiesSelection;
 export const selectMarkers = (state: TimelineStore) => state.markers;
 
+// Multi-ruler infrastructure (issue #257)
+export const selectRulerLanes = (state: TimelineStore) => state.rulerLanes;
+export const selectActiveRulerLaneId = (state: TimelineStore) => state.activeRulerLaneId;
+export const selectTempoMap = (state: TimelineStore) => state.tempoMap;
+
 // ===========================================
 // UI STATE SELECTORS (less frequent changes)
 // ===========================================
@@ -282,6 +287,14 @@ export const selectMarkerActions = (state: TimelineStore) => ({
   addMarker: state.addMarker,
   moveMarker: state.moveMarker,
   removeMarker: state.removeMarker,
+});
+
+// Ruler-lane actions (issue #257)
+export const selectRulerLaneActions = (state: TimelineStore) => ({
+  addRulerLane: state.addRulerLane,
+  removeRulerLane: state.removeRulerLane,
+  setActiveRulerLane: state.setActiveRulerLane,
+  reorderRulerLanes: state.reorderRulerLanes,
 });
 
 // Clipboard actions

@@ -2,6 +2,7 @@ import type { CompositionTimelineData, SerializableClip, TimelineClip, TimelineT
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { Logger } from './logger';
+import { createDefaultRulerLaneState } from '../timeline/tempo/rulerDefaults';
 
 const log = Logger.create('TimelineSubcomposition');
 
@@ -92,6 +93,8 @@ function buildNestedTimelineData(
     outPoint: null,
     loopPlayback: false,
     markers: nestedMarkers && nestedMarkers.length > 0 ? nestedMarkers : undefined,
+    // Multi-ruler infrastructure (issue #257) — new nested comp gets default lanes.
+    ...createDefaultRulerLaneState(),
   };
 }
 

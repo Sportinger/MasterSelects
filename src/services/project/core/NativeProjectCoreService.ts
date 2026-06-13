@@ -8,6 +8,7 @@ import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
 import { PROJECT_FOLDER_PATHS, MAX_BACKUPS } from './constants';
 import { shouldPreferAutosave, shouldSkipEmptyProjectSave } from './autosaveRecovery';
 import { addRecentNativeProject, removeRecentNativeProject } from '../recentProjects';
+import { createDefaultRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 
 const log = Logger.create('NativeProjectCore');
@@ -167,6 +168,8 @@ export class NativeProjectCoreService {
           ],
           clips: [],
           markers: [],
+          // Multi-ruler infrastructure (issue #257) — default single Time lane.
+          ...createDefaultRulerLaneState(),
         }],
         folders: [],
         activeCompositionId: mainCompId,

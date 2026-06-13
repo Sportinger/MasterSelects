@@ -1,6 +1,7 @@
 // Timeline-related types (keyframes, markers, effects, masks, transforms)
 
 import type { AudioEffectParamValue } from '../../../types/audio';
+import type { RulerLaneFormat } from '../../../types/timeline';
 
 export interface ProjectTransform {
   x: number;
@@ -91,4 +92,24 @@ export interface ProjectMarker {
   duration: number;
   stopPlayback?: boolean;
   midiBindings?: import('../../../types/midi').MarkerMIDIBinding[];
+}
+
+// ---- Multi-ruler infrastructure (issue #257) ----
+// Durable project-tier mirror of the runtime ruler types. Structurally identical
+// to the runtime `TempoEvent` / `TempoMap` / `RulerLane`; kept as distinct names
+// so the schema tier owns its own shape (matching ProjectMarker vs TimelineMarker).
+export interface ProjectTempoEvent {
+  time: number; // seconds, sorted ascending; first event is at 0
+  bpm: number;
+  numerator: number;
+  denominator: number;
+}
+
+export interface ProjectTempoMap {
+  events: ProjectTempoEvent[];
+}
+
+export interface ProjectRulerLane {
+  id: string;
+  format: RulerLaneFormat;
 }

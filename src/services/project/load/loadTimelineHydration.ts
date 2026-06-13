@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { cloneClipNodeGraph } from '../../nodeGraph';
 import { fromProjectTransform } from '../transformSerialization';
+import { normalizeRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
 import type { ProjectComposition, ProjectFile } from '../../projectFileService';
 import type { LabelColor } from '../../../stores/mediaStore/types';
 import type {
@@ -182,6 +183,13 @@ export function convertProjectCompositionToStore(
         stopPlayback: marker.stopPlayback === true ? true : undefined,
         midiBindings: marker.midiBindings,
       })),
+      // Multi-ruler infrastructure (issue #257) — hydrate lanes/tempo, defaulting
+      // projects authored before the feature (this is the migration).
+      ...normalizeRulerLaneState({
+        tempoMap: pc.tempoMap,
+        rulerLanes: pc.rulerLanes,
+        activeRulerLaneId: pc.activeRulerLaneId,
+      }),
     };
 
     return {

@@ -145,7 +145,7 @@
 .timeline-header-row .ruler-header {
   width: var(--track-header-width, 210px);
   flex-shrink: 0;
-  height: 30px;
+  height: var(--timeline-ruler-height, 30px);
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -329,7 +329,7 @@
 .time-ruler-wrapper {
   flex: 1;
   overflow: hidden;
-  height: 30px;
+  height: var(--timeline-ruler-height, 30px);
   border-bottom: 1px solid var(--border-color);
   transition: none;
 }
@@ -558,7 +558,7 @@
 }
 
 .ruler-header {
-  height: 30px;
+  height: var(--timeline-ruler-height, 30px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -575,13 +575,13 @@
 
 .time-ruler-container {
   position: relative;
-  height: 30px;
+  height: var(--timeline-ruler-height, 30px);
   display: flex;
   overflow: hidden;
 }
 
 .time-ruler {
-  height: 30px;
+  height: var(--timeline-ruler-height, 30px);
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   position: relative;
@@ -591,6 +591,24 @@
 
 .time-ruler:hover {
   background: var(--bg-hover);
+}
+
+/* Multi-ruler infrastructure (issue #257): one stacked row per lane. The
+   container height grows with lane count in Packet 5; a single default lane
+   keeps the original 30px look. */
+.ruler-lane {
+  position: relative;
+  height: 30px;
+  width: 100%;
+}
+
+.ruler-lane + .ruler-lane {
+  border-top: 1px solid var(--border-color);
+}
+
+.ruler-lane.is-active {
+  background: color-mix(in srgb, var(--accent, var(--border-strong)) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent, var(--border-strong));
 }
 
 .time-marker {

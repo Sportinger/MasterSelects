@@ -302,7 +302,8 @@ The toolbar and wheel gestures still drive playback and navigation:
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.
 - Marker MIDI bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`.
 - Left/Right arrows step frame by frame.
-- The ruler and lane grid use the active composition frame rate at deep zoom. The base time grid crossfades out while frame-accurate grid lines fade in with zoom before the ruler switches to frame timecode labels.
+- The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted) as the future snap target. See [Timeline Rulers](./Timeline-Rulers.md).
+- The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
 - `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. Faster wheel gestures use larger zoom steps.
 - `Shift+Scroll` pans horizontally.
 - Vertical scroll snaps to track boundaries.

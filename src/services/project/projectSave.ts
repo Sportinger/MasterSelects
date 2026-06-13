@@ -36,6 +36,7 @@ import {
   type ProjectFolder,
 } from '../projectFileService';
 import { toProjectTransform } from './transformSerialization';
+import { normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { shouldBlockDestructiveStoreSync } from './destructiveStoreSyncGuard';
 import {
   isProjectStoreSyncInProgress,
@@ -336,6 +337,14 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       midiBindings: marker.midiBindings || undefined,
     }));
 
+    // Multi-ruler infrastructure (issue #257) — persist lanes/tempo, defaulting
+    // comps authored before the feature so the durable file always has the fields.
+    const rulerState = normalizeRulerLaneState({
+      tempoMap: timelineData?.tempoMap,
+      rulerLanes: timelineData?.rulerLanes,
+      activeRulerLaneId: timelineData?.activeRulerLaneId,
+    });
+
     return {
       id: comp.id,
       name: comp.name,
@@ -355,6 +364,9 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         ? structuredClone(timelineData.masterAudioState)
         : undefined,
       markers,
+      tempoMap: rulerState.tempoMap,
+      rulerLanes: rulerState.rulerLanes,
+      activeRulerLaneId: rulerState.activeRulerLaneId,
     };
   });
 }
