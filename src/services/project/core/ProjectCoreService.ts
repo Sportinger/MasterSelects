@@ -6,6 +6,7 @@ import { projectDB } from '../../projectDB';
 import { apiKeyManager } from '../../apiKeyManager';
 import { shouldSkipEmptyProjectSave } from './autosaveRecovery';
 import { addRecentFsaProject, removeRecentFsaProject } from '../recentProjects';
+import { createDefaultRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
 
 const log = Logger.create('ProjectCore');
 import { FileStorageService } from './FileStorageService';
@@ -190,6 +191,8 @@ export class ProjectCoreService {
           ],
           clips: [],
           markers: [],
+          // Multi-ruler infrastructure (issue #257) — default single Time lane.
+          ...createDefaultRulerLaneState(),
         }],
         folders: [],
         activeCompositionId: mainCompId,

@@ -23,6 +23,7 @@ import { createSerializableTimelineState } from './serialization/serializableTim
 import { createLoadStateGeneratedClip } from './serialization/loadStateGeneratedClipRestore';
 import { restoreLoadStateCompositionClip } from './serialization/loadStateCompositionClipRestore';
 import { restoreLoadStateMediaClip } from './serialization/loadStateMediaClipRestore';
+import { createDefaultRulerLaneState, normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 
 function getDefaultExpandedTrackIds(tracks: readonly TimelineTrack[]): string[] {
   return tracks.map(track => track.id);
@@ -85,6 +86,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
         propertiesSelection: null,
         targetTrackIdByType: {},
         markers: [],
+        ...createDefaultRulerLaneState(),
         videoBakeRegionSelection: null,
         videoBakeRegions: [],
         masterAudioState: undefined,
@@ -127,6 +129,13 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       clipStemSeparationJobs: {},
       // Restore markers
       markers: data.markers || [],
+      // Restore ruler lanes / tempo map, defaulting old comps (issue #257). This
+      // is the composition-switch seam — fields dropped here vanish on comp swap.
+      ...normalizeRulerLaneState({
+        tempoMap: data.tempoMap,
+        rulerLanes: data.rulerLanes,
+        activeRulerLaneId: data.activeRulerLaneId,
+      }),
       videoBakeRegionSelection: null,
       videoBakeRegions: restoredVideoBakeState.videoBakeRegions,
       masterAudioState: data.masterAudioState ? structuredClone(data.masterAudioState) : undefined,

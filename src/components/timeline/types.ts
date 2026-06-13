@@ -10,6 +10,8 @@ import type {
   EasingType,
   RotationInterpolationMode,
   ClipAudioRegionGainPreview,
+  RulerLane,
+  TempoMap,
 } from '../../types';
 import type {
   ClipStemSeparationJobState,
@@ -143,7 +145,15 @@ export interface TimelineRulerProps {
   duration: number;
   zoom: number;
   frameRate?: number | null;
-  displayMode?: 'time' | 'frames';
+  // Multi-ruler infrastructure (issue #257). One stacked row per lane; bars lanes
+  // project through `tempoMap`. `activeRulerLaneId` highlights the authoritative
+  // lane (selection interaction lands in Packet 6).
+  lanes?: RulerLane[];
+  tempoMap?: TempoMap;
+  activeRulerLaneId?: string | null;
+  // Click (without drag) on a lane selects it as the active lane. No snap
+  // behavior — this is the seam a future grid reads (issue #257, Packet 6).
+  onSelectLane?: (laneId: string) => void;
   scrollX: number;
   onRulerMouseDown: (e: React.MouseEvent) => void;
   formatTime: (seconds: number) => string;

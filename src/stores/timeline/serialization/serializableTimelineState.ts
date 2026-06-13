@@ -27,6 +27,9 @@ type SerializableTimelineStateInput = Pick<
   | 'loopPlayback'
   | 'clipKeyframes'
   | 'markers'
+  | 'tempoMap'
+  | 'rulerLanes'
+  | 'activeRulerLaneId'
   | 'videoBakeRegions'
   | 'masterAudioState'
 >;
@@ -148,6 +151,10 @@ export function createSerializableTimelineState(
     outPoint: state.outPoint,
     loopPlayback: state.loopPlayback,
     markers: state.markers.length > 0 ? state.markers : undefined,
+    // Always emitted: runtime state is always defaulted (issue #257).
+    tempoMap: structuredClone(state.tempoMap),
+    rulerLanes: state.rulerLanes.map(lane => ({ ...lane })),
+    activeRulerLaneId: state.activeRulerLaneId,
     videoBakeRegions: state.videoBakeRegions.length > 0
       ? state.videoBakeRegions.map(serializeVideoBakeRegion)
       : undefined,

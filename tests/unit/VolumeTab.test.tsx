@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VolumeTab } from '../../src/components/panels/properties/VolumeTab';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -27,6 +27,18 @@ function addStackEqFromSelect(container: HTMLElement): AudioEffectInstance {
   expect(effect).toBeDefined();
   if (!effect) throw new Error('Expected stack EQ effect to be created');
   return effect;
+}
+
+function getSelectedBandNumbers(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll('.flex-eq-module-knobs .draggable-number'));
+}
+
+function getSelectedBandKeyframeToggles(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll('.flex-eq-module-knobs .keyframe-toggle'));
+}
+
+function getSelectedBandAllKeyframeToggle(container: HTMLElement): HTMLElement | null {
+  return container.querySelector('.flex-eq-module-keyframes .keyframe-toggle');
 }
 
 describe('VolumeTab', () => {
@@ -66,7 +78,7 @@ describe('VolumeTab', () => {
     expect(useTimelineStore.getState().clips[0].effects).toEqual([]);
     expect(useTimelineStore.getState().clips[0].audioState?.effectStack ?? []).toEqual([]);
     expect(screen.queryByText('Legacy Equalizer')).toBeNull();
-    expect(container.querySelector('.flex-eq-root')).toBeNull();
+    expect(container.querySelector('.flex-eq')).toBeNull();
   });
 
   it('creates the legacy volume effect only when the user edits volume', () => {
@@ -89,7 +101,7 @@ describe('VolumeTab', () => {
   it('adds EQ through the audio FX stack and updates the selected graph band when edited', () => {
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
     const eqEffect = addStackEqFromSelect(container);
-    const selectedBandNumbers = container.querySelectorAll('.flex-eq-selected-band .draggable-number');
+    const selectedBandNumbers = getSelectedBandNumbers(container);
     expect(selectedBandNumbers.length).toBeGreaterThanOrEqual(3);
 
     fireEvent.doubleClick(selectedBandNumbers[1]);
@@ -107,7 +119,7 @@ describe('VolumeTab', () => {
     expect(Object.prototype.hasOwnProperty.call(updatedEqEffect.params, 'eq.audible.bands.band31.gainDb')).toBe(false);
   });
 
-  it('lets the user switch the EQ spectrum between source and adjusted views', () => {
+  it('lets the user switch the EQ spectrum between source and adjusted views', async () => {
     // The live analyzer spectrum now streams through the runtime audio meter bus.
     runtimeAudioMeterBus.publishTrack('audio-1', {
       peakLinear: 0.2,
@@ -123,12 +135,15 @@ describe('VolumeTab', () => {
     const eqEffect = addStackEqFromSelect(container);
     const spectrumView = within(screen.getByRole('group', { name: 'Spectrum view' }));
 
+    await waitFor(() => expect(spectrumView.getByRole('button', { name: 'Source' })).not.toBeDisabled());
     fireEvent.click(spectrumView.getByRole('button', { name: 'Source' }));
 
-    const updatedEqEffect = useTimelineStore.getState().clips[0].audioState?.effectStack?.find(effect => effect.id === eqEffect.id);
-    expect(updatedEqEffect).toBeDefined();
-    if (!updatedEqEffect) throw new Error('Expected EQ effect to be updated');
-    expect(normalizeAudioEqParams(updatedEqEffect.params).display.analyzerMode).toBe('pre');
+    await waitFor(() => {
+      const updatedEqEffect = useTimelineStore.getState().clips[0].audioState?.effectStack?.find(effect => effect.id === eqEffect.id);
+      expect(updatedEqEffect).toBeDefined();
+      if (!updatedEqEffect) throw new Error('Expected EQ effect to be updated');
+      expect(normalizeAudioEqParams(updatedEqEffect.params).display.analyzerMode).toBe('pre');
+    });
   });
 
   it('sets keyframes for every numeric parameter on the selected flexible EQ band', () => {
@@ -146,7 +161,7 @@ describe('VolumeTab', () => {
     });
 
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
-    const keyframeToggle = container.querySelector('.flex-eq-selected-band .keyframe-toggle');
+    const keyframeToggle = getSelectedBandAllKeyframeToggle(container);
     expect(keyframeToggle).not.toBeNull();
 
     fireEvent.click(keyframeToggle!);
@@ -169,17 +184,17 @@ describe('VolumeTab', () => {
   it('keeps EQ keyframing connected after the EQ effect is added from the stack', () => {
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
     const eqEffect = addStackEqFromSelect(container);
-    const selectedBandNumbers = container.querySelectorAll('.flex-eq-selected-band .draggable-number');
+    const selectedBandNumbers = getSelectedBandNumbers(container);
 
     fireEvent.doubleClick(selectedBandNumbers[1]);
     fireEvent.change(screen.getByTitle('Enter value'), { target: { value: '3.5' } });
     fireEvent.keyDown(screen.getByTitle('Enter value'), { key: 'Enter' });
 
-    const keyframeToggle = container.querySelector('.flex-eq-selected-band .keyframe-toggle');
+    const keyframeToggle = getSelectedBandKeyframeToggles(container)[1];
     expect(keyframeToggle).not.toBeNull();
 
-    const selectedBandToggles = container.querySelectorAll('.flex-eq-selected-band .keyframe-toggle');
-    fireEvent.click(selectedBandToggles[2]);
+    const selectedBandToggles = getSelectedBandKeyframeToggles(container);
+    fireEvent.click(selectedBandToggles[1]);
 
     const keyframes = useTimelineStore.getState().clipKeyframes.get('clip-1') ?? [];
     expect(keyframes).toHaveLength(1);
@@ -204,13 +219,13 @@ describe('VolumeTab', () => {
     });
 
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
-    fireEvent.click(container.querySelector('.flex-eq-selected-band .keyframe-toggle')!);
+    fireEvent.click(getSelectedBandKeyframeToggles(container)[1]);
 
     act(() => {
       useTimelineStore.setState({ playheadPosition: 1 });
     });
 
-    const selectedBandNumbers = container.querySelectorAll('.flex-eq-selected-band .draggable-number');
+    const selectedBandNumbers = getSelectedBandNumbers(container);
     fireEvent.doubleClick(selectedBandNumbers[1]);
     fireEvent.change(screen.getByTitle('Enter value'), { target: { value: '5' } });
     fireEvent.keyDown(screen.getByTitle('Enter value'), { key: 'Enter' });
@@ -240,14 +255,14 @@ describe('VolumeTab', () => {
     });
 
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
-    const selectedBandToggles = container.querySelectorAll('.flex-eq-selected-band .keyframe-toggle');
-    fireEvent.click(selectedBandToggles[1]);
+    const selectedBandToggles = getSelectedBandKeyframeToggles(container);
+    fireEvent.click(selectedBandToggles[0]);
 
     act(() => {
       useTimelineStore.setState({ playheadPosition: 1 });
     });
 
-    const selectedBandNumbers = container.querySelectorAll('.flex-eq-selected-band .draggable-number');
+    const selectedBandNumbers = getSelectedBandNumbers(container);
     fireEvent.doubleClick(selectedBandNumbers[0]);
     fireEvent.change(screen.getByTitle('Enter value'), { target: { value: '120' } });
     fireEvent.keyDown(screen.getByTitle('Enter value'), { key: 'Enter' });
@@ -298,9 +313,9 @@ describe('VolumeTab', () => {
     });
 
     const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
-    const selectedBandNumbers = container.querySelectorAll('.flex-eq-selected-band .draggable-number');
+    const selectedBandNumbers = getSelectedBandNumbers(container);
 
-    expect(selectedBandNumbers[1]).toHaveTextContent('2.5 dB');
+    expect(selectedBandNumbers[1]).toHaveTextContent('2.5');
   });
 
   it('uses nested EQ numeric paths for the stack-wide EQ keyframe all toggle', () => {

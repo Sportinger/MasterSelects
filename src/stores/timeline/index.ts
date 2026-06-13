@@ -5,6 +5,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 
 import type { TimelineStore, TimelineUtils, TimelineClip, Keyframe } from './types';
 import { DEFAULT_TRACKS, DEFAULT_TRACK_HEADER_WIDTH, MIN_TRACK_HEADER_WIDTH, MAX_TRACK_HEADER_WIDTH } from './constants';
+import { createDefaultTempoMap, createDefaultRulerLanes, getDefaultActiveRulerLaneId } from '../../timeline/tempo/rulerDefaults';
 
 import { createTrackSlice } from './trackSlice';
 import { createClipSlice } from './clipSlice';
@@ -32,6 +33,7 @@ import { createSelectionSlice } from './selectionSlice';
 import { createKeyframeSlice } from './keyframeSlice';
 import { createMaskSlice } from './maskSlice';
 import { createMarkerSlice } from './markerSlice';
+import { createRulerSlice } from './rulerSlice';
 import { createTransitionSlice } from './transitionSlice';
 import { createNodeGraphSlice } from './nodeGraphSlice';
 import { createClipboardSlice } from './clipboardSlice';
@@ -96,6 +98,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const keyframeActions = createKeyframeSlice(set, get);
     const maskActions = createMaskSlice(set, get);
     const markerActions = createMarkerSlice(set, get);
+    const rulerActions = createRulerSlice(set, get);
     const transitionActions = createTransitionSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
     const clipboardActions = createClipboardSlice(set, get);
@@ -268,6 +271,11 @@ export const useTimelineStore = create<TimelineStore>()(
       // Timeline markers
       markers: [] as import('./types').TimelineMarker[],
 
+      // Multi-ruler infrastructure (issue #257) — default to a single Time lane.
+      tempoMap: createDefaultTempoMap(),
+      rulerLanes: createDefaultRulerLanes(),
+      activeRulerLaneId: getDefaultActiveRulerLaneId() as string | null,
+
       // Composition-level audio master bus state
       masterAudioState: undefined,
       runtimeAudioMeters: {
@@ -385,6 +393,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...layerActions,
       ...maskActions,
       ...markerActions,
+      ...rulerActions,
       ...transitionActions,
       ...nodeGraphActions,
       ...clipboardActions,

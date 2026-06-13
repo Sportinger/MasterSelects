@@ -110,6 +110,11 @@ export interface TimelineState {
   timelineToolPreview: TimelineToolPreview | null;
   clipDragPreview: TimelineClipDragPreview | null;
   markers: import('./feedbackTypes').TimelineMarker[];
+  // Multi-ruler infrastructure (issue #257). View state — always defaulted at
+  // init/load, so required (not optional) in the runtime store.
+  tempoMap: import('../../../types').TempoMap;
+  rulerLanes: import('../../../types').RulerLane[];
+  activeRulerLaneId: string | null;
   masterAudioState?: MasterAudioState;
   runtimeAudioMeters: RuntimeAudioMeterState;
   clipEntranceAnimationKey: number;

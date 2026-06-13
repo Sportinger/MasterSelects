@@ -19,6 +19,7 @@ import type { TimelineControlsProps } from './types';
 import { useTimelineStore } from '../../stores/timeline';
 import { AudioEffectStackControl } from '../panels/properties/AudioEffectStackControl';
 import { AudioLevelMeter } from './components/AudioLevelMeter';
+import { RulerLanesMenu } from './RulerLanesMenu';
 import { TimelineToolPalette } from './tools/TimelineToolPalette';
 import { AudioExportPipeline } from '../../engine/audio/AudioExportPipeline';
 import { audioRecordingService } from '../../services/audio/AudioRecordingService';
@@ -440,6 +441,7 @@ function TimelineControlsComponent({
         )}
       </div>
       <div className="timeline-ram-preview">
+        <RulerLanesMenu />
         <div className="view-dropdown" ref={viewDropdownRef}>
           <button
             className={`btn btn-sm ${viewDropdownOpen ? 'btn-active' : ''}`}

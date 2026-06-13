@@ -268,6 +268,32 @@ export interface SerializableMarker {
   midiBindings?: import('./midi').MarkerMIDIBinding[];
 }
 
+// ---- Multi-ruler infrastructure (issue #257) ----
+// The format a ruler lane renders. Linear formats (`time` / `timecode` /
+// `frames`) are pure functions of time; `bars` is projected through the TempoMap.
+export type RulerLaneFormat = 'time' | 'timecode' | 'frames' | 'bars';
+
+// One stacked ruler lane. Lanes are an ordered, format-unique set
+// (no two lanes share a format — duplicate rulers are pointless).
+export interface RulerLane {
+  id: string;
+  format: RulerLaneFormat;
+}
+
+// One tempo / time-signature segment, effective from `time` onward until the
+// next event. A single 4/4 @ 60 BPM event today; a sorted list of N later.
+export interface TempoEvent {
+  time: number; // seconds, sorted ascending; first event is at 0
+  bpm: number;
+  numerator: number;
+  denominator: number;
+}
+
+// The conductor track that makes Bars+Beats possible. Always >= 1 event.
+export interface TempoMap {
+  events: TempoEvent[];
+}
+
 // Serializable timeline data for composition storage
 export interface CompositionTimelineData {
   tracks: TimelineTrack[];
@@ -283,4 +309,9 @@ export interface CompositionTimelineData {
   markers?: SerializableMarker[];  // Timeline markers
   videoBakeRegions?: VideoBakeRegion[];
   masterAudioState?: MasterAudioState;
+  // Multi-ruler infrastructure (issue #257). Optional for back-compat: old data
+  // lacks them and is normalized to defaults on load (see rulerDefaults).
+  tempoMap?: TempoMap;
+  rulerLanes?: RulerLane[];
+  activeRulerLaneId?: string | null;
 }

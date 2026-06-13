@@ -11,6 +11,7 @@ import type {
   Layer,
   NodeGraphConnectionRequest,
   NodeGraphLayout,
+  RulerLaneFormat,
   RuntimeColorGrade,
   TextBoundsPath,
   TimelineClip,
@@ -148,6 +149,17 @@ export interface MarkerActions {
   updateMarker: (markerId: string, updates: Partial<Omit<TimelineMarker, 'id'>>) => void;
   moveMarker: (markerId: string, newTime: number) => void;
   clearMarkers: () => void;
+}
+
+// Multi-ruler infrastructure (issue #257, Packet 3). Lane toggles + the active
+// lane are VIEW state and are intentionally excluded from history snapshots.
+export interface RulerLaneActions {
+  // Enable a format's lane; no-op if already present. Returns the lane id.
+  addRulerLane: (format: RulerLaneFormat) => string;
+  removeRulerLane: (laneId: string) => void;
+  setActiveRulerLane: (laneId: string | null) => void;
+  // Replace the lane stacking order (no UI yet — seam for future drag-reorder).
+  reorderRulerLanes: (orderedLaneIds: string[]) => void;
 }
 
 export interface TransitionActions {

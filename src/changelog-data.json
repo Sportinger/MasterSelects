@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-06-13",
+    "type": "new",
+    "title": "MasterSelects 2.2.3",
+    "description": "Timeline ruler lanes release: the timeline can now show multiple rulers at once, including Time, Frames, Bars/Beats, SMPTE, and Samples. The active ruler lane drives snapping, ruler choices persist with project data, and the new tempo map foundation keeps bars/beats conversion ready for musical editing workflows.",
+    "section": "Release"
+  },
+  {
     "date": "2026-06-11",
     "type": "fix",
     "title": "MasterSelects 2.2.2",

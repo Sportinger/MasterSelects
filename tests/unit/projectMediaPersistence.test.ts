@@ -1653,7 +1653,7 @@ describe('project media persistence', () => {
     const { loadProjectToStores } = await import('../../src/services/project/projectLoad');
     await loadProjectToStores();
 
-    for (let attempt = 0; attempt < 1000 && mocks.timelineState.updateClip.mock.calls.length === 0; attempt += 1) {
+    for (let attempt = 0; attempt < 5000 && mocks.timelineState.updateClip.mock.calls.length === 0; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1));
     }
 

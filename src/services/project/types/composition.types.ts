@@ -1,6 +1,6 @@
 // Composition-related types
 
-import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, ProjectTransform } from './timeline.types';
+import type { ProjectKeyframe, ProjectMarker, ProjectEffect, ProjectMask, ProjectTransform, ProjectTempoMap, ProjectRulerLane } from './timeline.types';
 import type {
   ClipAudioState,
   MasterAudioState,
@@ -162,4 +162,10 @@ export interface ProjectComposition {
 
   // Markers
   markers: ProjectMarker[];
+
+  // Multi-ruler infrastructure (issue #257). Optional for back-compat: projects
+  // authored before this feature lack them and are normalized to defaults on load.
+  tempoMap?: ProjectTempoMap;
+  rulerLanes?: ProjectRulerLane[];
+  activeRulerLaneId?: string | null;
 }

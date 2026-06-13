@@ -24,7 +24,6 @@ interface UseTimelineBodySurfacePropsParams extends Omit<
   clipAnimationPhase: RulerHeaderProps['clipAnimationPhase'];
   clipDrag: GlobalOverlayProps['clipDrag'];
   clipTrim: GlobalOverlayProps['clipTrim'];
-  displayMode: RulerHeaderProps['displayMode'];
   duration: GlobalOverlayProps['duration'];
   exportProgress: GlobalOverlayProps['exportProgress'];
   exportRange: GlobalOverlayProps['exportRange'];
@@ -78,7 +77,6 @@ export function useTimelineBodySurfaceProps({
   clipDrag,
   clipDragActive,
   clipTrim,
-  displayMode,
   duration,
   exportProgress,
   exportRange,
@@ -210,7 +208,6 @@ export function useTimelineBodySurfaceProps({
     rulerHeaderProps: {
       cacheRanges,
       clipAnimationPhase,
-      displayMode,
       duration,
       formatTime,
       frameRate,
