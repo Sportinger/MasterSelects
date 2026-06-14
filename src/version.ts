@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.2.3';
+export const APP_VERSION = '2.2.4';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.2.3',
-    message: 'Timeline ruler lanes: stack Time, Frames, Bars/Beats, SMPTE, and Samples rulers, pick the active snap lane, and persist tempo/ruler state with projects.',
+    title: 'MasterSelects 2.2.4',
+    message: 'Export workflow release: Export opens as the default right-panel tab, media files can be downloaded from the browser context menu, and GIF export now has safer browser limits plus deeper FFmpeg controls.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.2.3',
-  message: 'Timeline ruler lanes: stack Time, Frames, Bars/Beats, SMPTE, and Samples rulers, pick the active snap lane, and persist tempo/ruler state with projects.',
+  title: 'MasterSelects 2.2.4',
+  message: 'Export workflow release: Export opens as the default right-panel tab, media files can be downloaded from the browser context menu, and GIF export now has safer browser limits plus deeper FFmpeg controls.',
   animated: true,
 };
 

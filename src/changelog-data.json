@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-06-14",
+    "type": "fix",
+    "title": "MasterSelects 2.2.4",
+    "description": "Export workflow release: Export is now the default right-side panel tab, media panel items can be downloaded through the browser context menu, and Browser GIF stops before oversized in-memory exports instead of hanging. GIF export also gains a pro control surface for palette size, global/per-frame palettes, loop modes, transparency, alpha threshold, and FFmpeg dithering options.",
+    "section": "Release"
+  },
+  {
     "date": "2026-06-13",
     "type": "new",
     "title": "MasterSelects 2.2.3",
