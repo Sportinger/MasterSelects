@@ -252,6 +252,34 @@ export class VideoSyncFullWebCodecsCoordinator {
     const audioVideo = handoffVideo ?? video;
     this.deps.muteLinkedVideoSourceAudio(ctx, clip, audioVideo);
 
+    if (clip.transitionSourceHold === true) {
+      const holdRuntimeSource = isInteractivePreview ? scrubRuntimeSource : playbackRuntimeSource;
+      updateRuntimePlaybackTime(holdRuntimeSource, timeInfo.clipTime);
+      if (isInteractivePreview) {
+        void ensureRuntimeFrameProvider(scrubRuntimeSource, 'interactive', timeInfo.clipTime);
+      }
+
+      const holdProvider = getRuntimeFrameProvider(holdRuntimeSource) ?? clipRuntimeProvider;
+      if (holdProvider?.isPlaying) {
+        holdProvider.pause?.();
+      }
+      if (video && !video.paused) {
+        video.pause();
+      }
+      if (holdProvider?.isFullMode()) {
+        this.syncPausedWebCodecsProvider(
+          holdProvider,
+          `${clip.id}:transition-hold`,
+          timeInfo.clipTime,
+          isInteractivePreview,
+          true,
+          true
+        );
+      }
+      scrubSettleState.resolve(clip.id);
+      return;
+    }
+
     if (ctx.isPlaying) {
       const settle = scrubSettleState.get(clip.id);
       const settleActive =

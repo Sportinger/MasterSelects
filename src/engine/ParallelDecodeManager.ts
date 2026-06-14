@@ -27,14 +27,18 @@ import {
 import { type ParallelDecodeFrameLookupOptions } from './parallelDecode/frameLookup';
 import { getNormalizedSampleSourceTime, getPresentationOffsetSeconds } from './parallelDecode/sampleTiming';
 import {
+  BUFFER_AHEAD_FRAMES,
   MAX_BUFFER_SIZE,
   MAX_PREWARM_CLIP_STARTS,
   collectPresentationKeyframeCandidates,
+  createDecodeSchedulingPlan,
   findKeyframeAtOrBeforeSample,
+  findSampleIndexForSourceTime,
   getDecodeBatchSize,
   getDecodeSeekState,
   getSeekTargetSampleIndex,
   hasDecodeSeekDistance,
+  hasUsableBufferedFrame,
 } from './parallelDecode/scheduling';
 import {
   createParallelDecodeRuntimeSnapshot,
@@ -55,7 +59,10 @@ import {
   prewarmClipStarts as runPrewarmClipStarts,
   type ParallelDecodePrefetchDeps,
 } from './parallelDecode/prefetchCoordinator';
-import { getBufferedFrameForClip } from './parallelDecode/frameAccess';
+import {
+  getBufferedFrameForClip,
+  getBufferedFrameForClipSourceTime,
+} from './parallelDecode/frameAccess';
 
 export type { ParallelDecodeClipInfo } from './parallelDecode/clipWindow';
 export type { ParallelDecodeFrameLookupOptions } from './parallelDecode/frameLookup';
@@ -237,6 +244,86 @@ export class ParallelDecodeManager {
    */
   async prefetchFramesForTime(timelineTime: number): Promise<void> {
     return runPrefetchFramesForTime(this.prefetchDeps(), timelineTime);
+  }
+
+  async prefetchFrameForClipSourceTime(clipId: string, sourceTime: number): Promise<void> {
+    if (!this.isActive) return;
+
+    const clipDecoder = this.clipDecoders.get(clipId);
+    if (!clipDecoder) return;
+
+    if (clipDecoder.samples.length === 0) {
+      const maxWaitMs = 10000;
+      const startWait = performance.now();
+      while (clipDecoder.samples.length === 0 && performance.now() - startWait < maxWaitMs) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+      if (clipDecoder.samples.length === 0) {
+        throw new Error(`Parallel decode initialization failed: "${clipDecoder.clipName}" has no samples after waiting ${maxWaitMs}ms`);
+      }
+    }
+
+    const clampedSourceTime = Math.max(
+      clipDecoder.clipInfo.inPoint,
+      Math.min(sourceTime, clipDecoder.clipInfo.outPoint - 0.001)
+    );
+    const targetTimestamp = clampedSourceTime * 1_000_000;
+    const targetSampleIndex = findSampleIndexForSourceTime(
+      clipDecoder.samples,
+      clampedSourceTime,
+      clipDecoder.presentationOffsetSeconds
+    );
+    const frameInBuffer = hasUsableBufferedFrame(
+      clipDecoder.sortedTimestamps,
+      clipDecoder.oldestTimestamp,
+      clipDecoder.newestTimestamp,
+      targetTimestamp,
+      this.frameTolerance * 2
+    );
+
+    if (!frameInBuffer && !clipDecoder.isDecoding) {
+      const decodePlan = createDecodeSchedulingPlan({
+        sampleIndex: clipDecoder.sampleIndex,
+        targetSampleIndex,
+        frameBufferSize: clipDecoder.frameBuffer.size,
+        frameInBuffer,
+      });
+      await this.decodeAhead(
+        clipDecoder,
+        decodePlan.decodeTarget,
+        decodePlan.shouldSeekDirectlyToTarget,
+        0,
+        targetSampleIndex
+      );
+    }
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      if (clipDecoder.pendingDecode) {
+        await clipDecoder.pendingDecode;
+      }
+      const frameFound = hasUsableBufferedFrame(
+        clipDecoder.sortedTimestamps,
+        clipDecoder.oldestTimestamp,
+        clipDecoder.newestTimestamp,
+        targetTimestamp,
+        this.frameTolerance * 3
+      );
+      if (frameFound) return;
+
+      if (attempt < 2) {
+        await new Promise(r => setTimeout(r, 8));
+      } else if (clipDecoder.decoder.decodeQueueSize > 0) {
+        await clipDecoder.decoder.flush();
+        clipDecoder.needsKeyframe = true;
+      } else if (!clipDecoder.isDecoding) {
+        const decodeTarget = Math.max(targetSampleIndex + BUFFER_AHEAD_FRAMES, BUFFER_AHEAD_FRAMES);
+        await this.decodeAhead(clipDecoder, decodeTarget, true, 0, targetSampleIndex);
+      } else {
+        await new Promise(r => setTimeout(r, 10));
+      }
+    }
+
+    throw new Error(`FAST export failed: "${clipDecoder.clipName}" has no decoded frame at ${clampedSourceTime.toFixed(3)}s after source-time prefetch.`);
   }
 
   /** Host surface for the prefetch coordinator; decoder/frame handles and decode-ahead stay owned here. */
@@ -547,6 +634,26 @@ export class ParallelDecodeManager {
     if (!clipDecoder) return null;
 
     return getBufferedFrameForClip(clipDecoder, timelineTime, this.frameTolerance, options);
+  }
+
+  getFrameForClipSourceTime(
+    clipId: string,
+    sourceTime: number,
+    options: ParallelDecodeFrameLookupOptions = {}
+  ): VideoFrame | null {
+    const clipDecoder = this.clipDecoders.get(clipId);
+    if (!clipDecoder) return null;
+
+    const clampedSourceTime = Math.max(
+      clipDecoder.clipInfo.inPoint,
+      Math.min(sourceTime, clipDecoder.clipInfo.outPoint - 0.001)
+    );
+    return getBufferedFrameForClipSourceTime(
+      clipDecoder,
+      clampedSourceTime,
+      this.frameTolerance,
+      options,
+    );
   }
 
   /**

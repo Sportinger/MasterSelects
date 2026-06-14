@@ -17,6 +17,7 @@ export type VFPipelineEventType =
   | 'vf_seek_done'       // seeked event / RVFC callback
   | 'vf_settle_seek'     // precise seek after scrub-stop (HTMLVideo)
   | 'vf_wc_settle_seek'  // precise seek after scrub-stop (WebCodecs)
+  | 'vf_transition_hold_seek' // precise seek for virtual transition hold frames
   | 'vf_drift'           // drift correction during playback
   | 'vf_preview_frame'   // main preview render submitted
   | 'vf_scrub_path'      // HTML scrub path/fallback selection

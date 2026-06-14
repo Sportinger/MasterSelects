@@ -6,6 +6,7 @@ import type {
   MaskPathKeyframeValue,
   RotationInterpolationMode,
 } from '../../../types';
+import type { TransitionParamValue } from '../../../transitions';
 import type { TimelineEditOperationSource } from './types';
 
 export type TimelineEditContractPlainValue =
@@ -378,6 +379,7 @@ export interface TransitionApplyOperation extends TimelineEditTransactionBase {
   transitionType: string;
   requestedDuration: number;
   resolvedDuration?: number;
+  params?: Record<string, TransitionParamValue>;
   junction: TransitionJunctionGeometryReference;
 }
 
@@ -398,6 +400,33 @@ export interface TransitionUpdateDurationOperation extends TimelineEditTransacti
   junction?: TransitionJunctionGeometryReference;
 }
 
+export interface TransitionUpdateOffsetOperation extends TimelineEditTransactionBase {
+  type: 'transition-update-offset';
+  clipId: string;
+  edge: 'in' | 'out';
+  transitionId?: string;
+  requestedOffset: number;
+  resolvedOffset?: number;
+  junction?: TransitionJunctionGeometryReference;
+}
+
+export interface TransitionUpdateTypeOperation extends TimelineEditTransactionBase {
+  type: 'transition-update-type';
+  clipId: string;
+  edge: 'in' | 'out';
+  transitionId?: string;
+  transitionType: string;
+  params?: Record<string, TransitionParamValue>;
+}
+
+export interface TransitionUpdateParamsOperation extends TimelineEditTransactionBase {
+  type: 'transition-update-params';
+  clipId: string;
+  edge: 'in' | 'out';
+  transitionId?: string;
+  params: Record<string, TransitionParamValue>;
+}
+
 export interface TransitionPreviewDropOperation extends TimelineEditTransactionBase {
   type: 'transition-preview-drop';
   transitionType: string;
@@ -414,6 +443,9 @@ export type TransitionEditOperation =
   | TransitionApplyOperation
   | TransitionRemoveOperation
   | TransitionUpdateDurationOperation
+  | TransitionUpdateOffsetOperation
+  | TransitionUpdateTypeOperation
+  | TransitionUpdateParamsOperation
   | TransitionPreviewDropOperation
   | TransitionClearPreviewOperation;
 
@@ -463,6 +495,9 @@ export const TIMELINE_EDIT_TRANSACTION_OPERATION_TYPES = [
   'transition-apply',
   'transition-remove',
   'transition-update-duration',
+  'transition-update-offset',
+  'transition-update-type',
+  'transition-update-params',
   'transition-preview-drop',
   'transition-clear-preview',
   'keyboard-delete-command',

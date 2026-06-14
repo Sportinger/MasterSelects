@@ -76,6 +76,7 @@ export interface SelectionActions {
   addClipToSelection: (id: string) => void;
   removeClipFromSelection: (id: string) => void;
   clearClipSelection: () => void;
+  selectTransitionProperties: (clipId: string, edge: 'in' | 'out', transitionId: string) => void;
   selectTrackProperties: (trackId: string) => void;
   selectMasterProperties: () => void;
   clearPropertiesSelection: () => void;

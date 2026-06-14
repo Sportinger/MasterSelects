@@ -23,14 +23,24 @@ import {
 import type { TimelineEditOperation, TimelineEditResult } from './types';
 import {
   applyTransitionApplyOperation,
+  pruneInvalidClipTransitions,
   applyTransitionRemoveOperation,
   applyTransitionUpdateDurationOperation,
+  applyTransitionUpdateOffsetOperation,
+  applyTransitionUpdateTypeOperation,
+  applyTransitionUpdateParamsOperation,
+  shouldClearTransitionPropertiesSelection,
 } from './transitionOperations';
+import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from './transitionPlanner';
+import { buildTransitionToolPreviewGhostRanges } from './transitionToolPreview';
+import { createTransitionMediaDurationResolver } from './transitionMediaDurationResolver';
+import { useMediaStore } from '../../mediaStore';
 import {
   aborted,
   blockedByExport,
   hasOnlyNoopWarnings,
   resultFromWarnings,
+  uniqueIds,
 } from './editOperationResults';
 import { applyFadeTransactionOperation, isFadeTransactionOperation } from './fadeTransactionOperations';
 import { applyKeyframeTransactionOperation, isKeyframeTransactionOperation } from './keyframeTransactionOperations';
@@ -64,26 +74,36 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
 
     if (operation.type === 'transition-preview-drop') {
       const junction = operation.junction;
-      const halfDuration = Math.max(0, operation.requestedDuration * 0.5);
+      const clipA = junction ? get().clips.find(clip => clip.id === junction.clipAId) : undefined;
+      const clipB = junction ? get().clips.find(clip => clip.id === junction.clipBId) : undefined;
+      const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
+      const plan = clipA && clipB
+        ? planTransition({
+            outgoingClip: clipA,
+            incomingClip: clipB,
+            transitionType: operation.transitionType,
+            requestedDuration: operation.requestedDuration,
+            placement: DEFAULT_TRANSITION_PLACEMENT,
+            edgePolicy: 'hold',
+            junctionTime: junction?.junctionTime,
+            getMediaDuration,
+          })
+        : null;
+      const ghostRanges = plan
+        ? buildTransitionToolPreviewGhostRanges(plan, operation.id, operation.transitionType)
+        : [];
       set({
-        timelineToolPreview: junction
+        timelineToolPreview: junction && plan
           ? {
               toolId: 'select',
               plane: 'section-scrolled',
               trackId: junction.trackId,
               trackIds: [junction.trackId],
               time: junction.junctionTime,
-              startTime: Math.max(0, junction.junctionTime - halfDuration),
-              endTime: junction.junctionTime + halfDuration,
+              startTime: plan.bodyStart,
+              endTime: plan.bodyEnd,
               label: operation.transitionType,
-              ghostRanges: [{
-                id: `${operation.id}:transition-preview`,
-                trackId: junction.trackId,
-                startTime: Math.max(0, junction.junctionTime - halfDuration),
-                endTime: junction.junctionTime + halfDuration,
-                label: operation.transitionType,
-                variant: 'transition-drop',
-              }],
+              ghostRanges,
               zIndex: 16,
             }
           : {
@@ -91,7 +111,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
               plane: 'section-scrolled',
               label: operation.transitionType,
               blocked: true,
-              message: 'No transition junction at the current drop target.',
+              message: junction ? 'Transition cannot be planned for the current drop target.' : 'No transition junction at the current drop target.',
               zIndex: 16,
             },
       });
@@ -100,9 +120,9 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         success: true,
         operationId,
         changedClipIds: [],
-        warnings: junction ? [] : [{
+        warnings: junction && plan ? [] : [{
           code: 'invalid-range',
-          message: 'No transition junction at the current drop target.',
+          message: junction ? 'Transition cannot be planned for the current drop target.' : 'No transition junction at the current drop target.',
         }],
       };
     }
@@ -289,14 +309,24 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     if (
       operation.type === 'transition-apply' ||
       operation.type === 'transition-remove' ||
-      operation.type === 'transition-update-duration'
+      operation.type === 'transition-update-duration' ||
+      operation.type === 'transition-update-offset' ||
+      operation.type === 'transition-update-type' ||
+      operation.type === 'transition-update-params'
     ) {
+      const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
       const result =
         operation.type === 'transition-apply'
-          ? applyTransitionApplyOperation(operation, get().clips, get().tracks)
+          ? applyTransitionApplyOperation(operation, get().clips, get().tracks, getMediaDuration)
           : operation.type === 'transition-remove'
             ? applyTransitionRemoveOperation(operation, get().clips, get().tracks)
-            : applyTransitionUpdateDurationOperation(operation, get().clips, get().tracks);
+            : operation.type === 'transition-update-duration'
+              ? applyTransitionUpdateDurationOperation(operation, get().clips, get().tracks, getMediaDuration)
+              : operation.type === 'transition-update-offset'
+                ? applyTransitionUpdateOffsetOperation(operation, get().clips, get().tracks, getMediaDuration)
+                : operation.type === 'transition-update-type'
+                  ? applyTransitionUpdateTypeOperation(operation, get().clips, get().tracks, getMediaDuration)
+                  : applyTransitionUpdateParamsOperation(operation, get().clips, get().tracks);
 
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
@@ -307,11 +337,22 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
           ? 'Apply transition'
           : operation.type === 'transition-remove'
             ? 'Remove transition'
-            : 'Update transition duration';
+            : operation.type === 'transition-update-duration'
+              ? 'Update transition duration'
+              : operation.type === 'transition-update-offset'
+                ? 'Move transition'
+                : operation.type === 'transition-update-type'
+                  ? 'Change transition type'
+                  : 'Update transition parameters';
 
       startBatch(options.historyLabel ?? historyLabel);
       try {
-        set({ clips: result.clips });
+        set({
+          clips: result.clips,
+          ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, result.clips)
+            ? { propertiesSelection: null }
+            : {}),
+        });
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -377,10 +418,18 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
+      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+      const nextClips = prunedTransitions.clips;
+      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
 
       startBatch(options.historyLabel ?? 'Move clips');
       try {
-        set({ clips: result.clips });
+        set({
+          clips: nextClips,
+          ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, nextClips)
+            ? { propertiesSelection: null }
+            : {}),
+        });
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -390,7 +439,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         warnings: result.warnings,
       };
     }
@@ -461,6 +510,9 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
+      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+      const nextClips = prunedTransitions.clips;
+      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
 
       startBatch(options.historyLabel ?? (
         operation.type === 'ripple-trim-edge-to-time' ? 'Ripple trim' :
@@ -471,7 +523,12 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
                   'Trim clips'
       ));
       try {
-        set({ clips: result.clips });
+        set({
+          clips: nextClips,
+          ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, nextClips)
+            ? { propertiesSelection: null }
+            : {}),
+        });
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -481,7 +538,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         warnings: result.warnings,
       };
     }

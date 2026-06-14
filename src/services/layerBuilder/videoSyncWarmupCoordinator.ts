@@ -7,7 +7,8 @@ import type { FrameContext } from './types';
 import {
   getClipSampleTimeNearPlayhead,
   getClipStartTime,
-  getVisibleVideoTrackClipsAtTime,
+  getVisibleVideoTrackPlaybackClipsAtTime,
+  getVisibleVideoTrackTransitionClipsInWindow,
   getWarmupClipTime,
   isVisibleVideoTrackClip,
 } from './videoSyncTimelineQueries';
@@ -528,6 +529,32 @@ export class VideoSyncWarmupCoordinator {
         requestRender: false,
       });
     }
+
+    for (const clip of getVisibleVideoTrackTransitionClipsInWindow(ctx, windowStart, windowEnd)) {
+      const video = this.deps.getClipHtmlVideoElement(clip);
+      if (flags.useFullWebCodecsPlayback) {
+        const transitionTime = getClipSampleTimeNearPlayhead({ ...ctx, isDraggingPlayhead: true }, clip);
+        this.deps.prewarmUpcomingWebCodecsClip(ctx, clip, transitionTime);
+      }
+
+      if (!video || this.deps.usesFullWebCodecsPreview(clip)) continue;
+      if (this.deps.warmups.isWarming(video)) continue;
+      if (!video.src && !video.currentSrc) continue;
+
+      const targetTime = getClipSampleTimeNearPlayhead({ ...ctx, isDraggingPlayhead: true }, clip);
+      if (this.deps.isVideoGpuReady(video)) {
+        this.positionWarmedUpcomingVideo(ctx, clip, video, targetTime);
+        continue;
+      }
+
+      const warmupCooldown = this.deps.warmups.getRetryCooldown(video);
+      if (warmupCooldown && performance.now() - warmupCooldown < 2000) continue;
+
+      this.deps.startTargetedWarmup(clip.id, video, targetTime, {
+        proactive: true,
+        requestRender: false,
+      });
+    }
   }
 
   preBufferUpcomingVideoAudio(ctx: FrameContext): void {
@@ -608,7 +635,7 @@ export class VideoSyncWarmupCoordinator {
   }
 
   private isVideoElementActiveAtPlayhead(ctx: FrameContext, video: HTMLVideoElement): boolean {
-    return getVisibleVideoTrackClipsAtTime(ctx).some((activeClip) =>
+    return getVisibleVideoTrackPlaybackClipsAtTime(ctx).some((activeClip) =>
       this.deps.getClipHtmlVideoElement(activeClip) === video ||
       this.deps.getHandoffVideoElement(activeClip.id) === video
     );

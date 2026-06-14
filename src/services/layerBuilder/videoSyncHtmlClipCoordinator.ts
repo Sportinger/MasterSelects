@@ -155,6 +155,17 @@ export class VideoSyncHtmlClipCoordinator {
     const needsClipSpeedAdjust = clipAbsSpeed > 0.01 && Math.abs(clipAbsSpeed - 1) > 0.01;
     const hasSpeedKeyframes = ctx.hasKeyframes(clip.id, 'speed');
 
+    if (clip.transitionSourceHold === true) {
+      this.syncTransitionSourceHold({
+        clip,
+        video,
+        clipTime: timeInfo.clipTime,
+        timeDiff,
+        isInteractivePreview,
+      });
+      return;
+    }
+
     if (isReversePlayback) {
       this.syncReverseOrNonstandardPlayback({
         clip,
@@ -238,6 +249,66 @@ export class VideoSyncHtmlClipCoordinator {
     }
     if (!isInteractivePreview) {
       this.deps.maybeRecoverScrubSettle(clip.id, video, clipTime);
+    }
+  }
+
+  private syncTransitionSourceHold({
+    clip,
+    video,
+    clipTime,
+    timeDiff,
+    isInteractivePreview,
+  }: {
+    clip: TimelineClip;
+    video: HTMLVideoElement;
+    clipTime: number;
+    timeDiff: number;
+    isInteractivePreview: boolean;
+  }): void {
+    this.deps.clipWasPlaying.delete(clip.id);
+    scrubSettleState.resolve(clip.id);
+
+    if (video.playbackRate !== 1) {
+      video.playbackRate = 1;
+    }
+    if (!video.paused) {
+      video.pause();
+      vfPipelineMonitor.record('vf_pause', { clipId: clip.id, reason: 'transition-hold' });
+    }
+
+    const seekThreshold = isInteractivePreview ? 0.04 : 0.015;
+    if (!video.seeking && timeDiff > seekThreshold) {
+      const seekTime = this.deps.safeSeekTime(video, clipTime);
+      video.addEventListener('seeked', () => {
+        engine.markVideoFramePresented(video, seekTime, clip.id);
+        if (!engine.captureVideoFrameAtTime(video, seekTime, clip.id)) {
+          engine.ensureVideoFrameCached(video, clip.id);
+        }
+        engine.requestNewFrameRender();
+      }, { once: true });
+      video.currentTime = seekTime;
+      vfPipelineMonitor.record('vf_transition_hold_seek', {
+        clipId: clip.id,
+        target: Math.round(clipTime * 1000) / 1000,
+        seekTo: Math.round(seekTime * 1000) / 1000,
+        driftMs: Math.round(timeDiff * 1000),
+      });
+      return;
+    }
+
+    if (video.readyState >= 2) {
+      const presentedTime = this.deps.safeSeekTime(video, clipTime);
+      engine.markVideoFramePresented(video, presentedTime, clip.id);
+      if (!engine.captureVideoFrameAtTime(video, presentedTime, clip.id)) {
+        engine.ensureVideoFrameCached(video, clip.id);
+      }
+    } else if (!video.seeking && !this.deps.isForceDecodeInProgress(clip.id)) {
+      vfPipelineMonitor.record('vf_readystate_drop', {
+        clipId: clip.id,
+        readyState: video.readyState,
+        reason: 'transition-hold',
+      });
+      this.deps.forceVideoFrameDecode(clip.id, video);
     }
   }
 

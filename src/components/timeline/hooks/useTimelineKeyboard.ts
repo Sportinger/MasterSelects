@@ -245,6 +245,25 @@ export function useTimelineKeyboard({
       // Delete: remove selected keyframes first, then clips
       if (registry.matches('edit.delete', e)) {
         e.preventDefault();
+        const propertiesSelection = useTimelineStore.getState().propertiesSelection;
+        if (propertiesSelection?.kind === 'transition') {
+          const transactionId = `keyboard-delete-transition:${propertiesSelection.transitionId}:${Date.now()}`;
+          applyTimelineEditOperation({
+            id: transactionId,
+            type: 'transition-remove',
+            transactionId,
+            historyBatchId: transactionId,
+            source: 'shortcut',
+            clipId: propertiesSelection.clipId,
+            edge: propertiesSelection.edge,
+            transitionId: propertiesSelection.transitionId,
+          }, {
+            source: 'shortcut',
+            historyLabel: 'Remove transition',
+          });
+          return;
+        }
+
         if (selectedKeyframeIds.size > 0 || selectedClipIds.size > 0) {
           const transactionId = `keyboard-delete:${Date.now()}`;
           applyTimelineEditOperation({

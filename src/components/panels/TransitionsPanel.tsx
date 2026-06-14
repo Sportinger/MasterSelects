@@ -1,35 +1,55 @@
 // Transitions Panel - Drag and drop transitions for timeline clips
 
 import { useState, useCallback } from 'react';
-import { getAllTransitions, type TransitionDefinition } from '../../transitions';
+import { getAllTransitions, getDefaultTransitionParams, type TransitionDefinition } from '../../transitions';
+import {
+  serializeTransitionDropData,
+  setActiveTransitionDragData,
+  TRANSITION_MIME_TYPE,
+} from '../timeline/transitionDragData';
 import './TransitionsPanel.css';
-
-// MIME type for drag data
-export const TRANSITION_MIME_TYPE = 'application/x-transition-type';
 
 // Transition preview thumbnail component
 function TransitionPreview({ type }: { type: string }) {
-  if (type === 'crossfade') {
+  if (type === 'crossfade' || type === 'dip-to-black' || type === 'dip-to-white') {
+    const dipColor = type === 'dip-to-white' ? '#f4f4f5' : '#050505';
+    const middleOpacity = type === 'crossfade' ? 0 : 0.9;
     return (
       <svg viewBox="0 0 80 40" className="transition-preview-svg">
-        {/* Left clip (fading out) */}
         <defs>
-          <linearGradient id="fadeOutGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id={`fadeOutGrad-${type}`} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#4a9eff" stopOpacity="1" />
             <stop offset="100%" stopColor="#4a9eff" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="fadeInGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <linearGradient id={`fadeInGrad-${type}`} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#ff6b4a" stopOpacity="0" />
             <stop offset="100%" stopColor="#ff6b4a" stopOpacity="1" />
           </linearGradient>
         </defs>
-        <rect x="0" y="8" width="50" height="24" fill="url(#fadeOutGrad)" rx="2" />
-        <rect x="30" y="8" width="50" height="24" fill="url(#fadeInGrad)" rx="2" />
-        {/* Overlap indicator */}
-        <rect x="30" y="4" width="20" height="32" fill="rgba(255,255,255,0.1)" rx="2" />
+        <rect x="0" y="8" width="50" height="24" fill={`url(#fadeOutGrad-${type})`} rx="2" />
+        <rect x="30" y="8" width="50" height="24" fill={`url(#fadeInGrad-${type})`} rx="2" />
+        <rect x="28" y="5" width="24" height="30" fill={dipColor} opacity={middleOpacity} rx="2" />
       </svg>
     );
   }
+
+  if (type === 'wipe-left' || type === 'wipe-right') {
+    const incomingX = type === 'wipe-right' ? 22 : 38;
+    return (
+      <svg viewBox="0 0 80 40" className="transition-preview-svg">
+        <rect x="6" y="8" width="52" height="24" fill="#4a9eff" rx="2" />
+        <rect x={incomingX} y="8" width="52" height="24" fill="#ff6b4a" rx="2" />
+        <path
+          d={type === 'wipe-right' ? 'M24 6v28' : 'M56 6v28'}
+          stroke="white"
+          strokeWidth="2"
+          strokeLinecap="round"
+          opacity="0.8"
+        />
+      </svg>
+    );
+  }
+
   // Default preview
   return (
     <svg viewBox="0 0 80 40" className="transition-preview-svg">
@@ -47,26 +67,66 @@ interface TransitionItemProps {
 
 function TransitionItem({ transition, duration }: TransitionItemProps) {
   const handleDragStart = useCallback((e: React.DragEvent) => {
-    e.dataTransfer.setData(TRANSITION_MIME_TYPE, JSON.stringify({
+    const dragData = {
       type: transition.id,
       duration,
-    }));
+      params: getDefaultTransitionParams(transition),
+    };
+    setActiveTransitionDragData(dragData);
+    e.dataTransfer.setData(TRANSITION_MIME_TYPE, serializeTransitionDropData(dragData));
     e.dataTransfer.effectAllowed = 'copy';
 
-    // Create drag image
+    // Create drag image from the same thumbnail the panel shows.
     const dragEl = document.createElement('div');
     dragEl.className = 'transition-drag-preview';
-    dragEl.textContent = transition.name;
-    dragEl.style.cssText = 'position:fixed;top:-100px;background:#3b82f6;color:white;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:500;pointer-events:none;';
+    dragEl.style.cssText = [
+      'position:fixed',
+      'top:-120px',
+      'left:-120px',
+      'display:flex',
+      'align-items:center',
+      'gap:8px',
+      'width:150px',
+      'padding:7px 9px',
+      'border:1px solid rgba(148,163,184,0.45)',
+      'border-radius:6px',
+      'background:rgba(17,24,39,0.96)',
+      'box-shadow:0 10px 28px rgba(0,0,0,0.35)',
+      'color:white',
+      'font-size:11px',
+      'font-weight:600',
+      'pointer-events:none',
+    ].join(';');
+
+    const previewClone = (e.currentTarget as HTMLElement)
+      .querySelector('.transition-item-preview')
+      ?.cloneNode(true);
+    if (previewClone instanceof HTMLElement) {
+      previewClone.style.width = '64px';
+      previewClone.style.height = '32px';
+      previewClone.style.flex = '0 0 auto';
+      dragEl.appendChild(previewClone);
+    }
+
+    const label = document.createElement('span');
+    label.textContent = transition.name;
+    label.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    dragEl.appendChild(label);
+
     document.body.appendChild(dragEl);
-    e.dataTransfer.setDragImage(dragEl, 40, 15);
+    e.dataTransfer.setDragImage(dragEl, 42, 20);
     setTimeout(() => dragEl.remove(), 0);
-  }, [transition.id, transition.name, duration]);
+  }, [transition, duration]);
+
+  const handleDragEnd = useCallback(() => {
+    setActiveTransitionDragData(null);
+  }, []);
 
   return (
     <div
       draggable
       onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       className="transition-item"
       title={transition.description}
     >
@@ -79,13 +139,13 @@ function TransitionItem({ transition, duration }: TransitionItemProps) {
 }
 
 export function TransitionsPanel() {
-  const [duration, setDuration] = useState(0.5);
+  const [duration, setDuration] = useState(2);
   const allTransitions = getAllTransitions();
 
   const handleDurationChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
     if (!isNaN(value) && value > 0) {
-      setDuration(Math.min(Math.max(value, 0.1), 5.0));
+      setDuration(Math.max(value, 0.1));
     }
   }, []);
 
@@ -100,7 +160,6 @@ export function TransitionsPanel() {
             value={duration}
             onChange={handleDurationChange}
             min={0.1}
-            max={5.0}
             step={0.1}
             className="transitions-duration-input"
           />

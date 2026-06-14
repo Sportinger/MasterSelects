@@ -294,7 +294,7 @@ export class RenderDispatcher {
     });
     const importTime = performance.now() - t1;
     const debugSnapshot: RenderDispatcherDebugSnapshot = this.debugSnapshotFacet.createRenderDebugSnapshot(
-      layers.length,
+      layers,
       layerData,
     );
     this.lastRenderDebugSnapshot = debugSnapshot;

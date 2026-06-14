@@ -22,6 +22,13 @@ import {
 } from './viewPreferences';
 import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
 import { getTimelinePlaybackWarmupVideo } from '../../services/timeline/timelinePlaybackWarmupRuntime';
+import {
+  createTransitionSourceClip,
+  DEFAULT_TRANSITION_PLACEMENT,
+  planTransition,
+} from './editOperations/transitionPlanner';
+import { createTransitionMediaDurationResolver } from './editOperations/transitionMediaDurationResolver';
+import type { TimelineClip } from '../../types';
 
 function createPlaybackWarmupRequestId(): string {
   return `playback-warmup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -29,6 +36,42 @@ function createPlaybackWarmupRequestId(): string {
 
 function getWarmupTimestamp(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function getTransitionWarmupClipsAtTime(
+  clips: readonly TimelineClip[],
+  visibleVideoTrackIds: ReadonlySet<string>,
+  time: number,
+): TimelineClip[] {
+  const clipsById = new Map<string, TimelineClip>();
+  const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
+
+  for (const outgoingClip of clips) {
+    const transition = outgoingClip.transitionOut;
+    if (!transition || !visibleVideoTrackIds.has(outgoingClip.trackId)) continue;
+
+    const incomingClip = clips.find(clip => clip.id === transition.linkedClipId);
+    if (!incomingClip || !visibleVideoTrackIds.has(incomingClip.trackId)) continue;
+
+    const junctionTime = outgoingClip.startTime + outgoingClip.duration;
+    const plan = planTransition({
+      outgoingClip,
+      incomingClip,
+      transitionType: transition.type,
+      requestedDuration: transition.duration,
+      placement: DEFAULT_TRANSITION_PLACEMENT,
+      edgePolicy: 'hold',
+      junctionTime,
+      bodyOffset: transition.offset ?? 0,
+      getMediaDuration,
+    });
+    if (!plan || time < plan.bodyStart || time >= plan.bodyEnd) continue;
+
+    clipsById.set(outgoingClip.id, createTransitionSourceClip(outgoingClip, plan.outgoing, time));
+    clipsById.set(incomingClip.id, createTransitionSourceClip(incomingClip, plan.incoming, time));
+  }
+
+  return [...clipsById.values()];
 }
 
 // Playback actions only (RAM preview and proxy cache in separate slices)
@@ -106,6 +149,11 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       const hasVideo = getTimelinePlaybackWarmupVideo(clip.source) !== null;
       return isAtPlayhead && hasVideo;
     });
+    const transitionClipsAtPlayhead = getTransitionWarmupClipsAtTime(
+      clips,
+      visibleVideoTrackIds,
+      playbackStartPosition,
+    ).filter(clip => getTimelinePlaybackWarmupVideo(clip.source) !== null);
 
     // Also check nested composition clips
     const nestedVideos: HTMLVideoElement[] = [];
@@ -132,6 +180,10 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     // Collect all videos that need to be ready
     const videosToCheck = Array.from(new Set([
       ...clipsAtPlayhead.flatMap(c => {
+        const warmupVideo = getTimelinePlaybackWarmupVideo(c.source);
+        return warmupVideo ? [warmupVideo] : [];
+      }),
+      ...transitionClipsAtPlayhead.flatMap(c => {
         const warmupVideo = getTimelinePlaybackWarmupVideo(c.source);
         return warmupVideo ? [warmupVideo] : [];
       }),

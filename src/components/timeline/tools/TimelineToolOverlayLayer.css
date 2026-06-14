@@ -3,7 +3,7 @@
   inset: 0 auto auto 0;
   min-width: 100%;
   pointer-events: none;
-  z-index: 35;
+  z-index: 58;
 }
 
 .timeline-tool-overlay-item {
@@ -159,6 +159,7 @@
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.07),
     0 0 12px rgba(14, 165, 233, 0.18);
+  z-index: 1;
 }
 
 .timeline-tool-overlay-operation-ghost::before,
@@ -216,6 +217,84 @@
 .timeline-tool-overlay-operation-ghost.variant-rolling-neighbor::before,
 .timeline-tool-overlay-operation-ghost.variant-rolling-neighbor::after {
   background: rgba(216, 180, 254, 0.92);
+}
+
+.timeline-tool-overlay-operation-ghost.variant-transition-source-handle,
+.timeline-tool-overlay-operation-ghost.variant-transition-real-handle {
+  border-color: rgba(34, 197, 94, 0.62);
+  background:
+    linear-gradient(180deg, rgba(34, 197, 94, 0.18), rgba(21, 128, 61, 0.08)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.055),
+      rgba(255, 255, 255, 0.055) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 0 12px rgba(34, 197, 94, 0.16);
+  z-index: 3;
+}
+
+.timeline-tool-overlay-operation-ghost.variant-transition-source-handle {
+  border-color: rgba(74, 222, 128, 0.72);
+  background:
+    linear-gradient(180deg, rgba(74, 222, 128, 0.36), rgba(22, 163, 74, 0.18)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.13),
+      rgba(255, 255, 255, 0.13) 4px,
+      transparent 4px,
+      transparent 8px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 0 16px rgba(34, 197, 94, 0.34);
+}
+
+.timeline-tool-overlay-operation-ghost.variant-transition-source-handle::before,
+.timeline-tool-overlay-operation-ghost.variant-transition-source-handle::after,
+.timeline-tool-overlay-operation-ghost.variant-transition-real-handle::before,
+.timeline-tool-overlay-operation-ghost.variant-transition-real-handle::after {
+  background: rgba(134, 239, 172, 0.94);
+}
+
+.timeline-tool-overlay-operation-ghost.variant-transition-hold-fallback {
+  border-color: rgba(248, 113, 113, 0.72);
+  background:
+    linear-gradient(180deg, rgba(248, 113, 113, 0.2), rgba(185, 28, 28, 0.1)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.07) 3px,
+      rgba(127, 29, 29, 0.22) 3px,
+      rgba(127, 29, 29, 0.22) 7px
+    );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 14px rgba(239, 68, 68, 0.2);
+  z-index: 4;
+}
+
+.timeline-tool-overlay-operation-ghost.variant-transition-drop {
+  border-color: rgba(96, 165, 250, 0.46);
+  background:
+    linear-gradient(90deg, rgba(74, 158, 255, 0.18), rgba(255, 107, 74, 0.18));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 10px rgba(59, 130, 246, 0.14);
+  z-index: 2;
+}
+
+.timeline-tool-overlay-operation-ghost.variant-transition-drop::before,
+.timeline-tool-overlay-operation-ghost.variant-transition-drop::after {
+  background: rgba(147, 197, 253, 0.84);
+}
+
+.timeline-tool-overlay-operation-ghost.variant-transition-hold-fallback::before,
+.timeline-tool-overlay-operation-ghost.variant-transition-hold-fallback::after {
+  background: rgba(252, 165, 165, 0.96);
 }
 
 .timeline-tool-overlay-operation-label {

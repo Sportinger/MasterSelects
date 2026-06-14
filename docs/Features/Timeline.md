@@ -253,8 +253,11 @@ getTrackChildren()  // Query child tracks
 
 ### Transitions
 - Transitions operate between adjacent clips on the same track.
-- The transition system moves the second clip earlier to create the overlap.
-- Junction highlights are shown when dragging a transition near a valid pair.
+- The first-pass suite includes Crossfade, Dip to Black, Dip to White, Wipe Left, and Wipe Right.
+- Dragging a transition from the Transitions panel targets a clip junction. Hover preview shows the transition body, real source-handle coverage, and red hold-frame fallback coverage when the requested duration extends past available source material.
+- The default placement is virtual `center`: the transition body is centered on the cut without moving either clip. Preview and export sample the incoming left handle before the clip start and the outgoing right handle after the clip end; when either side lacks real source material, the nearest first/last frame is held and shown as red fallback coverage.
+- Existing transition bodies render on the timeline, can be selected, moved left/right by dragging the body, resized by dragging either edge, and expose duration plus handle/hold details in the transition-scoped Properties tab. Move snaps to the centered cut position and to available source-handle edges; resize snaps to the same source edges. Move and resize previews show the same source-handle and red hold-frame feedback. Transition durations are not capped by clip length; missing material is represented with hold-frame fallback.
+- Preview and export share the same transition planner and layer assembly. Wipe transitions use compositor transition metadata rather than clip effects.
 
 ### Multicam
 - Multiple selected clips can be combined into a linked multicam group.

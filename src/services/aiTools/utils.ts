@@ -191,6 +191,8 @@ export function formatClipInfo(clip: TimelineClip, track: TimelineTrack | undefi
     signalAssetId: clip.signalAssetId,
     signalRefId: clip.signalRefId,
     signalRenderAdapterId: clip.signalRenderAdapterId,
+    transitionIn: clip.transitionIn ? { ...clip.transitionIn } : undefined,
+    transitionOut: clip.transitionOut ? { ...clip.transitionOut } : undefined,
     hasAnalysis: clip.analysisStatus === 'ready',
     hasTranscript: clip.transcriptStatus === 'ready' || !!clip.transcript?.length,
     // Transform info
@@ -221,6 +223,8 @@ export function formatTrackInfo(track: TimelineTrack, clips: TimelineClip[]) {
       signalAssetId: c.signalAssetId,
       signalRefId: c.signalRefId,
       signalRenderAdapterId: c.signalRenderAdapterId,
+      transitionIn: c.transitionIn ? { ...c.transitionIn } : undefined,
+      transitionOut: c.transitionOut ? { ...c.transitionOut } : undefined,
       hasAnalysis: c.analysisStatus === 'ready',
       hasTranscript: c.transcriptStatus === 'ready' || !!c.transcript?.length,
     })),

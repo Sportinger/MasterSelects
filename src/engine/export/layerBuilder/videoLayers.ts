@@ -14,6 +14,7 @@ export function buildVideoLayer(
   clipStates: Map<string, ExportClipStateLike>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean,
+  sourceMediaTime?: number,
 ): Layer | null {
   const clipState = clipStates.get(clip.id);
   const video = clipState?.preciseVideoElement ?? clip.source?.videoElement ?? null;
@@ -26,9 +27,13 @@ export function buildVideoLayer(
       throw new Error(`FAST export failed: parallel decoder is not initialized for clip "${clip.name}".`);
     }
     if (parallelDecoder.hasClip(clip.id)) {
-      const videoFrame = parallelDecoder.getFrameForClip(clip.id, time, {
-        toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
-      });
+      const videoFrame = sourceMediaTime !== undefined
+        ? parallelDecoder.getFrameForClipSourceTime(clip.id, sourceMediaTime, {
+            toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+          })
+        : parallelDecoder.getFrameForClip(clip.id, time, {
+            toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+          });
       if (videoFrame) {
         return {
           ...baseLayerProps,
@@ -36,6 +41,7 @@ export function buildVideoLayer(
             type: 'video',
             videoElement: video,
             videoFrame: videoFrame,
+            mediaTime: sourceMediaTime,
           },
         };
       }
@@ -54,6 +60,7 @@ export function buildVideoLayer(
           videoElement: video,
           videoFrame,
           webCodecsPlayer: clipState.webCodecsPlayer,
+          mediaTime: sourceMediaTime,
         },
       };
     }
@@ -67,6 +74,7 @@ export function buildVideoLayer(
       source: {
         type: 'video',
         videoElement: video,
+        mediaTime: sourceMediaTime,
       },
     };
   }

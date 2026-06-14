@@ -19,7 +19,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | Capability | Description |
 |---|---|
 | **WebGPU Rendering** | Shared render path for main preview, independent targets, output windows, and export |
-| **Timeline Editing** | Multi-track editing, nested compositions, markers, shortcuts, and keyframes |
+| **Timeline Editing** | Multi-track editing, nested compositions, markers, transitions, shortcuts, and keyframes |
 | **Node Workspace** | Dockable selected-clip processing graph derived from live timeline state |
 | **AI Control** | OpenAI/Cloud or local Lemonade chat with 86 exported model tools plus local/native bridge access for external agents |
 | **Media Generator Tray** | FlashBoard video/image/audio generation embedded in the Media Panel with queue previews and media import |
@@ -54,7 +54,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 | [GPU Engine](./GPU-Engine.md) | WebGPU engine, render loop, fallback paths, caches, and export boundary |
 | [Linux / Mesa GPU](./Linux-Mesa-GPU.md) | **Read before touching any canvas/GPU code** — Mesa silent-failure modes and the rules/gates that prevent "blank on Linux" regressions |
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
-| [Effects](./Effects.md) | Current effect registry, categories, quality controls, and inline effect behavior |
+| [Effects](./Effects.md) | Current effect registry, timeline transitions, categories, quality controls, and inline effect behavior |
 | [Color Correction](./Color-Correction.md) | Planned node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
 | [Professional Color Correction Plan](./Color-Correction-Professional-Plan.md) | Tactical roadmap for wheels, curves, LUTs, secondaries, float precision, scopes, compare, and presets |
 | [Masks](./Masks.md) | Overlay mask editing, whole-path keyframes, feathering, and stored modes |

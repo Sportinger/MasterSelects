@@ -27,6 +27,7 @@ export const createToolSlice: SliceCreator<TimelineToolActions> = (set, get) => 
       openTimelineToolGroupId: null,
       momentaryTimelineToolId: null,
       timelineToolPreview: null,
+      transitionEditPreview: null,
       toolMode: getLegacyToolMode(toolId),
     });
   },
@@ -66,6 +67,7 @@ export const createToolSlice: SliceCreator<TimelineToolActions> = (set, get) => 
       momentaryTimelineToolId: toolId,
       activeTimelineToolId: toolId,
       timelineToolPreview: null,
+      transitionEditPreview: null,
       toolMode: getLegacyToolMode(toolId),
     });
   },
@@ -79,6 +81,7 @@ export const createToolSlice: SliceCreator<TimelineToolActions> = (set, get) => 
       previousTimelineToolId: null,
       momentaryTimelineToolId: null,
       timelineToolPreview: null,
+      transitionEditPreview: null,
       toolMode: getLegacyToolMode(nextToolId),
     });
   },
@@ -107,6 +110,10 @@ export const createToolSlice: SliceCreator<TimelineToolActions> = (set, get) => 
 
   setTimelineToolPreview: (preview) => {
     set({ timelineToolPreview: preview });
+  },
+
+  setTransitionEditPreview: (preview) => {
+    set({ transitionEditPreview: preview });
   },
 });
 

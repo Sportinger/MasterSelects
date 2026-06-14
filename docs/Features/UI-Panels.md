@@ -255,9 +255,11 @@ MasterSelects currently exposes 18 active dockable panel types, plus the Slot Gr
 
 ### Transitions Panel
 
-- Transition library
-- Drag-drop application surface
-- Still marked WIP in the View menu
+- Draggable transition palette for Crossfade, Dip to Black, Dip to White, Wipe Left, and Wipe Right.
+- Each transition item carries a plain JSON drag payload with transition ID and duration.
+- The duration control keeps only the minimum bound; long transitions are allowed and rely on hold-frame fallback where source material runs out.
+- Timeline hover uses source-aware ghosts: normal transition body, real-handle coverage, and red hold-frame fallback coverage.
+- The panel is active in the View menu and is no longer marked WIP.
 
 ### Video Scopes Panels
 
@@ -320,6 +322,16 @@ See [Slot Grid](./Slot-Grid.md) for the current live/deck behavior, slot-clip tr
 ## Properties Panel
 
 The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Tab labels are scoped with `CLIP`, `TRACK`, or `MASTER`; transcript tabs are shown only for clip targets.
+
+Selecting a timeline transition switches the panel to `TRANSITION Parameters`.
+That tab shows the transition type, first-pass centered placement with timeline
+body offset support,
+hold-frame policy, duration, planned body range, real source-handle duration,
+hold fallback duration, and remove action. The same duration edit operation is
+used by the selected timeline body's drag-resize handle; dragging the body
+updates the transition offset relative to the cut. Timeline body moves snap to
+the centered cut position and source-handle edges; resize handles snap to the
+same source-handle edges.
 
 ### Standard Video Clip Tabs
 

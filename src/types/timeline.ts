@@ -153,6 +153,8 @@ export interface TimelineClip {
   // Transition support
   transitionIn?: TimelineTransition;   // Transition from previous clip
   transitionOut?: TimelineTransition;  // Transition to next clip
+  transitionSourceTimeOverride?: number; // Runtime-only source time for virtual transition participant clips
+  transitionSourceHold?: boolean; // Runtime-only: freeze a virtual transition participant on the override frame
   // 3D layer support (AE-style per-layer toggle)
   is3D?: boolean;
   wireframe?: boolean;  // Debug: show 3D model as wireframe

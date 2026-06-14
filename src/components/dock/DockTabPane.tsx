@@ -115,6 +115,13 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     return clip?.name || null;
   }, [clips, propertiesSelection, selectedClipIds]);
   const selectedPropertiesName = useMemo(() => {
+    if (propertiesSelection?.kind === 'transition') {
+      const clip = clips.find(item => item.id === propertiesSelection.clipId);
+      const transition = propertiesSelection.edge === 'in'
+        ? clip?.transitionIn
+        : clip?.transitionOut;
+      return transition ? `TRANSITION ${transition.type}` : null;
+    }
     if (propertiesSelection?.kind === 'track') {
       const track = tracks.find(item => item.id === propertiesSelection.trackId);
       return track ? `TRACK ${track.name}` : null;
@@ -123,7 +130,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
       return 'MASTER Master';
     }
     return selectedClipName ? `CLIP ${selectedClipName}` : null;
-  }, [propertiesSelection, selectedClipName, tracks]);
+  }, [clips, propertiesSelection, selectedClipName, tracks]);
   const selectedSlotName = useMemo(() => {
     if (slotGridProgress <= 0.5 || !selectedSlotCompositionId) {
       return null;

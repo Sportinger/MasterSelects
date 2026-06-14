@@ -67,6 +67,7 @@ describe('timeline edit operations kernel', () => {
       clips: [],
       selectedClipIds: new Set(),
       primarySelectedClipId: null,
+      propertiesSelection: null,
       playheadPosition: 0,
       isExporting: false,
       duration: 60,
@@ -1064,6 +1065,22 @@ describe('timeline edit operations kernel', () => {
   });
 
   it('stores transition drop preview ghost ranges through the operation kernel', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          source: { type: 'video', naturalDuration: 12 },
+        }),
+        createMockClip({ id: 'clip-b', trackId: 'video-1', startTime: 10, duration: 8, inPoint: 0.5, outPoint: 8.5 }),
+      ],
+    });
+
     const result = useTimelineStore.getState().applyTimelineEditOperation({
       id: 'typed-transition-preview',
       type: 'transition-preview-drop',
@@ -1091,14 +1108,40 @@ describe('timeline edit operations kernel', () => {
       label: 'crossfade',
       zIndex: 16,
     });
-    expect(preview?.ghostRanges).toEqual([{
-      id: 'typed-transition-preview:transition-preview',
-      trackId: 'video-1',
-      startTime: 9,
-      endTime: 11,
-      label: 'crossfade',
-      variant: 'transition-drop',
-    }]);
+    expect(preview?.ghostRanges).toEqual([
+      {
+        id: 'typed-transition-preview:transition-preview',
+        trackId: 'video-1',
+        startTime: 9,
+        endTime: 11,
+        label: 'crossfade',
+        variant: 'transition-drop',
+      },
+      {
+        id: 'typed-transition-preview:incoming:source-handle:9.5000:10.0000',
+        trackId: 'video-1',
+        startTime: 9.5,
+        endTime: 10,
+        label: '0.5s source',
+        variant: 'transition-source-handle',
+      },
+      {
+        id: 'typed-transition-preview:outgoing:source-handle:10.0000:12.0000',
+        trackId: 'video-1',
+        startTime: 10,
+        endTime: 12,
+        label: '2.0s source',
+        variant: 'transition-source-handle',
+      },
+      {
+        id: 'typed-transition-preview:incoming:hold:9.0000:9.5000',
+        trackId: 'video-1',
+        startTime: 9,
+        endTime: 9.5,
+        label: '+0.5s hold',
+        variant: 'transition-hold-fallback',
+      },
+    ]);
   });
 
   it('stores and clears blocked transition drop preview state', () => {
@@ -1172,10 +1215,10 @@ describe('timeline edit operations kernel', () => {
     expect(clipA?.transitionOut).toMatchObject({ type: 'crossfade', duration: 2, linkedClipId: 'clip-b' });
     expect(clipB?.transitionIn).toMatchObject({ type: 'crossfade', duration: 2, linkedClipId: 'clip-a' });
     expect(clipA?.transitionOut?.id).toBe(clipB?.transitionIn?.id);
-    expect(clipB?.startTime).toBe(8);
+    expect(clipB?.startTime).toBe(10);
   });
 
-  it('clamps typed transition duration to the transition and clip limits', () => {
+  it('keeps requested transition duration without a max cap', () => {
     useTimelineStore.setState({
       tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
       clips: [
@@ -1185,28 +1228,34 @@ describe('timeline edit operations kernel', () => {
     });
 
     const result = useTimelineStore.getState().applyTimelineEditOperation({
-      id: 'typed-transition-clamp',
+      id: 'typed-transition-uncapped',
       type: 'transition-apply',
-      transactionId: 'typed-transition-clamp',
-      historyBatchId: 'typed-transition-clamp',
+      transactionId: 'typed-transition-uncapped',
+      historyBatchId: 'typed-transition-uncapped',
       source: 'ui',
       clipAId: 'clip-a',
       clipBId: 'clip-b',
       transitionType: 'crossfade',
-      requestedDuration: 5,
+      requestedDuration: 12,
       junction: createTransitionJunctionFixture('clip-a', 'clip-b', 4),
     }, { source: 'ui', historyLabel: 'Apply transition' });
 
     const clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
     expect(result.success).toBe(true);
-    expect(clipB?.transitionIn?.duration).toBe(1.5);
-    expect(clipB?.startTime).toBe(2.5);
+    expect(clipB?.transitionIn?.duration).toBe(12);
+    expect(clipB?.startTime).toBe(4);
   });
 
-  it('removes a typed transition and restores the incoming clip start', () => {
+  it('removes a typed transition without moving the incoming clip start', () => {
     const transition = { id: 'transition-existing', type: 'crossfade', duration: 2 };
     useTimelineStore.setState({
       tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      propertiesSelection: {
+        kind: 'transition',
+        clipId: 'clip-a',
+        edge: 'out',
+        transitionId: 'transition-existing',
+      },
       clips: [
         createMockClip({
           id: 'clip-a',
@@ -1218,7 +1267,7 @@ describe('timeline edit operations kernel', () => {
         createMockClip({
           id: 'clip-b',
           trackId: 'video-1',
-          startTime: 8,
+          startTime: 10,
           duration: 8,
           transitionIn: { ...transition, linkedClipId: 'clip-a' },
         }),
@@ -1241,6 +1290,51 @@ describe('timeline edit operations kernel', () => {
     expect(clips.find(clip => clip.id === 'clip-a')?.transitionOut).toBeUndefined();
     expect(clips.find(clip => clip.id === 'clip-b')?.transitionIn).toBeUndefined();
     expect(clips.find(clip => clip.id === 'clip-b')?.startTime).toBe(10);
+    expect(useTimelineStore.getState().propertiesSelection).toBeNull();
+  });
+
+  it('removes a typed transition when the connected clips are moved apart', () => {
+    const transition = { id: 'transition-existing', type: 'crossfade', duration: 2 };
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      propertiesSelection: {
+        kind: 'transition',
+        clipId: 'clip-a',
+        edge: 'out',
+        transitionId: 'transition-existing',
+      },
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          transitionOut: { ...transition, linkedClipId: 'clip-b' },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 10,
+          duration: 8,
+          transitionIn: { ...transition, linkedClipId: 'clip-a' },
+        }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'move-transition-apart',
+      type: 'move-clips',
+      moves: [{ clipId: 'clip-b', startTime: 12 }],
+      includeLinked: false,
+    }, { source: 'ui', historyLabel: 'Move clip apart' });
+
+    const clips = useTimelineStore.getState().clips;
+    expect(result.success).toBe(true);
+    expect(result.changedClipIds).toEqual(expect.arrayContaining(['clip-a', 'clip-b']));
+    expect(clips.find(clip => clip.id === 'clip-a')?.transitionOut).toBeUndefined();
+    expect(clips.find(clip => clip.id === 'clip-b')?.transitionIn).toBeUndefined();
+    expect(clips.find(clip => clip.id === 'clip-b')?.startTime).toBe(12);
+    expect(useTimelineStore.getState().propertiesSelection).toBeNull();
   });
 
   it('updates typed transition duration while preserving the transition id', () => {
@@ -1258,7 +1352,7 @@ describe('timeline edit operations kernel', () => {
         createMockClip({
           id: 'clip-b',
           trackId: 'video-1',
-          startTime: 9,
+          startTime: 10,
           duration: 8,
           transitionIn: { ...transition, linkedClipId: 'clip-a' },
         }),
@@ -1282,7 +1376,7 @@ describe('timeline edit operations kernel', () => {
     expect(result.success).toBe(true);
     expect(clipA?.transitionOut).toMatchObject({ id: 'transition-existing', type: 'crossfade', duration: 3, linkedClipId: 'clip-b' });
     expect(clipB?.transitionIn).toMatchObject({ id: 'transition-existing', type: 'crossfade', duration: 3, linkedClipId: 'clip-a' });
-    expect(clipB?.startTime).toBe(7);
+    expect(clipB?.startTime).toBe(10);
   });
 
   it('blocks typed transition operations on locked tracks', () => {

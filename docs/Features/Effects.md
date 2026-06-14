@@ -9,7 +9,7 @@ MasterSelects has a modular GPU effect system built around registered effect mod
 - 37 blend modes are implemented in `src/shaders/composite.wgsl`.
 - 33 GPU effects are registered in `src/effects/`.
 - Registered effect categories are `color`, `blur`, `distort`, `stylize`, `keying`, `generate`, `time`, and `transition`.
-- `generate`, `time`, and `transition` currently have no registered effects and are hidden from the add-effect UI.
+- `generate`, `time`, and `transition` currently have no registered clip-stack effects and are hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Registry And UI
 
@@ -67,6 +67,20 @@ These effects are applied directly in the composite shader instead of running as
 - Invert
 
 That keeps them zero-overhead relative to the full ping-pong effect chain.
+
+## Timeline Transitions
+
+The Transition Suite is timeline-native rather than a normal one-clip effect
+stack. The first-pass suite is Crossfade, Dip to Black, Dip to White, Wipe
+Left, and Wipe Right. Transition definitions live in `src/transitions/` as
+serializable primitive recipes (`opacity`, `solid`, `mask`) and are interpreted
+by shared preview/export transition layer assembly.
+
+The default placement is virtual `center`: the edit point remains stable,
+neither clip is moved, and missing source handles render as first/last-frame
+hold fallback when the policy allows it. Wipe transitions pass
+typed transition metadata through existing compositor uniform padding slots, so
+normal layers pay no extra bind-group cost when `transitionRender` is absent.
 
 ## Effect Pipeline
 

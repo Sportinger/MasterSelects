@@ -9,6 +9,9 @@ import type {
   TransitionPreviewDropOperation,
   TransitionRemoveOperation,
   TransitionUpdateDurationOperation,
+  TransitionUpdateOffsetOperation,
+  TransitionUpdateTypeOperation,
+  TransitionUpdateParamsOperation,
 } from './transactionTypes';
 import type { ResolvedClipMove } from './transactionTypes';
 
@@ -274,6 +277,9 @@ export type TimelineEditOperation =
   | TransitionApplyOperation
   | TransitionRemoveOperation
   | TransitionUpdateDurationOperation
+  | TransitionUpdateOffsetOperation
+  | TransitionUpdateTypeOperation
+  | TransitionUpdateParamsOperation
   | TransitionPreviewDropOperation
   | TransitionClearPreviewOperation
   | DeleteGapAtTimeOperation

@@ -29,7 +29,15 @@ export interface Layer {
   maskFeatherQuality?: number;  // Blur quality: 0=low (9 samples), 1=medium (17), 2=high (25)
   maskInvert?: boolean;  // Whether to invert the mask, handled in GPU shader
   maskClipId?: string;  // Clip ID for looking up mask texture (consistent across systems)
+  transitionRender?: TransitionRenderState;
 }
+
+export type TransitionRenderState =
+  | {
+      kind: 'wipe';
+      direction: 'left' | 'right';
+      progress: number;
+    };
 
 export interface LayerSource {
   type: 'video' | 'image' | 'camera' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion';

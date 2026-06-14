@@ -20,6 +20,7 @@ import type {
   TimelineToolId,
   TimelineToolMode,
   TimelineToolPreview,
+  TimelineTransitionEditPreview,
   TimelineTrackFocusMode,
 } from './toolTypes';
 import type {
@@ -108,6 +109,7 @@ export interface TimelineState {
   momentaryTimelineToolId: TimelineToolId | null;
   timelineRangeSelection: TimelineRangeSelection | null;
   timelineToolPreview: TimelineToolPreview | null;
+  transitionEditPreview: TimelineTransitionEditPreview | null;
   clipDragPreview: TimelineClipDragPreview | null;
   markers: import('./feedbackTypes').TimelineMarker[];
   // Multi-ruler infrastructure (issue #257). View state — always defaulted at

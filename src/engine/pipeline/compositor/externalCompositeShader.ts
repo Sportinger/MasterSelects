@@ -28,8 +28,8 @@ struct LayerUniforms {
   inlineContrast: f32,
   inlineSaturation: f32,
   inlineInvert: u32,
-  _pad4: f32,
-  _pad5: f32,
+  transitionType: u32,
+  transitionProgress: f32,
 };
 
 @vertex
@@ -59,6 +59,18 @@ fn hash(p: vec2f) -> f32 {
   var p3 = fract(vec3f(p.xyx) * 0.1031);
   p3 = p3 + dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
+}
+
+fn getTransitionAlpha(uv: vec2f) -> f32 {
+  if (layer.transitionType != 1u) {
+    return 1.0;
+  }
+
+  let progress = clamp(abs(layer.transitionProgress), 0.0, 1.0);
+  if (layer.transitionProgress < 0.0) {
+    return select(0.0, 1.0, uv.x <= progress);
+  }
+  return select(0.0, 1.0, uv.x >= 1.0 - progress);
 }
 
 fn getLuminosity(c: vec3f) -> f32 {
@@ -299,7 +311,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   layerColor = vec4f(clamp(ec, vec3f(0.0), vec3f(1.0)), layerColor.a);
 
   let outOfBounds = uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0;
-  let maskAlpha = select(layerColor.a, 0.0, outOfBounds);
+  let maskAlpha = select(layerColor.a, 0.0, outOfBounds) * getTransitionAlpha(clampedUV);
 
   var blended: vec3f;
   var finalAlpha: f32 = maskAlpha * layer.opacity;

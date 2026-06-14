@@ -28,6 +28,7 @@ import { VideoSyncRecoveryCoordinator } from './videoSyncRecoveryCoordinator';
 import {
   getActiveClipsAtTime,
   getVisibleVideoTrackClipsAtTime,
+  getVisibleVideoTrackPlaybackClipsAtTime,
 } from './videoSyncTimelineQueries';
 import { VideoSyncWarmupState } from './videoSyncWarmupState';
 import { VideoSyncWarmupCoordinator } from './videoSyncWarmupCoordinator';
@@ -454,7 +455,7 @@ export class VideoSyncManager {
     }
 
     // Sync each clip at playhead
-    const visibleVideoClipsAtTime = getVisibleVideoTrackClipsAtTime(ctx);
+    const visibleVideoClipsAtTime = getVisibleVideoTrackPlaybackClipsAtTime(ctx);
     const visibleVideoClipIdsAtTime = new Set(visibleVideoClipsAtTime.map((clip) => clip.id));
 
     for (const clip of visibleVideoClipsAtTime) {

@@ -44,6 +44,12 @@ import {
 } from './layerBuilderLayerPostProcessing';
 import { buildLayerBuilderMotionShapeLayer } from './layerBuilderMotionLayers';
 import { buildLayerBuilderNestedCompLayer } from './layerBuilderNestedLayerBuilder';
+import {
+  DEFAULT_TRANSITION_PLACEMENT,
+  findActiveTransitionPlanForTrack,
+  type ActiveTransitionPlan,
+} from '../../stores/timeline/editOperations/transitionPlanner';
+import { assemblePreviewTransitionLayers } from './transitionLayerAssembly';
 
 const log = Logger.create('LayerBuilder');
 
@@ -275,8 +281,10 @@ export class LayerBuilderService {
   }
 
   /**
-   * Build layers from frame context
-   * Handles transitions by rendering both clips with crossfade opacity
+   * Build layers from frame context.
+   *
+   * Layers are returned in top-to-bottom order; LayerCollector reverses this
+   * array so lower visual layers are collected first.
    */
   private buildLayers(ctx: FrameContext): Layer[] {
     const layers: Layer[] = [];
@@ -289,61 +297,45 @@ export class LayerBuilderService {
         return;
       }
 
-      // Get all clips on this track at the current time
-      const trackClips = ctx.clipsAtTime.filter(c => c.trackId === track.id);
-
-      if (trackClips.length === 0) return;
-
-      // Check if we're in a transition (two clips overlapping with transition data)
-      if (trackClips.length >= 2) {
-        // Sort by start time to get outgoing (earlier) and incoming (later) clips
-        trackClips.sort((a, b) => a.startTime - b.startTime);
-        const outgoingClip = trackClips[0];
-        const incomingClip = trackClips[1];
-
-        // Check if they have transition data linking them
-        if (outgoingClip.transitionOut && outgoingClip.transitionOut.linkedClipId === incomingClip.id) {
-          // We're in a transition! Build both layers with adjusted opacity
-          const transitionDuration = outgoingClip.transitionOut.duration;
-          const transitionStart = incomingClip.startTime;
-
-          // Calculate transition progress (0 = start, 1 = end)
-          const progress = Math.max(0, Math.min(1,
-            (ctx.playheadPosition - transitionStart) / transitionDuration
-          ));
-
-          // Outgoing clip: opacity fades from 1 to 0
-          const outgoingOpacity = 1 - progress;
-          // Incoming clip: opacity fades from 0 to 1
-          const incomingOpacity = progress;
-
-          // Build outgoing clip layer (rendered first, behind)
-          const outgoingLayer = this.buildLayerForClip(outgoingClip, layerIndex, ctx, outgoingOpacity);
-          if (outgoingLayer) {
-            layers.push(outgoingLayer);
-          }
-
-          // Build incoming clip layer (rendered second, on top)
-          const incomingLayer = this.buildLayerForClip(incomingClip, layerIndex, ctx, incomingOpacity);
-          if (incomingLayer) {
-            layers.push(incomingLayer);
-          }
-
-          return; // Skip normal single-clip handling
-        }
+      const activeTransition = this.getActiveTransitionForTrack(ctx, track.id);
+      if (activeTransition) {
+        layers.push(...assemblePreviewTransitionLayers({
+          plan: activeTransition.plan,
+          playheadPosition: ctx.playheadPosition,
+          trackIndex: layerIndex,
+          outgoingClip: activeTransition.outgoingClip,
+          incomingClip: activeTransition.incomingClip,
+          buildClipLayer: (clip, _role, opacity) => this.buildLayerForClip(clip, layerIndex, ctx, opacity),
+        }));
+        return;
       }
 
       // Normal case: single clip or no transition
+      const trackClips = ctx.clipsAtTime
+        .filter(c => c.trackId === track.id)
+        .toSorted((a, b) => a.startTime - b.startTime);
+      if (trackClips.length === 0) return;
       const clip = trackClips.length > 1
         ? trackClips[trackClips.length - 1]
         : trackClips[0];
       const layer = this.buildLayerForClip(clip, layerIndex, ctx);
       if (layer) {
-        layers[layerIndex] = layer;
+        layers.push(layer);
       }
     });
 
     return layers;
+  }
+
+  private getActiveTransitionForTrack(ctx: FrameContext, trackId: string): ActiveTransitionPlan | null {
+    return findActiveTransitionPlanForTrack({
+      clips: ctx.clips,
+      trackId,
+      time: ctx.playheadPosition,
+      placement: DEFAULT_TRANSITION_PLACEMENT,
+      edgePolicy: 'hold',
+      getMediaDuration: (mediaFileId) => ctx.mediaFileById.get(mediaFileId)?.duration,
+    });
   }
 
   /**

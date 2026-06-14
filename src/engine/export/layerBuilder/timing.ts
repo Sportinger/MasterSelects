@@ -6,6 +6,10 @@ export function getClipSourceWindowTime(
   clipLocalTime: number,
   ctx: FrameContextLike,
 ): number {
+  if (Number.isFinite(clip.transitionSourceTimeOverride)) {
+    return clip.transitionSourceTimeOverride!;
+  }
+
   const sourceTime = ctx.getSourceTimeForClip(clip.id, clipLocalTime);
   const initialSpeed = ctx.getInterpolatedSpeed(clip.id, 0);
   const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;

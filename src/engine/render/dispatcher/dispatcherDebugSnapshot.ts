@@ -6,6 +6,21 @@ const log = Logger.create('RenderDispatcher');
 export interface RenderDispatcherDebugSnapshot {
   inputLayers: number;
   collectedLayerData: number;
+  inputLayerDetails?: Array<{
+    id: string;
+    sourceClipId?: string;
+    sourceType?: string;
+    mediaTime?: number;
+    opacity: number;
+  }>;
+  collectedLayerDetails?: Array<{
+    id: string;
+    sourceClipId?: string;
+    sourceType?: string;
+    targetMediaTime?: number;
+    displayedMediaTime?: number;
+    previewPath?: string;
+  }>;
   after3DLayerData: number;
   gaussianCandidates: number;
   gaussianRendered: number;
@@ -26,12 +41,27 @@ export class DispatcherDebugSnapshotFacet {
   private lastSceneRenderDebugKey = '';
 
   createRenderDebugSnapshot(
-    inputLayerCount: number,
+    inputLayers: Layer[],
     layerData: LayerRenderData[],
   ): RenderDispatcherDebugSnapshot {
     return {
-      inputLayers: inputLayerCount,
+      inputLayers: inputLayers.length,
       collectedLayerData: layerData.length,
+      inputLayerDetails: inputLayers.map((layer) => ({
+        id: layer.id,
+        sourceClipId: layer.sourceClipId,
+        sourceType: layer.source?.type,
+        mediaTime: layer.source?.mediaTime,
+        opacity: layer.opacity,
+      })),
+      collectedLayerDetails: layerData.map((data) => ({
+        id: data.layer.id,
+        sourceClipId: data.layer.sourceClipId,
+        sourceType: data.layer.source?.type,
+        targetMediaTime: data.targetMediaTime,
+        displayedMediaTime: data.displayedMediaTime,
+        previewPath: data.previewPath,
+      })),
       after3DLayerData: layerData.length,
       gaussianCandidates: layerData.filter((data) => data.layer.source?.type === 'gaussian-splat').length,
       gaussianRendered: 0,

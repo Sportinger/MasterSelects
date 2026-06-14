@@ -310,6 +310,13 @@ export function getClipForTrack(ctx: FrameContext, trackId: string): TimelineCli
 
 const clipTimeCacheByContext = new WeakMap<FrameContext, Map<string, ClipTimeInfo>>();
 
+function getClipTimeCacheKey(clip: TimelineClip): string {
+  const sourceOverride = clip.transitionSourceTimeOverride;
+  return Number.isFinite(sourceOverride)
+    ? `${clip.id}:transition:${sourceOverride!.toFixed(6)}:${clip.startTime.toFixed(6)}`
+    : clip.id;
+}
+
 /**
  * Get clip time info with memoization
  * Eliminates repeated calculations of the same clip time
@@ -322,28 +329,35 @@ export function getClipTimeInfo(ctx: FrameContext, clip: TimelineClip): ClipTime
     clipTimeCacheByContext.set(ctx, clipTimeCache);
   }
 
-  const cached = clipTimeCache.get(clip.id);
+  const cacheKey = getClipTimeCacheKey(clip);
+  const cached = clipTimeCache.get(cacheKey);
   if (cached) return cached;
 
   // Calculate
   const clipLocalTime = ctx.playheadPosition - clip.startTime;
-  const speed = ctx.getInterpolatedSpeed(clip.id, clipLocalTime);
+  const isTransitionHold = clip.transitionSourceHold === true;
+  const speed = isTransitionHold ? 0 : ctx.getInterpolatedSpeed(clip.id, clipLocalTime);
   const absSpeed = Math.abs(speed);
-  const sourceTime = ctx.getSourceTimeForClip(clip.id, clipLocalTime);
-  const initialSpeed = ctx.getInterpolatedSpeed(clip.id, 0);
+  const initialSpeed = isTransitionHold ? 1 : ctx.getInterpolatedSpeed(clip.id, 0);
   const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+  const sourceOverride = clip.transitionSourceTimeOverride;
+  const baseSourceTime = Number.isFinite(sourceOverride)
+    ? sourceOverride! - startPoint
+    : ctx.getSourceTimeForClip(clip.id, clipLocalTime);
+  const clipTime = Number.isFinite(sourceOverride)
+    ? sourceOverride!
+    : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + baseSourceTime));
 
   const info: ClipTimeInfo = {
     clipLocalTime,
-    sourceTime,
+    sourceTime: baseSourceTime,
     clipTime,
     speed,
     absSpeed,
   };
 
   // Cache and return
-  clipTimeCache.set(clip.id, info);
+  clipTimeCache.set(cacheKey, info);
 
   // Limit cache size
   if (clipTimeCache.size > LAYER_BUILDER_CONSTANTS.MAX_CLIP_TIME_CACHE) {

@@ -14,7 +14,7 @@ export type PanelType = 'preview' | 'multi-preview' | 'timeline' | 'clip-propert
 export const SCOPE_PANEL_TYPES: PanelType[] = ['scope-waveform', 'scope-histogram', 'scope-vectorscope'];
 
 // WIP panel types — shown grayed out with bug icon in View menu
-export const WIP_PANEL_TYPES: PanelType[] = ['multicam', 'transitions'];
+export const WIP_PANEL_TYPES: PanelType[] = ['multicam'];
 
 // Panel types that may exist more than once at the same time. These spawn a fresh,
 // independent instance (unique id) from the tab-bar "+" instead of focusing the

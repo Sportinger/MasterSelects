@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useTimelineKeyboard } from '../../src/components/timeline/hooks/useTimelineKeyboard';
 import { ALL_BLEND_MODES } from '../../src/components/timeline/constants';
+import { useTimelineStore } from '../../src/stores/timeline';
 import type { TimelineEditOperationActions } from '../../src/stores/timeline/types';
 import type { TimelineClip } from '../../src/types';
 import { createMockClip } from '../helpers/mockData';
@@ -53,6 +54,11 @@ describe('useTimelineKeyboard edit operation routing', () => {
   let applyTimelineEditOperation: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    useTimelineStore.setState({
+      propertiesSelection: null,
+      selectedClipIds: new Set(),
+      primarySelectedClipId: null,
+    });
     applyTimelineEditOperation = vi.fn(() => ({
       success: true,
       operationId: 'operation',
@@ -85,6 +91,40 @@ describe('useTimelineKeyboard edit operation routing', () => {
     expect(applyTimelineEditOperation.mock.calls[0][1]).toMatchObject({
       source: 'shortcut',
       historyLabel: 'Delete keyframes',
+    });
+  });
+
+  it('routes delete to transition removal when a transition is selected', () => {
+    useTimelineStore.setState({
+      propertiesSelection: {
+        kind: 'transition',
+        clipId: 'clip-a',
+        edge: 'out',
+        transitionId: 'transition-a',
+      },
+    });
+
+    render(
+      <KeyboardHarness
+        selectedClipIds={new Set(['clip-1'])}
+        selectedKeyframeIds={new Set(['kf-1'])}
+        applyTimelineEditOperation={applyTimelineEditOperation}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+
+    expect(applyTimelineEditOperation).toHaveBeenCalledTimes(1);
+    expect(applyTimelineEditOperation.mock.calls[0][0]).toMatchObject({
+      type: 'transition-remove',
+      clipId: 'clip-a',
+      edge: 'out',
+      transitionId: 'transition-a',
+      source: 'shortcut',
+    });
+    expect(applyTimelineEditOperation.mock.calls[0][1]).toMatchObject({
+      source: 'shortcut',
+      historyLabel: 'Remove transition',
     });
   });
 

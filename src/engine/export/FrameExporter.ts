@@ -5,6 +5,14 @@ const log = Logger.create('FrameExporter');
 import { AudioExportPipeline, type EncodedAudioResult } from '../audio';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { useTimelineStore } from '../../stores/timeline';
+import { useMediaStore } from '../../stores/mediaStore';
+import {
+  createTransitionSourceClip,
+  DEFAULT_TRANSITION_PLACEMENT,
+  findActiveTransitionPlanForTrack,
+  type ActiveTransitionPlan,
+} from '../../stores/timeline/editOperations/transitionPlanner';
+import { createTransitionMediaDurationResolver } from '../../stores/timeline/editOperations/transitionMediaDurationResolver';
 import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState, FrameContext } from './types';
 import { getFrameTolerance, getKeyframeInterval } from './types';
 import { VideoEncoderWrapper } from './VideoEncoderWrapper';
@@ -626,19 +634,53 @@ export class FrameExporter {
    */
   private createFrameContext(time: number, fps: number, frameTolerance: number): FrameContext {
     const state = useTimelineStore.getState();
+    const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
     const clipsAtTime = state.getClipsAtTime(time);
 
     // Build O(1) lookup maps
     const trackMap = new Map(state.tracks.map(t => [t.id, t]));
     const clipsByTrack = new Map(clipsAtTime.map(c => [c.trackId, c]));
+    const transitionParticipantsByTrack = new Map<string, ActiveTransitionPlan>();
+    const renderClipsById = new Map(clipsAtTime.map(c => [c.id, c]));
+
+    for (const track of state.tracks) {
+      if (track.type !== 'video') continue;
+
+      const transition = findActiveTransitionPlanForTrack({
+        clips: state.clips,
+        trackId: track.id,
+        time,
+        placement: DEFAULT_TRANSITION_PLACEMENT,
+        edgePolicy: 'hold',
+        getMediaDuration,
+      });
+      if (!transition) continue;
+
+      transitionParticipantsByTrack.set(track.id, transition);
+      const outgoingSourceClip = createTransitionSourceClip(
+        transition.outgoingClip,
+        transition.plan.outgoing,
+        time
+      );
+      const incomingSourceClip = createTransitionSourceClip(
+        transition.incomingClip,
+        transition.plan.incoming,
+        time
+      );
+      renderClipsById.set(outgoingSourceClip.id, outgoingSourceClip);
+      renderClipsById.set(incomingSourceClip.id, incomingSourceClip);
+    }
+    const renderClipsAtTime = Array.from(renderClipsById.values());
 
     return {
       time,
       fps,
       frameTolerance,
       clipsAtTime,
+      renderClipsAtTime,
       trackMap,
       clipsByTrack,
+      transitionParticipantsByTrack,
       getInterpolatedTransform: state.getInterpolatedTransform,
       getInterpolatedEffects: state.getInterpolatedEffects,
       getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,

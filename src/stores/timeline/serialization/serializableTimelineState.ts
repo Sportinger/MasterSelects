@@ -104,6 +104,8 @@ function createSerializableClip(
       : clip.waveformChannels,
     transform: clip.transform,
     effects: clip.effects,
+    transitionIn: clip.transitionIn ? structuredClone(clip.transitionIn) : undefined,
+    transitionOut: clip.transitionOut ? structuredClone(clip.transitionOut) : undefined,
     colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
     keyframes: keyframes.length > 0 ? keyframes : undefined,

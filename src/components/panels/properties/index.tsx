@@ -23,7 +23,7 @@ import './TextTab.css';
 import './VolumeBlendshapeTabs.css';
 
 // Tab type
-type PropertiesTab = 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip' | 'track-controls' | 'track-effects' | 'track-sends' | 'track-instrument' | 'master-controls' | 'master-effects';
+type PropertiesTab = 'transform' | 'color' | 'effects' | 'audio-edits' | 'masks' | 'transcript' | 'analysis' | 'text' | '3d-text' | 'math' | 'motion' | 'blendshapes' | 'gaussian-splat' | 'camera' | 'splat-effector' | 'lottie' | 'slot-clip' | 'transition' | 'track-controls' | 'track-effects' | 'track-sends' | 'track-instrument' | 'master-controls' | 'master-effects';
 
 // Lazy load tab components for code splitting
 const TransformTab = lazy(() => import('./TransformTab').then(m => ({ default: m.TransformTab })));
@@ -41,6 +41,7 @@ const LottieTab = lazy(() => import('./LottieTab').then(m => ({ default: m.Lotti
 const SlotClipTab = lazy(() => import('./SlotClipTab').then(m => ({ default: m.SlotClipTab })));
 const MathSceneTab = lazy(() => import('./MathSceneTab').then(m => ({ default: m.MathSceneTab })));
 const MotionShapeTab = lazy(() => import('./MotionShapeTab').then(m => ({ default: m.MotionShapeTab })));
+const TransitionTab = lazy(() => import('./TransitionTab').then(m => ({ default: m.TransitionTab })));
 
 // Tab loading fallback
 function TabLoading() {
@@ -59,6 +60,7 @@ function getSelectionKey(
   fallbackClipId: string | null,
 ): string | null {
   if (selection?.kind === 'clip') return `clip:${selection.clipId}`;
+  if (selection?.kind === 'transition') return `transition:${selection.clipId}:${selection.edge}:${selection.transitionId}`;
   if (selection?.kind === 'track') return `track:${selection.trackId}`;
   if (selection?.kind === 'master') return 'master';
   return fallbackClipId ? `clip:${fallbackClipId}` : null;
@@ -100,6 +102,12 @@ export function PropertiesPanel() {
   const selectedClip = clips.find(c => c.id === selectedClipId);
   const selectedPropertiesTrack = propertiesSelection?.kind === 'track'
     ? tracks.find(track => track.id === propertiesSelection.trackId) ?? null
+    : null;
+  const selectedTransitionSelection = propertiesSelection?.kind === 'transition'
+    ? propertiesSelection
+    : null;
+  const selectedTransitionClip = selectedTransitionSelection
+    ? clips.find(c => c.id === selectedTransitionSelection.clipId) ?? null
     : null;
   const isMasterPropertiesSelected = propertiesSelection?.kind === 'master';
   const masterAudio = masterAudioState ?? DEFAULT_MASTER_AUDIO_STATE;
@@ -188,6 +196,11 @@ export function PropertiesPanel() {
         return;
       }
 
+      if (selectedTransitionSelection) {
+        setActiveTab('transition');
+        return;
+      }
+
       if (selectedPropertiesTrack) {
         setActiveTab(selectedPropertiesTrack.type === 'audio' ? 'track-effects' : 'track-controls');
         return;
@@ -240,7 +253,7 @@ export function PropertiesPanel() {
         setActiveTab('transform');
       }
     }
-  }, [selectionKey, selectedPropertiesTrack, isMasterPropertiesSelected, isAudioClip, selectedClipAudioEditCount, isTextClip, is3DTextClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastSelectionKey, activeTab]);
+  }, [selectionKey, selectedTransitionSelection, selectedPropertiesTrack, isMasterPropertiesSelected, isAudioClip, selectedClipAudioEditCount, isTextClip, is3DTextClip, isMathSceneClip, isMotionShapeClip, isSolidClip, isVectorAnimationClip, isGaussianAvatar, isGaussianSplat, isCameraClip, isSplatEffectorClip, isSlotMode, lastSelectionKey, activeTab]);
 
   // Listen for external tab navigation requests (e.g. badge clicks in MediaPanel)
   useEffect(() => {
@@ -285,6 +298,32 @@ export function PropertiesPanel() {
               composition={selectedSlotComposition}
               slotIndex={selectedSlotIndex}
             />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedTransitionSelection) {
+    return (
+      <div className="properties-panel">
+        <div className="properties-tabs">
+          <button className="tab-btn active" onClick={() => setActiveTab('transition')}>
+            TRANSITION Parameters
+          </button>
+        </div>
+
+        <div className="properties-content">
+          <Suspense fallback={<TabLoading />}>
+            {selectedTransitionClip ? (
+              <TransitionTab
+                clip={selectedTransitionClip}
+                edge={selectedTransitionSelection.edge}
+                transitionId={selectedTransitionSelection.transitionId}
+              />
+            ) : (
+              <div className="panel-empty"><p>Select an active transition to edit its parameters.</p></div>
+            )}
           </Suspense>
         </div>
       </div>

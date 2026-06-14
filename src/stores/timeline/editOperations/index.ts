@@ -23,6 +23,7 @@ export {
   applyTransitionApplyOperation,
   applyTransitionRemoveOperation,
   applyTransitionUpdateDurationOperation,
+  applyTransitionUpdateOffsetOperation,
   createTransitionJunctionGeometryReference,
 } from './transitionOperations';
 export type {

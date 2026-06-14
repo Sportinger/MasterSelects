@@ -72,7 +72,10 @@ export type TimelineToolPreviewGhostVariant =
   | 'ripple-shift'
   | 'rolling-neighbor'
   | 'rate-stretch'
-  | 'transition-drop';
+  | 'transition-drop'
+  | 'transition-source-handle'
+  | 'transition-real-handle'
+  | 'transition-hold-fallback';
 
 export interface TimelineToolPreviewGhostRange {
   id: string;
@@ -101,6 +104,14 @@ export interface TimelineToolPreview {
   zIndex?: number;
 }
 
+export interface TimelineTransitionEditPreview {
+  clipId: string;
+  edge: 'in' | 'out';
+  transitionId: string;
+  duration: number;
+  offset: number;
+}
+
 export type LastTimelineToolByGroup = Record<TimelineToolGroupId, TimelineToolId>;
 
 export interface TimelineClipDragPreviewPatch {
@@ -117,6 +128,7 @@ export type TimelineTrackFocusMode = 'balanced' | 'audio' | 'video';
 
 export type TimelinePropertiesSelection =
   | { kind: 'clip'; clipId: string }
+  | { kind: 'transition'; clipId: string; edge: 'in' | 'out'; transitionId: string }
   | { kind: 'track'; trackId: string }
   | { kind: 'master' }
   | null;

@@ -12,6 +12,11 @@ import type { HtmlMediaResourceDescriptor, RenderResourceDescriptor } from './ru
 import { createRenderResourceDescriptorFromDemand } from './runtimeProviderDemandBridge';
 import { timelineRuntimeCoordinator } from './timelineRuntimeCoordinator';
 import { hasNativeDecoderForTimelineClip } from './nativeDecoderRuntimeRegistry';
+import {
+  DEFAULT_TRANSITION_PLACEMENT,
+  planTransition,
+} from '../../stores/timeline/editOperations/transitionPlanner';
+import { getTransition, transitionIncludesAudio, type TransitionType } from '../../transitions';
 
 type LazyMediaKind = 'video' | 'audio';
 
@@ -554,6 +559,50 @@ function collectDesiredClips(
   end: number,
 ): TimelineClip[] {
   const byTrack = new Map<string, LazyClipCandidate[]>();
+  const getMediaDuration = (mediaFileId: string) => ctx.mediaFileById.get(mediaFileId)?.duration;
+
+  const addTransitionCandidates = (
+    outgoingClip: TimelineClip,
+    incomingClip: TimelineClip,
+    trackKey: string,
+    transitionType: string,
+    duration: number,
+    junctionTime: number,
+    offset: number | undefined,
+  ): void => {
+    const plan = planTransition({
+      outgoingClip,
+      incomingClip,
+      transitionType,
+      requestedDuration: duration,
+      placement: DEFAULT_TRANSITION_PLACEMENT,
+      edgePolicy: 'hold',
+      junctionTime,
+      bodyOffset: offset ?? 0,
+      getMediaDuration,
+    });
+    const transitionInWindow = plan
+      ? isTimeSpanInWindow(plan.bodyStart, plan.bodyEnd - plan.bodyStart, start, end)
+      : false;
+    if (!plan || !transitionInWindow) return;
+
+    if (outgoingClip.source?.type === kind) {
+      addCandidate(byTrack, {
+        clip: outgoingClip,
+        trackKey,
+        rankStartTime: plan.bodyStart,
+        rankDuration: plan.bodyEnd - plan.bodyStart,
+      });
+    }
+    if (incomingClip.source?.type === kind) {
+      addCandidate(byTrack, {
+        clip: incomingClip,
+        trackKey,
+        rankStartTime: plan.bodyStart,
+        rankDuration: plan.bodyEnd - plan.bodyStart,
+      });
+    }
+  };
 
   for (const clip of ctx.clips) {
     const topLevelTrackAllowed = trackIds.has(clip.trackId);
@@ -578,6 +627,48 @@ function collectDesiredClips(
         clip.startTime,
         clip.inPoint || 0,
         clip.trackId,
+      );
+    }
+
+    const transition = clip.transitionOut;
+    if (transition && topLevelTrackAllowed) {
+      const incomingClip = ctx.clips.find(candidate => candidate.id === transition.linkedClipId);
+      if (incomingClip && trackIds.has(incomingClip.trackId)) {
+        addTransitionCandidates(
+          clip,
+          incomingClip,
+          clip.trackId,
+          transition.type,
+          transition.duration,
+          clip.startTime + clip.duration,
+          transition.offset,
+        );
+      }
+    }
+
+    if (kind === 'audio' && transition?.type === 'crossfade') {
+      const definition = getTransition(transition.type as TransitionType);
+      if (!transitionIncludesAudio(transition, definition)) continue;
+
+      const incomingVideo = ctx.clips.find(candidate => candidate.id === transition.linkedClipId);
+      const outgoingAudio = clip.linkedClipId
+        ? ctx.clips.find(candidate => candidate.id === clip.linkedClipId && candidate.source?.type === 'audio')
+        : undefined;
+      const incomingAudio = incomingVideo?.linkedClipId
+        ? ctx.clips.find(candidate => candidate.id === incomingVideo.linkedClipId && candidate.source?.type === 'audio')
+        : undefined;
+      if (!outgoingAudio || !incomingAudio || !trackIds.has(outgoingAudio.trackId) || outgoingAudio.trackId !== incomingAudio.trackId) {
+        continue;
+      }
+
+      addTransitionCandidates(
+        outgoingAudio,
+        incomingAudio,
+        outgoingAudio.trackId,
+        'crossfade',
+        transition.duration,
+        clip.startTime + clip.duration,
+        transition.offset,
       );
     }
   }

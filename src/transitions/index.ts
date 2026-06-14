@@ -10,6 +10,10 @@ const log = Logger.create('Transitions');
 
 // Import all transitions
 import { crossfade } from './crossfade';
+import { dipToBlack } from './dipToBlack';
+import { dipToWhite } from './dipToWhite';
+import { wipeLeft } from './wipeLeft';
+import { wipeRight } from './wipeRight';
 
 // Main transition registry
 export const TRANSITION_REGISTRY = new Map<TransitionType, TransitionDefinition>();
@@ -32,6 +36,10 @@ function registerTransition(transition: TransitionDefinition) {
 
 // Register all transitions
 registerTransition(crossfade);
+registerTransition(dipToBlack);
+registerTransition(dipToWhite);
+registerTransition(wipeLeft);
+registerTransition(wipeRight);
 
 // ==================== Helper Functions ====================
 

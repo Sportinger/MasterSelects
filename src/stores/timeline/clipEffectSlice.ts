@@ -2,6 +2,7 @@
 
 import type { AudioEffectInstance, Effect, EffectType, Keyframe, TimelineClip } from '../../types';
 import type { ClipEffectActions, SliceCreator } from './types';
+import { captureSnapshot } from '../historyStore';
 import { getDefaultEffectParams } from './utils';
 import { generateEffectId } from './helpers/idGenerator';
 import { clearProcessedAudioAnalysisRefs } from './helpers/audioAnalysisStateHelpers';
@@ -97,6 +98,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
         : c),
     });
     invalidateCache();
+    captureSnapshot('Add effect');
     return effect.id;
   },
 
@@ -115,6 +117,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot('Remove effect');
   },
 
   updateClipEffect: (clipId, effectId, params) => {
@@ -141,6 +144,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot('Adjust effect');
   },
 
   setClipEffectEnabled: (clipId, effectId, enabled) => {
@@ -163,6 +167,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot(enabled ? 'Enable effect' : 'Bypass effect');
   },
 
   reorderClipEffect: (clipId, effectId, newIndex) => {
@@ -185,6 +190,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot('Reorder effect');
   },
 
   addClipAudioEffectInstance: (clipId, descriptorId) => {
@@ -214,6 +220,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot('Add audio effect');
     return effect.id;
   },
 
@@ -238,6 +245,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot('Remove audio effect');
   },
 
   updateClipAudioEffectInstance: (clipId, effectId, params) => {
@@ -269,6 +277,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot('Adjust audio effect');
   },
 
   setClipAudioEffectInstanceEnabled: (clipId, effectId, enabled) => {
@@ -296,6 +305,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot(enabled ? 'Enable audio effect' : 'Bypass audio effect');
   },
 
   reorderClipAudioEffectInstance: (clipId, effectId, newIndex) => {
@@ -324,5 +334,6 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       }),
     });
     invalidateCache();
+    captureSnapshot('Reorder audio effect');
   },
 });

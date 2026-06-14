@@ -2,7 +2,9 @@
 
 import { Logger } from '../../services/logger';
 import type { ExportClipState, FrameContext } from './types';
+import type { TimelineClip } from '../../stores/timeline/types';
 import { updateRuntimePlaybackTime } from '../../services/mediaRuntime/runtimePlayback';
+import { getClipSourceWindowTime } from './layerBuilder/timing';
 
 const log = Logger.create('VideoSeeker');
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
@@ -31,6 +33,18 @@ export async function seekAllClipsToTime(
   // ParallelDecoder provides VideoFrames directly, much faster than seeking videos
   if (useParallelDecode && parallelDecoder) {
     await parallelDecoder.prefetchFramesForTime(time);
+    if ((ctx.transitionParticipantsByTrack?.size ?? 0) > 0) {
+      await Promise.all(getRenderableClips(ctx)
+        .filter((clip) => {
+          const track = ctx.trackMap.get(clip.trackId);
+          return track?.visible && clip.source?.type === 'video';
+        })
+        .map((clip) => {
+          const clipLocalTime = time - clip.startTime;
+          const sourceTime = getClipSourceWindowTime(clip, clipLocalTime, ctx);
+          return parallelDecoder.prefetchFrameForClipSourceTime(clip.id, sourceTime);
+        }));
+    }
     parallelDecoder.advanceToTime(time);
     return;
   }
@@ -47,14 +61,18 @@ function getExportVideoElement(
   return clipStates.get(clipId)?.preciseVideoElement ?? fallbackVideo ?? null;
 }
 
+function getRenderableClips(ctx: FrameContext): TimelineClip[] {
+  return ctx.renderClipsAtTime ?? ctx.clipsAtTime;
+}
+
 async function seekSequentialMode(
   ctx: FrameContext,
   clipStates: Map<string, ExportClipState>
 ): Promise<void> {
-  const { time, clipsAtTime, trackMap, getSourceTimeForClip, getInterpolatedSpeed } = ctx;
+  const { time, trackMap } = ctx;
   const seekPromises: Promise<void>[] = [];
 
-  for (const clip of clipsAtTime) {
+  for (const clip of getRenderableClips(ctx)) {
     const track = trackMap.get(clip.trackId);
     if (!track?.visible) continue;
 
@@ -97,10 +115,7 @@ async function seekSequentialMode(
       // Calculate clip time (handles speed keyframes and reversed clips)
       let clipTime: number;
       try {
-        const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
-        const initialSpeed = getInterpolatedSpeed(clip.id, 0);
-        const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-        clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+        clipTime = getClipSourceWindowTime(clip, clipLocalTime, ctx);
       } catch {
         clipTime = clip.reversed
           ? clip.outPoint - clipLocalTime
@@ -329,9 +344,9 @@ export async function waitForAllVideosReady(
   }
 
   // SEQUENTIAL MODE - wait for WebCodecs player (not HTMLVideoElement)
-  const { clipsAtTime, trackMap } = ctx;
+  const { trackMap } = ctx;
 
-  const videoClips = clipsAtTime.filter(clip => {
+  const videoClips = getRenderableClips(ctx).filter(clip => {
     const track = trackMap.get(clip.trackId);
     return track?.visible && clip.source?.type === 'video';
   });

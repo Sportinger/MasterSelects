@@ -170,6 +170,19 @@ export const createSelectionSlice: SliceCreator<SelectionActions> = (set, get) =
     set({ selectedClipIds: new Set(), primarySelectedClipId: null, propertiesSelection: null });
   },
 
+  selectTransitionProperties: (clipId, edge, transitionId) => {
+    const { clips } = get();
+    const clip = clips.find(candidate => candidate.id === clipId);
+    const transition = edge === 'in' ? clip?.transitionIn : clip?.transitionOut;
+    if (!clip || transition?.id !== transitionId) return;
+
+    set({
+      selectedClipIds: new Set(),
+      primarySelectedClipId: null,
+      propertiesSelection: { kind: 'transition', clipId, edge, transitionId },
+    });
+  },
+
   selectTrackProperties: (trackId) => {
     const { tracks } = get();
     if (!tracks.some(track => track.id === trackId)) return;

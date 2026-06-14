@@ -3,7 +3,7 @@ import type { Layer } from '../../core/types';
 
 export const COMPOSITOR_UNIFORM_SIZE = 96;
 export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 24;
-export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21]; // blendMode, hasMask, maskInvert, maskFeatherQuality, inlineInvert
+export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22]; // blendMode, mask flags, inlineInvert, transitionType
 
 export interface InlineEffectParams {
   brightness: number;  // Offset: 0 = no change, -1..1 range
@@ -59,8 +59,11 @@ export function writeLayerUniformData(
   uniformData[19] = inlineEffects?.contrast ?? 1;     // inlineContrast (1 = no change)
   uniformData[20] = inlineEffects?.saturation ?? 1;   // inlineSaturation (1 = no change)
   uniformDataU32[21] = inlineEffects?.invert ? 1 : 0; // inlineInvert (0 or 1)
-  uniformData[22] = 0;           // _pad4
-  uniformData[23] = 0;           // _pad5
+  const transition = layer.transitionRender;
+  uniformDataU32[22] = transition?.kind === 'wipe' ? 1 : 0; // transitionType: 0=none, 1=wipe
+  uniformData[23] = transition?.kind === 'wipe'
+    ? (transition.direction === 'right' ? -transition.progress : transition.progress)
+    : 0;
 }
 
 export function shouldUpdateLayerUniforms(

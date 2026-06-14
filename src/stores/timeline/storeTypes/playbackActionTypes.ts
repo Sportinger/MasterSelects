@@ -14,6 +14,7 @@ import type {
   TimelineToolId,
   TimelineToolMode,
   TimelineToolPreview,
+  TimelineTransitionEditPreview,
   TimelineTrackFocusMode,
 } from './toolTypes';
 import type {
@@ -80,6 +81,7 @@ export interface TimelineToolActions {
   setTimelineRangeSelection: (selection: TimelineRangeSelection | null) => void;
   clearTimelineRangeSelection: () => void;
   setTimelineToolPreview: (preview: TimelineToolPreview | null) => void;
+  setTransitionEditPreview: (preview: TimelineTransitionEditPreview | null) => void;
 }
 
 export interface TimelineEditOperationActions {

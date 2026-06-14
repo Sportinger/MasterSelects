@@ -10,6 +10,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import { vectorAnimationRuntimeManager } from '../../src/services/vectorAnimation/VectorAnimationRuntimeManager';
 import type { TimelineClip, TimelineTrack } from '../../src/stores/timeline/types';
 import type { ParallelDecodeManager } from '../../src/engine/ParallelDecodeManager';
+import { planTransition } from '../../src/stores/timeline/editOperations/transitionPlanner';
 
 const initialMediaState = useMediaStore.getState();
 
@@ -45,6 +46,188 @@ describe('ExportLayerBuilder', () => {
 
   afterEach(() => {
     cleanupLayerBuilder();
+  });
+
+  it('builds export layers for virtual transition participants', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as unknown as TimelineTrack;
+
+    const outgoingImage = document.createElement('img');
+    const incomingImage = document.createElement('img');
+    const outgoingClip = {
+      id: 'outgoing',
+      name: 'Outgoing',
+      trackId: track.id,
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      transitionOut: { type: 'crossfade', duration: 2, linkedClipId: 'incoming' },
+      source: { type: 'image', imageElement: outgoingImage },
+      transform: {},
+    } as unknown as TimelineClip;
+    const incomingClip = {
+      id: 'incoming',
+      name: 'Incoming',
+      trackId: track.id,
+      startTime: 10,
+      duration: 5,
+      inPoint: 0.5,
+      outPoint: 5.5,
+      source: { type: 'image', imageElement: incomingImage },
+      transform: {},
+    } as unknown as TimelineClip;
+
+    const plan = planTransition({
+      outgoingClip,
+      incomingClip,
+      transitionType: 'crossfade',
+      requestedDuration: 2,
+      placement: 'center',
+      edgePolicy: 'hold',
+      junctionTime: 10,
+    });
+    expect(plan).not.toBeNull();
+
+    const ctx: FrameContext = {
+      time: 10,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [outgoingClip],
+      renderClipsAtTime: [outgoingClip, incomingClip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, outgoingClip]]),
+      transitionParticipantsByTrack: new Map([[track.id, {
+        plan: plan!,
+        outgoingClip,
+        incomingClip,
+      }]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getInterpolatedColorCorrection: () => undefined,
+      getInterpolatedVectorAnimationSettings: () => ({}),
+      getInterpolatedTextBounds: () => undefined,
+      getSourceTimeForClip: (_clipId, localTime) => localTime,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, new Map(), null, false);
+
+    expect(layers).toHaveLength(2);
+    expect(layers.map(layer => layer.sourceClipId)).toEqual(['incoming', 'outgoing']);
+    expect(layers[0]?.opacity).toBeCloseTo(0.5);
+    expect(layers[0]?.id).toContain('transition:crossfade:outgoing:incoming:incoming');
+  });
+
+  it('uses transition source time for export video layers', () => {
+    const track = {
+      id: 'track-1',
+      type: 'video',
+      visible: true,
+      solo: false,
+    } as unknown as TimelineTrack;
+
+    const outgoingVideo = document.createElement('video');
+    const incomingVideo = document.createElement('video');
+    const outgoingClip = {
+      id: 'outgoing',
+      name: 'Outgoing',
+      trackId: track.id,
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      transitionOut: { type: 'crossfade', duration: 2, linkedClipId: 'incoming' },
+      source: { type: 'video', videoElement: outgoingVideo },
+      transform: {},
+    } as unknown as TimelineClip;
+    const incomingClip = {
+      id: 'incoming',
+      name: 'Incoming',
+      trackId: track.id,
+      startTime: 10,
+      duration: 5,
+      inPoint: 0.5,
+      outPoint: 5.5,
+      source: { type: 'video', videoElement: incomingVideo },
+      transform: {},
+    } as unknown as TimelineClip;
+    const plan = planTransition({
+      outgoingClip,
+      incomingClip,
+      transitionType: 'crossfade',
+      requestedDuration: 2,
+      placement: 'center',
+      edgePolicy: 'hold',
+      junctionTime: 10,
+    });
+    expect(plan).not.toBeNull();
+
+    const currentFrame = { displayWidth: 1920, displayHeight: 1080 } as VideoFrame;
+    const clipStates = new Map<string, ExportClipState>([
+      ['outgoing', {
+        clipId: 'outgoing',
+        webCodecsPlayer: { getCurrentFrame: () => currentFrame } as unknown as ExportClipState['webCodecsPlayer'],
+        lastSampleIndex: 0,
+        isSequential: true,
+        preciseVideoElement: outgoingVideo,
+      }],
+      ['incoming', {
+        clipId: 'incoming',
+        webCodecsPlayer: { getCurrentFrame: () => currentFrame } as unknown as ExportClipState['webCodecsPlayer'],
+        lastSampleIndex: 0,
+        isSequential: true,
+        preciseVideoElement: incomingVideo,
+      }],
+    ]);
+    const ctx: FrameContext = {
+      time: 9.75,
+      fps: 30,
+      frameTolerance: 50_000,
+      clipsAtTime: [outgoingClip],
+      renderClipsAtTime: [outgoingClip, incomingClip],
+      trackMap: new Map([[track.id, track]]),
+      clipsByTrack: new Map([[track.id, outgoingClip]]),
+      transitionParticipantsByTrack: new Map([[track.id, {
+        plan: plan!,
+        outgoingClip,
+        incomingClip,
+      }]]),
+      getInterpolatedTransform: () => ({
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: { x: 0, y: 0, z: 0 },
+        opacity: 1,
+        blendMode: 'normal',
+      }),
+      getInterpolatedEffects: () => [],
+      getInterpolatedColorCorrection: () => undefined,
+      getInterpolatedVectorAnimationSettings: () => ({}),
+      getInterpolatedTextBounds: () => undefined,
+      getSourceTimeForClip: (_clipId, localTime) => localTime,
+      getInterpolatedSpeed: () => 1,
+    };
+
+    initializeLayerBuilder([track]);
+
+    const layers = buildLayersAtTime(ctx, clipStates, null, false);
+
+    expect(layers[0]?.sourceClipId).toBe('incoming');
+    expect(layers[0]?.source?.mediaTime).toBeCloseTo(0.25);
+    expect(layers[1]?.sourceClipId).toBe('outgoing');
+    expect(layers[1]?.source?.mediaTime).toBeCloseTo(9.75);
   });
 
   it('uses the current WebCodecs VideoFrame for sequential export layers', () => {
@@ -158,6 +341,7 @@ describe('ExportLayerBuilder', () => {
     const parallelDecoder = {
       hasClip: vi.fn(() => true),
       getFrameForClip: vi.fn(() => parallelFrame),
+      getFrameForClipSourceTime: vi.fn(() => parallelFrame),
     } as unknown as ParallelDecodeManager;
 
     const ctx: FrameContext = {
@@ -185,7 +369,7 @@ describe('ExportLayerBuilder', () => {
 
     expect(layers).toHaveLength(1);
     expect(layers[0]?.source?.videoFrame).toBe(parallelFrame);
-    expect(parallelDecoder.getFrameForClip).toHaveBeenCalledWith(
+    expect(parallelDecoder.getFrameForClipSourceTime).toHaveBeenCalledWith(
       'clip-1',
       0.5,
       { toleranceMultiplier: 3 },

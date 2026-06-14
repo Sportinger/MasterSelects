@@ -205,6 +205,72 @@
   font-size: var(--font-md);
 }
 
+.transition-properties-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.transition-duration-row input[type="number"] {
+  width: 72px;
+  padding: 4px 6px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.transition-param-row .prop-label {
+  width: auto;
+  min-width: 84px;
+}
+
+.transition-param-row input[type="number"],
+.transition-param-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.transition-checkbox-row {
+  justify-content: space-between;
+}
+
+.transition-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.transition-static-value,
+.transition-hold-value {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.transition-hold-value {
+  color: #ff6b6b;
+}
+
+.transition-remove-button {
+  align-self: flex-start;
+  padding: 6px 10px;
+  color: #ffb3b3;
+  background: rgba(180, 40, 40, 0.16);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.transition-remove-button:hover {
+  background: rgba(180, 40, 40, 0.24);
+}
+
 .transform-tab-compact {
   container-type: inline-size;
 }

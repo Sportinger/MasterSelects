@@ -7,6 +7,10 @@ import {
   materializeResolvedClipMoveFallbackTracks,
   resolvedClipMovesToMoveClipsOperation,
 } from './moveResolution';
+import {
+  pruneInvalidClipTransitions,
+  shouldClearTransitionPropertiesSelection,
+} from './transitionOperations';
 import type { TimelineEditOperationApplyContext } from './editOperationContext';
 import { hasOnlyNoopWarnings, resultFromWarnings, uniqueIds } from './editOperationResults';
 import type { MoveClipsResolvedApplyOperation, TimelineEditResult, TimelineEditWarning } from './types';
@@ -41,9 +45,11 @@ export function applyResolvedMoveClipsOperation(
     }
 
     const trimResult = applyResolvedMoveOverlapTrims(moveResult.clips, operation.resolvedMoves);
+    const prunedTransitions = pruneInvalidClipTransitions(trimResult.clips);
     const changedClipIds = uniqueIds([
       ...moveResult.changedClipIds,
       ...trimResult.changedClipIds,
+      ...prunedTransitions.changedClipIds,
     ]);
     if (changedClipIds.length === 0) {
       return resultFromWarnings(operationId, [{ code: 'no-op', message: 'No clips were moved.' }]);
@@ -62,9 +68,12 @@ export function applyResolvedMoveClipsOperation(
     try {
       cleanupDeletedClipResources(deletedClips);
       set({
-        clips: trimResult.clips,
+        clips: prunedTransitions.clips,
         selectedClipIds,
         primarySelectedClipId,
+        ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, prunedTransitions.clips)
+          ? { propertiesSelection: null }
+          : {}),
       });
       get().updateDuration();
       get().invalidateCache();
@@ -103,9 +112,11 @@ export function applyResolvedMoveClipsOperation(
   }
 
   const trimResult = applyResolvedMoveOverlapTrims(moveResult.clips, operation.resolvedMoves);
+  const prunedTransitions = pruneInvalidClipTransitions(trimResult.clips);
   const changedClipIds = uniqueIds([
     ...moveResult.changedClipIds,
     ...trimResult.changedClipIds,
+    ...prunedTransitions.changedClipIds,
   ]);
   if (changedClipIds.length === 0) {
     return resultFromWarnings(operationId, [{ code: 'no-op', message: 'No clips were moved.' }]);
@@ -126,9 +137,12 @@ export function applyResolvedMoveClipsOperation(
     set({
       tracks: plannedTracks,
       expandedTracks: plannedExpandedTracks,
-      clips: trimResult.clips,
+      clips: prunedTransitions.clips,
       selectedClipIds,
       primarySelectedClipId,
+      ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, prunedTransitions.clips)
+        ? { propertiesSelection: null }
+        : {}),
     });
     get().updateDuration();
     get().invalidateCache();

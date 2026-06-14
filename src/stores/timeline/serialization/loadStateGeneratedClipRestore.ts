@@ -32,6 +32,8 @@ function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
   | 'audioState'
   | 'transform'
   | 'effects'
+  | 'transitionIn'
+  | 'transitionOut'
   | 'colorCorrection'
   | 'nodeGraph'
   | 'masks'
@@ -43,6 +45,8 @@ function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
     audioState: clonePersistedClipAudioState(serializedClip.audioState),
     transform: serializedClip.transform,
     effects: serializedClip.effects || [],
+    transitionIn: serializedClip.transitionIn ? structuredClone(serializedClip.transitionIn) : undefined,
+    transitionOut: serializedClip.transitionOut ? structuredClone(serializedClip.transitionOut) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks,
