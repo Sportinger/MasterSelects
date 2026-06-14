@@ -4,6 +4,7 @@ import { useRef } from 'react';
 
 import { useDockStore } from '../../stores/dockStore';
 import { DockNode } from './DockNode';
+import { DetachedPanelWindow } from './DetachedPanelWindow';
 import { FloatingPanel } from './FloatingPanel';
 import { DockDragPreview } from './container/DockDragPreview';
 import { DockRootEdgeDropOverlay } from './container/DockRootEdgeDropOverlay';
@@ -15,7 +16,16 @@ import './dock.css';
 
 export function DockContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { layout, dragState, endDrag, cancelDrag, updateDrag, toggleHoveredTabMaximized, maximizedPanelId } = useDockStore();
+  const {
+    layout,
+    browserWindowPanels,
+    dragState,
+    endDrag,
+    cancelDrag,
+    updateDrag,
+    toggleHoveredTabMaximized,
+    maximizedPanelId,
+  } = useDockStore();
   const getRootEdgeDropTarget = useRootEdgeDropTarget({
     containerRef,
     rootGroupId: layout.root.id,
@@ -57,6 +67,10 @@ export function DockContainer() {
 
       {layout.floatingPanels.map((floating) => (
         <FloatingPanel key={floating.id} floating={floating} />
+      ))}
+
+      {browserWindowPanels.map((windowPanel) => (
+        <DetachedPanelWindow key={windowPanel.id} windowPanel={windowPanel} />
       ))}
 
       <DockDragPreview dragState={dragState} />

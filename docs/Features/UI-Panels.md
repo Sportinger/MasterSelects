@@ -105,6 +105,12 @@ All docked panels can be:
 - They can be brought to the front by clicking
 - They can be redocked by clicking `Dock` or by dragging the floating panel title tab onto a dock target
 
+### Browser Window Panels
+
+- `Undock to Window` opens a dock tab as a separate browser window
+- The detached browser window renders the selected panel through the main editor runtime, so edits and controls affect the main app state
+- The detached browser window can return the panel to the main layout with `Dock back`
+
 ---
 
 ## Available Panels
@@ -421,11 +427,11 @@ Multi Preview, scopes, and other panels are available from the View menu and can
 ### Tab Context Menu
 
 Right-clicking a dock tab opens a tab menu. `Undock` moves that tab into a freely movable and
-resizable floating panel, `Hide` removes that tab, and `Change to` replaces the tab slot with
-another panel. If the target panel is already open elsewhere, it is moved into the clicked slot
-instead of creating a duplicate. The Timeline panel uses composition tabs instead of a normal panel
-tab; right-click the empty part of its tab bar next to the composition tabs to open the Timeline
-panel menu.
+resizable floating panel, `Undock to Window` opens it in a separate browser window with a `Dock back`
+control, `Hide` removes that tab, and `Change to` replaces the tab slot with another panel. If the
+target panel is already open elsewhere, it is moved into the clicked slot instead of creating a
+duplicate. The Timeline panel uses composition tabs instead of a normal panel tab; right-click the
+empty part of its tab bar next to the composition tabs to open the Timeline panel menu.
 
 ### Layout Actions
 

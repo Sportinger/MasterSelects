@@ -106,6 +106,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
     requestDockLayoutTransition();
     set({
       layout: nextLayout,
+      browserWindowPanels: [],
       maxZIndex: getLayoutMaxZIndex(nextLayout),
       hoveredTabTarget: null,
       maximizedPanelId: null,
@@ -141,6 +142,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
         requestDockLayoutTransition();
         set({
           layout: nextLayout,
+          browserWindowPanels: [],
           maxZIndex: getLayoutMaxZIndex(nextLayout),
           hoveredTabTarget: null,
           maximizedPanelId: null,
@@ -159,6 +161,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
         requestDockLayoutTransition();
         set({
           layout: parsed,
+          browserWindowPanels: [],
           maxZIndex: getLayoutMaxZIndex(parsed),
           hoveredTabTarget: null,
           maximizedPanelId: null,
@@ -179,6 +182,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
     requestDockLayoutTransition();
     set({
       layout: cloneDockLayout(DEFAULT_LAYOUT),
+      browserWindowPanels: [],
       maxZIndex: getLayoutMaxZIndex(DEFAULT_LAYOUT),
       hoveredTabTarget: null,
       maximizedPanelId: null,
@@ -225,6 +229,7 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
     const cleanedLayout = cleanupPersistedLayout(layout);
     set({
       layout: cleanedLayout,
+      browserWindowPanels: [],
       maxZIndex: getLayoutMaxZIndex(cleanedLayout),
       hoveredTabTarget: null,
       maximizedPanelId: null,

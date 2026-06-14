@@ -26,6 +26,11 @@ export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActio
         types.push(floating.panel.type);
       }
     });
+    get().browserWindowPanels.forEach((windowPanel) => {
+      if (VALID_PANEL_TYPES.has(windowPanel.panel.type) && !types.includes(windowPanel.panel.type)) {
+        types.push(windowPanel.panel.type);
+      }
+    });
     return types;
   },
 
@@ -99,6 +104,15 @@ export const createPanelVisibilityActions: DockSliceCreator<PanelVisibilityActio
         },
         hoveredTabTarget: state.hoveredTabTarget?.panelId === layout.floatingPanels[floatingIndex]?.panel.id ? null : state.hoveredTabTarget,
         maximizedPanelId: state.maximizedPanelId === layout.floatingPanels[floatingIndex]?.panel.id ? null : state.maximizedPanelId,
+      }));
+    }
+
+    const browserWindowPanel = get().browserWindowPanels.find((candidate) => candidate.panel.type === type);
+    if (browserWindowPanel) {
+      set((state) => ({
+        browserWindowPanels: state.browserWindowPanels.filter((candidate) => candidate.id !== browserWindowPanel.id),
+        hoveredTabTarget: state.hoveredTabTarget?.panelId === browserWindowPanel.panel.id ? null : state.hoveredTabTarget,
+        maximizedPanelId: state.maximizedPanelId === browserWindowPanel.panel.id ? null : state.maximizedPanelId,
       }));
     }
   },

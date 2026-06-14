@@ -2,6 +2,7 @@ import type {
   DockLayout,
   DockPanel,
   DockDragState,
+  BrowserWindowPanel,
   DropTarget,
   PanelType,
   PanelData,
@@ -18,6 +19,8 @@ export interface LayoutMutationActions {
   changePanelType: (panelId: string, type: PanelType) => void;
   floatPanel: (panelId: string, groupId: string, position: { x: number; y: number }) => void;
   dockFloatingPanel: (floatingId: string, target: DropTarget) => void;
+  detachPanelToBrowserWindow: (panelId: string, groupId: string) => BrowserWindowPanel | null;
+  dockBrowserWindowPanel: (windowPanelId: string, target?: DropTarget) => void;
   updateFloatingPosition: (floatingId: string, position: { x: number; y: number }) => void;
   updateFloatingSize: (floatingId: string, size: { width: number; height: number }) => void;
   bringToFront: (floatingId: string) => void;
@@ -72,6 +75,7 @@ export interface DockStoreState
     PanelVisibilityActions,
     SavedLayoutActions {
   layout: DockLayout;
+  browserWindowPanels: BrowserWindowPanel[];
   dragState: DockDragState;
   maxZIndex: number;
   hoveredTabTarget: HoveredDockTabTarget | null;

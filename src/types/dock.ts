@@ -85,6 +85,14 @@ export interface FloatingPanel {
   zIndex: number;
 }
 
+// Detached browser window panel. This is transient UI state only; it is not
+// persisted into saved/project layouts because it owns a live Window handle.
+export interface BrowserWindowPanel {
+  id: string;
+  panel: DockPanel;
+  returnGroupId: string | null;
+}
+
 // Root layout state
 export interface DockLayout {
   root: DockNode;

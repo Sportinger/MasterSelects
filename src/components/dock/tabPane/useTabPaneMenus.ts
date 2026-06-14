@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DockPanel, PanelType } from '../../../types/dock';
+import type { BrowserWindowPanel, DockPanel, PanelType } from '../../../types/dock';
 import { clampMenuPosition } from './layoutMath';
 
 export interface DockTabContextMenuState {
@@ -16,6 +16,7 @@ interface UseTabPaneMenusArgs {
   changePanelType: (panelId: string, type: PanelType) => void;
   addPanelTypeToGroup: (type: PanelType, groupId: string) => void;
   floatPanel: (panelId: string, groupId: string, position: { x: number; y: number }) => void;
+  detachPanelToBrowserWindow: (panelId: string, groupId: string) => BrowserWindowPanel | null;
 }
 
 export function useTabPaneMenus({
@@ -25,6 +26,7 @@ export function useTabPaneMenus({
   changePanelType,
   addPanelTypeToGroup,
   floatPanel,
+  detachPanelToBrowserWindow,
 }: UseTabPaneMenusArgs) {
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
@@ -36,7 +38,7 @@ export function useTabPaneMenus({
     event.stopPropagation();
     cancelHold();
     setTabContextMenu({
-      ...clampMenuPosition(event.clientX, event.clientY, 430, 150),
+      ...clampMenuPosition(event.clientX, event.clientY, 430, 180),
       panel,
     });
   }, [cancelHold]);
@@ -54,6 +56,12 @@ export function useTabPaneMenus({
     floatPanel(tabContextMenu.panel.id, groupId, { x, y });
     setTabContextMenu(null);
   }, [floatPanel, groupId, tabContextMenu]);
+
+  const handleDetachContextPanelToWindow = useCallback(() => {
+    if (!tabContextMenu) return;
+    detachPanelToBrowserWindow(tabContextMenu.panel.id, groupId);
+    setTabContextMenu(null);
+  }, [detachPanelToBrowserWindow, groupId, tabContextMenu]);
 
   const handleChangeContextPanelType = useCallback((type: PanelType) => {
     if (!tabContextMenu) return;
@@ -138,6 +146,7 @@ export function useTabPaneMenus({
     openTabContextMenu,
     handleHideContextPanel,
     handleFloatContextPanel,
+    handleDetachContextPanelToWindow,
     handleChangeContextPanelType,
     handleAddButtonClick,
     handleAddPanelType,

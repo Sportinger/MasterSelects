@@ -1,4 +1,4 @@
-import type { DockPanel, FloatingPanel } from '../../types/dock';
+import type { BrowserWindowPanel, DockPanel, DropTarget, FloatingPanel } from '../../types/dock';
 import {
   adjustDropTargetForMovedPanel,
   collapseSingleChildSplits,
@@ -8,8 +8,10 @@ import {
 import { getPanelConfig, VALID_PANEL_TYPES } from './panelRegistry';
 import {
   findGroupIdByPanelId,
+  findFirstTabGroup,
   findPanelAndGroup,
   findPanelById,
+  findTabGroupById,
   replacePanelInLayout,
   updateNodeInLayout,
 } from './layoutTree';
@@ -72,6 +74,16 @@ export const createLayoutMutationActions: DockSliceCreator<LayoutMutationActions
 
   closePanelById: (panelId) => {
     const { layout } = get();
+    const browserWindowPanel = get().browserWindowPanels.find((candidate) => candidate.panel.id === panelId);
+    if (browserWindowPanel) {
+      set((state) => ({
+        browserWindowPanels: state.browserWindowPanels.filter((candidate) => candidate.id !== browserWindowPanel.id),
+        hoveredTabTarget: state.hoveredTabTarget?.panelId === panelId ? null : state.hoveredTabTarget,
+        maximizedPanelId: state.maximizedPanelId === panelId ? null : state.maximizedPanelId,
+      }));
+      return;
+    }
+
     const floating = layout.floatingPanels.find((f) => f.panel.id === panelId);
     if (floating) {
       set((state) => ({
@@ -198,6 +210,77 @@ export const createLayoutMutationActions: DockSliceCreator<LayoutMutationActions
     set((state) => ({
       layout: newLayout,
       hoveredTabTarget: state.hoveredTabTarget?.panelId === floating.panel.id ? null : state.hoveredTabTarget,
+    }));
+  },
+
+  detachPanelToBrowserWindow: (panelId, groupId) => {
+    const { layout } = get();
+    const sourceGroup = findTabGroupById(layout.root, groupId);
+    const panel = sourceGroup?.panels.find((candidate) => candidate.id === panelId) ?? null;
+    if (!panel) return null;
+
+    let newLayout = removePanel(layout, panelId, groupId);
+    newLayout = {
+      ...newLayout,
+      root: collapseSingleChildSplits(newLayout.root),
+    };
+
+    const windowPanel: BrowserWindowPanel = {
+      id: `window-${panelId}-${Date.now()}`,
+      panel,
+      returnGroupId: groupId,
+    };
+
+    set((state) => ({
+      layout: newLayout,
+      browserWindowPanels: [...state.browserWindowPanels, windowPanel],
+      hoveredTabTarget: state.hoveredTabTarget?.panelId === panelId ? null : state.hoveredTabTarget,
+      maximizedPanelId: state.maximizedPanelId === panelId ? null : state.maximizedPanelId,
+    }));
+
+    return windowPanel;
+  },
+
+  dockBrowserWindowPanel: (windowPanelId, target) => {
+    const { browserWindowPanels, layout } = get();
+    const windowPanel = browserWindowPanels.find((candidate) => candidate.id === windowPanelId);
+    if (!windowPanel) return;
+
+    const { panel } = windowPanel;
+    let nextLayout = layout;
+
+    const dockedGroupId = findGroupIdByPanelId(nextLayout.root, panel.id);
+    if (dockedGroupId) {
+      nextLayout = removePanel(nextLayout, panel.id, dockedGroupId);
+      nextLayout = {
+        ...nextLayout,
+        root: collapseSingleChildSplits(nextLayout.root),
+      };
+    }
+
+    nextLayout = {
+      ...nextLayout,
+      floatingPanels: nextLayout.floatingPanels.filter((floating) => floating.panel.id !== panel.id),
+    };
+
+    const fallbackGroup =
+      (windowPanel.returnGroupId ? findTabGroupById(nextLayout.root, windowPanel.returnGroupId) : null)
+      ?? findTabGroupById(nextLayout.root, 'right-group')
+      ?? findFirstTabGroup(nextLayout.root);
+    if (!fallbackGroup && !target) return;
+
+    const resolvedTarget: DropTarget = target ?? {
+      groupId: fallbackGroup!.id,
+      position: 'center',
+      tabInsertIndex: fallbackGroup!.panels.length,
+    };
+
+    const newLayout = insertPanelAtTarget(nextLayout, panel, resolvedTarget);
+    set((state) => ({
+      layout: newLayout,
+      browserWindowPanels: state.browserWindowPanels.filter((candidate) => candidate.id !== windowPanelId),
+      hoveredTabTarget: state.hoveredTabTarget?.panelId === panel.id ? null : state.hoveredTabTarget,
+      maximizedPanelId: state.maximizedPanelId === panel.id ? null : state.maximizedPanelId,
     }));
   },
 

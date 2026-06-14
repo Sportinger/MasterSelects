@@ -6,6 +6,7 @@ import type { DockStoreState } from './storeTypes';
 export type DockStoreInitialState = Pick<
   DockStoreState,
   | 'layout'
+  | 'browserWindowPanels'
   | 'dragState'
   | 'maxZIndex'
   | 'hoveredTabTarget'
@@ -18,6 +19,7 @@ export type DockStoreInitialState = Pick<
 export function createDockStoreInitialState(): DockStoreInitialState {
   return {
     layout: cloneDockLayout(DEFAULT_LAYOUT),
+    browserWindowPanels: [],
     dragState: DEFAULT_DRAG_STATE,
     maxZIndex: 1000,
     hoveredTabTarget: null,

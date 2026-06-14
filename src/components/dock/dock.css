@@ -925,6 +925,98 @@
   opacity: 1;
 }
 
+.detached-panel-window-shell {
+  width: 100vw;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 34px minmax(0, 1fr);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.detached-panel-window-shell--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.detached-panel-window-header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.detached-panel-window-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.detached-panel-window-title strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detached-panel-window-dock-button,
+.detached-panel-window-empty button {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--accent-primary);
+  background: var(--accent-primary);
+  color: #ffffff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.detached-panel-window-dock-button:hover:not(:disabled),
+.detached-panel-window-empty button:hover {
+  background: var(--accent-hover);
+}
+
+.detached-panel-window-dock-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.detached-panel-window-content {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.detached-panel-window-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+.detached-panel-window-empty h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 /* Panel placeholder */
 .panel-placeholder {
   display: flex;

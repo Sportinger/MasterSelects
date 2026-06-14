@@ -23,6 +23,7 @@ describe('dock store saved layouts', () => {
   beforeEach(() => {
     localStorage.clear();
     useDockStore.setState({
+      browserWindowPanels: [],
       savedLayouts: getFactoryDockLayouts(),
       defaultSavedLayoutId: FACTORY_VIDEO_EDIT_LAYOUT_ID,
       activeSavedLayoutId: null,
@@ -150,6 +151,46 @@ describe('dock store saved layouts', () => {
     expect(layout.floatingPanels).toEqual([]);
     expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
     expect(useDockStore.getState().dragState.sourceFloatingId).toBeNull();
+  });
+
+  it('detaches a panel for a browser window and docks it back into the layout', () => {
+    const windowPanel = useDockStore.getState().detachPanelToBrowserWindow('export', 'right-group');
+
+    let layout = useDockStore.getState().layout;
+    let rightGroup = findTabGroup(layout.root, 'right-group');
+    expect(windowPanel).toMatchObject({
+      panel: { id: 'export', type: 'export', title: 'Export' },
+      returnGroupId: 'right-group',
+    });
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(layout.floatingPanels).toEqual([]);
+    expect(useDockStore.getState().browserWindowPanels).toEqual([windowPanel]);
+
+    useDockStore.getState().dockBrowserWindowPanel(windowPanel!.id, {
+      groupId: 'preview-group',
+      position: 'center',
+      tabInsertIndex: 1,
+    });
+
+    layout = useDockStore.getState().layout;
+    const previewGroup = findTabGroup(layout.root, 'preview-group');
+    rightGroup = findTabGroup(layout.root, 'right-group');
+    expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
+    expect(previewGroup?.activeIndex).toBe(1);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(useDockStore.getState().browserWindowPanels).toEqual([]);
+  });
+
+  it('docks a browser-window panel without duplicating an already visible panel id', () => {
+    const existingExport = useDockStore.getState().detachPanelToBrowserWindow('export', 'right-group');
+    expect(existingExport).not.toBeNull();
+    useDockStore.getState().dockBrowserWindowPanel(existingExport!.id);
+
+    useDockStore.getState().dockBrowserWindowPanel(existingExport!.id);
+
+    const layout = useDockStore.getState().layout;
+    const rightGroup = findTabGroup(layout.root, 'right-group');
+    expect(panelTypes(rightGroup).filter((type) => type === 'export')).toHaveLength(1);
   });
 
   it('drops retired dock panel payload ids from restored project layouts', () => {
