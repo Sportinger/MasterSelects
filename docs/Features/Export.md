@@ -131,6 +131,7 @@ Animated GIF is exposed as `.gif` in the video container group.
 - Uses fast quantization without dithering because `gifenc` has no dithering support.
 - Does not support audio.
 - Uses the GIF size estimator instead of video bitrate math.
+- Stops before rendering when the selected range would exceed the browser encoder's memory budget; use FFmpeg GIF or reduce duration, FPS, or resolution for larger exports.
 
 ### FFmpeg GIF Mode
 

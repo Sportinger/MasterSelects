@@ -1,5 +1,5 @@
 import { Logger } from '../../../services/logger';
-import { encodeBrowserGif } from '../../../engine/export/BrowserGifExporter';
+import { checkBrowserGifExportSize, encodeBrowserGif } from '../../../engine/export/BrowserGifExporter';
 import type { GifDither, GifLoopMode, GifPaletteMode } from '../../../engine/gif/gifOptions';
 import { createExportRunId } from '../../../services/timeline/exportRuntimeReporting';
 import { FFmpegFrameRenderer } from '../exportHelpers';
@@ -52,6 +52,25 @@ export interface GifExportRunnerResult {
 export async function runBrowserGifExport(
   input: GifExportRunnerInput,
 ): Promise<GifExportRunnerResult | null> {
+  const preflight = checkBrowserGifExportSize({
+    width: input.width,
+    height: input.height,
+    fps: input.fps,
+    durationSeconds: Math.max(0, input.endTime - input.startTime),
+    gifColors: input.gifColors,
+    gifDither: input.gifDither,
+    gifLoop: input.gifLoop,
+    gifLoopCount: input.gifLoopCount,
+    gifPaletteMode: input.gifPaletteMode,
+    gifOptimize: input.gifOptimize,
+    gifTransparency: input.gifTransparency,
+    gifAlphaThreshold: input.gifAlphaThreshold,
+    gifBayerScale: input.gifBayerScale,
+  });
+  if (!preflight.ok) {
+    throw new Error(preflight.message ?? 'Browser GIF is too large for in-browser encoding.');
+  }
+
   const frameRenderer = new FFmpegFrameRenderer({
     width: input.width,
     height: input.height,

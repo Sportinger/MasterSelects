@@ -3,11 +3,16 @@ import {
   clampGifAlphaThreshold,
   clampGifBayerScale,
   clampGifColors,
+  estimateGifSize,
+  formatByteSize,
   clampGifLoopCount,
   getGifRepeatCount,
   type GifExportOptions,
   type GifPaletteMode,
 } from '../gif/gifOptions';
+
+const BROWSER_GIF_MAX_RAW_FRAME_BYTES = 384 * 1024 * 1024;
+const BROWSER_GIF_MAX_ESTIMATED_OUTPUT_BYTES = 512 * 1024 * 1024;
 
 export interface BrowserGifExportSettings extends Required<GifExportOptions> {
   width: number;
@@ -20,6 +25,19 @@ export interface BrowserGifEncodeProgress {
   frame: number;
   totalFrames: number;
   percent: number;
+}
+
+export interface BrowserGifPreflightInput extends BrowserGifExportSettings {
+  durationSeconds: number;
+}
+
+export interface BrowserGifPreflightResult {
+  ok: boolean;
+  frameCount: number;
+  rawFrameBytes: number;
+  estimatedOutputBytes: number;
+  estimatedOutputMaxBytes: number;
+  message?: string;
 }
 
 export function createDefaultBrowserGifSettings(
@@ -41,11 +59,72 @@ export function createDefaultBrowserGifSettings(
   };
 }
 
+export function checkBrowserGifExportSize(settingsInput: BrowserGifPreflightInput): BrowserGifPreflightResult {
+  const settings = createDefaultBrowserGifSettings(settingsInput);
+  const durationSeconds = Math.max(0, settingsInput.durationSeconds);
+  const frameCount = Math.max(1, Math.ceil(durationSeconds * settings.fps));
+  const rawFrameBytes = settings.width * settings.height * 4 * frameCount;
+  const estimate = estimateGifSize({
+    width: settings.width,
+    height: settings.height,
+    fps: settings.fps,
+    durationSeconds,
+    gifColors: settings.gifColors,
+    gifDither: settings.gifDither,
+    gifLoop: settings.gifLoop,
+    gifLoopCount: settings.gifLoopCount,
+    gifPaletteMode: settings.gifPaletteMode,
+    gifOptimize: settings.gifOptimize,
+    gifTransparency: settings.gifTransparency,
+    gifAlphaThreshold: settings.gifAlphaThreshold,
+    gifBayerScale: settings.gifBayerScale,
+  });
+  const overRawLimit = rawFrameBytes > BROWSER_GIF_MAX_RAW_FRAME_BYTES;
+  const overOutputLimit = estimate.maxBytes > BROWSER_GIF_MAX_ESTIMATED_OUTPUT_BYTES;
+  if (!overRawLimit && !overOutputLimit) {
+    return {
+      ok: true,
+      frameCount,
+      rawFrameBytes,
+      estimatedOutputBytes: estimate.bytes,
+      estimatedOutputMaxBytes: estimate.maxBytes,
+    };
+  }
+
+  const rawLabel = formatByteSize(rawFrameBytes);
+  const outputRangeLabel = `${formatByteSize(estimate.minBytes)}-${formatByteSize(estimate.maxBytes)}`;
+  const maxRawLabel = formatByteSize(BROWSER_GIF_MAX_RAW_FRAME_BYTES);
+  const maxOutputLabel = formatByteSize(BROWSER_GIF_MAX_ESTIMATED_OUTPUT_BYTES);
+
+  return {
+    ok: false,
+    frameCount,
+    rawFrameBytes,
+    estimatedOutputBytes: estimate.bytes,
+    estimatedOutputMaxBytes: estimate.maxBytes,
+    message: [
+      `Browser GIF is too large for in-browser encoding (${frameCount} frames, ${rawLabel} raw frames, estimated ${outputRangeLabel}).`,
+      `Use FFmpeg GIF for this range, or lower duration, FPS, or resolution. Browser GIF is capped at about ${maxRawLabel} raw frames and ${maxOutputLabel} estimated output.`,
+    ].join(' '),
+  };
+}
+
 export function encodeBrowserGif(
   frames: Uint8Array[],
   settingsInput: BrowserGifExportSettings,
   onProgress?: (progress: BrowserGifEncodeProgress) => void,
 ): Blob {
+  const output = encodeBrowserGifBytes(frames, settingsInput, onProgress);
+  const buffer = new ArrayBuffer(output.byteLength);
+  new Uint8Array(buffer).set(output);
+  return new Blob([buffer], { type: 'image/gif' });
+}
+
+export function encodeBrowserGifBytes(
+  frames: Uint8Array[],
+  settingsInput: BrowserGifExportSettings,
+  onProgress?: (progress: BrowserGifEncodeProgress) => void,
+): Uint8Array {
   if (frames.length === 0) {
     throw new Error('No frames rendered');
   }
@@ -97,9 +176,9 @@ export function encodeBrowserGif(
 
   gif.finish();
   const bytes = gif.bytes();
-  const buffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buffer).set(bytes);
-  return new Blob([buffer], { type: 'image/gif' });
+  const output = new Uint8Array(bytes.byteLength);
+  output.set(bytes);
+  return output;
 }
 
 function createFramePalette(

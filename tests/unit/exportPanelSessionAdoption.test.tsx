@@ -118,6 +118,14 @@ const mockFactory = vi.hoisted(() => {
     },
   };
 
+  const checkBrowserGifExportSize = vi.fn(() => ({
+    ok: true,
+    frameCount: 1,
+    rawFrameBytes: 32 * 18 * 4,
+    estimatedOutputBytes: 1024,
+    estimatedOutputMaxBytes: 2048,
+  }));
+
   const createExportState = () => {
     const isImageScenario = state.scenario === 'still-image' || state.scenario === 'image-sequence';
     return {
@@ -236,6 +244,7 @@ const mockFactory = vi.hoisted(() => {
     MockFFmpegFrameRenderer,
     createExportState,
     createImageSequenceZip,
+    checkBrowserGifExportSize,
     downloadBlob,
     encodeBrowserGif,
     endExport,
@@ -329,6 +338,7 @@ vi.mock('../../src/components/export/CodecSelector', () => ({
 }));
 
 vi.mock('../../src/engine/export/BrowserGifExporter', () => ({
+  checkBrowserGifExportSize: mockFactory.checkBrowserGifExportSize,
   encodeBrowserGif: mockFactory.encodeBrowserGif,
 }));
 
@@ -441,6 +451,7 @@ beforeEach(() => {
   mockFactory.frameRendererInstances.length = 0;
   mockFactory.state.throwRenderFrame = false;
   mockFactory.downloadBlob.mockClear();
+  mockFactory.checkBrowserGifExportSize.mockClear();
   mockFactory.encodeBrowserGif.mockClear();
   mockFactory.createImageSequenceZip.mockClear();
   mockFactory.ffmpegBridge.encode.mockClear();

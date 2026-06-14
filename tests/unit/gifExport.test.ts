@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checkBrowserGifExportSize,
+  encodeBrowserGif,
+  encodeBrowserGifBytes,
+  isBrowserGifPaletteMode,
+} from '../../src/engine/export/BrowserGifExporter';
+import {
   CONTAINER_FORMATS,
   getCodecInfo,
   getCodecsForContainer,
@@ -123,5 +129,72 @@ describe('GIF size estimation', () => {
     expect(filter).toContain('dither=bayer');
     expect(filter).toContain('bayer_scale=5');
     expect(filter).not.toContain('alpha_threshold=');
+  });
+});
+
+describe('Browser GIF encoder', () => {
+  const settings = {
+    width: 2,
+    height: 2,
+    fps: 10,
+    gifColors: 256,
+    gifDither: 'none' as const,
+    gifLoop: 'forever' as const,
+    gifLoopCount: 3,
+    gifPaletteMode: 'global' as const,
+    gifOptimize: true,
+    gifTransparency: true,
+    gifAlphaThreshold: 128,
+    gifBayerScale: 3,
+  };
+
+  it('encodes a small transparent browser GIF blob', () => {
+    const frame = new Uint8Array([
+      255, 0, 0, 255,
+      0, 255, 0, 255,
+      0, 0, 255, 255,
+      0, 0, 0, 0,
+    ]);
+
+    const bytes = encodeBrowserGifBytes([frame], settings);
+    const blob = encodeBrowserGif([frame], settings);
+    const header = new TextDecoder('ascii').decode(bytes.slice(0, 6));
+
+    expect(blob.type).toBe('image/gif');
+    expect(blob.size).toBe(bytes.byteLength);
+    expect(header).toBe('GIF89a');
+  });
+
+  it('rejects browser GIF settings that would require oversized browser buffers', () => {
+    const preflight = checkBrowserGifExportSize({
+      ...settings,
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      durationSeconds: 20,
+    });
+
+    expect(preflight.ok).toBe(false);
+    expect(preflight.message).toContain('Browser GIF is too large');
+    expect(preflight.message).toContain('Use FFmpeg GIF');
+  });
+
+  it('accepts short browser GIF preview settings', () => {
+    const preflight = checkBrowserGifExportSize({
+      ...settings,
+      width: 640,
+      height: 360,
+      fps: 15,
+      durationSeconds: 4,
+    });
+
+    expect(preflight.ok).toBe(true);
+    expect(preflight.frameCount).toBe(60);
+  });
+
+  it('recognizes only supported browser GIF palette modes', () => {
+    expect(isBrowserGifPaletteMode('global')).toBe(true);
+    expect(isBrowserGifPaletteMode('per-frame')).toBe(true);
+    expect(isBrowserGifPaletteMode('scene')).toBe(false);
   });
 });
