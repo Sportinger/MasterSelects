@@ -172,13 +172,15 @@ export const createLayoutMutationActions: DockSliceCreator<LayoutMutationActions
       zIndex: maxZIndex + 1,
     };
 
-    set({
+    set((state) => ({
       layout: {
         ...newLayout,
         floatingPanels: [...newLayout.floatingPanels, floatingPanel],
       },
       maxZIndex: maxZIndex + 1,
-    });
+      hoveredTabTarget: state.hoveredTabTarget?.panelId === panelId ? null : state.hoveredTabTarget,
+      maximizedPanelId: state.maximizedPanelId === panelId ? null : state.maximizedPanelId,
+    }));
   },
 
   dockFloatingPanel: (floatingId, target) => {
@@ -193,7 +195,10 @@ export const createLayoutMutationActions: DockSliceCreator<LayoutMutationActions
       target
     );
 
-    set({ layout: newLayout });
+    set((state) => ({
+      layout: newLayout,
+      hoveredTabTarget: state.hoveredTabTarget?.panelId === floating.panel.id ? null : state.hoveredTabTarget,
+    }));
   },
 
   updateFloatingPosition: (floatingId, position) => {

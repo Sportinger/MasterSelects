@@ -24,7 +24,13 @@ export interface LayoutMutationActions {
 }
 
 export interface DragAndPanelStateActions {
-  startDrag: (panel: DockPanel, sourceGroupId: string, offset: { x: number; y: number }, initialPos?: { x: number; y: number }) => void;
+  startDrag: (
+    panel: DockPanel,
+    sourceGroupId: string | null,
+    offset: { x: number; y: number },
+    initialPos?: { x: number; y: number },
+    sourceFloatingId?: string | null
+  ) => void;
   updateDrag: (pos: { x: number; y: number }, dropTarget: DropTarget | null) => void;
   endDrag: () => void;
   cancelDrag: () => void;

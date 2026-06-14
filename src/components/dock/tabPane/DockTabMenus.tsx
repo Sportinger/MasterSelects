@@ -16,6 +16,7 @@ interface DockTabMenusProps {
   getVisiblePanelTypes: () => PanelType[];
   onAddPanelType: (type: PanelType) => void;
   onHideContextPanel: () => void;
+  onFloatContextPanel: () => void;
   onChangeContextPanelType: (type: PanelType) => void;
 }
 
@@ -27,6 +28,7 @@ export function DockTabMenus({
   getVisiblePanelTypes,
   onAddPanelType,
   onHideContextPanel,
+  onFloatContextPanel,
   onChangeContextPanelType,
 }: DockTabMenusProps) {
   return (
@@ -77,6 +79,13 @@ export function DockTabMenus({
           }}
           onContextMenu={(event) => event.preventDefault()}
         >
+          <button
+            className="dock-tab-context-menu-item"
+            type="button"
+            onClick={onFloatContextPanel}
+          >
+            <span>Undock</span>
+          </button>
           <button
             className="dock-tab-context-menu-item"
             type="button"

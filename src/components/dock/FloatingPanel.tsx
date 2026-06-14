@@ -1,8 +1,9 @@
 // Floating panel wrapper - draggable and resizable
 
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import type { FloatingPanel as FloatingPanelType } from '../../types/dock';
 import { useDockStore } from '../../stores/dockStore';
+import { findFirstTabGroup } from '../../stores/dockStore/layoutTree';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { DockPanelContent } from './DockPanelContent';
 
@@ -11,11 +12,27 @@ interface FloatingPanelProps {
 }
 
 export function FloatingPanel({ floating }: FloatingPanelProps) {
-  const { updateFloatingPosition, updateFloatingSize, bringToFront } = useDockStore();
+  const {
+    layout,
+    startDrag,
+    dockFloatingPanel,
+    updateFloatingPosition,
+    updateFloatingSize,
+    bringToFront,
+  } = useDockStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const defaultDockTarget = useMemo(() => {
+    const group = findFirstTabGroup(layout.root);
+    if (!group) return null;
+    return {
+      groupId: group.id,
+      position: 'center' as const,
+      tabInsertIndex: group.panels.length,
+    };
+  }, [layout.root]);
 
   // Handle drag
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
@@ -45,6 +62,27 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
       height: floating.size.height,
     };
   }, [floating.id, floating.size, bringToFront]);
+
+  const handleFloatingTabMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    bringToFront(floating.id);
+    startDrag(
+      floating.panel,
+      null,
+      { x: 0, y: 0 },
+      { x: e.clientX, y: e.clientY },
+      floating.id
+    );
+  }, [bringToFront, floating.id, floating.panel, startDrag]);
+
+  const handleDockClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!defaultDockTarget) return;
+    dockFloatingPanel(floating.id, defaultDockTarget);
+  }, [defaultDockTarget, dockFloatingPanel, floating.id]);
 
   useEffect(() => {
     if (!isDragging && !isResizing) return;
@@ -102,7 +140,24 @@ export function FloatingPanel({ floating }: FloatingPanelProps) {
     >
       <div className="floating-panel-header" onMouseDown={handleHeaderMouseDown}>
         <span className="floating-panel-drag-handle">⋮⋮</span>
-        <span className="floating-panel-title">{floating.panel.title}</span>
+        <button
+          className="floating-panel-title-tab"
+          type="button"
+          onMouseDown={handleFloatingTabMouseDown}
+          title="Drag into a dock area to dock this panel"
+        >
+          {floating.panel.title}
+        </button>
+        <button
+          className="floating-panel-dock-button"
+          type="button"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={handleDockClick}
+          disabled={!defaultDockTarget}
+          title="Dock panel back into the main layout"
+        >
+          Dock
+        </button>
       </div>
       <div className="floating-panel-content">
         <DockPanelContent panel={floating.panel} />

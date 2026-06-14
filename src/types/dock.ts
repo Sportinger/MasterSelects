@@ -149,6 +149,7 @@ export interface DockDragState {
   isDragging: boolean;
   draggedPanel: DockPanel | null;
   sourceGroupId: string | null;
+  sourceFloatingId: string | null;
   dropTarget: DropTarget | null;
   dragOffset: { x: number; y: number };
   currentPos: { x: number; y: number };

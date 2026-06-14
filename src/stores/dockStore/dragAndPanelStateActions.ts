@@ -4,12 +4,13 @@ import { findTabGroupById } from './layoutTree';
 import type { DockSliceCreator, DragAndPanelStateActions } from './storeTypes';
 
 export const createDragAndPanelStateActions: DockSliceCreator<DragAndPanelStateActions> = (set, get) => ({
-  startDrag: (panel, sourceGroupId, offset, initialPos) => {
+  startDrag: (panel, sourceGroupId, offset, initialPos, sourceFloatingId = null) => {
     set({
       dragState: {
         isDragging: true,
         draggedPanel: panel,
         sourceGroupId,
+        sourceFloatingId,
         dropTarget: null,
         dragOffset: offset,
         currentPos: initialPos || { x: 0, y: 0 },
@@ -29,7 +30,9 @@ export const createDragAndPanelStateActions: DockSliceCreator<DragAndPanelStateA
 
   endDrag: () => {
     const { dragState } = get();
-    if (dragState.isDragging && dragState.draggedPanel && dragState.dropTarget && dragState.sourceGroupId) {
+    if (dragState.isDragging && dragState.draggedPanel && dragState.dropTarget && dragState.sourceFloatingId) {
+      get().dockFloatingPanel(dragState.sourceFloatingId, dragState.dropTarget);
+    } else if (dragState.isDragging && dragState.draggedPanel && dragState.dropTarget && dragState.sourceGroupId) {
       get().movePanel(dragState.draggedPanel.id, dragState.sourceGroupId, dragState.dropTarget);
     }
     set({ dragState: DEFAULT_DRAG_STATE });

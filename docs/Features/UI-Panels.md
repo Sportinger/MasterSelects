@@ -103,7 +103,7 @@ All docked panels can be:
 
 - Floating panels keep their own position, size, and z-order
 - They can be brought to the front by clicking
-- They can be redocked by dragging onto a dock target
+- They can be redocked by clicking `Dock` or by dragging the floating panel title tab onto a dock target
 
 ---
 
@@ -420,11 +420,12 @@ Multi Preview, scopes, and other panels are available from the View menu and can
 
 ### Tab Context Menu
 
-Right-clicking a dock tab opens a tab menu. `Hide` removes that tab, and `Change to` replaces
-the tab slot with another panel. If the target panel is already open elsewhere, it is moved
-into the clicked slot instead of creating a duplicate. The Timeline panel uses composition tabs
-instead of a normal panel tab; right-click the empty part of its tab bar next to the composition
-tabs to open the Timeline panel menu.
+Right-clicking a dock tab opens a tab menu. `Undock` moves that tab into a freely movable and
+resizable floating panel, `Hide` removes that tab, and `Change to` replaces the tab slot with
+another panel. If the target panel is already open elsewhere, it is moved into the clicked slot
+instead of creating a duplicate. The Timeline panel uses composition tabs instead of a normal panel
+tab; right-click the empty part of its tab bar next to the composition tabs to open the Timeline
+panel menu.
 
 ### Layout Actions
 

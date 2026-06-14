@@ -15,6 +15,7 @@ interface UseTabPaneMenusArgs {
   closePanelById: (panelId: string) => void;
   changePanelType: (panelId: string, type: PanelType) => void;
   addPanelTypeToGroup: (type: PanelType, groupId: string) => void;
+  floatPanel: (panelId: string, groupId: string, position: { x: number; y: number }) => void;
 }
 
 export function useTabPaneMenus({
@@ -23,6 +24,7 @@ export function useTabPaneMenus({
   closePanelById,
   changePanelType,
   addPanelTypeToGroup,
+  floatPanel,
 }: UseTabPaneMenusArgs) {
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
@@ -34,7 +36,7 @@ export function useTabPaneMenus({
     event.stopPropagation();
     cancelHold();
     setTabContextMenu({
-      ...clampMenuPosition(event.clientX, event.clientY, 430, 120),
+      ...clampMenuPosition(event.clientX, event.clientY, 430, 150),
       panel,
     });
   }, [cancelHold]);
@@ -44,6 +46,14 @@ export function useTabPaneMenus({
     closePanelById(tabContextMenu.panel.id);
     setTabContextMenu(null);
   }, [closePanelById, tabContextMenu]);
+
+  const handleFloatContextPanel = useCallback(() => {
+    if (!tabContextMenu) return;
+    const x = Math.max(12, Math.min(window.innerWidth - 420, tabContextMenu.x));
+    const y = Math.max(12, Math.min(window.innerHeight - 320, tabContextMenu.y));
+    floatPanel(tabContextMenu.panel.id, groupId, { x, y });
+    setTabContextMenu(null);
+  }, [floatPanel, groupId, tabContextMenu]);
 
   const handleChangeContextPanelType = useCallback((type: PanelType) => {
     if (!tabContextMenu) return;
@@ -127,6 +137,7 @@ export function useTabPaneMenus({
     addMenu,
     openTabContextMenu,
     handleHideContextPanel,
+    handleFloatContextPanel,
     handleChangeContextPanelType,
     handleAddButtonClick,
     handleAddPanelType,

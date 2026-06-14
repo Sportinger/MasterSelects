@@ -37,6 +37,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closePanelById,
     changePanelType,
     addPanelTypeToGroup,
+    floatPanel,
     getVisiblePanelTypes,
     hoveredTabTarget,
     setHoveredTabTarget,
@@ -54,6 +55,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closePanelById: s.closePanelById,
     changePanelType: s.changePanelType,
     addPanelTypeToGroup: s.addPanelTypeToGroup,
+    floatPanel: s.floatPanel,
     getVisiblePanelTypes: s.getVisiblePanelTypes,
     hoveredTabTarget: s.hoveredTabTarget,
     setHoveredTabTarget: s.setHoveredTabTarget,
@@ -162,6 +164,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
     closePanelById,
     changePanelType,
     addPanelTypeToGroup,
+    floatPanel,
   });
 
   const handlePaneMouseEnter = useCallback(() => {
@@ -350,6 +353,7 @@ export function DockTabPane({ group }: DockTabPaneProps) {
         getVisiblePanelTypes={getVisiblePanelTypes}
         onAddPanelType={menus.handleAddPanelType}
         onHideContextPanel={menus.handleHideContextPanel}
+        onFloatContextPanel={menus.handleFloatContextPanel}
         onChangeContextPanelType={menus.handleChangeContextPanelType}
       />
 

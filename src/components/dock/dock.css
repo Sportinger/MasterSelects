@@ -830,14 +830,70 @@
 
 .floating-panel-drag-handle {
   color: var(--text-secondary);
+  width: 14px;
+  font-size: 0;
+  letter-spacing: 0;
+}
+
+.floating-panel-drag-handle::before {
+  content: '::';
   font-size: 10px;
-  letter-spacing: -2px;
+  letter-spacing: 0;
 }
 
 .floating-panel-title {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.floating-panel-title-tab {
+  min-width: 0;
+  flex: 1;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grab;
+}
+
+.floating-panel-title-tab:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+}
+
+.floating-panel-title-tab:active {
+  cursor: grabbing;
+}
+
+.floating-panel-dock-button {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.floating-panel-dock-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.floating-panel-dock-button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .floating-panel-content {

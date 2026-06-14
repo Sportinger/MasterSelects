@@ -100,6 +100,58 @@ describe('dock store saved layouts', () => {
     expect(rightGroup?.panels[rightGroup.activeIndex]?.type).toBe('history');
   });
 
+  it('undocks a panel into a floating panel and docks it back into a tab group', () => {
+    useDockStore.getState().floatPanel('export', 'right-group', { x: 120, y: 90 });
+
+    let layout = useDockStore.getState().layout;
+    let rightGroup = findTabGroup(layout.root, 'right-group');
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+    expect(layout.floatingPanels).toHaveLength(1);
+    expect(layout.floatingPanels[0]).toMatchObject({
+      panel: { id: 'export', type: 'export' },
+      position: { x: 120, y: 90 },
+    });
+
+    useDockStore.getState().dockFloatingPanel(layout.floatingPanels[0].id, {
+      groupId: 'preview-group',
+      position: 'center',
+      tabInsertIndex: 1,
+    });
+
+    layout = useDockStore.getState().layout;
+    const previewGroup = findTabGroup(layout.root, 'preview-group');
+    rightGroup = findTabGroup(layout.root, 'right-group');
+    expect(layout.floatingPanels).toEqual([]);
+    expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
+    expect(previewGroup?.activeIndex).toBe(1);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
+  });
+
+  it('docks a floating panel when its floating tab is dragged onto a drop target', () => {
+    useDockStore.getState().floatPanel('export', 'right-group', { x: 120, y: 90 });
+    const floating = useDockStore.getState().layout.floatingPanels[0];
+
+    useDockStore.getState().startDrag(
+      floating.panel,
+      null,
+      { x: 0, y: 0 },
+      { x: 200, y: 200 },
+      floating.id
+    );
+    useDockStore.getState().updateDrag({ x: 220, y: 220 }, {
+      groupId: 'preview-group',
+      position: 'center',
+      tabInsertIndex: 1,
+    });
+    useDockStore.getState().endDrag();
+
+    const layout = useDockStore.getState().layout;
+    const previewGroup = findTabGroup(layout.root, 'preview-group');
+    expect(layout.floatingPanels).toEqual([]);
+    expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
+    expect(useDockStore.getState().dragState.sourceFloatingId).toBeNull();
+  });
+
   it('drops retired dock panel payload ids from restored project layouts', () => {
     const legacyLayout = {
       root: {
