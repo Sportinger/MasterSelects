@@ -1,14 +1,6 @@
 [
   {
     "date": "2026-06-14",
-    "type": "improve",
-    "title": "MasterSelects 2.2.5",
-    "description": "UI settings and preview polish release: Media Panel Classic columns now show type-specific metadata for audio, image, and Signal assets; Preferences adds an Audio page for browser input/output devices, latency mode, and AudioContext diagnostics; Appearance adds text size, font, and high-readability controls; Shift temporarily enables edit-mode snapping for text bounds and layer movement; isolated layer previews normalize blend modes for source-like slot previews; Preferences dragging and the timeline tool palette feel tighter; and the issue-credit banner is removed.",
-    "section": "Release",
-    "commits": ["413ec825"]
-  },
-  {
-    "date": "2026-06-14",
     "type": "fix",
     "title": "MasterSelects 2.2.4",
     "description": "Export workflow release: Export is now the default right-side panel tab, media panel items can be downloaded through the browser context menu, and Browser GIF stops before oversized in-memory exports instead of hanging. GIF export also gains a pro control surface for palette size, global/per-frame palettes, loop modes, transparency, alpha threshold, and FFmpeg dithering options.",
