@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.2.5';
+export const APP_VERSION = '2.2.6';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.2.5',
-    message: 'Panel workspace release: dock tabs can now float inside the editor or open in a separate shared-state window with a Dock back control.',
+    title: 'MasterSelects 2.2.6',
+    message: 'Transition suite release: grouped 2D/3D transition browsing, expanded variants, richer parameters, and shared runtime/export assembly for the new transition families.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.2.5',
-  message: 'Panel workspace release: dock tabs can now float inside the editor or open in a separate shared-state window with a Dock back control.',
+  title: 'MasterSelects 2.2.6',
+  message: 'Transition suite release: grouped 2D/3D transition browsing, expanded variants, richer parameters, and shared runtime/export assembly for the new transition families.',
   animated: true,
 };
 

@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-06-15",
+    "type": "new",
+    "title": "MasterSelects 2.2.6",
+    "description": "Transition suite release: the Transitions panel now groups 2D and 3D families, shows variant counts, expands families on click for direct dragging, and exposes richer direction/color/style controls in Properties. The suite adds new dissolve, dip, wipe, iris, push, slide, light/film, glitch, pattern, and early 3D transition families, with shared preview metadata plus runtime/export assembly for multi-panel sourceRect transitions such as Puzzle Push and Magnetic Tiles. This release also includes the credit-claim page/API groundwork and updated transition/playback planning docs.",
+    "section": "Release"
+  },
+  {
     "date": "2026-06-14",
     "type": "new",
     "title": "MasterSelects 2.2.5",
