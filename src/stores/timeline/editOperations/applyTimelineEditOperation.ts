@@ -33,8 +33,7 @@ import {
 } from './transitionOperations';
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from './transitionPlanner';
 import { buildTransitionToolPreviewGhostRanges } from './transitionToolPreview';
-import { createTransitionMediaDurationResolver } from './transitionMediaDurationResolver';
-import { useMediaStore } from '../../mediaStore';
+import { createTimelineTransitionMediaDurationResolver } from '../../../services/timeline/timelineTransitionMediaDurations';
 import {
   aborted,
   blockedByExport,
@@ -76,7 +75,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       const junction = operation.junction;
       const clipA = junction ? get().clips.find(clip => clip.id === junction.clipAId) : undefined;
       const clipB = junction ? get().clips.find(clip => clip.id === junction.clipBId) : undefined;
-      const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
+      const getMediaDuration = createTimelineTransitionMediaDurationResolver();
       const plan = clipA && clipB
         ? planTransition({
             outgoingClip: clipA,
@@ -314,7 +313,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       operation.type === 'transition-update-type' ||
       operation.type === 'transition-update-params'
     ) {
-      const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
+      const getMediaDuration = createTimelineTransitionMediaDurationResolver();
       const result =
         operation.type === 'transition-apply'
           ? applyTransitionApplyOperation(operation, get().clips, get().tracks, getMediaDuration)

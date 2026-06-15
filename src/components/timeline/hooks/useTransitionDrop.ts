@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
+import { getRuntimeTransition } from '../../../transitions';
 import { createTransitionJunctionGeometryReference } from '../../../stores/timeline/editOperations/transitionOperations';
 import {
   getActiveTransitionDragData,
@@ -54,6 +55,7 @@ function canDropTransitionOnJunction(
   track: TimelineTrack | undefined,
 ): boolean {
   if (!track) return false;
+  if (!getRuntimeTransition(transitionData.type)) return false;
 
   const clipAIsAudio = isAudioClip(junction.clipA);
   const clipBIsAudio = isAudioClip(junction.clipB);

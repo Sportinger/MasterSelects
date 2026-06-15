@@ -3,6 +3,7 @@ import type { ClipAnalysis, FrameAnalysisData } from '../../../types';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { Logger } from '../../../services/logger';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
+import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { projectFileService } from '../../../services/projectFileService';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
 import {
@@ -100,8 +101,8 @@ function createRestoredMediaClip(params: {
     waveformChannels: serializedClip.waveformChannels,
     transform: serializedClip.transform,
     effects: serializedClip.effects || [],
-    transitionIn: serializedClip.transitionIn ? structuredClone(serializedClip.transitionIn) : undefined,
-    transitionOut: serializedClip.transitionOut ? structuredClone(serializedClip.transitionOut) : undefined,
+    transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
+    transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     isLoading: !needsReload,

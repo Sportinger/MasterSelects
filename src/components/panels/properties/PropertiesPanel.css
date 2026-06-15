@@ -211,6 +211,1107 @@
   gap: var(--sp-1);
 }
 
+.transition-choice-section {
+  display: grid;
+  gap: 8px;
+}
+
+.transition-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.transition-dissolve-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.transition-dip-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.transition-iris-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.transition-three-d-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.transition-light-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.transition-motion-blur-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.transition-stylize-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.transition-choice-button {
+  display: flex;
+  min-width: 0;
+  min-height: 54px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.transition-choice-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-color));
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.transition-choice-button.active {
+  border-color: color-mix(in srgb, var(--accent) 66%, var(--border-color));
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-primary));
+  color: var(--text-primary);
+}
+
+.transition-choice-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transition-dissolve-glyph {
+  position: relative;
+  width: 32px;
+  height: 22px;
+  color: currentColor;
+}
+
+.transition-dissolve-glyph::before,
+.transition-dissolve-glyph::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-dissolve-glyph-cross::before {
+  left: 3px;
+  top: 5px;
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.36;
+}
+
+.transition-dissolve-glyph-cross::after {
+  right: 3px;
+  top: 5px;
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.72;
+}
+
+.transition-dissolve-glyph-blur::before {
+  left: 5px;
+  right: 5px;
+  top: 5px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  opacity: 0.34;
+  box-shadow: 0 0 0 4px currentColor;
+}
+
+.transition-dissolve-glyph-blur::after {
+  left: 12px;
+  top: 2px;
+  width: 8px;
+  height: 18px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.2;
+}
+
+.transition-dissolve-glyph-add::before {
+  left: 4px;
+  top: 7px;
+  width: 24px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.34;
+}
+
+.transition-dissolve-glyph-add::after {
+  left: 14px;
+  top: 2px;
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: -7px 7px 0 -1px currentColor, 7px 7px 0 -1px currentColor;
+}
+
+.transition-dissolve-glyph-dark::before {
+  left: 3px;
+  top: 5px;
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.72;
+}
+
+.transition-dissolve-glyph-dark::after {
+  right: 3px;
+  top: 5px;
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.86;
+  mix-blend-mode: multiply;
+}
+
+.transition-motion-blur-glyph {
+  position: relative;
+  width: 34px;
+  height: 22px;
+  color: currentColor;
+}
+
+.transition-motion-blur-glyph::before,
+.transition-motion-blur-glyph::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-motion-blur-glyph-directional::before {
+  left: 4px;
+  right: 4px;
+  top: 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.4;
+  box-shadow: 0 6px 0 currentColor, 0 12px 0 currentColor;
+}
+
+.transition-motion-blur-glyph-directional::after {
+  right: 3px;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.transition-motion-blur-glyph-whip::before {
+  left: 4px;
+  top: 5px;
+  width: 20px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.3;
+  box-shadow: 8px 0 0 -2px currentColor, 14px 0 0 -4px currentColor;
+}
+
+.transition-motion-blur-glyph-whip::after {
+  left: 10px;
+  right: 2px;
+  top: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.transition-direction-glyph {
+  position: relative;
+  width: 30px;
+  height: 22px;
+  color: currentColor;
+}
+
+.transition-direction-glyph::before,
+.transition-direction-glyph::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-direction-glyph::before {
+  top: 10px;
+  left: 5px;
+  right: 7px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.transition-direction-glyph::after {
+  top: 6px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.transition-direction-glyph-left {
+  transform: rotate(180deg);
+}
+
+.transition-direction-glyph-up {
+  transform: rotate(-90deg);
+}
+
+.transition-direction-glyph-down {
+  transform: rotate(90deg);
+}
+
+.transition-wipe-glyph,
+.transition-iris-glyph {
+  position: relative;
+  width: 30px;
+  height: 22px;
+  color: currentColor;
+}
+
+.transition-wipe-glyph-center::before {
+  content: '';
+  position: absolute;
+  inset: 3px 1px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.transition-wipe-glyph-center::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: currentColor;
+  box-shadow: 0 -5px 0 -1px currentColor, 0 5px 0 -1px currentColor;
+}
+
+.transition-wipe-glyph-clock::before {
+  content: '';
+  position: absolute;
+  inset: 1px 5px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.transition-wipe-glyph-clock::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 15px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.transition-wipe-glyph-barn-horizontal::before,
+.transition-wipe-glyph-barn-vertical::before {
+  content: '';
+  position: absolute;
+  inset: 3px 1px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.transition-wipe-glyph-barn-horizontal::after,
+.transition-wipe-glyph-barn-vertical::after {
+  content: '';
+  position: absolute;
+  background: currentColor;
+}
+
+.transition-wipe-glyph-barn-horizontal::after {
+  top: 4px;
+  bottom: 4px;
+  left: 14px;
+  width: 2px;
+  box-shadow: -5px 0 0 -1px currentColor, 5px 0 0 -1px currentColor;
+}
+
+.transition-wipe-glyph-barn-vertical::after {
+  left: 4px;
+  right: 4px;
+  top: 10px;
+  height: 2px;
+  box-shadow: 0 -5px 0 -1px currentColor, 0 5px 0 -1px currentColor;
+}
+
+.transition-iris-glyph-circle::before,
+.transition-iris-glyph-oval::before,
+.transition-iris-glyph-diamond::before,
+.transition-iris-glyph-square::before,
+.transition-iris-glyph-triangle::before,
+.transition-iris-glyph-cross::before,
+.transition-iris-glyph-star::before {
+  content: '';
+  position: absolute;
+}
+
+.transition-iris-glyph-circle::before,
+.transition-iris-glyph-diamond::before,
+.transition-iris-glyph-square::before {
+  inset: 3px 7px;
+  border: 2px solid currentColor;
+}
+
+.transition-iris-glyph-circle::before {
+  border-radius: 999px;
+}
+
+.transition-iris-glyph-oval::before {
+  inset: 4px 4px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.transition-iris-glyph-diamond::before {
+  transform: rotate(45deg);
+}
+
+.transition-iris-glyph-square::before {
+  border-radius: 2px;
+}
+
+.transition-iris-glyph-triangle::before {
+  inset: 2px 6px 3px;
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.transition-iris-glyph-cross::before {
+  inset: 3px 4px;
+  background:
+    linear-gradient(currentColor 0 0) 9px 0 / 6px 16px no-repeat,
+    linear-gradient(currentColor 0 0) 0 5px / 24px 6px no-repeat;
+}
+
+.transition-iris-glyph-star::before {
+  inset: 1px 5px;
+  background: currentColor;
+  clip-path: polygon(
+    50% 0,
+    61% 34%,
+    98% 34%,
+    68% 55%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 55%,
+    2% 34%,
+    39% 34%
+  );
+}
+
+.transition-three-d-glyph {
+  position: relative;
+  width: 32px;
+  height: 24px;
+  color: currentColor;
+}
+
+.transition-three-d-glyph::before,
+.transition-three-d-glyph::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-three-d-glyph::before {
+  inset: 4px 7px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+  transform: skewY(-10deg);
+}
+
+.transition-three-d-glyph-flip-horizontal::after {
+  top: 4px;
+  bottom: 4px;
+  left: 15px;
+  width: 2px;
+  background: currentColor;
+}
+
+.transition-three-d-glyph-flip-vertical::after {
+  left: 7px;
+  right: 7px;
+  top: 11px;
+  height: 2px;
+  background: currentColor;
+}
+
+.transition-three-d-glyph-card-spin::after {
+  inset: 2px 4px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-radius: 999px;
+  transform: rotate(22deg);
+}
+
+.transition-three-d-glyph-roll::after {
+  left: 7px;
+  right: 7px;
+  top: 4px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 999px;
+  transform: rotate(-8deg);
+}
+
+.transition-three-d-glyph-spinback::before {
+  transform: rotate(-18deg) skewY(-14deg) scale(0.72);
+  transform-origin: center;
+}
+
+.transition-three-d-glyph-spinback::after {
+  inset: 0 3px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 999px;
+  transform: rotate(-36deg);
+}
+
+.transition-three-d-glyph-tumble-away::before {
+  transform: rotate(12deg) skewY(-12deg) scale(0.82);
+  transform-origin: center;
+}
+
+.transition-three-d-glyph-tumble-away::after {
+  left: 7px;
+  right: 5px;
+  top: 5px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 999px;
+  transform: rotate(32deg);
+}
+
+.transition-light-glyph {
+  position: relative;
+  width: 32px;
+  height: 24px;
+  color: currentColor;
+}
+
+.transition-light-glyph-flash::before,
+.transition-light-glyph-flash::after,
+.transition-light-glyph-leak::before,
+.transition-light-glyph-leak::after,
+.transition-light-glyph-sweep::before,
+.transition-light-glyph-sweep::after,
+.transition-light-glyph-flicker::before,
+.transition-light-glyph-flicker::after,
+.transition-light-glyph-film-roll::before,
+.transition-light-glyph-film-roll::after,
+.transition-light-glyph-bloom::before,
+.transition-light-glyph-bloom::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-light-glyph-flash::before {
+  left: 12px;
+  top: 1px;
+  width: 8px;
+  height: 22px;
+  background: currentColor;
+  clip-path: polygon(60% 0, 100% 0, 58% 43%, 100% 43%, 30% 100%, 44% 55%, 0 55%);
+}
+
+.transition-light-glyph-flash::after {
+  inset: 5px 4px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  opacity: 0.38;
+}
+
+.transition-light-glyph-leak::before {
+  left: 2px;
+  top: 3px;
+  width: 13px;
+  height: 19px;
+  border-radius: 10px 2px 2px 10px;
+  background: currentColor;
+  box-shadow: 6px 0 8px currentColor;
+  opacity: 0.72;
+}
+
+.transition-light-glyph-leak::after {
+  left: 16px;
+  top: 6px;
+  width: 14px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  opacity: 0.38;
+}
+
+.transition-light-glyph-sweep::before {
+  left: 1px;
+  top: 11px;
+  width: 30px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  transform: rotate(-22deg);
+}
+
+.transition-light-glyph-sweep::after {
+  left: 8px;
+  top: 4px;
+  width: 10px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-right-color: transparent;
+  opacity: 0.42;
+  transform: rotate(-22deg);
+}
+
+.transition-light-glyph-flicker::before {
+  left: 5px;
+  right: 5px;
+  top: 6px;
+  height: 12px;
+  border-radius: 2px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 4px 12px no-repeat,
+    linear-gradient(currentColor 0 0) 8px 0 / 6px 12px no-repeat,
+    linear-gradient(currentColor 0 0) 18px 0 / 4px 12px no-repeat;
+  opacity: 0.72;
+}
+
+.transition-light-glyph-flicker::after {
+  left: 4px;
+  right: 4px;
+  top: 4px;
+  height: 16px;
+  border-top: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  opacity: 0.32;
+}
+
+.transition-light-glyph-film-roll::before {
+  left: 8px;
+  right: 8px;
+  top: 3px;
+  bottom: 3px;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  opacity: 0.72;
+}
+
+.transition-light-glyph-film-roll::after {
+  left: 5px;
+  right: 5px;
+  top: 9px;
+  height: 2px;
+  background: currentColor;
+  box-shadow: 0 5px 0 currentColor;
+  opacity: 0.84;
+}
+
+.transition-light-glyph-bloom::before {
+  left: 8px;
+  top: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.15);
+}
+
+.transition-light-glyph-bloom::after {
+  left: 2px;
+  right: 2px;
+  top: 11px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.transition-stylize-glyph {
+  position: relative;
+  width: 32px;
+  height: 24px;
+  color: currentColor;
+}
+
+.transition-stylize-glyph-noise::before {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 3px;
+  background:
+    radial-gradient(circle at 20% 30%, currentColor 0 2px, transparent 2px),
+    radial-gradient(circle at 55% 18%, currentColor 0 1px, transparent 1px),
+    radial-gradient(circle at 78% 42%, currentColor 0 2px, transparent 2px),
+    radial-gradient(circle at 36% 70%, currentColor 0 2px, transparent 2px),
+    radial-gradient(circle at 72% 78%, currentColor 0 1px, transparent 1px);
+}
+
+.transition-stylize-glyph-noise::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  top: 11px;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.transition-stylize-glyph-kaleidoscope::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.transition-stylize-glyph-kaleidoscope::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  width: 22px;
+  height: 16px;
+  background:
+    linear-gradient(60deg, transparent 0 44%, currentColor 45% 55%, transparent 56%),
+    linear-gradient(120deg, transparent 0 44%, currentColor 45% 55%, transparent 56%);
+  opacity: 0.78;
+}
+
+.transition-stylize-glyph-rotate-left::before,
+.transition-stylize-glyph-rotate-right::before,
+.transition-stylize-glyph-rotate-90::before {
+  content: '';
+  position: absolute;
+  inset: 4px 7px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+}
+
+.transition-stylize-glyph-rotate-left::before {
+  transform: rotate(-18deg);
+}
+
+.transition-stylize-glyph-rotate-right::before {
+  transform: rotate(18deg);
+}
+
+.transition-stylize-glyph-rotate-90::before {
+  inset: 5px 8px;
+  transform: rotate(90deg);
+}
+
+.transition-stylize-glyph-rotate-left::after,
+.transition-stylize-glyph-rotate-right::after,
+.transition-stylize-glyph-rotate-90::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  top: 5px;
+  height: 14px;
+  border-top: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.transition-stylize-glyph-rotate-left::after {
+  transform: rotate(-32deg);
+}
+
+.transition-stylize-glyph-rotate-right::after {
+  transform: rotate(32deg);
+}
+
+.transition-stylize-glyph-rotate-90::after {
+  transform: rotate(70deg);
+}
+
+.transition-glitch-glyph {
+  position: relative;
+  width: 32px;
+  height: 24px;
+  color: currentColor;
+}
+
+.transition-glitch-glyph-blocks::before,
+.transition-glitch-glyph-blocks::after,
+.transition-glitch-glyph-crt::before,
+.transition-glitch-glyph-crt::after,
+.transition-glitch-glyph-rgb::before,
+.transition-glitch-glyph-rgb::after,
+.transition-glitch-glyph-mosaic::before,
+.transition-glitch-glyph-mosaic::after,
+.transition-glitch-glyph-scanline::before,
+.transition-glitch-glyph-scanline::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-glitch-glyph-blocks::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 9px 6px no-repeat,
+    linear-gradient(currentColor 0 0) 14px 2px / 10px 8px no-repeat,
+    linear-gradient(currentColor 0 0) 4px 14px / 11px 6px no-repeat,
+    linear-gradient(currentColor 0 0) 21px 15px / 5px 5px no-repeat;
+}
+
+.transition-glitch-glyph-blocks::after {
+  left: 3px;
+  right: 3px;
+  top: 11px;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.transition-glitch-glyph-crt::before {
+  left: 4px;
+  right: 4px;
+  top: 10px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.16);
+}
+
+.transition-glitch-glyph-crt::after {
+  left: 7px;
+  right: 7px;
+  top: 5px;
+  height: 14px;
+  border-top: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  opacity: 0.45;
+}
+
+.transition-glitch-glyph-rgb::before {
+  left: 4px;
+  right: 4px;
+  top: 7px;
+  height: 10px;
+  border-top: 2px solid #4a9eff;
+  border-bottom: 2px solid #ff6b4a;
+  box-shadow: 3px 4px 0 currentColor;
+}
+
+.transition-glitch-glyph-rgb::after {
+  left: 8px;
+  right: 8px;
+  top: 12px;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.transition-glitch-glyph-mosaic::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 8px 8px no-repeat,
+    linear-gradient(currentColor 0 0) 12px 0 / 6px 6px no-repeat,
+    linear-gradient(currentColor 0 0) 21px 2px / 7px 7px no-repeat,
+    linear-gradient(currentColor 0 0) 3px 12px / 6px 6px no-repeat,
+    linear-gradient(currentColor 0 0) 13px 10px / 8px 8px no-repeat,
+    linear-gradient(currentColor 0 0) 23px 13px / 5px 5px no-repeat;
+}
+
+.transition-glitch-glyph-mosaic::after {
+  inset: 3px;
+  border: 1px solid currentColor;
+  opacity: 0.32;
+}
+
+.transition-glitch-glyph-scanline::before {
+  left: 4px;
+  right: 4px;
+  top: 5px;
+  height: 14px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 100% 2px no-repeat,
+    linear-gradient(currentColor 0 0) 0 6px / 100% 2px no-repeat,
+    linear-gradient(currentColor 0 0) 0 12px / 100% 2px no-repeat;
+}
+
+.transition-glitch-glyph-scanline::after {
+  left: 7px;
+  right: 10px;
+  top: 10px;
+  height: 2px;
+  background: #ff6b4a;
+  box-shadow: 6px 5px 0 #4a9eff;
+  opacity: 0.85;
+}
+
+.transition-pattern-glyph {
+  position: relative;
+  width: 32px;
+  height: 24px;
+  color: currentColor;
+}
+
+.transition-pattern-glyph::before,
+.transition-pattern-glyph::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-pattern-glyph-checker::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 8px 8px no-repeat,
+    linear-gradient(currentColor 0 0) 16px 0 / 8px 8px no-repeat,
+    linear-gradient(currentColor 0 0) 8px 8px / 8px 8px no-repeat,
+    linear-gradient(currentColor 0 0) 0 16px / 8px 4px no-repeat,
+    linear-gradient(currentColor 0 0) 16px 16px / 8px 4px no-repeat;
+}
+
+.transition-pattern-glyph-random-blocks::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 12px 7px no-repeat,
+    linear-gradient(currentColor 0 0) 15px 2px / 9px 8px no-repeat,
+    linear-gradient(currentColor 0 0) 5px 13px / 10px 5px no-repeat,
+    linear-gradient(currentColor 0 0) 20px 14px / 4px 4px no-repeat;
+}
+
+.transition-pattern-glyph-puzzle::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 10px 7px no-repeat,
+    linear-gradient(currentColor 0 0) 14px 0 / 10px 7px no-repeat,
+    linear-gradient(currentColor 0 0) 7px 11px / 10px 7px no-repeat,
+    linear-gradient(currentColor 0 0) 21px 11px / 3px 7px no-repeat;
+}
+
+.transition-pattern-glyph-magnetic::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 1px 1px / 7px 5px no-repeat,
+    linear-gradient(currentColor 0 0) 15px 1px / 7px 5px no-repeat,
+    linear-gradient(currentColor 0 0) 8px 12px / 7px 5px no-repeat,
+    linear-gradient(currentColor 0 0) 22px 12px / 2px 5px no-repeat;
+}
+
+.transition-pattern-glyph-magnetic::after {
+  left: 10px;
+  top: 8px;
+  width: 12px;
+  height: 8px;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  opacity: 0.65;
+}
+
+.transition-pattern-glyph-paint-splatter::before {
+  inset: 3px;
+  background:
+    radial-gradient(circle at 10px 10px, currentColor 0 6px, transparent 6px),
+    radial-gradient(circle at 20px 6px, currentColor 0 3px, transparent 3px),
+    radial-gradient(circle at 5px 18px, currentColor 0 3px, transparent 3px),
+    radial-gradient(circle at 23px 18px, currentColor 0 2px, transparent 2px);
+}
+
+.transition-pattern-glyph-polka-dot::before {
+  inset: 3px 4px;
+  background:
+    radial-gradient(circle at 6px 6px, currentColor 0 4px, transparent 4px),
+    radial-gradient(circle at 20px 6px, currentColor 0 3px, transparent 3px),
+    radial-gradient(circle at 13px 15px, currentColor 0 4px, transparent 4px);
+}
+
+.transition-pattern-glyph-doom-bars::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 4px 18px no-repeat,
+    linear-gradient(currentColor 0 0) 6px 5px / 4px 13px no-repeat,
+    linear-gradient(currentColor 0 0) 12px 0 / 4px 16px no-repeat,
+    linear-gradient(currentColor 0 0) 18px 8px / 4px 10px no-repeat;
+}
+
+.transition-pattern-glyph-venetian-horizontal::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 24px 3px no-repeat,
+    linear-gradient(currentColor 0 0) 0 7px / 24px 3px no-repeat,
+    linear-gradient(currentColor 0 0) 0 14px / 24px 3px no-repeat;
+}
+
+.transition-pattern-glyph-venetian-vertical::before {
+  inset: 4px;
+  background:
+    linear-gradient(currentColor 0 0) 0 0 / 3px 18px no-repeat,
+    linear-gradient(currentColor 0 0) 7px 0 / 3px 18px no-repeat,
+    linear-gradient(currentColor 0 0) 14px 0 / 3px 18px no-repeat,
+    linear-gradient(currentColor 0 0) 21px 0 / 3px 18px no-repeat;
+}
+
+.transition-pattern-glyph-zig-zag::before {
+  inset: 4px;
+  background: currentColor;
+  clip-path: polygon(0 22%, 22% 22%, 34% 45%, 46% 22%, 68% 22%, 80% 45%, 100% 22%, 100% 60%, 78% 60%, 66% 38%, 54% 60%, 32% 60%, 20% 38%, 8% 60%, 0 60%);
+}
+
+.transition-pattern-glyph::after {
+  left: 4px;
+  right: 4px;
+  top: 11px;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.transition-zoom-glyph {
+  position: relative;
+  width: 32px;
+  height: 24px;
+  color: currentColor;
+}
+
+.transition-zoom-glyph::before,
+.transition-zoom-glyph::after {
+  content: '';
+  position: absolute;
+  display: block;
+}
+
+.transition-zoom-glyph::before {
+  inset: 5px 7px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.transition-zoom-glyph-in::after {
+  left: 18px;
+  top: 8px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.transition-zoom-glyph-out::after {
+  left: 6px;
+  top: 8px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.transition-zoom-glyph-spin::after {
+  inset: 2px 4px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-radius: 999px;
+  transform: rotate(-25deg);
+}
+
+.transition-zoom-glyph-blur::after {
+  inset: 1px 3px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  opacity: 0.38;
+  box-shadow: 0 0 0 4px currentColor;
+}
+
+.transition-color-choice {
+  min-height: 50px;
+}
+
+.transition-color-chip {
+  width: 28px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.28);
+}
+
+.transition-color-chip-white {
+  border-color: rgba(0, 0, 0, 0.24);
+}
+
+.transition-color-picker {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.transition-color-preview {
+  width: 34px;
+  height: 28px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.transition-color-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transition-color-picker input[type="color"] {
+  width: 56px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  cursor: pointer;
+}
+
 .transition-duration-row input[type="number"] {
   width: 72px;
   padding: 4px 6px;

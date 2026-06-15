@@ -5,14 +5,13 @@ const log = Logger.create('FrameExporter');
 import { AudioExportPipeline, type EncodedAudioResult } from '../audio';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { useTimelineStore } from '../../stores/timeline';
-import { useMediaStore } from '../../stores/mediaStore';
 import {
   createTransitionSourceClip,
   DEFAULT_TRANSITION_PLACEMENT,
   findActiveTransitionPlanForTrack,
   type ActiveTransitionPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { createTransitionMediaDurationResolver } from '../../stores/timeline/editOperations/transitionMediaDurationResolver';
+import { createTimelineTransitionMediaDurationResolver } from '../../services/timeline/timelineTransitionMediaDurations';
 import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState, FrameContext } from './types';
 import { getFrameTolerance, getKeyframeInterval } from './types';
 import { VideoEncoderWrapper } from './VideoEncoderWrapper';
@@ -461,7 +460,7 @@ export class FrameExporter {
             } else {
               log.error(`Failed to read pixels at frame ${frame}`);
             }
-            continue;
+            throw new Error(`Export frame capture failed at frame ${frame} (${error.captureKind})`);
           }
           throw error;
         }
@@ -634,7 +633,7 @@ export class FrameExporter {
    */
   private createFrameContext(time: number, fps: number, frameTolerance: number): FrameContext {
     const state = useTimelineStore.getState();
-    const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
+    const getMediaDuration = createTimelineTransitionMediaDurationResolver();
     const clipsAtTime = state.getClipsAtTime(time);
 
     // Build O(1) lookup maps
@@ -676,6 +675,8 @@ export class FrameExporter {
       time,
       fps,
       frameTolerance,
+      outputWidth: this.settings.width,
+      outputHeight: this.settings.height,
       clipsAtTime,
       renderClipsAtTime,
       trackMap,

@@ -3,6 +3,9 @@ import { LandingPage } from './marketing/LandingPage';
 import type { EntryExperience } from './routing/entryExperience';
 
 const EditorApp = lazy(() => import('./App'));
+const CreditClaimPage = lazy(() =>
+  import('./creditClaims/CreditClaimPage').then((module) => ({ default: module.CreditClaimPage }))
+);
 
 interface RootAppProps {
   initialExperience: EntryExperience;
@@ -23,6 +26,14 @@ const loadingShellStyle: CSSProperties = {
 export function RootApp({ initialExperience }: RootAppProps) {
   if (initialExperience === 'landing') {
     return <LandingPage />;
+  }
+
+  if (initialExperience === 'creditClaim') {
+    return (
+      <Suspense fallback={<div style={loadingShellStyle}>Opening credit claim...</div>}>
+        <CreditClaimPage />
+      </Suspense>
+    );
   }
 
   return (

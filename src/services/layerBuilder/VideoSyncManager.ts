@@ -28,8 +28,8 @@ import { VideoSyncRecoveryCoordinator } from './videoSyncRecoveryCoordinator';
 import {
   getActiveClipsAtTime,
   getVisibleVideoTrackClipsAtTime,
-  getVisibleVideoTrackPlaybackClipsAtTime,
 } from './videoSyncTimelineQueries';
+import { getVisibleVideoTrackPlaybackClipsAtTime } from './videoSyncTransitionQueries';
 import { VideoSyncWarmupState } from './videoSyncWarmupState';
 import { VideoSyncWarmupCoordinator } from './videoSyncWarmupCoordinator';
 import { VideoSyncWebCodecsSeekState } from './videoSyncWebCodecsSeekState';

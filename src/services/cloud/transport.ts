@@ -10,6 +10,7 @@ const HOSTED_CLOUD_API_ROUTES = [
   '/api/me',
   '/api/auth',
   '/api/billing',
+  '/api/credits',
   '/api/stripe',
   '/api/ai/chat',
   '/api/ai/audio',

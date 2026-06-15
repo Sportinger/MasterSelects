@@ -20,6 +20,471 @@ to add the common editorial transitions users expect, while keeping the
 MasterSelects implementation timeline-native, serializable, preview/export
 shared, and compatible with the existing virtual handle and hold-frame planner.
 
+## Effect QA Gate
+
+Every newly exposed visible transition/effect packet needs real-preview Dev
+Bridge screenshot evidence before it can be marked complete. The default check
+is a 5-frame grid around the transition plus a full-resolution midpoint frame,
+followed by a log scan for runtime errors, missing effect pipelines, and shader
+warnings. Record the screenshot paths in this plan or the packet report, and
+restore the pre-QA transition after temporary applies.
+
+## Implementation Progress
+
+Verified on 2026-06-15:
+
+- EX0/EX0A foundation started: transition definitions now have
+  stable/experimental/planned capability metadata, runtime-enabled registry
+  queries, centralized param normalization, and persistence/load normalization
+  for transition params.
+- Capability gating is wired through the panel list, properties type changes,
+  drag/drop acceptance, planner validation, edit operations, AI transition
+  handler, linked-audio transition sync, and transition overlay/runtime callers.
+- EX0B directional wipe ABI subset is implemented without changing uniform
+  buffer size: `transitionType` now distinguishes Wipe Left/Right/Up/Down and
+  normal/external compositor shader paths are updated together.
+- EX1 Wipe Up and Wipe Down are implemented as leaf transition modules and
+  registered in the transition registry.
+- EX4 Dip to Color is implemented with a param-driven solid color primitive.
+  `TransitionPlan` now carries normalized params through preview/export layer
+  assembly, while Dip to Black/White keep their existing IDs and recipes.
+- EX0C transform composition is implemented for transition layer assembly.
+  Transform primitives apply immutable additive translation, multiplicative
+  scale, additive X/Y/Z rotation, and additive Z-depth translation on top of the
+  already sampled virtual-handle or hold-frame clip transform.
+- EX2 Push Left/Right/Up/Down and Slide Left/Right/Up/Down are implemented as
+  transform-driven transition modules, registered in the stable registry, and
+  shown with a generic motion thumbnail in the Transitions panel.
+- EX3 Circle Iris, Diamond Iris, Square Iris, Clock Wipe, and Center Wipe are
+  implemented as mask-driven stable transition modules. `transitionRender`
+  now supports directional wipe, shape/iris, clock, and center mask states, and
+  both normal and external-video compositor shader paths use the same compact
+  `transitionType` mapping.
+- EX3 shape follow-up is implemented with `Oval Iris`, `Triangle Iris`,
+  `Cross Iris`, and `Star Iris`. These reuse the same `shape-mask`
+  transition render state, add `transitionType` values 16-19 in both normal
+  and external-video shader paths, and stay under the grouped `Iris` 2D
+  family in the panel and Properties UI.
+- Transition UI grouping is implemented for the currently related families:
+  the Transitions panel and Properties effect selector collapse variant leaf
+  IDs into `Wipe`, `Iris`, `Push`, `Slide`, `Dip`, and `Rotate`, while large
+  Properties buttons choose direction, wipe mode, iris shape, dip color, or
+  2D rotate style.
+- EX8 initial 3D foundation is implemented with `Flip Horizontal`,
+  `Flip Vertical`, `Card Spin`, and `Tumble Away`. These now opt into
+  `scene-3d-panel` rendering when the participant layer has a renderable
+  `videoFrame`, `videoElement`, `imageElement`, or `textCanvas`, so whole-card
+  transitions can use the native shared-scene camera/MVP/depth plane path while
+  unsupported sources fall back to the compositor transform path.
+- EX8 follow-up adds `3D Roll` and `3D Spinback` as additional whole-card
+  `scene-3d-panel` recipes. The 3D browser now exposes separate `Flip`,
+  `Tumble`, `Roll`, and `Spin` families instead of a duplicate top-level `3D`
+  card, with Flip and Spin carrying their own draggable variants. They intentionally
+  avoid Cube/Door/Fold/Page-Peel claims because transform origins, per-panel
+  source UVs, deterministic panel ordering, and strip/mesh geometry are still
+  planned infrastructure.
+- Transition browsing now separates family cards into `2D` and `3D` sections;
+  the Properties effect selector mirrors this with `2D`/`3D` option groups.
+- EX12 initial browser scale-up is implemented with collapsible 2D/3D sections
+  plus panel-side search over the grouped family cards. The search index
+  includes family labels, transition IDs, variant names, descriptions,
+  categories, and 2D/3D dimension labels so hidden variants remain discoverable
+  without exposing every leaf ID as a top-level card; search results stay
+  expanded even when a section was collapsed beforehand. The search index also
+  includes family synonyms such as film, analog, depth, lens, matte, and barn.
+  Panel item assembly/search and SVG thumbnail rendering are extracted out of
+  `TransitionsPanel.tsx` into focused transition panel helpers so the panel
+  shell stays below the product-source ceiling while the transition list grows.
+  Properties-side transition choice metadata is also extracted from
+  `TransitionTab.tsx`, keeping the grouped selector and large choice-button
+  glyph metadata below the source ceiling without changing edit operations.
+- Transition family cards now show a variant-count badge, and clicking a family
+  card in the Transitions panel expands its draggable leaf variants until the
+  pointer leaves the panel. Dragging the collapsed family card still uses the
+  family default.
+- Dev builds now expose capability badges for Stable/Experimental/Planned
+  transition metadata in the Transitions panel. Planned metadata is not
+  draggable and remains out of production/runtime lists.
+- EX13D-MP0 adds a pure deterministic multi-panel ordering planner with stable
+  panel IDs, source rects, z-order, seeded ordering, magnetic/center/edge
+  strategies, and staggered per-panel progress. EX13D-MP1 promotes
+  `Puzzle Push` as the first visible multi-panel transition by adding the
+  general `Layer.sourceRect` sampling contract, compositor shader/uniform
+  support, and transition-layer panel cloning. EX13D-MP2 promotes
+  `Magnetic Tiles` on the same rectangular panel path with center-magnetic
+  ordering and tile pull-in motion. `Shatter Glass` and `Origami Fold` stay
+  planned until shard semantics, shadows, and pivot/hinge contracts are
+  explicit.
+- EX10 first Light-family step is implemented with `Flash`. It uses the shared
+  generated-solid layer path plus deterministic multi-segment solid opacity, so
+  preview/export stay on the existing transition layer assembly path.
+- EX5/EX9 first Stylize procedural-mask step is implemented with
+  `Noise Dissolve`. It adds a serializable procedural mask primitive,
+  `transitionRender.kind = 'procedural-mask'`, `transitionType` value 11, and
+  matching deterministic hash-noise threshold math in the normal and
+  external-video compositor shader paths. The UI exposes it through a grouped
+  `Stylize` 2D family rather than another one-off top-level leaf.
+- EX9 first Glitch-family procedural-mask step is implemented with
+  `Block Glitch`. It reuses the same serializable procedural-mask contract with
+  a coarser deterministic block rank mask, `transitionType` value 12, matching
+  normal/external shader paths, and a grouped `Glitch` 2D family.
+- EX9 Analog/Glitch transform follow-up is implemented with `CRT Collapse`.
+  It uses only opacity and transform primitives to compress the outgoing clip
+  into a horizontal beam and expand the incoming clip from the same beam, so it
+  avoids claiming RGB split, signal tear, UV distortion, or frame-history
+  behavior before those contracts exist.
+- EX9 effect-driven Glitch follow-up is implemented with `RGB Split Glitch`,
+  `Mosaic Glitch`, and `Scanline Glitch`. These reuse the transition-scoped
+  registered `effect` primitive with existing single-input GPU effects:
+  `rgb-split`, `pixelate`, and static `scanlines` (`speed: 0`). Signal Tear,
+  animated scanline jitter, Data Corrupt, and Datamosh remain planned until
+  deterministic distortion/two-participant/temporal contracts exist.
+- EX10 Blur-family first pass is implemented with `Blur Dissolve`. A
+  transition-scoped `effect` primitive now appends serializable registered
+  GPU effects to incoming/outgoing transition participant layers without
+  replacing existing clip effects. The first user-facing use animates
+  `gaussian-blur` radius on both clips while opacity cross-dissolves.
+- EX5 Blend-family first pass is implemented with `Additive Dissolve`. A
+  transition-scoped `blend` primitive temporarily overrides the participant
+  layer blend mode inside a progress window, then restores the clip default at
+  the endpoint. Crossfade, Blur Dissolve, and Additive Dissolve are grouped
+  under one `Dissolve` 2D family in the panel and Properties UI.
+- EX5 Blend-family follow-up is implemented with `Non-Additive Dissolve`. It
+  uses the same transition-scoped `blend` primitive with a temporary `multiply`
+  blend window on incoming, giving the family a darker midpoint without adding
+  a fake subtractive shader.
+- EX11 first Pattern-family step is implemented with `Checker Wipe`,
+  `Venetian Blinds Horizontal`, and `Venetian Blinds Vertical`. These add a
+  serializable `pattern` mask primitive, `transitionRender.kind =
+  'pattern-mask'`, `transitionType` values 13-15, and matching normalized UV
+  math in normal/external compositor shader paths. The UI exposes them through
+  one grouped `Pattern` 2D family.
+- EX11 Pattern follow-up adds `Random Blocks`, `Paint Splatter`,
+  `Zig-Zag Blocks`, `Polka Dot Curtain`, and `Doom Bars` on the same
+  deterministic `pattern-mask` primitive with `transitionType` values 20-24 in
+  both normal and external-video shader paths.
+- EX3 follow-up Barn Door variants are implemented with `Barn Door Horizontal`
+  and `Barn Door Vertical`. They intentionally use the existing center-mask
+  alpha reveal path (`axis: x/y`) and stay in the grouped `Wipe` 2D family; the
+  true hinged/panel Door effect remains planned for a later multi-panel pass.
+- EX6/EX10 initial Zoom family is implemented with `Zoom In`, `Zoom Out`, and
+  `Spin Zoom`. These use the existing one-layer transform and opacity recipe
+  path and stay grouped under a single `Zoom` 2D family in the panel/Properties
+  UI.
+- EX10 Zoom blur follow-up is implemented with `Zoom Blur`, using the
+  transition-scoped `effect` primitive to animate the existing registered
+  `zoom-blur` GPU effect on both transition participant layers, plus the same
+  grouped Zoom family controls.
+- EX10 Motion Blur family is implemented with `Directional Blur` and
+  `Whip Pan`. Both animate the registered `motion-blur` GPU effect through the
+  transition-scoped `effect` primitive; `Whip Pan` also adds a restrained
+  transform offset/scale. The Motion Blur shader mirrors out-of-range sample
+  UVs at image edges so fast horizontal blurs do not introduce transparent edge
+  gaps.
+- EX10 Light/Film follow-up is implemented with `Projector Flicker`,
+  `Film Roll`, and `Vignette Bloom`. Projector Flicker uses deterministic
+  generated-solid exposure pulses, Film Roll uses vertical transform plus
+  transition-scoped `motion-blur` with extra vertical overscan to avoid
+  transparent edge gaps, and Vignette Bloom uses existing `glow` and `vignette`
+  GPU effects on both transition participants.
+- EX10 overlay follow-up is implemented with `Light Sweep`, `Light Leak`,
+  `Chroma Leak`, `Lens Flare`, and `Film Burn`. It adds a serializable
+  generated `overlay` primitive and cached transparent overlay canvases on the
+  same preview/export layer assembly path. Light Sweep uses a moving
+  screen-blended light band, Light Leak uses warm deterministic edge streaks,
+  Chroma Leak uses magenta/cyan split streaks, Lens Flare uses generated flare
+  ghosts and streaks, and Film Burn uses warm burn-edge/exposure overlays. All
+  generated overlay cache keys include output size and rounded overlay params.
+- EX5 Stylize transform follow-up is implemented with `Rotate Left`,
+  `Rotate Right`, and `Rotate 90`. These reuse the existing transform/opacity
+  recipe path, stay grouped under the dedicated `Rotate` 2D family separate
+  from `Stylize`, and do not introduce a new shader or transition-pass
+  primitive.
+- Earlier read-only sidecar passes recommended Barn Door/Center variants,
+  Shape/Iris expansion, transform-only Rotate/Zoom variants, and keeping
+  heavyweight Luma Fade, Signal Tear, Page Peel/Door/Fold/Cube, Datamosh, and
+  Smooth Cut/Flow planned until their two-participant, mesh, or temporal
+  pipelines exist. That guidance has since been narrowed: Film Burn, Lens
+  Flare, and Chroma Leak now use the generated overlay primitive, while Water
+  Drop and Swirl use the stable distortion primitive.
+- Focused verification passed after the latest Motion Blur changes:
+  `npx tsc -b --pretty false` and the focused transition/layer-builder/edit
+  operation suite covering 28 test files and 180 tests, including
+  `transitionAdditiveDissolveDefinition`,
+  `transitionNonAdditiveDissolveDefinition`,
+  `transitionBlurDissolveDefinition`, and
+  `transitionLensMotionDefinitions`.
+- The focused Glitch follow-up verification passed for the expanded
+  transition/layer-builder/edit operation suite covering 29 test files and 184
+  tests, including `transitionEffectGlitchDefinitions`, plus
+  `npx tsc -b --pretty false`.
+- The focused Light/Film follow-up verification passed for the expanded
+  transition/layer-builder/edit operation suite covering 30 test files and 188
+  tests, including `transitionLightFilmDefinitions`, plus
+  `npx tsc -b --pretty false`. `git diff --check` reported only existing
+  LF/CRLF normalization warnings and no whitespace errors.
+- The focused 3D Roll/Spinback follow-up verification passed for the expanded
+  transition/layer-builder/edit operation suite covering 30 test files and 190
+  tests, including `transition3dDefinitions`, plus
+  `npx tsc -b --pretty false`. `git diff --check` again reported only LF/CRLF
+  normalization warnings and no whitespace errors.
+- The focused EX0 contract follow-up verification passed for
+  `transitionRegistry`, `transitionPlanner`, `transitionGroups`, and
+  `timelineEditOperations`, covering 4 test files and 86 tests. This adds
+  regression coverage for type-change param normalization, stale-param
+  dropping, reciprocal param undo/redo, project serialization of known and
+  future transition params, planner rejection of planned IDs, and edit-operation
+  rejection before clip metadata is written. `npx tsc -b --pretty false` passed
+  afterward, and `git diff --check` again reported only LF/CRLF normalization
+  warnings and no whitespace errors.
+- The focused Light Sweep overlay follow-up verification passed for the
+  expanded transition/layer-builder/edit operation suite covering 30 test files
+  and 198 tests, including `transitionLightFilmDefinitions` and
+  `transitionLayerAssembly`, plus `npx tsc -b --pretty false`.
+- The focused Light Leak overlay follow-up verification passed for the expanded
+  transition/layer-builder/edit operation suite covering 30 test files and 200
+  tests, including `transitionLightFilmDefinitions` and
+  `transitionLayerAssembly`, plus `npx tsc -b --pretty false`.
+- The focused EX12 panel extraction verification passed for
+  `transitionPanelItems`, `TransitionsPanel`, `transitionChoiceMetadata`, and
+  `transitionGroups`, covering 4 test files and 18 tests, plus
+  `npx tsc -b --pretty false` and focused ESLint on the extracted panel files.
+  UI screenshot QA captured the grouped panel through a headless browser at
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transitions-panel-desktop.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transitions-panel-narrow.png`,
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transitions-panel-tall.png`;
+  the DOM state reported sections `2D12` and `3D1` with the expected 13 family
+  cards.
+- The focused export parity follow-up expanded `exportLayerBuilder` coverage
+  for representative overlay, registered-effect, blend, procedural-mask,
+  pattern-mask, and 2.5D transform transition families. It also covers
+  hold-frame export source times across Light Sweep, RGB Split Glitch,
+  Additive Dissolve, Noise Dissolve, Checker Wipe, and 3D Roll. The focused
+  `tests/unit/exportLayerBuilder.test.ts` run passed with 18 tests, plus
+  `npx tsc -b --pretty false`.
+- The focused EX0B shader parity follow-up added a source-level guard in
+  `tests/unit/compositorUniforms.test.ts` that extracts `getTransitionAlpha`
+  from both `src/shaders/composite.wgsl` and
+  `src/engine/pipeline/compositor/externalCompositeShader.ts`, verifies the
+  expected transition type branch list, and requires the normalized WGSL bodies
+  to stay identical. `npm run test -- tests/unit/compositorUniforms.test.ts`,
+  `npx tsc -b --pretty false`, and focused ESLint on
+  `tests/unit/compositorUniforms.test.ts` and
+  `tests/unit/exportLayerBuilder.test.ts` passed.
+- The focused EX0E overlay/cache follow-up moved generated Light Sweep/Light
+  Leak canvas generation into a bounded helper keyed by overlay pattern, color,
+  rounded overlay parameters, and output size. Preview passes the active
+  composition size into transition assembly, export passes the export
+  dimensions through `FrameContext`, and the cache evicts by pixel budget with
+  an 8192 per-axis clamp for Mesa-aware canvas sizing. Focused coverage now
+  proves direct assembly cache keying by output size, export overlay canvases
+  at 1280x720, and preview overlay canvases from a 1280x720 active
+  composition. `npm run test -- tests/unit/layerBuilderService.test.ts
+  tests/unit/transitionLayerAssembly.test.ts tests/unit/exportLayerBuilder.test.ts`
+  passed as part of the focused transition suite, and `npx tsc -p
+  tsconfig.app.json --pretty false` passed.
+- The focused seeded procedural glitch follow-up added normalized `seed`
+  params to Noise Dissolve and Block Glitch, carries the seed into procedural
+  transition render state for preview/export, adds a `transitionSeed` compositor
+  uniform slot, and uses that seed in both normal and external-video WGSL hash
+  inputs for transition types 11 and 12. Default seed `0` preserves existing
+  default visuals; non-zero seeds produce deterministic alternate reveal
+  orderings. Focused coverage now spans transition definition tests, registry
+  normalization, transition layer assembly, export layer assembly, compositor
+  uniform reset/packing, and normal/external shader parity.
+- The EX12 scalability gate now has a synthetic registry-level test asserting
+  the grouped transition panel remains searchable and grouped when the runtime
+  registry has at least 60 definitions. The test uses the real registry and
+  existing `transitionPanelItems` helper; no production panel changes were
+  needed for this gate.
+- Deferred and experimental transition gating remains enforced for heavyweight
+  follow-ups: `transitionRegistry` asserts Smooth Cut/Flow, AI/neural,
+  shatter/puzzle/tile, Page Peel, Datamosh, Liquid Melt, VHS Head Switch, and
+  related IDs are absent from the stable runtime registry and cannot be
+  resolved through default `getRuntimeTransition`. `Water Drop` and `Swirl`
+  have been promoted to stable runtime transitions because they use the shared
+  preview/export distortion primitive and appear in the Properties UI.
+- EX13A first Distortion Lab slice is implemented for `Water Drop` and
+  `Swirl`. A reusable serializable `distortion` primitive now
+  compiles to `transitionRender.kind = 'distortion'`, packs transition type
+  codes 25-26 plus seed in the existing compositor uniform slots, and remaps
+  per-participant UVs in both normal-texture and external-video shader paths.
+  `Liquid Melt` and `VHS Head Switch` remain planned because they need richer
+  luma/noise melt or bottom-frame tear/chroma/noise behavior.
+- Dev-Bridge screenshot QA has been run against the real preview path for
+  `noise-dissolve` at the transition midpoint, plus `tumble-away` and
+  `block-glitch`, and the Pattern family (`checker-wipe`,
+  `venetian-blinds-horizontal`, `venetian-blinds-vertical`) after temporarily
+  applying each to the same adjacent clips and undoing back to the previous
+  transition. The same screenshot loop has also been run for
+  `barn-door-horizontal`, `barn-door-vertical`, `zoom-in`, `zoom-out`, and
+  `spin-zoom`, plus the Iris shape expansion (`oval-iris`, `triangle-iris`,
+  `cross-iris`, `star-iris`). The accepted Iris captures are the `v2`
+  midpoint screenshots after shader-size adjustment. The same real-preview
+  loop has been run for `rotate-left`, `rotate-right`, and `rotate-90`; the
+  `rotate-90` capture intentionally uses a post-midpoint frame because the
+  recipe has a hard 50% handoff. The same loop also verified the EX11 Pattern
+  follow-up (`random-blocks`, `paint-splatter`, `zig-zag-blocks`,
+  `polka-dot-curtain`, `doom-bars`) at the cut midpoint and restored the
+  previous `noise-dissolve` transition after each capture. `CRT Collapse` was
+  verified with a Dev-Bridge 5-frame grid plus full-resolution midpoint capture
+  and the same restore-to-`noise-dissolve` check. `Blur Dissolve` was verified
+  through the same real-preview Dev Bridge path with
+  `C:\Users\admin\AppData\Local\Temp\masterselects-blur-dissolve-grid.png`
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-blur-dissolve-mid.png`;
+  the log check reported no `No pipeline for effect type` warnings and no
+  errors, and the timeline was restored to `noise-dissolve`. `Zoom Blur` was
+  verified the same way with
+  `C:\Users\admin\AppData\Local\Temp\masterselects-zoom-blur-grid.png` and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-zoom-blur-mid.png`, again
+  with no missing-pipeline warnings or errors and with the timeline restored.
+  `Additive Dissolve` was verified with
+  `C:\Users\admin\AppData\Local\Temp\masterselects-additive-dissolve-grid.png`
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-additive-dissolve-mid.png`,
+  with no error logs and the same restore check. `Non-Additive Dissolve` was
+  verified with
+  `C:\Users\admin\AppData\Local\Temp\masterselects-non-additive-dissolve-grid.png`
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-non-additive-dissolve-mid.png`.
+  `Directional Blur` and `Whip Pan` were verified after the Motion Blur shader
+  edge-sampling adjustment with
+  `C:\Users\admin\AppData\Local\Temp\masterselects-directional-blur-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-directional-blur-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-whip-pan-grid.png`, and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-whip-pan-mid.png`; the log
+  checks reported no errors, no missing-pipeline warnings, no shader warnings,
+  and the timeline restored to `noise-dissolve` after each temporary apply.
+  The same loop verified `RGB Split Glitch`, `Mosaic Glitch`, and
+  `Scanline Glitch` with
+  `C:\Users\admin\AppData\Local\Temp\masterselects-rgb-split-glitch-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-rgb-split-glitch-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-mosaic-glitch-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-mosaic-glitch-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-scanline-glitch-grid.png`,
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-scanline-glitch-mid.png`;
+  there were no error logs, missing-pipeline warnings, or shader warnings, and
+  the timeline restored to `noise-dissolve` after each capture.
+  `Projector Flicker`, `Film Roll`, and `Vignette Bloom` were verified through
+  the same Dev-Bridge real-preview loop with 5-frame grids and full-resolution
+  midpoint captures:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-projector-flicker-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-projector-flicker-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-film-roll-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-film-roll-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-vignette-bloom-grid.png`,
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-vignette-bloom-mid.png`.
+  The log checks reported no errors, missing-pipeline warnings, or shader
+  warnings. Film Roll was recaptured after increasing vertical overscan, and
+  the timeline restored to the pre-QA `directional-blur` transition after each
+  temporary apply.
+  `3D Roll` and `3D Spinback` were verified through the same Dev-Bridge
+  real-preview loop with 5-frame grids and full-resolution midpoint captures:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-roll-3d-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-roll-3d-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-spinback-3d-grid.png`,
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-spinback-3d-mid.png`.
+  The log checks reported no errors, missing-pipeline warnings, or shader
+  warnings, and the timeline restored to the pre-QA `directional-blur`
+  transition after each temporary apply.
+  After the `scene-3d-panel` switch, `Flip Horizontal`, `Card Spin`,
+  `3D Roll`, and `3D Spinback` were recaptured through the Dev Bridge on the
+  real preview path with GPU grids and midpoint frames:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-3d-captures-20260615-125917\masterselects-flip-horizontal-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-3d-captures-20260615-125917\masterselects-card-spin-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-3d-captures-20260615-125917\masterselects-roll-3d-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-3d-captures-20260615-125917\masterselects-spinback-3d-grid.png`,
+  plus matching `*-mid.png` captures in the same directory. Shader, pipeline,
+  scene, and warning log searches returned zero matches; only unrelated media
+  output device errors were present in the broader error search. The timeline
+  restored to the pre-QA `flip-horizontal` transition.
+  `Light Sweep` was verified through the same Dev-Bridge real-preview loop with
+  a 5-frame grid and full-resolution midpoint capture:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-sweep-grid.png` and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-sweep-mid.png`.
+  The log checks reported no errors, missing-pipeline warnings, runtime
+  diagnostics errors, or shader warnings, and the timeline restored to the
+  pre-QA `directional-blur` transition after the temporary apply.
+  `Light Leak` was verified through the same Dev-Bridge real-preview loop with
+  a 5-frame grid and full-resolution midpoint capture:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-leak-grid.png` and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-leak-mid.png`.
+  The log checks reported no errors, missing-pipeline warnings, runtime
+  diagnostics errors, or shader warnings, and the timeline restored to the
+  pre-QA `directional-blur` transition after the temporary apply.
+  After the EX0E output-size cache change, a headless Dev-Bridge QA attempt on
+  a synthetic two-solid-clip timeline produced capture files for `Light Sweep`
+  and `Light Leak`:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-sweep-outputsize-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-sweep-outputsize-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-leak-outputsize-grid.png`,
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-light-leak-outputsize-mid.png`.
+  Visual inspection showed black frames and Headless Chrome logged WebGPU
+  adapter initialization errors, so this run is not accepted as visual evidence
+  and does not close the global no-error Dev-Bridge gate.
+  A follow-up visible-browser Dev-Bridge QA pass on 2026-06-15 used DOM-mode
+  transition-progress sampling instead of `getCutPreviewQuad`, producing
+  7-frame progress grids (stricter than the 5-frame default) plus
+  full-resolution midpoint captures for the remaining exposed runtime
+  candidates:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\flash-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\flash-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\chroma-leak-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\chroma-leak-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\lens-flare-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\lens-flare-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\film-burn-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\film-burn-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\water-drop-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\water-drop-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\swirl-grid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\swirl-mid.png`,
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\kaleidoscope-grid.png`,
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-transition-qa-20260615-151756\kaleidoscope-mid.png`.
+  Visual inspection confirmed nonblank renders with visible overlay, UV
+  distortion, and kaleidoscope effects. Log checks reported zero browser
+  errors, zero `No pipeline for effect type` matches, zero runtime diagnostics
+  errors, and zero shader warnings for each transition. The timeline restored
+  to the pre-QA `lens-flare` transition after each temporary apply.
+  The first visible multi-panel runtime transition, `Puzzle Push`, was verified
+  in the same DOM-mode real-preview loop after the `Layer.sourceRect` sampling
+  contract landed, with:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-puzzle-push-qa-20260615-153934\puzzle-push-grid.png`
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-puzzle-push-qa-20260615-153934\puzzle-push-mid.png`.
+  Visual inspection showed distributed panel slices instead of a collapsed
+  center block. Log checks reported zero browser errors, zero missing-pipeline
+  matches, zero runtime diagnostics errors, and zero shader warnings, and the
+  timeline restored to the pre-QA `lens-flare` transition.
+  `Magnetic Tiles` was verified through the same visible-browser DOM-mode
+  Dev-Bridge path after switching the recipe to an ease-in magnetic pull so
+  the center-cut midpoint remains visibly tiled:
+  `C:\Users\admin\AppData\Local\Temp\masterselects-magnetic-tiles-qa-20260615-160244\magnetic-tiles-cut-grid.png`
+  and
+  `C:\Users\admin\AppData\Local\Temp\masterselects-magnetic-tiles-qa-20260615-160244\magnetic-tiles-mid.png`.
+  The broader progress-grid QA is also stored at
+  `C:\Users\admin\AppData\Local\Temp\masterselects-magnetic-tiles-qa-20260615-155932\magnetic-tiles-grid.png`.
+  Visual inspection confirmed the incoming tiles pull from the center over the
+  outgoing frame before settling into the incoming clip. Log checks reported
+  zero browser errors, zero missing-pipeline matches, zero runtime diagnostics
+  errors, and zero shader warnings, and the timeline restored to the pre-QA
+  `lens-flare` transition.
+- A read-only Light/Blur sidecar recommends the next EX10 step as a small
+  transition-scoped `effect` primitive contract that appends existing
+  `Layer.effects` to transition participants. That enables an honest
+  `Blur Dissolve` using the existing effects pipeline; that recommendation is
+  now implemented for single-input registered effects. The first generated
+  overlay primitive is implemented for `Light Sweep`, `Light Leak`,
+  `Chroma Leak`, `Lens Flare`, and `Film Burn`; the generated overlay cache
+  model is now output-size-aware and bounded.
+
 ---
 
 ## Research Anchors
@@ -79,26 +544,43 @@ Commonly recurring families from these references:
 
 The current implementation is intentionally small and solid:
 
-- `src/transitions/types.ts` supports only opacity, black/white solid, and
-  simple wipe primitives.
-- `src/types/layers.ts` exposes `transitionRender` only for horizontal wipes.
+- `src/transitions/types.ts` supports opacity, generated solid colors, simple
+  wipe/shape/clock/center mask primitives, procedural noise/block mask
+  primitives, pattern mask primitives, blend primitives, transform primitives
+  for layer translateX/Y/Z, scaleX/Y, rotateX/Y/Z, generated overlay
+  primitives for deterministic light/film/lens overlays, UV distortion
+  primitives, and transition-scoped registered effect primitives for
+  incoming/outgoing participants. It does not yet support luma, matte,
+  two-participant color comparison, temporal frame-history, or multi-panel
+  primitives.
+- `src/types/layers.ts` exposes `transitionRender` for directional wipes,
+  shape/iris masks, clock wipes, center wipes, procedural noise/block masks,
+  pattern masks, and per-participant UV distortion, but not for
+  luma, matte, temporal, or multi-panel masks.
 - `src/engine/pipeline/compositor/uniforms.ts`,
   `src/shaders/composite.wgsl`, and
-  `src/engine/pipeline/compositor/externalCompositeShader.ts` encode one
-  transition shader mode: `transitionType = 1` for wipe.
+  `src/engine/pipeline/compositor/externalCompositeShader.ts` encode
+  directional wipe, iris, clock, center, procedural noise/block, pattern mask,
+  and distortion modes with `transitionType` values 1-26.
 - `TimelineTransition` already supports serializable `params`, and
-  `TransitionTab` can edit them through transition edit operations. The gap is
-  validation hardening, capability gating, schema-on-load behavior, and focused
-  undo/redo/persistence tests.
-- Current param normalization is schema-driven. Unknown params must have an
-  explicit preserve/drop policy before experimental transitions can safely
-  round-trip.
-- `TransitionsPanel` thumbnails are hard-coded by transition ID.
+  `TransitionTab` can edit them through transition edit operations. The current
+  normalization path is schema-driven; newly param-heavy transition families
+  still need focused persistence, undo/redo, and forward-compatibility tests.
+- Unknown params have to preserve forward compatibility for unrecognized future
+  transition types, while known transition definitions drop params not present
+  in their schema.
+- `TransitionsPanel` is grouped and searchable for the current variant
+  families, but its thumbnail preview logic still needs a generic
+  primitive/family renderer before dozens of definitions are exposed.
 - The current compositor path is not a GL-style direct `from`/`to` transition
   shader. It composites an accumulated base texture with one current layer
-  texture, so luma fades, water-drop distortions across both clips, and other
-  two-participant effects need a dedicated transition pass before they are
-  exposed.
+  texture. Per-participant UV distortion is now supported for Water Drop and
+  Swirl, but luma fades, two-clip color comparison, and temporal
+  effects still need a dedicated transition pass before they are exposed.
+- The current 2.5D transition path has whole-layer X/Y/Z transform support, but
+  no transform origin, per-panel source UV rectangles, or strip/mesh subdivision
+  model. Cube, Door, Fold, and Page Peel should stay planned until those
+  contracts exist instead of being faked as single-card rotations.
 
 The next wave should extend those contracts first, before adding many names to
 the registry.
@@ -133,14 +615,18 @@ These need generalized mask primitives but no optical flow.
 | Transition | Family | Notes |
 |---|---|---|
 | Circle Iris | Iris | Radial reveal from center, optional feather. |
+| Oval Iris | Iris | Implemented as an analytic horizontal oval shape mask. |
 | Diamond Iris | Iris | Diamond/signed-distance mask. |
 | Square Iris | Iris | Rectangular center reveal. |
+| Triangle Iris | Iris | Implemented as an analytic triangle shape mask. |
+| Cross Iris | Iris | Implemented as an analytic cross shape mask. |
+| Star Iris | Iris | Implemented as an analytic five-point star shape mask. |
 | Clock Wipe | Wipe | Angular radial reveal. |
 | Radial Wipe | Wipe | Circular sweep variant. |
 | Center Wipe | Wipe | Open from center horizontally/vertically. |
-| Venetian Blinds | Wipe | Repeated stripe mask with count/angle params. |
-| Barn Door Horizontal | Motion/Shape | Two-sided reveal. |
-| Barn Door Vertical | Motion/Shape | Vertical two-sided reveal. |
+| Venetian Blinds | Wipe/Pattern | Implemented as horizontal and vertical normalized UV pattern masks; count params remain planned. |
+| Barn Door Horizontal | Wipe/Shape | Implemented as center-out alpha reveal on the existing center-mask path; hinged panels remain planned. |
+| Barn Door Vertical | Wipe/Shape | Implemented as center-out alpha reveal on the existing center-mask path; hinged panels remain planned. |
 
 ### Tier 3: Stylized Dissolves
 
@@ -149,21 +635,24 @@ primitives consistently for preview and export.
 
 | Transition | Family | Notes |
 |---|---|---|
-| Additive Dissolve | Dissolve | Use additive/lighten blend at midpoint. |
-| Non-Additive Dissolve | Dissolve | Darker midpoint; likely multiply/subtract style. |
-| Blur Dissolve | Dissolve | Needs transition-scoped blur strength. |
+| Additive Dissolve | Dissolve | Implemented with a transition-scoped `add` blend window on incoming. |
+| Non-Additive Dissolve | Dissolve | Implemented with a transition-scoped `multiply` blend window on incoming for a darker midpoint. |
+| Blur Dissolve | Dissolve | Implemented with transition-scoped `gaussian-blur` effects on both participants. |
 | Noise Dissolve | Stylized | Procedural threshold/noise alpha. |
 | Film Dissolve | Dissolve | Curve/gamma-like dissolve style. |
-| Rotate | Stylized | Transform plus opacity. |
-| Rotate 90 | Stylized | Transform plus opacity. |
+| Rotate Left | Rotate | Implemented as 2D transform plus opacity. |
+| Rotate Right | Rotate | Implemented as 2D transform plus opacity. |
+| Rotate 90 | Rotate | Implemented as 2D transform plus opacity with a hard midpoint handoff. |
 | Slice Push | Stylized | Multi-column transform mask. |
 
 ### Tier 4: 3D And Depth Transitions
 
 These are highly visible and expected in modern editors, but they should be
-implemented after transform primitives are stable. Start with compositor-safe
-Flip/Card-style 2.5D transforms. Cube, Door, Fold, and Page Peel need transform
-origin and/or multi-panel contracts before they become realistic.
+implemented after transform primitives are stable. The current whole-card
+Flip/Card/Roll/Spinback pass uses `scene-3d-panel` rendering on the native
+shared-scene camera/depth plane path when the source can be uploaded as a
+scene plane. Cube, Door, Fold, and Page Peel still need transform origin and/or
+multi-panel contracts before they become realistic.
 
 | Transition | Family | Notes |
 |---|---|---|
@@ -176,19 +665,23 @@ origin and/or multi-panel contracts before they become realistic.
 | Fold Up | 3D | Paper-fold style transform; start as 2-panel. |
 | Page Peel | 3D/Shape | Requires curved page or approximated mesh/strip peel. |
 | Card Spin | 3D | Single-card spin with opacity swap near edge-on. |
-| Tumble Away | 3D | Outgoing rotates and scales away while incoming rises. |
+| Tumble Away | 3D | Implemented as a whole-card `scene-3d-panel` transition with compositor fallback. |
+| 3D Roll | 3D | Implemented as a whole-card `scene-3d-panel` X-axis roll with opacity handoff. |
+| 3D Spinback | 3D | Implemented as a whole-card `scene-3d-panel` depth spinback; no panel slicing. |
 
 Implementation guidance:
 
-- First pass can use ordinary layer `rotation.x`, `rotation.y`, `position.z`,
-  scale, perspective, and opacity, because the compositor already has 3D-ish
-  layer uniforms.
+- Whole-card 3D transitions should prefer `renderMode: 'scene-3d-panel'` so
+  eligible participants enter the native scene camera/MVP/depth renderer.
+  The normal compositor transform path remains the fallback for unsupported
+  source states.
 - Split/panel transitions need either multiple generated sublayers per
   participant or a fragment shader that can gate/slice local UVs.
 - Page Peel should be deferred until the renderer can generate a curved mesh or
   approximate it with enough vertical strips to look intentional.
 - True 3D shared-scene transitions must not hijack normal 3D asset rendering;
-  they are transition-time render constructs.
+  they are transition-time render constructs and should stay opt-in by
+  transition metadata.
 
 ### Tier 5: Glitch And Digital Damage
 
@@ -199,11 +692,12 @@ projects match.
 
 | Transition | Family | Notes |
 |---|---|---|
-| RGB Split Glitch | Glitch | Per-channel offsets that ramp up/down around the cut. |
-| Block Glitch | Glitch | Tile grid offsets with seeded random block motion. |
-| Mosaic Glitch | Glitch | Pixelation/mosaic resolves into incoming clip. |
-| Scanline Glitch | Glitch | Horizontal bands, jitter, optional luma flicker. |
+| RGB Split Glitch | Glitch | Implemented with transition-scoped registered `rgb-split` effects on both participants. |
+| Block Glitch | Glitch | Implemented first as deterministic random block reveal; tile offsets remain planned. |
+| Mosaic Glitch | Glitch | Implemented with transition-scoped registered `pixelate` effects on both participants. |
+| Scanline Glitch | Glitch | Implemented with static transition-scoped registered `scanlines` effects; jitter/flicker remain planned. |
 | Signal Tear | Glitch | Horizontal displacement tears with chroma edges. |
+| CRT Collapse | Analog/Glitch | Implemented as transform/opacity collapse to a horizontal beam; scanlines and beam glow remain planned. |
 | Digital Noise Dissolve | Glitch | Thresholded noise reveal; deterministic seed. |
 | Data Corrupt | Glitch | Blocks, RGB split, brief posterize/invert. |
 | Stutter Cut | Glitch/Time | Repeated held frames around cut; export must match. |
@@ -229,17 +723,20 @@ textures, blend modes, or procedural overlays.
 | Transition | Family | Notes |
 |---|---|---|
 | Flash | Light | Overexpose to white or color, then reveal incoming. |
-| Light Leak | Light/Film | Procedural warm leak overlay plus dissolve. |
-| Chroma Leak | Light/Glitch | Color flare with chromatic offset. |
-| Light Sweep | Light | Moving beam/reveal over clips. |
-| Lens Flare | Light | Generated flare overlay; keep deterministic. |
-| Film Burn | Film | Burn edge/luma mask with color ramp. |
-| Film Roll | Film | Vertical roll/offset plus motion blur. |
-| Projector Flicker | Film | Exposure flicker plus optional gate weave. |
-| Vignette Bloom | Lens | Bloom edge hides the cut. |
-| Zoom Blur | Lens/Motion | Radial blur into outgoing/incoming. |
-| Directional Blur | Lens/Motion | Directional blur with optional slide/push. |
-| Whip Pan | Lens/Motion | Fast directional blur + motion offset. |
+| Light Leak | Light/Film | Implemented as cached deterministic warm edge/streak overlays plus dissolve. |
+| Chroma Leak | Light/Glitch | Implemented as cached deterministic magenta/cyan generated overlays plus dissolve. |
+| Light Sweep | Light | Implemented as a cached generated overlay canvas with a moving screen-blended light band. |
+| Lens Flare | Light | Implemented as cached deterministic flare streak/ghost overlays. |
+| Film Burn | Film | Implemented as cached deterministic burn-edge/exposure overlays. |
+| Film Roll | Film | Implemented as vertical transform plus transition-scoped `motion-blur`, with vertical overscan to avoid transparent edge gaps. |
+| Projector Flicker | Film | Implemented as deterministic generated-solid exposure pulses over a dissolve. Gate weave remains planned. |
+| Vignette Bloom | Lens | Implemented with transition-scoped `glow` and `vignette` effects on both participants. |
+| Zoom In | Zoom/Motion | Implemented as transform-only zoom/dissolve; no blur pass. |
+| Zoom Out | Zoom/Motion | Implemented as transform-only zoom/dissolve; no blur pass. |
+| Spin Zoom | Zoom/Motion | Implemented as transform-only zoom plus restrained Z rotation. |
+| Zoom Blur | Lens/Motion | Implemented with transition-scoped registered `zoom-blur` effects on both participants. |
+| Directional Blur | Lens/Motion | Implemented with transition-scoped registered `motion-blur` effects on both participants. |
+| Whip Pan | Lens/Motion | Implemented with registered `motion-blur` plus restrained horizontal transform/scale. |
 
 Implementation guidance:
 
@@ -257,11 +754,11 @@ These are useful for title-heavy, presentation, recap, sports, and social edits.
 
 | Transition | Family | Notes |
 |---|---|---|
-| Checker Wipe | Pattern | Checkerboard reveal with tile count. |
-| Random Blocks | Pattern | Block reveal with seeded ordering. |
-| Paint Splatter | Pattern | Noise/splat mask reveal. |
+| Checker Wipe | Pattern | Implemented as deterministic checkerboard pattern mask; tile count params remain planned. |
+| Random Blocks | Pattern | Implemented as large deterministic seeded block ordering. |
+| Paint Splatter | Pattern | Implemented as deterministic hard-edged splat cells. |
 | Star Wipe | Shape | Star-shaped reveal; niche but expected. |
-| Zig-Zag Blocks | Pattern | Alternating block bands. |
+| Zig-Zag Blocks | Pattern | Implemented as a deterministic jagged edge pattern mask. |
 | Frame Push | Graphic | Border/frame animates over cut. |
 | Mirror Slide | Motion | Mirrored edge fill during slide. |
 | Elastic Stretch | Warp | Stretch outgoing/incoming around cut. |
@@ -284,17 +781,17 @@ distortion, generated overlays, and deterministic randomness.
 
 | Transition | Family | Notes |
 |---|---|---|
-| Water Drop | Exotic/Warp | Radial ripple lens that distorts both clips around an expanding drop. |
+| Water Drop | Exotic/Warp | Implemented as stable per-participant seeded UV ripple distortion. |
 | Liquid Melt | Exotic/Warp | Vertical luminance/noise melt where pixels drip into the next clip. |
 | Luminance Melt | Exotic/Key | Bright/dark regions dissolve at different rates. |
 | Kaleidoscope | Exotic/Pattern | Mirror-fold UVs around center, then mix into incoming. |
 | Fly Eye | Exotic/Lens | Honeycomb lens cells sample offset copies of the image. |
 | Hex Pixelize | Exotic/Pattern | Hexagonal cells resolve from outgoing to incoming. |
-| Puzzle Push | Exotic/Pattern | Puzzle/maze-shaped pieces slide or reveal. |
-| Polka Dot Curtain | Exotic/Pattern | Repeating circles open/close like a dotted curtain. |
-| Doom Bars | Exotic/Retro | Vertical columns fall at varied speeds. |
+| Puzzle Push | Exotic/Pattern | Implemented as the first visible multi-panel source-rect reveal. |
+| Polka Dot Curtain | Exotic/Pattern | Implemented through the deterministic pattern mask path: expanding dot cells. |
+| Doom Bars | Exotic/Retro | Implemented through the deterministic pattern mask path: staggered vertical bars. |
 | Stereo Viewer | Exotic/3D | Split red/cyan or side-by-side stereoscopic skew during cut. |
-| Swirl | Exotic/Warp | Rotational UV displacement around center. |
+| Swirl | Exotic/Warp | Implemented as stable seeded center-weighted UV swirl distortion. |
 | Wormhole Zoom | Exotic/Warp | Tunnel/radial zoom with chromatic edge distortion. |
 | VHS Head Switch | Analog/Glitch | Bottom-frame horizontal wobble and noise tear. |
 | CRT Collapse | Analog/Glitch | Image collapses to horizontal/vertical beam, then expands. |
@@ -302,7 +799,7 @@ distortion, generated overlays, and deterministic randomness.
 | Ink Bleed | Organic/Mask | Expanding soft procedural ink mask. |
 | Smoke Reveal | Organic/Overlay | Noise-flow alpha reveal with soft smoke-like edges. |
 | Shatter Glass | Exotic/Pattern | Voronoi shards rotate/slide away. |
-| Magnetic Tiles | Exotic/Pattern | Tiles attract toward a moving point before revealing incoming. |
+| Magnetic Tiles | Exotic/Pattern | Implemented as center-magnetic source-rect tiles pulling into place. |
 | Origami Fold | Exotic/3D | Multiple panels fold like paper. |
 | Portal Ring | Exotic/3D/Light | Ring mask with glow opens to incoming clip. |
 | Neural Dream | Stylized/AI | Deferred; requires generated intermediate frames or style pass. |
@@ -315,8 +812,9 @@ Implementation guidance:
 - Start with procedural full-screen shader versions for Water Drop, Swirl,
   Kaleidoscope, Hex Pixelize, Doom Bars, Ink Bleed, and CRT Collapse.
 - Treat Shatter Glass, Magnetic Tiles, Puzzle Push, and Origami Fold as
-  multi-panel transitions. They need per-cell transforms, stable seeded cell
-  ordering, and deterministic z/order.
+  multi-panel transitions. Puzzle Push and Magnetic Tiles now prove the
+  rectangular source-rect/panel-clone path; Shatter Glass and Origami Fold
+  still need shard, shadow, or hinge semantics before promotion.
 - Treat Smoke Reveal, Portal Ring, Thermal Bloom, and VHS Head Switch as
   overlay/distortion composites with explicit pass plans.
 - Keep "Neural Dream" and any AI/morph-driven transition planned only until
@@ -339,8 +837,9 @@ the implementation can produce a meaningful preview/export result.
    ordinary one-clip effects.
 2. Keep durable project state serializable. No DOM/media handles, GPU objects,
    frames, canvases, or decoder instances in transition metadata.
-3. Extend `TimelineTransition` with a `params?: Record<string, unknown>` field
-   only after a typed validation layer exists.
+3. Harden the existing `TimelineTransition.params` path with typed validation,
+   load-time normalization, explicit unknown-param policy, and focused
+   persistence/undo tests before broad param-heavy transitions ship.
 4. Compile transition definitions into a small runtime render model before hot
    preview/export loops.
 5. Keep preview and export on the same transition layer assembly path.
@@ -378,14 +877,14 @@ transition compositor/pass.
 | Effect family | Good construction approach | MasterSelects primitive target |
 |---|---|---|
 | Cross/film/additive dissolve | Blend `from` and `to` with a curve; optional blend-mode override or gamma-style curve. | `opacity`, `blend`, `curve`. |
-| Dip/flash/blur-to-color | Fade outgoing to a generated solid/overlay, then fade incoming up. | `solid`, `opacity`, `overlay`, optional `inlineEffect`. |
+| Dip/flash/blur-to-color | Fade outgoing to a generated solid/overlay, then fade incoming up. | `solid`, `opacity`, `overlay`, optional `effect`. |
 | Linear/diagonal wipe | Compute a signed distance from a moving line in UV space; use smoothstep for softness. | `linear-mask`. |
 | Shape/iris/star wipe | Compute signed distance to shape boundary; reveal where distance is inside progress threshold. | `shape-mask`, `pattern-mask`. |
 | Clock/radial wipe | Convert UV to polar angle around center; reveal angular segment based on progress. | `clock-mask`. |
 | Venetian/blinds/stripe | Repeat UV into cells/stripes, then reveal each stripe with optional stagger. | `stripe-mask`, `pattern-mask`. |
 | Checker/random blocks | Quantize UV into tiles; derive deterministic order from tile index plus seed. | `pattern-mask` with `seed`. |
 | Luma fade/matte dissolve | Sample luma from one participant or matte; compare against progress threshold with softness. | dedicated luma/matte shader path. |
-| Push/slide/whip | Move participant layer transforms over progress; add blur only as a separate pass. | `transform`, optional `inlineEffect`. |
+| Push/slide/whip | Move participant layer transforms over progress; add blur only as a separate pass. | `transform`, optional `effect`. |
 | Cube/flip/card/door | Project UV or layer planes through perspective-like X/Y rotation; sample only in-bounds faces. | `transform3d` first, mesh/panel later. |
 | Page peel/book flip | Approximate curled page with strip mesh or segmented UV warp; add shadow/highlight. | deferred `multiPanel` or mesh transition. |
 | Grid flip/puzzle/shatter | Split into cells; each cell has deterministic transform timing and optional divider/shadow. | `multiPanel`, `pattern-mask`. |
@@ -427,7 +926,7 @@ type TransitionPrimitive =
   | MaskPrimitive
   | TransformPrimitive
   | BlendPrimitive
-  | InlineEffectPrimitive
+  | EffectPrimitive
   | DistortionPrimitive
   | PatternPrimitive
   | OverlayPrimitive
@@ -443,8 +942,8 @@ Suggested primitives:
 - `transform3d`: perspective-aware rotate/translate/scale around X/Y/Z axes,
   using the existing compositor 3D layer uniforms where possible.
 - `blend`: temporary blend mode override for a participant layer.
-- `inlineEffect`: transition-scoped blur/brightness/contrast/saturation where
-  the compositor path can support it.
+- `effect`: transition-scoped registered clip effect for incoming/outgoing
+  participant layers where the effect is honest as a single-input pass.
 - `distortion`: UV displacement, wave, RGB channel offset, scanline tear, or
   lens-like warp.
 - `pattern`: procedural alpha reveal such as checker, random blocks, mosaic,
@@ -499,10 +998,10 @@ Transform-only transitions should prefer ordinary layer `position`, `scale`,
 and `rotation` changes where possible, to avoid expanding shader uniforms when
 the existing transform path already works.
 
-This is a shader ABI change. It must be implemented serially across
+This is a shader ABI change. It must be implemented as one coordinated change across
 `src/types/layers.ts`, uniform packing, `src/shaders/composite.wgsl`,
 `externalCompositeShader.ts`, and the focused compositor tests before any
-parallel effect-family packet depends on it.
+effect-family packet depends on it.
 
 ### Render Capability Levels
 
@@ -532,128 +1031,6 @@ proved.
 
 ---
 
-## Multi-Agent Execution Model
-
-This EXTRA plan is large enough to benefit from parallel agents, but only after
-the shared transition contracts are stable. Parallel work should be organized by
-contract boundary first, then by transition family, and only then by individual
-effect.
-
-### Serial First: Contract Lock
-
-Run these packets serially with one owner:
-
-- EX0 Contract, Capability, And Param Hardening
-- EX0A Registry Extensibility And Capability Filtering
-- EX0B Transition Shader ABI
-- EX0C Transform Composition Contract
-- EX0D Two-Participant Transition Pass Feasibility
-- EX0E Transition Pass Planner And Overlay Cache Feasibility
-- Any schema migration or project-load behavior for `TimelineTransition.params`
-- Any first expansion of `TransitionPrimitive`
-- Any first expansion of `TransitionRenderState`
-- Any compositor uniform layout change
-- Any first production/experimental/planned capability filter
-
-These files are shared hot spots and should not be edited by multiple agents at
-the same time:
-
-- `src/transitions/types.ts`
-- `src/transitions/index.ts`
-- `src/types/layers.ts`
-- `src/types/timelineCore.ts`
-- `src/services/layerBuilder/transitionLayerAssembly.ts`
-- `src/stores/timeline/editOperations/transitionOperations.ts`
-- `src/stores/timeline/editOperations/transactionTypes.ts`
-- `src/stores/timeline/editOperations/transitionPlanner.ts`
-- `src/stores/timeline/editOperations/applyTimelineEditOperation.ts`
-- `src/components/panels/properties/TransitionTab.tsx`
-- `src/components/timeline/hooks/useTransitionDrop.ts`
-- `src/components/timeline/transitionDragData.ts`
-- `src/engine/pipeline/compositor/uniforms.ts`
-- `src/shaders/composite.wgsl`
-- `src/engine/pipeline/compositor/externalCompositeShader.ts`
-- `src/components/panels/TransitionsPanel.tsx`
-- `tests/unit/transitionRegistry.test.ts`
-- `tests/unit/compositorUniforms.test.ts`
-- `tests/unit/layerBuilderService.test.ts`
-- `tests/unit/exportLayerBuilder.test.ts`
-
-### Wave 1: Parallel By Primitive Family
-
-After EX0 through the required serial gates are green, dispatch bounded agents
-by primitive family rather than by individual transition. Each agent gets a
-disjoint write set and reports any needed shared-contract change instead of
-making it directly.
-
-| Agent | Scope | Primary write set | Forbidden/shared files unless explicitly assigned |
-|---|---|---|---|
-| Linear/Shape Masks | Wipe Up/Down, diagonal wipes, circle/diamond/square/clock masks | `src/transitions/wipe*/`, `src/transitions/*Iris*/`, focused tests | shared hot spots above |
-| Transform/2.5D | Push, Slide, Flip, Card prototypes | `src/transitions/push*/`, `src/transitions/slide*/`, `src/transitions/flip*/`, focused tests | shared hot spots above |
-| Glitch/Distortion | RGB split, block glitch, mosaic glitch, scanline, signal tear | `src/transitions/*Glitch*/`, `src/transitions/*Mosaic*/`, focused tests | shared hot spots above |
-| Light/Film/Overlay | Flash, light leak, film burn, flare, zoom/directional blur planning | `src/transitions/*Light*/`, `src/transitions/*Film*/`, focused tests | shared hot spots above |
-| Pattern/MultiPanel | Checker, random blocks, star, polka dots, tiles, shatter planning | `src/transitions/*Pattern*/`, `src/transitions/*Blocks*/`, focused tests | shared hot spots above |
-| Browser/UI | Category search, capability badges, thumbnail family renderer | panel CSS/component helpers and focused UI tests | transition render contracts and acceptance gating |
-
-Use two to four agents by default. Go wider only when the primitive contracts
-are already locked and write sets are genuinely disjoint.
-
-### Wave 2: Parallel By Effect Or Mini-Pack
-
-Once a primitive family is implemented and tested, individual effects can be
-parallelized safely. Prefer one agent per mini-pack, not one agent per trivial
-variant.
-
-Good mini-packs:
-
-- Directional wipes: `wipe-up`, `wipe-down`, diagonal variants.
-- Push/Slide cardinal directions.
-- Iris/shape masks: circle, diamond, square, clock.
-- Glitch set: RGB Split, Block Glitch, Scanline, Signal Tear.
-- Light/film set: Flash, Light Leak, Film Burn.
-- Exotic shader set: Water Drop, Swirl, Kaleidoscope, Doom Bars.
-
-Rules:
-
-- Agents may add new leaf transition folders after the primitive contract
-  exists.
-- Agents may add focused tests for their own effects.
-- Agents must not change core contracts, shared shaders, or panel architecture
-  unless their packet explicitly owns those files.
-- If an effect needs a new primitive, stop and report the primitive gap; do not
-  implement a one-off special path.
-
-### Wave 3: Serial Integration
-
-Finish each multi-agent wave with a serial integration pass:
-
-- Review all diffs for duplicated primitives or divergent naming.
-- Update manual registry imports/type unions only in this integration pass,
-  unless a prior serial packet has replaced them with generated/array-backed
-  registry metadata.
-- Register only transitions whose preview/export path is actually implemented
-  or explicitly hidden as planned/experimental metadata.
-- Run focused tests for touched primitive families.
-- Run `npx tsc -b --pretty false`.
-- Update docs only after behavior is verified.
-- Keep planned/experimental transitions hidden from production UI.
-
-### Agent Report Template
-
-Every agent should end with:
-
-- Files changed.
-- Transition IDs added or modified.
-- Primitive families used.
-- Any shared-contract changes requested but not made.
-- Tests run and exact result.
-- Known gaps or follow-up packets.
-
-Agents must not commit, push, merge, or broaden scope. Extra transition ideas
-found mid-packet go back into this plan instead of being implemented ad hoc.
-
----
-
 ## Work Packets
 
 ### Packet EX0: Contract, Capability, And Param Hardening
@@ -667,6 +1044,10 @@ changing visual behavior.
 - `src/transitions/types.ts`
 - `src/stores/timeline/editOperations/transactionTypes.ts`
 - `src/stores/timeline/editOperations/transitionOperations.ts`
+- `src/services/project/projectSave.ts`
+- `src/services/project/load/loadTimelineHydration.ts`
+- `src/stores/timeline/serialization/serializableTimelineState.ts`
+- `src/stores/timeline/serialization/loadStateMediaClipRestore.ts`
 - `src/components/panels/properties/TransitionTab.tsx`
 - `src/services/layerBuilder/transitionLayerAssembly.ts`
 - focused params/capability unit tests
@@ -698,6 +1079,7 @@ first-class registry concern before adding large numbers of definitions.
 - `src/components/timeline/transitionDragData.ts`
 - `src/stores/timeline/editOperations/transitionOperations.ts`
 - `src/stores/timeline/editOperations/transitionPlanner.ts`
+- `src/stores/timeline/editOperations/applyTimelineEditOperation.ts`
 - focused registry/UI acceptance tests
 
 **Requirements:**
@@ -707,8 +1089,8 @@ first-class registry concern before adding large numbers of definitions.
 - Planned transitions can exist as metadata/docs but cannot be dropped,
   selected in the type dropdown, planned, or rendered.
 - Until the manual `TransitionType` union and registry imports are replaced,
-  only the serial integrator edits `src/transitions/types.ts` and
-  `src/transitions/index.ts`.
+  keep edits to `src/transitions/types.ts` and `src/transitions/index.ts`
+  small and coordinated.
 
 **Checks:**
 
@@ -724,7 +1106,7 @@ operations.
 ### Packet EX0B: Transition Shader ABI
 
 **Goal:** Replace the wipe-only transition shader ABI with a compact, tested
-render-state contract before parallel shader families start.
+render-state contract before shader families depend on it.
 
 **Write set:**
 
@@ -771,6 +1153,12 @@ preview/export-safe way before Push, Slide, Flip, or Card transitions are added.
 - Existing `buildClipLayer` opacity override remains compatible.
 - Transform primitives compose with clip keyframed transform rather than
   replacing it unexpectedly.
+- Transform composition must be immutable: clone nested `position`, `scale`,
+  and `rotation` objects before applying transition offsets so cached layer
+  transforms cannot leak between participants or frames.
+- Compose against the transform already sampled for the transition source clip's
+  virtual-handle or hold-frame local time, not against a second original
+  body-local-time lookup.
 - Transform origin support is explicitly in or out of scope. If out of scope,
   Cube/Door/Fold/Page Peel stay deferred.
 
@@ -867,7 +1255,8 @@ behavior change for absent transition metadata.
 **Goal:** Add Push Left/Right/Up/Down and Slide Left/Right/Up/Down through
 transform primitives.
 
-**Prerequisite:** EX0C.
+**Prerequisite:** EX0A, EX0C, and the `transform` primitive branch has been
+serially added to `TransitionPrimitive`.
 
 **Write set:**
 
@@ -894,7 +1283,8 @@ moves incoming over outgoing; both share preview/export assembly.
 **Goal:** Add Circle Iris, Diamond Iris, Square Iris, Clock Wipe, and Center
 Wipe.
 
-**Prerequisite:** EX0B.
+**Prerequisite:** EX0A, EX0B, and the relevant `shape-mask`/`clock-mask`
+primitive branch has been serially added to `TransitionPrimitive`.
 
 **Write set:**
 
@@ -946,8 +1336,17 @@ new Dip to Color stores only serializable color/curve params.
 **Goal:** Add Additive Dissolve, Non-Additive Dissolve, Blur Dissolve, and
 Noise Dissolve after blend/effect primitives are proven.
 
-**Prerequisite:** EX0B for blend/mask states. Blur Dissolve also requires EX0E
-if it needs a real blur pass rather than simple opacity/blend changes.
+**Prerequisite:** EX0A and EX0B for blend/mask states, plus the relevant
+`blend` or `effect` primitive branch has been serially added to
+`TransitionPrimitive`. Blur Dissolve also requires EX0E if it needs a real
+blur pass rather than simple opacity/blend changes.
+
+**Progress:** `Noise Dissolve` is implemented as the first procedural mask
+member of this family. `Blur Dissolve` is implemented through transition-scoped
+registered `gaussian-blur` effect passes. `Additive Dissolve` is implemented
+through the transition-scoped `blend` primitive. `Non-Additive Dissolve` is
+implemented through the same `blend` primitive with `multiply`, not a new
+subtractive shader.
 
 **Write set:**
 
@@ -1012,10 +1411,13 @@ not ship a user-visible Smooth Cut/Flow transition before this is answered.
 
 ### Packet EX8: 3D Transition Foundation
 
-**Goal:** Add a conservative 2.5D transition transform layer that supports
-Flip and Card Spin first, without creating a separate renderer.
+**Goal:** Add a conservative whole-card `scene-3d-panel` transition layer that
+supports Flip/Card/Roll-style transitions through the existing native
+shared-scene camera/depth renderer, with compositor fallback for unsupported
+sources.
 
-**Prerequisite:** EX0C.
+**Prerequisite:** EX0A, EX0C, and the `transform3d` primitive branch has been
+serially added to `TransitionPrimitive`.
 
 **Write set:**
 
@@ -1027,13 +1429,17 @@ Flip and Card Spin first, without creating a separate renderer.
 
 **Requirements:**
 
-- Reuse existing layer `rotation.x`, `rotation.y`, `position.z`, perspective,
-  scale, opacity, and normal blend path where possible.
+- Reuse existing layer `rotation.x`, `rotation.y`, `position.z`, scale, and
+  opacity primitives, but route eligible whole-card 3D participants through the
+  native scene plane path via transition metadata.
+- Do not expose tunable transition perspective in this packet unless the shader
+  ABI/uniform packing work is explicitly part of the packet.
 - Provide deterministic ordering for 3D transition sublayers.
 - Keep Cube, Door, Fold, and Page Peel out of this packet unless transform
   origin and multi-panel contracts are already solved.
-- Do not route transition-time 2.5D cards through the real shared-scene 3D
-  renderer. These are compositor transition constructs, not timeline 3D assets.
+- Do not mark unsupported source states as shared-scene 3D; fall back to the
+  compositor transform path when no `videoFrame`, `videoElement`,
+  `imageElement`, or `textCanvas` is available.
 
 **Checks:**
 
@@ -1042,17 +1448,26 @@ npm run test -- tests/unit/transitionRegistry.test.ts tests/unit/layerBuilderSer
 npx tsc -b --pretty false
 ```
 
-**Stop condition:** Flip Horizontal/Vertical and Card Spin render with
-preview/export parity and no changes to non-transition layers. Cube/Door/Fold
-remain planned unless origin/panel slicing exists.
+**Progress:** Flip Horizontal/Vertical, Card Spin, Tumble Away, 3D Roll, and
+3D Spinback use `renderMode: 'scene-3d-panel'`, share transition layer assembly
+with preview/export, and are exposed as `Flip`, `Tumble`, `Roll`, and `Spin`
+families in the panel/Properties UI. Cube/Door/Fold and Page Peel remain
+planned until origin/panel slicing or mesh-strip contracts exist.
+
+**Stop condition:** Flip Horizontal/Vertical, Card Spin, Tumble Away, 3D Roll,
+and 3D Spinback render with preview/export parity and no changes to
+non-transition layers. Cube/Door/Fold remain planned unless origin/panel
+slicing exists.
 
 ### Packet EX9: Glitch Primitive Foundation
 
 **Goal:** Add deterministic glitch primitives for RGB split, block glitch,
-mosaic glitch, scanline tear, and digital noise dissolve.
+mosaic glitch, scanline tear, CRT collapse, and digital noise dissolve.
 
-**Prerequisite:** EX0B. Any glitch that needs raw outgoing and incoming samples
-in the same shader also requires EX0D.
+**Prerequisite:** EX0A and EX0B, plus the relevant `distortion`/glitch
+primitive branch has been serially added to `TransitionPrimitive`. Any glitch
+that needs raw outgoing and incoming samples in the same shader also requires
+EX0D.
 
 **Write set:**
 
@@ -1077,16 +1492,42 @@ npm run test -- tests/unit/transitionRegistry.test.ts tests/unit/compositorUnifo
 npx tsc -b --pretty false
 ```
 
+**Progress:** `Block Glitch` and `Digital Noise Dissolve` use deterministic
+procedural masks. `CRT Collapse` uses transform/opacity primitives. `RGB Split
+Glitch`, `Mosaic Glitch`, and static `Scanline Glitch` use transition-scoped
+registered effects and do not require compositor ABI changes. Signal Tear,
+animated scanline jitter, Data Corrupt, and Datamosh remain planned.
+
 **Stop condition:** RGB Split Glitch, Block Glitch, Mosaic Glitch, Scanline
-Glitch, and Digital Noise Dissolve are visibly distinct, seeded, and
-serializable.
+Glitch, CRT Collapse, and Digital Noise Dissolve are visibly distinct,
+seeded or otherwise deterministic, and serializable.
 
 ### Packet EX10: Light, Film, And Blur Transition Foundation
 
-**Goal:** Add generated overlay/effect primitives for Flash, Light Leak,
-Chroma Leak, Film Burn, Zoom Blur, Directional Blur, and Whip Pan.
+**Goal:** Add generated overlay/effect primitives for Flash, Blur Dissolve,
+Projector Flicker, Film Roll, Vignette Bloom, Light Leak, Chroma Leak,
+Film Burn, Zoom Blur, Directional Blur, and Whip Pan.
 
-**Prerequisite:** EX0E.
+**Prerequisite:** EX0A and EX0E, plus the relevant `overlay` or `effect`
+primitive branch has been serially added to `TransitionPrimitive`. The
+single-input registered `effect` branch is implemented for Blur Dissolve,
+Zoom Blur, Directional Blur, Whip Pan, Film Roll, and Vignette Bloom;
+deterministic generated solids are implemented for Flash and Projector Flicker;
+deterministic generated overlays are implemented for Light Sweep, Light Leak,
+Chroma Leak, Lens Flare, and Film Burn.
+
+**Progress:** Flash uses deterministic generated-solid opacity. Blur Dissolve,
+Zoom Blur, Directional Blur, and Whip Pan use transition-scoped registered GPU
+effects on incoming/outgoing participants. Whip Pan also uses a conservative
+transform offset/scale, and the shared Motion Blur shader mirrors edge samples
+to avoid transparent gaps during fast horizontal blur. Projector Flicker adds
+deterministic exposure pulses through the same generated-solid path, Film Roll
+uses vertical transform plus transition-scoped `motion-blur` with extra
+vertical overscan, and Vignette Bloom combines transition-scoped `glow` and
+`vignette` effects. Light Sweep uses the generated overlay primitive and a
+cached transparent light-band canvas. Light Leak, Chroma Leak, Lens Flare, and
+Film Burn use the same output-size-aware generated overlay/cache path for warm
+edge streaks, chroma split leaks, flare ghosts, and burn-edge exposure washes.
 
 **Write set:**
 
@@ -1101,7 +1542,7 @@ Chroma Leak, Film Burn, Zoom Blur, Directional Blur, and Whip Pan.
 - Procedural overlays are cached by transition type, params, progress bucket,
   and output size when necessary.
 - Blur-heavy transitions go through an explicit pass plan if they cannot be
-  represented by existing inline effects.
+  represented by existing registered effect passes.
 - No bundled video overlays in this packet.
 
 **Checks:**
@@ -1117,11 +1558,13 @@ paths.
 
 ### Packet EX11: Pattern And Matte Transition Foundation
 
-**Goal:** Add checker, random block, paint splatter, star wipe, zig-zag, and
-luma fade planning.
+**Goal:** Add checker, random block, paint splatter, star wipe, zig-zag,
+polka-dot, doom-bar, and luma fade planning.
 
-**Prerequisite:** EX0B for procedural patterns. Luma Fade requires EX0D and
-must remain planned if no two-participant transition pass exists.
+**Prerequisite:** EX0A and EX0B for procedural patterns, plus the relevant
+`pattern` primitive branch has been serially added to `TransitionPrimitive`.
+Luma Fade requires EX0D and must remain planned if no two-participant
+transition pass exists.
 
 **Write set:**
 
@@ -1141,7 +1584,7 @@ must remain planned if no two-participant transition pass exists.
 **Checks:**
 
 ```bash
-npm run test -- tests/unit/transitionRegistry.test.ts tests/unit/compositorUniforms.test.ts
+npm run test -- tests/unit/transitionPatternDefinitions.test.ts tests/unit/transitionRegistry.test.ts tests/unit/transitionGroups.test.ts tests/unit/compositorUniforms.test.ts
 npx tsc -b --pretty false
 ```
 
@@ -1157,22 +1600,29 @@ experimental definitions.
 
 - `src/components/panels/TransitionsPanel.tsx`
 - `src/components/panels/TransitionsPanel.css`
-- transition metadata/thumbnail helpers
+- `src/components/panels/transitions/transitionPanelItems.ts`
+- `src/components/panels/transitions/TransitionPreview.tsx`
+- `src/components/panels/properties/TransitionTab.tsx`
+- `src/components/panels/properties/transitionChoiceMetadata.ts`
+- tests for transition panel item grouping/search and rendered 2D/3D sections
 - docs in `docs/Features/`
 
 **Requirements:**
 
-- Category groups can be collapsed.
+- Category groups can be collapsed. Initial 2D/3D section collapse is
+  implemented; deeper per-family/category collapse remains follow-up.
 - Search includes aliases such as "glitch", "3d", "light", "film", and
-  "wipe".
-- Stable badges distinguish Stable, Experimental, and Planned in dev builds.
-- Production panel hides planned definitions.
+  "wipe". Initial family-card search is implemented for available family,
+  transition, category, description, dimension, and synonym values.
+- Stable/Experimental/Planned badges are shown in dev builds.
+- Production panel hides planned definitions; planned dev metadata is visible
+  but not draggable.
 - Thumbnail previews derive from family metadata where possible.
 
 **Checks:**
 
 ```bash
-npm run test -- tests/unit/transitionRegistry.test.ts
+npm run test -- tests/unit/transitionPanelItems.test.ts tests/unit/TransitionsPanel.test.tsx tests/unit/transitionChoiceMetadata.test.ts tests/unit/transitionGroups.test.ts
 npx tsc -b --pretty false
 ```
 
@@ -1181,42 +1631,46 @@ does not require manual layout work per transition.
 
 ### Packet EX13: Exotic Shader Lab Pack
 
-**Goal:** Add an experimental pack of exotic shader transitions after the core
-distortion, pattern, overlay, and multi-panel primitives are proven.
+**Goal:** Add exotic shader transitions as experimental mini-packs after the
+core distortion, pattern, overlay, and multi-panel primitives are proven.
 
-**Prerequisite:** EX0B, EX0D, and EX0E for any effect that distorts both clips,
-uses generated overlays, or needs a multi-pass pipeline.
+**Prerequisite:** EX0A, EX0B, EX0D, and EX0E for any effect that distorts both
+clips, uses generated overlays, or needs a multi-pass pipeline. The relevant
+`distortion`, `pattern`, `overlay`, or `multiPanel` primitive branch must be
+serially added to `TransitionPrimitive` before a leaf effect packet starts.
+The first reusable `distortion` primitive is now implemented for
+per-participant UV remap effects.
 
-**Candidate set:**
+**Candidate mini-packs:**
 
-- Water Drop
-- Liquid Melt
-- Luminance Melt
-- Kaleidoscope
-- Fly Eye
-- Hex Pixelize
-- Puzzle Push
-- Polka Dot Curtain
-- Doom Bars
-- Swirl
-- VHS Head Switch
-- CRT Collapse
-- Ink Bleed
-- Smoke Reveal
-- Portal Ring
+- EX13A Distortion Lab: Water Drop and Swirl are implemented as stable seeded
+  UV remaps; Liquid Melt and VHS Head Switch remain planned.
+- EX13B Pattern Lab: Kaleidoscope is implemented through transition-scoped
+  registered `kaleidoscope` effects. Polka Dot Curtain and Doom Bars are
+  implemented as deterministic pattern masks. Fly Eye, Hex Pixelize, and Ink
+  Bleed remain planned metadata only.
+- EX13C Overlay/Light Lab: Smoke Reveal, Portal Ring, Thermal Bloom remain
+  planned metadata only.
+- EX13D Multi-Panel Lab: MP0 deterministic ordering/source-rect planning,
+  MP1 visible `Puzzle Push` source-rect rendering, and MP2 visible
+  `Magnetic Tiles` center-magnetic tile rendering are implemented. Shatter
+  Glass and Origami Fold remain planned metadata until shard, shadow, and
+  pivot/hinge support exist.
 
 **Write set:**
 
-- `src/transitions/**`
-- `src/transitions/types.ts`
-- compositor shader/uniform files as needed
-- generated overlay/cache helpers as needed
-- `src/components/panels/TransitionsPanel.tsx`
-- focused tests per primitive family
+- Owned mini-pack folders under `src/transitions/**` and focused tests for that
+  primitive family.
+- Shared integration files as needed: `src/transitions/types.ts`,
+  `src/transitions/index.ts`, compositor shader/uniform files, generated
+  overlay/cache helpers, `src/components/panels/TransitionsPanel.tsx`, and
+  export/layer-builder integration.
 
 **Requirements:**
 
 - Mark the pack `experimental` until performance and export parity are proven.
+- Implement one mini-pack at a time. Do not bundle all EX13 candidates into a
+  single renderer/export packet.
 - Every effect must map to an existing primitive family or introduce one
   reusable primitive. No isolated one-transition shader path.
 - Every procedural effect has an explicit seed and deterministic replay.
@@ -1232,9 +1686,10 @@ npm run test -- tests/unit/transitionRegistry.test.ts tests/unit/compositorUnifo
 npx tsc -b --pretty false
 ```
 
-**Stop condition:** The lab pack can be toggled on in dev builds, each
-transition is visibly distinct, and disabling experimental transitions removes
-them from the production panel without affecting persisted stable transitions.
+**Stop condition:** Each completed mini-pack can be toggled on in dev builds,
+each included transition is visibly distinct, and disabling experimental
+transitions removes them from the production panel without affecting persisted
+stable transitions. Unstarted mini-packs remain planned metadata only.
 
 ---
 
@@ -1275,6 +1730,12 @@ Manual QA for a representative set:
 - Same project reopened after save.
 - Scrub repeatedly through procedural glitch/light transitions and verify the
   same frame does not change randomly.
+- For every newly implemented transition effect, capture a Dev Bridge
+  real-preview 5-frame grid and a full-resolution midpoint frame, then visually
+  inspect both before marking the packet complete. Unit tests are not enough
+  for visible transitions; each newly exposed effect packet needs screenshot
+  evidence plus a log check for errors, missing effect pipelines, and shader
+  warnings.
 - Run at desktop and narrow panel widths with many transition definitions.
 - Verify Linux/Mesa fallback expectations for any new canvas/GPU path; do not
   allocate full-timeline or full-content canvases for transition previews.
@@ -1283,45 +1744,135 @@ Manual QA for a representative set:
 
 ## Acceptance Checklist
 
-- [ ] Transition params are durable, validated, undoable, and serializable.
-- [ ] Existing `TimelineTransition.params` behavior is hardened with explicit
+- [x] Transition params are durable, validated, undoable, and serializable.
+- [x] Existing `TimelineTransition.params` behavior is hardened with explicit
       unknown-param, load, type-change, and undo/redo policies.
-- [ ] Capability filtering applies before panel display, type dropdowns,
+- [x] Capability filtering applies before panel display, type dropdowns,
       drag/drop, planner validation, and edit operations.
-- [ ] Shader ABI changes update normal texture and external-video compositor
+- [x] Shader ABI changes update normal texture and external-video compositor
       paths together.
-- [ ] Two-participant shader effects are implemented through a deliberate pass
+- [x] Two-participant shader effects are implemented through a deliberate pass
       or kept planned.
-- [ ] Generated overlay/light/blur effects have a Mesa-aware pass/cache model.
-- [ ] Wipe render state supports horizontal and vertical directions.
-- [ ] Push and Slide render through transform primitives in preview and export.
-- [ ] Shape/iris masks render through generic mask render state.
-- [ ] Dip to Color exists without breaking Dip to Black/White.
-- [ ] Stylized dissolves are visually distinct and not renamed crossfades.
-- [ ] 3D transitions use stable 2.5D layer transforms or an explicit mesh plan.
-- [ ] Page Peel is not exposed until the curved/strip mesh model is credible.
-- [ ] Glitch transitions are seeded and deterministic in preview and export.
-- [ ] Datamosh remains deferred until a frame-history/motion-vector model
+- [x] Every newly exposed visible transition/effect packet has Dev-Bridge
+      screenshot evidence and log checks recorded before it is marked complete.
+- [x] Generated overlay/light/blur effects have a Mesa-aware pass/cache model.
+- [x] Wipe render state supports horizontal and vertical directions.
+- [x] Push and Slide render through transform primitives in preview and export.
+- [x] Shape/iris masks render through generic mask render state.
+- [x] Oval, Triangle, Cross, and Star Iris extend the same grouped Iris
+      shape-mask path.
+- [x] Barn Door Horizontal/Vertical use the existing center-mask path and stay
+      grouped under Wipe.
+- [x] Dip to Color exists without breaking Dip to Black/White.
+- [x] Current variant families are grouped in the panel and Properties UI
+      instead of showing one top-level item per Wipe/Iris/Push/Slide/Dip/Rotate
+      or 3D variant.
+- [x] Transition families are visually separated into 2D and 3D groups in the
+      panel and Properties selector.
+- [x] Stylized dissolves are visually distinct and not renamed crossfades.
+- [x] Additive Dissolve uses a transition-scoped blend primitive and stays
+      grouped under one Dissolve family.
+- [x] Non-Additive Dissolve uses a transition-scoped multiply blend primitive
+      and stays grouped under the Dissolve family.
+- [x] Blur Dissolve uses transition-scoped registered Gaussian Blur effects and
+      preserves existing clip effect stacks.
+- [x] Noise Dissolve uses a deterministic procedural mask on the shared
+      preview/export transition layer path.
+- [x] Rotate Left/Right and Rotate 90 use shared transform primitives and
+      remain grouped under one dedicated 2D Rotate family, separate from
+      Stylize and the perspective 3D families.
+- [x] Current whole-card 3D transitions opt into `scene-3d-panel` rendering
+      when the participant has a scene-plane-compatible source, with compositor
+      fallback for unsupported source states.
+- [x] 3D Roll and 3D Spinback extend the 3D family set as whole-card
+      camera/depth panel transitions without claiming Cube/Door/Fold/Page-Peel
+      infrastructure.
+- [x] Current whole-card 3D transitions are exposed as `Flip`, `Tumble`,
+      `Roll`, and `Spin` families instead of one duplicated top-level `3D`
+      family card.
+- [x] Page Peel is not exposed until the curved/strip mesh model is credible.
+- [x] Glitch transitions are seeded and deterministic in preview and export.
+- [x] Block Glitch uses a seeded deterministic procedural block mask on the
+      shared preview/export transition layer path.
+- [x] CRT Collapse uses deterministic transform/opacity primitives on the
+      shared preview/export transition layer path.
+- [x] RGB Split Glitch, Mosaic Glitch, and static Scanline Glitch use
+      transition-scoped registered effects without claiming two-participant
+      signal tear or temporal corruption.
+- [x] Datamosh remains deferred until a frame-history/motion-vector model
       exists.
-- [ ] Light, film, and blur transitions use deterministic generated overlays or
-      explicit pass plans.
-- [ ] Pattern transitions use procedural masks or a deliberate matte pipeline.
-- [ ] Exotic Shader Lab transitions are experimental by default and map to
-      reusable primitives.
-- [ ] Water/liquid/swirl transitions use deterministic UV distortion, not
-      mutable frame history.
-- [ ] Shatter/puzzle/tile transitions use deterministic multi-panel ordering.
-- [ ] AI/neural transitions remain planned until derived-frame cache and export
+- [x] Flash uses a deterministic generated solid overlay on the shared
+      preview/export transition layer path.
+- [x] Light, film, and remaining blur transitions use deterministic generated
+      overlays or explicit pass plans.
+- [x] Light Sweep uses a deterministic generated overlay canvas on the shared
+      preview/export transition layer path with output-size-aware cache keys.
+- [x] Light Leak uses deterministic generated edge/streak overlay canvases on
+      the shared preview/export transition layer path with output-size-aware
+      cache keys.
+- [x] Projector Flicker uses deterministic generated-solid exposure pulses on
+      the shared preview/export transition layer path.
+- [x] Film Roll uses shared transform primitives plus transition-scoped Motion
+      Blur with enough vertical overscan to avoid transparent preview gaps.
+- [x] Vignette Bloom uses transition-scoped registered Glow and Vignette
+      effects without replacing existing clip effect stacks.
+- [x] Zoom In/Out and Spin Zoom use shared transform primitives and remain
+      grouped under one Zoom family.
+- [x] Zoom Blur uses transition-scoped registered Zoom Blur effects and remains
+      grouped under the same Zoom family.
+- [x] Directional Blur and Whip Pan use transition-scoped registered Motion Blur
+      effects and remain grouped under one Motion Blur family.
+- [x] Pattern transitions use procedural masks or a deliberate matte pipeline.
+- [x] Checker Wipe and Venetian Blinds use deterministic pattern masks on the
+      shared preview/export transition layer path.
+- [x] Random Blocks, Paint Splatter, Zig-Zag Blocks, Polka Dot Curtain, and
+      Doom Bars use deterministic pattern masks on the shared preview/export
+      transition layer path.
+- [x] First Exotic Shader Lab distortion transitions map to reusable primitives
+      and are promoted only when preview/export parity is credible.
+- [x] Water Drop and Swirl use deterministic UV distortion, not mutable frame
+      history; Liquid Melt remains planned until its luma/noise melt contract
+      is explicit.
+- [x] Kaleidoscope uses transition-scoped registered effects and Dev-Bridge
+      screenshot QA captured the pattern transition without blank frames.
+- [x] EX13D-MP0 deterministic multi-panel ordering exists as a pure planner for
+      stable panel IDs, source rects, z-order, seeded ordering, magnetic/edge/
+      center strategies, and staggered per-panel progress.
+- [x] Puzzle Push uses the multi-panel planner in visible preview/export
+      rendering through the general `Layer.sourceRect` sampling path.
+- [x] Magnetic Tiles uses the multi-panel planner in visible preview/export
+      rendering with center-magnetic ordering and panel pull-in motion.
+- [ ] Shatter/Origami transitions use the multi-panel planner in visible
+      preview/export rendering after shard, shadow, and pivot/hinge contracts
+      are implemented.
+- [x] AI/neural transitions remain planned until derived-frame cache and export
       behavior are specified.
-- [ ] Transitions panel scales by category/search without hard-coded layout
+- [x] Transitions panel scales by category/search without hard-coded layout
       changes for every new definition.
-- [ ] Stable/experimental/planned capability levels prevent unfinished effects
+- [x] Transition panel family-card assembly, search indexing, and sectioning
+      are extracted from `TransitionsPanel.tsx` and covered by focused tests.
+- [x] Transition panel SVG thumbnail rendering is extracted from the panel shell
+      so the browser layout file stays below the product-source ceiling.
+- [x] Properties transition choice metadata is extracted from `TransitionTab.tsx`
+      so the transition Properties tab stays below the product-source ceiling.
+- [x] Transitions panel search filters grouped family cards by hidden variant
+      names, transition IDs, categories, descriptions, aliases, and 2D/3D
+      labels.
+- [x] Transitions panel 2D/3D sections can be collapsed without hiding active
+      search results.
+- [x] Transitions panel family cards show variant counts and expand on click to
+      reveal draggable leaf variants, then collapse when the pointer leaves the
+      panel.
+- [x] Dev Transition panel metadata shows Stable/Experimental/Planned badges;
+      planned definitions remain visible only in dev metadata and are not
+      draggable/runtime-enabled.
+- [x] Stable/experimental/planned capability levels prevent unfinished effects
       from appearing in production UI.
-- [ ] No new transition type changes planner semantics unless explicitly
+- [x] No new transition type changes planner semantics unless explicitly
       documented.
-- [ ] Preview and export remain visually aligned for virtual handles and
+- [x] Preview and export remain visually aligned for virtual handles and
       hold-frame fallback.
-- [ ] Smooth Cut/Flow remains deferred until a real optical-flow/morphing plan
+- [x] Smooth Cut/Flow remains deferred until a real optical-flow/morphing plan
       exists.
 
 ---
@@ -1333,10 +1884,10 @@ Manual QA for a representative set:
   **Mitigation:** Require a distinct primitive/render model before registering
   each transition ID.
 
-- **Risk:** Parallel agents conflict on the current manual registry and literal
-  `TransitionType` union.
-  **Mitigation:** Keep registry/type edits serial, or first replace the manual
-  shape with an array-backed/generated registry contract.
+- **Risk:** The current manual registry and literal `TransitionType` union make
+  broad edits conflict-prone.
+  **Mitigation:** Keep registry/type edits small and coordinated, or first
+  replace the manual shape with an array-backed/generated registry contract.
 
 - **Risk:** Shader uniforms become a dumping ground.
   **Mitigation:** Prefer layer transforms for transform transitions; reserve

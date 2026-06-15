@@ -28,7 +28,7 @@ export class CompositorPipeline {
   private externalCopyBindGroupLayout: GPUBindGroupLayout | null = null;
 
   // Uniform buffer and data
-  private uniformBuffer = new ArrayBuffer(COMPOSITOR_UNIFORM_SIZE); // 24 floats for extended uniforms (mask quality + inline effects)
+  private uniformBuffer = new ArrayBuffer(COMPOSITOR_UNIFORM_SIZE); // Extended layer uniforms.
   private uniformData = new Float32Array(this.uniformBuffer);
   private uniformDataU32 = new Uint32Array(this.uniformBuffer);
 
@@ -131,7 +131,7 @@ export class CompositorPipeline {
     let uniformBuffer = this.layerUniformBuffers.get(layerId);
     if (!uniformBuffer) {
       uniformBuffer = this.device.createBuffer({
-        size: COMPOSITOR_UNIFORM_SIZE, // 24 floats for extended uniforms (mask quality + inline effects)
+        size: COMPOSITOR_UNIFORM_SIZE,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
       this.layerUniformBuffers.set(layerId, uniformBuffer);

@@ -107,6 +107,14 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
         if (!engine.isDeviceValid()) {
           throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
         }
+        const readbackCapture = await this.capturePixels(input, {
+          maskSyncMs,
+          ensureLayersMs,
+          renderMs,
+        });
+        if (readbackCapture) {
+          return readbackCapture;
+        }
         throw new ExportFrameCaptureUnavailableError('video-frame');
       }
 
@@ -121,6 +129,21 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       };
     }
 
+    const readbackCapture = await this.capturePixels(input, {
+      maskSyncMs,
+      ensureLayersMs,
+      renderMs,
+    });
+    if (!readbackCapture) {
+      throw new ExportFrameCaptureUnavailableError('rgba-pixels');
+    }
+    return readbackCapture;
+  }
+
+  private async capturePixels(
+    input: ExportRenderFrameInput,
+    metrics: Omit<ExportRenderSessionFrameMetrics, 'captureMs'>
+  ): Promise<ExportRenderSessionFrameCapture | null> {
     // Fallback: read pixels from GPU (slower)
     const captureStart = performance.now();
     const pixels = await engine.readPixels();
@@ -129,7 +152,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       if (!engine.isDeviceValid()) {
         throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
       }
-      throw new ExportFrameCaptureUnavailableError('rgba-pixels');
+      return null;
     }
 
     return {
@@ -139,7 +162,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       height: this.height,
       timestampMicros: input.timestampMicros,
       durationMicros: input.durationMicros,
-      metrics: { maskSyncMs, ensureLayersMs, renderMs, captureMs },
+      metrics: { ...metrics, captureMs },
     };
   }
 

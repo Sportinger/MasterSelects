@@ -2,6 +2,7 @@ import type { SerializableClip, TimelineClip, TimelineStore } from '../types';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { Logger } from '../../../services/logger';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
+import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
 import type { useMediaStore } from '../../mediaStore';
 import {
@@ -197,8 +198,8 @@ function createCompositionAudioClip(serializedClip: SerializableClip): TimelineC
     waveformChannels: serializedClip.waveformChannels,
     transform: serializedClip.transform,
     effects: serializedClip.effects || [],
-    transitionIn: serializedClip.transitionIn ? structuredClone(serializedClip.transitionIn) : undefined,
-    transitionOut: serializedClip.transitionOut ? structuredClone(serializedClip.transitionOut) : undefined,
+    transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
+    transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     isLoading: false,
@@ -231,8 +232,8 @@ function createCompositionVideoClip(serializedClip: SerializableClip): TimelineC
     audioState: clonePersistedClipAudioState(serializedClip.audioState),
     transform: serializedClip.transform,
     effects: serializedClip.effects || [],
-    transitionIn: serializedClip.transitionIn ? structuredClone(serializedClip.transitionIn) : undefined,
-    transitionOut: serializedClip.transitionOut ? structuredClone(serializedClip.transitionOut) : undefined,
+    transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
+    transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks || [],

@@ -236,10 +236,10 @@ describe('transitionPlanner', () => {
         kind: 'hold',
         startTime: 4,
         endTime: 10,
-        sourceStart: 4,
         holdFrame: 'last-frame',
       }),
     ]);
+    expect(plan?.outgoing.coverage[2]?.sourceStart).toBeCloseTo(4 - (1 / 120));
     expect(plan?.incoming.coverage).toEqual([
       expect.objectContaining({
         kind: 'hold',
@@ -259,9 +259,38 @@ describe('transitionPlanner', () => {
         kind: 'hold',
         startTime: 7,
         endTime: 10,
-        sourceStart: 3,
         holdFrame: 'last-frame',
       }),
     ]);
+    expect(plan?.incoming.coverage[2]?.sourceStart).toBeCloseTo(3 - (1 / 120));
+  });
+
+  it('refuses planned transition ids that are not runtime-enabled', () => {
+    const outgoingClip = createMockClip({
+      id: 'outgoing',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+      source: { type: 'video', naturalDuration: 12 },
+    });
+    const incomingClip = createMockClip({
+      id: 'incoming',
+      startTime: 10,
+      duration: 8,
+      inPoint: 0,
+      outPoint: 8,
+      source: { type: 'video', naturalDuration: 10 },
+    });
+
+    expect(planTransition({
+      outgoingClip,
+      incomingClip,
+      transitionType: 'page-peel',
+      requestedDuration: 1,
+      placement: 'center',
+      edgePolicy: 'hold',
+      junctionTime: 10,
+    })).toBeNull();
   });
 });

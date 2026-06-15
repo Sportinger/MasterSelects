@@ -6,6 +6,8 @@ import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import type { FrameContext } from './types';
 import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
+import { syncReverseOrNonstandardPlayback } from './videoSyncHtmlReversePlayback';
+import { syncHtmlTransitionSourceHold } from './videoSyncHtmlTransitionHold';
 import type { VideoSyncHtmlSeekState } from './videoSyncHtmlSeekState';
 import type { VideoSyncWarmupState } from './videoSyncWarmupState';
 
@@ -156,18 +158,19 @@ export class VideoSyncHtmlClipCoordinator {
     const hasSpeedKeyframes = ctx.hasKeyframes(clip.id, 'speed');
 
     if (clip.transitionSourceHold === true) {
-      this.syncTransitionSourceHold({
+      syncHtmlTransitionSourceHold({
         clip,
         video,
         clipTime: timeInfo.clipTime,
         timeDiff,
         isInteractivePreview,
+        deps: this.deps,
       });
       return;
     }
 
     if (isReversePlayback) {
-      this.syncReverseOrNonstandardPlayback({
+      syncReverseOrNonstandardPlayback({
         clip,
         ctx,
         video,
@@ -175,12 +178,13 @@ export class VideoSyncHtmlClipCoordinator {
         timeDiff,
         isInteractivePreview,
         seekThreshold: isInteractivePreview ? 0.04 : 0.02,
+        deps: this.deps,
       });
       return;
     }
 
     if (ctx.playbackSpeed !== 1) {
-      this.syncReverseOrNonstandardPlayback({
+      syncReverseOrNonstandardPlayback({
         clip,
         ctx,
         video,
@@ -189,6 +193,7 @@ export class VideoSyncHtmlClipCoordinator {
         isInteractivePreview,
         seekThreshold: isInteractivePreview ? 0.04 : 0.03,
         clearPlayingState: true,
+        deps: this.deps,
       });
       return;
     }
@@ -206,110 +211,6 @@ export class VideoSyncHtmlClipCoordinator {
       isInteractivePreview,
       handoffVideo,
     });
-  }
-
-  private syncReverseOrNonstandardPlayback({
-    clip,
-    ctx,
-    video,
-    clipTime,
-    timeDiff,
-    isInteractivePreview,
-    seekThreshold,
-    clearPlayingState = false,
-  }: {
-    clip: TimelineClip;
-    ctx: FrameContext;
-    video: HTMLVideoElement;
-    clipTime: number;
-    timeDiff: number;
-    isInteractivePreview: boolean;
-    seekThreshold: number;
-    clearPlayingState?: boolean;
-  }): void {
-    if (!video.paused) video.pause();
-    if (clearPlayingState) {
-      this.deps.clipWasPlaying.delete(clip.id);
-    }
-    if (isInteractivePreview) {
-      this.deps.clipWasDragging.add(clip.id);
-    } else if (this.deps.clipWasDragging.has(clip.id)) {
-      this.deps.clipWasDragging.delete(clip.id);
-      this.deps.htmlSeeks.clearPreciseSeekTimer(clip.id);
-      if (timeDiff > 0.001) {
-        this.deps.beginOrQueueSettleSeek(clip.id, video, clipTime, undefined, 'scrub-stop');
-        video.addEventListener('seeked', () => engine.requestNewFrameRender(), { once: true });
-      } else {
-        scrubSettleState.resolve(clip.id);
-      }
-      return;
-    }
-    if (timeDiff > seekThreshold) {
-      this.deps.throttledSeek(clip.id, video, clipTime, ctx);
-    }
-    if (!isInteractivePreview) {
-      this.deps.maybeRecoverScrubSettle(clip.id, video, clipTime);
-    }
-  }
-
-  private syncTransitionSourceHold({
-    clip,
-    video,
-    clipTime,
-    timeDiff,
-    isInteractivePreview,
-  }: {
-    clip: TimelineClip;
-    video: HTMLVideoElement;
-    clipTime: number;
-    timeDiff: number;
-    isInteractivePreview: boolean;
-  }): void {
-    this.deps.clipWasPlaying.delete(clip.id);
-    scrubSettleState.resolve(clip.id);
-
-    if (video.playbackRate !== 1) {
-      video.playbackRate = 1;
-    }
-    if (!video.paused) {
-      video.pause();
-      vfPipelineMonitor.record('vf_pause', { clipId: clip.id, reason: 'transition-hold' });
-    }
-
-    const seekThreshold = isInteractivePreview ? 0.04 : 0.015;
-    if (!video.seeking && timeDiff > seekThreshold) {
-      const seekTime = this.deps.safeSeekTime(video, clipTime);
-      video.addEventListener('seeked', () => {
-        engine.markVideoFramePresented(video, seekTime, clip.id);
-        if (!engine.captureVideoFrameAtTime(video, seekTime, clip.id)) {
-          engine.ensureVideoFrameCached(video, clip.id);
-        }
-        engine.requestNewFrameRender();
-      }, { once: true });
-      video.currentTime = seekTime;
-      vfPipelineMonitor.record('vf_transition_hold_seek', {
-        clipId: clip.id,
-        target: Math.round(clipTime * 1000) / 1000,
-        seekTo: Math.round(seekTime * 1000) / 1000,
-        driftMs: Math.round(timeDiff * 1000),
-      });
-      return;
-    }
-
-    if (video.readyState >= 2) {
-      const presentedTime = this.deps.safeSeekTime(video, clipTime);
-      engine.markVideoFramePresented(video, presentedTime, clip.id);
-      if (!engine.captureVideoFrameAtTime(video, presentedTime, clip.id)) {
-        engine.ensureVideoFrameCached(video, clip.id);
-      }
-    } else if (!video.seeking && !this.deps.isForceDecodeInProgress(clip.id)) {
-      vfPipelineMonitor.record('vf_readystate_drop', {
-        clipId: clip.id,
-        readyState: video.readyState,
-        reason: 'transition-hold',
-      });
-      this.deps.forceVideoFrameDecode(clip.id, video);
-    }
   }
 
   private syncNormalForwardPlayback(params: {

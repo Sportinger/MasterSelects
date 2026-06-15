@@ -78,6 +78,7 @@ The docs in this folder were re-audited against the current codebase and now tra
 |---|---|
 | [Landing Page](./Landing-Page.md) | Dev-only front page concept, separate URL strategy, and current landing/editor split |
 | [AI Integration](./AI-Integration.md) | OpenAI/Cloud and Lemonade chat, 86 exported model tools, segmentation, transcription, and bridge behavior |
+| [Credit Claims](./Credit-Claims.md) | Cloudflare-backed reward links for manually granted hosted credits |
 | [Guided Action Runtime Plan](./Guided-Action-Runtime-Plan.md) | Target architecture for AI action replay, interactive tutorials, guided workflows, and parallel implementation workstreams |
 | [FlashBoard](./FlashBoard.md) | Media Panel generation tray for video, image, speech, and music generation |
 | [Multicam AI](./Multicam-AI.md) | Sync, transcription, multicam analysis, and Anthropic-powered EDL generation |

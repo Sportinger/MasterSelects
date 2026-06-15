@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  initHistoryStoreRefs,
+  useHistoryStore,
+} from '../../src/stores/historyStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { DEFAULT_TRACKS } from '../../src/stores/timeline/constants';
 import {
@@ -58,8 +62,41 @@ function createIdentityAINodeClip(id: string): TimelineClip {
   };
 }
 
+function initializeTestHistoryRefs() {
+  initHistoryStoreRefs({
+    timeline: {
+      getState: () => useTimelineStore.getState(),
+      setState: (state) => useTimelineStore.setState(state),
+    },
+    media: {
+      getState: () => ({
+        files: [],
+        compositions: [],
+        folders: [],
+        selectedIds: [],
+        expandedFolderIds: [],
+        textItems: [],
+        solidItems: [],
+        mathSceneItems: [],
+        motionShapeItems: [],
+        signalAssets: [],
+        signalArtifacts: [],
+        signalGraphs: [],
+        signalOperators: [],
+      }),
+      setState: vi.fn(),
+    },
+    dock: {
+      getState: () => ({ layout: null as never }),
+      setState: vi.fn(),
+    },
+  });
+}
+
 describe('timeline edit operations kernel', () => {
   beforeEach(() => {
+    initializeTestHistoryRefs();
+    useHistoryStore.getState().clearHistory();
     clearAINodeRuntimeCache();
     timelineRuntimeCoordinator.clearResources();
     useTimelineStore.setState({
@@ -76,6 +113,7 @@ describe('timeline edit operations kernel', () => {
   });
 
   afterEach(() => {
+    useHistoryStore.getState().clearHistory();
     clearAINodeRuntimeCache();
     timelineRuntimeCoordinator.clearResources();
   });
@@ -1377,6 +1415,305 @@ describe('timeline edit operations kernel', () => {
     expect(clipA?.transitionOut).toMatchObject({ id: 'transition-existing', type: 'crossfade', duration: 3, linkedClipId: 'clip-b' });
     expect(clipB?.transitionIn).toMatchObject({ id: 'transition-existing', type: 'crossfade', duration: 3, linkedClipId: 'clip-a' });
     expect(clipB?.startTime).toBe(10);
+  });
+
+  it('normalizes typed transition params and mirrors them to the reciprocal edge', () => {
+    const transition = {
+      id: 'transition-existing',
+      type: 'crossfade',
+      duration: 1,
+      params: { includeAudio: true },
+    };
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          transitionOut: { ...transition, linkedClipId: 'clip-b' },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 10,
+          duration: 8,
+          transitionIn: { ...transition, linkedClipId: 'clip-a' },
+        }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-update-params',
+      type: 'transition-update-params',
+      transactionId: 'typed-transition-update-params',
+      historyBatchId: 'typed-transition-update-params',
+      source: 'ui',
+      clipId: 'clip-b',
+      edge: 'in',
+      transitionId: 'transition-existing',
+      params: {
+        includeAudio: 'not-boolean',
+        unknownParam: true,
+      },
+    }, { source: 'ui', historyLabel: 'Update transition parameters' });
+
+    const clipA = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a');
+    const clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
+    expect(result.success).toBe(true);
+    expect(clipA?.transitionOut?.params).toEqual({ includeAudio: false });
+    expect(clipB?.transitionIn?.params).toEqual({ includeAudio: false });
+  });
+
+  it('normalizes params when changing transition types and drops stale schema fields', () => {
+    const transition = {
+      id: 'transition-existing',
+      type: 'crossfade',
+      duration: 1,
+      params: { includeAudio: true },
+    };
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          transitionOut: { ...transition, linkedClipId: 'clip-b' },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 10,
+          duration: 8,
+          transitionIn: { ...transition, linkedClipId: 'clip-a' },
+        }),
+      ],
+    });
+
+    const dipResult = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-update-type-dip',
+      type: 'transition-update-type',
+      transactionId: 'typed-transition-update-type-dip',
+      historyBatchId: 'typed-transition-update-type-dip',
+      source: 'ui',
+      clipId: 'clip-a',
+      edge: 'out',
+      transitionId: 'transition-existing',
+      transitionType: 'dip-to-color',
+      params: {
+        color: 'not-a-color',
+        includeAudio: true,
+      },
+    }, { source: 'ui', historyLabel: 'Change transition type' });
+
+    let clipA = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a');
+    let clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
+    expect(dipResult.success).toBe(true);
+    expect(clipA?.transitionOut).toMatchObject({ id: 'transition-existing', type: 'dip-to-color' });
+    expect(clipB?.transitionIn).toMatchObject({ id: 'transition-existing', type: 'dip-to-color' });
+    expect(clipA?.transitionOut?.params).toEqual({ color: '#000000' });
+    expect(clipB?.transitionIn?.params).toEqual({ color: '#000000' });
+
+    const wipeResult = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-update-type-wipe',
+      type: 'transition-update-type',
+      transactionId: 'typed-transition-update-type-wipe',
+      historyBatchId: 'typed-transition-update-type-wipe',
+      source: 'ui',
+      clipId: 'clip-b',
+      edge: 'in',
+      transitionId: 'transition-existing',
+      transitionType: 'wipe-left',
+      params: {
+        color: '#ff0000',
+      },
+    }, { source: 'ui', historyLabel: 'Change transition type' });
+
+    clipA = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a');
+    clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
+    expect(wipeResult.success).toBe(true);
+    expect(clipA?.transitionOut).toMatchObject({ id: 'transition-existing', type: 'wipe-left' });
+    expect(clipB?.transitionIn).toMatchObject({ id: 'transition-existing', type: 'wipe-left' });
+    expect(clipA?.transitionOut?.params).toBeUndefined();
+    expect(clipB?.transitionIn?.params).toBeUndefined();
+
+    const waterDropResult = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-update-type-water-drop',
+      type: 'transition-update-type',
+      transactionId: 'typed-transition-update-type-water-drop',
+      historyBatchId: 'typed-transition-update-type-water-drop',
+      source: 'ui',
+      clipId: 'clip-a',
+      edge: 'out',
+      transitionId: 'transition-existing',
+      transitionType: 'water-drop',
+      params: {
+        seed: 2_000_000,
+      },
+    }, { source: 'ui', historyLabel: 'Change transition type' });
+
+    clipA = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a');
+    clipB = useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b');
+    expect(waterDropResult.success).toBe(true);
+    expect(clipA?.transitionOut).toMatchObject({ id: 'transition-existing', type: 'water-drop' });
+    expect(clipB?.transitionIn).toMatchObject({ id: 'transition-existing', type: 'water-drop' });
+    expect(clipA?.transitionOut?.params).toEqual({ seed: 1_000_000 });
+    expect(clipB?.transitionIn?.params).toEqual({ seed: 1_000_000 });
+  });
+
+  it('undoes and redoes reciprocal transition param updates', () => {
+    const transition = {
+      id: 'transition-existing',
+      type: 'crossfade',
+      duration: 1,
+      params: { includeAudio: true },
+    };
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          transitionOut: { ...transition, linkedClipId: 'clip-b' },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 10,
+          duration: 8,
+          transitionIn: { ...transition, linkedClipId: 'clip-a' },
+        }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-history-params',
+      type: 'transition-update-params',
+      transactionId: 'typed-transition-history-params',
+      historyBatchId: 'typed-transition-history-params',
+      source: 'ui',
+      clipId: 'clip-a',
+      edge: 'out',
+      transitionId: 'transition-existing',
+      params: { includeAudio: false },
+    }, { source: 'ui', historyLabel: 'Update transition parameters' });
+
+    expect(result.success).toBe(true);
+    expect(useHistoryStore.getState().canUndo()).toBe(true);
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a')?.transitionOut?.params)
+      .toEqual({ includeAudio: false });
+
+    expect(useHistoryStore.getState().undo()).toMatchObject({ operation: 'undo' });
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a')?.transitionOut?.params)
+      .toEqual({ includeAudio: true });
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b')?.transitionIn?.params)
+      .toEqual({ includeAudio: true });
+
+    expect(useHistoryStore.getState().redo()).toMatchObject({ operation: 'redo' });
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-a')?.transitionOut?.params)
+      .toEqual({ includeAudio: false });
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === 'clip-b')?.transitionIn?.params)
+      .toEqual({ includeAudio: false });
+  });
+
+  it('normalizes known transition params but preserves future transition params while serializing', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({
+          id: 'clip-a',
+          trackId: 'video-1',
+          startTime: 0,
+          duration: 10,
+          transitionOut: {
+            id: 'transition-known',
+            type: 'dip-to-color',
+            duration: 1,
+            linkedClipId: 'clip-b',
+            params: {
+              color: '#00ff00',
+              staleParam: true,
+            },
+          },
+        }),
+        createMockClip({
+          id: 'clip-b',
+          trackId: 'video-1',
+          startTime: 10,
+          duration: 8,
+          transitionIn: {
+            id: 'transition-known',
+            type: 'dip-to-color',
+            duration: 1,
+            linkedClipId: 'clip-a',
+            params: {
+              color: 'invalid-color',
+              staleParam: true,
+            },
+          },
+        }),
+        createMockClip({
+          id: 'clip-c',
+          trackId: 'video-1',
+          startTime: 18,
+          duration: 5,
+          transitionOut: {
+            id: 'transition-future',
+            type: 'future-volumetric-wipe',
+            duration: 1,
+            linkedClipId: 'clip-d',
+            params: {
+              seed: 123,
+              mode: 'draft',
+            },
+          },
+        }),
+      ],
+    });
+
+    const serialized = useTimelineStore.getState().getSerializableState();
+
+    expect(serialized.clips.find(clip => clip.id === 'clip-a')?.transitionOut?.params)
+      .toEqual({ color: '#00ff00' });
+    expect(serialized.clips.find(clip => clip.id === 'clip-b')?.transitionIn?.params)
+      .toEqual({ color: '#000000' });
+    expect(serialized.clips.find(clip => clip.id === 'clip-c')?.transitionOut?.params)
+      .toEqual({ seed: 123, mode: 'draft' });
+  });
+
+  it('rejects planned transition ids before writing clip metadata', () => {
+    useTimelineStore.setState({
+      tracks: [createMockTrack({ id: 'video-1', type: 'video' })],
+      clips: [
+        createMockClip({ id: 'clip-a', trackId: 'video-1', startTime: 0, duration: 10 }),
+        createMockClip({ id: 'clip-b', trackId: 'video-1', startTime: 10, duration: 8 }),
+      ],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'typed-transition-planned-rejected',
+      type: 'transition-apply',
+      transactionId: 'typed-transition-planned-rejected',
+      historyBatchId: 'typed-transition-planned-rejected',
+      source: 'ui',
+      clipAId: 'clip-a',
+      clipBId: 'clip-b',
+      transitionType: 'page-peel',
+      requestedDuration: 1,
+      junction: createTransitionJunctionFixture(),
+    }, { source: 'ui', historyLabel: 'Apply transition' });
+
+    expect(result.success).toBe(false);
+    expect(result.warnings[0]).toMatchObject({
+      code: 'unsupported',
+      message: 'Unsupported transition type: page-peel',
+    });
+    expect(useTimelineStore.getState().clips.some(clip => clip.transitionIn || clip.transitionOut)).toBe(false);
   });
 
   it('blocks typed transition operations on locked tracks', () => {

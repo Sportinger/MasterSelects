@@ -273,6 +273,33 @@ const sampleTransactionOperations = [
   },
   {
     ...base,
+    type: 'transition-update-offset',
+    clipId: 'clip-a',
+    edge: 'out',
+    transitionId: 'transition-1',
+    requestedOffset: 0.25,
+    resolvedOffset: 0.2,
+    junction: transitionJunction,
+  },
+  {
+    ...base,
+    type: 'transition-update-type',
+    clipId: 'clip-a',
+    edge: 'out',
+    transitionId: 'transition-1',
+    transitionType: 'wipe-left',
+    params: {},
+  },
+  {
+    ...base,
+    type: 'transition-update-params',
+    clipId: 'clip-a',
+    edge: 'out',
+    transitionId: 'transition-1',
+    params: { includeAudio: true },
+  },
+  {
+    ...base,
     type: 'transition-preview-drop',
     transitionType: 'cross-dissolve',
     requestedDuration: 1,
@@ -323,6 +350,9 @@ function getTransactionOperationType(operation: TimelineEditTransactionOperation
     case 'transition-apply':
     case 'transition-remove':
     case 'transition-update-duration':
+    case 'transition-update-offset':
+    case 'transition-update-type':
+    case 'transition-update-params':
     case 'transition-preview-drop':
     case 'transition-clear-preview':
     case 'keyboard-delete-command':
@@ -348,6 +378,9 @@ describe('timeline edit operation transaction contracts', () => {
       'transition-apply': true,
       'transition-remove': true,
       'transition-update-duration': true,
+      'transition-update-offset': true,
+      'transition-update-type': true,
+      'transition-update-params': true,
       'transition-preview-drop': true,
       'transition-clear-preview': true,
       'keyboard-delete-command': true,
@@ -368,17 +401,23 @@ describe('timeline edit operation transaction contracts', () => {
     }
   });
 
-  it('covers typed transition apply, remove, and update-duration operation payloads', () => {
+  it('covers typed transition operation payloads', () => {
     const transitionOperations = sampleTransactionOperations.filter(operation =>
       operation.type === 'transition-apply' ||
       operation.type === 'transition-remove' ||
-      operation.type === 'transition-update-duration'
+      operation.type === 'transition-update-duration' ||
+      operation.type === 'transition-update-offset' ||
+      operation.type === 'transition-update-type' ||
+      operation.type === 'transition-update-params'
     );
 
     expect(transitionOperations.map(operation => operation.type)).toEqual([
       'transition-apply',
       'transition-remove',
       'transition-update-duration',
+      'transition-update-offset',
+      'transition-update-type',
+      'transition-update-params',
     ]);
     expect(transitionOperations[0]).toMatchObject({
       clipAId: 'clip-a',
@@ -395,6 +434,17 @@ describe('timeline edit operation transaction contracts', () => {
       edge: 'out',
       requestedDuration: 1.5,
       junction: transitionJunction,
+    });
+    expect(transitionOperations[3]).toMatchObject({
+      requestedOffset: 0.25,
+      junction: transitionJunction,
+    });
+    expect(transitionOperations[4]).toMatchObject({
+      transitionType: 'wipe-left',
+      params: {},
+    });
+    expect(transitionOperations[5]).toMatchObject({
+      params: { includeAudio: true },
     });
   });
 

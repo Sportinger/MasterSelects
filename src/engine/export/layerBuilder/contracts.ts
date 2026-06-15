@@ -38,6 +38,8 @@ export interface FrameContextLike {
   time: number;
   fps: number;
   frameTolerance: number;
+  outputWidth?: number;
+  outputHeight?: number;
   clipsAtTime: TimelineClip[];
   renderClipsAtTime?: TimelineClip[];
   trackMap: Map<string, TimelineTrack>;

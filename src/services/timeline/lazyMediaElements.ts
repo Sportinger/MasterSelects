@@ -16,7 +16,7 @@ import {
   DEFAULT_TRANSITION_PLACEMENT,
   planTransition,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { getTransition, transitionIncludesAudio, type TransitionType } from '../../transitions';
+import { getRuntimeTransition, transitionIncludesAudio } from '../../transitions';
 
 type LazyMediaKind = 'video' | 'audio';
 
@@ -647,7 +647,7 @@ function collectDesiredClips(
     }
 
     if (kind === 'audio' && transition?.type === 'crossfade') {
-      const definition = getTransition(transition.type as TransitionType);
+      const definition = getRuntimeTransition(transition.type);
       if (!transitionIncludesAudio(transition, definition)) continue;
 
       const incomingVideo = ctx.clips.find(candidate => candidate.id === transition.linkedClipId);

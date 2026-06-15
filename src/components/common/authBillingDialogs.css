@@ -1876,3 +1876,227 @@
     display: none;
   }
 }
+
+/* Sign-in dialog refresh */
+
+.welcome-overlay.auth-dialog-signin {
+  width: min(560px, 92vw);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(45, 140, 235, 0.18), transparent 30%),
+    linear-gradient(180deg, rgba(24, 25, 28, 0.98), rgba(15, 16, 19, 0.98));
+  box-shadow:
+    0 28px 100px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.auth-dialog-signin .auth-dialog-header {
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 22px 24px 16px;
+}
+
+.auth-dialog-signin .changelog-heading {
+  gap: 4px;
+}
+
+.auth-dialog-signin .changelog-brand {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.auth-dialog-signin .changelog-header-title {
+  color: rgba(84, 214, 255, 0.84);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+
+.auth-dialog-close-button {
+  align-items: center;
+  border-radius: 10px;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+  width: 34px;
+}
+
+.auth-dialog-signin .auth-dialog-content {
+  background: transparent;
+  border-radius: 0;
+  gap: 16px;
+  padding: 22px 24px 24px;
+}
+
+.auth-dialog-signin .auth-dialog-intro {
+  gap: 8px;
+}
+
+.auth-dialog-kicker {
+  align-items: center;
+  color: rgba(84, 214, 255, 0.88);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: 0;
+}
+
+.auth-dialog-signin .auth-dialog-subtitle {
+  font-size: 26px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.auth-dialog-signin .auth-dialog-description {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.auth-dialog-google-button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 750;
+  gap: 10px;
+  height: 46px;
+  justify-content: center;
+  padding: 0 16px;
+  transition: transform 0.16s ease, background 0.16s ease;
+  width: 100%;
+}
+
+.auth-dialog-google-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.auth-dialog-google-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.auth-dialog-google-logo {
+  display: block;
+  height: 24px;
+  width: 24px;
+}
+
+.auth-dialog-signin .auth-dialog-form {
+  gap: 14px;
+}
+
+.auth-dialog-email-line {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.auth-dialog-signin .auth-dialog-label {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.auth-dialog-input-shell {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.38);
+  display: flex;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 13px;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  width: 100%;
+}
+
+.auth-dialog-input-shell:focus-within {
+  background: rgba(255, 255, 255, 0.065);
+  border-color: rgba(84, 214, 255, 0.58);
+  box-shadow: 0 0 0 3px rgba(45, 140, 235, 0.16);
+  color: rgba(84, 214, 255, 0.88);
+}
+
+.auth-dialog-signin .auth-dialog-input {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: rgba(255, 255, 255, 0.9);
+  flex: 1;
+  font-size: 15px;
+  min-width: 0;
+  padding: 0;
+}
+
+.auth-dialog-signin .auth-dialog-input:focus {
+  background: transparent;
+  border-color: transparent;
+}
+
+.auth-dialog-signin .auth-dialog-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.auth-dialog-signin .auth-dialog-submit {
+  background: linear-gradient(100deg, #15c4ff 0%, #1fe4d4 48%, #2cf2a6 100%);
+  border: 0;
+  border-radius: 12px;
+  box-shadow:
+    0 14px 34px rgba(25, 213, 205, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.46);
+  color: #041015;
+  font-size: 14px;
+  font-weight: 800;
+  gap: 8px;
+  height: 46px;
+  margin-top: 2px;
+  min-width: 138px;
+  padding: 0 16px;
+}
+
+.auth-dialog-signin .auth-dialog-submit:hover {
+  background: linear-gradient(100deg, #28ceff 0%, #2beedd 48%, #39f8b1 100%);
+  border-color: transparent;
+  color: #041015;
+  transform: translateY(-1px);
+}
+
+.auth-dialog-signin .auth-dialog-submit:disabled {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+  color: rgba(255, 255, 255, 0.34);
+  opacity: 1;
+  transform: none;
+}
+
+.auth-dialog-signin .auth-dialog-notice {
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .auth-dialog-email-line {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-dialog-signin .auth-dialog-submit {
+    width: 100%;
+  }
+}

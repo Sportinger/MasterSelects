@@ -16,6 +16,8 @@ import type {
   CloudAiVideoRequest,
   CloudMeResponse,
   CloudSessionUser,
+  CreditClaimRedeemResponse,
+  CreditClaimStatusResponse,
   HostedVideoCreateResponse,
   HostedVideoInfoResponse,
   HostedVideoStatusResponse,
@@ -52,6 +54,9 @@ export type {
   CloudAiVideoRequest,
   CloudMeResponse,
   CloudSessionUser,
+  CreditClaimRedeemResponse,
+  CreditClaimStatus,
+  CreditClaimStatusResponse,
   HostedVideoCreateResponse,
   HostedVideoInfoResponse,
   HostedVideoStatusResponse,
@@ -110,6 +115,19 @@ export const cloudApi = {
     },
     summary(): Promise<BillingSummaryResponse> {
       return requestJson<BillingSummaryResponse>('/api/billing/summary', { method: 'GET' });
+    },
+  },
+  credits: {
+    claimStatus(code: string): Promise<CreditClaimStatusResponse> {
+      const url = new URL('/api/credits/claim', window.location.origin);
+      url.searchParams.set('code', code);
+      return requestJson<CreditClaimStatusResponse>(url.toString(), { method: 'GET' });
+    },
+    redeemClaim(body: { code: string; email: string }): Promise<CreditClaimRedeemResponse> {
+      return requestJson<CreditClaimRedeemResponse>('/api/credits/claim', {
+        body: JSON.stringify(body),
+        method: 'POST',
+      });
     },
   },
   ai: {

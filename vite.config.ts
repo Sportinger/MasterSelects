@@ -383,6 +383,7 @@ export default defineConfig(({ command, mode }) => {
     '/api/me',
     '/api/auth',
     '/api/billing',
+    '/api/credits',
     '/api/stripe',
     '/api/ai/chat',
     '/api/ai/audio',

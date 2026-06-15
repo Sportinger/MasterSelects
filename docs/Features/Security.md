@@ -31,12 +31,15 @@ The main trust boundaries are:
 - Explicit allowed file roots
 - IndexedDB for encrypted API keys
 - OPFS for the SAM 2 model cache
+- Cloudflare D1 for hosted account, billing, usage, and credit-claim records
 
 External services are only contacted when the user enables a feature that needs them, such as AI chat, transcription, AI video generation, or multicam EDL generation.
 
 Local Lemonade chat is treated as a local provider rather than a MasterSelects bridge. The app sends chat prompts, timeline summaries, tool definitions, and tool results to the configured Lemonade Server, but the configured endpoint is restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`).
 
 Hosted OpenAI/Cloud chat is different from local editing and local Lemonade chat. Authenticated hosted chat requests are sent to the Cloudflare Functions backend, are credit-gated, and are logged best-effort in D1 for account history, billing/debugging, abuse handling, and support.
+
+Hosted credit claim links are also a Cloudflare boundary. The admin-created link contains a high-entropy random code, but D1 stores only its SHA-256 hash. Public claim routes can read claim metadata and redeem only through a same-origin POST with a signed-in session whose email matches the submitted email and any server-side recipient lock.
 
 ---
 

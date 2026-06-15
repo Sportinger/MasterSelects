@@ -551,6 +551,138 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers[2]?.source).toMatchObject({ type: 'solid', color: '#000000' });
   });
 
+  it('uses normalized transition params for dip-to-color solid layers', () => {
+    const service = new LayerBuilderService();
+
+    setSingleVideoTrackMediaState();
+    useTimelineStore.setState({
+      tracks: [{
+        id: 'track-v1',
+        name: 'Video 1',
+        type: 'video',
+        visible: true,
+        muted: false,
+        solo: false,
+      }],
+      clips: [
+        {
+          id: 'clip-a',
+          trackId: 'track-v1',
+          name: 'outgoing.mp4',
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: { type: 'video', naturalDuration: 10, webCodecsPlayer: createTestWebCodecsPlayer(9.25) },
+          transitionOut: {
+            id: 'transition-existing',
+            type: 'dip-to-color',
+            duration: 2,
+            params: { color: '#ff0080' },
+            linkedClipId: 'clip-b',
+          },
+          isLoading: false,
+        },
+        {
+          id: 'clip-b',
+          trackId: 'track-v1',
+          name: 'incoming.mp4',
+          startTime: 10,
+          duration: 8,
+          inPoint: 1,
+          outPoint: 9,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: { type: 'video', naturalDuration: 9, webCodecsPlayer: createTestWebCodecsPlayer(0.25) },
+          transitionIn: {
+            id: 'transition-existing',
+            type: 'dip-to-color',
+            duration: 2,
+            params: { color: '#ff0080' },
+            linkedClipId: 'clip-a',
+          },
+          isLoading: false,
+        },
+      ],
+      playheadPosition: 10.25,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = service.buildLayersFromStore();
+
+    expect(layers).toHaveLength(3);
+    expect(layers[2]?.source).toMatchObject({ type: 'solid', color: '#ff0080' });
+  });
+
+  it('sizes generated transition overlay canvases from the active preview composition', () => {
+    const service = new LayerBuilderService();
+
+    const mediaState = {
+      activeCompositionId: 'comp-preview',
+      activeLayerSlots: {},
+      layerOpacities: {},
+      files: [],
+      compositions: [{ id: 'comp-preview', width: 1280, height: 720 }],
+      proxyEnabled: false,
+    } satisfies Partial<ReturnType<typeof useMediaStore.getState>>;
+    useTimelineStore.setState({
+      tracks: [{
+        id: 'track-v1',
+        name: 'Video 1',
+        type: 'video',
+        visible: true,
+        muted: false,
+        solo: false,
+      }],
+      clips: [
+        {
+          id: 'clip-a',
+          trackId: 'track-v1',
+          name: 'outgoing.mp4',
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: { type: 'video', naturalDuration: 10, webCodecsPlayer: createTestWebCodecsPlayer(9.25) },
+          transitionOut: { id: 'transition-existing', type: 'light-sweep', duration: 2, linkedClipId: 'clip-b' },
+          isLoading: false,
+        },
+        {
+          id: 'clip-b',
+          trackId: 'track-v1',
+          name: 'incoming.mp4',
+          startTime: 10,
+          duration: 8,
+          inPoint: 1,
+          outPoint: 9,
+          effects: [],
+          transform: { ...DEFAULT_TRANSFORM },
+          source: { type: 'video', naturalDuration: 9, webCodecsPlayer: createTestWebCodecsPlayer(0.25) },
+          transitionIn: { id: 'transition-existing', type: 'light-sweep', duration: 2, linkedClipId: 'clip-a' },
+          isLoading: false,
+        },
+      ],
+      playheadPosition: 10.25,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = withMediaStoreState(mediaState, () => service.buildLayersFromStore());
+    const overlayLayers = layers.filter((layer) => layer.id.includes(':overlay:'));
+
+    expect(overlayLayers).toHaveLength(2);
+    expect(overlayLayers[0]?.source?.type).toBe('solid');
+    expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(1280);
+    expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(720);
+  });
+
   it('attaches wipe transition render metadata to the incoming layer', () => {
     const service = new LayerBuilderService();
 
@@ -609,6 +741,78 @@ describe('LayerBuilderService paused visual provider selection', () => {
       progress: 0.5,
     });
     expect(layers[1]?.transitionRender).toBeUndefined();
+  });
+
+  it('composes push transition transforms without mutating source clip transforms', () => {
+    const service = new LayerBuilderService();
+    const outgoingTransform = {
+      ...DEFAULT_TRANSFORM,
+      position: { x: 0.2, y: 0.1, z: 0.3 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+    };
+    const incomingTransform = {
+      ...DEFAULT_TRANSFORM,
+      position: { x: -0.1, y: -0.2, z: 0.4 },
+      scale: { x: 1, y: 1 },
+      rotation: { x: 0, y: 0, z: 0 },
+    };
+
+    setSingleVideoTrackMediaState();
+    useTimelineStore.setState({
+      tracks: [{
+        id: 'track-v1',
+        name: 'Video 1',
+        type: 'video',
+        visible: true,
+        muted: false,
+        solo: false,
+      }],
+      clips: [
+        {
+          id: 'clip-a',
+          trackId: 'track-v1',
+          name: 'outgoing.mp4',
+          startTime: 0,
+          duration: 10,
+          inPoint: 0,
+          outPoint: 10,
+          effects: [],
+          transform: outgoingTransform,
+          source: { type: 'video', naturalDuration: 10, webCodecsPlayer: createTestWebCodecsPlayer(9) },
+          transitionOut: { id: 'transition-existing', type: 'push-left', duration: 2, linkedClipId: 'clip-b' },
+          isLoading: false,
+        },
+        {
+          id: 'clip-b',
+          trackId: 'track-v1',
+          name: 'incoming.mp4',
+          startTime: 10,
+          duration: 8,
+          inPoint: 1,
+          outPoint: 9,
+          effects: [],
+          transform: incomingTransform,
+          source: { type: 'video', naturalDuration: 9, webCodecsPlayer: createTestWebCodecsPlayer(0) },
+          transitionIn: { id: 'transition-existing', type: 'push-left', duration: 2, linkedClipId: 'clip-a' },
+          isLoading: false,
+        },
+      ],
+      playheadPosition: 10,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = service.buildLayersFromStore();
+
+    expect(layers.map((layer) => layer.sourceClipId)).toEqual(['clip-b', 'clip-a']);
+    expect(layers[0]?.position).toEqual({ x: 0.4, y: -0.2, z: 0.4 });
+    expect(layers[1]?.position).toEqual({ x: -0.3, y: 0.1, z: 0.3 });
+    expect(layers[0]?.position).not.toBe(incomingTransform.position);
+    expect(layers[1]?.position).not.toBe(outgoingTransform.position);
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === 'clip-a')?.transform.position).toEqual({ x: 0.2, y: 0.1, z: 0.3 });
+    expect(useTimelineStore.getState().clips.find((clip) => clip.id === 'clip-b')?.transform.position).toEqual({ x: -0.1, y: -0.2, z: 0.4 });
   });
 
   it('passes linked audio analysis context into rendered AI node layers', () => {

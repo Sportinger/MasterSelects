@@ -3,6 +3,7 @@ import type { SerializableClip } from '../../types';
 import { clonePersistedClipAudioState } from '../../services/audio/clipAudioStatePersistence';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
+import { normalizeTransitionInstanceParams } from '../../transitions';
 import { serializeVideoBakeRegion } from './videoBakeSlice';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import type { RestoredRuntimePatch } from './vectorRuntimeRestore';
@@ -76,8 +77,8 @@ function createRestoredNestedClipCommon(
     waveformChannels: serializedClip.waveformChannels,
     transform: serializedClip.transform,
     effects: serializedClip.effects || [],
-    transitionIn: serializedClip.transitionIn ? structuredClone(serializedClip.transitionIn) : undefined,
-    transitionOut: serializedClip.transitionOut ? structuredClone(serializedClip.transitionOut) : undefined,
+    transitionIn: serializedClip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionIn)) : undefined,
+    transitionOut: serializedClip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(serializedClip.transitionOut)) : undefined,
     colorCorrection: serializedClip.colorCorrection ? structuredClone(serializedClip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks || [],

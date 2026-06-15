@@ -11,6 +11,11 @@ struct MotionBlurParams {
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: MotionBlurParams;
 
+fn mirrorEdgeUv(uv: vec2f) -> vec2f {
+  let wrapped = uv - floor(uv * 0.5) * 2.0;
+  return select(wrapped, vec2f(2.0) - wrapped, wrapped > vec2f(1.0));
+}
+
 @fragment
 fn motionBlurFragment(input: VertexOutput) -> @location(0) vec4f {
   if (params.amount < 0.001) {
@@ -30,7 +35,8 @@ fn motionBlurFragment(input: VertexOutput) -> @location(0) vec4f {
     // Gaussian-like weight (center samples weighted more)
     let weight = exp(-t * t * 2.0);
 
-    color += textureSample(inputTex, texSampler, input.uv + offset) * weight;
+    let sampleUv = mirrorEdgeUv(input.uv + offset);
+    color += textureSample(inputTex, texSampler, sampleUv) * weight;
     totalWeight += weight;
   }
 

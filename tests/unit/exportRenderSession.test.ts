@@ -75,7 +75,10 @@ vi.mock('../../src/engine/export/ExportMaskTextures', () => ({
   syncExportMaskTextures: mockFactory.syncExportMaskTextures,
 }));
 
-import { ExportRenderSessionImpl } from '../../src/engine/export/ExportRenderSessionImpl';
+import {
+  ExportFrameCaptureUnavailableError,
+  ExportRenderSessionImpl,
+} from '../../src/engine/export/ExportRenderSessionImpl';
 
 const layers = [{ id: 'layer-a' }] as unknown as Layer[];
 
@@ -158,6 +161,52 @@ describe('ExportRenderSessionImpl', () => {
       'render',
       'readPixels',
     ]);
+  });
+
+  it('falls back to readback when zero-copy VideoFrame capture is unavailable', async () => {
+    const session = createSession();
+    session.begin();
+    mockFactory.calls.length = 0;
+    mockFactory.engine.createVideoFrameFromExport.mockImplementationOnce(async (timestamp: number, duration: number) => {
+      mockFactory.calls.push(`createVideoFrameFromExport:${timestamp}:${duration}`);
+      return null;
+    });
+
+    const capture = await session.renderFrame({
+      time: 3,
+      layers,
+      timestampMicros: 300000,
+      durationMicros: 33333,
+    });
+
+    expect(capture.kind).toBe('rgba-pixels');
+    expect(capture.width).toBe(1920);
+    expect(capture.height).toBe(1080);
+    expect(mockFactory.calls).toEqual([
+      'isDeviceValid',
+      'setRenderTimeOverride:3',
+      'syncExportMaskTextures',
+      'ensureExportLayersReady',
+      'render',
+      'createVideoFrameFromExport:300000:33333',
+      'isDeviceValid',
+      'readPixels',
+    ]);
+  });
+
+  it('throws when both zero-copy and readback capture are unavailable', async () => {
+    const session = createSession();
+    session.begin();
+    mockFactory.calls.length = 0;
+    mockFactory.engine.createVideoFrameFromExport.mockResolvedValueOnce(null);
+    mockFactory.engine.readPixels.mockResolvedValueOnce(null);
+
+    await expect(session.renderFrame({
+      time: 4,
+      layers,
+      timestampMicros: 400000,
+      durationMicros: 33333,
+    })).rejects.toBeInstanceOf(ExportFrameCaptureUnavailableError);
   });
 
   it('disposes with the original restore order and is idempotent', () => {

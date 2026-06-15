@@ -163,6 +163,9 @@ export function getTimelineReplayToolId(operation: TimelineEditOperation): Timel
     case 'transition-apply':
     case 'transition-remove':
     case 'transition-update-duration':
+    case 'transition-update-offset':
+    case 'transition-update-type':
+    case 'transition-update-params':
     case 'transition-preview-drop':
     case 'transition-clear-preview':
       return 'select';

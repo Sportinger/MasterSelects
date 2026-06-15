@@ -5,7 +5,7 @@ import type { KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent } fro
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { getTransition, type TransitionType } from '../../../transitions';
+import { getRuntimeTransition } from '../../../transitions';
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from '../../../stores/timeline/editOperations/transitionPlanner';
 import { buildTransitionToolPreviewGhostRanges } from '../../../stores/timeline/editOperations/transitionToolPreview';
 import { createTransitionMediaDurationResolver } from '../../../stores/timeline/editOperations/transitionMediaDurationResolver';
@@ -91,6 +91,7 @@ function getOtherTransitionSnapTimes({
       incomingClip,
       transitionType: transition.type,
       requestedDuration: transition.duration,
+      params: transition.params,
       placement: DEFAULT_TRANSITION_PLACEMENT,
       edgePolicy: 'hold',
       junctionTime: outgoingClip.startTime + outgoingClip.duration,
@@ -265,6 +266,7 @@ export function TransitionOverlays({
         incomingClip: clipB,
         transitionType: transition.type,
         requestedDuration: duration,
+        params: transition.params,
         placement: DEFAULT_TRANSITION_PLACEMENT,
         edgePolicy: 'hold',
         junctionTime,
@@ -296,6 +298,7 @@ export function TransitionOverlays({
       duration: startDuration,
       offset: startOffset,
     });
+    showResizePreview(startDuration);
     target.setPointerCapture(pointerId);
 
     const cleanup = () => {
@@ -406,6 +409,7 @@ export function TransitionOverlays({
         incomingClip: clipB,
         transitionType: transition.type,
         requestedDuration: transition.duration,
+        params: transition.params,
         placement: DEFAULT_TRANSITION_PLACEMENT,
         edgePolicy: 'hold',
         junctionTime,
@@ -557,7 +561,7 @@ export function TransitionOverlays({
         const trackTop = getTrackTop(track);
         const trackHeight = resolveTrackHeight(track);
 
-        const transitionDefinition = getTransition(clipA.transitionOut.type as TransitionType);
+        const transitionDefinition = getRuntimeTransition(clipA.transitionOut.type);
         const transitionName = transitionDefinition?.name ?? clipA.transitionOut.type;
         const displayDuration = editPreview?.transitionId === clipA.transitionOut.id
           ? editPreview.duration
@@ -571,6 +575,7 @@ export function TransitionOverlays({
           incomingClip: clipB,
           transitionType: clipA.transitionOut.type,
           requestedDuration: displayDuration,
+          params: clipA.transitionOut.params,
           placement: DEFAULT_TRANSITION_PLACEMENT,
           edgePolicy: 'hold',
           junctionTime: transitionEnd,

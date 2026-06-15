@@ -310,16 +310,18 @@ export function useTimelineKeyboard({
         return;
       }
 
+      const timelineToolState = useTimelineStore.getState();
+
       // Timeline tool selection
       if (registry.matches('tool.select', e)) {
         e.preventDefault();
-        useTimelineStore.getState().setActiveTimelineTool('select');
+        timelineToolState.setActiveTimelineTool('select');
         return;
       }
 
       if (registry.matches('tool.selectionGroup', e)) {
         e.preventDefault();
-        useTimelineStore.getState().cycleTimelineToolGroup('selection', e.shiftKey ? -1 : 1);
+        timelineToolState.cycleTimelineToolGroup('selection', e.shiftKey ? -1 : 1);
         return;
       }
 
@@ -328,25 +330,25 @@ export function useTimelineKeyboard({
       // Blade All Tracks.
       if (registry.matches('tool.cutToggle', e)) {
         e.preventDefault();
-        useTimelineStore.getState().setActiveTimelineTool('blade');
+        timelineToolState.setActiveTimelineTool('blade');
         return;
       }
 
       if (registry.matches('tool.trimGroup', e)) {
         e.preventDefault();
-        useTimelineStore.getState().cycleTimelineToolGroup('trim', e.shiftKey ? -1 : 1);
+        timelineToolState.cycleTimelineToolGroup('trim', e.shiftKey ? -1 : 1);
         return;
       }
 
       if (registry.matches('tool.placementGroup', e)) {
         e.preventDefault();
-        useTimelineStore.getState().cycleTimelineToolGroup('placement', e.shiftKey ? -1 : 1);
+        timelineToolState.cycleTimelineToolGroup('placement', e.shiftKey ? -1 : 1);
         return;
       }
 
       if (registry.matches('tool.navigationGroup', e)) {
         e.preventDefault();
-        useTimelineStore.getState().cycleTimelineToolGroup('navigation', e.shiftKey ? -1 : 1);
+        timelineToolState.cycleTimelineToolGroup('navigation', e.shiftKey ? -1 : 1);
         return;
       }
 
@@ -358,7 +360,7 @@ export function useTimelineKeyboard({
         if (tool.kind === 'command') {
           runTimelineToolCommand(tool.id);
         } else {
-          useTimelineStore.getState().setActiveTimelineTool(tool.id);
+          timelineToolState.setActiveTimelineTool(tool.id);
         }
         return;
       }

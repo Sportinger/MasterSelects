@@ -212,6 +212,9 @@ export function buildLayersAtTime(
           useParallelDecode,
           opacity,
         ),
+        outputSize: ctx.outputWidth && ctx.outputHeight
+          ? { width: ctx.outputWidth, height: ctx.outputHeight }
+          : undefined,
       }));
       continue;
     }

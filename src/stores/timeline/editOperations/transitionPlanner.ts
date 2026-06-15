@@ -1,5 +1,11 @@
 import type { TimelineClip } from '../../../types';
-import { getTransition, type TransitionDefinition, type TransitionType } from '../../../transitions';
+import {
+  getRuntimeTransition,
+  normalizeTransitionParamsForDefinition,
+  type TransitionDefinition,
+  type TransitionParamValue,
+  type TransitionType,
+} from '../../../transitions';
 
 export type TransitionPlacement = 'center' | 'end-at-cut' | 'start-at-cut';
 export type TransitionEdgePolicy = 'hold' | 'require-handles';
@@ -45,6 +51,7 @@ export interface TransitionPlan {
   edgePolicy: TransitionEdgePolicy;
   requestedDuration: number;
   resolvedDuration: number;
+  params?: Record<string, TransitionParamValue>;
   bodyOffset: number;
   junctionTime: number;
   bodyStart: number;
@@ -66,6 +73,7 @@ export interface PlanTransitionInput {
   incomingClip: TimelineClip;
   transitionType: string;
   requestedDuration: number;
+  params?: Record<string, TransitionParamValue>;
   placement?: TransitionPlacement;
   edgePolicy?: TransitionEdgePolicy;
   junctionTime?: number;
@@ -447,13 +455,14 @@ function getBlockedReason(
 }
 
 export function planTransition(input: PlanTransitionInput): TransitionPlan | null {
-  const definition = getTransition(input.transitionType as TransitionType);
+  const definition = getRuntimeTransition(input.transitionType);
   if (!definition) return null;
   if (!Number.isFinite(input.requestedDuration) || input.requestedDuration <= 0) return null;
 
   const placement = input.placement ?? DEFAULT_TRANSITION_PLACEMENT;
   const edgePolicy = input.edgePolicy ?? 'hold';
   const resolvedDuration = Math.max(definition.minDuration, input.requestedDuration);
+  const params = normalizeTransitionParamsForDefinition(definition, input.params);
   const junctionTime = input.junctionTime ?? getClipEnd(input.outgoingClip);
   const bodyOffset = Number.isFinite(input.bodyOffset) ? input.bodyOffset ?? 0 : 0;
   const body = getBodyRange(placement, junctionTime + bodyOffset, resolvedDuration);
@@ -478,6 +487,7 @@ export function planTransition(input: PlanTransitionInput): TransitionPlan | nul
     edgePolicy,
     requestedDuration: input.requestedDuration,
     resolvedDuration,
+    ...(params ? { params } : {}),
     bodyOffset,
     junctionTime,
     bodyStart: body.startTime,
@@ -509,6 +519,7 @@ export function findActiveTransitionPlanForTrack(
       incomingClip,
       transitionType: transition.type,
       requestedDuration: transition.duration,
+      params: transition.params,
       placement: input.placement ?? DEFAULT_TRANSITION_PLACEMENT,
       edgePolicy: input.edgePolicy ?? 'hold',
       junctionTime,

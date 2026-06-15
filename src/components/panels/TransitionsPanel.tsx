@@ -1,72 +1,56 @@
 // Transitions Panel - Drag and drop transitions for timeline clips
 
-import { useState, useCallback } from 'react';
-import { getAllTransitions, getDefaultTransitionParams, type TransitionDefinition } from '../../transitions';
+import { useCallback, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type MouseEvent } from 'react';
+import {
+  getAllTransitions,
+  getDefaultTransitionParams,
+  getTransitionCapability,
+  type TransitionCapability,
+  type TransitionDefinition,
+  type TransitionFamilyDimension,
+} from '../../transitions';
 import {
   serializeTransitionDropData,
   setActiveTransitionDragData,
   TRANSITION_MIME_TYPE,
 } from '../timeline/transitionDragData';
+import { TransitionPreview } from './transitions/TransitionPreview';
+import {
+  filterTransitionPanelItems,
+  groupTransitionPanelItems,
+  sectionTransitionPanelItems,
+} from './transitions/transitionPanelItems';
 import './TransitionsPanel.css';
 
-// Transition preview thumbnail component
-function TransitionPreview({ type }: { type: string }) {
-  if (type === 'crossfade' || type === 'dip-to-black' || type === 'dip-to-white') {
-    const dipColor = type === 'dip-to-white' ? '#f4f4f5' : '#050505';
-    const middleOpacity = type === 'crossfade' ? 0 : 0.9;
-    return (
-      <svg viewBox="0 0 80 40" className="transition-preview-svg">
-        <defs>
-          <linearGradient id={`fadeOutGrad-${type}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#4a9eff" stopOpacity="1" />
-            <stop offset="100%" stopColor="#4a9eff" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id={`fadeInGrad-${type}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#ff6b4a" stopOpacity="0" />
-            <stop offset="100%" stopColor="#ff6b4a" stopOpacity="1" />
-          </linearGradient>
-        </defs>
-        <rect x="0" y="8" width="50" height="24" fill={`url(#fadeOutGrad-${type})`} rx="2" />
-        <rect x="30" y="8" width="50" height="24" fill={`url(#fadeInGrad-${type})`} rx="2" />
-        <rect x="28" y="5" width="24" height="30" fill={dipColor} opacity={middleOpacity} rx="2" />
-      </svg>
-    );
-  }
-
-  if (type === 'wipe-left' || type === 'wipe-right') {
-    const incomingX = type === 'wipe-right' ? 22 : 38;
-    return (
-      <svg viewBox="0 0 80 40" className="transition-preview-svg">
-        <rect x="6" y="8" width="52" height="24" fill="#4a9eff" rx="2" />
-        <rect x={incomingX} y="8" width="52" height="24" fill="#ff6b4a" rx="2" />
-        <path
-          d={type === 'wipe-right' ? 'M24 6v28' : 'M56 6v28'}
-          stroke="white"
-          strokeWidth="2"
-          strokeLinecap="round"
-          opacity="0.8"
-        />
-      </svg>
-    );
-  }
-
-  // Default preview
-  return (
-    <svg viewBox="0 0 80 40" className="transition-preview-svg">
-      <rect x="5" y="8" width="30" height="24" fill="#4a9eff" rx="2" />
-      <rect x="45" y="8" width="30" height="24" fill="#ff6b4a" rx="2" />
-      <path d="M38 20 L42 20" stroke="white" strokeWidth="2" />
-    </svg>
-  );
-}
-
 interface TransitionItemProps {
+  label: string;
   transition: TransitionDefinition;
   duration: number;
+  capability: TransitionCapability;
+  showCapabilityBadge: boolean;
+  variantCount?: number;
+  variant?: boolean;
+  onClick?: () => void;
 }
 
-function TransitionItem({ transition, duration }: TransitionItemProps) {
-  const handleDragStart = useCallback((e: React.DragEvent) => {
+function TransitionItem({
+  label,
+  transition,
+  duration,
+  capability,
+  showCapabilityBadge,
+  variantCount,
+  variant = false,
+  onClick,
+}: TransitionItemProps) {
+  const dragStartedRef = useRef(false);
+  const isPlanned = capability === 'planned';
+  const handleDragStart = useCallback((e: DragEvent<HTMLDivElement>) => {
+    if (isPlanned) {
+      e.preventDefault();
+      return;
+    }
+    dragStartedRef.current = true;
     const dragData = {
       type: transition.id,
       duration,
@@ -108,50 +92,105 @@ function TransitionItem({ transition, duration }: TransitionItemProps) {
       dragEl.appendChild(previewClone);
     }
 
-    const label = document.createElement('span');
-    label.textContent = transition.name;
-    label.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-    dragEl.appendChild(label);
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    labelEl.style.cssText = 'min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    dragEl.appendChild(labelEl);
 
     document.body.appendChild(dragEl);
     e.dataTransfer.setDragImage(dragEl, 42, 20);
     setTimeout(() => dragEl.remove(), 0);
-  }, [transition, duration]);
+  }, [isPlanned, label, transition, duration]);
 
   const handleDragEnd = useCallback(() => {
     setActiveTransitionDragData(null);
+    setTimeout(() => {
+      dragStartedRef.current = false;
+    }, 0);
   }, []);
+
+  const handleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (!onClick || dragStartedRef.current) return;
+    event.preventDefault();
+    onClick();
+  }, [onClick]);
 
   return (
     <div
-      draggable
+      draggable={!isPlanned}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className="transition-item"
+      onClick={handleClick}
+      className={[
+        'transition-item',
+        variant ? 'transition-item-variant' : '',
+        isPlanned ? 'transition-item-planned' : '',
+      ].filter(Boolean).join(' ')}
       title={transition.description}
+      aria-disabled={isPlanned || undefined}
     >
       <div className="transition-item-preview">
         <TransitionPreview type={transition.id} />
       </div>
-      <span className="transition-item-name">{transition.name}</span>
+      <span className="transition-item-name">{label}</span>
+      {variantCount !== undefined ? (
+        <span className="transition-item-type-count" title={`${variantCount} transition types`}>
+          {variantCount}
+        </span>
+      ) : null}
+      {showCapabilityBadge ? (
+        <span className={`transition-capability-badge transition-capability-${capability}`}>
+          {capability}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 export function TransitionsPanel() {
   const [duration, setDuration] = useState(2);
-  const allTransitions = getAllTransitions();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedFamilyKey, setExpandedFamilyKey] = useState<string | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<TransitionFamilyDimension>>(() => new Set());
+  const showCapabilityBadge = import.meta.env.DEV;
+  const allTransitions = getAllTransitions({
+    runtimeOnly: !showCapabilityBadge,
+    includeExperimental: showCapabilityBadge,
+    includePlanned: showCapabilityBadge,
+  });
+  const transitionItems = useMemo(() => groupTransitionPanelItems(allTransitions), [allTransitions]);
+  const visibleTransitionItems = useMemo(
+    () => filterTransitionPanelItems(transitionItems, searchQuery),
+    [searchQuery, transitionItems]
+  );
+  const transitionSections = useMemo(() => sectionTransitionPanelItems(visibleTransitionItems), [visibleTransitionItems]);
+  const isSearchActive = searchQuery.trim().length > 0;
 
-  const handleDurationChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDurationChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(e.target.value);
-    if (!isNaN(value) && value > 0) {
+    if (!Number.isNaN(value) && value > 0) {
       setDuration(Math.max(value, 0.1));
     }
   }, []);
 
+  const toggleSection = useCallback((dimension: TransitionFamilyDimension) => {
+    setCollapsedSections((current) => {
+      const next = new Set(current);
+      if (next.has(dimension)) {
+        next.delete(dimension);
+      } else {
+        next.add(dimension);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleFamily = useCallback((key: string) => {
+    setExpandedFamilyKey((current) => current === key ? null : key);
+  }, []);
+
   return (
-    <div className="transitions-panel">
-      {/* Header with duration */}
+    <div className="transitions-panel" onMouseLeave={() => setExpandedFamilyKey(null)}>
       <div className="transitions-panel-header">
         <span className="transitions-panel-title">Transitions</span>
         <div className="transitions-duration-control">
@@ -167,24 +206,109 @@ export function TransitionsPanel() {
         </div>
       </div>
 
-      {/* Transitions list */}
-      <div className="transitions-list">
-        {allTransitions.map((transition) => (
-          <TransitionItem
-            key={transition.id}
-            transition={transition}
-            duration={duration}
-          />
-        ))}
+      <div className="transitions-search">
+        <svg
+          viewBox="0 0 16 16"
+          width="13"
+          height="13"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          aria-hidden="true"
+        >
+          <circle cx="7" cy="7" r="4.4" />
+          <path d="M10.3 10.3 14 14" />
+        </svg>
+        <input
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setSearchQuery('');
+          }}
+          placeholder="Search transitions"
+          aria-label="Search transitions"
+        />
+        {searchQuery ? (
+          <button
+            type="button"
+            className="transitions-search-clear"
+            onClick={() => setSearchQuery('')}
+            title="Clear search"
+            aria-label="Clear search"
+          >
+            x
+          </button>
+        ) : null}
+      </div>
 
-        {allTransitions.length === 0 && (
+      <div className="transitions-list">
+        {transitionSections.map((section) => {
+          const isCollapsed = !isSearchActive && collapsedSections.has(section.dimension);
+          return (
+            <section className="transitions-family-section" key={section.dimension}>
+              <button
+                type="button"
+                className="transitions-family-title-button"
+                onClick={() => toggleSection(section.dimension)}
+                aria-expanded={!isCollapsed}
+              >
+                <svg
+                  className={isCollapsed ? 'transitions-family-chevron collapsed' : 'transitions-family-chevron'}
+                  viewBox="0 0 16 16"
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  aria-hidden="true"
+                >
+                  <path d="M4 6 8 10 12 6" />
+                </svg>
+                <span className="transitions-family-title">{section.label}</span>
+                <span className="transitions-family-count">{section.items.length}</span>
+              </button>
+              {!isCollapsed && section.items.map((item) => {
+                const isExpanded = expandedFamilyKey === item.key;
+                return (
+                  <div className="transition-family-item" key={item.key}>
+                    <TransitionItem
+                      label={item.label}
+                      transition={item.transition}
+                      duration={duration}
+                      capability={getTransitionCapability(item.transition)}
+                      showCapabilityBadge={showCapabilityBadge}
+                      variantCount={item.variantCount}
+                      onClick={() => toggleFamily(item.key)}
+                    />
+                    {isExpanded ? (
+                      <div className="transition-variant-list" aria-label={`${item.label} transition variants`}>
+                        {item.variants.map((variant) => (
+                          <TransitionItem
+                            key={variant.id}
+                            label={variant.name}
+                            transition={variant}
+                            duration={duration}
+                            capability={getTransitionCapability(variant)}
+                            showCapabilityBadge={showCapabilityBadge}
+                            variant
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </section>
+          );
+        })}
+
+        {visibleTransitionItems.length === 0 && (
           <div className="transitions-empty">
-            No transitions available
+            {isSearchActive ? 'No transitions found' : 'No transitions available'}
           </div>
         )}
       </div>
 
-      {/* Footer hint */}
       <div className="transitions-panel-footer">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="10" />

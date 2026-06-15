@@ -1,9 +1,8 @@
 import type { TimelineClip, TimelineTrack, TimelineTransition } from '../../../types';
 import {
-  getDefaultTransitionParams,
-  getTransition,
+  getRuntimeTransition,
+  normalizeTransitionParams,
   type TransitionParamValue,
-  type TransitionType,
 } from '../../../transitions';
 import type { TimelinePropertiesSelection } from '../storeTypes/toolTypes';
 import type { TransitionSourceDurationResolver } from './transitionPlanner';
@@ -108,6 +107,7 @@ export function applyTransitionApplyOperation(
     incomingClip: clipB!,
     transitionType: operation.transitionType,
     requestedDuration: operation.requestedDuration,
+    params: operation.params,
     placement: DEFAULT_TRANSITION_PLACEMENT,
     edgePolicy: 'hold',
     junctionTime: operation.junction.junctionTime,
@@ -254,6 +254,7 @@ export function applyTransitionUpdateDurationOperation(
     incomingClip: clipB!,
     transitionType: transition.type,
     requestedDuration: operation.requestedDuration,
+    params: transition.params,
     placement: DEFAULT_TRANSITION_PLACEMENT,
     edgePolicy: 'hold',
     junctionTime: operation.junction?.junctionTime,
@@ -347,6 +348,7 @@ export function applyTransitionUpdateOffsetOperation(
     incomingClip: clipB!,
     transitionType: transition.type,
     requestedDuration: transition.duration,
+    params: transition.params,
     placement: DEFAULT_TRANSITION_PLACEMENT,
     edgePolicy: 'hold',
     junctionTime: operation.junction?.junctionTime,
@@ -431,6 +433,7 @@ export function applyTransitionUpdateTypeOperation(
     incomingClip: clipB!,
     transitionType: operation.transitionType,
     requestedDuration: transition.duration,
+    params: operation.params,
     placement: DEFAULT_TRANSITION_PLACEMENT,
     edgePolicy: 'hold',
     junctionTime: clipA!.startTime + clipA!.duration,
@@ -686,7 +689,7 @@ function validateTransitionPair(
   const lockedWarning = getTransitionLockedWarning(clips, tracks, [input.clipA.id, input.clipB.id]);
   if (lockedWarning) return [lockedWarning];
 
-  if (!getTransition(input.transitionType as TransitionType)) {
+  if (!getRuntimeTransition(input.transitionType)) {
     return [{
       code: 'unsupported',
       message: `Unsupported transition type: ${input.transitionType}`,
@@ -838,36 +841,4 @@ function unchanged(
 
 function uniqueIds(ids: readonly string[]): string[] {
   return [...new Set(ids)];
-}
-
-function normalizeTransitionParams(
-  transitionType: string,
-  patch: Record<string, TransitionParamValue> | undefined,
-  base?: Record<string, TransitionParamValue>,
-): Record<string, TransitionParamValue> | undefined {
-  const definition = getTransition(transitionType as TransitionType);
-  const defaultParams = getDefaultTransitionParams(definition);
-  const schema = definition?.params;
-  if (!schema) return undefined;
-
-  const nextParams: Record<string, TransitionParamValue> = {
-    ...(defaultParams ?? {}),
-    ...(base ?? {}),
-  };
-  for (const [paramId, value] of Object.entries(patch ?? {})) {
-    const param = schema[paramId];
-    if (!param) continue;
-    if (param.type === 'boolean') {
-      nextParams[paramId] = value === true;
-    } else if (param.type === 'number') {
-      const numericValue = typeof value === 'number' && Number.isFinite(value) ? value : Number(param.defaultValue);
-      const min = typeof param.min === 'number' ? param.min : -Infinity;
-      const max = typeof param.max === 'number' ? param.max : Infinity;
-      nextParams[paramId] = Math.max(min, Math.min(max, numericValue));
-    } else {
-      nextParams[paramId] = value;
-    }
-  }
-
-  return Object.keys(nextParams).length > 0 ? nextParams : undefined;
 }

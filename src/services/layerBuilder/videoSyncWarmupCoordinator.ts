@@ -7,11 +7,13 @@ import type { FrameContext } from './types';
 import {
   getClipSampleTimeNearPlayhead,
   getClipStartTime,
-  getVisibleVideoTrackPlaybackClipsAtTime,
-  getVisibleVideoTrackTransitionClipsInWindow,
   getWarmupClipTime,
   isVisibleVideoTrackClip,
 } from './videoSyncTimelineQueries';
+import {
+  getVisibleVideoTrackPlaybackClipsAtTime,
+  getVisibleVideoTrackTransitionClipsInWindow,
+} from './videoSyncTransitionQueries';
 import type { VideoSyncWarmupState } from './videoSyncWarmupState';
 
 type VideoFrameCallbackVideo = HTMLVideoElement & {

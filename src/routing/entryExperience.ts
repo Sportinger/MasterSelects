@@ -1,4 +1,4 @@
-export type EntryExperience = 'editor' | 'landing';
+export type EntryExperience = 'creditClaim' | 'editor' | 'landing';
 
 interface EntryLocationLike {
   hostname: string;
@@ -10,6 +10,7 @@ interface EntryLocationLike {
 
 const LANDING_HOST = 'landing.localhost';
 const LANDING_PATHS = ['/landing'];
+const CREDIT_CLAIM_PATHS = ['/credits/claim', '/claim'];
 
 function normalizeHostname(hostname: string): string {
   return hostname.trim().toLowerCase();
@@ -45,9 +46,18 @@ export function isLandingPath(pathname: string): boolean {
   return LANDING_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
 }
 
+export function isCreditClaimPath(pathname: string): boolean {
+  const normalizedPath = normalizePathname(pathname);
+  return CREDIT_CLAIM_PATHS.some((basePath) => matchesPathPrefix(normalizedPath, basePath));
+}
+
 export function resolveEntryExperience(locationLike: EntryLocationLike): EntryExperience {
   if (hasEditorOverride(locationLike.search)) {
     return 'editor';
+  }
+
+  if (isCreditClaimPath(locationLike.pathname)) {
+    return 'creditClaim';
   }
 
   if (isLandingHost(locationLike.hostname) || isLandingPath(locationLike.pathname)) {

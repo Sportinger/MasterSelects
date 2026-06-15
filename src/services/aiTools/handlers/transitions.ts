@@ -1,5 +1,5 @@
 import { useTimelineStore } from '../../../stores/timeline';
-import { getTransition, type TransitionType } from '../../../transitions';
+import { getRuntimeTransition } from '../../../transitions';
 import type { ToolResult } from '../types';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
@@ -11,7 +11,8 @@ export async function handleAddTransition(
   const clipAId = args.clipAId as string;
   const clipBId = args.clipBId as string;
   const type = (args.type as string) || 'crossfade';
-  const definition = getTransition(type as TransitionType);
+  const definition = getRuntimeTransition(type);
+  if (!definition) return { success: false, error: `Unsupported transition type: ${type}` };
   const duration = (args.duration as number) || definition?.defaultDuration || 2;
 
   const clipA = timelineStore.clips.find(c => c.id === clipAId);

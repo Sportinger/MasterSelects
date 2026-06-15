@@ -8,6 +8,21 @@ import type {
 import type { MotionLayerDefinition } from './motionDesign';
 import type { Text3DProperties, TextClipProperties } from './text';
 import type { TimelineClip, TimelineTrack } from './timeline';
+import type {
+  TransitionCenterAxis,
+  TransitionDistortion,
+  TransitionPatternMask,
+  TransitionProceduralMask,
+  TransitionShapeMask,
+  TransitionWipeDirection,
+} from '../transitions/types';
+
+export interface LayerSourceRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface Layer {
   id: string;
@@ -29,14 +44,48 @@ export interface Layer {
   maskFeatherQuality?: number;  // Blur quality: 0=low (9 samples), 1=medium (17), 2=high (25)
   maskInvert?: boolean;  // Whether to invert the mask, handled in GPU shader
   maskClipId?: string;  // Clip ID for looking up mask texture (consistent across systems)
+  sourceRect?: LayerSourceRect;  // Normalized source UV rect; defaults to full source.
   transitionRender?: TransitionRenderState;
 }
 
 export type TransitionRenderState =
   | {
       kind: 'wipe';
-      direction: 'left' | 'right';
+      direction: TransitionWipeDirection;
       progress: number;
+    }
+  | {
+      kind: 'shape-mask';
+      shape: TransitionShapeMask;
+      progress: number;
+    }
+  | {
+      kind: 'clock-mask';
+      progress: number;
+      clockwise: boolean;
+      angleOffset: number;
+    }
+  | {
+      kind: 'center-mask';
+      axis: TransitionCenterAxis;
+      progress: number;
+    }
+  | {
+      kind: 'procedural-mask';
+      procedural: TransitionProceduralMask;
+      progress: number;
+      seed?: number;
+    }
+  | {
+      kind: 'pattern-mask';
+      pattern: TransitionPatternMask;
+      progress: number;
+    }
+  | {
+      kind: 'distortion';
+      distortion: TransitionDistortion;
+      progress: number;
+      seed?: number;
     };
 
 export interface LayerSource {

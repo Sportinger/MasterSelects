@@ -2,16 +2,84 @@ import { useCallback, useMemo } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
 import {
+  DIP_TRANSITION_GROUP,
+  DIP_TRANSITION_OPTION_LABELS,
+  DISSOLVE_TRANSITION_GROUP,
+  DISSOLVE_TRANSITION_OPTION_LABELS,
+  DISSOLVE_TRANSITION_OPTIONS,
+  GLITCH_TRANSITION_GROUP,
+  GLITCH_TRANSITION_OPTION_LABELS,
+  GLITCH_TRANSITION_OPTIONS,
+  IRIS_TRANSITION_GROUP,
+  IRIS_TRANSITION_OPTION_LABELS,
+  IRIS_TRANSITION_OPTIONS,
+  LIGHT_TRANSITION_GROUP,
+  LIGHT_TRANSITION_OPTION_LABELS,
+  LIGHT_TRANSITION_OPTIONS,
+  MOTION_BLUR_TRANSITION_GROUP,
+  MOTION_BLUR_TRANSITION_OPTION_LABELS,
+  MOTION_BLUR_TRANSITION_OPTIONS,
+  PATTERN_TRANSITION_GROUP,
+  PATTERN_TRANSITION_OPTION_LABELS,
+  PATTERN_TRANSITION_OPTIONS,
+  ROTATE_TRANSITION_GROUP,
+  ROTATE_TRANSITION_OPTION_LABELS,
+  ROTATE_TRANSITION_OPTIONS,
+  STYLIZE_TRANSITION_GROUP,
+  STYLIZE_TRANSITION_OPTION_LABELS,
+  STYLIZE_TRANSITION_OPTIONS,
+  TRANSITION_DIRECTIONS,
+  TRANSITION_DIRECTION_LABELS,
+  THREE_D_TRANSITION_OPTION_LABELS,
+  WIPE_TRANSITION_GROUP,
+  WIPE_TRANSITION_OPTION_LABELS,
+  WIPE_TRANSITION_OPTIONS,
+  ZOOM_TRANSITION_GROUP,
+  ZOOM_TRANSITION_OPTION_LABELS,
+  ZOOM_TRANSITION_OPTIONS,
   getAllTransitions,
+  getDissolveTransitionOption,
+  getDipTransitionOption,
   getDefaultTransitionParams,
-  getTransition,
+  getDirectionalTransitionGroup,
+  getGlitchTransitionOption,
+  getIrisTransitionOption,
+  getLightTransitionOption,
+  getMotionBlurTransitionOption,
+  getPatternTransitionOption,
+  getRotateTransitionOption,
+  getRuntimeTransition,
+  getStylizeTransitionOption,
+  getThreeDTransitionGroup,
+  getThreeDTransitionOption,
+  getTransitionFamilyById,
+  getTransitionFamilyGroup,
+  getTransitionDirection,
   getTransitionParamValue,
-  type TransitionParamValue,
+  getWipeTransitionOption,
+  getZoomTransitionOption,
   type TransitionType,
+  type TransitionParamValue,
+  type ThreeDTransitionOption,
 } from '../../../transitions';
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from '../../../stores/timeline/editOperations/transitionPlanner';
 import { createTransitionMediaDurationResolver } from '../../../stores/timeline/editOperations/transitionMediaDurationResolver';
 import type { TimelineClip } from '../../../types';
+import {
+  DIP_OPTIONS,
+  DIP_SWATCHES,
+  getDissolveGlyphClass,
+  getGlitchGlyphClass,
+  getLightGlyphClass,
+  getMotionBlurGlyphClass,
+  getPatternGlyphClass,
+  getRotateGlyphClass,
+  getStylizeGlyphClass,
+  getThreeDGlyphClass,
+  getTransitionSelectOptionGroups,
+  getZoomGlyphClass,
+  isDirectionOption,
+} from './transitionChoiceMetadata';
 
 interface TransitionTabProps {
   clip: TimelineClip;
@@ -38,7 +106,7 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
   const linkedClip = transition
     ? clips.find(candidate => candidate.id === transition.linkedClipId) ?? null
     : null;
-  const definition = transition ? getTransition(transition.type as TransitionType) : null;
+  const definition = transition ? getRuntimeTransition(transition.type) : null;
   const availableTransitions = useMemo(() => {
     const allTransitions = getAllTransitions();
     if (isAudioClip(clip) || isAudioClip(linkedClip)) {
@@ -46,6 +114,10 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
     }
     return allTransitions;
   }, [clip, linkedClip]);
+  const availableTransitionOptionGroups = useMemo(
+    () => getTransitionSelectOptionGroups(availableTransitions),
+    [availableTransitions]
+  );
   const activeEditPreview = transitionEditPreview?.transitionId === transition?.id
     ? transitionEditPreview
     : null;
@@ -61,6 +133,7 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
       incomingClip,
       transitionType: transition.type,
       requestedDuration: displayDuration,
+      params: transition.params,
       placement: DEFAULT_TRANSITION_PLACEMENT,
       edgePolicy: 'hold',
       junctionTime: outgoingClip.startTime + outgoingClip.duration,
@@ -92,7 +165,7 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
   const updateTransitionType = useCallback((nextType: string) => {
     if (!transition || nextType === transition.type) return;
 
-    const nextDefinition = getTransition(nextType as TransitionType);
+    const nextDefinition = getRuntimeTransition(nextType);
     if (!nextDefinition) return;
 
     const operationId = `transition-type:${transition.id}:${Date.now()}`;
@@ -112,6 +185,16 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
       historyLabel: 'Change transition type',
     });
   }, [applyTimelineEditOperation, clip.id, edge, transition, transitionId]);
+
+  const updateTransitionFamily = useCallback((nextValue: string) => {
+    if (!transition) return;
+
+    const family = getTransitionFamilyById(nextValue);
+    const nextType = family
+      ? (family.types.includes(transition.type as TransitionType) ? transition.type : family.defaultType)
+      : nextValue;
+    updateTransitionType(nextType);
+  }, [transition, updateTransitionType]);
 
   const updateParam = useCallback((paramId: string, value: TransitionParamValue) => {
     if (!transition) return;
@@ -170,8 +253,33 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
   const holdDuration = plan.outgoing.holdDuration + plan.incoming.holdDuration;
   const realHandleDuration = plan.outgoing.realHandleDuration + plan.incoming.realHandleDuration;
   const isAudioOnlyTransition = isAudioClip(clip) || isAudioClip(linkedClip);
+  const dissolveOption = getDissolveTransitionOption(transition.type);
+  const directionalGroup = getDirectionalTransitionGroup(transition.type);
+  const activeDirection = getTransitionDirection(transition.type);
+  const dipOption = getDipTransitionOption(transition.type);
+  const wipeOption = getWipeTransitionOption(transition.type);
+  const irisOption = getIrisTransitionOption(transition.type);
+  const lightOption = getLightTransitionOption(transition.type);
+  const motionBlurOption = getMotionBlurTransitionOption(transition.type);
+  const glitchOption = getGlitchTransitionOption(transition.type);
+  const patternOption = getPatternTransitionOption(transition.type);
+  const stylizeOption = getStylizeTransitionOption(transition.type);
+  const rotateOption = getRotateTransitionOption(transition.type);
+  const threeDOption = getThreeDTransitionOption(transition.type);
+  const threeDGroup = getThreeDTransitionGroup(transition.type);
+  const zoomOption = getZoomTransitionOption(transition.type);
+  const activeTransitionOption = getTransitionFamilyGroup(transition.type)?.id ?? transition.type;
+  const handledParamIds = new Set<string>();
+  if (dipOption === 'custom') {
+    handledParamIds.add('color');
+  }
+  const dipColorValue = dipOption === 'custom'
+    ? String(getTransitionParamValue(transition, definition, 'color') ?? '#000000')
+    : '#000000';
   const params = definition.params
-    ? Object.entries(definition.params).filter(([paramId]) => !(isAudioOnlyTransition && paramId === 'includeAudio'))
+    ? Object.entries(definition.params)
+      .filter(([paramId]) => !(isAudioOnlyTransition && paramId === 'includeAudio'))
+      .filter(([paramId]) => !handledParamIds.has(paramId))
     : [];
 
   return (
@@ -182,11 +290,15 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
           <label className="prop-label" htmlFor="transition-type-select">Effect</label>
           <select
             id="transition-type-select"
-            value={transition.type}
-            onChange={(event) => updateTransitionType(event.currentTarget.value)}
+            value={activeTransitionOption}
+            onChange={(event) => updateTransitionFamily(event.currentTarget.value)}
           >
-            {availableTransitions.map(candidate => (
-              <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+            {availableTransitionOptionGroups.map(group => (
+              <optgroup key={group.dimension} label={group.label}>
+                {group.options.map(candidate => (
+                  <option key={candidate.value} value={candidate.value}>{candidate.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
@@ -203,6 +315,351 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
           <span className="transition-static-value">Hold frames</span>
         </div>
       </section>
+
+      {dissolveOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{DISSOLVE_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-dissolve-grid">
+            {(isAudioOnlyTransition ? ['crossfade'] as const : DISSOLVE_TRANSITION_OPTIONS).map((option) => {
+              const nextType = DISSOLVE_TRANSITION_GROUP.transitions[option];
+              const isActive = option === dissolveOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-dissolve-glyph ${getDissolveGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{DISSOLVE_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {wipeOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{WIPE_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-wipe-grid">
+            {WIPE_TRANSITION_OPTIONS.map((option) => {
+              const nextType = WIPE_TRANSITION_GROUP.transitions[option];
+              const isActive = option === wipeOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span
+                    className={isDirectionOption(option)
+                      ? `transition-direction-glyph transition-direction-glyph-${option}`
+                      : `transition-wipe-glyph transition-wipe-glyph-${option}`}
+                    aria-hidden="true"
+                  />
+                  <span className="transition-choice-label">{WIPE_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {directionalGroup && activeDirection ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{directionalGroup.label} Direction</h4>
+          <div className="transition-choice-grid">
+            {TRANSITION_DIRECTIONS.map((direction) => {
+              const nextType = directionalGroup.transitions[direction];
+              const isActive = direction === activeDirection;
+              return (
+                <button
+                  key={direction}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span
+                    className={`transition-direction-glyph transition-direction-glyph-${direction}`}
+                    aria-hidden="true"
+                  />
+                  <span className="transition-choice-label">{TRANSITION_DIRECTION_LABELS[direction]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {irisOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{IRIS_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-iris-grid">
+            {IRIS_TRANSITION_OPTIONS.map((option) => {
+              const nextType = IRIS_TRANSITION_GROUP.transitions[option];
+              const isActive = option === irisOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-iris-glyph transition-iris-glyph-${option}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{IRIS_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {threeDGroup && threeDOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{threeDGroup.label}</h4>
+          <div className="transition-choice-grid transition-three-d-grid">
+            {(Object.entries(threeDGroup.transitions) as [ThreeDTransitionOption, TransitionType][]).map(([option, nextType]) => {
+              const isActive = option === threeDOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-three-d-glyph ${getThreeDGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{THREE_D_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {lightOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{LIGHT_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-light-grid">
+            {LIGHT_TRANSITION_OPTIONS.map((option) => {
+              const nextType = LIGHT_TRANSITION_GROUP.transitions[option];
+              const isActive = option === lightOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-light-glyph ${getLightGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{LIGHT_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {motionBlurOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{MOTION_BLUR_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-motion-blur-grid">
+            {MOTION_BLUR_TRANSITION_OPTIONS.map((option) => {
+              const nextType = MOTION_BLUR_TRANSITION_GROUP.transitions[option];
+              const isActive = option === motionBlurOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-motion-blur-glyph ${getMotionBlurGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{MOTION_BLUR_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {glitchOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{GLITCH_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-glitch-grid">
+            {GLITCH_TRANSITION_OPTIONS.map((option) => {
+              const nextType = GLITCH_TRANSITION_GROUP.transitions[option];
+              const isActive = option === glitchOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-glitch-glyph ${getGlitchGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{GLITCH_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {patternOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{PATTERN_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-pattern-grid">
+            {PATTERN_TRANSITION_OPTIONS.map((option) => {
+              const nextType = PATTERN_TRANSITION_GROUP.transitions[option];
+              const isActive = option === patternOption;
+              const isRuntimeOption = Boolean(getRuntimeTransition(nextType));
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  aria-disabled={!isRuntimeOption}
+                  disabled={!isRuntimeOption}
+                  onClick={() => {
+                    if (isRuntimeOption) updateTransitionType(nextType);
+                  }}
+                >
+                  <span className={`transition-pattern-glyph ${getPatternGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{PATTERN_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {zoomOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{ZOOM_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-zoom-grid">
+            {ZOOM_TRANSITION_OPTIONS.map((option) => {
+              const nextType = ZOOM_TRANSITION_GROUP.transitions[option];
+              const isActive = option === zoomOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-zoom-glyph ${getZoomGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{ZOOM_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {stylizeOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{STYLIZE_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-stylize-grid">
+            {STYLIZE_TRANSITION_OPTIONS.map((option) => {
+              const nextType = STYLIZE_TRANSITION_GROUP.transitions[option];
+              const isActive = option === stylizeOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-stylize-glyph ${getStylizeGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{STYLIZE_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {rotateOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>{ROTATE_TRANSITION_GROUP.label}</h4>
+          <div className="transition-choice-grid transition-stylize-grid">
+            {ROTATE_TRANSITION_OPTIONS.map((option) => {
+              const nextType = ROTATE_TRANSITION_GROUP.transitions[option];
+              const isActive = option === rotateOption;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span className={`transition-stylize-glyph ${getRotateGlyphClass(option)}`} aria-hidden="true" />
+                  <span className="transition-choice-label">{ROTATE_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {dipOption ? (
+        <section className="properties-section transition-choice-section">
+          <h4>Dip Color</h4>
+          <div className="transition-choice-grid transition-dip-grid">
+            {DIP_OPTIONS.map((option) => {
+              const nextType = DIP_TRANSITION_GROUP.transitions[option];
+              const isActive = option === dipOption;
+              const swatch = option === 'custom' ? dipColorValue : DIP_SWATCHES[option];
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`transition-choice-button transition-color-choice ${isActive ? 'active' : ''}`}
+                  aria-pressed={isActive}
+                  onClick={() => updateTransitionType(nextType)}
+                >
+                  <span
+                    className={`transition-color-chip transition-color-chip-${option}`}
+                    style={{ backgroundColor: swatch }}
+                    aria-hidden="true"
+                  />
+                  <span className="transition-choice-label">{DIP_TRANSITION_OPTION_LABELS[option]}</span>
+                </button>
+              );
+            })}
+          </div>
+          {dipOption === 'custom' ? (
+            <label className="transition-color-picker" htmlFor="transition-dip-color-input">
+              <span
+                className="transition-color-preview"
+                style={{ backgroundColor: dipColorValue }}
+                aria-hidden="true"
+              />
+              <span className="transition-color-picker-label">Color</span>
+              <input
+                id="transition-dip-color-input"
+                type="color"
+                value={dipColorValue}
+                onChange={(event) => updateParam('color', event.currentTarget.value)}
+              />
+            </label>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="properties-section">
         <h4>Timing</h4>

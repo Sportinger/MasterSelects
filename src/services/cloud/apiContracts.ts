@@ -98,6 +98,38 @@ export interface PortalResponse {
   portalUrl: string;
 }
 
+export type CreditClaimStatus = 'available' | 'claimed' | 'expired' | 'invalid' | 'revoked';
+
+export interface CreditClaimStatusResponse {
+  claim: {
+    amount: number;
+    claimable: boolean;
+    claimedAt: string | null;
+    createdAt: string;
+    description: string | null;
+    emailLocked: boolean;
+    expiresAt: string | null;
+    status: CreditClaimStatus;
+    title: string;
+  };
+  ok: boolean;
+  session: {
+    authenticated: boolean;
+    email: string | null;
+  };
+}
+
+export interface CreditClaimRedeemResponse {
+  amount: number;
+  claimedAt: string | null;
+  creditBalance: number;
+  error?: string;
+  ledgerEntryId: string | null;
+  message?: string;
+  ok: boolean;
+  status: CreditClaimStatus | 'redeemed';
+}
+
 export interface CloudAiGatewayError {
   code: string;
   details?: Record<string, unknown> | null;

@@ -3,6 +3,7 @@ import { useMediaStore, type Composition } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import { cloneClipNodeGraph } from '../../nodeGraph';
+import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { fromProjectTransform } from '../transformSerialization';
 import { normalizeRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
 import type { ProjectComposition, ProjectFile } from '../../projectFileService';
@@ -94,8 +95,8 @@ export function convertProjectCompositionToStore(
           enabled: effect.enabled,
           params: effect.params,
         })),
-        transitionIn: c.transitionIn ? structuredClone(c.transitionIn) : undefined,
-        transitionOut: c.transitionOut ? structuredClone(c.transitionOut) : undefined,
+        transitionIn: c.transitionIn ? normalizeTransitionInstanceParams(structuredClone(c.transitionIn)) : undefined,
+        transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
         colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
         nodeGraph: cloneClipNodeGraph(c.nodeGraph),
         masks: c.masks.map((mask): ClipMask => ({

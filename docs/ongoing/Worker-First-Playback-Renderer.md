@@ -1181,6 +1181,8 @@ Current source of truth:
   execution plan.
 - `docs/ongoing/Worker-First-Playback-Renderer-checklist.md`: user-visible
   progress, gates, lane readiness, and next packets.
+- `docs/ongoing/Worker-First-Playback-Renderer-handoff.md`: current execution
+  handoff, next worker prompts, blockers, and latest meaningful checks.
 - `docs/ongoing/Playback.md`: investigation notes for current playback,
   proxy, and RAM preview behavior.
 
@@ -1190,6 +1192,46 @@ manifest.
 
 Checklist rule: whenever a new requirement, lane, gate, baseline item, blocker,
 or stop condition is discovered, update the checklist in the same session.
+
+Handoff rule: keep the handoff file short. It is not a packet-history archive.
+It should contain only current state, next eligible packets, fresh prompt
+inputs, blockers, active high-conflict ownership, and the last meaningful
+checks. Long completed packet reports belong in the checklist or commit
+history, not in handoff.
+
+## Check Cadence And Batching
+
+The migration will involve many small packets, so checks must be intentional.
+Avoid running expensive builds/tests after every worker packet unless the packet
+touches a surface where that is the narrowest useful proof.
+
+Rules:
+
+- Worker packets run only the focused checks named in their prompt.
+- Read-only packets run no build/lint/test unless their task is to define or
+  validate a check.
+- Contract-only packets run contract tests, cloneability tests, import-boundary
+  scans, and focused type checks when needed.
+- UI/target packets run the smallest relevant unit/smoke/browser check, plus
+  targeted type checks if APIs changed.
+- Runtime ownership packets run focused leak/lifetime tests and targeted scans,
+  not the full suite.
+- The Codex orchestrator batches broader checks after a group of compatible
+  packets lands, for example after the first parallel wave or after several
+  contract-only packets integrate cleanly.
+- The full `npm run build`, `npm run lint`, and `npm run test` chain runs only
+  at AGENTS.md-required boundaries: normal commit, push, release, merge, or
+  explicit final readiness. Reuse a passing full-chain result if the exact same
+  HEAD has already passed.
+- If two or more packets need the same expensive check, run it once after both
+  are integrated instead of once per worker.
+- If a focused check fails because of unrelated existing worktree state, the
+  worker reports the failure and evidence; the orchestrator decides whether to
+  batch, defer, or isolate it.
+
+Prompt rule: every worker prompt must list exact expected checks. If the exact
+check is unknown, the packet is preflight-only and the worker defines the
+smallest useful check instead of doing broad source edits.
 
 ## Multi-Agent Execution Model
 

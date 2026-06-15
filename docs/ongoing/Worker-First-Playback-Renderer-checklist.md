@@ -18,6 +18,8 @@ playback renderer plan. The canonical architecture plan remains
 - [x] Linux/Mesa, macOS Safari, and Firefox platform gates added.
 - [x] Codex-only multi-agent execution model added.
 - [x] Complete Refactor execution discipline imported into the plan.
+- [x] Handoff file created for current execution state and next prompts.
+- [x] Check batching policy added.
 - [x] First practical slice listed as packets A-I.
 - [ ] Gate matrix converted into exact test/static-check command names.
 - [ ] First implementation packet assigned.
@@ -55,6 +57,32 @@ source implementation is complete.
 - [x] Focused checks are preferred during packet work.
 - [x] Full `npm run build`, `npm run lint`, and `npm run test` are reserved for
       normal commit, push, release, merge, or explicit readiness boundaries.
+- [x] Expensive checks are batched after compatible packets integrate, not run
+      separately by every worker.
+- [x] Worker prompts must name exact expected checks; otherwise the packet is
+      preflight-only until the smallest useful check is defined.
+
+## Handoff Contract
+
+Handoff source:
+
+- `docs/ongoing/Worker-First-Playback-Renderer-handoff.md`
+
+The handoff file must stay short and current:
+
+- [x] current state
+- [x] next eligible packets
+- [x] active blockers
+- [x] high-conflict ownership
+- [x] fresh prompt inputs
+- [x] latest meaningful checks
+- [x] check batching policy
+
+Do not:
+
+- [ ] Do not turn handoff into packet history.
+- [ ] Do not duplicate long completed worker reports in handoff.
+- [ ] Do not use handoff as the canonical architecture plan.
 
 ## High-Conflict Ownership
 

@@ -27,7 +27,7 @@ import {
   DEFAULT_TRANSITION_PLACEMENT,
   planTransition,
 } from './editOperations/transitionPlanner';
-import { createTransitionMediaDurationResolver } from './editOperations/transitionMediaDurationResolver';
+import { createTimelineTransitionMediaDurationResolver } from '../../services/timeline/timelineTransitionMediaDurations';
 import type { TimelineClip } from '../../types';
 
 function createPlaybackWarmupRequestId(): string {
@@ -44,7 +44,7 @@ function getTransitionWarmupClipsAtTime(
   time: number,
 ): TimelineClip[] {
   const clipsById = new Map<string, TimelineClip>();
-  const getMediaDuration = createTransitionMediaDurationResolver(useMediaStore.getState().files);
+  const getMediaDuration = createTimelineTransitionMediaDurationResolver();
 
   for (const outgoingClip of clips) {
     const transition = outgoingClip.transitionOut;
@@ -59,6 +59,7 @@ function getTransitionWarmupClipsAtTime(
       incomingClip,
       transitionType: transition.type,
       requestedDuration: transition.duration,
+      params: transition.params,
       placement: DEFAULT_TRANSITION_PLACEMENT,
       edgePolicy: 'hold',
       junctionTime,

@@ -9,6 +9,7 @@ import type { SerializableClip } from '../../../types';
 import { clonePersistedClipAudioState } from '../../../services/audio/clipAudioStatePersistence';
 import { sanitizePlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
+import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { useMediaStore } from '../../mediaStore';
 import { getDataOnlyTimelineSource } from '../sourceRuntimeSanitizer';
 import { serializeVideoBakeRegion } from '../videoBakeSlice';
@@ -104,8 +105,8 @@ function createSerializableClip(
       : clip.waveformChannels,
     transform: clip.transform,
     effects: clip.effects,
-    transitionIn: clip.transitionIn ? structuredClone(clip.transitionIn) : undefined,
-    transitionOut: clip.transitionOut ? structuredClone(clip.transitionOut) : undefined,
+    transitionIn: clip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(clip.transitionIn)) : undefined,
+    transitionOut: clip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(clip.transitionOut)) : undefined,
     colorCorrection: clip.colorCorrection ? structuredClone(clip.colorCorrection) : undefined,
     nodeGraph: cloneClipNodeGraph(clip.nodeGraph),
     keyframes: keyframes.length > 0 ? keyframes : undefined,

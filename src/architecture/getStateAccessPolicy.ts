@@ -21,6 +21,7 @@ export const allowedAdapterPaths = [
   'src/services/timeline/timelineRuntimeCoordinator.ts',
   'src/services/timeline/runtimeCoordinatorTypes.ts',
   'src/services/timeline/runtimeCoordinatorContracts.ts',
+  'src/services/timeline/timelineTransitionMediaDurations.ts',
   'src/services/audio/AudioRecordingService.ts',
   'src/services/audio/recording/commitRecording.ts',
   'src/services/audio/timelineRecordingWorkflow.ts',
@@ -282,7 +283,7 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   // 21 -> 22: packet-221 grant moved into recording/commitRecording.ts.
-  allowedAdapterPathCount: 22,
+  allowedAdapterPathCount: 23,
   // Running redistribution log: 178 (packet 172), 182 (183), 187 (186),
   // 189 (189+190: ExportPanel/MediaPanel hits moved into runner/board-hook
   // entries). Totals conserved per redistribution; max-hits ratchets DOWN

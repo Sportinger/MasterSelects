@@ -1,8 +1,8 @@
 import { BLEND_MODE_MAP } from '../../core/types';
 import type { Layer } from '../../core/types';
 
-export const COMPOSITOR_UNIFORM_SIZE = 96;
-export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 24;
+export const COMPOSITOR_UNIFORM_SIZE = 116;
+export const COMPOSITOR_UNIFORM_FLOAT_COUNT = 29;
 export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22]; // blendMode, mask flags, inlineInvert, transitionType
 
 export interface InlineEffectParams {
@@ -15,6 +15,51 @@ export interface InlineEffectParams {
 export interface UniformValueSnapshot {
   float: Float32Array;
   u32: Uint32Array;
+}
+
+function getTransitionType(layer: Layer): number {
+  const transition = layer.transitionRender;
+  if (!transition) return 0;
+
+  if (transition.kind === 'wipe') {
+    if (transition.direction === 'left') return 1;
+    if (transition.direction === 'right') return 2;
+    if (transition.direction === 'up') return 3;
+    return 4;
+  }
+
+  if (transition.kind === 'shape-mask') {
+    if (transition.shape === 'circle') return 5;
+    if (transition.shape === 'diamond') return 6;
+    if (transition.shape === 'rect') return 7;
+    if (transition.shape === 'oval') return 16;
+    if (transition.shape === 'triangle') return 17;
+    if (transition.shape === 'cross') return 18;
+    return 19;
+  }
+
+  if (transition.kind === 'clock-mask') return 8;
+  if (transition.kind === 'center-mask') return transition.axis === 'x' ? 9 : 10;
+  if (transition.kind === 'procedural-mask') {
+    if (transition.procedural === 'noise') return 11;
+    if (transition.procedural === 'blocks') return 12;
+  }
+  if (transition.kind === 'pattern-mask') {
+    if (transition.pattern === 'checker') return 13;
+    if (transition.pattern === 'venetian-horizontal') return 14;
+    if (transition.pattern === 'venetian-vertical') return 15;
+    if (transition.pattern === 'random-blocks') return 20;
+    if (transition.pattern === 'zig-zag') return 21;
+    if (transition.pattern === 'polka-dot') return 22;
+    if (transition.pattern === 'doom-bars') return 23;
+    if (transition.pattern === 'paint-splatter') return 24;
+  }
+  if (transition.kind === 'distortion') {
+    if (transition.distortion === 'water-drop') return 25;
+    if (transition.distortion === 'swirl') return 26;
+  }
+
+  return 0;
 }
 
 export function writeLayerUniformData(
@@ -60,10 +105,15 @@ export function writeLayerUniformData(
   uniformData[20] = inlineEffects?.saturation ?? 1;   // inlineSaturation (1 = no change)
   uniformDataU32[21] = inlineEffects?.invert ? 1 : 0; // inlineInvert (0 or 1)
   const transition = layer.transitionRender;
-  uniformDataU32[22] = transition?.kind === 'wipe' ? 1 : 0; // transitionType: 0=none, 1=wipe
-  uniformData[23] = transition?.kind === 'wipe'
-    ? (transition.direction === 'right' ? -transition.progress : transition.progress)
+  uniformDataU32[22] = getTransitionType(layer); // transitionType: 0=none, 1-4=wipe, 5-7/16-19=iris, 8=clock, 9-10=center, 11=noise, 12=blocks, 13=checker, 14-15/20-24=pattern, 25-26=distortion
+  uniformData[23] = transition?.progress ?? 0;
+  uniformData[24] = transition?.kind === 'procedural-mask' || transition?.kind === 'distortion'
+    ? transition.seed ?? 0
     : 0;
+  uniformData[25] = layer.sourceRect?.x ?? 0;
+  uniformData[26] = layer.sourceRect?.y ?? 0;
+  uniformData[27] = layer.sourceRect?.width ?? 1;
+  uniformData[28] = layer.sourceRect?.height ?? 1;
 }
 
 export function shouldUpdateLayerUniforms(

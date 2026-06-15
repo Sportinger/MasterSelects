@@ -71,14 +71,77 @@ That keeps them zero-overhead relative to the full ping-pong effect chain.
 ## Timeline Transitions
 
 The Transition Suite is timeline-native rather than a normal one-clip effect
-stack. The first-pass suite is Crossfade, Dip to Black, Dip to White, Wipe
-Left, and Wipe Right. Transition definitions live in `src/transitions/` as
-serializable primitive recipes (`opacity`, `solid`, `mask`) and are interpreted
-by shared preview/export transition layer assembly.
+stack. Transition definitions live in `src/transitions/` as serializable
+primitive recipes (`opacity`, generated `solid`, `mask`, procedural/pattern
+mask, blend, transform, generated `overlay`, UV `distortion`
+primitives, and transition-scoped registered `effect` primitives) and are
+interpreted by shared preview/export transition layer assembly. Analog/glitch
+transitions that can be represented honestly as existing primitives, such as
+seeded deterministic block masks, transform-based CRT collapse, or
+transition-scoped registered effects for RGB split, pixelation, and static
+scanlines, stay on that same preview/export path. Procedural noise/block masks
+carry their normalized seed through preview, export, and the compositor shader
+ABI so repeated renders are stable while non-default seeds can produce
+alternate reveal orders. `Water Drop` and `Swirl` use the same seed path with
+per-participant compositor UV remapping and are grouped under the Stylize
+transition family. `Blur Dissolve`
+and `Zoom Blur` use the same assembly path to append temporary registered GPU
+effects to the incoming and outgoing participant layers while preserving each
+clip's existing effect stack. `Directional Blur` and `Whip Pan` use the same
+registered-effect path with `motion-blur`; the Motion Blur shader mirrors edge
+samples for out-of-range UVs so fast horizontal transition blurs do not expose
+transparent borders. `Projector Flicker` uses deterministic generated-solid
+exposure pulses, `Film Roll` combines vertical transform overscan with
+transition-scoped Motion Blur, and `Vignette Bloom` uses registered `glow` and
+`vignette` effects on both transition participants. `Light Sweep` uses a
+cached transparent generated overlay canvas with a screen-blended diagonal
+highlight band, while `Light Leak` uses the same deterministic overlay
+primitive for warm edge streaks and analog wash. Those overlay canvases are
+generated per output size and cached by dimensions plus rounded overlay
+parameters, so preview and export do not upscale a fixed thumbnail texture.
+`Chroma Leak`, `Lens Flare`, and `Film Burn` use that same overlay/cache model
+with deterministic generated color-split, flare-ghost, and burn-edge overlays.
+They stay deterministic without bundled overlay video. `Additive Dissolve` and
+`Non-Additive Dissolve`
+use temporary transition blend windows on the incoming participant, so they
+stay in the same layer assembly path instead of adding one-off shaders.
+
+The current user-facing suite is grouped by family in the Transitions panel and
+the transition-scoped Properties tab. It includes dissolve/dip, directional
+wipe, iris/shape, push/slide, dedicated 2D rotate, whole-card 3D
+flip/tumble/roll/spin, stylize, glitch, light, zoom, and pattern-mask
+families. Family cards show their variant count in the Transitions panel; a
+click expands the draggable leaf variants until the pointer leaves the panel,
+while dragging a collapsed family card uses that family's default variant. The
+current 3D families opt eligible participants into `scene-3d-panel` rendering
+so video frames, video elements, images, and text canvases can render as native
+shared-scene textured planes with camera projection and depth; unsupported
+source states fall back to the compositor transform path. Cube, Door, Fold,
+and Page Peel remain planned until origin, panel-slicing, or mesh-strip
+renderer contracts exist. Kaleidoscope is available as the first exotic
+pattern-lab transition by reusing transition-scoped registered effect
+primitives rather than adding a one-off compositor path. `Puzzle Push` and
+`Magnetic Tiles` are the first visible multi-panel transitions: the layer
+contract now supports normalized `sourceRect` sampling, and transition
+assembly clones the incoming participant into deterministic staggered panels
+or center-magnetic tiles. Shatter Glass and Origami Fold remain planned until
+their shard, shadow, and pivot/hinge contracts exist. Planned transitions that
+need true two-participant sampling, luma/matte comparison, mesh strips, richer
+visible multi-panel rendering, or temporal frame history remain out of the
+production palette until those renderer contracts exist.
+
+The 2026-06-15 visible-browser Dev-Bridge QA pass for `Flash`,
+`Chroma Leak`, `Lens Flare`, `Film Burn`, `Water Drop`, `Swirl`, and
+`Kaleidoscope` used DOM-mode progress grids plus midpoint captures to avoid
+the known GPU readback timeout path while still sampling the real preview
+canvas. The same visible-browser path verified `Puzzle Push` and
+`Magnetic Tiles` after the `sourceRect` compositor path landed, with
+distributed panel slices or center-pulled tiles and no browser errors, missing
+transition pipelines, runtime diagnostics errors, or shader warnings.
 
 The default placement is virtual `center`: the edit point remains stable,
 neither clip is moved, and missing source handles render as first/last-frame
-hold fallback when the policy allows it. Wipe transitions pass
+hold fallback when the policy allows it. Compositor-driven transitions pass
 typed transition metadata through existing compositor uniform padding slots, so
 normal layers pay no extra bind-group cost when `transitionRender` is absent.
 

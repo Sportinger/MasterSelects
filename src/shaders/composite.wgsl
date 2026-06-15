@@ -55,8 +55,13 @@ struct LayerUniforms {
   inlineContrast: f32,    // Inline effect: contrast multiplier (1 = no change)
   inlineSaturation: f32,  // Inline effect: saturation multiplier (1 = no change)
   inlineInvert: u32,      // Inline effect: invert (0 or 1)
-  transitionType: u32,    // 0=none, 1=wipe
-  transitionProgress: f32, // signed: negative=right, positive=left
+  transitionType: u32,    // 0=none, 1-4=wipe, 5-7/16-19=iris, 8=clock, 9-10=center, 11=noise, 12=blocks, 13=checker, 14-15/20-24=pattern, 25-26=distortion
+  transitionProgress: f32,
+  transitionSeed: f32,
+  sourceRectX: f32,
+  sourceRectY: f32,
+  sourceRectWidth: f32,
+  sourceRectHeight: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -75,15 +80,234 @@ fn hash(p: vec2f) -> f32 {
 }
 
 fn getTransitionAlpha(uv: vec2f) -> f32 {
-  if (layer.transitionType != 1u) {
+  if (layer.transitionType == 0u) {
     return 1.0;
   }
 
-  let progress = clamp(abs(layer.transitionProgress), 0.0, 1.0);
-  if (layer.transitionProgress < 0.0) {
+  let progress = clamp(layer.transitionProgress, 0.0, 1.0);
+  let seedOffset = vec2f(layer.transitionSeed * 0.013, layer.transitionSeed * 0.021);
+  if (layer.transitionType == 1u) {
+    return select(0.0, 1.0, uv.x >= 1.0 - progress);
+  }
+  if (layer.transitionType == 2u) {
     return select(0.0, 1.0, uv.x <= progress);
   }
-  return select(0.0, 1.0, uv.x >= 1.0 - progress);
+  if (layer.transitionType == 3u) {
+    return select(0.0, 1.0, uv.y >= 1.0 - progress);
+  }
+  if (layer.transitionType == 4u) {
+    return select(0.0, 1.0, uv.y <= progress);
+  }
+  let centered = uv - vec2f(0.5);
+  if (layer.transitionType == 5u) {
+    return select(0.0, 1.0, length(centered) <= progress * 0.70710678);
+  }
+  if (layer.transitionType == 6u) {
+    return select(0.0, 1.0, abs(centered.x) + abs(centered.y) <= progress);
+  }
+  if (layer.transitionType == 7u) {
+    return select(0.0, 1.0, max(abs(centered.x), abs(centered.y)) <= progress * 0.5);
+  }
+  if (layer.transitionType == 16u) {
+    let ovalDistance = length(vec2f(centered.x * 0.68, centered.y));
+    return select(0.0, 1.0, ovalDistance <= progress * 0.605);
+  }
+  if (layer.transitionType == 17u) {
+    let easedShapeProgress = pow(progress, 1.35);
+    let triangleDistance = max(abs(centered.x) * 1.1 - centered.y * 0.6, centered.y * 1.2);
+    return select(0.0, 1.0, triangleDistance <= easedShapeProgress * 0.9);
+  }
+  if (layer.transitionType == 18u) {
+    let crossWidth = pow(progress, 1.35) * 0.5;
+    return select(0.0, 1.0, min(abs(centered.x), abs(centered.y)) <= crossWidth);
+  }
+  if (layer.transitionType == 19u) {
+    let angle = atan2(centered.y, centered.x);
+    let radius = length(centered);
+    let starRadius = 0.68 + 0.32 * cos(angle * 5.0);
+    let starDistance = radius / max(starRadius, 0.24);
+    return select(0.0, 1.0, starDistance <= pow(progress, 1.35) * 2.0);
+  }
+  if (layer.transitionType == 8u) {
+    let angle = atan2(centered.x, -centered.y);
+    let normalized = fract(angle / 6.28318530718);
+    return select(0.0, 1.0, normalized <= progress);
+  }
+  if (layer.transitionType == 9u) {
+    return select(0.0, 1.0, abs(centered.x) <= progress * 0.5);
+  }
+  if (layer.transitionType == 10u) {
+    return select(0.0, 1.0, abs(centered.y) <= progress * 0.5);
+  }
+  if (layer.transitionType == 11u) {
+    let cell = floor(uv * 96.0);
+    let noise = hash(cell + seedOffset);
+    return select(0.0, 1.0, noise <= progress);
+  }
+  if (layer.transitionType == 12u) {
+    let blockGrid = vec2f(24.0, 14.0);
+    let cell = floor(uv * blockGrid);
+    let rank = hash(cell + vec2f(19.19, 7.31) + seedOffset);
+    return select(0.0, 1.0, rank <= progress);
+  }
+  if (layer.transitionType == 13u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let grid = vec2f(18.0, 10.0);
+    let cell = floor(uv * grid);
+    let checker = fract((cell.x + cell.y) * 0.5) * 2.0;
+    let rank = checker * 0.58 + hash(cell + vec2f(2.71, 5.83)) * 0.42;
+    return select(0.0, 1.0, rank < progress);
+  }
+  if (layer.transitionType == 14u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let stripeCount = 10.0;
+    let stripeUv = uv.y * stripeCount;
+    let stripe = floor(stripeUv);
+    let local = fract(stripeUv);
+    let stagger = hash(vec2f(stripe, 4.17)) * 0.18;
+    let stripeProgress = clamp(progress * 1.18 - stagger, 0.0, 1.0);
+    return select(0.0, 1.0, local <= stripeProgress);
+  }
+  if (layer.transitionType == 15u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let stripeCount = 12.0;
+    let stripeUv = uv.x * stripeCount;
+    let stripe = floor(stripeUv);
+    let local = fract(stripeUv);
+    let stagger = hash(vec2f(stripe, 9.43)) * 0.18;
+    let stripeProgress = clamp(progress * 1.18 - stagger, 0.0, 1.0);
+    return select(0.0, 1.0, local <= stripeProgress);
+  }
+  if (layer.transitionType == 20u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let blockGrid = vec2f(10.0, 6.0);
+    let cell = floor(uv * blockGrid);
+    let rank = hash(cell + vec2f(31.7, 13.9));
+    return select(0.0, 1.0, rank <= progress);
+  }
+  if (layer.transitionType == 21u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let rowCount = 8.0;
+    let localRow = fract(uv.y * rowCount);
+    let notch = abs(localRow - 0.5) * 0.28;
+    let edge = progress * 1.28 - 0.14;
+    return select(0.0, 1.0, uv.x <= edge - notch);
+  }
+  if (layer.transitionType == 22u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let dotGrid = vec2f(12.0, 7.0);
+    let cell = floor(uv * dotGrid);
+    let local = fract(uv * dotGrid) - vec2f(0.5);
+    let stagger = hash(cell + vec2f(8.13, 2.47)) * 0.16;
+    let radius = clamp(progress * 1.18 - stagger, 0.0, 1.0) * 0.72;
+    return select(0.0, 1.0, length(local) <= radius);
+  }
+  if (layer.transitionType == 23u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let columnCount = 12.0;
+    let column = floor(uv.x * columnCount);
+    let stagger = hash(vec2f(column, 6.91)) * 0.18;
+    let columnProgress = clamp(progress * 1.18 - stagger, 0.0, 1.0);
+    let alternate = fract(column * 0.5) * 2.0;
+    let topDown = uv.y <= columnProgress;
+    let bottomUp = uv.y >= 1.0 - columnProgress;
+    return select(0.0, 1.0, select(bottomUp, topDown, alternate < 1.0));
+  }
+  if (layer.transitionType == 24u) {
+    if (progress <= 0.0) {
+      return 0.0;
+    }
+    if (progress >= 1.0) {
+      return 1.0;
+    }
+    let splatGrid = vec2f(9.0, 5.0);
+    let scaled = uv * splatGrid;
+    let cell = floor(scaled);
+    let local = fract(scaled) - vec2f(0.5);
+    let rank = hash(cell + vec2f(4.89, 12.37));
+    let growth = clamp(progress * 1.28 - rank * 0.34, 0.0, 1.0);
+    let offsetA = (vec2f(
+      hash(cell + vec2f(17.1, 2.3)),
+      hash(cell + vec2f(5.7, 23.4))
+    ) - vec2f(0.5)) * 0.28;
+    let offsetB = (vec2f(
+      hash(cell + vec2f(11.2, 31.6)),
+      hash(cell + vec2f(29.9, 7.4))
+    ) - vec2f(0.5)) * 0.32;
+    let mainRadius = growth * (0.34 + hash(cell + vec2f(3.4, 44.2)) * 0.18);
+    let satelliteA = growth * (0.14 + hash(cell + vec2f(41.8, 1.9)) * 0.1);
+    let satelliteB = growth * (0.12 + hash(cell + vec2f(8.6, 15.1)) * 0.08);
+    let main = length(local - offsetA) <= mainRadius;
+    let spotA = length(local + vec2f(0.24, -0.16) - offsetB * 0.55) <= satelliteA;
+    let spotB = length(local + vec2f(-0.18, 0.22) + offsetA * 0.45) <= satelliteB;
+    return select(0.0, 1.0, main || spotA || spotB);
+  }
+  return 1.0;
+}
+
+fn getTransitionUv(uv: vec2f) -> vec2f {
+  let progress = clamp(layer.transitionProgress, 0.0, 1.0);
+  let envelope = sin(progress * 3.14159265359);
+  let seedPhase = layer.transitionSeed * 0.0017;
+  let centered = uv - vec2f(0.5);
+  let radius = length(centered);
+  let dir = centered / max(radius, 0.001);
+
+  if (layer.transitionType == 25u) {
+    let rippleCenter = progress * 0.82;
+    let waveBand = 1.0 - smoothstep(0.0, 0.18, abs(radius - rippleCenter));
+    let wave = sin((radius - rippleCenter) * 46.0 + seedPhase) * envelope * waveBand;
+    return clamp(uv + dir * wave * 0.035, vec2f(0.0), vec2f(1.0));
+  }
+
+  if (layer.transitionType == 26u) {
+    let falloff = smoothstep(0.72, 0.0, radius);
+    let angle = (1.0 - progress) * envelope * falloff * (2.4 + fract(layer.transitionSeed * 0.013) * 0.8);
+    let cosA = cos(angle);
+    let sinA = sin(angle);
+    let rotated = vec2f(
+      centered.x * cosA - centered.y * sinA,
+      centered.x * sinA + centered.y * cosA
+    );
+    return clamp(rotated + vec2f(0.5), vec2f(0.0), vec2f(1.0));
+  }
+
+  return uv;
 }
 
 // Get luminosity of a color
@@ -515,10 +739,13 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 
   // Clamp UV to valid range for sampling
   let clampedUV = clamp(uv, vec2f(0.0), vec2f(1.0));
+  let transitionUV = getTransitionUv(clampedUV);
+  let sourceUV = vec2f(layer.sourceRectX, layer.sourceRectY) +
+    transitionUV * vec2f(layer.sourceRectWidth, layer.sourceRectHeight);
 
   // Sample both textures in uniform control flow
   let baseColor = textureSample(baseTexture, texSampler, input.uv);
-  var layerColor = textureSample(layerTexture, texSampler, clampedUV);
+  var layerColor = textureSample(layerTexture, texSampler, sourceUV);
 
   // Apply inline color effects (invert → brightness+contrast → saturation)
   // Zero-cost at defaults (brightness=0, contrast=1, saturation=1, invert=0)

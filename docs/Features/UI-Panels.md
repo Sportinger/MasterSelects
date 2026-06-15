@@ -255,7 +255,34 @@ MasterSelects currently exposes 18 active dockable panel types, plus the Slot Gr
 
 ### Transitions Panel
 
-- Draggable transition palette for Crossfade, Dip to Black, Dip to White, Wipe Left, and Wipe Right.
+- Draggable transition palette for the current 2D and 3D transition families,
+  including dissolve/dip, wipe/iris, push/slide, dedicated 2D rotate,
+  stylize, glitch, light, zoom, motion blur, pattern, and 2.5D
+  flip/card/roll/spinback variants.
+- The palette is grouped into 2D and 3D sections. Related variants appear as a
+  single family card; dissolve style, direction, shape, color, motion-blur
+  style, light/film style, or pattern variants are selected in the
+  transition-scoped Properties tab. The 2D and 3D sections can be collapsed
+  when browsing the palette.
+- Search filters grouped family cards by family names, transition IDs, variant
+  names, descriptions, category aliases, synonym aliases such as film/depth/lens,
+  and 2D/3D dimension labels. Glitch search includes hidden RGB split, mosaic,
+  pixelate, and scanline variants even though the palette shows one Glitch
+  family card. Light search includes Flash, Light Leak, Light Sweep, Projector
+  Flicker, Film Roll, and Vignette Bloom variants while the palette keeps them
+  grouped as one Light family. 3D search includes separate Flip, Tumble, Roll,
+  and Spin families for the current runtime effects; planned dev metadata adds
+  non-draggable Cube, Door, Fold, and Peel families.
+  Search results stay expanded even if a section was collapsed before searching.
+- Family cards show a variant count. Clicking a family expands the draggable
+  leaf variants until the pointer leaves the panel; planned dev metadata shows
+  a Planned badge and is not draggable.
+- Family-card assembly, sectioning, and search indexing live in focused
+  transition panel helpers so the panel layout does not grow with each new
+  transition definition.
+- The transition Properties tab uses the same grouped 2D/3D selector model; its
+  choice-button metadata and glyph mapping are kept in focused helpers so the
+  Properties tab can grow by family without adding more panel-state code.
 - Each transition item carries a plain JSON drag payload with transition ID and duration.
 - The duration control keeps only the minimum bound; long transitions are allowed and rely on hold-frame fallback where source material runs out.
 - Timeline hover uses source-aware ghosts: normal transition body, real-handle coverage, and red hold-frame fallback coverage.

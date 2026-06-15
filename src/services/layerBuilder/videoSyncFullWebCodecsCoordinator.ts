@@ -19,6 +19,7 @@ import { Logger } from '../logger';
 import type { FrameContext } from './types';
 import { getClipTimeInfo } from './FrameContext';
 import type { VideoSyncHandoffManager } from './videoSyncHandoffs';
+import { syncTransitionSourceHold } from './videoSyncTransitionSourceHold';
 import {
   canStartLiveHtmlPlaybackFallbackPolicy,
   isPlaybackProviderReadyForAudioStartPolicy,
@@ -70,15 +71,6 @@ export class VideoSyncFullWebCodecsCoordinator {
 
   constructor(deps: VideoSyncFullWebCodecsCoordinatorDeps) {
     this.deps = deps;
-  }
-
-  providerHasFrame(
-    provider:
-      | Pick<VideoSyncFrameProviderPolicyTarget, 'hasFrame' | 'getCurrentFrame'>
-      | null
-      | undefined
-  ): boolean {
-    return videoSyncProviderHasFrame(provider);
   }
 
   getPausedWebCodecsProvider(
@@ -182,7 +174,7 @@ export class VideoSyncFullWebCodecsCoordinator {
           performance.now() - (this.deps.wcSeeks.getLastPreciseSeekAt(providerKey) ?? 0) >= 24;
         if (
           (!decodeBusy || canRetargetBusyInteractiveSeek) &&
-          (!this.providerHasFrame(provider) || dragDelta > 0.01)
+          (!videoSyncProviderHasFrame(provider) || dragDelta > 0.01)
         ) {
           this.clearFastSeekTracking(providerKey);
           interactiveSeek(targetTime);
@@ -253,30 +245,16 @@ export class VideoSyncFullWebCodecsCoordinator {
     this.deps.muteLinkedVideoSourceAudio(ctx, clip, audioVideo);
 
     if (clip.transitionSourceHold === true) {
-      const holdRuntimeSource = isInteractivePreview ? scrubRuntimeSource : playbackRuntimeSource;
-      updateRuntimePlaybackTime(holdRuntimeSource, timeInfo.clipTime);
-      if (isInteractivePreview) {
-        void ensureRuntimeFrameProvider(scrubRuntimeSource, 'interactive', timeInfo.clipTime);
-      }
-
-      const holdProvider = getRuntimeFrameProvider(holdRuntimeSource) ?? clipRuntimeProvider;
-      if (holdProvider?.isPlaying) {
-        holdProvider.pause?.();
-      }
-      if (video && !video.paused) {
-        video.pause();
-      }
-      if (holdProvider?.isFullMode()) {
-        this.syncPausedWebCodecsProvider(
-          holdProvider,
-          `${clip.id}:transition-hold`,
-          timeInfo.clipTime,
-          isInteractivePreview,
-          true,
-          true
-        );
-      }
-      scrubSettleState.resolve(clip.id);
+      syncTransitionSourceHold({
+        clip,
+        video,
+        clipRuntimeProvider,
+        isInteractivePreview,
+        playbackRuntimeSource,
+        scrubRuntimeSource,
+        clipTime: timeInfo.clipTime,
+        syncPausedWebCodecsProvider: (...args) => this.syncPausedWebCodecsProvider(...args),
+      });
       return;
     }
 
@@ -462,7 +440,7 @@ export class VideoSyncFullWebCodecsCoordinator {
         Math.abs(pendingTarget - timeInfo.clipTime) <= 0.01;
       const displayedDiff = Math.abs(pausedProvider.currentTime - timeInfo.clipTime);
       const needsVisibleSettle =
-        !this.providerHasFrame(pausedProvider) ||
+        !videoSyncProviderHasFrame(pausedProvider) ||
         displayedDiff > 0.001;
 
       if (needsVisibleSettle && !pendingAtTarget) {

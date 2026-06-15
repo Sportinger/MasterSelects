@@ -21,6 +21,7 @@ import { buildProjectAudioStateIndex } from '../audio/projectAudioState';
 import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { cloneClipNodeGraph } from '../nodeGraph';
+import { normalizeTransitionInstanceParams } from '../../transitions';
 import type {
   ProjectFlashBoardGenerationMetadata,
   ProjectFlashBoardGenerationRecord,
@@ -274,8 +275,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         enabled: e.enabled !== false,
         params: e.params || {},
       })),
-      transitionIn: c.transitionIn ? structuredClone(c.transitionIn) : undefined,
-      transitionOut: c.transitionOut ? structuredClone(c.transitionOut) : undefined,
+      transitionIn: c.transitionIn ? normalizeTransitionInstanceParams(structuredClone(c.transitionIn)) : undefined,
+      transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
       colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
       nodeGraph: cloneClipNodeGraph(c.nodeGraph),
       masks: (c.masks || []).map((m) => ({

@@ -14,6 +14,7 @@
     "cf:migrate:local": "wrangler d1 migrations apply DB --local",
     "cf:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "cf:types": "wrangler types",
+    "credits:create-claim": "node scripts/create-credit-claim.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

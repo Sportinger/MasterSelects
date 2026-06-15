@@ -5,7 +5,8 @@ export function createTransitionMediaDurationResolver(
   mediaFiles: readonly MediaFile[],
 ): TransitionSourceDurationResolver {
   const durationById = new Map<string, number>();
-  for (const mediaFile of mediaFiles) {
+  const files = Array.isArray(mediaFiles) ? mediaFiles : [];
+  for (const mediaFile of files) {
     if (Number.isFinite(mediaFile.duration) && mediaFile.duration && mediaFile.duration > 0) {
       durationById.set(mediaFile.id, mediaFile.duration);
     }
