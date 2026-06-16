@@ -15,6 +15,9 @@ export class LastFrameCache {
   private presentedOwners = new WeakMap<HTMLVideoElement, string>();
   private lastOwnerMissSignature = new WeakMap<HTMLVideoElement, string>();
   private lastOwnerMissAt = new WeakMap<HTMLVideoElement, number>();
+  private allocations = 0;
+  private reuses = 0;
+  private releases = 0;
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -57,6 +60,9 @@ export class LastFrameCache {
         this.textures.set(video, texture!);
         this.views.set(video, view!);
         this.sizes.set(video, { width, height });
+        this.allocations += 1;
+      } else {
+        this.reuses += 1;
       }
       this.mediaTimes.set(video, video.currentTime);
       if (ownerId) {
@@ -93,6 +99,9 @@ export class LastFrameCache {
         this.textures.set(video, texture);
         this.sizes.set(video, { width, height });
         this.views.set(video, texture.createView());
+        this.allocations += 1;
+      } else {
+        this.reuses += 1;
       }
 
       this.device.queue.copyExternalImageToTexture(
@@ -181,6 +190,7 @@ export class LastFrameCache {
       return null;
     }
     if (view && size) {
+      this.reuses += 1;
       return {
         view,
         width: size.width,
@@ -239,7 +249,10 @@ export class LastFrameCache {
 
   cleanupVideo(video: HTMLVideoElement): void {
     const texture = this.textures.get(video);
-    if (texture) texture.destroy();
+    if (texture) {
+      texture.destroy();
+      this.releases += 1;
+    }
     this.textures.delete(video);
     this.views.delete(video);
     this.sizes.delete(video);
@@ -251,6 +264,7 @@ export class LastFrameCache {
   }
 
   clearAll(): void {
+    this.releases += this.textures.size;
     for (const texture of this.textures.values()) {
       texture.destroy();
     }
@@ -262,5 +276,25 @@ export class LastFrameCache {
     this.captureTimes.clear();
     this.presentedTimes = new WeakMap();
     this.presentedOwners = new WeakMap();
+  }
+
+  getRuntimeCacheSnapshot(): {
+    entries: number;
+    bytes: number;
+    allocations: number;
+    reuses: number;
+    releases: number;
+  } {
+    let bytes = 0;
+    for (const size of this.sizes.values()) {
+      bytes += size.width * size.height * 4;
+    }
+    return {
+      entries: this.textures.size,
+      bytes,
+      allocations: this.allocations,
+      reuses: this.reuses,
+      releases: this.releases,
+    };
   }
 }

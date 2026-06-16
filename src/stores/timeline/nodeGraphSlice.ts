@@ -1,5 +1,5 @@
 import type { NodeGraph, NodeGraphLayout, NodeGraphPort, NodeGraphSignalType, TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import {
   addClipCustomNodeDefinition,
   buildClipNodeGraph,
@@ -527,5 +527,5 @@ export const createNodeGraphSlice: SliceCreator<NodeGraphActions> = (set, get) =
 
 function invalidateCacheAndRequestRender(state: TimelineStore): void {
   state.invalidateCache();
-  engine.requestRender();
+  renderHostPort.requestRender();
 }

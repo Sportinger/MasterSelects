@@ -1,13 +1,11 @@
 // useLayerSync - Syncs timeline clips to mixer layers for rendering
-// Extracted from Timeline.tsx for better maintainability
-
 import { useEffect, useRef, useCallback } from 'react';
 import type { TimelineClip, TimelineTrack, Layer, Effect, NestedCompositionData, Keyframe, ClipTransform } from '../../../types';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { ClipDragState } from '../types';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { engine } from '../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../services/render/renderHostPort';
 import { ensureMidiPlaybackScheduler } from '../../../services/audio/midiPlaybackScheduler';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { vectorAnimationRuntimeManager } from '../../../services/vectorAnimation/VectorAnimationRuntimeManager';
@@ -190,7 +188,7 @@ export function useLayerSync({
     if (ramPreviewRange) {
       const inRange = playheadPosition >= ramPreviewRange.start && playheadPosition <= ramPreviewRange.end;
       if (inRange) {
-        const hit = engine.renderCachedFrame(playheadPosition);
+        const hit = renderHostPort.renderCachedFrame(playheadPosition);
         if (hit) {
           return; // Cache hit - instant render, no video seek needed
         }
@@ -198,7 +196,7 @@ export function useLayerSync({
       }
     } else {
       // No RAM preview range, but still try the cache in case frames were cached during playback
-      const hit = engine.renderCachedFrame(playheadPosition);
+      const hit = renderHostPort.renderCachedFrame(playheadPosition);
       if (hit) {
         return;
       }
@@ -549,7 +547,7 @@ export function useLayerSync({
       useTimelineStore.setState({ layers: newLayers });
       // Wake render loop to pick up the new layers
       // Don't render directly to avoid dual-render race conditions with the render loop
-      engine.requestRender();
+      renderHostPort.requestRender();
     }
 
     syncLayerAudioPlayback({

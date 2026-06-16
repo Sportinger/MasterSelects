@@ -112,6 +112,8 @@ export async function handleRunTimelineCanvasExportPreviewParitySmoke(
       exportMode,
       download: false,
       maxRuntimeMs,
+      ...(args.codec !== undefined ? { codec: args.codec } : {}),
+      ...(args.container !== undefined ? { container: args.container } : {}),
     });
     await waitForFrames(2, 180);
 

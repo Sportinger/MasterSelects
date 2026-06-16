@@ -1,4 +1,4 @@
-import { engine } from '../../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../render/renderHostPort';
 import { useMediaStore, type Composition } from '../../../../stores/mediaStore';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { addCompositionSegment, addMediaSegment } from './clipSegments';
@@ -151,7 +151,7 @@ export async function buildMainComposition(
   timelineStore.addMarker(5.75, 'nested-export-check', '#5da7ff');
   timelineStore.setPlayheadPosition(0.25);
   saveActiveTimelineToComposition(mainComp.id, ctx.durationSeconds);
-  engine.requestRender();
+  renderHostPort.requestRender();
   await waitForAnimationFrame();
   await waitForAnimationFrame();
   return useMediaStore.getState().compositions.find((entry) => entry.id === mainComp.id) ?? mainComp;

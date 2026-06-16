@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useEngineStore } from '../../../stores/engineStore';
 import { ScopeRenderer } from '../../../engine/analysis/ScopeRenderer';
+import { renderHostPort } from '../../../services/render/renderHostPort';
 
 export type ScopeTab = 'histogram' | 'vectorscope' | 'waveform';
 export type ScopeViewMode = 'rgb' | 'r' | 'g' | 'b' | 'luma';
@@ -43,8 +44,7 @@ export function useGpuScope(
     let destroyed = false;
 
     const init = async () => {
-      const { engine } = await import('../../../engine/WebGPUEngine');
-      const device = engine.getDevice();
+      const device = renderHostPort.getDevice();
       if (!device || destroyed) return;
 
       const ctx = canvas.getContext('webgpu') as GPUCanvasContext;
@@ -78,11 +78,10 @@ export function useGpuScope(
     const mode = VIEW_MODE_MAP[viewModeRef.current];
 
     try {
-      const { engine } = await import('../../../engine/WebGPUEngine');
-      const texture = engine.getLastRenderedTexture();
+      const texture = renderHostPort.getLastRenderedTexture();
       if (!texture) {
         // No content — clear scope to black
-        const device = engine.getDevice();
+        const device = renderHostPort.getDevice();
         if (device && ctx) {
           const enc = device.createCommandEncoder();
           enc.beginRenderPass({

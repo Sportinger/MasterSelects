@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useSliceStore } from '../../stores/sliceStore';
 import { renderScheduler } from '../../services/renderScheduler';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 
 interface TargetPreviewProps {
   targetId: string | null;
@@ -33,7 +33,7 @@ export function TargetPreview({ targetId }: TargetPreviewProps) {
   const sliceConfig = useSliceStore((s) => targetId ? s.configs.get(targetId) : undefined);
   const activeTab = useSliceStore((s) => s.activeTab);
   useEffect(() => {
-    engine.requestRender();
+    renderHostPort.requestRender();
   }, [sliceConfig, activeTab]);
 
   useEffect(() => {
@@ -42,14 +42,14 @@ export function TargetPreview({ targetId }: TargetPreviewProps) {
       if (registeredRef.current) {
         renderScheduler.unregister(PREVIEW_ID);
         useRenderTargetStore.getState().unregisterTarget(PREVIEW_ID);
-        engine.unregisterTargetCanvas(PREVIEW_ID);
+        renderHostPort.unregisterTargetCanvas(PREVIEW_ID);
         registeredRef.current = false;
       }
       return;
     }
 
     // Register canvas with engine
-    const gpuContext = engine.registerTargetCanvas(PREVIEW_ID, canvasRef.current);
+    const gpuContext = renderHostPort.registerTargetCanvas(PREVIEW_ID, canvasRef.current);
     if (!gpuContext) return;
 
     // Register as render target
@@ -78,7 +78,7 @@ export function TargetPreview({ targetId }: TargetPreviewProps) {
         renderScheduler.unregister(PREVIEW_ID);
       }
       useRenderTargetStore.getState().unregisterTarget(PREVIEW_ID);
-      engine.unregisterTargetCanvas(PREVIEW_ID);
+      renderHostPort.unregisterTargetCanvas(PREVIEW_ID);
       registeredRef.current = false;
     };
   }, [source]);

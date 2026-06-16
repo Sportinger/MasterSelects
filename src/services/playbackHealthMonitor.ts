@@ -11,7 +11,7 @@
 //   HIGH_DROP_RATE   - > 10 drops/second from engine stats
 
 import { Logger } from './logger';
-import { engine } from '../engine/WebGPUEngine';
+import { renderHostPort } from './render/renderHostPort';
 import { getClipTimeInfo, layerBuilder } from './layerBuilder';
 import { createFrameContext } from './layerBuilder/FrameContext';
 import { useTimelineStore } from '../stores/timeline';
@@ -44,6 +44,9 @@ import {
   getVisibleHtmlVideoClipsAtPlayhead,
   shouldMonitorHtmlVideoHealth,
 } from './playbackHealth/visibleClips';
+import type {
+  EngineStats,
+} from '../types';
 import type {
   AnomalyEvent,
   AnomalyType,
@@ -225,7 +228,7 @@ export class PlaybackHealthMonitor {
 
     // 6. GPU_SURFACE_COLD
     if (isPlaying) {
-      const lc = engine.getLayerCollector();
+      const lc = renderHostPort.getLayerCollector();
       if (lc) {
         for (const clip of htmlHealthVideoClips) {
           const video = clip.source!.videoElement!;
@@ -242,19 +245,19 @@ export class PlaybackHealthMonitor {
 
     // 7. RENDER_STALL
     if (isPlaying && hasVisualRenderDemand) {
-      const rl = engine.getRenderLoop();
+      const rl = renderHostPort.getRenderLoop();
       if (rl) {
         const lastRender = rl.getLastSuccessfulRenderTime();
         if (lastRender > 0 && now - lastRender > RENDER_STALL_MS) {
           if (this.recordAnomaly('RENDER_STALL', undefined, `no render for ${((now - lastRender) / 1000).toFixed(1)}s`)) {
-            engine.requestRender();
+            renderHostPort.requestRender();
           }
         }
       }
     }
 
     // 8. HIGH_DROP_RATE
-    const stats = engine.getStats();
+    const stats = renderHostPort.getStats();
     if (hasVisualRenderDemand && stats.drops && stats.drops.lastSecond > HIGH_DROP_THRESHOLD) {
       this.recordAnomaly('HIGH_DROP_RATE', undefined, `${stats.drops.lastSecond} drops/sec`);
     }
@@ -283,7 +286,7 @@ export class PlaybackHealthMonitor {
   private maybeRecoverPreviewFreeze(
     now: number,
     isPlaying: boolean,
-    decoder: ReturnType<typeof engine.getStats>['decoder']
+    decoder: EngineStats['decoder']
   ): void {
     const recovery = classifyPreviewFreezeRecovery({
       decoder,
@@ -330,7 +333,7 @@ export class PlaybackHealthMonitor {
     // EOF stall: seeking past end is futile — clamp back
     if (isFinite(dur) && time >= dur - 0.002) {
       video.currentTime = dur - 0.001;
-      engine.requestRender();
+      renderHostPort.requestRender();
       return;
     }
 
@@ -340,16 +343,16 @@ export class PlaybackHealthMonitor {
       // Do NOT pause — that races with AudioSyncHandler and causes
       // "play() interrupted by pause()" errors.
       video.currentTime = time + 0.001;
-      engine.requestRender();
+      renderHostPort.requestRender();
     } else {
       // When paused: play/pause cycle to force GPU decode
       video.play().then(() => {
         video.pause();
         video.currentTime = time;
-        engine.requestRender();
+        renderHostPort.requestRender();
       }).catch(() => {
         video.currentTime = time + 0.001;
-        engine.requestRender();
+        renderHostPort.requestRender();
       });
     }
   }
@@ -357,7 +360,7 @@ export class PlaybackHealthMonitor {
   private recoverSeekStuck(video: HTMLVideoElement): void {
     const time = video.currentTime;
     video.currentTime = time;
-    engine.requestRender();
+    renderHostPort.requestRender();
   }
 
   private maybeEscalateClipRecovery(
@@ -389,7 +392,7 @@ export class PlaybackHealthMonitor {
     reason: 'FRAME_STALL' | 'SEEK_STUCK'
   ): void {
     const vsm = layerBuilder.getVideoSyncManager();
-    const lc = engine.getLayerCollector();
+    const lc = renderHostPort.getLayerCollector();
     const ctx = createFrameContext();
     const clip = ctx.clips.find((entry) => entry.id === clipId);
     if (!clip) return;
@@ -436,7 +439,7 @@ export class PlaybackHealthMonitor {
 
     const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
-    const lc = engine.getLayerCollector();
+    const lc = renderHostPort.getLayerCollector();
     const clipsAtPlayhead = getVisibleHtmlVideoClipsAtPlayhead(ctx).filter(
       (clip) => clip.source?.videoElement || clip.source?.webCodecsPlayer
     );
@@ -447,10 +450,10 @@ export class PlaybackHealthMonitor {
     this.clipEscalationEvents.clear();
     this.clipEscalationCooldowns.clear();
     vsm.reset();
-    engine.clearVideoCache();
+    renderHostPort.clearVideoCache();
     if (mode === 'full') {
-      engine.clearScrubbingCache();
-      engine.clearCompositeCache();
+      renderHostPort.clearScrubbingCache();
+      renderHostPort.clearCompositeCache();
     }
 
     const purgedClips: PlaybackPurgeResult['clips'] = [];
@@ -479,7 +482,7 @@ export class PlaybackHealthMonitor {
         lc?.resetVideoGpuReady(video);
         const videoSrc = video.currentSrc || video.src;
         if (videoSrc) {
-          engine.clearScrubbingCache(videoSrc);
+          renderHostPort.clearScrubbingCache(videoSrc);
         }
         vsm.resetClipRecoveryState(clip.id, video);
         vsm.recoverClipPlaybackState(clip.id, video, safeTargetTime, { resumePlayback: false });
@@ -493,7 +496,7 @@ export class PlaybackHealthMonitor {
       });
     }
 
-    engine.requestNewFrameRender();
+    renderHostPort.requestNewFrameRender();
     log.warn(`[PLAYBACK_PURGE] reason=${reason} mode=${mode} clips=${purgedClips.length}`);
 
     if (resumePlayback) {
@@ -503,7 +506,7 @@ export class PlaybackHealthMonitor {
         void liveState.play().catch((error) => {
           log.warn('Failed to resume playback after purge', error);
         });
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
       }, PLAYBACK_PURGE_RESUME_DELAY_MS);
     }
 
@@ -520,7 +523,7 @@ export class PlaybackHealthMonitor {
   softReset(): void {
     const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
-    const lc = engine.getLayerCollector?.();
+    const lc = renderHostPort.getLayerCollector();
 
     const videoClips = getVisibleHtmlVideoClipsAtPlayhead(ctx);
 
@@ -538,13 +541,13 @@ export class PlaybackHealthMonitor {
       if (!currentIds.has(id)) vsm.cancelRvfcHandle(id);
     }
 
-    engine.requestRender();
+    renderHostPort.requestRender();
     log.info('Soft reset completed');
   }
 
   forceDecodeAll(): void {
     const ctx = createFrameContext();
-    const lc = engine.getLayerCollector?.();
+    const lc = renderHostPort.getLayerCollector();
 
     const videoClips = getVisibleHtmlVideoClipsAtPlayhead(ctx);
 
@@ -553,7 +556,7 @@ export class PlaybackHealthMonitor {
       if (lc) lc.resetVideoGpuReady(video);
     }
 
-    engine.requestRender();
+    renderHostPort.requestRender();
     log.info('Force decode all completed');
   }
 
@@ -624,7 +627,7 @@ export class PlaybackHealthMonitor {
   videos(): PlaybackHealthVideoSnapshot[] {
     const ctx = createFrameContext();
     const vsm = layerBuilder.getVideoSyncManager();
-    const lc = engine.getLayerCollector();
+    const lc = renderHostPort.getLayerCollector();
 
     return getVisibleHtmlVideoClipsAtPlayhead(ctx)
       .map((c) => {

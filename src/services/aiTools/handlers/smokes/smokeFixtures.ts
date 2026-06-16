@@ -1,4 +1,4 @@
-import { engine } from '../../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../render/renderHostPort';
 import type { TimelineClip, TimelineTrack } from '../../../../types/timeline';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { useMediaStore } from '../../../../stores/mediaStore';
@@ -189,7 +189,7 @@ export async function createSyntheticTimeline(args: Record<string, unknown>): Pr
     clipDragPreview: null,
     timelineToolPreview: null,
   });
-  engine.requestNewFrameRender();
+  renderHostPort.requestNewFrameRender();
   await waitForFrames(3);
 
   return {
@@ -285,7 +285,7 @@ export async function createExistingMediaTimeline(args: Record<string, unknown>)
   if (clipId) {
     useTimelineStore.getState().selectClip(clipId, false);
   }
-  engine.requestNewFrameRender();
+  renderHostPort.requestNewFrameRender();
   await waitForFrames(8, 250);
 
   return {

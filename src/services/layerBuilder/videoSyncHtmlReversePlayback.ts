@@ -1,5 +1,5 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import type { FrameContext } from './types';
 
@@ -52,7 +52,7 @@ export function syncReverseOrNonstandardPlayback({
     deps.htmlSeeks.clearPreciseSeekTimer(clip.id);
     if (timeDiff > 0.001) {
       deps.beginOrQueueSettleSeek(clip.id, video, clipTime, undefined, 'scrub-stop');
-      video.addEventListener('seeked', () => engine.requestNewFrameRender(), { once: true });
+      video.addEventListener('seeked', () => renderHostPort.requestNewFrameRender(), { once: true });
     } else {
       scrubSettleState.resolve(clip.id);
     }

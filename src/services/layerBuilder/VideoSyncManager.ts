@@ -5,8 +5,8 @@ import type { TimelineClip } from '../../types';
 import type { FrameContext } from './types';
 import { createFrameContext } from './FrameContext';
 import { layerPlaybackManager } from '../layerPlaybackManager';
-import { engine } from '../../engine/WebGPUEngine';
 import { flags } from '../../engine/featureFlags';
+import { renderHostPort } from '../render/renderHostPort';
 import {
   canUseSharedPreviewRuntimeSession,
   getPreviewRuntimeSource,
@@ -155,7 +155,7 @@ export class VideoSyncManager {
   }
 
   private isVideoGpuReady(video: HTMLVideoElement): boolean {
-    return this.warmups.isGpuReady(video) || engine.getLayerCollector?.()?.isVideoGpuReady(video) === true;
+    return this.warmups.isGpuReady(video) || renderHostPort.getLayerCollector()?.isVideoGpuReady(video) === true;
   }
 
   /**

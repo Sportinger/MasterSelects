@@ -42,6 +42,8 @@ describe('render contract boundaries', () => {
       'RenderTargetSnapshot',
       'RenderOutputRouter',
       'ExportRenderSession',
+      'ProjectRenderGraph',
+      'FrameProviderRequest',
     ]) {
       expect(barrel).toMatch(new RegExp(`\\b${contractName}\\b`));
     }

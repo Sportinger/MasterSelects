@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Layer } from '../../src/types';
+import type { ExportRenderHostPort } from '../../src/engine/export/exportRenderHostPort';
 
 const mockFactory = vi.hoisted(() => {
   const calls: string[] = [];
@@ -92,6 +93,28 @@ function createSession(preferZeroCopy = true): ExportRenderSessionImpl {
   });
 }
 
+function createInjectedHost(): ExportRenderHostPort {
+  return {
+    getOutputDimensions: vi.fn(() => ({ width: 640, height: 360 })),
+    setResolution: vi.fn(),
+    setExporting: vi.fn(),
+    initExportCanvas: vi.fn(() => false),
+    isDeviceValid: vi.fn(() => true),
+    setRenderTimeOverride: vi.fn(),
+    ensureExportLayersReady: vi.fn(async () => undefined),
+    render: vi.fn(),
+    createVideoFrameFromExport: vi.fn(async () => null),
+    readPixels: vi.fn(async () => new Uint8ClampedArray([5, 6, 7, 8])),
+    cleanupExportCanvas: vi.fn(),
+    hasMaskTexture: vi.fn(() => false),
+    updateMaskTexture: vi.fn(),
+    removeMaskTexture: vi.fn(),
+    ensureGaussianSplatSceneLoaded: vi.fn(async () => true),
+    ensureSceneRendererInitialized: vi.fn(async () => true),
+    preloadSceneModelAsset: vi.fn(async () => true),
+  };
+}
+
 beforeEach(() => {
   mockFactory.calls.length = 0;
   vi.clearAllMocks();
@@ -127,7 +150,15 @@ describe('ExportRenderSessionImpl', () => {
     expect(capture.kind).toBe('video-frame');
     expect(capture.width).toBe(1920);
     expect(capture.height).toBe(1080);
-    expect(mockFactory.syncExportMaskTextures).toHaveBeenCalledWith(layers, 1920, 1080, 1.25);
+    expect(mockFactory.syncExportMaskTextures).toHaveBeenCalledWith(
+      layers,
+      1920,
+      1080,
+      1.25,
+      expect.objectContaining({
+        getOutputDimensions: expect.any(Function),
+      }),
+    );
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:1.25',
@@ -161,6 +192,28 @@ describe('ExportRenderSessionImpl', () => {
       'render',
       'readPixels',
     ]);
+  });
+
+  it('passes an injected export host into mask texture sync', async () => {
+    const host = createInjectedHost();
+    const session = new ExportRenderSessionImpl({
+      runId: 'export-run-host',
+      width: 320,
+      height: 180,
+      stackedAlpha: false,
+      preferZeroCopy: false,
+      host,
+    });
+    session.begin();
+
+    await session.renderFrame({
+      time: 5,
+      layers,
+      timestampMicros: 500000,
+      durationMicros: 33333,
+    });
+
+    expect(mockFactory.syncExportMaskTextures).toHaveBeenCalledWith(layers, 320, 180, 5, host);
   });
 
   it('falls back to readback when zero-copy VideoFrame capture is unavailable', async () => {

@@ -10,8 +10,8 @@ import {
   resolveTextBoxRect,
 } from '../../services/textLayout';
 import { googleFontsService } from '../../services/googleFontsService';
-import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { generateTextClipId } from './helpers/idGenerator';
 import { useMediaStore } from '../mediaStore';
 import { Logger } from '../../services/logger';
@@ -34,7 +34,7 @@ function getActiveCompositionResolution(): { width: number; height: number } {
     };
   }
 
-  const engineResolution = engine.getOutputDimensions();
+  const engineResolution = renderHostPort.getOutputDimensions();
   if (engineResolution.width > 0 && engineResolution.height > 0) {
     return {
       width: Math.max(1, Math.round(engineResolution.width)),
@@ -140,10 +140,7 @@ function rescaleTextBoxFields(
 }
 
 function invalidateTextGpuBindings(): void {
-  const pipeline = (engine as unknown as {
-    compositorPipeline?: { invalidateBindGroupCache: (layerId?: string) => void };
-  }).compositorPipeline;
-  pipeline?.invalidateBindGroupCache();
+  renderHostPort.invalidateCompositorBindings();
 }
 
 export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => ({
@@ -243,11 +240,8 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
       dimensions: { width: renderWidth, height: renderHeight },
     });
 
-    const texMgr = engine.getTextureManager();
-    if (texMgr) {
-      if (!texMgr.updateCanvasTexture(canvas)) {
-        log.debug('Canvas texture not cached yet, will create on render');
-      }
+    if (!renderHostPort.updateCanvasTexture(canvas)) {
+      log.debug('Canvas texture not cached yet, will create on render');
     }
     invalidateTextGpuBindings();
 
@@ -264,7 +258,7 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
     try {
       layerBuilder.invalidateCache();
       const layers = layerBuilder.buildLayersFromStore();
-      engine.render(layers);
+      renderHostPort.render(layers);
     } catch (e) {
       log.debug('Direct render after text update failed', e);
     }
@@ -284,7 +278,7 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
             currentCanvas,
             dimensions: { width: currentCanvas.width, height: currentCanvas.height },
           });
-          engine.getTextureManager()?.updateCanvasTexture(currentCanvas);
+          renderHostPort.updateCanvasTexture(currentCanvas);
           invalidateTextGpuBindings();
         }
         inv();
@@ -292,7 +286,7 @@ export const createTextClipSlice: SliceCreator<TextClipActions> = (set, get) => 
         try {
           layerBuilder.invalidateCache();
           const layers = layerBuilder.buildLayersFromStore();
-          engine.render(layers);
+          renderHostPort.render(layers);
         } catch (e) {
           log.debug('Direct render after font load failed', e);
         }

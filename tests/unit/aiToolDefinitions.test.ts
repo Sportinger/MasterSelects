@@ -170,6 +170,38 @@ describe('expected tools exist', () => {
     expect(toolNames).toContain('getFramesAtTimes');
   });
 
+  it('includes worker-first proof capture tools', () => {
+    expect(toolNames).toContain('runWorkerFirstRenderCapabilityProbe');
+    expect(toolNames).toContain('runWorkerFirstSolidTextImageGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstMultiVideoGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstWebCodecsProviderGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstHtmlProviderGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstJpegProxyGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstMultiTargetOutputSliceGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstRamCacheGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstBakeGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstExportGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstUniversal3dGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstW5EvidenceSuite');
+    expect(toolNames).toContain('runWorkerFirstPlatformEvidencePackage');
+    expect(toolNames).toContain('verifyWorkerFirstPlatformEvidenceMatrix');
+    expect(toolNames).toContain('runWorkerFirstRuntimeExportPlaybackSmoke');
+    expect(toolNames).toContain('runWorkerFirstEffectsMasksTransitionsGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstEffectsMasksTransitionsShadowParity');
+    expect(toolNames).toContain('runWorkerFirstNestedCompsGoldenFixture');
+    expect(toolNames).toContain('runWorkerFirstNestedCompsShadowParity');
+    expect(toolNames).toContain('runWorkerFirstJpegProxyShadowParity');
+    expect(toolNames).toContain('runWorkerFirstRamCacheShadowParity');
+    expect(toolNames).toContain('runWorkerFirstBakeShadowParity');
+    expect(toolNames).toContain('runWorkerFirstExportShadowParity');
+    expect(toolNames).toContain('runWorkerFirstUniversal3dShadowParity');
+    expect(toolNames).toContain('runWorkerFirstSolidTextImageShadowParity');
+    expect(toolNames).toContain('runWorkerFirstMultiTargetOutputSliceShadowParity');
+    expect(toolNames).toContain('captureWorkerFirstGoldenFixtureFingerprint');
+    expect(toolNames).toContain('captureWorkerFirstVisiblePresentationProof');
+    expect(toolNames).toContain('runWorkerFirstVisiblePresentationStressProof');
+  });
+
   it('includes analysis tools', () => {
     expect(toolNames).toContain('getClipAnalysis');
     expect(toolNames).toContain('getClipTranscript');

@@ -5,7 +5,7 @@ import type {
   SliceCreator,
   ClipTransform,
 } from './types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../mediaStore/types';
 import {
   parseCameraProperty,
@@ -77,7 +77,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
       addKeyframe(clipId, property, valueForStorage);
       if (parseNodeGraphParamProperty(property)) {
         get().invalidateCache();
-        engine.requestRender();
+        renderHostPort.requestRender();
       }
       if (isPlaying && clips.some(c => c.id === clipId)) {
         dispatchKeyframeRecordingFeedback(clipId, property);
@@ -264,7 +264,7 @@ export const createKeyframeSlice: SliceCreator<KeyframeActions> = (set, get) => 
             : c),
         });
         get().invalidateCache();
-        engine.requestRender();
+        renderHostPort.requestRender();
         return;
       }
 

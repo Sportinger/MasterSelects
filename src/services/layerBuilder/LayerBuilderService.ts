@@ -9,7 +9,7 @@ import { TransformCache } from './TransformCache';
 import { VideoSyncManager } from './VideoSyncManager';
 import { AudioTrackSyncManager } from './AudioTrackSyncManager';
 import { layerPlaybackManager } from '../layerPlaybackManager';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import { Logger } from '../logger';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 import { useTimelineStore } from '../../stores/timeline';
@@ -172,7 +172,7 @@ export class LayerBuilderService {
   }
 
   private getActiveCompositionVideoBakeRegion(ctx: FrameContext): VideoBakeRegion | undefined {
-    if (engine.getIsExporting()) return undefined;
+    if (renderHostPort.getIsExporting()) return undefined;
 
     return useTimelineStore.getState().videoBakeRegions.find(region =>
       region.scope === 'composition' &&

@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 import { Logger } from '../../services/logger';
 import {
@@ -27,6 +27,12 @@ export function usePreviewRenderTargetRegistration({
   showTransparencyGrid,
   stableRenderSource,
 }: UsePreviewRenderTargetRegistrationOptions): void {
+  const showTransparencyGridRef = useRef(showTransparencyGrid);
+
+  useEffect(() => {
+    showTransparencyGridRef.current = showTransparencyGrid;
+  }, [showTransparencyGrid]);
+
   useEffect(() => {
     if (!isEngineReady || !canvasRef.current) return;
 
@@ -37,7 +43,7 @@ export function usePreviewRenderTargetRegistration({
       id: panelId,
       name: 'Preview',
       source: stableRenderSource,
-      showTransparencyGrid,
+      showTransparencyGrid: showTransparencyGridRef.current,
       canvas: canvasRef.current,
       onIndependentRegistered: () => setCompReady(true),
     });
@@ -47,7 +53,7 @@ export function usePreviewRenderTargetRegistration({
       log.debug(`[${panelId}] Unregistering render target`);
       unregisterPreviewTarget(panelId, stableRenderSource);
     };
-  }, [canvasRef, isEngineReady, panelId, setCompReady, stableRenderSource, showTransparencyGrid]);
+  }, [canvasRef, isEngineReady, panelId, setCompReady, stableRenderSource]);
 
   useEffect(() => {
     if (!isEngineReady) return;

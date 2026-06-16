@@ -1,7 +1,7 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
 import { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
 import { useMediaStore } from '../../stores/mediaStore';
+import { renderHostPort } from '../render/renderHostPort';
 import type { TimelineRuntimeAdmissionDecision } from '../timeline/runtimeCoordinatorTypes';
 import { timelineRuntimeCoordinator } from '../timeline/timelineRuntimeCoordinator';
 import { mediaRuntimeRegistry } from './registry';
@@ -464,10 +464,10 @@ export async function ensureRuntimeFrameProvider(
       loop: false,
       useSimpleMode: false,
       onFrame: () => {
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
       },
       onError: () => {
-        engine.requestRender();
+        renderHostPort.requestRender();
       },
     });
 
@@ -480,7 +480,7 @@ export async function ensureRuntimeFrameProvider(
       if (Number.isFinite(initialTime) && initialTime !== undefined) {
         player.seek(initialTime);
       }
-      engine.requestRender();
+      renderHostPort.requestRender();
       return player;
     } catch {
       reservation.release();

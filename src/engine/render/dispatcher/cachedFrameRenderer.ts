@@ -1,7 +1,7 @@
 import type { LayerRenderData } from '../../core/types';
 import { Logger } from '../../../services/logger';
 import type { RenderDeps } from '../RenderDispatcher';
-import type { RenderOutputRouter } from '../contracts';
+import type { RenderOutputRouter, RenderTargetSnapshot } from '../contracts';
 import type { PreviewFrameFallback } from './dispatcherTelemetry';
 
 const log = Logger.create('RenderDispatcher');
@@ -27,24 +27,43 @@ export class CachedFrameRenderer {
     this.recordMainPreviewFrame = recordMainPreviewFrame;
   }
 
+  private resolveCachedFrameRoute(): {
+    snapshot: RenderTargetSnapshot;
+    targetIds: readonly string[];
+  } | null {
+    const snapshot = this.outputRouter.captureSnapshot();
+    const targetIds = snapshot.activeCompositionTargetIds;
+    if (this.deps.previewContext) {
+      return { snapshot, targetIds };
+    }
+    if (targetIds.some((targetId) => this.outputRouter.getTargetContext(targetId))) {
+      return { snapshot, targetIds };
+    }
+    return null;
+  }
+
   renderCachedFrame(time: number): boolean {
     const d = this.deps;
     const device = d.getDevice();
     const scrubbingCache = d.cacheManager.getScrubbingCache();
-    if (!d.previewContext || !device || !scrubbingCache || !d.outputPipeline || !d.sampler) {
+    if (!device || !scrubbingCache || !d.outputPipeline || !d.sampler) {
+      return false;
+    }
+
+    const route = this.resolveCachedFrameRoute();
+    if (!route) {
       return false;
     }
 
     const gpuCached = scrubbingCache.getGpuCachedFrame(time);
     if (gpuCached) {
       const commandEncoder = device.createCommandEncoder();
-      const outputSnapshot = this.outputRouter.captureSnapshot();
       this.outputRouter.routeCachedFrame({
         commandEncoder,
         bindGroup: gpuCached.bindGroup,
         time,
-        snapshot: outputSnapshot,
-        targetIds: outputSnapshot.activeCompositionTargetIds,
+        snapshot: route.snapshot,
+        targetIds: route.targetIds,
       });
       this.recordMainPreviewFrame('ram-gpu-cache', undefined, {
         targetTimeMs: Math.round(time * 1000),
@@ -121,13 +140,12 @@ export class CachedFrameRenderer {
       createdTexture = null;
 
       const commandEncoder = device.createCommandEncoder();
-      const outputSnapshot = this.outputRouter.captureSnapshot();
       this.outputRouter.routeCachedFrame({
         commandEncoder,
         bindGroup,
         time,
-        snapshot: outputSnapshot,
-        targetIds: outputSnapshot.activeCompositionTargetIds,
+        snapshot: route.snapshot,
+        targetIds: route.targetIds,
       });
       this.recordMainPreviewFrame('ram-cpu-cache', undefined, {
         targetTimeMs: Math.round(time * 1000),

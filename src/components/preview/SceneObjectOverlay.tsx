@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
-import { engine } from '../../engine/WebGPUEngine';
 import { endBatch, startBatch } from '../../stores/historyStore';
 import { useEngineStore } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import type { SceneCameraConfig, SceneViewport } from '../../engine/scene/types';
 import {
   buildCameraPreviewSceneObject,
@@ -92,7 +92,7 @@ function applySceneObjectTransform(clipId: string, transform: ClipTransformPatch
   } else {
     store.updateClipTransform(clipId, transform);
   }
-  engine.requestRender();
+  renderHostPort.requestRender();
 }
 
 function resetSceneObjectTransform(
@@ -199,7 +199,7 @@ export function SceneObjectOverlay({
     hoveredAxisRef.current = axis;
     setHoveredAxis(axis);
     setSceneGizmoHoveredAxis(axis);
-    engine.requestRender();
+    renderHostPort.requestRender();
   }, [setSceneGizmoHoveredAxis]);
 
   const handleAxisHover = useCallback((axis: SceneGizmoAxis | null) => {
@@ -212,7 +212,7 @@ export function SceneObjectOverlay({
   useEffect(() => () => {
     hoveredAxisRef.current = null;
     setSceneGizmoHoveredAxis(null);
-    engine.requestRender();
+    renderHostPort.requestRender();
   }, [setSceneGizmoHoveredAxis]);
 
   useEffect(() => {
@@ -229,7 +229,7 @@ export function SceneObjectOverlay({
     if (!enabled) return;
     setSceneGizmoMode(mode);
     updateHoveredAxis(null);
-    engine.requestRender();
+    renderHostPort.requestRender();
   }, [enabled, mode, setSceneGizmoMode, updateHoveredAxis]);
 
   const { camera, objects } = useMemo(

@@ -1,4 +1,4 @@
-import { engine } from '../../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../render/renderHostPort';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { CallerContext } from '../../policy';
@@ -71,7 +71,7 @@ export async function createStressTestProjectFixture(
     const activeMainComp = await buildMainComposition(ctx, mainComp, nestedComp);
     await openComposition(activeMainComp.id);
     await waitForAnimationFrame();
-    engine.requestRender();
+    renderHostPort.requestRender();
 
     const finalTimeline = useTimelineStore.getState();
     const finalMedia = useMediaStore.getState();

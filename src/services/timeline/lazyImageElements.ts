@@ -1,8 +1,8 @@
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import type { FrameContext } from '../layerBuilder/types';
-import { engine } from '../../engine/WebGPUEngine';
 import { Logger } from '../logger';
+import { renderHostPort } from '../render/renderHostPort';
 import type { RuntimeProviderDemand } from '../../timeline';
 import type { ImageCanvasResourceDescriptor, RenderResourceDescriptor } from './runtimeCoordinatorTypes';
 import { createRenderResourceDescriptorFromDemand } from './runtimeProviderDemandBridge';
@@ -285,13 +285,13 @@ function createImageRecord(ctx: LazyImageLookupContext, clip: TimelineClip): Laz
     record.status = 'ready';
     reportLazyImageRecord(record);
     notifyStatusCallbacks(record);
-    engine.requestRender();
+    renderHostPort.requestRender();
   };
   image.onerror = () => {
     record.status = 'error';
     reportLazyImageRecord(record);
     notifyStatusCallbacks(record);
-    engine.requestRender();
+    renderHostPort.requestRender();
   };
   image.src = source.url;
 

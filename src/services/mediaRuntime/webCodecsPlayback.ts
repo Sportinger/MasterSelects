@@ -1,6 +1,6 @@
 import { WebCodecsPlayer } from '../../engine/WebCodecsPlayer';
-import { engine } from '../../engine/WebGPUEngine';
 import { flags } from '../../engine/featureFlags';
+import { renderHostPort } from '../render/renderHostPort';
 import { layerBuilder } from '../layerBuilder';
 import { Logger } from '../logger';
 import type { RuntimeProviderDemand } from '../../timeline';
@@ -180,12 +180,12 @@ export async function initWebCodecsPlayer(
       loop: false,
       useSimpleMode: !useFullMode,
       onFrame: () => {
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
         layerBuilder.invalidateCache();
       },
       onError: (error) => {
         log.warn('WebCodecs error', { error: error.message });
-        engine.requestRender();
+        renderHostPort.requestRender();
       },
     });
     releaseAdmission = attachWebCodecsHelperAdmissionRelease(webCodecsPlayer, admission);

@@ -120,6 +120,11 @@ The current flow is:
 POST /api/ai-tools -> Vite server -> HMR -> browser -> executeAITool()
 ```
 
+Bridge preflight endpoints:
+- `GET /api/ai-tools` is status-only and does not require auth
+- `GET /api/ai-tools/auth-check` requires the bearer token and returns `{ "status": "ok" }` without dispatching a browser tool
+- `POST /api/ai-tools` requires the bearer token and forwards tool execution to the selected browser tab
+
 The bridge also serves local file endpoints used by the AI media tools:
 - `/api/local-file`
 - `/api/local-files`

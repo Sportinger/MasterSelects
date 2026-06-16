@@ -4,7 +4,7 @@ import type { Composition, MediaSliceCreator } from '../types';
 import { DEFAULT_COMPOSITION } from '../constants';
 import { fileSystemService } from '../../../services/fileSystemService';
 import { useTimelineStore } from '../../timeline';
-import { engine } from '../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../services/render/renderHostPort';
 import { Logger } from '../../../services/logger';
 import { restoreLegacyStartupMediaState } from '../legacyStartupRestore';
 import {
@@ -49,7 +49,7 @@ export const createProjectSlice: MediaSliceCreator<ProjectActions> = (set, get) 
     timelineStore.clearTimeline();
 
     // Clear the render frame
-    engine.clearFrame();
+    renderHostPort.clearFrame();
 
     previousFiles.forEach((file) => {
       revokeMediaFileObjectUrls(file);

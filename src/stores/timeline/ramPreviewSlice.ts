@@ -11,6 +11,7 @@ import {
   releaseRamPreviewRunResources,
   reportRamPreviewRunJob,
 } from '../../services/timeline/ramPreviewRuntimeReporting';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { useMediaStore } from '../mediaStore';
 
 const log = Logger.create('RamPreviewSlice');
@@ -76,13 +77,12 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
       return false;
     }
 
-    const { engine } = await import('../../engine/WebGPUEngine');
-    engine.setGeneratingRamPreview(true);
+    renderHostPort.setGeneratingRamPreview(true);
     set({ isRamPreviewing: true, ramPreviewProgress: 0, ramPreviewRange: null });
     reportRamPreviewRunJob(runJobReport);
 
     try {
-      const preview = new RamPreviewEngine(engine);
+      const preview = new RamPreviewEngine(renderHostPort.getRamPreviewRenderEngine());
       const result = await preview.generate(
         {
           start: rangeStart,
@@ -130,7 +130,7 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
       log.error(`${label} error`, error);
       completed = false;
     } finally {
-      engine.setGeneratingRamPreview(false);
+      renderHostPort.setGeneratingRamPreview(false);
       releaseRamPreviewRunResources(runId);
       set({ isRamPreviewing: false, ramPreviewProgress: null });
     }
@@ -144,10 +144,8 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
     if (ramPreviewEnabled) {
       // Turning OFF - cancel any running preview and clear cache
       set({ ramPreviewEnabled: false, isRamPreviewing: false, ramPreviewProgress: null });
-      import('../../engine/WebGPUEngine').then(({ engine }) => {
-        engine.setGeneratingRamPreview(false);
-        engine.clearCompositeCache();
-      });
+      renderHostPort.setGeneratingRamPreview(false);
+      renderHostPort.clearCompositeCache();
       set({ ramPreviewRange: null, cachedFrameTimes: new Set() });
     } else {
       // Turning ON - enable automatic RAM preview
@@ -182,15 +180,12 @@ export const createRamPreviewSlice: SliceCreator<RamPreviewActions> = (set, get)
     // The RAM preview loop checks !get().isRamPreviewing to know when to stop
     set({ isRamPreviewing: false, ramPreviewProgress: null });
     // Then async cleanup the engine
-    import('../../engine/WebGPUEngine').then(({ engine }) => {
-      engine.setGeneratingRamPreview(false);
-    });
+    renderHostPort.setGeneratingRamPreview(false);
   },
 
   clearRamPreview: async () => {
-    const { engine } = await import('../../engine/WebGPUEngine');
-    engine.setGeneratingRamPreview(false);
-    engine.clearCompositeCache();
+    renderHostPort.setGeneratingRamPreview(false);
+    renderHostPort.clearCompositeCache();
     set({
       isRamPreviewing: false,
       ramPreviewRange: null,

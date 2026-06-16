@@ -6,7 +6,7 @@ import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useSliceStore } from '../../stores/sliceStore';
 import { SourceSelector } from './SourceSelector';
 import { renderScheduler } from '../../services/renderScheduler';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import type { RenderSource, RenderTarget } from '../../types/renderTarget';
 import type { OutputSlice } from '../../types/outputSlice';
 
@@ -123,20 +123,20 @@ export function TargetList({ selectedTargetId, onSelect }: TargetListProps) {
   };
 
   const handleClose = (targetId: string) => {
-    engine.closeOutputWindow(targetId);
+    renderHostPort.closeOutputWindow(targetId);
   };
 
   const handleRestore = (targetId: string) => {
-    engine.restoreOutputWindow(targetId);
+    renderHostPort.restoreOutputWindow(targetId);
   };
 
   const handleRemove = (targetId: string) => {
-    engine.removeOutputTarget(targetId);
+    renderHostPort.removeOutputTarget(targetId);
   };
 
   const handleNewOutput = () => {
     const id = `output_${Date.now()}`;
-    engine.createOutputWindow(id, `Output ${Date.now()}`);
+    renderHostPort.createOutputWindow(id, `Output ${Date.now()}`);
   };
 
   const handleAddSlice = () => {

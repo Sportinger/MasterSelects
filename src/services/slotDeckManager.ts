@@ -1,8 +1,8 @@
 import type { TimelineClip } from '../types/timeline';
-import { engine } from '../engine/WebGPUEngine';
 import { flags } from '../engine/featureFlags';
 import type { Composition, SlotDeckState } from '../stores/mediaStore/types';
 import { useMediaStore } from '../stores/mediaStore';
+import { renderHostPort } from './render/renderHostPort';
 import {
   bindSourceRuntimeForOwner,
   planSourceRuntimeBindingForOwner,
@@ -55,7 +55,7 @@ class SlotDeckManager {
 
   private cleanupVideoElement(video: HTMLVideoElement): void {
     video.pause();
-    engine.cleanupVideo(video);
+    renderHostPort.cleanupVideo(video);
     video.removeAttribute('src');
     video.src = '';
     try {
@@ -246,7 +246,7 @@ class SlotDeckManager {
       });
       this.reportClipResources(entry, clip);
       clip.isLoading = false;
-      engine.preCacheVideoFrame?.(video);
+      renderHostPort.preCacheVideoFrame(video);
       this.markClipReady(entry, 'html', { visual: true });
     };
 

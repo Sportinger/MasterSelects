@@ -134,6 +134,38 @@ import {
   handleClearRuntimeDiagnostics,
   handlePurgePlaybackPath,
 } from './stats';
+import { handleRunWorkerFirstRenderCapabilityProbe } from '../workerFirstCapabilityProbeBridge';
+import { handleRunWorkerFirstBakeGoldenFixture } from '../workerFirstBakeGoldenFixture';
+import { handleRunWorkerFirstBakeShadowParity } from '../workerFirstBakeShadowParity';
+import { handleRunWorkerFirstEffectsMasksTransitionsGoldenFixture } from '../workerFirstEffectsMasksTransitionsGoldenFixture';
+import { handleRunWorkerFirstEffectsMasksTransitionsShadowParity } from '../workerFirstEffectsMasksTransitionsShadowParity';
+import { handleRunWorkerFirstExportGoldenFixture } from '../workerFirstExportGoldenFixture';
+import { handleRunWorkerFirstExportShadowParity } from '../workerFirstExportShadowParity';
+import { handleCaptureWorkerFirstGoldenFixtureFingerprint } from '../workerFirstGoldenFixtureBridge';
+import { handleRunWorkerFirstHtmlProviderGoldenFixture } from '../workerFirstHtmlProviderGoldenFixture';
+import { handleRunWorkerFirstHtmlProviderShadowParity } from '../workerFirstHtmlProviderShadowParity';
+import { handleRunWorkerFirstJpegProxyGoldenFixture } from '../workerFirstJpegProxyGoldenFixture';
+import { handleRunWorkerFirstJpegProxyShadowParity } from '../workerFirstJpegProxyShadowParity';
+import { handleRunWorkerFirstMultiTargetOutputSliceGoldenFixture } from '../workerFirstMultiTargetOutputSliceGoldenFixture';
+import { handleRunWorkerFirstMultiTargetOutputSliceShadowParity } from '../workerFirstMultiTargetOutputSliceShadowParity';
+import { handleRunWorkerFirstMultiVideoGoldenFixture } from '../workerFirstMultiVideoGoldenFixture';
+import { handleRunWorkerFirstMultiVideoShadowParity } from '../workerFirstMultiVideoShadowParity';
+import { handleRunWorkerFirstNestedCompsGoldenFixture } from '../workerFirstNestedCompsGoldenFixture';
+import { handleRunWorkerFirstNestedCompsShadowParity } from '../workerFirstNestedCompsShadowParity';
+import { handleRunWorkerFirstRamCacheGoldenFixture } from '../workerFirstRamCacheGoldenFixture';
+import { handleRunWorkerFirstRamCacheShadowParity } from '../workerFirstRamCacheShadowParity';
+import { handleRunWorkerFirstRuntimeExportPlaybackSmoke } from '../workerFirstRuntimeExportPlaybackSmoke';
+import { handleRunWorkerFirstPlatformEvidencePackage } from '../workerFirstPlatformEvidencePackage';
+import { handleVerifyWorkerFirstPlatformEvidenceMatrix } from '../workerFirstPlatformEvidenceMatrix';
+import { handleRunWorkerFirstSolidTextImageGoldenFixture } from '../workerFirstSolidTextImageGoldenFixture';
+import { handleRunWorkerFirstSolidTextImageShadowParity } from '../workerFirstSolidTextImageShadowParity';
+import { handleRunWorkerFirstUniversal3dGoldenFixture } from '../workerFirstUniversal3dGoldenFixture';
+import { handleRunWorkerFirstUniversal3dShadowParity } from '../workerFirstUniversal3dShadowParity';
+import { handleRunWorkerFirstW5EvidenceSuite } from '../workerFirstW5EvidenceSuite';
+import { handleRunWorkerFirstWebCodecsProviderGoldenFixture } from '../workerFirstWebCodecsProviderGoldenFixture';
+import { handleRunWorkerFirstWebCodecsProviderShadowParity } from '../workerFirstWebCodecsProviderShadowParity';
+import { handleCaptureWorkerFirstVisiblePresentationProof } from '../workerFirstVisibleCaptureBridge';
+import { handleRunWorkerFirstVisiblePresentationStressProof } from '../workerFirstVisibleStressBridge';
 import { handleDebugExport } from './export';
 import { handleCreateStressTestProjectFixture } from './stressTest';
 import {
@@ -260,6 +292,70 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   clearRuntimeDiagnostics: handleClearRuntimeDiagnostics,
   getPlaybackTrace: handleGetPlaybackTrace,
   purgePlaybackPath: handlePurgePlaybackPath,
+  runWorkerFirstRenderCapabilityProbe: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstRenderCapabilityProbe(args),
+  runWorkerFirstSolidTextImageGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstSolidTextImageGoldenFixture(args),
+  runWorkerFirstMultiVideoGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstMultiVideoGoldenFixture(args),
+  runWorkerFirstMultiVideoShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstMultiVideoShadowParity(args),
+  runWorkerFirstWebCodecsProviderGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstWebCodecsProviderGoldenFixture(args),
+  runWorkerFirstWebCodecsProviderShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstWebCodecsProviderShadowParity(args),
+  runWorkerFirstHtmlProviderGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstHtmlProviderGoldenFixture(args),
+  runWorkerFirstHtmlProviderShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstHtmlProviderShadowParity(args),
+  runWorkerFirstJpegProxyGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstJpegProxyGoldenFixture(args),
+  runWorkerFirstJpegProxyShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstJpegProxyShadowParity(args),
+  runWorkerFirstMultiTargetOutputSliceGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstMultiTargetOutputSliceGoldenFixture(args),
+  runWorkerFirstMultiTargetOutputSliceShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstMultiTargetOutputSliceShadowParity(args),
+  runWorkerFirstRamCacheGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstRamCacheGoldenFixture(args),
+  runWorkerFirstRamCacheShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstRamCacheShadowParity(args),
+  runWorkerFirstBakeGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstBakeGoldenFixture(args),
+  runWorkerFirstBakeShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstBakeShadowParity(args),
+  runWorkerFirstExportGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstExportGoldenFixture(args),
+  runWorkerFirstExportShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstExportShadowParity(args),
+  runWorkerFirstUniversal3dGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstUniversal3dGoldenFixture(args),
+  runWorkerFirstUniversal3dShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstUniversal3dShadowParity(args),
+  runWorkerFirstW5EvidenceSuite: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstW5EvidenceSuite(args),
+  runWorkerFirstPlatformEvidencePackage: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstPlatformEvidencePackage(args),
+  verifyWorkerFirstPlatformEvidenceMatrix: async (args: Record<string, unknown>) =>
+    handleVerifyWorkerFirstPlatformEvidenceMatrix(args),
+  runWorkerFirstRuntimeExportPlaybackSmoke: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstRuntimeExportPlaybackSmoke(args),
+  runWorkerFirstEffectsMasksTransitionsGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstEffectsMasksTransitionsGoldenFixture(args),
+  runWorkerFirstEffectsMasksTransitionsShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstEffectsMasksTransitionsShadowParity(args),
+  runWorkerFirstNestedCompsGoldenFixture: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstNestedCompsGoldenFixture(args),
+  runWorkerFirstNestedCompsShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstNestedCompsShadowParity(args),
+  runWorkerFirstSolidTextImageShadowParity: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstSolidTextImageShadowParity(args),
+  captureWorkerFirstGoldenFixtureFingerprint: async (args: Record<string, unknown>) =>
+    handleCaptureWorkerFirstGoldenFixtureFingerprint(args),
+  captureWorkerFirstVisiblePresentationProof: async (args: Record<string, unknown>) =>
+    handleCaptureWorkerFirstVisiblePresentationProof(args),
+  runWorkerFirstVisiblePresentationStressProof: async (args: Record<string, unknown>) =>
+    handleRunWorkerFirstVisiblePresentationStressProof(args),
   debugExport: handleDebugExport,
   createStressTestProjectFixture: handleCreateStressTestProjectFixture,
   runTimelineCanvasBladeToolSmoke: handleRunTimelineCanvasBladeToolSmoke,
@@ -560,6 +656,10 @@ export {
   handleGetRuntimeDiagnostics,
   handleGetPlaybackTrace,
   handleGetStatsHistory,
+  handleRunWorkerFirstPlatformEvidencePackage,
+  handleRunWorkerFirstEffectsMasksTransitionsShadowParity,
+  handleCaptureWorkerFirstVisiblePresentationProof,
+  handleRunWorkerFirstVisiblePresentationStressProof,
   handleClearRuntimeDiagnostics,
   handleDebugExport,
   handleCreateStressTestProjectFixture,

@@ -1,5 +1,5 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 
@@ -40,11 +40,11 @@ export function syncHtmlTransitionSourceHold({
   if (!video.seeking && timeDiff > seekThreshold) {
     const seekTime = deps.safeSeekTime(video, clipTime);
     video.addEventListener('seeked', () => {
-      engine.markVideoFramePresented(video, seekTime, clip.id);
-      if (!engine.captureVideoFrameAtTime(video, seekTime, clip.id)) {
-        engine.ensureVideoFrameCached(video, clip.id);
+      renderHostPort.markVideoFramePresented(video, seekTime, clip.id);
+      if (!renderHostPort.captureVideoFrameAtTime(video, seekTime, clip.id)) {
+        renderHostPort.ensureVideoFrameCached(video, clip.id);
       }
-      engine.requestNewFrameRender();
+      renderHostPort.requestNewFrameRender();
     }, { once: true });
     video.currentTime = seekTime;
     vfPipelineMonitor.record('vf_transition_hold_seek', {
@@ -58,9 +58,9 @@ export function syncHtmlTransitionSourceHold({
 
   if (video.readyState >= 2) {
     const presentedTime = deps.safeSeekTime(video, clipTime);
-    engine.markVideoFramePresented(video, presentedTime, clip.id);
-    if (!engine.captureVideoFrameAtTime(video, presentedTime, clip.id)) {
-      engine.ensureVideoFrameCached(video, clip.id);
+    renderHostPort.markVideoFramePresented(video, presentedTime, clip.id);
+    if (!renderHostPort.captureVideoFrameAtTime(video, presentedTime, clip.id)) {
+      renderHostPort.ensureVideoFrameCached(video, clip.id);
     }
   } else if (!video.seeking && !deps.isForceDecodeInProgress(clip.id)) {
     vfPipelineMonitor.record('vf_readystate_drop', {

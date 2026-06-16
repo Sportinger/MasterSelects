@@ -1,4 +1,4 @@
-import { engine } from '../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../render/renderHostPort';
 
 function nextAnimationFrame(): Promise<number> {
   return new Promise((resolve) => window.requestAnimationFrame(resolve));
@@ -9,7 +9,7 @@ export async function ensureRenderForDiagnostics(): Promise<{
   waitedMs: number;
 }> {
   const startedAt = performance.now();
-  engine.requestRender();
+  renderHostPort.requestRender();
 
   // Give the render loop a short window to submit at least one fresh frame.
   await Promise.race([

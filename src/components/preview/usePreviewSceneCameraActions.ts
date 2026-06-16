@@ -1,6 +1,6 @@
 import { useCallback, type MutableRefObject } from 'react';
 
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { useEngineStore } from '../../stores/engineStore';
 import type { SceneCameraSettings } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
@@ -85,7 +85,7 @@ export function usePreviewSceneCameraActions({
             }
           : {}),
       });
-      engine.requestRender();
+      renderHostPort.requestRender();
       return;
     }
 
@@ -121,7 +121,7 @@ export function usePreviewSceneCameraActions({
           : {}),
       });
     }
-    engine.requestRender();
+    renderHostPort.requestRender();
   }, [addKeyframe, hasKeyframes, isRecording, updateClipTransform]);
 
   const getSceneNavSolveSettings = useCallback((clip: TimelineClip | null) => {

@@ -2,7 +2,7 @@ import { useCallback, type Dispatch, type MutableRefObject, type RefObject, type
 import type React from 'react';
 
 import { resolveOrbitCameraFrame } from '../../engine/gaussian/core/SplatCameraUtils';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import {
   stepSceneNavFpsMoveSpeed,
   useEngineStore,
@@ -137,7 +137,7 @@ export function usePreviewWheelHandler({
     );
 
     setEditCameraOrthoFrame({ ...current, center: nextCenter, scale: nextScale });
-    engine.requestRender();
+    renderHostPort.requestRender();
     return true;
   }, [
     activeEditCameraOrthoFrame,

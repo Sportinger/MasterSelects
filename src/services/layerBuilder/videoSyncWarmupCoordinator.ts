@@ -1,6 +1,6 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
 import { flags } from '../../engine/featureFlags';
+import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import type { FrameContext } from './types';
@@ -112,8 +112,8 @@ export class VideoSyncWarmupCoordinator {
     }
 
     if (video.readyState >= 2 && !video.seeking) {
-      engine.ensureVideoFrameCached(video, clip.id);
-      engine.cacheFrameAtTime(video, safeTargetTime);
+      renderHostPort.ensureVideoFrameCached(video, clip.id);
+      renderHostPort.cacheFrameAtTime(video, safeTargetTime);
     }
   }
 
@@ -298,11 +298,11 @@ export class VideoSyncWarmupCoordinator {
       }
 
       if (isActive && !video.seeking && video.readyState >= 2) {
-        engine.markVideoFramePresented(video, targetTime, clip.id);
-        if (!engine.captureVideoFrameAtTime(video, targetTime, clip.id)) {
-          engine.ensureVideoFrameCached(video, clip.id);
+        renderHostPort.markVideoFramePresented(video, targetTime, clip.id);
+        if (!renderHostPort.captureVideoFrameAtTime(video, targetTime, clip.id)) {
+          renderHostPort.ensureVideoFrameCached(video, clip.id);
         }
-        engine.cacheFrameAtTime(video, targetTime);
+        renderHostPort.cacheFrameAtTime(video, targetTime);
       }
     }
   }
@@ -401,7 +401,7 @@ export class VideoSyncWarmupCoordinator {
         recovery: `warmup-${reason}`,
       });
       if (shouldRequestRender) {
-        engine.requestRender();
+        renderHostPort.requestRender();
       }
     };
 
@@ -412,12 +412,12 @@ export class VideoSyncWarmupCoordinator {
 
       this.deps.warmups.clearWatchdog(video);
       const presentedTime = video.currentTime;
-      engine.markVideoFramePresented(video, presentedTime, clipId);
-      if (!engine.captureVideoFrameAtTime(video, presentedTime, clipId)) {
-        engine.ensureVideoFrameCached(video, clipId);
+      renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
+      if (!renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId)) {
+        renderHostPort.ensureVideoFrameCached(video, clipId);
       }
-      engine.cacheFrameAtTime(video, safeTargetTime);
-      engine.markVideoGpuReady(video);
+      renderHostPort.cacheFrameAtTime(video, safeTargetTime);
+      renderHostPort.markVideoGpuReady(video);
       scrubSettleState.resolve(clipId);
       this.deps.warmups.completeAttempt(video);
       delete this.lastWarmupRetargetAt[clipId];
@@ -432,7 +432,7 @@ export class VideoSyncWarmupCoordinator {
         video.pause?.();
       }
       if (shouldRequestRender) {
-        engine.requestRender();
+        renderHostPort.requestRender();
       }
     };
 

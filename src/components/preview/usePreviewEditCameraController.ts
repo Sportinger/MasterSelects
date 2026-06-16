@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject, type R
 
 import { resolveSharedSceneCameraConfig } from '../../engine/scene/SceneCameraUtils';
 import type { SceneCameraConfig, SceneVector3 } from '../../engine/scene/types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { useEngineStore } from '../../stores/engineStore';
 import type { SceneCameraSettings } from '../../stores/mediaStore/types';
 import { useTimelineStore } from '../../stores/timeline';
@@ -141,17 +141,17 @@ export function usePreviewEditCameraController({
     const tick = (now: number) => {
       const rawT = Math.min(1, (now - startedAt) / EDIT_CAMERA_BLEND_MS);
       setPreviewCameraOverride(lerpSceneCameraConfig(from, to, rawT < 0.5 ? 4 * rawT * rawT * rawT : 1 - Math.pow(-2 * rawT + 2, 3) / 2));
-      engine.requestRender();
+      renderHostPort.requestRender();
       if (rawT < 1) {
         editCameraAnimationRef.current = window.requestAnimationFrame(tick);
         return;
       }
       editCameraAnimationRef.current = null;
       setPreviewCameraOverride(clearAtEnd ? null : cloneSceneCameraConfig(to));
-      engine.requestRender();
+      renderHostPort.requestRender();
     };
     setPreviewCameraOverride(cloneSceneCameraConfig(from));
-    engine.requestRender();
+    renderHostPort.requestRender();
     editCameraAnimationRef.current = window.requestAnimationFrame(tick);
   }, [setPreviewCameraOverride, stopEditCameraAnimation]);
 
@@ -191,7 +191,7 @@ export function usePreviewEditCameraController({
     );
     if (nextCameraConfig) {
       setPreviewCameraOverride(nextCameraConfig);
-      engine.requestRender();
+      renderHostPort.requestRender();
     }
   }, [
     applySceneCameraValues,
@@ -293,7 +293,7 @@ export function usePreviewEditCameraController({
       toConfig = buildEditCameraOrthographicConfig(editCameraOrthoMode, nextFrame, nextCameraConfig);
     }
     animatePreviewCameraOverride(fromConfig, toConfig, false);
-    engine.requestRender();
+    renderHostPort.requestRender();
     return true;
   }, [
     activeCameraClipAtPlayhead,
@@ -351,7 +351,7 @@ export function usePreviewEditCameraController({
         editCameraViewTransitionRef.current = false;
       } else {
         setPreviewCameraOverride(editCameraConfig);
-        engine.requestRender();
+        renderHostPort.requestRender();
       }
       return;
     }
@@ -373,7 +373,7 @@ export function usePreviewEditCameraController({
   useEffect(() => () => {
     stopEditCameraAnimation();
     setPreviewCameraOverride(null);
-    engine.requestRender();
+    renderHostPort.requestRender();
   }, [setPreviewCameraOverride, stopEditCameraAnimation]);
 
   const editCameraGizmoTransform = editCameraModeActive && activeCameraClipAtPlayhead ? resolveCameraClipTransformAtPlayhead(activeCameraClipAtPlayhead) : null;

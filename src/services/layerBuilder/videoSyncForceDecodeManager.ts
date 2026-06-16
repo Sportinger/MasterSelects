@@ -1,4 +1,4 @@
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 
 export class VideoSyncForceDecodeManager {
@@ -31,12 +31,12 @@ export class VideoSyncForceDecodeManager {
         video.pause();
         video.currentTime = currentTime;
         this.inProgress.delete(clipId);
-        engine.requestRender();
+        renderHostPort.requestRender();
       })
       .catch(() => {
         video.currentTime = currentTime + 0.001;
         this.inProgress.delete(clipId);
-        engine.requestRender();
+        renderHostPort.requestRender();
       });
   }
 
@@ -44,11 +44,11 @@ export class VideoSyncForceDecodeManager {
     if (this.inProgress.has(clipId)) return;
     this.inProgress.add(clipId);
     vfPipelineMonitor.record('vf_gpu_cold', { clipId, scrub: 'true' });
-    void engine
+    void renderHostPort
       .preCacheVideoFrame(video, clipId)
       .finally(() => {
         this.inProgress.delete(clipId);
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
       });
   }
 }

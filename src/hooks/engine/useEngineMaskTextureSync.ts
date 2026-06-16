@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { engine } from '../../engine/WebGPUEngine';
 import { Logger } from '../../services/logger';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSAM2Store, maskToImageData } from '../../stores/sam2Store';
 import { useTimelineStore } from '../../stores/timeline';
@@ -53,7 +53,7 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       const sam2Version = `sam2_${mask.maskData.length}_${sam2State.inverted}_${engineDimensions.width}x${engineDimensions.height}`;
       if (maskVersionRef.current.get(cacheKey) !== sam2Version) {
         maskVersionRef.current.set(cacheKey, sam2Version);
-        engine.updateMaskTexture(clip.id, maskImageData);
+        renderHostPort.updateMaskTexture(clip.id, maskImageData);
         return true;
       }
       return false;
@@ -79,9 +79,9 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
 
         if (maskImageData) {
           log.debug(`Generated mask texture for clip ${clip.id}: ${engineDimensions.width}x${engineDimensions.height}, masks: ${clip.masks.length}`);
-          engine.updateMaskTexture(clip.id, maskImageData);
+          renderHostPort.updateMaskTexture(clip.id, maskImageData);
         } else {
-          engine.removeMaskTexture(clip.id);
+          renderHostPort.removeMaskTexture(clip.id);
         }
         return true;
       }
@@ -89,7 +89,7 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       const cacheKey = clip.id;
       if (maskVersionRef.current.has(cacheKey)) {
         maskVersionRef.current.delete(cacheKey);
-        engine.removeMaskTexture(clip.id);
+        renderHostPort.removeMaskTexture(clip.id);
         return true;
       }
     }
@@ -111,7 +111,7 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       lastMaskTextureUpdate.current = now;
     }
 
-    const engineDimensions = engine.getOutputDimensions();
+    const engineDimensions = renderHostPort.getOutputDimensions();
     const dragScale = maskDragging
       ? Math.min(1, MASK_TEXTURE_DRAG_MAX_EDGE / Math.max(engineDimensions.width, engineDimensions.height))
       : 1;
@@ -151,7 +151,7 @@ export function useEngineMaskTextureSync(isEngineReady: boolean): (
       }
     }
     if (changed) {
-      engine.requestRender();
+      renderHostPort.requestRender();
     }
   }, [processClipMask]);
 

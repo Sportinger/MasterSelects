@@ -16,6 +16,8 @@ import { transitionToolDefinitions } from './transitions';
 import { maskToolDefinitions } from './masks';
 import { statsToolDefinitions } from './stats';
 import { nodeWorkspaceToolDefinitions } from './nodeWorkspace';
+import { workerFirstToolDefinitions } from './workerFirst';
+import { workerFirstRuntimeToolDefinitions } from './workerFirstRuntime';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -34,6 +36,8 @@ export const AI_TOOLS = [
   ...transitionToolDefinitions,
   ...maskToolDefinitions,
   ...statsToolDefinitions,
+  ...workerFirstToolDefinitions,
+  ...workerFirstRuntimeToolDefinitions,
   ...nodeWorkspaceToolDefinitions,
 ];
 
@@ -54,5 +58,7 @@ export {
   transitionToolDefinitions,
   maskToolDefinitions,
   statsToolDefinitions,
+  workerFirstToolDefinitions,
+  workerFirstRuntimeToolDefinitions,
   nodeWorkspaceToolDefinitions,
 };

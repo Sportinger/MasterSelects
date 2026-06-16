@@ -1,5 +1,5 @@
-import { engine } from '../../engine/WebGPUEngine';
 import { useTimelineStore } from '../../stores/timeline';
+import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import type { FrameContext } from './types';
@@ -98,7 +98,7 @@ export class VideoSyncHtmlSeekCoordinator {
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
     const fastSeek = getFastSeek(video);
     const supportsFastSeek = fastSeek !== null;
-    const presentedTime = engine.getLastPresentedVideoTime(video);
+    const presentedTime = renderHostPort.getLastPresentedVideoTime(video);
     const effectiveDisplayedTime =
       typeof presentedTime === 'number' ? presentedTime : video.currentTime;
     const displayedDriftSeconds = Math.abs(effectiveDisplayedTime - time);
@@ -333,7 +333,7 @@ export class VideoSyncHtmlSeekCoordinator {
     const isDragging = timelineState.isDraggingPlayhead || timelineState.clipDragPreview != null;
     const fastSeek = getFastSeek(video);
     const supportsFastSeek = fastSeek !== null;
-    const presentedTime = engine.getLastPresentedVideoTime(video);
+    const presentedTime = renderHostPort.getLastPresentedVideoTime(video);
     const effectiveTime = typeof presentedTime === 'number' ? presentedTime : video.currentTime;
     const targetDrift = Math.abs(effectiveTime - queuedTarget);
     const settle = scrubSettleState.get(clipId);
@@ -342,7 +342,7 @@ export class VideoSyncHtmlSeekCoordinator {
       if (targetDrift <= 0.04) {
         this.deps.htmlSeeks.setLatestTarget(clipId, queuedTarget);
         this.deps.htmlSeeks.setLastSeekAt(clipId, performance.now());
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
         return;
       }
 
@@ -363,7 +363,7 @@ export class VideoSyncHtmlSeekCoordinator {
               : 'drag-rvfc',
         });
         this.registerRVFC(clipId, video);
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
         return;
       }
 
@@ -375,7 +375,7 @@ export class VideoSyncHtmlSeekCoordinator {
         deferred: 'drag-rvfc',
         driftMs: Math.round(targetDrift * 1000),
       });
-      engine.requestNewFrameRender();
+      renderHostPort.requestNewFrameRender();
       return;
     }
 
@@ -388,7 +388,7 @@ export class VideoSyncHtmlSeekCoordinator {
           satisfied: 'rvfc',
           driftMs: Math.round(targetDrift * 1000),
         });
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
         return;
       }
 
@@ -404,7 +404,7 @@ export class VideoSyncHtmlSeekCoordinator {
           deferred: 'rvfc',
           driftMs: Math.round(targetDrift * 1000),
         });
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
         return;
       }
     }
@@ -446,7 +446,7 @@ export class VideoSyncHtmlSeekCoordinator {
       this.registerRVFC(clipId, video);
     }
 
-    engine.requestNewFrameRender();
+    renderHostPort.requestNewFrameRender();
   }
 
   private armSeekedFlush(clipId: string, video: HTMLVideoElement): void {
@@ -458,10 +458,10 @@ export class VideoSyncHtmlSeekCoordinator {
     video.addEventListener('seeked', () => {
       this.deps.htmlSeeks.clearSeekedFlush(clipId);
       const presentedTime = video.currentTime;
-      engine.markVideoFramePresented(video, presentedTime, clipId);
-      engine.captureVideoFrameAtTime(video, presentedTime, clipId);
-      engine.cacheFrameAtTime(video, presentedTime);
-      engine.requestNewFrameRender();
+      renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
+      renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId);
+      renderHostPort.cacheFrameAtTime(video, presentedTime);
+      renderHostPort.requestNewFrameRender();
 
       const timelineState = useTimelineStore.getState();
       const isDragging = timelineState.isDraggingPlayhead || timelineState.clipDragPreview != null;
@@ -493,13 +493,13 @@ export class VideoSyncHtmlSeekCoordinator {
             : video.currentTime;
         this.deps.htmlSeeks.deleteRvfcHandle(clipId);
         this.deps.htmlSeeks.clearPendingTarget(clipId);
-        engine.markVideoFramePresented(video, presentedTime, clipId);
-        engine.captureVideoFrameAtTime(video, presentedTime, clipId);
-        engine.cacheFrameAtTime(video, presentedTime);
+        renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
+        renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId);
+        renderHostPort.cacheFrameAtTime(video, presentedTime);
         scrubSettleState.resolve(clipId);
         vfPipelineMonitor.record('vf_seek_done', { clipId });
         this.flushQueuedSeekTarget(clipId, video, 'rvfc');
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
       }));
     }
   }

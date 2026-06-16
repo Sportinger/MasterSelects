@@ -7,7 +7,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { renderScheduler } from '../../services/renderScheduler';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 
 interface MultiPreviewSlotProps {
   panelId: string;
@@ -65,7 +65,7 @@ export function MultiPreviewSlot({
 
     const isIndependent = source.type !== 'activeComp';
 
-    const gpuContext = engine.registerTargetCanvas(targetId, canvasRef.current);
+    const gpuContext = renderHostPort.registerTargetCanvas(targetId, canvasRef.current);
     if (!gpuContext) return;
 
     useRenderTargetStore.getState().registerTarget({
@@ -90,7 +90,7 @@ export function MultiPreviewSlot({
         renderScheduler.unregister(targetId);
       }
       useRenderTargetStore.getState().unregisterTarget(targetId);
-      engine.unregisterTargetCanvas(targetId);
+      renderHostPort.unregisterTargetCanvas(targetId);
     };
   }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSourceCompositionId, autoSourceLayerIndex]);
 
@@ -98,7 +98,7 @@ export function MultiPreviewSlot({
   useEffect(() => {
     if (!isEngineReady) return;
     useRenderTargetStore.getState().setTargetTransparencyGrid(targetId, showTransparencyGrid);
-    engine.requestRender();
+    renderHostPort.requestRender();
   }, [isEngineReady, targetId, showTransparencyGrid]);
 
   // ResizeObserver for aspect-ratio-correct sizing

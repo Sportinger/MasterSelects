@@ -11,7 +11,7 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { useRenderTargetStore } from '../stores/renderTargetStore';
 import { compositionRenderer } from './compositionRenderer';
-import { engine } from '../engine/WebGPUEngine';
+import { renderHostPort } from './render/renderHostPort';
 import { getPlayheadPosition } from './layerBuilder/PlayheadState';
 import { isRenderTargetRenderable } from '../utils/renderTargetVisibility';
 
@@ -21,6 +21,56 @@ interface NestedCompInfo {
   clipDuration: number;
   clipInPoint: number;
   clipOutPoint: number;
+}
+
+export interface IndependentRenderSchedulerRuntimeJob {
+  readonly jobId: string;
+  readonly targetId: string;
+  readonly compositionId: string | null;
+  readonly state: 'completed' | 'dropped';
+  readonly queuedAtMs: number;
+  readonly startedAtMs: number | null;
+  readonly finishedAtMs: number | null;
+  readonly reason:
+    | 'black-frame'
+    | 'active-layer-filter'
+    | 'nested-texture-copy'
+    | 'composition-render'
+    | 'composition-not-ready';
+}
+
+export interface IndependentRenderSchedulerRuntimeCounters {
+  admitted: number;
+  started: number;
+  completed: number;
+  dropped: number;
+  blackFrames: number;
+  activeLayerFilters: number;
+  nestedTextureCopies: number;
+  compositionRenders: number;
+  compositionNotReadyDrops: number;
+}
+
+export interface IndependentRenderSchedulerRuntimeSnapshot {
+  readonly generatedAtMs: number;
+  readonly isRunning: boolean;
+  readonly registeredTargetCount: number;
+  readonly jobs: readonly IndependentRenderSchedulerRuntimeJob[];
+  readonly counters: IndependentRenderSchedulerRuntimeCounters;
+}
+
+function createRuntimeCounters(): IndependentRenderSchedulerRuntimeCounters {
+  return {
+    admitted: 0,
+    started: 0,
+    completed: 0,
+    dropped: 0,
+    blackFrames: 0,
+    activeLayerFilters: 0,
+    nestedTextureCopies: 0,
+    compositionRenders: 0,
+    compositionNotReadyDrops: 0,
+  };
 }
 
 export function normalizeIsolatedLayerPreview(layers: Layer[]): Layer[] {
@@ -48,6 +98,9 @@ class RenderSchedulerService {
   // Reuse the main loop's pre-built layers for the active composition
   // Avoids re-seeking video elements and bypasses compositionRenderer entirely
   private activeCompLayers: Layer[] | null = null;
+  private readonly runtimeCounters = createRuntimeCounters();
+  private runtimeJobSequence = 0;
+  private recentRuntimeJobs: IndependentRenderSchedulerRuntimeJob[] = [];
 
   /**
    * Match the main preview timing path: during playback the render loop advances
@@ -219,7 +272,7 @@ class RenderSchedulerService {
       const shouldRender = deltaTime >= 14;
 
       // Skip during export to prevent video element conflicts
-      if (shouldRender && !engine.getIsExporting()) {
+      if (shouldRender && !renderHostPort.getIsExporting()) {
         this.renderAllTargets();
       }
 
@@ -268,7 +321,13 @@ class RenderSchedulerService {
 
       if (!compId) {
         // Empty slot or unresolvable source — render black
-        engine.renderToPreviewCanvas(targetId, []);
+        renderHostPort.renderToPreviewCanvas(targetId, []);
+        this.recordRuntimeJob({
+          targetId,
+          compositionId: null,
+          state: 'completed',
+          reason: 'black-frame',
+        });
         continue;
       }
 
@@ -291,7 +350,13 @@ class RenderSchedulerService {
           filtered = this.activeCompLayers;
         }
         filtered = normalizeIsolatedLayerPreview(filtered);
-        engine.renderToPreviewCanvas(targetId, filtered);
+        renderHostPort.renderToPreviewCanvas(targetId, filtered);
+        this.recordRuntimeJob({
+          targetId,
+          compositionId: compId,
+          state: 'completed',
+          reason: 'active-layer-filter',
+        });
         continue;
       }
 
@@ -303,7 +368,13 @@ class RenderSchedulerService {
         const clipEnd = clipStart + nestedInfo.clipDuration;
 
         if (mainPlayhead >= clipStart && mainPlayhead < clipEnd) {
-          if (engine.copyNestedCompTextureToPreview(targetId, compId)) {
+          if (renderHostPort.copyNestedCompTextureToPreview(targetId, compId)) {
+            this.recordRuntimeJob({
+              targetId,
+              compositionId: compId,
+              state: 'completed',
+              reason: 'nested-texture-copy',
+            });
             continue; // Reused pre-rendered texture
           }
           // Fall through to independent rendering
@@ -319,6 +390,12 @@ class RenderSchedulerService {
             log.debug(`Composition ${compId} auto-prepared in render loop: ${ready}`);
           });
         }
+        this.recordRuntimeJob({
+          targetId,
+          compositionId: compId,
+          state: 'dropped',
+          reason: 'composition-not-ready',
+        });
         continue;
       }
 
@@ -345,8 +422,39 @@ class RenderSchedulerService {
       }
 
       // Render to the target canvas (empty = black)
-      engine.renderToPreviewCanvas(targetId, evalLayers);
+      renderHostPort.renderToPreviewCanvas(targetId, evalLayers);
+      this.recordRuntimeJob({
+        targetId,
+        compositionId: compId,
+        state: 'completed',
+        reason: 'composition-render',
+      });
     }
+  }
+
+  private recordRuntimeJob(input: Omit<IndependentRenderSchedulerRuntimeJob, 'jobId' | 'queuedAtMs' | 'startedAtMs' | 'finishedAtMs'>): void {
+    const now = Date.now();
+    this.runtimeCounters.admitted += 1;
+    if (input.state === 'completed') {
+      this.runtimeCounters.started += 1;
+      this.runtimeCounters.completed += 1;
+    } else {
+      this.runtimeCounters.dropped += 1;
+    }
+    if (input.reason === 'black-frame') this.runtimeCounters.blackFrames += 1;
+    if (input.reason === 'active-layer-filter') this.runtimeCounters.activeLayerFilters += 1;
+    if (input.reason === 'nested-texture-copy') this.runtimeCounters.nestedTextureCopies += 1;
+    if (input.reason === 'composition-render') this.runtimeCounters.compositionRenders += 1;
+    if (input.reason === 'composition-not-ready') this.runtimeCounters.compositionNotReadyDrops += 1;
+
+    const job: IndependentRenderSchedulerRuntimeJob = {
+      ...input,
+      jobId: `independent-render:${++this.runtimeJobSequence}`,
+      queuedAtMs: now,
+      startedAtMs: input.state === 'completed' ? now : null,
+      finishedAtMs: input.state === 'completed' ? now : null,
+    };
+    this.recentRuntimeJobs = [...this.recentRuntimeJobs, job].slice(-32);
   }
 
   /**
@@ -387,6 +495,16 @@ class RenderSchedulerService {
         compositionId: target ? store.resolveSourceToCompId(target.source) : null,
       };
     });
+  }
+
+  getWorkerFirstRuntimeSnapshot(): IndependentRenderSchedulerRuntimeSnapshot {
+    return {
+      generatedAtMs: Date.now(),
+      isRunning: this.isRunning,
+      registeredTargetCount: this.registeredTargets.size,
+      jobs: this.recentRuntimeJobs.map((job) => ({ ...job })),
+      counters: { ...this.runtimeCounters },
+    };
   }
 }
 

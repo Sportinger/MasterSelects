@@ -1,7 +1,7 @@
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import { getExpectedProxyFrameCount } from '../../stores/mediaStore/helpers/proxyCompleteness';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import { proxyFrameCache } from '../proxyFrameCache';
 import { getMediaFileForClip } from './FrameContext';
 import { LAYER_BUILDER_CONSTANTS, type FrameContext } from './types';
@@ -213,7 +213,7 @@ export class LayerBuilderProxyFrames {
       .then((image) => {
         if (image) {
           this.heldFrames.set(cacheKey, { frameIndex, image });
-          engine.requestRender();
+          renderHostPort.requestRender();
         }
       })
       .finally(() => {

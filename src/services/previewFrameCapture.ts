@@ -1,4 +1,5 @@
 import { Logger } from './logger';
+import { renderHostPort } from './render/renderHostPort';
 
 const log = Logger.create('PreviewFrameCapture');
 
@@ -16,17 +17,12 @@ async function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob | null> 
 
 export async function captureCurrentPreviewFrameCanvas(): Promise<CapturedPreviewFrameCanvas | null> {
   try {
-    const { engine } = await import('../engine/WebGPUEngine');
-    if (!engine) {
-      return null;
-    }
-
-    const pixels = await engine.readPixels();
+    const pixels = await renderHostPort.readPixels();
     if (!pixels) {
       return null;
     }
 
-    const { width, height } = engine.getOutputDimensions();
+    const { width, height } = renderHostPort.getOutputDimensions();
     if (!width || !height) {
       return null;
     }
