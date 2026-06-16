@@ -467,8 +467,13 @@
   font-weight: inherit;
 }
 
+/* Solo is a loud, exclusive state - give it a filled amber chip on mixer
+   tracks (audio + MIDI) so it reads at a glance, matching the video header. */
+.track-header.mixer .track-controls .btn-icon.solo-active,
 .track-header.mixer.audio-layer-basic .track-controls .btn-icon.solo-active {
   color: var(--warning);
+  background: rgba(243, 156, 18, 0.2);
+  border: 1px solid rgba(243, 156, 18, 0.5);
   font-weight: bold;
   opacity: 1;
 }

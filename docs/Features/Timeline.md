@@ -283,6 +283,8 @@ Each track header exposes:
 
 Soloing multiple tracks is supported. Non-solo tracks dim visually when any solo state is active.
 
+Audio and MIDI tracks share one audible solo group: soloing a MIDI track silences non-soloed audio tracks and vice versa (both during playback and export), and the non-soloed tracks of either type dim in the timeline. Video solo stays an independent, visual-only group. An active solo button on an audio/MIDI track shows a filled amber chip so the soloed state is obvious.
+
 ### Track Header Context Menu
 
 - Math Scene and Motion Shape presets are created from the Media panel add/context menu and then dragged to video tracks.

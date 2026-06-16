@@ -14,6 +14,7 @@ import type { TrackContextMenuState } from '../TrackContextMenu';
 import { useTimelineStore } from '../../../stores/timeline';
 import { TimelineHeader } from '../TimelineHeader';
 import { VIDEO_NEW_TRACK_PREVIEW_HEIGHT } from '../utils/timelineHostConstants';
+import { isAudioSectionTrackType } from '../utils/trackSection';
 import { TimelineNewTrackHeaderPreview } from './TimelineNewTrackPreviews';
 
 type NullableSetter<T> = Dispatch<SetStateAction<T | null>>;
@@ -122,7 +123,7 @@ export function TimelineSectionHeaders({
       {sectionTracks.map((track) => {
         const isDimmed =
           (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
-          (track.type === 'audio' && anyViewAudioSolo && !track.solo);
+          (isAudioSectionTrackType(track.type) && anyViewAudioSolo && !track.solo);
         const isExpanded = !sectionCollapsed && isTrackExpandedForRender(track.id);
         const baseHeight = getSectionTrackBaseHeight(track, sectionKind);
         const dynamicHeight = getSectionTrackHeight(track, sectionKind);

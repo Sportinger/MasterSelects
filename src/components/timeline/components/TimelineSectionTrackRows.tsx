@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import { TimelineTrack } from '../TimelineTrack';
 import { getTimelineTrackColor, TIMELINE_TRACK_COLOR_HIDDEN } from '../trackColor';
+import { isAudioSectionTrackType } from '../utils/trackSection';
 import {
   clipDragAffectsTrack,
   clipDragPreviewAffectsTrack,
@@ -132,7 +133,7 @@ export function TimelineSectionTrackRows({
       {sectionTracks.map((track, trackIndex) => {
         const isDimmed =
           (track.type === 'video' && anyViewVideoSolo && !track.solo) ||
-          (track.type === 'audio' && anyViewAudioSolo && !track.solo);
+          (isAudioSectionTrackType(track.type) && anyViewAudioSolo && !track.solo);
         const trackClipDrag = clipDragAffectsTrack(clipDrag, track.id, clipMap)
           ? clipDrag
           : null;
