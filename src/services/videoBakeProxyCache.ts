@@ -5,6 +5,7 @@ import type {
   TimelineRuntimeAdmissionDecision,
 } from './timeline/runtimeCoordinatorTypes';
 import { createRenderResourceDescriptorFromDemand } from './timeline/runtimeProviderDemandBridge';
+import { renderHostPort } from './render/renderHostPort';
 import { timelineRuntimeCoordinator } from './timeline/timelineRuntimeCoordinator';
 import { Logger } from './logger';
 
@@ -312,9 +313,7 @@ class VideoBakeProxyCache {
   }
 
   private requestRender(): void {
-    void import('../engine/WebGPUEngine')
-      .then(({ engine }) => engine.requestRender())
-      .catch(() => undefined);
+    renderHostPort.requestRender();
   }
 }
 

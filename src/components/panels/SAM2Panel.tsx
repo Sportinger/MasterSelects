@@ -9,6 +9,7 @@ import { getSAM2Service } from '../../services/sam2/SAM2Service';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
 import { requireMediaFileImportResult } from '../../stores/mediaStore/helpers/importResult';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { MatAnyoneSetupDialog } from '../common/MatAnyoneSetupDialog';
 import {
   buildMatAnyoneProjectFileName,
@@ -105,9 +106,7 @@ export function SAM2Panel() {
   // --- Paint mask ---
   const initPaintCanvas = useCallback(async () => {
     try {
-      const { engine } = await import('../../engine/WebGPUEngine');
-      if (!engine) return;
-      const { width, height } = engine.getOutputDimensions();
+      const { width, height } = renderHostPort.getOutputDimensions();
 
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -285,11 +284,9 @@ export function SAM2Panel() {
   const handleSam2AutoDetect = useCallback(async () => {
     if (!selectedClip) return;
     try {
-      const { engine } = await import('../../engine/WebGPUEngine');
-      if (!engine) return;
-      const pixels = await engine.readPixels();
+      const pixels = await renderHostPort.readPixels();
       if (!pixels) return;
-      const { width, height } = engine.getOutputDimensions();
+      const { width, height } = renderHostPort.getOutputDimensions();
       const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
       await getSAM2Service().autoDetect(imageData, 0);
     } catch (e) {

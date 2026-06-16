@@ -1,7 +1,7 @@
 import type { MathObject, MathParameter, MathSceneDefinition, TimelineClip } from '../../types';
 import type { MathSceneClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { layerBuilder } from '../../services/layerBuilder';
 import { createDefaultMathScene } from '../../services/mathScene/defaultScene';
 import { generateMathSceneClipId } from './helpers/idGenerator';
@@ -27,7 +27,7 @@ function renderMathClipNow(clip: TimelineClip, playheadPosition: number): void {
     duration: clip.duration,
     dimensions: { width: canvas.width, height: canvas.height },
   });
-  engine.getTextureManager()?.updateCanvasTexture(canvas);
+  renderHostPort.updateCanvasTexture(canvas);
 }
 
 function rerenderAfterMathUpdate(clip: TimelineClip, playheadPosition: number): void {
@@ -35,10 +35,10 @@ function rerenderAfterMathUpdate(clip: TimelineClip, playheadPosition: number): 
   try {
     layerBuilder.invalidateCache();
     const layers = layerBuilder.buildLayersFromStore();
-    engine.render(layers);
+    renderHostPort.render(layers);
   } catch (error) {
     log.debug('Direct render after math scene update failed', error);
-    engine.requestRender();
+    renderHostPort.requestRender();
   }
 }
 
@@ -86,7 +86,7 @@ export const createMathSceneClipSlice: SliceCreator<MathSceneClipActions> = (set
     set({ clips: [...clips, mathClip] });
     updateDuration();
     invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
 
     log.debug('Created math scene clip', { clipId });
     return clipId;

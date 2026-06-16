@@ -6,7 +6,7 @@ import { getRuntimeDiagnostics } from '../../../../runtimeDiagnostics';
 import { proxyFrameCache } from '../../../../proxyFrameCache';
 import { layerBuilder } from '../../../../layerBuilder';
 import { audioRoutingManager } from '../../../../audioRoutingManager';
-import { engine } from '../../../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../../render/renderHostPort';
 import { createFrameContext, getClipTimeInfo } from '../../../../layerBuilder/FrameContext';
 import { createLiveAudioRouteSettings, getTrackAudioMuted } from '../../../../audio/audioGraphRouteSettings';
 import { canUseStemBufferMixer } from '../../../../layerBuilder/audioTrackStemSyncModel';
@@ -549,7 +549,7 @@ export async function measurePlaybackFrameLoop(args: Record<string, unknown> = {
     debugWindow.__MS_DISABLE_LIVE_PLAYHEAD__ = true;
   }
   if (suppressEngineRenderLoop) {
-    engine.stop();
+    renderHostPort.stopRenderLoopForDiagnostics();
     engineRenderLoopStopped = true;
   }
 
@@ -610,7 +610,7 @@ export async function measurePlaybackFrameLoop(args: Record<string, unknown> = {
     };
   } finally {
     if (engineRenderLoopStopped) {
-      engine.getRenderLoop()?.start();
+      renderHostPort.startExistingRenderLoopForDiagnostics();
     }
     if (suppressPlaybackLoop) {
       debugWindow.__MS_DISABLE_PLAYBACK_LOOP__ = previousPlaybackLoopDebugFlag;

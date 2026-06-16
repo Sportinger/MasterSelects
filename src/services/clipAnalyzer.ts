@@ -6,7 +6,7 @@ import { useTimelineStore } from '../stores/timeline';
 import { useMediaStore } from '../stores/mediaStore';
 import { triggerTimelineSave } from '../stores/mediaStore';
 import { projectFileService } from './projectFileService';
-import { engine } from '../engine/WebGPUEngine';
+import { renderHostPort } from './render/renderHostPort';
 import {
   OpticalFlowAnalyzer,
   getOpticalFlowAnalyzer,
@@ -46,7 +46,7 @@ async function initGPUAnalyzer(forceRecreate = false): Promise<boolean> {
   if (flowAnalyzer) return true;
 
   try {
-    const device = engine.getDevice();
+    const device = renderHostPort.getDevice();
     if (!device) {
       log.warn('WebGPU device not available, falling back to CPU');
       useGPUAnalysis = false;

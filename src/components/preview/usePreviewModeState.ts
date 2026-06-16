@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import type { Layer } from '../../types/layers';
 import type { TextBoundsPath } from '../../types/masks';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
@@ -218,7 +218,7 @@ export function usePreviewModeState({
   useEffect(() => {
     setSceneGizmoVisible(sceneObjectOverlayEnabled && activeSharedSceneOverlayContent && isEditableSource && !sourceMonitorActive);
     if (isEngineReady) {
-      engine.requestRender();
+      renderHostPort.requestRender();
     }
   }, [
     activeSharedSceneOverlayContent,

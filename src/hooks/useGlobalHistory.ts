@@ -16,8 +16,8 @@ import type { TimelineClip } from '../types';
 import type { DockLayout, DockNode, DockPanel, FloatingPanel } from '../types/dock';
 import { getShortcutRegistry } from '../services/shortcutRegistry';
 import { isAIExecutionRunning } from '../services/aiTools/executionState';
-import { engine } from '../engine/WebGPUEngine';
 import { layerBuilder } from '../services/layerBuilder';
+import { renderHostPort } from '../services/render/renderHostPort';
 import {
   useHistoryStore,
   initHistoryStoreRefs,
@@ -344,9 +344,9 @@ export function useGlobalHistory() {
         try {
           layerBuilder.invalidateCache();
           const layers = layerBuilder.buildLayersFromStore();
-          engine.render(layers);
+          renderHostPort.render(layers);
         } catch {
-          engine.requestNewFrameRender();
+          renderHostPort.requestNewFrameRender();
         }
       },
     });

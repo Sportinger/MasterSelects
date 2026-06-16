@@ -29,6 +29,26 @@ export interface ScrubbingCacheStats {
   background: BackgroundScrubCacheStats;
 }
 
+export type WorkerFirstCacheRuntimeOwner = 'source-frame' | 'composite-frame';
+
+export interface WorkerFirstCacheRuntimeRecord {
+  readonly cacheId: string;
+  readonly owner: WorkerFirstCacheRuntimeOwner;
+  readonly entries: number;
+  readonly bytes: number;
+  readonly allocations: number;
+  readonly reuses: number;
+  readonly evictions: number;
+  readonly transfers: number;
+  readonly releases: number;
+  readonly leakChecks: number;
+}
+
+export interface WorkerFirstCacheRuntimeSnapshot {
+  readonly generatedAtMs: number;
+  readonly records: readonly WorkerFirstCacheRuntimeRecord[];
+}
+
 export class ScrubbingCache {
   private readonly scrubTextureCache: ScrubTextureCache;
   private readonly backgroundPreload: BackgroundPreloadController;
@@ -129,6 +149,65 @@ export class ScrubbingCache {
       evictions: snapshot.evictions,
       budgetMode: 'static',
       background: this.backgroundPreload.getStats(),
+    };
+  }
+
+  getWorkerFirstCacheRuntimeSnapshot(): WorkerFirstCacheRuntimeSnapshot {
+    const scrub = this.scrubTextureCache.getRuntimeCacheSnapshot();
+    const lastFrame = this.lastFrameCache.getRuntimeCacheSnapshot();
+    const ramPreview = this.ramPreviewCache.getRuntimeCacheSnapshot();
+    return {
+      generatedAtMs: Date.now(),
+      records: [
+        {
+          cacheId: 'scrubbing:texture-cache',
+          owner: 'source-frame',
+          entries: scrub.entries,
+          bytes: scrub.bytes,
+          allocations: scrub.allocations,
+          reuses: scrub.reuses,
+          evictions: scrub.evictions,
+          transfers: 0,
+          releases: scrub.releases,
+          leakChecks: 1,
+        },
+        {
+          cacheId: 'scrubbing:last-frame-cache',
+          owner: 'source-frame',
+          entries: lastFrame.entries,
+          bytes: lastFrame.bytes,
+          allocations: lastFrame.allocations,
+          reuses: lastFrame.reuses,
+          evictions: 0,
+          transfers: 0,
+          releases: lastFrame.releases,
+          leakChecks: 1,
+        },
+        {
+          cacheId: 'ram-preview:composite-cache',
+          owner: 'composite-frame',
+          entries: ramPreview.composite.entries,
+          bytes: ramPreview.composite.bytes,
+          allocations: ramPreview.composite.allocations,
+          reuses: ramPreview.composite.reuses,
+          evictions: ramPreview.composite.evictions,
+          transfers: 0,
+          releases: ramPreview.composite.releases,
+          leakChecks: 1,
+        },
+        {
+          cacheId: 'ram-preview:gpu-frame-cache',
+          owner: 'composite-frame',
+          entries: ramPreview.gpuFrames.entries,
+          bytes: ramPreview.gpuFrames.bytes,
+          allocations: ramPreview.gpuFrames.allocations,
+          reuses: ramPreview.gpuFrames.reuses,
+          evictions: ramPreview.gpuFrames.evictions,
+          transfers: ramPreview.gpuFrames.allocations,
+          releases: ramPreview.gpuFrames.releases,
+          leakChecks: 1,
+        },
+      ],
     };
   }
 

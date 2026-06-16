@@ -1,5 +1,5 @@
 import type { Keyframe, KeyframeActions, SliceCreator } from '../types';
-import { engine } from '../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../services/render/renderHostPort';
 import { getKeyframeAtTime, hasKeyframesForProperty } from '../../../utils/keyframeInterpolation';
 import { normalizeEasingType } from '../../../utils/easing';
 import { isVectorAnimationSourceType, parseVectorAnimationStateProperty } from '../../../types/vectorAnimation';
@@ -64,7 +64,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
       : { clipKeyframes: newMap, clips: nextClips });
 
     invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
   },
 
   removeKeyframe: (keyframeId) => {

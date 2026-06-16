@@ -1,4 +1,4 @@
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import type { VideoSyncHtmlSeekState } from './videoSyncHtmlSeekState';
@@ -66,7 +66,7 @@ export class VideoSyncRecoveryCoordinator {
       return;
     }
 
-    const lastPresentedTime = engine.getLastPresentedVideoTime(video);
+    const lastPresentedTime = renderHostPort.getLastPresentedVideoTime(video);
     if (typeof lastPresentedTime === 'number' && Math.abs(lastPresentedTime - targetTime) <= 0.12) {
       scrubSettleState.resolve(clipId);
       return;
@@ -78,7 +78,7 @@ export class VideoSyncRecoveryCoordinator {
 
     if (settle.stage === 'settle') {
       this.deps.beginOrQueueSettleSeek(clipId, video, targetTime, { retry: 'true' });
-      engine.requestNewFrameRender();
+      renderHostPort.requestNewFrameRender();
       scrubSettleState.markRetry(clipId, targetTime, VideoSyncRecoveryCoordinator.SCRUB_SETTLE_TIMEOUT_MS);
       return;
     }
@@ -112,7 +112,7 @@ export class VideoSyncRecoveryCoordinator {
       return;
     }
 
-    const lastPresentedTime = engine.getLastPresentedVideoTime(video);
+    const lastPresentedTime = renderHostPort.getLastPresentedVideoTime(video);
     if (typeof lastPresentedTime !== 'number' || !Number.isFinite(lastPresentedTime)) {
       return;
     }

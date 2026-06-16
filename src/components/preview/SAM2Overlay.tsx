@@ -7,6 +7,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useSAM2Store } from '../../stores/sam2Store';
 import { getSAM2Service } from '../../services/sam2/SAM2Service';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import type { SAM2Point } from '../../services/sam2/types';
 
 interface SAM2OverlayProps {
@@ -131,13 +132,10 @@ export function SAM2Overlay({ canvasWidth, canvasHeight }: SAM2OverlayProps) {
 
     try {
       // First encode frame if needed (check if embedding is ready)
-      const { engine } = await import('../../engine/WebGPUEngine');
-      if (!engine) return;
-
-      const pixels = await engine.readPixels();
+      const pixels = await renderHostPort.readPixels();
       if (!pixels) return;
 
-      const { width, height } = engine.getOutputDimensions();
+      const { width, height } = renderHostPort.getOutputDimensions();
       const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
 
       // Encode frame (cached if already encoded)
@@ -177,13 +175,10 @@ export function SAM2Overlay({ canvasWidth, canvasHeight }: SAM2OverlayProps) {
     const service = getSAM2Service();
 
     try {
-      const { engine } = await import('../../engine/WebGPUEngine');
-      if (!engine) return;
-
-      const pixels = await engine.readPixels();
+      const pixels = await renderHostPort.readPixels();
       if (!pixels) return;
 
-      const { width, height } = engine.getOutputDimensions();
+      const { width, height } = renderHostPort.getOutputDimensions();
       const imageData = new ImageData(new Uint8ClampedArray(pixels), width, height);
 
       await service.encodeFrame(imageData, 0);

@@ -107,6 +107,39 @@ POST /api/ai-tools
 
 It also supports the `_list` and `_status` meta-commands, plus targeted execution against the active browser tab through the HMR bridge.
 
+For bridge preflight, `GET /api/ai-tools` reports connected browser tabs without auth, while `GET /api/ai-tools/auth-check` validates the bearer token without dispatching a browser tool. This catches stale `.ai-bridge-token` files after multiple dev servers have been started.
+
+```powershell
+$token = Get-Content -Path .ai-bridge-token -Raw
+$headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
+Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools/auth-check' -Method Get -Headers $headers
+```
+
+The worker-first platform-evidence helper wraps these checks:
+
+```powershell
+npm run worker-first:platform:doctor -- --latest-per-platform
+npm run worker-first:platform:status -- --latest-per-platform
+npm run worker-first:platform:macos-runbook
+```
+
+`doctor` prints matrix status, platform proof summaries, bridge tab status,
+fresh/stale tab counts, and `Bridge auth: ok` or the token error. `collect`
+first waits for a fresh dev-bridge target tab to register
+(`lastSeenAgoMs <= 10000` and not unresponsive), then waits `--wait-ms` again
+after target-tab selection before dispatching the proof tool; the default is
+5000ms. If doctor reports `Fresh tabs: 0/...`, foreground or reload the target
+browser tab before collecting. Collection reports include readiness metadata
+(`targetPollCount`, `targetWaitedMs`, selected tab before/after settle, and
+actual settle wait) so a package can be audited for the required post-load wait.
+`status`, `verify`, and `doctor` read matching companion `*.report.json` files
+when present and print a non-blocking readiness audit (`missing report`,
+`legacy report`, or `invalid`). Failed `collect` payloads are written as
+`*.failed.json`, never `*.package.json`, so incomplete runs cannot displace the
+latest valid per-platform package. `macos-runbook` prints the exact real-Mac
+Safari/Firefox collection commands for the remaining platform packages; it is
+not synthetic platform evidence.
+
 ### Export Debug Via Bridge
 
 Use `debugExport` when the UI export fails or appears stuck and the dev server plus browser tab are already running. It is a dev-bridge-only handler, not a public chat tool.

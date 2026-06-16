@@ -1,10 +1,10 @@
 import { FrameExporter, downloadBlob } from '../../../engine/export';
 import type { ExportMode, ExportProgress, VideoCodec, ContainerFormat } from '../../../engine/export';
-import { engine } from '../../../engine/WebGPUEngine';
 import { useExportStore } from '../../../stores/exportStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { exportDiagnostics } from '../../export/exportDiagnostics';
 import { Logger } from '../../logger';
+import { renderHostPort } from '../../render/renderHostPort';
 import type { ToolResult } from '../types';
 
 const log = Logger.create('AIExport');
@@ -141,7 +141,7 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
   });
 
   log.info('Starting debug export', { startTime, endTime, width, height, fps, includeAudio, exportMode, maxRuntimeMs });
-  const engineBefore = engine.getDebugInfrastructureState();
+  const engineBefore = renderHostPort.getDebugInfrastructureState();
   timeline.startExport(startTime, endTime);
   const timeoutId = window.setTimeout(() => {
     timedOut = true;
@@ -163,7 +163,7 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
     });
 
     const elapsedMs = Math.round(performance.now() - startedAt);
-    const engineAfter = engine.getDebugInfrastructureState();
+    const engineAfter = renderHostPort.getDebugInfrastructureState();
     const errors = recentExportErrors(startedAtIso);
 
     if (!blob) {
@@ -216,7 +216,7 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
         progressSamples,
         exportStats: exportDiagnostics.snapshot(),
         engineBefore,
-        engineAfter: engine.getDebugInfrastructureState(),
+        engineAfter: renderHostPort.getDebugInfrastructureState(),
         errors: recentExportErrors(startedAtIso),
       },
     };

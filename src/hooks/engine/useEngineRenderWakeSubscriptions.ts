@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { hasTimelineVisualRenderDemand } from '../../services/timeline/timelineVisualDemand';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -20,7 +20,7 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
           playheadPosition,
           clipDragPreview: timelineState.clipDragPreview,
         });
-        engine.requestRender();
+        renderHostPort.requestRender();
         if (!hasVisualDemand && timelineState.isDraggingPlayhead) {
           layerBuilder.syncAudioElements();
         }
@@ -31,19 +31,19 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
       (state) => state.clips,
       () => {
         if (!useTimelineStore.getState().maskDragging) {
-          engine.requestRender();
+          renderHostPort.requestRender();
         }
       }
     );
 
     const unsubTracks = useTimelineStore.subscribe(
       (state) => state.tracks,
-      () => engine.requestRender()
+      () => renderHostPort.requestRender()
     );
 
     const unsubLayers = useTimelineStore.subscribe(
       (state) => state.layers,
-      () => engine.requestRender()
+      () => renderHostPort.requestRender()
     );
 
     const unsubClipDragPreview = useTimelineStore.subscribe(
@@ -59,33 +59,33 @@ export function useEngineRenderWakeSubscriptions(isEngineReady: boolean): void {
           return;
         }
         layerBuilder.invalidateCache();
-        engine.requestRender();
+        renderHostPort.requestRender();
       }
     );
 
     const unsubSettings = useSettingsStore.subscribe(
       (state) => state.previewQuality,
-      () => engine.requestRender()
+      () => renderHostPort.requestRender()
     );
 
     const unsubActiveComp = useMediaStore.subscribe(
       (state) => state.activeCompositionId,
-      () => engine.requestRender()
+      () => renderHostPort.requestRender()
     );
 
     const unsubLayerSlots = useMediaStore.subscribe(
       (state) => state.activeLayerSlots,
-      () => engine.requestRender()
+      () => renderHostPort.requestRender()
     );
 
     const unsubSlotGridProgress = useTimelineStore.subscribe(
       (state) => state.slotGridProgress,
-      () => engine.requestRender()
+      () => renderHostPort.requestRender()
     );
 
     const unsubLayerOpacities = useMediaStore.subscribe(
       (state) => state.layerOpacities,
-      () => engine.requestRender()
+      () => renderHostPort.requestRender()
     );
 
     return () => {

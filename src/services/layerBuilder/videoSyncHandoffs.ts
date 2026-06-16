@@ -1,5 +1,5 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { Logger } from '../logger';
 import type { FrameContext } from './types';
@@ -180,9 +180,9 @@ export class VideoSyncHandoffManager {
         inPoint: clip.inPoint.toFixed(3),
         drift: elemDrift.toFixed(3),
       });
-      engine.markVideoFramePresented(prev.videoElement, prev.videoElement.currentTime, clip.id);
-      if (!engine.captureVideoFrameAtTime(prev.videoElement, prev.videoElement.currentTime, clip.id)) {
-        engine.ensureVideoFrameCached(prev.videoElement, clip.id);
+      renderHostPort.markVideoFramePresented(prev.videoElement, prev.videoElement.currentTime, clip.id);
+      if (!renderHostPort.captureVideoFrameAtTime(prev.videoElement, prev.videoElement.currentTime, clip.id)) {
+        renderHostPort.ensureVideoFrameCached(prev.videoElement, clip.id);
       }
       this.setHandoff(clip.id, prev.videoElement);
     }

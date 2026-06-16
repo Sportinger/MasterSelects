@@ -3,7 +3,7 @@
 import type { PlaybackActions, SliceCreator } from './types';
 import { MIN_ZOOM, MAX_ZOOM, MIN_TRACK_HEADER_WIDTH, MAX_TRACK_HEADER_WIDTH } from './constants';
 import { useMediaStore } from '../mediaStore';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import {
   getPlayheadPosition,
   playheadState,
@@ -98,7 +98,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       // clears to black instead of retaining a stale frame. Previously this was
       // gated on there being a clip at the position, which left the last frame on
       // screen when jumping into empty space.
-      engine.requestNewFrameRender();
+      renderHostPort.requestNewFrameRender();
     }
 
     if (!latestState.isPlaying) {

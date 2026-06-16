@@ -2,6 +2,7 @@ import type { TimelineClip } from '../../types';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { audioRoutingManager } from '../audioRoutingManager';
 import { clearMasterAudio, playheadState } from '../layerBuilder/PlayheadState';
+import { renderHostPort } from '../render/renderHostPort';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
 
 export interface TimelineClipSourceRuntimeCleanupOptions {
@@ -63,13 +64,7 @@ export function detachLegacyTimelineMediaElement(
 }
 
 function cleanupGpuVideoElement(element: HTMLVideoElement): void {
-  import('../../engine/WebGPUEngine')
-    .then(({ engine }) => {
-      engine.cleanupVideo(element);
-    })
-    .catch(() => {
-      // Ignore async engine cleanup failures during detach.
-    });
+  renderHostPort.cleanupVideo(element);
 }
 
 export function releaseLegacyTimelineClipSourceRuntime(

@@ -2,7 +2,7 @@
 
 import type { ProxyCacheActions, SliceCreator } from './types';
 import { Logger } from '../../services/logger';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { layerBuilder } from '../../services/layerBuilder';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
 import { videoBakeProxyCache } from '../../services/videoBakeProxyCache';
@@ -139,7 +139,7 @@ export const createProxyCacheSlice: SliceCreator<ProxyCacheActions> = (set, get)
       const videoSrc = getTimelineClipScrubCacheVideoSrc(clip);
       if (!videoSrc) return;
 
-      const mediaCachedRanges = engine.getScrubbingCachedRanges(videoSrc);
+      const mediaCachedRanges = renderHostPort.getScrubbingCachedRanges(videoSrc);
       if (mediaCachedRanges.length === 0) return;
 
       const playbackRate = Math.max(Math.abs(clip.speed || 1), 0.001);
@@ -223,9 +223,9 @@ export const createProxyCacheSlice: SliceCreator<ProxyCacheActions> = (set, get)
     // Immediately clear all caches and request render
     layerBuilder.invalidateCache(); // Force layer rebuild
     videoBakeProxyCache.clear();
-    engine.setGeneratingRamPreview(false);
-    engine.clearCompositeCache();
-    engine.requestRender(); // Wake up render loop to show changes immediately
+    renderHostPort.setGeneratingRamPreview(false);
+    renderHostPort.clearCompositeCache();
+    renderHostPort.requestRender(); // Wake up render loop to show changes immediately
   },
 
   // Video warmup - seek through all videos to fill browser cache for smooth scrubbing

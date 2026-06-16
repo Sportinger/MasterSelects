@@ -187,6 +187,19 @@ export function createDevBridgePlugin(options: DevBridgePluginOptions = {}): Plu
       })
 
       server.middlewares.use('/api/ai-tools', (req, res) => {
+        const requestPath = req.url?.split('?')[0] ?? '/'
+        if (requestPath === '/auth-check') {
+          if (!validateBridgeRequest(req, res)) return
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.end('Method not allowed')
+            return
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ status: 'ok' }))
+          return
+        }
+
         if (req.method === 'GET') {
           setCorsHeaders(req, res)
           res.setHeader('Content-Type', 'application/json')

@@ -1,4 +1,4 @@
-import { engine } from '../../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../render/renderHostPort';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import type { TimelineAudioDisplayMode } from '../../../../stores/timeline/types';
@@ -275,7 +275,7 @@ export async function restoreTimelineCanvasSmokeState(
     clipDragPreview: snapshot.clipDragPreview,
     timelineToolPreview: snapshot.timelineToolPreview,
   });
-  engine.requestNewFrameRender();
+  renderHostPort.requestNewFrameRender();
   await waitForFrames(2);
 
   if (snapshot.isPlaying) {

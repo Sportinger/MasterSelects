@@ -1,8 +1,8 @@
-import { engine } from '../../engine/WebGPUEngine';
 import { renderScheduler } from '../renderScheduler';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useTimelineStore } from '../../stores/timeline';
 import type { RenderSource } from '../../types/renderTarget';
+import { renderHostPort } from './renderHostPort';
 
 export interface RegisterPreviewTargetOptions {
   id: string;
@@ -23,7 +23,7 @@ export function registerPreviewTarget({
 }: RegisterPreviewTargetOptions): boolean {
   const isIndependent = source.type !== 'activeComp';
 
-  const gpuContext = engine.registerTargetCanvas(id, canvas);
+  const gpuContext = renderHostPort.registerTargetCanvas(id, canvas);
   if (!gpuContext) return false;
 
   useRenderTargetStore.getState().registerTarget({
@@ -40,10 +40,10 @@ export function registerPreviewTarget({
   });
 
   if (useTimelineStore.getState().isPlaying) {
-    engine.clearVideoCache();
-    engine.clearScrubbingCache();
-    engine.clearCompositeCache();
-    engine.requestRender();
+    renderHostPort.clearVideoCache();
+    renderHostPort.clearScrubbingCache();
+    renderHostPort.clearCompositeCache();
+    renderHostPort.requestRender();
   }
 
   if (isIndependent) {
@@ -61,10 +61,10 @@ export function unregisterPreviewTarget(id: string, source: RenderSource): void 
     renderScheduler.unregister(id);
   }
   useRenderTargetStore.getState().unregisterTarget(id);
-  engine.unregisterTargetCanvas(id);
+  renderHostPort.unregisterTargetCanvas(id);
 }
 
 export function setPreviewTargetTransparency(id: string, showTransparencyGrid: boolean): void {
   useRenderTargetStore.getState().setTargetTransparencyGrid(id, showTransparencyGrid);
-  engine.requestRender();
+  renderHostPort.requestRender();
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type React from 'react';
 
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import type { SceneVector3 } from '../../engine/scene/types';
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
@@ -159,7 +159,7 @@ export function usePreviewMouseRouting({
       setEditCameraOrthoFrame((current) => (
         current?.mode === mode ? { ...current, center: nextCenter } : current
       ));
-      engine.requestRender();
+      renderHostPort.requestRender();
     };
 
     const handleWindowMouseUp = (event: MouseEvent) => {

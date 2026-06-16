@@ -1,7 +1,7 @@
-import { engine } from '../../../../engine/WebGPUEngine';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { getLastRamPreviewGenerationError } from '../../../../stores/timeline/ramPreviewSlice';
 import { useMediaStore } from '../../../../stores/mediaStore';
+import { renderHostPort } from '../../../render/renderHostPort';
 import { RamPreviewEngine } from '../../../ramPreviewEngine';
 import {
   createRamPreviewRunId,
@@ -38,9 +38,9 @@ async function runDirectRamPreviewSmokeRange(start: number, end: number): Promis
     startedAtMs: Date.now(),
   });
 
-  engine.setGeneratingRamPreview(true);
+  renderHostPort.setGeneratingRamPreview(true);
   try {
-    const preview = new RamPreviewEngine(engine);
+    const preview = new RamPreviewEngine(renderHostPort.getRamPreviewRenderEngine());
     const result = await preview.generate(
       {
         start,
@@ -77,7 +77,7 @@ async function runDirectRamPreviewSmokeRange(start: number, end: number): Promis
         : { message: String(error) },
     };
   } finally {
-    engine.setGeneratingRamPreview(false);
+    renderHostPort.setGeneratingRamPreview(false);
     releaseRamPreviewRunResources(runId);
     useTimelineStore.setState({ isRamPreviewing: false, ramPreviewProgress: null });
   }

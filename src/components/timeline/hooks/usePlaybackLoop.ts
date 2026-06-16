@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useTimelineStore } from '../../../stores/timeline';
-import { engine } from '../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../services/render/renderHostPort';
 import {
   clearInternalPlaybackHold,
   getPlayheadPosition,
@@ -111,7 +111,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
       // store update that was still on a clip, so without this the canvas keeps
       // that last frame; at the timeline end / a gap the position has no clip and
       // must clear to black instead of retaining the previous frame.
-      engine.requestNewFrameRender();
+      renderHostPort.requestNewFrameRender();
     };
 
     const updatePlayhead = (currentTime: number) => {

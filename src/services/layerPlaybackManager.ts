@@ -3,12 +3,12 @@
 // and provides layers for rendering. The primary (editor) composition is handled by the timeline store.
 
 import type { TimelineClip, Layer, NestedCompositionData } from '../types';
-import { engine } from '../engine/WebGPUEngine';
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { mediaRuntimeRegistry } from './mediaRuntime/registry';
 import { flags } from '../engine/featureFlags';
 import { Logger } from './logger';
+import { renderHostPort } from './render/renderHostPort';
 import { slotDeckManager } from './slotDeckManager';
 import { vectorAnimationRuntimeManager } from './vectorAnimation/VectorAnimationRuntimeManager';
 import { isVectorAnimationSourceType } from '../types/vectorAnimation';
@@ -48,7 +48,7 @@ class LayerPlaybackManager {
 
   private cleanupVideoElement(video: HTMLVideoElement): void {
     video.pause();
-    engine.cleanupVideo(video);
+    renderHostPort.cleanupVideo(video);
     video.removeAttribute('src');
     video.src = '';
     try {

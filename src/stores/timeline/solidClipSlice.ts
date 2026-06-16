@@ -3,8 +3,8 @@
 import type { TimelineClip } from '../../types';
 import type { SolidClipActions, SliceCreator } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
-import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { generateSolidClipId } from './helpers/idGenerator';
 import { useMediaStore } from '../mediaStore';
 import { Logger } from '../../services/logger';
@@ -79,10 +79,7 @@ export const createSolidClipSlice: SliceCreator<SolidClipActions> = (set, get) =
       currentCanvas: getTimelineGeneratedCanvasRuntime(clip),
     });
 
-    const texMgr = engine.getTextureManager();
-    if (texMgr) {
-      texMgr.updateCanvasTexture(canvas);
-    }
+    renderHostPort.updateCanvasTexture(canvas);
 
     set({
       clips: clips.map(c => c.id !== clipId ? c : {
@@ -97,7 +94,7 @@ export const createSolidClipSlice: SliceCreator<SolidClipActions> = (set, get) =
     try {
       layerBuilder.invalidateCache();
       const layers = layerBuilder.buildLayersFromStore();
-      engine.render(layers);
+      renderHostPort.render(layers);
     } catch (e) {
       log.debug('Direct render after solid color update failed', e);
     }

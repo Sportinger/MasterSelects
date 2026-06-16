@@ -2,9 +2,8 @@
 
 import { useTimelineStore } from '../../stores/timeline';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { NativeHelperClient } from '../nativeHelper';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
 import type { ToolResult } from './types';
 
@@ -23,33 +22,7 @@ function waitForAnimationFrame(): Promise<number> {
 }
 
 function getCaptureCanvas(): { canvas: HTMLCanvasElement; source: string } | null {
-  const engineState = engine as unknown as {
-    mainPreviewCanvas?: HTMLCanvasElement | null;
-    targetCanvases?: Map<string, { canvas: HTMLCanvasElement; context: GPUCanvasContext }>;
-  };
-
-  const mainPreviewCanvas = engineState.mainPreviewCanvas;
-  if (mainPreviewCanvas && mainPreviewCanvas.width > 0 && mainPreviewCanvas.height > 0) {
-    return { canvas: mainPreviewCanvas, source: 'mainPreviewCanvas' };
-  }
-
-  const activeTargets = useRenderTargetStore.getState().getActiveCompTargets();
-  for (const target of activeTargets) {
-    if (target.canvas && target.canvas.width > 0 && target.canvas.height > 0) {
-      return { canvas: target.canvas, source: `renderTarget:${target.id}` };
-    }
-  }
-
-  const targetCanvases = engineState.targetCanvases;
-  if (targetCanvases) {
-    for (const [targetId, entry] of targetCanvases) {
-      if (entry.canvas.width > 0 && entry.canvas.height > 0) {
-        return { canvas: entry.canvas, source: `engineTarget:${targetId}` };
-      }
-    }
-  }
-
-  return null;
+  return renderHostPort.getCaptureCanvas();
 }
 
 // Helper to capture frames at multiple times and combine into a grid image
@@ -79,7 +52,7 @@ export async function captureFrameGrid(
   gridCtx.fillStyle = '#1a1a1a';
   gridCtx.fillRect(0, 0, gridCanvas.width, gridCanvas.height);
 
-  const { width: outputWidth, height: outputHeight } = engine.getOutputDimensions();
+  const { width: outputWidth, height: outputHeight } = renderHostPort.getOutputDimensions();
   const originalPosition = timelineStore.playheadPosition;
 
   // Capture each frame
@@ -90,10 +63,10 @@ export async function captureFrameGrid(
 
     // Move playhead and give nested video providers enough time to settle.
     timelineStore.setPlayheadPosition(Math.max(0, time));
-    engine.requestRender();
+    renderHostPort.requestRender();
     await waitForAnimationFrame();
     await waitForTimeout(settleMs);
-    engine.requestRender();
+    renderHostPort.requestRender();
     await waitForAnimationFrame();
 
     if (mode === 'dom') {
@@ -109,7 +82,7 @@ export async function captureFrameGrid(
       }
     } else {
       // Capture frame from engine
-      const pixels = await engine.readPixels();
+      const pixels = await renderHostPort.readPixels();
       if (pixels) {
         // Create temp canvas for the frame
         const frameCanvas = document.createElement('canvas');

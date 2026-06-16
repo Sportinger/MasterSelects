@@ -28,6 +28,9 @@ export class ScrubTextureCache {
   readonly maxDimension = 960;
   private bytes = 0;
   private evictions = 0;
+  private allocations = 0;
+  private reuses = 0;
+  private releases = 0;
   private pendingCaptures = new Set<string>();
 
   constructor(device: GPUDevice) {
@@ -80,7 +83,10 @@ export class ScrubTextureCache {
     if (!videoSrc || width <= 0 || height <= 0) return false;
 
     const key = getScrubbingKey(videoSrc, time);
-    if (this.cache.has(key)) return false;
+    if (this.cache.has(key)) {
+      this.reuses += 1;
+      return false;
+    }
 
     const texture = this.device.createTexture({
       size: [width, height],
@@ -98,6 +104,7 @@ export class ScrubTextureCache {
       const bytes = width * height * 4;
       this.cache.set(key, { texture, view: texture.createView(), bytes });
       this.bytes += bytes;
+      this.allocations += 1;
       this.evictIfNeeded();
       return true;
     } catch {
@@ -210,6 +217,7 @@ export class ScrubTextureCache {
           if (entry) {
             this.bytes -= entry.bytes;
             entry.texture.destroy();
+            this.releases += 1;
           }
           this.cache.delete(key);
         }
@@ -220,6 +228,7 @@ export class ScrubTextureCache {
     for (const entry of this.cache.values()) {
       entry.texture.destroy();
     }
+    this.releases += this.cache.size;
     this.cache.clear();
     this.bytes = 0;
   }
@@ -241,6 +250,7 @@ export class ScrubTextureCache {
   ): { view: GPUTextureView; mediaTime: number } {
     this.cache.delete(key);
     this.cache.set(key, entry);
+    this.reuses += 1;
     return {
       view: entry.view,
       mediaTime: getScrubbingKeyTime(key),
@@ -256,9 +266,28 @@ export class ScrubTextureCache {
       if (oldest) {
         this.bytes -= oldest.bytes;
         this.evictions++;
+        this.releases += 1;
         oldest.texture.destroy();
       }
       this.cache.delete(oldestKey);
     }
+  }
+
+  getRuntimeCacheSnapshot(): {
+    entries: number;
+    bytes: number;
+    allocations: number;
+    reuses: number;
+    evictions: number;
+    releases: number;
+  } {
+    return {
+      entries: this.cache.size,
+      bytes: this.bytes,
+      allocations: this.allocations,
+      reuses: this.reuses,
+      evictions: this.evictions,
+      releases: this.releases,
+    };
   }
 }

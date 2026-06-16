@@ -359,6 +359,7 @@ POST /api/ai-tools -> Vite server -> HMR WebSocket -> browser -> executeAITool()
 - Sends presence heartbeats and tab-targeting metadata through HMR
 - Supports `_list` and `_status` meta-commands alongside tool execution
 - Shares the dev bridge auth token and only accepts loopback browser origins
+- `GET /api/ai-tools` reports bridge/tab status without auth; `GET /api/ai-tools/auth-check` validates the bearer token without dispatching a browser tool
 - Dev-only browser helpers expose the same surface as `window.aiTools.execute()`, `window.aiTools.list()`, and `window.aiTools.status()`
 
 ### Production (Native Helper Bridge)

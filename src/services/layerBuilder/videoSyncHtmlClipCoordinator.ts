@@ -1,6 +1,6 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
 import { useTimelineStore } from '../../stores/timeline';
+import { renderHostPort } from '../render/renderHostPort';
 import { playheadState } from './PlayheadState';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
@@ -145,7 +145,7 @@ export class VideoSyncHtmlClipCoordinator {
     const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
 
     if (!video.seeking && video.readyState >= 2) {
-      engine.ensureVideoFrameCached(video, clip.id);
+      renderHostPort.ensureVideoFrameCached(video, clip.id);
     }
 
     if (ctx.isPlaying || isInteractivePreview) {
@@ -320,9 +320,9 @@ export class VideoSyncHtmlClipCoordinator {
         vfPipelineMonitor.record('vf_pause', { clipId: clip.id });
       }
       const pauseTargetTime = actualVideo.currentTime;
-      engine.markVideoFramePresented(actualVideo, pauseTargetTime, clip.id);
-      if (!engine.captureVideoFrameAtTime(actualVideo, pauseTargetTime, clip.id)) {
-        engine.ensureVideoFrameCached(actualVideo, clip.id);
+      renderHostPort.markVideoFramePresented(actualVideo, pauseTargetTime, clip.id);
+      if (!renderHostPort.captureVideoFrameAtTime(actualVideo, pauseTargetTime, clip.id)) {
+        renderHostPort.ensureVideoFrameCached(actualVideo, clip.id);
       }
       const effectiveSpeed = timeInfo.absSpeed > 0.01 ? timeInfo.absSpeed : 1;
       const videoClipTime = pauseTargetTime;
@@ -352,17 +352,17 @@ export class VideoSyncHtmlClipCoordinator {
             'playback-stop'
           );
         } else {
-          engine.markVideoFramePresented(clipVideoElement, pauseTargetTime, clip.id);
-          if (!engine.captureVideoFrameAtTime(clipVideoElement, pauseTargetTime, clip.id)) {
-            engine.ensureVideoFrameCached(clipVideoElement, clip.id);
+          renderHostPort.markVideoFramePresented(clipVideoElement, pauseTargetTime, clip.id);
+          if (!renderHostPort.captureVideoFrameAtTime(clipVideoElement, pauseTargetTime, clip.id)) {
+            renderHostPort.ensureVideoFrameCached(clipVideoElement, clip.id);
           }
           scrubSettleState.resolve(clip.id);
           this.deps.deleteHandoff(clip.id, actualVideo);
         }
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
         return;
       }
-      engine.requestNewFrameRender();
+      renderHostPort.requestNewFrameRender();
       return;
     }
 
@@ -380,7 +380,7 @@ export class VideoSyncHtmlClipCoordinator {
         scrubSettleState.resolve(clip.id);
       }
       video.addEventListener('seeked', () => {
-        engine.requestNewFrameRender();
+        renderHostPort.requestNewFrameRender();
       }, { once: true });
     } else {
       const seekThreshold = isInteractivePreview

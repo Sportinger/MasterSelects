@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { engine } from '../../engine/WebGPUEngine';
 import { layerBuilder } from '../../services/layerBuilder';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { hasTimelineVisualRenderDemand } from '../../services/timeline/timelineVisualDemand';
 import { useTimelineStore } from '../../stores/timeline';
 
@@ -11,13 +11,13 @@ export function useEngineTimelineStateSync(
   useEffect(() => {
     if (!isEngineReady) return;
     const timelineState = useTimelineStore.getState();
-    engine.setTimelineVisualDemand(hasTimelineVisualRenderDemand({
+    renderHostPort.setTimelineVisualDemand(hasTimelineVisualRenderDemand({
       clips: timelineState.clips,
       tracks: timelineState.tracks,
       playheadPosition: timelineState.playheadPosition,
       clipDragPreview: timelineState.clipDragPreview,
     }));
-    engine.setIsPlaying(isPlaying);
+    renderHostPort.setIsPlaying(isPlaying);
   }, [isEngineReady, isPlaying]);
 
   useEffect(() => {
@@ -32,8 +32,8 @@ export function useEngineTimelineStateSync(
           playheadPosition: timelineState.playheadPosition,
           clipDragPreview: timelineState.clipDragPreview,
         });
-        engine.setTimelineVisualDemand(hasVisualDemand);
-        engine.setIsScrubbing(isDragging);
+        renderHostPort.setTimelineVisualDemand(hasVisualDemand);
+        renderHostPort.setIsScrubbing(isDragging);
         if (!hasVisualDemand) {
           layerBuilder.syncAudioElements();
         }

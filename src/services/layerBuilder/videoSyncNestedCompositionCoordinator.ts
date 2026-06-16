@@ -1,6 +1,6 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
 import { flags } from '../../engine/featureFlags';
+import { renderHostPort } from '../render/renderHostPort';
 import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import {
   ensureRuntimeFrameProvider,
@@ -115,7 +115,7 @@ export class VideoSyncNestedCompositionCoordinator {
       }
 
       if (!video.seeking && video.readyState >= 2) {
-        engine.ensureVideoFrameCached(video, nestedClip.id);
+        renderHostPort.ensureVideoFrameCached(video, nestedClip.id);
       }
 
       if (ctx.isPlaying) {
@@ -149,7 +149,7 @@ export class VideoSyncNestedCompositionCoordinator {
             );
           }
           this.deps.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
-          video.addEventListener('seeked', () => engine.requestRender(), { once: true });
+          video.addEventListener('seeked', () => renderHostPort.requestRender(), { once: true });
         }
 
         if (video.readyState < 2 && !video.seeking) {

@@ -1,7 +1,11 @@
 // CacheManager - Extracted from WebGPUEngine
 // Owns ScrubbingCache lifecycle, video time tracking, and RAM preview canvas state
 
-import { ScrubbingCache, type ScrubbingCacheStats } from '../texture/ScrubbingCache';
+import {
+  ScrubbingCache,
+  type ScrubbingCacheStats,
+  type WorkerFirstCacheRuntimeSnapshot,
+} from '../texture/ScrubbingCache';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('CacheManager');
@@ -158,6 +162,13 @@ export class CacheManager {
   getCompositeCacheStats(getResolution: () => { width: number; height: number }): { count: number; maxFrames: number; memoryMB: number } {
     const { width, height } = getResolution();
     return this.scrubbingCache?.getCompositeCacheStats(width, height) ?? { count: 0, maxFrames: 0, memoryMB: 0 };
+  }
+
+  getWorkerFirstCacheRuntimeSnapshot(): WorkerFirstCacheRuntimeSnapshot {
+    return this.scrubbingCache?.getWorkerFirstCacheRuntimeSnapshot() ?? {
+      generatedAtMs: Date.now(),
+      records: [],
+    };
   }
 
   // --- General Cache ---

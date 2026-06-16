@@ -4,7 +4,7 @@
 import type { SliceCreator, TimelineClip, TimelineTrack, TimelineUtils, Keyframe, CompositionTimelineData } from './types';
 import { DEFAULT_TRACKS } from './constants';
 import { useMediaStore } from '../mediaStore';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { layerBuilder } from '../../services/layerBuilder';
 import { videoBakeProxyCache } from '../../services/videoBakeProxyCache';
 import { sanitizePlayheadPosition } from '../../services/layerBuilder/PlayheadState';
@@ -56,7 +56,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     const { pause, clearTimeline } = get();
     const wakePreviewAfterRestore = () => {
       layerBuilder.invalidateCache();
-      engine.requestRender();
+      renderHostPort.requestRender();
     };
     // Stop playback
     pause();
@@ -293,7 +293,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       recurseNestedClips: true,
       revokeObjectUrls: true,
     });
-    engine.clearCaches();
+    renderHostPort.clearCaches();
     layerBuilder.getVideoSyncManager().reset();
   },
 });

@@ -23,6 +23,14 @@ export class RamPreviewCache {
   private compositeBytes = 0;
   private gpuFrameCache: Map<number, GpuFrameCacheEntry> = new Map();
   private maxGpuFrames = 60;
+  private compositeAllocations = 0;
+  private compositeReuses = 0;
+  private compositeEvictions = 0;
+  private compositeReleases = 0;
+  private gpuAllocations = 0;
+  private gpuReuses = 0;
+  private gpuEvictions = 0;
+  private gpuReleases = 0;
 
   get maxGpuCacheFrames(): number {
     return this.maxGpuFrames;
@@ -61,7 +69,10 @@ export class RamPreviewCache {
 
   cacheCompositeFrame(time: number, imageData: ImageData): boolean {
     const key = quantizeTime(time);
-    if (this.compositeCache.has(key)) return true;
+    if (this.compositeCache.has(key)) {
+      this.compositeReuses += 1;
+      return true;
+    }
 
     const frameBytes = imageData.data.byteLength;
     const projectedReport = this.getProjectedCompositeCacheReport(key, frameBytes, imageData);
@@ -79,6 +90,7 @@ export class RamPreviewCache {
 
     this.compositeCache.set(key, imageData);
     this.compositeBytes += frameBytes;
+    this.compositeAllocations += 1;
 
     while (
       this.compositeCache.size > this.maxCompositeFrames ||
@@ -88,6 +100,8 @@ export class RamPreviewCache {
       if (oldestKey !== undefined) {
         const evicted = this.compositeCache.get(oldestKey);
         if (evicted) this.compositeBytes -= evicted.data.byteLength;
+        this.compositeEvictions += 1;
+        this.compositeReleases += 1;
         this.compositeCache.delete(oldestKey);
       } else {
         break;
@@ -105,6 +119,7 @@ export class RamPreviewCache {
     if (imageData) {
       this.compositeCache.delete(key);
       this.compositeCache.set(key, imageData);
+      this.compositeReuses += 1;
       return imageData;
     }
     return null;
@@ -126,6 +141,7 @@ export class RamPreviewCache {
     if (entry) {
       this.gpuFrameCache.delete(key);
       this.gpuFrameCache.set(key, entry);
+      this.gpuReuses += 1;
       return entry;
     }
     return null;
@@ -158,9 +174,11 @@ export class RamPreviewCache {
       existing.texture.destroy();
       releaseRamPreviewGpuFrameResource(key);
       this.gpuFrameCache.delete(key);
+      this.gpuReleases += 1;
     }
 
     this.gpuFrameCache.set(key, entry);
+    this.gpuAllocations += 1;
     reportRamPreviewGpuFrame(report);
 
     while (this.gpuFrameCache.size > this.maxGpuFrames) {
@@ -175,6 +193,7 @@ export class RamPreviewCache {
   }
 
   clearCompositeCache(): void {
+    this.compositeReleases += this.compositeCache.size;
     this.compositeCache.clear();
     this.compositeBytes = 0;
     releaseRamPreviewCompositeCacheResource();
@@ -182,6 +201,7 @@ export class RamPreviewCache {
     for (const entry of this.gpuFrameCache.values()) {
       entry.texture.destroy();
     }
+    this.gpuReleases += this.gpuFrameCache.size;
     this.gpuFrameCache.clear();
     releaseRamPreviewGpuFrameCacheResources();
 
@@ -240,6 +260,8 @@ export class RamPreviewCache {
       if (evicted) evicted.texture.destroy();
       releaseRamPreviewGpuFrameResource(oldestKey);
       this.gpuFrameCache.delete(oldestKey);
+      this.gpuEvictions += 1;
+      this.gpuReleases += 1;
       return true;
     }
     return false;
@@ -260,6 +282,48 @@ export class RamPreviewCache {
       admission = canRetainRamPreviewGpuFrame(report);
     }
     return admission;
+  }
+
+  getRuntimeCacheSnapshot(): {
+    composite: {
+      entries: number;
+      bytes: number;
+      allocations: number;
+      reuses: number;
+      evictions: number;
+      releases: number;
+    };
+    gpuFrames: {
+      entries: number;
+      bytes: number;
+      allocations: number;
+      reuses: number;
+      evictions: number;
+      releases: number;
+    };
+  } {
+    let gpuBytes = 0;
+    for (const entry of this.gpuFrameCache.values()) {
+      gpuBytes += entry.gpuBytes ?? 0;
+    }
+    return {
+      composite: {
+        entries: this.compositeCache.size,
+        bytes: this.compositeBytes,
+        allocations: this.compositeAllocations,
+        reuses: this.compositeReuses,
+        evictions: this.compositeEvictions,
+        releases: this.compositeReleases,
+      },
+      gpuFrames: {
+        entries: this.gpuFrameCache.size,
+        bytes: gpuBytes,
+        allocations: this.gpuAllocations,
+        reuses: this.gpuReuses,
+        evictions: this.gpuEvictions,
+        releases: this.gpuReleases,
+      },
+    };
   }
 }
 

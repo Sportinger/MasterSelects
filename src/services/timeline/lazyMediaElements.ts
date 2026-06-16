@@ -1,7 +1,7 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
 import type { FrameContext } from '../layerBuilder/types';
 import { Logger } from '../logger';
+import { renderHostPort } from '../render/renderHostPort';
 import {
   createMediaObjectUrl,
   getLazyMediaElementObjectUrlKey,
@@ -404,7 +404,7 @@ function detachRecord(record: LazyMediaRecord, ctx?: Pick<FrameContext, 'clips'>
 
   element.pause();
   if (record.kind === 'video') {
-    engine.cleanupVideo(element as HTMLVideoElement);
+    renderHostPort.cleanupVideo(element as HTMLVideoElement);
   }
   element.removeAttribute('src');
   try {

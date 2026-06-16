@@ -4,7 +4,7 @@
 // manager and is reached through the LayerClipMediaHost callbacks.
 
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import {
   bindSourceRuntimeForOwner,
   planSourceRuntimeBindingForOwner,
@@ -127,7 +127,7 @@ export function loadVideoForLayerClip(
     clip.isLoading = false;
     log.debug(`Video loaded for background clip ${clip.name} on layer ${layerIndex}`);
     // Pre-cache frame via createImageBitmap for immediate scrubbing without play()
-    engine.preCacheVideoFrame(video);
+    renderHostPort.preCacheVideoFrame(video);
   };
 
   const onError = () => {

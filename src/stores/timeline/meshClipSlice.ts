@@ -8,7 +8,7 @@ import { generateMeshClipId } from './helpers/idGenerator';
 import { useMediaStore } from '../mediaStore';
 import { Logger } from '../../services/logger';
 import { layerBuilder } from '../../services/layerBuilder';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 
 const log = Logger.create('MeshClipSlice');
 
@@ -109,6 +109,6 @@ export const createMeshClipSlice: SliceCreator<MeshClipActions> = (set, get) => 
 
     invalidateCache();
     layerBuilder.invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
   },
 });

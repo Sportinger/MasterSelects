@@ -1,5 +1,5 @@
 import type { TimelineClip } from '../../types';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../render/renderHostPort';
 import {
   clearInternalPlaybackHold,
   playheadState,
@@ -446,7 +446,7 @@ export class VideoSyncFullWebCodecsCoordinator {
       if (needsVisibleSettle && !pendingAtTarget) {
         pausedProvider.seek(timeInfo.clipTime);
         this.deps.wcSeeks.setLastPreciseSeekAt(`${clip.id}:fallback`, performance.now());
-        engine.requestRender();
+        renderHostPort.requestRender();
         vfPipelineMonitor.record('vf_wc_settle_seek', {
           clipId: clip.id,
           target: Math.round(timeInfo.clipTime * 1000) / 1000,
@@ -508,7 +508,7 @@ export class VideoSyncFullWebCodecsCoordinator {
       if (Math.abs(wcp.currentTime - targetTime) > 0.01) {
         wcp.seek(targetTime);
         this.deps.wcSeeks.setLastPreciseSeekAt(clipId, performance.now());
-        engine.requestRender();
+        renderHostPort.requestRender();
       }
     }, 120));
   }

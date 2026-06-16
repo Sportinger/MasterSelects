@@ -12,6 +12,16 @@ const createImageData = (width: number, height: number): ImageData =>
 
 type ScrubbingCacheDeviceLossTestAccess = {
   getOrCreateBackgroundSession(video: HTMLVideoElement): { video: HTMLVideoElement } | null;
+  cacheCompositeFrame(time: number, imageData: ImageData): boolean;
+  getWorkerFirstCacheRuntimeSnapshot(): {
+    records: readonly {
+      cacheId: string;
+      entries: number;
+      bytes: number;
+      allocations: number;
+      reuses: number;
+    }[];
+  };
 };
 
 const createSourceVideo = () => ({
@@ -99,5 +109,24 @@ describe('CacheManager runtime reporting cleanup', () => {
 
     expect(ImageDataCtor).not.toHaveBeenCalled();
     expect(manager.hasCompositeCacheFrame(1)).toBe(false);
+  });
+
+  it('reports RAM preview composite cache as cloneable worker-first cache runtime data', () => {
+    const manager = new CacheManager();
+    manager.initialize({} as GPUDevice);
+
+    manager.getScrubbingCache()?.cacheCompositeFrame(1, createImageData(10, 10));
+    manager.getScrubbingCache()?.cacheCompositeFrame(1, createImageData(10, 10));
+
+    const snapshot = manager.getWorkerFirstCacheRuntimeSnapshot();
+    const composite = snapshot.records.find((record) => record.cacheId === 'ram-preview:composite-cache');
+
+    expect(composite).toMatchObject({
+      entries: 1,
+      bytes: 400,
+      allocations: 1,
+      reuses: 1,
+    });
+    expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
   });
 });

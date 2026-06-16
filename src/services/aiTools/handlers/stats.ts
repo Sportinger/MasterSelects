@@ -1,7 +1,6 @@
 import { useEngineStore } from '../../../stores/engineStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
-import { engine } from '../../../engine/WebGPUEngine';
 import { Logger } from '../../logger';
 import { redactSecrets, redactObject } from '../../security/redact';
 import { getPlaybackDebugStats } from '../../playbackDebugSnapshot';
@@ -21,7 +20,25 @@ import {
   getTimelineCanvasDiagnostics,
 } from '../../timeline/timelineCanvasDiagnostics';
 import { timelineRuntimeCoordinator } from '../../timeline/timelineRuntimeCoordinator';
+import { buildWorkerFirstProviderRuntimeSnapshot } from '../../timeline/providerRuntimeDiagnostics';
+import { captureRenderTargetSnapshot } from '../../render/renderTargetSnapshotFactory';
+import { renderHostPort } from '../../render/renderHostPort';
+import { renderScheduler } from '../../renderScheduler';
+import { createWorkerFirstProofSnapshot } from '../workerFirstProofHarness';
+import { getWorkerFirstProofCaptures } from '../workerFirstProofCaptures';
+import { getWorkerFirstCounterSources } from '../workerFirstCounterSources';
+import {
+  buildWorkerFirstRuntimeCounterSources,
+  mergeWorkerFirstCounterSources,
+} from '../workerFirstRuntimeCounterAdapter';
+import {
+  getLastRenderCapabilityProbe,
+} from '../../render/renderCapabilityProbe';
 import type { ToolResult } from '../types';
+import type { TimelineRuntimeCoordinatorBridgeStats } from '../../timeline/runtimeCoordinatorTypes';
+import type { IndependentRenderSchedulerRuntimeSnapshot } from '../../renderScheduler';
+import type { WorkerFirstCacheRuntimeSnapshot } from '../../../engine/texture/ScrubbingCache';
+import type { WorkerFirstProviderRuntimeSnapshot } from '../../timeline/providerRuntimeDiagnostics';
 
 const DEFAULT_PLAYBACK_WINDOW_MS = 5000;
 const MAX_TRACE_WINDOW_MS = 120000;
@@ -111,9 +128,34 @@ function serializePlayback(playback: ReturnType<typeof getPlaybackDebugStats>): 
 
 function collectCacheSnapshot(): Record<string, unknown> {
   return {
-    scrubbing: engine.getScrubbingCacheStats(),
-    composite: engine.getCompositeCacheStats(),
+    scrubbing: renderHostPort.getScrubbingCacheStats(),
+    composite: renderHostPort.getCompositeCacheStats(),
   };
+}
+
+function collectWorkerFirstRendererSnapshot(input: {
+  readonly timelineRuntimeCoordinatorStats: TimelineRuntimeCoordinatorBridgeStats;
+  readonly cacheStats: ReturnType<typeof collectCacheSnapshot>;
+  readonly cacheRuntime: WorkerFirstCacheRuntimeSnapshot;
+  readonly providerRuntime: WorkerFirstProviderRuntimeSnapshot;
+  readonly renderLoop: Record<string, unknown> | null;
+  readonly independentRenderScheduler: IndependentRenderSchedulerRuntimeSnapshot;
+}): Record<string, unknown> {
+  const recordedSources = getWorkerFirstCounterSources();
+  const runtimeSources = buildWorkerFirstRuntimeCounterSources({
+    timelineRuntime: input.timelineRuntimeCoordinatorStats,
+    cacheStats: input.cacheStats,
+    cacheRuntime: input.cacheRuntime,
+    providerRuntime: input.providerRuntime,
+    renderLoop: input.renderLoop,
+    independentRenderScheduler: input.independentRenderScheduler,
+  });
+  return createWorkerFirstProofSnapshot({
+    targetSnapshot: captureRenderTargetSnapshot(),
+    capabilityProbe: getLastRenderCapabilityProbe(),
+    proofCaptures: getWorkerFirstProofCaptures(),
+    counterSources: mergeWorkerFirstCounterSources(recordedSources, runtimeSources),
+  }) as unknown as Record<string, unknown>;
 }
 
 function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
@@ -122,7 +164,12 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
   const mediaState = useMediaStore.getState();
   const s = engineStats;
   const playback = getPlaybackDebugStats(s.decoder, playbackWindowMs);
-  const renderLoop = engine.getRenderLoop() as (Record<string, unknown> & {
+  const cacheStats = collectCacheSnapshot();
+  const cacheRuntime = renderHostPort.getWorkerFirstCacheRuntimeSnapshot();
+  const timelineRuntimeCoordinatorStats = timelineRuntimeCoordinator.getBridgeStats();
+  const providerRuntime = buildWorkerFirstProviderRuntimeSnapshot(timelineRuntimeCoordinatorStats);
+  const independentRenderScheduler = renderScheduler.getWorkerFirstRuntimeSnapshot();
+  const renderLoop = renderHostPort.getRenderLoop() as (Record<string, unknown> & {
     getLastSuccessfulRenderTime?: () => number;
     getRenderCount?: () => number;
     getIsIdle?: () => boolean;
@@ -158,18 +205,29 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
     audio: s.audio,
     audioDiagnostics: collectAudioDiagnostics({ windowMs: playbackWindowMs, eventLimit: 20 }),
     health: playbackHealthMonitor.snapshot(),
-    cache: collectCacheSnapshot(),
+    cache: cacheStats,
+    cacheRuntime,
+    providerRuntime,
     timelineCanvas: getTimelineCanvasDiagnostics(buildTimelineCanvasStoreDiagnostics({
       tracks: timelineState.tracks,
       clips: timelineState.clips,
     })),
-    timelineRuntimeCoordinator: timelineRuntimeCoordinator.getBridgeStats(),
+    timelineRuntimeCoordinator: timelineRuntimeCoordinatorStats,
+    independentRenderScheduler,
     slotDecks: slotDeckManager.getSnapshot(),
     pipelineStats: {
       wc: wcPipelineMonitor.stats(),
       vf: vfPipelineMonitor.stats(),
     },
-    engineInfra: engine.getDebugInfrastructureState(),
+    engineInfra: renderHostPort.getDebugInfrastructureState(),
+    workerFirstRenderer: collectWorkerFirstRendererSnapshot({
+      timelineRuntimeCoordinatorStats,
+      cacheStats,
+      cacheRuntime,
+      providerRuntime,
+      renderLoop: renderLoop as Record<string, unknown> | null,
+      independentRenderScheduler,
+    }),
     renderLoop: renderLoop ? {
       isRunning: renderLoop.isRunning,
       animationIdNull: renderLoop.animationId == null,
@@ -185,7 +243,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
       lastRenderTime: renderLoop.lastRenderTime,
       watchdogActive: renderLoop.watchdogTimer != null,
     } : null,
-    renderDispatcher: engine.getRenderDispatcherDebugSnapshot(),
+    renderDispatcher: renderHostPort.getRenderDispatcherDebugSnapshot(),
     export: exportDiagnostics.snapshot(),
   };
 
@@ -368,6 +426,12 @@ export async function handleGetPlaybackTrace(
     healthVideos,
     healthAnomalies,
   });
+  const cacheStats = collectCacheSnapshot();
+  const cacheRuntime = renderHostPort.getWorkerFirstCacheRuntimeSnapshot();
+  const timelineRuntimeCoordinatorStats = timelineRuntimeCoordinator.getBridgeStats();
+  const providerRuntime = buildWorkerFirstProviderRuntimeSnapshot(timelineRuntimeCoordinatorStats);
+  const independentRenderScheduler = renderScheduler.getWorkerFirstRuntimeSnapshot();
+  const renderLoop = renderHostPort.getRenderLoop() as Record<string, unknown> | null;
 
   return {
     success: true,
@@ -379,7 +443,18 @@ export async function handleGetPlaybackTrace(
       limit,
       playback: serializePlayback(playback),
       health: playbackHealthMonitor.snapshot(),
-      cache: collectCacheSnapshot(),
+      cache: cacheStats,
+      cacheRuntime,
+      providerRuntime,
+      independentRenderScheduler,
+      workerFirstRenderer: collectWorkerFirstRendererSnapshot({
+        timelineRuntimeCoordinatorStats,
+        cacheStats,
+        cacheRuntime,
+        providerRuntime,
+        renderLoop,
+        independentRenderScheduler,
+      }),
       slotDecks: slotDeckManager.getSnapshot(),
       gpu: gpuInfo,
       wcStats: wcPipelineMonitor.stats(),

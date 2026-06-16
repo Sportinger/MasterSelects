@@ -1,8 +1,7 @@
 // Preview & Frame Capture Tool Handlers
 
 import { useTimelineStore } from '../../../stores/timeline';
-import { useRenderTargetStore } from '../../../stores/renderTargetStore';
-import { engine } from '../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../render/renderHostPort';
 import type { ToolResult } from '../types';
 import { captureFrameGrid } from '../utils';
 import { flashPreviewCanvas } from '../aiFeedback';
@@ -11,33 +10,7 @@ import { ensureRenderForDiagnostics } from './renderOnce';
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
 function getCaptureCanvas(): { canvas: HTMLCanvasElement; source: string } | null {
-  const engineState = engine as unknown as {
-    mainPreviewCanvas?: HTMLCanvasElement | null;
-    targetCanvases?: Map<string, { canvas: HTMLCanvasElement; context: GPUCanvasContext }>;
-  };
-
-  const mainPreviewCanvas = engineState.mainPreviewCanvas;
-  if (mainPreviewCanvas && mainPreviewCanvas.width > 0 && mainPreviewCanvas.height > 0) {
-    return { canvas: mainPreviewCanvas, source: 'mainPreviewCanvas' };
-  }
-
-  const activeTargets = useRenderTargetStore.getState().getActiveCompTargets();
-  for (const target of activeTargets) {
-    if (target.canvas && target.canvas.width > 0 && target.canvas.height > 0) {
-      return { canvas: target.canvas, source: `renderTarget:${target.id}` };
-    }
-  }
-
-  const targetCanvases = engineState.targetCanvases;
-  if (targetCanvases) {
-    for (const [targetId, entry] of targetCanvases) {
-      if (entry.canvas.width > 0 && entry.canvas.height > 0) {
-        return { canvas: entry.canvas, source: `engineTarget:${targetId}` };
-      }
-    }
-  }
-
-  return null;
+  return renderHostPort.getCaptureCanvas();
 }
 
 export async function handleCaptureFrame(
@@ -75,12 +48,12 @@ export async function handleCaptureFrame(
     dataUrl = previewCanvas.toDataURL('image/png');
     canvasSource = captureCanvas.source;
   } else {
-    const pixels = await engine.readPixels();
+    const pixels = await renderHostPort.readPixels();
     if (!pixels) {
       return { success: false, error: 'Failed to capture frame - engine not ready' };
     }
 
-    ({ width, height } = engine.getOutputDimensions());
+    ({ width, height } = renderHostPort.getOutputDimensions());
 
     // Convert to PNG using canvas
     const canvas = document.createElement('canvas');

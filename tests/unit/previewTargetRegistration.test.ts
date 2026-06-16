@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
     setTargetTransparencyGrid: vi.fn(),
   };
   const timelineState = { isPlaying: false };
-  const engine = {
+  const renderHostPort = {
     registerTargetCanvas: vi.fn(() => gpuContext),
     unregisterTargetCanvas: vi.fn(),
     clearVideoCache: vi.fn(),
@@ -23,8 +23,8 @@ const mocks = vi.hoisted(() => {
   };
 
   return {
-    engine,
     gpuContext,
+    renderHostPort,
     renderScheduler,
     renderTargetState,
     timelineState,
@@ -33,7 +33,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('../../src/engine/WebGPUEngine', () => ({ engine: mocks.engine }));
+vi.mock('../../src/services/render/renderHostPort', () => ({ renderHostPort: mocks.renderHostPort }));
 vi.mock('../../src/services/renderScheduler', () => ({ renderScheduler: mocks.renderScheduler }));
 vi.mock('../../src/stores/renderTargetStore', () => ({ useRenderTargetStore: mocks.useRenderTargetStore }));
 vi.mock('../../src/stores/timeline', () => ({ useTimelineStore: mocks.useTimelineStore }));
@@ -61,7 +61,7 @@ function expectOrdered(...fns: MockFn[]): void {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.timelineState.isPlaying = false;
-  mocks.engine.registerTargetCanvas.mockReturnValue(mocks.gpuContext);
+  mocks.renderHostPort.registerTargetCanvas.mockReturnValue(mocks.gpuContext);
 });
 
 describe('preview target registration', () => {
@@ -81,7 +81,7 @@ describe('preview target registration', () => {
     });
 
     expect(registered).toBe(true);
-    expect(mocks.engine.registerTargetCanvas).toHaveBeenCalledWith('preview-a', canvas);
+    expect(mocks.renderHostPort.registerTargetCanvas).toHaveBeenCalledWith('preview-a', canvas);
     expect(mocks.renderTargetState.registerTarget).toHaveBeenCalledWith({
       id: 'preview-a',
       name: 'Preview',
@@ -97,12 +97,12 @@ describe('preview target registration', () => {
     expect(mocks.renderScheduler.register).toHaveBeenCalledWith('preview-a');
     expect(onIndependentRegistered).toHaveBeenCalledTimes(1);
     expectOrdered(
-      mocks.engine.registerTargetCanvas,
+      mocks.renderHostPort.registerTargetCanvas,
       mocks.renderTargetState.registerTarget,
-      mocks.engine.clearVideoCache,
-      mocks.engine.clearScrubbingCache,
-      mocks.engine.clearCompositeCache,
-      mocks.engine.requestRender,
+      mocks.renderHostPort.clearVideoCache,
+      mocks.renderHostPort.clearScrubbingCache,
+      mocks.renderHostPort.clearCompositeCache,
+      mocks.renderHostPort.requestRender,
       mocks.renderScheduler.register,
       onIndependentRegistered,
     );
@@ -130,14 +130,14 @@ describe('preview target registration', () => {
     }));
     expect(mocks.renderScheduler.register).not.toHaveBeenCalled();
     expect(onIndependentRegistered).not.toHaveBeenCalled();
-    expect(mocks.engine.clearVideoCache).not.toHaveBeenCalled();
-    expect(mocks.engine.requestRender).not.toHaveBeenCalled();
+    expect(mocks.renderHostPort.clearVideoCache).not.toHaveBeenCalled();
+    expect(mocks.renderHostPort.requestRender).not.toHaveBeenCalled();
   });
 
   it('preserves the early return when engine canvas registration fails', () => {
     const canvas = { label: 'canvas' } as unknown as HTMLCanvasElement;
     const source: RenderSource = { type: 'composition', compositionId: 'comp-a' };
-    mocks.engine.registerTargetCanvas.mockReturnValueOnce(null);
+    mocks.renderHostPort.registerTargetCanvas.mockReturnValueOnce(null);
 
     const registered = registerPreviewTarget({
       id: 'preview-a',
@@ -160,11 +160,11 @@ describe('preview target registration', () => {
 
     expect(mocks.renderScheduler.unregister).toHaveBeenCalledWith('preview-a');
     expect(mocks.renderTargetState.unregisterTarget).toHaveBeenCalledWith('preview-a');
-    expect(mocks.engine.unregisterTargetCanvas).toHaveBeenCalledWith('preview-a');
+    expect(mocks.renderHostPort.unregisterTargetCanvas).toHaveBeenCalledWith('preview-a');
     expectOrdered(
       mocks.renderScheduler.unregister,
       mocks.renderTargetState.unregisterTarget,
-      mocks.engine.unregisterTargetCanvas,
+      mocks.renderHostPort.unregisterTargetCanvas,
     );
   });
 
@@ -172,10 +172,13 @@ describe('preview target registration', () => {
     setPreviewTargetTransparency('preview-a', true);
 
     expect(mocks.renderTargetState.setTargetTransparencyGrid).toHaveBeenCalledWith('preview-a', true);
-    expect(mocks.engine.requestRender).toHaveBeenCalledTimes(1);
+    expect(mocks.renderHostPort.clearVideoCache).not.toHaveBeenCalled();
+    expect(mocks.renderHostPort.clearScrubbingCache).not.toHaveBeenCalled();
+    expect(mocks.renderHostPort.clearCompositeCache).not.toHaveBeenCalled();
+    expect(mocks.renderHostPort.requestRender).toHaveBeenCalledTimes(1);
     expectOrdered(
       mocks.renderTargetState.setTargetTransparencyGrid,
-      mocks.engine.requestRender,
+      mocks.renderHostPort.requestRender,
     );
   });
 });

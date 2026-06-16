@@ -3,9 +3,12 @@ import type {
   ExportRenderFrameInput,
   ExportRenderSession,
 } from '../render/contracts/exportRenderSession';
-import { engine } from '../WebGPUEngine';
 import { syncExportMaskTextures } from './ExportMaskTextures';
 import type { Layer } from '../core/types';
+import {
+  exportRenderHostPort,
+  type ExportRenderHostPort,
+} from './exportRenderHostPort';
 
 export interface ExportRenderSessionOptions {
   readonly runId: string;
@@ -13,6 +16,7 @@ export interface ExportRenderSessionOptions {
   readonly height: number;
   readonly stackedAlpha: boolean;
   readonly preferZeroCopy: boolean;
+  readonly host?: ExportRenderHostPort;
 }
 
 export interface ExportRenderSessionFrameMetrics {
@@ -45,6 +49,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   private readonly height: number;
   private readonly stackedAlpha: boolean;
   private readonly preferZeroCopy: boolean;
+  private readonly host: ExportRenderHostPort;
   private originalDimensions: { width: number; height: number } | null = null;
   private disposed = false;
   private useZeroCopy = false;
@@ -55,6 +60,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     this.height = options.height;
     this.stackedAlpha = options.stackedAlpha;
     this.preferZeroCopy = options.preferZeroCopy;
+    this.host = options.host ?? exportRenderHostPort;
     this.signal = this.abortController.signal;
   }
 
@@ -63,13 +69,13 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   }
 
   begin(): void {
-    this.originalDimensions = engine.getOutputDimensions();
-    engine.setResolution(this.width, this.height);
-    engine.setExporting(true);
+    this.originalDimensions = this.host.getOutputDimensions();
+    this.host.setResolution(this.width, this.height);
+    this.host.setExporting(true);
 
     // Initialize export canvas for zero-copy VideoFrame creation
     this.useZeroCopy = this.preferZeroCopy
-      ? engine.initExportCanvas(this.width, this.height, this.stackedAlpha)
+      ? this.host.initExportCanvas(this.width, this.height, this.stackedAlpha)
       : false;
   }
 
@@ -77,34 +83,34 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     const layers = input.layers as Layer[];
 
     // Check GPU device validity
-    if (!engine.isDeviceValid()) {
+    if (!this.host.isDeviceValid()) {
       throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
     }
 
-    engine.setRenderTimeOverride(input.time);
+    this.host.setRenderTimeOverride(input.time);
     const maskSyncStart = performance.now();
-    syncExportMaskTextures(layers, this.width, this.height, input.time);
+    syncExportMaskTextures(layers, this.width, this.height, input.time, this.host);
     const maskSyncMs = performance.now() - maskSyncStart;
 
     const ensureLayersStart = performance.now();
-    await engine.ensureExportLayersReady(layers);
+    await this.host.ensureExportLayersReady(layers);
     const ensureLayersMs = performance.now() - ensureLayersStart;
 
     const renderStart = performance.now();
-    engine.render(layers);
+    this.host.render(layers);
     const renderMs = performance.now() - renderStart;
 
     if (this.useZeroCopy) {
       // Zero-copy path: create VideoFrame directly from OffscreenCanvas
       // await ensures GPU has finished rendering before we capture
       const captureStart = performance.now();
-      const videoFrame = await engine.createVideoFrameFromExport(
+      const videoFrame = await this.host.createVideoFrameFromExport(
         input.timestampMicros ?? 0,
         input.durationMicros ?? 0,
       );
       const captureMs = performance.now() - captureStart;
       if (!videoFrame) {
-        if (!engine.isDeviceValid()) {
+        if (!this.host.isDeviceValid()) {
           throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
         }
         const readbackCapture = await this.capturePixels(input, {
@@ -146,10 +152,10 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   ): Promise<ExportRenderSessionFrameCapture | null> {
     // Fallback: read pixels from GPU (slower)
     const captureStart = performance.now();
-    const pixels = await engine.readPixels();
+    const pixels = await this.host.readPixels();
     const captureMs = performance.now() - captureStart;
     if (!pixels) {
-      if (!engine.isDeviceValid()) {
+      if (!this.host.isDeviceValid()) {
         throw new Error('WebGPU device lost during export. Try keeping the browser tab in focus.');
       }
       return null;
@@ -179,9 +185,9 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
 
     if (!this.originalDimensions) return;
 
-    engine.setRenderTimeOverride(null);
-    engine.cleanupExportCanvas();
-    engine.setExporting(false);
-    engine.setResolution(this.originalDimensions.width, this.originalDimensions.height);
+    this.host.setRenderTimeOverride(null);
+    this.host.cleanupExportCanvas();
+    this.host.setExporting(false);
+    this.host.setResolution(this.originalDimensions.width, this.originalDimensions.height);
   }
 }

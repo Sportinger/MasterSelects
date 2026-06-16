@@ -1,4 +1,3 @@
-import { engine } from '../../engine/WebGPUEngine';
 import {
   CAMERA_POSE_TRANSFORM_PROPERTIES,
   buildCameraTransformPatchFromUpdates,
@@ -15,6 +14,7 @@ import type { AnimatableProperty } from '../../types/animationProperties';
 import type { Text3DProperties } from '../../types/text';
 import type { TimelineClip } from '../../types/timeline';
 import type { MIDIParameterBinding } from '../../types/midi';
+import { renderHostPort } from '../render/renderHostPort';
 import { roundIntegerParameter } from './midiParameterUtils';
 
 type ClipSource = NonNullable<TimelineClip['source']>;
@@ -75,7 +75,7 @@ function applyCameraLookTransformParameter(clip: TimelineClip, property: string,
     engineState.setSceneCameraLiveOverride(clip.id, {
       rotation: { [rotationAxis]: value },
     });
-    engine.requestRender();
+    renderHostPort.requestRender();
     return true;
   }
 

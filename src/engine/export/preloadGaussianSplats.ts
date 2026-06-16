@@ -2,7 +2,7 @@ import { Logger } from '../../services/logger';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
-import { engine } from '../WebGPUEngine';
+import { exportRenderHostPort } from './exportRenderHostPort';
 import {
   buildSharedSplatRuntimeRequest,
   getUsableSplatFile,
@@ -142,7 +142,7 @@ export async function preloadGaussianSplatsForExport(options: PreloadOptions): P
 
   const nativeResults = await Promise.allSettled(
     nativePreloadSplats.map(({ sceneKey, clipId, url, fileName, file }) =>
-        engine.ensureGaussianSplatSceneLoaded({
+        exportRenderHostPort.ensureGaussianSplatSceneLoaded({
           sceneKey,
           clipId,
           url,
@@ -187,7 +187,7 @@ export async function preload3DAssetsForExport(options: Preload3DOptions): Promi
     return;
   }
 
-  const rendererReady = await engine.ensureSceneRendererInitialized(options.width, options.height);
+  const rendererReady = await exportRenderHostPort.ensureSceneRendererInitialized(options.width, options.height);
   if (!rendererReady) {
     log.warn('Shared scene renderer could not be initialized before export');
     return;
@@ -224,8 +224,8 @@ export async function preload3DAssetsForExport(options: Preload3DOptions): Promi
   const results = await Promise.allSettled(
     modelPreloads.map((preload) => (
       preload.modelSequence
-        ? engine.preloadSceneModelAsset(preload.modelUrl, preload.fileName, preload.modelSequence)
-        : engine.preloadSceneModelAsset(preload.modelUrl, preload.fileName)
+        ? exportRenderHostPort.preloadSceneModelAsset(preload.modelUrl, preload.fileName, preload.modelSequence)
+        : exportRenderHostPort.preloadSceneModelAsset(preload.modelUrl, preload.fileName)
     )),
   );
   results.forEach((result, index) => {

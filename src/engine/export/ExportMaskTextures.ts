@@ -1,7 +1,10 @@
 import type { ClipMask, Layer, MaskVertex, TimelineClip } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { generateMaskTexture } from '../../utils/maskRenderer';
-import { engine } from '../WebGPUEngine';
+import {
+  exportRenderHostPort,
+  type ExportRenderHostPort,
+} from './exportRenderHostPort';
 
 const exportMaskVersions = new Map<string, string>();
 
@@ -67,7 +70,13 @@ function collectMaskClipLocalTimes(
   }
 }
 
-export function syncExportMaskTextures(layers: Layer[], width: number, height: number, timelineTime?: number): void {
+export function syncExportMaskTextures(
+  layers: Layer[],
+  width: number,
+  height: number,
+  timelineTime?: number,
+  host: ExportRenderHostPort = exportRenderHostPort,
+): void {
   if (layers.length === 0) return;
 
   const maskClipIds = new Set<string>();
@@ -92,22 +101,22 @@ export function syncExportMaskTextures(layers: Layer[], width: number, height: n
       : undefined;
     if (!masks?.some(mask => mask.enabled !== false)) {
       exportMaskVersions.delete(clipId);
-      engine.removeMaskTexture(clipId);
+      host.removeMaskTexture(clipId);
       continue;
     }
 
     const version = `${width}x${height}|${getMaskShapeHash(masks)}`;
-    if (exportMaskVersions.get(clipId) === version && engine.hasMaskTexture(clipId)) {
+    if (exportMaskVersions.get(clipId) === version && host.hasMaskTexture(clipId)) {
       continue;
     }
     exportMaskVersions.set(clipId, version);
 
     const maskImageData = generateMaskTexture(masks, width, height);
     if (maskImageData) {
-      engine.updateMaskTexture(clipId, maskImageData);
+      host.updateMaskTexture(clipId, maskImageData);
     } else {
       exportMaskVersions.delete(clipId);
-      engine.removeMaskTexture(clipId);
+      host.removeMaskTexture(clipId);
     }
   }
 }

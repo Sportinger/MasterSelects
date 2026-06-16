@@ -3,7 +3,7 @@ import type { MotionClipActions, SliceCreator } from './types';
 import { createDefaultMotionLayerDefinition } from '../../types/motionDesign';
 import { DEFAULT_TRANSFORM } from './constants';
 import { generateMotionClipId } from './helpers/idGenerator';
-import { engine } from '../../engine/WebGPUEngine';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { layerBuilder } from '../../services/layerBuilder';
 import { Logger } from '../../services/logger';
 
@@ -69,7 +69,7 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
     updateDuration();
     invalidateCache();
     layerBuilder.invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
 
     log.debug('Created motion shape clip', { clipId, primitive: motion.shape?.primitive });
     return clipId;
@@ -109,7 +109,7 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
     updateDuration();
     invalidateCache();
     layerBuilder.invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
 
     log.debug('Created motion null clip', { clipId });
     return clipId;
@@ -149,7 +149,7 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
     updateDuration();
     invalidateCache();
     layerBuilder.invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
 
     log.debug('Created motion adjustment clip', { clipId });
     return clipId;
@@ -188,7 +188,7 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
     });
     invalidateCache();
     layerBuilder.invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
 
     log.debug('Converted solid clip to motion shape', { clipId });
     return clipId;
@@ -209,6 +209,6 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
     });
     invalidateCache();
     layerBuilder.invalidateCache();
-    engine.requestRender();
+    renderHostPort.requestRender();
   },
 });

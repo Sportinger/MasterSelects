@@ -1,6 +1,6 @@
 import type { MediaFile, MediaState } from '../../types';
 import type { CompositionTimelineData, SerializableClip, TimelineClip } from '../../../../types/timeline';
-import { engine } from '../../../../engine/WebGPUEngine';
+import { renderHostPort } from '../../../../services/render/renderHostPort';
 import { projectDB } from '../../../../services/projectDB';
 import { compositionRenderer } from '../../../../services/compositionRenderer';
 import { clearAINodeRuntimeCacheForClip } from '../../../../services/nodeGraph';
@@ -22,7 +22,7 @@ function cleanupTimelineClipResources(clip: TimelineClip): void {
     video.pause();
     video.src = '';
     video.load();
-    engine.cleanupVideo(video);
+    renderHostPort.cleanupVideo(video);
   }
 
   if (clip.source?.type === 'audio' && clip.source.audioElement) {

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { engine } from '../../engine/WebGPUEngine';
 import { Logger } from '../../services/logger';
+import { renderHostPort } from '../../services/render/renderHostPort';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -42,7 +42,7 @@ export function useEngineResolutionSync(isEngineReady: boolean): void {
       const scaledWidth = Math.round(baseWidth * previewQuality);
       const scaledHeight = Math.round(baseHeight * previewQuality);
 
-      engine.setResolution(scaledWidth, scaledHeight);
+      renderHostPort.setResolution(scaledWidth, scaledHeight);
       log.info(`Resolution set to ${scaledWidth}\u00d7${scaledHeight} (${previewQuality * 100}% of ${baseWidth}\u00d7${baseHeight})`);
     };
 
