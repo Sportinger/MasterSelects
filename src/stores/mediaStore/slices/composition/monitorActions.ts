@@ -5,6 +5,7 @@ export const createCompositionMonitorActions: MediaSliceCreator<Pick<
   CompositionActions,
   | 'setPreviewComposition'
   | 'setSourceMonitorFile'
+  | 'openSourceMonitorCrop'
   | 'setSourceMonitorInPoint'
   | 'setSourceMonitorOutPoint'
   | 'clearSourceMonitorInOut'
@@ -21,6 +22,18 @@ export const createCompositionMonitorActions: MediaSliceCreator<Pick<
       sourceMonitorPlaybackRequestId: id === null
         ? state.sourceMonitorPlaybackRequestId
         : state.sourceMonitorPlaybackRequestId + 1,
+    }));
+  },
+
+  openSourceMonitorCrop: (id: string) => {
+    set((state) => ({
+      sourceMonitorFileId: id,
+      sourceMonitorInPoint: null,
+      sourceMonitorOutPoint: null,
+      sourceMonitorPlaybackRequestId: state.sourceMonitorFileId === id
+        ? state.sourceMonitorPlaybackRequestId
+        : state.sourceMonitorPlaybackRequestId + 1,
+      sourceMonitorCropRequestId: state.sourceMonitorCropRequestId + 1,
     }));
   },
 

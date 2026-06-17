@@ -18,7 +18,9 @@ import {
 import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import { startMediaFileWaveformGeneration } from '../../stores/mediaStore/helpers/mediaWaveformHelpers';
 import type { TimelinePlacementMode } from '../../stores/timeline/editOperations/types';
+import { SourceMonitorImageCrop } from './sourceMonitor/SourceMonitorImageCrop';
 import { SourceMonitorPlacementCommands } from './sourceMonitor/SourceMonitorPlacementCommands';
+import { useSourceMonitorImageCrop } from './sourceMonitor/useSourceMonitorImageCrop';
 import {
   clampTime,
   createTimelineTicks,
@@ -72,6 +74,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
   const setSourceMonitorOutPoint = useMediaStore(state => state.setSourceMonitorOutPoint);
   const clearSourceMonitorInOut = useMediaStore(state => state.clearSourceMonitorInOut);
   const currentTimeRef = useRef(currentTime);
+  const imageCrop = useSourceMonitorImageCrop(file, isImage);
   const timelineDuration = normalizeDuration(duration, normalizeDuration(file.duration, isImage ? DEFAULT_STILL_DURATION : 0));
   const effectiveInPoint = clampTime(inPoint ?? 0, timelineDuration);
   const effectiveOutPoint = clampTime(outPoint ?? timelineDuration, timelineDuration);
@@ -516,6 +519,15 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
               </div>
             </div>
           </>
+        ) : isImage && imageCrop.cropMode ? (
+          <SourceMonitorImageCrop
+            key={file.id}
+            file={file}
+            busy={imageCrop.cropBusy}
+            error={imageCrop.cropError}
+            onApply={imageCrop.applyImageCrop}
+            onCancel={imageCrop.cancelImageCrop}
+          />
         ) : (
           <img
             src={file.url}
@@ -615,6 +627,18 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
                   <IconX size={13} aria-hidden="true" />
                 </button>
               </div>
+            )}
+
+            {isImage && (
+              <button
+                className={`btn btn-sm ${imageCrop.cropMode ? 'btn-active' : ''}`}
+                onClick={imageCrop.toggleImageCrop}
+                disabled={imageCrop.cropBusy}
+                title="Crop image"
+                aria-pressed={imageCrop.cropMode}
+              >
+                CROP
+              </button>
             )}
 
             {isPlayable && (

@@ -1,6 +1,6 @@
 // App version
 // Format: MAJOR.MINOR.PATCH
-export const APP_VERSION = '2.2.8';
+export const APP_VERSION = '2.2.9';
 
 export interface ChangelogNotice {
   type: 'info' | 'warning' | 'success' | 'danger';
@@ -27,8 +27,8 @@ export const FEATURED_VIDEO: {
   title: 'MasterSelects Demo',
   banner: {
     type: 'success',
-    title: 'MasterSelects 2.2.8',
-    message: 'Worker-first playback renderer evidence is now merged: render-host routing, shadow parity, runtime export/playback smokes, and platform proof tooling are in place, with real Mac Safari/Firefox packages remaining as the final external gate.',
+    title: 'MasterSelects 2.2.9',
+    message: 'Image crop tools are now available from the Media Panel and source monitor, creating a new CROP-prefixed media file without touching the original.',
     animated: true,
   },
 };
@@ -36,8 +36,8 @@ export const FEATURED_VIDEO: {
 // Build/Platform notice shown at top of changelog (set to null to hide)
 export const BUILD_NOTICE: ChangelogNotice | null = {
   type: 'success',
-  title: 'MasterSelects 2.2.8',
-  message: 'Worker-first playback renderer evidence is now merged: render-host routing, shadow parity, runtime export/playback smokes, and platform proof tooling are in place, with real Mac Safari/Firefox packages remaining as the final external gate.',
+  title: 'MasterSelects 2.2.9',
+  message: 'Image crop tools are now available from the Media Panel and source monitor, creating a new CROP-prefixed media file without touching the original.',
   animated: true,
 };
 

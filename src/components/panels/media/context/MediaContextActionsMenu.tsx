@@ -48,6 +48,7 @@ export interface MediaContextActionsMenuProps {
   onStartRename: (itemId: string, itemName: string) => void;
   onMoveToFolder: (ids: readonly string[], folderId: string | null) => void;
   onOpenCompositionSettings: (composition: Composition) => void;
+  onOpenImageCrop: (mediaFile: MediaFile) => void;
   onOpenSolidSettings: (solidItem: SolidItem) => void;
   onCancelProxyGeneration: (mediaFileId: string) => void;
   onGenerateProxy: (mediaFileId: string, options: { force: boolean }) => void;
@@ -109,6 +110,7 @@ export function MediaContextActionsMenu({
   onStartRename,
   onMoveToFolder,
   onOpenCompositionSettings,
+  onOpenImageCrop,
   onOpenSolidSettings,
   onCancelProxyGeneration,
   onGenerateProxy,
@@ -198,6 +200,12 @@ export function MediaContextActionsMenu({
           {!multiSelect && mediaFile && canDownloadMediaFileInBrowser(mediaFile) && (
             <div className="context-menu-item" onClick={() => { void onDownloadMediaFile(mediaFile); }}>
               Download
+            </div>
+          )}
+
+          {!multiSelect && isImageFile && mediaFile && (
+            <div className="context-menu-item" onClick={() => onOpenImageCrop(mediaFile)}>
+              Crop
             </div>
           )}
 

@@ -131,6 +131,7 @@ export const useMediaStore = create<MediaStoreState>()(
     previewCompositionId: null,
     sourceMonitorFileId: null,
     sourceMonitorPlaybackRequestId: 0,
+    sourceMonitorCropRequestId: 0,
     sourceMonitorInPoint: null,
     sourceMonitorOutPoint: null,
     activeLayerSlots: {},

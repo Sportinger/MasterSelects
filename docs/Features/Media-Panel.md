@@ -277,6 +277,7 @@ getOpenCompositions()                // List open tabs
 
 ### Source Monitor
 - Double-click a video or image file to open it in the source monitor
+- Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`.
 - Sets `sourceMonitorFileId` in the store
 
 ---
@@ -368,6 +369,7 @@ Right-click on items or empty space for context options.
 - **Reference in AI Prompt** / **Unreference from AI Prompt** for selected image, video, and audio files
 - **Rename** (single selection only)
 - **Download** (single file selection, saves through the browser from the retained file/blob URL)
+- **Crop** (single image selection, opens the source monitor directly in crop mode)
 - **Move to Folder** submenu (shows available folders + "Root")
 - **Delete** (shows count for multi-selection)
 

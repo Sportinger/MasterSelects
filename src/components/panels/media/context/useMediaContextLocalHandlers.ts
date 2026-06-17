@@ -1,5 +1,5 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
-import type { SolidItem } from '../../../../stores/mediaStore';
+import type { MediaFile, SolidItem } from '../../../../stores/mediaStore';
 
 export interface MediaContextSolidSettingsDialogState {
   solidItemId: string;
@@ -10,17 +10,20 @@ export interface MediaContextSolidSettingsDialogState {
 
 interface UseMediaContextLocalHandlersInput {
   moveToFolder: (ids: string[], folderId: string | null) => void;
+  openSourceMonitorCrop: (id: string) => void;
   setSolidSettingsDialog: Dispatch<SetStateAction<MediaContextSolidSettingsDialogState | null>>;
   closeContextMenu: () => void;
 }
 
 export interface MediaContextLocalHandlers {
   onMoveToFolder: (ids: readonly string[], folderId: string | null) => void;
+  onOpenImageCrop: (mediaFile: MediaFile) => void;
   onOpenSolidSettings: (solidItem: SolidItem) => void;
 }
 
 export function useMediaContextLocalHandlers({
   moveToFolder,
+  openSourceMonitorCrop,
   setSolidSettingsDialog,
   closeContextMenu,
 }: UseMediaContextLocalHandlersInput): MediaContextLocalHandlers {
@@ -38,8 +41,14 @@ export function useMediaContextLocalHandlers({
     closeContextMenu();
   }, [closeContextMenu, setSolidSettingsDialog]);
 
+  const onOpenImageCrop = useCallback((mediaFile: MediaFile) => {
+    openSourceMonitorCrop(mediaFile.id);
+    closeContextMenu();
+  }, [closeContextMenu, openSourceMonitorCrop]);
+
   return {
     onMoveToFolder,
+    onOpenImageCrop,
     onOpenSolidSettings,
   };
 }

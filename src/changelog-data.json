@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-06-17",
+    "type": "new",
+    "title": "MasterSelects 2.2.9",
+    "description": "Image crop release: still images can now be cropped directly in the source monitor, and the Media Panel context menu can open an image straight into crop mode. Applying a crop imports a new CROP-prefixed image beside the original, preserving the source file unchanged.",
+    "section": "Release"
+  },
+  {
     "date": "2026-06-16",
     "type": "refactor",
     "title": "MasterSelects 2.2.8",

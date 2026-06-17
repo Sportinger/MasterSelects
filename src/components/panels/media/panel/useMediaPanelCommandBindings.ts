@@ -37,6 +37,7 @@ interface UseMediaPanelCommandBindingsInput {
   showInExplorer: MediaStoreState['showInExplorer'];
   pickProxyFolder: MediaStoreState['pickProxyFolder'];
   moveToFolder: MediaStoreState['moveToFolder'];
+  openSourceMonitorCrop: MediaStoreState['openSourceMonitorCrop'];
   setSelection: MediaStoreState['setSelection'];
   addToSelection: MediaStoreState['addToSelection'];
   removeFromSelection: MediaStoreState['removeFromSelection'];
@@ -94,6 +95,7 @@ export function useMediaPanelCommandBindings({
   showInExplorer,
   pickProxyFolder,
   moveToFolder,
+  openSourceMonitorCrop,
   setSelection,
   addToSelection,
   removeFromSelection,
@@ -133,6 +135,7 @@ export function useMediaPanelCommandBindings({
   });
   const mediaContextLocalHandlers = useMediaContextLocalHandlers({
     moveToFolder,
+    openSourceMonitorCrop,
     setSolidSettingsDialog,
     closeContextMenu,
   });

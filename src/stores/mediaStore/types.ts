@@ -364,6 +364,7 @@ export interface MediaState {
   previewCompositionId: string | null;
   sourceMonitorFileId: string | null;
   sourceMonitorPlaybackRequestId: number;
+  sourceMonitorCropRequestId: number;
   sourceMonitorInPoint: number | null;
   sourceMonitorOutPoint: number | null;
 

@@ -26,6 +26,7 @@ export interface CompositionActions {
   assignMediaFileToSlot: (mediaFileId: string, slotIndex: number) => void;
   setPreviewComposition: (id: string | null) => void;
   setSourceMonitorFile: (id: string | null) => void;
+  openSourceMonitorCrop: (id: string) => void;
   setSourceMonitorInPoint: (time: number | null) => void;
   setSourceMonitorOutPoint: (time: number | null) => void;
   clearSourceMonitorInOut: () => void;
