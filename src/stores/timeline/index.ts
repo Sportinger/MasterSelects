@@ -44,6 +44,7 @@ import { Logger } from '../../services/logger';
 import { lockTimelineEditActions } from './exportEditLock';
 import {
   readStoredAudioLayerAdvancedMode,
+  readStoredTimelineSnappingEnabled,
   readStoredTimelineSplitRatio,
   readStoredTimelineTrackFocusMode,
   readStoredTimelineTrackHeaderWidth,
@@ -180,7 +181,7 @@ export const useTimelineStore = create<TimelineStore>()(
         MAX_TRACK_HEADER_WIDTH,
       ),
       timelineSplitRatio: readStoredTimelineSplitRatio(null),
-      snappingEnabled: true,
+      snappingEnabled: readStoredTimelineSnappingEnabled(true),
       isPlaying: false,
       isDraggingPlayhead: false,
       playbackWarmup: null,

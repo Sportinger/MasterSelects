@@ -2,6 +2,7 @@ const AUDIO_LAYER_ADVANCED_MODE_STORAGE_KEY = 'masterselects.audioLayerAdvancedM
 const TIMELINE_TRACK_FOCUS_MODE_STORAGE_KEY = 'masterselects.timelineTrackFocusMode';
 const TIMELINE_TRACK_HEADER_WIDTH_STORAGE_KEY = 'masterselects.timelineTrackHeaderWidth';
 const TIMELINE_SPLIT_RATIO_STORAGE_KEY = 'masterselects.timelineSplitRatio';
+const TIMELINE_SNAPPING_ENABLED_STORAGE_KEY = 'masterselects.timelineSnappingEnabled';
 
 type TimelineTrackFocusModePreference = 'balanced' | 'audio' | 'video';
 
@@ -60,6 +61,26 @@ export function readStoredAudioLayerAdvancedMode(fallback: boolean): boolean {
 
 export function persistAudioLayerAdvancedMode(enabled: boolean): void {
   persistStoredValue(AUDIO_LAYER_ADVANCED_MODE_STORAGE_KEY, enabled ? 'true' : 'false');
+}
+
+export function readStoredTimelineSnappingEnabled(fallback: boolean): boolean {
+  if (!canUseLocalStorage()) {
+    return fallback;
+  }
+
+  try {
+    const stored = localStorage.getItem(TIMELINE_SNAPPING_ENABLED_STORAGE_KEY);
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
+  } catch {
+    // localStorage can be unavailable in restricted browser contexts.
+  }
+
+  return fallback;
+}
+
+export function persistTimelineSnappingEnabled(enabled: boolean): void {
+  persistStoredValue(TIMELINE_SNAPPING_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false');
 }
 
 export function readStoredTimelineTrackFocusMode(
