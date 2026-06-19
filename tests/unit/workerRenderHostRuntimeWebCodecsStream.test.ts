@@ -32,4 +32,29 @@ describe('workerRenderHostRuntimeWebCodecsStream', () => {
     expect(result.timestampSeconds).toBe(0);
     expect(state.lastPresentedTimestampSeconds).toBe(0);
   });
+
+  it('passes an explicit decoder reset request through a stream force-rebase', async () => {
+    const state = createWorkerWebCodecsStreamState();
+    const frame = { timestamp: 1_000_000 } as VideoFrame;
+    const player = {
+      getFrameRate: vi.fn(() => 60),
+      getCurrentFrame: vi.fn(() => null),
+      startWorkerStreamPlayback: vi.fn(),
+      pumpWorkerStreamPlayback: vi.fn(),
+      takeWorkerStreamPlaybackFrame: vi.fn(() => frame),
+    } as unknown as WebCodecsPlayer;
+
+    await readWorkerWebCodecsStreamFrame({
+      player,
+      state,
+      timeSeconds: 1,
+      timeoutMs: 0,
+      resetDecoder: true,
+    });
+
+    expect(player.startWorkerStreamPlayback).toHaveBeenCalledWith(1, {
+      forceRebase: true,
+      resetDecoder: true,
+    });
+  });
 });

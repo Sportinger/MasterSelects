@@ -1206,7 +1206,7 @@ class WorkerPresentingRenderHostPortCore {
   }
 
   private isWorkerGpuStreamPlaybackSpeed(): boolean {
-    return Math.abs(this.playbackSpeed - 1) <= 0.001;
+    return Math.abs(Math.abs(this.playbackSpeed) - 1) <= 0.001;
   }
 
   private shouldQueueGpuExactSeekPresentation(layers: readonly Layer[]): boolean {

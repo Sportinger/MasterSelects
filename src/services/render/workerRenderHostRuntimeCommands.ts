@@ -289,6 +289,8 @@ export interface WorkerRenderHostWebCodecsStatus {
   readonly lastDecodedFrameTimestampSeconds?: number | null;
   readonly reverseFrameCacheSize?: number;
   readonly reverseCaptureTargetSeconds?: number | null;
+  readonly reverseCaptureWindowMinSeconds?: number | null;
+  readonly reverseCaptureWindowMaxSeconds?: number | null;
   readonly reverseFrameCacheMinTimestampSeconds?: number | null;
   readonly reverseFrameCacheMaxTimestampSeconds?: number | null;
   readonly lastSeekPlan?: {

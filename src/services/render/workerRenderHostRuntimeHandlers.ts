@@ -571,17 +571,22 @@ function retargetStreamFpsFromStatus(
   status: WorkerRenderHostWebCodecsStatus | null,
 ): void {
   const playbackRate = Math.abs(session.playbackRate);
-  if (playbackRate <= 0 || playbackRate <= 1.000001) return;
+  if (playbackRate <= 0) return;
   const sourceFrameRate = status?.frameRate;
   if (typeof sourceFrameRate !== 'number' || !Number.isFinite(sourceFrameRate) || sourceFrameRate <= 0) {
     return;
   }
+  if (session.playbackRate < 0) {
+    session.targetFps = clampStreamTargetFps(Math.min(session.targetFps, sourceFrameRate * playbackRate));
+    return;
+  }
+  if (playbackRate <= 1.000001) return;
   session.targetFps = clampStreamTargetFps(sourceFrameRate * playbackRate);
 }
 
 function reverseStreamReadTimeoutMs(session: WorkerGpuWebCodecsStreamSession): number {
   const frameIntervalMs = 1000 / Math.max(1, session.targetFps);
-  return Math.min(48, Math.max(12, frameIntervalMs * 1.2));
+  return Math.min(12, Math.max(4, frameIntervalMs * 0.5));
 }
 
 function createGpuVideoFrameStats(input: {
@@ -624,6 +629,8 @@ function createGpuVideoFrameStats(input: {
     'workerGpu.videoFrame.lastDecodedFrameTimestampSeconds': status?.lastDecodedFrameTimestampSeconds ?? null,
     'workerGpu.videoFrame.reverseFrameCacheSize': status?.reverseFrameCacheSize ?? null,
     'workerGpu.videoFrame.reverseCaptureTargetSeconds': status?.reverseCaptureTargetSeconds ?? null,
+    'workerGpu.videoFrame.reverseCaptureWindowMinSeconds': status?.reverseCaptureWindowMinSeconds ?? null,
+    'workerGpu.videoFrame.reverseCaptureWindowMaxSeconds': status?.reverseCaptureWindowMaxSeconds ?? null,
     'workerGpu.videoFrame.reverseFrameCacheMinTimestampSeconds': status?.reverseFrameCacheMinTimestampSeconds ?? null,
     'workerGpu.videoFrame.reverseFrameCacheMaxTimestampSeconds': status?.reverseFrameCacheMaxTimestampSeconds ?? null,
     'workerGpu.videoFrame.lastSeekPlanTargetIndex': status?.lastSeekPlan?.targetIndex ?? null,
@@ -1023,7 +1030,7 @@ async function presentGpuWebCodecsStreamTick(session: WorkerGpuWebCodecsStreamSe
     previousPresentedTimestampSeconds: streamReadMode === 'reverse'
       ? session.lastPresentedTimestampSeconds
       : null,
-    allowStaleReverseHold: streamReadMode !== 'reverse',
+    allowStaleReverseHold: true,
   });
   const frameRead = isGpuVideoFrameLayerRead(layerRead) ? layerRead.primaryFrameRead : layerRead;
   session.lastStatus = frameRead.status;
@@ -1551,6 +1558,8 @@ async function presentGpuWebCodecsFrame(
             'workerGpu.videoFrame.lastDecodedFrameTimestampSeconds': frameRead.status?.lastDecodedFrameTimestampSeconds ?? null,
             'workerGpu.videoFrame.reverseFrameCacheSize': frameRead.status?.reverseFrameCacheSize ?? null,
             'workerGpu.videoFrame.reverseCaptureTargetSeconds': frameRead.status?.reverseCaptureTargetSeconds ?? null,
+            'workerGpu.videoFrame.reverseCaptureWindowMinSeconds': frameRead.status?.reverseCaptureWindowMinSeconds ?? null,
+            'workerGpu.videoFrame.reverseCaptureWindowMaxSeconds': frameRead.status?.reverseCaptureWindowMaxSeconds ?? null,
             'workerGpu.videoFrame.reverseFrameCacheMinTimestampSeconds': frameRead.status?.reverseFrameCacheMinTimestampSeconds ?? null,
             'workerGpu.videoFrame.reverseFrameCacheMaxTimestampSeconds': frameRead.status?.reverseFrameCacheMaxTimestampSeconds ?? null,
             'workerGpu.videoFrame.lastSeekPlanTargetIndex': frameRead.status?.lastSeekPlan?.targetIndex ?? null,

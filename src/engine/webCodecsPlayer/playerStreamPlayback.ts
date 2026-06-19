@@ -4,6 +4,7 @@ import { WebCodecsPlayerAdvancePlayback } from './playerAdvancePlayback';
 
 export interface WorkerStreamPlaybackStartOptions {
   readonly forceRebase?: boolean;
+  readonly resetDecoder?: boolean;
 }
 
 export abstract class WebCodecsPlayerStreamPlayback extends WebCodecsPlayerAdvancePlayback {
@@ -29,6 +30,7 @@ export abstract class WebCodecsPlayerStreamPlayback extends WebCodecsPlayerAdvan
       Math.abs(frame.timestamp - targetUs) <= frameDurationUs * 4
     ));
 
+    const resetDecoderForRebase = options.forceRebase === true && options.resetDecoder === true;
     if (
       options.forceRebase === true ||
       hasPendingPausedSeek ||
@@ -39,6 +41,35 @@ export abstract class WebCodecsPlayerStreamPlayback extends WebCodecsPlayerAdvan
         if (!this.isFrameUsableForPlaybackStartup(this.currentFrameTimestampUs, targetUs)) {
           this.clearDisplayedFrame();
         }
+      }
+      if (resetDecoderForRebase && this.codecConfig) {
+        this._isPlaying = true;
+        this.playbackStartupWarmupStartedAtMs = performance.now();
+        this.invalidateStrictPausedSeekFlush();
+        this.endPendingSeek('replaced');
+        this.seekTargetUs = null;
+        this.seekTargetToleranceUs = 0;
+        this.pendingSeekPreviewMode = 'strict';
+        this.clearPendingSeekFeed();
+        this.clearPausedPreroll();
+        this.clearAdvanceSeekState('replaced');
+        if (this.animationId !== null) {
+          cancelAnimationFrame(this.animationId);
+          this.animationId = null;
+        }
+        const targetCts = this.getTargetCtsForTimeSeconds(timeSeconds);
+        const targetIdx = this.findSampleNearCts(targetCts);
+        const keyframe = this.findKeyframeBefore(targetIdx);
+        this.recordDecoderReset('advance_seek');
+        this.decoder.reset();
+        this.decoder.configure(this.codecConfig);
+        this.resetDecodeQueueTracking();
+        this.clearFrameBuffer();
+        this.sampleIndex = targetIdx;
+        this.feedIndex = keyframe;
+        this.setPendingAdvanceSeekTarget(targetIdx);
+        this.feedWorkerStreamSamples();
+        return;
       }
       if (hasPendingPausedSeek) {
         this.endPendingSeek('replaced');

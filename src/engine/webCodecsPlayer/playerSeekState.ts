@@ -27,6 +27,55 @@ export abstract class WebCodecsPlayerSeekState extends WebCodecsPlayerLoading {
     return sample ? this.getSamplePresentationTimestampUs(sample) : null;
   }
 
+  getReverseDecodeWindowForTimeSeconds(timeSeconds: number): {
+    readonly targetTimeSeconds: number;
+    readonly minTimeSeconds: number;
+    readonly maxTimeSeconds: number;
+  } | null {
+    if (!Number.isFinite(timeSeconds) || !this.videoTrack || this.samples.length === 0) {
+      return null;
+    }
+
+    const targetCts = this.getTargetCtsForTimeSeconds(timeSeconds);
+    const targetIndex = this.findSampleNearCts(targetCts);
+    const frameDurationSeconds = 1 / Math.max(this.frameRate, 1);
+    const maxLookaheadSeconds = Math.max(0.25, Math.min(1, 30 / Math.max(this.frameRate, 1)));
+    const maxCaptureTimeSeconds = timeSeconds + maxLookaheadSeconds;
+
+    let captureIndex = targetIndex;
+    for (let index = targetIndex + 1; index < this.samples.length; index += 1) {
+      if (this.samples[index]?.is_sync === true) {
+        captureIndex = Math.max(targetIndex, index - 1);
+        break;
+      }
+      const timestampUs = this.getSampleTimestampUs(index);
+      if (timestampUs !== null && timestampUs / 1_000_000 <= maxCaptureTimeSeconds) {
+        captureIndex = index;
+      }
+      if (timestampUs !== null && timestampUs / 1_000_000 > maxCaptureTimeSeconds + frameDurationSeconds) {
+        break;
+      }
+    }
+
+    const captureTimestampUs = this.getSampleTimestampUs(captureIndex);
+    const keyframeIndex = this.findKeyframeBefore(targetIndex);
+    const keyframeTimestampUs = this.getSampleTimestampUs(keyframeIndex);
+    if (captureTimestampUs === null || keyframeTimestampUs === null) {
+      return null;
+    }
+
+    const targetTimeSeconds = Math.max(timeSeconds, captureTimestampUs / 1_000_000);
+    return {
+      targetTimeSeconds,
+      minTimeSeconds: keyframeTimestampUs / 1_000_000,
+      maxTimeSeconds: targetTimeSeconds,
+    };
+  }
+
+  getReverseDecodeTargetTimeSeconds(timeSeconds: number): number {
+    return this.getReverseDecodeWindowForTimeSeconds(timeSeconds)?.targetTimeSeconds ?? timeSeconds;
+  }
+
   protected beginPendingSeek(kind: 'seek' | 'advance', targetUs: number): void {
     if (!Number.isFinite(targetUs)) {
       return;
@@ -95,7 +144,10 @@ export abstract class WebCodecsPlayerSeekState extends WebCodecsPlayerLoading {
   }
 
   protected getEffectiveDecodeQueueSize(): number {
-    return Math.max(this.decoder?.decodeQueueSize ?? 0, this.trackedDecodeQueueSize);
+    const reportedQueueSize = this.decoder?.decodeQueueSize ?? 0;
+    return this.trackedDecodeQueueSize > 0
+      ? this.trackedDecodeQueueSize
+      : Math.max(0, reportedQueueSize);
   }
 
   protected noteDecodeQueued(): number {
@@ -109,13 +161,9 @@ export abstract class WebCodecsPlayerSeekState extends WebCodecsPlayerLoading {
 
   protected noteDecodeDequeued(): number {
     const reportedQueueSize = this.decoder?.decodeQueueSize ?? 0;
-    if (reportedQueueSize >= 0) {
-      // Browser's VideoDecoder.decodeQueueSize is authoritative - trust it
-      // to pull our tracked estimate back to reality and prevent inflation.
+    this.trackedDecodeQueueSize = Math.max(0, this.trackedDecodeQueueSize - 1);
+    if (reportedQueueSize >= 0 && reportedQueueSize < this.trackedDecodeQueueSize) {
       this.trackedDecodeQueueSize = reportedQueueSize;
-    } else {
-      // Fallback: decrement tracked
-      this.trackedDecodeQueueSize = Math.max(0, this.trackedDecodeQueueSize - 1);
     }
     return this.getEffectiveDecodeQueueSize();
   }

@@ -38,6 +38,7 @@ type WebCodecsPlayerTestAccess = WebCodecsPlayer & {
   onFrame?: (frame: TestVideoFrame) => void;
   handleDecodedFrame: (frame: TestVideoFrame) => void;
   promoteBufferedFrameNearTime: (timeSeconds: number, maxFrameDelta?: number) => TestVideoFrame | null;
+  decodeReverseWindowForTimeSeconds: (timeSeconds: number) => void;
 };
 
 class MockEncodedVideoChunk {
@@ -110,6 +111,46 @@ describe('WebCodecsPlayer advance playback', () => {
     expect(decoder.decode).toHaveBeenCalledTimes(24);
     expect(player.feedIndex).toBe(24);
     expect(player.trackedDecodeQueueSize).toBe(24);
+  });
+
+  it('chooses a reverse decode target inside the current GOP', async () => {
+    const { player } = await makePlayerHarness();
+    player.samples = makeSamples(90).map((sample, index) => ({
+      ...sample,
+      is_sync: index % 30 === 0,
+    }));
+
+    expect(player.getReverseDecodeTargetTimeSeconds(0.6)).toBeCloseTo(29 / 30);
+  });
+
+  it('reports the reverse decode window from keyframe to capture target', async () => {
+    const { player } = await makePlayerHarness();
+    player.samples = makeSamples(120).map((sample, index) => ({
+      ...sample,
+      is_sync: index % 30 === 0,
+    }));
+
+    const window = player.getReverseDecodeWindowForTimeSeconds(2.6);
+    expect(window?.targetTimeSeconds).toBeCloseTo(89 / 30);
+    expect(window?.minTimeSeconds).toBeCloseTo(2);
+    expect(window?.maxTimeSeconds).toBeCloseTo(89 / 30);
+  });
+
+  it('feeds a whole reverse decode window instead of stopping at the seek queue cap', async () => {
+    const { player, decoder } = await makePlayerHarness();
+    player.samples = makeSamples(120).map((sample, index) => ({
+      ...sample,
+      is_sync: index % 30 === 0,
+    }));
+
+    player.decodeReverseWindowForTimeSeconds(2.6);
+
+    expect(decoder.reset).toHaveBeenCalledTimes(1);
+    expect(decoder.configure).toHaveBeenCalledWith(player.codecConfig);
+    expect(decoder.decode).toHaveBeenCalledTimes(41);
+    expect(player.sampleIndex).toBe(89);
+    expect(player.feedIndex).toBe(101);
+    expect(player.trackedDecodeQueueSize).toBe(41);
   });
 
   it('continues an in-flight advance seek without moving the pending resolve target forward', async () => {
@@ -385,6 +426,38 @@ describe('WebCodecsPlayer advance playback', () => {
     expect(player.seekTargetUs).toBeNull();
   });
 
+  it('resets decoder backlog when a worker stream force-rebase explicitly requests it', async () => {
+    const { player, decoder } = await makePlayerHarness();
+    const staleFrame = { timestamp: 5_000_000, close: vi.fn() };
+
+    player.sampleIndex = 90;
+    player.feedIndex = 100;
+    player.currentFrame = staleFrame;
+    player.currentFrameTimestampUs = staleFrame.timestamp;
+    player.seekTargetUs = 5_000_000;
+    player.seekTargetToleranceUs = 1_000;
+    player.pendingSeekKind = 'seek';
+    player.pendingSeekStartedAtMs = performance.now();
+    player.pendingSeekTargetDebugUs = 5_000_000;
+    player.pendingSeekFeedEndIndex = 110;
+    player.trackedDecodeQueueSize = 12;
+    decoder.decodeQueueSize = 12;
+
+    player.startWorkerStreamPlayback(2, { forceRebase: true, resetDecoder: true });
+
+    expect(staleFrame.close).toHaveBeenCalledTimes(1);
+    expect(decoder.reset).toHaveBeenCalledTimes(1);
+    expect(decoder.configure).toHaveBeenCalledWith(player.codecConfig);
+    expect(player.seekTargetUs).toBeNull();
+    expect(player.pendingSeekFeedEndIndex).toBeNull();
+    expect(player.pendingSeekKind).toBe('advance');
+    expect(player.pendingAdvanceSeekTargetIdx).toBe(60);
+    expect(player.sampleIndex).toBe(60);
+    expect(player.feedIndex).toBeGreaterThan(0);
+    expect(player.trackedDecodeQueueSize).toBeGreaterThan(0);
+    expect(player._isPlaying).toBe(true);
+  });
+
   it('clears a stale displayed frame when force-rebasing a still-marked-playing worker stream', async () => {
     const { player } = await makePlayerHarness();
     const staleFrame = { timestamp: 5_000_000, close: vi.fn() };
@@ -638,6 +711,20 @@ describe('WebCodecsPlayer advance playback', () => {
     expect(player.sampleIndex).toBe(96);
     expect(player.feedIndex).toBe(24);
     expect(player.pendingSeekFeedEndIndex).toBe(107);
+  });
+
+  it('decrements tracked queue size when decoder output arrives with a stale reported queue', async () => {
+    const { player, decoder } = await makePlayerHarness();
+    const frame = { timestamp: 3_000_000, close: vi.fn() };
+
+    player._isPlaying = true;
+    player.trackedDecodeQueueSize = 24;
+    decoder.decodeQueueSize = 24;
+
+    player.handleDecodedFrame(frame);
+
+    expect(player.trackedDecodeQueueSize).toBe(23);
+    expect(player.frameBuffer).toEqual([frame]);
   });
 
   it('resolves a paused seek immediately when the displayed frame already matches the target', async () => {

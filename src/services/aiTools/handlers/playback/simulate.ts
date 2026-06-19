@@ -5,6 +5,7 @@ import { vfPipelineMonitor } from '../../../vfPipelineMonitor';
 import { wcPipelineMonitor } from '../../../wcPipelineMonitor';
 import { getReverseWorkerWebCodecsRuntimeDebugSnapshot } from '../../../layerBuilder/reverseWorkerWebCodecsRuntime';
 import { renderHostPort } from '../../../render/renderHostPort';
+import { fingerprintCanvas, type FrameFingerprint } from '../../frameFingerprint';
 import { createScrubPlan, sampleScrubPlan } from '../../scrubSimulation';
 import {
   clampPlaybackTime,
@@ -29,6 +30,64 @@ import {
 import { runScrubMotion } from './scrubMotion';
 
 const PLAYBACK_SAMPLE_INTERVAL_MS = 16;
+
+interface VisiblePlaybackSample {
+  readonly elapsedMs: number;
+  readonly playheadPosition: number;
+  readonly hash: string;
+  readonly meanLuma: number;
+  readonly nonBlankRatio: number;
+  readonly colorRangeLuma: number;
+}
+
+function collectVisiblePlaybackSample(input: {
+  readonly startedAt: number;
+  readonly playheadPosition: number;
+}): VisiblePlaybackSample | null {
+  const canvas = renderHostPort.getCaptureCanvas()?.canvas ?? null;
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+    return null;
+  }
+
+  let fingerprint: FrameFingerprint;
+  try {
+    fingerprint = fingerprintCanvas(canvas, {
+      sampleWidth: 32,
+      sampleHeight: 18,
+    });
+  } catch {
+    return null;
+  }
+
+  return {
+    elapsedMs: Math.round(performance.now() - input.startedAt),
+    playheadPosition: Math.round(input.playheadPosition * 1000) / 1000,
+    hash: fingerprint.hash,
+    meanLuma: fingerprint.meanLuma,
+    nonBlankRatio: fingerprint.nonBlankRatio,
+    colorRangeLuma: fingerprint.colorRange.luma,
+  };
+}
+
+function summarizeVisiblePlaybackSamples(samples: readonly VisiblePlaybackSample[]) {
+  let hashChanges = 0;
+  let previousHash: string | null = null;
+  for (const sample of samples) {
+    if (previousHash !== null && sample.hash !== previousHash) {
+      hashChanges += 1;
+    }
+    previousHash = sample.hash;
+  }
+  const distinctHashes = new Set(samples.map((sample) => sample.hash)).size;
+  return {
+    sampleCount: samples.length,
+    distinctHashes,
+    hashChanges,
+    firstHash: samples[0]?.hash ?? null,
+    lastHash: samples.at(-1)?.hash ?? null,
+    samples: samples.slice(0, 40),
+  };
+}
 
 export async function handleSimulateScrub(
   args: Record<string, unknown>,
@@ -101,6 +160,8 @@ export async function handleSimulatePlayback(
       : 1;
   const resetDiagnostics = args.resetDiagnostics !== false;
   const restorePlaybackState = args.restorePlaybackState === true;
+  const sampleVisibleFrames = args.sampleVisibleFrames === true;
+  const visibleSampleIntervalMs = readDurationMsArg(args, 'visibleSampleIntervalMs', 100, 16, 2000);
 
   const wasPlaying = timelineStore.isPlaying;
   const previousSpeed = timelineStore.playbackSpeed;
@@ -149,6 +210,8 @@ export async function handleSimulatePlayback(
     let minVisited = initialPosition;
     let maxVisited = initialPosition;
     let maxStepSeconds = 0;
+    let lastVisibleSampleAt = Number.NEGATIVE_INFINITY;
+    const visibleSamples: VisiblePlaybackSample[] = [];
 
     while (true) {
       const remainingMs = Math.max(0, deadlineAt - performance.now());
@@ -162,6 +225,16 @@ export async function handleSimulatePlayback(
       minVisited = Math.min(minVisited, position);
       maxVisited = Math.max(maxVisited, position);
       maxStepSeconds = Math.max(maxStepSeconds, stepSeconds);
+      if (sampleVisibleFrames && now - lastVisibleSampleAt >= visibleSampleIntervalMs) {
+        const visibleSample = collectVisiblePlaybackSample({
+          startedAt,
+          playheadPosition: position,
+        });
+        if (visibleSample) {
+          visibleSamples.push(visibleSample);
+          lastVisibleSampleAt = now;
+        }
+      }
 
       if (stepSeconds > 0.0001) {
         movingFrames++;
@@ -248,6 +321,10 @@ export async function handleSimulatePlayback(
         wasPlaying,
         restoredPlaybackState,
         resetDiagnostics,
+        sampleVisibleFrames,
+        visiblePlayback: sampleVisibleFrames
+          ? summarizeVisiblePlaybackSamples(visibleSamples)
+          : null,
         settled: settleMs > 0,
         endedPlaying: finalState.isPlaying,
         reverseWorkerWebCodecsBeforePause,

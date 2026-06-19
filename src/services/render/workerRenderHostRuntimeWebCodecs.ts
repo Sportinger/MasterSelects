@@ -36,18 +36,34 @@ export interface WorkerWebCodecsGpuFrameReadResult {
 interface WorkerWebCodecsSource {
   readonly sourceId: string;
   readonly player: WebCodecsPlayer;
+  readonly retainedBuffer: ArrayBuffer;
+  readonly hardwareAcceleration?: VideoDecoderConfig['hardwareAcceleration'];
   readonly reverseFrameCache: Map<string, ReverseFrameCacheEntry>;
+  readonly reverseCaptureWindows: ReverseCaptureWindow[];
+  reversePrefetchPlayer: WebCodecsPlayer | null;
+  reversePrefetchLoadPromise: Promise<WebCodecsPlayer> | null;
+  reversePrefetchTargetSeconds: number | null;
   lastError: string | null;
   reverseCaptureTargetSeconds: number | null;
+  reverseCaptureWindowMinSeconds: number | null;
+  reverseCaptureWindowMaxSeconds: number | null;
   decodedFrameCount: number;
   lastDecodedFrameTimestampSeconds: number | null;
   stream: WorkerWebCodecsStreamState;
+  lastGpuPresentationMode: WorkerRenderHostWebCodecsSeekMode | null;
 }
 
 const sources = new Map<string, WorkerWebCodecsSource>();
 const REVERSE_FRAME_CACHE_LIMIT = 90;
 const REVERSE_FRAME_CACHE_LOOKBACK_SECONDS = 2.25;
 const REVERSE_PENDING_DECODE_WAIT_SECONDS = 0.75;
+
+interface ReverseCaptureWindow {
+  readonly role: 'primary' | 'prefetch';
+  readonly targetSeconds: number;
+  readonly minSeconds: number;
+  readonly maxSeconds: number;
+}
 
 interface ReverseFrameCacheEntry {
   readonly frame: VideoFrame;
@@ -85,7 +101,7 @@ function statusForSource(source: WorkerWebCodecsSource): WorkerRenderHostWebCode
     currentTime: player.currentTime,
     hasFrame: player.hasFrame(),
     pendingSeekTime: player.getPendingSeekTime?.() ?? null,
-    decodePending: player.isDecodePending?.() ?? false,
+    decodePending: isReverseDecodePending(source),
     decodeQueueSize: debugInfo?.decodeQueueSize,
     samplesLoaded: debugInfo?.samplesLoaded,
     sampleIndex: debugInfo?.sampleIndex,
@@ -103,6 +119,8 @@ function statusForSource(source: WorkerWebCodecsSource): WorkerRenderHostWebCode
     lastDecodedFrameTimestampSeconds: source.lastDecodedFrameTimestampSeconds,
     reverseFrameCacheSize: source.reverseFrameCache.size,
     reverseCaptureTargetSeconds: source.reverseCaptureTargetSeconds,
+    reverseCaptureWindowMinSeconds: source.reverseCaptureWindowMinSeconds,
+    reverseCaptureWindowMaxSeconds: source.reverseCaptureWindowMaxSeconds,
     reverseFrameCacheMinTimestampSeconds: reverseBounds?.minTimestampSeconds ?? null,
     reverseFrameCacheMaxTimestampSeconds: reverseBounds?.maxTimestampSeconds ?? null,
     lastSeekPlan: debugInfo?.lastSeekPlan,
@@ -175,6 +193,77 @@ function closeReverseFrameCache(source: WorkerWebCodecsSource): void {
   source.reverseFrameCache.clear();
 }
 
+function disposeReversePrefetchPlayer(source: WorkerWebCodecsSource): void {
+  source.reversePrefetchTargetSeconds = null;
+  source.reversePrefetchLoadPromise = null;
+  try {
+    source.reversePrefetchPlayer?.destroy?.();
+  } catch {
+    // Ignore decoder shutdown errors during mode switches/dispose.
+  }
+  source.reversePrefetchPlayer = null;
+}
+
+function exitReverseCapture(source: WorkerWebCodecsSource): void {
+  source.reverseCaptureTargetSeconds = null;
+  source.reverseCaptureWindowMinSeconds = null;
+  source.reverseCaptureWindowMaxSeconds = null;
+  source.reverseCaptureWindows.length = 0;
+  disposeReversePrefetchPlayer(source);
+  closeReverseFrameCache(source);
+}
+
+function reverseCaptureWindowForTarget(
+  source: WorkerWebCodecsSource,
+  captureTargetSeconds: number,
+): { readonly minSeconds: number; readonly maxSeconds: number } {
+  const frameRate = frameRateForPlayer(source.player);
+  const frameIntervalSeconds = 1 / frameRate;
+  return {
+    minSeconds: captureTargetSeconds - REVERSE_FRAME_CACHE_LOOKBACK_SECONDS,
+    maxSeconds: captureTargetSeconds + frameIntervalSeconds * 2,
+  };
+}
+
+function setReverseCaptureTarget(
+  source: WorkerWebCodecsSource,
+  captureTargetSeconds: number | null,
+  window?: { readonly minSeconds: number; readonly maxSeconds: number } | null,
+  role: ReverseCaptureWindow['role'] = 'primary',
+): void {
+  if (captureTargetSeconds === null) {
+    for (let index = source.reverseCaptureWindows.length - 1; index >= 0; index -= 1) {
+      if (source.reverseCaptureWindows[index]?.role === role) {
+        source.reverseCaptureWindows.splice(index, 1);
+      }
+    }
+    if (role === 'primary') {
+      source.reverseCaptureTargetSeconds = null;
+      source.reverseCaptureWindowMinSeconds = null;
+      source.reverseCaptureWindowMaxSeconds = null;
+    }
+    return;
+  }
+  const resolvedWindow = window ?? reverseCaptureWindowForTarget(source, captureTargetSeconds);
+  for (let index = source.reverseCaptureWindows.length - 1; index >= 0; index -= 1) {
+    if (source.reverseCaptureWindows[index]?.role === role) {
+      source.reverseCaptureWindows.splice(index, 1);
+    }
+  }
+  source.reverseCaptureWindows.push({
+    role,
+    targetSeconds: captureTargetSeconds,
+    minSeconds: resolvedWindow.minSeconds,
+    maxSeconds: resolvedWindow.maxSeconds,
+  });
+  if (role !== 'primary') {
+    return;
+  }
+  source.reverseCaptureTargetSeconds = captureTargetSeconds;
+  source.reverseCaptureWindowMinSeconds = resolvedWindow.minSeconds;
+  source.reverseCaptureWindowMaxSeconds = resolvedWindow.maxSeconds;
+}
+
 function reverseFrameCacheKey(timestampSeconds: number): string {
   return String(Math.round(timestampSeconds * 1_000_000));
 }
@@ -225,14 +314,16 @@ function pruneReverseFrameCache(source: WorkerWebCodecsSource): void {
 }
 
 function rememberReverseDecodedFrame(source: WorkerWebCodecsSource, frame: VideoFrame): void {
-  const captureTarget = source.reverseCaptureTargetSeconds;
-  if (captureTarget === null) return;
+  if (source.reverseCaptureWindows.length === 0) return;
 
   const timestampSeconds = frameTimestampSeconds(frame);
   const dimensions = reverseCacheFrameDimensions(frame);
   if (timestampSeconds === null || !dimensions) return;
-  if (timestampSeconds > captureTarget + 0.08) return;
-  if (timestampSeconds < captureTarget - REVERSE_FRAME_CACHE_LOOKBACK_SECONDS) return;
+  const matchingWindow = source.reverseCaptureWindows.find((window) => (
+    timestampSeconds >= window.minSeconds - 0.08 &&
+    timestampSeconds <= window.maxSeconds + 0.08
+  ));
+  if (!matchingWindow) return;
 
   let clone: VideoFrame | null = null;
   try {
@@ -301,15 +392,36 @@ function reverseCaptureCoversTarget(
   timeSeconds: number,
 ): boolean {
   const captureTarget = source.reverseCaptureTargetSeconds;
-  if (captureTarget === null) {
+  if (captureTarget === null && source.reverseCaptureWindows.length === 0) {
     return false;
   }
   const frameRate = frameRateForPlayer(source.player);
   const forwardToleranceSeconds = Math.max(0.045, 2 / frameRate);
+  if (source.reverseCaptureWindows.some((window) => (
+    timeSeconds >= window.minSeconds - forwardToleranceSeconds &&
+    timeSeconds <= window.maxSeconds + forwardToleranceSeconds
+  ))) {
+    return true;
+  }
+  if (
+    typeof source.reverseCaptureWindowMinSeconds === 'number' &&
+    Number.isFinite(source.reverseCaptureWindowMinSeconds) &&
+    typeof source.reverseCaptureWindowMaxSeconds === 'number' &&
+    Number.isFinite(source.reverseCaptureWindowMaxSeconds)
+  ) {
+    return timeSeconds >= source.reverseCaptureWindowMinSeconds - forwardToleranceSeconds &&
+      timeSeconds <= source.reverseCaptureWindowMaxSeconds + forwardToleranceSeconds;
+  }
   const bounds = reverseFrameCacheBounds(source);
   if (bounds) {
+    const maxCoveredTimestampSeconds = captureTarget === null
+      ? bounds.maxTimestampSeconds
+      : Math.max(bounds.maxTimestampSeconds, captureTarget);
     return timeSeconds >= bounds.minTimestampSeconds - forwardToleranceSeconds &&
-      timeSeconds <= Math.max(bounds.maxTimestampSeconds, captureTarget) + forwardToleranceSeconds;
+      timeSeconds <= maxCoveredTimestampSeconds + forwardToleranceSeconds;
+  }
+  if (captureTarget === null) {
+    return false;
   }
   return timeSeconds <= captureTarget + forwardToleranceSeconds &&
     timeSeconds >= captureTarget - Math.max(REVERSE_PENDING_DECODE_WAIT_SECONDS, 24 / frameRate);
@@ -327,6 +439,89 @@ function reverseFrameCacheBounds(
   return Number.isFinite(minTimestampSeconds) && Number.isFinite(maxTimestampSeconds)
     ? { minTimestampSeconds, maxTimestampSeconds }
     : null;
+}
+
+function isReverseDecodePending(source: WorkerWebCodecsSource): boolean {
+  return source.player.isDecodePending?.() === true ||
+    source.reversePrefetchPlayer?.isDecodePending?.() === true;
+}
+
+function ensureReversePrefetchPlayer(source: WorkerWebCodecsSource): Promise<WebCodecsPlayer> {
+  if (source.reversePrefetchPlayer?.ready === true) {
+    return Promise.resolve(source.reversePrefetchPlayer);
+  }
+  if (source.reversePrefetchLoadPromise) {
+    return source.reversePrefetchLoadPromise;
+  }
+
+  const prefetchPlayer = new WebCodecsPlayer({
+    loop: false,
+    hardwareAcceleration: source.hardwareAcceleration,
+    useSimpleMode: false,
+    onDecodedFrame: (frame) => {
+      source.decodedFrameCount += 1;
+      source.lastDecodedFrameTimestampSeconds = frameTimestampSeconds(frame);
+      rememberReverseDecodedFrame(source, frame);
+    },
+    onError: (error) => {
+      source.lastError = error.message;
+    },
+  });
+  source.reversePrefetchPlayer = prefetchPlayer;
+  source.reversePrefetchLoadPromise = prefetchPlayer
+    .loadArrayBuffer(source.retainedBuffer.slice(0))
+    .then(async () => {
+      await waitForReady(prefetchPlayer, 2000);
+      return prefetchPlayer;
+    })
+    .catch((error: unknown) => {
+      if (source.reversePrefetchPlayer === prefetchPlayer) {
+        source.reversePrefetchPlayer = null;
+      }
+      source.reversePrefetchLoadPromise = null;
+      source.lastError = error instanceof Error ? error.message : String(error);
+      throw error;
+    });
+  return source.reversePrefetchLoadPromise;
+}
+
+function startReversePrefetchWindow(
+  source: WorkerWebCodecsSource,
+  capturePlan: {
+    readonly targetSeconds: number;
+    readonly windowMinSeconds: number;
+    readonly windowMaxSeconds: number;
+  },
+): void {
+  const frameIntervalSeconds = 1 / frameRateForPlayer(source.player);
+  if (
+    source.reversePrefetchTargetSeconds !== null &&
+    Math.abs(source.reversePrefetchTargetSeconds - capturePlan.targetSeconds) <= frameIntervalSeconds
+  ) {
+    return;
+  }
+
+  source.reversePrefetchTargetSeconds = capturePlan.targetSeconds;
+  setReverseCaptureTarget(source, capturePlan.targetSeconds, {
+    minSeconds: capturePlan.windowMinSeconds,
+    maxSeconds: capturePlan.windowMaxSeconds,
+  }, 'prefetch');
+
+  void ensureReversePrefetchPlayer(source)
+    .then((prefetchPlayer) => {
+      if (
+        source.reversePrefetchPlayer !== prefetchPlayer ||
+        source.reversePrefetchTargetSeconds === null ||
+        Math.abs(source.reversePrefetchTargetSeconds - capturePlan.targetSeconds) > frameIntervalSeconds
+      ) {
+        return;
+      }
+      prefetchPlayer.decodeReverseWindowForTimeSeconds?.(capturePlan.targetSeconds);
+      source.lastError = null;
+    })
+    .catch((error: unknown) => {
+      source.lastError = error instanceof Error ? error.message : String(error);
+    });
 }
 
 async function waitForReverseVideoFrameCache(
@@ -355,40 +550,22 @@ function maybePrimeNextReverseCacheWindow(
     return;
   }
   const frameRate = frameRateForPlayer(source.player);
-  const prefetchDistanceSeconds = Math.max(0.45, 24 / frameRate);
-  const decodePending = source.player.isDecodePending?.() === true;
+  const frameIntervalSeconds = 1 / frameRate;
+  const prefetchDistanceSeconds = Math.max(1.25, 45 / frameRate);
   const captureTarget = source.reverseCaptureTargetSeconds;
-  if (
-    decodePending &&
-    (
-      captureTarget === null ||
-      timeSeconds >= captureTarget - prefetchDistanceSeconds * 1.5
-    )
-  ) {
-    return;
-  }
   if (bounds.maxTimestampSeconds - bounds.minTimestampSeconds < prefetchDistanceSeconds) {
     return;
   }
   if (timeSeconds > bounds.minTimestampSeconds + prefetchDistanceSeconds) {
     return;
   }
-  if (
-    captureTarget !== null &&
-    Math.abs(captureTarget - timeSeconds) <= prefetchDistanceSeconds * 0.5
-  ) {
+  const nextWindowProbeTimeSeconds = Math.max(0, bounds.minTimestampSeconds - frameIntervalSeconds);
+  const capturePlan = reverseCapturePlanForRead(source, nextWindowProbeTimeSeconds, bounds.maxTimestampSeconds);
+  if (captureTarget !== null && Math.abs(captureTarget - capturePlan.targetSeconds) <= frameIntervalSeconds) {
     return;
   }
 
-  const captureTargetSeconds = reverseCaptureTargetForRead(source, timeSeconds, bounds.maxTimestampSeconds);
-  source.reverseCaptureTargetSeconds = captureTargetSeconds;
-  void applySeek(source.player, 'reverse', captureTargetSeconds)
-    .then(() => {
-      source.lastError = null;
-    })
-    .catch((error: unknown) => {
-      source.lastError = error instanceof Error ? error.message : String(error);
-    });
+  startReversePrefetchWindow(source, capturePlan);
 }
 
 function reverseCaptureTargetForRead(
@@ -396,6 +573,14 @@ function reverseCaptureTargetForRead(
   timeSeconds: number,
   previousTimestampSeconds: number | null | undefined,
 ): number {
+  const playerTargetSeconds = source.player.getReverseDecodeTargetTimeSeconds?.(timeSeconds);
+  if (
+    typeof playerTargetSeconds === 'number' &&
+    Number.isFinite(playerTargetSeconds) &&
+    playerTargetSeconds >= timeSeconds
+  ) {
+    return playerTargetSeconds;
+  }
   if (
     typeof previousTimestampSeconds !== 'number' ||
     !Number.isFinite(previousTimestampSeconds) ||
@@ -404,7 +589,44 @@ function reverseCaptureTargetForRead(
     return timeSeconds;
   }
   const frameRate = frameRateForPlayer(source.player);
-  return timeSeconds + Math.max(0.45, 24 / frameRate);
+  return timeSeconds + Math.min(0.25, Math.max(0.1, 6 / frameRate));
+}
+
+function reverseCapturePlanForRead(
+  source: WorkerWebCodecsSource,
+  timeSeconds: number,
+  previousTimestampSeconds: number | null | undefined,
+): {
+  readonly targetSeconds: number;
+  readonly windowMinSeconds: number;
+  readonly windowMaxSeconds: number;
+} {
+  const playerWindow = source.player.getReverseDecodeWindowForTimeSeconds?.(timeSeconds);
+  if (
+    playerWindow &&
+    typeof playerWindow.targetTimeSeconds === 'number' &&
+    Number.isFinite(playerWindow.targetTimeSeconds) &&
+    playerWindow.targetTimeSeconds >= timeSeconds &&
+    typeof playerWindow.minTimeSeconds === 'number' &&
+    Number.isFinite(playerWindow.minTimeSeconds) &&
+    typeof playerWindow.maxTimeSeconds === 'number' &&
+    Number.isFinite(playerWindow.maxTimeSeconds)
+  ) {
+    const frameIntervalSeconds = 1 / frameRateForPlayer(source.player);
+    return {
+      targetSeconds: playerWindow.targetTimeSeconds,
+      windowMinSeconds: playerWindow.minTimeSeconds,
+      windowMaxSeconds: playerWindow.maxTimeSeconds + frameIntervalSeconds * 2,
+    };
+  }
+
+  const targetSeconds = reverseCaptureTargetForRead(source, timeSeconds, previousTimestampSeconds);
+  const fallbackWindow = reverseCaptureWindowForTarget(source, targetSeconds);
+  return {
+    targetSeconds,
+    windowMinSeconds: fallbackWindow.minSeconds,
+    windowMaxSeconds: fallbackWindow.maxSeconds,
+  };
 }
 
 async function bitmapResultFromReverseCache(
@@ -484,6 +706,42 @@ function heldStreamVideoFrameResultForSource(
   const frameIntervalSeconds = 1 / frameRateForPlayer(source.player);
   const maxHoldSeconds = Math.max(0.12, frameIntervalSeconds * 6);
   return Math.abs(held.timestampSeconds - targetTimeSeconds) <= maxHoldSeconds
+    ? held
+    : null;
+}
+
+function heldReverseVideoFrameResultWhilePending(input: {
+  readonly source: WorkerWebCodecsSource;
+  readonly targetTimeSeconds: number;
+  readonly previousPresentedTimestampSeconds?: number | null;
+  readonly allowStaleReverseHold?: boolean;
+}): WorkerWebCodecsGpuFrameReadResult | null {
+  if (input.allowStaleReverseHold === false) {
+    return null;
+  }
+  if (
+    typeof input.previousPresentedTimestampSeconds !== 'number' ||
+    !Number.isFinite(input.previousPresentedTimestampSeconds)
+  ) {
+    return null;
+  }
+  const held = heldVideoFrameResultForSource(input.source);
+  if (!held || held.timestampSeconds === null) {
+    return null;
+  }
+  if (
+    reverseFrameWouldMoveForward(
+      input.source,
+      held.timestampSeconds,
+      input.previousPresentedTimestampSeconds,
+    )
+  ) {
+    return null;
+  }
+  const frameIntervalSeconds = 1 / frameRateForPlayer(input.source.player);
+  const maxAheadSeconds = Math.max(0.25, frameIntervalSeconds * 8);
+  return held.timestampSeconds >= input.targetTimeSeconds - frameIntervalSeconds * 0.5 &&
+    held.timestampSeconds <= input.targetTimeSeconds + maxAheadSeconds
     ? held
     : null;
 }
@@ -632,6 +890,10 @@ async function applySeek(
     if (player.isPlaying) {
       player.pause();
     }
+    if (typeof player.decodeReverseWindowForTimeSeconds === 'function') {
+      player.decodeReverseWindowForTimeSeconds(timeSeconds);
+      return;
+    }
     player.seek(timeSeconds, { previewMode: 'strict' });
     return;
   }
@@ -748,9 +1010,12 @@ async function loadSource(command: Extract<WorkerWebCodecsCommand, { readonly ty
     reverseFrameCache: new Map(),
     lastError: null,
     reverseCaptureTargetSeconds: null,
+    reverseCaptureWindowMinSeconds: null,
+    reverseCaptureWindowMaxSeconds: null,
     decodedFrameCount: 0,
     lastDecodedFrameTimestampSeconds: null,
     stream: createWorkerWebCodecsStreamState(),
+    lastGpuPresentationMode: null,
   };
   sourceRef.current = source;
   sources.set(command.sourceId, source);
@@ -793,11 +1058,20 @@ async function readFrame(command: Extract<WorkerWebCodecsCommand, { readonly typ
   const previousTimestampSeconds = frameTimestampSeconds(source.player.getCurrentFrame());
   let result: WorkerRenderHostWebCodecsResult;
   try {
-    const reverseCaptureTargetSeconds = isReverseRead
-      ? reverseCaptureTargetForRead(source, command.timeSeconds, previousTimestampSeconds)
+    const reverseCapturePlan = isReverseRead
+      ? reverseCapturePlanForRead(source, command.timeSeconds, previousTimestampSeconds)
       : null;
-    source.reverseCaptureTargetSeconds = reverseCaptureTargetSeconds;
-    await applySeek(source.player, command.mode, reverseCaptureTargetSeconds ?? command.timeSeconds);
+    setReverseCaptureTarget(
+      source,
+      reverseCapturePlan?.targetSeconds ?? null,
+      reverseCapturePlan
+        ? {
+            minSeconds: reverseCapturePlan.windowMinSeconds,
+            maxSeconds: reverseCapturePlan.windowMaxSeconds,
+          }
+        : null,
+    );
+    await applySeek(source.player, command.mode, reverseCapturePlan?.targetSeconds ?? command.timeSeconds);
     source.lastError = null;
   } catch (error) {
     source.lastError = error instanceof Error ? error.message : String(error);
@@ -814,7 +1088,7 @@ async function readFrame(command: Extract<WorkerWebCodecsCommand, { readonly typ
     }
   } finally {
     if (!isReverseRead) {
-      source.reverseCaptureTargetSeconds = null;
+      setReverseCaptureTarget(source, null);
     }
   }
 
@@ -828,7 +1102,7 @@ async function readFrame(command: Extract<WorkerWebCodecsCommand, { readonly typ
 function disposeSource(command: Extract<WorkerWebCodecsCommand, { readonly type: 'disposeWebCodecsSource' }>) {
   const source = sources.get(command.sourceId);
   if (source) {
-    source.reverseCaptureTargetSeconds = null;
+    setReverseCaptureTarget(source, null);
     closeReverseFrameCache(source);
   }
   source?.player.destroy?.();
@@ -881,11 +1155,18 @@ export async function readWorkerWebCodecsVideoFrameForGpuPresentation(input: {
 
   const previousTimestampSeconds = frameTimestampSeconds(source.player.getCurrentFrame());
   if (input.mode === 'stream') {
+    const resetDecoder = source.lastGpuPresentationMode === 'reverse' ||
+      source.reverseCaptureTargetSeconds !== null;
+    if (resetDecoder || source.reverseFrameCache.size > 0) {
+      exitReverseCapture(source);
+    }
+    source.lastGpuPresentationMode = 'stream';
     const streamRead = await readWorkerWebCodecsStreamFrame({
       player: source.player,
       state: source.stream,
       timeSeconds: input.timeSeconds,
       timeoutMs: input.timeoutMs,
+      resetDecoder,
     });
     const dimensions = streamRead.frame ? reverseCacheFrameDimensions(streamRead.frame) : null;
     if (!streamRead.frame && input.allowStreamHold === true) {
@@ -912,6 +1193,17 @@ export async function readWorkerWebCodecsVideoFrameForGpuPresentation(input: {
   pauseWorkerWebCodecsStream(source.stream, {
     clearPresentedTimestamp: clearStreamPresentedTimestamp,
   });
+  if (
+    input.mode !== 'reverse' &&
+    (
+      source.lastGpuPresentationMode === 'reverse' ||
+      source.reverseCaptureTargetSeconds !== null ||
+      source.reverseFrameCache.size > 0
+    )
+  ) {
+    exitReverseCapture(source);
+  }
+  source.lastGpuPresentationMode = input.mode;
   if (input.mode === 'reverse') {
     const reverseMaxTimestampSeconds = reverseMonotonicMaxTimestampSeconds(
       source,
@@ -924,8 +1216,17 @@ export async function readWorkerWebCodecsVideoFrameForGpuPresentation(input: {
     }
     if (
       reverseCaptureCoversTarget(source, input.timeSeconds) &&
-      source.player.isDecodePending?.() === true
+      isReverseDecodePending(source)
     ) {
+      const heldWhilePending = heldReverseVideoFrameResultWhilePending({
+        source,
+        targetTimeSeconds: input.timeSeconds,
+        previousPresentedTimestampSeconds: input.previousPresentedTimestampSeconds,
+        allowStaleReverseHold: input.allowStaleReverseHold,
+      });
+      if (heldWhilePending) {
+        return heldWhilePending;
+      }
       const pendingCached = await waitForReverseVideoFrameCache(
         source,
         input.timeSeconds,
@@ -958,12 +1259,21 @@ export async function readWorkerWebCodecsVideoFrameForGpuPresentation(input: {
       };
     }
   }
-  const reverseCaptureTargetSeconds = input.mode === 'reverse'
-    ? reverseCaptureTargetForRead(source, input.timeSeconds, input.previousPresentedTimestampSeconds)
+  const reverseCapturePlan = input.mode === 'reverse'
+    ? reverseCapturePlanForRead(source, input.timeSeconds, input.previousPresentedTimestampSeconds)
     : null;
-  source.reverseCaptureTargetSeconds = reverseCaptureTargetSeconds;
+  setReverseCaptureTarget(
+    source,
+    reverseCapturePlan?.targetSeconds ?? null,
+    reverseCapturePlan
+      ? {
+          minSeconds: reverseCapturePlan.windowMinSeconds,
+          maxSeconds: reverseCapturePlan.windowMaxSeconds,
+        }
+      : null,
+  );
   try {
-    await applySeek(source.player, input.mode, reverseCaptureTargetSeconds ?? input.timeSeconds);
+    await applySeek(source.player, input.mode, reverseCapturePlan?.targetSeconds ?? input.timeSeconds);
     source.lastError = null;
   } catch (error) {
     source.lastError = error instanceof Error ? error.message : String(error);

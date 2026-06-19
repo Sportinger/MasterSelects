@@ -91,10 +91,14 @@ export async function readWorkerWebCodecsStreamFrame(input: {
   readonly state: WorkerWebCodecsStreamState;
   readonly timeSeconds: number;
   readonly timeoutMs?: number;
+  readonly resetDecoder?: boolean;
 }): Promise<WorkerWebCodecsStreamFrameResult> {
   const forceRebase = streamNeedsRebase(input);
   if (forceRebase) {
-    input.player.startWorkerStreamPlayback(input.timeSeconds, { forceRebase });
+    input.player.startWorkerStreamPlayback(
+      input.timeSeconds,
+      input.resetDecoder === true ? { forceRebase, resetDecoder: true } : { forceRebase },
+    );
     input.state.active = true;
     input.state.lastPresentedTimestampSeconds = null;
   } else {

@@ -107,6 +107,71 @@ export abstract class WebCodecsPlayerSeekingControls extends WebCodecsPlayerStre
     webCodecsTelemetry.seekEnd(timeSeconds, framesDecoded, performance.now() - seekStart);
   }
 
+  decodeReverseWindowForTimeSeconds(timeSeconds: number): void {
+    if (this.useSimpleMode || !this.videoTrack || this.samples.length === 0 || !this.decoder || !this.codecConfig) {
+      return;
+    }
+
+    const window = this.getReverseDecodeWindowForTimeSeconds(timeSeconds);
+    const targetTimeSeconds = window?.targetTimeSeconds ?? timeSeconds;
+    const targetCts = this.getTargetCtsForTimeSeconds(targetTimeSeconds);
+    const targetIndex = this.findSampleNearCts(targetCts);
+    const keyframeIndex = this.findKeyframeBefore(targetIndex);
+    const feedEndIndex = this.getPausedSeekFeedEndIndex(targetIndex, 'strict');
+    const targetSampleTimeUs = this.getSampleTimestampUs(targetIndex);
+    const keyframeTimeUs = this.getSampleTimestampUs(keyframeIndex);
+
+    this.lastSeekPlanDebug = {
+      targetIndex,
+      keyframeIndex,
+      feedEndIndex,
+      targetTimeSeconds,
+      targetSampleTimeSeconds: targetSampleTimeUs === null ? null : targetSampleTimeUs / 1_000_000,
+      keyframeTimeSeconds: keyframeTimeUs === null ? null : keyframeTimeUs / 1_000_000,
+    };
+    this.seekTargetUs = null;
+    this.seekTargetToleranceUs = 0;
+    this.pendingSeekPreviewMode = 'strict';
+    this.invalidateStrictPausedSeekFlush();
+    this.endPendingSeek('replaced');
+    this.clearPendingSeekFeed();
+    this.clearPausedPreroll();
+    this.clearAdvanceSeekState('replaced');
+    this.recordDecoderReset('seek');
+    this.decoder.reset();
+    this.decoder.configure(this.codecConfig);
+    this.resetDecodeQueueTracking();
+    this.clearFrameBuffer();
+
+    for (let index = keyframeIndex; index <= feedEndIndex; index += 1) {
+      const sample = this.samples[index];
+      if (!sample) {
+        break;
+      }
+      const chunk = new EncodedVideoChunk({
+        type: sample.is_sync ? 'key' : 'delta',
+        timestamp: this.getSamplePresentationTimestampUs(sample),
+        duration: (sample.duration * 1_000_000) / sample.timescale,
+        data: sample.data,
+      });
+      try {
+        this.decoder.decode(chunk);
+        const queueSize = this.noteDecodeQueued();
+        webCodecsTelemetry.decodeFeed(
+          index,
+          sample.is_sync ? 'key' : 'delta',
+          queueSize,
+          'seek',
+        );
+      } catch (error) {
+        this.recordDecodeError(error, 'reverse_window.decode');
+      }
+    }
+
+    this.sampleIndex = targetIndex;
+    this.feedIndex = Math.min(feedEndIndex + 1, this.samples.length);
+  }
+
   /**
    * Fast seek: decode only the nearest keyframe (1 frame instead of N).
    * Use during fast scrubbing for instant feedback - shows nearest I-frame.

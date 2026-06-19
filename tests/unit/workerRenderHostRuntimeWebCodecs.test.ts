@@ -30,6 +30,7 @@ const workerRuntimeWebCodecsMocks = vi.hoisted(() => {
       getCurrentFrame: ReturnType<typeof vi.fn>;
       isDecodePending: ReturnType<typeof vi.fn>;
       getDebugInfo: ReturnType<typeof vi.fn>;
+      getReverseDecodeWindowForTimeSeconds: ReturnType<typeof vi.fn>;
       seek: ReturnType<typeof vi.fn>;
       advanceToTime: ReturnType<typeof vi.fn>;
       startWorkerStreamPlayback: ReturnType<typeof vi.fn>;
@@ -68,6 +69,7 @@ vi.mock('../../src/engine/WebCodecsPlayer', () => {
         ? this.currentFrame.timestamp / 1_000_000
         : null,
     }));
+    getReverseDecodeWindowForTimeSeconds = vi.fn(() => null);
     advanceToTime = vi.fn((timeSeconds: number) => {
       this.currentTime = timeSeconds;
       this.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(timeSeconds);
@@ -361,7 +363,7 @@ describe('worker render host runtime WebCodecs commands', () => {
       allowStaleReverseHold: false,
     });
 
-    expect(player.seek.mock.calls[0]?.[0]).toBeCloseTo(3.35);
+    expect(player.seek.mock.calls[0]?.[0]).toBeCloseTo(3);
     expect(player.seek.mock.calls[0]?.[1]).toEqual({ previewMode: 'strict' });
     expect(output.frame).toBeNull();
     expect(output.timestampSeconds).toBeNull();
@@ -405,7 +407,44 @@ describe('worker render host runtime WebCodecs commands', () => {
     expect(output.frame?.timestamp).toBe(3_000_000);
   });
 
-  it('starts a new GPU reverse seek after the target moves below the cached window', async () => {
+  it('uses a nearby monotonic held frame while a GPU reverse decode window is pending', async () => {
+    await acceptWorkerWebCodecsCommand({
+      type: 'loadWebCodecsSource',
+      requestId: 'load-source-gpu-reverse-held-pending',
+      sourceId: 'source-gpu-reverse-held-pending',
+      buffer: new ArrayBuffer(8),
+    });
+    const player = workerRuntimeWebCodecsMocks.instances[0]!;
+    player.getFrameRate.mockReturnValue(60);
+    player.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(3.25);
+    player.getCurrentFrame.mockImplementation(() => player.currentFrame);
+    player.isDecodePending.mockReturnValue(true);
+    player.seek.mockImplementation((timeSeconds: number) => {
+      player.currentTime = timeSeconds;
+    });
+
+    await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-gpu-reverse-held-pending',
+      timeSeconds: 3.25,
+      mode: 'reverse',
+      timeoutMs: 0,
+    });
+    player.seek.mockClear();
+
+    const output = await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-gpu-reverse-held-pending',
+      timeSeconds: 3.1,
+      mode: 'reverse',
+      timeoutMs: 20,
+      previousPresentedTimestampSeconds: 3.25,
+    });
+
+    expect(player.seek).not.toHaveBeenCalled();
+    expect(output.frame?.timestamp).toBe(3_250_000);
+    expect(output.timestampSeconds).toBe(3.25);
+  });
+
+  it('keeps an active GPU reverse decode window when the target moves below the partially filled cache', async () => {
     await acceptWorkerWebCodecsCommand({
       type: 'loadWebCodecsSource',
       requestId: 'load-source-gpu-reverse-cache-edge',
@@ -439,7 +478,78 @@ describe('worker render host runtime WebCodecs commands', () => {
       timeoutMs: 0,
     });
 
-    expect(player.seek).toHaveBeenCalledWith(2, { previewMode: 'strict' });
+    expect(player.seek).not.toHaveBeenCalled();
+  });
+
+  it('starts a new GPU reverse seek after the target moves below the planned decode window', async () => {
+    await acceptWorkerWebCodecsCommand({
+      type: 'loadWebCodecsSource',
+      requestId: 'load-source-gpu-reverse-window-edge',
+      sourceId: 'source-gpu-reverse-window-edge',
+      buffer: new ArrayBuffer(8),
+    });
+    const player = workerRuntimeWebCodecsMocks.instances[0]!;
+    player.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(3.25);
+    player.getCurrentFrame.mockImplementation(() => player.currentFrame);
+    player.isDecodePending.mockReturnValue(true);
+    player.seek.mockImplementation((timeSeconds: number) => {
+      player.currentTime = timeSeconds;
+    });
+
+    await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-gpu-reverse-window-edge',
+      timeSeconds: 3.25,
+      mode: 'reverse',
+      timeoutMs: 0,
+    });
+    player.seek.mockClear();
+
+    await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-gpu-reverse-window-edge',
+      timeSeconds: 0.8,
+      mode: 'reverse',
+      timeoutMs: 0,
+    });
+
+    expect(player.seek).toHaveBeenCalledWith(0.8, { previewMode: 'strict' });
+  });
+
+  it('uses the player keyframe window instead of a fixed reverse lookback window', async () => {
+    await acceptWorkerWebCodecsCommand({
+      type: 'loadWebCodecsSource',
+      requestId: 'load-source-gpu-reverse-keyframe-window',
+      sourceId: 'source-gpu-reverse-keyframe-window',
+      buffer: new ArrayBuffer(8),
+    });
+    const player = workerRuntimeWebCodecsMocks.instances[0]!;
+    player.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(4.8);
+    player.getCurrentFrame.mockImplementation(() => player.currentFrame);
+    player.isDecodePending.mockReturnValue(true);
+    player.getReverseDecodeWindowForTimeSeconds.mockImplementation((timeSeconds: number) => (
+      timeSeconds >= 3.9
+        ? { targetTimeSeconds: 4.83, minTimeSeconds: 3.9, maxTimeSeconds: 4.83 }
+        : { targetTimeSeconds: 3.86, minTimeSeconds: 1.93, maxTimeSeconds: 3.86 }
+    ));
+    player.seek.mockImplementation((timeSeconds: number) => {
+      player.currentTime = timeSeconds;
+    });
+
+    await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-gpu-reverse-keyframe-window',
+      timeSeconds: 4.2,
+      mode: 'reverse',
+      timeoutMs: 0,
+    });
+    player.seek.mockClear();
+
+    await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-gpu-reverse-keyframe-window',
+      timeSeconds: 3.5,
+      mode: 'reverse',
+      timeoutMs: 0,
+    });
+
+    expect(player.seek).toHaveBeenCalledWith(3.86, { previewMode: 'strict' });
   });
 
   it('primes the next GPU reverse window while serving a lower-edge cache hit', async () => {
@@ -451,7 +561,7 @@ describe('worker render host runtime WebCodecs commands', () => {
     });
     const player = workerRuntimeWebCodecsMocks.instances[0]!;
     player.getFrameRate.mockReturnValue(60);
-    player.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(3.25);
+    player.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(4.25);
     player.getCurrentFrame.mockImplementation(() => player.currentFrame);
     player.isDecodePending.mockReturnValue(false);
     player.seek.mockImplementation((timeSeconds: number) => {
@@ -460,11 +570,12 @@ describe('worker render host runtime WebCodecs commands', () => {
 
     await readWorkerWebCodecsVideoFrameForGpuPresentation({
       sourceId: 'source-gpu-reverse-prime-next',
-      timeSeconds: 3.25,
+      timeSeconds: 4.25,
       mode: 'reverse',
       timeoutMs: 0,
     });
-    player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(3.25));
+    player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(4.25));
+    player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(3));
     player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(2.75));
     player.seek.mockClear();
 
@@ -476,7 +587,7 @@ describe('worker render host runtime WebCodecs commands', () => {
     });
 
     expect(output.frame?.timestamp).toBe(2_750_000);
-    expect(player.seek.mock.calls[0]?.[0]).toBeCloseTo(3.24);
+    expect(player.seek.mock.calls[0]?.[0]).toBeCloseTo(2.83);
     expect(player.seek.mock.calls[0]?.[1]).toEqual({ previewMode: 'strict' });
   });
 
@@ -489,7 +600,7 @@ describe('worker render host runtime WebCodecs commands', () => {
     });
     const player = workerRuntimeWebCodecsMocks.instances[0]!;
     player.getFrameRate.mockReturnValue(60);
-    player.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(3.25);
+    player.currentFrame = workerRuntimeWebCodecsMocks.makeFrame(4);
     player.getCurrentFrame.mockImplementation(() => player.currentFrame);
     player.isDecodePending.mockReturnValue(true);
     player.seek.mockImplementation((timeSeconds: number) => {
@@ -498,11 +609,11 @@ describe('worker render host runtime WebCodecs commands', () => {
 
     await readWorkerWebCodecsVideoFrameForGpuPresentation({
       sourceId: 'source-gpu-reverse-prime-pending',
-      timeSeconds: 3.25,
+      timeSeconds: 4,
       mode: 'reverse',
       timeoutMs: 0,
     });
-    player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(3.25));
+    player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(4));
     player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(2.5));
     player.seek.mockClear();
 
@@ -514,7 +625,7 @@ describe('worker render host runtime WebCodecs commands', () => {
     });
 
     expect(output.frame?.timestamp).toBe(2_500_000);
-    expect(player.seek.mock.calls[0]?.[0]).toBeCloseTo(2.95);
+    expect(player.seek.mock.calls[0]?.[0]).toBeCloseTo(2.58);
     expect(player.seek.mock.calls[0]?.[1]).toEqual({ previewMode: 'strict' });
   });
 
@@ -543,6 +654,44 @@ describe('worker render host runtime WebCodecs commands', () => {
     expect(player.fastSeek).not.toHaveBeenCalled();
     expect(player.pause).not.toHaveBeenCalled();
     expect(output.frame?.timestamp).toBe(1_250_000);
+  });
+
+  it('clears reverse capture and resets the decoder when normal GPU streaming resumes after reverse', async () => {
+    await acceptWorkerWebCodecsCommand({
+      type: 'loadWebCodecsSource',
+      requestId: 'load-source-stream-after-reverse',
+      sourceId: 'source-stream-after-reverse',
+      buffer: new ArrayBuffer(8),
+    });
+    const player = workerRuntimeWebCodecsMocks.instances[0]!;
+
+    await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-stream-after-reverse',
+      timeSeconds: 3,
+      mode: 'reverse',
+      timeoutMs: 0,
+    });
+    player.onDecodedFrame?.(workerRuntimeWebCodecsMocks.makeFrame(3));
+    player.startWorkerStreamPlayback.mockClear();
+
+    const output = await readWorkerWebCodecsVideoFrameForGpuPresentation({
+      sourceId: 'source-stream-after-reverse',
+      timeSeconds: 3.1,
+      mode: 'stream',
+      timeoutMs: 0,
+    });
+
+    expect(player.startWorkerStreamPlayback).toHaveBeenCalledWith(3.1, {
+      forceRebase: true,
+      resetDecoder: true,
+    });
+    expect(player.seek).toHaveBeenCalledTimes(1);
+    expect(player.advanceToTime).not.toHaveBeenCalled();
+    expect(output.status?.reverseCaptureTargetSeconds).toBeNull();
+    expect(output.status?.reverseCaptureWindowMinSeconds).toBeNull();
+    expect(output.status?.reverseCaptureWindowMaxSeconds).toBeNull();
+    expect(output.status?.reverseFrameCacheSize).toBe(0);
+    expect(output.frame?.timestamp).toBe(3_100_000);
   });
 
   it('waits briefly for a streaming queue frame after a jump without falling back to seek', async () => {

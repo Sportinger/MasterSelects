@@ -3878,7 +3878,7 @@ describe('worker presenting render host port', () => {
     );
   });
 
-  it('uses reverse WebCodecs reads instead of the forward stream for reverse playback', async () => {
+  it('uses a reverse WebCodecs stream session for 1x reverse worker WebGPU playback', async () => {
     const fallback = createFallback();
     const bridge = createBridge();
     const offscreen = { width: 640, height: 360 } as unknown as OffscreenCanvas;
@@ -3937,17 +3937,17 @@ describe('worker presenting render host port', () => {
     host.render([layer]);
 
     await vi.waitFor(() => {
-      expect(bridge.presentGpuWebCodecsFrame).toHaveBeenCalledTimes(1);
+      expect(bridge.startGpuWebCodecsStream).toHaveBeenCalledTimes(1);
     });
-    expect(bridge.startGpuWebCodecsStream).not.toHaveBeenCalled();
-    expect(vi.mocked(bridge.presentGpuWebCodecsFrame).mock.calls[0]).toEqual([
-      expect.stringContaining('worker-gpu-only:render'),
+    expect(bridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
+    expect(vi.mocked(bridge.startGpuWebCodecsStream).mock.calls[0]).toEqual([
+      expect.stringContaining('worker-gpu-only:stream'),
       'preview',
       expect.stringContaining('gpu-video:runtime:media:media-video-reverse-stream:interactive:clip-video-reverse-stream'),
       8,
       8,
       expect.any(Number),
-      expect.objectContaining({ mode: 'reverse', timeoutMs: 120 }),
+      expect.objectContaining({ playbackRate: -1, timeoutMs: 48 }),
     ]);
   });
 

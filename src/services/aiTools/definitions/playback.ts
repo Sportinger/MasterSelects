@@ -176,6 +176,14 @@ export const playbackToolDefinitions: ToolDefinition[] = [
             type: 'boolean',
             description: 'Restore playback if it was already running before the simulation. Defaults to false so diagnostics runs leave playback paused.',
           },
+          sampleVisibleFrames: {
+            type: 'boolean',
+            description: 'Whether to sample visible preview canvas fingerprints during playback. Defaults to false.',
+          },
+          visibleSampleIntervalMs: {
+            type: 'number',
+            description: 'Interval for visible preview canvas fingerprint sampling when enabled. Defaults to 100ms.',
+          },
         },
         required: [],
       },
