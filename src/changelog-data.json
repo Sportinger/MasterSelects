@@ -2,13 +2,6 @@
   {
     "date": "2026-06-19",
     "type": "fix",
-    "title": "MasterSelects 2.3.0",
-    "description": "Production playback default fix: worker-gpu-only is now the default render host mode for fresh sessions, Worker WebCodecs stays enabled during settings rehydration, and old persisted HTML playback settings are migrated so masterselects.com no longer silently falls back to the legacy HTML video path.",
-    "section": "Release"
-  },
-  {
-    "date": "2026-06-19",
-    "type": "fix",
     "title": "MasterSelects 2.2.10",
     "description": "Worker GPU playback release: normal forward playback now uses Worker WebCodecs frame delivery into Worker WebGPU presentation, with reverse playback prefetch diagnostics and source retention fixes to avoid stale or blank preview frames after playback mode changes. This release also includes the Safari export and native-helper media playback fixes from staging.",
     "section": "Release"

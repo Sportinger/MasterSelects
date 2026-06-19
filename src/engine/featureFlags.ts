@@ -5,8 +5,8 @@
 export const flags = {
   useRenderGraph: false,  // Render Graph executor (stubs - not ready)
   useDecoderPool: false,  // Shared decoder pool (not wired yet)
-  useFullWebCodecsPlayback: true,  // Worker video decode is the default playback path.
-  disableHtmlPreviewFallback: true,  // Keep preview/playback off the legacy HTML video path by default.
+  useFullWebCodecsPlayback: false,  // Default HTML Video; persisted toggle in settingsStore syncs on rehydrate
+  disableHtmlPreviewFallback: false,  // Synced with useFullWebCodecsPlayback via settingsStore
   useLiveSlotTrigger: false,  // Slot Grid click triggers live layers without forcing editor switching
   useWarmSlotDecks: false,  // Prepare reusable slot-owned live decks for low-latency triggering
   use3DLayers: true,  // Shared 3D scene support
@@ -29,7 +29,7 @@ export const flags = {
   guidedActionsTutorials: true,  // Tutorial scenarios using guided actions
   guidedActionsRecorder: false,  // Future guided action authoring/recording layer
   timelineCanvasWorker: true,  // issue #228 P4: OffscreenCanvas clip renderer for eligible rows; verified by timeline canvas worker smokes.
-  workerFirstRenderHost: true,  // Worker GPU render host is the default production presentation path.
+  workerFirstRenderHost: false,  // Worker-first playback renderer primary host; remains gated until W5 and worker host mount are green.
 };
 
 // Expose for runtime toggling from devtools

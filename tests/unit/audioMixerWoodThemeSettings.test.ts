@@ -18,11 +18,6 @@ async function importSettingsStoreWithMocks() {
   vi.resetModules();
   vi.doUnmock('../../src/stores/settingsStore');
   localStorage.clear();
-  const mockedFlags = {
-    useFullWebCodecsPlayback: false,
-    disableHtmlPreviewFallback: false,
-    workerFirstRenderHost: false,
-  };
 
   vi.doMock('../../src/services/apiKeyManager', () => ({
     apiKeyManager: {
@@ -41,7 +36,10 @@ async function importSettingsStoreWithMocks() {
     },
   }));
   vi.doMock('../../src/engine/featureFlags', () => ({
-    flags: mockedFlags,
+    flags: {
+      useFullWebCodecsPlayback: false,
+      disableHtmlPreviewFallback: false,
+    },
   }));
   vi.doMock('../../src/services/lemonadeProvider', () => ({
     DEFAULT_LEMONADE_ENDPOINT: 'http://localhost:13305/api/v1',
@@ -58,10 +56,7 @@ async function importSettingsStoreWithMocks() {
     },
   }));
 
-  return {
-    ...(await import('../../src/stores/settingsStore')),
-    mockedFlags,
-  };
+  return import('../../src/stores/settingsStore');
 }
 
 describe('audio mixer wood theme settings', () => {
@@ -79,20 +74,5 @@ describe('audio mixer wood theme settings', () => {
     useSettingsStore.getState().setAudioMixerWoodThemeEnabled(false);
 
     expect(useSettingsStore.getState().audioMixerWoodThemeEnabled).toBe(false);
-  });
-
-  it('keeps worker WebCodecs playback enabled even when the legacy toggle is set false', async () => {
-    const { useSettingsStore, mockedFlags } = await importSettingsStoreWithMocks();
-
-    expect(useSettingsStore.getState().webCodecsEnabled).toBe(true);
-
-    useSettingsStore.getState().setWebCodecsEnabled(false);
-
-    expect(useSettingsStore.getState().webCodecsEnabled).toBe(true);
-    expect(mockedFlags).toMatchObject({
-      useFullWebCodecsPlayback: true,
-      disableHtmlPreviewFallback: true,
-      workerFirstRenderHost: true,
-    });
   });
 });
