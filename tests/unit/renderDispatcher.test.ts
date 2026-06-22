@@ -51,6 +51,7 @@ vi.mock('../../src/engine/gaussian/core/GaussianSplatGpuRenderer', () => ({
 }));
 
 function createDispatcher(isPlaying = true) {
+  useTimelineStore.setState({ isPlaying });
   const collect = vi.fn(() => []);
   const deps = {
     getDevice: vi.fn(() => ({})),

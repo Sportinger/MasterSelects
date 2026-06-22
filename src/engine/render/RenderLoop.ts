@@ -39,6 +39,8 @@ export class RenderLoop {
   private continuousRender = false;
   private newFrameReady = false; // Set by RVFC to bypass scrub limiter
   private lastRenderTime = 0;
+  private playbackTargetFps = 60;
+  private playbackFrameTime = 15;
 
   // Health monitoring - detect frozen render loop
   private lastSuccessfulRender = 0;
@@ -50,6 +52,8 @@ export class RenderLoop {
   private readonly PAUSED_PREVIEW_HOLD_FRAME_TIME = 15; // WebGPU canvas contents are not persistent between presents
   private readonly VIDEO_FRAME_TIME = 15; // ~60fps target with tolerance for 16.6ms display ticks
   private readonly SCRUB_FRAME_TIME = 15; // ~60fps during scrubbing with tolerance for 16.6ms display ticks
+  private readonly FRAME_TIME_TOLERANCE = 1.5; // lets a 16.6ms RAF satisfy a nominal 60fps cadence
+  private readonly MAX_VISUAL_TARGET_FPS = 60;
   private readonly WATCHDOG_INTERVAL = 2000; // Check every 2s
   private readonly WATCHDOG_STALL_THRESHOLD = 3000; // 3s without render = stalled
 
@@ -87,6 +91,7 @@ export class RenderLoop {
 
       const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
       lastTimestamp = timestamp;
+      let renderedFrameGap = rafGap;
 
       if (
         this.idleSuppressed
@@ -114,11 +119,6 @@ export class RenderLoop {
       if (this.continuousRender || playbackRenderActive || scrubRenderActive) {
         this.isIdle = false;
         this.lastActivityTime = timestamp;
-      } else if (pausedPreviewHoldActive) {
-        // Browser WebGPU canvases are not reliable as persistent frame stores
-        // after the render loop goes idle. Re-present the held paused frame at
-        // display cadence so pause does not decay into a black preview.
-        this.isIdle = false;
       } else if (!this.idleSuppressed) {
         // Idle detection (briefly suppressed after reload to allow video GPU warmup)
         const timeSinceActivity = timestamp - this.lastActivityTime;
@@ -158,9 +158,15 @@ export class RenderLoop {
       // to oscillate (75% cache-hits → false), disabling the limiter and
       // rendering at 120fps — double the GPU work for zero visual benefit.
       if (this.hasActiveVideo || playbackRenderActive || scrubRenderActive || this.continuousRender) {
-        const timeSinceLastRender = timestamp - this.lastRenderTime;
-        if (playbackRenderActive || this.continuousRender) {
-          // Playback: ~60fps target
+        const previousRenderTime = this.lastRenderTime;
+        const timeSinceLastRender = timestamp - previousRenderTime;
+        if (playbackRenderActive) {
+          if (timeSinceLastRender < this.playbackFrameTime) {
+            this.animationId = requestAnimationFrame(loop);
+            return;
+          }
+        } else if (this.continuousRender) {
+          // Non-playback continuous layers stay responsive at the display cadence.
           if (timeSinceLastRender < this.VIDEO_FRAME_TIME) {
             this.animationId = requestAnimationFrame(loop);
             return;
@@ -181,6 +187,9 @@ export class RenderLoop {
           this.newFrameReady = false;
         }
         this.lastRenderTime = timestamp;
+        if (previousRenderTime > 0) {
+          renderedFrameGap = timeSinceLastRender;
+        }
       }
 
       // Call render callback (unless exporting)
@@ -195,10 +204,10 @@ export class RenderLoop {
         }
       }
 
-      // Record RAF gap for stats (pass scrubbing state so intentional
-      // 30fps rate-limiting doesn't inflate drop counts)
+      // Record rendered-frame cadence for stats. The RAF loop itself may keep
+      // ticking at display rate while playback is intentionally frame-limited.
       if (lastTimestamp > 0) {
-        this.performanceStats.recordRafGap(rafGap, this.isScrubbing);
+        this.performanceStats.recordRafGap(renderedFrameGap, this.isScrubbing);
       }
 
       // Reset per-second counters
@@ -383,6 +392,26 @@ export class RenderLoop {
 
   getTimelineVisualDemand(): boolean {
     return this.timelineVisualDemand;
+  }
+
+  setVisualTargetFps(targetFps: number): void {
+    const nextTargetFps = Number.isFinite(targetFps) && targetFps > 0
+      ? Math.max(1, Math.min(this.MAX_VISUAL_TARGET_FPS, Math.round(targetFps)))
+      : this.MAX_VISUAL_TARGET_FPS;
+    if (nextTargetFps === this.playbackTargetFps) {
+      return;
+    }
+
+    this.playbackTargetFps = nextTargetFps;
+    this.performanceStats.setTargetFps(nextTargetFps);
+    this.playbackFrameTime = Math.max(
+      this.VIDEO_FRAME_TIME,
+      (1000 / nextTargetFps) - this.FRAME_TIME_TOLERANCE,
+    );
+    if (this.isPlaying && this.timelineVisualDemand) {
+      this.lastRenderTime = 0;
+      this.requestRender();
+    }
   }
 
   setIsScrubbing(scrubbing: boolean): void {

@@ -112,6 +112,7 @@ export function createFrameContext(): FrameContext {
       : LAYER_BUILDER_CONSTANTS.FRAME_RATE;
   const proxyEnabled = mediaState.proxyEnabled;
   const frameNumber = Math.floor(playheadPosition * contextFrameRate + 1e-6);
+  const visualPlayheadPosition = frameNumber / contextFrameRate;
 
   // === LAZY CACHED VALUES ===
   // These are computed on first access and cached
@@ -155,6 +156,8 @@ export function createFrameContext(): FrameContext {
     // Timing
     now,
     frameNumber,
+    frameRate: contextFrameRate,
+    visualPlayheadPosition,
 
     // Media files reference
     mediaFiles: mediaState.files,
@@ -356,11 +359,25 @@ export function getClipTimeInfo(ctx: FrameContext, clip: TimelineClip): ClipTime
   const clipTime = Number.isFinite(sourceOverride)
     ? sourceOverride!
     : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + baseSourceTime));
+  const visualPlayheadPosition =
+    typeof ctx.visualPlayheadPosition === 'number' && Number.isFinite(ctx.visualPlayheadPosition)
+      ? ctx.visualPlayheadPosition
+      : ctx.playheadPosition;
+  const visualClipLocalTime = visualPlayheadPosition - clip.startTime;
+  const visualBaseSourceTime = Number.isFinite(sourceOverride)
+    ? sourceOverride! - startPoint
+    : ctx.getSourceTimeForClip(clip.id, visualClipLocalTime);
+  const visualClipTime = Number.isFinite(sourceOverride)
+    ? sourceOverride!
+    : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + visualBaseSourceTime));
 
   const info: ClipTimeInfo = {
     clipLocalTime,
     sourceTime: baseSourceTime,
     clipTime,
+    visualClipLocalTime,
+    visualSourceTime: visualBaseSourceTime,
+    visualClipTime,
     speed,
     absSpeed,
   };

@@ -72,7 +72,7 @@ export function buildLayerBuilderNativeDecoderLayer(params: BuildNativeDecoderLa
   });
   const transform = transformCache.getTransform(
     `${ctx.activeCompId}_${layerIndex}`,
-    ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime),
+    ctx.getInterpolatedTransform(clip.id, timeInfo.visualClipLocalTime),
   );
   const layer: Layer = {
     id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}`,
@@ -84,10 +84,12 @@ export function buildLayerBuilderNativeDecoderLayer(params: BuildNativeDecoderLa
     source: {
       type: 'video',
       nativeDecoder,
+      mediaTime: timeInfo.visualClipTime,
+      targetMediaTime: timeInfo.visualClipTime,
       ...sourceMetadata,
     },
-    effects: ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime),
-    colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime),
+    effects: ctx.getInterpolatedEffects(clip.id, timeInfo.visualClipLocalTime),
+    colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.visualClipLocalTime),
     position: transform.position,
     scale: transform.scale,
     rotation: transform.rotation,
@@ -100,16 +102,18 @@ export function buildLayerBuilderNativeDecoderLayer(params: BuildNativeDecoderLa
 export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParams): Layer | null {
   const { clip, layerIndex, ctx, transformCache, opacityOverride, proxyFrames } = params;
   const timeInfo = getClipTimeInfo(ctx, clip);
+  const visualClipTime = timeInfo.visualClipTime;
+  const visualClipLocalTime = timeInfo.visualClipLocalTime;
   const mediaFile = getMediaFileForClip(ctx, clip);
   const videoSource = resolveLayerBuilderVideoSource({
     clip,
     ctx,
-    targetTime: timeInfo.clipTime,
+    targetTime: visualClipTime,
     allowSharedPreviewSession: canUseSharedPreviewRuntimeSession(clip, ctx.clipsAtTime),
     workerGpuMediaFile: mediaFile,
     continuationVideo: params.previewContinuationResolver?.getPreviewContinuationVideoElement(
       clip,
-      timeInfo.clipTime,
+      visualClipTime,
     ),
   });
   if (!videoSource) return null;
@@ -123,7 +127,7 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
     const proxyFrame = proxyFrames.selectProxyFrame({
       clipId: clip.id,
       mediaFile,
-      targetMediaTime: timeInfo.clipTime,
+      targetMediaTime: visualClipTime,
       isDraggingPlayhead: ctx.isDraggingPlayhead,
       previewPathBase: 'proxy-image-frame',
     });
@@ -135,7 +139,7 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
         transformCache,
         opacityOverride,
         image: proxyFrame.image,
-        localTime: timeInfo.clipTime,
+        localTime: visualClipLocalTime,
         sourceMetadata: getLayerSourceMetadata(clip, mediaFile, {
           width: proxyFrame.image.naturalWidth || proxyFrame.image.width,
           height: proxyFrame.image.naturalHeight || proxyFrame.image.height,
@@ -147,7 +151,7 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
 
   const transform = transformCache.getTransform(
     `${ctx.activeCompId}_${layerIndex}`,
-    ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime),
+    ctx.getInterpolatedTransform(clip.id, visualClipLocalTime),
   );
   const layer: Layer = {
     id: `${ctx.activeCompId}_layer_${layerIndex}`,
@@ -160,8 +164,8 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
       ...videoSource.source,
       ...sourceMetadata,
     },
-    effects: ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime),
-    colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipLocalTime),
+    effects: ctx.getInterpolatedEffects(clip.id, visualClipLocalTime),
+    colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, visualClipLocalTime),
     position: transform.position,
     scale: transform.scale,
     rotation: transform.rotation,

@@ -77,10 +77,54 @@ describe('FrameContext clipsAtTime', () => {
     const frameAtOneSecond = createFrameContext().frameNumber;
 
     hoisted.timelineState = createTimelineState({ playheadPosition: 1 + 1 / 60 });
-    const frameAtNextSixtyFpsStep = createFrameContext().frameNumber;
+    const nextSixtyFpsContext = createFrameContext();
+    const frameAtNextSixtyFpsStep = nextSixtyFpsContext.frameNumber;
 
     expect(frameAtOneSecond).toBe(60);
+    expect(nextSixtyFpsContext.frameRate).toBe(60);
+    expect(nextSixtyFpsContext.visualPlayheadPosition).toBeCloseTo(1 + 1 / 60);
     expect(frameAtNextSixtyFpsStep).toBe(61);
+  });
+
+  it('keeps video visual time on the active composition frame grid', () => {
+    hoisted.mediaState = {
+      files: [],
+      compositions: [{
+        id: 'comp-30',
+        name: 'Comp 30',
+        type: 'composition',
+        width: 1920,
+        height: 1080,
+        duration: 30,
+        frameRate: 30,
+        backgroundColor: '#000000',
+      }],
+      activeCompositionId: 'comp-30',
+      proxyEnabled: false,
+    };
+    const clip = createMockClip({
+      id: 'clip-a',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 10,
+      inPoint: 0,
+      outPoint: 10,
+    });
+
+    hoisted.timelineState = createTimelineState({
+      clips: [clip],
+      playheadPosition: 1 + 1 / 60,
+    });
+
+    const ctx = createFrameContext();
+    const timeInfo = getClipTimeInfo(ctx, clip);
+
+    expect(ctx.frameRate).toBe(30);
+    expect(ctx.frameNumber).toBe(30);
+    expect(ctx.visualPlayheadPosition).toBeCloseTo(1);
+    expect(timeInfo.clipTime).toBeCloseTo(1 + 1 / 60);
+    expect(timeInfo.visualClipTime).toBeCloseTo(1);
+    expect(timeInfo.visualClipLocalTime).toBeCloseTo(1);
   });
 
   it('prefers the incoming clip at an exact cut boundary', () => {

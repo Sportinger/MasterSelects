@@ -23,6 +23,17 @@ import { useEngineTimelineStateSync } from './engine/useEngineTimelineStateSync'
 
 const log = Logger.create('Engine');
 
+function getVisualTargetFps(): number {
+  const mediaState = useMediaStore.getState();
+  const activeComposition = mediaState.activeCompositionId
+    ? mediaState.compositions.find((composition) => composition.id === mediaState.activeCompositionId)
+    : null;
+  const frameRate = activeComposition?.frameRate;
+  return typeof frameRate === 'number' && Number.isFinite(frameRate) && frameRate > 0
+    ? Math.max(1, Math.min(60, Math.round(frameRate)))
+    : 60;
+}
+
 export function useEngine() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isEngineReady = useEngineStore((state) => state.isEngineReady);
@@ -114,6 +125,7 @@ export function useEngine() {
           hasActiveVisualClip ||
           hasActiveTemporalClip ||
           hasActiveBackgroundLayer;
+        renderHostPort.setVisualTargetFps(getVisualTargetFps());
         renderHostPort.setTimelineVisualDemand(hasVisualRenderDemand);
         renderHostPort.setIsScrubbing(isInteractiveScrub);
         renderHostPort.setContinuousRender(hasActiveTemporalClip || hasPlaybackWarmup);

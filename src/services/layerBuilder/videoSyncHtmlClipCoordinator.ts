@@ -121,8 +121,12 @@ export class VideoSyncHtmlClipCoordinator {
       return;
     }
 
+    const justStoppedPlayback =
+      !ctx.isPlaying &&
+      !isInteractivePreview &&
+      this.deps.clipWasPlaying.has(clip.id);
     if (this.deps.warmups.isWarming(video)) {
-      if (isInteractivePreview) {
+      if (isInteractivePreview || justStoppedPlayback) {
         this.deps.clearWarmupState(video);
       } else {
         this.deps.maybeRetargetActiveWarmup(clip.id, video, timeInfo.clipTime, ctx.now, {
@@ -158,7 +162,6 @@ export class VideoSyncHtmlClipCoordinator {
 
     const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
 
-    const justStoppedPlayback = this.deps.clipWasPlaying.has(clip.id);
     if (!ctx.isPlaying && !isInteractivePreview && !justStoppedPlayback && !video.seeking && video.readyState >= 2) {
       renderHostPort.ensureVideoFrameCached(video, clip.id);
     }

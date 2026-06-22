@@ -113,6 +113,12 @@ If the preview is black after reload, also confirm the browser media element is 
 - Compare WebCodecs and fallback pipeline events to see where sync diverged.
 - Verify whether the issue is clip-specific with `getClipDetails`.
 
+### Source FPS Higher Than Composition FPS
+
+- Playback preview is visually locked to the active composition frame rate. A 60 fps video in a 30 fps composition should show about 30 render/preview updates per second, not every decoded source frame.
+- `samplePlaybackFramePacing` may still report the browser media element advancing at the source cadence through `videoQuality` / video frame callbacks. Use `renderLoop.renderCountDelta`, `stats.fps`, `stats.targetFps`, `playback.previewUpdateFps`, and `visualTargetFps` to confirm the visible composition cadence.
+- During playback, the HTML media clock stays continuous to avoid per-frame seeking; visual layer target times are quantized to composition frames for cache/provider selection and deterministic preview presentation.
+
 ### Export Looks Fine But Preview Is Wrong
 
 - Compare target routing and render-target state in `getStats`.

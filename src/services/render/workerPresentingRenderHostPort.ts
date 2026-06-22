@@ -570,6 +570,10 @@ class WorkerPresentingRenderHostPortCore {
     this.requestRender();
   }
 
+  setVisualTargetFps(_targetFps: number): void {
+    // Worker presentation derives cadence from the active composition directly.
+  }
+
   setIsPlaying(isPlaying: boolean): void {
     if (this.isPlaying === isPlaying) return;
     const startingPlayback = isPlaying && !this.isPlaying;

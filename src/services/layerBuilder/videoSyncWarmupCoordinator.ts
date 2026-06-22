@@ -28,6 +28,7 @@ export type VideoSyncWarmupCoordinatorDeps = {
   isVideoGpuReady: (video: HTMLVideoElement) => boolean;
   safeSeekTime: (video: HTMLVideoElement, time: number) => number;
   clearHtmlSeekState: (clipId: string, video?: HTMLVideoElement) => void;
+  isCompletingPlaybackStop: (clipId: string) => boolean;
   prewarmUpcomingWebCodecsClip: (ctx: FrameContext, clip: TimelineClip, clipTime: number) => void;
   usesFullWebCodecsPreview: (clip: TimelineClip) => boolean;
   startTargetedWarmup: (clipId: string, video: HTMLVideoElement, targetTime: number, options?: {
@@ -189,32 +190,22 @@ export class VideoSyncWarmupCoordinator {
   }
 
   preloadPausedJumpNeighborhood(ctx: FrameContext): void {
-    if (ctx.isPlaying || ctx.isDraggingPlayhead) {
-      return;
-    }
+    if (ctx.isPlaying || ctx.isDraggingPlayhead) return;
 
-    const activeClipKey = ctx.clipsAtTime
-      .map((clip) => clip.id)
-      .sort()
-      .join('|');
+    const activeClipKey = ctx.clipsAtTime.map((clip) => clip.id).sort().join('|');
     const movedFar =
       !Number.isFinite(this.lastPausedJumpPreloadPosition) ||
       Math.abs(ctx.playheadPosition - this.lastPausedJumpPreloadPosition) >=
         VideoSyncWarmupCoordinator.PAUSED_JUMP_PRELOAD_THRESHOLD_SECONDS;
     const activeChanged = activeClipKey !== this.lastPausedJumpPreloadActiveKey;
 
-    if (!movedFar && !activeChanged) {
-      return;
-    }
+    if (!movedFar && !activeChanged) return;
 
     this.lastPausedJumpPreloadPosition = ctx.playheadPosition;
     this.lastPausedJumpPreloadActiveKey = activeClipKey;
 
     const activeClipIds = new Set(ctx.clipsAtTime.map((clip) => clip.id));
-    const windowStart = Math.max(
-      0,
-      ctx.playheadPosition - VideoSyncWarmupCoordinator.PAUSED_JUMP_PRELOAD_LOOKBEHIND
-    );
+    const windowStart = Math.max(0, ctx.playheadPosition - VideoSyncWarmupCoordinator.PAUSED_JUMP_PRELOAD_LOOKBEHIND);
     const windowEnd = ctx.playheadPosition + VideoSyncWarmupCoordinator.PAUSED_JUMP_PRELOAD_LOOKAHEAD;
 
     const candidateClips = ctx.clips
@@ -254,24 +245,26 @@ export class VideoSyncWarmupCoordinator {
         this.deps.prewarmUpcomingWebCodecsClip(ctx, clip, targetTime);
       }
 
-      if (this.deps.usesFullWebCodecsPreview(clip)) {
-        continue;
-      }
+      if (this.deps.usesFullWebCodecsPreview(clip)) continue;
 
       const video = this.deps.getClipHtmlVideoElement(clip);
-      if (!video) {
-        continue;
-      }
+      if (!video) continue;
 
-      if (!video.src && !video.currentSrc) {
-        continue;
-      }
+      if (!video.src && !video.currentSrc) continue;
 
       if (video.preload !== 'auto') {
         video.preload = 'auto';
       }
 
       const isActive = activeClipIds.has(clip.id);
+      const isPlaybackStopSettling =
+        isActive &&
+        scrubSettleState.get(clip.id)?.reason === 'playback-stop' &&
+        scrubSettleState.isPending(clip.id);
+      if (isActive && (this.deps.isCompletingPlaybackStop(clip.id) || isPlaybackStopSettling)) {
+        continue;
+      }
+
       const targetDrift = Math.abs(video.currentTime - targetTime);
       const shouldWarmTargetFrame =
         isActive &&

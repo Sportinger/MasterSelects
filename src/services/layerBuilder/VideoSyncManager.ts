@@ -150,6 +150,7 @@ export class VideoSyncManager {
       isVideoGpuReady: (video) => this.isVideoGpuReady(video),
       safeSeekTime: (video, time) => this.safeSeekTime(video, time),
       clearHtmlSeekState: (clipId, video) => this.clearHtmlSeekState(clipId, video),
+      isCompletingPlaybackStop: (clipId) => this.clipWasPlaying.has(clipId),
       prewarmUpcomingWebCodecsClip: (ctx, clip, clipTime) => this.prewarmUpcomingWebCodecsClip(ctx, clip, clipTime),
       usesFullWebCodecsPreview: (clip) => this.usesFullWebCodecsPreview(clip),
       startTargetedWarmup: (clipId, video, targetTime, options) =>

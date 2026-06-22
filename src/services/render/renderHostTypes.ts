@@ -47,6 +47,7 @@ export interface RenderHostPort {
   stopRenderLoopForDiagnostics(): void;
   startExistingRenderLoopForDiagnostics(): void;
   setTimelineVisualDemand(hasDemand: boolean): void;
+  setVisualTargetFps(targetFps: number): void;
   setIsPlaying(isPlaying: boolean): void;
   setPlaybackSpeed(playbackSpeed: number): void;
   setIsScrubbing(isScrubbing: boolean): void;

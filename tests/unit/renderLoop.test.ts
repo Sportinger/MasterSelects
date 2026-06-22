@@ -55,6 +55,97 @@ function createLoop() {
 }
 
 describe('RenderLoop watchdog', () => {
+  it('limits playback renders to the visual target fps', () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    });
+    const cancelAnimationFrameMock = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrameMock);
+    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrameMock);
+
+    const performanceStats = {
+      recordRafGap: vi.fn(),
+      resetPerSecondCounters: vi.fn(),
+      setTargetFps: vi.fn(),
+    } as unknown as ConstructorParameters<typeof RenderLoop>[0];
+    const onRender = vi.fn();
+    const loop = new RenderLoop(
+      performanceStats,
+      {
+        isRecovering: vi.fn(() => false),
+        isExporting: vi.fn(() => false),
+        onRender,
+      }
+    );
+
+    const runNextRaf = (timestamp: number) => {
+      const callback = rafCallbacks.shift();
+      expect(callback).toBeDefined();
+      callback?.(timestamp);
+    };
+
+    try {
+      loop.start();
+      loop.setIsPlaying(true);
+      loop.setVisualTargetFps(30);
+
+      runNextRaf(1000);
+      expect(onRender).toHaveBeenCalledTimes(1);
+
+      runNextRaf(1016);
+      expect(onRender).toHaveBeenCalledTimes(1);
+
+      runNextRaf(1032);
+      expect(onRender).toHaveBeenCalledTimes(2);
+      expect(performanceStats.recordRafGap).toHaveBeenLastCalledWith(32, false);
+    } finally {
+      loop.stop();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('allows a paused active video preview hold to enter idle after the timeout', () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      return rafCallbacks.length;
+    });
+    const cancelAnimationFrameMock = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrameMock);
+    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrameMock);
+
+    const performanceStats = {
+      recordRafGap: vi.fn(),
+      resetPerSecondCounters: vi.fn(),
+    } as unknown as ConstructorParameters<typeof RenderLoop>[0];
+    const onRender = vi.fn();
+    const loop = new RenderLoop(
+      performanceStats,
+      {
+        isRecovering: vi.fn(() => false),
+        isExporting: vi.fn(() => false),
+        onRender,
+      }
+    );
+
+    try {
+      loop.start();
+      loop.setHasActiveVideo(true);
+
+      const callback = rafCallbacks.shift();
+      expect(callback).toBeDefined();
+      callback?.(performance.now() + 1100);
+
+      expect(loop.getIsIdle()).toBe(true);
+      expect(onRender).not.toHaveBeenCalled();
+    } finally {
+      loop.stop();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('settles into idle instead of forcing paused inactive timelines awake', () => {
     const loop = createLoop();
     loop.hasActiveVideo = true;

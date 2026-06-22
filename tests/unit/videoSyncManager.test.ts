@@ -1457,6 +1457,77 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     });
   });
 
+  it('does not start paused preload while an HTML clip is completing playback stop', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    const { clip, ctx, video } = createLazyVideoClip('clip-stop-preload', {
+      currentTime: 4.8,
+      muted: false,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      duration: 10,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      preload: 'metadata',
+      src: 'blob:clip-stop-preload',
+      currentSrc: 'blob:clip-stop-preload',
+    });
+
+    ctx.isPlaying = true;
+    ctx.playheadPosition = 4.8;
+    ctx.getSourceTimeForClip = () => 4.8;
+    manager.syncClipVideo(clip, ctx);
+
+    const startTargetedWarmup = vi
+      .spyOn(manager, 'startTargetedWarmup')
+      .mockImplementation(() => {});
+    const pausedCtx = {
+      ...ctx,
+      isPlaying: false,
+      playheadPosition: 5,
+      clips: [clip],
+      clipsAtTime: [clip],
+      getSourceTimeForClip: () => 5,
+    } as FrameContext;
+
+    manager.preloadPausedJumpNeighborhood(pausedCtx);
+
+    expect(startTargetedWarmup).not.toHaveBeenCalled();
+    expect(video.play).toHaveBeenCalledTimes(0);
+  });
+
+  it('does not start paused preload while playback-stop settle is pending', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    const startTargetedWarmup = vi
+      .spyOn(manager, 'startTargetedWarmup')
+      .mockImplementation(() => {});
+
+    const { clip, ctx, video } = createLazyVideoClip('clip-stop-settle-preload', {
+      currentTime: 4.8,
+      readyState: 4,
+      seeking: false,
+      preload: 'metadata',
+      src: 'blob:clip-stop-settle-preload',
+      currentSrc: 'blob:clip-stop-settle-preload',
+    });
+    ctx.playheadPosition = 5;
+    ctx.clips = [clip];
+    ctx.clipsAtTime = [clip];
+    ctx.getSourceTimeForClip = () => 5;
+    scrubSettleState.begin(clip.id, 5, 500, 'playback-stop');
+
+    manager.preloadPausedJumpNeighborhood(ctx);
+
+    expect(startTargetedWarmup).not.toHaveBeenCalled();
+    expect(video.currentTime).toBe(4.8);
+  });
+
   it('does not spam paused jump preload for the same paused target', () => {
     flags.useFullWebCodecsPlayback = false;
 
