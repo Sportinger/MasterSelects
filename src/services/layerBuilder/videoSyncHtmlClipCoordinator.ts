@@ -1,4 +1,5 @@
 import type { TimelineClip } from '../../types';
+import { flags } from '../../engine/featureFlags';
 import { useTimelineStore } from '../../stores/timeline';
 import { renderHostPort } from '../render/renderHostPort';
 import { playheadState } from './PlayheadState';
@@ -95,7 +96,9 @@ export class VideoSyncHtmlClipCoordinator {
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
     const mediaFile = getMediaFileForClip(ctx, clip);
     const suppressLiveHtmlVideoPlayback =
-      ctx.isPlaying && renderHostPort.getTelemetry().mode === 'worker-gpu-only';
+      ctx.isPlaying &&
+      renderHostPort.getTelemetry().mode === 'worker-gpu-only' &&
+      flags.useFullWebCodecsPlayback;
 
     if (suppressLiveHtmlVideoPlayback) {
       if (!video.paused) {

@@ -4,6 +4,7 @@ import {
   getWorkerFirstCounterSourceSnapshot,
 } from '../../src/services/aiTools/workerFirstCounterSources';
 import { useRenderTargetStore } from '../../src/stores/renderTargetStore';
+import { flags } from '../../src/engine/featureFlags';
 import type { RenderHostPort } from '../../src/services/render/renderHostTypes';
 import { createWorkerPresentingRenderHostPort } from '../../src/services/render/workerPresentingRenderHostPort';
 import type { WorkerRenderHostRuntimeBridge } from '../../src/services/render/workerRenderHostRuntimeBridge';
@@ -154,6 +155,36 @@ function createBridge() {
       }],
       presentedFrameId: 'preview:gpu-render-1:gpu-clear:1',
     })),
+    presentGpuTransferredVideoFrames: vi.fn((
+      requestId: string,
+      targetId: string,
+      timelineTime: number,
+      sequence: number,
+    ) => Promise.resolve(output({
+      commandType: 'presentGpuTransferredVideoFrames',
+      statusEvents: [
+        {
+          type: 'frame-presented',
+          requestId,
+          targetId,
+          timelineTime,
+        },
+        {
+          type: 'stats',
+          requestId,
+          stats: {
+            'workerGpu.videoFrame.presented': true,
+            'workerGpu.videoFrame.sourceReady': true,
+            'workerGpu.videoFrame.timestampSeconds': timelineTime,
+            'workerGpu.videoFrame.targetMediaTime': timelineTime,
+            'workerGpu.videoFrame.mode': 'html-transfer',
+            'workerGpu.videoFrame.decoder': 'HTMLVideo',
+            'workerGpu.videoFrame.streaming': false,
+          },
+        },
+      ],
+      presentedFrameId: `${targetId}:${requestId}:gpu-html-video:${sequence}`,
+    }))),
     loadWebCodecsSource: vi.fn((requestId: string, sourceId: string) => Promise.resolve(output({
       commandType: 'loadWebCodecsSource',
       presentedFrameId: null,
@@ -431,13 +462,20 @@ function expectPreviewBitmapResize(
 }
 
 describe('worker presenting render host port', () => {
+  const originalUseFullWebCodecsPlayback = flags.useFullWebCodecsPlayback;
+  const originalDisableHtmlPreviewFallback = flags.disableHtmlPreviewFallback;
+
   beforeEach(() => {
+    flags.useFullWebCodecsPlayback = true;
+    flags.disableHtmlPreviewFallback = true;
     clearWorkerFirstCounterSourcesForTests();
     useRenderTargetStore.setState({ targets: new Map(), selectedTargetId: null });
   });
 
   afterEach(() => {
     clearWorkerFirstCounterSourcesForTests();
+    flags.useFullWebCodecsPlayback = originalUseFullWebCodecsPlayback;
+    flags.disableHtmlPreviewFallback = originalDisableHtmlPreviewFallback;
     useRenderTargetStore.setState({ targets: new Map(), selectedTargetId: null });
     if (originalWorker) {
       (globalThis as typeof globalThis & { Worker?: typeof Worker }).Worker = originalWorker;
@@ -2855,6 +2893,83 @@ describe('worker presenting render host port', () => {
     await vi.waitFor(() => {
       expect(bridge.attachTargetSurface).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('presents HTMLVideo frames through worker WebGPU when full WebCodecs playback is disabled', async () => {
+    const originalCreateImageBitmap = globalThis.createImageBitmap;
+    const bitmap = { width: 1280, height: 720, close: vi.fn() } as unknown as ImageBitmap;
+    Object.defineProperty(globalThis, 'createImageBitmap', {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(bitmap),
+    });
+    flags.useFullWebCodecsPlayback = false;
+    flags.disableHtmlPreviewFallback = false;
+
+    try {
+      const fallback = createFallback();
+      const bridge = createBridge();
+      const offscreen = { width: 640, height: 360 } as unknown as OffscreenCanvas;
+      installWorkerCanvasSupport(offscreen);
+      const host = createWorkerPresentingRenderHostPort({
+        fallback,
+        getSelectionTelemetry: () => ({
+          selectedId: 'worker-primary',
+          selectedRole: 'primary',
+          workerPrimaryRequested: true,
+          workerPrimaryRegistered: true,
+          workerPrimaryAvailable: true,
+          blockers: [],
+          reason: 'using worker primary render host',
+        }),
+        createBridge: () => bridge,
+        strictWorkerOnly: true,
+        presentationStrategy: 'worker-webgpu-present',
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 360;
+      const video = createVideo({ currentTime: 2 });
+
+      host.registerTargetCanvas('preview', canvas);
+      host.render([{
+        id: 'html-video-layer',
+        sourceClipId: 'clip-html',
+        name: 'HTML Video Layer',
+        visible: true,
+        opacity: 0.5,
+        blendMode: 'multiply',
+        source: { type: 'video', videoElement: video, mediaTime: 2 },
+        effects: [],
+        position: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1 },
+        rotation: 0,
+      }]);
+
+      await vi.waitFor(() => {
+        expect(bridge.presentGpuTransferredVideoFrames).toHaveBeenCalledTimes(1);
+      });
+      expect(bridge.loadWebCodecsSource).not.toHaveBeenCalled();
+      expect(bridge.presentGpuWebCodecsFrame).not.toHaveBeenCalled();
+      expect(bridge.startGpuWebCodecsStream).not.toHaveBeenCalled();
+      expect(bridge.presentGpuTestPattern).not.toHaveBeenCalled();
+      expect(globalThis.createImageBitmap).toHaveBeenCalledWith(video);
+      const transferCall = vi.mocked(bridge.presentGpuTransferredVideoFrames).mock.calls[0];
+      expect(transferCall[0]).toContain('worker-gpu-only:render');
+      expect(transferCall[1]).toBe('preview');
+      expect(transferCall[2]).toBe(2);
+      expect(transferCall[4]).toMatchObject([{
+        sourceId: 'html-video:clip-html',
+        mediaTime: 2,
+        timestampSeconds: 2,
+        opacity: 0.5,
+        blendMode: 'multiply',
+      }]);
+      expect(transferCall[4][0].frame).toBe(bitmap);
+      expect(transferCall[5]).toHaveLength(1);
+      expect(transferCall[5][0]).toBe(bitmap);
+    } finally {
+      restoreCreateImageBitmap(originalCreateImageBitmap);
+    }
   });
 
   it('presents file-backed worker WebGPU video frames without falling back to test patterns', async () => {

@@ -14,6 +14,7 @@ import {
   type WorkerRenderHostRuntimeJobOutput,
 } from './workerRenderHostRuntimeHandlers';
 import type {
+  WorkerRenderHostGpuTransferredVideoFrameLayer,
   WorkerRenderHostRuntimeCommand,
   WorkerRenderHostRuntimeCapabilities,
   WorkerRenderHostWebCodecsSeekMode,
@@ -226,6 +227,24 @@ export class WorkerRenderHostRuntimeBridge {
       sourceId: options.sourceId,
       reason: options.reason ?? 'host stopped stream',
     }, undefined, { priority: 40 });
+  }
+
+  presentGpuTransferredVideoFrames(
+    requestId: string,
+    targetId: RenderGraphId,
+    timelineTime: number,
+    frameIndex: number,
+    layers: readonly WorkerRenderHostGpuTransferredVideoFrameLayer[],
+    transfer: Transferable[],
+  ): Promise<WorkerRenderHostRuntimeJobOutput> {
+    return this.sendCommand({
+      type: 'presentGpuTransferredVideoFrames',
+      requestId,
+      targetId,
+      timelineTime,
+      frameIndex,
+      layers,
+    }, transfer, { priority: 20 });
   }
 
   disposeRenderer(reason: string): Promise<WorkerRenderHostRuntimeJobOutput> {

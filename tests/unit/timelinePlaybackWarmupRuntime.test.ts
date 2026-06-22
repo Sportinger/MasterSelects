@@ -59,11 +59,11 @@ describe('timeline playback warmup runtime', () => {
     expect(getTimelinePlaybackWarmupVideo(source)).toBeNull();
   });
 
-  it('skips html warmup in worker GPU only playback', () => {
+  it('keeps html warmup in worker GPU-only playback when full WebCodecs is disabled', () => {
     const source = createVideoSource();
     renderHostMock.getTelemetry.mockReturnValue({ mode: 'worker-gpu-only' });
 
-    expect(getTimelinePlaybackWarmupVideo(source)).toBeNull();
+    expect(getTimelinePlaybackWarmupVideo(source)).toBe(source.videoElement);
   });
 
   it('ignores sources without legacy html video elements', () => {

@@ -5,8 +5,8 @@
 export const flags = {
   useRenderGraph: false,  // Render Graph executor (stubs - not ready)
   useDecoderPool: false,  // Shared decoder pool (not wired yet)
-  useFullWebCodecsPlayback: true,  // Worker video decode is the default playback path.
-  disableHtmlPreviewFallback: true,  // Keep preview/playback off the legacy HTML video path by default.
+  useFullWebCodecsPlayback: false,  // Playback uses HTMLVideo decode by default; worker WebCodecs stays off.
+  disableHtmlPreviewFallback: false,  // HTMLVideo is the active decoder source for worker WebGPU presentation.
   useLiveSlotTrigger: false,  // Slot Grid click triggers live layers without forcing editor switching
   useWarmSlotDecks: false,  // Prepare reusable slot-owned live decks for low-latency triggering
   use3DLayers: true,  // Shared 3D scene support

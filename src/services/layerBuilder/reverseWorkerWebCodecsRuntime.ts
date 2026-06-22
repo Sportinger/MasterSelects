@@ -1,4 +1,5 @@
 import type { TimelineClip } from '../../types';
+import { flags } from '../../engine/featureFlags';
 import { renderHostPort } from '../render/renderHostPort';
 import {
   bindSourceRuntimeToClip,
@@ -260,6 +261,7 @@ export async function primeReverseWorkerRuntimeSourcesForPlayback(input: {
   readonly getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   readonly getInterpolatedSpeed?: (clipId: string, clipLocalTime: number) => number;
 }): Promise<number> {
+  if (!flags.useFullWebCodecsPlayback) return 0;
   const mode = renderHostPort.getTelemetry().mode;
   if (mode !== 'worker-presenting' && mode !== 'worker-only' && mode !== 'worker-gpu-only') return 0;
   const seenClipIds = new Set<string>();
@@ -346,6 +348,10 @@ export function isReverseWorkerWebCodecsCandidate(
     renderHostMode: mode,
   };
   const reverseRequested = ctx.playbackSpeed < 0 || clip.reversed;
+  if (!flags.useFullWebCodecsPlayback) {
+    recordCheck({ ...baseCheck, candidate: false, reason: 'webcodecs-disabled' });
+    return false;
+  }
   if (!ctx.isPlaying && !reverseRequested) {
     recordCheck({ ...baseCheck, candidate: false, reason: 'not-playing' });
     return false;

@@ -1,6 +1,7 @@
 import type { LayerSource } from '../../types/layers';
 import type { TimelineClip } from '../../types/timeline';
 import type { MediaFile } from '../../stores/mediaStore/types';
+import { flags } from '../../engine/featureFlags';
 import {
   canUseSharedPreviewRuntimeSession,
   getPreviewRuntimeSource,
@@ -50,7 +51,7 @@ export function hasLayerBuilderRenderableVideoSource(
   clip?: TimelineClip,
   mediaFile?: Pick<MediaFile, 'id' | 'file' | 'width' | 'height'>,
 ): boolean {
-  if (clip && isWorkerGpuOnlyRenderHost()) {
+  if (clip && isWorkerGpuOnlyRenderHost() && flags.useFullWebCodecsPlayback) {
     return hasWorkerGpuLayerVideoSource(clip, mediaFile);
   }
   return !!(
@@ -109,7 +110,7 @@ export function resolveLayerBuilderVideoSource(params: {
   workerGpuMediaFile?: Pick<MediaFile, 'id' | 'file' | 'width' | 'height'>;
 }): LayerBuilderVideoSourceResolution | null {
   const { clip, ctx, targetTime } = params;
-  const workerGpuSource = isWorkerGpuOnlyRenderHost()
+  const workerGpuSource = isWorkerGpuOnlyRenderHost() && flags.useFullWebCodecsPlayback
     ? resolveWorkerGpuLayerVideoSource({
         clip,
         targetTime,
@@ -119,7 +120,7 @@ export function resolveLayerBuilderVideoSource(params: {
   if (workerGpuSource) {
     return workerGpuSource;
   }
-  if (isWorkerGpuOnlyRenderHost()) {
+  if (isWorkerGpuOnlyRenderHost() && flags.useFullWebCodecsPlayback) {
     return null;
   }
 

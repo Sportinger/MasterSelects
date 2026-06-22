@@ -15,8 +15,7 @@ export interface WorkerGpuVideoPresentationSource {
   readonly runtimeSessionKey?: string;
 }
 
-export interface WorkerGpuVideoPresentationLayer extends WorkerGpuVideoPresentationSource {
-  readonly layerId: string;
+export interface WorkerGpuVideoPresentationLayerStyle {
   readonly opacity: number;
   readonly blendMode: string;
   readonly inlineBrightness: number;
@@ -82,6 +81,10 @@ export interface WorkerGpuVideoPresentationLayer extends WorkerGpuVideoPresentat
   readonly complexEffectCount: number;
 }
 
+export interface WorkerGpuVideoPresentationLayer extends WorkerGpuVideoPresentationSource, WorkerGpuVideoPresentationLayerStyle {
+  readonly layerId: string;
+}
+
 export type WorkerGpuVideoSourceLoadResult =
   | { readonly status: 'already-loaded' }
   | { readonly status: 'loaded' }
@@ -113,6 +116,22 @@ function finiteEffectNumber(value: unknown, fallback: number): number {
 
 function effectBoolean(value: unknown): boolean {
   return value === true || value === 1;
+}
+
+export function resolveWorkerGpuVideoPresentationLayerStyle(layer: Layer): WorkerGpuVideoPresentationLayerStyle {
+  const effectStack = splitLayerEffects(layer.effects);
+  return {
+    opacity: typeof layer.opacity === 'number' && Number.isFinite(layer.opacity)
+      ? Math.max(0, Math.min(1, layer.opacity))
+      : 1,
+    blendMode: typeof layer.blendMode === 'string' ? layer.blendMode : 'normal',
+    inlineBrightness: effectStack.inlineEffects.brightness,
+    inlineContrast: effectStack.inlineEffects.contrast,
+    inlineSaturation: effectStack.inlineEffects.saturation,
+    inlineInvert: effectStack.inlineEffects.invert,
+    ...workerGpuEffectParams(effectStack.complexEffects),
+    complexEffectCount: effectStack.complexEffects?.length ?? 0,
+  };
 }
 
 function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['complexEffects']) {
@@ -322,8 +341,6 @@ export class WorkerGpuMediaSourceRegistry {
       const file = source.file ?? mediaFile?.file;
       if (!file) continue;
       const sourceKey = createSourceKey(layer);
-      const effectStack = splitLayerEffects(layer.effects);
-      const gpuEffects = workerGpuEffectParams(effectStack.complexEffects);
       sources.push({
         sourceId: `gpu-video:${sourceKey}:${createFileSignature(file)}`,
         sourceKey,
@@ -331,16 +348,7 @@ export class WorkerGpuMediaSourceRegistry {
         layerId: layer.id,
         mediaTime,
         timelineTime: mediaTime,
-        opacity: typeof layer.opacity === 'number' && Number.isFinite(layer.opacity)
-          ? Math.max(0, Math.min(1, layer.opacity))
-          : 1,
-        blendMode: typeof layer.blendMode === 'string' ? layer.blendMode : 'normal',
-        inlineBrightness: effectStack.inlineEffects.brightness,
-        inlineContrast: effectStack.inlineEffects.contrast,
-        inlineSaturation: effectStack.inlineEffects.saturation,
-        inlineInvert: effectStack.inlineEffects.invert,
-        ...gpuEffects,
-        complexEffectCount: effectStack.complexEffects?.length ?? 0,
+        ...resolveWorkerGpuVideoPresentationLayerStyle(layer),
         mediaFileId: source.mediaFileId,
         runtimeSourceId: source.runtimeSourceId,
         runtimeSessionKey: source.runtimeSessionKey,

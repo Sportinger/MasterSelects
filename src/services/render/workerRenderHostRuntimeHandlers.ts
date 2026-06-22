@@ -19,6 +19,7 @@ import {
 import type {
   WorkerRenderHostRuntimeCommand,
   WorkerRenderHostRuntimeCapabilities,
+  WorkerRenderHostGpuTransferredVideoFrameLayer,
   WorkerRenderHostWebCodecsResult,
   WorkerRenderHostWebCodecsSeekMode,
   WorkerRenderHostWebCodecsStatus,
@@ -1670,6 +1671,167 @@ async function presentGpuWebCodecsFrame(
   };
 }
 
+function closeTransferredGpuVideoFrameLayers(
+  layers: readonly WorkerRenderHostGpuTransferredVideoFrameLayer[],
+): void {
+  for (const layer of layers) {
+    try {
+      layer.frame.close();
+    } catch {
+      // Ignore frames that were already closed by the browser runtime.
+    }
+  }
+}
+
+function transferredFrameStats(
+  layer: WorkerRenderHostGpuTransferredVideoFrameLayer | undefined,
+  input: {
+    readonly presented: boolean;
+    readonly command: { readonly timelineTime: number };
+    readonly submitted?: boolean | null;
+    readonly workDone?: boolean | null;
+    readonly error?: string | null;
+  },
+): Record<string, number | string | boolean | null> {
+  const frame = layer?.frame as Partial<ImageBitmap & VideoFrame> | undefined;
+  return {
+    'workerGpu.videoFrame.presented': input.presented,
+    'workerGpu.videoFrame.sourceReady': !!layer,
+    'workerGpu.videoFrame.sourceFrameRate': null,
+    'workerGpu.videoFrame.decodePending': false,
+    'workerGpu.videoFrame.decodeQueueSize': null,
+    'workerGpu.videoFrame.width': frame?.displayWidth || frame?.codedWidth || frame?.width || null,
+    'workerGpu.videoFrame.height': frame?.displayHeight || frame?.codedHeight || frame?.height || null,
+    'workerGpu.videoFrame.timestampSeconds': layer?.timestampSeconds ?? null,
+    'workerGpu.videoFrame.targetMediaTime': layer?.mediaTime ?? input.command.timelineTime,
+    'workerGpu.videoFrame.mode': 'html-transfer',
+    'workerGpu.videoFrame.decoder': 'HTMLVideo',
+    'workerGpu.videoFrame.streaming': false,
+    'workerGpu.videoFrame.submitted': input.submitted ?? null,
+    'workerGpu.videoFrame.workDone': input.workDone ?? null,
+    'workerGpu.videoFrame.error': input.error ?? null,
+  };
+}
+
+async function presentGpuTransferredVideoFrames(
+  command: Extract<WorkerRenderHostRuntimeCommand, { readonly type: 'presentGpuTransferredVideoFrames' }>,
+  nowMs: number,
+): Promise<AcceptedRenderCommand> {
+  stopGpuWebCodecsStreamForTarget(command.targetId, 'transferred HTMLVideo frames');
+  const surface = state.targetSurfaces.get(command.targetId);
+  const accepted: WorkerRenderStatusEvent = {
+    type: 'command-accepted',
+    commandType: command.type,
+    requestId: command.requestId,
+    presentation: surface?.presentation ?? 'not-presenting',
+  };
+
+  try {
+    if (!surface) {
+      return {
+        statusEvents: [
+          accepted,
+          {
+            type: 'error',
+            message: `Worker WebGPU target surface '${command.targetId}' is not attached`,
+            recoverable: false,
+          },
+        ],
+        presentedFrameId: null,
+        readback: null,
+      };
+    }
+    if (!isWorkerGpuTargetSurface(surface)) {
+      return {
+        statusEvents: [
+          { ...accepted, presentation: 'not-presenting' },
+          {
+            type: 'error',
+            message: `Worker WebGPU target surface '${command.targetId}' is not a WebGPU surface`,
+            recoverable: false,
+          },
+        ],
+        presentedFrameId: null,
+        readback: null,
+      };
+    }
+    if (command.layers.length === 0) {
+      return {
+        statusEvents: [
+          { ...accepted, presentation: 'not-presenting' },
+          {
+            type: 'error',
+            message: 'No transferred HTMLVideo frames were available for Worker WebGPU presentation',
+            recoverable: true,
+          },
+        ],
+        presentedFrameId: null,
+        readback: null,
+      };
+    }
+
+    const firstLayer = command.layers[0];
+    const result = await presentGpuVideoFrameLayers(surface, {
+      targetId: command.targetId,
+      requestId: command.requestId,
+      frameIndex: command.frameIndex,
+      layers: command.layers,
+    });
+    const presentedFrameId = result.diagnostics.presentedFrameId;
+    const stats = transferredFrameStats(firstLayer, {
+      presented: result.ok && !!presentedFrameId,
+      command,
+      submitted: result.diagnostics.commandSubmitted,
+      workDone: result.diagnostics.submittedWorkDoneResolved,
+      error: result.diagnostics.error,
+    });
+
+    if (result.ok && presentedFrameId) {
+      state.cache.touch(targetCacheId(command.targetId), nowMs);
+      state.cache.touch(targetSurfaceCacheId(command.targetId), nowMs);
+      state.lastPresentedFrameId = presentedFrameId;
+      return {
+        statusEvents: [
+          accepted,
+          {
+            type: 'frame-presented',
+            requestId: command.requestId,
+            targetId: command.targetId,
+            timelineTime: command.timelineTime,
+          },
+          {
+            type: 'stats',
+            requestId: command.requestId,
+            stats,
+          },
+        ],
+        presentedFrameId,
+        readback: null,
+      };
+    }
+
+    return {
+      statusEvents: [
+        { ...accepted, presentation: 'not-presenting' },
+        {
+          type: 'error',
+          message: result.diagnostics.error ?? 'Worker WebGPU transferred HTMLVideo frame presentation failed',
+          recoverable: true,
+        },
+        {
+          type: 'stats',
+          requestId: command.requestId,
+          stats,
+        },
+      ],
+      presentedFrameId: null,
+      readback: null,
+    };
+  } finally {
+    closeTransferredGpuVideoFrameLayers(command.layers);
+  }
+}
+
 function paintPresentedFrame(
   targetId: RenderGraphId,
   requestId: string,
@@ -1807,6 +1969,7 @@ function shouldEmitCommandLifecycleEvents(command: WorkerRenderHostRuntimeComman
     case 'gpu.startWebCodecsStream':
     case 'gpu.stopWebCodecsStream':
     case 'gpu.presentWebCodecsFrame':
+    case 'presentGpuTransferredVideoFrames':
     case 'gpu.presentTestPattern':
     case 'presentSoftwareFrame':
     case 'RenderNow':
@@ -1905,6 +2068,10 @@ async function acceptCommand(command: WorkerRenderHostRuntimeCommand, nowMs: num
 
   if (command.type === 'gpu.presentWebCodecsFrame') {
     return presentGpuWebCodecsFrame(command, nowMs);
+  }
+
+  if (command.type === 'presentGpuTransferredVideoFrames') {
+    return presentGpuTransferredVideoFrames(command, nowMs);
   }
 
   if (command.type === 'gpu.startWebCodecsStream') {

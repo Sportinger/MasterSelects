@@ -4,7 +4,10 @@ import type {
   RenderGraphId,
   RenderGraphVector2,
 } from '../../engine/render/contracts/workerRenderGraph';
-import type { WorkerGpuRuntimeCommand } from './workerGpuRuntimeCommands';
+import type {
+  WorkerGpuRuntimeCommand,
+  WorkerGpuWebCodecsFrameLayer,
+} from './workerGpuRuntimeCommands';
 import type {
   TransitionCenterAxis,
   TransitionPatternMask,
@@ -316,6 +319,11 @@ export interface WorkerRenderHostWebCodecsResult {
   readonly frame: WorkerRenderHostWebCodecsFrame | null;
 }
 
+export interface WorkerRenderHostGpuTransferredVideoFrameLayer extends WorkerGpuWebCodecsFrameLayer {
+  readonly frame: ImageBitmap;
+  readonly timestampSeconds?: number | null;
+}
+
 export type WorkerRenderHostRuntimeCommand =
   | RenderCommand
   | WorkerGpuRuntimeCommand
@@ -340,6 +348,14 @@ export type WorkerRenderHostRuntimeCommand =
       readonly type: 'disposeWebCodecsSource';
       readonly requestId: string;
       readonly sourceId: string;
+    }
+  | {
+      readonly type: 'presentGpuTransferredVideoFrames';
+      readonly requestId: string;
+      readonly targetId: RenderGraphId;
+      readonly timelineTime: number;
+      readonly frameIndex: number;
+      readonly layers: readonly WorkerRenderHostGpuTransferredVideoFrameLayer[];
     }
   | { readonly type: 'attachTargetSurface'; readonly surface: WorkerRenderHostTargetSurfaceCommand }
   | { readonly type: 'detachTargetSurface'; readonly targetId: RenderGraphId }

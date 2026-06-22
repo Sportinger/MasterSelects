@@ -485,13 +485,13 @@ describe('worker-first platform evidence CLI', () => {
           '--expect-platform',
           'windows-chromium',
           '--wait-ms',
-          '300',
+          '1000',
         ]);
 
-        expect(output).toContain('Waiting up to 300ms for a live MasterSelects bridge tab');
+        expect(output).toContain('Waiting up to 1000ms for a live MasterSelects bridge tab');
         expect(output).toContain('Target tab: ready-tab');
         expect(output).not.toContain('Target tab: stale-tab');
-        expect(output).toContain('Waiting 300ms after target tab selection for MasterSelects to settle');
+        expect(output).toContain('Waiting 1000ms after target tab selection for MasterSelects to settle');
         expect(state.statusRequests).toBeGreaterThanOrEqual(3);
         expect(state.postBodies[0]).toMatchObject({
           tool: 'runWorkerFirstPlatformEvidencePackage',
@@ -520,11 +520,11 @@ describe('worker-first platform evidence CLI', () => {
         };
       };
       expect(report.readiness).toMatchObject({
-        targetWaitTimeoutMs: 300,
+        targetWaitTimeoutMs: 1000,
         targetPollCount: 2,
         selectedTabBeforeSettle: { tabId: 'ready-tab' },
         selectedTabAfterSettle: { tabId: 'ready-tab' },
-        postSelectionSettleMs: 300,
+        postSelectionSettleMs: 1000,
       });
       expect(report.readiness?.targetWaitedMs).toBeGreaterThanOrEqual(200);
       expect(report.readiness?.postSelectionSettleWaitedMs).toBeGreaterThanOrEqual(250);

@@ -11,6 +11,7 @@ import {
 
 interface WorkerGpuVideoFrameLayerPresenterResources {
   readonly compositePipeline: GPURenderPipeline;
+  readonly bitmapCompositePipeline: GPURenderPipeline;
   readonly displayPipeline: GPURenderPipeline;
   readonly sampler: GPUSampler;
   textureA: GPUTexture | null;
@@ -24,8 +25,10 @@ interface WorkerGpuVideoFrameDimensions {
   readonly height: number;
 }
 
+type WorkerGpuVideoFrameSource = VideoFrame | ImageBitmap;
+
 export interface WorkerGpuVideoFramePresentLayer {
-  readonly frame: VideoFrame;
+  readonly frame: WorkerGpuVideoFrameSource;
   readonly timestampSeconds?: number | null;
   readonly opacity: number;
   readonly blendMode: string;
@@ -66,6 +69,16 @@ export interface WorkerGpuVideoFrameLayerPresentOptions extends WorkerGpuPresent
 
 const layerPresenterResourcesBySurface = new WeakMap<WorkerGpuTargetSurface, WorkerGpuVideoFrameLayerPresenterResources>();
 
+const BITMAP_LAYER_COMPOSITE_SHADER = VIDEO_FRAME_LAYER_COMPOSITE_SHADER
+  .replace(
+    '@group(0) @binding(2) var frameTexture: texture_external;',
+    '@group(0) @binding(2) var frameTexture: texture_2d<f32>;',
+  )
+  .replaceAll(
+    'textureSampleBaseClampToEdge(frameTexture, frameSampler, input.uv)',
+    'textureSample(frameTexture, frameSampler, input.uv)',
+  );
+
 const BLEND_MODE_TO_GPU_INDEX: Record<string, number> = {
   normal: 0,
   dissolve: 0,
@@ -103,9 +116,14 @@ function positiveInteger(value: number | undefined): number {
     : 0;
 }
 
-function getVideoFrameDimensions(frame: VideoFrame): WorkerGpuVideoFrameDimensions | null {
-  const width = positiveInteger(frame.displayWidth) || positiveInteger(frame.codedWidth);
-  const height = positiveInteger(frame.displayHeight) || positiveInteger(frame.codedHeight);
+function isImageBitmapFrame(frame: WorkerGpuVideoFrameSource): frame is ImageBitmap {
+  return typeof ImageBitmap !== 'undefined' && frame instanceof ImageBitmap;
+}
+
+function getVideoFrameDimensions(frame: WorkerGpuVideoFrameSource): WorkerGpuVideoFrameDimensions | null {
+  const image = frame as Partial<ImageBitmap & VideoFrame>;
+  const width = positiveInteger(image.displayWidth) || positiveInteger(image.codedWidth) || positiveInteger(image.width);
+  const height = positiveInteger(image.displayHeight) || positiveInteger(image.codedHeight) || positiveInteger(image.height);
   return width > 0 && height > 0 ? { width, height } : null;
 }
 
@@ -119,6 +137,20 @@ function createLayerPresenterResources(surface: WorkerGpuTargetSurface): WorkerG
     },
     fragment: {
       module: surface.device.createShaderModule({ code: VIDEO_FRAME_LAYER_COMPOSITE_SHADER }),
+      entryPoint: 'fragmentMain',
+      targets: [{ format: 'rgba8unorm' }],
+    },
+    primitive: { topology: 'triangle-list' },
+  });
+  const bitmapCompositePipeline = surface.device.createRenderPipeline({
+    layout: 'auto',
+    vertex: {
+      module: surface.device.createShaderModule({ code: BITMAP_LAYER_COMPOSITE_SHADER }),
+      entryPoint: 'vertexMain',
+      buffers: [],
+    },
+    fragment: {
+      module: surface.device.createShaderModule({ code: BITMAP_LAYER_COMPOSITE_SHADER }),
       entryPoint: 'fragmentMain',
       targets: [{ format: 'rgba8unorm' }],
     },
@@ -140,6 +172,7 @@ function createLayerPresenterResources(surface: WorkerGpuTargetSurface): WorkerG
   });
   return {
     compositePipeline,
+    bitmapCompositePipeline,
     displayPipeline,
     sampler: surface.device.createSampler({ magFilter: 'linear', minFilter: 'linear' }),
     textureA: null,
@@ -302,6 +335,7 @@ export async function presentGpuVideoFrameLayers(
   const submittedWorkDoneResolved = false;
   let pass: GPURenderPassEncoder | null = null;
   const uniformBuffers: GPUBuffer[] = [];
+  const uploadedBitmapTextures: GPUTexture[] = [];
 
   try {
     if (options.layers.length === 0) throw new Error('No VideoFrame layers to present');
@@ -334,20 +368,45 @@ export async function presentGpuVideoFrameLayers(
     let readTexture = resources.textureA;
     let writeTexture = resources.textureB;
     for (const layer of options.layers) {
+      const dimensions = getVideoFrameDimensions(layer.frame);
+      if (!dimensions) {
+        throw new Error('VideoFrame layer has no positive display dimensions');
+      }
       const uniformBuffer = createLayerUniformBuffer(surface, layer);
       uniformBuffers.push(uniformBuffer);
+      const compositePipeline = isImageBitmapFrame(layer.frame)
+        ? resources.bitmapCompositePipeline
+        : resources.compositePipeline;
+      let frameResource: GPUBindingResource;
+      if (isImageBitmapFrame(layer.frame)) {
+        const bitmapTexture = surface.device.createTexture({
+          size: { width: dimensions.width, height: dimensions.height },
+          format: 'rgba8unorm',
+          usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING,
+        });
+        surface.device.queue.copyExternalImageToTexture(
+          { source: layer.frame },
+          {
+            texture: bitmapTexture,
+            colorSpace: surface.colorSpace ?? 'srgb',
+            premultipliedAlpha: false,
+          },
+          { width: dimensions.width, height: dimensions.height },
+        );
+        uploadedBitmapTextures.push(bitmapTexture);
+        frameResource = bitmapTexture.createView();
+      } else {
+        frameResource = surface.device.importExternalTexture({
+          source: layer.frame,
+          colorSpace: surface.colorSpace ?? 'srgb',
+        });
+      }
       const bindGroup = surface.device.createBindGroup({
-        layout: resources.compositePipeline.getBindGroupLayout(0),
+        layout: compositePipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: resources.sampler },
           { binding: 1, resource: readTexture.createView() },
-          {
-            binding: 2,
-            resource: surface.device.importExternalTexture({
-              source: layer.frame,
-              colorSpace: surface.colorSpace ?? 'srgb',
-            }),
-          },
+          { binding: 2, resource: frameResource },
           { binding: 3, resource: { buffer: uniformBuffer } },
         ],
       });
@@ -359,7 +418,7 @@ export async function presentGpuVideoFrameLayers(
           storeOp: 'store',
         }],
       });
-      pass.setPipeline(resources.compositePipeline);
+      pass.setPipeline(compositePipeline);
       pass.setBindGroup(0, bindGroup);
       pass.draw(6);
       pass.end();
@@ -393,6 +452,7 @@ export async function presentGpuVideoFrameLayers(
     commandSubmitted = true;
 
     for (const buffer of uniformBuffers) buffer.destroy();
+    for (const texture of uploadedBitmapTextures) texture.destroy();
     surface.frameSequence = nextSequence;
     surface.diagnostics = { ...surface.diagnostics, lastPresentedFrameId: presentedFrameId };
     return {
@@ -423,6 +483,13 @@ export async function presentGpuVideoFrameLayers(
     for (const buffer of uniformBuffers) {
       try {
         buffer.destroy();
+      } catch {
+        // Ignore cleanup errors after a failed WebGPU pass.
+      }
+    }
+    for (const texture of uploadedBitmapTextures) {
+      try {
+        texture.destroy();
       } catch {
         // Ignore cleanup errors after a failed WebGPU pass.
       }

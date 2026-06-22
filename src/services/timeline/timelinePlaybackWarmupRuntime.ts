@@ -1,6 +1,7 @@
 import type { TimelineClip } from '../../types';
 import { getRuntimeFrameProvider } from '../mediaRuntime/runtimePlayback';
 import { renderHostPort } from '../render/renderHostPort';
+import { flags } from '../../engine/featureFlags';
 
 function isWorkerGpuOnlyPlayback(): boolean {
   try {
@@ -16,7 +17,7 @@ export function getTimelinePlaybackWarmupVideo(
   if (!source?.videoElement) {
     return null;
   }
-  if (isWorkerGpuOnlyPlayback()) {
+  if (isWorkerGpuOnlyPlayback() && flags.useFullWebCodecsPlayback) {
     return null;
   }
 

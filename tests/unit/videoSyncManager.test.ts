@@ -836,7 +836,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(throttledSeek).toHaveBeenCalledTimes(1);
   });
 
-  it('routes reverse worker playback even when full WebCodecs preview is disabled', () => {
+  it('keeps reverse worker playback on HTML fallback when full WebCodecs preview is disabled', () => {
     flags.useFullWebCodecsPlayback = false;
 
     const manager = createManager();
@@ -862,12 +862,10 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
 
     manager.syncClipVideo(clip, ctx);
 
-    expect(syncFullWebCodecs).toHaveBeenCalledTimes(1);
+    expect(syncFullWebCodecs).not.toHaveBeenCalled();
   });
 
   it('creates a transient reverse worker runtime binding for reloaded clips without runtime handles', () => {
-    flags.useFullWebCodecsPlayback = false;
-
     const manager = createManager();
     const syncFullWebCodecs = vi.spyOn(manager, 'syncFullWebCodecs').mockImplementation(() => {});
     mockRenderHostMode('worker-presenting');
@@ -903,7 +901,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(routedClip?.source?.runtimeSessionKey).toBe(`interactive:${clip.id}`);
   });
 
-  it('builds reverse worker playback layers with the transient runtime source after reload without forcing missing frames', () => {
+  it('uses HTML fallback layers after reload when full WebCodecs preview is disabled', () => {
     flags.useFullWebCodecsPlayback = false;
     mockRenderHostMode('worker-presenting');
 
@@ -943,7 +941,7 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(result?.source.videoElement).toBeTruthy();
   });
 
-  it('presents reverse worker playback frames once the provider has a frame even with HTML fallback available', () => {
+  it('keeps the attached provider available without forcing runtime frames when full WebCodecs preview is disabled', () => {
     flags.useFullWebCodecsPlayback = false;
     mockRenderHostMode('worker-presenting');
 
@@ -982,10 +980,10 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
 
     expect(result?.source.runtimeSourceId).toBe('media:worker-reverse-shared-guard');
     expect(result?.source.runtimeSessionKey).toBe(
-      'interactive:clip-worker-reverse-shared-guard'
+      'interactive-track:track-v1:media:worker-reverse-shared-guard'
     );
     expect(result?.source.webCodecsPlayer).toBe(provider);
-    expect(result?.source.forceRuntimeFramePreview).toBe(true);
+    expect(result?.source.forceRuntimeFramePreview).toBeUndefined();
     expect(result?.source.videoElement).toBeTruthy();
   });
 

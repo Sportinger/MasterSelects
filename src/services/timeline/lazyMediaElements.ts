@@ -4,6 +4,7 @@ import type { FrameContext } from '../layerBuilder/types';
 import { Logger } from '../logger';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
 import { renderHostPort } from '../render/renderHostPort';
+import { flags } from '../../engine/featureFlags';
 import {
   createMediaObjectUrl,
   createPrimaryMediaObjectUrl,
@@ -766,7 +767,8 @@ export function hydrateTimelineMediaWindow(ctx: FrameContext): void {
 
   const now = ctx.now;
   const desired = new Set<string>();
-  const hydrateVideo = renderHostPort.getTelemetry().mode !== 'worker-gpu-only';
+  const hydrateVideo = renderHostPort.getTelemetry().mode !== 'worker-gpu-only' ||
+    !flags.useFullWebCodecsPlayback;
   const videoStart = ctx.playheadPosition - VIDEO_LOOKBEHIND_SECONDS;
   const videoEnd = ctx.playheadPosition + (ctx.isPlaying ? VIDEO_LOOKAHEAD_SECONDS : 0.8);
   const audioStart = ctx.playheadPosition - AUDIO_LOOKBEHIND_SECONDS;
