@@ -329,6 +329,23 @@ $body = @{ tool = 'getStats'; args = @{} } | ConvertTo-Json -Depth 4
 Invoke-RestMethod -Uri 'http://localhost:5173/api/ai-tools' -Method Post -Headers $headers -Body $body
 ```
 
+Bridge automation gotchas:
+
+- Bridge responses are shaped as `{ success, data }`; do not read `result`.
+- `GET /api/ai-tools` lists connected `clientTabs`. If more than one browser
+  tab is connected, identify the intended tab with `getTimelineState`/`getStats`
+  and include top-level `targetTabId` on every bridge POST. Otherwise playback
+  measurements can silently mix tabs, comps, or render modes.
+- Bridge POSTs may also take top-level `timeoutMs`; use it for long playback or
+  export probes instead of relying on the default request timeout.
+- In PowerShell bridge helpers, never name a parameter `$args`: it collides with
+  PowerShell's automatic variable and can silently drop tool arguments. Use a
+  name like `$toolArgs`.
+- Avoid short helper names that collide with PowerShell aliases, e.g. `R` maps
+  to `Invoke-History`. Use explicit names such as `RoundN`.
+- For long diagnostics, print compact summaries. Full `getStats`/trace payloads
+  are huge and easy to truncate, which can hide the real result.
+
 | Tool | Purpose |
 |---|---|
 | `getStats` / `getStatsHistory` | engine snapshot(s): FPS, timing, decoder, drops, audio, GPU |

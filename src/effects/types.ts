@@ -31,10 +31,14 @@ export interface EffectControlProps {
   clipId?: string;
 }
 
+export type EffectPipelineKind = 'fullscreen' | 'particle-render';
+
 /**
- * Complete effect definition - each effect module exports this
+ * Standard fullscreen fragment effect definition.
  */
-export interface EffectDefinition {
+export interface FullscreenEffectDefinition {
+  pipelineKind?: 'fullscreen';
+
   // Identification
   id: string;                          // e.g. 'gaussian-blur'
   name: string;                        // e.g. 'Gaussian Blur'
@@ -66,6 +70,37 @@ export interface EffectDefinition {
 
   // Optional: Custom UI component for special controls
   customControls?: ComponentType<EffectControlProps>;
+}
+
+/**
+ * Specialized render effect definition. It is registered for UI and project
+ * data, but rendered by a dedicated pass instead of EffectsPipeline.
+ */
+export interface ParticleRenderEffectDefinition {
+  pipelineKind: 'particle-render';
+  id: string;
+  name: string;
+  category: EffectCategory;
+  params: Record<string, EffectParam>;
+  requiresContinuousRender?: boolean;
+  customControls?: ComponentType<EffectControlProps>;
+}
+
+/**
+ * Complete effect definition - each effect module exports this.
+ */
+export type EffectDefinition = FullscreenEffectDefinition | ParticleRenderEffectDefinition;
+
+export function isFullscreenEffectDefinition(
+  effect: EffectDefinition | undefined,
+): effect is FullscreenEffectDefinition {
+  return !!effect && (effect.pipelineKind ?? 'fullscreen') === 'fullscreen';
+}
+
+export function isParticleRenderEffectDefinition(
+  effect: EffectDefinition | undefined,
+): effect is ParticleRenderEffectDefinition {
+  return !!effect && effect.pipelineKind === 'particle-render';
 }
 
 /**

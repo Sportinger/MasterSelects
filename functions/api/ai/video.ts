@@ -165,6 +165,10 @@ function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): H
         hasStartImage: Boolean(videoParams.startImageUrl),
         mode: videoParams.mode,
         multiShots: Boolean(videoParams.multiShots),
+        referenceImageCount: videoParams.referenceMedia
+          ?.filter((reference) => reference.mediaType === 'image').length ?? 0,
+        referenceVideoCount: videoParams.referenceMedia
+          ?.filter((reference) => reference.mediaType === 'video').length ?? 0,
         requestId,
         shotCount: videoParams.multiPrompt?.length ?? 0,
         sound: videoParams.multiShots ? true : Boolean(videoParams.sound),

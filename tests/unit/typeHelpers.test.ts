@@ -265,6 +265,7 @@ describe('isAudioEffect', () => {
       'rgb-split',
       'levels',
       'voxel-relief',
+      'pixel-particle-disintegrate',
     ];
     for (const effect of visualEffects) {
       expect(isAudioEffect(effect)).toBe(false);
@@ -276,6 +277,7 @@ describe('isAudioEffect', () => {
       'hue-shift', 'saturation', 'brightness', 'contrast',
       'blur', 'pixelate', 'kaleidoscope', 'mirror',
       'invert', 'rgb-split', 'levels', 'voxel-relief',
+      'pixel-particle-disintegrate',
       'audio-eq', 'audio-volume', 'audio-pan', 'audio-normalize', 'audio-parametric-eq', 'audio-high-pass', 'audio-low-pass',
       'audio-hum-notch', 'audio-de-click', 'audio-noise-reduction',
       'audio-spectral-gate',
@@ -311,8 +313,8 @@ describe('isAudioEffect', () => {
       'audio-channel-swap',
       'audio-stereo-split',
     ]);
-    // Visual effects should be the remaining 12
-    expect(visualEffects).toHaveLength(12);
+    // Visual effects should be the remaining 13
+    expect(visualEffects).toHaveLength(13);
     // Together they cover all
     expect(audioEffects.length + visualEffects.length).toBe(allEffects.length);
   });

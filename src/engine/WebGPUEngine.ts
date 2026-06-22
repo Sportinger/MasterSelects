@@ -285,6 +285,10 @@ export class WebGPUEngine {
     this.renderLoop?.setTimelineVisualDemand(hasDemand);
   }
 
+  setVisualTargetFps(targetFps: number): void {
+    this.renderLoop?.setVisualTargetFps(targetFps);
+  }
+
   setIsPlaying(playing: boolean): void {
     this._isPlaying = playing;
     if (playing) this.hasEverPlayed = true;

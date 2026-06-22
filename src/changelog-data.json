@@ -3,7 +3,7 @@
     "date": "2026-06-19",
     "type": "fix",
     "title": "MasterSelects 2.3.0",
-    "description": "Staging playback mode update: worker-gpu-only stays the default render host, but Worker WebCodecs playback is disabled and hidden HTMLVideo sources now feed transferred ImageBitmaps into Worker WebGPU presentation.",
+    "description": "Playback default override: this branch is locked back to the origin/master main-thread HTML video path, clears persisted worker-gpu-only render-host defaults on startup, and keeps Worker WebCodecs diagnostics opt-in.",
     "section": "Release"
   },
   {

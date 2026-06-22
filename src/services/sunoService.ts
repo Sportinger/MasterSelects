@@ -4,7 +4,7 @@ import type { TaskStatus } from './piApiService';
 const log = Logger.create('Suno');
 
 const BASE_URL = 'https://api.kie.ai';
-const DEFAULT_CALLBACK_URL = 'https://masterselects.app/api/ai/suno/callback';
+const DEFAULT_CALLBACK_URL = 'https://www.masterselects.com/api/ai/suno/callback';
 
 export const SUNO_PROVIDER_ID = 'suno-music';
 export const SUNO_MODEL_IDS = ['V5', 'V4_5PLUS', 'V4_5', 'V4'] as const;

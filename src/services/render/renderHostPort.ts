@@ -33,7 +33,7 @@ export type {
 export type RenderHostDevMode = 'main' | 'worker-shadow' | 'worker-presenting' | 'worker-only' | 'worker-gpu-only';
 
 const RENDER_HOST_DEV_MODE_STORAGE_KEY = 'masterselects.renderHostMode';
-const DEFAULT_RENDER_HOST_MODE: RenderHostDevMode = 'worker-gpu-only';
+const DEFAULT_RENDER_HOST_MODE: RenderHostDevMode = 'main';
 
 const INITIAL_RENDER_HOST_SELECTION_TELEMETRY: RenderHostSelectionTelemetry = {
   selectedId: 'main-fallback',
@@ -168,7 +168,11 @@ function workerRuntimeBlockers(): readonly string[] {
   return [];
 }
 
-const initialDevMode = readRenderHostDevMode();
+const persistedInitialDevMode = readRenderHostDevMode();
+const initialDevMode = persistedInitialDevMode === 'main' ? 'main' : null;
+if (persistedInitialDevMode && persistedInitialDevMode !== 'main') {
+  writeRenderHostDevMode(null);
+}
 const initialEffectiveMode = effectiveRenderHostMode(initialDevMode);
 runtimeState.workerPrimaryStrictWorkerOnly = initialEffectiveMode === 'worker-only' || initialEffectiveMode === 'worker-gpu-only';
 runtimeState.workerPrimaryPresentationStrategy = initialEffectiveMode === 'worker-gpu-only'
@@ -367,14 +371,14 @@ export function setRenderHostDevMode(mode: RenderHostDevMode | null): RenderHost
   }
 
   writeRenderHostDevMode(null);
-  flags.workerFirstRenderHost = true;
-  runtimeState.workerPrimaryStrictWorkerOnly = true;
-  runtimeState.workerPrimaryPresentationStrategy = 'worker-webgpu-present';
+  flags.workerFirstRenderHost = false;
+  runtimeState.workerPrimaryStrictWorkerOnly = false;
+  runtimeState.workerPrimaryPresentationStrategy = 'worker-cpu-present';
   configureRenderHostSelection({
-    workerPrimary: runtimeState.workerOnlyRenderHostPort,
-    preferWorkerPrimary: true,
-    workerPrimaryAvailable: workerPrimaryAvailableForMode(null),
-    workerPrimaryBlockers: workerPrimaryBlockersForMode(null),
+    workerPrimary: runtimeState.workerPresentingRenderHostPort,
+    preferWorkerPrimary: false,
+    workerPrimaryAvailable: false,
+    workerPrimaryBlockers: [],
   });
   return renderHostPort.getTelemetry();
 }

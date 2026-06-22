@@ -127,6 +127,7 @@ export class RenderDispatcher {
   private readonly cachedFrameRenderer: CachedFrameRenderer;
   private readonly emptyFrameRenderer: EmptyFrameRenderer;
   private readonly targetPreviewRenderer: TargetPreviewRenderer;
+  private lastCompositeView: GPUTextureView | null = null;
   private renderTimeOverride: number | null = null;
 
   constructor(deps: RenderDeps, outputRouter?: RenderOutputRouter) {
@@ -280,6 +281,11 @@ export class RenderDispatcher {
     const t0 = performance.now();
     const { width, height } = d.renderTargetManager.getResolution();
     const skipEffects = false;
+    const isExporting = d.exportCanvasManager.getIsExporting();
+    const timelineState = useTimelineStore.getState();
+    const isPlaying =
+      (d.renderLoop?.getIsPlaying() ?? false) &&
+      timelineState.isPlaying;
 
     // Collect layer data
     const t1 = performance.now();
@@ -289,8 +295,8 @@ export class RenderDispatcher {
       motionRenderer: d.motionRenderer,
       getLastVideoTime: (key) => d.cacheManager.getLastVideoTime(key),
       setLastVideoTime: (key, time) => d.cacheManager.setLastVideoTime(key, time),
-      isExporting: d.exportCanvasManager.getIsExporting(),
-      isPlaying: d.renderLoop?.getIsPlaying() ?? false,
+      isExporting,
+      isPlaying,
     });
     const importTime = performance.now() - t1;
     const debugSnapshot: RenderDispatcherDebugSnapshot = this.debugSnapshotFacet.createRenderDebugSnapshot(
@@ -316,8 +322,7 @@ export class RenderDispatcher {
       // handles transient decoder stalls on Windows/Linux where readyState drops
       // briefly. Real timeline gaps must render empty instead of retaining the
       // previous clip's last frame.
-      const isPlaying = d.renderLoop?.getIsPlaying() ?? false;
-      const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+      const isDragging = timelineState.isDraggingPlayhead;
       const isScrubSettling =
         !isPlaying &&
         !isDragging &&
@@ -333,23 +338,39 @@ export class RenderDispatcher {
       const canHoldEmptyScrubFrame =
         (isDragging || isScrubSettling) &&
         this.lastRenderHadContent;
+      const canHoldPausedEmptyFrame =
+        !isPlaying &&
+        !isDragging &&
+        !isScrubSettling &&
+        !isExporting &&
+        this.telemetry.shouldHoldLastFrameOnEmptyPlayback(
+          this.lastRenderHadContent,
+          previewFallback.targetTimeMs,
+        );
       const shouldHoldEmptyFrame =
         hasVisibleInputLayer &&
         (
           (isPlaying && this.telemetry.shouldHoldLastFrameOnEmptyPlayback(this.lastRenderHadContent, previewFallback.targetTimeMs)) ||
-          canHoldEmptyScrubFrame
+          canHoldEmptyScrubFrame ||
+          canHoldPausedEmptyFrame
         );
 
       if (shouldHoldEmptyFrame) {
+        const heldCompositeRendered = this.renderHeldCompositeFrame(device);
         // Don't render anything â€” canvas retains previous frame automatically.
         // Log once so the stall is visible in telemetry.
         log.debug('Holding last frame during empty preview frame', {
           isPlaying,
           isDragging,
           driftMs: emptyScrubHoldDriftMs,
+          heldCompositeRendered,
         });
         this.recordMainPreviewFrame(
-          isDragging || isScrubSettling ? 'empty-hold' : 'playback-stall-hold',
+          isDragging || isScrubSettling
+            ? 'empty-hold'
+            : isPlaying
+              ? 'playback-stall-hold'
+              : 'paused-empty-hold',
           undefined,
           {
             ...previewFallback,
@@ -360,6 +381,7 @@ export class RenderDispatcher {
         return;
       }
       this.lastRenderHadContent = false;
+      this.lastCompositeView = null;
       this.renderEmptyFrame(device);
       this.recordMainPreviewFrame('empty', undefined, previewFallback);
       d.performanceStats.setLayerCount(0);
@@ -406,6 +428,7 @@ export class RenderDispatcher {
           nc.sceneTracks,
           0,
           skipEffects,
+          isExporting ? 'export' : 'preview',
         );
         if (view) data.textureView = view;
       }
@@ -428,6 +451,8 @@ export class RenderDispatcher {
       device, sampler: d.sampler, pingView, pongView, outputWidth: width, outputHeight: height,
       skipEffects,
       effectTempTexture, effectTempView, effectTempTexture2, effectTempView2,
+      motionTime: this.getEffectiveTimelineTime(),
+      particleQuality: isExporting ? 'export' : 'preview',
     });
     const renderTime = performance.now() - t2;
 
@@ -436,7 +461,7 @@ export class RenderDispatcher {
     const outputSnapshot = !skipCanvas ? this.outputRouter.captureSnapshot() : undefined;
     const activeTargetIds = outputSnapshot?.activeCompositionTargetIds ?? [];
     const exportCtx = d.exportCanvasManager.getExportCanvasContext();
-    const exportTarget = d.exportCanvasManager.getIsExporting() && exportCtx
+    const exportTarget = isExporting && exportCtx
       ? {
         context: exportCtx,
         mode: d.exportCanvasManager.isStackedAlpha() ? 'stackedAlpha' as const : 'normal' as const,
@@ -470,6 +495,7 @@ export class RenderDispatcher {
       log.error('GPU submit failed', e);
       return;
     }
+    this.lastCompositeView = result.finalView;
     const submitTime = performance.now() - t3;
 
     // Cleanup after submit
@@ -497,6 +523,32 @@ export class RenderDispatcher {
    */
   private process3DLayers(layerData: LayerRenderData[], device: GPUDevice, width: number, height: number): void {
     this.sharedScene3DProcessor.process3DLayers(layerData, device, width, height);
+  }
+
+  private renderHeldCompositeFrame(device: GPUDevice): boolean {
+    const d = this.deps;
+    if (!this.lastCompositeView || !d.sampler || d.exportCanvasManager.shouldSkipPreviewOutput()) {
+      return false;
+    }
+
+    const commandEncoder = device.createCommandEncoder();
+    const outputSnapshot = this.outputRouter.captureSnapshot();
+    this.outputRouter.routeCompositeFrame({
+      commandEncoder,
+      sourceView: this.lastCompositeView,
+      sampler: d.sampler,
+      snapshot: outputSnapshot,
+      targetIds: outputSnapshot.activeCompositionTargetIds,
+    });
+
+    try {
+      device.queue.submit([commandEncoder.finish()]);
+      return true;
+    } catch (e) {
+      log.warn('Failed to render held composite frame', e);
+      this.lastCompositeView = null;
+      return false;
+    }
   }
 
   getGaussianSplatSceneBounds(clipId: string): { min: [number, number, number]; max: [number, number, number] } | undefined {

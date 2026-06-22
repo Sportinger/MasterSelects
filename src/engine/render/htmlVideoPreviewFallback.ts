@@ -9,9 +9,10 @@ export function getCopiedHtmlVideoPreviewFrame(
   scrubbingCache: ScrubbingCache | null,
   targetTime?: number,
   lookupOwnerId?: string,
-  captureOwnerId?: string
+  captureOwnerId?: string,
+  forceCopy = false
 ): { view: GPUTextureView; width: number; height: number; mediaTime?: number } | null {
-  if (!isFirefoxBrowser() || !scrubbingCache) {
+  if ((!forceCopy && !isFirefoxBrowser()) || !scrubbingCache) {
     return null;
   }
 

@@ -2,7 +2,7 @@ import type { Env } from './env';
 
 const KIEAI_BASE_URL = 'https://api.kie.ai';
 const KIEAI_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload';
-const DEFAULT_SUNO_CALLBACK_URL = 'https://masterselects.app/api/ai/suno/callback';
+const DEFAULT_SUNO_CALLBACK_URL = 'https://www.masterselects.com/api/ai/suno/callback';
 // Hosted customer credits are priced at 6x vendor Kie credits to keep margin after VAT, Stripe, and FX.
 const HOSTED_KIE_CREDIT_MULTIPLIER = 6;
 const KIEAI_USD_PER_CREDIT = 0.005;
@@ -561,6 +561,49 @@ function normalizeMultiPrompt(
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function getKlingReferenceToken(index: number): string {
+  return `ref_${index + 1}`;
+}
+
+function applyKlingReferenceTokens(
+  prompt: string,
+  references: Array<HostedReferenceMedia & { url: string }>,
+): string {
+  if (references.length === 0) {
+    return prompt;
+  }
+
+  let nextPrompt = prompt;
+  const tokens = references.map((_, index) => getKlingReferenceToken(index));
+
+  tokens.forEach((token, index) => {
+    const pattern = new RegExp(`\\bREF\\s*${index + 1}\\b`, 'gi');
+    nextPrompt = nextPrompt.replace(pattern, `@${token}`);
+  });
+
+  const mentionsReference = tokens.some((token) => new RegExp(`@${token}\\b`, 'i').test(nextPrompt));
+  if (mentionsReference) {
+    return nextPrompt;
+  }
+
+  return `${nextPrompt.trim()} ${tokens.map((token) => `@${token}`).join(' ')}`.trim();
+}
+
+function addHostedKlingReferenceInput(
+  input: Record<string, unknown>,
+  references: Array<HostedReferenceMedia & { url: string }>,
+): void {
+  if (references.length === 0) {
+    return;
+  }
+
+  input.kling_elements = references.map((reference, index) => ({
+    name: getKlingReferenceToken(index),
+    description: reference.label || `Reference ${index + 1}`,
+    element_input_urls: [reference.url],
+  }));
+}
+
 function isSeedanceProvider(provider: string | undefined): provider is typeof SEEDANCE_2_PROVIDER_ID | typeof SEEDANCE_2_FAST_PROVIDER_ID {
   return provider === SEEDANCE_2_PROVIDER_ID || provider === SEEDANCE_2_FAST_PROVIDER_ID;
 }
@@ -643,6 +686,13 @@ export async function createHostedKlingTask(
   const imageUrls: string[] = [];
   const multiPrompt = params.multiShots ? normalizeMultiPrompt(params.multiPrompt) : undefined;
   const effectiveSound = params.multiShots ? true : Boolean(params.sound);
+  const elementReferences = await uploadReferenceMediaList(
+    env,
+    (params.referenceMedia ?? [])
+      .filter((reference) => reference.mediaType === 'image' || reference.mediaType === 'video')
+      .slice(0, 3),
+  );
+  const prompt = applyKlingReferenceTokens(params.prompt, elementReferences);
 
   if (params.startImageUrl) {
     imageUrls.push(await uploadImage(env, params.startImageUrl));
@@ -657,7 +707,7 @@ export async function createHostedKlingTask(
     duration: String(params.duration),
     mode: params.mode === 'pro' ? 'pro' : 'std',
     multi_shots: Boolean(params.multiShots),
-    prompt: params.prompt,
+    prompt,
     sound: effectiveSound,
   };
 
@@ -666,8 +716,13 @@ export async function createHostedKlingTask(
   }
 
   if (multiPrompt) {
-    input.multi_prompt = multiPrompt;
+    input.multi_prompt = multiPrompt.map((shot) => ({
+      ...shot,
+      prompt: applyKlingReferenceTokens(shot.prompt, elementReferences),
+    }));
   }
+
+  addHostedKlingReferenceInput(input, elementReferences);
 
   const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
     input,

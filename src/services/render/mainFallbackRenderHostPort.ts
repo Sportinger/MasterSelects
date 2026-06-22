@@ -247,6 +247,10 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     engine.setTimelineVisualDemand(hasDemand);
   }
 
+  setVisualTargetFps(targetFps: number): void {
+    engine.setVisualTargetFps(targetFps);
+  }
+
   setIsPlaying(isPlaying: boolean): void {
     engine.setIsPlaying(isPlaying);
   }

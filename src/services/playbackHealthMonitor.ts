@@ -60,6 +60,25 @@ import type {
 
 const log = Logger.create('PlaybackHealth');
 
+type VideoSyncManagerLike = ReturnType<typeof layerBuilder.getVideoSyncManager>;
+
+function getActiveRvfcClipIds(vsm: VideoSyncManagerLike): string[] {
+  const candidate = vsm as VideoSyncManagerLike & {
+    getActiveRvfcClipIds?: unknown;
+  };
+  return typeof candidate.getActiveRvfcClipIds === 'function'
+    ? candidate.getActiveRvfcClipIds()
+    : [];
+}
+
+function cancelRvfcHandle(vsm: VideoSyncManagerLike, clipId: string): void {
+  const candidate = vsm as VideoSyncManagerLike & {
+    cancelRvfcHandle?: unknown;
+  };
+  if (typeof candidate.cancelRvfcHandle === 'function') {
+    candidate.cancelRvfcHandle(clipId);
+  }
+}
 
 // --- Service ---
 
@@ -188,12 +207,12 @@ export class PlaybackHealthMonitor {
     }
 
     // 3. RVFC_ORPHANED
-    const activeRvfcClipIds = vsm.getActiveRvfcClipIds();
+    const activeRvfcClipIds = getActiveRvfcClipIds(vsm);
     const currentClipIds = new Set(clips.map((c) => c.id));
     for (const clipId of activeRvfcClipIds) {
       if (!currentClipIds.has(clipId)) {
         if (this.recordAnomaly('RVFC_ORPHANED', clipId, 'RVFC handle for clip not in timeline')) {
-          vsm.cancelRvfcHandle(clipId);
+          cancelRvfcHandle(vsm, clipId);
         }
       }
     }
@@ -544,10 +563,10 @@ export class PlaybackHealthMonitor {
     }
 
     // Clear orphaned RVFC handles
-    const rvfcIds = vsm.getActiveRvfcClipIds();
+    const rvfcIds = getActiveRvfcClipIds(vsm);
     const currentIds = new Set(ctx.clips.map((c) => c.id));
     for (const id of rvfcIds) {
-      if (!currentIds.has(id)) vsm.cancelRvfcHandle(id);
+      if (!currentIds.has(id)) cancelRvfcHandle(vsm, id);
     }
 
     renderHostPort.requestRender();
@@ -589,8 +608,8 @@ export class PlaybackHealthMonitor {
     const vsm = layerBuilder.getVideoSyncManager();
     const currentIds = new Set(clips.map((c) => c.id));
 
-    for (const id of vsm.getActiveRvfcClipIds()) {
-      if (!currentIds.has(id)) vsm.cancelRvfcHandle(id);
+    for (const id of getActiveRvfcClipIds(vsm)) {
+      if (!currentIds.has(id)) cancelRvfcHandle(vsm, id);
     }
 
     log.info('Orphaned handles cleared');

@@ -5,9 +5,11 @@ import {
   calculateHostedKlingCost,
   calculateHostedSeedanceCost,
   calculateHostedSunoCost,
+  createHostedKlingTask,
   createHostedSeedanceTask,
   getHostedKlingTask,
 } from '../../functions/lib/kieai';
+import { normalizeHostedKlingParams } from '../../functions/lib/providers/kieai';
 import type { Env } from '../../functions/lib/env';
 import { getModelCreditCost } from '../../functions/lib/modelPricing';
 import { getFlashBoardPriceEstimate } from '../../src/services/flashboard/FlashBoardPricing';
@@ -28,6 +30,115 @@ describe('hosted Kie.ai pricing', () => {
     expect(calculateHostedImageCost('nano-banana-2', '1K')).toBe(48);
     expect(calculateHostedImageCost('nano-banana-2', '2K')).toBe(72);
     expect(calculateHostedImageCost('nano-banana-2', '4K')).toBe(108);
+  });
+
+  it('normalizes hosted Kling reference media for production cloud requests', () => {
+    expect(normalizeHostedKlingParams({
+      duration: 5,
+      prompt: 'Make REF 1 walk through the frame.',
+      provider: 'cloud-kling',
+      referenceMedia: [
+        {
+          fileName: 'hero.png',
+          label: 'Hero',
+          mediaType: 'image',
+          mimeType: 'image/png',
+          source: 'data:image/png;base64,AAAA',
+        },
+      ],
+    })).toMatchObject({
+      provider: 'kling-3.0',
+      referenceMedia: [
+        {
+          fileName: 'hero.png',
+          label: 'Hero',
+          mediaType: 'image',
+          mimeType: 'image/png',
+          source: 'data:image/png;base64,AAAA',
+        },
+      ],
+    });
+  });
+
+  it('uploads hosted Kling reference media into Kie.ai kling_elements', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: {
+          downloadUrl: 'https://cdn.example.com/download/hero',
+          fileUrl: 'https://cdn.example.com/hero.png',
+        },
+        success: true,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: {
+          downloadUrl: 'https://cdn.example.com/download/motion',
+          fileUrl: 'https://cdn.example.com/motion.mp4',
+        },
+        success: true,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: { taskId: 'kling_task_1' },
+        msg: 'success',
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedKlingTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: '16:9',
+      duration: 5,
+      mode: 'pro',
+      prompt: 'A cinematic subject enters the frame.',
+      provider: 'kling-3.0',
+      referenceMedia: [
+        {
+          fileName: 'hero.png',
+          label: 'Hero',
+          mediaType: 'image',
+          mimeType: 'image/png',
+          source: 'data:image/png;base64,AAAA',
+        },
+        {
+          fileName: 'motion.mp4',
+          label: 'Motion',
+          mediaType: 'video',
+          mimeType: 'video/mp4',
+          source: 'data:video/mp4;base64,AAAA',
+        },
+      ],
+      sound: false,
+    })).resolves.toEqual({ taskId: 'kling_task_1' });
+
+    const firstUploadBody = fetchMock.mock.calls[0]?.[1]?.body as FormData;
+    const secondUploadBody = fetchMock.mock.calls[1]?.[1]?.body as FormData;
+    expect(firstUploadBody.get('uploadPath')).toBe('images');
+    expect(secondUploadBody.get('uploadPath')).toBe('videos');
+
+    const createBody = JSON.parse(fetchMock.mock.calls[2]?.[1]?.body as string);
+    expect(createBody).toMatchObject({
+      input: {
+        aspect_ratio: '16:9',
+        duration: '5',
+        kling_elements: [
+          {
+            description: 'Hero',
+            element_input_urls: ['https://cdn.example.com/hero.png'],
+            name: 'ref_1',
+          },
+          {
+            description: 'Motion',
+            element_input_urls: ['https://cdn.example.com/motion.mp4'],
+            name: 'ref_2',
+          },
+        ],
+        mode: 'pro',
+        multi_shots: false,
+        prompt: 'A cinematic subject enters the frame. @ref_1 @ref_2',
+        sound: false,
+      },
+      model: 'kling-3.0/video',
+    });
   });
 
   it('charges hosted Suno music generation through MasterSelects Cloud credits', () => {

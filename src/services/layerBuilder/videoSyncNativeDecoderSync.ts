@@ -9,7 +9,7 @@ export class VideoSyncNativeDecoderSync {
   sync(clip: TimelineClip, ctx: FrameContext, nativeDecoder: VideoSyncNativeDecoder): void {
     const timeInfo = getClipTimeInfo(ctx, clip);
     const fps = nativeDecoder.fps || 25;
-    const targetFrame = Math.round(timeInfo.clipTime * fps);
+    const targetFrame = Math.round(timeInfo.visualClipTime * fps);
     let state = this.decoderState.get(clip.id);
 
     if (!state) {

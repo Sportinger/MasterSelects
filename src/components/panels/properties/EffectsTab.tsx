@@ -5,6 +5,7 @@ import { startBatch, endBatch } from '../../../stores/historyStore';
 import type { AnimatableProperty, AudioEffectParamValue, EffectType } from '../../../types';
 import { createEffectProperty, isAudioEffect } from '../../../types';
 import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
+import { addParticleDisintegrateOutroPreset } from '../../../effects/presets/particleDisintegrateOutro';
 import {
   EffectKeyframeToggle,
   DraggableNumber,
@@ -235,7 +236,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clips = useTimelineStore(state => state.clips);
   // Actions from getState() - stable, no subscription needed
-  const { addClipEffect, removeClipEffect, updateClipEffect, setClipEffectEnabled, reorderClipEffect, setPropertyValue, getInterpolatedEffects } = useTimelineStore.getState();
+  const { addClipEffect, addKeyframe, removeClipEffect, updateClipEffect, setClipEffectEnabled, reorderClipEffect, setPropertyValue, getInterpolatedEffects } = useTimelineStore.getState();
 
   // Drag-and-drop reorder state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -246,6 +247,20 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
   const clip = clips.find(c => c.id === clipId);
   const clipLocalTime = clip ? playheadPosition - clip.startTime : 0;
   const interpolatedEffects = getInterpolatedEffects(clipId, clipLocalTime);
+  const handleAddParticleDisintegrateOutro = useCallback(() => {
+    if (!clip) return;
+    startBatch('Add particle disintegrate out');
+    try {
+      addParticleDisintegrateOutroPreset({
+        clipId,
+        clipDuration: clip.duration,
+        addClipEffect,
+        addKeyframe,
+      });
+    } finally {
+      endBatch();
+    }
+  }, [addClipEffect, addKeyframe, clip, clipId]);
 
   // Get effects grouped by category from registry (video effects only)
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
@@ -260,16 +275,27 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
     <div className="properties-tab-content effects-tab">
       <div className="effect-add-row">
         {!isAudioClip && (
-          <select onChange={(e) => { if (e.target.value) { addClipEffect(clipId, e.target.value); e.target.value = ''; } }} defaultValue="">
-            <option value="" disabled>+ Add Effect</option>
-            {effectCategories.map(({ category, effects: catEffects }) => (
-              <optgroup key={category} label={category.charAt(0).toUpperCase() + category.slice(1)}>
-                {catEffects.map((effect) => (
-                  <option key={effect.id} value={effect.id}>{effect.name}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          <>
+            <select onChange={(e) => { if (e.target.value) { addClipEffect(clipId, e.target.value as EffectType); e.target.value = ''; } }} defaultValue="">
+              <option value="" disabled>+ Add Effect</option>
+              {effectCategories.map(({ category, effects: catEffects }) => (
+                <optgroup key={category} label={category.charAt(0).toUpperCase() + category.slice(1)}>
+                  {catEffects.map((effect) => (
+                    <option key={effect.id} value={effect.id}>{effect.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={!clip}
+              onClick={handleAddParticleDisintegrateOutro}
+              title="Add particle disintegrate outro"
+            >
+              Particle Out
+            </button>
+          </>
         )}
         {isAudioClip && <span className="effect-mode-label">Audio</span>}
       </div>

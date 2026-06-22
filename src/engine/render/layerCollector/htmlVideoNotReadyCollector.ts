@@ -12,6 +12,10 @@ import {
   getSafeLastFrameFallback,
   scheduleBackgroundScrubPreload,
 } from './htmlVideoFrameCache';
+import {
+  filterPausedHtmlTargetFrame,
+  shouldGuardPausedHtmlTargetFrames,
+} from './htmlVideoPausedFrameGuard';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
 
 export function collectNotReadyHtmlVideo(
@@ -23,7 +27,16 @@ export function collectNotReadyHtmlVideo(
   scheduleBackgroundScrubPreload(video, targetTime, deps, isDragging);
   const cacheSearchDistanceFrames = isDragging ? 10 : 6;
   const isSettling = scrubSettleState.isPending(layer.sourceClipId);
-  const lastSameClipFrame = getDragHoldFrame(layer, video, deps);
+  const shouldGuardPausedTargetFrames = shouldGuardPausedHtmlTargetFrames({
+    isPlaying: deps.isPlaying,
+    isDragging,
+    isExporting: deps.isExporting,
+  });
+  const lastSameClipFrame = filterPausedHtmlTargetFrame(
+    getDragHoldFrame(layer, video, deps),
+    targetTime,
+    shouldGuardPausedTargetFrames
+  );
   const dragHoldFrame = isSettling
     ? (() => {
       const holdFrame = lastSameClipFrame;
@@ -60,21 +73,32 @@ export function collectNotReadyHtmlVideo(
         ? lastSameClipFrame
         : null
       : null;
-  const safeFallback = getSafeLastFrameFallback(layer, video, deps, targetTime) ?? dragHoldFrame;
+  const safeFallback = filterPausedHtmlTargetFrame(
+    getSafeLastFrameFallback(layer, video, deps, targetTime),
+    targetTime,
+    shouldGuardPausedTargetFrames
+  ) ?? dragHoldFrame;
   const cachedFrame =
     deps.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
-    deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
-  if (cachedFrame) {
+    (shouldGuardPausedTargetFrames
+      ? null
+      : deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames));
+  const pausedTargetCachedFrame = filterPausedHtmlTargetFrame(
+    cachedFrame,
+    targetTime,
+    shouldGuardPausedTargetFrames
+  );
+  if (pausedTargetCachedFrame) {
     controller.armHtmlHold(layerReuseKey);
     controller.traceScrubPath(layer, 'not-ready-scrub-cache', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
     return {
       layer,
       isVideo: false,
       externalTexture: null,
-      textureView: cachedFrame.view,
+      textureView: pausedTargetCachedFrame.view,
       sourceWidth: video.videoWidth,
       sourceHeight: video.videoHeight,
-      displayedMediaTime: cachedFrame.mediaTime,
+      displayedMediaTime: pausedTargetCachedFrame.mediaTime,
       targetMediaTime: targetTime,
       previewPath: 'not-ready-scrub-cache',
     };

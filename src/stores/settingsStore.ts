@@ -63,10 +63,10 @@ export {
 
 const log = Logger.create('SettingsStore');
 
-function forceHtmlWorkerGpuPlaybackFlags(): void {
+function forceMainThreadHtmlPlaybackFlags(): void {
   flags.useFullWebCodecsPlayback = false;
   flags.disableHtmlPreviewFallback = false;
-  flags.workerFirstRenderHost = true;
+  flags.workerFirstRenderHost = false;
 }
 
 function persistChangelogStateToProject(
@@ -177,7 +177,7 @@ interface SettingsState {
   lastSeenChangelogVersion: string | null;
 
   // Playback engine mode
-  webCodecsEnabled: boolean;  // Worker WebCodecs playback is disabled; HTMLVideo feeds worker WebGPU presentation.
+  webCodecsEnabled: boolean;  // false = origin/master HTML video playback path.
 
   // UI state
   isSettingsOpen: boolean;
@@ -319,7 +319,7 @@ export const useSettingsStore = create<SettingsState>()(
       completedTutorials: [], // Campaign IDs that have been completed
       showChangelogOnStartup: true, // Show changelog dialog on every startup
       lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
-      webCodecsEnabled: false, // HTMLVideo is the default video decoder for worker WebGPU presentation.
+      webCodecsEnabled: false, // Default to HTML Video.
       isSettingsOpen: false,
 
       // Output settings
@@ -571,7 +571,7 @@ export const useSettingsStore = create<SettingsState>()(
         persistChangelogStateToProject(get().showChangelogOnStartup, version);
       },
       setWebCodecsEnabled: (_enabled: boolean) => {
-        forceHtmlWorkerGpuPlaybackFlags();
+        forceMainThreadHtmlPlaybackFlags();
         set({ webCodecsEnabled: false });
       },
       openSettings: () => set({ isSettingsOpen: true }),
@@ -686,9 +686,10 @@ export const useSettingsStore = create<SettingsState>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // Staging currently tests HTMLVideo decode feeding worker WebGPU.
+          // Force the origin/master playback path even if this branch previously
+          // persisted Worker WebCodecs as the default.
           state.webCodecsEnabled = false;
-          forceHtmlWorkerGpuPlaybackFlags();
+          forceMainThreadHtmlPlaybackFlags();
         }
       },
     }

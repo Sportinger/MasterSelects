@@ -5,6 +5,17 @@ import type {
   WorkerGpuRgba,
   WorkerGpuVector2,
 } from './workerGpuRenderGraph';
+import type { RuntimeColorGrade } from '../../types/colorCorrection';
+import type { Effect } from '../../types/effects';
+import type {
+  TransitionCenterAxis,
+  TransitionDistortion,
+  TransitionPatternMask,
+  TransitionProceduralMask,
+  TransitionShapeMask,
+  TransitionWipeDirection,
+} from '../../transitions/types';
+import type { BlendMode } from '../../types/blendMode';
 
 export type WorkerGpuRuntimeCommandType =
   | 'gpu.registerTarget'
@@ -96,11 +107,79 @@ export interface WorkerGpuPresentTestPatternCommand extends WorkerGpuRuntimeComm
 
 export type WorkerGpuWebCodecsFrameSeekMode = 'seek' | 'scrub' | 'fast' | 'advance' | 'reverse';
 
+export interface WorkerGpuLayerSourceRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export type WorkerGpuTransitionRenderState =
+  | {
+      readonly kind: 'wipe';
+      readonly direction: TransitionWipeDirection;
+      readonly progress: number;
+    }
+  | {
+      readonly kind: 'shape-mask';
+      readonly shape: TransitionShapeMask;
+      readonly progress: number;
+    }
+  | {
+      readonly kind: 'clock-mask';
+      readonly progress: number;
+      readonly clockwise: boolean;
+      readonly angleOffset: number;
+    }
+  | {
+      readonly kind: 'center-mask';
+      readonly axis: TransitionCenterAxis;
+      readonly progress: number;
+    }
+  | {
+      readonly kind: 'procedural-mask';
+      readonly procedural: TransitionProceduralMask;
+      readonly progress: number;
+      readonly seed?: number;
+    }
+  | {
+      readonly kind: 'pattern-mask';
+      readonly pattern: TransitionPatternMask;
+      readonly progress: number;
+    }
+  | {
+      readonly kind: 'distortion';
+      readonly distortion: TransitionDistortion;
+      readonly progress: number;
+      readonly seed?: number;
+    };
+
+export interface WorkerGpuWebCodecsRenderLayer {
+  readonly id: string;
+  readonly name: string;
+  readonly sourceClipId?: string;
+  readonly visible: boolean;
+  readonly opacity: number;
+  readonly blendMode: BlendMode;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  readonly scale: { readonly x: number; readonly y: number; readonly z?: number };
+  readonly rotation: number | { readonly x: number; readonly y: number; readonly z: number };
+  readonly sourceRect?: WorkerGpuLayerSourceRect;
+  readonly effects: readonly Effect[];
+  readonly colorCorrection?: RuntimeColorGrade;
+  readonly maskFeather?: number;
+  readonly maskFeatherQuality?: number;
+  readonly maskInvert?: boolean;
+  readonly maskClipId?: string;
+  readonly transitionRender?: WorkerGpuTransitionRenderState;
+}
+
 export interface WorkerGpuWebCodecsFrameLayer {
   readonly sourceId: string;
   readonly mediaTime: number;
   readonly opacity: number;
   readonly blendMode: string;
+  readonly renderLayer?: WorkerGpuWebCodecsRenderLayer;
   readonly inlineBrightness?: number;
   readonly inlineContrast?: number;
   readonly inlineSaturation?: number;

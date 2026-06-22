@@ -40,6 +40,21 @@ interface VisiblePlaybackSample {
   readonly colorRangeLuma: number;
 }
 
+interface ManualPauseRenderStats {
+  decoder?: string;
+  renderLoop?: {
+    isPlaying?: boolean;
+    isIdle?: boolean;
+  };
+  renderDispatcher?: {
+    collectedLayerDetails?: Array<{
+      previewPath?: string;
+      targetMediaTime?: number;
+      displayedMediaTime?: number;
+    }>;
+  };
+}
+
 function collectVisiblePlaybackSample(input: {
   readonly startedAt: number;
   readonly playheadPosition: number;
@@ -86,6 +101,431 @@ function summarizeVisiblePlaybackSamples(samples: readonly VisiblePlaybackSample
     firstHash: samples[0]?.hash ?? null,
     lastHash: samples.at(-1)?.hash ?? null,
     samples: samples.slice(0, 40),
+  };
+}
+
+function summarizePreviewEvents(startMs: number, endMs: number) {
+  const windowMs = Math.max(250, Math.ceil(endMs - startMs + 500));
+  const events = vfPipelineMonitor.timeline(windowMs)
+    .filter((event) => event.t >= startMs && event.t <= endMs);
+  const previewEvents = events.filter((event) => event.type === 'vf_preview_frame');
+  const previewPathCounts: Record<string, number> = {};
+  const backwardFrames: Array<{
+    t: number;
+    previewPath?: string;
+    targetTimeMs?: number;
+    displayedTimeMs?: number;
+    driftMs: number;
+    changed?: string;
+    targetMoved?: string;
+  }> = [];
+  const emptyFrames: Array<{
+    t: number;
+    previewPath?: string;
+    targetTimeMs?: number;
+    displayedTimeMs?: number;
+  }> = [];
+
+  for (const event of previewEvents) {
+    const previewPath =
+      typeof event.detail?.previewPath === 'string'
+        ? event.detail.previewPath
+        : 'unknown';
+    previewPathCounts[previewPath] = (previewPathCounts[previewPath] ?? 0) + 1;
+
+    const targetTimeMs =
+      typeof event.detail?.targetTimeMs === 'number'
+        ? event.detail.targetTimeMs
+        : undefined;
+    const displayedTimeMs =
+      typeof event.detail?.displayedTimeMs === 'number'
+        ? event.detail.displayedTimeMs
+        : undefined;
+    if (targetTimeMs !== undefined && displayedTimeMs !== undefined) {
+      const signedDriftMs = displayedTimeMs - targetTimeMs;
+      if (signedDriftMs < -20) {
+        backwardFrames.push({
+          t: Math.round(event.t * 10) / 10,
+          previewPath,
+          targetTimeMs,
+          displayedTimeMs,
+          driftMs: Math.round(signedDriftMs * 10) / 10,
+          changed: typeof event.detail?.changed === 'string' ? event.detail.changed : undefined,
+          targetMoved: typeof event.detail?.targetMoved === 'string' ? event.detail.targetMoved : undefined,
+        });
+      }
+    }
+    if (/^empty$|empty-hold|paused-empty-hold/.test(previewPath)) {
+      emptyFrames.push({
+        t: Math.round(event.t * 10) / 10,
+        previewPath,
+        targetTimeMs,
+        displayedTimeMs,
+      });
+    }
+  }
+
+  return {
+    eventCount: events.length,
+    previewEventCount: previewEvents.length,
+    previewPathCounts,
+    backwardFrames: backwardFrames.slice(-20),
+    emptyFrames: emptyFrames.slice(-20),
+    pauseEvents: events
+      .filter((event) => /pause|settle|seek|stop/.test(event.type))
+      .slice(-20)
+      .map((event) => ({
+        t: Math.round(event.t * 10) / 10,
+        type: event.type,
+        detail: event.detail,
+      })),
+  };
+}
+
+function collectManualPauseVisibleSample(input: {
+  readonly startedAt: number;
+  readonly pauseAt: number | null;
+  readonly timelineStore: TimelineStore;
+  readonly phase: 'before' | 'after';
+}) {
+  const visible = collectVisiblePlaybackSample({
+    startedAt: input.startedAt,
+    playheadPosition: input.timelineStore.playheadPosition,
+  });
+  if (!visible) {
+    return null;
+  }
+
+  const renderStats = renderHostPort.getStats() as ManualPauseRenderStats;
+  const primaryLayer = renderStats.renderDispatcher?.collectedLayerDetails?.[0] ?? null;
+  return {
+    ...visible,
+    phase: input.phase,
+    sincePauseMs: input.pauseAt === null ? null : Math.round(performance.now() - input.pauseAt),
+    isPlaying: input.timelineStore.isPlaying,
+    previewPath: primaryLayer?.previewPath,
+    targetMediaTime: primaryLayer?.targetMediaTime,
+    displayedMediaTime: primaryLayer?.displayedMediaTime,
+    renderLoopPlaying: renderStats.renderLoop?.isPlaying,
+    renderLoopIdle: renderStats.renderLoop?.isIdle,
+  };
+}
+
+function summarizeManualPauseSamples(
+  samples: readonly NonNullable<ReturnType<typeof collectManualPauseVisibleSample>>[]
+) {
+  const afterSamples = samples.filter((sample) => sample.phase === 'after');
+  const beforeSamples = samples.filter((sample) => sample.phase === 'before');
+  const hashChanges = summarizeVisiblePlaybackSamples(afterSamples).hashChanges;
+  const blankSamples = afterSamples.filter((sample) => sample.nonBlankRatio < 0.05);
+  const countPreviewPaths = (
+    pathSamples: readonly NonNullable<ReturnType<typeof collectManualPauseVisibleSample>>[]
+  ) => {
+    const counts: Record<string, number> = {};
+    for (const sample of pathSamples) {
+      const path = sample.previewPath ?? 'unknown';
+      counts[path] = (counts[path] ?? 0) + 1;
+    }
+    return counts;
+  };
+  const visibleChanges: Array<{
+    sincePauseMs: number | null;
+    fromHash: string;
+    toHash: string;
+    fromPath?: string;
+    toPath?: string;
+    fromDisplayed?: number;
+    toDisplayed?: number;
+    fromTarget?: number;
+    toTarget?: number;
+    meanLumaDelta: number;
+  }> = [];
+
+  for (let i = 1; i < afterSamples.length; i += 1) {
+    const previous = afterSamples[i - 1];
+    const current = afterSamples[i];
+    if (!previous || !current || previous.hash === current.hash) {
+      continue;
+    }
+    visibleChanges.push({
+      sincePauseMs: current.sincePauseMs,
+      fromHash: previous.hash,
+      toHash: current.hash,
+      fromPath: previous.previewPath,
+      toPath: current.previewPath,
+      fromDisplayed: previous.displayedMediaTime,
+      toDisplayed: current.displayedMediaTime,
+      fromTarget: previous.targetMediaTime,
+      toTarget: current.targetMediaTime,
+      meanLumaDelta: Math.round(Math.abs(current.meanLuma - previous.meanLuma) * 100) / 100,
+    });
+  }
+  const stateTransitions: Array<{
+    atMs: number;
+    phase: 'before' | 'after';
+    fromPlaying: boolean;
+    toPlaying: boolean;
+    fromRenderLoopPlaying?: boolean;
+    toRenderLoopPlaying?: boolean;
+    fromPath?: string;
+    toPath?: string;
+    fromTarget?: number;
+    toTarget?: number;
+    fromDisplayed?: number;
+    toDisplayed?: number;
+  }> = [];
+  for (let i = 1; i < samples.length; i += 1) {
+    const previous = samples[i - 1];
+    const current = samples[i];
+    if (!previous || !current) {
+      continue;
+    }
+    const changedPlayback = previous.isPlaying !== current.isPlaying
+      || previous.renderLoopPlaying !== current.renderLoopPlaying;
+    if (!changedPlayback) {
+      continue;
+    }
+    stateTransitions.push({
+      atMs: Math.round(current.elapsedMs),
+      phase: current.phase,
+      fromPlaying: previous.isPlaying,
+      toPlaying: current.isPlaying,
+      fromRenderLoopPlaying: previous.renderLoopPlaying,
+      toRenderLoopPlaying: current.renderLoopPlaying,
+      fromPath: previous.previewPath,
+      toPath: current.previewPath,
+      fromTarget: previous.targetMediaTime,
+      toTarget: current.targetMediaTime,
+      fromDisplayed: previous.displayedMediaTime,
+      toDisplayed: current.displayedMediaTime,
+    });
+  }
+
+  return {
+    beforeSampleCount: beforeSamples.length,
+    beforePlayingSampleCount: beforeSamples.filter((sample) => sample.isPlaying).length,
+    beforeRenderLoopPlayingSampleCount: beforeSamples.filter((sample) => sample.renderLoopPlaying).length,
+    afterSampleCount: afterSamples.length,
+    afterDistinctHashes: new Set(afterSamples.map((sample) => sample.hash)).size,
+    afterHashChanges: hashChanges,
+    blankAfterSampleCount: blankSamples.length,
+    previewPathCounts: countPreviewPaths(afterSamples),
+    beforePreviewPathCounts: countPreviewPaths(beforeSamples),
+    allPreviewPathCounts: countPreviewPaths(samples),
+    stateTransitions: stateTransitions.slice(-20),
+    firstBeforeSamples: beforeSamples.slice(0, 8),
+    lastBeforeSamples: beforeSamples.slice(-12),
+    visibleChanges: visibleChanges.slice(-20),
+    firstAfterSamples: afterSamples.slice(0, 8),
+    lastAfterSamples: afterSamples.slice(-12),
+  };
+}
+
+function describeManualPauseEventTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+  return {
+    tagName: target.tagName,
+    id: target.id || undefined,
+    role: target.getAttribute('role') || undefined,
+    ariaLabel: target.getAttribute('aria-label') || undefined,
+    title: target.getAttribute('title') || undefined,
+    className: typeof target.className === 'string'
+      ? target.className.slice(0, 160)
+      : undefined,
+  };
+}
+
+function createManualPauseInputRecorder(startedAt: number) {
+  const inputEvents: Array<Record<string, unknown>> = [];
+  const eventTypes = ['keydown', 'keyup', 'pointerdown', 'pointerup', 'click'] as const;
+  const listener = (event: Event) => {
+    const base: Record<string, unknown> = {
+      atMs: Math.round(performance.now() - startedAt),
+      type: event.type,
+      target: describeManualPauseEventTarget(event.target),
+    };
+    if (event instanceof KeyboardEvent) {
+      base.key = event.key;
+      base.code = event.code;
+      base.repeat = event.repeat;
+    }
+    if (event instanceof PointerEvent) {
+      base.pointerType = event.pointerType;
+      base.button = event.button;
+    }
+    if (event instanceof MouseEvent && !(event instanceof PointerEvent)) {
+      base.button = event.button;
+    }
+    inputEvents.push(base);
+  };
+
+  for (const type of eventTypes) {
+    window.addEventListener(type, listener, true);
+  }
+
+  return {
+    inputEvents,
+    dispose: () => {
+      for (const type of eventTypes) {
+        window.removeEventListener(type, listener, true);
+      }
+    },
+  };
+}
+
+export async function handleMonitorManualPause(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore
+): Promise<PlaybackToolResult> {
+  const waitMs = readDurationMsArg(args, 'waitMs', 20_000, 500, 120_000);
+  const afterPauseMs = readDurationMsArg(args, 'afterPauseMs', 1_500, 100, 10_000);
+  const sampleIntervalMs = readDurationMsArg(args, 'sampleIntervalMs', 33, 8, 1_000);
+  const resetDiagnostics = args.resetDiagnostics !== false;
+  const startPlayback = args.startPlayback === true;
+  const autoPauseAfterMsValue = readFiniteNumber(args.autoPauseAfterMs);
+  const autoPauseAfterMs =
+    autoPauseAfterMsValue !== null
+      ? Math.max(50, Math.min(60_000, autoPauseAfterMsValue))
+      : null;
+  const startTime = readFiniteNumber(args.startTime);
+  const requestedPlaybackSpeed = readFiniteNumber(args.playbackSpeed);
+  const playbackSpeed =
+    requestedPlaybackSpeed !== null && requestedPlaybackSpeed !== 0
+      ? requestedPlaybackSpeed
+      : 1;
+  const previousSpeed = timelineStore.playbackSpeed;
+
+  if (resetDiagnostics) {
+    wcPipelineMonitor.reset();
+    vfPipelineMonitor.reset();
+    playbackHealthMonitor.reset();
+  }
+
+  const startedAt = performance.now();
+  const inputRecorder = createManualPauseInputRecorder(startedAt);
+  const waitDeadline = startedAt + waitMs;
+  const samples: Array<NonNullable<ReturnType<typeof collectManualPauseVisibleSample>>> = [];
+  let lastSampleAt = 0;
+  let currentTimelineState = useTimelineStore.getState();
+  let hasSeenPlaying = currentTimelineState.isPlaying;
+  let previousPlaying = currentTimelineState.isPlaying;
+  let pauseAt: number | null = null;
+  let playbackWasAutoStarted = false;
+
+  try {
+    if (startPlayback) {
+      if (currentTimelineState.isPlaying) {
+        timelineStore.pause();
+        await waitForAnimationFrame();
+      }
+      if (startTime !== null) {
+        timelineStore.setPlayheadPosition(clampPlaybackTime(startTime, timelineStore.duration));
+      }
+      timelineStore.setDraggingPlayhead(false);
+      timelineStore.setPlaybackSpeed(playbackSpeed);
+      await waitForAnimationFrame();
+      await timelineStore.play();
+      timelineStore.setPlaybackSpeed(playbackSpeed);
+      playbackWasAutoStarted = true;
+      currentTimelineState = useTimelineStore.getState();
+      hasSeenPlaying = currentTimelineState.isPlaying;
+      previousPlaying = currentTimelineState.isPlaying;
+      await waitForAnimationFrame(sampleIntervalMs);
+    }
+
+    const autoPauseAt = playbackWasAutoStarted && autoPauseAfterMs !== null
+      ? performance.now() + autoPauseAfterMs
+      : null;
+    while (performance.now() < waitDeadline) {
+      currentTimelineState = useTimelineStore.getState();
+      const now = performance.now();
+      if (now - lastSampleAt >= sampleIntervalMs) {
+        const sample = collectManualPauseVisibleSample({
+          startedAt,
+          pauseAt: null,
+          timelineStore: currentTimelineState,
+          phase: 'before',
+        });
+        if (sample) {
+          samples.push(sample);
+        }
+        lastSampleAt = now;
+      }
+
+      if (currentTimelineState.isPlaying) {
+        hasSeenPlaying = true;
+      }
+      if (autoPauseAt !== null && currentTimelineState.isPlaying && now >= autoPauseAt) {
+        timelineStore.pause();
+        pauseAt = performance.now();
+        previousPlaying = false;
+        break;
+      }
+      if (hasSeenPlaying && previousPlaying && !currentTimelineState.isPlaying) {
+        pauseAt = performance.now();
+        break;
+      }
+      previousPlaying = currentTimelineState.isPlaying;
+      await waitForAnimationFrame(sampleIntervalMs);
+    }
+
+    if (pauseAt !== null) {
+      const afterDeadline = pauseAt + afterPauseMs;
+      lastSampleAt = 0;
+      while (performance.now() < afterDeadline) {
+        currentTimelineState = useTimelineStore.getState();
+        const now = performance.now();
+        if (now - lastSampleAt >= sampleIntervalMs) {
+          const sample = collectManualPauseVisibleSample({
+            startedAt,
+            pauseAt,
+            timelineStore: currentTimelineState,
+            phase: 'after',
+          });
+          if (sample) {
+            samples.push(sample);
+          }
+          lastSampleAt = now;
+        }
+        await waitForAnimationFrame(sampleIntervalMs);
+      }
+      }
+  } finally {
+    inputRecorder.dispose();
+    if (playbackWasAutoStarted) {
+      if (pauseAt === null) {
+        timelineStore.pause();
+      }
+      timelineStore.setPlaybackSpeed(previousSpeed);
+    }
+  }
+
+  const endedAt = performance.now();
+  const finalStats = renderHostPort.getStats() as ManualPauseRenderStats;
+  return {
+    success: true,
+    data: {
+      detectedPause: pauseAt !== null,
+      waitMs,
+      afterPauseMs,
+      sampleIntervalMs,
+      startPlayback,
+      autoPauseAfterMs,
+      startTime,
+      playbackSpeed,
+      totalDurationMs: Math.round(endedAt - startedAt),
+      pauseAtMs: pauseAt === null ? null : Math.round(pauseAt - startedAt),
+      inputEvents: inputRecorder.inputEvents.slice(-80),
+      sampleSummary: summarizeManualPauseSamples(samples),
+      previewEvents: summarizePreviewEvents(startedAt, endedAt),
+      finalRenderStats: {
+        decoder: finalStats.decoder,
+        renderLoop: finalStats.renderLoop,
+        renderDispatcher: finalStats.renderDispatcher,
+      },
+    },
   };
 }
 

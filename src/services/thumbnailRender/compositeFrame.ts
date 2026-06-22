@@ -1,5 +1,6 @@
 import { Logger } from '../logger';
 import { splitLayerEffects } from '../../engine/render/layerEffectStack';
+import { getPixelParticleDisintegrateRenderer } from '../../engine/particles/PixelParticleDisintegrateRenderer';
 import type { Layer } from '../../types/layers';
 import type { ThumbnailLayerData, ThumbnailRenderTarget, ThumbnailResources } from './contracts';
 import { blobToDataURL } from './frameCapture';
@@ -130,13 +131,25 @@ function applyComplexEffectsIfNeeded(
   width: number,
   height: number
 ): { textureView: GPUTextureView | null; externalTexture: GPUExternalTexture | null; useExternalTexture: boolean } {
-  const { sampler, compositorPipeline, effectsPipeline } = resources;
-  const { complexEffects } = splitLayerEffects(data.layer.effects);
+  const { device, sampler, compositorPipeline, effectsPipeline } = resources;
+  const {
+    complexEffects,
+    renderEffects,
+    unsupportedAfterRenderEffect,
+  } = splitLayerEffects(data.layer.effects);
   let textureView = data.textureView;
   let externalTexture = data.externalTexture;
   let useExternalTexture = data.isVideo && !!data.externalTexture;
+  if (unsupportedAfterRenderEffect?.length) {
+    log.warn('Ignoring thumbnail effects after terminal render effect', {
+      layerId: data.layer.id,
+      effects: unsupportedAfterRenderEffect.map((effect) => effect.type),
+    });
+  }
 
-  if (!complexEffects || complexEffects.length === 0) {
+  const hasComplexEffects = !!complexEffects && complexEffects.length > 0;
+  const hasRenderEffects = !!renderEffects && renderEffects.length > 0;
+  if (!hasComplexEffects && !hasRenderEffects) {
     return { textureView, externalTexture, useExternalTexture };
   }
 
@@ -148,47 +161,71 @@ function applyComplexEffectsIfNeeded(
 
     if (copyPipeline && copyBindGroup) {
       copySourceToTemp(commandEncoder, target.effectTempView, copyPipeline, copyBindGroup);
-      const effectResult = effectsPipeline.applyEffects(
-        commandEncoder,
-        complexEffects,
-        sampler,
-        target.effectTempView,
-        target.effectTempView2,
-        target.effectTempView,
-        target.effectTempView2,
-        width,
-        height,
-        target.effectTempTexture,
-        target.effectTempTexture2
-      );
-
-      textureView = effectResult.finalView;
+      textureView = target.effectTempView;
       externalTexture = null;
       useExternalTexture = false;
     }
-  } else if (textureView) {
-    const copyPipeline = compositorPipeline.getCopyPipeline?.();
-    const copyBindGroup = copyPipeline
-      ? compositorPipeline.createCopyBindGroup?.(sampler, textureView, data.layer.id)
-      : null;
+  }
 
-    if (copyPipeline && copyBindGroup) {
-      copySourceToTemp(commandEncoder, target.effectTempView, copyPipeline, copyBindGroup);
-      const effectResult = effectsPipeline.applyEffects(
+  if (!textureView) {
+    return { textureView, externalTexture, useExternalTexture };
+  }
+
+  if (hasComplexEffects) {
+    const effectOutput = textureView === target.effectTempView
+      ? target.effectTempView2
+      : target.effectTempView;
+    const effectResult = effectsPipeline.applyEffects(
+      commandEncoder,
+      complexEffects,
+      sampler,
+      textureView,
+      effectOutput,
+      target.effectTempView,
+      target.effectTempView2,
+      width,
+      height,
+      target.effectTempTexture,
+      target.effectTempTexture2
+    );
+
+    textureView = effectResult.finalView;
+    externalTexture = null;
+    useExternalTexture = false;
+  }
+
+  if (hasRenderEffects && renderEffects) {
+    const renderEffect = renderEffects[0];
+    const accumulationView = textureView === target.effectTempView
+      ? target.effectTempView2
+      : target.effectTempView;
+    const outputView = accumulationView === target.effectTempView
+      ? target.effectTempView2
+      : target.effectTempView;
+    try {
+      const renderer = getPixelParticleDisintegrateRenderer(device);
+      renderer.render({
         commandEncoder,
-        complexEffects,
         sampler,
-        target.effectTempView,
-        target.effectTempView2,
-        target.effectTempView,
-        target.effectTempView2,
-        width,
-        height,
-        target.effectTempTexture,
-        target.effectTempTexture2
-      );
+        sourceView: textureView,
+        accumulationView,
+        outputView,
+        outputWidth: width,
+        outputHeight: height,
+        effect: renderEffect,
+        motionTime: data.layer.source?.mediaTime ?? 0,
+        quality: 'preview',
+      });
 
-      textureView = effectResult.finalView;
+      textureView = outputView;
+      externalTexture = null;
+      useExternalTexture = false;
+    } catch (error) {
+      log.warn('Thumbnail particle render effect failed; falling back to source texture', {
+        layerId: data.layer.id,
+        effectType: renderEffect.type,
+        error,
+      });
     }
   }
 

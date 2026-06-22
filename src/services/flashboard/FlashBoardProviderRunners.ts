@@ -320,9 +320,10 @@ async function runVideoJob({
     : (request.referenceMediaFileIds ?? []);
   const isHostedSeedanceRequest = request.service === 'cloud'
     && (request.providerId === 'bytedance/seedance-2' || request.providerId === 'bytedance/seedance-2-fast');
+  const isHostedKlingRequest = request.service === 'cloud' && request.providerId === 'cloud-kling';
   const referenceMedia = request.service === 'kieai'
     ? effectiveVideoReferenceMediaFileIds.map((mediaFileId) => resolveReferenceMedia(mediaFileId))
-    : isHostedSeedanceRequest
+    : isHostedSeedanceRequest || isHostedKlingRequest
       ? await Promise.all(
           effectiveVideoReferenceMediaFileIds.map((mediaFileId) => resolveHostedReferenceMedia(mediaFileId)),
         )

@@ -147,6 +147,51 @@ export const playbackToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'monitorManualPause',
+      description: 'Wait for a manual play-to-pause transition in the browser, then sample visible preview canvas fingerprints and preview telemetry around the pause moment.',
+      parameters: {
+        type: 'object',
+        properties: {
+          waitMs: {
+            type: 'number',
+            description: 'How long to wait for the user to manually pause playback, in milliseconds. Defaults to 20000.',
+          },
+          afterPauseMs: {
+            type: 'number',
+            description: 'How long to keep sampling visible canvas fingerprints after the pause is detected. Defaults to 1500.',
+          },
+          sampleIntervalMs: {
+            type: 'number',
+            description: 'Approximate interval between visible canvas fingerprint samples. Defaults to 33.',
+          },
+          startPlayback: {
+            type: 'boolean',
+            description: 'Start playback inside the monitor before waiting for the manual pause. Defaults to false.',
+          },
+          startTime: {
+            type: 'number',
+            description: 'Optional timeline time in seconds to seek to before auto-starting playback.',
+          },
+          playbackSpeed: {
+            type: 'number',
+            description: 'Optional playback speed when startPlayback is true. Defaults to 1.',
+          },
+          autoPauseAfterMs: {
+            type: 'number',
+            description: 'When startPlayback is true, automatically pause after this many milliseconds instead of waiting for user input.',
+          },
+          resetDiagnostics: {
+            type: 'boolean',
+            description: 'Reset playback diagnostics before waiting. Defaults to true.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'simulatePlayback',
       description: 'Run real timeline playback in the browser for a fixed duration, then pause and report how the playhead actually progressed. Useful for reproducing longer playback freezes and checking playback at different speeds.',
       parameters: {

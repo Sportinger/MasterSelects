@@ -1,5 +1,6 @@
 import type { Layer, LayerRenderData } from '../../core/types';
 import { flags } from '../../featureFlags';
+import { hasParticleRenderEffect, splitLayerEffects } from '../layerEffectStack';
 import {
   getRuntimeFrameProvider,
   readRuntimeFrameForSource,
@@ -80,6 +81,12 @@ export class WebCodecsLayerCollector {
         flags.useFullWebCodecsPlayback &&
         (!!clipProvider || !!runtimeProvider?.isFullMode())
       );
+    const allowHtmlRenderEffectStill =
+      !!source.videoElement &&
+      !deps.isPlaying &&
+      !deps.isExporting &&
+      !isDragging &&
+      hasParticleRenderEffect(splitLayerEffects(layer.effects));
 
     if (isDragging) {
       this.scrubGraceUntil = performance.now() + SCRUB_GRACE_MS;
@@ -100,8 +107,11 @@ export class WebCodecsLayerCollector {
         ENABLE_VISUAL_HTML_VIDEO_FALLBACK ||
         allowHtmlScrubPreview);
 
-    if (allowHtmlVideoPreview) {
-      return this.htmlVideoCollector.collect(layer, source.videoElement!, deps);
+    if (allowHtmlVideoPreview || allowHtmlRenderEffectStill) {
+      const htmlFrame = this.htmlVideoCollector.collect(layer, source.videoElement!, deps);
+      if (htmlFrame || !allowHtmlRenderEffectStill) {
+        return htmlFrame;
+      }
     }
 
     const layerReuseKey = getLayerReuseKey(layer);

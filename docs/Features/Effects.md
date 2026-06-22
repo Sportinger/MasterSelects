@@ -7,13 +7,15 @@ MasterSelects has a modular GPU effect system built around registered effect mod
 ## At A Glance
 
 - 37 blend modes are implemented in `src/shaders/composite.wgsl`.
-- 33 GPU effects are registered in `src/effects/`.
+- 34 GPU effects are registered in `src/effects/`, including fullscreen
+  fragment effects and specialized render effects.
 - Registered effect categories are `color`, `blur`, `distort`, `stylize`, `keying`, `generate`, `time`, and `transition`.
 - `generate`, `time`, and `transition` currently have no registered clip-stack effects and are hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Registry And UI
 
-The effect registry is built from category exports in `src/effects/index.ts`. Each effect definition provides:
+The effect registry is built from category exports in `src/effects/index.ts`.
+Fullscreen effect definitions provide:
 
 - `id`, `name`, and `category`
 - WGSL shader source
@@ -23,6 +25,10 @@ The effect registry is built from category exports in `src/effects/index.ts`. Ea
 - `packUniforms(...)`
 - optional `passes` and `customControls`
 
+Specialized render effects use an explicit `pipelineKind` discriminator. They
+are registered for UI/project data, but are skipped by the fullscreen
+`EffectsPipeline` and rendered by a dedicated compositor pass.
+
 The production editor UI is `src/components/panels/properties/EffectsTab.tsx`.
 `src/effects/EffectControls.tsx` is a generic fallback renderer.
 
@@ -31,7 +37,7 @@ The production editor UI is `src/components/panels/properties/EffectsTab.tsx`.
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
 - `distort` (7): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge
-- `stylize` (11): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief
+- `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
 - `keying` (1): Chroma Key
 
 ## Parameter Editing
@@ -53,6 +59,8 @@ The registered quality parameters are currently:
 - Zoom Blur: `samples`
 - Glow: `rings`, `samplesPerRing`
 - Voxel Relief: `maxSteps`
+- Pixel Particle Disintegrate: `maxPreviewParticles`, `maxExportParticles`,
+  `maxInstances`, `softness`
 
 Right-click on a numeric control resets that parameter to its default.
 The `performanceMonitor` service can also reset quality parameters to defaults when rendering becomes too slow.
@@ -67,6 +75,32 @@ These effects are applied directly in the composite shader instead of running as
 - Invert
 
 That keeps them zero-overhead relative to the full ping-pong effect chain.
+
+## Particle Render Effects
+
+`Pixel Particle Disintegrate` is a `particle-render` clip effect. It samples
+the live source texture into deterministic instanced quads and resolves a
+straight-alpha texture back into the normal layer compositor. At progress `0`
+the source is already represented by particle cells at their origin positions;
+progress moves, curls, and fades those cells rather than crossfading from a
+normal full-frame video plane. Particle release is driven by a deterministic
+gust field: coherent noise pockets, a wind-front delay, and the clip seed decide
+which regions separate first, so the breakup starts in scattered islands and
+then grows without relying on accumulated simulation state. Each particle
+carries UVs from its original source cell, so moving particles keep their
+assigned image patch instead of sampling from their new screen position. Preview
+and export use explicit render/media time instead of wall-clock time.
+
+V1 is terminal in the clip effect stack. Effects before it are pre-rendered
+into the particle source texture; effects after it are reported as unsupported
+instead of being silently reordered. The Effects tab includes a `Particle Out`
+preset button that adds the effect and creates progress keyframes near the end
+of the selected clip.
+
+Strict worker-gpu-only video presentation does not run the dedicated particle
+pass yet. That path detects the effect, reports an explicit recoverable
+diagnostic, and applies the same opacity envelope as a visible fallback rather
+than rendering stale or black frames.
 
 ## Timeline Transitions
 

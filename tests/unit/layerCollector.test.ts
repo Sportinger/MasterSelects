@@ -1518,6 +1518,191 @@ describe('LayerCollector', () => {
     });
   });
 
+  it('copies stable paused HTML frames before live import so still renders stay visible', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 6,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+
+    const copiedFrame = {
+      view: { label: 'copied-paused-frame' },
+      width: 1920,
+      height: 1080,
+      mediaTime: 6,
+    };
+    let captured = false;
+    const textureManager = {
+      importVideoTexture: vi.fn(() => ({ label: 'html-video-texture' })),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => undefined),
+      getLastPresentedOwner: vi.fn(() => undefined),
+      getLastFrameOwner: vi.fn(() => undefined),
+      getLastFrame: vi.fn(() => null),
+      getLastFrameNearTime: vi.fn(() => captured ? copiedFrame : null),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => null),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(() => {
+        captured = true;
+        return true;
+      }),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-paused-html-copy',
+      sourceClipId: 'clip-paused-html-copy',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 6,
+        videoElement: video,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+    expect(scrubbingCache.captureVideoFrame).toHaveBeenCalledWith(video, 'clip-paused-html-copy');
+    expect(result[0]).toMatchObject({
+      isVideo: false,
+      externalTexture: null,
+      textureView: copiedFrame.view,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      displayedMediaTime: 6,
+      targetMediaTime: 6,
+      previewPath: 'copied-preview',
+    });
+  });
+
+  it('allows paused particle render effects to use a stable HTML still when full WebCodecs has no frame', () => {
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 6,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+    const webCodecsPlayer = {
+      currentTime: 6,
+      isPlaying: false,
+      isFullMode: () => true,
+      isSimpleMode: () => false,
+      hasFrame: () => false,
+      getCurrentFrame: vi.fn(() => null),
+      getPendingSeekTime: vi.fn(() => null),
+      getDebugInfo: vi.fn(() => null),
+      pause: vi.fn(),
+      seek: vi.fn(),
+    };
+
+    hoisted.getRuntimeFrameProvider.mockReturnValue(null);
+    hoisted.readRuntimeFrameForSource.mockReturnValue(null);
+
+    const copiedFrame = {
+      view: { label: 'particle-paused-frame' },
+      width: 1920,
+      height: 1080,
+      mediaTime: 6,
+    };
+    let captured = false;
+    const textureManager = {
+      importVideoTexture: vi.fn(() => ({ label: 'webcodecs-texture' })),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => undefined),
+      getLastPresentedOwner: vi.fn(() => undefined),
+      getLastFrameOwner: vi.fn(() => undefined),
+      getLastFrame: vi.fn(() => null),
+      getLastFrameNearTime: vi.fn(() => captured ? copiedFrame : null),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => null),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(() => {
+        captured = true;
+        return true;
+      }),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-particle-paused-html-copy',
+      sourceClipId: 'clip-particle-paused-html-copy',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [{
+        id: 'fx-particle',
+        name: 'Pixel Particle Disintegrate',
+        type: 'pixel-particle-disintegrate',
+        enabled: true,
+        params: { progress: 0.35 },
+      }],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 6,
+        videoElement: video,
+        webCodecsPlayer,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(webCodecsPlayer.getCurrentFrame).not.toHaveBeenCalled();
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+    expect(scrubbingCache.captureVideoFrame).toHaveBeenCalledWith(video, 'clip-particle-paused-html-copy');
+    expect(result[0]).toMatchObject({
+      isVideo: false,
+      externalTexture: null,
+      textureView: copiedFrame.view,
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      displayedMediaTime: 6,
+      targetMediaTime: 6,
+      previewPath: 'copied-preview',
+    });
+  });
+
   it('uses copied HTML video frames on Firefox instead of external textures', () => {
     flags.useFullWebCodecsPlayback = false;
     Object.defineProperty(globalThis.navigator, 'userAgent', {
@@ -1893,6 +2078,278 @@ describe('LayerCollector', () => {
       targetMediaTime: 25,
       previewPath: 'seeking-cache',
     });
+  });
+
+  it('does not show a backward cached frame during playback-stop settle', () => {
+    flags.useFullWebCodecsPlayback = false;
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+    scrubSettleState.begin('clip-playback-stop', 25, 500, 'playback-stop');
+
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 24.8,
+      readyState: 4,
+      seeking: true,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+
+    const staleFrame = {
+      view: { label: 'stale-playback-stop-frame' },
+      width: 1920,
+      height: 1080,
+      mediaTime: 24.8,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => null),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => 24.8),
+      getLastPresentedOwner: vi.fn(() => 'clip-playback-stop'),
+      getLastFrame: vi.fn(() => staleFrame),
+      getLastFrameNearTime: vi.fn(() => staleFrame),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => staleFrame),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-playback-stop',
+      sourceClipId: 'clip-playback-stop',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 25,
+        videoElement: video,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(0);
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+    expect(scrubbingCache.getNearestCachedFrameEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not show a backward paused HTML final-cache frame without playback-stop settle', () => {
+    flags.useFullWebCodecsPlayback = false;
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 2.337,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+
+    const staleFrame = {
+      view: { label: 'stale-paused-final-frame' },
+      width: 1920,
+      height: 1080,
+      mediaTime: 2.337,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => null),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => 2.337),
+      getLastPresentedOwner: vi.fn(() => 'clip-paused-final'),
+      getLastFrame: vi.fn(() => staleFrame),
+      getLastFrameNearTime: vi.fn(() => staleFrame),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => staleFrame),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+      preloadAroundTime: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-paused-final',
+      sourceClipId: 'clip-paused-final',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 2.433,
+        videoElement: video,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(0);
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+    expect(scrubbingCache.getNearestCachedFrameEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not show a backward not-ready cache frame while paused', () => {
+    flags.useFullWebCodecsPlayback = false;
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 6.092,
+      readyState: 1,
+      seeking: true,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+
+    const staleFrame = {
+      view: { label: 'stale-not-ready-frame' },
+      width: 1920,
+      height: 1080,
+      mediaTime: 6.092,
+    };
+    const textureManager = {
+      importVideoTexture: vi.fn(() => null),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => 6.092),
+      getLastPresentedOwner: vi.fn(() => 'clip-not-ready-paused'),
+      getLastFrame: vi.fn(() => staleFrame),
+      getLastFrameNearTime: vi.fn(() => staleFrame),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => staleFrame),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+      preloadAroundTime: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-not-ready-paused',
+      sourceClipId: 'clip-not-ready-paused',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 6.347,
+        videoElement: video,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(0);
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+    expect(scrubbingCache.getNearestCachedFrameEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not live-import a backward HTML frame during playback-stop settle', () => {
+    flags.useFullWebCodecsPlayback = false;
+    useTimelineStore.setState({ isDraggingPlayhead: false });
+    scrubSettleState.begin('clip-playback-stop-live', 25, 500, 'playback-stop');
+
+    const video = {
+      src: 'blob:test-video',
+      currentTime: 24.92,
+      readyState: 4,
+      seeking: false,
+      paused: true,
+      videoWidth: 1920,
+      videoHeight: 1080,
+    } as unknown as HTMLVideoElement;
+
+    const textureManager = {
+      importVideoTexture: vi.fn(() => ({ label: 'stale-live-frame' })),
+    };
+    const scrubbingCache = {
+      getLastPresentedTime: vi.fn(() => 24.92),
+      getLastPresentedOwner: vi.fn(() => 'clip-playback-stop-live'),
+      getLastFrame: vi.fn(() => null),
+      getLastFrameNearTime: vi.fn(() => null),
+      getCachedFrameEntry: vi.fn(() => null),
+      getNearestCachedFrameEntry: vi.fn(() => null),
+      getLastCaptureTime: vi.fn(() => 0),
+      captureVideoFrame: vi.fn(),
+      setLastCaptureTime: vi.fn(),
+      cacheFrameAtTime: vi.fn(),
+      captureVideoFrameIfCloser: vi.fn(),
+      preloadAroundTime: vi.fn(),
+    };
+
+    const collector = new LayerCollector();
+    const result = collector.collect([{
+      id: 'layer-playback-stop-live',
+      sourceClipId: 'clip-playback-stop-live',
+      name: 'Video',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      effects: [],
+      position: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      source: {
+        type: 'video',
+        mediaTime: 25,
+        videoElement: video,
+      },
+    } as unknown as Layer], {
+      textureManager: textureManager as unknown as TextureManager,
+      scrubbingCache: scrubbingCache as unknown as ScrubbingCache,
+      getLastVideoTime: () => undefined,
+      setLastVideoTime: () => {},
+      isExporting: false,
+      isPlaying: false,
+    });
+
+    expect(result).toHaveLength(0);
+    expect(textureManager.importVideoTexture).not.toHaveBeenCalled();
+    expect(scrubbingCache.captureVideoFrame).not.toHaveBeenCalled();
+    expect(scrubbingCache.cacheFrameAtTime).not.toHaveBeenCalled();
   });
 
   it('keeps a short same-clip hold window before returning to live HTML imports', () => {

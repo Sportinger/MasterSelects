@@ -1,7 +1,13 @@
 // Effect Registry System
 // Auto-discovers and registers all effects from category folders
 
-import type { EffectDefinition, EffectCategory } from './types';
+import {
+  isFullscreenEffectDefinition,
+  isParticleRenderEffectDefinition,
+  type EffectDefinition,
+  type EffectCategory,
+  type FullscreenEffectDefinition,
+} from './types';
 import { Logger } from '../services/logger';
 export * from './types';
 
@@ -48,12 +54,21 @@ function registerEffects(effects: Record<string, unknown>) {
  * Type guard to check if an object is an EffectDefinition
  */
 function isEffectDefinition(obj: unknown): obj is EffectDefinition {
-  return (
+  if (
     typeof obj === 'object' &&
     obj !== null &&
     'id' in obj &&
     'name' in obj &&
     'category' in obj &&
+    'params' in obj
+  ) {
+    return isFullscreenEffectDefinitionCandidate(obj) || isParticleRenderEffectDefinition(obj as EffectDefinition);
+  }
+  return false;
+}
+
+function isFullscreenEffectDefinitionCandidate(obj: object): obj is FullscreenEffectDefinition {
+  return (
     'shader' in obj &&
     'entryPoint' in obj &&
     'params' in obj &&
@@ -146,7 +161,7 @@ export function effectStackNeedsContinuousRender(
  */
 export function getEffectConfig(id: string): { entryPoint: string; needsUniform: boolean; uniformSize: number } | undefined {
   const effect = EFFECT_REGISTRY.get(id);
-  if (!effect) return undefined;
+  if (!isFullscreenEffectDefinition(effect)) return undefined;
 
   return {
     entryPoint: effect.entryPoint,

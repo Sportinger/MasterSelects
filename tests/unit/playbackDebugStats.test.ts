@@ -309,6 +309,7 @@ describe('playback debug stats', () => {
       pathCounts: {
         'worker-gpu-only:gpu-test-pattern': 1,
         'worker-gpu-only:video-frame': 1,
+        'worker-gpu-only:video-frame-compositor': 0,
         'worker-gpu-only:solid': 1,
         'worker-gpu-only:image': 1,
         'worker-gpu-only:text': 1,

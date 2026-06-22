@@ -17,6 +17,11 @@ import {
   getSafeLastFrameFallback,
   scheduleBackgroundScrubPreload,
 } from './htmlVideoFrameCache';
+import {
+  filterPausedHtmlTargetFrame,
+  isPausedHtmlTargetMediaTimeUsable,
+  shouldGuardPausedHtmlTargetFrames,
+} from './htmlVideoPausedFrameGuard';
 import { collectExportHtmlVideo } from './htmlVideoExportCollector';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
 
@@ -36,8 +41,14 @@ export function collectReadyHtmlVideo(
 
   const isDragging = useTimelineStore.getState().isDraggingPlayhead;
   scheduleBackgroundScrubPreload(video, targetTime, deps, isDragging);
-  const isSettling = scrubSettleState.isPending(layer.sourceClipId);
+  const settle = scrubSettleState.get(layer.sourceClipId);
+  const isSettling = !!settle;
   const isPausedSettle = !deps.isPlaying && !isDragging && isSettling;
+  const shouldGuardPausedTargetFrames = shouldGuardPausedHtmlTargetFrames({
+    isPlaying: deps.isPlaying,
+    isDragging,
+    isExporting: deps.isExporting,
+  });
   const lastPresentedTime = deps.scrubbingCache?.getLastPresentedTime(video);
   const lastPresentedOwner = deps.scrubbingCache?.getLastPresentedOwner(video);
   const hasPresentedOwnerMismatch =
@@ -58,19 +69,35 @@ export function collectReadyHtmlVideo(
       : displayedTime;
   const hasFreshPresentedFrame =
     hasConfirmedPresentedFrame &&
-    Math.abs(lastPresentedTime - targetTime) <= 0.12;
+    (shouldGuardPausedTargetFrames
+      ? isPausedHtmlTargetMediaTimeUsable(lastPresentedTime, targetTime)
+      : Math.abs(lastPresentedTime - targetTime) <= 0.12);
   const presentedDriftSeconds = hasConfirmedPresentedFrame
     ? Math.abs(lastPresentedTime - targetTime)
     : undefined;
   const currentTimeDriftSeconds = Math.abs(currentTime - targetTime);
+  const hasStablePausedHtmlFrame =
+    !deps.isPlaying &&
+    !isDragging &&
+    !isSettling &&
+    !video.seeking &&
+    Number.isFinite(currentTime) &&
+    (shouldGuardPausedTargetFrames
+      ? isPausedHtmlTargetMediaTimeUsable(currentTime, targetTime)
+      : currentTimeDriftSeconds <= 0.12);
   const awaitingPausedTargetFrame =
     hasPresentedOwnerMismatch ||
     !deps.isPlaying &&
     !isDragging &&
+    !hasStablePausedHtmlFrame &&
     (!isSettling &&
       (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
   const cacheSearchDistanceFrames = isDragging ? 10 : 6;
-  const lastSameClipFrame = getDragHoldFrame(layer, video, deps);
+  const lastSameClipFrame = filterPausedHtmlTargetFrame(
+    getDragHoldFrame(layer, video, deps),
+    targetTime,
+    shouldGuardPausedTargetFrames
+  );
   const dragHoldFrame = isDragging
     ? isFrameNearTarget(
       lastSameClipFrame,
@@ -95,7 +122,12 @@ export function collectReadyHtmlVideo(
         ? lastSameClipFrame
         : null
     : null;
-  const safeFallback = getSafeLastFrameFallback(layer, video, deps, targetTime) ?? dragHoldFrame;
+  const safeFallback =
+    filterPausedHtmlTargetFrame(
+      getSafeLastFrameFallback(layer, video, deps, targetTime),
+      targetTime,
+      shouldGuardPausedTargetFrames
+    ) ?? dragHoldFrame;
   const shouldPreferStableHold = controller.shouldPreferHtmlHold(layerReuseKey, {
     hasHoldFrame: !!safeFallback || !!emergencyHoldFrame || !!sameClipHoldFrame,
     isDragging,
@@ -127,8 +159,15 @@ export function collectReadyHtmlVideo(
   if ((video.seeking || awaitingPausedTargetFrame) && !deps.isExporting) {
     const cachedFrame =
       deps.scrubbingCache?.getCachedFrameEntry(video.src, targetTime) ??
-      deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames);
-    if (cachedFrame) {
+      (shouldGuardPausedTargetFrames
+        ? null
+        : deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, cacheSearchDistanceFrames));
+    const pausedTargetCachedFrame = filterPausedHtmlTargetFrame(
+      cachedFrame,
+      targetTime,
+      shouldGuardPausedTargetFrames
+    );
+    if (pausedTargetCachedFrame) {
       controller.armHtmlHold(layerReuseKey);
       controller.traceScrubPath(layer, 'scrub-cache', video, targetTime, lastPresentedTime);
       controller.setDecoder('HTMLVideo(scrub-cache)');
@@ -136,10 +175,10 @@ export function collectReadyHtmlVideo(
         layer,
         isVideo: false,
         externalTexture: null,
-        textureView: cachedFrame.view,
+        textureView: pausedTargetCachedFrame.view,
         sourceWidth: video.videoWidth,
         sourceHeight: video.videoHeight,
-        displayedMediaTime: cachedFrame.mediaTime,
+        displayedMediaTime: pausedTargetCachedFrame.mediaTime,
         targetMediaTime: targetTime,
         previewPath: 'scrub-cache',
       };
@@ -197,7 +236,7 @@ export function collectReadyHtmlVideo(
   if (!controller.isVideoGpuReady(video) && !deps.isExporting) {
     if (!video.paused && !video.seeking) {
       controller.markVideoGpuReady(video);
-    } else if (!deps.isPlaying) {
+    } else if (!deps.isPlaying && !hasStablePausedHtmlFrame) {
       if (safeFallback) {
         controller.armHtmlHold(layerReuseKey);
         controller.traceScrubPath(layer, 'gpu-cached', video, targetTime, lastPresentedTime);
@@ -226,7 +265,8 @@ export function collectReadyHtmlVideo(
       deps.scrubbingCache,
       targetTime,
       layer.sourceClipId,
-      captureOwnerId
+      captureOwnerId,
+      hasStablePausedHtmlFrame
     );
     if (copiedFrame) {
       controller.clearHtmlHold(layerReuseKey);

@@ -18,7 +18,11 @@ import {
   getEffectConfig,
   effectStackNeedsContinuousRender,
 } from '../../src/effects/index';
-import { CATEGORY_INFO } from '../../src/effects/types';
+import {
+  CATEGORY_INFO,
+  isFullscreenEffectDefinition,
+  isParticleRenderEffectDefinition,
+} from '../../src/effects/types';
 import type { EffectCategory } from '../../src/effects/types';
 
 // ---- Category registration -------------------------------------------------
@@ -157,6 +161,7 @@ describe('Expected effects per category', () => {
 
   const expectedStylizeEffects = [
     'vignette', 'grain', 'sharpen', 'posterize', 'glow', 'edge-detect', 'scanlines', 'threshold', 'acuarela', 'rom1', 'voxel-relief',
+    'pixel-particle-disintegrate',
   ];
 
   it('should register all color effects', () => {
@@ -217,8 +222,8 @@ describe('Expected effects per category', () => {
     }
   });
 
-  it('should have at least 32 effects total', () => {
-    expect(getAllEffects().length).toBeGreaterThanOrEqual(32);
+  it('should have at least 34 effects total', () => {
+    expect(getAllEffects().length).toBeGreaterThanOrEqual(34);
   });
 
   it('expected effect counts per category should match', () => {
@@ -247,7 +252,7 @@ describe('Expected effects per category', () => {
 // ---- Effect structure validation -------------------------------------------
 
 describe('Effect required properties', () => {
-  it('every effect should have id, name, category, shader, entryPoint, params, packUniforms', () => {
+  it('every effect should have id, name, category, and params', () => {
     const allEffects = getAllEffects();
     expect(allEffects.length).toBeGreaterThan(0);
 
@@ -260,28 +265,43 @@ describe('Effect required properties', () => {
 
       expect(typeof effect.category).toBe('string');
 
+      expect(typeof effect.params).toBe('object');
+      expect(effect.params).not.toBeNull();
+    }
+  });
+
+  it('fullscreen effects should have shader, entryPoint, params, and packUniforms', () => {
+    const fullscreenEffects = getAllEffects().filter(isFullscreenEffectDefinition);
+    expect(fullscreenEffects.length).toBeGreaterThan(0);
+
+    for (const effect of fullscreenEffects) {
       expect(typeof effect.shader).toBe('string');
       expect(effect.shader.length).toBeGreaterThan(0);
 
       expect(typeof effect.entryPoint).toBe('string');
       expect(effect.entryPoint.length).toBeGreaterThan(0);
 
-      expect(typeof effect.params).toBe('object');
-      expect(effect.params).not.toBeNull();
-
       expect(typeof effect.packUniforms).toBe('function');
     }
   });
 
+  it('particle render effects should not need fullscreen shader contract fields', () => {
+    const particleEffect = getEffect('pixel-particle-disintegrate');
+    expect(particleEffect).toBeDefined();
+    expect(isParticleRenderEffectDefinition(particleEffect)).toBe(true);
+    expect(isFullscreenEffectDefinition(particleEffect)).toBe(false);
+    expect(getEffectConfig('pixel-particle-disintegrate')).toBeUndefined();
+  });
+
   it('every effect should have a non-negative uniformSize', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       expect(typeof effect.uniformSize).toBe('number');
       expect(effect.uniformSize).toBeGreaterThanOrEqual(0);
     }
   });
 
   it('every effect uniformSize should be 16-byte aligned', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       expect(effect.uniformSize % 16).toBe(0);
     }
   });
@@ -300,7 +320,7 @@ describe('Effect required properties', () => {
   });
 
   it('effects with uniformSize 0 should have packUniforms returning null', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       if (effect.uniformSize === 0) {
         const defaults = getDefaultParams(effect.id);
         const result = effect.packUniforms(defaults, 1920, 1080);
@@ -310,7 +330,7 @@ describe('Effect required properties', () => {
   });
 
   it('effects with uniformSize > 0 should have packUniforms returning Float32Array', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       if (effect.uniformSize > 0) {
         const defaults = getDefaultParams(effect.id);
         const result = effect.packUniforms(defaults, 1920, 1080);
@@ -322,6 +342,8 @@ describe('Effect required properties', () => {
   it('invert effect should have uniformSize 0 and no params', () => {
     const invert = getEffect('invert')!;
     expect(invert).toBeDefined();
+    expect(isFullscreenEffectDefinition(invert)).toBe(true);
+    if (!isFullscreenEffectDefinition(invert)) return;
     expect(invert.uniformSize).toBe(0);
     expect(Object.keys(invert.params)).toHaveLength(0);
   });
@@ -343,7 +365,7 @@ describe('No duplicate effect IDs', () => {
   });
 
   it('should have unique entry points across all effects', () => {
-    const allEffects = getAllEffects();
+    const allEffects = getAllEffects().filter(isFullscreenEffectDefinition);
     const entryPoints = allEffects.map(e => e.entryPoint);
     const uniqueEntryPoints = new Set(entryPoints);
     expect(uniqueEntryPoints.size).toBe(entryPoints.length);
@@ -642,7 +664,7 @@ describe('Registry helper functions', () => {
   });
 
   it('getEffectConfig entryPoint should match the effect definition', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       const config = getEffectConfig(effect.id);
       expect(config).toBeDefined();
       expect(config!.entryPoint).toBe(effect.entryPoint);
@@ -669,6 +691,8 @@ describe('Registry helper functions', () => {
 describe('packUniforms function', () => {
   it('should return Float32Array for brightness with default params', () => {
     const effect = getEffect('brightness')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const defaults = getDefaultParams('brightness');
     const uniforms = effect.packUniforms(defaults, 1920, 1080);
 
@@ -678,6 +702,8 @@ describe('packUniforms function', () => {
 
   it('should return Float32Array for gaussian-blur with custom params', () => {
     const effect = getEffect('gaussian-blur')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms({ radius: 20, samples: 10 }, 1920, 1080);
 
     expect(uniforms).toBeInstanceOf(Float32Array);
@@ -686,7 +712,7 @@ describe('packUniforms function', () => {
   });
 
   it('every effect packUniforms should not throw with default params', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       const defaults = getDefaultParams(effect.id);
       expect(() => {
         effect.packUniforms(defaults, 1920, 1080);
@@ -695,7 +721,7 @@ describe('packUniforms function', () => {
   });
 
   it('every effect packUniforms should return Float32Array or null', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       const defaults = getDefaultParams(effect.id);
       const result = effect.packUniforms(defaults, 1920, 1080);
       expect(result === null || result instanceof Float32Array).toBe(true);
@@ -703,7 +729,7 @@ describe('packUniforms function', () => {
   });
 
   it('packUniforms Float32Array byte size should not exceed uniformSize', () => {
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       const defaults = getDefaultParams(effect.id);
       const result = effect.packUniforms(defaults, 1920, 1080);
       if (result !== null) {
@@ -716,12 +742,16 @@ describe('packUniforms function', () => {
 
   it('invert packUniforms should return null', () => {
     const invert = getEffect('invert')!;
+    expect(isFullscreenEffectDefinition(invert)).toBe(true);
+    if (!isFullscreenEffectDefinition(invert)) return;
     const result = invert.packUniforms({}, 1920, 1080);
     expect(result).toBeNull();
   });
 
   it('brightness packUniforms should encode amount as first float', () => {
     const effect = getEffect('brightness')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms({ amount: 0.5 }, 1920, 1080);
     expect(uniforms).toBeInstanceOf(Float32Array);
     expect(uniforms![0]).toBe(0.5);
@@ -729,6 +759,8 @@ describe('packUniforms function', () => {
 
   it('chroma-key packUniforms should encode green screen correctly', () => {
     const effect = getEffect('chroma-key')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms(
       { keyColor: 'green', tolerance: 0.2, softness: 0.1, spillSuppression: 0.5 },
       1920, 1080,
@@ -743,6 +775,8 @@ describe('packUniforms function', () => {
 
   it('chroma-key packUniforms should encode blue screen correctly', () => {
     const effect = getEffect('chroma-key')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms(
       { keyColor: 'blue', tolerance: 0.3, softness: 0.15, spillSuppression: 0.6 },
       1920, 1080,
@@ -756,6 +790,8 @@ describe('packUniforms function', () => {
 
   it('mirror packUniforms should encode boolean params as 0/1 floats', () => {
     const effect = getEffect('mirror')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms({ horizontal: true, vertical: false }, 1920, 1080);
     expect(uniforms).toBeInstanceOf(Float32Array);
     expect(uniforms![0]).toBe(1); // horizontal = true
@@ -771,7 +807,7 @@ describe('packUniforms function', () => {
       [1, 1],
     ];
 
-    for (const effect of getAllEffects()) {
+    for (const effect of getAllEffects().filter(isFullscreenEffectDefinition)) {
       const defaults = getDefaultParams(effect.id);
       for (const [w, h] of resolutions) {
         expect(() => {
@@ -783,6 +819,8 @@ describe('packUniforms function', () => {
 
   it('gaussian-blur packUniforms should include width and height', () => {
     const effect = getEffect('gaussian-blur')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms({ radius: 10, samples: 5 }, 1920, 1080);
     expect(uniforms).toBeInstanceOf(Float32Array);
     expect(uniforms![1]).toBe(1920); // width
@@ -791,6 +829,8 @@ describe('packUniforms function', () => {
 
   it('vignette packUniforms should encode all four parameters', () => {
     const effect = getEffect('vignette')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms(
       { amount: 0.5, size: 0.5, softness: 0.5, roundness: 1 },
       1920, 1080,
@@ -804,6 +844,8 @@ describe('packUniforms function', () => {
 
   it('twirl packUniforms should encode amount, radius, centerX, centerY', () => {
     const effect = getEffect('twirl')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms(
       { amount: 2, radius: 0.8, centerX: 0.3, centerY: 0.7 },
       1920, 1080,
@@ -817,6 +859,8 @@ describe('packUniforms function', () => {
 
   it('levels packUniforms should encode all five parameters', () => {
     const effect = getEffect('levels')!;
+    expect(isFullscreenEffectDefinition(effect)).toBe(true);
+    if (!isFullscreenEffectDefinition(effect)) return;
     const uniforms = effect.packUniforms(
       { inputBlack: 0.1, inputWhite: 0.9, gamma: 1.5, outputBlack: 0, outputWhite: 1 },
       1920, 1080,

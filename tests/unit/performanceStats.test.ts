@@ -21,6 +21,18 @@ describe('PerformanceStats', () => {
     expect(snapshot.fps).toBe(0);
   });
 
+  it('uses the configured visual target fps for stats and drop detection', () => {
+    const stats = new PerformanceStats();
+    stats.setTargetFps(30);
+    stats.recordRafGap(33);
+    stats.resetPerSecondCounters();
+
+    const snapshot = stats.getStats(false);
+    expect(snapshot.targetFps).toBe(30);
+    expect(snapshot.fps).toBe(30);
+    expect(snapshot.drops.lastSecond).toBe(0);
+  });
+
   it('does not report stale per-second drops while idle', () => {
     const stats = new PerformanceStats();
     stats.recordRafGap(100);

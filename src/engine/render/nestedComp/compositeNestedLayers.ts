@@ -3,7 +3,11 @@ import type { ColorPipeline } from '../../color/ColorPipeline';
 import type { LayerRenderData } from '../../core/types';
 import type { CompositorPipeline } from '../../pipeline/CompositorPipeline';
 import type { MaskTextureManager } from '../../texture/MaskTextureManager';
+import { getPixelParticleDisintegrateRenderer } from '../../particles/PixelParticleDisintegrateRenderer';
 import { splitLayerEffects } from '../layerEffectStack';
+import { Logger } from '../../../services/logger';
+
+const log = Logger.create('NestedCompositor');
 
 interface TexturePairTextures {
   pingTexture: GPUTexture;
@@ -12,6 +16,7 @@ interface TexturePairTextures {
 
 interface CompositeNestedLayersParams {
   layerData: LayerRenderData[];
+  device: GPUDevice;
   compositionId: string;
   width: number;
   height: number;
@@ -28,11 +33,14 @@ interface CompositeNestedLayersParams {
   nestedPongView: GPUTextureView;
   effectTempView: GPUTextureView;
   effectTempView2: GPUTextureView;
+  motionTime?: number;
+  particleQuality?: 'preview' | 'export';
 }
 
 export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUTexture {
   const {
     layerData,
+    device,
     compositionId,
     width,
     height,
@@ -49,6 +57,8 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
     nestedPongView,
     effectTempView,
     effectTempView2,
+    motionTime,
+    particleQuality = 'preview',
   } = params;
 
   let readView = nestedPingView;
@@ -73,7 +83,18 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
     const maskInfo = maskTextureManager.getMaskInfo(maskLookupId);
     const hasMask = maskInfo.hasMask;
     const maskTextureView = maskInfo.view;
-    const { inlineEffects, complexEffects } = splitLayerEffects(layer.effects, skipEffects);
+    const {
+      inlineEffects,
+      complexEffects,
+      renderEffects,
+      unsupportedAfterRenderEffect,
+    } = splitLayerEffects(layer.effects, skipEffects);
+    if (unsupportedAfterRenderEffect?.length) {
+      log.warn('Ignoring effects after terminal render effect', {
+        layerId: layer.id,
+        effects: unsupportedAfterRenderEffect.map((effect) => effect.type),
+      });
+    }
 
     compositorPipeline.updateLayerUniforms(
       layer,
@@ -89,7 +110,10 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
     let useExternalTexture = data.isVideo && !!data.externalTexture;
 
     const hasColorCorrection = !!colorPipeline && !skipEffects && !!layer.colorCorrection?.enabled;
-    const needsSourcePreprocess = hasColorCorrection || !!(complexEffects && complexEffects.length > 0);
+    const needsSourcePreprocess =
+      hasColorCorrection ||
+      !!(complexEffects && complexEffects.length > 0) ||
+      !!(renderEffects && renderEffects.length > 0);
 
     if (needsSourcePreprocess) {
       let copied = false;
@@ -161,6 +185,38 @@ export function compositeNestedLayers(params: CompositeNestedLayersParams): GPUT
               effectTexturePair.pongTexture
             );
             sourceTextureView = effectResult.finalView;
+          }
+
+          if (renderEffects && renderEffects.length > 0) {
+            const renderEffect = renderEffects[0];
+            const particleAccumulation = sourceTextureView === effectTempView
+              ? effectTempView2
+              : effectTempView;
+            const particleOutput = particleAccumulation === effectTempView
+              ? effectTempView2
+              : effectTempView;
+            try {
+              const renderer = getPixelParticleDisintegrateRenderer(device);
+              renderer.render({
+                commandEncoder,
+                sampler,
+                sourceView: sourceTextureView,
+                accumulationView: particleAccumulation,
+                outputView: particleOutput,
+                outputWidth: width,
+                outputHeight: height,
+                effect: renderEffect,
+                motionTime: layer.source?.mediaTime ?? motionTime ?? 0,
+                quality: particleQuality,
+              });
+              sourceTextureView = particleOutput;
+            } catch (error) {
+              log.warn('Nested particle render effect failed; falling back to source texture', {
+                layerId: layer.id,
+                effectType: renderEffect.type,
+                error,
+              });
+            }
           }
         }
       }

@@ -146,6 +146,19 @@ describe('AI Tool Policy Registry', () => {
     }
   });
 
+  it('pixel particle QA runner is limited to dev/test callers', () => {
+    const policy = getToolPolicy('runPixelParticleDisintegrateQa');
+    expect(policy).toBeDefined();
+    expect(policy!.readOnly).toBe(false);
+    expect(policy!.riskLevel).toBe('medium');
+    expect(policy!.requiresConfirmation).toBe(false);
+    expect(checkToolAccess('runPixelParticleDisintegrateQa', 'devBridge').allowed).toBe(true);
+    expect(checkToolAccess('runPixelParticleDisintegrateQa', 'console').allowed).toBe(true);
+    expect(checkToolAccess('runPixelParticleDisintegrateQa', 'internal').allowed).toBe(true);
+    expect(checkToolAccess('runPixelParticleDisintegrateQa', 'chat').allowed).toBe(false);
+    expect(checkToolAccess('runPixelParticleDisintegrateQa', 'nativeHelper').allowed).toBe(false);
+  });
+
   it('render host mode control is limited to dev/test callers', () => {
     const policy = getToolPolicy('setRenderHostMode');
     expect(policy).toBeDefined();

@@ -5,7 +5,11 @@ import type { CompositorPipeline } from '../pipeline/CompositorPipeline';
 import type { EffectsPipeline } from '../../effects/EffectsPipeline';
 import type { ColorPipeline } from '../color/ColorPipeline';
 import type { MaskTextureManager } from '../texture/MaskTextureManager';
+import { getPixelParticleDisintegrateRenderer } from '../particles/PixelParticleDisintegrateRenderer';
 import { splitLayerEffects } from './layerEffectStack';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('Compositor');
 
 export interface CompositorState {
   device: GPUDevice;
@@ -20,6 +24,8 @@ export interface CompositorState {
   effectTempView?: GPUTextureView;
   effectTempTexture2?: GPUTexture;
   effectTempView2?: GPUTextureView;
+  motionTime?: number;
+  particleQuality?: 'preview' | 'export';
 }
 
 export class Compositor {
@@ -81,7 +87,18 @@ export class Compositor {
 
       this.maskTextureManager.logMaskState(maskLookupId, hasMask);
 
-      const { inlineEffects, complexEffects } = splitLayerEffects(layer.effects, state.skipEffects);
+      const {
+        inlineEffects,
+        complexEffects,
+        renderEffects,
+        unsupportedAfterRenderEffect,
+      } = splitLayerEffects(layer.effects, state.skipEffects);
+      if (unsupportedAfterRenderEffect?.length) {
+        log.warn('Ignoring effects after terminal render effect', {
+          layerId: layer.id,
+          effects: unsupportedAfterRenderEffect.map((effect) => effect.type),
+        });
+      }
 
       // Update uniforms (includes inline effect params)
       this.compositorPipeline.updateLayerUniforms(layer, sourceAspect, outputAspect, hasMask, uniformBuffer, inlineEffects);
@@ -96,7 +113,9 @@ export class Compositor {
 
       const hasColorCorrection = !!this.colorPipeline && !state.skipEffects && !!layer.colorCorrection?.enabled;
       const needsSourcePreprocess =
-        (hasColorCorrection || !!(complexEffects && complexEffects.length > 0)) &&
+        (hasColorCorrection ||
+          !!(complexEffects && complexEffects.length > 0) ||
+          !!(renderEffects && renderEffects.length > 0)) &&
         !!state.effectTempView &&
         !!state.effectTempView2;
 
@@ -172,6 +191,38 @@ export class Compositor {
               );
               sourceTextureView = effectResult.finalView;
             }
+
+            if (renderEffects && renderEffects.length > 0) {
+              const renderEffect = renderEffects[0];
+              const particleAccumulation = sourceTextureView === state.effectTempView
+                ? state.effectTempView2
+                : state.effectTempView;
+              const particleOutput = particleAccumulation === state.effectTempView
+                ? state.effectTempView2
+                : state.effectTempView;
+              try {
+                const renderer = getPixelParticleDisintegrateRenderer(state.device);
+                renderer.render({
+                  commandEncoder,
+                  sampler: state.sampler,
+                  sourceView: sourceTextureView,
+                  accumulationView: particleAccumulation,
+                  outputView: particleOutput,
+                  outputWidth: state.outputWidth,
+                  outputHeight: state.outputHeight,
+                  effect: renderEffect,
+                  motionTime: layer.source?.mediaTime ?? state.motionTime ?? 0,
+                  quality: state.particleQuality ?? 'preview',
+                });
+                sourceTextureView = particleOutput;
+              } catch (error) {
+                log.warn('Particle render effect failed; falling back to source texture', {
+                  layerId: layer.id,
+                  effectType: renderEffect.type,
+                  error,
+                });
+              }
+            }
           }
         }
       }
@@ -207,6 +258,7 @@ export class Compositor {
         const canCacheBindGroup =
           isStaticTextureSource &&
           !complexEffects &&
+          !renderEffects &&
           !hasColorCorrection &&
           !data.isDynamic;
         const cacheLayerId = canCacheBindGroup ? layer.id : undefined;

@@ -245,6 +245,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       getInterpolatedSpeed,
     } = get();
     set({ playbackWarmup: null });
+    const effectivePlaybackSpeed = typeof playbackSpeed === 'number' && Number.isFinite(playbackSpeed)
+      ? playbackSpeed
+      : 1;
 
     const playheadPosition = sanitizePlayheadPosition(
       get().playheadPosition,
@@ -255,7 +258,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       inPoint,
       outPoint,
       duration,
-      playbackSpeed,
+      effectivePlaybackSpeed,
     );
 
     if (playbackStartPosition !== playheadPosition) {
@@ -294,7 +297,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
     const reverseWorkerPrimeReady = primeReverseWorkerWebCodecsPlayback({
       clips: [...clipsAtPlayhead, ...transitionClipsAtPlayhead],
-      playbackSpeed,
+      playbackSpeed: effectivePlaybackSpeed,
       playheadPosition: playbackStartPosition,
       getSourceTimeForClip,
       getInterpolatedSpeed,
@@ -400,7 +403,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
     if (!wasPlaying && shouldWarmWorkerGpuForwardPlaybackStart({
       hasVideoAtPlaybackStart: hasWorkerGpuStartVideo,
-      playbackSpeed,
+      playbackSpeed: effectivePlaybackSpeed,
     })) {
       const warmupRequestId = createPlaybackWarmupRequestId();
       set({
@@ -415,14 +418,14 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       renderHostPort.requestNewFrameRender();
       await waitForWorkerGpuPlaybackStartFrame({
         targetTime: playbackStartPosition,
-        playbackSpeed,
+        playbackSpeed: effectivePlaybackSpeed,
       });
       if (get().playbackWarmup?.requestId !== warmupRequestId) {
         return;
       }
     }
 
-    startInternalPosition(playbackStartPosition, playbackSpeed);
+    startInternalPosition(playbackStartPosition, effectivePlaybackSpeed);
     set({ playbackWarmup: null, isPlaying: true });
     if (!wasPlaying) {
       renderHostPort.setIsPlaying(true);

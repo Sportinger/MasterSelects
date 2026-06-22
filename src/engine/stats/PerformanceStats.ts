@@ -36,6 +36,7 @@ export class PerformanceStats {
 
   // Layer count for stats display
   private lastLayerCount = 0;
+  private targetFps = 60;
 
   private readonly TARGET_FRAME_TIME = 16.67; // 60fps target
 
@@ -59,6 +60,12 @@ export class PerformanceStats {
     this.lastLayerCount = count;
   }
 
+  setTargetFps(targetFps: number): void {
+    this.targetFps = Number.isFinite(targetFps) && targetFps > 0
+      ? Math.max(1, Math.round(targetFps))
+      : 60;
+  }
+
   recordRafGap(gap: number, isScrubbing = false): void {
     this.detailedStats.rafGap = this.detailedStats.rafGap > 0
       ? this.detailedStats.rafGap * 0.9 + gap * 0.1
@@ -67,7 +74,7 @@ export class PerformanceStats {
 
     // During scrubbing, the render loop intentionally limits to ~30fps (33ms).
     // Use the scrub frame time as baseline so intentional skips aren't counted as drops.
-    const targetTime = isScrubbing ? 33 : this.TARGET_FRAME_TIME;
+    const targetTime = isScrubbing ? 33 : 1000 / Math.max(1, this.targetFps);
     const dropThreshold = targetTime * 2;
 
     if (gap > dropThreshold) {
@@ -156,7 +163,7 @@ export class PerformanceStats {
         reason: dropsLastSecond > 0 ? this.detailedStats.lastDropReason : 'none',
       },
       layerCount: this.lastLayerCount,
-      targetFps: 60,
+      targetFps: this.targetFps,
       decoder: this.detailedStats.decoder,
       webCodecsInfo: this.detailedStats.webCodecsInfo,
       audio: audioStatusTracker.getStatus(),

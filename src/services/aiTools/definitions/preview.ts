@@ -82,4 +82,59 @@ export const previewToolDefinitions: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'runPixelParticleDisintegrateQa',
+      description: 'Dev-bridge QA runner for pixel-particle-disintegrate. Creates a temporary synthetic image clip, applies the particle effect with progress keyframes, captures progress 0/0.5/1 frames, runs a short debug export across the fade, fingerprints preview/export frames, then restores the previous timeline by default.',
+      parameters: {
+        type: 'object',
+        properties: {
+          restoreTimelineAfterRun: {
+            type: 'boolean',
+            description: 'Whether to restore the previous timeline after the QA run. Defaults to true.',
+          },
+          captureMode: {
+            type: 'string',
+            enum: ['auto', 'gpu', 'dom'],
+            description: 'Capture mode for preview frames. Defaults to dom so QA compares the visible presented preview against export preview.',
+          },
+          sampleSize: {
+            type: 'number',
+            description: 'Fingerprint sample grid size. Defaults to 20 and clamps to 4..64.',
+          },
+          includePlaybackParity: {
+            type: 'boolean',
+            description: 'Whether to compare a paused playback frame with a direct seek to the same time. Defaults to true.',
+          },
+          durationSeconds: {
+            type: 'number',
+            description: 'Temporary QA clip/timeline duration. Defaults to 1.25.',
+          },
+          exportMode: {
+            type: 'string',
+            enum: ['fast', 'precise'],
+            description: 'Debug export mode. Defaults to fast.',
+          },
+          exportWidth: {
+            type: 'number',
+            description: 'Debug export width. Defaults to 320.',
+          },
+          exportHeight: {
+            type: 'number',
+            description: 'Debug export height. Defaults to 180.',
+          },
+          exportFps: {
+            type: 'number',
+            description: 'Debug export FPS. Defaults to 8.',
+          },
+          maxRuntimeMs: {
+            type: 'number',
+            description: 'Debug export timeout budget. Defaults to 45000ms.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ];

@@ -22,6 +22,9 @@ export interface ClipTimeInfo {
   clipLocalTime: number;
   sourceTime: number;
   clipTime: number;
+  visualClipLocalTime: number;
+  visualSourceTime: number;
+  visualClipTime: number;
   speed: number;
   absSpeed: number;
 }
@@ -57,6 +60,8 @@ export interface FrameContext {
   // Timing
   now: number;
   frameNumber: number;
+  frameRate?: number;
+  visualPlayheadPosition?: number;
 
   // Pre-computed track data (lazy, cached via getters)
   videoTracks: TimelineTrack[];

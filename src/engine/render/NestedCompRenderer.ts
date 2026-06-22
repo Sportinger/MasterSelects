@@ -199,7 +199,8 @@ export class NestedCompRenderer {
     sceneClips?: TimelineClip[],
     sceneTracks?: TimelineTrack[],
     depth: number = 0,
-    skipEffects = false
+    skipEffects = false,
+    particleQuality: 'preview' | 'export' = 'preview'
   ): GPUTextureView | null {
     if (depth >= MAX_NESTING_DEPTH) {
       log.warn('Max nesting depth reached in preRender', { compositionId, depth });
@@ -245,7 +246,14 @@ export class NestedCompRenderer {
 
     try {
       // Collect layer data (including sub-nested compositions)
-      const nestedLayerData = this.collectNestedLayerData(nestedLayers, commandEncoder, sampler, depth, skipEffects);
+      const nestedLayerData = this.collectNestedLayerData(
+        nestedLayers,
+        commandEncoder,
+        sampler,
+        depth,
+        skipEffects,
+        particleQuality,
+      );
 
       // Process 3D layers through the shared scene renderer.
       if (flags.use3DLayers) {
@@ -282,6 +290,7 @@ export class NestedCompRenderer {
 
       const sourceTexture = compositeNestedLayers({
         layerData: nestedLayerData,
+        device: this.device,
         compositionId,
         width,
         height,
@@ -298,6 +307,8 @@ export class NestedCompRenderer {
         nestedPongView,
         effectTempView,
         effectTempView2,
+        motionTime: currentTime,
+        particleQuality,
       });
       commandEncoder.copyTextureToTexture(
         { texture: sourceTexture },
@@ -343,7 +354,8 @@ export class NestedCompRenderer {
     commandEncoder?: GPUCommandEncoder,
     sampler?: GPUSampler,
     depth: number = 0,
-    skipEffects = false
+    skipEffects = false,
+    particleQuality: 'preview' | 'export' = 'preview'
   ): LayerRenderData[] {
     const result: LayerRenderData[] = [];
 
@@ -365,7 +377,8 @@ export class NestedCompRenderer {
           nc.sceneClips,
           nc.sceneTracks,
           depth + 1,
-          skipEffects
+          skipEffects,
+          particleQuality
         );
         if (subTextureView) {
           result.push({

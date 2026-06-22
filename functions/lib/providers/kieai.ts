@@ -117,6 +117,7 @@ export function normalizeHostedKlingParams(value: unknown): HostedVideoParams | 
   const duration = Number(value.duration);
   const multiShots = value.multiShots === true || value.multi_shots === true;
   const requestedProvider = asString(value.provider ?? value.providerId ?? value.provider_id);
+  const referenceMedia = normalizeHostedReferenceMedia(value.referenceMedia ?? value.reference_media);
 
   const normalizedDuration = Math.max(3, Math.min(15, Math.floor(duration)));
   const multiPrompt = multiShots
@@ -149,6 +150,7 @@ export function normalizeHostedKlingParams(value: unknown): HostedVideoParams | 
     multiShots,
     prompt,
     provider: 'kling-3.0',
+    referenceMedia,
     sound: multiShots ? true : value.sound === true,
     startImageUrl: typeof value.startImageUrl === 'string' && value.startImageUrl.trim() ? value.startImageUrl.trim() : undefined,
   };

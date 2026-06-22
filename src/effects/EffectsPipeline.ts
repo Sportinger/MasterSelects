@@ -1,7 +1,10 @@
 // Effects Pipeline - GPU effect processing using the modular effect registry
 
 import { EFFECT_REGISTRY, getEffect } from './index';
-import type { EffectDefinition } from './types';
+import {
+  isFullscreenEffectDefinition,
+  type FullscreenEffectDefinition,
+} from './types';
 import commonShader from './_shared/common.wgsl?raw';
 import { Logger } from '../services/logger';
 
@@ -60,7 +63,7 @@ export class EffectsPipeline {
 
     for (const [id, effect] of EFFECT_REGISTRY) {
       // Skip effects handled inline in the composite shader
-      if (INLINE_EFFECT_IDS.has(id)) continue;
+      if (INLINE_EFFECT_IDS.has(id) || !isFullscreenEffectDefinition(effect)) continue;
       this.createEffectPipeline(id, effect);
     }
 
@@ -71,7 +74,7 @@ export class EffectsPipeline {
   /**
    * Create GPU pipeline for a single effect
    */
-  private createEffectPipeline(id: string, effect: EffectDefinition): void {
+  private createEffectPipeline(id: string, effect: FullscreenEffectDefinition): void {
     try {
       // Combine common shader with effect shader
       const shaderCode = `${commonShader}\n${effect.shader}`;
@@ -135,7 +138,7 @@ export class EffectsPipeline {
     }
   }
 
-  private getPipelineSignature(effect: EffectDefinition): string {
+  private getPipelineSignature(effect: FullscreenEffectDefinition): string {
     return [
       effect.entryPoint,
       effect.uniformSize,
@@ -144,7 +147,7 @@ export class EffectsPipeline {
     ].join('\u0000');
   }
 
-  private ensureEffectPipeline(id: string, effect: EffectDefinition): boolean {
+  private ensureEffectPipeline(id: string, effect: FullscreenEffectDefinition): boolean {
     const signature = this.getPipelineSignature(effect);
     if (this.pipelines.has(id) && this.pipelineSignatures.get(id) === signature) {
       return false;
@@ -181,7 +184,7 @@ export class EffectsPipeline {
     outputHeight: number
   ): Float32Array | null {
     const definition = getEffect(effect.type);
-    if (!definition) return null;
+    if (!isFullscreenEffectDefinition(definition)) return null;
 
     return definition.packUniforms(toPrimitiveEffectParams(effect.params), outputWidth, outputHeight);
   }
@@ -307,13 +310,13 @@ export class EffectsPipeline {
 
     for (const effect of enabledEffects) {
       const definition = getEffect(effect.type);
-      const rebuiltPipeline = definition
+      const rebuiltPipeline = isFullscreenEffectDefinition(definition)
         ? this.ensureEffectPipeline(effect.type, definition)
         : false;
       const pipeline = this.pipelines.get(effect.type);
       const bindGroupLayout = this.bindGroupLayouts.get(effect.type);
 
-      if (!definition || !pipeline || !bindGroupLayout) {
+      if (!isFullscreenEffectDefinition(definition) || !pipeline || !bindGroupLayout) {
         log.warn(`No pipeline for effect type: ${effect.type}`);
         continue;
       }

@@ -4,7 +4,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 const CREDIT_CLAIM_HASH_CONTEXT = 'masterselects:credit-claim:v1:';
 const DEFAULT_DATABASE_ID = 'a2f0a1aa-6bd9-4c75-9406-d09b93635eac';
-const DEFAULT_URL_BASE = 'https://masterselects.app';
+const DEFAULT_URL_BASE = 'https://www.masterselects.com';
 const MAX_CLAIM_AMOUNT = 1_000_000;
 
 function usage() {

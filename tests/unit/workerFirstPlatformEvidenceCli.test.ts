@@ -527,7 +527,7 @@ describe('worker-first platform evidence CLI', () => {
         postSelectionSettleMs: 1000,
       });
       expect(report.readiness?.targetWaitedMs).toBeGreaterThanOrEqual(200);
-      expect(report.readiness?.postSelectionSettleWaitedMs).toBeGreaterThanOrEqual(250);
+      expect(report.readiness?.postSelectionSettleWaitedMs).toBeGreaterThanOrEqual(900);
     } finally {
       rmSync(outDir, { recursive: true, force: true });
     }

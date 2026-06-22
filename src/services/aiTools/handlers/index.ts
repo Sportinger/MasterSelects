@@ -56,6 +56,7 @@ import {
   handleGetCutPreviewQuad,
   handleGetFramesAtTimes,
 } from './preview';
+import { handleRunPixelParticleDisintegrateQa } from './pixelParticleDisintegrateQa';
 
 import {
   handleGetMediaItems,
@@ -96,6 +97,7 @@ import {
   handlePlay,
   handlePause,
   handleSimulateFrameKeypresses,
+  handleMonitorManualPause,
   handleSimulateScrub,
   handleSimulatePlayback,
   handleSimulatePlaybackPulses,
@@ -221,6 +223,8 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   captureFrame: handleCaptureFrame,
   getCutPreviewQuad: handleGetCutPreviewQuad,
   getFramesAtTimes: handleGetFramesAtTimes,
+  runPixelParticleDisintegrateQa: async (args: Record<string, unknown>) =>
+    handleRunPixelParticleDisintegrateQa(args),
   // Transform
   setTransform: handleSetTransform,
   // Effects
@@ -233,6 +237,7 @@ const timelineHandlers: Record<string, (args: Record<string, unknown>, store: Re
   // Playback & Control
   play: handlePlay,
   pause: handlePause,
+  monitorManualPause: handleMonitorManualPause,
   simulateFrameKeypresses: handleSimulateFrameKeypresses,
   simulateScrub: handleSimulateScrub,
   simulatePlayback: handleSimulatePlayback,

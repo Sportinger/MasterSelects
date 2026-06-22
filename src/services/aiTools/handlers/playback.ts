@@ -12,6 +12,7 @@ export {
   handleSimulateFrameKeypresses,
 } from './playback/keyboard';
 export {
+  handleMonitorManualPause,
   handleSimulatePlayback,
   handleSimulatePlaybackPulses,
   handleSimulatePlaybackPath,

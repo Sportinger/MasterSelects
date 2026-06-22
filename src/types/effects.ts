@@ -43,6 +43,7 @@ export type EffectType =
   | 'acuarela'
   | 'rom1'
   | 'voxel-relief'
+  | 'pixel-particle-disintegrate'
   // Audio effects
   | 'audio-eq'
   | 'audio-volume'
