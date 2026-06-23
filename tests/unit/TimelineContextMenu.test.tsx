@@ -44,6 +44,7 @@ function renderMenu(params: {
   removeClip?: ReturnType<typeof vi.fn>;
   splitClipAtPlayhead?: ReturnType<typeof vi.fn>;
   rippleDeleteSelection?: ReturnType<typeof vi.fn>;
+  deleteClipSelection?: ReturnType<typeof vi.fn>;
   createSubcompositionFromSelection?: ReturnType<typeof vi.fn>;
   copyClipEffects?: ReturnType<typeof vi.fn>;
   copyClipColor?: ReturnType<typeof vi.fn>;
@@ -58,6 +59,7 @@ function renderMenu(params: {
   const removeClip = params.removeClip ?? vi.fn();
   const splitClipAtPlayhead = params.splitClipAtPlayhead ?? vi.fn();
   const rippleDeleteSelection = params.rippleDeleteSelection ?? vi.fn();
+  const deleteClipSelection = params.deleteClipSelection ?? vi.fn();
   const createSubcompositionFromSelection = params.createSubcompositionFromSelection ?? vi.fn();
   const copyClipEffects = params.copyClipEffects ?? vi.fn();
   const copyClipColor = params.copyClipColor ?? vi.fn();
@@ -78,6 +80,7 @@ function renderMenu(params: {
       removeClip={removeClip}
       splitClipAtPlayhead={splitClipAtPlayhead}
       rippleDeleteSelection={rippleDeleteSelection}
+      deleteClipSelection={deleteClipSelection}
       deleteGapAtTime={deleteGapAtTime}
       toggleClipReverse={vi.fn()}
       unlinkGroup={vi.fn()}
@@ -110,6 +113,7 @@ function renderMenu(params: {
     removeClip,
     splitClipAtPlayhead,
     rippleDeleteSelection,
+    deleteClipSelection,
     createSubcompositionFromSelection,
     copyClipEffects,
     copyClipColor,
@@ -300,6 +304,7 @@ describe('TimelineContextMenu regenerate menu', () => {
     const removeClip = vi.fn();
     const splitClipAtPlayhead = vi.fn();
     const rippleDeleteSelection = vi.fn();
+    const deleteClipSelection = vi.fn();
     const createSubcompositionFromSelection = vi.fn();
     const copyClipEffects = vi.fn();
     const copyClipColor = vi.fn();
@@ -310,6 +315,7 @@ describe('TimelineContextMenu regenerate menu', () => {
       removeClip,
       splitClipAtPlayhead,
       rippleDeleteSelection,
+      deleteClipSelection,
       createSubcompositionFromSelection,
       copyClipEffects,
       copyClipColor,
@@ -328,6 +334,7 @@ describe('TimelineContextMenu regenerate menu', () => {
     expect(copyClipColor).not.toHaveBeenCalled();
     expect(splitClipAtPlayhead).not.toHaveBeenCalled();
     expect(rippleDeleteSelection).not.toHaveBeenCalled();
+    expect(deleteClipSelection).not.toHaveBeenCalled();
     expect(createSubcompositionFromSelection).not.toHaveBeenCalled();
     expect(removeClip).not.toHaveBeenCalled();
     expect(setContextMenu).not.toHaveBeenCalled();

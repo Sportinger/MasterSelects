@@ -21,6 +21,10 @@ export interface LayoutMutationActions {
   dockFloatingPanel: (floatingId: string, target: DropTarget) => void;
   detachPanelToBrowserWindow: (panelId: string, groupId: string) => BrowserWindowPanel | null;
   dockBrowserWindowPanel: (windowPanelId: string, target?: DropTarget) => void;
+  updateBrowserWindowPanelSize: (
+    windowPanelId: string,
+    size: { width: number; height: number; left?: number; top?: number },
+  ) => void;
   updateFloatingPosition: (floatingId: string, position: { x: number; y: number }) => void;
   updateFloatingSize: (floatingId: string, size: { width: number; height: number }) => void;
   bringToFront: (floatingId: string) => void;

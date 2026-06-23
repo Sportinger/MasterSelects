@@ -109,6 +109,7 @@ All docked panels can be:
 
 - `Undock to Window` opens a dock tab as a separate browser window
 - The detached browser window renders the selected panel through the main editor runtime, so edits and controls affect the main app state
+- Detached browser windows keep their last local position and size across refreshes
 - The detached browser window can return the panel to the main layout with `Dock back`
 
 ---
@@ -458,6 +459,7 @@ Multi Preview, scopes, and other panels are available from the View menu and can
 
 - The dock layout is persisted with Zustand and project state
 - Floating panels are restored across sessions
+- Browser window panels are restored from local dock state on refresh and stay connected when project layout hydration runs
 - Invalid panel types are cleaned up on load
 - Named layouts can be stored in the View menu and reused later
 - The active named layout can be overwritten directly with `Save to Current Layout`

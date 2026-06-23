@@ -592,6 +592,7 @@ describe('clip context menu model', () => {
     const actions = {
       splitClipAtPlayhead: vi.fn(),
       rippleDeleteSelection: vi.fn(),
+      deleteClipSelection: vi.fn(),
       deleteGapAtTime: vi.fn(),
       linkClips: vi.fn(),
       unlinkClips: vi.fn(),
@@ -627,11 +628,11 @@ describe('clip context menu model', () => {
       command: 'delete-clip',
       clip: clip('clip-a'),
       clipId: 'clip-a',
-      targetClipIds: ['clip-a'],
+      targetClipIds: ['clip-a', 'clip-b'],
       canExecute: true,
       actions,
     })).toBe(true);
-    expect(actions.removeClip).toHaveBeenCalledWith('clip-a');
+    expect(actions.deleteClipSelection).toHaveBeenCalledWith(['clip-a', 'clip-b']);
 
     expect(executeClipContextMenuTimelineCommand({
       command: 'toggle-reverse',
@@ -648,6 +649,7 @@ describe('clip context menu model', () => {
     const timelineActions = {
       splitClipAtPlayhead: vi.fn(),
       rippleDeleteSelection: vi.fn(),
+      deleteClipSelection: vi.fn(),
       deleteGapAtTime: vi.fn(),
       linkClips: vi.fn(),
       unlinkClips: vi.fn(),
@@ -741,6 +743,7 @@ describe('clip context menu model', () => {
     expect(clipboardActions.pasteClipEffects).not.toHaveBeenCalled();
     expect(timelineActions.splitClipAtPlayhead).not.toHaveBeenCalled();
     expect(timelineActions.rippleDeleteSelection).not.toHaveBeenCalled();
+    expect(timelineActions.deleteClipSelection).not.toHaveBeenCalled();
     expect(timelineActions.deleteGapAtTime).not.toHaveBeenCalled();
     expect(timelineActions.createSubcompositionFromSelection).not.toHaveBeenCalled();
     expect(timelineActions.removeClip).not.toHaveBeenCalled();

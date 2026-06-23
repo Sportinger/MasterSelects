@@ -184,7 +184,7 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
         set({ isPlaying: true, playheadPosition: playbackStartPosition });
       },
       pause: () => set({ isPlaying: false, playbackSpeed: 1 }),
-      stop: () => set({ isPlaying: false, playheadPosition: 0 }),
+      stop: () => set({ isPlaying: false, playheadPosition: 0, scrollX: 0 }),
       setZoom: (zoom: number) => set({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) }),
       toggleSnapping: () => set((state) => ({ snappingEnabled: !state.snappingEnabled })),
       setScrollX: (scrollX: number) => set({ scrollX: Math.max(0, scrollX) }),

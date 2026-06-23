@@ -445,8 +445,7 @@ export function executeClipContextMenuTimelineCommand(input: {
       input.actions.createSubcompositionFromSelection(input.clipId);
       return true;
     case 'delete-clip':
-      if (!input.clipId) return false;
-      input.actions.removeClip(input.clipId);
+      input.actions.deleteClipSelection([...input.targetClipIds]);
       return true;
   }
 }

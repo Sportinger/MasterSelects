@@ -284,6 +284,24 @@ export const createLayoutMutationActions: DockSliceCreator<LayoutMutationActions
     }));
   },
 
+  updateBrowserWindowPanelSize: (windowPanelId, size) => {
+    if (!Number.isFinite(size.width) || !Number.isFinite(size.height)) return;
+    const nextSize = {
+      width: Math.max(320, Math.round(size.width)),
+      height: Math.max(240, Math.round(size.height)),
+    };
+    const nextPosition = typeof size.left === 'number' && typeof size.top === 'number' && Number.isFinite(size.left) && Number.isFinite(size.top)
+      ? { left: Math.round(size.left), top: Math.round(size.top) }
+      : undefined;
+    set((state) => ({
+      browserWindowPanels: state.browserWindowPanels.map((windowPanel) =>
+        windowPanel.id === windowPanelId
+          ? { ...windowPanel, size: nextSize, position: nextPosition ?? windowPanel.position }
+          : windowPanel
+      ),
+    }));
+  },
+
   updateFloatingPosition: (floatingId, position) => {
     set((state) => ({
       layout: {

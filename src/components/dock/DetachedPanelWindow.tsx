@@ -9,18 +9,22 @@ interface DetachedPanelWindowProps {
   windowPanel: BrowserWindowPanel;
 }
 
-function getPopupFeatures(): string {
+function getDefaultPopupSize(): { width: number; height: number } {
+  return {
+    width: Math.min(1120, Math.max(760, Math.round(window.screen.availWidth * 0.56))),
+    height: Math.min(880, Math.max(540, Math.round(window.screen.availHeight * 0.72))),
+  };
+}
+
+function getPopupFeatures(savedBounds?: Pick<BrowserWindowPanel, 'position' | 'size'>): string {
   const screenWithOffset = window.screen as Screen & { availLeft?: number; availTop?: number };
-  const width = Math.min(1120, Math.max(760, Math.round(window.screen.availWidth * 0.56)));
-  const height = Math.min(880, Math.max(540, Math.round(window.screen.availHeight * 0.72)));
-  const left = Math.max(
-    0,
-    Number(screenWithOffset.availLeft ?? 0) + Math.round((window.screen.availWidth - width) / 2)
-  );
-  const top = Math.max(
-    0,
-    Number(screenWithOffset.availTop ?? 0) + Math.round((window.screen.availHeight - height) / 2)
-  );
+  const fallbackSize = getDefaultPopupSize();
+  const width = savedBounds?.size ? Math.max(320, Math.round(savedBounds.size.width)) : fallbackSize.width;
+  const height = savedBounds?.size ? Math.max(240, Math.round(savedBounds.size.height)) : fallbackSize.height;
+  const fallbackLeft = Number(screenWithOffset.availLeft ?? 0) + Math.round((window.screen.availWidth - width) / 2);
+  const fallbackTop = Number(screenWithOffset.availTop ?? 0) + Math.round((window.screen.availHeight - height) / 2);
+  const left = savedBounds?.position ? Math.round(savedBounds.position.left) : fallbackLeft;
+  const top = savedBounds?.position ? Math.round(savedBounds.position.top) : fallbackTop;
 
   return [
     'popup=yes',
@@ -75,11 +79,32 @@ function createWindowDocument(popup: Window, title: string): HTMLElement | null 
   return popup.document.getElementById('detached-panel-window-root');
 }
 
+function getWindowBounds(popup: Window): { width: number; height: number; left: number; top: number } | null {
+  if (popup.closed) return null;
+  const legacyWindow = popup as Window & { screenLeft?: number; screenTop?: number };
+  const width = Math.round(popup.outerWidth || popup.innerWidth || 0);
+  const height = Math.round(popup.outerHeight || popup.innerHeight || 0);
+  const left = Math.round(popup.screenX || legacyWindow.screenLeft || 0);
+  const top = Math.round(popup.screenY || legacyWindow.screenTop || 0);
+  if (width <= 0 || height <= 0) return null;
+  return { width, height, left, top };
+}
+
 export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
   const dockBrowserWindowPanel = useDockStore((state) => state.dockBrowserWindowPanel);
+  const updateBrowserWindowPanelSize = useDockStore((state) => state.updateBrowserWindowPanelSize);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const popupRef = useRef<Window | null>(null);
   const closingFromAppRef = useRef(false);
+  const mainUnloadingRef = useRef(false);
+  const initialBoundsRef = useRef<Pick<BrowserWindowPanel, 'position' | 'size'>>({
+    position: windowPanel.position,
+    size: windowPanel.size,
+  });
+  const lastBoundsRef = useRef<Pick<BrowserWindowPanel, 'position' | 'size'>>({
+    position: windowPanel.position,
+    size: windowPanel.size,
+  });
 
   const dockBack = useCallback(() => {
     closingFromAppRef.current = true;
@@ -88,7 +113,10 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
   }, [dockBrowserWindowPanel, windowPanel.id]);
 
   useEffect(() => {
-    const popup = window.open('', `masterselects_panel_${windowPanel.id}`, getPopupFeatures());
+    closingFromAppRef.current = false;
+    mainUnloadingRef.current = false;
+
+    const popup = window.open('', `masterselects_panel_${windowPanel.id}`, getPopupFeatures(initialBoundsRef.current));
     if (!popup) {
       dockBrowserWindowPanel(windowPanel.id);
       return undefined;
@@ -107,7 +135,11 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
       }
     };
     const handleMainUnload = () => {
+      const bounds = getWindowBounds(popup);
+      if (bounds) updateBrowserWindowPanelSize(windowPanel.id, bounds);
+      mainUnloadingRef.current = true;
       closingFromAppRef.current = true;
+      popup.removeEventListener('beforeunload', handlePopupUnload);
       popup.close();
     };
 
@@ -136,6 +168,26 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
         dockBrowserWindowPanel(windowPanel.id);
       }
     }, 500);
+    const sizePoll = window.setInterval(() => {
+      const bounds = getWindowBounds(popup);
+      if (!bounds) return;
+      const previousSize = lastBoundsRef.current.size;
+      const previousPosition = lastBoundsRef.current.position;
+      if (
+        !previousSize ||
+        !previousPosition ||
+        Math.abs(previousSize.width - bounds.width) > 2 ||
+        Math.abs(previousSize.height - bounds.height) > 2 ||
+        Math.abs(previousPosition.left - bounds.left) > 2 ||
+        Math.abs(previousPosition.top - bounds.top) > 2
+      ) {
+        lastBoundsRef.current = {
+          position: { left: bounds.left, top: bounds.top },
+          size: { width: bounds.width, height: bounds.height },
+        };
+        updateBrowserWindowPanelSize(windowPanel.id, bounds);
+      }
+    }, 1000);
 
     return () => {
       closingFromAppRef.current = true;
@@ -143,14 +195,14 @@ export function DetachedPanelWindow({ windowPanel }: DetachedPanelWindowProps) {
       styleObserver.disconnect();
       themeObserver.disconnect();
       window.clearInterval(closedPoll);
+      window.clearInterval(sizePoll);
       window.removeEventListener('beforeunload', handleMainUnload);
       popup.removeEventListener('beforeunload', handlePopupUnload);
-      if (!popup.closed) {
-        popup.close();
-      }
+      const bounds = getWindowBounds(popup);
+      if (bounds) updateBrowserWindowPanelSize(windowPanel.id, bounds);
       popupRef.current = null;
     };
-  }, [dockBrowserWindowPanel, windowPanel.id, windowPanel.panel.title]);
+  }, [dockBrowserWindowPanel, updateBrowserWindowPanelSize, windowPanel.id, windowPanel.panel.title]);
 
   if (!portalRoot) {
     return null;

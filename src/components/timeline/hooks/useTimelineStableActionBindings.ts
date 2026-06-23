@@ -31,6 +31,7 @@ export function useTimelineStableActionBindings() {
     copyClips: store.copyClips,
     copyKeyframes: store.copyKeyframes,
     deleteAllGaps: store.deleteAllGaps,
+    deleteClipSelection: store.deleteClipSelection,
     deleteGapAtTime: store.deleteGapAtTime,
     deselectAllKeyframes: store.deselectAllKeyframes,
     generateSpectrogramForClip: store.generateSpectrogramForClip,

@@ -612,6 +612,13 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     includeLinked: true,
   }, { source: 'ui', historyLabel: 'Ripple delete selection' }),
 
+  deleteClipSelection: (clipIds) => get().applyTimelineEditOperation({
+    id: `delete-clips:${Date.now()}`,
+    type: 'delete-clips',
+    clipIds: clipIds ?? [...get().selectedClipIds],
+    includeLinked: true,
+  }, { source: 'ui', historyLabel: 'Delete clips' }),
+
   deleteGapAtTime: (time, trackIds) => get().applyTimelineEditOperation({
     id: `delete-gap-at-time:${time}`,
     type: 'delete-gap-at-time',

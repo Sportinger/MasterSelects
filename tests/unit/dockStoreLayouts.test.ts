@@ -166,6 +166,10 @@ describe('dock store saved layouts', () => {
     expect(layout.floatingPanels).toEqual([]);
     expect(useDockStore.getState().browserWindowPanels).toEqual([windowPanel]);
 
+    useDockStore.getState().updateBrowserWindowPanelSize(windowPanel!.id, { width: 913.4, height: 601.8, left: 77.6, top: 44.2 });
+    expect(useDockStore.getState().browserWindowPanels[0]?.size).toEqual({ width: 913, height: 602 });
+    expect(useDockStore.getState().browserWindowPanels[0]?.position).toEqual({ left: 78, top: 44 });
+
     useDockStore.getState().dockBrowserWindowPanel(windowPanel!.id, {
       groupId: 'preview-group',
       position: 'center',
@@ -191,6 +195,19 @@ describe('dock store saved layouts', () => {
     const layout = useDockStore.getState().layout;
     const rightGroup = findTabGroup(layout.root, 'right-group');
     expect(panelTypes(rightGroup).filter((type) => type === 'export')).toHaveLength(1);
+  });
+
+  it('keeps browser-window panels open when hydrating a project layout', () => {
+    const projectLayout = JSON.parse(JSON.stringify(useDockStore.getState().layout)) as DockLayout;
+    const windowPanel = useDockStore.getState().detachPanelToBrowserWindow('export', 'right-group');
+
+    expect(windowPanel).not.toBeNull();
+
+    useDockStore.getState().setLayoutFromProject(projectLayout);
+
+    const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
+    expect(useDockStore.getState().browserWindowPanels).toEqual([windowPanel]);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'history']);
   });
 
   it('drops retired dock panel payload ids from restored project layouts', () => {

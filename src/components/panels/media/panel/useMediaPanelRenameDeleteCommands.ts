@@ -165,6 +165,18 @@ export function useMediaPanelRenameDeleteCommands({
   }, [selectedIds, startRename]);
 
   const deleteSelectedItems = useCallback(async (idsToDelete: string[], fileIdsToDelete: string[]) => {
+    const fileIdSet = new Set(fileIdsToDelete);
+    const compositionIds = new Set(compositions.map((item) => item.id));
+    const folderIds = new Set(folders.map((item) => item.id));
+    const textItemIds = new Set(textItems.map((item) => item.id));
+    const solidItemIds = new Set(solidItems.map((item) => item.id));
+    const meshItemIds = new Set(meshItems.map((item) => item.id));
+    const cameraItemIds = new Set(cameraItems.map((item) => item.id));
+    const splatEffectorItemIds = new Set(splatEffectorItems.map((item) => item.id));
+    const mathSceneItemIds = new Set(mathSceneItems.map((item) => item.id));
+    const motionShapeItemIds = new Set(motionShapeItems.map((item) => item.id));
+    const signalAssetIds = new Set(signalAssets.map((item) => item.id));
+
     if (fileIdsToDelete.length > 0) {
       const result = await deleteMediaFilesEverywhere(fileIdsToDelete);
       if (result.artifactFailures.length > 0) {
@@ -173,24 +185,25 @@ export function useMediaPanelRenameDeleteCommands({
     }
 
     idsToDelete.forEach(id => {
-      if (fileIdsToDelete.includes(id)) return;
-      if (compositions.find(c => c.id === id)) removeComposition(id);
-      else if (folders.find(f => f.id === id)) removeFolder(id);
-      else if (textItems.find(t => t.id === id)) removeTextItem(id);
-      else if (solidItems.find(s => s.id === id)) removeSolidItem(id);
-      else if (meshItems.find(m => m.id === id)) removeMeshItem(id);
-      else if (cameraItems.find(c => c.id === id)) removeCameraItem(id);
-      else if (splatEffectorItems.find(e => e.id === id)) removeSplatEffectorItem(id);
-      else if (mathSceneItems.find(m => m.id === id)) removeMathSceneItem(id);
-      else if (motionShapeItems.find(m => m.id === id)) removeMotionShapeItem(id);
-      else if (signalAssets.find(item => item.id === id)) removeSignalAsset(id);
+      if (fileIdSet.has(id)) return;
+      if (compositionIds.has(id)) removeComposition(id);
+      else if (folderIds.has(id)) removeFolder(id);
+      else if (textItemIds.has(id)) removeTextItem(id);
+      else if (solidItemIds.has(id)) removeSolidItem(id);
+      else if (meshItemIds.has(id)) removeMeshItem(id);
+      else if (cameraItemIds.has(id)) removeCameraItem(id);
+      else if (splatEffectorItemIds.has(id)) removeSplatEffectorItem(id);
+      else if (mathSceneItemIds.has(id)) removeMathSceneItem(id);
+      else if (motionShapeItemIds.has(id)) removeMotionShapeItem(id);
+      else if (signalAssetIds.has(id)) removeSignalAsset(id);
     });
     closeContextMenu();
   }, [compositions, folders, textItems, solidItems, meshItems, cameraItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, deleteMediaFilesEverywhere, removeSignalAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
 
   const handleDelete = useCallback(async () => {
-    const selectedFileIds = selectedIds.filter(id => files.some(file => file.id === id));
-    const selectedFiles = files.filter(file => selectedFileIds.includes(file.id));
+    const selectedIdSet = new Set(selectedIds);
+    const selectedFiles = files.filter(file => selectedIdSet.has(file.id));
+    const selectedFileIds = selectedFiles.map((file) => file.id);
 
     if (selectedFiles.length > 0) {
       const usages = getMediaFileUsages(selectedFileIds);

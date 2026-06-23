@@ -53,11 +53,12 @@ describe('playbackSlice', () => {
     expect(store.getState().playbackSpeed).toBe(1);
   });
 
-  it('stop: sets isPlaying false and resets playhead to 0', () => {
-    store.setState({ isPlaying: true, playheadPosition: 30 });
+  it('stop: sets isPlaying false, resets playhead, and scrolls to the start', () => {
+    store.setState({ isPlaying: true, playheadPosition: 30, scrollX: 500 });
     store.getState().stop();
     expect(store.getState().isPlaying).toBe(false);
     expect(store.getState().playheadPosition).toBe(0);
+    expect(store.getState().scrollX).toBe(0);
   });
 
   it('stop: works when already stopped', () => {

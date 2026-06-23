@@ -401,6 +401,7 @@ export function Timeline() {
     copyClipColor: timelineActions.copyClipColor,
     copyClipEffects: timelineActions.copyClipEffects,
     deleteAllGaps: timelineActions.deleteAllGaps,
+    deleteClipSelection: timelineActions.deleteClipSelection,
     deleteGapAtTime: timelineActions.deleteGapAtTime,
     duration,
     generateSpectrogramForClip: timelineActions.generateSpectrogramForClip,

@@ -195,6 +195,7 @@ export type ClipContextMenuTimelineCommand =
 export interface ClipContextMenuTimelineActions {
   splitClipAtPlayhead: () => void;
   rippleDeleteSelection: (clipIds?: string[]) => void;
+  deleteClipSelection: (clipIds?: string[]) => void;
   deleteGapAtTime: (time: number) => void;
   linkClips: (clipIds: string[]) => void;
   unlinkClips: (clipIds: string[]) => void;

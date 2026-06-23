@@ -450,7 +450,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     stopTimelineAudioPlayback();
     playheadState.position = 0;
     stopInternalPosition();
-    set({ isPlaying: false, playheadPosition: 0, playbackWarmup: null });
+    set({ isPlaying: false, playheadPosition: 0, playbackWarmup: null, scrollX: 0 });
+    renderHostPort.setIsPlaying(false);
+    renderHostPort.requestNewFrameRender();
   },
 
   // View actions

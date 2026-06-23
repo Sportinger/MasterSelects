@@ -1,4 +1,4 @@
-import type { DockLayout, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
+import type { BrowserWindowPanel, DockLayout, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
 import { Logger } from '../../services/logger';
 import { DEFAULT_LAYOUT } from './layoutDefaults';
 import {
@@ -13,11 +13,38 @@ import {
   applySavedTimelineLayout,
   captureTimelineLayout,
 } from './timelineLayoutAdapter';
+import { findGroupIdByPanelId } from './layoutTree';
+import { collapseSingleChildSplits, removePanel } from '../../utils/dockLayout';
 import type { DockSliceCreator, SavedLayoutActions } from './storeTypes';
 
 const log = Logger.create('DockStore');
 const LEGACY_DEFAULT_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default';
 const DEFAULT_TIMELINE_LAYOUT_STORAGE_KEY = 'webvj-dock-layout-default-timeline';
+
+function removeBrowserWindowPanelsFromLayout(
+  layout: DockLayout,
+  windowPanels: readonly BrowserWindowPanel[],
+): DockLayout {
+  if (windowPanels.length === 0) return layout;
+
+  const panelIds = new Set(windowPanels.map((windowPanel) => windowPanel.panel.id));
+  let nextLayout: DockLayout = {
+    ...layout,
+    floatingPanels: layout.floatingPanels.filter((floating) => !panelIds.has(floating.panel.id)),
+  };
+
+  for (const panelId of panelIds) {
+    const groupId = findGroupIdByPanelId(nextLayout.root, panelId);
+    if (!groupId) continue;
+    const layoutWithoutPanel = removePanel(nextLayout, panelId, groupId);
+    nextLayout = {
+      ...layoutWithoutPanel,
+      root: collapseSingleChildSplits(layoutWithoutPanel.root),
+    };
+  }
+
+  return nextLayout;
+}
 
 export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (set, get) => ({
   saveNamedLayout: (name) => {
@@ -226,10 +253,14 @@ export const createSavedLayoutActions: DockSliceCreator<SavedLayoutActions> = (s
   },
 
   setLayoutFromProject: (layout: DockLayout) => {
-    const cleanedLayout = cleanupPersistedLayout(layout);
+    const browserWindowPanels = get().browserWindowPanels;
+    const cleanedLayout = removeBrowserWindowPanelsFromLayout(
+      cleanupPersistedLayout(layout),
+      browserWindowPanels,
+    );
     set({
       layout: cleanedLayout,
-      browserWindowPanels: [],
+      browserWindowPanels,
       maxZIndex: getLayoutMaxZIndex(cleanedLayout),
       hoveredTabTarget: null,
       maximizedPanelId: null,

@@ -99,6 +99,7 @@ export interface TimelineEditOperationActions {
     },
   ) => TimelineEditResult;
   rippleDeleteSelection: (clipIds?: string[]) => TimelineEditResult;
+  deleteClipSelection: (clipIds?: string[]) => TimelineEditResult;
   deleteGapAtTime: (time: number, trackIds?: string[]) => TimelineEditResult;
   deleteAllGaps: (trackIds?: string[], startTime?: number) => TimelineEditResult;
   trimSelectedClipEdgeToPlayhead: (edge: 'start' | 'end') => TimelineEditResult;

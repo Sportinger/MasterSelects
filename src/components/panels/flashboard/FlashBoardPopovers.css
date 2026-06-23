@@ -546,7 +546,21 @@
   overflow: hidden;
 }
 
-.fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pills,
+.fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pills {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 4px;
+  height: auto;
+  margin: 0;
+  max-height: 52px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-audio-actions {
   display: flex;
   flex: 0 0 24px;
@@ -561,9 +575,14 @@
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-model-category-tabs::-webkit-scrollbar,
-.fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pills::-webkit-scrollbar,
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-audio-actions::-webkit-scrollbar {
   display: none;
+}
+
+.fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pills::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+  height: 6px;
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-model-category-tab,

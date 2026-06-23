@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
 import {
+  cleanupPersistedBrowserWindowPanels,
   cleanupRestoredCurrentLayout,
   cleanupSavedLayout,
   mergeFactoryDockLayouts,
@@ -43,6 +44,7 @@ export const useDockStore = create<DockStoreState>()(
         name: 'webvj-dock-layout',
         partialize: (state) => ({
           layout: state.layout,
+          browserWindowPanels: state.browserWindowPanels,
           maxZIndex: state.maxZIndex,
           savedLayouts: state.savedLayouts,
           defaultSavedLayoutId: state.defaultSavedLayoutId,
@@ -53,6 +55,7 @@ export const useDockStore = create<DockStoreState>()(
           const savedLayouts = Array.isArray(persisted?.savedLayouts)
             ? mergeFactoryDockLayouts(persisted.savedLayouts.map(cleanupSavedLayout))
             : mergeFactoryDockLayouts(currentState.savedLayouts);
+          const browserWindowPanels = cleanupPersistedBrowserWindowPanels(persisted?.browserWindowPanels);
           const defaultSavedLayoutId = (
             typeof persisted?.defaultSavedLayoutId === 'string'
             && savedLayouts.some((savedLayout) => savedLayout.id === persisted.defaultSavedLayoutId)
@@ -74,6 +77,7 @@ export const useDockStore = create<DockStoreState>()(
             return {
               ...currentState,
               layout: cleanedLayout,
+              browserWindowPanels,
               maxZIndex: persisted.maxZIndex ?? currentState.maxZIndex,
               savedLayouts,
               defaultSavedLayoutId,
@@ -82,6 +86,7 @@ export const useDockStore = create<DockStoreState>()(
           }
           return {
             ...currentState,
+            browserWindowPanels,
             savedLayouts,
             defaultSavedLayoutId,
             activeSavedLayoutId,

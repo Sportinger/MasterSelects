@@ -106,9 +106,6 @@ export function useFlashBoardReferenceCommands({
       }
 
       patch.startMediaFileId = mediaFileId;
-      if (composerEndMediaFileId === mediaFileId) {
-        patch.endMediaFileId = undefined;
-      }
     } else {
       if (composerEndMediaFileId && composerEndMediaFileId !== mediaFileId) {
         nextReferenceMediaFileIds = moveMediaFileIdToReferences(
@@ -120,9 +117,6 @@ export function useFlashBoardReferenceCommands({
       }
 
       patch.endMediaFileId = mediaFileId;
-      if (composerStartMediaFileId === mediaFileId) {
-        patch.startMediaFileId = undefined;
-      }
     }
 
     updateComposer({

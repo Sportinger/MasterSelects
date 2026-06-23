@@ -1,4 +1,12 @@
-import type { DockLayout, DockNode, DockPanel, FloatingPanel, PanelType, SavedDockLayout } from '../../types/dock';
+import type {
+  BrowserWindowPanel,
+  DockLayout,
+  DockNode,
+  DockPanel,
+  FloatingPanel,
+  PanelType,
+  SavedDockLayout,
+} from '../../types/dock';
 import { DEFAULT_LAYOUT, FACTORY_SAVED_DOCK_LAYOUTS } from './layoutDefaults';
 import { cleanupSavedTimelineLayout } from './timelineLayoutPersistence';
 import {
@@ -16,6 +24,10 @@ interface NormalizedDockPanel {
 
 interface NormalizedFloatingPanel {
   floatingPanel: FloatingPanel;
+}
+
+interface NormalizedBrowserWindowPanel {
+  browserWindowPanel: BrowserWindowPanel;
 }
 
 
@@ -43,6 +55,37 @@ function normalizeFloatingPanel(floatingPanel: FloatingPanel): NormalizedFloatin
     floatingPanel: {
       ...floatingPanel,
       panel: normalizedDockPanel.panel,
+    },
+  };
+}
+
+function normalizeBrowserWindowPanel(windowPanel: BrowserWindowPanel): NormalizedBrowserWindowPanel | null {
+  const normalizedDockPanel = normalizeDockPanel(windowPanel.panel);
+  if (!normalizedDockPanel) {
+    return null;
+  }
+
+  const width = windowPanel.size?.width;
+  const height = windowPanel.size?.height;
+  const size = typeof width === 'number' && typeof height === 'number' && Number.isFinite(width) && Number.isFinite(height)
+    ? {
+        width: Math.max(320, Math.round(width)),
+        height: Math.max(240, Math.round(height)),
+      }
+    : undefined;
+  const left = windowPanel.position?.left;
+  const top = windowPanel.position?.top;
+  const position = typeof left === 'number' && typeof top === 'number' && Number.isFinite(left) && Number.isFinite(top)
+    ? { left: Math.round(left), top: Math.round(top) }
+    : undefined;
+
+  return {
+    browserWindowPanel: {
+      ...windowPanel,
+      panel: normalizedDockPanel.panel,
+      returnGroupId: typeof windowPanel.returnGroupId === 'string' ? windowPanel.returnGroupId : null,
+      size,
+      position,
     },
   };
 }
@@ -82,6 +125,14 @@ export function cleanupPersistedLayout(layout: DockLayout): DockLayout {
       .filter((panel): panel is NormalizedFloatingPanel => panel !== null)
       .map((candidate) => candidate.floatingPanel),
   };
+}
+
+export function cleanupPersistedBrowserWindowPanels(windowPanels: BrowserWindowPanel[] | undefined): BrowserWindowPanel[] {
+  if (!Array.isArray(windowPanels)) return [];
+  return windowPanels
+    .map(normalizeBrowserWindowPanel)
+    .filter((panel): panel is NormalizedBrowserWindowPanel => panel !== null)
+    .map((candidate) => candidate.browserWindowPanel);
 }
 
 export function cloneDockLayout(layout: DockLayout): DockLayout {

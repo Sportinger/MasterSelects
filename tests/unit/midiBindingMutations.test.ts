@@ -214,6 +214,35 @@ describe('midiBindingMutations', () => {
     });
   });
 
+  it('preserves the last parameter value when re-learning a mapped value without one', () => {
+    setParameterMIDIBinding({
+      clipId: 'clip-param',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+      currentValue: 0.42,
+    }, {
+      type: 'control-change',
+      channel: 1,
+      control: 7,
+    });
+
+    setParameterMIDIBinding({
+      clipId: 'clip-param',
+      property: 'opacity',
+      label: 'Opacity',
+      min: 0,
+      max: 1,
+    }, {
+      type: 'control-change',
+      channel: 1,
+      control: 8,
+    });
+
+    expect(useMIDIStore.getState().parameterBindings['parameter:clip-param:opacity']?.currentValue).toBe(0.42);
+  });
+
   it('keeps active mapping highlights transient and timestamp-safe', () => {
     const state = useMIDIStore.getState();
     state.markMappingActive('parameter:clip-param:opacity', 100);

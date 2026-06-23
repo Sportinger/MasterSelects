@@ -200,6 +200,7 @@ export function setParameterMIDIBinding(
     message,
     min: existingBinding?.min ?? target.min,
     max: existingBinding?.max ?? target.max,
+    currentValue: target.currentValue ?? existingBinding?.currentValue,
     invert: existingBinding?.invert,
     damping: existingBinding?.damping,
   });

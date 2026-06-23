@@ -52,6 +52,7 @@ interface TimelineContextMenuProps {
   removeClip: (clipId: string) => void;
   splitClipAtPlayhead: () => void;
   rippleDeleteSelection: (clipIds?: string[]) => void;
+  deleteClipSelection: (clipIds?: string[]) => void;
   deleteGapAtTime: (time: number) => void;
   toggleClipReverse: (clipId: string) => void;
   unlinkGroup: (clipId: string) => void;
@@ -91,6 +92,7 @@ export function TimelineContextMenu({
   removeClip,
   splitClipAtPlayhead,
   rippleDeleteSelection,
+  deleteClipSelection,
   deleteGapAtTime,
   toggleClipReverse,
   unlinkGroup,
@@ -223,6 +225,7 @@ export function TimelineContextMenu({
   const timelineActions = {
     splitClipAtPlayhead,
     rippleDeleteSelection,
+    deleteClipSelection,
     deleteGapAtTime,
     linkClips,
     unlinkClips,
