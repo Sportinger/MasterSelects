@@ -27,6 +27,7 @@ interface TimelineClipCanvasViewport {
   cssWidth: number;
   canvasOffsetX: number;
   scrollBucket: number;
+  visibleViewportWidth: number;
 }
 
 export function useTimelineClipCanvasViewport({
@@ -38,7 +39,11 @@ export function useTimelineClipCanvasViewport({
 }: TimelineClipCanvasViewportInput): TimelineClipCanvasViewport {
   const [measuredViewportWidth, setMeasuredViewportWidth] = useState(0);
   useLayoutEffect(() => {
-    const viewport = canvasRef.current?.closest('.timeline-section-viewport');
+    const canvas = canvasRef.current;
+    const viewport = (
+      canvas?.closest('.timeline-section-tracks') ??
+      canvas?.closest('.timeline-section-viewport')
+    );
     if (!viewport) return;
     const update = () => {
       setMeasuredViewportWidth((previous) => (
@@ -67,5 +72,5 @@ export function useTimelineClipCanvasViewport({
       Math.ceil(windowViewportWidth + overscanPx * 2),
     ),
   );
-  return { cssWidth, canvasOffsetX, scrollBucket };
+  return { cssWidth, canvasOffsetX, scrollBucket, visibleViewportWidth: windowViewportWidth };
 }

@@ -48,7 +48,6 @@ interface TimelineClipCanvasMainThreadDrawInput {
   renderOverscanPx: number;
   thumbnailViewportOverscanPx: number;
   lodBarPx: number;
-  lodLabelPx: number;
   lodThumbnailPx: number;
   maxThumbnailSlots: number;
   thumbnailSlotPx: number;
@@ -89,7 +88,6 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     renderOverscanPx,
     thumbnailViewportOverscanPx,
     lodBarPx,
-    lodLabelPx,
     lodThumbnailPx,
     maxThumbnailSlots,
     thumbnailSlotPx,
@@ -168,7 +166,6 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
         renderOverscanPx,
         thumbnailViewportOverscanPx,
         lodBarPx,
-        lodLabelPx,
         lodThumbnailPx,
         maxThumbnailSlots,
         thumbnailSlotPx,

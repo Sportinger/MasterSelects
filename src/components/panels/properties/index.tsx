@@ -442,6 +442,17 @@ export function PropertiesPanel() {
   // Count non-audio effects for badge
   const visualEffects = (selectedClip.effects || []).filter(e => !isAudioEffect(e.type));
   const audioEditCount = selectedClipAudioEditCount;
+  const linkedTranscriptClip = selectedClip.linkedClipId
+    ? clips.find(c => c.id === selectedClip.linkedClipId)
+    : clips.find(c => c.linkedClipId === selectedClip.id);
+  const selectedClipHasTranscriptState = (selectedClip.transcript?.length ?? 0) > 0
+    || (selectedClip.transcriptStatus !== undefined && selectedClip.transcriptStatus !== 'none');
+  const transcriptSourceClip = selectedClipHasTranscriptState
+    ? selectedClip
+    : linkedTranscriptClip;
+  const transcriptWords = transcriptSourceClip?.transcript || [];
+  const transcriptStatus = transcriptSourceClip?.transcriptStatus || 'none';
+  const transcriptProgress = transcriptSourceClip?.transcriptProgress || 0;
 
   return (
     <div className="properties-panel">
@@ -472,7 +483,7 @@ export function PropertiesPanel() {
               {scopedTabLabel('CLIP', 'Audio Edits')} {audioEditCount > 0 && <span className="badge">{audioEditCount}</span>}
             </button>
             <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
-              {scopedTabLabel('CLIP', 'Transcript')} {selectedClip.transcript && selectedClip.transcript.length > 0 && <span className="badge">{selectedClip.transcript.length}</span>}
+              {scopedTabLabel('CLIP', 'Transcript')} {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
             </button>
           </>
         ) : isCameraClip ? (
@@ -562,7 +573,7 @@ export function PropertiesPanel() {
             {!isSolidClip && !isVectorAnimationClip && (
               <>
                 <button className={`tab-btn ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>
-                  {scopedTabLabel('CLIP', 'Transcript')} {selectedClip.transcript && selectedClip.transcript.length > 0 && <span className="badge">{selectedClip.transcript.length}</span>}
+                  {scopedTabLabel('CLIP', 'Transcript')} {transcriptWords.length > 0 && <span className="badge">{transcriptWords.length}</span>}
                 </button>
                 <button className={`tab-btn ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>
                   {scopedTabLabel('CLIP', 'Analysis')} {selectedClip.analysisStatus === 'ready' && <span className="badge">✓</span>}
@@ -608,9 +619,9 @@ export function PropertiesPanel() {
           {activeTab === 'transcript' && (
             <TranscriptTab
               clipId={selectedClip.id}
-              transcript={selectedClip.transcript || []}
-              transcriptStatus={selectedClip.transcriptStatus || 'none'}
-              transcriptProgress={selectedClip.transcriptProgress || 0}
+              transcript={transcriptWords}
+              transcriptStatus={transcriptStatus}
+              transcriptProgress={transcriptProgress}
               clipStartTime={selectedClip.startTime}
               inPoint={selectedClip.inPoint}
               outPoint={selectedClip.outPoint}

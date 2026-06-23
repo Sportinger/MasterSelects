@@ -206,6 +206,7 @@ export function drawWorkerPassiveDecorations(
   top: number,
   height: number,
   passiveDecorationsPayloadByFacetId: WorkerPassiveDecorationsPayloadByFacetId,
+  drawBadges = true,
 ): void {
   const facet = clip.paintPacket.facets.find((candidate) => candidate.kind === 'passive-decorations');
   if (!facet) return;
@@ -220,6 +221,8 @@ export function drawWorkerPassiveDecorations(
   drawWorkerAnalysisOverlay(context, decorations.analysisOverlay, x, top, width, height - 2);
   drawWorkerTranscriptMarkers(context, decorations.transcriptMarkers, x, top, width, height - 2);
   drawWorkerClipProgressBars(context, decorations.progressBars, x, top, width);
-  drawWorkerClipBadges(context, decorations.badges, x, top, width);
+  if (drawBadges) {
+    drawWorkerClipBadges(context, decorations.badges, x, top, width);
+  }
   context.restore();
 }

@@ -53,11 +53,6 @@ function getModelName(language: string): string {
   return 'onnx-community/whisper-tiny';
 }
 
-function supportsWordTimestamps(_language: string): boolean {
-  // Word-level timestamps work for all languages in transformers.js whisper
-  return true;
-}
-
 /**
  * Detect repetitive/hallucinated text
  */
@@ -158,7 +153,8 @@ async function transcribe(
 
   const isEnglishOnly = language === 'en';
   const isAutoDetect = language === 'auto';
-  const useWordTimestamps = supportsWordTimestamps(language);
+  let failedSegments = 0;
+  let lastSegmentError: unknown = null;
 
   for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
     const startSample = segmentIdx * segmentSamples;
@@ -171,7 +167,7 @@ async function transcribe(
 
     try {
       const result = await model(segmentData, {
-        return_timestamps: useWordTimestamps ? 'word' : true,
+        return_timestamps: true,
         chunk_length_s: 30,
         stride_length_s: 5,
         // Anti-hallucination settings
@@ -197,8 +193,10 @@ async function transcribe(
           continue;
         }
 
-        const chunkStart = (chunk.timestamp[0] ?? 0) + segmentStartTime;
-        const chunkEnd = (chunk.timestamp[1] ?? chunkStart + 0.5) + segmentStartTime;
+        const relativeChunkStart = chunk.timestamp[0] ?? 0;
+        const relativeChunkEnd = chunk.timestamp[1] ?? relativeChunkStart + 0.5;
+        const chunkStart = relativeChunkStart + segmentStartTime;
+        const chunkEnd = relativeChunkEnd + segmentStartTime;
 
         const chunkWords = chunkText.split(/\s+/).filter((w: string) => w.length > 0);
 
@@ -251,8 +249,15 @@ async function transcribe(
       onWords([...allWords]);
 
     } catch (err) {
+      failedSegments++;
+      lastSegmentError = err;
       console.error('[Transcribe Worker] Segment error:', err);
     }
+  }
+
+  if (allWords.length === 0 && failedSegments === numSegments && lastSegmentError) {
+    const message = lastSegmentError instanceof Error ? lastSegmentError.message : String(lastSegmentError);
+    throw new Error(`Transcription failed: ${message}`);
   }
 
   return allWords;

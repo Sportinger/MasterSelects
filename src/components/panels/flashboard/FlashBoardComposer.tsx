@@ -199,7 +199,7 @@ export function FlashBoardComposer({
   const isElevenLabsMode = isAudioMode && !isSunoMode;
   const isHostedAudioMode = isElevenLabsMode && service === 'cloud';
   const {
-    hasVideoReferenceInput, seedanceReferenceModeActive, seedanceReferenceValidationError,
+    hasVideoReferenceInput, hasVisualReferenceInput, seedanceReferenceModeActive, seedanceReferenceValidationError,
   } = useFlashBoardReferenceValidationController({
     composer,
     mediaFiles,
@@ -317,6 +317,7 @@ export function FlashBoardComposer({
     hasGenerationBoard,
     hasHostedSession,
     hasKieAiKey,
+    hasReferenceMediaInput: hasVisualReferenceInput,
     hasVideoReferenceInput,
     hostedAIEnabled,
     imageSize,
@@ -352,6 +353,7 @@ export function FlashBoardComposer({
     hasGenerationBoard,
     hasHostedSession,
     hasKieAiKey,
+    hasVisualReferenceInput,
     hasVideoReferenceInput,
     hostedAIEnabled,
     imageSize,

@@ -90,6 +90,13 @@ export const CLOUD_AI_PRICE_ROWS: readonly CloudAiPriceRow[] = [
     unit: '1K chars',
   },
   {
+    category: 'Speech',
+    credits: 6,
+    name: 'OpenAI Whisper Cloud',
+    note: 'signed-in transcription',
+    unit: 'min',
+  },
+  {
     category: 'Chat',
     credits: 1,
     name: 'OpenAI Cloud Chat',

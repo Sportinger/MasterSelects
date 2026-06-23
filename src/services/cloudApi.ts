@@ -9,6 +9,8 @@ import type {
   CloudAiAudioMusicCreateResponse,
   CloudAiAudioMusicRequest,
   CloudAiAudioSpeechRequest,
+  CloudAiAudioTranscriptionRequest,
+  CloudAiAudioTranscriptionResponse,
   CloudAiAudioVoicesResponse,
   CloudAiCapabilitiesResponse,
   CloudAiChatRequest,
@@ -42,6 +44,8 @@ export type {
   CloudAiAudioMusicCreateResponse,
   CloudAiAudioMusicRequest,
   CloudAiAudioSpeechRequest,
+  CloudAiAudioTranscriptionRequest,
+  CloudAiAudioTranscriptionResponse,
   CloudAiAudioVoicesResponse,
   CloudAiCapabilitiesResponse,
   CloudAiChatMessage,
@@ -202,6 +206,13 @@ export const cloudApi = {
           body: JSON.stringify(body),
           method: 'POST',
           signal,
+        });
+      },
+      transcription(body: CloudAiAudioTranscriptionRequest): Promise<CloudAiGatewayEnvelope<CloudAiAudioTranscriptionResponse>> {
+        return requestJson<CloudAiGatewayEnvelope<CloudAiAudioTranscriptionResponse>>('/api/ai/audio', {
+          body: JSON.stringify(body),
+          method: 'POST',
+          timeoutMs: 300_000,
         });
       },
       musicStatus(taskId: string): Promise<CloudAiGatewayEnvelope> {

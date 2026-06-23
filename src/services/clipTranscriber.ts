@@ -7,10 +7,11 @@ import { triggerTimelineSave } from '../stores/mediaStore';
 import type { TranscriptWord } from '../types/clipMetadata';
 import { projectFileService } from './project/ProjectFileService';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useAccountStore } from '../stores/accountStore';
 import { extractAudioBuffer, isAudioBearingFile, resampleAudio, audioBufferToWav } from './transcription/audioPrep';
 import { propagateTranscriptToMediaFile, updateClipTranscript } from './transcription/artifactPersistence';
 import { findGaps, mergeTranscriptWords } from './transcription/resultMapping';
-import { transcribeWithCloudProvider } from './transcription/cloudProviders';
+import { transcribeWithCloudProvider, transcribeWithHostedOpenAI } from './transcription/cloudProviders';
 import { runWorkerTranscription, terminateTranscriptionWorker } from './transcription/workerClient';
 
 const log = Logger.create('ClipTranscriber');
@@ -18,9 +19,18 @@ const log = Logger.create('ClipTranscriber');
 let isTranscribing = false;
 let currentClipId: string | null = null;
 
+function isLocalHostedApiUnavailable(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.includes('Hosted API route /api/ai/audio')
+    && (error.message.includes('not available') || error.message.includes('did not respond'));
+}
+
 /**
  * Extract audio from a clip's file and transcribe it.
- * Uses the configured provider (local Whisper, OpenAI, AssemblyAI, or Deepgram).
+ * Signed-in accounts use hosted OpenAI credits; signed-out users use the configured provider.
  * When continueMode is true, only transcribes uncovered time ranges.
  */
 export async function transcribeClip(
@@ -47,19 +57,28 @@ export async function transcribeClip(
   }
 
   const { transcriptionProvider, apiKeys } = useSettingsStore.getState();
-  const apiKey = transcriptionProvider !== 'local' ? apiKeys[transcriptionProvider] : null;
+  const useHostedOpenAI = Boolean(useAccountStore.getState().session?.authenticated);
+  const effectiveProvider = useHostedOpenAI ? 'openai' : transcriptionProvider;
+  const fallbackApiKey = transcriptionProvider !== 'local' ? apiKeys[transcriptionProvider] : null;
+  const apiKey = !useHostedOpenAI && effectiveProvider !== 'local' ? fallbackApiKey : null;
 
-  if (transcriptionProvider !== 'local' && !apiKey) {
-    log.error(`No API key configured for ${transcriptionProvider}`);
+  if (!useHostedOpenAI && effectiveProvider !== 'local' && !apiKey) {
+    log.error(`No API key configured for ${effectiveProvider}`);
     updateClipTranscript(clipId, {
       status: 'error',
       progress: 0,
-      message: `No API key configured for ${transcriptionProvider}. Go to Settings to add one.`,
+      message: `No API key configured for ${effectiveProvider}. Go to Settings to add one.`,
     });
     return;
   }
 
   const continueMode = options?.continueMode ?? false;
+  const linkedClip = clip.linkedClipId
+    ? store.clips.find(c => c.id === clip.linkedClipId)
+    : store.clips.find(c => c.linkedClipId === clip.id);
+  const existingTranscript = clip.transcript?.length
+    ? clip.transcript
+    : linkedClip?.transcript;
   const mediaFileId = clip.source?.mediaFileId || clip.mediaFileId;
   const inPoint = clip.inPoint || 0;
   const outPoint = clip.outPoint || clip.duration;
@@ -83,7 +102,11 @@ export async function transcribeClip(
   isTranscribing = true;
   currentClipId = clipId;
 
-  const providerName = transcriptionProvider === 'local' ? 'Local Whisper' : transcriptionProvider.toUpperCase();
+  const providerName = useHostedOpenAI
+    ? 'OpenAI Cloud'
+    : effectiveProvider === 'local'
+      ? 'Local Whisper'
+      : effectiveProvider.toUpperCase();
   log.info(`Starting transcription for ${clip.name} using ${providerName}${continueMode ? ' (continue mode)' : ''}`);
 
   updateClipTranscript(clipId, {
@@ -113,7 +136,7 @@ export async function transcribeClip(
       const progressScale = rangeDuration / totalDuration;
       let words: TranscriptWord[];
 
-      if (transcriptionProvider === 'local') {
+      if (effectiveProvider === 'local' && !useHostedOpenAI) {
         const audioData = await resampleAudio(audioBuffer, 16000);
         updateClipTranscript(clipId, {
           progress: progressBase + Math.round(5 * progressScale),
@@ -134,23 +157,60 @@ export async function transcribeClip(
         });
 
         const audioBlob = await audioBufferToWav(audioBuffer);
-        words = await transcribeWithCloudProvider(
-          transcriptionProvider,
-          clipId,
-          audioBlob,
-          language,
-          apiKey!,
-          rangeStart,
-          updateClipTranscript,
-        );
+        if (useHostedOpenAI) {
+          try {
+            words = await transcribeWithHostedOpenAI(clipId, audioBlob, language, rangeStart, updateClipTranscript);
+          } catch (error) {
+            if (!isLocalHostedApiUnavailable(error)) {
+              throw error;
+            }
+
+            log.warn('Hosted transcription unavailable, falling back to configured provider', error);
+            if (transcriptionProvider !== 'local' && fallbackApiKey) {
+              words = await transcribeWithCloudProvider(
+                transcriptionProvider,
+                clipId,
+                audioBlob,
+                language,
+                fallbackApiKey,
+                rangeStart,
+                updateClipTranscript,
+              );
+            } else {
+              const audioData = await resampleAudio(audioBuffer, 16000);
+              updateClipTranscript(clipId, {
+                progress: progressBase + Math.round(5 * progressScale),
+                message: 'Hosted API unavailable; using local transcription...',
+              });
+              words = await runWorkerTranscription(
+                clipId,
+                audioData,
+                language,
+                audioDuration,
+                rangeStart,
+                updateClipTranscript,
+              );
+            }
+          }
+        } else {
+          words = await transcribeWithCloudProvider(
+            effectiveProvider,
+            clipId,
+            audioBlob,
+            language,
+            apiKey!,
+            rangeStart,
+            updateClipTranscript,
+          );
+        }
       }
 
       allNewWords.push(...words);
       processedDuration += rangeDuration;
     }
 
-    const finalWords = continueMode && clip.transcript?.length
-      ? mergeTranscriptWords(clip.transcript, allNewWords)
+    const finalWords = continueMode && existingTranscript?.length
+      ? mergeTranscriptWords(existingTranscript, allNewWords)
       : allNewWords;
 
     updateClipTranscript(clipId, {

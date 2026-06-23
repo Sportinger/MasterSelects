@@ -123,6 +123,7 @@ export function FlashBoardSunoPopovers({
                   <em>{control.value.toFixed(2)}</em>
                 </span>
                 <input
+                  aria-label={control.label}
                   type="range"
                   min="0"
                   max="1"

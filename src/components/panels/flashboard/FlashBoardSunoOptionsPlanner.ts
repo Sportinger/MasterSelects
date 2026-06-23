@@ -51,6 +51,15 @@ const SUNO_VOCAL_GENDER_OPTIONS: FlashBoardSunoOption[] = [
   { id: 'm', label: 'Male' },
 ];
 
+export function normalizeFlashBoardSunoWeight(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  const clamped = Math.max(0, Math.min(1, value));
+  return Math.round(clamped * 100) / 100;
+}
+
 export function normalizeFlashBoardSunoModel(value: string | undefined): SunoModelId {
   return value && SUNO_MODEL_IDS.includes(value as SunoModelId)
     ? value as SunoModelId
@@ -67,6 +76,12 @@ export function buildFlashBoardSunoOptionsState({
   weirdnessConstraint,
 }: BuildFlashBoardSunoOptionsStateInput): FlashBoardSunoOptionsState {
   const currentModelId = normalizeFlashBoardSunoModel(modelId);
+  const normalizedAudioWeight = normalizeFlashBoardSunoWeight(audioWeight, DEFAULT_SUNO_AUDIO_WEIGHT);
+  const normalizedStyleWeight = normalizeFlashBoardSunoWeight(styleWeight, DEFAULT_SUNO_STYLE_WEIGHT);
+  const normalizedWeirdnessConstraint = normalizeFlashBoardSunoWeight(
+    weirdnessConstraint,
+    DEFAULT_SUNO_WEIRDNESS_CONSTRAINT,
+  );
   const modeButtonLabel = customMode
     ? instrumental ? 'Custom inst.' : 'Custom song'
     : instrumental ? 'Simple inst.' : 'Simple song';
@@ -79,9 +94,9 @@ export function buildFlashBoardSunoOptionsState({
       id: model,
       label: SUNO_MODEL_LABELS[model] ?? model,
     })),
-    tuningChanged: styleWeight !== DEFAULT_SUNO_STYLE_WEIGHT
-      || weirdnessConstraint !== DEFAULT_SUNO_WEIRDNESS_CONSTRAINT
-      || audioWeight !== DEFAULT_SUNO_AUDIO_WEIGHT
+    tuningChanged: normalizedStyleWeight !== DEFAULT_SUNO_STYLE_WEIGHT
+      || normalizedWeirdnessConstraint !== DEFAULT_SUNO_WEIRDNESS_CONSTRAINT
+      || normalizedAudioWeight !== DEFAULT_SUNO_AUDIO_WEIGHT
       || vocalGender !== '',
     vocalGenderOptions: SUNO_VOCAL_GENDER_OPTIONS,
   };

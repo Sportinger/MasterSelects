@@ -1,6 +1,6 @@
 // OffscreenCanvas worker for the timeline clip layer (issue #228, Phase 4).
 //
-// Draws clip bodies (rounded rects + Level-of-Detail + labels) entirely off the
+// Draws clip bodies and passive visual payloads entirely off the
 // main thread, so even heavy React reconciliation of the timeline chrome cannot
 // stutter the clip render. The main thread resolves geometry before posting so
 // timeline state, transforms, and cache ownership never cross the worker boundary.
@@ -22,7 +22,6 @@ import type {
 import type { TimelinePaintFacetKind, TimelinePaintResourceRef } from '../../../timeline';
 import {
   TIMELINE_CLIP_CANVAS_LOD_BAR_PX,
-  TIMELINE_CLIP_CANVAS_LOD_LABEL_PX,
 } from '../timelineRenderConstants';
 import { writeTimelineSpectralColor } from '../utils/spectralColor';
 import { drawWorkerPassiveDecorations } from './timelineClipCanvasWorkerPassivePainter';
@@ -33,7 +32,6 @@ import {
 } from './timelineClipCanvasWorkerWaveformPainter';
 
 const LOD_BAR_PX = TIMELINE_CLIP_CANVAS_LOD_BAR_PX;
-const LOD_LABEL_PX = TIMELINE_CLIP_CANVAS_LOD_LABEL_PX;
 
 let canvas: OffscreenCanvas | null = null;
 let ctx: OffscreenCanvasRenderingContext2D | null = null;
@@ -536,7 +534,6 @@ function draw(msg: DrawMessage): DrawnMessage {
   const fillSelected = withAlpha(trackColor, 0.85);
   const border = withAlpha(trackColor, 0.9);
 
-  ctx.font = '11px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.textBaseline = 'middle';
 
   const paintResourceById = new Map(msg.paintResources.resources.map((resource) => [resource.id, resource]));
@@ -572,7 +569,6 @@ function draw(msg: DrawMessage): DrawnMessage {
     const w = workerClipPaintWidth(clip);
     const isSel = clip.paintPacket.state.selected;
     const isHovered = clip.paintPacket.state.hovered;
-    const label = clip.paintPacket.label;
     if (w < LOD_BAR_PX) {
       ctx.fillStyle = isSel ? fillSelected : fill;
       ctx.fillRect(x, 1, Math.max(1, w), height - 2);
@@ -604,24 +600,12 @@ function draw(msg: DrawMessage): DrawnMessage {
     }
     drawWorkerTrimVisuals(ctx, clip, top, height, trimPayloadByFacetId);
     drawWorkerFadeVisuals(ctx, clip, top, height, paintResourceById, fadePayloadByResourceId);
-    drawWorkerPassiveDecorations(ctx, clip, top, height, passiveDecorationsPayloadByFacetId);
+    drawWorkerPassiveDecorations(ctx, clip, top, height, passiveDecorationsPayloadByFacetId, false);
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, radius);
     ctx.lineWidth = isSel ? 2 : 1;
     ctx.strokeStyle = isSel ? '#ffffff' : isHovered ? '#9dc8ff' : border;
     ctx.stroke();
-    if (w >= LOD_LABEL_PX && label) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x + 5, top, w - 10, h);
-      ctx.clip();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-      // MIDI clips show their name top-left (the lane body is the piano-roll
-      // preview); other clips keep it centered.
-      const labelY = workerClipPaintFacet(clip, 'midi-preview') ? top + 9 : top + h / 2;
-      ctx.fillText(label, x + 6, labelY);
-      ctx.restore();
-    }
   }
 
   return {

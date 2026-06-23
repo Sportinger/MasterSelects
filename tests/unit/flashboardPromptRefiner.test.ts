@@ -65,6 +65,26 @@ const seedanceEntry: CatalogEntry = {
   outputType: 'video',
 };
 
+const gptImageEditEntry: CatalogEntry = {
+  service: 'kieai',
+  providerId: 'gpt-image-2-image-to-image',
+  name: 'GPT Image 2 Edit',
+  description: 'Image editing',
+  versions: ['latest'],
+  modes: [],
+  durations: [],
+  aspectRatios: ['auto'],
+  supportsTextToVideo: false,
+  supportsImageToVideo: false,
+  supportsTextToImage: true,
+  supportsGenerateAudio: false,
+  supportsMultiShot: false,
+  maxReferenceMedia: 16,
+  outputType: 'image',
+  promptRefinerProfile: 'gpt-image-edit',
+  requiresReferenceMedia: true,
+};
+
 const sunoEntry: CatalogEntry = {
   service: 'suno',
   providerId: 'suno-music',
@@ -99,6 +119,21 @@ describe('FlashBoardPromptRefiner', () => {
     expect(instructions).toContain('single still-image generation prompt');
     expect(instructions).toContain('reference-aware');
     expect(instructions).toContain('REF labels');
+  });
+
+  it('builds edit-model guidance for GPT Image 2 image-to-image', () => {
+    const instructions = buildFlashBoardPromptRefinerInstructions({
+      entry: gptImageEditEntry,
+      service: gptImageEditEntry.service,
+      providerId: gptImageEditEntry.providerId,
+      version: 'latest',
+      generateAudio: false,
+      multiShots: false,
+    });
+
+    expect(instructions).toContain('GPT Image editing');
+    expect(instructions).toContain('preserve list');
+    expect(instructions).toContain('reference-image roles');
   });
 
   it('builds video-model guidance for Kling with sound and multishot context', () => {

@@ -286,7 +286,10 @@
 
 .fb-suno-tuning-row input[type='range'] {
   width: 100%;
+  min-width: 0;
   accent-color: var(--accent, #4aa3ff);
+  cursor: pointer;
+  touch-action: pan-y;
 }
 
 .fb-suno-gender-row,

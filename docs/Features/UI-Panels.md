@@ -352,7 +352,7 @@ See [Slot Grid](./Slot-Grid.md) for the current live/deck behavior, slot-clip tr
 
 ## Properties Panel
 
-The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Tab labels are scoped with `CLIP`, `TRACK`, or `MASTER`; transcript tabs are shown only for clip targets.
+The unified Properties panel adapts its tabs to the selected clip type, selected audio track/layer, selected master bus, and slot-grid mode. Tab labels are scoped with `CLIP`, `TRACK`, or `MASTER`; transcript tabs are shown only for clip targets. Linked video/audio companions share the same `CLIP Transcript` state, so selecting either side opens the same transcript view.
 
 Selecting a timeline transition switches the panel to `TRANSITION Parameters`.
 That tab shows the transition type, first-pass centered placement with timeline
@@ -380,7 +380,7 @@ same source-handle edges.
 |-----|----------|
 | **CLIP Effects** | Audio effects and linked audio controls |
 | **CLIP Audio Edits** | Non-destructive edit-stack operations |
-| **CLIP Transcript** | Speech-to-text transcript |
+| **CLIP Transcript** | Speech-to-text transcript, shared with the linked video clip when present |
 
 ### Audio Track And Master Tabs
 

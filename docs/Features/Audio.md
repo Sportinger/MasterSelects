@@ -45,7 +45,7 @@ The main runtime path is `LayerBuilderService` -> `AudioTrackSyncManager` -> `Au
 
 ## Audio Effects
 
-Audio clip controls live in the Properties panel under `CLIP Effects`; clip edit-stack operations live under `CLIP Audio Edits`, and clip transcripts remain clip-only under `CLIP Transcript`. Selecting an audio track/layer switches the same panel to `TRACK Controls`, `TRACK Effects`, and `TRACK Sends`; selecting the master bus switches it to `MASTER Controls` and `MASTER Effects`.
+Audio clip controls live in the Properties panel under `CLIP Effects`; clip edit-stack operations live under `CLIP Audio Edits`, and clip transcripts remain clip-only under `CLIP Transcript`. Linked video/audio companions share the same transcript state, so selecting either clip opens the same transcript view. Selecting an audio track/layer switches the same panel to `TRACK Controls`, `TRACK Effects`, and `TRACK Sends`; selecting the master bus switches it to `MASTER Controls` and `MASTER Effects`.
 For audio clips, `CLIP Effects` renders the `VolumeTab`.
 
 - Volume is stored as the `audio-volume` effect and displayed in dB.

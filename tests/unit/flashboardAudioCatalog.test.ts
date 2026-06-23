@@ -113,6 +113,37 @@ describe('FlashBoard audio catalog contract', () => {
     ).toBe('200 Kie credits');
   });
 
+  it('exposes current Kie.ai image generation and edit models', () => {
+    const entries = getCatalogEntries();
+    const providerIds = entries
+      .filter((candidate) => candidate.service === 'kieai' && candidate.outputType === 'image')
+      .map((candidate) => candidate.providerId);
+
+    expect(providerIds).toEqual(expect.arrayContaining([
+      'nano-banana-2',
+      'nano-banana-pro',
+      'google/imagen4-fast',
+      'google/imagen4-ultra',
+      'gpt-image-2-text-to-image',
+      'gpt-image-2-image-to-image',
+      'flux-2/pro-text-to-image',
+      'flux-2/pro-image-to-image',
+      'seedream/5-lite-text-to-image',
+      'seedream/5-lite-image-to-image',
+    ]));
+
+    expect(entries.find((candidate) => candidate.providerId === 'gpt-image-2-image-to-image')).toMatchObject({
+      requiresReferenceMedia: true,
+      promptRefinerProfile: 'gpt-image-edit',
+      maxReferenceMedia: 16,
+    });
+    expect(entries.find((candidate) => candidate.providerId === 'flux-2/pro-image-to-image')).toMatchObject({
+      requiresReferenceMedia: true,
+      promptRefinerProfile: 'flux-edit',
+      maxReferenceMedia: 8,
+    });
+  });
+
   it('exposes hosted Suno music as a Cloud audio provider', () => {
     const entry = getCatalogEntries().find((candidate) => (
       candidate.service === 'cloud' && candidate.providerId === 'suno-music'

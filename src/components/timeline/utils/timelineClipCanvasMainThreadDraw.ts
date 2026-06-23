@@ -8,7 +8,6 @@ import { drawTimelineClipCanvasFadeCurve } from './timelineClipCanvasFadeCurvePa
 import { drawTimelineClipCanvasMidiPreviewResource } from './timelineClipCanvasMidiPreviewPainter';
 import { createTimelineClipCanvasWorkerMidiPreviewResource } from './timelineClipCanvasMidiResource';
 import {
-  getTimelineClipCanvasPassiveDecorationBadgeReserve,
   getTimelineClipCanvasPassiveDecorationBadges,
   getTimelineClipCanvasPassiveDecorationProgressBars,
   type TimelineClipCanvasMediaStatus,
@@ -44,7 +43,6 @@ export interface TimelineClipCanvasMainThreadDrawInput {
   renderOverscanPx: number;
   thumbnailViewportOverscanPx: number;
   lodBarPx: number;
-  lodLabelPx: number;
   lodThumbnailPx: number;
   maxThumbnailSlots: number;
   thumbnailSlotPx: number;
@@ -92,7 +90,6 @@ export function drawTimelineClipCanvasMainThread(
     renderOverscanPx,
     thumbnailViewportOverscanPx,
     lodBarPx,
-    lodLabelPx,
     lodThumbnailPx,
     maxThumbnailSlots,
     thumbnailSlotPx,
@@ -122,7 +119,6 @@ export function drawTimelineClipCanvasMainThread(
   const border = withAlpha(trackColor, 0.9);
   const selectedBorder = '#ffffff';
 
-  ctx.font = '11px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif';
   ctx.textBaseline = 'middle';
 
   for (const clip of clips) {
@@ -305,7 +301,7 @@ export function drawTimelineClipCanvasMainThread(
 
     drawTimelineClipCanvasSourceExtensionGhosts(ctx, geometry, top, h, renderVisibleLeft, renderVisibleRight, canvasOffsetX, timeToPixel);
     drawTimelineClipCanvasFadeCurve(ctx, clip.fade, x, top, w, h);
-    drawTimelineClipCanvasPassiveDecorations(ctx, clip, geometry, badges, progressBars, x, top, w, h);
+    drawTimelineClipCanvasPassiveDecorations(ctx, clip, geometry, badges, progressBars, x, top, w, h, false);
 
     ctx.beginPath();
     ctx.roundRect(x, top, w, h, radius);
@@ -313,25 +309,6 @@ export function drawTimelineClipCanvasMainThread(
     ctx.strokeStyle = selected ? selectedBorder : hovered ? 'rgba(255,255,255,0.58)' : border;
     ctx.stroke();
 
-    if (visibleW >= lodLabelPx && clip.name) {
-      const labelLeft = Math.max(x + 5, visibleX + 5);
-      const badgeReserve = Math.min(w * 0.45, getTimelineClipCanvasPassiveDecorationBadgeReserve(badges));
-      const labelRight = Math.min(x + w - 5 - badgeReserve, visibleX + visibleW - 5);
-      const labelW = labelRight - labelLeft;
-      if (labelW <= 4) continue;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(labelLeft, top, labelW, h);
-      ctx.clip();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-      // MIDI clips show their name top-left (the lane body is the piano-roll
-      // preview); media clips put it at the bottom over the thumbnail/waveform,
-      // everything else centers it.
-      const labelY = clip.trackType === 'midi' ? top + 9 : mediaFileId ? top + h - 8 : top + h / 2;
-      ctx.fillText(clip.name, labelLeft + 1, labelY);
-      ctx.restore();
-    }
   }
 
   return diagnostics;

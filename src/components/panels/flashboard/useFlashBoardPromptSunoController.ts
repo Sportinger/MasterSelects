@@ -18,6 +18,7 @@ import {
 import {
   buildFlashBoardSunoOptionsState,
   buildFlashBoardSunoTuningResetState,
+  normalizeFlashBoardSunoWeight,
 } from './FlashBoardSunoOptionsPlanner';
 
 interface PromptRefineCallbacks {
@@ -38,14 +39,6 @@ interface UseFlashBoardPromptSunoControllerInput {
   version: string;
 }
 
-function clampSunoWeight(value: number | undefined, fallback: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return fallback;
-  }
-
-  return Math.max(0, Math.min(1, value));
-}
-
 export function useFlashBoardPromptSunoController({
   composer,
   isSunoMode,
@@ -64,13 +57,13 @@ export function useFlashBoardPromptSunoController({
     composer.sunoVocalGender ?? '',
   );
   const [sunoStyleWeight, setSunoStyleWeight] = useState(
-    clampSunoWeight(composer.sunoStyleWeight, DEFAULT_SUNO_STYLE_WEIGHT),
+    normalizeFlashBoardSunoWeight(composer.sunoStyleWeight, DEFAULT_SUNO_STYLE_WEIGHT),
   );
   const [sunoWeirdnessConstraint, setSunoWeirdnessConstraint] = useState(
-    clampSunoWeight(composer.sunoWeirdnessConstraint, DEFAULT_SUNO_WEIRDNESS_CONSTRAINT),
+    normalizeFlashBoardSunoWeight(composer.sunoWeirdnessConstraint, DEFAULT_SUNO_WEIRDNESS_CONSTRAINT),
   );
   const [sunoAudioWeight, setSunoAudioWeight] = useState(
-    clampSunoWeight(composer.sunoAudioWeight, DEFAULT_SUNO_AUDIO_WEIGHT),
+    normalizeFlashBoardSunoWeight(composer.sunoAudioWeight, DEFAULT_SUNO_AUDIO_WEIGHT),
   );
 
   const effectivePrompt = useMemo(() => {
@@ -136,6 +129,18 @@ export function useFlashBoardPromptSunoController({
     setSunoVocalGender(value as FlashBoardSunoVocalGender | '');
   }, []);
 
+  const handleSunoStyleWeightChange = useCallback((value: number) => {
+    setSunoStyleWeight(normalizeFlashBoardSunoWeight(value, DEFAULT_SUNO_STYLE_WEIGHT));
+  }, []);
+
+  const handleSunoWeirdnessConstraintChange = useCallback((value: number) => {
+    setSunoWeirdnessConstraint(normalizeFlashBoardSunoWeight(value, DEFAULT_SUNO_WEIRDNESS_CONSTRAINT));
+  }, []);
+
+  const handleSunoAudioWeightChange = useCallback((value: number) => {
+    setSunoAudioWeight(normalizeFlashBoardSunoWeight(value, DEFAULT_SUNO_AUDIO_WEIGHT));
+  }, []);
+
   const resetSunoTuning = useCallback(() => {
     const resetState = buildFlashBoardSunoTuningResetState();
     setSunoVocalGender(resetState.vocalGender);
@@ -155,13 +160,13 @@ export function useFlashBoardPromptSunoController({
     prompt,
     resetSunoTuning,
     setPrompt,
-    setSunoAudioWeight,
+    setSunoAudioWeight: handleSunoAudioWeightChange,
     setSunoCustomMode,
     setSunoInstrumental,
     setSunoNegativeTags,
     setSunoStyle,
-    setSunoStyleWeight,
-    setSunoWeirdnessConstraint,
+    setSunoStyleWeight: handleSunoStyleWeightChange,
+    setSunoWeirdnessConstraint: handleSunoWeirdnessConstraintChange,
     sunoAudioWeight,
     sunoCustomMode,
     sunoInstrumental,

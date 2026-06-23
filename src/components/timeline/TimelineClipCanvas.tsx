@@ -23,12 +23,18 @@ import {
   resolveClipGeometry,
 } from './utils/timelineClipCanvasClipGeometry';
 import {
+  alignTimelineGridPixel,
+  getTimelineDevicePixelRatio,
+} from './utils/timelineGrid';
+import {
   buildSourceWaveformPyramidIdMap,
   enrichClipsWithSourceWaveformRef,
 } from './utils/timelineClipCanvasSourceWaveformRef';
 import type { TimelineClipCanvasSpectrogramTileSetMap } from './utils/timelineClipCanvasSpectrogramResource';
 import type { TimelineClipCanvasWaveformPyramidMap } from './utils/timelineClipCanvasWaveformResource';
 import {
+  getTimelineClipCanvasPassiveDecorationBadgeReserve,
+  getTimelineClipCanvasPassiveDecorationBadges,
   hasTimelineClipCanvasPassiveDecorations,
   type TimelineClipCanvasMediaStatus,
 } from './utils/timelineClipCanvasPassiveDecorations';
@@ -81,6 +87,23 @@ interface TimelineClipCanvasProps {
 
 type MediaFileCanvasStatusMap = ReadonlyMap<string, TimelineClipCanvasMediaStatus>;
 
+interface TimelineClipCanvasChromeBadge {
+  label: string;
+  fill: string;
+  stroke?: string;
+  width: number;
+  right: number;
+}
+
+interface TimelineClipCanvasChromeOverlay {
+  id: string;
+  label: string;
+  left: number;
+  width: number;
+  badges: readonly TimelineClipCanvasChromeBadge[];
+  badgeReserve: number;
+}
+
 function getCanvasClipMediaFileId(clip: TimelinePaintSourceClip): string | null {
   return clip.source?.mediaFileId ?? clip.mediaFileId ?? null;
 }
@@ -91,6 +114,28 @@ function getMediaFileCanvasStatus(
 ): TimelineClipCanvasMediaStatus | undefined {
   const mediaFileId = getCanvasClipMediaFileId(clip);
   return mediaFileId ? mediaFileStatusById.get(mediaFileId) : undefined;
+}
+
+function createTimelineClipCanvasChromeBadge(
+  badge: ReturnType<typeof getTimelineClipCanvasPassiveDecorationBadges>[number],
+): TimelineClipCanvasChromeBadge {
+  return {
+    ...badge,
+    width: Math.max(14, badge.label.length * 6 + 8),
+    right: 4,
+  };
+}
+
+function createTimelineClipCanvasChromeBadges(
+  badges: ReturnType<typeof getTimelineClipCanvasPassiveDecorationBadges>,
+): TimelineClipCanvasChromeBadge[] {
+  const chromeBadges = badges.map(createTimelineClipCanvasChromeBadge);
+  let right = 4;
+  for (let index = chromeBadges.length - 1; index >= 0; index -= 1) {
+    chromeBadges[index] = { ...chromeBadges[index], right };
+    right += chromeBadges[index].width + 3;
+  }
+  return chromeBadges;
 }
 
 function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
@@ -131,13 +176,20 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     clipDragPreview,
     clipTrim,
   }), [clipDrag, clipDragPreview, clipTrim, trackId]);
-  const { cssWidth, canvasOffsetX, scrollBucket } = useTimelineClipCanvasViewport({
+  const {
+    cssWidth,
+    canvasOffsetX,
+    scrollBucket,
+    visibleViewportWidth,
+  } = useTimelineClipCanvasViewport({
     canvasRef,
     scrollX,
     viewportWidth,
     overscanPx: CANVAS_RENDER_OVERSCAN_PX,
     maxCanvasWidthPx: MAX_CANVAS_WIDTH_PX,
   });
+  const chromeViewportWidth = Math.max(1, Math.min(viewportWidth, visibleViewportWidth));
+  const chromeScrollX = alignTimelineGridPixel(scrollX, getTimelineDevicePixelRatio());
   const visibleAudioArtifactClipIds = useMemo(
     () => collectTimelineClipCanvasVisibleAudioArtifactClipIds({
       clips,
@@ -254,6 +306,36 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     return ids;
   }, [mediaFileStatusById, workerDrawableClips]);
   const hasPassiveDecorations = passiveDecorationClipIds.size > 0;
+  const chromeOverlays = useMemo(() => {
+    const overlays: TimelineClipCanvasChromeOverlay[] = [];
+    for (const clip of clips) {
+      const geometry = resolveClipGeometry(clip, geometryProps);
+      if (!geometry.visible || geometry.duration <= 0) continue;
+
+      const absoluteX = timeToPixel(geometry.startTime);
+      const absoluteW = timeToPixel(geometry.duration);
+      const visibleLeft = Math.max(absoluteX, chromeScrollX);
+      const visibleRight = Math.min(absoluteX + absoluteW, chromeScrollX + chromeViewportWidth);
+      const visibleW = visibleRight - visibleLeft;
+      if (visibleW <= 0 || visibleW < LOD_LABEL_PX) continue;
+
+      const passiveBadges = getTimelineClipCanvasPassiveDecorationBadges(
+        clip,
+        getMediaFileCanvasStatus(clip, mediaFileStatusById),
+      );
+      if (!clip.name && passiveBadges.length === 0) continue;
+
+      overlays.push({
+        id: clip.id,
+        label: clip.name,
+        left: visibleLeft - chromeScrollX,
+        width: visibleW,
+        badges: createTimelineClipCanvasChromeBadges(passiveBadges),
+        badgeReserve: getTimelineClipCanvasPassiveDecorationBadgeReserve(passiveBadges),
+      });
+    }
+    return overlays;
+  }, [chromeScrollX, chromeViewportWidth, clips, geometryProps, mediaFileStatusById, timeToPixel]);
   const workerEligibility = useMemo(() => getTimelineClipCanvasWorkerEligibility({
     clips: workerPaintClips,
     waveformsEnabled,
@@ -326,20 +408,65 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     renderOverscanPx: CANVAS_RENDER_OVERSCAN_PX,
     thumbnailViewportOverscanPx: THUMBNAIL_VIEWPORT_OVERSCAN_PX,
     lodBarPx: LOD_BAR_PX,
-    lodLabelPx: LOD_LABEL_PX,
     lodThumbnailPx: LOD_THUMB_PX,
     maxThumbnailSlots: MAX_THUMB_SLOTS,
     thumbnailSlotPx: CANVAS_THUMB_SLOT_PX,
   });
 
   return (
-    <canvas
-      key={`${trackId}:${workerCanvasGeneration}`}
-      ref={canvasRef}
-      className="timeline-clip-canvas"
-      style={{ position: 'absolute', left: canvasOffsetX, top: 0, pointerEvents: 'none' }}
-      aria-hidden="true"
-    />
+    <>
+      <canvas
+        key={`${trackId}:${workerCanvasGeneration}`}
+        ref={canvasRef}
+        className="timeline-clip-canvas"
+        style={{ position: 'absolute', left: canvasOffsetX, top: 0, pointerEvents: 'none' }}
+        aria-hidden="true"
+      />
+      <div
+        className="timeline-clip-chrome-layer"
+        style={{
+          transform: `translateX(${chromeScrollX}px)`,
+          width: chromeViewportWidth,
+        }}
+        aria-hidden="true"
+      >
+        {chromeOverlays.map((overlay) => (
+          <div
+            key={overlay.id}
+            className="timeline-clip-chrome"
+            style={{
+              left: overlay.left,
+              top: 1,
+              width: overlay.width,
+              height: Math.max(1, height - 2),
+            }}
+          >
+            {overlay.label && (
+              <span
+                className="timeline-clip-chrome-title"
+                style={{ right: Math.max(6, overlay.badgeReserve + 8) }}
+              >
+                {overlay.label}
+              </span>
+            )}
+            {overlay.badges.map((badge, index) => (
+              <span
+                key={`${badge.label}:${index}`}
+                className="timeline-clip-chrome-badge"
+                style={{
+                  right: badge.right,
+                  width: badge.width,
+                  backgroundColor: badge.fill,
+                  borderColor: badge.stroke ?? 'transparent',
+                }}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 

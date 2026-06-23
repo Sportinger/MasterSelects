@@ -34,22 +34,14 @@ function pickCheckoutPlanId(planId: BillingPlanId | string): BillingPlanId | str
 
 /* ── Dev-login mock data (used when backend is not running) ── */
 
-const DEV_PLAN_MOCKS: Record<string, { credits: number; entitlements: Record<string, string>; label: string }> = {
-  free:    { credits: 25,   label: 'Free',    entitlements: { hosted_ai_chat: 'true' } },
-  starter: { credits: 4500, label: 'Starter', entitlements: { hosted_ai_chat: 'true' } },
-  pro:     { credits: 13500, label: 'Pro',     entitlements: { hosted_ai_chat: 'true', kling_generation: 'true', priority_queue: 'true' } },
-  studio:  { credits: 27000, label: 'Studio',  entitlements: { hosted_ai_chat: 'true', kling_generation: 'true', priority_queue: 'true', api_access: 'true' } },
-};
-
-function applyDevMock(set: (partial: Partial<AccountState>) => void, planId: string): void {
-  const mock = DEV_PLAN_MOCKS[planId] ?? DEV_PLAN_MOCKS.studio;
+function applyDevMock(set: (partial: Partial<AccountState>) => void): void {
   set({
     billingSummary: null,
-    creditBalance: mock.credits,
+    creditBalance: 0,
     dialog: 'account',
-    entitlements: mock.entitlements,
-    error: null,
-    hostedAIEnabled: true,
+    entitlements: {},
+    error: 'Local API backend is not running. Start npm run dev:full to test hosted AI with env keys.',
+    hostedAIEnabled: false,
     isInitialized: true,
     isLoading: false,
     session: { authenticated: true, provider: 'dev' },
@@ -120,7 +112,7 @@ export const useAccountStore = create<AccountState>((set, get) => ({
       set({ dialog: 'account' });
     } catch {
       // Backend not running — use frontend-only mock
-      applyDevMock(set, planId);
+      applyDevMock(set);
     }
   },
   login: async (input) => {

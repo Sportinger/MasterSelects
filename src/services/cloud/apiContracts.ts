@@ -247,10 +247,27 @@ export interface CloudAiAudioMusicRequest {
   };
 }
 
+export interface CloudAiAudioTranscriptionRequest {
+  action: 'transcription';
+  idempotencyKey?: string;
+  params: {
+    audioBase64: string;
+    fileName?: string;
+    language?: string;
+    mimeType?: string;
+  };
+}
+
 export interface CloudAiAudioMusicCreateResponse {
   outputType: 'audio';
   provider: string;
   taskId: string;
+}
+
+export interface CloudAiAudioTranscriptionResponse {
+  durationSeconds: number;
+  model: string;
+  words: Array<{ word: string; start: number; end: number }>;
 }
 
 export interface CloudAiAudioModelsResponse {

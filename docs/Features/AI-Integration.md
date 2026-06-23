@@ -132,9 +132,10 @@ The old dock-level AI Generative tab is deprecated and removed from default and 
 - Compact setting buttons such as model, aspect ratio, duration, image size, and mode open as inline submenus: the standard control row slides out, submenu pills stagger in, and the default row returns after selection
 - Reference cards use pointer-proximity magnification in the compact Media tray, with previews scaling visually outside the tray without changing the prompt box height; crowded trays switch the reference cards into a vertical scroll strip
 - Media Panel image, video, and audio files can be referenced by right-clicking them or dragging them onto the expanded prompt composer
-- Nano Banana 2 accepts up to 14 ordered reference images through Kie.ai or EvoLink; Kie.ai and Cloud Seedance 2.0 / Fast accept multimodal image/video/audio references and send audio references as `reference_audio_urls` for lip-sync / performance timing; the composer labels generic references as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
+- Kie.ai image generation includes Nano Banana 2, Nano Banana Pro, Imagen 4 Fast/Ultra, GPT Image 2, Flux 2 Pro, and Seedream 5 Lite through the shared async image-provider adapter. GPT Image 2 Edit, Flux 2 Pro Edit, and Seedream 5 Lite Edit require at least one reference image before generation is enabled.
+- Nano Banana 2 and Nano Banana Pro accept up to 14 ordered reference images through Kie.ai; Nano Banana 2 is also available through EvoLink. Kie.ai and Cloud Seedance 2.0 / Fast accept multimodal image/video/audio references and send audio references as `reference_audio_urls` for lip-sync / performance timing; the composer labels generic references as `REF 1`, `REF 2`, ... so prompts can refer to them explicitly
 - Seedance 2.0 standard and Fast cannot combine strict `first_frame_url` / `last_frame_url` with multimodal references in the same Kie.ai request, so IN / OUT cards are converted to image references when REF media is present. In multimodal reference mode, the adapter sends `generate_audio: false`; audio references are passed separately as input drivers through `reference_audio_urls`, and the composer hides the `Sound` toggle while REF media is attached. Audio-only Seedance references are blocked locally because Seedance requires audio references to be paired with at least one image or video anchor.
-- The wand button in the composer refines the current prompt with GPT-5.5 through the hosted Cloudflare `/api/ai/chat` route by default. In non-production development it can still use a local OpenAI key when that key is explicitly marked as default. Seedance targets use model-specific guidance for concise cinematic motion, REF media continuity, multimodal constraints, and audio-driven speech/timing prompts.
+- The wand button in the composer refines the current prompt with GPT-5.5 through the hosted Cloudflare `/api/ai/chat` route by default. In non-production development it can still use a local OpenAI key when that key is explicitly marked as default. Suno, Nano Banana, GPT Image, Flux, Seedream, Imagen, Kling, Seedance, Veo, and Runway targets use model-specific guidance so the refined prompt follows the selected model's input style and constraints.
 - The collapsed Media tray shows separate `Chat` and `Generate` launch buttons. `Chat` opens a compact chat prompt window with OpenAI/Cloud model selection, OpenAI reasoning effort for GPT-5.x models, a visible per-round credit estimate, and a temperature slider when the selected model accepts temperature. Non-production development can still expose Anthropic and Lemonade for local testing.
 - Compact chat requests include the Media-chat system prompt, current timeline summary, and callable AI tools. Tool calls route through the shared `executeAIToolCalls(..., 'chat')` dispatcher; actions that require confirmation are denied in the compact flow and reported back to the model unless the approval mode allows them automatically.
 - Queued and running generations appear as Media Panel preview cards with output type, status, elapsed timer, prompt, metadata, and progress when the provider reports it
@@ -146,9 +147,9 @@ The current generator stack is no longer best described as "PiAPI as one unified
 
 | Backend | Where it is used | Notes |
 |---------|------------------|-------|
-| `Kie.ai` | FlashBoard development/BYO flows | Current provider list comes from `getKieAiProviders()`; user-supplied keys are development-only when explicitly unlocked and marked as default |
+| `Kie.ai` | FlashBoard development/BYO flows | Video providers come from `getKieAiProviders()`; image providers include Kie Market job models in the FlashBoard catalog; user-supplied keys are development-only when explicitly unlocked and marked as default |
 | `EvoLink` | FlashBoard image generation | User-supplied key must be unlocked and marked as default; Nano Banana 2 uses EvoLink's async `gemini-3.1-flash-image-preview` task flow with up to 14 reference images |
-| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; production uses Cloudflare secrets only. FlashBoard uses hosted Kling/Seedance/Nano Banana through `/api/ai/video`, hosted ElevenLabs speech through `/api/ai/audio`, hosted Suno music through `/api/ai/audio`, and hosted OpenAI chat/refinement through `/api/ai/chat` |
+| `MasterSelects Cloud` | FlashBoard production and hosted development | Hosted credits/account flow; production uses Cloudflare secrets only. FlashBoard uses hosted Kling/Seedance/Nano Banana through `/api/ai/video`, hosted ElevenLabs speech, OpenAI transcription, and Suno music through `/api/ai/audio`, and hosted OpenAI chat/refinement through `/api/ai/chat` |
 | `ElevenLabs` | FlashBoard audio generation in development/BYO flows | User-supplied keys are development-only when explicitly unlocked and marked as default; production text-to-speech uses the Cloudflare `ELEVENLABS_API_KEY` secret |
 | `Suno` | FlashBoard music generation | Production uses Kie.ai's Suno API through the Cloudflare `KIEAI_API_KEY` secret and charges hosted credits; development can still use BYO Kie.ai only when enabled as default |
 | `OpenAI` | FlashBoard prompt refinement and compact chat | Production uses the Cloudflare `OPENAI_API_KEY` secret and charges hosted credits per model round; development can still use BYO OpenAI when explicitly marked as default |
@@ -411,6 +412,17 @@ Model: whisper-1
 Format: verbose_json
 Granularity: word
 ```
+- Signed-in accounts always use the hosted OpenAI Whisper path through
+  MasterSelects credits, currently 6 credits per minute rounded up to the next
+  whole credit.
+- On the plain Vite dev server, if the hosted `/api/ai/audio` route is not
+  available, clip transcription falls back to the configured provider, or to
+  local Whisper when no BYO provider key is configured.
+- Backend-free dev-login mocks do not enable hosted AI; local hosted-AI testing
+  with `.dev.vars` or environment secrets requires `npm run dev:full` or
+  `npm run dev:api` beside `npm run dev`.
+- Signed-out users can still use the configured local/BYO transcription
+  provider selection.
 
 #### AssemblyAI
 ```

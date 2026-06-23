@@ -39,6 +39,10 @@ getTrackChildren()  // Query child tracks
 - Expanded track height depends on the selected clip, visible property rows, and open curve editors.
 
 ### Track and Clip Colors
+- Clip titles and passive status badges render as a lightweight DOM chrome
+  above `TimelineClipCanvas`, clamped to the visible clip span while
+  scrolling/zooming. The canvas still owns clip bodies, thumbnails, waveforms,
+  spectrograms, and passive analysis/progress visuals.
 - A single resolver, `getTimelineTrackColor()` (`src/components/timeline/trackColor.ts`),
   is the source of truth for a track's color. Precedence: a user-picked
   **label color** wins; otherwise a **per-type default** applies; otherwise the

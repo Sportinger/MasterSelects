@@ -9,6 +9,8 @@ note here when a plan still has unresolved gates or intentionally deferred work.
 | File | Status | Why It Stays Here |
 |---|---|---|
 | [Native-Helper-Codec-Service.md](./Native-Helper-Codec-Service.md) | Draft plan | Native helper codec commands are not implemented server-side yet. |
+| [Kie-AI-Generation-Chatbox-Expansion.md](./Kie-AI-Generation-Chatbox-Expansion.md) | Active implementation | Tracks Kie.ai service expansion, Suno tuning control fix, and model-specific prompt-refiner profiles for FlashBoard. |
+| [Kie-AI-Magic-Wand-Research-Ledger.md](./Kie-AI-Magic-Wand-Research-Ledger.md) | Active source ledger | Source-backed June 2026 model guidance for FlashBoard prompt-refiner profiles. |
 | [Pixel-Particle-Disintegration-Fade-plan.md](./Pixel-Particle-Disintegration-Fade-plan.md) | Draft plan | The pixel-particle fade effect is future work and has an unchecked acceptance checklist. |
 | [Worker-First-Playback-Renderer.md](./Worker-First-Playback-Renderer.md) | Active architecture plan | Foundations and evidence tooling are merged, but Mac Safari/Firefox platform packages and later worker-renderer gates remain open. |
 | [Worker-First-Playback-Renderer-checklist.md](./Worker-First-Playback-Renderer-checklist.md) | Active checklist | Tracks merged packets plus remaining platform and debt gates. |

@@ -20,14 +20,22 @@ export type ClipTranscriptUpdate = {
  */
 export function updateClipTranscript(clipId: string, data: ClipTranscriptUpdate): void {
   const store = useTimelineStore.getState();
+  const targetClip = store.clips.find(clip => clip.id === clipId);
+  const affectedClipIds = new Set([clipId]);
+  if (targetClip?.linkedClipId) affectedClipIds.add(targetClip.linkedClipId);
+  for (const clip of store.clips) {
+    if (clip.linkedClipId === clipId) affectedClipIds.add(clip.id);
+  }
+
+  const hasWords = Object.prototype.hasOwnProperty.call(data, 'words');
   const clips = store.clips.map(clip => {
-    if (clip.id !== clipId) return clip;
+    if (!affectedClipIds.has(clip.id)) return clip;
 
     return {
       ...clip,
       transcriptStatus: data.status ?? clip.transcriptStatus,
       transcriptProgress: data.progress ?? clip.transcriptProgress,
-      transcript: data.words ?? clip.transcript,
+      transcript: hasWords ? data.words : clip.transcript,
       transcriptMessage: data.message,
     };
   });

@@ -1,4 +1,5 @@
 import { useSettingsStore, type TranscriptionProvider } from '../../../stores/settingsStore';
+import { useAccountStore } from '../../../stores/accountStore';
 
 interface TranscriptionSettingsProps {
   localKeys: { [key: string]: string };
@@ -13,6 +14,8 @@ const providers: { id: TranscriptionProvider; label: string; description: string
 
 export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps) {
   const { transcriptionProvider, setTranscriptionProvider } = useSettingsStore();
+  const isSignedIn = useAccountStore((state) => Boolean(state.session?.authenticated));
+  const activeProvider = isSignedIn ? 'openai' : transcriptionProvider;
 
   return (
     <div className="settings-category-content">
@@ -22,30 +25,47 @@ export function TranscriptionSettings({ localKeys }: TranscriptionSettingsProps)
         <div className="settings-group-title">Provider</div>
 
         <div className="provider-list">
-          {providers.map((provider) => (
-            <label
-              key={provider.id}
-              className={`provider-option ${transcriptionProvider === provider.id ? 'active' : ''}`}
-            >
-              <input
-                type="radio"
-                name="transcriptionProvider"
-                value={provider.id}
-                checked={transcriptionProvider === provider.id}
-                onChange={() => setTranscriptionProvider(provider.id)}
-              />
-              <div className="provider-info">
-                <span className="provider-label">{provider.label}</span>
-                <span className="provider-description">{provider.description}</span>
-              </div>
-              {provider.id !== 'local' && localKeys[provider.id] && (
-                <span className="provider-status">{'\u2713'}</span>
-              )}
-            </label>
-          ))}
+          {providers.map((provider) => {
+            const disabled = isSignedIn && provider.id !== 'openai';
+            const description = isSignedIn && provider.id === 'openai'
+              ? 'Uses MasterSelects credits for signed-in accounts.'
+              : provider.description;
+
+            return (
+              <label
+                key={provider.id}
+                className={[
+                  'provider-option',
+                  activeProvider === provider.id ? 'active' : '',
+                  disabled ? 'disabled' : '',
+                ].filter(Boolean).join(' ')}
+              >
+                <input
+                  type="radio"
+                  name="transcriptionProvider"
+                  value={provider.id}
+                  checked={activeProvider === provider.id}
+                  disabled={disabled}
+                  onChange={() => setTranscriptionProvider(provider.id)}
+                />
+                <div className="provider-info">
+                  <span className="provider-label">{provider.label}</span>
+                  <span className="provider-description">{description}</span>
+                </div>
+                {provider.id !== 'local' && !isSignedIn && localKeys[provider.id] && (
+                  <span className="provider-status">{'\u2713'}</span>
+                )}
+                {provider.id === 'openai' && isSignedIn && (
+                  <span className="provider-status">CR</span>
+                )}
+              </label>
+            );
+          })}
         </div>
         <p className="settings-hint">
-          API keys for transcription providers can be configured in the API Keys section.
+          {isSignedIn
+            ? 'Signed-in accounts always use OpenAI Cloud transcription through MasterSelects credits.'
+            : 'API keys for transcription providers can be configured in the API Keys section.'}
         </p>
       </div>
     </div>

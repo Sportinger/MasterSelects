@@ -8,6 +8,7 @@ import type {
 
 interface GenerationActionStateEntry {
   outputType?: FlashBoardOutputType;
+  requiresReferenceMedia?: boolean;
 }
 
 interface BuildFlashBoardGenerationActionStateInput {
@@ -20,6 +21,7 @@ interface BuildFlashBoardGenerationActionStateInput {
   hasGenerationBoard: boolean;
   hasHostedSession: boolean;
   hasKieAiKey: boolean;
+  hasReferenceMediaInput: boolean;
   hasVideoReferenceInput: boolean;
   hostedAIEnabled: boolean;
   imageSize: string;
@@ -204,10 +206,16 @@ function buildBackendValidationError({
   hasEvolinkKey,
   hasHostedSession,
   hasKieAiKey,
+  hasReferenceMediaInput,
   isHostedAudioMode,
+  selectedEntry,
   service,
   usePiApiKeyByDefault,
 }: BuildFlashBoardGenerationActionStateInput): string | null {
+  if (selectedEntry?.requiresReferenceMedia && !hasReferenceMediaInput) {
+    return 'Add a reference image for this image edit model.';
+  }
+
   if (service === 'piapi' && !usePiApiKeyByDefault) {
     return 'Enable a PiAPI key as default in Settings to generate with PiAPI.';
   }

@@ -57,6 +57,7 @@ export function drawTimelineClipCanvasPassiveDecorations(
   top: number,
   w: number,
   h: number,
+  drawBadges = true,
 ): void {
   ctx.save();
   ctx.beginPath();
@@ -65,6 +66,8 @@ export function drawTimelineClipCanvasPassiveDecorations(
   drawTimelineClipCanvasPassiveAnalysisOverlay(ctx, clip, geometry, x, top, w, h);
   drawTimelineClipCanvasTranscriptMarkers(ctx, clip, geometry, x, top, w, h);
   drawTimelineClipCanvasPassiveProgressBars(ctx, progressBars, x, top, w);
-  drawTimelineClipCanvasPassiveBadges(ctx, badges, x, top, w);
+  if (drawBadges) {
+    drawTimelineClipCanvasPassiveBadges(ctx, badges, x, top, w);
+  }
   ctx.restore();
 }

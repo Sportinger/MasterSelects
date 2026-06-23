@@ -19,6 +19,9 @@ import {
   type HostedSunoParams,
 } from '../../lib/providers/kieai';
 import {
+  handleHostedOpenAITranscriptionRequest,
+} from '../../lib/providers/openaiTranscriptionRoute';
+import {
   createGatewayError,
   createHostedGatewayEnvelope,
   type HostedGatewayEnvelope,
@@ -81,6 +84,11 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
   const requestId = context.data.requestId ?? null;
   const capabilities = {
     elevenlabs: buildHostedElevenLabsCapabilities(),
+    openaiTranscription: {
+      creditsPerMinute: 6,
+      model: 'whisper-1',
+      provider: 'openai',
+    },
     suno: {
       byoExplicit: false,
       models: ['V5', 'V4_5PLUS', 'V4_5', 'V4'],
@@ -118,7 +126,7 @@ function requireHostedAudioAccess(
   if (!hostedContext.user) {
     return json(
       buildRouteEnvelope({
-        error: createGatewayError('auth_required', 'Hosted audio generation requires a signed-in account.', {
+        error: createGatewayError('auth_required', 'Hosted audio features require a signed-in account.', {
           requestId,
         }),
         next: 'auth',
@@ -141,7 +149,7 @@ function requireHostedAudioAccess(
         byoRequired: true,
         error: createGatewayError(
           'feature_not_enabled',
-          'Hosted audio generation is not enabled for this account.',
+          'Hosted audio features are not enabled for this account.',
           { requestId },
         ),
         next: 'pricing',
@@ -477,6 +485,23 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
         : `${requestId}:ai.audio.suno`;
 
     return handleHostedSunoMusicRequest(context, hostedContext, musicParams, idempotencyKey, requestId);
+  }
+
+  if (rawBody?.action === 'transcription') {
+    const hostedContext = await loadHostedContext(context);
+    const accessError = requireHostedAudioAccess(hostedContext, requestId);
+    if (accessError) {
+      return accessError;
+    }
+
+    return handleHostedOpenAITranscriptionRequest({
+      billing: hostedContext.billing,
+      context,
+      idempotencyKey: rawBody.idempotencyKey,
+      paramsInput,
+      requestId,
+      user: hostedContext.user!,
+    });
   }
 
   const speechParams = normalizeHostedElevenLabsSpeechParams(paramsInput);

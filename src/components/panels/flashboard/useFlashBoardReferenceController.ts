@@ -92,6 +92,7 @@ export function useFlashBoardReferenceValidationController({
   });
 
   return {
+    hasVisualReferenceInput: hasSeedanceVisualReferenceInput,
     hasVideoReferenceInput,
     seedanceReferenceModeActive,
     seedanceReferenceValidationError,

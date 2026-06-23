@@ -269,6 +269,7 @@ async function runImageJob({
   const remoteTaskId = await imageProvider.createTextToImage({
     provider: request.providerId,
     prompt: request.prompt,
+    negativePrompt: request.negativePrompt,
     aspectRatio: request.aspectRatio,
     resolution: request.imageSize,
     outputFormat: 'png',

@@ -390,6 +390,15 @@
   background: rgba(59, 130, 246, 0.1);
 }
 
+.provider-option.disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.provider-option.disabled:hover {
+  border-color: var(--border-color);
+}
+
 .provider-option input {
   margin: 0;
   accent-color: var(--accent);
