@@ -6,12 +6,21 @@ import {
 } from '../evolinkService';
 import type { CatalogEntry } from './types';
 import { DEFAULT_ELEVENLABS_MODEL_ID } from '../../stores/flashboardStore/defaults';
-import { DEFAULT_SUNO_MODEL_ID, SUNO_MODEL_IDS, SUNO_PROVIDER_ID } from '../sunoService';
+import { DEFAULT_SUNO_MODEL_ID, SUNO_MODEL_IDS, SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoService';
+import {
+  FLUX_KONTEXT_MAX_PROVIDER_ID,
+  FLUX_KONTEXT_PRO_PROVIDER_ID,
+  RECRAFT_CRISP_UPSCALE_PROVIDER_ID,
+  RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID,
+  RUNWAY_VIDEO_PROVIDER_ID,
+  TOPAZ_IMAGE_UPSCALE_PROVIDER_ID,
+  TOPAZ_VIDEO_UPSCALE_PROVIDER_ID,
+  VEO_3_1_PROVIDER_ID,
+} from '../kieAi/config';
 
 const COMMON_IMAGE_ASPECT_RATIOS = ['auto', '1:1', '3:4', '4:3', '9:16', '16:9', '21:9'];
 const NANO_BANANA_ASPECT_RATIOS = ['auto', '1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'];
 const NANO_BANANA_IMAGE_SIZES = ['1K', '2K', '4K'];
-
 const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
   {
     service: 'kieai',
@@ -200,6 +209,113 @@ const KIEAI_MARKET_IMAGE_ENTRIES: CatalogEntry[] = [
     promptRefinerProfile: 'seedream-edit',
     requiresReferenceMedia: true,
   },
+  {
+    service: 'kieai',
+    providerId: FLUX_KONTEXT_PRO_PROVIDER_ID,
+    name: 'Flux Kontext Pro',
+    description: 'Flux Kontext image generation and single-image editing via Kie.ai',
+    versions: ['latest'],
+    modes: [],
+    durations: [],
+    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    maxReferenceImages: 1,
+    maxReferenceMedia: 1,
+    outputType: 'image',
+    promptRefinerProfile: 'flux-kontext',
+    requiredReferenceMediaType: 'image',
+  },
+  {
+    service: 'kieai',
+    providerId: FLUX_KONTEXT_MAX_PROVIDER_ID,
+    name: 'Flux Kontext Max',
+    description: 'Higher-quality Flux Kontext image generation and editing via Kie.ai',
+    versions: ['latest'],
+    modes: [],
+    durations: [],
+    aspectRatios: COMMON_IMAGE_ASPECT_RATIOS,
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    maxReferenceImages: 1,
+    maxReferenceMedia: 1,
+    outputType: 'image',
+    promptRefinerProfile: 'flux-kontext',
+    requiredReferenceMediaType: 'image',
+  },
+  {
+    service: 'kieai',
+    providerId: RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID,
+    name: 'Recraft Remove Background',
+    description: 'Remove image backgrounds via Kie.ai',
+    versions: ['latest'],
+    modes: [],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    maxReferenceImages: 1,
+    maxReferenceMedia: 1,
+    outputType: 'image',
+    promptRefinerProfile: 'utility-image',
+    requiredReferenceMediaType: 'image',
+    requiresPrompt: false,
+    requiresReferenceMedia: true,
+  },
+  {
+    service: 'kieai',
+    providerId: RECRAFT_CRISP_UPSCALE_PROVIDER_ID,
+    name: 'Recraft Crisp Upscale',
+    description: 'Crisp image upscaling via Kie.ai',
+    versions: ['latest'],
+    modes: [],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    maxReferenceImages: 1,
+    maxReferenceMedia: 1,
+    outputType: 'image',
+    promptRefinerProfile: 'utility-image',
+    requiredReferenceMediaType: 'image',
+    requiresPrompt: false,
+    requiresReferenceMedia: true,
+  },
+  {
+    service: 'kieai',
+    providerId: TOPAZ_IMAGE_UPSCALE_PROVIDER_ID,
+    name: 'Topaz Image Upscale',
+    description: 'Topaz image upscaling via Kie.ai',
+    versions: ['latest'],
+    modes: [],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    imageSizes: ['2x', '4x'],
+    maxReferenceImages: 1,
+    maxReferenceMedia: 1,
+    outputType: 'image',
+    promptRefinerProfile: 'utility-image',
+    requiredReferenceMediaType: 'image',
+    requiresPrompt: false,
+    requiresReferenceMedia: true,
+  },
 ];
 
 export function getCatalogEntries(): CatalogEntry[] {
@@ -225,6 +341,7 @@ export function getCatalogEntries(): CatalogEntry[] {
   for (const p of getKieAiProviders()) {
     const isImageOnly = !p.supportsTextToVideo && !p.supportsImageToVideo;
     const isSeedance2 = p.id === 'bytedance/seedance-2' || p.id === 'bytedance/seedance-2-fast';
+    const isTopazVideoUpscale = p.id === TOPAZ_VIDEO_UPSCALE_PROVIDER_ID;
     entries.push({
       service: 'kieai',
       providerId: p.id,
@@ -238,7 +355,17 @@ export function getCatalogEntries(): CatalogEntry[] {
       supportsImageToVideo: p.supportsImageToVideo,
       supportsGenerateAudio: p.id === 'kling-3.0' || isSeedance2,
       supportsMultiShot: p.id === 'kling-3.0',
-      maxReferenceMedia: p.id === 'kling-3.0' ? 3 : isSeedance2 ? 8 : undefined,
+      maxReferenceMedia: p.id === 'kling-3.0' ? 3 : isSeedance2 ? 8 : isTopazVideoUpscale ? 1 : undefined,
+      promptRefinerProfile: isTopazVideoUpscale
+        ? 'utility-video'
+        : p.id === VEO_3_1_PROVIDER_ID
+          ? 'veo'
+          : p.id === RUNWAY_VIDEO_PROVIDER_ID
+            ? 'runway'
+            : undefined,
+      requiredReferenceMediaType: isTopazVideoUpscale ? 'video' : undefined,
+      requiresPrompt: isTopazVideoUpscale ? false : undefined,
+      requiresReferenceMedia: isTopazVideoUpscale ? true : undefined,
       ...(isImageOnly ? { supportsTextToImage: true, outputType: 'image' as const } : { outputType: 'video' as const }),
     });
   }
@@ -302,9 +429,28 @@ export function getCatalogEntries(): CatalogEntry[] {
   });
 
   entries.push({
+    service: 'suno',
+    providerId: SUNO_SOUNDS_PROVIDER_ID,
+    name: 'Suno Sounds',
+    description: 'Text-to-sound generation via Kie.ai Suno Sounds',
+    versions: [DEFAULT_SUNO_MODEL_ID, ...SUNO_MODEL_IDS.filter((model) => model !== DEFAULT_SUNO_MODEL_ID)],
+    modes: ['one-shot', 'loop'],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: false,
+    supportsTextToAudio: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    outputType: 'audio',
+    promptRefinerProfile: 'suno-sounds',
+  });
+
+  entries.push({
     service: 'cloud',
     providerId: 'cloud-elevenlabs-tts',
-    name: 'ElevenLabs (Cloud)',
+    name: 'ElevenLabs',
     description: 'Hosted text-to-speech generation via MasterSelects Cloud credits',
     versions: [DEFAULT_ELEVENLABS_MODEL_ID],
     modes: [],
@@ -322,7 +468,7 @@ export function getCatalogEntries(): CatalogEntry[] {
   entries.push({
     service: 'cloud',
     providerId: SUNO_PROVIDER_ID,
-    name: 'Suno (Cloud)',
+    name: 'Suno',
     description: 'Hosted text-to-music generation via MasterSelects Cloud credits',
     versions: [DEFAULT_SUNO_MODEL_ID, ...SUNO_MODEL_IDS.filter((model) => model !== DEFAULT_SUNO_MODEL_ID)],
     modes: [],
@@ -339,8 +485,27 @@ export function getCatalogEntries(): CatalogEntry[] {
 
   entries.push({
     service: 'cloud',
+    providerId: SUNO_SOUNDS_PROVIDER_ID,
+    name: 'Suno Sounds',
+    description: 'Hosted text-to-sound generation via MasterSelects Cloud',
+    versions: [DEFAULT_SUNO_MODEL_ID, ...SUNO_MODEL_IDS.filter((model) => model !== DEFAULT_SUNO_MODEL_ID)],
+    modes: ['one-shot', 'loop'],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: false,
+    supportsImageToVideo: false,
+    supportsTextToImage: false,
+    supportsTextToAudio: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    outputType: 'audio',
+    promptRefinerProfile: 'suno-sounds',
+  });
+
+  entries.push({
+    service: 'cloud',
     providerId: 'cloud-kling',
-    name: 'Kling (Cloud)',
+    name: 'Kling',
     description: 'Hosted Kling via MasterSelects Cloud',
     versions: ['latest'],
     modes: ['std', 'pro'],
@@ -357,7 +522,7 @@ export function getCatalogEntries(): CatalogEntry[] {
   entries.push({
     service: 'cloud',
     providerId: 'bytedance/seedance-2',
-    name: 'Seedance 2.0 (Cloud)',
+    name: 'Seedance 2.0',
     description: 'Hosted Seedance 2.0 via MasterSelects Cloud',
     versions: ['latest'],
     modes: ['480p', '720p', '1080p'],
@@ -374,7 +539,7 @@ export function getCatalogEntries(): CatalogEntry[] {
   entries.push({
     service: 'cloud',
     providerId: 'bytedance/seedance-2-fast',
-    name: 'Seedance 2.0 Fast (Cloud)',
+    name: 'Seedance 2.0 Fast',
     description: 'Hosted Seedance 2.0 Fast via MasterSelects Cloud',
     versions: ['latest'],
     modes: ['480p', '720p'],
@@ -390,23 +555,67 @@ export function getCatalogEntries(): CatalogEntry[] {
 
   entries.push({
     service: 'cloud',
-    providerId: 'nano-banana-2',
-    name: 'Nano Banana 2 (Cloud)',
-    description: 'Hosted image generation via MasterSelects Cloud with up to 14 ordered reference images',
-    versions: ['latest'],
-    modes: [],
+    providerId: VEO_3_1_PROVIDER_ID,
+    name: 'Veo 3.1',
+    description: 'Hosted Veo 3.1 via MasterSelects Cloud',
+    versions: ['3.1'],
+    modes: ['veo3_fast', 'veo3', 'veo3_lite'],
     durations: [],
-    aspectRatios: ['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'],
-    supportsTextToVideo: false,
-    supportsImageToVideo: false,
-    supportsTextToImage: true,
+    aspectRatios: ['16:9', '9:16'],
+    supportsTextToVideo: true,
+    supportsImageToVideo: true,
     supportsGenerateAudio: false,
     supportsMultiShot: false,
-    imageSizes: ['1K', '2K', '4K'],
-    maxReferenceImages: 14,
-    maxReferenceMedia: 14,
-    outputType: 'image',
+    maxReferenceMedia: 3,
+    outputType: 'video',
+    promptRefinerProfile: 'veo',
   });
+
+  entries.push({
+    service: 'cloud',
+    providerId: RUNWAY_VIDEO_PROVIDER_ID,
+    name: 'Runway',
+    description: 'Hosted Runway via MasterSelects Cloud',
+    versions: ['latest'],
+    modes: ['720p', '1080p'],
+    durations: [5, 10],
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    supportsTextToVideo: true,
+    supportsImageToVideo: true,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    maxReferenceMedia: 1,
+    outputType: 'video',
+    promptRefinerProfile: 'runway',
+  });
+
+  entries.push({
+    service: 'cloud',
+    providerId: TOPAZ_VIDEO_UPSCALE_PROVIDER_ID,
+    name: 'Topaz Video Upscale',
+    description: 'Hosted Topaz video upscaling via MasterSelects Cloud',
+    versions: ['latest'],
+    modes: ['2x', '4x'],
+    durations: [],
+    aspectRatios: [],
+    supportsTextToVideo: true,
+    supportsImageToVideo: false,
+    supportsGenerateAudio: false,
+    supportsMultiShot: false,
+    maxReferenceMedia: 1,
+    outputType: 'video',
+    promptRefinerProfile: 'utility-video',
+    requiredReferenceMediaType: 'video',
+    requiresPrompt: false,
+    requiresReferenceMedia: true,
+  });
+
+  entries.push(...KIEAI_MARKET_IMAGE_ENTRIES.map((entry) => ({
+    ...entry,
+    service: 'cloud' as const,
+    name: entry.name,
+    versions: entry.providerId === 'nano-banana-2' ? ['latest'] : entry.versions,
+  })));
 
   return entries;
 }

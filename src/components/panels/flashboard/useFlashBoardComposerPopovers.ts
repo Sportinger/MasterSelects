@@ -12,7 +12,6 @@ export type FlashBoardComposerPopover =
   | 'voiceSettings'
   | 'sunoModel'
   | 'sunoMode'
-  | 'sunoTuning'
   | 'chatProvider'
   | 'chatModel'
   | 'chatTemperature'
@@ -47,10 +46,11 @@ export function useFlashBoardComposerPopovers() {
   const renderedPopover = popover ?? closingPopover;
   const popoverHostClassName = `fb-pill-group ${closingPopover && !popover ? 'is-closing' : popover ? 'is-opening' : ''}`;
   const inlineSubmenuVisible = isInlineSubmenuPopover(renderedPopover);
+  const inlineSubmenuTypeClassName = inlineSubmenuVisible ? `inline-submenu-${renderedPopover}` : '';
   const inlineSubmenuStateClassName = inlineSubmenuVisible
     ? closingPopover && !popover
-      ? 'has-inline-submenu is-inline-submenu-closing'
-      : 'has-inline-submenu is-inline-submenu-opening'
+      ? `has-inline-submenu ${inlineSubmenuTypeClassName} is-inline-submenu-closing`
+      : `has-inline-submenu ${inlineSubmenuTypeClassName} is-inline-submenu-opening`
     : '';
 
   const closePopover = useCallback((popoverToClose?: FlashBoardComposerPopover) => {

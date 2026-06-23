@@ -1,11 +1,30 @@
 import type { KeyboardEvent, RefObject } from 'react';
+import { FlashBoardElevenLabsVoicePanel } from './FlashBoardElevenLabsVoicePanel';
+import { FlashBoardSunoTuningPanel } from './FlashBoardSunoTuningPanel';
 
 interface FlashBoardPromptEditorProps {
   canRestorePrompt: boolean;
   chatInputRef: RefObject<HTMLTextAreaElement | null>;
   chatPanelOpen: boolean;
   chatPrompt: string;
+  elevenLabsVoicePanel: {
+    emptyMessage: string;
+    error: string | null;
+    isLoading: boolean;
+    search: string;
+    selectedVoiceId: string;
+    voiceId: string;
+    voiceName: string;
+    voices: Array<{ id: string; name: string; meta: string; previewUrl?: string }>;
+    onPreviewVoice: (previewUrl: string | undefined) => void;
+    onRefresh: () => void;
+    onSearchChange: (value: string) => void;
+    onSelectVoice: (voiceId: string) => void;
+    onVoiceIdChange: (value: string) => void;
+    onVoiceNameChange: (value: string) => void;
+  };
   isAudioMode: boolean;
+  isElevenLabsMode: boolean;
   isRefiningPrompt: boolean;
   isSunoMode: boolean;
   maxReferenceMedia?: number;
@@ -16,6 +35,10 @@ interface FlashBoardPromptEditorProps {
   sunoNegativeTags: string;
   sunoStyle: string;
   sunoStyleLimit: number;
+  sunoAudioReferenceActive: boolean;
+  sunoAudioWeight: number;
+  sunoStyleWeight: number;
+  sunoWeirdnessConstraint: number;
   onAutosizeInput: (textarea: HTMLTextAreaElement | null) => void;
   onChatInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onChatPromptChange: (value: string) => void;
@@ -24,7 +47,11 @@ interface FlashBoardPromptEditorProps {
   onPromptChange: (value: string) => void;
   onRestorePromptBeforeAiRewrite: () => void;
   onSunoNegativeTagsChange: (value: string) => void;
+  onSunoAudioWeightChange: (value: number) => void;
+  onSunoResetTuning: () => void;
   onSunoStyleChange: (value: string) => void;
+  onSunoStyleWeightChange: (value: number) => void;
+  onSunoWeirdnessConstraintChange: (value: number) => void;
 }
 
 export function FlashBoardPromptEditor({
@@ -32,7 +59,9 @@ export function FlashBoardPromptEditor({
   chatInputRef,
   chatPanelOpen,
   chatPrompt,
+  elevenLabsVoicePanel,
   isAudioMode,
+  isElevenLabsMode,
   isRefiningPrompt,
   isSunoMode,
   maxReferenceMedia,
@@ -43,6 +72,10 @@ export function FlashBoardPromptEditor({
   sunoNegativeTags,
   sunoStyle,
   sunoStyleLimit,
+  sunoAudioReferenceActive,
+  sunoAudioWeight,
+  sunoStyleWeight,
+  sunoWeirdnessConstraint,
   onAutosizeInput,
   onChatInputKeyDown,
   onChatPromptChange,
@@ -51,7 +84,11 @@ export function FlashBoardPromptEditor({
   onPromptChange,
   onRestorePromptBeforeAiRewrite,
   onSunoNegativeTagsChange,
+  onSunoAudioWeightChange,
+  onSunoResetTuning,
   onSunoStyleChange,
+  onSunoStyleWeightChange,
+  onSunoWeirdnessConstraintChange,
 }: FlashBoardPromptEditorProps) {
   if (chatPanelOpen) {
     return (
@@ -82,9 +119,19 @@ export function FlashBoardPromptEditor({
 
   return (
     <div className={`fb-bubble-prompt ${isRefiningPrompt ? 'is-refining' : ''}`}>
-      <div className={`fb-bubble-row ${isSunoMode ? 'fb-bubble-row-suno' : ''}`}>
+      <div className={`fb-bubble-row ${isSunoMode ? 'fb-bubble-row-suno' : ''} ${isElevenLabsMode ? 'fb-bubble-row-elevenlabs' : ''}`}>
         {isSunoMode ? (
           <div className="fb-suno-prompt-grid">
+            <FlashBoardSunoTuningPanel
+              audioReferenceActive={sunoAudioReferenceActive}
+              audioWeight={sunoAudioWeight}
+              styleWeight={sunoStyleWeight}
+              weirdnessConstraint={sunoWeirdnessConstraint}
+              onAudioWeightChange={onSunoAudioWeightChange}
+              onResetTuning={onSunoResetTuning}
+              onStyleWeightChange={onSunoStyleWeightChange}
+              onWeirdnessConstraintChange={onSunoWeirdnessConstraintChange}
+            />
             <label className="fb-suno-prompt-field fb-suno-prompt-field-lyrics">
               <span>Lyrics</span>
               <textarea
@@ -121,21 +168,24 @@ export function FlashBoardPromptEditor({
             </label>
           </div>
         ) : (
-          <textarea
-            ref={promptInputRef}
-            className="fb-bubble-input"
-            value={prompt}
-            onInput={(event) => onAutosizeInput(event.currentTarget)}
-            onChange={(event) => onPromptChange(event.target.value)}
-            placeholder={
-              isAudioMode
-                ? 'Text to speak...'
-                : multiShots
-                  ? 'Overall scene or style (optional when using multishot)...'
-                  : 'Describe what to generate...'
-            }
-            rows={isAudioMode ? 2 : multiShots ? 3 : 2}
-          />
+          <div className={`fb-standard-prompt-stack ${isElevenLabsMode ? 'is-elevenlabs' : ''}`}>
+            {isElevenLabsMode && <FlashBoardElevenLabsVoicePanel {...elevenLabsVoicePanel} />}
+            <textarea
+              ref={promptInputRef}
+              className="fb-bubble-input"
+              value={prompt}
+              onInput={(event) => onAutosizeInput(event.currentTarget)}
+              onChange={(event) => onPromptChange(event.target.value)}
+              placeholder={
+                isAudioMode
+                  ? 'Text to speak...'
+                  : multiShots
+                    ? 'Overall scene or style (optional when using multishot)...'
+                    : 'Describe what to generate...'
+              }
+              rows={isAudioMode ? 2 : multiShots ? 3 : 2}
+            />
+          </div>
         )}
         {canRestorePrompt && (
           <button

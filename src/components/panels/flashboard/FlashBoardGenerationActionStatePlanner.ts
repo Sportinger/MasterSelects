@@ -1,6 +1,7 @@
 import type { ElevenLabsModelRates } from '../../../services/elevenLabsService';
 import { getFlashBoardPriceEstimate, type FlashBoardPriceEstimate } from '../../../services/flashboard/FlashBoardPricing';
 import type {
+  FlashBoardMediaType,
   FlashBoardMultiShotPrompt,
   FlashBoardOutputType,
   FlashBoardService,
@@ -8,6 +9,8 @@ import type {
 
 interface GenerationActionStateEntry {
   outputType?: FlashBoardOutputType;
+  requiredReferenceMediaType?: FlashBoardMediaType | 'visual';
+  requiresPrompt?: boolean;
   requiresReferenceMedia?: boolean;
 }
 
@@ -20,6 +23,7 @@ interface BuildFlashBoardGenerationActionStateInput {
   hasEvolinkKey: boolean;
   hasGenerationBoard: boolean;
   hasHostedSession: boolean;
+  hasImageReferenceInput: boolean;
   hasKieAiKey: boolean;
   hasReferenceMediaInput: boolean;
   hasVideoReferenceInput: boolean;
@@ -168,6 +172,14 @@ function buildAudioValidationError({
     return null;
   }
 
+  if (service === 'suno') {
+    if (!hasKieAiKey) {
+      return 'Add a Kie.ai API key in Settings to generate Suno sounds.';
+    }
+
+    return null;
+  }
+
   if (isHostedAudioMode) {
     if (!accountAuthenticated) {
       return 'Sign in to use MasterSelects Cloud speech.';
@@ -205,15 +217,31 @@ function buildAudioValidationError({
 function buildBackendValidationError({
   hasEvolinkKey,
   hasHostedSession,
+  hasImageReferenceInput,
   hasKieAiKey,
   hasReferenceMediaInput,
+  hasVideoReferenceInput,
   isHostedAudioMode,
   selectedEntry,
   service,
   usePiApiKeyByDefault,
 }: BuildFlashBoardGenerationActionStateInput): string | null {
   if (selectedEntry?.requiresReferenceMedia && !hasReferenceMediaInput) {
-    return 'Add a reference image for this image edit model.';
+    if (selectedEntry.requiredReferenceMediaType === 'video') {
+      return 'Add a reference video for this model.';
+    }
+    if (selectedEntry.requiredReferenceMediaType === 'image') {
+      return 'Add a reference image for this model.';
+    }
+    return 'Add a visual reference for this model.';
+  }
+
+  if (selectedEntry?.requiredReferenceMediaType === 'image' && !hasImageReferenceInput) {
+    return 'Add a reference image for this model.';
+  }
+
+  if (selectedEntry?.requiredReferenceMediaType === 'video' && !hasVideoReferenceInput) {
+    return 'Add a reference video for this model.';
   }
 
   if (service === 'piapi' && !usePiApiKeyByDefault) {
@@ -259,14 +287,15 @@ export function buildFlashBoardGenerationActionState(input: BuildFlashBoardGener
       hasVideoInput: input.hasVideoReferenceInput,
     })
     : null;
-  const generateActionLabel = input.isSunoMode ? 'Compose' : input.isAudioMode ? 'Speak' : 'Generate';
+  const generateActionLabel = input.isSunoMode ? 'Compose' : input.service === 'suno' ? 'Generate' : input.isAudioMode ? 'Speak' : 'Generate';
   const generateButtonLabel = currentPrice
     ? `${generateActionLabel} - ${currentPrice.compactLabel}`
     : generateActionLabel;
   const generateButtonTitle = currentPrice
     ? `${currentPrice.fullLabel} (Ctrl+Enter)`
     : `${generateActionLabel} (Ctrl+Enter)`;
-  const canGenerate = Boolean(input.hasGenerationBoard && input.selectedEntry && input.effectivePrompt)
+  const promptReady = input.selectedEntry?.requiresPrompt === false || input.effectivePrompt.trim().length > 0;
+  const canGenerate = Boolean(input.hasGenerationBoard && input.selectedEntry && promptReady)
     && !multiShotValidationError
     && !audioValidationError
     && !input.seedanceReferenceValidationError

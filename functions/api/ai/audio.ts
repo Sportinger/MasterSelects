@@ -14,8 +14,10 @@ import {
 import {
   calculateHostedSunoCost,
   createHostedSunoMusicTask,
+  createHostedSunoSoundsTask,
   getHostedSunoMusicTask,
   normalizeHostedSunoParams,
+  normalizeHostedSunoSoundsParams,
   type HostedSunoParams,
 } from '../../lib/providers/kieai';
 import {
@@ -91,7 +93,7 @@ function buildCapabilityResponse(context: AppContext, hostedContext: HostedAiCon
     },
     suno: {
       byoExplicit: false,
-      models: ['V5', 'V4_5PLUS', 'V4_5', 'V4'],
+      models: ['V5_5', 'V5', 'V4_5PLUS', 'V4_5', 'V4'],
       pollingSupported: true,
       provider: 'suno-music',
     },
@@ -175,9 +177,11 @@ async function handleHostedSunoMusicRequest(
   params: HostedSunoParams,
   idempotencyKey: string,
   requestId: string,
+  sound = false,
 ): Promise<Response> {
   const creditsRequired = calculateHostedSunoCost();
-  const ledgerSource = 'hosted:suno_music';
+  const provider = sound ? 'suno-sounds' : 'suno-music';
+  const ledgerSource = sound ? 'hosted:suno_sounds' : 'hosted:suno_music';
   const existingCharge = await getCreditLedgerEntryBySource(
     context.env.DB,
     hostedContext.user!.id,
@@ -191,12 +195,12 @@ async function handleHostedSunoMusicRequest(
         creditBalance: hostedContext.billing?.balance ?? 0,
         error: createGatewayError(
           'insufficient_credits',
-          'You need more credits to generate hosted Suno music.',
-          { creditsRequired, provider: 'suno-music', requestId },
+          `You need more credits to generate hosted ${sound ? 'Suno sounds' : 'Suno music'}.`,
+          { creditsRequired, provider, requestId },
         ),
         next: 'pricing',
         ok: false,
-        provider: 'suno-music',
+        provider,
         requestId,
         session: {
           authenticated: true,
@@ -211,35 +215,37 @@ async function handleHostedSunoMusicRequest(
 
   await createUsageEvent(context.env.DB, {
     creditCost: creditsRequired,
-    feature: 'suno_music_generation',
+    feature: sound ? 'suno_sounds_generation' : 'suno_music_generation',
     idempotencyKey,
     metadata: {
       customMode: Boolean(params.customMode),
       instrumental: params.instrumental !== false,
-      model: params.model ?? 'V5',
-      provider: 'suno-music',
+      model: params.model ?? 'V5_5',
+      provider,
       requestId,
     },
-    model: params.model ?? 'V5',
-    provider: 'suno-music',
-    requestUnits: '1 song',
+    model: params.model ?? 'V5_5',
+    provider,
+    requestUnits: sound ? '1 sound' : '1 song',
     userId: hostedContext.user!.id,
   });
 
   try {
-    const { taskId } = await createHostedSunoMusicTask(context.env, params);
+    const { taskId } = sound
+      ? await createHostedSunoSoundsTask(context.env, params)
+      : await createHostedSunoMusicTask(context.env, params);
     const charge = await spendCredits(
       context.env.DB,
       hostedContext.user!.id,
       creditsRequired,
       ledgerSource,
       idempotencyKey,
-      'Hosted Suno music generation',
+      `Hosted ${sound ? 'Suno sounds' : 'Suno music'} generation`,
       {
         customMode: Boolean(params.customMode),
         instrumental: params.instrumental !== false,
-        model: params.model ?? 'V5',
-        provider: 'suno-music',
+        model: params.model ?? 'V5_5',
+        provider,
         requestId,
         taskId,
       },
@@ -252,12 +258,12 @@ async function handleHostedSunoMusicRequest(
           creditBalance: charge.balance,
           error: createGatewayError(
             'insufficient_credits',
-            'You need more credits to generate hosted Suno music.',
-            { creditsRequired, provider: 'suno-music', requestId },
+              `You need more credits to generate hosted ${sound ? 'Suno sounds' : 'Suno music'}.`,
+              { creditsRequired, provider, requestId },
           ),
           next: 'pricing',
           ok: false,
-          provider: 'suno-music',
+          provider,
           requestId,
           session: {
             authenticated: true,
@@ -281,11 +287,11 @@ async function handleHostedSunoMusicRequest(
         creditsCharged: charge.charged ? creditsRequired : 0,
         data: {
           outputType: 'audio',
-          provider: 'suno-music',
+          provider,
           taskId,
         },
         ok: true,
-        provider: 'suno-music',
+        provider,
         requestId,
         session: {
           authenticated: true,
@@ -302,11 +308,11 @@ async function handleHostedSunoMusicRequest(
       buildRouteEnvelope({
         error: createGatewayError(
           'provider_request_failed',
-          error instanceof Error ? error.message : 'Hosted Suno music generation failed.',
+          error instanceof Error ? error.message : `Hosted ${sound ? 'Suno sounds' : 'Suno music'} generation failed.`,
           { requestId },
         ),
         ok: false,
-        provider: 'suno-music',
+        provider,
         requestId,
         session: {
           authenticated: true,
@@ -455,17 +461,20 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   const rawBody = (await parseJson<HostedAudioRouteBody>(context.request)) ?? null;
   const paramsInput = rawBody?.params ?? rawBody;
 
-  if (rawBody?.action === 'music') {
-    const musicParams = normalizeHostedSunoParams(paramsInput);
+  if (rawBody?.action === 'music' || rawBody?.action === 'sound') {
+    const sound = rawBody.action === 'sound';
+    const musicParams = sound
+      ? normalizeHostedSunoSoundsParams(paramsInput)
+      : normalizeHostedSunoParams(paramsInput);
 
     if (!musicParams) {
       return json(
         buildRouteEnvelope({
-          error: createGatewayError('invalid_request', 'Expected valid Suno music parameters.', {
+          error: createGatewayError('invalid_request', `Expected valid Suno ${sound ? 'sounds' : 'music'} parameters.`, {
             requestId,
           }),
           ok: false,
-          provider: 'suno-music',
+          provider: sound ? 'suno-sounds' : 'suno-music',
           requestId,
           status: 'error',
         }),
@@ -482,9 +491,9 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     const idempotencyKey =
       typeof rawBody?.idempotencyKey === 'string' && rawBody.idempotencyKey.trim().length > 0
         ? rawBody.idempotencyKey.trim()
-        : `${requestId}:ai.audio.suno`;
+        : `${requestId}:ai.audio.${sound ? 'suno-sounds' : 'suno'}`;
 
-    return handleHostedSunoMusicRequest(context, hostedContext, musicParams, idempotencyKey, requestId);
+    return handleHostedSunoMusicRequest(context, hostedContext, musicParams, idempotencyKey, requestId, sound);
   }
 
   if (rawBody?.action === 'transcription') {

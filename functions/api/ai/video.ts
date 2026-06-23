@@ -13,6 +13,7 @@ import {
   normalizeHostedImageParams,
   normalizeHostedKlingParams,
   normalizeHostedSeedanceParams,
+  normalizeHostedSpecialVideoParams,
   type HostedImageParams,
   type HostedVideoParams,
 } from '../../lib/providers/kieai';
@@ -122,8 +123,8 @@ function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): H
   if (imageParams) {
     return {
       creditsRequired: calculateHostedImageCost(imageParams.provider, imageParams.resolution),
-      description: 'Hosted Nano Banana 2 generation',
-      feature: 'nano_banana_generation',
+      description: `Hosted ${imageParams.provider} image generation`,
+      feature: 'hosted_kie_image_generation',
       ledgerSource: `hosted:${imageParams.provider}`,
       model: imageParams.provider,
       outputType: 'image',
@@ -177,39 +178,64 @@ function parseHostedGeneration(body: HostedVideoRouteBody, requestId: string): H
   }
 
   const seedanceParams = normalizeHostedSeedanceParams(paramsInput);
-  if (!seedanceParams?.provider) {
+  if (seedanceParams?.provider) {
+    const hasVideoInput = seedanceParams.referenceMedia?.some((reference) => reference.mediaType === 'video') === true;
+
+    return {
+      creditsRequired: calculateHostedSeedanceCost(
+        seedanceParams.provider,
+        seedanceParams.mode,
+        seedanceParams.duration,
+        hasVideoInput,
+      ),
+      description: `Hosted ${seedanceParams.provider === 'bytedance/seedance-2-fast' ? 'Seedance 2.0 Fast' : 'Seedance 2.0'} generation`,
+      feature: 'seedance_generation',
+      ledgerSource: `hosted:${seedanceParams.provider}`,
+      model: seedanceParams.provider,
+      outputType: 'video',
+      params: seedanceParams,
+      provider: seedanceParams.provider,
+      requestUnits: `${seedanceParams.duration}s`,
+      usageMetadata: {
+        aspectRatio: seedanceParams.aspectRatio,
+        duration: seedanceParams.duration,
+        hasEndImage: Boolean(seedanceParams.endImageUrl),
+        hasStartImage: Boolean(seedanceParams.startImageUrl),
+        hasVideoInput,
+        mode: seedanceParams.mode,
+        referenceAudioCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'audio').length ?? 0,
+        referenceImageCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'image').length ?? 0,
+        referenceVideoCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'video').length ?? 0,
+        requestId,
+        sound: Boolean(seedanceParams.sound),
+      },
+    };
+  }
+
+  const specialVideoParams = normalizeHostedSpecialVideoParams(paramsInput);
+  if (!specialVideoParams?.provider) {
     return null;
   }
 
-  const hasVideoInput = seedanceParams.referenceMedia?.some((reference) => reference.mediaType === 'video') === true;
-
   return {
-    creditsRequired: calculateHostedSeedanceCost(
-      seedanceParams.provider,
-      seedanceParams.mode,
-      seedanceParams.duration,
-      hasVideoInput,
-    ),
-    description: `Hosted ${seedanceParams.provider === 'bytedance/seedance-2-fast' ? 'Seedance 2.0 Fast' : 'Seedance 2.0'} generation`,
-    feature: 'seedance_generation',
-    ledgerSource: `hosted:${seedanceParams.provider}`,
-    model: seedanceParams.provider,
+    creditsRequired: calculateHostedKlingCost('std', specialVideoParams.duration, false, false),
+    description: `Hosted ${specialVideoParams.provider} generation`,
+    feature: 'hosted_kie_video_generation',
+    ledgerSource: `hosted:${specialVideoParams.provider}`,
+    model: specialVideoParams.provider,
     outputType: 'video',
-    params: seedanceParams,
-    provider: seedanceParams.provider,
-    requestUnits: `${seedanceParams.duration}s`,
+    params: specialVideoParams,
+    provider: specialVideoParams.provider,
+    requestUnits: `${specialVideoParams.duration}s`,
     usageMetadata: {
-      aspectRatio: seedanceParams.aspectRatio,
-      duration: seedanceParams.duration,
-      hasEndImage: Boolean(seedanceParams.endImageUrl),
-      hasStartImage: Boolean(seedanceParams.startImageUrl),
-      hasVideoInput,
-      mode: seedanceParams.mode,
-      referenceAudioCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'audio').length ?? 0,
-      referenceImageCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'image').length ?? 0,
-      referenceVideoCount: seedanceParams.referenceMedia?.filter((reference) => reference.mediaType === 'video').length ?? 0,
+      aspectRatio: specialVideoParams.aspectRatio,
+      duration: specialVideoParams.duration,
+      hasEndImage: Boolean(specialVideoParams.endImageUrl),
+      hasStartImage: Boolean(specialVideoParams.startImageUrl),
+      mode: specialVideoParams.mode,
+      referenceImageCount: specialVideoParams.referenceMedia?.filter((reference) => reference.mediaType === 'image').length ?? 0,
+      referenceVideoCount: specialVideoParams.referenceMedia?.filter((reference) => reference.mediaType === 'video').length ?? 0,
       requestId,
-      sound: Boolean(seedanceParams.sound),
     },
   };
 }

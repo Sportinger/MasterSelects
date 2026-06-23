@@ -225,6 +225,17 @@ function trimOriginalsFromClip(clip: TimelineClip): TrimOriginals {
   };
 }
 
+export function shouldIncludeLinkedTrim(
+  clip: Pick<TimelineClip, 'id' | 'linkedClipId'>,
+  selectedClipIds: Set<string>,
+  singleClip = false,
+): boolean {
+  if (singleClip) return false;
+  if (!clip.linkedClipId) return false;
+  if (!selectedClipIds.has(clip.id)) return true;
+  return selectedClipIds.has(clip.linkedClipId);
+}
+
 function resolveTrimDragTiming(clip: TimelineClip, trim: ClipTrimState, deltaTime: number) {
   return computeTrimTiming(clip, trim.edge, {
     startTime: trim.originalStartTime,
@@ -270,7 +281,7 @@ function buildTrimToolPreview(
   const timing = resolveTrimDragTiming(clip, trim, deltaTime);
   const clips = [...clipMap.values()];
   const previewToolId = activeTimelineToolId === 'select' ? 'edge-trim' : activeTimelineToolId;
-  const includeLinked = !trim.altKey;
+  const includeLinked = trim.singleClip === true ? false : trim.includeLinked === true;
   const ghostRanges: TimelineToolPreviewGhostRange[] = [];
 
   if (activeTimelineToolId === 'ripple-trim') {
@@ -416,14 +427,16 @@ export function useClipTrim({
       const isClipLocked = (candidate: TimelineClip): boolean =>
         tracks.find(track => track.id === candidate.trackId)?.locked === true;
       if (isClipLocked(clip)) return;
-      if (!e.altKey && clip.linkedClipId) {
+      const initialSingleClip = e.shiftKey;
+      const initialIncludeLinked = shouldIncludeLinkedTrim(clip, selectedClipIds, initialSingleClip);
+      if (initialIncludeLinked && clip.linkedClipId) {
         const linkedClip = clipMap.get(clip.linkedClipId);
         if (linkedClip && isClipLocked(linkedClip)) return;
       }
 
-      // Preserve an existing multi-selection when grabbing one of its clips, so
-      // the whole selection trims together. Grabbing an unselected clip selects
-      // just that one (single-clip trim).
+      // Preserve an existing multi-selection when grabbing one of its clips.
+      // Grabbing an unselected linked clip uses linked trim by default, then
+      // selects the direct clip for the rest of the gesture.
       if (!selectedClipIds.has(clipId)) {
         selectClip(clipId);
       }
@@ -438,6 +451,8 @@ export function useClipTrim({
         startX: e.clientX,
         currentX: e.clientX,
         altKey: e.altKey,
+        singleClip: initialSingleClip,
+        includeLinked: initialIncludeLinked,
         snapIndicatorTime: null,
         isSnapping: false,
         appliedDelta: 0,
@@ -453,10 +468,12 @@ export function useClipTrim({
           ...newTrim,
           currentX: moveEvent.clientX,
           altKey: moveEvent.altKey,
+          singleClip: moveEvent.shiftKey,
         };
         // Resolve the snapped delta once: drives the green snap line AND the live
         // clip resize (shared so the preview matches where the trim commits).
         const clipForSnap = clipMap.get(base.clipId);
+        const includeLinked = clipForSnap ? shouldIncludeLinkedTrim(clipForSnap, selectedClipIds, base.singleClip === true) : false;
         const adjusted = clipForSnap
           ? computeAdjustedDelta(base, pixelToTime(base.currentX - base.startX), clipForSnap)
           : { delta: pixelToTime(base.currentX - base.startX), snapTime: null };
@@ -464,6 +481,7 @@ export function useClipTrim({
           ...base,
           snapIndicatorTime: adjusted.snapTime,
           isSnapping: adjusted.snapTime !== null,
+          includeLinked,
           appliedDelta: adjusted.delta,
         };
         setClipTrim(updated);
@@ -471,7 +489,7 @@ export function useClipTrim({
         setTimelineToolPreview(buildTrimToolPreview(updated, clipMap, tracks, activeTimelineToolId, pixelToTime, computeAdjustedDelta));
       };
 
-      const handleMouseUp = () => {
+      const handleMouseUp = (upEvent: MouseEvent) => {
         const trim = clipTrimRef.current;
         if (!trim) {
           setClipTrim(null);
@@ -492,31 +510,37 @@ export function useClipTrim({
           return;
         }
 
-        const rawDelta = pixelToTime(trim.currentX - trim.startX);
-        const deltaTime = computeAdjustedDelta(trim, rawDelta, clipToTrim).delta;
+        const commitTrim: ClipTrimState = {
+          ...trim,
+          altKey: upEvent.altKey,
+          singleClip: upEvent.shiftKey,
+        };
+        const rawDelta = pixelToTime(commitTrim.currentX - commitTrim.startX);
+        const deltaTime = computeAdjustedDelta(commitTrim, rawDelta, clipToTrim).delta;
 
-        const timing = resolveTrimDragTiming(clipToTrim, trim, deltaTime);
+        const timing = resolveTrimDragTiming(clipToTrim, commitTrim, deltaTime);
         const edge = timing.edge;
         const targetTime = timing.targetTime;
         const newStartTime = timing.newStartTime;
         const newInPoint = timing.newInPoint;
         const newOutPoint = timing.newOutPoint;
-        const includeLinked = !trim.altKey;
+        const singleClip = commitTrim.singleClip === true;
+        const includeLinked = shouldIncludeLinkedTrim(clipToTrim, selectedClipIds, singleClip);
 
         // Multi-select trim: apply the lead clip's (snapped) delta to every other
         // selected clip, each clamped to its own bounds ("only as much as each can").
         const extraClips: NonNullable<Extract<TimelineEditOperation, { type: 'trim-clip' }>['extraClips']> = [];
-        if (selectedClipIds.size > 1 && selectedClipIds.has(clipToTrim.id)) {
+        if (!singleClip && selectedClipIds.size > 1 && selectedClipIds.has(clipToTrim.id)) {
           for (const otherId of selectedClipIds) {
             if (otherId === clipToTrim.id) continue;
             const otherClip = clipMap.get(otherId);
             if (!otherClip) continue;
-            const otherTiming = computeTrimTiming(otherClip, trim.edge, trimOriginalsFromClip(otherClip), deltaTime);
+            const otherTiming = computeTrimTiming(otherClip, commitTrim.edge, trimOriginalsFromClip(otherClip), deltaTime);
             extraClips.push({
               clipId: otherClip.id,
               inPoint: otherTiming.newInPoint,
               outPoint: otherTiming.newOutPoint,
-              ...(trim.edge === 'left' ? { startTime: otherTiming.newStartTime } : {}),
+              ...(commitTrim.edge === 'left' ? { startTime: otherTiming.newStartTime } : {}),
             });
           }
         }

@@ -4,8 +4,16 @@ import type { AppRouteHandler } from '../../../lib/env';
 const KIEAI_BASE_URL = 'https://api.kie.ai';
 const ALLOWED_ENDPOINTS = new Set([
   '/api/v1/chat/credit',
+  '/api/v1/flux/kontext/generate',
+  '/api/v1/flux/kontext/record-info',
+  '/api/v1/generate/record-info',
+  '/api/v1/generate/sounds',
   '/api/v1/jobs/createTask',
   '/api/v1/jobs/recordInfo',
+  '/api/v1/runway/generate',
+  '/api/v1/runway/record-detail',
+  '/api/v1/veo/generate',
+  '/api/v1/veo/record-info',
 ]);
 
 interface KieAiByoRequestBody {

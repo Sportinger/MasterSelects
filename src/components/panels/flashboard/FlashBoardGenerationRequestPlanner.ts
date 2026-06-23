@@ -8,6 +8,7 @@ import type {
 } from '../../../stores/flashboardStore/types';
 
 interface FlashBoardGenerationRequestEntry {
+  modes: string[];
   outputType?: FlashBoardOutputType;
   supportsImageToVideo?: boolean;
   supportsTextToImage?: boolean;
@@ -91,14 +92,18 @@ export function buildFlashBoardGenerationRequest({
   voiceName,
   voiceSettings,
 }: BuildFlashBoardGenerationRequestInput): FlashBoardGenerationRequest {
-  const requestIsElevenLabs = isAudioRequest && !isSunoRequest;
+  const requestIsElevenLabs = isAudioRequest && (
+    service === 'elevenlabs'
+    || providerId === 'cloud-elevenlabs-tts'
+  );
+  const modeSupportedForAudio = isAudioRequest && selectedEntry.modes.length > 0;
 
   return {
     service,
     providerId,
     version,
     outputType: selectedEntry.outputType ?? 'video',
-    mode: isAudioRequest ? undefined : mode,
+    mode: isAudioRequest && !modeSupportedForAudio ? undefined : mode,
     prompt: effectivePrompt,
     duration: isAudioRequest ? undefined : duration,
     aspectRatio: isAudioRequest ? undefined : aspectRatio,
@@ -123,6 +128,6 @@ export function buildFlashBoardGenerationRequest({
     sunoAudioWeight: isSunoRequest ? sunoAudioWeight : undefined,
     startMediaFileId: !isAudioRequest && selectedEntry.supportsImageToVideo ? startMediaFileId : undefined,
     endMediaFileId: !isAudioRequest && selectedEntry.supportsImageToVideo && !multiShots ? endMediaFileId : undefined,
-    referenceMediaFileIds: isAudioRequest ? [] : effectiveReferenceMediaFileIds,
+    referenceMediaFileIds: isAudioRequest && !isSunoRequest ? [] : effectiveReferenceMediaFileIds,
   };
 }

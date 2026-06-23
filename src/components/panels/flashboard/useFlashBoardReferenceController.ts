@@ -77,6 +77,16 @@ export function useFlashBoardReferenceValidationController({
       mediaFilesById,
     ],
   );
+  const hasImageReferenceInput = useMemo(
+    () => [composer.startMediaFileId, composer.endMediaFileId, ...(composer.referenceMediaFileIds ?? [])]
+      .some((mediaFileId) => mediaFilesById.get(mediaFileId ?? '')?.type === 'image'),
+    [
+      composer.endMediaFileId,
+      composer.referenceMediaFileIds,
+      composer.startMediaFileId,
+      mediaFilesById,
+    ],
+  );
   const hasVideoReferenceInput = useMemo(
     () => (composer.referenceMediaFileIds ?? []).some((mediaFileId) => (
       mediaFilesById.get(mediaFileId)?.type === 'video'
@@ -92,6 +102,8 @@ export function useFlashBoardReferenceValidationController({
   });
 
   return {
+    hasAudioReferenceInput: hasSeedanceAudioReferenceInput,
+    hasImageReferenceInput,
     hasVisualReferenceInput: hasSeedanceVisualReferenceInput,
     hasVideoReferenceInput,
     seedanceReferenceModeActive,

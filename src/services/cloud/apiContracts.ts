@@ -228,7 +228,7 @@ export interface CloudAiAudioSpeechRequest {
 }
 
 export interface CloudAiAudioMusicRequest {
-  action: 'music';
+  action: 'music' | 'sound';
   idempotencyKey?: string;
   params: {
     audioWeight?: number;
@@ -239,6 +239,7 @@ export interface CloudAiAudioMusicRequest {
     outputType?: 'audio';
     prompt: string;
     provider?: string;
+    soundLoop?: boolean;
     style?: string;
     styleWeight?: number;
     title?: string;

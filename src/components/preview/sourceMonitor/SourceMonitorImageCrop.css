@@ -15,6 +15,7 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  transform-origin: center;
   user-select: none;
 }
 
@@ -77,6 +78,7 @@
   top: 10px;
   right: 10px;
   display: flex;
+  flex-direction: column;
   gap: 6px;
   padding: 5px;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -85,8 +87,20 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
 }
 
-.source-monitor-image-crop-controls .btn {
+.source-monitor-image-crop-presets,
+.source-monitor-image-crop-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.source-monitor-image-crop-actions .btn {
   min-width: 52px;
+}
+
+.source-monitor-image-crop-preset {
+  min-width: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
 }
 
 .source-monitor-image-crop-status {

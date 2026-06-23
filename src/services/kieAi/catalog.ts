@@ -1,9 +1,12 @@
 import type { VideoProvider } from '../piApiService';
 import {
+  RUNWAY_VIDEO_PROVIDER_ID,
   SEEDANCE_2_ASPECT_RATIOS,
   SEEDANCE_2_DURATIONS,
   SEEDANCE_2_FAST_PROVIDER_ID,
   SEEDANCE_2_PROVIDER_ID,
+  TOPAZ_VIDEO_UPSCALE_PROVIDER_ID,
+  VEO_3_1_PROVIDER_ID,
 } from './config';
 
 const KIEAI_PROVIDERS: VideoProvider[] = [
@@ -38,6 +41,39 @@ const KIEAI_PROVIDERS: VideoProvider[] = [
     supportedDurations: SEEDANCE_2_DURATIONS,
     supportedAspectRatios: SEEDANCE_2_ASPECT_RATIOS,
     supportsImageToVideo: true,
+    supportsTextToVideo: true,
+  },
+  {
+    id: VEO_3_1_PROVIDER_ID,
+    name: 'Veo 3.1',
+    description: 'Google Veo 3.1 video generation via Kie.ai',
+    versions: ['3.1'],
+    supportedModes: ['veo3_fast', 'veo3', 'veo3_lite'],
+    supportedDurations: [],
+    supportedAspectRatios: ['16:9', '9:16'],
+    supportsImageToVideo: true,
+    supportsTextToVideo: true,
+  },
+  {
+    id: RUNWAY_VIDEO_PROVIDER_ID,
+    name: 'Runway',
+    description: 'Runway video generation via Kie.ai',
+    versions: ['latest'],
+    supportedModes: ['720p', '1080p'],
+    supportedDurations: [5, 10],
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+    supportsImageToVideo: true,
+    supportsTextToVideo: true,
+  },
+  {
+    id: TOPAZ_VIDEO_UPSCALE_PROVIDER_ID,
+    name: 'Topaz Video Upscale',
+    description: 'Topaz video upscaling via Kie.ai',
+    versions: ['latest'],
+    supportedModes: ['2x', '4x'],
+    supportedDurations: [],
+    supportedAspectRatios: [],
+    supportsImageToVideo: false,
     supportsTextToVideo: true,
   },
 ];

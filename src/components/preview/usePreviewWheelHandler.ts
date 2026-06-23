@@ -49,6 +49,10 @@ interface EditCameraOrthoFrame {
   scale: number;
 }
 
+function isSourceMonitorTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('.source-monitor') !== null;
+}
+
 interface UsePreviewWheelHandlerOptions {
   activeEditCameraOrthoFrame: EditCameraOrthoFrame | null;
   applyNavigationCameraValues: (clip: TimelineClip, values: SceneNavCameraValues) => void;
@@ -151,6 +155,7 @@ export function usePreviewWheelHandler({
   ]);
 
   return useCallback((event: PreviewWheelEvent) => {
+    if (isSourceMonitorTarget(event.target)) return;
     if (zoomEditCameraOrthoView(event)) return;
 
     if (sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(event.target)) {

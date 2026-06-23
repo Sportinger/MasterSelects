@@ -51,7 +51,7 @@ const klingEntry: CatalogEntry = {
 const seedanceEntry: CatalogEntry = {
   service: 'cloud',
   providerId: 'bytedance/seedance-2',
-  name: 'Seedance 2.0 (Cloud)',
+  name: 'Seedance 2.0',
   description: 'Hosted Seedance video generation',
   versions: ['latest'],
   modes: ['480p', '720p', '1080p'],
@@ -98,6 +98,43 @@ const sunoEntry: CatalogEntry = {
   supportsImageToVideo: false,
   supportsTextToAudio: true,
   outputType: 'audio',
+};
+
+const sunoSoundsEntry: CatalogEntry = {
+  service: 'suno',
+  providerId: 'suno-sounds',
+  name: 'Suno Sounds',
+  description: 'Sound generation',
+  versions: ['V5'],
+  modes: ['one-shot', 'loop'],
+  durations: [],
+  aspectRatios: [],
+  supportsTextToVideo: false,
+  supportsImageToVideo: false,
+  supportsTextToAudio: true,
+  outputType: 'audio',
+  promptRefinerProfile: 'suno-sounds',
+};
+
+const topazImageEntry: CatalogEntry = {
+  service: 'kieai',
+  providerId: 'topaz/image-upscale',
+  name: 'Topaz Image Upscale',
+  description: 'Image utility',
+  versions: ['latest'],
+  modes: [],
+  durations: [],
+  aspectRatios: [],
+  supportsTextToVideo: false,
+  supportsImageToVideo: false,
+  supportsTextToImage: true,
+  supportsGenerateAudio: false,
+  supportsMultiShot: false,
+  outputType: 'image',
+  promptRefinerProfile: 'utility-image',
+  requiresPrompt: false,
+  requiresReferenceMedia: true,
+  requiredReferenceMediaType: 'image',
 };
 
 describe('FlashBoardPromptRefiner', () => {
@@ -240,6 +277,51 @@ describe('FlashBoardPromptRefiner', () => {
     expect(instructions).toContain('LYRICS:');
     expect(instructions).toContain('STYLE:');
     expect(instructions).toContain('NEGATIVE:');
+  });
+
+  it('builds sound-design guidance for Suno Sounds without Suno Music sections', () => {
+    const instructions = buildFlashBoardPromptRefinerInstructions({
+      entry: sunoSoundsEntry,
+      service: sunoSoundsEntry.service,
+      providerId: sunoSoundsEntry.providerId,
+      version: 'V5',
+      generateAudio: false,
+      multiShots: false,
+      sunoInstrumental: true,
+    });
+    const userText = buildFlashBoardPromptRefinerStreamingUserText({
+      prompt: 'short electric door opening loop',
+      entry: sunoSoundsEntry,
+      service: sunoSoundsEntry.service,
+      providerId: sunoSoundsEntry.providerId,
+      mode: 'loop',
+      duration: 5,
+      aspectRatio: '',
+      imageSize: '',
+      generateAudio: false,
+      multiShots: false,
+    }, []);
+
+    expect(instructions).toContain('Suno Sounds generation');
+    expect(instructions).toContain('sound-design prompt');
+    expect(instructions).not.toContain('LYRICS:');
+    expect(userText).toContain('Mode: loop');
+    expect(userText).toContain('Return the final refined English prompt text only');
+  });
+
+  it('builds utility guidance for image upscale prompts', () => {
+    const instructions = buildFlashBoardPromptRefinerInstructions({
+      entry: topazImageEntry,
+      service: topazImageEntry.service,
+      providerId: topazImageEntry.providerId,
+      version: 'latest',
+      generateAudio: false,
+      multiShots: false,
+    });
+
+    expect(instructions).toContain('image utility operation');
+    expect(instructions).toContain('short processing intent');
+    expect(instructions).toContain('Preserve the source image content');
   });
 
   it('includes current Suno fields in streamed refinement text', () => {

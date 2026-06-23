@@ -2380,6 +2380,56 @@ describe('timeline edit operations kernel', () => {
     ]);
   });
 
+  it('keeps an explicitly selected linked clip clamped during multi-trim', () => {
+    const video = createMockClip({
+      id: 'video-1',
+      trackId: 'video-1',
+      startTime: 0,
+      duration: 8,
+      inPoint: 0,
+      outPoint: 8,
+      linkedClipId: 'audio-1',
+      source: { type: 'video', naturalDuration: 10 },
+    });
+    const audio = createMockClip({
+      id: 'audio-1',
+      trackId: 'audio-1',
+      startTime: 0,
+      duration: 5,
+      inPoint: 0,
+      outPoint: 5,
+      linkedClipId: 'video-1',
+      source: { type: 'audio', naturalDuration: 5 },
+    });
+    useTimelineStore.setState({
+      tracks: [
+        createMockTrack({ id: 'video-1', type: 'video' }),
+        createMockTrack({ id: 'audio-1', type: 'audio' }),
+      ],
+      clips: [video, audio],
+    });
+
+    const result = useTimelineStore.getState().applyTimelineEditOperation({
+      id: 'trim-selected-linked-clamp',
+      type: 'trim-clip',
+      clipId: 'video-1',
+      inPoint: 0,
+      outPoint: 10,
+      includeLinked: true,
+      extraClips: [{
+        clipId: 'audio-1',
+        inPoint: 0,
+        outPoint: 5,
+      }],
+    }, { source: 'ui', historyLabel: 'Trim clips' });
+
+    expect(result.success).toBe(true);
+    expect(useTimelineStore.getState().clips.map((clip) => [clip.id, clip.inPoint, clip.outPoint, clip.duration])).toEqual([
+      ['video-1', 0, 10, 10],
+      ['audio-1', 0, 5, 5],
+    ]);
+  });
+
   it('trims selected clip start to the playhead and keeps linked audio aligned', () => {
     const video = createMockClip({
       id: 'video-1',

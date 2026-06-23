@@ -163,7 +163,7 @@ export function applyTrimClipOperation(
   const updatesByClipId = new Map<string, ClipTrimUpdate>([
     [clip.id, updates],
   ]);
-  pushLinkedTrim(updatesByClipId, clips, clip, updates, operation.includeLinked);
+  const explicitUpdates: Array<{ clip: TimelineClip; updates: ClipTrimUpdate }> = [{ clip, updates }];
 
   // Multi-select trim: fold in the other selected clips, each already clamped to
   // its own bounds by the caller, so they all commit in one history batch.
@@ -177,7 +177,11 @@ export function applyTrimClipOperation(
       ...(extra.startTime !== undefined ? { startTime: extra.startTime } : {}),
     };
     updatesByClipId.set(extra.clipId, extraUpdates);
-    pushLinkedTrim(updatesByClipId, clips, extraClip, extraUpdates, operation.includeLinked);
+    explicitUpdates.push({ clip: extraClip, updates: extraUpdates });
+  }
+
+  for (const explicit of explicitUpdates) {
+    pushLinkedTrim(updatesByClipId, clips, explicit.clip, explicit.updates, operation.includeLinked);
   }
 
   return applyTrimUpdates(clips, tracks, updatesByClipId);

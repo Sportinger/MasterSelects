@@ -1,6 +1,11 @@
 import type { GenerationReferenceMedia } from '../piApiService';
 import type { KieAiTaskResponse } from './apiContracts';
-import { isRemoteUrl } from './config';
+import {
+  RECRAFT_CRISP_UPSCALE_PROVIDER_ID,
+  RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID,
+  TOPAZ_IMAGE_UPSCALE_PROVIDER_ID,
+  isRemoteUrl,
+} from './config';
 import { log } from './log';
 import type { KieAiMediaTools } from './mediaUpload';
 import type { KieAiRequest } from './transport';
@@ -17,11 +22,15 @@ export interface TextToImageParams {
 }
 
 type KieAiImageInputKey = 'image_input' | 'input_urls' | 'image_urls';
+type KieAiSingleImageInputKey = 'image' | 'image_url';
 
 interface KieAiImageModelSpec {
   defaultAspectRatio: string;
   imageInputKey?: KieAiImageInputKey;
+  singleImageInputKey?: KieAiSingleImageInputKey;
   maxImages?: number;
+  omitAspectRatio?: boolean;
+  omitPrompt?: boolean;
   quality?: string;
   requiresImageInput?: boolean;
   supportsGoogleSearch?: boolean;
@@ -29,6 +38,7 @@ interface KieAiImageModelSpec {
   supportsNsfwChecker?: boolean;
   supportsOutputFormat?: boolean;
   supportsResolution?: boolean;
+  supportsUpscaleFactor?: boolean;
 }
 
 const DEFAULT_IMAGE_MODEL_SPEC: KieAiImageModelSpec = {
@@ -96,6 +106,31 @@ const KIEAI_IMAGE_MODEL_SPECS: Record<string, KieAiImageModelSpec> = {
     requiresImageInput: true,
     supportsNsfwChecker: true,
   },
+  [RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID]: {
+    defaultAspectRatio: '1:1',
+    maxImages: 1,
+    omitAspectRatio: true,
+    omitPrompt: true,
+    requiresImageInput: true,
+    singleImageInputKey: 'image',
+  },
+  [RECRAFT_CRISP_UPSCALE_PROVIDER_ID]: {
+    defaultAspectRatio: '1:1',
+    maxImages: 1,
+    omitAspectRatio: true,
+    omitPrompt: true,
+    requiresImageInput: true,
+    singleImageInputKey: 'image',
+  },
+  [TOPAZ_IMAGE_UPSCALE_PROVIDER_ID]: {
+    defaultAspectRatio: '1:1',
+    maxImages: 1,
+    omitAspectRatio: true,
+    omitPrompt: true,
+    requiresImageInput: true,
+    singleImageInputKey: 'image_url',
+    supportsUpscaleFactor: true,
+  },
 };
 
 function normalizeImageResolution(resolution?: string): '1K' | '2K' | '4K' {
@@ -110,6 +145,10 @@ function normalizeOutputFormat(format: TextToImageParams['outputFormat']): 'png'
   return format === 'jpeg' || format === 'webp' ? format : 'png';
 }
 
+function normalizeUpscaleFactor(value: string | undefined): '2' | '4' {
+  return value === '4' || value === '4x' || value === '4X' ? '4' : '2';
+}
+
 function getImageModelSpec(provider: string): KieAiImageModelSpec {
   return KIEAI_IMAGE_MODEL_SPECS[provider] ?? DEFAULT_IMAGE_MODEL_SPEC;
 }
@@ -119,10 +158,7 @@ export function buildKieAiImageTaskInput(
   imageInputs: string[] = [],
 ): Record<string, unknown> {
   const spec = getImageModelSpec(params.provider);
-  const input: Record<string, unknown> = {
-    prompt: params.prompt,
-    aspect_ratio: params.aspectRatio || spec.defaultAspectRatio,
-  };
+  const input: Record<string, unknown> = {};
   const effectiveImageInputs = typeof spec.maxImages === 'number'
     ? imageInputs.slice(0, spec.maxImages)
     : imageInputs;
@@ -131,7 +167,15 @@ export function buildKieAiImageTaskInput(
     throw new Error('Add at least one reference image for this Kie.ai image model.');
   }
 
-  if (spec.imageInputKey && effectiveImageInputs.length > 0) {
+  if (!spec.omitPrompt) {
+    input.prompt = params.prompt;
+  }
+  if (!spec.omitAspectRatio) {
+    input.aspect_ratio = params.aspectRatio || spec.defaultAspectRatio;
+  }
+  if (spec.singleImageInputKey && effectiveImageInputs.length > 0) {
+    input[spec.singleImageInputKey] = effectiveImageInputs[0];
+  } else if (spec.imageInputKey && effectiveImageInputs.length > 0) {
     input[spec.imageInputKey] = effectiveImageInputs;
   }
   if (spec.supportsResolution) {
@@ -151,6 +195,9 @@ export function buildKieAiImageTaskInput(
   }
   if (spec.supportsGoogleSearch) {
     input.google_search = false;
+  }
+  if (spec.supportsUpscaleFactor) {
+    input.upscale_factor = normalizeUpscaleFactor(params.resolution);
   }
 
   return input;

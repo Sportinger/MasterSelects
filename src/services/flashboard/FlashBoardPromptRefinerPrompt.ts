@@ -1,5 +1,6 @@
 import type { CatalogEntry } from './types';
 import type { RefineFlashBoardPromptInput, PromptReferenceDescriptor } from './FlashBoardPromptRefinerTypes';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoService';
 
 export function getOutputTypeLabel(entry: CatalogEntry): string {
   if (entry.outputType === 'image' || entry.supportsTextToImage) {
@@ -14,9 +15,11 @@ export function getOutputTypeLabel(entry: CatalogEntry): string {
 }
 
 export function isSunoTarget(input: Pick<RefineFlashBoardPromptInput, 'entry' | 'service' | 'providerId'>): boolean {
-  return input.entry.service === 'suno'
-    || input.service === 'suno'
-    || input.providerId.toLowerCase().includes('suno');
+  return input.providerId === SUNO_PROVIDER_ID;
+}
+
+function isSunoSoundsTarget(input: Pick<RefineFlashBoardPromptInput, 'providerId'>): boolean {
+  return input.providerId === SUNO_SOUNDS_PROVIDER_ID;
 }
 
 interface PromptGuidanceProfile {
@@ -60,11 +63,27 @@ const IMAGE_PROMPT_GUIDANCE_PROFILES: PromptGuidanceProfile[] = [
     ],
   },
   {
+    id: 'flux-kontext',
+    matches: (providerId) => providerId.includes('flux-kontext'),
+    guidance: [
+      'Optimize for Flux Kontext. If references are supplied, state the intended edit and what visual identity, layout, text, material, and lighting must be preserved.',
+      'Use direct positive instructions and avoid unsupported parameter names or negative-prompt phrasing.',
+    ],
+  },
+  {
     id: 'flux',
     matches: (providerId) => providerId.includes('flux'),
     guidance: [
       'Optimize for Flux image generation. Put the subject and required action first, describe desired content positively, and use structured fields, exact hex colors, quoted text, and camera/lens details when useful.',
       'Do not rely on negative prompts.',
+    ],
+  },
+  {
+    id: 'utility-image',
+    matches: (providerId) => providerId.includes('recraft/') || providerId.includes('topaz/image-upscale'),
+    guidance: [
+      'Optimize for an image utility operation. Keep the prompt as a short processing intent, not a new creative scene.',
+      'Preserve the source image content, identity, layout, and text unless the selected utility explicitly removes or upscales something.',
     ],
   },
   {
@@ -108,6 +127,14 @@ function getTargetModelGuidance(
 ): string {
   const outputType = getOutputTypeLabel(input.entry);
   const providerId = input.providerId.toLowerCase();
+
+  if (isSunoSoundsTarget(input)) {
+    return [
+      'Optimize for Suno Sounds generation.',
+      'Write one concise sound-design prompt: source, action, texture, environment, timing, loopability, and mix perspective.',
+      'Do not write lyrics, song sections, artist names, negative tags, or music-video instructions.',
+    ].join('\n');
+  }
 
   if (isSunoTarget(input)) {
     const lyricGuidance = input.sunoInstrumental
@@ -167,6 +194,14 @@ function getTargetModelGuidance(
         'Write a focused start/middle/end scene with explicit camera, action, atmosphere, aspect/audio intent, and reference-preservation instructions.',
         multiShotGuidance,
         audioGuidance,
+      ].join('\n');
+    }
+
+    if (providerId.includes('topaz/video-upscale')) {
+      return [
+        'Optimize for Topaz video upscaling.',
+        'Keep the prompt as a preservation/upscale intent only: improve clarity, detail, and compression artifacts without changing identity, motion, timing, framing, or content.',
+        'Do not invent new action, camera movement, style transfer, soundtrack, or scene changes.',
       ].join('\n');
     }
 

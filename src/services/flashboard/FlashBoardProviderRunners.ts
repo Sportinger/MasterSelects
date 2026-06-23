@@ -14,7 +14,7 @@ import {
   elevenLabsService,
   isElevenLabsMp3OutputFormat,
 } from '../elevenLabsService';
-import { SUNO_PROVIDER_ID, sunoService } from '../sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID, sunoService } from '../sunoService';
 
 type FlashBoardProviderProcessingUpdate = {
   status: 'processing';
@@ -78,10 +78,13 @@ export async function runFlashBoardProviderJob(
 ): Promise<FlashBoardProviderRunnerResult> {
   applyFlashBoardProviderApiKeys(context.request);
 
-  const isSunoMusicRequest = context.request.service === 'suno'
-    || context.request.providerId === SUNO_PROVIDER_ID;
+  const isSunoMusicRequest = context.request.providerId === SUNO_PROVIDER_ID;
   if (isSunoMusicRequest) {
     return runSunoMusicJob(context);
+  }
+
+  if (context.request.providerId === SUNO_SOUNDS_PROVIDER_ID) {
+    return runSunoSoundsJob(context);
   }
 
   if (context.request.outputType === 'audio' || context.request.service === 'elevenlabs') {
@@ -185,6 +188,81 @@ async function runSunoMusicJob({
   };
 }
 
+async function runSunoSoundsJob({
+  recordId,
+  request,
+  abortController,
+  registerRunningJob,
+  onProcessing,
+}: FlashBoardProviderRunnerContext): Promise<FlashBoardProviderRunnerResult> {
+  if (!request.prompt.trim()) {
+    throw new Error('Describe the sound before generating with Suno Sounds.');
+  }
+
+  const soundParams = {
+    model: request.version,
+    prompt: request.prompt,
+    soundLoop: request.mode === 'loop',
+  };
+  const remoteTaskId = request.service === 'cloud'
+    ? await cloudAiService.createSunoSounds(
+      soundParams,
+      `flashboard-suno-sounds:${recordId}:${Date.now()}`,
+      abortController.signal,
+    )
+    : await sunoService.createSounds(soundParams, abortController.signal);
+
+  registerRunningJob(remoteTaskId);
+  onProcessing({ status: 'processing', progress: 0.05, remoteTaskId });
+
+  const task = request.service === 'cloud'
+    ? await cloudAiService.pollSunoMusicTaskUntilComplete(
+      remoteTaskId,
+      (currentTask) => {
+        if (abortController.signal.aborted) throw new Error('Canceled');
+        onProcessing({
+          status: 'processing',
+          progress: currentTask.progress,
+          remoteTaskId,
+        });
+      },
+      30000,
+      900000,
+      abortController.signal,
+    )
+    : await sunoService.pollMusicTaskUntilComplete(
+      remoteTaskId,
+      (currentTask) => {
+        if (abortController.signal.aborted) throw new Error('Canceled');
+        onProcessing({
+          status: 'processing',
+          progress: currentTask.progress,
+          remoteTaskId,
+        });
+      },
+      30000,
+      900000,
+      abortController.signal,
+    );
+
+  const audioUrl = task.results?.[0]?.audioUrl;
+  if (task.status === 'completed' && audioUrl) {
+    return {
+      status: 'completed',
+      progress: 1,
+      remoteTaskId,
+      assetUrl: audioUrl,
+      mediaType: 'audio',
+    };
+  }
+
+  return {
+    status: 'failed',
+    error: task.error || 'Suno Sounds generation finished without an audio URL.',
+    remoteTaskId,
+  };
+}
+
 async function runSpeechJob({
   recordId,
   request,
@@ -258,9 +336,16 @@ async function runImageJob({
   const effectiveReferenceMediaFileIds = typeof catalogEntry?.maxReferenceImages === 'number'
     ? (request.referenceMediaFileIds ?? []).slice(0, catalogEntry.maxReferenceImages)
     : (request.referenceMediaFileIds ?? []);
+  const acceptedReferenceMediaTypes = catalogEntry?.requiredReferenceMediaType === 'image'
+    ? new Set<FlashBoardMediaType>(['image'])
+    : new Set<FlashBoardMediaType>(['image', 'video']);
   const visualReferenceMediaFileIds = effectiveReferenceMediaFileIds.filter((mediaFileId) => {
     const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
-    return mediaFile?.type === 'image' || mediaFile?.type === 'video';
+    if (mediaFile?.type !== 'image' && mediaFile?.type !== 'video') {
+      return false;
+    }
+
+    return acceptedReferenceMediaTypes.has(mediaFile.type);
   });
   const referenceImageInputs = (await Promise.all(
     visualReferenceMediaFileIds.map((mediaFileId) => resolveReferenceImage(mediaFileId))
@@ -322,9 +407,15 @@ async function runVideoJob({
   const isHostedSeedanceRequest = request.service === 'cloud'
     && (request.providerId === 'bytedance/seedance-2' || request.providerId === 'bytedance/seedance-2-fast');
   const isHostedKlingRequest = request.service === 'cloud' && request.providerId === 'cloud-kling';
+  const isHostedSpecialKieVideoRequest = request.service === 'cloud'
+    && (
+      request.providerId === 'veo-3.1'
+      || request.providerId === 'runway-video'
+      || request.providerId === 'topaz/video-upscale'
+    );
   const referenceMedia = request.service === 'kieai'
     ? effectiveVideoReferenceMediaFileIds.map((mediaFileId) => resolveReferenceMedia(mediaFileId))
-    : isHostedSeedanceRequest || isHostedKlingRequest
+    : isHostedSeedanceRequest || isHostedKlingRequest || isHostedSpecialKieVideoRequest
       ? await Promise.all(
           effectiveVideoReferenceMediaFileIds.map((mediaFileId) => resolveHostedReferenceMedia(mediaFileId)),
         )

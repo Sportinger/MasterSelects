@@ -63,7 +63,9 @@ export interface ClipTrimState {
   originalOutPoint: number;
   startX: number;
   currentX: number;
-  altKey: boolean;  // If true, don't trim linked clip
+  altKey: boolean;  // Snap modifier captured during trim
+  singleClip?: boolean; // Shift modifier: trim only the grabbed clip, regardless of selection/link
+  includeLinked?: boolean; // True only when the linked partner is part of this trim gesture
   // Snap feedback: the timeline time the edge snapped to (clip/playhead/marker),
   // or null when frame-snapped or not snapped. Drives the green snap line.
   snapIndicatorTime: number | null;

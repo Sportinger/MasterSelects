@@ -667,6 +667,7 @@ describe('clip context menu model', () => {
       pasteClipColor: vi.fn(),
     };
     const toggleThumbnailsEnabled = vi.fn();
+    const exportCurrentFrame = vi.fn(async () => true);
     const context = {
       clipId: 'missing-clip',
       clip: null,
@@ -694,6 +695,7 @@ describe('clip context menu model', () => {
       toggleWaveformsEnabled: vi.fn(),
       setAudioDisplayMode: vi.fn(),
       loadTranscriber: vi.fn(async () => ({ transcribeClip: vi.fn() })),
+      exportCurrentFrame,
       showInExplorer: vi.fn(async () => ({ success: true, message: 'ok' })),
       notify: vi.fn(),
       downloadRawFile: vi.fn(),
@@ -738,6 +740,10 @@ describe('clip context menu model', () => {
       kind: 'toggle-thumbnails',
       canExecute: true,
     }, context)).resolves.toBe(true);
+    await expect(executeClipContextMenuCommand({
+      kind: 'export-current-frame',
+      canExecute: true,
+    }, context)).resolves.toBe(true);
 
     expect(clipboardActions.copyClipEffects).not.toHaveBeenCalled();
     expect(clipboardActions.pasteClipEffects).not.toHaveBeenCalled();
@@ -748,6 +754,7 @@ describe('clip context menu model', () => {
     expect(timelineActions.createSubcompositionFromSelection).not.toHaveBeenCalled();
     expect(timelineActions.removeClip).not.toHaveBeenCalled();
     expect(toggleThumbnailsEnabled).toHaveBeenCalledTimes(1);
+    expect(exportCurrentFrame).toHaveBeenCalledTimes(1);
   });
 
   it('executes stem separation through an injected starter only when allowed', () => {

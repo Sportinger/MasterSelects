@@ -96,8 +96,11 @@ export function buildFlashBoardProviderTransition({
 }: BuildFlashBoardProviderTransitionInput): FlashBoardProviderTransitionPlan {
   const nextVersion = entry.versions[0] ?? '';
   const isAudio = entry.outputType === 'audio' || entry.service === 'elevenlabs' || entry.service === 'suno';
-  const isSuno = entry.service === 'suno' || entry.providerId === sunoProviderId;
-  const isElevenLabs = isAudio && !isSuno;
+  const isSuno = entry.providerId === sunoProviderId;
+  const isElevenLabs = isAudio && (
+    entry.service === 'elevenlabs'
+    || entry.providerId === 'cloud-elevenlabs-tts'
+  );
   const nextMode = entry.modes.includes(currentMode) ? undefined : entry.modes[0] ?? 'std';
   const nextDuration = entry.durations.length > 0 && !entry.durations.includes(currentDuration)
     ? entry.durations[0] ?? 5

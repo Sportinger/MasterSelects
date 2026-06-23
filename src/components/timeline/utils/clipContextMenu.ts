@@ -592,5 +592,7 @@ export async function executeClipContextMenuCommand(
         color: command.color,
         labelStore: context.labelStore,
       });
+    case 'export-current-frame':
+      return context.exportCurrentFrame();
   }
 }

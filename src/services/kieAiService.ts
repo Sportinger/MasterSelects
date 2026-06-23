@@ -18,6 +18,16 @@ import { createTextToImageTask, type TextToImageParams } from './kieAi/imageComm
 import { createKlingImageToVideo, createKlingTextToVideo } from './kieAi/klingCommands';
 import { createKieAiMediaTools, type KieAiMediaTools } from './kieAi/mediaUpload';
 import { createSeedanceVideoTask, isSeedance2Provider } from './kieAi/seedanceCommands';
+import {
+  createFluxKontextImageTask,
+  createKieAiSpecialVideoTask,
+  getFluxKontextImageTaskStatus,
+  getKieAiSpecialVideoTaskKind,
+  getKieAiSpecialVideoTaskStatus,
+  isFluxKontextProvider,
+  isKieAiSpecialVideoProvider,
+  type KieAiSpecialVideoTaskKind,
+} from './kieAi/specialCommands';
 import { createKieAiTaskMonitor, type KieAiTaskMonitor } from './kieAi/statusPolling';
 import { createKieAiTransport, type KieAiTransport } from './kieAi/transport';
 
@@ -34,6 +44,8 @@ class KieAiService {
   private mediaTools: KieAiMediaTools;
   private transport: KieAiTransport;
   private taskMonitor: KieAiTaskMonitor;
+  private imageTaskKinds = new Map<string, 'flux-kontext'>();
+  private videoTaskKinds = new Map<string, KieAiSpecialVideoTaskKind>();
 
   constructor() {
     this.mediaTools = createKieAiMediaTools(
@@ -56,6 +68,15 @@ class KieAiService {
   }
 
   async createTextToVideo(params: TextToVideoParams): Promise<string> {
+    if (isKieAiSpecialVideoProvider(params.provider)) {
+      const taskId = await createKieAiSpecialVideoTask(params, this.transport.request, this.mediaTools);
+      const taskKind = getKieAiSpecialVideoTaskKind(params.provider);
+      if (taskKind) {
+        this.videoTaskKinds.set(taskId, taskKind);
+      }
+      return taskId;
+    }
+
     if (isSeedance2Provider(params.provider)) {
       return createSeedanceVideoTask(params, this.transport.request, this.mediaTools);
     }
@@ -64,10 +85,25 @@ class KieAiService {
   }
 
   async createTextToImage(params: TextToImageParams): Promise<string> {
+    if (isFluxKontextProvider(params.provider)) {
+      const taskId = await createFluxKontextImageTask(params, this.transport.request, this.mediaTools);
+      this.imageTaskKinds.set(taskId, 'flux-kontext');
+      return taskId;
+    }
+
     return createTextToImageTask(params, this.transport.request, this.mediaTools);
   }
 
   async createImageToVideo(params: ImageToVideoParams): Promise<string> {
+    if (isKieAiSpecialVideoProvider(params.provider)) {
+      const taskId = await createKieAiSpecialVideoTask(params, this.transport.request, this.mediaTools);
+      const taskKind = getKieAiSpecialVideoTaskKind(params.provider);
+      if (taskKind) {
+        this.videoTaskKinds.set(taskId, taskKind);
+      }
+      return taskId;
+    }
+
     if (isSeedance2Provider(params.provider)) {
       return createSeedanceVideoTask(params, this.transport.request, this.mediaTools);
     }
@@ -76,10 +112,27 @@ class KieAiService {
   }
 
   async getTaskStatus(taskId: string): Promise<VideoTask> {
+    const specialTaskKind = this.videoTaskKinds.get(taskId);
+    if (specialTaskKind) {
+      const task = await getKieAiSpecialVideoTaskStatus(taskId, specialTaskKind, this.transport.request);
+      if (task.status === 'completed' || task.status === 'failed') {
+        this.videoTaskKinds.delete(taskId);
+      }
+      return task;
+    }
+
     return this.taskMonitor.getTaskStatus(taskId);
   }
 
   async getImageTaskStatus(taskId: string): Promise<VideoTask> {
+    if (this.imageTaskKinds.get(taskId) === 'flux-kontext') {
+      const task = await getFluxKontextImageTaskStatus(taskId, this.transport.request);
+      if (task.status === 'completed' || task.status === 'failed') {
+        this.imageTaskKinds.delete(taskId);
+      }
+      return task;
+    }
+
     return this.taskMonitor.getImageTaskStatus(taskId);
   }
 
@@ -89,7 +142,20 @@ class KieAiService {
     pollInterval = 15000,
     timeout = 600000,
   ): Promise<VideoTask> {
-    return this.taskMonitor.pollTaskUntilComplete(taskId, onProgress, pollInterval, timeout);
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const task = await this.getTaskStatus(taskId);
+      onProgress?.(task);
+
+      if (task.status === 'completed' || task.status === 'failed') {
+        return task;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('Task timed out after 10 minutes');
   }
 
   async pollImageTaskUntilComplete(
@@ -98,7 +164,20 @@ class KieAiService {
     pollInterval = 5000,
     timeout = 180000,
   ): Promise<VideoTask> {
-    return this.taskMonitor.pollImageTaskUntilComplete(taskId, onProgress, pollInterval, timeout);
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const task = await this.getImageTaskStatus(taskId);
+      onProgress?.(task);
+
+      if (task.status === 'completed' || task.status === 'failed') {
+        return task;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('Image task timed out after 3 minutes');
   }
 
   async getAccountInfo(): Promise<AccountInfo> {

@@ -7,6 +7,7 @@ import {
   createHostedKlingTask,
   createHostedSeedanceTask,
   createHostedSunoMusicTask,
+  createHostedSunoSoundsTask,
   getHostedKlingTask,
   getHostedSunoMusicTask,
   type HostedImageParams,
@@ -24,6 +25,30 @@ export interface HostedKlingCapabilities {
   pollingSupported: true;
   sunoModels: string[];
 }
+
+const SPECIAL_VIDEO_PROVIDERS = new Set(['veo-3.1', 'runway-video', 'topaz/video-upscale']);
+const IMAGE_PROVIDERS = new Set([
+  'nano-banana-2',
+  'nano-banana-pro',
+  'google/imagen4-fast',
+  'google/imagen4-ultra',
+  'gpt-image-2-text-to-image',
+  'gpt-image-2-image-to-image',
+  'flux-2/pro-text-to-image',
+  'flux-2/pro-image-to-image',
+  'seedream/5-lite-text-to-image',
+  'seedream/5-lite-image-to-image',
+  'flux-kontext-pro',
+  'flux-kontext-max',
+  'recraft/remove-background',
+  'recraft/crisp-upscale',
+  'topaz/image-upscale',
+]);
+const IMAGE_UTILITY_PROVIDERS = new Set([
+  'recraft/remove-background',
+  'recraft/crisp-upscale',
+  'topaz/image-upscale',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -165,7 +190,7 @@ export function normalizeHostedImageParams(value: unknown): HostedImageParams | 
   const requestedOutputType = typeof value.outputType === 'string' ? value.outputType.trim() : '';
   const requestedProvider = typeof value.provider === 'string' ? value.provider.trim() : '';
 
-  if (requestedOutputType !== 'image' && requestedProvider !== 'nano-banana-2') {
+  if (requestedOutputType !== 'image' && !IMAGE_PROVIDERS.has(requestedProvider)) {
     return null;
   }
 
@@ -174,7 +199,7 @@ export function normalizeHostedImageParams(value: unknown): HostedImageParams | 
     ? value.imageInputs.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
     : undefined;
 
-  if (!prompt) {
+  if (!prompt && !IMAGE_UTILITY_PROVIDERS.has(provider)) {
     return null;
   }
 
@@ -218,7 +243,7 @@ export function normalizeHostedSunoParams(value: unknown): HostedSunoParams | nu
     audioWeight: clampOptionalNumber(value.audioWeight ?? value.audio_weight ?? value.sunoAudioWeight, 0, 1),
     customMode,
     instrumental,
-    model: asString(value.model ?? value.version) ?? 'V5',
+    model: asString(value.model ?? value.version) ?? 'V5_5',
     negativeTags: asString(value.negativeTags ?? value.negative_tags ?? value.sunoNegativeTags),
     prompt,
     style,
@@ -234,6 +259,57 @@ export function normalizeHostedSunoParams(value: unknown): HostedSunoParams | nu
       0,
       1,
     ),
+  };
+}
+
+export function normalizeHostedSunoSoundsParams(value: unknown): HostedSunoParams | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const requestedProvider = asString(value.provider ?? value.providerId ?? value.provider_id);
+  const prompt = asString(value.prompt);
+
+  if (requestedProvider !== 'suno-sounds' || !prompt) {
+    return null;
+  }
+
+  return {
+    model: asString(value.model ?? value.version) ?? 'V5_5',
+    prompt,
+    soundLoop: value.soundLoop === true || value.mode === 'loop',
+  };
+}
+
+export function normalizeHostedSpecialVideoParams(value: unknown): HostedVideoParams | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const requestedProvider = asString(value.provider ?? value.providerId ?? value.provider_id);
+  if (!requestedProvider || !SPECIAL_VIDEO_PROVIDERS.has(requestedProvider)) {
+    return null;
+  }
+
+  const prompt = typeof value.prompt === 'string' ? value.prompt.trim() : '';
+  const referenceMedia = normalizeHostedReferenceMedia(value.referenceMedia ?? value.reference_media);
+  const needsPrompt = requestedProvider !== 'topaz/video-upscale';
+
+  if (needsPrompt && !prompt) {
+    return null;
+  }
+
+  return {
+    aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '16:9',
+    duration: Math.max(5, Math.min(10, Math.floor(Number(value.duration) || 5))),
+    endImageUrl: typeof value.endImageUrl === 'string' && value.endImageUrl.trim() ? value.endImageUrl.trim() : undefined,
+    mode: asString(value.mode),
+    multiShots: false,
+    prompt,
+    provider: requestedProvider,
+    referenceMedia,
+    sound: false,
+    startImageUrl: typeof value.startImageUrl === 'string' && value.startImageUrl.trim() ? value.startImageUrl.trim() : undefined,
   };
 }
 
@@ -286,6 +362,7 @@ export {
   createHostedKlingTask,
   createHostedSeedanceTask,
   createHostedSunoMusicTask,
+  createHostedSunoSoundsTask,
   getHostedKlingTask,
   getHostedSunoMusicTask,
 };
@@ -302,8 +379,8 @@ export function buildHostedKlingCapabilities(): HostedKlingCapabilities {
   return {
     byoExplicit: true,
     musicProvider: 'suno-music',
-    providers: ['kling-3.0', 'bytedance/seedance-2', 'bytedance/seedance-2-fast'],
+    providers: ['kling-3.0', 'bytedance/seedance-2', 'bytedance/seedance-2-fast', 'veo-3.1', 'runway-video', 'topaz/video-upscale'],
     pollingSupported: true,
-    sunoModels: ['V5', 'V4_5PLUS', 'V4_5', 'V4'],
+    sunoModels: ['V5_5', 'V5', 'V4_5PLUS', 'V4_5', 'V4'],
   };
 }

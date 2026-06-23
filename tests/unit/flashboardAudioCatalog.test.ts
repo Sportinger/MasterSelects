@@ -130,6 +130,11 @@ describe('FlashBoard audio catalog contract', () => {
       'flux-2/pro-image-to-image',
       'seedream/5-lite-text-to-image',
       'seedream/5-lite-image-to-image',
+      'flux-kontext-pro',
+      'flux-kontext-max',
+      'recraft/remove-background',
+      'recraft/crisp-upscale',
+      'topaz/image-upscale',
     ]));
 
     expect(entries.find((candidate) => candidate.providerId === 'gpt-image-2-image-to-image')).toMatchObject({
@@ -141,6 +146,61 @@ describe('FlashBoard audio catalog contract', () => {
       requiresReferenceMedia: true,
       promptRefinerProfile: 'flux-edit',
       maxReferenceMedia: 8,
+    });
+    expect(entries.find((candidate) => candidate.providerId === 'recraft/remove-background')).toMatchObject({
+      requiresPrompt: false,
+      requiresReferenceMedia: true,
+      requiredReferenceMediaType: 'image',
+      promptRefinerProfile: 'utility-image',
+    });
+    expect(entries.find((candidate) => candidate.providerId === 'topaz/image-upscale')).toMatchObject({
+      imageSizes: ['2x', '4x'],
+      requiresPrompt: false,
+      requiredReferenceMediaType: 'image',
+    });
+  });
+
+  it('exposes current Kie.ai video utilities and premium video providers', () => {
+    const entries = getCatalogEntries();
+
+    expect(entries.find((candidate) => candidate.providerId === 'veo-3.1')).toMatchObject({
+      service: 'kieai',
+      outputType: 'video',
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      modes: ['veo3_fast', 'veo3', 'veo3_lite'],
+      promptRefinerProfile: 'veo',
+    });
+    expect(entries.find((candidate) => candidate.providerId === 'runway-video')).toMatchObject({
+      service: 'kieai',
+      outputType: 'video',
+      durations: [5, 10],
+      modes: ['720p', '1080p'],
+      promptRefinerProfile: 'runway',
+    });
+    expect(entries.find((candidate) => candidate.providerId === 'topaz/video-upscale')).toMatchObject({
+      service: 'kieai',
+      outputType: 'video',
+      modes: ['2x', '4x'],
+      requiresPrompt: false,
+      requiresReferenceMedia: true,
+      requiredReferenceMediaType: 'video',
+      promptRefinerProfile: 'utility-video',
+    });
+  });
+
+  it('exposes Suno Sounds separately from Suno Music', () => {
+    const entry = getCatalogEntries().find((candidate) => (
+      candidate.service === 'suno' && candidate.providerId === 'suno-sounds'
+    ));
+
+    expect(entry).toMatchObject({
+      service: 'suno',
+      providerId: 'suno-sounds',
+      outputType: 'audio',
+      supportsTextToAudio: true,
+      modes: ['one-shot', 'loop'],
+      promptRefinerProfile: 'suno-sounds',
     });
   });
 
@@ -157,7 +217,7 @@ describe('FlashBoard audio catalog contract', () => {
       supportsTextToVideo: false,
       supportsImageToVideo: false,
       supportsTextToImage: false,
-      versions: ['V5', 'V4_5PLUS', 'V4_5', 'V4'],
+      versions: ['V5_5', 'V5', 'V4_5PLUS', 'V4_5', 'V4'],
     });
   });
 

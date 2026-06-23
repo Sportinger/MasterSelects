@@ -1,8 +1,8 @@
 import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type CloudAiVideoRequest } from './cloudApi';
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
 import type { TextToImageParams } from './kieAiService';
-import type { SunoCreateMusicParams, SunoMusicTask } from './sunoService';
-import { SUNO_PROVIDER_ID } from './sunoService';
+import type { SunoCreateMusicParams, SunoCreateSoundsParams, SunoMusicTask } from './sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from './sunoService';
 import { useAccountStore } from '../stores/accountStore';
 import {
   DEFAULT_ELEVENLABS_SPEECH_OUTPUT_FORMAT,
@@ -290,6 +290,25 @@ export const cloudAiService = {
     }, signal);
     syncHostedCreditBalance(response);
     return getHostedTaskId(response, 'Hosted Suno generation did not return a task id');
+  },
+  async createSunoSounds(
+    params: SunoCreateSoundsParams,
+    idempotencyKey = createHostedSunoIdempotencyKey(),
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const response = await cloudApi.ai.audio.music({
+      action: 'sound',
+      idempotencyKey,
+      params: {
+        model: params.model,
+        outputType: 'audio',
+        prompt: params.prompt,
+        provider: SUNO_SOUNDS_PROVIDER_ID,
+        soundLoop: params.soundLoop,
+      },
+    }, signal);
+    syncHostedCreditBalance(response);
+    return getHostedTaskId(response, 'Hosted Suno Sounds generation did not return a task id');
   },
   async getSunoMusicTaskStatus(taskId: string): Promise<SunoMusicTask> {
     const response = await cloudApi.ai.audio.musicStatus(taskId);

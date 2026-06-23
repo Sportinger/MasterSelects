@@ -7,8 +7,9 @@ const BASE_URL = 'https://api.kie.ai';
 const DEFAULT_CALLBACK_URL = 'https://www.masterselects.com/api/ai/suno/callback';
 
 export const SUNO_PROVIDER_ID = 'suno-music';
-export const SUNO_MODEL_IDS = ['V5', 'V4_5PLUS', 'V4_5', 'V4'] as const;
-export const DEFAULT_SUNO_MODEL_ID = 'V5';
+export const SUNO_SOUNDS_PROVIDER_ID = 'suno-sounds';
+export const SUNO_MODEL_IDS = ['V5_5', 'V5', 'V4_5PLUS', 'V4_5', 'V4'] as const;
+export const DEFAULT_SUNO_MODEL_ID = 'V5_5';
 export const DEFAULT_SUNO_CUSTOM_MODE = false;
 export const DEFAULT_SUNO_INSTRUMENTAL = true;
 export const DEFAULT_SUNO_STYLE_WEIGHT = 0.65;
@@ -31,6 +32,16 @@ export interface SunoCreateMusicParams {
   title?: string;
   vocalGender?: SunoVocalGender;
   weirdnessConstraint?: number;
+}
+
+export interface SunoCreateSoundsParams {
+  callBackUrl?: string;
+  grabLyrics?: boolean;
+  model?: string;
+  prompt: string;
+  soundKey?: string;
+  soundLoop?: boolean;
+  soundTempo?: number;
 }
 
 export interface SunoMusicResult {
@@ -251,6 +262,40 @@ class SunoService {
     const result = await this.request<KieSunoCreateResponse>('/api/v1/generate', 'POST', body, signal);
     if (result.code !== 200 || !result.data?.taskId) {
       throw new Error(`Suno request failed: ${result.msg || 'missing task id'}`);
+    }
+
+    return result.data.taskId;
+  }
+
+  async createSounds(params: SunoCreateSoundsParams, signal?: AbortSignal): Promise<string> {
+    const prompt = params.prompt.trim();
+    if (!prompt) {
+      throw new Error('Describe the sound before generating with Suno Sounds.');
+    }
+
+    const body: Record<string, unknown> = {
+      callBackUrl: params.callBackUrl?.trim() || DEFAULT_CALLBACK_URL,
+      grabLyrics: params.grabLyrics === true,
+      model: normalizeModel(params.model),
+      prompt,
+      soundLoop: params.soundLoop === true,
+    };
+
+    if (typeof params.soundTempo === 'number' && Number.isFinite(params.soundTempo)) {
+      body.soundTempo = Math.max(40, Math.min(240, Math.round(params.soundTempo)));
+    }
+    if (params.soundKey?.trim()) {
+      body.soundKey = params.soundKey.trim();
+    }
+
+    log.debug('Creating Suno Sounds task:', {
+      loop: body.soundLoop,
+      model: body.model,
+    });
+
+    const result = await this.request<KieSunoCreateResponse>('/api/v1/generate/sounds', 'POST', body, signal);
+    if (!result.data?.taskId) {
+      throw new Error(`Suno Sounds request failed: ${result.msg || 'missing task id'}`);
     }
 
     return result.data.taskId;

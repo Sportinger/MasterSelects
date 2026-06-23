@@ -40,6 +40,7 @@ interface BuildFlashBoardSunoOptionsStateInput {
 }
 
 const SUNO_MODEL_LABELS: Record<SunoModelId, string> = {
+  V5_5: 'V5.5',
   V5: 'V5',
   V4_5PLUS: 'V4.5+',
   V4_5: 'V4.5',

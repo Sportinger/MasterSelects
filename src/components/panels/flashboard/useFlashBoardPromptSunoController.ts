@@ -178,7 +178,6 @@ export function useFlashBoardPromptSunoController({
     sunoStyleLimit: getSunoStyleLimit(version),
     sunoStyleWeight,
     sunoTitle,
-    sunoTuningChanged: sunoOptionsState.tuningChanged,
     sunoVocalGender,
     sunoVocalGenderOptions: sunoOptionsState.vocalGenderOptions,
     sunoWeirdnessConstraint,

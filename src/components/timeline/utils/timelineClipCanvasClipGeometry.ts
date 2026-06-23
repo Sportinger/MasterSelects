@@ -26,7 +26,8 @@ export function isTimelineClipCanvasTrimPreviewClip(
   clipTrim?: ClipTrimState | null,
 ): boolean {
   if (!clipTrim) return false;
-  return clip.id === clipTrim.clipId || (!clipTrim.altKey && clip.linkedClipId === clipTrim.clipId);
+  const includeLinked = clipTrim.singleClip === true ? false : clipTrim.includeLinked === true;
+  return clip.id === clipTrim.clipId || (includeLinked && clip.linkedClipId === clipTrim.clipId);
 }
 
 export function resolveClipGeometry(
@@ -135,11 +136,11 @@ export function resolveClipGeometry(
   };
 }
 
-export function createWorkerDrawableClips(
-  clips: readonly TimelinePaintSourceClip[],
+export function createWorkerDrawableClips<TClip extends TimelinePaintSourceClip>(
+  clips: readonly TClip[],
   props: TimelineClipCanvasGeometryInput,
-): readonly TimelinePaintSourceClip[] {
-  const drawableClips: TimelinePaintSourceClip[] = [];
+): readonly TClip[] {
+  const drawableClips: TClip[] = [];
   for (const clip of clips) {
     const geometry = resolveClipGeometry(clip, props);
     if (!geometry.visible) continue;
@@ -149,7 +150,7 @@ export function createWorkerDrawableClips(
       duration: geometry.duration,
       inPoint: geometry.inPoint,
       outPoint: geometry.outPoint,
-    });
+    } as TClip);
   }
   return drawableClips;
 }

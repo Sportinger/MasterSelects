@@ -2,7 +2,7 @@ import {
   DEFAULT_FLASHBOARD_PROVIDER_ID,
   DEFAULT_FLASHBOARD_SERVICE,
 } from '../../../stores/flashboardStore/defaults';
-import { SUNO_PROVIDER_ID } from '../../../services/sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../../../services/sunoService';
 import { getCatalogEntries } from '../../../services/flashboard/FlashBoardModelCatalog';
 import { getCatalogEntryPriceEstimate } from '../../../services/flashboard/FlashBoardPricing';
 import type { CatalogEntry } from '../../../services/flashboard/types';
@@ -92,7 +92,11 @@ export function getFlashBoardModelCategory(entry: CatalogEntry | undefined): Fla
     return 'video';
   }
 
-  if (entry.service === 'suno' || entry.providerId === SUNO_PROVIDER_ID) {
+  if (
+    entry.service === 'suno'
+    || entry.providerId === SUNO_PROVIDER_ID
+    || entry.providerId === SUNO_SOUNDS_PROVIDER_ID
+  ) {
     return 'music';
   }
 
@@ -134,11 +138,27 @@ function getModelDisplayName(entry: CatalogEntry): string {
     return 'ElevenLabs Speech';
   }
 
-  if (entry.service === 'suno' || entry.providerId === SUNO_PROVIDER_ID) {
+  if (entry.providerId === SUNO_PROVIDER_ID) {
     return 'Suno Music';
   }
 
   return entry.name.replace(' (Kie.ai)', '').replace(' (EvoLink)', '');
+}
+
+function isKieCloudMirrorProvider(providerId: string): boolean {
+  return providerId === 'cloud-kling'
+    || providerId === 'nano-banana-2'
+    || providerId === 'bytedance/seedance-2'
+    || providerId === 'bytedance/seedance-2-fast'
+    || providerId === 'veo-3.1'
+    || providerId === 'runway-video'
+    || providerId === 'topaz/video-upscale'
+    || providerId.includes('/')
+    || providerId.includes('flux-kontext')
+    || providerId.includes('nano-banana')
+    || providerId.includes('imagen')
+    || providerId.includes('gpt-image')
+    || providerId.includes('seedream');
 }
 
 function isCatalogEntryVisible({
@@ -167,12 +187,7 @@ function isCatalogEntryVisible({
 
     if (
       !useHostedProductionProviders
-      && (
-        entry.providerId === 'cloud-kling'
-        || entry.providerId === 'nano-banana-2'
-        || entry.providerId === 'bytedance/seedance-2'
-        || entry.providerId === 'bytedance/seedance-2-fast'
-      )
+      && isKieCloudMirrorProvider(entry.providerId)
       && useKieAiKeyByDefault
     ) {
       return false;

@@ -250,11 +250,18 @@
   flex-direction: column;
   gap: 7px;
   padding: 7px;
-  border-radius: 10px;
-  background: rgba(26, 26, 28, 0.92);
+  border-radius: 8px;
+  background: rgba(26, 26, 28, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(8px);
+}
+
+.fb-suno-inline-tuning {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 7px 8px;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .fb-suno-tuning-row {
@@ -292,16 +299,31 @@
   touch-action: pan-y;
 }
 
-.fb-suno-gender-row,
-.fb-suno-tuning-actions {
+.fb-suno-tuning-row.disabled {
+  opacity: 0.48;
+}
+
+.fb-suno-tuning-row.disabled input[type='range'] {
+  cursor: not-allowed;
+}
+
+.fb-suno-tuning-footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 5px;
 }
 
-.fb-suno-tuning-actions {
+.fb-suno-inline-tuning .fb-suno-tuning-footer {
   justify-content: flex-end;
+}
+
+.fb-suno-inline-tuning .fb-popover-pill {
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .fb-audio-popover-field .fb-pill-input,
@@ -512,7 +534,7 @@
   justify-content: flex-start;
   gap: 4px;
   width: 100%;
-  height: 60px;
+  height: var(--fb-inline-submenu-height, 60px);
   min-width: 0;
   max-width: none;
   max-height: none;
@@ -523,6 +545,10 @@
   box-shadow: none;
   transform: none;
   transform-origin: center;
+}
+
+.fb-bubble-bar.inline-submenu-model .fb-pill-group .fb-popover {
+  justify-content: flex-start;
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-title {
@@ -549,19 +575,30 @@
   overflow: hidden;
 }
 
+.fb-bubble-bar.inline-submenu-model .fb-pill-group .fb-model-list {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pills {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: 1 1 auto;
-  flex-wrap: wrap;
   align-content: flex-start;
   align-items: flex-start;
   gap: 4px;
   height: auto;
   margin: 0;
-  max-height: 52px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  max-height: none;
+  overflow: visible;
+  scrollbar-width: none;
+}
+
+.fb-bubble-bar.inline-submenu-model .fb-pill-group .fb-popover-pills {
+  max-height: none;
+  overflow: visible;
+  scrollbar-width: none;
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-audio-actions {
@@ -583,9 +620,13 @@
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pills::-webkit-scrollbar {
-  display: block;
+  display: none;
   width: 6px;
   height: 6px;
+}
+
+.fb-bubble-bar.inline-submenu-model .fb-pill-group .fb-popover-pills::-webkit-scrollbar {
+  display: none;
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-model-category-tab,
@@ -724,11 +765,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-model-list .fb-popover-pill {
   min-width: 0;
   min-height: 24px;
+}
+
+.fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pills .fb-popover-pill {
+  width: 100%;
+  justify-content: center;
+}
+
+.fb-bubble-bar.inline-submenu-model .fb-pill-group .fb-model-list .fb-popover-pill {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.fb-bubble-bar.inline-submenu-model .fb-pill-group .fb-popover-pill-label {
+  max-width: none;
+  text-align: left;
 }
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pill br {
@@ -737,4 +794,41 @@
 
 .fb-bubble-bar.has-inline-submenu .fb-pill-group .fb-popover-pill-meta {
   display: none;
+}
+
+.fb-aspect-pictogram {
+  flex: 0 0 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  color: currentColor;
+}
+
+.fb-aspect-pictogram-shape {
+  display: block;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 0.85;
+}
+
+.fb-aspect-pictogram-auto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px dashed currentColor;
+  border-radius: 5px;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.fb-popover-pill.active .fb-aspect-pictogram-shape,
+.fb-popover-pill.active .fb-aspect-pictogram-auto {
+  opacity: 1;
 }

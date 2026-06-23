@@ -1,6 +1,6 @@
 # Kie.ai Generation Chatbox Expansion
 
-Status: active implementation
+Status: implementation landed locally; browser QA and hosted mirrors still open
 Updated: 2026-06-24
 
 ## Goal
@@ -16,42 +16,54 @@ option popovers. Do not create a second Kie-only UI.
 
 ## Current Implementation Status
 
-Implemented first wave:
+Implemented:
 
 - Suno tuning sliders normalize to stable two-decimal values and expose range
   labels.
 - Magic-wand research ledger exists at
   `docs/ongoing/Kie-AI-Magic-Wand-Research-Ledger.md`.
 - Prompt refiner has model-family guidance for Suno, Nano Banana, GPT Image,
-  Flux, Seedream, Imagen, Kling, Seedance, Veo, and Runway.
+  Flux, Flux Kontext, Recraft/Topaz utilities, Seedream, Imagen, Kling,
+  Seedance, Veo, Runway, and Suno Sounds.
 - Kie.ai FlashBoard image catalog exposes Nano Banana 2/Pro, Imagen 4
-  Fast/Ultra, GPT Image 2, Flux 2 Pro, and Seedream 5 Lite.
+  Fast/Ultra, GPT Image 2, Flux 2 Pro, Seedream 5 Lite, Flux Kontext Pro/Max,
+  Recraft Remove Background, Recraft Crisp Upscale, and Topaz Image Upscale.
 - GPT Image 2 Edit, Flux 2 Pro Edit, and Seedream 5 Lite Edit require a
   reference before generation is enabled.
+- Kie.ai video catalog exposes Kling 3.0, Seedance 2.0/Fast, Veo 3.1,
+  Runway, and Topaz Video Upscale.
+- Suno Sounds is available as a separate music-category entry through hosted
+  Cloud credits in production or BYO Kie in development, with one-shot/loop
+  mode and without Suno Music lyrics/style/tuning controls.
+- Flux Kontext, Veo 3.1, and Runway use dedicated create/poll endpoint
+  mappings. Recraft and Topaz utilities use the existing Market job route.
+- Utility models can run without a prompt but require matching image or video
+  reference media before the Generate button enables.
 
 Still open:
 
-- Dedicated endpoint implementations for Flux Kontext, Recraft, Topaz, Veo,
-  Runway, and Suno Sounds.
-- Hosted/cloud mirrors and pricing for newly added BYO Kie image models.
+- Full hosted price-row copy for every newly mirrored Kie model in account
+  pricing surfaces.
+- Optional Suno Sounds controls for tempo, key, and `grabLyrics`; the current
+  chatbox integration exposes only prompt plus one-shot/loop to avoid a wider
+  option-schema migration.
+- Browser QA in the compact FlashBoard composer after the next running dev
+  server pass.
 
 ## Current Local Findings
 
-- `src/services/kieAi/catalog.ts` currently exposes Kie video providers only:
-  Kling 3.0, Seedance 2.0, and Seedance 2.0 Fast.
-- `src/services/kieAi/imageCommands.ts` already has a generic
-  `/api/v1/jobs/createTask` image path, but the visible catalog only exposes
-  the current Nano Banana path through FlashBoard.
-- `src/services/flashboard/FlashBoardModelCatalog.ts` keeps the user-visible
-  FlashBoard catalog; this is the right place to add model entries and labels.
-- `src/services/flashboard/FlashBoardProviderRunners.ts` owns the dispatch from
-  a FlashBoard request to Suno, speech, image, and video runners.
-- `src/stores/flashboardStore/types.ts` only has output types `video`, `image`,
-  and `audio`; add capability metadata before adding utility tasks such as
-  background removal or upscaling.
-- `src/services/flashboard/FlashBoardPromptRefinerPrompt.ts` currently has
-  special guidance for Suno, Nano Banana, Kling, and Seedance, with a generic
-  fallback for everything else.
+- `src/services/flashboard/FlashBoardModelCatalog.ts` is the user-visible
+  catalog for the screenshot composer categories: Image, Video, Voice, Music.
+- `src/services/kieAi/imageCommands.ts` handles Market image jobs and utility
+  image payloads. `src/services/kieAi/specialCommands.ts` handles Flux
+  Kontext, Veo, Runway, and Topaz Video Upscale endpoint differences.
+- `src/services/flashboard/FlashBoardProviderRunners.ts` dispatches Suno Music,
+  Suno Sounds, speech, image, and video jobs without adding a second Kie UI.
+- The current implementation uses `requiresPrompt`,
+  `requiresReferenceMedia`, and `requiredReferenceMediaType` as the minimal
+  catalog metadata needed for local validation. A generic `optionSchema` and
+  persisted provider option bag remain deferred until more advanced provider
+  controls are exposed.
 
 ## Add Now
 
@@ -204,6 +216,9 @@ Acceptance:
   ledger can stay in `docs/ongoing/` until the profiles ship.
 
 ## Architecture Plan
+
+Longer-term capability architecture, not fully required for the landed local
+integration:
 
 1. Add model capability metadata to the FlashBoard catalog instead of hardcoding
    UI behavior per provider. Minimum fields:

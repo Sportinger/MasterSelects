@@ -2,7 +2,7 @@ import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/t
 import { calculateKieAiCost } from '../kieAiService';
 import { calculateCost as calculatePiApiCost } from '../piApiService';
 import { estimateHostedElevenLabsSpeechCredits, type ElevenLabsModelRates } from '../elevenLabsService';
-import { SUNO_PROVIDER_ID } from '../sunoService';
+import { SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoService';
 import type { CatalogEntry } from './types';
 
 export const KIEAI_USD_PER_CREDIT = 0.005;
@@ -180,7 +180,7 @@ function buildPiApiEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstim
 
 export function getFlashBoardPriceEstimate(input: FlashBoardPricingInput): FlashBoardPriceEstimate | null {
   if (input.outputType === 'audio') {
-    if (input.providerId === SUNO_PROVIDER_ID) {
+    if (input.providerId === SUNO_PROVIDER_ID || input.providerId === SUNO_SOUNDS_PROVIDER_ID) {
       return input.service === 'cloud' ? buildHostedSunoEstimate() : buildKieSunoEstimate();
     }
 

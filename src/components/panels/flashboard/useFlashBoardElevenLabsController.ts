@@ -96,7 +96,6 @@ export function useFlashBoardElevenLabsController({
     version,
   ]);
 
-  const audioVoiceButtonLabel = voiceName.trim() || voiceId.trim() || 'Voice';
   const voiceSettingsChanged = !areFlashBoardVoiceSettingsEqual(voiceSettings, DEFAULT_ELEVENLABS_VOICE_SETTINGS);
 
   useEffect(() => {
@@ -275,7 +274,6 @@ export function useFlashBoardElevenLabsController({
 
   return {
     ...optionsState,
-    audioVoiceButtonLabel,
     elevenLabsVoicesError,
     handleOutputFormatChange,
     handlePreviewVoice,

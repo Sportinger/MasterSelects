@@ -9,9 +9,9 @@ interface CapturedPreviewFrameCanvas {
   height: number;
 }
 
-async function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob | null> {
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), 'image/png');
+    canvas.toBlob((blob) => resolve(blob), type, quality);
   });
 }
 
@@ -61,10 +61,15 @@ export async function captureCurrentPreviewFrameFile(filenamePrefix = 'preview_f
     return null;
   }
 
-  const blob = await canvasToPngBlob(capture.canvas);
+  const blob = await canvasToBlob(capture.canvas, 'image/png');
   if (!blob) {
     return null;
   }
 
   return new File([blob], `${filenamePrefix}_${Date.now()}.png`, { type: 'image/png' });
+}
+
+export async function captureCurrentPreviewFrameJpegBlob(quality = 0.92): Promise<Blob | null> {
+  const capture = await captureCurrentPreviewFrameCanvas();
+  return capture ? canvasToBlob(capture.canvas, 'image/jpeg', quality) : null;
 }

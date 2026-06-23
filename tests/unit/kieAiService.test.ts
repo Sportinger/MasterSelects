@@ -117,4 +117,102 @@ describe('kieAiService', () => {
     expect(request.body.input).not.toHaveProperty('first_frame_url');
     expect(request.body.input).not.toHaveProperty('last_frame_url');
   });
+
+  it('sends Flux Kontext tasks to the dedicated Flux endpoint', async () => {
+    kieAiService.setApiKey('kie_test_key');
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: 200, msg: 'success', data: { taskId: 'task_flux' } }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(kieAiService.createTextToImage({
+      provider: 'flux-kontext-pro',
+      prompt: 'Replace the background but preserve the subject.',
+      aspectRatio: '16:9',
+      imageInputs: ['https://cdn.example.com/source.png'],
+    })).resolves.toBe('task_flux');
+
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request).toMatchObject({
+      endpoint: '/api/v1/flux/kontext/generate',
+      method: 'POST',
+      body: {
+        prompt: 'Replace the background but preserve the subject.',
+        inputImage: 'https://cdn.example.com/source.png',
+        aspectRatio: '16:9',
+        outputFormat: 'png',
+        promptUpsampling: false,
+        enableTranslation: true,
+        safetyTolerance: 2,
+        model: 'flux-kontext-pro',
+      },
+    });
+  });
+
+  it('sends Runway tasks to the dedicated Runway endpoint and downgrades 10s 1080p to 720p', async () => {
+    kieAiService.setApiKey('kie_test_key');
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: 200, msg: 'success', data: { taskId: 'task_runway' } }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(kieAiService.createTextToVideo({
+      provider: 'runway-video',
+      version: 'latest',
+      prompt: 'A handheld shot of a glass sculpture reflecting city lights.',
+      duration: 10,
+      aspectRatio: '16:9',
+      mode: '1080p',
+    })).resolves.toBe('task_runway');
+
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request).toMatchObject({
+      endpoint: '/api/v1/runway/generate',
+      method: 'POST',
+      body: {
+        prompt: 'A handheld shot of a glass sculpture reflecting city lights.',
+        duration: '10',
+        quality: '720p',
+        aspectRatio: '16:9',
+        waterMark: '',
+      },
+    });
+  });
+
+  it('sends Topaz video upscale as a Market utility task with a video reference', async () => {
+    kieAiService.setApiKey('kie_test_key');
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: 200, msg: 'success', data: { taskId: 'task_topaz_video' } }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(kieAiService.createTextToVideo({
+      provider: 'topaz/video-upscale',
+      version: 'latest',
+      prompt: '',
+      duration: 5,
+      aspectRatio: '16:9',
+      mode: '4x',
+      referenceMedia: [
+        {
+          mediaType: 'video',
+          source: 'https://cdn.example.com/source.mp4',
+          fileName: 'source.mp4',
+        },
+      ],
+    })).resolves.toBe('task_topaz_video');
+
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(request).toMatchObject({
+      endpoint: '/api/v1/jobs/createTask',
+      method: 'POST',
+      body: {
+        model: 'topaz/video-upscale',
+        input: {
+          video_url: 'https://cdn.example.com/source.mp4',
+          upscale_factor: '4',
+        },
+      },
+    });
+  });
 });

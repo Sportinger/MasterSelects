@@ -74,14 +74,16 @@ The composer uses the shared catalog from `FlashBoardModelCatalog`:
 - PiAPI video providers from the shared PiAPI catalog
 - Kie.ai Kling 3.0 video
 - Kie.ai Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references, including audio-driven lip-sync reference mode
-- Kie.ai Nano Banana 2 image generation
+- Kie.ai Veo 3.1 and Runway video generation
+- Kie.ai Topaz Video Upscale with required video reference input
+- Kie.ai Nano Banana 2, Nano Banana Pro, Imagen 4, GPT Image 2, Flux 2, Seedream 5 Lite, Flux Kontext, Recraft, and Topaz image generation/edit/utility entries
 - Cloud Kling 3.0 video
 - Cloud Seedance 2.0 and Seedance 2.0 Fast video with image, video, and audio references
 - Cloud Nano Banana 2 image generation
 - Cloud ElevenLabs text-to-speech audio generation
 - Cloud Suno music generation
 - BYO ElevenLabs text-to-speech audio generation
-- BYO Suno music generation via Kie.ai in development
+- BYO Suno music and Suno Sounds generation via Kie.ai in development
 
 The compact composer exposes the richer FlashBoard catalog.
 
@@ -96,10 +98,10 @@ The compact composer exposes the richer FlashBoard catalog.
 5. Jobs run with a concurrency cap of 3 overall, but only 1 Kie.ai job at a time.
 6. The selected media service submits the remote task and polls until completion when the provider is asynchronous.
 7. ElevenLabs audio jobs create speech directly and return an audio `File` without remote polling. BYO development jobs call ElevenLabs from the browser with the user's local key; Cloud jobs call `/api/ai/audio` and spend hosted credits.
-8. Suno music jobs use Cloudflare `/api/ai/audio` in production, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, polls the task until a generated audio URL is available, then imports the downloaded audio. Non-production BYO jobs can still call Kie.ai with the local default key.
+8. Suno music and Suno Sounds jobs use Cloudflare `/api/ai/audio` in production, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, polls the task until a generated audio URL is available, then imports the downloaded audio. Non-production BYO jobs can still call Kie.ai with the local default key. Suno Sounds uses the same audio import path after polling and does not expose the Suno Music lyrics/style/tuning controls.
 9. On success, `FlashBoardMediaBridge` imports the asset into the Media Pool and marks the node complete.
 
-Kie.ai Market video/image tasks are asynchronous. A successful create call only returns a `taskId`; FlashBoard polls `GET /api/v1/jobs/recordInfo?taskId=...` and maps Kie states such as `waiting`, `queuing`, `generating`, `success`, and `fail` into local job states. The local `canceled` state only means MasterSelects stopped tracking the node; Kie.ai does not currently expose a documented Market task cancel endpoint, so the Kie logs page and `recordInfo` response remain the server-side source of truth.
+Kie.ai Market video/image tasks are asynchronous. A successful create call only returns a `taskId`; FlashBoard polls `GET /api/v1/jobs/recordInfo?taskId=...` and maps Kie states such as `waiting`, `queuing`, `generating`, `success`, and `fail` into local job states. Flux Kontext, Veo, and Runway use dedicated Kie create/status endpoints because their result schemas differ from Market jobs. The local `canceled` state only means MasterSelects stopped tracking the node; Kie.ai does not currently expose a documented Market task cancel endpoint, so the Kie logs page and provider record responses remain the server-side source of truth.
 
 Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer also accepts media-panel image, video, and audio references through right-click or drag-and-drop; Kie.ai and Cloud Seedance jobs upload local files through Kie.ai file hosting and map them to provider-specific inputs such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Both use `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
 

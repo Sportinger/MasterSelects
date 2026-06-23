@@ -1,3 +1,5 @@
+import type { CSSProperties, ReactNode } from 'react';
+
 type ParameterPopoverType = 'aspect' | 'duration' | 'imageSize' | 'mode';
 
 interface ParameterPopoverOption {
@@ -27,6 +29,7 @@ interface FlashBoardParameterPopoversProps {
 function renderPopoverOption(
   option: ParameterPopoverOption,
   onClick: () => void,
+  pictogram?: ReactNode,
 ) {
   return (
     <button
@@ -35,9 +38,45 @@ function renderPopoverOption(
       type="button"
       onClick={onClick}
     >
+      {pictogram}
       <span className="fb-popover-pill-label">{option.label}</span>
       {option.meta && <span className="fb-popover-pill-meta">{option.meta}</span>}
     </button>
+  );
+}
+
+function getAspectPictogramStyle(value: string): CSSProperties | undefined {
+  const match = value.match(/^(\d+):(\d+)$/);
+  if (!match) {
+    return undefined;
+  }
+
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return undefined;
+  }
+
+  const maxWidth = 30;
+  const maxHeight = 18;
+  const ratio = width / height;
+  const boxRatio = maxWidth / maxHeight;
+  const pictogramWidth = ratio >= boxRatio ? maxWidth : Math.max(4, maxHeight * ratio);
+  const pictogramHeight = ratio >= boxRatio ? Math.max(4, maxWidth / ratio) : maxHeight;
+
+  return {
+    width: `${pictogramWidth}px`,
+    height: `${pictogramHeight}px`,
+  };
+}
+
+function renderAspectPictogram(option: ParameterPopoverOption) {
+  const style = getAspectPictogramStyle(option.id);
+
+  return (
+    <span className={`fb-aspect-pictogram ${style ? '' : 'auto'}`} aria-hidden="true">
+      {style ? <span className="fb-aspect-pictogram-shape" style={style} /> : <span className="fb-aspect-pictogram-auto">A</span>}
+    </span>
   );
 }
 
@@ -62,7 +101,7 @@ export function FlashBoardParameterPopovers({
             {aspectOptions.map((option) => renderPopoverOption(option, () => {
               onAspectRatioChange(option.id);
               onClosePopover('aspect');
-            }))}
+            }, renderAspectPictogram(option)))}
           </div>
         </div>
       )}

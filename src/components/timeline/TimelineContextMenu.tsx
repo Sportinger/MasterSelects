@@ -12,7 +12,9 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { projectFileService } from '../../services/projectFileService';
 import { thumbnailCacheService } from '../../services/thumbnailCacheService';
+import { captureCurrentPreviewFrameJpegBlob } from '../../services/previewFrameCapture';
 import { Logger } from '../../services/logger';
+import { downloadBlob } from '../../engine/export';
 import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
 import { resolveAudibleAudioClip, resolveAudibleAudioClipId } from '../../services/audio/audioClipResolution';
 import { isManualLinkedGroupId } from '../../stores/timeline/helpers/idGenerator';
@@ -33,6 +35,14 @@ import {
 } from '../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('TimelineContextMenu');
+
+function getFrameExportFilename(clip: TimelineClip | null | undefined, playheadPosition: number): string {
+  const baseName = (clip?.name ?? 'current-frame')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[<>:"/\\|?*]/g, '_')
+    .trim() || 'current-frame';
+  return `${baseName.slice(0, 80)}_frame_${Math.max(0, playheadPosition).toFixed(2).replace('.', '_')}s.jpg`;
+}
 
 interface TimelineContextMenuProps {
   contextMenu: ContextMenuState | null;
@@ -183,6 +193,7 @@ export function TimelineContextMenu({
     showColorClipboardTopLevel,
   } = menuModel;
   const isVideoMedia = mediaFile?.type === 'video' || isVideo;
+  const canExportCurrentFrame = Boolean(clip && !isAudio && !isMidi);
   const audibleAudioResolution = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
   const audibleAudioClip = audibleAudioResolution?.audioClip ?? null;
   const stemSeparationJob = audibleAudioClip ? clipStemSeparationJobs[audibleAudioClip.id] : undefined;
@@ -261,6 +272,15 @@ export function TimelineContextMenu({
     toggleWaveformsEnabled,
     setAudioDisplayMode,
     loadTranscriber: () => import('../../services/clipTranscriber'),
+    exportCurrentFrame: async () => {
+      const blob = await captureCurrentPreviewFrameJpegBlob();
+      if (!blob) {
+        alert('Could not export current frame.');
+        return false;
+      }
+      downloadBlob(blob, getFrameExportFilename(clip, useTimelineStore.getState().playheadPosition));
+      return true;
+    },
     showInExplorer,
     notify: (message: string) => alert(message),
     downloadRawFile: downloadClipContextMenuRawFile,
@@ -463,6 +483,18 @@ export function TimelineContextMenu({
               </div>
             </>
           )}
+        </>
+      )}
+
+      {canExportCurrentFrame && (
+        <>
+          <div className="context-menu-separator" />
+          <div
+            className="context-menu-item"
+            onClick={() => runCommand({ kind: 'export-current-frame', canExecute: true })}
+          >
+            Export Current Frame
+          </div>
         </>
       )}
 

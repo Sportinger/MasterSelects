@@ -9,6 +9,14 @@ const KIEAI_USD_PER_CREDIT = 0.005;
 const HOSTED_SUNO_VENDOR_CREDITS = 12;
 const SEEDANCE_2_PROVIDER_ID = 'bytedance/seedance-2';
 const SEEDANCE_2_FAST_PROVIDER_ID = 'bytedance/seedance-2-fast';
+const FLUX_KONTEXT_PRO_PROVIDER_ID = 'flux-kontext-pro';
+const FLUX_KONTEXT_MAX_PROVIDER_ID = 'flux-kontext-max';
+const RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID = 'recraft/remove-background';
+const RECRAFT_CRISP_UPSCALE_PROVIDER_ID = 'recraft/crisp-upscale';
+const TOPAZ_IMAGE_UPSCALE_PROVIDER_ID = 'topaz/image-upscale';
+const TOPAZ_VIDEO_UPSCALE_PROVIDER_ID = 'topaz/video-upscale';
+const VEO_3_1_PROVIDER_ID = 'veo-3.1';
+const RUNWAY_VIDEO_PROVIDER_ID = 'runway-video';
 const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
   'nano-banana-2': {
     '1K': 0.04,
@@ -29,7 +37,7 @@ const SEEDANCE_CREDITS_PER_SECOND: Record<string, Record<string, { normal: numbe
 };
 
 export type HostedVideoTaskStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type HostedSunoModelId = 'V5' | 'V4_5PLUS' | 'V4_5' | 'V4';
+export type HostedSunoModelId = 'V5_5' | 'V5' | 'V4_5PLUS' | 'V4_5' | 'V4';
 export type HostedSunoVocalGender = 'm' | 'f';
 
 export interface HostedVideoParams {
@@ -84,6 +92,7 @@ export interface HostedSunoParams {
   model?: string;
   negativeTags?: string;
   prompt: string;
+  soundLoop?: boolean;
   style?: string;
   styleWeight?: number;
   title?: string;
@@ -425,6 +434,38 @@ function normalizeImageResolution(resolution?: string): '1K' | '2K' | '4K' {
   return '1K';
 }
 
+function normalizeUpscaleFactor(value: string | undefined): '2' | '4' {
+  return value === '4' || value === '4x' || value === '4X' ? '4' : '2';
+}
+
+function isFluxKontextProvider(provider: string): boolean {
+  return provider === FLUX_KONTEXT_PRO_PROVIDER_ID || provider === FLUX_KONTEXT_MAX_PROVIDER_ID;
+}
+
+function isImageUtilityProvider(provider: string): boolean {
+  return provider === RECRAFT_REMOVE_BACKGROUND_PROVIDER_ID
+    || provider === RECRAFT_CRISP_UPSCALE_PROVIDER_ID
+    || provider === TOPAZ_IMAGE_UPSCALE_PROVIDER_ID;
+}
+
+function createHostedTaskId(kind: string, taskId: string): string {
+  return `${kind}:${taskId}`;
+}
+
+function parseHostedTaskId(taskId: string): { kind: string | null; taskId: string } {
+  const separatorIndex = taskId.indexOf(':');
+  if (separatorIndex <= 0) {
+    return { kind: null, taskId };
+  }
+
+  const kind = taskId.slice(0, separatorIndex);
+  if (kind !== 'flux' && kind !== 'runway' && kind !== 'veo') {
+    return { kind: null, taskId };
+  }
+
+  return { kind, taskId: taskId.slice(separatorIndex + 1) };
+}
+
 function getResultUrl(data: KieAiStatusResponse['data'] | undefined): string | undefined {
   let resultUrl = data?.resultUrls?.[0];
 
@@ -464,10 +505,11 @@ function normalizeSunoModel(model: string | undefined): HostedSunoModelId {
     case 'V4':
     case 'V4_5':
     case 'V4_5PLUS':
+    case 'V5_5':
     case 'V5':
       return model;
     default:
-      return 'V5';
+      return 'V5_5';
   }
 }
 
@@ -559,6 +601,53 @@ function normalizeMultiPrompt(
     .filter((shot) => shot.prompt.length > 0);
 
   return normalized.length > 0 ? normalized : undefined;
+}
+
+interface KieAiFluxStatusResponse {
+  code?: number;
+  data?: {
+    completeTime?: number;
+    createTime?: number;
+    errorMessage?: string;
+    failMsg?: string;
+    response?: {
+      resultImageUrl?: string;
+    };
+    successFlag?: number;
+  };
+  msg?: string;
+}
+
+interface KieAiVeoStatusResponse {
+  code?: number;
+  data?: {
+    completeTime?: number;
+    createTime?: number;
+    errorMessage?: string;
+    failMsg?: string;
+    response?: {
+      resultUrl?: string;
+      resultUrls?: string[];
+      videoUrl?: string;
+    };
+    successFlag?: number;
+  };
+  msg?: string;
+}
+
+interface KieAiRunwayStatusResponse {
+  code?: number;
+  data?: {
+    completeTime?: number;
+    createTime?: number;
+    errorMessage?: string;
+    failMsg?: string;
+    state?: string;
+    videoInfo?: {
+      videoUrl?: string;
+    };
+  };
+  msg?: string;
 }
 
 function getKlingReferenceToken(index: number): string {
@@ -683,6 +772,18 @@ export async function createHostedKlingTask(
   env: Env,
   params: HostedVideoParams,
 ): Promise<{ taskId: string }> {
+  if (params.provider === RUNWAY_VIDEO_PROVIDER_ID) {
+    return createHostedRunwayTask(env, params);
+  }
+
+  if (params.provider === VEO_3_1_PROVIDER_ID) {
+    return createHostedVeoTask(env, params);
+  }
+
+  if (params.provider === TOPAZ_VIDEO_UPSCALE_PROVIDER_ID) {
+    return createHostedTopazVideoTask(env, params);
+  }
+
   const imageUrls: string[] = [];
   const multiPrompt = params.multiShots ? normalizeMultiPrompt(params.multiPrompt) : undefined;
   const effectiveSound = params.multiShots ? true : Boolean(params.sound);
@@ -732,6 +833,103 @@ export async function createHostedKlingTask(
 
   if (payload.code !== 200 || !taskId) {
     throw new Error(payload.msg ?? 'Failed to create Kling 3.0 task');
+  }
+
+  return { taskId };
+}
+
+async function createHostedRunwayTask(
+  env: Env,
+  params: HostedVideoParams,
+): Promise<{ taskId: string }> {
+  const duration = params.duration === 10 ? '10' : '5';
+  const referenceImages = params.startImageUrl
+    ? []
+    : await uploadReferenceMediaList(
+        env,
+        (params.referenceMedia ?? []).filter((reference) => reference.mediaType === 'image').slice(0, 1),
+      );
+  const imageUrl = params.startImageUrl ? await uploadImage(env, params.startImageUrl) : referenceImages[0]?.url;
+  const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/runway/generate', 'POST', {
+    aspectRatio: params.aspectRatio ?? '16:9',
+    duration,
+    ...(imageUrl ? { imageUrl } : {}),
+    prompt: params.prompt,
+    quality: params.mode === '1080p' && duration !== '10' ? '1080p' : '720p',
+    waterMark: '',
+  });
+  const taskId = payload.data?.taskId;
+
+  if (!taskId) {
+    throw new Error(payload.msg ?? 'Failed to create Runway task');
+  }
+
+  return { taskId: createHostedTaskId('runway', taskId) };
+}
+
+async function createHostedVeoTask(
+  env: Env,
+  params: HostedVideoParams,
+): Promise<{ taskId: string }> {
+  const startImageUrl = params.startImageUrl ? await uploadImage(env, params.startImageUrl) : undefined;
+  const endImageUrl = params.endImageUrl ? await uploadImage(env, params.endImageUrl) : undefined;
+  const referenceImages = await uploadReferenceMediaList(
+    env,
+    (params.referenceMedia ?? []).filter((reference) => reference.mediaType === 'image'),
+  );
+  const imageUrls = [startImageUrl, endImageUrl, ...referenceImages.map((reference) => reference.url)]
+    .filter((url): url is string => Boolean(url))
+    .slice(0, 3);
+  const generationType = startImageUrl && endImageUrl
+    ? 'FIRST_AND_LAST_FRAMES_2_VIDEO'
+    : imageUrls.length > 0
+      ? 'REFERENCE_2_VIDEO'
+      : 'TEXT_2_VIDEO';
+  const model = params.mode === 'veo3' || params.mode === 'veo3_lite' ? params.mode : 'veo3_fast';
+  const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/veo/generate', 'POST', {
+    aspect_ratio: params.aspectRatio ?? '16:9',
+    enableFallback: false,
+    enableTranslation: true,
+    generationType,
+    imageUrls,
+    model,
+    prompt: params.prompt,
+    watermark: '',
+  });
+  const taskId = payload.data?.taskId;
+
+  if (!taskId) {
+    throw new Error(payload.msg ?? 'Failed to create Veo task');
+  }
+
+  return { taskId: createHostedTaskId('veo', taskId) };
+}
+
+async function createHostedTopazVideoTask(
+  env: Env,
+  params: HostedVideoParams,
+): Promise<{ taskId: string }> {
+  const uploadedVideos = await uploadReferenceMediaList(
+    env,
+    (params.referenceMedia ?? []).filter((reference) => reference.mediaType === 'video').slice(0, 1),
+  );
+  const videoUrl = uploadedVideos[0]?.url;
+
+  if (!videoUrl) {
+    throw new Error('Add a reference video for Topaz Video Upscale.');
+  }
+
+  const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
+    input: {
+      upscale_factor: normalizeUpscaleFactor(params.mode),
+      video_url: videoUrl,
+    },
+    model: TOPAZ_VIDEO_UPSCALE_PROVIDER_ID,
+  });
+  const taskId = payload.data?.taskId;
+
+  if (payload.code !== 200 || !taskId) {
+    throw new Error(payload.msg ?? 'Failed to create Topaz Video Upscale task');
   }
 
   return { taskId };
@@ -845,6 +1043,48 @@ export async function createHostedImageTask(
   const uploadedInputs = params.imageInputs?.length
     ? await Promise.all(params.imageInputs.map((imageUrl) => uploadImage(env, imageUrl)))
     : undefined;
+  const firstInput = uploadedInputs?.[0];
+
+  if (isFluxKontextProvider(params.provider)) {
+    const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/flux/kontext/generate', 'POST', {
+      aspectRatio: params.aspectRatio ?? '16:9',
+      enableTranslation: true,
+      ...(firstInput ? { inputImage: firstInput } : {}),
+      model: params.provider,
+      outputFormat: params.outputFormat ?? 'png',
+      prompt: params.prompt,
+      promptUpsampling: false,
+      safetyTolerance: 2,
+    });
+    const taskId = payload.data?.taskId;
+
+    if (!taskId) {
+      throw new Error(payload.msg ?? 'Failed to create Flux Kontext task');
+    }
+
+    return { taskId: createHostedTaskId('flux', taskId) };
+  }
+
+  if (isImageUtilityProvider(params.provider)) {
+    if (!firstInput) {
+      throw new Error('Add a reference image for this hosted image utility.');
+    }
+
+    const input = params.provider === TOPAZ_IMAGE_UPSCALE_PROVIDER_ID
+      ? { image_url: firstInput, upscale_factor: normalizeUpscaleFactor(params.resolution) }
+      : { image: firstInput };
+    const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
+      input,
+      model: params.provider,
+    });
+    const taskId = payload.data?.taskId;
+
+    if (payload.code !== 200 || !taskId) {
+      throw new Error(payload.msg ?? 'Failed to create hosted image utility task');
+    }
+
+    return { taskId };
+  }
 
   const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
     input: {
@@ -916,13 +1156,49 @@ export async function createHostedSunoMusicTask(
   return { taskId };
 }
 
+export async function createHostedSunoSoundsTask(
+  env: Env,
+  params: HostedSunoParams,
+): Promise<{ taskId: string }> {
+  const prompt = params.prompt.trim();
+  if (!prompt) {
+    throw new Error('Describe the sound before generating with Suno Sounds.');
+  }
+
+  const payload = await kieAiJsonRequest<KieSunoCreateResponse>(env, '/api/v1/generate/sounds', 'POST', {
+    callBackUrl: params.callBackUrl?.trim() || DEFAULT_SUNO_CALLBACK_URL,
+    grabLyrics: false,
+    model: normalizeSunoModel(params.model),
+    prompt,
+    soundLoop: params.soundLoop === true,
+  });
+  const taskId = payload.data?.taskId;
+
+  if (!taskId) {
+    throw new Error(payload.msg ?? 'Failed to create hosted Suno Sounds task');
+  }
+
+  return { taskId };
+}
+
 export async function getHostedKlingTask(
   env: Env,
   taskId: string,
 ): Promise<HostedVideoTask> {
+  const parsedTaskId = parseHostedTaskId(taskId);
+  if (parsedTaskId.kind === 'flux') {
+    return getHostedFluxTask(env, parsedTaskId.taskId, taskId);
+  }
+  if (parsedTaskId.kind === 'runway') {
+    return getHostedRunwayTask(env, parsedTaskId.taskId, taskId);
+  }
+  if (parsedTaskId.kind === 'veo') {
+    return getHostedVeoTask(env, parsedTaskId.taskId, taskId);
+  }
+
   const payload = await kieAiJsonRequest<KieAiStatusResponse>(
     env,
-    `/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
+    `/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(parsedTaskId.taskId)}`,
     'GET',
   );
   const status = normalizeTaskStatus(payload.data?.state);
@@ -940,6 +1216,81 @@ export async function getHostedKlingTask(
     progress: normalizeKieProgress(payload.data?.progress, status),
     status,
     videoUrl,
+  };
+}
+
+async function getHostedFluxTask(env: Env, rawTaskId: string, visibleTaskId: string): Promise<HostedVideoTask> {
+  const payload = await kieAiJsonRequest<KieAiFluxStatusResponse>(
+    env,
+    `/api/v1/flux/kontext/record-info?taskId=${encodeURIComponent(rawTaskId)}`,
+    'GET',
+  );
+  const successFlag = payload.data?.successFlag;
+  const status: HostedVideoTaskStatus = successFlag === 1
+    ? 'completed'
+    : successFlag === 2 || successFlag === 3
+      ? 'failed'
+      : 'processing';
+
+  return {
+    completedAt: payload.data?.completeTime
+      ? new Date(payload.data.completeTime).toISOString()
+      : status === 'completed' ? new Date().toISOString() : undefined,
+    createdAt: payload.data?.createTime ? new Date(payload.data.createTime).toISOString() : new Date().toISOString(),
+    error: status === 'failed' ? payload.data?.errorMessage ?? payload.data?.failMsg ?? payload.msg : undefined,
+    id: visibleTaskId,
+    imageUrl: payload.data?.response?.resultImageUrl,
+    progress: normalizeKieProgress(undefined, status),
+    status,
+  };
+}
+
+async function getHostedRunwayTask(env: Env, rawTaskId: string, visibleTaskId: string): Promise<HostedVideoTask> {
+  const payload = await kieAiJsonRequest<KieAiRunwayStatusResponse>(
+    env,
+    `/api/v1/runway/record-detail?taskId=${encodeURIComponent(rawTaskId)}`,
+    'GET',
+  );
+  const status = normalizeTaskStatus(payload.data?.state);
+
+  return {
+    completedAt: payload.data?.completeTime
+      ? new Date(payload.data.completeTime).toISOString()
+      : status === 'completed' ? new Date().toISOString() : undefined,
+    createdAt: payload.data?.createTime ? new Date(payload.data.createTime).toISOString() : new Date().toISOString(),
+    error: status === 'failed' ? payload.data?.errorMessage ?? payload.data?.failMsg ?? payload.msg : undefined,
+    id: visibleTaskId,
+    progress: normalizeKieProgress(undefined, status),
+    status,
+    videoUrl: payload.data?.videoInfo?.videoUrl,
+  };
+}
+
+async function getHostedVeoTask(env: Env, rawTaskId: string, visibleTaskId: string): Promise<HostedVideoTask> {
+  const payload = await kieAiJsonRequest<KieAiVeoStatusResponse>(
+    env,
+    `/api/v1/veo/record-info?taskId=${encodeURIComponent(rawTaskId)}`,
+    'GET',
+  );
+  const successFlag = payload.data?.successFlag;
+  const status: HostedVideoTaskStatus = successFlag === 1
+    ? 'completed'
+    : successFlag === 2 || successFlag === 3
+      ? 'failed'
+      : 'processing';
+
+  return {
+    completedAt: payload.data?.completeTime
+      ? new Date(payload.data.completeTime).toISOString()
+      : status === 'completed' ? new Date().toISOString() : undefined,
+    createdAt: payload.data?.createTime ? new Date(payload.data.createTime).toISOString() : new Date().toISOString(),
+    error: status === 'failed' ? payload.data?.errorMessage ?? payload.data?.failMsg ?? payload.msg : undefined,
+    id: visibleTaskId,
+    progress: normalizeKieProgress(undefined, status),
+    status,
+    videoUrl: payload.data?.response?.resultUrls?.[0]
+      ?? payload.data?.response?.resultUrl
+      ?? payload.data?.response?.videoUrl,
   };
 }
 

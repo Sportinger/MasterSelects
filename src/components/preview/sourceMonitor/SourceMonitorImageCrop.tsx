@@ -1,10 +1,27 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from 'react';
 import './SourceMonitorImageCrop.css';
 import type { MediaFile } from '../../../stores/mediaStore';
 import type { SourceMonitorImageCropSelection } from './sourceMonitorImageCropFile';
 
 const MIN_CROP_SIZE = 32;
+const CROP_MAX_ZOOM = 128;
+const CROP_ZOOM_STEP = 0.001;
 const CROP_HANDLES = ['nw', 'ne', 'sw', 'se'] as const;
+const CROP_ASPECT_PRESETS = [
+  { label: 'Free', ratio: null },
+  { label: '1:1', ratio: 1 },
+  { label: '4:5', ratio: 4 / 5 },
+  { label: '16:9', ratio: 16 / 9 },
+  { label: '9:16', ratio: 9 / 16 },
+] as const;
 
 type CropHandle = typeof CROP_HANDLES[number];
 type CropDragMode = 'move' | CropHandle;
@@ -14,6 +31,13 @@ interface CropBox {
   y: number;
   width: number;
   height: number;
+}
+
+interface CropViewportState {
+  fileId: string;
+  panX: number;
+  panY: number;
+  zoom: number;
 }
 
 export interface SourceMonitorImageCropApplyRequest {
@@ -31,6 +55,27 @@ interface SourceMonitorImageCropProps {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function getNextCropZoom(current: number, deltaY: number, maxZoom: number): number {
+  return clamp(current * Math.exp(-deltaY * CROP_ZOOM_STEP), 1, maxZoom);
+}
+
+function getDefaultCropViewport(fileId: string): CropViewportState {
+  return { fileId, panX: 0, panY: 0, zoom: 1 };
+}
+
+function moveBox(box: CropBox, dx: number, dy: number): CropBox {
+  return { ...box, x: box.x + dx, y: box.y + dy };
+}
+
+function scaleBoxFromAnchor(box: CropBox, anchorX: number, anchorY: number, scale: number): CropBox {
+  return {
+    x: anchorX + (box.x - anchorX) * scale,
+    y: anchorY + (box.y - anchorY) * scale,
+    width: box.width * scale,
+    height: box.height * scale,
+  };
 }
 
 function getInitialCropBox(imageBox: CropBox): CropBox {
@@ -63,12 +108,41 @@ function getMovedCropBox(start: CropBox, imageBox: CropBox, dx: number, dy: numb
   }, imageBox);
 }
 
+function fitCropBoxToAspect(crop: CropBox, imageBox: CropBox, aspectRatio: number): CropBox {
+  const centerX = crop.x + crop.width / 2;
+  const centerY = crop.y + crop.height / 2;
+  let width = crop.width;
+  let height = crop.height;
+
+  if (width / Math.max(1, height) > aspectRatio) {
+    width = height * aspectRatio;
+  } else {
+    height = width / aspectRatio;
+  }
+  if (width > imageBox.width) {
+    width = imageBox.width;
+    height = width / aspectRatio;
+  }
+  if (height > imageBox.height) {
+    height = imageBox.height;
+    width = height * aspectRatio;
+  }
+
+  return clampCropBox({
+    x: centerX - width / 2,
+    y: centerY - height / 2,
+    width,
+    height,
+  }, imageBox);
+}
+
 function getResizedCropBox(
   mode: CropHandle,
   start: CropBox,
   imageBox: CropBox,
   dx: number,
   dy: number,
+  aspectRatio: number | null,
 ): CropBox {
   let left = start.x;
   let right = start.x + start.width;
@@ -88,12 +162,13 @@ function getResizedCropBox(
     bottom = clamp(start.y + start.height + dy, top + MIN_CROP_SIZE, imageBox.y + imageBox.height);
   }
 
-  return {
+  const resized = {
     x: left,
     y: top,
     width: right - left,
     height: bottom - top,
   };
+  return aspectRatio === null ? resized : fitCropBoxToAspect(resized, imageBox, aspectRatio);
 }
 
 function cropBoxToNaturalSelection(crop: CropBox, imageBox: CropBox, image: HTMLImageElement): SourceMonitorImageCropSelection {
@@ -127,8 +202,23 @@ export function SourceMonitorImageCrop({
     startY: number;
     startCrop: CropBox;
   } | null>(null);
+  const panDragRef = useRef<{
+    fileId: string;
+    startCropBox: CropBox | null;
+    startImageBox: CropBox | null;
+    startPanX: number;
+    startPanY: number;
+    startX: number;
+    startY: number;
+    zoom: number;
+  } | null>(null);
   const [imageBox, setImageBox] = useState<CropBox | null>(null);
   const [cropBox, setCropBox] = useState<CropBox | null>(null);
+  const [cropAspectRatio, setCropAspectRatio] = useState<number | null>(null);
+  const [imageViewportState, setImageViewportState] = useState(() => getDefaultCropViewport(file.id));
+  const imageViewport = imageViewportState.fileId === file.id
+    ? imageViewportState
+    : getDefaultCropViewport(file.id);
 
   const updateImageBox = useCallback((resetCrop = false) => {
     const stage = stageRef.current;
@@ -176,12 +266,10 @@ export function SourceMonitorImageCrop({
       const dy = event.clientY - drag.startY;
       setCropBox(drag.mode === 'move'
         ? getMovedCropBox(drag.startCrop, imageBox, dx, dy)
-        : getResizedCropBox(drag.mode, drag.startCrop, imageBox, dx, dy));
+        : getResizedCropBox(drag.mode, drag.startCrop, imageBox, dx, dy, cropAspectRatio));
     };
     const handlePointerUp = () => {
       dragRef.current = null;
-      document.removeEventListener('pointermove', handlePointerMove);
-      document.removeEventListener('pointerup', handlePointerUp);
     };
 
     document.addEventListener('pointermove', handlePointerMove);
@@ -190,10 +278,10 @@ export function SourceMonitorImageCrop({
       document.removeEventListener('pointermove', handlePointerMove);
       document.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [imageBox]);
+  }, [cropAspectRatio, imageBox]);
 
   const startDrag = useCallback((mode: CropDragMode, event: ReactPointerEvent) => {
-    if (busy || !cropBox) return;
+    if (event.button !== 0 || busy || !cropBox) return;
     event.preventDefault();
     event.stopPropagation();
     dragRef.current = {
@@ -216,7 +304,80 @@ export function SourceMonitorImageCrop({
 
   const resetCrop = useCallback(() => {
     if (!imageBox) return;
-    setCropBox(getInitialCropBox(imageBox));
+    const nextCrop = getInitialCropBox(imageBox);
+    setCropBox(cropAspectRatio === null ? nextCrop : fitCropBoxToAspect(nextCrop, imageBox, cropAspectRatio));
+  }, [cropAspectRatio, imageBox]);
+
+  const handleWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const stageRect = event.currentTarget.getBoundingClientRect();
+    const anchorX = event.clientX - stageRect.left;
+    const anchorY = event.clientY - stageRect.top;
+    const zoom = getNextCropZoom(imageViewport.zoom, event.deltaY, CROP_MAX_ZOOM);
+    const scale = zoom / imageViewport.zoom;
+    setImageViewportState(zoom === 1
+      ? getDefaultCropViewport(file.id)
+      : {
+        fileId: file.id,
+        panX: anchorX - stageRect.width / 2 - scale * (anchorX - stageRect.width / 2 - imageViewport.panX),
+        panY: anchorY - stageRect.height / 2 - scale * (anchorY - stageRect.height / 2 - imageViewport.panY),
+        zoom,
+      });
+    setImageBox((current) => current ? scaleBoxFromAnchor(current, anchorX, anchorY, scale) : current);
+    setCropBox((current) => current ? scaleBoxFromAnchor(current, anchorX, anchorY, scale) : current);
+    if (zoom === 1) {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => updateImageBox(false));
+      } else {
+        updateImageBox(false);
+      }
+    }
+  }, [file.id, imageViewport.panX, imageViewport.panY, imageViewport.zoom, updateImageBox]);
+
+  const startPan = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    panDragRef.current = {
+      fileId: file.id,
+      startCropBox: cropBox,
+      startImageBox: imageBox,
+      startPanX: imageViewport.panX,
+      startPanY: imageViewport.panY,
+      startX: event.clientX,
+      startY: event.clientY,
+      zoom: imageViewport.zoom,
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const drag = panDragRef.current;
+      if (!drag) return;
+      const dx = moveEvent.clientX - drag.startX;
+      const dy = moveEvent.clientY - drag.startY;
+      setImageViewportState({
+        fileId: drag.fileId,
+        panX: drag.startPanX + dx,
+        panY: drag.startPanY + dy,
+        zoom: drag.zoom,
+      });
+      setImageBox(drag.startImageBox ? moveBox(drag.startImageBox, dx, dy) : null);
+      setCropBox(drag.startCropBox ? moveBox(drag.startCropBox, dx, dy) : null);
+    };
+    const handlePointerUp = () => {
+      panDragRef.current = null;
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+  }, [cropBox, file.id, imageBox, imageViewport.panX, imageViewport.panY, imageViewport.zoom]);
+
+  const selectAspectPreset = useCallback((aspectRatio: number | null) => {
+    setCropAspectRatio(aspectRatio);
+    if (aspectRatio === null || !imageBox) return;
+    setCropBox((current) => current ? fitCropBoxToAspect(current, imageBox, aspectRatio) : current);
   }, [imageBox]);
 
   const shadeRects = imageBox && cropBox ? {
@@ -237,13 +398,22 @@ export function SourceMonitorImageCrop({
   } : null;
 
   return (
-    <div ref={stageRef} className="source-monitor-image-crop">
+    <div
+      ref={stageRef}
+      className="source-monitor-image-crop"
+      onWheel={handleWheel}
+      onPointerDown={startPan}
+      onAuxClick={(event) => {
+        if (event.button === 1) event.preventDefault();
+      }}
+    >
       <img
         ref={imageRef}
         src={file.url}
         alt={file.name}
         draggable={false}
         onLoad={() => updateImageBox(true)}
+        style={{ transform: `translate(${imageViewport.panX}px, ${imageViewport.panY}px) scale(${imageViewport.zoom})` }}
       />
 
       {shadeRects && Object.entries(shadeRects).map(([key, rect]) => (
@@ -278,15 +448,30 @@ export function SourceMonitorImageCrop({
       )}
 
       <div className="source-monitor-image-crop-controls">
-        <button type="button" className="btn btn-sm" onClick={applyCrop} disabled={busy || !cropBox}>
-          {busy ? 'Saving' : 'Apply'}
-        </button>
-        <button type="button" className="btn btn-sm" onClick={resetCrop} disabled={busy || !imageBox}>
-          Reset
-        </button>
-        <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>
-          Cancel
-        </button>
+        <div className="source-monitor-image-crop-presets" aria-label="Crop aspect ratio presets">
+          {CROP_ASPECT_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className={`btn btn-sm source-monitor-image-crop-preset ${cropAspectRatio === preset.ratio ? 'btn-active' : ''}`}
+              onClick={() => selectAspectPreset(preset.ratio)}
+              disabled={busy || !cropBox}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+        <div className="source-monitor-image-crop-actions">
+          <button type="button" className="btn btn-sm" onClick={applyCrop} disabled={busy || !cropBox}>
+            {busy ? 'Saving' : 'Apply'}
+          </button>
+          <button type="button" className="btn btn-sm" onClick={resetCrop} disabled={busy || !imageBox}>
+            Reset
+          </button>
+          <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+        </div>
       </div>
 
       {(busy || error) && (

@@ -160,7 +160,7 @@ export function useFlashBoardPromptRefineController({
   }, []);
 
   const handleRefinePrompt = useCallback(async () => {
-    if (isAudioMode && !isSunoMode) {
+    if (isAudioMode && !isSunoMode && selectedEntry?.promptRefinerProfile !== 'suno-sounds') {
       return;
     }
 

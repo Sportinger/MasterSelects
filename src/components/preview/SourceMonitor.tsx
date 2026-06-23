@@ -1,7 +1,15 @@
 // Source Monitor - previews raw media files before timeline placement.
 
 import './SourceMonitor.css';
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from 'react';
 import {
   IconFlag,
   IconPlayerPauseFilled,
@@ -30,6 +38,9 @@ import {
   normalizeDuration,
 } from './sourceMonitor/sourceMonitorTimecode';
 
+const SOURCE_MONITOR_MAX_ZOOM = 128;
+const IMAGE_SOURCE_MONITOR_ZOOM_STEP = 0.001;
+
 interface SourceMonitorProps {
   file: MediaFile;
   autoplayRequestId?: number;
@@ -37,6 +48,21 @@ interface SourceMonitorProps {
 }
 
 type SourceTimelineDragKind = 'playhead' | 'in' | 'out';
+
+interface SourceViewportState {
+  fileId: string;
+  panX: number;
+  panY: number;
+  zoom: number;
+}
+
+function getNextSourceZoom(current: number, deltaY: number): number {
+  return Math.max(1, Math.min(SOURCE_MONITOR_MAX_ZOOM, current * Math.exp(-deltaY * IMAGE_SOURCE_MONITOR_ZOOM_STEP)));
+}
+
+function getDefaultSourceViewport(fileId: string): SourceViewportState {
+  return { fileId, panX: 0, panY: 0, zoom: 1 };
+}
 
 function updateMediaFileWaveformCache(
   id: string,
@@ -56,6 +82,14 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
   const timelineRef = useRef<HTMLDivElement>(null);
   const audioWaveformRef = useRef<HTMLDivElement>(null);
   const audioWaveformCanvasRef = useRef<HTMLCanvasElement>(null);
+  const sourcePanDragRef = useRef<{
+    fileId: string;
+    startPanX: number;
+    startPanY: number;
+    startX: number;
+    startY: number;
+    zoom: number;
+  } | null>(null);
 
   const isVideo = file.type === 'video';
   const isAudio = file.type === 'audio';
@@ -67,6 +101,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
   const [duration, setDuration] = useState(normalizeDuration(file.duration, isImage ? DEFAULT_STILL_DURATION : 0));
   const [isPlaying, setIsPlaying] = useState(false);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [sourceViewportState, setSourceViewportState] = useState(() => getDefaultSourceViewport(file.id));
   const [pendingPlacementMode, setPendingPlacementMode] = useState<TimelinePlacementMode | null>(null);
   const inPoint = useMediaStore(state => state.sourceMonitorInPoint);
   const outPoint = useMediaStore(state => state.sourceMonitorOutPoint);
@@ -75,6 +110,10 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
   const clearSourceMonitorInOut = useMediaStore(state => state.clearSourceMonitorInOut);
   const currentTimeRef = useRef(currentTime);
   const imageCrop = useSourceMonitorImageCrop(file, isImage);
+  const sourceViewport = sourceViewportState.fileId === file.id
+    ? sourceViewportState
+    : getDefaultSourceViewport(file.id);
+  const sourceViewportStyle = { transform: `translate(${sourceViewport.panX}px, ${sourceViewport.panY}px) scale(${sourceViewport.zoom})` };
   const timelineDuration = normalizeDuration(duration, normalizeDuration(file.duration, isImage ? DEFAULT_STILL_DURATION : 0));
   const effectiveInPoint = clampTime(inPoint ?? 0, timelineDuration);
   const effectiveOutPoint = clampTime(outPoint ?? timelineDuration, timelineDuration);
@@ -462,14 +501,76 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
     });
   }, [pendingPlacementMode]);
 
+  const handleSourceWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!isVideo && (!isImage || imageCrop.cropMode)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left - rect.width / 2;
+    const mouseY = event.clientY - rect.top - rect.height / 2;
+    setSourceViewportState((current) => {
+      const base = current.fileId === file.id ? current : getDefaultSourceViewport(file.id);
+      const zoom = getNextSourceZoom(base.zoom, event.deltaY);
+      if (zoom === 1) return getDefaultSourceViewport(file.id);
+      const scale = zoom / base.zoom;
+      return {
+        fileId: file.id,
+        panX: mouseX - scale * (mouseX - base.panX),
+        panY: mouseY - scale * (mouseY - base.panY),
+        zoom,
+      };
+    });
+  }, [file.id, imageCrop.cropMode, isImage, isVideo]);
+
+  const startSourcePan = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if ((!isVideo && (!isImage || imageCrop.cropMode)) || event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    sourcePanDragRef.current = {
+      fileId: file.id,
+      startPanX: sourceViewport.panX,
+      startPanY: sourceViewport.panY,
+      startX: event.clientX,
+      startY: event.clientY,
+      zoom: sourceViewport.zoom,
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const drag = sourcePanDragRef.current;
+      if (!drag) return;
+      setSourceViewportState({
+        fileId: drag.fileId,
+        panX: drag.startPanX + moveEvent.clientX - drag.startX,
+        panY: drag.startPanY + moveEvent.clientY - drag.startY,
+        zoom: drag.zoom,
+      });
+    };
+    const handlePointerUp = () => {
+      sourcePanDragRef.current = null;
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+  }, [file.id, imageCrop.cropMode, isImage, isVideo, sourceViewport.panX, sourceViewport.panY, sourceViewport.zoom]);
+
   return (
     <div className="source-monitor">
-      <div className="source-monitor-media">
+      <div
+        className="source-monitor-media"
+        onWheel={handleSourceWheel}
+        onPointerDown={startSourcePan}
+        onAuxClick={(event) => {
+          if ((isImage || isVideo) && event.button === 1) event.preventDefault();
+        }}
+      >
         {isVideo ? (
           <video
             ref={(node) => { mediaRef.current = node; }}
             src={file.url}
             className="source-monitor-video"
+            style={sourceViewportStyle}
             onClick={togglePlayback}
             autoPlay
             playsInline
@@ -533,6 +634,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
             src={file.url}
             alt={file.name}
             className="source-monitor-image"
+            style={sourceViewportStyle}
           />
         )}
       </div>

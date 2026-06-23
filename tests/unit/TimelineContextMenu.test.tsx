@@ -1,8 +1,18 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TimelineContextMenu } from '../../src/components/timeline/TimelineContextMenu';
+import { downloadBlob } from '../../src/engine/export';
+import { captureCurrentPreviewFrameJpegBlob } from '../../src/services/previewFrameCapture';
 import { useMediaStore, type MediaFile } from '../../src/stores/mediaStore';
 import type { TimelineClip } from '../../src/types';
+
+vi.mock('../../src/engine/export', () => ({
+  downloadBlob: vi.fn(),
+}));
+
+vi.mock('../../src/services/previewFrameCapture', () => ({
+  captureCurrentPreviewFrameJpegBlob: vi.fn(),
+}));
 
 function createClip(overrides: Partial<TimelineClip>): TimelineClip {
   return {
@@ -123,6 +133,7 @@ function renderMenu(params: {
 afterEach(() => {
   cleanup();
   useMediaStore.setState({ files: [] });
+  vi.clearAllMocks();
   vi.restoreAllMocks();
 });
 
@@ -191,6 +202,32 @@ describe('TimelineContextMenu regenerate menu', () => {
     expect(screen.queryByText('Copy Color')).toBeNull();
     expect(screen.queryByText('Paste Color')).toBeNull();
     expect(screen.queryByText(/Show Thumbnail/)).toBeNull();
+  });
+
+  it('exports the current frame as a jpg from visual clip menus', async () => {
+    const blob = new Blob(['jpg'], { type: 'image/jpeg' });
+    vi.mocked(captureCurrentPreviewFrameJpegBlob).mockResolvedValueOnce(blob);
+    renderMenu({
+      clips: [createClip({ id: 'clip-video' })],
+      mediaFile: {
+        id: 'media-video',
+        name: 'Clip.mp4',
+        type: 'video',
+        parentId: null,
+        createdAt: 1,
+        file: new File(['video'], 'Clip.mp4', { type: 'video/mp4' }),
+        url: 'blob:video',
+        duration: 10,
+        hasAudio: false,
+      } as MediaFile,
+    });
+
+    fireEvent.click(screen.getByText('Export Current Frame'));
+
+    await waitFor(() => {
+      expect(captureCurrentPreviewFrameJpegBlob).toHaveBeenCalledTimes(1);
+      expect(downloadBlob).toHaveBeenCalledWith(blob, 'Clip_frame_0_00s.jpg');
+    });
   });
 
   it('bundles video and audio regeneration actions for clips with linked audio', () => {

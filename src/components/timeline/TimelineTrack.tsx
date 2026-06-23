@@ -42,6 +42,7 @@ import {
 import {
   type TimelinePaintFadeVisuals,
 } from '../../timeline';
+import { createWorkerDrawableClips } from './utils/timelineClipCanvasClipGeometry';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_RENDER_OVERSCAN_PX = 1200;
@@ -338,6 +339,15 @@ function TimelineTrackComponent({
     hoveredClipId,
     getClipFadeVisualState,
   });
+  const geometryPreviewClips = useMemo(
+    () => createWorkerDrawableClips(canvasClips, {
+      clipDrag,
+      clipDragPreview,
+      clipTrim,
+      trackId: track.id,
+    }),
+    [canvasClips, clipDrag, clipDragPreview, clipTrim, track.id],
+  );
   const canvasContentWidth = useMemo(() => {
     let max = trackContentWidth;
     for (const clip of canvasClips) {
@@ -389,7 +399,7 @@ function TimelineTrackComponent({
   const timelineTrackGeometrySnapshot = useMemo(
     () => buildTimelineTrackHostGeometrySnapshot({
       track,
-      clips: canvasClips,
+      clips: geometryPreviewClips,
       baseHeight,
       trackColor,
       selectedClipIds,
@@ -399,7 +409,7 @@ function TimelineTrackComponent({
       zoom,
       clipVerticalInsetPx: CLIP_SHELL_VERTICAL_INSET_PX,
     }),
-    [baseHeight, canvasClips, hoveredClipId, scrollX, selectedClipIds, track, trackColor, viewportWidth, zoom],
+    [baseHeight, geometryPreviewClips, hoveredClipId, scrollX, selectedClipIds, track, trackColor, viewportWidth, zoom],
   );
   const timelineClipGeometryById = useMemo(
     () => buildTimelineTrackClipGeometryMap(timelineTrackGeometrySnapshot),

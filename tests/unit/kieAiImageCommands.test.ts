@@ -52,4 +52,38 @@ describe('Kie.ai image command payloads', () => {
       prompt: 'edit the object',
     })).toThrow('Add at least one reference image');
   });
+
+  it('builds Recraft utility inputs without prompt or aspect ratio fields', () => {
+    expect(buildKieAiImageTaskInput({
+      provider: 'recraft/remove-background',
+      prompt: '',
+    }, ['https://cdn.example.com/source.png'])).toEqual({
+      image: 'https://cdn.example.com/source.png',
+    });
+
+    expect(buildKieAiImageTaskInput({
+      provider: 'recraft/crisp-upscale',
+      prompt: '',
+    }, ['https://cdn.example.com/source.png'])).toEqual({
+      image: 'https://cdn.example.com/source.png',
+    });
+  });
+
+  it('builds Topaz image upscale utility input with an upscale factor', () => {
+    expect(buildKieAiImageTaskInput({
+      provider: 'topaz/image-upscale',
+      prompt: '',
+      resolution: '4x',
+    }, ['https://cdn.example.com/source.png'])).toEqual({
+      image_url: 'https://cdn.example.com/source.png',
+      upscale_factor: '4',
+    });
+  });
+
+  it('rejects utility image models without references', () => {
+    expect(() => buildKieAiImageTaskInput({
+      provider: 'recraft/remove-background',
+      prompt: '',
+    })).toThrow('Add at least one reference image');
+  });
 });

@@ -81,7 +81,7 @@ function assertPersonalApiKeyAccess(request: FlashBoardGenerationRequest): void 
   }
 
   if (request.service === 'suno' && !shouldUsePersonalApiKey('kieai')) {
-    throw new Error('Enable a Kie.ai key as default in Settings to generate music with Suno.');
+    throw new Error('Enable a Kie.ai key as default in Settings to generate with Suno.');
   }
 }
 

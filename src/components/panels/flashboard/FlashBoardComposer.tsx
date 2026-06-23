@@ -195,18 +195,22 @@ export function FlashBoardComposer({
     selectedModelCategory,
   } = modelOptionsState;
   const isAudioMode = selectedEntry?.outputType === 'audio' || service === 'elevenlabs' || service === 'suno';
-  const isSunoMode = selectedEntry?.providerId === SUNO_PROVIDER_ID || service === 'suno';
-  const isElevenLabsMode = isAudioMode && !isSunoMode;
+  const isSunoMode = selectedEntry?.providerId === SUNO_PROVIDER_ID || providerId === SUNO_PROVIDER_ID;
+  const isElevenLabsMode = isAudioMode && (
+    service === 'elevenlabs'
+    || selectedEntry?.providerId === 'cloud-elevenlabs-tts'
+  );
   const isHostedAudioMode = isElevenLabsMode && service === 'cloud';
   const {
-    hasVideoReferenceInput, hasVisualReferenceInput, seedanceReferenceModeActive, seedanceReferenceValidationError,
+    hasAudioReferenceInput, hasImageReferenceInput, hasVideoReferenceInput, hasVisualReferenceInput,
+    seedanceReferenceModeActive, seedanceReferenceValidationError,
   } = useFlashBoardReferenceValidationController({
     composer,
     mediaFiles,
     providerId,
   });
   const {
-    audioModelButtonLabel, audioOutputButtonLabel, audioVoiceButtonLabel,
+    audioModelButtonLabel, audioOutputButtonLabel,
     elevenLabsVoicesError, handleOutputFormatChange, handlePreviewVoice,
     handleRefreshVoices, handleSelectVoice, handleSpeakerBoostChange,
     handleVoiceSettingNumberChange, isLoadingElevenLabsVoices, languageCode,
@@ -257,7 +261,7 @@ export function FlashBoardComposer({
     setSunoInstrumental, setSunoNegativeTags, setSunoStyle, setSunoStyleWeight,
     setSunoWeirdnessConstraint, sunoAudioWeight, sunoCustomMode, sunoInstrumental,
     sunoModelButtonLabel, sunoModeButtonLabel, sunoModelOptions, sunoNegativeTags,
-    sunoStyle, sunoStyleLimit, sunoStyleWeight, sunoTitle, sunoTuningChanged,
+    sunoStyle, sunoStyleLimit, sunoStyleWeight, sunoTitle,
     sunoVocalGender, sunoVocalGenderOptions, sunoWeirdnessConstraint,
   } = useFlashBoardPromptSunoController({
     composer,
@@ -316,6 +320,7 @@ export function FlashBoardComposer({
     hasEvolinkKey,
     hasGenerationBoard,
     hasHostedSession,
+    hasImageReferenceInput,
     hasKieAiKey,
     hasReferenceMediaInput: hasVisualReferenceInput,
     hasVideoReferenceInput,
@@ -352,6 +357,7 @@ export function FlashBoardComposer({
     hasEvolinkKey,
     hasGenerationBoard,
     hasHostedSession,
+    hasImageReferenceInput,
     hasKieAiKey,
     hasVisualReferenceInput,
     hasVideoReferenceInput,
@@ -559,14 +565,38 @@ export function FlashBoardComposer({
           onReferenceRoleChange: handleComposerReferenceRoleChange, onRemoveReference: handleRemoveComposerReference,
         }}
         promptEditor={{
-          canRestorePrompt, chatInputRef, chatPanelOpen, chatPrompt, isAudioMode,
+          canRestorePrompt, chatInputRef, chatPanelOpen, chatPrompt,
+          elevenLabsVoicePanel: {
+            emptyMessage: isHostedAudioMode
+              ? hasHostedAudioAccess ? 'No voices found.' : 'Sign in for Cloud voices.'
+              : hasElevenLabsKey ? 'No voices found.' : 'Configure ElevenLabs key.',
+            error: elevenLabsVoicesError,
+            isLoading: isLoadingElevenLabsVoices,
+            search: voiceSearch,
+            selectedVoiceId: voiceId,
+            voiceId,
+            voiceName,
+            voices: elevenLabsVoiceOptions,
+            onPreviewVoice: handlePreviewVoice,
+            onRefresh: handleRefreshVoices,
+            onSearchChange: setVoiceSearch,
+            onSelectVoice: handleSelectVoice,
+            onVoiceIdChange: setVoiceId,
+            onVoiceNameChange: setVoiceName,
+          },
+          isAudioMode, isElevenLabsMode,
           isRefiningPrompt, isSunoMode, maxReferenceMedia, multiShots, prompt,
           promptInputRef, referenceMediaCount: effectiveReferenceMediaFileIds.length,
-          sunoNegativeTags, sunoStyle, sunoStyleLimit, onAutosizeInput: resizePromptInput,
+          sunoAudioReferenceActive: hasAudioReferenceInput, sunoAudioWeight,
+          sunoNegativeTags, sunoStyle, sunoStyleLimit, sunoStyleWeight,
+          sunoWeirdnessConstraint,
+          onAutosizeInput: resizePromptInput,
           onChatInputKeyDown: handleChatInputKeyDown, onChatPromptChange: handleChatPromptChange,
           onClearChatPrompt: handleClearChatPrompt, onClearPrompt: handleClearPrompt,
           onPromptChange: handlePromptChange, onRestorePromptBeforeAiRewrite: handleRestorePromptBeforeAiRewrite,
-          onSunoNegativeTagsChange: handleSunoNegativeTagsChange, onSunoStyleChange: handleSunoStyleChange,
+          onSunoAudioWeightChange: setSunoAudioWeight, onSunoNegativeTagsChange: handleSunoNegativeTagsChange,
+          onSunoResetTuning: resetSunoTuning, onSunoStyleChange: handleSunoStyleChange,
+          onSunoStyleWeightChange: setSunoStyleWeight, onSunoWeirdnessConstraintChange: setSunoWeirdnessConstraint,
         }}
         multishotPanel={{
           canAddShot, duration, isClosing: isMultiShotPanelClosing,
@@ -593,7 +623,7 @@ export function FlashBoardComposer({
         inlineSubmenuStateClassName={inlineSubmenuStateClassName}
         generationControls={{
           activePopover: popover, aspectRatioLabel: aspectRatio, audioModelButtonLabel,
-          audioOutputButtonLabel, audioVoiceButtonLabel, durationLabel: `${duration}s`,
+          audioOutputButtonLabel, durationLabel: `${duration}s`,
           effectiveGenerateAudio, imageSizeLabel: imageSize, isAudioMode, isElevenLabsMode,
           isRefiningPrompt, isSunoMode, modeLabel: mode, modelButtonLabel, multiShots,
           popoverHostClassName, popoverRef, promptRefineTitle,
@@ -601,10 +631,11 @@ export function FlashBoardComposer({
           selectedEntryHasDurations: Boolean(selectedEntry && selectedEntry.durations.length > 0),
           selectedEntryHasImageSizes: Boolean(selectedEntry?.supportsTextToImage && selectedEntry.imageSizes?.length),
           selectedEntryHasMultipleModes: Boolean(selectedEntry && selectedEntry.modes.length > 1),
-          sunoModelButtonLabel, sunoModeButtonLabel, sunoTuningChanged, supportsAudio,
+          sunoModelButtonLabel, sunoModeButtonLabel, sunoVocalGender,
+          sunoVocalGenderOptions, supportsAudio,
           supportsMultiShot, voiceSettingsChanged, onAudioToggle: handleAudioToggle,
           onMultiShotToggle: handleMultiShotToggle, onOpenPopover: togglePopover,
-          onRefinePrompt: handleRefinePrompt,
+          onRefinePrompt: handleRefinePrompt, onSunoVocalGenderChange: handleSunoVocalGenderChange,
         }}
         modelPopover={{
           activeCategoryId: effectiveModelCategory, activePopover: renderedPopover,
@@ -618,19 +649,14 @@ export function FlashBoardComposer({
           },
         }}
         sunoPopovers={{
-          activePopover: renderedPopover, audioWeight: sunoAudioWeight,
-          currentModelId: currentSunoModelId, customMode: sunoCustomMode,
+          activePopover: renderedPopover, currentModelId: currentSunoModelId, customMode: sunoCustomMode,
           instrumental: sunoInstrumental, isSunoMode, modelOptions: sunoModelOptions,
-          styleWeight: sunoStyleWeight, vocalGender: sunoVocalGender,
-          vocalGenderOptions: sunoVocalGenderOptions, weirdnessConstraint: sunoWeirdnessConstraint,
-          onAudioWeightChange: setSunoAudioWeight, onClosePopover: closePopover,
+          onClosePopover: closePopover,
           onModeChange: (nextCustomMode, nextInstrumental) => {
             setSunoCustomMode(nextCustomMode);
             setSunoInstrumental(nextInstrumental);
           },
-          onModelChange: setVersion, onResetTuning: resetSunoTuning,
-          onStyleWeightChange: setSunoStyleWeight, onVocalGenderChange: handleSunoVocalGenderChange,
-          onWeirdnessConstraintChange: setSunoWeirdnessConstraint,
+          onModelChange: setVersion,
         }}
         elevenLabsSettingsPopovers={{
           activePopover: renderedPopover, isElevenLabsMode, languageCode, languageOverride,

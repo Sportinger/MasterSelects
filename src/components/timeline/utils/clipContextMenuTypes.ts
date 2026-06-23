@@ -171,6 +171,10 @@ export type ClipContextMenuCommandDescriptor =
       kind: 'label-color';
       color: LabelColor;
       canExecute: boolean;
+    }
+  | {
+      kind: 'export-current-frame';
+      canExecute: boolean;
     };
 
 export type ClipContextMenuClipboardCommand =
@@ -229,6 +233,7 @@ export interface ClipContextMenuCommandExecutionContext {
   toggleWaveformsEnabled: () => void;
   setAudioDisplayMode: (mode: ClipContextMenuAudioDisplayMode) => void;
   loadTranscriber: ClipContextMenuTranscribeLoader;
+  exportCurrentFrame: () => Promise<boolean>;
   showInExplorer: ClipContextMenuShowInExplorerHandler;
   notify: (message: string) => void;
   downloadRawFile: (file: File | Blob, name: string) => void;

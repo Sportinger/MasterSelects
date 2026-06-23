@@ -74,7 +74,7 @@ describe('timeline clip canvas trim geometry', () => {
       source: { type: 'audio', naturalDuration: 10 },
     }), {
       trackId: 'audio-track',
-      clipTrim: trim({ clipId: 'video', edge: 'right', appliedDelta: 1.5 }),
+      clipTrim: trim({ clipId: 'video', edge: 'right', appliedDelta: 1.5, includeLinked: true }),
     });
 
     expect(geometry.duration).toBe(6.5);
@@ -82,7 +82,7 @@ describe('timeline clip canvas trim geometry', () => {
     expect(geometry.trimEdge).toBe('right');
   });
 
-  it('leaves linked clips alone while alt-trimming', () => {
+  it('keeps linked clips in the trim preview while alt is held', () => {
     const geometry = resolveClipGeometry(clip({
       id: 'audio',
       linkedClipId: 'video',
@@ -90,7 +90,23 @@ describe('timeline clip canvas trim geometry', () => {
       source: { type: 'audio', naturalDuration: 10 },
     }), {
       trackId: 'audio-track',
-      clipTrim: trim({ clipId: 'video', edge: 'right', appliedDelta: 1.5, altKey: true }),
+      clipTrim: trim({ clipId: 'video', edge: 'right', appliedDelta: 1.5, altKey: true, includeLinked: true }),
+    });
+
+    expect(geometry.duration).toBe(6.5);
+    expect(geometry.outPoint).toBe(6.5);
+    expect(geometry.trimEdge).toBe('right');
+  });
+
+  it('keeps linked clips out of the trim preview while shift is held', () => {
+    const geometry = resolveClipGeometry(clip({
+      id: 'audio',
+      linkedClipId: 'video',
+      trackId: 'audio-track',
+      source: { type: 'audio', naturalDuration: 10 },
+    }), {
+      trackId: 'audio-track',
+      clipTrim: trim({ clipId: 'video', edge: 'right', appliedDelta: 1.5, includeLinked: true, singleClip: true }),
     });
 
     expect(geometry.duration).toBe(5);

@@ -5,8 +5,10 @@ import {
   calculateHostedKlingCost,
   calculateHostedSeedanceCost,
   calculateHostedSunoCost,
+  createHostedImageTask,
   createHostedKlingTask,
   createHostedSeedanceTask,
+  createHostedSunoSoundsTask,
   getHostedKlingTask,
 } from '../../functions/lib/kieai';
 import { normalizeHostedKlingParams } from '../../functions/lib/providers/kieai';
@@ -150,6 +152,37 @@ describe('hosted Kie.ai pricing', () => {
     })?.compactLabel).toBe('72 cr');
   });
 
+  it('charges hosted Suno Sounds generation through the same Cloud Kie.ai route family', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: { taskId: 'sounds_task_1' },
+        msg: 'success',
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedSunoSoundsTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      model: 'V5',
+      prompt: 'Clean sci-fi door servo, short pneumatic release.',
+      soundLoop: true,
+    })).resolves.toEqual({ taskId: 'sounds_task_1' });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.kie.ai/api/v1/generate/sounds');
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      grabLyrics: false,
+      model: 'V5',
+      prompt: 'Clean sci-fi door servo, short pneumatic release.',
+      soundLoop: true,
+    });
+    expect(getFlashBoardPriceEstimate({
+      outputType: 'audio',
+      providerId: 'suno-sounds',
+      service: 'cloud',
+    })?.compactLabel).toBe('72 cr');
+  });
+
   it('charges hosted Seedance 2.0 at the 6x MasterSelects cloud multiplier', () => {
     expect(calculateHostedSeedanceCost('bytedance/seedance-2', '480p', 10)).toBe(1140);
     expect(calculateHostedSeedanceCost('bytedance/seedance-2', '720p', 10)).toBe(2460);
@@ -219,6 +252,71 @@ describe('hosted Kie.ai pricing', () => {
     });
     expect(createBody.input.prompt).toContain('Synchronize visible speech');
     expect(createBody.input).not.toHaveProperty('first_frame_url');
+  });
+
+  it('routes hosted Flux Kontext image generation through Kie.ai special endpoints', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: {
+          downloadUrl: 'https://cdn.example.com/download/source',
+          fileUrl: 'https://cdn.example.com/source.png',
+        },
+        success: true,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: { taskId: 'flux_task_1' },
+        msg: 'success',
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedImageTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: '1:1',
+      imageInputs: ['data:image/png;base64,AAAA'],
+      prompt: 'Replace the product color with brushed steel.',
+      provider: 'flux-kontext-pro',
+      resolution: '1K',
+    })).resolves.toEqual({ taskId: 'flux:flux_task_1' });
+
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('https://api.kie.ai/api/v1/flux/kontext/generate');
+    expect(JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string)).toMatchObject({
+      aspectRatio: '1:1',
+      inputImage: 'https://cdn.example.com/source.png',
+      model: 'flux-kontext-pro',
+      prompt: 'Replace the product color with brushed steel.',
+    });
+  });
+
+  it('routes hosted Runway video generation through Kie.ai special endpoints', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 200,
+        data: { taskId: 'runway_task_1' },
+        msg: 'success',
+      }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(createHostedKlingTask({
+      KIEAI_API_KEY: 'kie_test_key',
+    } as Partial<Env> as Env, {
+      aspectRatio: '16:9',
+      duration: 10,
+      mode: '1080p',
+      prompt: 'A controlled cinematic product dolly shot.',
+      provider: 'runway-video',
+      sound: false,
+    })).resolves.toEqual({ taskId: 'runway:runway_task_1' });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.kie.ai/api/v1/runway/generate');
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toMatchObject({
+      aspectRatio: '16:9',
+      duration: '10',
+      prompt: 'A controlled cinematic product dolly shot.',
+      quality: '720p',
+      waterMark: '',
+    });
   });
 
   it('normalizes hosted Kie market task states and progress from recordInfo', async () => {
