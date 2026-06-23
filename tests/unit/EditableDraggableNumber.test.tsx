@@ -127,4 +127,38 @@ describe('EditableDraggableNumber drag behavior', () => {
 
     expect(onChange).toHaveBeenCalledWith(0);
   });
+
+  it('opens direct typing on the second click before pointer lock starts', () => {
+    const onChange = vi.fn();
+    const requestPointerLock = vi.fn();
+    const originalRequestPointerLockDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'requestPointerLock');
+    Object.defineProperty(HTMLElement.prototype, 'requestPointerLock', {
+      configurable: true,
+      value: requestPointerLock,
+    });
+
+    try {
+      const { container } = render(
+        <EditableDraggableNumber
+          value={12.3}
+          onChange={onChange}
+          decimals={1}
+        />,
+      );
+      const valueElement = container.querySelector('.draggable-number') as HTMLElement;
+
+      fireEvent.mouseDown(valueElement, { button: 0, detail: 2, clientX: 100, buttons: 1 });
+
+      const input = container.querySelector('input.draggable-number-input') as HTMLInputElement;
+      expect(input).not.toBeNull();
+      expect(input.value).toBe('12.3');
+      expect(requestPointerLock).not.toHaveBeenCalled();
+    } finally {
+      if (originalRequestPointerLockDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'requestPointerLock', originalRequestPointerLockDescriptor);
+      } else {
+        delete (HTMLElement.prototype as HTMLElement & { requestPointerLock?: () => void }).requestPointerLock;
+      }
+    }
+  });
 });

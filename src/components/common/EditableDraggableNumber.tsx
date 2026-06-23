@@ -260,12 +260,24 @@ export function EditableDraggableNumber({
     return clientDx;
   }, []);
 
+  const beginEditing = useCallback(() => {
+    setShowBoundsPopover(false);
+    setDraftValue(formatEditableValue(value, decimals));
+    setIsEditing(true);
+  }, [decimals, value]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (isEditing) return;
     if (e.button === 1) {
       e.preventDefault();
       e.stopPropagation();
       openBoundsPopover();
+      return;
+    }
+    if (e.button === 0 && e.detail >= 2) {
+      e.preventDefault();
+      e.stopPropagation();
+      beginEditing();
       return;
     }
     if (showBoundsPopover || e.button !== 0) return;
@@ -361,6 +373,7 @@ export function EditableDraggableNumber({
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
   }, [
+    beginEditing,
     decimals,
     effectiveMax,
     effectiveMin,
@@ -434,12 +447,6 @@ export function EditableDraggableNumber({
     setDraftDefaultValue(formatEditableValue(nextValue, decimals));
     setShowBoundsPopover(false);
   }, [decimals, effectiveDefaultValue, effectiveMax, effectiveMin, onChange]);
-
-  const beginEditing = useCallback(() => {
-    setShowBoundsPopover(false);
-    setDraftValue(formatEditableValue(value, decimals));
-    setIsEditing(true);
-  }, [decimals, value]);
 
   const cancelEditing = useCallback(() => {
     setDraftValue(formatEditableValue(value, decimals));
