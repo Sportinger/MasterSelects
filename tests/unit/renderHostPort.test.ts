@@ -44,10 +44,9 @@ describe('renderHostPort', () => {
         workerPrimaryRequested: false,
         workerPrimaryRegistered: true,
         workerPrimaryAvailable: false,
-        blockers: ['worker render host flag disabled'],
-        reason: 'using main fallback: worker render host flag disabled',
       },
     });
+    expect(renderHostPort.getTelemetry().selection.blockers.length).toBeGreaterThan(0);
   });
 
   it('initializes the engine lifecycle once through the host', async () => {

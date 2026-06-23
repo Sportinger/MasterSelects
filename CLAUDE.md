@@ -152,6 +152,10 @@ When intentionally bumping the release version, check all of these:
 - `src/changelog-data.json`: add release notes at the beginning.
 - `package.json`: top-level `"version"`.
 - `package-lock.json`: top-level `"version"` and `packages[""].version`.
+- Version numbers use carry-over counting, not unbounded decimal-extension
+  counting: after `1.9` comes `2.0`, not `1.10`; after the `2.2.10`
+  release train the next release is `2.3.1` unless the user explicitly says
+  otherwise.
 
 Consistency scan before a normal release:
 

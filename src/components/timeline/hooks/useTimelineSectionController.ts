@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { RefObject } from 'react';
-
+import { useCallback, useMemo, useState, type RefObject } from 'react';
 import type { AnimatableProperty, Keyframe, TimelineClip as TimelineClipType, TimelineTrack as TimelineTrackType } from '../../../types';
 import type { TimelineAudioDisplayMode, TimelinePropertiesSelection, TimelineTrackFocusMode } from '../../../stores/timeline/types';
-import { DOCK_LAYOUT_TRANSITION_EVENT } from '../../../stores/dockStore';
 import type { ClipDragState, ExternalDragState } from '../types';
 import { TIMELINE_VIEWPORT_FALLBACK_PX } from '../utils/timelineHostConstants';
+import { usePinVideoBottomOnLayoutChange } from './usePinVideoBottomOnLayoutChange';
 import { useTimelineSectionLayout } from './useTimelineSectionLayout';
 import { useTimelineSectionViewportMeasurement } from './useTimelineSectionViewportMeasurement';
 import { useTimelineSectionReveal } from './useTimelineSectionReveal';
@@ -14,7 +12,6 @@ import { useTimelineSectionScrollPinning } from './useTimelineSectionScrollPinni
 import { useTimelineSplitDividerDrag } from './useTimelineSplitDividerDrag';
 import { useTimelineTrackFocusStep } from './useTimelineTrackFocusStep';
 import { useTimelineTrackResize } from './useTimelineTrackResize';
-
 interface UseTimelineSectionControllerProps {
   audioDisplayMode: TimelineAudioDisplayMode;
   audioFocusMode: boolean;
@@ -78,13 +75,7 @@ export function useTimelineSectionController({
   const [splitDragPinVideoBottom, setSplitDragPinVideoBottom] = useState(false);
   const [forceVideoBottomScroll, setForceVideoBottomScroll] = useState(false);
 
-  useEffect(() => {
-    const pinVideoBottom = () => setForceVideoBottomScroll(true);
-    pinVideoBottom();
-
-    window.addEventListener(DOCK_LAYOUT_TRANSITION_EVENT, pinVideoBottom);
-    return () => window.removeEventListener(DOCK_LAYOUT_TRANSITION_EVENT, pinVideoBottom);
-  }, []);
+  usePinVideoBottomOnLayoutChange(setForceVideoBottomScroll);
 
   const {
     videoSectionViewportRef,

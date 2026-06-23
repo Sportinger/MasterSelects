@@ -24,10 +24,9 @@ import { useExternalDropTrackDragEnter } from './useExternalDropTrackDragEnter';
 import { useExternalDropTrackDragOver } from './useExternalDropTrackDragOver';
 import { useExternalDropNewTrackDragOver } from './useExternalDropNewTrackDragOver';
 import { useExternalDropTrackDragLeave } from './useExternalDropTrackDragLeave';
+import { useDroppedTimelineMediaFiles as placeTimelineExternalDropFilesViaHook } from './useDroppedTimelineMediaFiles';
 import type { TimelineTrack, TimelineClip, TextClipProperties } from '../../../types';
 import type { Composition, MediaFile, SignalAssetItem } from '../../../stores/mediaStore';
-import type { FileImportResult } from '../../../stores/mediaStore/types';
-import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../../panels/media/dropImport';
 import type { ShapePrimitive } from '../../../types/motionDesign';
 import { Logger } from '../../../services/logger';
 import { placeSignalAssetOnTimeline } from '../../../runtime/renderers/signalTimelineRendererAdapter';
@@ -38,10 +37,6 @@ import {
   planTimelineExternalDropCommand,
 } from '../../../timeline';
 import { executeTimelineExternalDropCommand } from '../../../services/timeline/timelineExternalDropCommandExecutor';
-import {
-  placeTimelineExternalDropFiles,
-  type TimelineExternalDropArrangement,
-} from '../../../services/timeline/timelineExternalDropFilePlacement';
 
 const log = Logger.create('useExternalDrop');
 
@@ -141,21 +136,6 @@ function planExternalDropCommand(dataTransfer: DataTransfer) {
   });
 }
 
-function chooseTimelineExternalDropArrangement(fileCount: number): TimelineExternalDropArrangement | null {
-  if (fileCount <= 1) return 'side-by-side';
-
-  const answer = window.prompt(
-    `Drop ${fileCount} files on the timeline.\nType "stack" for layers or "side" for side by side.`,
-    'side',
-  );
-  if (answer === null) return null;
-
-  const normalized = answer.trim().toLowerCase();
-  return normalized.startsWith('stack') || normalized.startsWith('layer') || normalized.startsWith('ueber')
-    ? 'stack'
-    : 'side-by-side';
-}
-
 export function useExternalDrop({
   timelineRef,
   scrollX,
@@ -218,51 +198,7 @@ export function useExternalDrop({
     return result.clipId;
   }, [addClip, addTextClip, updateClip, updateTextProperties]);
 
-  // Place one or more externally dropped files onto the timeline, going
-  // through the same media-store import path the media panel uses (#194).
-  // `resolveStartTime` lets the caller snap/avoid overlaps; without it the raw
-  // cursor is used (e.g. when dropping onto a freshly created empty track).
-  const placeDroppedTimelineMediaFiles = useCallback(async (params: {
-    dataTransfer: DataTransfer;
-    trackId: string;
-    trackIsVideo: boolean;
-    baseStartTime: number;
-    fallbackDuration?: number;
-    filePath?: string;
-    resolveStartTime?: (desiredStartTime: number, duration?: number) => number;
-  }): Promise<boolean> => {
-    const { dataTransfer, trackId, trackIsVideo, baseStartTime, fallbackDuration, filePath, resolveStartTime } = params;
-    const records = await collectDroppedMediaFiles(dataTransfer);
-    const arrangement = chooseTimelineExternalDropArrangement(records.length);
-    if (!arrangement) return false;
-
-    const recordsWithPath = filePath
-      ? records.map((record) => ({
-        ...record,
-        absolutePath: record.absolutePath ?? filePath,
-      }))
-      : records;
-    const mediaStore = useMediaStore.getState();
-    const importResults = await importDroppedMediaFiles<FileImportResult>(recordsWithPath, null, {
-      createFolder: mediaStore.createFolder,
-      existingFolders: mediaStore.folders,
-      importFiles: mediaStore.importFiles,
-      importFilesWithHandles: mediaStore.importFilesWithHandles,
-    });
-
-    return placeTimelineExternalDropFiles({
-      actions: { addTrack, addClip, addSignalAssetClip },
-      arrangement,
-      records: recordsWithPath,
-      importResults,
-      trackId,
-      trackIsVideo,
-      baseStartTime,
-      fallbackDuration,
-      filePath,
-      resolveStartTime,
-    });
-  }, [addClip, addSignalAssetClip, addTrack]);
+  const placeDroppedTimelineMediaFiles = placeTimelineExternalDropFilesViaHook({ addTrack, addClip, addSignalAssetClip });
 
   const updateVideoNewTrackGesture = useCallback((clientY: number, isAudio: boolean) => {
     const rect = timelineRef.current?.getBoundingClientRect();

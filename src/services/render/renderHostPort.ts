@@ -33,6 +33,7 @@ export type {
 export type RenderHostDevMode = 'main' | 'worker-shadow' | 'worker-presenting' | 'worker-only' | 'worker-gpu-only';
 
 const RENDER_HOST_DEV_MODE_STORAGE_KEY = 'masterselects.renderHostMode';
+const DEFAULT_RENDER_HOST_MODE: RenderHostDevMode = 'main';
 
 const INITIAL_RENDER_HOST_SELECTION_TELEMETRY: RenderHostSelectionTelemetry = {
   selectedId: 'main-fallback',
@@ -131,10 +132,15 @@ function writeRenderHostDevMode(mode: RenderHostDevMode | null): void {
   }
 }
 
+function effectiveRenderHostMode(mode: RenderHostDevMode | null): RenderHostDevMode {
+  return mode ?? DEFAULT_RENDER_HOST_MODE;
+}
+
 function primaryForDevMode(mode: RenderHostDevMode | null): RenderHostPort {
-  return mode === 'worker-shadow'
+  const effectiveMode = effectiveRenderHostMode(mode);
+  return effectiveMode === 'worker-shadow'
     ? runtimeState.workerShadowRenderHostPort
-    : mode === 'worker-only' || mode === 'worker-gpu-only'
+    : effectiveMode === 'worker-only' || effectiveMode === 'worker-gpu-only'
       ? runtimeState.workerOnlyRenderHostPort
     : runtimeState.workerPresentingRenderHostPort;
 }
@@ -162,16 +168,21 @@ function workerRuntimeBlockers(): readonly string[] {
   return [];
 }
 
-const initialDevMode = readRenderHostDevMode();
-runtimeState.workerPrimaryStrictWorkerOnly = initialDevMode === 'worker-only' || initialDevMode === 'worker-gpu-only';
-runtimeState.workerPrimaryPresentationStrategy = initialDevMode === 'worker-gpu-only'
+const persistedInitialDevMode = readRenderHostDevMode();
+const initialDevMode = persistedInitialDevMode === 'main' ? 'main' : null;
+if (persistedInitialDevMode && persistedInitialDevMode !== 'main') {
+  writeRenderHostDevMode(null);
+}
+const initialEffectiveMode = effectiveRenderHostMode(initialDevMode);
+runtimeState.workerPrimaryStrictWorkerOnly = initialEffectiveMode === 'worker-only' || initialEffectiveMode === 'worker-gpu-only';
+runtimeState.workerPrimaryPresentationStrategy = initialEffectiveMode === 'worker-gpu-only'
   ? 'worker-webgpu-present'
   : 'worker-cpu-present';
 if (
-  initialDevMode === 'worker-shadow' ||
-  initialDevMode === 'worker-presenting' ||
-  initialDevMode === 'worker-only' ||
-  initialDevMode === 'worker-gpu-only'
+  initialEffectiveMode === 'worker-shadow' ||
+  initialEffectiveMode === 'worker-presenting' ||
+  initialEffectiveMode === 'worker-only' ||
+  initialEffectiveMode === 'worker-gpu-only'
 ) {
   flags.workerFirstRenderHost = true;
 }
@@ -180,20 +191,28 @@ if (initialDevMode === 'main') {
 }
 
 function workerPrimaryAvailableForMode(mode: RenderHostDevMode | null): boolean {
-  if (mode === 'worker-shadow') {
+  if (mode === 'main') {
+    return false;
+  }
+  const effectiveMode = effectiveRenderHostMode(mode);
+  if (effectiveMode === 'worker-shadow') {
     return isBrowserWorkerRenderHostRuntimeSupported();
   }
   return workerRuntimeAvailable();
 }
 
 function workerPrimaryBlockersForMode(mode: RenderHostDevMode | null): readonly string[] {
-  if (mode === 'worker-shadow') {
+  if (mode === 'main') {
+    return [];
+  }
+  const effectiveMode = effectiveRenderHostMode(mode);
+  if (effectiveMode === 'worker-shadow') {
     return isBrowserWorkerRenderHostRuntimeSupported()
       ? []
       : ['browser Worker unavailable for worker render host runtime'];
   }
   const blockers = [...workerRuntimeBlockers()];
-  if (mode === 'worker-gpu-only' && (typeof navigator === 'undefined' || !navigator.gpu)) {
+  if (effectiveMode === 'worker-gpu-only' && (typeof navigator === 'undefined' || !navigator.gpu)) {
     blockers.push('WebGPU unavailable in current browser');
   }
   return blockers;
@@ -214,12 +233,13 @@ if (!hotData?.renderHostRuntimeState && hotData?.activeRenderHostPort) {
 runtimeState.instance = instance;
 
 export function configureRenderHostSelection(options: ConfigureRenderHostSelectionOptions = {}): void {
+  const currentMode = readRenderHostDevMode();
   instance = applyRenderHostSelection(selectRenderHost<RenderHostPort>({
     mainFallback: runtimeState.mainFallbackRenderHostPort,
-    workerPrimary: options.workerPrimary ?? runtimeState.workerPresentingRenderHostPort,
+    workerPrimary: options.workerPrimary ?? primaryForDevMode(currentMode),
     preferWorkerPrimary: options.preferWorkerPrimary ?? flags.workerFirstRenderHost,
-    workerPrimaryAvailable: options.workerPrimaryAvailable ?? workerRuntimeAvailable(),
-    workerPrimaryBlockers: options.workerPrimaryBlockers ?? workerRuntimeBlockers(),
+    workerPrimaryAvailable: options.workerPrimaryAvailable ?? workerPrimaryAvailableForMode(currentMode),
+    workerPrimaryBlockers: options.workerPrimaryBlockers ?? workerPrimaryBlockersForMode(currentMode),
   }));
 }
 
