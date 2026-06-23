@@ -65,6 +65,15 @@ them.
 6. **Never trust silent success.** Draw calls completing, diagnostics reporting
    N clips drawn, or `getImageData` showing pixels do **not** prove the canvas
    is on screen. Compositing is a separate step the page cannot observe.
+7. **Keep the main-thread path at parity with the worker path.** Because the
+   worker is gated off on Linux (rule 3), the main-thread renderer is the *only*
+   path Linux users see — a divergence there ships exclusively to them. Fold the
+   same live interaction geometry (drag/trim start/duration/in/out) into both.
+   Example regression (issue #275): the main-thread MIDI preview built its note
+   bars from the raw stored clip while drawing at the live trimmed width, so
+   resizing a MIDI clip stretched the notes until commit; the worker path was
+   correct because it folds trim geometry into its `resourceClip`. Windows users
+   never saw it.
 
 ---
 

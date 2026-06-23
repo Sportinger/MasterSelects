@@ -162,9 +162,24 @@ export function drawTimelineClipCanvasMainThread(
     ctx.fillStyle = selected ? fillSelected : fill;
     ctx.fill();
 
+    // Build the MIDI preview from the geometry-adjusted clip (live trim/drag
+    // start/duration/in/out), not the raw stored clip. The preview's bar x =
+    // ((sourceTime - sourceIn) / sourceSpan) * clipWidth, so passing the trimmed
+    // pixel width `w` while keeping the raw source span would stretch every note
+    // during a resize and only snap back on commit. The worker path already
+    // folds geometry into its resourceClip; mirror that here.
+    const midiPreviewClip = (clip.trackType === 'midi' || clip.source?.type === 'midi')
+      ? {
+        ...clip,
+        startTime: geometry.startTime,
+        duration: geometry.duration,
+        inPoint: geometry.inPoint,
+        outPoint: geometry.outPoint,
+      }
+      : clip;
     drawTimelineClipCanvasMidiPreviewResource(
       ctx,
-      createTimelineClipCanvasWorkerMidiPreviewResource(clip, w, h, visibleStartRatio, visibleEndRatio),
+      createTimelineClipCanvasWorkerMidiPreviewResource(midiPreviewClip, w, h, visibleStartRatio, visibleEndRatio),
       x,
       top,
       w,

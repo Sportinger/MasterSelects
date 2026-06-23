@@ -123,6 +123,11 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
     const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
     const targetWidth = Math.round(cssWidth * dpr);
     const targetHeight = Math.round(height * dpr);
+    // Assigning canvas.width/height resets the bitmap to transparent. Deferring
+    // the repaint to rAF lets the browser composite that cleared canvas first,
+    // showing as clips blinking while dragging a track's height (most visible on
+    // Linux's software raster) — so a resize must repaint synchronously below.
+    const resizedBackingStore = canvas.width !== targetWidth || canvas.height !== targetHeight;
     if (canvas.width !== targetWidth) {
       canvas.width = targetWidth;
     }
@@ -142,9 +147,7 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
       canvas.style.height = cssHeightStyle;
     }
 
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null;
+    const paint = () => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const diagnostics = drawTimelineClipCanvasMainThread({
         ctx,
@@ -186,7 +189,23 @@ export function useTimelineClipCanvasMainThreadDraw(input: TimelineClipCanvasMai
               : workerEligibility.reasons
           : undefined,
       });
-    });
+    };
+
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (resizedBackingStore) {
+      // Repaint synchronously so the just-cleared backing store is never
+      // composited blank (the track-resize blink). Throttle everything else
+      // (scroll, data updates) through rAF as before.
+      paint();
+    } else {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        paint();
+      });
+    }
 
     return () => {
       if (rafRef.current !== null) {
