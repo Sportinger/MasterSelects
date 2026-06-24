@@ -84,6 +84,8 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   // Flipped true whenever a drag (create/move/resize) starts, so the document
   // listener effect re-runs to attach handlers regardless of which drag kind.
   const [dragActive, setDragActive] = useState(false);
+  // Pitch under the cursor, so the matching key on the keyboard lights up (#249).
+  const [hoverPitch, setHoverPitch] = useState<number | null>(null);
 
   // Two independent zoom axes (#249). Refs mirror the state so the native wheel
   // handler reads fresh values without re-attaching the listener on every zoom.
@@ -306,6 +308,14 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
     );
   }
 
+  // Track the pitch under the cursor so the matching key lights up. Only updates
+  // state when the row actually changes, to avoid a re-render on every pixel.
+  const updateHoverPitch = (e: React.MouseEvent) => {
+    const { y } = localPoint(e.clientX, e.clientY);
+    const pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, yToPitch(y, rowH)));
+    setHoverPitch((prev) => (prev === pitch ? prev : pitch));
+  };
+
   const startCreate = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const { x, y } = localPoint(e.clientX, e.clientY);
@@ -401,6 +411,8 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
             const mod = ((pitch % 12) + 12) % 12;
             // Seam between two adjacent white keys (below C and below F).
             const whiteSeam = !black && (mod === 0 || mod === 5);
+            // The key the cursor is currently over in the grid lights up (#249).
+            const hovered = pitch === hoverPitch;
             return (
               <div
                 key={pitch}
@@ -413,8 +425,11 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
                   // container's background so that tall composited fill is never
                   // exposed — exposing it produced a faint GPU-tiling shade seam
                   // on Mesa that rode along with the content.
-                  background: '#2b2b2b',
-                  borderBottom: whiteSeam ? '1px solid #161616' : 'none',
+                  // Only light the row fill for WHITE keys. For a black key the
+                  // row's right strip is the neighbouring white surface, so the
+                  // highlight belongs on the black-key overlay alone, not the row.
+                  background: hovered && !black ? '#48587a' : '#2b2b2b',
+                  borderBottom: whiteSeam ? '1px solid #000' : 'none',
                   color: '#9a9a9a',
                   fontSize: 8,
                   lineHeight: `${rowH}px`,
@@ -424,13 +439,32 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
                 }}
               >
                 {black && (
-                  <div style={{
-                    position: 'absolute', left: 0, top: 0, height: '100%', width: '62%',
-                    background: '#1a1a1a',
-                    borderRight: '1px solid #000',
-                    borderTopRightRadius: 2, borderBottomRightRadius: 2,
-                    boxSizing: 'border-box',
-                  }} />
+                  <>
+                    {/* Hover highlight bleeding into the white strip beside this
+                        black key. A black key's neighbours are always white: the
+                        white key ABOVE it (pitch+1) owns the strip's TOP half,
+                        the white key BELOW it (pitch-1) owns the BOTTOM half —
+                        split at the black key's middle seam. */}
+                    {hoverPitch === pitch + 1 && (
+                      <div style={{ position: 'absolute', left: '62%', right: 0, top: 0, height: rowH / 2, background: '#48587a' }} />
+                    )}
+                    {hoverPitch === pitch - 1 && (
+                      <div style={{ position: 'absolute', left: '62%', right: 0, top: rowH / 2, bottom: 0, background: '#48587a' }} />
+                    )}
+                    {/* White-key seam running through the middle of this black
+                        key — the boundary between the white keys above and below
+                        it. The black key (drawn next, on top) covers its left
+                        part, so the seam shows only in the white strip beside it,
+                        like a real keyboard. */}
+                    <div style={{ position: 'absolute', left: 0, top: rowH / 2, width: '100%', height: 1, background: '#000' }} />
+                    <div style={{
+                      position: 'absolute', left: 0, top: 0, height: '100%', width: '62%',
+                      background: hovered ? '#3a4866' : '#1a1a1a',
+                      borderRight: '1px solid #000',
+                      borderTopRightRadius: 2, borderBottomRightRadius: 2,
+                      boxSizing: 'border-box',
+                    }} />
+                  </>
                 )}
                 {mod === 0 ? pitchLabel(pitch) : ''}
               </div>
@@ -442,6 +476,8 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         <div
           ref={gridRef}
           onMouseDown={startCreate}
+          onMouseMove={updateHoverPitch}
+          onMouseLeave={() => setHoverPitch(null)}
           style={{ position: 'relative', width: contentWidth, height: gridH, flexShrink: 0, cursor: 'crosshair' }}
         >
           {/* Flat lane fill + sparse octave reference lines. We deliberately
