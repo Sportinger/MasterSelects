@@ -8,10 +8,14 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
+import { selectTempoMap } from '../../stores/timeline/selectors';
 import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
 import type { MidiNote } from '../../types/midiClip';
 import { computeGhostNotes } from './ghostNotes';
 import { PianoRollScrollbars, PIANO_ROLL_SCROLLBAR } from './PianoRollScrollbars';
+import { PianoRollRuler, PIANO_ROLL_RULER_H } from './PianoRollRuler';
+import { PianoRollGridLines } from './PianoRollGridLines';
+import { buildPianoRollGrid } from './pianoRollGrid';
 import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
 
 // Two independent zoom axes, like Cubase (#249): horizontal = time scale
@@ -78,6 +82,11 @@ interface PianoRollProps {
 export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
+  // The ruler track that slides under the viewport's horizontal scroll. Driven by
+  // an imperative translateX (never React state) so scrolling never re-renders the
+  // notes layer (#249 §6).
+  const rulerInnerRef = useRef<HTMLDivElement | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const pendingRef = useRef<PendingNote | null>(null);
   const [pendingNote, setPendingNote] = useState<PendingNote | null>(null);
@@ -108,6 +117,10 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   // is what we want — ghosts must track the other clips' notes live.
   const allClips = useTimelineStore((state) => state.clips);
   const playheadPosition = useTimelineStore((state) => state.playheadPosition);
+  // Same TempoMap the main timeline ruler reads, so bar numbers / timecodes in the
+  // piano-roll ruler are identical to the timeline at the same musical positions
+  // (#249). Stable identity unless the tempo/meter map actually changes.
+  const tempoMap = useTimelineStore(selectTempoMap);
   const addMidiNote = useTimelineStore((state) => state.addMidiNote);
   const updateMidiNote = useTimelineStore((state) => state.updateMidiNote);
   const removeMidiNote = useTimelineStore((state) => state.removeMidiNote);
@@ -118,6 +131,23 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   const contentWidth = clipDuration * pxPerSec;
   const gridH = PITCH_COUNT * rowH;
   const notes = clip?.midiData?.notes ?? [];
+
+  // Tempo-synced ruler ticks + gridlines, computed ONCE here and shared by the
+  // ruler and the gridlines so both use the identical absolute→pixel mapping and
+  // stay aligned by construction (#249). Keyed only on geometry/tempo — NOT on
+  // notes — so editing notes never recomputes the grid.
+  const clipStartTime = clip?.startTime ?? 0;
+  const pianoRollGrid = useMemo(
+    () => buildPianoRollGrid({
+      tempoMap,
+      clipStartTime,
+      clipDuration,
+      pxPerSec,
+      visibleStartPx: 0,
+      visibleWidthPx: contentWidth,
+    }),
+    [tempoMap, clipStartTime, clipDuration, pxPerSec, contentWidth],
+  );
 
   // Read-only ghosts: notes from other MIDI clips that overlap this clip's
   // window, in this clip's local time space (#232). Editing stays in each
@@ -142,6 +172,32 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
     if (pending.top !== null) el.scrollTop = Math.max(0, pending.top);
     pendingScrollRef.current = { left: null, top: null };
   }, [pxPerSec, rowH]);
+
+  // --- ruler scroll lock (#249 §6) -------------------------------------------
+  // Slide the ruler track to match the viewport's horizontal scroll with a pure
+  // imperative transform — no state, so scrolling never re-renders the heavy
+  // notes/keys subtree. The onScroll path keeps it aligned while scrolling; the
+  // layout effect re-aligns after any re-render (mount, zoom, content resize),
+  // including the programmatic scrollLeft the zoom-restore effect above sets.
+  const syncRulerScroll = useCallback(() => {
+    const el = scrollRef.current;
+    const inner = rulerInnerRef.current;
+    if (el && inner) inner.style.transform = `translateX(${-el.scrollLeft}px)`;
+  }, []);
+
+  useLayoutEffect(() => { syncRulerScroll(); });
+
+  const handleGridScroll = useCallback(() => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      syncRulerScroll();
+    });
+  }, [syncRulerScroll]);
+
+  useEffect(() => () => {
+    if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
+  }, []);
 
   // --- two-axis zoom (#249) ---------------------------------------------------
   // Shared by the Ctrl/Ctrl+Shift wheel gesture and the on-screen +/- buttons.
@@ -384,6 +440,32 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         )}
       </div>
 
+      {/* Ruler row (#249 Phase 2): Bars + Time lanes, locked to the grid's time
+          zoom and reading the shared TempoMap so labels match the main timeline.
+          Sits OUTSIDE the scroll viewport — a corner spacer covers the keyboard
+          column, and the ruler track is slid by the viewport's scrollLeft via an
+          imperative translateX (no React state; scrolling must not re-render the
+          notes). The track viewport clips ticks scrolled in behind the spacer. */}
+      <div style={{
+        display: 'flex', flexShrink: 0, height: PIANO_ROLL_RULER_H,
+        // Match the main timeline ruler background (--bg-tertiary, #1e1e1e dark).
+        background: '#1e1e1e', borderBottom: '1px solid #2a2a2a', overflow: 'hidden',
+      }}>
+        <div style={{ width: KEYBOARD_W, flexShrink: 0, background: '#1a1a1a', borderRight: '1px solid #000' }} />
+        <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+          <div
+            ref={rulerInnerRef}
+            style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: contentWidth, willChange: 'transform' }}
+          >
+            <PianoRollRuler
+              rulerTicks={pianoRollGrid.rulerTicks}
+              clipStartTime={clip.startTime}
+              pxPerSec={pxPerSec}
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Body: relative container holding the scroll viewport + our own bars
           (#249). The viewport keeps the native scroll engine (overflow:auto) but
           its native bars are hidden — see the <style> below and scrollbarWidth —
@@ -393,6 +475,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         <div
           ref={scrollRef}
           className="pr-grid-scroll"
+          onScroll={handleGridScroll}
           style={{
             position: 'absolute', top: 0, left: 0,
             right: PIANO_ROLL_SCROLLBAR, bottom: PIANO_ROLL_SCROLLBAR,
@@ -499,13 +582,15 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
             );
           })}
 
-          {/* Second grid lines */}
-          {Array.from({ length: Math.ceil(contentWidth / pxPerSec) + 1 }, (_, s) => (
-            <div
-              key={`s${s}`}
-              style={{ position: 'absolute', top: 0, left: s * pxPerSec, width: 1, height: gridH, background: 'rgba(255,255,255,0.07)' }}
-            />
-          ))}
+          {/* Tempo-synced bar / beat / sub gridlines (#249 Phase 3), positioned by
+              the same absolute→pixel mapping as the ruler so each line sits under
+              its ruler tick. Isolated, memoized child → unaffected by note edits. */}
+          <PianoRollGridLines
+            barLines={pianoRollGrid.barLines}
+            beatLines={pianoRollGrid.beatLines}
+            subLines={pianoRollGrid.subLines}
+            height={gridH}
+          />
 
           {/* Ghost notes from other overlapping MIDI clips — read-only (#232).
               Drawn before the real notes so editable notes always sit on top. */}
