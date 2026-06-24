@@ -389,20 +389,33 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
             display: 'flex', overflow: 'auto', scrollbarWidth: 'none',
           }}
         >
-        {/* Keyboard column (sticky left) */}
-        <div style={{ width: KEYBOARD_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: '#0a0a0a' }}>
+        {/* Keyboard column (sticky left) — FL-style piano keys (#249). The whole
+            strip is the white-key surface; black keys are narrower overlays on
+            the left so the white surface shows behind/beside them, and adjacent
+            white keys (B–C, E–F) get a seam like a real keyboard. Equal row
+            heights keep every key aligned to its note row in the grid. */}
+        <div style={{ width: KEYBOARD_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: '#2b2b2b', borderRight: '1px solid #000' }}>
           {Array.from({ length: PITCH_COUNT }, (_, i) => {
             const pitch = PITCH_MAX - i;
             const black = isBlackKey(pitch);
+            const mod = ((pitch % 12) + 12) % 12;
+            // Seam between two adjacent white keys (below C and below F).
+            const whiteSeam = !black && (mod === 0 || mod === 5);
             return (
               <div
                 key={pitch}
                 style={{
+                  position: 'relative',
                   height: rowH,
                   boxSizing: 'border-box',
-                  borderBottom: '1px solid #1c1c1c',
-                  background: black ? '#1a1a1a' : '#2b2b2b',
-                  color: black ? '#777' : '#bbb',
+                  // Each row carries its own opaque white-key fill. This is the
+                  // FL look, but crucially it also fully covers the sticky
+                  // container's background so that tall composited fill is never
+                  // exposed — exposing it produced a faint GPU-tiling shade seam
+                  // on Mesa that rode along with the content.
+                  background: '#2b2b2b',
+                  borderBottom: whiteSeam ? '1px solid #161616' : 'none',
+                  color: '#9a9a9a',
                   fontSize: 8,
                   lineHeight: `${rowH}px`,
                   textAlign: 'right',
@@ -410,7 +423,16 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
                   userSelect: 'none',
                 }}
               >
-                {pitch % 12 === 0 ? pitchLabel(pitch) : ''}
+                {black && (
+                  <div style={{
+                    position: 'absolute', left: 0, top: 0, height: '100%', width: '62%',
+                    background: '#1a1a1a',
+                    borderRight: '1px solid #000',
+                    borderTopRightRadius: 2, borderBottomRightRadius: 2,
+                    boxSizing: 'border-box',
+                  }} />
+                )}
+                {mod === 0 ? pitchLabel(pitch) : ''}
               </div>
             );
           })}
@@ -422,18 +444,21 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
           onMouseDown={startCreate}
           style={{ position: 'relative', width: contentWidth, height: gridH, flexShrink: 0, cursor: 'crosshair' }}
         >
-          {/* Row backgrounds */}
+          {/* Flat lane fill + sparse octave reference lines. We deliberately
+              avoid any repeating pattern here (neither a per-row div stack nor a
+              repeating-linear-gradient): on a tall composited layer the GPU
+              rasterizes in tiles and resets the gradient phase at tile edges,
+              which showed up as a single shade seam that moved on resize. A
+              solid fill can't seam, and fine per-semitone reference comes from
+              the keyboard strip; only the octave boundaries (each C) get a line. */}
+          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: gridH, background: '#181818' }} />
           {Array.from({ length: PITCH_COUNT }, (_, i) => {
             const pitch = PITCH_MAX - i;
+            if ((((pitch % 12) + 12) % 12) !== 0) return null; // octave boundary = top of each C
             return (
               <div
-                key={pitch}
-                style={{
-                  position: 'absolute', top: i * rowH, left: 0, width: '100%', height: rowH,
-                  background: isBlackKey(pitch) ? '#141414' : '#181818',
-                  borderBottom: '1px solid #1d1d1d',
-                  boxSizing: 'border-box',
-                }}
+                key={`oct-${pitch}`}
+                style={{ position: 'absolute', top: i * rowH, left: 0, width: '100%', height: 1, background: '#262626' }}
               />
             );
           })}
