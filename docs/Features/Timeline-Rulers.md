@@ -14,6 +14,22 @@ what actually shipped, followed by the original spec for reference.
 
 ---
 
+## Reused by the piano roll (issue #249)
+
+The piano-roll editor builds its own **Bars + Time ruler and tempo-synced grid**
+on this foundation. It reads the **same `TempoMap`** (`selectTempoMap`) and calls
+the **same pure tick generators** (`iterateBarBeatLines`, `createBarsLaneTicks`,
+`createLinearLaneTicks`, plus the shared `formatTimelineClock`), so bar numbers and
+timecodes are **identical to the timeline** at the same musical positions. It does
+**not** reuse `TimelineRuler.tsx` (coupled to cache ranges / video-bake regions /
+active-lane selection and has no left keyboard column) — only the generators. The
+adapter (`components/pianoRoll/pianoRollGrid.ts`) bridges the piano roll's
+clip-local x-axis to absolute musical time. The piano-roll ruler uses an
+independent horizontal zoom, so only spacing differs; the numbers match by
+construction. See `docs/completed/features/MIDI-Tracks-Plan.md`.
+
+---
+
 ## Goal
 
 Turn the single time ruler into a **stack of coexisting ruler lanes** (Time,

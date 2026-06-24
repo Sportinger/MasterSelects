@@ -1,7 +1,9 @@
 # Piano-Roll Rulers + Tempo-Synced Grid — Implementation Plan
 
 > Issue #249 · branch `249-enhance-pianoroll`
-> Status: **Phases 1–3 done** (adapter + ruler + tempo-synced grid, not committed). Phases 4–5 pending.
+> Status: **Implemented (Phases 1–5).** Phases 1–3 committed `24557670`; Phases 4–5
+> (scrubbing + docs) pending the next commit. Only future work: the `gridResolution`
+> UI control and snap-to-grid (both out of scope here).
 > Updated: 2026-06-24
 
 ## 1. Goal
@@ -232,8 +234,8 @@ next.
 | **1. Pure adapter** ✅ | Added `pianoRollGrid.ts` (`buildPianoRollGrid` + `gridResolution`); extracted shared `formatTimelineClock` into `timelineGrid.ts` and routed `useTimelineHelpers.formatTime` through it. No UI change. | `tests/unit/pianoRollGrid.test.ts` — 7 pinned tests (bar 4 @ abs 12s → 200px = 2·pxPerSec, label `"4"`, Time `"00:12.00"`; absolute-window gotcha; windowing; gridResolution=2 sub-lines; empty-window guard). `tsc -b` + lint + timelineGrid regression all green. |
 | **2. Ruler** ✅ | Added `PianoRollRuler.tsx` (Bars+Time lanes via the adapter + reused `.ruler-lane`/`.time-marker`/`.time-label` classes; `PIANO_ROLL_RULER_H=61`). Ruler row inserted between header and viewport: `KEYBOARD_W` corner spacer + clipped track; `rulerInnerRef` slid by an imperative `translateX(-scrollLeft)` from a rAF-batched `onScroll`, re-aligned by a no-dep `useLayoutEffect` (covers mount/zoom/resize). No top-level scroll state → notes never re-render on scroll. `tsc -b` + lint green. **Visual check pending** (open piano roll: lanes show, labels match timeline, scroll lockstep). |
 | **3. Grid** ✅ | Replaced the 1-second gridlines with `buildPianoRollGrid` bar/beat/sub tiers in new `PianoRollGridLines.tsx` (inline-styled, `memo`). Chose **§7 option (a)** full-width DOM lines (not the windowed (b)): they live inside the scrolling grid content so they scroll for free, the count is modest (one div/beat), and pure `<div>`s carry no Mesa risk — (b)'s scroll-state child wasn't worth the complexity at these clip sizes. Grid + ruler now share **one** `buildPianoRollGrid` call (memoized in `PianoRoll`, keyed on geometry/tempo not notes); the ruler became presentational (takes `rulerTicks`). | Lines sit exactly under ruler ticks (same absolute→pixel mapping). `tsc`+lint+tests green. **Visual check pending.** |
-| **4. Scrubbing** | Wire ruler click/drag → `setPlayheadPosition(absoluteTime)`. | Scrubbing moves the global playhead; cursor stays aligned. |
-| **5. Docs + checks** | Update `docs/Features/`; run full `build`/`lint`/`test` at the commit boundary. | Green chain; doc reflects shipped behavior. |
+| **4. Scrubbing** ✅ | `handleRulerMouseDown` on the ruler track: clip-local px = `(clientX - trackLeft) + scrollLeft` → `setPlayheadPosition(clamp(clipStartTime + localSeconds, clipStartTime, clipStartTime + clipDuration))`. Drag listeners on the ruler's `ownerDocument` (popup doc), like the note drag; `cursor: ew-resize`. | `tsc`+lint green. **Visual check pending** (scrub moves playhead; cursor stays under pointer). |
+| **5. Docs + checks** ✅ | Documented the feature in `docs/completed/features/MIDI-Tracks-Plan.md` (new #249 bullet + updated the "Note timing" grid note) and the shared-`TempoMap` dependency in `docs/Features/Timeline-Rulers.md` (new "Reused by the piano roll" section). This plan moved to `docs/completed/`. Full `build`/`lint`/`test` at the commit boundary. | Green chain; docs reflect shipped behavior. |
 
 > Out of scope (later): the `gridResolution` UI control (1/8, 1/16, triplets) and
 > snap-to-grid. The parameter and musical gridlines that make both easy land in

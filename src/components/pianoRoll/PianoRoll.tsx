@@ -86,6 +86,9 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   // an imperative translateX (never React state) so scrolling never re-renders the
   // notes layer (#249 §6).
   const rulerInnerRef = useRef<HTMLDivElement | null>(null);
+  // The clipped ruler-track viewport (its left edge = grid pixel 0 on screen),
+  // used to map a scrub's clientX back to clip-local pixels.
+  const rulerTrackRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const pendingRef = useRef<PendingNote | null>(null);
@@ -124,6 +127,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   const addMidiNote = useTimelineStore((state) => state.addMidiNote);
   const updateMidiNote = useTimelineStore((state) => state.updateMidiNote);
   const removeMidiNote = useTimelineStore((state) => state.removeMidiNote);
+  const setPlayheadPosition = useTimelineStore((state) => state.setPlayheadPosition);
 
   const clipDuration = clip?.duration ?? 0;
   // The piano roll is exactly the clip's real time span — no padding. Clip length
@@ -198,6 +202,38 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   useEffect(() => () => {
     if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
   }, []);
+
+  // --- ruler scrubbing (#249 Phase 4) ----------------------------------------
+  // Click/drag on the ruler moves the GLOBAL playhead. The ruler track's left
+  // edge sits at grid pixel 0 on screen, and the track content is slid by
+  // scrollLeft, so clip-local pixel = (clientX - trackLeft) + scrollLeft. That
+  // maps to absolute time as clipStartTime + localSeconds (the window's left edge
+  // is clipStartTime regardless of inPoint), clamped to the clip window.
+  const scrubToClientX = useCallback((clientX: number) => {
+    const track = rulerTrackRef.current;
+    const el = scrollRef.current;
+    if (!track || !el) return;
+    const localPx = clientX - track.getBoundingClientRect().left + el.scrollLeft;
+    const localSeconds = localPx / pxPerSec;
+    const absolute = clamp(clipStartTime + localSeconds, clipStartTime, clipStartTime + clipDuration);
+    setPlayheadPosition(absolute);
+  }, [clipStartTime, clipDuration, pxPerSec, setPlayheadPosition]);
+
+  const handleRulerMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    // Listen on the POPUP's document (the ruler's ownerDocument), not the opener's
+    // global `document`, so move/up fire inside the popup — matching the note drag.
+    const doc = rulerTrackRef.current?.ownerDocument ?? document;
+    scrubToClientX(e.clientX);
+    const onMove = (ev: MouseEvent) => scrubToClientX(ev.clientX);
+    const onUp = () => {
+      doc.removeEventListener('mousemove', onMove);
+      doc.removeEventListener('mouseup', onUp);
+    };
+    doc.addEventListener('mousemove', onMove);
+    doc.addEventListener('mouseup', onUp);
+  }, [scrubToClientX]);
 
   // --- two-axis zoom (#249) ---------------------------------------------------
   // Shared by the Ctrl/Ctrl+Shift wheel gesture and the on-screen +/- buttons.
@@ -452,7 +488,11 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         background: '#1e1e1e', borderBottom: '1px solid #2a2a2a', overflow: 'hidden',
       }}>
         <div style={{ width: KEYBOARD_W, flexShrink: 0, background: '#1a1a1a', borderRight: '1px solid #000' }} />
-        <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+        <div
+          ref={rulerTrackRef}
+          onMouseDown={handleRulerMouseDown}
+          style={{ position: 'relative', flex: 1, overflow: 'hidden', cursor: 'ew-resize' }}
+        >
           <div
             ref={rulerInnerRef}
             style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: contentWidth, willChange: 'transform' }}
