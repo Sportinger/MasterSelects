@@ -6,21 +6,37 @@
 // clip. Notes are drawn/moved/resized with free placement (no grid snapping)
 // and deleted via right-click. A live cursor mirrors the timeline playhead.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
 import type { MidiNote } from '../../types/midiClip';
 import { computeGhostNotes } from './ghostNotes';
+import { PianoRollScrollbars, PIANO_ROLL_SCROLLBAR } from './PianoRollScrollbars';
 import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
 
-const ROW_H = 16;          // px per pitch row
-const PX_PER_SEC = 120;    // horizontal zoom
+// Two independent zoom axes, like Cubase (#249): horizontal = time scale
+// (px per second), vertical = note-row height (px per pitch). Both live in
+// component state so Ctrl / Ctrl+Shift wheel zoom (and, later, the on-screen
+// zoom buttons) can drive them. The DEFAULT_* values are the historical fixed
+// scale; MIN/MAX keep the grid usable at the extremes.
+const DEFAULT_ROW_H = 16;          // px per pitch row
+const MIN_ROW_H = 5;
+const MAX_ROW_H = 48;
+const DEFAULT_PX_PER_SEC = 120;    // px per second (time scale)
+const MIN_PX_PER_SEC = 12;
+const MAX_PX_PER_SEC = 1200;
+const ZOOM_WHEEL_STEP = 1.15;      // multiplier per wheel notch
+const ZOOM_BUTTON_STEP = 1.4;      // multiplier per +/- button click
+
 const KEYBOARD_W = 48;     // px, left keyboard column
 const DEFAULT_CLICK_DURATION = 0.5; // seconds, note created by a plain click (no drag)
 const PITCH_MIN = 21;      // A0
 const PITCH_MAX = 108;     // C8
 const PITCH_COUNT = PITCH_MAX - PITCH_MIN + 1;
-const GRID_H = PITCH_COUNT * ROW_H;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
@@ -35,12 +51,12 @@ function pitchLabel(pitch: number): string {
   return `${name}${octave}`;
 }
 
-function pitchToY(pitch: number): number {
-  return (PITCH_MAX - pitch) * ROW_H;
+function pitchToY(pitch: number, rowH: number): number {
+  return (PITCH_MAX - pitch) * rowH;
 }
 
-function yToPitch(y: number): number {
-  return PITCH_MAX - Math.floor(y / ROW_H);
+function yToPitch(y: number, rowH: number): number {
+  return PITCH_MAX - Math.floor(y / rowH);
 }
 
 type DragState =
@@ -69,6 +85,19 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   // listener effect re-runs to attach handlers regardless of which drag kind.
   const [dragActive, setDragActive] = useState(false);
 
+  // Two independent zoom axes (#249). Refs mirror the state so the native wheel
+  // handler reads fresh values without re-attaching the listener on every zoom.
+  const [pxPerSec, setPxPerSec] = useState(DEFAULT_PX_PER_SEC);
+  const [rowH, setRowH] = useState(DEFAULT_ROW_H);
+  const pxPerSecRef = useRef(pxPerSec);
+  const rowHRef = useRef(rowH);
+  useEffect(() => { pxPerSecRef.current = pxPerSec; }, [pxPerSec]);
+  useEffect(() => { rowHRef.current = rowH; }, [rowH]);
+  // After a zoom changes the content size, restore the scroll offset that keeps
+  // the point under the cursor stationary. Applied in a layout effect because the
+  // grid's new width/height only exist once React has re-rendered.
+  const pendingScrollRef = useRef<{ left: number | null; top: number | null }>({ left: null, top: null });
+
   // Plain selectors (no useShallow): the clip object identity changes whenever
   // its notes change, so this re-renders on every edit; actions are stable refs.
   const clip = useTimelineStore((state) => state.clips.find((c) => c.id === clipId));
@@ -84,7 +113,8 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   const clipDuration = clip?.duration ?? 0;
   // The piano roll is exactly the clip's real time span — no padding. Clip length
   // rules the editor length (#232); resize the clip on the timeline for more room.
-  const contentWidth = clipDuration * PX_PER_SEC;
+  const contentWidth = clipDuration * pxPerSec;
+  const gridH = PITCH_COUNT * rowH;
   const notes = clip?.midiData?.notes ?? [];
 
   // Read-only ghosts: notes from other MIDI clips that overlap this clip's
@@ -98,8 +128,102 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   // Center the view near middle C on first mount so notes land in view.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = Math.max(0, pitchToY(72) - el.clientHeight / 2 + ROW_H);
+    if (el) el.scrollTop = Math.max(0, pitchToY(72, rowHRef.current) - el.clientHeight / 2 + rowHRef.current);
   }, []);
+
+  // Restore cursor-anchored scroll after a zoom resizes the grid content.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const pending = pendingScrollRef.current;
+    if (!el || (pending.left === null && pending.top === null)) return;
+    if (pending.left !== null) el.scrollLeft = Math.max(0, pending.left);
+    if (pending.top !== null) el.scrollTop = Math.max(0, pending.top);
+    pendingScrollRef.current = { left: null, top: null };
+  }, [pxPerSec, rowH]);
+
+  // --- two-axis zoom (#249) ---------------------------------------------------
+  // Shared by the Ctrl/Ctrl+Shift wheel gesture and the on-screen +/- buttons.
+  // Each keeps the point under its anchor (cursor for wheel, viewport center for
+  // buttons) stationary by stashing the corrected scroll offset for the layout
+  // effect above to apply once the grid has resized.
+
+  // Time (horizontal) zoom to newPx, anchored on the second under anchorClientX.
+  // The first KEYBOARD_W px of the scroll content is the sticky keyboard column.
+  const zoomTimeTo = useCallback((newPx: number, anchorClientX: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const clamped = clamp(newPx, MIN_PX_PER_SEC, MAX_PX_PER_SEC);
+    const oldPx = pxPerSecRef.current;
+    if (clamped === oldPx) return;
+    const rect = el.getBoundingClientRect();
+    const cursorX = anchorClientX - rect.left;
+    const time = Math.max(0, (cursorX + el.scrollLeft - KEYBOARD_W) / oldPx);
+    pendingScrollRef.current = { left: KEYBOARD_W + time * clamped - cursorX, top: null };
+    setPxPerSec(clamped);
+  }, []);
+
+  // Note-height (vertical) zoom to newRowH, anchored on the pitch under anchorClientY.
+  const zoomNotesTo = useCallback((newRowH: number, anchorClientY: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const clamped = clamp(newRowH, MIN_ROW_H, MAX_ROW_H);
+    const oldRowH = rowHRef.current;
+    if (clamped === oldRowH) return;
+    const rect = el.getBoundingClientRect();
+    const cursorY = anchorClientY - rect.top;
+    const frac = (cursorY + el.scrollTop) / oldRowH;
+    pendingScrollRef.current = { left: null, top: frac * clamped - cursorY };
+    setRowH(clamped);
+  }, []);
+
+  // Center-anchored zoom steps for the +/- buttons (dir: +1 in, -1 out).
+  const zoomTimeStep = useCallback((dir: 1 | -1) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const factor = dir > 0 ? ZOOM_BUTTON_STEP : 1 / ZOOM_BUTTON_STEP;
+    zoomTimeTo(pxPerSecRef.current * factor, el.getBoundingClientRect().left + el.clientWidth / 2);
+  }, [zoomTimeTo]);
+
+  const zoomNotesStep = useCallback((dir: 1 | -1) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const factor = dir > 0 ? ZOOM_BUTTON_STEP : 1 / ZOOM_BUTTON_STEP;
+    zoomNotesTo(rowHRef.current * factor, el.getBoundingClientRect().top + el.clientHeight / 2);
+  }, [zoomNotesTo]);
+
+  // Ctrl+wheel = time zoom; Ctrl+Shift+wheel = note-height zoom, both pointer-
+  // anchored. The native, non-passive listener is mandatory: it preventDefaults
+  // the gesture so the browser never page-zooms the popup (the app's usePageZoom
+  // guard lives in the main window and never runs in this detached document).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const doc = el.ownerDocument;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 1 / ZOOM_WHEEL_STEP : ZOOM_WHEEL_STEP;
+      if (e.shiftKey) {
+        zoomNotesTo(rowHRef.current * factor, e.clientY);
+      } else {
+        zoomTimeTo(pxPerSecRef.current * factor, e.clientX);
+      }
+    };
+
+    // Block the browser's Ctrl+wheel zoom over the popup chrome outside the
+    // scroll area too (e.g. the header), mirroring usePageZoom's intent.
+    const handleDocWheel = (e: WheelEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !el.contains(e.target as Node)) e.preventDefault();
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    doc.addEventListener('wheel', handleDocWheel, { passive: false, capture: true });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      doc.removeEventListener('wheel', handleDocWheel, { capture: true } as EventListenerOptions);
+    };
+  }, [zoomTimeTo, zoomNotesTo]);
 
   // --- coordinate helpers (relative to the scrollable grid content) ----------
   const localPoint = useCallback((clientX: number, clientY: number) => {
@@ -120,7 +244,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
       // Map the cursor's screen offset to CONTENT time through the clip window
       // (#232), so note times stay anchored to the content, not the window edge.
       const liveInPoint = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.inPoint ?? 0;
-      const time = Math.max(0, clipLocalToContentTime({ inPoint: liveInPoint }, x / PX_PER_SEC));
+      const time = Math.max(0, clipLocalToContentTime({ inPoint: liveInPoint }, x / pxPerSecRef.current));
 
       if (drag.kind === 'create') {
         const next = { pitch: drag.pitch, start: drag.startTime, duration: Math.max(0.02, time - drag.startTime) };
@@ -130,7 +254,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
       }
       if (drag.kind === 'move') {
         const newStart = Math.max(0, time - drag.grabOffsetTime);
-        const newPitch = yToPitch(y);
+        const newPitch = yToPitch(y, rowHRef.current);
         updateMidiNote(clipId, drag.noteId, { start: newStart, pitch: newPitch }, { captureHistory: false });
         return;
       }
@@ -185,8 +309,8 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   const startCreate = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const { x, y } = localPoint(e.clientX, e.clientY);
-    const pitch = yToPitch(y);
-    const startTime = Math.max(0, clipLocalToContentTime(clip, x / PX_PER_SEC));
+    const pitch = yToPitch(y, rowH);
+    const startTime = Math.max(0, clipLocalToContentTime(clip, x / pxPerSec));
     // Audible feedback for the note being drawn (issue #182, Phase 4) — routed
     // through the track's synth bus so preview respects its volume/pan.
     const track = useTimelineStore.getState().tracks.find((t) => t.id === clip?.trackId);
@@ -206,7 +330,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
     const track = useTimelineStore.getState().tracks.find((t) => t.id === clip?.trackId);
     previewMidiNote(track?.midiInstrument, note.pitch, note.velocity, clip?.trackId);
     const { x } = localPoint(e.clientX, e.clientY);
-    const grabTime = clipLocalToContentTime(clip, x / PX_PER_SEC);
+    const grabTime = clipLocalToContentTime(clip, x / pxPerSec);
     dragRef.current = { kind: 'move', noteId: note.id, grabOffsetTime: grabTime - note.start };
     setDragActive(true);
     e.preventDefault();
@@ -250,8 +374,21 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         )}
       </div>
 
-      {/* Body: keyboard + scrollable grid */}
-      <div ref={scrollRef} style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'auto' }}>
+      {/* Body: relative container holding the scroll viewport + our own bars
+          (#249). The viewport keeps the native scroll engine (overflow:auto) but
+          its native bars are hidden — see the <style> below and scrollbarWidth —
+          and is inset to leave room for the custom bars along the bottom/right. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <style>{'.pr-grid-scroll::-webkit-scrollbar{display:none}'}</style>
+        <div
+          ref={scrollRef}
+          className="pr-grid-scroll"
+          style={{
+            position: 'absolute', top: 0, left: 0,
+            right: PIANO_ROLL_SCROLLBAR, bottom: PIANO_ROLL_SCROLLBAR,
+            display: 'flex', overflow: 'auto', scrollbarWidth: 'none',
+          }}
+        >
         {/* Keyboard column (sticky left) */}
         <div style={{ width: KEYBOARD_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: '#0a0a0a' }}>
           {Array.from({ length: PITCH_COUNT }, (_, i) => {
@@ -261,13 +398,13 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
               <div
                 key={pitch}
                 style={{
-                  height: ROW_H,
+                  height: rowH,
                   boxSizing: 'border-box',
                   borderBottom: '1px solid #1c1c1c',
                   background: black ? '#1a1a1a' : '#2b2b2b',
                   color: black ? '#777' : '#bbb',
                   fontSize: 8,
-                  lineHeight: `${ROW_H}px`,
+                  lineHeight: `${rowH}px`,
                   textAlign: 'right',
                   paddingRight: 4,
                   userSelect: 'none',
@@ -283,7 +420,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         <div
           ref={gridRef}
           onMouseDown={startCreate}
-          style={{ position: 'relative', width: contentWidth, height: GRID_H, flexShrink: 0, cursor: 'crosshair' }}
+          style={{ position: 'relative', width: contentWidth, height: gridH, flexShrink: 0, cursor: 'crosshair' }}
         >
           {/* Row backgrounds */}
           {Array.from({ length: PITCH_COUNT }, (_, i) => {
@@ -292,7 +429,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
               <div
                 key={pitch}
                 style={{
-                  position: 'absolute', top: i * ROW_H, left: 0, width: '100%', height: ROW_H,
+                  position: 'absolute', top: i * rowH, left: 0, width: '100%', height: rowH,
                   background: isBlackKey(pitch) ? '#141414' : '#181818',
                   borderBottom: '1px solid #1d1d1d',
                   boxSizing: 'border-box',
@@ -302,10 +439,10 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
           })}
 
           {/* Second grid lines */}
-          {Array.from({ length: Math.ceil(contentWidth / PX_PER_SEC) + 1 }, (_, s) => (
+          {Array.from({ length: Math.ceil(contentWidth / pxPerSec) + 1 }, (_, s) => (
             <div
               key={`s${s}`}
-              style={{ position: 'absolute', top: 0, left: s * PX_PER_SEC, width: 1, height: GRID_H, background: 'rgba(255,255,255,0.07)' }}
+              style={{ position: 'absolute', top: 0, left: s * pxPerSec, width: 1, height: gridH, background: 'rgba(255,255,255,0.07)' }}
             />
           ))}
 
@@ -317,10 +454,10 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
               title={`${pitchLabel(ghost.pitch)} · (other clip)`}
               style={{
                 position: 'absolute',
-                left: ghost.start * PX_PER_SEC,
-                top: pitchToY(ghost.pitch),
-                width: Math.max(2, ghost.duration * PX_PER_SEC),
-                height: ROW_H - 1,
+                left: ghost.start * pxPerSec,
+                top: pitchToY(ghost.pitch, rowH),
+                width: Math.max(2, ghost.duration * pxPerSec),
+                height: rowH - 1,
                 background: 'rgba(150,150,150,0.18)',
                 border: '1px solid rgba(170,170,170,0.35)',
                 borderRadius: 2,
@@ -333,9 +470,9 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
           {/* Notes — only those whose start is inside the clip window are shown
               and editable; notes outside it are preserved but hidden (#232). */}
           {notes.filter((note) => isNoteStartInWindow(clip, note)).map((note) => {
-            const left = contentTimeToClipLocal(clip, note.start) * PX_PER_SEC;
-            const width = Math.max(2, note.duration * PX_PER_SEC);
-            const top = pitchToY(note.pitch);
+            const left = contentTimeToClipLocal(clip, note.start) * pxPerSec;
+            const width = Math.max(2, note.duration * pxPerSec);
+            const top = pitchToY(note.pitch, rowH);
             return (
               <div
                 key={note.id}
@@ -343,7 +480,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
                 onContextMenu={(e) => deleteNote(e, note)}
                 title={`${pitchLabel(note.pitch)} · ${note.duration.toFixed(2)}s`}
                 style={{
-                  position: 'absolute', left, top, width, height: ROW_H - 1,
+                  position: 'absolute', left, top, width, height: rowH - 1,
                   background: `rgba(120,170,255,${0.45 + note.velocity * 0.5})`,
                   border: '1px solid rgba(180,210,255,0.9)',
                   borderRadius: 2, boxSizing: 'border-box', cursor: 'grab',
@@ -361,8 +498,8 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
           {pendingNote && (
             <div
               style={{
-                position: 'absolute', left: contentTimeToClipLocal(clip, pendingNote.start) * PX_PER_SEC, top: pitchToY(pendingNote.pitch),
-                width: Math.max(2, pendingNote.duration * PX_PER_SEC), height: ROW_H - 1,
+                position: 'absolute', left: contentTimeToClipLocal(clip, pendingNote.start) * pxPerSec, top: pitchToY(pendingNote.pitch, rowH),
+                width: Math.max(2, pendingNote.duration * pxPerSec), height: rowH - 1,
                 background: 'rgba(120,170,255,0.5)', border: '1px solid rgba(180,210,255,0.9)',
                 borderRadius: 2, boxSizing: 'border-box', pointerEvents: 'none',
               }}
@@ -371,9 +508,18 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
 
           {/* Live playhead cursor */}
           {showPlayhead && (
-            <div style={{ position: 'absolute', top: 0, left: clipLocalPlayhead * PX_PER_SEC, width: 2, height: GRID_H, background: '#ff5252', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', top: 0, left: clipLocalPlayhead * pxPerSec, width: 2, height: gridH, background: '#ff5252', pointerEvents: 'none' }} />
           )}
         </div>
+        </div>
+
+        <PianoRollScrollbars
+          scrollRef={scrollRef}
+          contentWidth={KEYBOARD_W + contentWidth}
+          contentHeight={gridH}
+          onZoomTime={zoomTimeStep}
+          onZoomNotes={zoomNotesStep}
+        />
       </div>
     </div>
   );
