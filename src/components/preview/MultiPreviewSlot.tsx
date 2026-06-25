@@ -1,9 +1,10 @@
 // Individual preview slot for the Multi Preview panel
 // Stripped-down canvas that renders a single composition independently
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useEngine } from '../../hooks/useEngine';
 import { useMediaStore } from '../../stores/mediaStore';
+import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { renderScheduler } from '../../services/renderScheduler';
@@ -31,6 +32,8 @@ export function MultiPreviewSlot({
 }: MultiPreviewSlotProps) {
   const { isEngineReady } = useEngine();
   const compositions = useMediaStore((s) => s.compositions);
+  const visibleCompositions = useMemo(() => compositions.filter(isUserVisibleComposition), [compositions]);
+  const visibleCompositionIds = useMemo(() => new Set(visibleCompositions.map((composition) => composition.id)), [visibleCompositions]);
   const activeCompositionId = useMediaStore((s) => s.activeCompositionId);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -43,7 +46,10 @@ export function MultiPreviewSlot({
   const targetId = `mp-${panelId}-slot-${slotIndex}`;
 
   // Determine which composition to display
-  const displayedCompId = compositionId ?? activeCompositionId;
+  const explicitDisplayedComp = compositionId
+    ? visibleCompositions.find((c) => c.id === compositionId)
+    : null;
+  const displayedCompId = explicitDisplayedComp?.id ?? activeCompositionId;
   const displayedComp = compositions.find((c) => c.id === displayedCompId);
   const autoSourceCompositionId = autoSource?.compositionId;
   const autoSourceLayerIndex = autoSource?.layerIndex;
@@ -57,9 +63,15 @@ export function MultiPreviewSlot({
     if (!isEngineReady || !canvasRef.current) return;
 
     // Determine source: auto mode (layer-index) vs custom mode (composition/activeComp)
-    const source = autoSourceCompositionId !== undefined && autoSourceLayerIndex !== undefined
+    const autoSourceVisible = autoSourceCompositionId
+      ? visibleCompositionIds.has(autoSourceCompositionId)
+      : false;
+    const customCompositionVisible = compositionId
+      ? visibleCompositionIds.has(compositionId)
+      : false;
+    const source = autoSourceVisible && autoSourceCompositionId !== undefined && autoSourceLayerIndex !== undefined
       ? { type: 'layer-index' as const, compositionId: autoSourceCompositionId, layerIndex: autoSourceLayerIndex }
-      : compositionId
+      : compositionId && customCompositionVisible
         ? { type: 'composition' as const, compositionId }
         : { type: 'activeComp' as const };
 
@@ -92,7 +104,7 @@ export function MultiPreviewSlot({
       useRenderTargetStore.getState().unregisterTarget(targetId);
       renderHostPort.unregisterTargetCanvas(targetId);
     };
-  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSourceCompositionId, autoSourceLayerIndex]);
+  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSourceCompositionId, autoSourceLayerIndex, visibleCompositionIds]);
 
   // Sync transparency grid flag without full re-registration
   useEffect(() => {
@@ -182,7 +194,7 @@ export function MultiPreviewSlot({
                 Active Composition
               </button>
               <div className="preview-comp-separator" />
-              {compositions.map((comp) => (
+              {visibleCompositions.map((comp) => (
                 <button
                   key={comp.id}
                   className={`preview-comp-option ${compositionId === comp.id ? 'active' : ''}`}

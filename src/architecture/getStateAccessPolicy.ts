@@ -44,7 +44,6 @@ export const classCHardTargets = [
   { path: 'src/components/outputManager/SliceOutputOverlay.tsx', maxCurrentHits: 1 },
   { path: 'src/components/outputManager/TargetList.tsx', maxCurrentHits: 2 },
   { path: 'src/components/outputManager/TargetPreview.tsx', maxCurrentHits: 5 },
-  // Packet 279: 30 -> 6+10+3+10+1 (mixer strip/fx modules), total conserved.
   { path: 'src/components/panels/audio-mixer/AudioMixerPanel.tsx', maxCurrentHits: 6 },
   { path: 'src/components/panels/audio-mixer/TrackMixerStrip.tsx', maxCurrentHits: 10 },
   { path: 'src/components/panels/audio-mixer/MasterMixerStrip.tsx', maxCurrentHits: 3 },
@@ -65,7 +64,6 @@ export const classCHardTargets = [
   { path: 'src/components/panels/properties/GaussianSplatTab.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/index.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/LottieTab.tsx', maxCurrentHits: 2 },
-  // Packet 287: 6 -> 1+1+1+1+2 (masksTab modules), total conserved.
   { path: 'src/components/panels/properties/MasksTab.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/masksTab/MaskItem.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/masksTab/MaskPathKeyframeToggle.tsx', maxCurrentHits: 1 },
@@ -77,7 +75,6 @@ export const classCHardTargets = [
   { path: 'src/components/panels/properties/TranscriptTab.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/TransformTab.tsx', maxCurrentHits: 2 },
   { path: 'src/components/panels/properties/VolumeTab.tsx', maxCurrentHits: 2 },
-  // Packet 259: 32 -> 28 + 4 (MatAnyone file helpers), total conserved.
   { path: 'src/components/panels/SAM2Panel.tsx', maxCurrentHits: 28 },
   { path: 'src/components/panels/sam2/MatAnyoneFileHelpers.ts', maxCurrentHits: 4 },
   { path: 'src/components/panels/TextTab.tsx', maxCurrentHits: 2 },
@@ -85,8 +82,6 @@ export const classCHardTargets = [
   { path: 'src/components/pianoRoll/PianoRollBoot.ts', maxCurrentHits: 1 },
   { path: 'src/components/preview/MaskOverlay.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/MultiPreviewSlot.tsx', maxCurrentHits: 4 },
-  // Preview trail: 27 ->23(188) ->20+3(191) ->17+3+2(209, one retired)
-  // ->1+16 camera hooks (227). Cluster total 22.
   { path: 'src/components/preview/Preview.tsx', maxCurrentHits: 1 },
   { path: 'src/components/preview/usePreviewEditCameraController.ts', maxCurrentHits: 8 },
   { path: 'src/components/preview/usePreviewSceneCameraActions.ts', maxCurrentHits: 7 },
@@ -101,6 +96,7 @@ export const classCHardTargets = [
   { path: 'src/components/preview/useMaskEdgeDrag.ts', maxCurrentHits: 3 },
   { path: 'src/components/preview/useMaskVertexDrag.ts', maxCurrentHits: 6 },
   { path: 'src/components/timeline/components/SlotGridTimeOverlay.tsx', maxCurrentHits: 3 },
+  { path: 'src/components/timeline/components/TransitionOverlays.tsx', maxCurrentHits: 2 },
   { path: 'src/components/timeline/components/TimelineHeaderAudioControls.tsx', maxCurrentHits: 12 },
   { path: 'src/components/timeline/components/TimelineHeaderAudioSends.tsx', maxCurrentHits: 6 },
   { path: 'src/components/timeline/components/TimelineHeaderPropertyLabels.tsx', maxCurrentHits: 1 },
@@ -134,9 +130,12 @@ export const classCHardTargets = [
   { path: 'src/components/timeline/utils/layerSyncProxyFrames.ts', maxCurrentHits: 2 },
   { path: 'src/engine/audio/AudioExportPipeline.ts', maxCurrentHits: 3 },
   { path: 'src/engine/export/ClipPreparation.ts', maxCurrentHits: 2 },
+  { path: 'src/engine/export/ExportLayerBuilder.ts', maxCurrentHits: 1 },
+  { path: 'src/engine/export/prepareTransitionCompositionsForExport.ts', maxCurrentHits: 2 },
   // Packet 291: 7 -> 0 entry + 1+4+1 modules (one site retired via shared
   // lookup; maxHits ratchets 658 -> 657).
   { path: 'src/engine/export/layerBuilder/baseLayers.ts', maxCurrentHits: 1 },
+  { path: 'src/engine/export/layerBuilder/nestedLayers.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/layerBuilder/sourceLookup.ts', maxCurrentHits: 4 },
   { path: 'src/engine/export/layerBuilder/textLayers.ts', maxCurrentHits: 1 },
   { path: 'src/engine/export/ExportMaskTextures.ts', maxCurrentHits: 1 },
@@ -265,6 +264,7 @@ export const classCHardTargets = [
   { path: 'src/stores/timeline/clip/videoThumbnailLoader.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/clipboardSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/constants.ts', maxCurrentHits: 2 },
+  { path: 'src/stores/timeline/editOperations/transitionCompositionMaintenance.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/keyframes/vectorAnimationKeyframeValues.ts', maxCurrentHits: 3 },
   { path: 'src/stores/timeline/mathSceneClipSlice.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/meshClipSlice.ts', maxCurrentHits: 1 },
@@ -290,10 +290,10 @@ export const getStateAccessPolicyBaselines = {
   // only (669 -> 665 via the packet-188 Preview ceiling cut).
   // fileCount log (totals conserved per split redistribution):
   // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
-  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3).
-  classCHardTargetFileCount: 231,
+  // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps).
+  classCHardTargetFileCount: 236,
   // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit)
   // -> 659 (packet 231 retired the dispatcher ceiling slack: 16 -> 11 actual)
   // -> 658 (packet 237 retired one compositionRenderer hit).
-  classCHardTargetMaxHits: 657,
+  classCHardTargetMaxHits: 664,
 } as const;

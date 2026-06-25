@@ -2,6 +2,7 @@ import type { Layer, LayerSource, NestedCompositionData } from '../../types/laye
 import type { SerializableClip, TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
 import { isVectorAnimationSourceType, type VectorAnimationClipSettings } from '../../types/vectorAnimation';
+import type { Composition } from '../../stores/mediaStore/types';
 import { calculateSourceTime } from '../../utils/speedIntegration';
 import { getEffectiveScale } from '../../utils/transformScale';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
@@ -23,13 +24,68 @@ import type {
   CompositionSources,
   EvaluatedLayer,
 } from './sourceTypes';
+import { buildCompositionTransitionLayersForTrack } from './transitionEvaluation';
 
 type VectorSettingsReader = (clipId: string, localTime: number) => VectorAnimationClipSettings | undefined;
 type ClipKeyframesReader = (clipId: string) => readonly Keyframe[] | undefined;
 
+export interface BackgroundVideoPlaybackOptions {
+  isPlaying?: boolean;
+  playbackRate?: number;
+  continuousPlayback?: boolean;
+}
+
+const PAUSED_BACKGROUND_VIDEO_SEEK_THRESHOLD = 0.05;
+const PLAYING_BACKGROUND_VIDEO_START_DRIFT_THRESHOLD = 0.12;
+const PLAYING_BACKGROUND_VIDEO_DRIFT_THRESHOLD = 0.35;
+
+function getSafeVideoTime(video: HTMLVideoElement, time: number): number {
+  const duration = video.duration;
+  if (!Number.isFinite(duration) || duration <= 0) return Math.max(0, time);
+  return Math.max(0, Math.min(time, duration - 0.001));
+}
+
+function syncBackgroundVideoElement(
+  video: HTMLVideoElement,
+  clipTime: number,
+  options: BackgroundVideoPlaybackOptions | undefined,
+): void {
+  const playbackRate = options?.playbackRate ?? 1;
+  const canPlayContinuously =
+    options?.isPlaying === true &&
+    options.continuousPlayback !== false &&
+    playbackRate > 0;
+  const drift = Math.abs(video.currentTime - clipTime);
+
+  if (!canPlayContinuously) {
+    if (!video.paused) video.pause();
+    if (!video.seeking && drift > PAUSED_BACKGROUND_VIDEO_SEEK_THRESHOLD) {
+      video.currentTime = getSafeVideoTime(video, clipTime);
+    }
+    return;
+  }
+
+  const driftThreshold = video.paused
+    ? PLAYING_BACKGROUND_VIDEO_START_DRIFT_THRESHOLD
+    : PLAYING_BACKGROUND_VIDEO_DRIFT_THRESHOLD;
+  if (!video.seeking && drift > driftThreshold) {
+    video.currentTime = getSafeVideoTime(video, clipTime);
+  }
+
+  const safePlaybackRate = Math.min(16, Math.max(0.0625, playbackRate));
+  if (Math.abs(video.playbackRate - safePlaybackRate) > 0.001) {
+    video.playbackRate = safePlaybackRate;
+  }
+  if (!video.muted) video.muted = true;
+  if (video.paused) {
+    void video.play().catch(() => {});
+  }
+}
+
 export function buildBackgroundVideoLayerSource(
   entry: CompositionClipSourceEntry,
-  clipTime: number
+  clipTime: number,
+  options?: BackgroundVideoPlaybackOptions,
 ): LayerSource {
   const baseSource = getBaseLayerSource(entry);
   const binding = updateRuntimePlaybackTime(baseSource, clipTime, 'background');
@@ -40,14 +96,15 @@ export function buildBackgroundVideoLayerSource(
 
   if (
     entry.videoElement &&
-    !isRuntimeFullWebCodecs &&
-    Math.abs(entry.videoElement.currentTime - clipTime) > 0.05
+    !isRuntimeFullWebCodecs
   ) {
-    entry.videoElement.currentTime = clipTime;
+    syncBackgroundVideoElement(entry.videoElement, clipTime, options);
   }
 
   return {
     ...baseSource,
+    mediaTime: clipTime,
+    targetMediaTime: clipTime,
     webCodecsPlayer: runtimeProvider ?? baseSource.webCodecsPlayer,
   };
 }
@@ -61,8 +118,19 @@ export function buildEvaluatedClipLayer(params: {
   getVectorAnimationSettings: VectorSettingsReader;
   getClipKeyframes?: ClipKeyframesReader;
   opacityOverride?: number;
+  playbackOptions?: BackgroundVideoPlaybackOptions;
 }): EvaluatedLayer {
-  const { compositionId, time, clipAtTime, source, isActiveComposition, getVectorAnimationSettings, getClipKeyframes, opacityOverride } = params;
+  const {
+    compositionId,
+    time,
+    clipAtTime,
+    source,
+    isActiveComposition,
+    getVectorAnimationSettings,
+    getClipKeyframes,
+    opacityOverride,
+    playbackOptions,
+  } = params;
   const timelineClip = clipAtTime as TimelineClip;
   const timelineLocalTime = time - clipAtTime.startTime;
   const sourceOverride = timelineClip.transitionSourceTimeOverride;
@@ -94,7 +162,11 @@ export function buildEvaluatedClipLayer(params: {
 
   let layerSource: EvaluatedLayer['source'] = null;
   if (source.videoElement) {
-    layerSource = buildBackgroundVideoLayerSource(source, clipTime);
+    layerSource = buildBackgroundVideoLayerSource(source, clipTime, {
+      ...playbackOptions,
+      playbackRate: Math.abs(defaultSpeed),
+      continuousPlayback: !timelineClip.transitionSourceHold && defaultSpeed > 0,
+    });
   } else if (source.imageElement) {
     layerSource = getBaseLayerSource(source);
   } else if (isVectorAnimationSourceType(source.type)) {
@@ -140,6 +212,7 @@ export function buildEvaluatedClipLayer(params: {
     rotation: typeof transform.rotation === 'number'
       ? transform.rotation
       : transform.rotation?.z || 0,
+    sourceRect: clipAtTime.sourceRect ? { ...clipAtTime.sourceRect } : undefined,
     ...(masks?.some((mask) => mask.enabled !== false) ? { maskClipId: clipAtTime.id, maskInvert: false, masks } : {}),
   };
 }
@@ -153,6 +226,15 @@ export function evaluateNestedComposition(params: {
   mediaFiles: CompositionMediaFile[];
   proxyEnabled: boolean;
   getVectorAnimationSettings: VectorSettingsReader;
+  playbackOptions?: BackgroundVideoPlaybackOptions;
+  getComposition: (compositionId: string) => Composition | null | undefined;
+  isCompositionReady: (compositionId: string) => boolean;
+  prepareComposition: (compositionId: string) => void;
+  evaluateCompositionAtTime: (
+    compositionId: string,
+    time: number,
+    options?: { playbackOptions?: BackgroundVideoPlaybackOptions },
+  ) => Layer[];
 }): EvaluatedLayer | null {
   const {
     clip,
@@ -163,6 +245,11 @@ export function evaluateNestedComposition(params: {
     mediaFiles,
     proxyEnabled,
     getVectorAnimationSettings,
+    playbackOptions,
+    getComposition,
+    isCompositionReady,
+    prepareComposition,
+    evaluateCompositionAtTime,
   } = params;
 
   if (!clip.nestedClips || !clip.nestedTracks) {
@@ -179,6 +266,29 @@ export function evaluateNestedComposition(params: {
 
   for (let i = nestedVideoTracks.length - 1; i >= 0; i--) {
     const nestedTrack = nestedVideoTracks[i];
+    const transitionLayers = buildCompositionTransitionLayersForTrack({
+      compositionId: clip.compositionId || clip.id,
+      time: nestedTime,
+      track: nestedTrack,
+      trackIndex: i,
+      clips: clip.nestedClips,
+      sources,
+      mediaFiles,
+      width: compWidth,
+      height: compHeight,
+      isActiveComposition: false,
+      getVectorAnimationSettings,
+      playbackOptions,
+      getComposition,
+      isCompositionReady,
+      prepareComposition,
+      evaluateCompositionAtTime,
+    });
+    if (transitionLayers) {
+      nestedLayers.push(...transitionLayers);
+      continue;
+    }
+
     const nestedClip = clip.nestedClips.find(
       nc =>
         nc.trackId === nestedTrack.id &&
@@ -273,7 +383,15 @@ export function evaluateNestedComposition(params: {
               nestedClip.source
             ),
           },
-          nestedClipTime
+          nestedClipTime,
+          {
+            ...playbackOptions,
+            playbackRate: Math.abs(nestedClip.speed ?? (nestedClip.reversed ? -1 : 1)),
+            continuousPlayback:
+              playbackOptions?.continuousPlayback === true &&
+              !nestedClip.reversed &&
+              (nestedClip.speed ?? 1) > 0,
+          }
         ),
       } as Layer);
     } else if (nestedClip.source?.type === 'image') {

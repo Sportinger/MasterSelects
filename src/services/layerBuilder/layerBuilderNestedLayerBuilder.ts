@@ -2,20 +2,11 @@ import type { BlendMode, Layer, NestedCompositionData, TimelineClip } from '../.
 import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { Logger } from '../logger';
 import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
-import {
-  buildNestedImageSourceLayer,
-  buildNestedProxyImageSourceLayer,
-  getLayerBuilderRenderableImageElement,
-} from './layerBuilder2dSources';
+import { buildNestedImageSourceLayer, buildNestedProxyImageSourceLayer, getLayerBuilderRenderableImageElement } from './layerBuilder2dSources';
 import { buildNestedLayerBuilder3dSourceLayer } from './layerBuilder3dLayers';
 import { buildNestedLayerBuilderCanvasBackedSourceLayer } from './layerBuilderCanvasSources';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
-import {
-  buildNestedCompositionSourceLayer,
-  buildNestedLayerBase,
-  buildNestedMotionSourceLayer,
-  getNestedClipSourceTime,
-} from './layerBuilderNestedLayers';
+import { buildNestedCompositionSourceLayer, buildNestedLayerBase, buildNestedMotionSourceLayer, getNestedClipSourceTime } from './layerBuilderNestedLayers';
 import { addLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
 import {
   getLayerBuilderVideoSourceDebugInfo,
@@ -24,6 +15,7 @@ import {
 } from './layerBuilderVideoSources';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
+import { buildLayerBuilderNestedTransitionLayer } from './layerBuilderNestedTransitionLayer';
 
 const log = Logger.create('LayerBuilderNestedLayers');
 
@@ -131,7 +123,7 @@ function buildNestedClipLayer(
 }
 
 export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): Layer[] {
-  const { clip, clipTime, depth = 0 } = params;
+  const { clip, clipTime, ctx, depth = 0 } = params;
   if (!clip.nestedClips || !clip.nestedTracks) return [];
   if (depth >= MAX_NESTING_DEPTH) return [];
 
@@ -140,6 +132,18 @@ export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): 
 
   for (let i = 0; i < nestedVideoTracks.length; i++) {
     const nestedTrack = nestedVideoTracks[i];
+    const transitionLayer = buildLayerBuilderNestedTransitionLayer({
+      parentClip: clip,
+      nestedTrack,
+      layerIndex: i,
+      clipTime,
+      ctx,
+    });
+    if (transitionLayer) {
+      layers.push(transitionLayer);
+      continue;
+    }
+
     const nestedClip = clip.nestedClips.find(
       nc =>
         nc.trackId === nestedTrack.id &&
@@ -223,6 +227,6 @@ export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerPar
     rotation: transform.rotation,
   };
 
-  addLayerBuilderMaskProperties(layer, clip);
+  addLayerBuilderMaskProperties(layer, clip, timeInfo.clipTime);
   return layer;
 }

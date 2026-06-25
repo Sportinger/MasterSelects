@@ -14,6 +14,10 @@ export interface CreateTransitionMultiPanelLayersInput {
   seed: number;
 }
 
+export interface TransitionMultiPanelLayerState extends Layer {
+  panel: TransitionMultiPanelCellPlan;
+}
+
 function clamp01(value: number): number {
   return Math.min(Math.max(value, 0), 1);
 }
@@ -94,12 +98,12 @@ function panelPositionValue(value: number, size: number): number {
   return value / Math.max(size, 0.0001);
 }
 
-export function createTransitionMultiPanelLayers({
+export function createTransitionMultiPanelLayerStates({
   baseLayer,
   primitive,
   progress,
   seed,
-}: CreateTransitionMultiPanelLayersInput): Layer[] {
+}: CreateTransitionMultiPanelLayersInput): TransitionMultiPanelLayerState[] {
   const plannerSeed = Number.isFinite(seed)
     ? seed
     : primitive.seed ?? 0;
@@ -114,17 +118,16 @@ export function createTransitionMultiPanelLayers({
 
   return panelPlan
     .toSorted((a, b) => a.zIndex - b.zIndex || a.index - b.index)
-    .flatMap((panel): Layer[] => {
+    .map((panel): TransitionMultiPanelLayerState => {
       const motion = panelMotion(primitive, panel);
       const opacity = baseLayer.opacity * clamp01(motion.opacity);
-      if (opacity <= 0.001) return [];
-
       const center = panelCenter(panel);
       const sourceRect = { ...panel.sourceRect };
-      return [{
+      return {
         ...baseLayer,
         id: `${baseLayer.id}:${panel.id}`,
         name: `${baseLayer.name} ${panel.id}`,
+        panel,
         opacity,
         sourceRect,
         position: {
@@ -138,6 +141,11 @@ export function createTransitionMultiPanelLayers({
           y: baseLayer.scale.y * sourceRect.height,
         },
         rotation: addRotationZ(baseLayer.rotation, motion.rotateZ),
-      }];
+      };
     });
+}
+
+export function createTransitionMultiPanelLayers(input: CreateTransitionMultiPanelLayersInput): Layer[] {
+  return createTransitionMultiPanelLayerStates(input)
+    .filter((layer) => layer.opacity > 0.001);
 }

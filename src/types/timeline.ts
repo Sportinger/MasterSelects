@@ -18,6 +18,7 @@ import type {
 } from './clipMetadata';
 import type { Effect } from './effects';
 import type { Keyframe } from './keyframes';
+import type { LayerSourceRect, TransitionRenderState } from './layers';
 import type { MathSceneDefinition } from './mathScene';
 import type { ClipMask } from './masks';
 import type {
@@ -108,6 +109,8 @@ export interface TimelineClip {
   waveformGenerating?: boolean;  // True while waveform is being generated
   waveformProgress?: number;     // 0-100 progress of waveform generation
   transform: ClipTransform;  // Visual transform properties
+  sourceRect?: LayerSourceRect;
+  transitionRender?: TransitionRenderState;
   effects: Effect[];      // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;  // Professional node/list color correction state
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state for this clip
@@ -223,6 +226,8 @@ export interface SerializableClip {
   waveform?: number[];
   waveformChannels?: number[][];
   transform: ClipTransform;
+  sourceRect?: LayerSourceRect;
+  transitionRender?: TransitionRenderState;
   effects: Effect[];         // Effects applied to this clip
   colorCorrection?: ColorCorrectionState;
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state
@@ -260,6 +265,8 @@ export interface SerializableClip {
   // Transition support
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;
+  transitionSourceTimeOverride?: number;
+  transitionSourceHold?: boolean;
   // 3D layer support
   is3D?: boolean;
   modelSequence?: ModelSequenceData;

@@ -9,6 +9,7 @@ import type {
 import type { ColorCorrectionState } from '../../../types/colorCorrection';
 import type { ClipNodeGraph } from '../../../types/nodeGraph';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
+import type { LayerSourceRect, TransitionRenderState } from '../../../types/layers';
 import type { TransitionOverlayClipDefinition } from '../../../types/timeline';
 import type { TimelineTransition, TransitionCompositionLink } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
@@ -67,11 +68,15 @@ export interface ProjectClip {
 
   // Transform
   transform: ProjectTransform;
+  sourceRect?: LayerSourceRect;
+  transitionRender?: TransitionRenderState;
 
   // Effects
   effects: ProjectEffect[];
   transitionIn?: TimelineTransition;
   transitionOut?: TimelineTransition;
+  transitionSourceTimeOverride?: number;
+  transitionSourceHold?: boolean;
   colorCorrection?: ColorCorrectionState;
   nodeGraph?: ClipNodeGraph;
 

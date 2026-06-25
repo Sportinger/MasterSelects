@@ -41,6 +41,8 @@ function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
   | 'masks'
   | 'speed'
   | 'preservesPitch'
+  | 'sourceRect'
+  | 'transitionRender'
 > {
   return {
     videoState: restorePersistedClipVideoState(serializedClip),
@@ -54,6 +56,8 @@ function applyCommonRestoredClipFields(serializedClip: SerializableClip): Pick<
     masks: serializedClip.masks,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
+    sourceRect: serializedClip.sourceRect ? { ...serializedClip.sourceRect } : undefined,
+    transitionRender: serializedClip.transitionRender ? structuredClone(serializedClip.transitionRender) : undefined,
   };
 }
 

@@ -59,6 +59,14 @@ function createDefaultTransform() {
   };
 }
 
+function markVideoReady(video: HTMLVideoElement): HTMLVideoElement {
+  Object.defineProperty(video, 'readyState', {
+    configurable: true,
+    value: HTMLMediaElement.HAVE_CURRENT_DATA,
+  });
+  return video;
+}
+
 interface BuildTransitionExportLayersOptions {
   transitionType: TransitionType;
   requestedDuration?: number;
@@ -90,15 +98,25 @@ function buildTransitionExportLayers({
   const outgoingClip = {
     ...createTransitionClip('outgoing', track.id, 0, 10, sourceType),
     transitionOut: {
+      id: `transition-${transitionType}`,
       type: transitionType,
       duration: requestedDuration,
       linkedClipId: 'incoming',
+      compositionId: `transition-comp-${transitionType}`,
       ...(transitionParams ? { params: transitionParams } : {}),
     },
     ...outgoingOverrides,
   } as TimelineClip;
   const incomingClip = {
     ...createTransitionClip('incoming', track.id, 10, 5, sourceType),
+    transitionIn: {
+      id: `transition-${transitionType}`,
+      type: transitionType,
+      duration: requestedDuration,
+      linkedClipId: 'outgoing',
+      compositionId: `transition-comp-${transitionType}`,
+      ...(transitionParams ? { params: transitionParams } : {}),
+    },
     ...incomingOverrides,
   } as TimelineClip;
   const plan = planTransition({
@@ -112,6 +130,12 @@ function buildTransitionExportLayers({
     params: transitionParams,
   });
   expect(plan).not.toBeNull();
+  const transitionComposition = createTransitionComposition({
+    id: `transition-comp-${transitionType}`,
+    transitionId: `transition-${transitionType}`,
+    transitionType,
+    duration: plan!.resolvedDuration,
+  });
 
   const ctx: FrameContext = {
     time,
@@ -140,10 +164,93 @@ function buildTransitionExportLayers({
   initializeLayerBuilder([track]);
 
   return {
-    layers: buildLayersAtTime(ctx, clipStates, null, false),
+    layers: withMediaStoreState(
+      { compositions: [transitionComposition] },
+      () => buildLayersAtTime(ctx, clipStates, null, false),
+    ),
     plan: plan!,
     outgoingClip,
     incomingClip,
+  };
+}
+
+function createTransitionComposition(input: {
+  id: string;
+  transitionId: string;
+  transitionType: string;
+  duration: number;
+}): ReturnType<typeof useMediaStore.getState>['compositions'][number] {
+  const outgoingClipId = `transition-comp:${input.transitionId}:outgoing`;
+  const incomingClipId = `transition-comp:${input.transitionId}:incoming`;
+  return {
+    id: input.id,
+    name: `Transition - ${input.transitionType}`,
+    type: 'composition',
+    parentId: null,
+    createdAt: 1,
+    width: 1280,
+    height: 720,
+    frameRate: 30,
+    duration: input.duration,
+    backgroundColor: '#000000',
+    timelineData: {
+      tracks: [
+        { id: 'transition-track-incoming', name: 'Incoming', type: 'video', visible: true, muted: false, solo: false },
+        { id: 'transition-track-outgoing', name: 'Outgoing', type: 'video', visible: true, muted: false, solo: false },
+      ],
+      clips: [
+        {
+          id: outgoingClipId,
+          trackId: 'transition-track-outgoing',
+          name: 'Outgoing linked',
+          mediaFileId: '',
+          startTime: 0,
+          duration: input.duration,
+          inPoint: 0,
+          outPoint: input.duration,
+          sourceType: 'image',
+          transform: createDefaultTransform(),
+          effects: [],
+        },
+        {
+          id: incomingClipId,
+          trackId: 'transition-track-incoming',
+          name: 'Incoming linked',
+          mediaFileId: '',
+          startTime: 0,
+          duration: input.duration,
+          inPoint: 0,
+          outPoint: input.duration,
+          sourceType: 'image',
+          transform: createDefaultTransform(),
+          effects: [],
+        },
+      ],
+      playheadPosition: 0,
+      duration: input.duration,
+      zoom: 160,
+      scrollX: 0,
+      inPoint: 0,
+      outPoint: input.duration,
+      loopPlayback: true,
+    },
+    transitionComp: {
+      kind: 'transition-comp',
+      parentCompositionId: 'parent',
+      parentTransitionId: input.transitionId,
+      parentOutgoingClipId: 'outgoing',
+      parentIncomingClipId: 'incoming',
+      linkedOutgoingClipId: outgoingClipId,
+      linkedIncomingClipId: incomingClipId,
+      innerTransitionId: '',
+      templateType: input.transitionType,
+      templateVersion: 1,
+      paddingBefore: 0,
+      paddingAfter: 0,
+      bodyStart: 0,
+      bodyEnd: input.duration,
+      materialized: true,
+    },
   };
 }
 
@@ -181,7 +288,7 @@ describe('ExportLayerBuilder', () => {
     cleanupLayerBuilder();
   });
 
-  it('builds export layers for virtual transition participants', () => {
+  it('builds a nested composition layer for an active transition', () => {
     const track = {
       id: 'track-1',
       type: 'video',
@@ -199,7 +306,13 @@ describe('ExportLayerBuilder', () => {
       duration: 10,
       inPoint: 0,
       outPoint: 10,
-      transitionOut: { type: 'crossfade', duration: 2, linkedClipId: 'incoming' },
+      transitionOut: {
+        id: 'transition-crossfade',
+        type: 'crossfade',
+        duration: 2,
+        linkedClipId: 'incoming',
+        compositionId: 'transition-comp-crossfade',
+      },
       source: { type: 'image', imageElement: outgoingImage },
       transform: {},
     } as unknown as TimelineClip;
@@ -211,6 +324,13 @@ describe('ExportLayerBuilder', () => {
       duration: 5,
       inPoint: 0.5,
       outPoint: 5.5,
+      transitionIn: {
+        id: 'transition-crossfade',
+        type: 'crossfade',
+        duration: 2,
+        linkedClipId: 'outgoing',
+        compositionId: 'transition-comp-crossfade',
+      },
       source: { type: 'image', imageElement: incomingImage },
       transform: {},
     } as unknown as TimelineClip;
@@ -225,6 +345,12 @@ describe('ExportLayerBuilder', () => {
       junctionTime: 10,
     });
     expect(plan).not.toBeNull();
+    const transitionComposition = createTransitionComposition({
+      id: 'transition-comp-crossfade',
+      transitionId: 'transition-crossfade',
+      transitionType: 'crossfade',
+      duration: plan!.resolvedDuration,
+    });
 
     const ctx: FrameContext = {
       time: 10,
@@ -256,15 +382,18 @@ describe('ExportLayerBuilder', () => {
 
     initializeLayerBuilder([track]);
 
-    const layers = buildLayersAtTime(ctx, new Map(), null, false);
+    const layers = withMediaStoreState(
+      { compositions: [transitionComposition] },
+      () => buildLayersAtTime(ctx, new Map(), null, false),
+    );
 
-    expect(layers).toHaveLength(2);
-    expect(layers.map(layer => layer.sourceClipId)).toEqual(['incoming', 'outgoing']);
-    expect(layers[0]?.opacity).toBeCloseTo(0.5);
-    expect(layers[0]?.id).toContain('transition:crossfade:outgoing:incoming:incoming');
+    expect(layers).toHaveLength(1);
+    expect(layers[0]?.sourceClipId).toBe('transition-crossfade');
+    expect(layers[0]?.source?.nestedComposition?.compositionId).toBe('transition-comp-crossfade');
+    expect(layers[0]?.source?.nestedComposition?.currentTime).toBeCloseTo(1);
   });
 
-  it('applies transform transition offsets to export layers', () => {
+  it('does not render an arbitrary normal composition as a transition layer', () => {
     const track = {
       id: 'track-1',
       type: 'video',
@@ -282,7 +411,13 @@ describe('ExportLayerBuilder', () => {
       duration: 10,
       inPoint: 0,
       outPoint: 10,
-      transitionOut: { type: 'push-left', duration: 2, linkedClipId: 'incoming' },
+      transitionOut: {
+        id: 'transition-push',
+        type: 'push-left',
+        duration: 2,
+        linkedClipId: 'incoming',
+        compositionId: 'normal-comp',
+      },
       source: { type: 'image', imageElement: outgoingImage },
       transform: {},
     } as unknown as TimelineClip;
@@ -294,6 +429,13 @@ describe('ExportLayerBuilder', () => {
       duration: 5,
       inPoint: 0,
       outPoint: 5,
+      transitionIn: {
+        id: 'transition-push',
+        type: 'push-left',
+        duration: 2,
+        linkedClipId: 'outgoing',
+        compositionId: 'normal-comp',
+      },
       source: { type: 'image', imageElement: incomingImage },
       transform: {},
     } as unknown as TimelineClip;
@@ -308,6 +450,29 @@ describe('ExportLayerBuilder', () => {
       junctionTime: 10,
     });
     expect(plan).not.toBeNull();
+    const normalComposition = {
+      id: 'normal-comp',
+      name: 'Normal Comp',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1,
+      width: 1280,
+      height: 720,
+      frameRate: 30,
+      duration: 2,
+      backgroundColor: '#000000',
+      timelineData: {
+        tracks: [],
+        clips: [],
+        playheadPosition: 0,
+        duration: 2,
+        zoom: 160,
+        scrollX: 0,
+        inPoint: 0,
+        outPoint: 2,
+        loopPlayback: true,
+      },
+    };
 
     const ctx: FrameContext = {
       time: 10,
@@ -341,345 +506,63 @@ describe('ExportLayerBuilder', () => {
 
     initializeLayerBuilder([track]);
 
-    const layers = buildLayersAtTime(ctx, new Map(), null, false);
+    const layers = withMediaStoreState(
+      { compositions: [normalComposition] },
+      () => buildLayersAtTime(ctx, new Map(), null, false),
+    );
 
-    expect(layers.map(layer => layer.sourceClipId)).toEqual(['incoming', 'outgoing']);
-    expect(layers[0]?.position).toEqual({ x: 0.4, y: -0.2, z: 0.4 });
-    expect(layers[1]?.position).toEqual({ x: -0.3, y: 0.1, z: 0.3 });
+    expect(layers).toEqual([]);
   });
 
-  it('exports representative transition primitive families through the shared assembly path', () => {
-    const lightSweepLayers = buildTransitionExportLayers({ transitionType: 'light-sweep' }).layers;
-    const overlayLayers = lightSweepLayers
-      .filter((layer) => layer.id.includes(':overlay:'));
-    expect(lightSweepLayers.map((layer) => layer.sourceClipId ?? 'overlay')).toEqual([
-      'overlay',
-      'overlay',
-      'incoming',
-      'outgoing',
-    ]);
-    expect(overlayLayers).toHaveLength(2);
-    expect(overlayLayers[0]?.blendMode).toBe('screen');
-    expect(overlayLayers[0]?.opacity).toBeCloseTo(0.5759, 3);
-    expect(overlayLayers[1]?.opacity).toBeCloseTo(0.42, 2);
-    expect(overlayLayers[0]?.source?.type).toBe('solid');
-    expect(overlayLayers[0]?.source?.color).toBe('#fff7d2');
-    expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(960);
-    expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(540);
-    expect(lightSweepLayers[0]?.id).toContain(':overlay:');
+  it('exports active transition families as hidden nested composition layers', () => {
+    for (const transitionType of ['light-sweep', 'rgb-split-glitch', 'additive-dissolve', 'checker-wipe', 'roll-3d'] as const) {
+      const { layers } = buildTransitionExportLayers({ transitionType });
 
-    for (const transitionType of ['chroma-leak', 'lens-flare', 'film-burn'] as const) {
-      const layers = buildTransitionExportLayers({ transitionType }).layers;
-      const generatedOverlays = layers.filter((layer) => layer.id.includes(':overlay:'));
-
-      expect(generatedOverlays).toHaveLength(2);
-      expect(generatedOverlays[0]?.blendMode).toBe('normal');
-      expect(generatedOverlays[0]?.opacity).toBeGreaterThan(0);
-      expect(generatedOverlays[0]?.source?.type).toBe('solid');
-      expect(generatedOverlays[0]?.source?.textCanvas?.width).toBe(960);
-      expect(generatedOverlays[0]?.source?.textCanvas?.height).toBe(540);
-    }
-
-    const clipEffect = {
-      id: 'clip-brightness',
-      name: 'Brightness',
-      type: 'brightness',
-      enabled: true,
-      params: { value: 0.2 },
-    } as ReturnType<FrameContext['getInterpolatedEffects']>[number];
-    const effectLayers = buildTransitionExportLayers({
-      transitionType: 'rgb-split-glitch',
-      clipEffects: [clipEffect],
-    }).layers;
-    const effectOutgoing = effectLayers.find((layer) => layer.sourceClipId === 'outgoing');
-    const rgbSplitEffect = effectOutgoing?.effects.find((effect) =>
-      effect.id.startsWith('transition-effect:rgb-split:outgoing')
-    );
-    expect(effectOutgoing?.effects[0]).toBe(clipEffect);
-    expect(rgbSplitEffect?.type).toBe('rgb-split');
-    expect(rgbSplitEffect?.enabled).toBe(true);
-    expect(rgbSplitEffect?.params.angle).toBe(0);
-    expect(rgbSplitEffect?.params.amount).toBeCloseTo(0.031217, 6);
-
-    const kaleidoscopeLayers = buildTransitionExportLayers({ transitionType: 'kaleidoscope' }).layers;
-    const kaleidoscopeOutgoing = kaleidoscopeLayers.find((layer) => layer.sourceClipId === 'outgoing');
-    const kaleidoscopeIncoming = kaleidoscopeLayers.find((layer) => layer.sourceClipId === 'incoming');
-    const outgoingKaleidoscope = kaleidoscopeOutgoing?.effects.find((effect) =>
-      effect.id.startsWith('transition-effect:kaleidoscope:outgoing')
-    );
-    const incomingKaleidoscope = kaleidoscopeIncoming?.effects.find((effect) =>
-      effect.id.startsWith('transition-effect:kaleidoscope:incoming')
-    );
-    expect(outgoingKaleidoscope?.type).toBe('kaleidoscope');
-    expect(incomingKaleidoscope?.type).toBe('kaleidoscope');
-    expect(outgoingKaleidoscope?.params.segments).toBeCloseTo(9.340278, 6);
-    expect(incomingKaleidoscope?.params.segments).toBeCloseTo(9.858025, 6);
-
-    const blendLayers = buildTransitionExportLayers({ transitionType: 'additive-dissolve' }).layers;
-    expect(blendLayers.find((layer) => layer.sourceClipId === 'incoming')?.blendMode).toBe('add');
-    expect(blendLayers.find((layer) => layer.sourceClipId === 'outgoing')?.blendMode).toBe('normal');
-    const inactiveBlendLayers = buildTransitionExportLayers({
-      transitionType: 'additive-dissolve',
-      time: 10.95,
-    }).layers;
-    expect(inactiveBlendLayers.find((layer) => layer.sourceClipId === 'incoming')?.blendMode).toBe('normal');
-
-    const proceduralLayers = buildTransitionExportLayers({
-      transitionType: 'noise-dissolve',
-      transitionParams: { seed: 17 },
-    }).layers;
-    expect(proceduralLayers.find((layer) => layer.sourceClipId === 'incoming')?.transitionRender).toEqual({
-      kind: 'procedural-mask',
-      procedural: 'noise',
-      progress: 0.5,
-      seed: 17,
-    });
-    expect(proceduralLayers.find((layer) => layer.sourceClipId === 'outgoing')?.transitionRender).toBeUndefined();
-
-    const patternLayers = buildTransitionExportLayers({ transitionType: 'checker-wipe' }).layers;
-    expect(patternLayers.find((layer) => layer.sourceClipId === 'incoming')?.transitionRender).toEqual({
-      kind: 'pattern-mask',
-      pattern: 'checker',
-      progress: 0.5,
-    });
-    expect(patternLayers.find((layer) => layer.sourceClipId === 'outgoing')?.transitionRender).toBeUndefined();
-
-    const puzzleLayers = buildTransitionExportLayers({ transitionType: 'puzzle-push' }).layers;
-    const puzzlePanelLayers = puzzleLayers.filter((layer) =>
-      layer.id.includes(':incoming:incoming:') && layer.sourceRect
-    );
-    expect(puzzlePanelLayers).toHaveLength(16);
-    expect(puzzleLayers.find((layer) => layer.sourceClipId === 'incoming' && !layer.sourceRect)).toBeUndefined();
-    expect(puzzleLayers.find((layer) => layer.sourceClipId === 'outgoing')).toBeTruthy();
-    expect(puzzlePanelLayers.at(-1)?.sourceRect).toEqual({
-      x: 0,
-      y: 0,
-      width: 0.25,
-      height: 0.25,
-    });
-    expect(puzzlePanelLayers.at(-1)?.scale.x).toBeCloseTo(0.25);
-    expect(puzzlePanelLayers.at(-1)?.scale.y).toBeCloseTo(0.25);
-
-    const magneticLayers = buildTransitionExportLayers({ transitionType: 'magnetic-tiles' }).layers;
-    const magneticPanelLayers = magneticLayers.filter((layer) =>
-      layer.id.includes(':incoming:incoming:') && layer.sourceRect
-    );
-    expect(magneticPanelLayers).toHaveLength(20);
-    expect(magneticLayers.find((layer) => layer.sourceClipId === 'incoming' && !layer.sourceRect)).toBeUndefined();
-    expect(magneticLayers.find((layer) => layer.sourceClipId === 'outgoing')).toBeTruthy();
-    const magneticTopLeftLayer = magneticPanelLayers.find((layer) =>
-      layer.sourceRect?.x === 0 && layer.sourceRect.y === 0
-    );
-    expect(magneticTopLeftLayer?.sourceRect).toEqual({
-      x: 0,
-      y: 0,
-      width: 0.2,
-      height: 0.25,
-    });
-
-    const shatterLayers = buildTransitionExportLayers({ transitionType: 'shatter-glass' }).layers;
-    const shatterPanelLayers = shatterLayers.filter((layer) =>
-      layer.id.includes(':outgoing:outgoing:') && layer.sourceRect
-    );
-    expect(shatterPanelLayers).toHaveLength(24);
-    expect(shatterLayers.find((layer) => layer.sourceClipId === 'outgoing' && !layer.sourceRect)).toBeUndefined();
-    expect(shatterLayers.find((layer) => layer.sourceClipId === 'incoming')).toBeTruthy();
-    const shatterTopLeftLayer = shatterPanelLayers.find((layer) =>
-      layer.sourceRect?.x === 0 && layer.sourceRect.y === 0
-    );
-    expect(shatterTopLeftLayer?.sourceRect).toEqual({
-      x: 0,
-      y: 0,
-      width: 1 / 6,
-      height: 0.25,
-    });
-    expect(shatterTopLeftLayer?.opacity).toBeLessThan(1);
-
-    const threeDLayers = buildTransitionExportLayers({ transitionType: 'roll-3d' }).layers;
-    const incoming3DLayer = threeDLayers.find((layer) => layer.sourceClipId === 'incoming');
-    const outgoing3DLayer = threeDLayers.find((layer) => layer.sourceClipId === 'outgoing');
-    const incomingRotation = incoming3DLayer?.rotation as { x: number; y: number; z: number } | undefined;
-    const outgoingRotation = outgoing3DLayer?.rotation as { x: number; y: number; z: number } | undefined;
-    expect(incoming3DLayer?.is3D).toBe(true);
-    expect(outgoing3DLayer?.is3D).toBe(true);
-    expect(incoming3DLayer?.position.y).toBeCloseTo(0.055, 3);
-    expect(incoming3DLayer?.position.z).toBeCloseTo(-0.148, 3);
-    expect(incoming3DLayer?.scale.x).toBeCloseTo(0.963, 3);
-    expect(incomingRotation?.x).toBeCloseTo(1.4522895033236836, 6);
-    expect(incomingRotation?.z).toBeCloseTo(0.09245562130177513, 6);
-    expect(outgoingRotation?.x).toBeCloseTo(-1.4522895033236836, 6);
-  });
-
-  it('exports hold-frame transition participants at fixed source times across transition primitive families', () => {
-    const transitionTypes: TransitionType[] = [
-      'light-sweep',
-      'rgb-split-glitch',
-      'additive-dissolve',
-      'noise-dissolve',
-      'kaleidoscope',
-      'checker-wipe',
-      'roll-3d',
-    ];
-    const baseOutgoing = createTransitionClip('outgoing', 'track-1', 0, 1, 'video');
-    const baseIncoming = createTransitionClip('incoming', 'track-1', 1, 1, 'video');
-    const expectedHoldSourceTime = 1 - (1 / 120);
-    const clipStates = new Map<string, ExportClipState>([
-      ['outgoing', {
-        clipId: 'outgoing',
-        webCodecsPlayer: { getCurrentFrame: () => ({ displayWidth: 1920, displayHeight: 1080 }) as VideoFrame } as unknown as ExportClipState['webCodecsPlayer'],
-        lastSampleIndex: 0,
-        isSequential: true,
-        preciseVideoElement: baseOutgoing.source?.videoElement,
-      }],
-      ['incoming', {
-        clipId: 'incoming',
-        webCodecsPlayer: { getCurrentFrame: () => ({ displayWidth: 1920, displayHeight: 1080 }) as VideoFrame } as unknown as ExportClipState['webCodecsPlayer'],
-        lastSampleIndex: 0,
-        isSequential: true,
-        preciseVideoElement: baseIncoming.source?.videoElement,
-      }],
-    ]);
-
-    for (const transitionType of transitionTypes) {
-      const { layers, plan } = buildTransitionExportLayers({
-        transitionType,
-        requestedDuration: 4,
-        time: 2.5,
-        sourceType: 'video',
-        clipStates,
-        outgoingClip: {
-          startTime: baseOutgoing.startTime,
-          duration: baseOutgoing.duration,
-          inPoint: baseOutgoing.inPoint,
-          outPoint: baseOutgoing.outPoint,
-        },
-        incomingClip: {
-          startTime: baseIncoming.startTime,
-          duration: baseIncoming.duration,
-          inPoint: baseIncoming.inPoint,
-          outPoint: baseIncoming.outPoint,
-        },
-      });
-
-      const outgoingHold = plan.outgoing.coverage.find((range) =>
-        range.kind === 'hold' &&
-        2.5 >= range.startTime &&
-        2.5 <= range.endTime
-      );
-      const incomingHold = plan.incoming.coverage.find((range) =>
-        range.kind === 'hold' &&
-        2.5 >= range.startTime &&
-        2.5 <= range.endTime
-      );
-      const outgoingLayer = layers.find((layer) => layer.sourceClipId === 'outgoing');
-      const incomingLayer = layers.find((layer) => layer.sourceClipId === 'incoming');
-
-      expect(outgoingHold?.sourceStart).toBeCloseTo(expectedHoldSourceTime, 6);
-      expect(incomingHold?.sourceStart).toBeCloseTo(expectedHoldSourceTime, 6);
-      expect(outgoingLayer?.source?.type).toBe('video');
-      expect(incomingLayer?.source?.type).toBe('video');
-      expect(outgoingLayer?.source?.mediaTime).toBeCloseTo(expectedHoldSourceTime, 6);
-      expect(incomingLayer?.source?.mediaTime).toBeCloseTo(expectedHoldSourceTime, 6);
+      expect(layers).toHaveLength(1);
+      expect(layers[0]?.sourceClipId).toBe(`transition-${transitionType}`);
+      expect(layers[0]?.source?.nestedComposition?.compositionId).toBe(`transition-comp-${transitionType}`);
+      expect(layers[0]?.source?.nestedComposition?.layers).toHaveLength(2);
     }
   });
 
-  it('uses transition source time for export video layers', () => {
-    const track = {
-      id: 'track-1',
-      type: 'video',
-      visible: true,
-      solo: false,
-    } as unknown as TimelineTrack;
-
-    const outgoingVideo = document.createElement('video');
-    const incomingVideo = document.createElement('video');
-    const outgoingClip = {
-      id: 'outgoing',
-      name: 'Outgoing',
-      trackId: track.id,
-      startTime: 0,
-      duration: 10,
-      inPoint: 0,
-      outPoint: 10,
-      transitionOut: { type: 'crossfade', duration: 2, linkedClipId: 'incoming' },
-      source: { type: 'video', videoElement: outgoingVideo },
-      transform: {},
-    } as unknown as TimelineClip;
-    const incomingClip = {
-      id: 'incoming',
-      name: 'Incoming',
-      trackId: track.id,
-      startTime: 10,
-      duration: 5,
-      inPoint: 0.5,
-      outPoint: 5.5,
-      source: { type: 'video', videoElement: incomingVideo },
-      transform: {},
-    } as unknown as TimelineClip;
-    const plan = planTransition({
-      outgoingClip,
-      incomingClip,
-      transitionType: 'crossfade',
-      requestedDuration: 2,
-      placement: 'center',
-      edgePolicy: 'hold',
-      junctionTime: 10,
-    });
-    expect(plan).not.toBeNull();
-
-    const currentFrame = { displayWidth: 1920, displayHeight: 1080 } as VideoFrame;
+  it('hydrates transition composition export layers from prepared parent video states', () => {
+    const outgoingVideo = markVideoReady(document.createElement('video'));
+    const incomingVideo = markVideoReady(document.createElement('video'));
     const clipStates = new Map<string, ExportClipState>([
       ['outgoing', {
         clipId: 'outgoing',
-        webCodecsPlayer: { getCurrentFrame: () => currentFrame } as unknown as ExportClipState['webCodecsPlayer'],
+        webCodecsPlayer: null,
         lastSampleIndex: 0,
-        isSequential: true,
+        isSequential: false,
         preciseVideoElement: outgoingVideo,
       }],
       ['incoming', {
         clipId: 'incoming',
-        webCodecsPlayer: { getCurrentFrame: () => currentFrame } as unknown as ExportClipState['webCodecsPlayer'],
+        webCodecsPlayer: null,
         lastSampleIndex: 0,
-        isSequential: true,
+        isSequential: false,
         preciseVideoElement: incomingVideo,
       }],
     ]);
-    const ctx: FrameContext = {
-      time: 9.75,
-      fps: 30,
-      frameTolerance: 50_000,
-      clipsAtTime: [outgoingClip],
-      renderClipsAtTime: [outgoingClip, incomingClip],
-      trackMap: new Map([[track.id, track]]),
-      clipsByTrack: new Map([[track.id, outgoingClip]]),
-      transitionParticipantsByTrack: new Map([[track.id, {
-        plan: plan!,
-        outgoingClip,
-        incomingClip,
-      }]]),
-      getInterpolatedTransform: () => ({
-        position: { x: 0, y: 0, z: 0 },
-        scale: { x: 1, y: 1 },
-        rotation: { x: 0, y: 0, z: 0 },
-        opacity: 1,
-        blendMode: 'normal',
-      }),
-      getInterpolatedEffects: () => [],
-      getInterpolatedColorCorrection: () => undefined,
-      getInterpolatedVectorAnimationSettings: () => ({}),
-      getInterpolatedTextBounds: () => undefined,
-      getSourceTimeForClip: (_clipId, localTime) => localTime,
-      getInterpolatedSpeed: () => 1,
-    };
 
-    initializeLayerBuilder([track]);
+    const { layers } = buildTransitionExportLayers({
+      transitionType: 'light-leak',
+      sourceType: 'video',
+      clipStates,
+    });
+    const nestedLayers = layers[0]?.source?.nestedComposition?.layers ?? [];
+    const outgoingLayer = nestedLayers.find(layer =>
+      layer.sourceClipId === 'transition-comp:transition-light-leak:outgoing'
+    );
+    const incomingLayer = nestedLayers.find(layer =>
+      layer.sourceClipId === 'transition-comp:transition-light-leak:incoming'
+    );
 
-    const layers = buildLayersAtTime(ctx, clipStates, null, false);
-
-    expect(layers[0]?.sourceClipId).toBe('incoming');
-    expect(layers[0]?.source?.mediaTime).toBeCloseTo(0.25);
-    expect(layers[1]?.sourceClipId).toBe('outgoing');
-    expect(layers[1]?.source?.mediaTime).toBeCloseTo(9.75);
+    expect(layers).toHaveLength(1);
+    expect(outgoingLayer?.source?.videoElement).toBe(outgoingVideo);
+    expect(incomingLayer?.source?.videoElement).toBe(incomingVideo);
+    expect(outgoingLayer?.source?.mediaTime).toBeCloseTo(1);
+    expect(incomingLayer?.source?.mediaTime).toBeCloseTo(1);
   });
 
   it('uses the current WebCodecs VideoFrame for sequential export layers', () => {

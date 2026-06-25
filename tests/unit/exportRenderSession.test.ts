@@ -56,6 +56,9 @@ const mockFactory = vi.hoisted(() => {
     cleanupExportCanvas: vi.fn(() => {
       calls.push('cleanupExportCanvas');
     }),
+    requestNewFrameRender: vi.fn(() => {
+      calls.push('requestNewFrameRender');
+    }),
   };
 
   const syncExportMaskTextures = vi.fn(() => {
@@ -173,8 +176,8 @@ describe('ExportRenderSessionImpl', () => {
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:1.25',
-      'syncExportMaskTextures',
       'ensureExportLayersReady',
+      'syncExportMaskTextures',
       'render',
       'createVideoFrameFromExport:123000:42000',
     ]);
@@ -198,8 +201,8 @@ describe('ExportRenderSessionImpl', () => {
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:2',
-      'syncExportMaskTextures',
       'ensureExportLayersReady',
+      'syncExportMaskTextures',
       'render',
       'readPixels',
     ]);
@@ -225,6 +228,36 @@ describe('ExportRenderSessionImpl', () => {
     });
 
     expect(mockFactory.syncExportMaskTextures).toHaveBeenCalledWith(layers, 320, 180, 5, host);
+  });
+
+  it('retries a deferred nested composition render before capture', async () => {
+    const host = createInjectedHost();
+    vi.mocked(host.render)
+      .mockImplementationOnce(() => {
+        throw new Error('Export frame deferred because a nested composition was not ready');
+      })
+      .mockImplementationOnce(() => undefined);
+    const session = new ExportRenderSessionImpl({
+      runId: 'export-run-nested-retry',
+      width: 320,
+      height: 180,
+      stackedAlpha: false,
+      preferZeroCopy: false,
+      host,
+    });
+    await session.begin();
+
+    const capture = await session.renderFrame({
+      time: 5,
+      layers,
+      timestampMicros: 500000,
+      durationMicros: 33333,
+    });
+
+    expect(capture.kind).toBe('rgba-pixels');
+    expect(host.render).toHaveBeenCalledTimes(2);
+    expect(host.ensureExportLayersReady).toHaveBeenCalledTimes(2);
+    expect(host.readPixels).toHaveBeenCalledTimes(1);
   });
 
   it('revalidates the export host once before rendering a frame', async () => {
@@ -311,8 +344,8 @@ describe('ExportRenderSessionImpl', () => {
     expect(mockFactory.calls).toEqual([
       'isDeviceValid',
       'setRenderTimeOverride:3',
-      'syncExportMaskTextures',
       'ensureExportLayersReady',
+      'syncExportMaskTextures',
       'render',
       'createVideoFrameFromExport:300000:33333',
       'isDeviceValid',
@@ -348,6 +381,7 @@ describe('ExportRenderSessionImpl', () => {
       'cleanupExportCanvas',
       'setExporting:false',
       'setResolution:1280x720',
+      'requestNewFrameRender',
     ]);
   });
 
@@ -365,6 +399,7 @@ describe('ExportRenderSessionImpl', () => {
       'cleanupExportCanvas',
       'setExporting:false',
       'setResolution:1280x720',
+      'requestNewFrameRender',
     ]);
   });
 });

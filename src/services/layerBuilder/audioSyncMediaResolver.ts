@@ -16,8 +16,8 @@ export interface AudioSyncMediaResolution {
 
 export function resolveAudioSyncMedia(clip: TimelineClip): AudioSyncMediaResolution {
   const source = clip.source;
-  const htmlAudioElement = getLazyTimelineAudioElementForClip(clip);
-  const htmlVideoElement = getLazyTimelineVideoElementForClip(clip);
+  const htmlAudioElement = getLazyTimelineAudioElementForClip(clip) ?? source?.audioElement ?? null;
+  const htmlVideoElement = getLazyTimelineVideoElementForClip(clip) ?? source?.videoElement ?? null;
 
   return {
     sourceType: source?.type,

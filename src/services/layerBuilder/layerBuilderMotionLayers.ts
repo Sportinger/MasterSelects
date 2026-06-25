@@ -46,6 +46,6 @@ export function buildLayerBuilderMotionShapeLayer(params: BuildMotionLayerParams
     rotation: transform.rotation,
   };
 
-  addLayerBuilderMaskProperties(layer, clip);
+  addLayerBuilderMaskProperties(layer, clip, timeInfo.clipLocalTime, keyframes);
   return layer;
 }

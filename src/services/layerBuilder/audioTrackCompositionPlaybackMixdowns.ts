@@ -7,6 +7,7 @@ import {
 } from '../timeline/compositionAudioMixdownCache';
 import { applyCompositionAudioMixdownToTimelineClip } from '../timeline/compositionAudioMixdownTimelineState';
 import { resolveAudioSyncMedia } from './audioSyncMediaResolver';
+import { shouldUseInlineCompositionMixdown } from '../timeline/compositionAudioClipLinks';
 
 export class AudioTrackCompositionPlaybackMixdownManager {
   private pendingCompositionPlaybackMixdowns = new Set<string>();
@@ -16,6 +17,10 @@ export class AudioTrackCompositionPlaybackMixdownManager {
     attachTo: 'source' | 'mixdown',
   ): HTMLAudioElement | null {
     if (!clip.isComposition || !clip.compositionId) return null;
+    if (attachTo === 'mixdown' && !shouldUseInlineCompositionMixdown(useTimelineStore.getState().clips, clip)) {
+      return null;
+    }
+
     const syncMedia = resolveAudioSyncMedia(clip);
     if (attachTo === 'source') {
       if (syncMedia.sourceType !== 'audio') return null;

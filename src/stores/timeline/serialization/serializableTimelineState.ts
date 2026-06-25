@@ -104,6 +104,8 @@ function createSerializableClip(
       ? undefined
       : clip.waveformChannels,
     transform: clip.transform,
+    sourceRect: clip.sourceRect ? structuredClone(clip.sourceRect) : undefined,
+    transitionRender: clip.transitionRender ? structuredClone(clip.transitionRender) : undefined,
     effects: clip.effects,
     transitionIn: clip.transitionIn ? normalizeTransitionInstanceParams(structuredClone(clip.transitionIn)) : undefined,
     transitionOut: clip.transitionOut ? normalizeTransitionInstanceParams(structuredClone(clip.transitionOut)) : undefined,

@@ -4,6 +4,7 @@
 import type { ToolResult } from '../../types';
 import { Logger } from '../../../logger';
 import { waitForCompositionReady, type MediaStore } from './runtime';
+import { isUserVisibleComposition } from '../../../../stores/mediaStore/compositionVisibility';
 
 const log = Logger.create('AITool:Media');
 
@@ -16,7 +17,7 @@ export async function handleGetMediaItems(
 
   // Filter by folder
   const folderFiles = files.filter(f => f.parentId === folderId);
-  const folderComps = compositions.filter(c => c.parentId === folderId);
+  const folderComps = compositions.filter(c => c.parentId === folderId && isUserVisibleComposition(c));
   const subFolders = folders.filter(f => f.parentId === folderId);
 
   return {
@@ -81,7 +82,7 @@ export async function handleRenameMediaItem(
 
   // Try to find the item in files, compositions, or folders
   const file = mediaStore.files.find(f => f.id === itemId);
-  const comp = mediaStore.compositions.find(c => c.id === itemId);
+  const comp = mediaStore.compositions.find(c => c.id === itemId && isUserVisibleComposition(c));
   const folder = mediaStore.folders.find(f => f.id === itemId);
 
   if (file) {
@@ -105,7 +106,7 @@ export async function handleDeleteMediaItem(
   const itemId = args.itemId as string;
 
   const file = mediaStore.files.find(f => f.id === itemId);
-  const comp = mediaStore.compositions.find(c => c.id === itemId);
+  const comp = mediaStore.compositions.find(c => c.id === itemId && isUserVisibleComposition(c));
   const folder = mediaStore.folders.find(f => f.id === itemId);
 
   if (file) {
@@ -146,14 +147,20 @@ export async function handleMoveMediaItems(
     }
   }
 
-  mediaStore.moveToFolder(itemIds, targetFolderId);
+  const visibleCompositionIds = new Set(mediaStore.compositions.filter(isUserVisibleComposition).map((composition) => composition.id));
+  const movableIds = itemIds.filter((id) =>
+    mediaStore.files.some((file) => file.id === id) ||
+    mediaStore.folders.some((folder) => folder.id === id) ||
+    visibleCompositionIds.has(id)
+  );
+  mediaStore.moveToFolder(movableIds, targetFolderId);
 
   return {
     success: true,
     data: {
-      movedIds: itemIds,
+      movedIds: movableIds,
       targetFolderId: targetFolderId || 'root',
-      itemCount: itemIds.length,
+      itemCount: movableIds.length,
     },
   };
 }
@@ -163,7 +170,7 @@ export async function handleCreateComposition(
   mediaStore: MediaStore
 ): Promise<ToolResult> {
   const requestedName = typeof args.name === 'string' ? args.name.trim() : '';
-  const name = requestedName || `Composition ${mediaStore.compositions.length + 1}`;
+  const name = requestedName || `Composition ${mediaStore.compositions.filter(isUserVisibleComposition).length + 1}`;
   const width = (args.width as number) || 1920;
   const height = (args.height as number) || 1080;
   const frameRate = (args.frameRate as number) || 30;
@@ -206,7 +213,7 @@ export async function handleOpenComposition(
 ): Promise<ToolResult> {
   const compositionId = args.compositionId as string;
 
-  const comp = mediaStore.compositions.find(c => c.id === compositionId);
+  const comp = mediaStore.compositions.find(c => c.id === compositionId && isUserVisibleComposition(c));
   if (!comp) {
     return { success: false, error: `Composition not found: ${compositionId}` };
   }
@@ -235,9 +242,15 @@ export async function handleSelectMediaItems(
   mediaStore: MediaStore
 ): Promise<ToolResult> {
   const itemIds = args.itemIds as string[];
-  mediaStore.setSelection(itemIds);
+  const visibleCompositionIds = new Set(mediaStore.compositions.filter(isUserVisibleComposition).map((composition) => composition.id));
+  const selectableIds = itemIds.filter((id) =>
+    mediaStore.files.some((file) => file.id === id) ||
+    mediaStore.folders.some((folder) => folder.id === id) ||
+    visibleCompositionIds.has(id)
+  );
+  mediaStore.setSelection(selectableIds);
   return {
     success: true,
-    data: { selectedIds: itemIds, count: itemIds.length },
+    data: { selectedIds: selectableIds, count: selectableIds.length },
   };
 }

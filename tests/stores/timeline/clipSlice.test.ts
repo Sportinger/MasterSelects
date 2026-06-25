@@ -1980,6 +1980,70 @@ describe('clipSlice', () => {
       // Second half should keep transitionOut but lose transitionIn
       expect(sorted[1].transitionIn).toBeUndefined();
     });
+
+    it('remaps adjacent transition links from the split clip to the kept halves', () => {
+      const before = createMockClip({
+        id: 'clip-before',
+        trackId: 'video-1',
+        startTime: -10,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        transitionOut: {
+          id: 'transition-in',
+          type: 'fade',
+          duration: 0.5,
+          linkedClipId: 'clip-1',
+          compositionId: 'transition-comp-in',
+        },
+      });
+      const clip = createMockClip({
+        id: 'clip-1',
+        trackId: 'video-1',
+        startTime: 0,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        transitionIn: {
+          id: 'transition-in',
+          type: 'fade',
+          duration: 0.5,
+          linkedClipId: 'clip-before',
+          compositionId: 'transition-comp-in',
+        },
+        transitionOut: {
+          id: 'transition-out',
+          type: 'fade',
+          duration: 0.5,
+          linkedClipId: 'clip-after',
+          compositionId: 'transition-comp-out',
+        },
+      });
+      const after = createMockClip({
+        id: 'clip-after',
+        trackId: 'video-1',
+        startTime: 10,
+        duration: 10,
+        inPoint: 0,
+        outPoint: 10,
+        transitionIn: {
+          id: 'transition-out',
+          type: 'fade',
+          duration: 0.5,
+          linkedClipId: 'clip-1',
+          compositionId: 'transition-comp-out',
+        },
+      });
+      store = createTestTimelineStore({ clips: [before, clip, after] });
+
+      store.getState().splitClip('clip-1', 5);
+      const sorted = [...store.getState().clips].sort((a, b) => a.startTime - b.startTime);
+      const firstHalf = sorted.find((candidate) => candidate.transitionIn?.id === 'transition-in')!;
+      const secondHalf = sorted.find((candidate) => candidate.transitionOut?.id === 'transition-out')!;
+
+      expect(sorted.find((candidate) => candidate.id === 'clip-before')?.transitionOut?.linkedClipId).toBe(firstHalf.id);
+      expect(sorted.find((candidate) => candidate.id === 'clip-after')?.transitionIn?.linkedClipId).toBe(secondHalf.id);
+    });
   });
 
   // ========== Additional splitClipAtPlayhead edge cases ==========

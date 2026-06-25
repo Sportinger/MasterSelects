@@ -11,15 +11,7 @@ import { applyMergeMidiClipsOperation } from './mergeOperations';
 import { generateMidiClipId, generateMidiNoteId } from '../helpers/idGenerator';
 import { resolveSplitAllAtTimeTargets, resolveSplitAtTimeTargets } from './splitOperations';
 import { applyDeleteAllGapsOperation, applyDeleteGapAtTimeOperation, applyRippleDeleteSelectionOperation } from './rippleOperations';
-import {
-  applyRateStretchClipOperation,
-  applyRippleTrimEdgeToTimeOperation,
-  applyRollingEditOperation,
-  applySlideClipOperation,
-  applySlipClipOperation,
-  applyTrimClipOperation,
-  applyTrimEdgeToTimeOperation,
-} from './trimOperations';
+import { applyRateStretchClipOperation, applyRippleTrimEdgeToTimeOperation, applyRollingEditOperation, applySlideClipOperation, applySlipClipOperation, applyTrimClipOperation, applyTrimEdgeToTimeOperation } from './trimOperations';
 import type { TimelineEditOperation, TimelineEditResult } from './types';
 import {
   applyTransitionApplyOperation,
@@ -34,18 +26,12 @@ import {
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from './transitionPlanner';
 import { buildTransitionToolPreviewGhostRanges } from './transitionToolPreview';
 import { createTimelineTransitionMediaDurationResolver } from '../../../services/timeline/timelineTransitionMediaDurations';
-import {
-  aborted,
-  blockedByExport,
-  hasOnlyNoopWarnings,
-  resultFromWarnings,
-  uniqueIds,
-} from './editOperationResults';
+import { aborted, blockedByExport, hasOnlyNoopWarnings, resultFromWarnings, uniqueIds } from './editOperationResults';
 import { applyFadeTransactionOperation, isFadeTransactionOperation } from './fadeTransactionOperations';
 import { applyKeyframeTransactionOperation, isKeyframeTransactionOperation } from './keyframeTransactionOperations';
 import { applyKeyboardEditCommandOperation, isKeyboardEditCommandOperation } from './keyboardEditCommandOperations';
 import { applyResolvedMoveClipsOperation } from './resolvedMoveApplyOperation';
-
+import { ensureTransitionCompositionsForChangedClips, getChangedClipIdsAfterReplacement, removeDetachedTransitionCompositions, setClipsAndCleanupTransitionComps } from './transitionCompositionMaintenance';
 export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperationActions> = (set, get) => ({
   applyTimelineEditOperation: (operation: TimelineEditOperation, options): TimelineEditResult => {
     const operationId = operation.id;
@@ -157,11 +143,15 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         : resolveSplitAllAtTimeTargets(operation, get().clips, get().tracks);
       if (resolved.clipIds.length === 0) return resultFromWarnings(operationId, resolved.warnings);
 
+      const previousClips = get().clips;
       startBatch(options.historyLabel ?? 'Timeline split');
       try {
         for (const clipId of resolved.clipIds) {
           get().splitClip(clipId, operation.time);
         }
+        const nextClips = get().clips;
+        removeDetachedTransitionCompositions(previousClips, nextClips);
+        ensureTransitionCompositionsForChangedClips(set, get, uniqueIds(getChangedClipIdsAfterReplacement(previousClips, nextClips, resolved.clipIds)), previousClips);
       } finally {
         endBatch();
       }
@@ -209,20 +199,22 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     }
 
     if (operation.type === 'split-at-times') {
+      const previousClips = get().clips;
       const result = applySplitAtTimesOperation(
         operation,
-        get().clips,
+        previousClips,
         get().tracks,
       );
       if (result.changedClipIds.length === 0) return resultFromWarnings(operationId, result.warnings);
 
       startBatch(options.historyLabel ?? 'Timeline split');
       try {
-        set({
+        setClipsAndCleanupTransitionComps(set, previousClips, {
           clips: result.clips,
           selectedClipIds: result.selectedClipIds,
           primarySelectedClipId: [...result.selectedClipIds][0] ?? null,
         });
+        ensureTransitionCompositionsForChangedClips(set, get, result.changedClipIds, previousClips);
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -239,21 +231,26 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     }
 
     if (operation.type === 'ripple-delete-selection') {
+      const previousClips = get().clips;
       const result = applyRippleDeleteSelectionOperation(
         operation,
-        get().clips,
+        previousClips,
         get().tracks,
         get().selectedClipIds,
       );
       if (result.changedClipIds.length === 0) return resultFromWarnings(operationId, result.warnings);
+      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+      const nextClips = prunedTransitions.clips;
+      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
 
       startBatch(options.historyLabel ?? 'Ripple delete');
       try {
-        set({
-          clips: result.clips,
+        setClipsAndCleanupTransitionComps(set, previousClips, {
+          clips: nextClips,
           selectedClipIds: result.selectedClipIds,
           primarySelectedClipId: null,
         });
+        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -263,26 +260,30 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         selectedClipIds: [],
         warnings: result.warnings,
       };
     }
 
     if (operation.type === 'delete-clips') {
+      const previousClips = get().clips;
       const result = applyDeleteClipsOperation(
         operation,
-        get().clips,
+        previousClips,
         get().tracks,
         get().selectedClipIds,
       );
       if (result.changedClipIds.length === 0) return resultFromWarnings(operationId, result.warnings);
+      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+      const nextClips = prunedTransitions.clips;
+      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
 
       startBatch(options.historyLabel ?? 'Delete clips');
       try {
         cleanupDeletedClipResources(result.deletedClips);
-        set({
-          clips: result.clips,
+        setClipsAndCleanupTransitionComps(set, previousClips, {
+          clips: nextClips,
           selectedClipIds: result.selectedClipIds,
           primarySelectedClipId: [...result.selectedClipIds][0] ?? null,
         });
@@ -295,7 +296,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         selectedClipIds: [...result.selectedClipIds],
         warnings: result.warnings,
       };
@@ -314,6 +315,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       operation.type === 'transition-update-params'
     ) {
       const getMediaDuration = createTimelineTransitionMediaDurationResolver();
+      const previousClips = get().clips;
       const result =
         operation.type === 'transition-apply'
           ? applyTransitionApplyOperation(operation, get().clips, get().tracks, getMediaDuration)
@@ -352,6 +354,11 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
             ? { propertiesSelection: null }
             : {}),
         });
+        removeDetachedTransitionCompositions(previousClips, result.clips);
+
+        if (operation.type !== 'transition-remove') {
+          ensureTransitionCompositionsForChangedClips(set, get, result.changedClipIds, previousClips);
+        }
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -367,14 +374,19 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     }
 
     if (operation.type === 'delete-gap-at-time') {
-      const result = applyDeleteGapAtTimeOperation(operation, get().clips, get().tracks);
+      const previousClips = get().clips;
+      const result = applyDeleteGapAtTimeOperation(operation, previousClips, get().tracks);
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
+      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+      const nextClips = prunedTransitions.clips;
+      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
 
       startBatch(options.historyLabel ?? 'Delete gap');
       try {
-        set({ clips: result.clips });
+        setClipsAndCleanupTransitionComps(set, previousClips, { clips: nextClips });
+        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -384,20 +396,25 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         warnings: result.warnings,
       };
     }
 
     if (operation.type === 'delete-all-gaps') {
-      const result = applyDeleteAllGapsOperation(operation, get().clips, get().tracks);
+      const previousClips = get().clips;
+      const result = applyDeleteAllGapsOperation(operation, previousClips, get().tracks);
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
+      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+      const nextClips = prunedTransitions.clips;
+      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
 
       startBatch(options.historyLabel ?? 'Delete all gaps');
       try {
-        set({ clips: result.clips });
+        setClipsAndCleanupTransitionComps(set, previousClips, { clips: nextClips });
+        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -407,13 +424,14 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         warnings: result.warnings,
       };
     }
 
     if (operation.type === 'move-clips') {
-      const result = applyMoveClipsOperation(operation, get().clips, get().tracks);
+      const previousClips = get().clips;
+      const result = applyMoveClipsOperation(operation, previousClips, get().tracks);
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
@@ -423,12 +441,13 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
 
       startBatch(options.historyLabel ?? 'Move clips');
       try {
-        set({
+        setClipsAndCleanupTransitionComps(set, previousClips, {
           clips: nextClips,
           ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, nextClips)
             ? { propertiesSelection: null }
             : {}),
         });
+        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -448,9 +467,10 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     }
 
     if (operation.type === 'lift-range' || operation.type === 'extract-range') {
+      const previousClips = get().clips;
       const result = applyRangeEditOperation(
         operation,
-        get().clips,
+        previousClips,
         get().tracks,
         get().selectedClipIds,
         get().timelineRangeSelection,
@@ -458,16 +478,20 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
+      const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+      const nextClips = prunedTransitions.clips;
+      const changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
 
       startBatch(options.historyLabel ?? (operation.type === 'extract-range' ? 'Extract range' : 'Lift range'));
       try {
         cleanupDeletedClipResources(result.deletedClips);
-        set({
-          clips: result.clips,
+        setClipsAndCleanupTransitionComps(set, previousClips, {
+          clips: nextClips,
           selectedClipIds: result.selectedClipIds,
           primarySelectedClipId: [...result.selectedClipIds][0] ?? null,
           timelineRangeSelection: null,
         });
+        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -477,7 +501,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         selectedClipIds: [...result.selectedClipIds],
         warnings: result.warnings,
       };
@@ -492,20 +516,21 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       operation.type === 'slide-clip' ||
       operation.type === 'rate-stretch-clip'
     ) {
+      const previousClips = get().clips;
       const result =
         operation.type === 'trim-clip'
-          ? applyTrimClipOperation(operation, get().clips, get().tracks)
+          ? applyTrimClipOperation(operation, previousClips, get().tracks)
           : operation.type === 'trim-edge-to-time'
-            ? applyTrimEdgeToTimeOperation(operation, get().clips, get().tracks, get().selectedClipIds)
+            ? applyTrimEdgeToTimeOperation(operation, previousClips, get().tracks, get().selectedClipIds)
             : operation.type === 'ripple-trim-edge-to-time'
-              ? applyRippleTrimEdgeToTimeOperation(operation, get().clips, get().tracks, get().selectedClipIds)
+              ? applyRippleTrimEdgeToTimeOperation(operation, previousClips, get().tracks, get().selectedClipIds)
               : operation.type === 'rolling-edit'
-                ? applyRollingEditOperation(operation, get().clips, get().tracks)
+                ? applyRollingEditOperation(operation, previousClips, get().tracks)
                 : operation.type === 'slip-clip'
-                  ? applySlipClipOperation(operation, get().clips, get().tracks)
+                  ? applySlipClipOperation(operation, previousClips, get().tracks)
                   : operation.type === 'slide-clip'
-                    ? applySlideClipOperation(operation, get().clips, get().tracks)
-                    : applyRateStretchClipOperation(operation, get().clips, get().tracks);
+                    ? applySlideClipOperation(operation, previousClips, get().tracks)
+                    : applyRateStretchClipOperation(operation, previousClips, get().tracks);
       if (result.changedClipIds.length === 0 || hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
@@ -522,12 +547,13 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
                   'Trim clips'
       ));
       try {
-        set({
+        setClipsAndCleanupTransitionComps(set, previousClips, {
           clips: nextClips,
           ...(shouldClearTransitionPropertiesSelection(get().propertiesSelection, nextClips)
             ? { propertiesSelection: null }
             : {}),
         });
+        ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
         get().updateDuration();
         get().invalidateCache();
       } finally {
@@ -543,14 +569,19 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     }
 
     if (operation.type === 'place-timeline-range') {
-      const result = applyPlaceTimelineRangeOperation(operation, get().clips, get().tracks);
+      const previousClips = get().clips;
+      const result = applyPlaceTimelineRangeOperation(operation, previousClips, get().tracks);
       const hasMutation = result.changedClipIds.length > 0 || result.deletedClips.length > 0;
 
       if (!hasMutation && hasOnlyNoopWarnings(result.warnings)) {
         return resultFromWarnings(operationId, result.warnings);
       }
 
+      let changedClipIds = result.changedClipIds;
       if (hasMutation) {
+        const prunedTransitions = pruneInvalidClipTransitions(result.clips);
+        const nextClips = prunedTransitions.clips;
+        changedClipIds = uniqueIds([...result.changedClipIds, ...prunedTransitions.changedClipIds]);
         startBatch(options.historyLabel ?? (
           operation.mode === 'insert' ? 'Insert placement range' :
             operation.mode === 'ripple-overwrite' ? 'Ripple overwrite placement range' :
@@ -560,7 +591,8 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         ));
         try {
           cleanupDeletedClipResources(result.deletedClips);
-          set({ clips: result.clips });
+          setClipsAndCleanupTransitionComps(set, previousClips, { clips: nextClips });
+          ensureTransitionCompositionsForChangedClips(set, get, changedClipIds, previousClips);
           get().updateDuration();
           get().invalidateCache();
         } finally {
@@ -571,7 +603,7 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
       return {
         success: true,
         operationId,
-        changedClipIds: result.changedClipIds,
+        changedClipIds,
         warnings: result.warnings,
       };
     }

@@ -1,6 +1,20 @@
 import type { TimelineClip } from '../../../stores/timeline/types';
+import { useMediaStore } from '../../../stores/mediaStore';
+import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
+import {
+  DEFAULT_TRANSITION_PLACEMENT,
+  findActiveTransitionPlanForTrack,
+  type ActiveTransitionPlan,
+} from '../../../stores/timeline/editOperations/transitionPlanner';
 import type { Layer } from '../../../types/layers';
+import type { TimelineClipSource } from '../../../types';
 import type { ParallelDecodeManager } from '../../ParallelDecodeManager';
+import {
+  getTransitionCompositionTime,
+  hydrateTransitionCompositionTimeline,
+  type TransitionCompositionSourceResolver,
+} from '../../../services/layerBuilder/layerBuilderTransitionComposition';
+import { createTransitionNestedCompositionLayer } from '../../../services/layerBuilder/transitionNestedCompositionLayer';
 import type { ExportClipStateLike } from './contracts';
 import { buildNestedBaseLayer } from './baseLayers';
 import {
@@ -16,6 +30,162 @@ import { buildNestedVideoLayer } from './videoLayers';
 
 const MAX_EXPORT_NESTING_DEPTH = 4;
 
+function createPlaceholderFile(name: string): File {
+  return typeof File !== 'undefined'
+    ? new File([], name || 'transition-comp')
+    : ({} as File);
+}
+
+function matchesLinkedClipId(clipId: string, baseId: string): boolean {
+  return clipId === baseId || clipId.startsWith(`${baseId}:`);
+}
+
+function getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {
+  const sourceOverride = nestedClip.transitionSourceTimeOverride;
+  if (Number.isFinite(sourceOverride)) return sourceOverride!;
+  if (nestedClip.transitionSourceHold) return nestedClip.inPoint ?? 0;
+  return nestedClip.reversed
+    ? (nestedClip.outPoint ?? nestedClip.duration) - nestedClipLocalTime
+    : nestedClipLocalTime + (nestedClip.inPoint ?? 0);
+}
+
+function cloneTransform() {
+  return structuredClone(DEFAULT_TRANSFORM);
+}
+
+function createExportTransitionSourceResolver(
+  clipStates: Map<string, ExportClipStateLike>,
+): TransitionCompositionSourceResolver {
+  return (clip, runtimeClip): TimelineClipSource | null | undefined => {
+    if (!runtimeClip?.source) return undefined;
+
+    if (runtimeClip.source.type === 'video') {
+      const clipState = clipStates.get(runtimeClip.id);
+      const videoElement = getExportVideoElement(runtimeClip, clipStates);
+      return {
+        ...runtimeClip.source,
+        type: 'video',
+        mediaFileId: clip.mediaFileId || runtimeClip.source.mediaFileId || runtimeClip.mediaFileId,
+        naturalDuration: clip.naturalDuration ?? runtimeClip.source.naturalDuration ?? runtimeClip.duration,
+        ...(videoElement ? { videoElement } : {}),
+        webCodecsPlayer: clipState?.webCodecsPlayer ?? runtimeClip.source.webCodecsPlayer,
+      };
+    }
+
+    if (runtimeClip.source.type === 'image') {
+      const imageElement = getExportImageElement(runtimeClip, clipStates);
+      return {
+        ...runtimeClip.source,
+        type: 'image',
+        mediaFileId: clip.mediaFileId || runtimeClip.source.mediaFileId || runtimeClip.mediaFileId,
+        naturalDuration: clip.naturalDuration ?? runtimeClip.source.naturalDuration ?? runtimeClip.duration,
+        ...(imageElement ? { imageElement } : {}),
+      };
+    }
+
+    return undefined;
+  };
+}
+
+function tagLinkedExportSourceClipIds(
+  clips: TimelineClip[],
+  activeTransition: ActiveTransitionPlan,
+  compositionId: string,
+): void {
+  const composition = useMediaStore.getState().compositions.find(candidate => candidate.id === compositionId);
+  const link = composition?.transitionComp;
+  if (link?.kind !== 'transition-comp') return;
+
+  for (const clip of clips as Array<TimelineClip & { exportSourceClipId?: string }>) {
+    if (matchesLinkedClipId(clip.id, link.linkedOutgoingClipId)) {
+      clip.exportSourceClipId = activeTransition.outgoingClip.id;
+    } else if (matchesLinkedClipId(clip.id, link.linkedIncomingClipId)) {
+      clip.exportSourceClipId = activeTransition.incomingClip.id;
+    }
+  }
+}
+
+export function buildTransitionCompositionLayerForExport(params: {
+  activeTransition: ActiveTransitionPlan;
+  layerIndex: number;
+  parentCompositionId: string;
+  parentTime: number;
+  layerIdPrefix: string;
+  clipStates: Map<string, ExportClipStateLike>;
+  parallelDecoder: ParallelDecodeManager | null;
+  useParallelDecode: boolean;
+  depth?: number;
+}): Layer | null {
+  const {
+    activeTransition,
+    layerIndex,
+    parentCompositionId,
+    parentTime,
+    layerIdPrefix,
+    clipStates,
+    parallelDecoder,
+    useParallelDecode,
+    depth = 0,
+  } = params;
+  const transition = activeTransition.outgoingClip.transitionOut;
+  const compositionId = transition?.compositionId;
+  if (!transition || !compositionId || compositionId === parentCompositionId) return null;
+
+  const mediaState = useMediaStore.getState();
+  const composition = mediaState.compositions.find(candidate => candidate.id === compositionId);
+  if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') return null;
+
+  const mediaFileById = new Map(mediaState.files.map(file => [file.id, file]));
+  const compositionTime = getTransitionCompositionTime(activeTransition, composition, parentTime);
+  const nestedTimeline = hydrateTransitionCompositionTimeline({
+    composition,
+    activeTransition,
+    mediaFileById,
+    resolveSource: createExportTransitionSourceResolver(clipStates),
+  });
+  tagLinkedExportSourceClipIds(nestedTimeline.clips, activeTransition, composition.id);
+
+  const duration = Math.max(0.0001, composition.timelineData.duration ?? composition.duration);
+  const syntheticClip: TimelineClip = {
+    id: `transition-comp-export:${composition.id}`,
+    trackId: activeTransition.outgoingClip.trackId,
+    name: composition.name,
+    file: createPlaceholderFile(composition.name),
+    startTime: 0,
+    duration,
+    inPoint: 0,
+    outPoint: duration,
+    source: null,
+    transform: cloneTransform(),
+    effects: [],
+    isComposition: true,
+    compositionId: composition.id,
+    nestedClips: nestedTimeline.clips,
+    nestedTracks: nestedTimeline.tracks,
+    isLoading: false,
+  };
+  const nestedLayers = buildNestedLayersForExport(
+    syntheticClip,
+    compositionTime,
+    parentTime,
+    clipStates,
+    parallelDecoder,
+    useParallelDecode,
+    depth + 1,
+  );
+
+  return createTransitionNestedCompositionLayer({
+    transition,
+    composition,
+    compositionTime,
+    nestedLayers,
+    layerIndex,
+    layerIdPrefix,
+    sceneClips: nestedTimeline.clips,
+    sceneTracks: nestedTimeline.tracks,
+  });
+}
+
 export function buildNestedLayersForExport(
   clip: TimelineClip,
   nestedTime: number,
@@ -30,11 +200,39 @@ export function buildNestedLayersForExport(
   const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video');
   const nestedAnyVideoSolo = nestedVideoTracks.some(t => t.solo);
   const layers: Layer[] = [];
+  const mediaState = useMediaStore.getState();
 
   for (let i = 0; i < nestedVideoTracks.length; i++) {
     const nestedTrack = nestedVideoTracks[i];
     if (nestedTrack.visible === false) continue;
     if (nestedAnyVideoSolo && !nestedTrack.solo) continue;
+
+    const activeTransition = findActiveTransitionPlanForTrack({
+      clips: clip.nestedClips,
+      trackId: nestedTrack.id,
+      time: nestedTime,
+      placement: DEFAULT_TRANSITION_PLACEMENT,
+      edgePolicy: 'hold',
+      getMediaDuration: (mediaFileId) =>
+        mediaState.files.find((file) => file.id === mediaFileId)?.duration,
+    });
+    if (activeTransition) {
+      const transitionLayer = buildTransitionCompositionLayerForExport({
+        activeTransition,
+        layerIndex: i,
+        parentCompositionId: clip.compositionId || clip.id,
+        parentTime: nestedTime,
+        layerIdPrefix: clip.compositionId || clip.id,
+        clipStates,
+        parallelDecoder,
+        useParallelDecode,
+        depth,
+      });
+      if (transitionLayer) {
+        layers.push(transitionLayer);
+      }
+      continue;
+    }
 
     const nestedClip = clip.nestedClips.find(
       nc =>
@@ -111,6 +309,7 @@ function buildNestedLayerForExport(
 
   const exportVideo = getExportVideoElement(nestedClip, clipStates);
   if (exportVideo) {
+    const nestedClipTime = getNestedClipSourceTime(nestedClip, nestedClipLocalTime);
     return buildNestedVideoLayer(
       nestedClip,
       baseLayer,
@@ -119,6 +318,7 @@ function buildNestedLayerForExport(
       clipStates,
       parallelDecoder,
       useParallelDecode,
+      nestedClipTime,
     );
   }
 
@@ -150,9 +350,7 @@ function buildNestedLayerForExport(
   }
 
   if (nestedClip.source?.type === 'model') {
-    const nestedSourceTime = nestedClip.reversed
-      ? nestedClip.outPoint - nestedClipLocalTime
-      : nestedClipLocalTime + nestedClip.inPoint;
+    const nestedSourceTime = getNestedClipSourceTime(nestedClip, nestedClipLocalTime);
     return {
       ...baseLayer,
       source: buildModelSource(nestedClip, nestedSourceTime),

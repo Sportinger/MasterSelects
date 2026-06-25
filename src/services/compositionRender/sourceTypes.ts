@@ -5,7 +5,7 @@ import type { VectorAnimationProvider } from '../../types/vectorAnimation';
 export type CompositionClipSourceEntry = {
   clipId: string;
   compositionId?: string;
-  type: 'video' | 'image' | 'audio' | 'text' | 'math-scene' | 'transition-overlay' | VectorAnimationProvider;
+  type: 'video' | 'image' | 'audio' | 'text' | 'solid' | 'math-scene' | 'transition-overlay' | VectorAnimationProvider;
   videoElement?: HTMLVideoElement;
   webCodecsPlayer?: LayerSource['webCodecsPlayer'];
   imageElement?: HTMLImageElement;

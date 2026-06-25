@@ -52,9 +52,16 @@ type NestedCompRendererTestAccess = NestedCompRenderer & {
   ) => void;
 };
 
-function createRenderer() {
+function createMockTexture() {
+  return {
+    createView: vi.fn(() => ({ label: 'texture-view' })),
+    destroy: vi.fn(),
+  };
+}
+
+function createRenderer(device: GPUDevice = {} as GPUDevice) {
   return new NestedCompRenderer(
-    {} as GPUDevice,
+    device,
     {} as unknown as CompositorPipeline,
     {} as unknown as EffectsPipeline,
     {} as unknown as TextureManager,
@@ -103,6 +110,48 @@ describe('NestedCompRenderer shared-scene integration', () => {
     mockNativeSceneRenderer.renderScene.mockReturnValue({ label: 'nested-shared-scene-view' });
     useMediaStore.setState(initialMediaState);
     useTimelineStore.setState(initialTimelineState);
+  });
+
+  it('does not cache a deferred nested frame at the target time', () => {
+    const previousGPUTextureUsage = (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+    Object.defineProperty(globalThis, 'GPUTextureUsage', {
+      configurable: true,
+      value: { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_DST: 4 },
+    });
+    const renderer = createRenderer({
+      createTexture: vi.fn(() => createMockTexture()),
+    } as unknown as GPUDevice);
+
+    try {
+      const view = renderer.preRender(
+        'transition-comp',
+        [{
+          id: 'pending-layer',
+          name: 'Pending Layer',
+          visible: true,
+          opacity: 1,
+          source: null,
+        }] as unknown as Layer[],
+        16,
+        16,
+        {} as GPUCommandEncoder,
+        {} as GPUSampler,
+        1,
+        [{ id: 'scene-clip' }] as unknown as TimelineClip[],
+      );
+
+      expect(view).toBeNull();
+      expect((renderer as unknown as { lastRenderTime: Map<string, number> }).lastRenderTime.has('transition-comp')).toBe(false);
+    } finally {
+      if (previousGPUTextureUsage === undefined) {
+        delete (globalThis as typeof globalThis & { GPUTextureUsage?: unknown }).GPUTextureUsage;
+      } else {
+        Object.defineProperty(globalThis, 'GPUTextureUsage', {
+          configurable: true,
+          value: previousGPUTextureUsage,
+        });
+      }
+    }
   });
 
   it('collects nested gaussian splats as shared-scene placeholders', () => {

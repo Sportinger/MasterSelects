@@ -23,6 +23,7 @@ import { useMediaBoardAnnotationState } from './media/board/useMediaBoardAnnotat
 import { useMediaBoardController } from './media/board/useMediaBoardController';
 
 import { useMediaStore } from '../../stores/mediaStore';
+import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useFlashBoardStore } from '../../stores/flashboardStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -301,7 +302,7 @@ export function MediaPanel() {
     gridFolderId,
     selectedIds,
     folders,
-    compositionCount: compositions.length,
+    compositionCount: compositions.filter(isUserVisibleComposition).length,
     setGridFolderId,
     setContextMenu,
     closeContextMenu,

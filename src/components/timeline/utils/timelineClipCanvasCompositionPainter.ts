@@ -61,6 +61,8 @@ function drawCanvasMixdownWaveform(
   w: number,
   h: number,
 ): void {
+  if (clip.source?.type !== 'audio') return;
+
   const waveform = (clip.mixdownWaveform && clip.mixdownWaveform.length > 0)
     ? clip.mixdownWaveform
     : clip.hasMixdownAudio && clip.waveform && clip.waveform.length > 0
@@ -114,7 +116,7 @@ export function drawTimelineClipCanvasCompositionDecorations(
   ctx.clip();
   thumbnailDrawCount += drawTimelineClipCanvasCompositionSegmentThumbnails(ctx, clip, x, top, w, h, requestRedraw, props);
   drawCanvasMixdownWaveform(ctx, clip, geometry, x, top, w, h);
-  if (clip.mixdownGenerating && w >= 72) {
+  if (clip.source?.type === 'audio' && clip.mixdownGenerating && w >= 72) {
     ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
     ctx.fillRect(x + 6, top + Math.max(4, h - 20), Math.min(118, w - 12), 15);
     ctx.fillStyle = 'rgba(255, 255, 255, 0.86)';

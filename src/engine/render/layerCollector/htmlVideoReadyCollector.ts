@@ -25,6 +25,8 @@ import {
 import { collectExportHtmlVideo } from './htmlVideoExportCollector';
 import type { HtmlVideoCollectRequest } from './htmlVideoCollector';
 
+const PLAYBACK_CACHE_CAPTURE_INTERVAL_MS = 2000;
+
 export function collectReadyHtmlVideo(
   request: HtmlVideoCollectRequest
 ): LayerRenderData | null {
@@ -297,7 +299,7 @@ export function collectReadyHtmlVideo(
     if (deps.isPlaying) {
       const now = performance.now();
       const lastCapture = deps.scrubbingCache?.getLastCaptureTime(video) || 0;
-      if (now - lastCapture > 500) {
+      if (now - lastCapture > PLAYBACK_CACHE_CAPTURE_INTERVAL_MS) {
         deps.scrubbingCache?.captureVideoFrame(video, layer.sourceClipId);
         deps.scrubbingCache?.setLastCaptureTime(video, now);
       }

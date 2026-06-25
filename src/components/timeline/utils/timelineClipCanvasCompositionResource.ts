@@ -13,6 +13,9 @@ export interface TimelineClipCanvasCompositionSegmentInput {
 export interface TimelineClipCanvasCompositionResourceClipInput {
   isComposition?: boolean;
   compositionId?: string;
+  source?: {
+    type?: string | null;
+  } | null;
   nestedClipBoundaries?: readonly number[];
   clipSegments?: readonly TimelineClipCanvasCompositionSegmentInput[];
   mixdownWaveform?: readonly number[];
@@ -28,15 +31,24 @@ type WorkerPreparedCompositionSegmentThumbnailStripResource = NonNullable<
   WorkerPreparedCompositionVisualsResource['segmentThumbnailStrip']
 >;
 
+function hasTimelineClipCanvasCompositionAudioMixdown(
+  clip: TimelineClipCanvasCompositionResourceClipInput,
+): boolean {
+  if (clip.source?.type !== 'audio') return false;
+  return Boolean(
+    clip.mixdownGenerating ||
+      (clip.mixdownWaveform && clip.mixdownWaveform.length > 0) ||
+      (clip.hasMixdownAudio && clip.waveform && clip.waveform.length > 0)
+  );
+}
+
 export function hasTimelineClipCanvasCompositionDecorations(
   clip: TimelineClipCanvasCompositionResourceClipInput,
 ): boolean {
   return Boolean(
     clip.isComposition ||
     clip.compositionId ||
-    clip.mixdownGenerating ||
-    (clip.mixdownWaveform && clip.mixdownWaveform.length > 0) ||
-    (clip.hasMixdownAudio && clip.waveform && clip.waveform.length > 0) ||
+    hasTimelineClipCanvasCompositionAudioMixdown(clip) ||
     (clip.nestedClipBoundaries && clip.nestedClipBoundaries.length > 0) ||
     (clip.clipSegments && clip.clipSegments.length > 0)
   );
@@ -177,6 +189,6 @@ export function createTimelineClipCanvasWorkerCompositionVisualsResource(input: 
     segmentRects: createTimelineClipCanvasWorkerCompositionSegmentRects(clip),
     segmentThumbnailStrip: createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(input),
     mixdownWaveform: input.mixdownWaveform,
-    mixdownGenerating: clip.mixdownGenerating,
+    mixdownGenerating: clip.source?.type === 'audio' ? clip.mixdownGenerating : false,
   };
 }

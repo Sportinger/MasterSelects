@@ -3,6 +3,8 @@ import type { ActiveTransitionPlan } from '../../../stores/timeline/editOperatio
 import type { BlendMode } from '../../../types/blendMode';
 import type { RuntimeColorGrade } from '../../../types/colorCorrection';
 import type { Effect } from '../../../types/effects';
+import type { ClipMask } from '../../../types/masks';
+import type { LayerSourceRect, TransitionRenderState } from '../../../types/layers';
 import type { TextBoundsPath } from '../../../types/masks';
 import type { ClipTransform } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
@@ -31,6 +33,9 @@ export interface BaseLayerPropsLike {
   rotation: { x: number; y: number; z: number };
   maskClipId?: string;
   maskInvert?: boolean;
+  masks?: ClipMask[];
+  sourceRect?: LayerSourceRect;
+  transitionRender?: TransitionRenderState;
   is3D?: boolean;
 }
 

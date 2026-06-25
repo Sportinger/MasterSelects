@@ -10,6 +10,9 @@ const ENABLE_VISUAL_HTML_VIDEO_FALLBACK = false;
 const MAX_DRAG_FALLBACK_DRIFT_SECONDS = 1.2;
 const MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.9;
 const HTML_HOLD_RECOVERY_MS = 120;
+const PLAYBACK_CACHE_CAPTURE_INTERVAL_MS = 2000;
+const IMPORT_FAILURE_WARN_INTERVAL_MS = 2000;
+const importFailureWarnAt = new Map<string, number>();
 
 type VideoProvider = NonNullable<NonNullable<Layer['source']>['webCodecsPlayer']>;
 
@@ -78,6 +81,16 @@ function armHtmlHold(htmlHoldUntil: Map<string, number>, layerId: string): void 
 
 function clearHtmlHold(htmlHoldUntil: Map<string, number>, layerId: string): void {
   htmlHoldUntil.delete(layerId);
+}
+
+function shouldWarnImportFailure(layerId: string): boolean {
+  const now = performance.now();
+  const lastWarnAt = importFailureWarnAt.get(layerId) ?? 0;
+  if (now - lastWarnAt < IMPORT_FAILURE_WARN_INTERVAL_MS) {
+    return false;
+  }
+  importFailureWarnAt.set(layerId, now);
+  return true;
 }
 
 function shouldPreferHtmlHold(
@@ -151,13 +164,15 @@ export function tryCollectHtmlVideoPreview(
   }
   const layerReuseKey = getLayerReuseKey(layer);
   const targetTime = getTargetVideoTime(layer, video);
-  const isDragging = useTimelineStore.getState().isDraggingPlayhead;
+  const timelineState = useTimelineStore.getState();
+  const isPlaying = timelineState.isPlaying;
+  const isDragging = timelineState.isDraggingPlayhead;
   scrubbingCache?.preloadAroundTime?.(video, targetTime, {
     isDragging,
-    isPlaying: useTimelineStore.getState().isPlaying,
+    isPlaying,
   });
   const isSettling = scrubSettleState.isPending(layer.sourceClipId);
-  const isPausedSettle = !useTimelineStore.getState().isPlaying && !isDragging && isSettling;
+  const isPausedSettle = !isPlaying && !isDragging && isSettling;
   const lastPresentedTime = scrubbingCache?.getLastPresentedTime(video);
   const lastPresentedOwner = scrubbingCache?.getLastPresentedOwner(video);
   const hasPresentedOwnerMismatch =
@@ -170,7 +185,7 @@ export function tryCollectHtmlVideoPreview(
     Number.isFinite(lastPresentedTime);
   const displayedTime = hasConfirmedPresentedFrame ? lastPresentedTime : undefined;
   const reportedDisplayedTime =
-    useTimelineStore.getState().isPlaying &&
+    isPlaying &&
     !video.paused &&
     !video.seeking &&
     Number.isFinite(video.currentTime)
@@ -184,7 +199,7 @@ export function tryCollectHtmlVideoPreview(
     : undefined;
   const awaitingPausedTargetFrame =
     hasPresentedOwnerMismatch ||
-    !useTimelineStore.getState().isPlaying &&
+    !isPlaying &&
     !isDragging &&
     (!isSettling &&
       (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
@@ -203,7 +218,7 @@ export function tryCollectHtmlVideoPreview(
       : null;
   const emergencyHoldFrame = dragHoldFrame;
   const sameClipHoldFrame =
-    !useTimelineStore.getState().isPlaying &&
+    !isPlaying &&
     (isDragging || isSettling || awaitingPausedTargetFrame || video.seeking)
       ? lastSameClipFrame
       : null;
@@ -276,7 +291,7 @@ export function tryCollectHtmlVideoPreview(
   }
 
   if (video.readyState >= 2) {
-    if (allowLiveVideoImport) {
+    if (allowLiveVideoImport && !isPlaying) {
       const copiedFrame = getCopiedHtmlVideoPreviewFrame(
         video,
         scrubbingCache,
@@ -304,11 +319,16 @@ export function tryCollectHtmlVideoPreview(
       if (scrubbingCache) {
         const now = performance.now();
         const lastCapture = scrubbingCache.getLastCaptureTime(video);
-        if (allowConfirmedFrameCaching && now - lastCapture > 50) {
-          scrubbingCache.captureVideoFrame(video, captureOwnerId);
-          scrubbingCache.setLastCaptureTime(video, now);
-        }
-        if (allowConfirmedFrameCaching) {
+        if (isPlaying) {
+          if (now - lastCapture > PLAYBACK_CACHE_CAPTURE_INTERVAL_MS) {
+            scrubbingCache.captureVideoFrame(video, layer.sourceClipId);
+            scrubbingCache.setLastCaptureTime(video, now);
+          }
+        } else if (allowConfirmedFrameCaching) {
+          if (now - lastCapture > 50) {
+            scrubbingCache.captureVideoFrame(video, captureOwnerId);
+            scrubbingCache.setLastCaptureTime(video, now);
+          }
           scrubbingCache.cacheFrameAtTime(video, targetTime);
         } else {
           if (typeof displayedTime === 'number' && Number.isFinite(displayedTime)) {
@@ -332,7 +352,31 @@ export function tryCollectHtmlVideoPreview(
         previewPath: 'live-import',
       };
     } else {
-      warn('Failed to import video texture', { layerId: layer.id });
+      if (allowLiveVideoImport && isPlaying) {
+        const copiedFrame = getCopiedHtmlVideoPreviewFrame(
+          video,
+          scrubbingCache,
+          targetTime,
+          layer.sourceClipId,
+          captureOwnerId
+        );
+        if (copiedFrame) {
+          clearHtmlHold(htmlHoldUntil, layerReuseKey);
+          return {
+            layer, isVideo: false, externalTexture: null, textureView: copiedFrame.view,
+            sourceWidth: copiedFrame.width, sourceHeight: copiedFrame.height,
+            displayedMediaTime: copiedFrame.mediaTime ?? reportedDisplayedTime,
+            targetMediaTime: targetTime,
+            previewPath: 'copied-preview',
+          };
+        }
+      }
+      const context = { layerId: layer.id };
+      if (shouldWarnImportFailure(layerReuseKey)) {
+        warn('Failed to import video texture', context);
+      } else {
+        debug('Failed to import video texture', context);
+      }
     }
   }
 

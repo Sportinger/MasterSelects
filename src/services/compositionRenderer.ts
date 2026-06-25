@@ -7,6 +7,7 @@ import type {
   TimelineTrack,
   TimelineClip,
 } from '../types';
+import type { Layer } from '../types/layers';
 import type { Keyframe } from '../types/keyframes';
 
 const log = Logger.create('CompositionRenderer');
@@ -14,10 +15,14 @@ import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { textRenderer } from './textRenderer';
 import { isVectorAnimationSourceType } from '../types/vectorAnimation';
-import { createTimelineTransitionOverlayCanvasRuntime } from './timeline/timelineGeneratedCanvasRuntime';
+import {
+  createTimelineSolidCanvasRuntime,
+  createTimelineTransitionOverlayCanvasRuntime,
+} from './timeline/timelineGeneratedCanvasRuntime';
 import {
   buildEvaluatedClipLayer,
   evaluateNestedComposition,
+  type BackgroundVideoPlaybackOptions,
 } from './compositionRender/layerEvaluation';
 import {
   buildSerializableMathSceneClip,
@@ -39,6 +44,21 @@ import type {
 } from './compositionRender/sourceTypes';
 import { buildCompositionTransitionLayersForTrack } from './compositionRender/transitionEvaluation';
 export type { EvaluatedLayer } from './compositionRender/sourceTypes';
+
+export interface EvaluateCompositionOptions {
+  playbackOptions?: BackgroundVideoPlaybackOptions;
+}
+
+function pauseInactiveCompositionVideos(
+  sources: CompositionSources,
+  activeClipIds: ReadonlySet<string>,
+): void {
+  for (const source of sources.clipSources.values()) {
+    const video = source.videoElement;
+    if (!video || activeClipIds.has(source.clipId) || video.paused) continue;
+    video.pause();
+  }
+}
 
 class CompositionRendererService {
   // Cache of prepared sources per composition
@@ -214,7 +234,7 @@ class CompositionRendererService {
           }
         }
 
-        if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
+        if ((sourceType === 'text' || sourceType === 'solid' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
           sources.clipSources.set(clip.id, {
             clipId: clip.id,
             type: sourceType,
@@ -259,7 +279,7 @@ class CompositionRendererService {
                 timelineClip.source
               ),
             });
-          } else if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
+          } else if ((sourceType === 'text' || sourceType === 'solid' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
             sources.clipSources.set(clip.id, {
               clipId: clip.id,
               type: sourceType,
@@ -312,6 +332,22 @@ class CompositionRendererService {
             clipId: clip.id,
             compositionId,
             type: 'transition-overlay',
+            textCanvas,
+            naturalDuration: clip.duration,
+          };
+          sources.clipSources.set(clip.id, entry);
+          reportCompositionSource(compositionId, entry);
+        }
+
+        if (sourceType === 'solid' && serializableClip.solidColor) {
+          const textCanvas = createTimelineSolidCanvasRuntime({
+            color: serializableClip.solidColor,
+            dimensions: { width: composition.width, height: composition.height },
+          });
+          const entry: CompositionClipSourceEntry = {
+            clipId: clip.id,
+            compositionId,
+            type: 'solid',
             textCanvas,
             naturalDuration: clip.duration,
           };
@@ -411,7 +447,7 @@ class CompositionRendererService {
   /**
    * Evaluate a composition at a specific time - returns layers ready for rendering
    */
-  evaluateAtTime(compositionId: string, time: number): EvaluatedLayer[] {
+  evaluateAtTime(compositionId: string, time: number, options?: EvaluateCompositionOptions): EvaluatedLayer[] {
     const sources = this.compositionSources.get(compositionId);
     if (!sources?.isReady) {
       // Log at debug level — this is a normal transient state during loading, not an error
@@ -470,6 +506,7 @@ class CompositionRendererService {
 
     // Build layers from bottom to top (reverse track order)
     const layers: EvaluatedLayer[] = [];
+    const activeVideoSourceClipIds = new Set<string>();
     const getVectorAnimationSettings = (clipId: string, localTime: number) =>
       useTimelineStore.getState().getInterpolatedVectorAnimationSettings(clipId, localTime);
     const getClipKeyframes = (clipId: string) => activeClipKeyframes?.get(clipId);
@@ -491,9 +528,21 @@ class CompositionRendererService {
         isActiveComposition: isActiveComp,
         getVectorAnimationSettings,
         getClipKeyframes,
+        playbackOptions: options?.playbackOptions,
+        getComposition: (transitionCompositionId) =>
+          mediaState.compositions.find((candidate) => candidate.id === transitionCompositionId),
+        isCompositionReady: (transitionCompositionId) => this.isReady(transitionCompositionId),
+        prepareComposition: (transitionCompositionId) => { void this.prepareComposition(transitionCompositionId); },
+        evaluateCompositionAtTime: (transitionCompositionId, transitionCompositionTime, transitionOptions) =>
+          this.evaluateAtTime(transitionCompositionId, transitionCompositionTime, transitionOptions) as Layer[],
       });
       if (transitionLayers) {
         layers.push(...transitionLayers);
+        for (const layer of transitionLayers) {
+          if (typeof layer.clipId === 'string') {
+            activeVideoSourceClipIds.add(layer.clipId);
+          }
+        }
         continue;
       }
 
@@ -519,6 +568,13 @@ class CompositionRendererService {
           mediaFiles: mediaStore.files,
           proxyEnabled: mediaStore.proxyEnabled,
           getVectorAnimationSettings,
+          playbackOptions: options?.playbackOptions,
+          getComposition: (transitionCompositionId) =>
+            mediaStore.compositions.find((candidate) => candidate.id === transitionCompositionId),
+          isCompositionReady: (transitionCompositionId) => this.isReady(transitionCompositionId),
+          prepareComposition: (transitionCompositionId) => { void this.prepareComposition(transitionCompositionId); },
+          evaluateCompositionAtTime: (transitionCompositionId, transitionCompositionTime, transitionOptions) =>
+            this.evaluateAtTime(transitionCompositionId, transitionCompositionTime, transitionOptions) as Layer[],
         });
         if (nestedLayer) {
           layers.push(nestedLayer);
@@ -528,6 +584,9 @@ class CompositionRendererService {
 
       const source = sources.clipSources.get(clipAtTime.id);
       if (!source) continue;
+      if (source.videoElement) {
+        activeVideoSourceClipIds.add(source.clipId);
+      }
 
       layers.push(buildEvaluatedClipLayer({
         compositionId,
@@ -537,8 +596,11 @@ class CompositionRendererService {
         isActiveComposition: isActiveComp,
         getVectorAnimationSettings,
         getClipKeyframes,
+        playbackOptions: options?.playbackOptions,
       }));
     }
+
+    pauseInactiveCompositionVideos(sources, activeVideoSourceClipIds);
 
     return layers;
   }
@@ -642,7 +704,9 @@ class CompositionRendererService {
       // Check if this composition contains the changed one as a nested clip
       const clips = comp.timelineData?.clips || [];
       const hasNested = clips.some(clip =>
-        clip.isComposition && clip.compositionId === compositionId
+        (clip.isComposition && clip.compositionId === compositionId) ||
+        clip.transitionOut?.compositionId === compositionId ||
+        clip.transitionIn?.compositionId === compositionId
       );
 
       if (hasNested) {

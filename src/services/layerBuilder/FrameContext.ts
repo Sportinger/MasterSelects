@@ -97,6 +97,7 @@ export function createFrameContext(): FrameContext {
     getInterpolatedSpeed,
     getSourceTimeForClip,
     hasKeyframes,
+    getClipKeyframes,
   } = timelineState;
 
   const playheadPosition = getPlayheadPosition(storePlayheadPosition);
@@ -152,6 +153,7 @@ export function createFrameContext(): FrameContext {
     getInterpolatedSpeed,
     getSourceTimeForClip,
     hasKeyframes,
+    getClipKeyframes,
 
     // Timing
     now,

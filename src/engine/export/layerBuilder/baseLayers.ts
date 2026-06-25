@@ -5,9 +5,11 @@ import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
 import type { BlendMode } from '../../../types/blendMode';
 import { compileRuntimeColorGrade } from '../../../types/colorCorrection';
 import type { Effect } from '../../../types/effects';
+import type { Keyframe } from '../../../types/keyframes';
 import type { ClipTransform } from '../../../types/timelineCore';
 import { getInterpolatedClipTransform } from '../../../utils/keyframeInterpolation';
 import { getEffectiveScale } from '../../../utils/transformScale';
+import { evaluateCompositionClipMasks } from '../../../services/compositionRender/keyframeEvaluation';
 import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 
 const log = Logger.create('ExportLayerBuilder');
@@ -72,6 +74,7 @@ export function buildBaseLayerProps(
       y: ((transform.rotation?.y ?? 0) * Math.PI) / 180,
       z: ((transform.rotation?.z ?? 0) * Math.PI) / 180,
     },
+    sourceRect: clip.sourceRect ? { ...clip.sourceRect } : undefined,
     ...(clip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: clip.id, maskInvert: false } : {}),
     ...(clip.is3D ? { is3D: true } : {}),
   };
@@ -79,7 +82,10 @@ export function buildBaseLayerProps(
 
 export function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTime: number): BaseLayerPropsLike {
   const { clipKeyframes } = useTimelineStore.getState();
-  const keyframes = clipKeyframes.get(nestedClip.id) || [];
+  const storeKeyframes = clipKeyframes.get(nestedClip.id);
+  const keyframes = storeKeyframes?.length
+    ? storeKeyframes
+    : [...((nestedClip as TimelineClip & { keyframes?: readonly Keyframe[] }).keyframes ?? [])];
 
   const baseTransform: ClipTransform = {
     opacity: nestedClip.transform?.opacity ?? DEFAULT_TRANSFORM.opacity,
@@ -160,7 +166,13 @@ export function buildNestedBaseLayer(nestedClip: TimelineClip, nestedClipLocalTi
       y: ((transform.rotation?.y || 0) * Math.PI) / 180,
       z: ((transform.rotation?.z || 0) * Math.PI) / 180,
     },
-    ...(nestedClip.masks?.some(mask => mask.enabled !== false) ? { maskClipId: nestedClip.id, maskInvert: false } : {}),
+    sourceRect: nestedClip.sourceRect ? { ...nestedClip.sourceRect } : undefined,
+    ...(() => {
+      const masks = evaluateCompositionClipMasks(nestedClip.masks, keyframes, nestedClipLocalTime);
+      return masks?.some(mask => mask.enabled !== false)
+        ? { maskClipId: nestedClip.id, maskInvert: false, masks }
+        : {};
+    })(),
     ...(nestedClip.is3D ? { is3D: true } : {}),
   };
 }

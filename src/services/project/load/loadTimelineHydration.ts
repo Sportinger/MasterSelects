@@ -7,6 +7,7 @@ import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { fromProjectTransform } from '../transformSerialization';
 import { normalizeRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
 import { hydrateMaskEdgeFeathers, hydrateMaskKeyframeProperty } from '../maskSerialization';
+import { ensureTransitionCompositionForPair } from '../../timeline/transitionCompositionService';
 import type { ProjectComposition, ProjectFile } from '../../projectFileService';
 import type { LabelColor } from '../../../stores/mediaStore/types';
 import type {
@@ -21,6 +22,119 @@ import type {
 import { calcRangeCoverage } from './loadMediaCacheHydration';
 
 const log = Logger.create('ProjectSync');
+
+function createPlaceholderFile(name: string): File {
+  return typeof File !== 'undefined'
+    ? new File([], name)
+    : ({} as File);
+}
+
+function asTransitionTimelineClip(clip: CompositionTimelineData['clips'][number]): TimelineClip {
+  return {
+    ...clip,
+    file: createPlaceholderFile(clip.name || 'clip'),
+    source: {
+      type: clip.sourceType,
+      mediaFileId: clip.mediaFileId || undefined,
+      naturalDuration: clip.naturalDuration,
+      transitionOverlay: clip.transitionOverlay,
+      vectorAnimationSettings: clip.vectorAnimationSettings,
+    },
+    transform: clip.transform,
+    effects: clip.effects ?? [],
+  } as TimelineClip;
+}
+
+function collectAttachedTransitionCompositionIds(compositions: readonly Composition[]): Set<string> {
+  const ids = new Set<string>();
+  const pending: string[] = [];
+  const byId = new Map(compositions.map((composition) => [composition.id, composition]));
+  const collectFromTimeline = (timelineData: Composition['timelineData']) => {
+    if (!timelineData) return;
+    for (const clip of timelineData.clips) {
+      for (const compositionId of [clip.transitionOut?.compositionId, clip.transitionIn?.compositionId]) {
+        if (!compositionId || ids.has(compositionId)) continue;
+        ids.add(compositionId);
+        pending.push(compositionId);
+      }
+    }
+  };
+
+  for (const composition of compositions) {
+    if (composition.transitionComp?.kind === 'transition-comp') continue;
+    collectFromTimeline(composition.timelineData);
+  }
+
+  while (pending.length > 0) {
+    collectFromTimeline(byId.get(pending.pop()!)?.timelineData);
+  }
+  return ids;
+}
+
+function hasValidTransitionCompositionReference(
+  compositions: readonly Composition[],
+  parentCompositionId: string,
+  transitionId: string,
+  compositionId: string | undefined,
+  outgoingClipId: string | undefined,
+  incomingClipId: string | undefined,
+): boolean {
+  if (!compositionId) return true;
+  const composition = compositions.find((candidate) => candidate.id === compositionId);
+  return composition?.transitionComp?.kind === 'transition-comp' &&
+    composition.transitionComp.parentCompositionId === parentCompositionId &&
+    composition.transitionComp.parentTransitionId === transitionId &&
+    composition.transitionComp.parentOutgoingClipId === outgoingClipId &&
+    composition.transitionComp.parentIncomingClipId === incomingClipId;
+}
+
+function pruneInvalidTransitionCompositionReferences(): void {
+  const compositions = useMediaStore.getState().compositions;
+  let changed = false;
+  const nextCompositions = compositions.map((composition) => {
+    if (composition.transitionComp?.kind === 'transition-comp' || !composition.timelineData) return composition;
+    let compositionChanged = false;
+    const clips = composition.timelineData.clips.map((clip) => {
+      let nextClip = clip;
+      if (
+        clip.transitionOut?.compositionId &&
+        !hasValidTransitionCompositionReference(
+          compositions,
+          composition.id,
+          clip.transitionOut.id,
+          clip.transitionOut.compositionId,
+          clip.id,
+          clip.transitionOut.linkedClipId,
+        )
+      ) {
+        changed = true;
+        compositionChanged = true;
+        nextClip = { ...nextClip, transitionOut: { ...clip.transitionOut, compositionId: undefined } };
+      }
+      if (
+        clip.transitionIn?.compositionId &&
+        !hasValidTransitionCompositionReference(
+          compositions,
+          composition.id,
+          clip.transitionIn.id,
+          clip.transitionIn.compositionId,
+          clip.transitionIn.linkedClipId,
+          clip.id,
+        )
+      ) {
+        changed = true;
+        compositionChanged = true;
+        nextClip = { ...nextClip, transitionIn: { ...clip.transitionIn, compositionId: undefined } };
+      }
+      return nextClip;
+    });
+    return compositionChanged ? { ...composition, timelineData: { ...composition.timelineData, clips } } : composition;
+  });
+
+  if (changed) {
+    useMediaStore.setState({ compositions: nextCompositions });
+  }
+}
 
 type CompositionViewState = Record<string, {
   playheadPosition?: number;
@@ -89,6 +203,8 @@ export function convertProjectCompositionToStore(
         inPoint: c.inPoint,
         outPoint: c.outPoint,
         transform: fromProjectTransform(c.transform),
+        sourceRect: c.sourceRect ? structuredClone(c.sourceRect) : undefined,
+        transitionRender: c.transitionRender ? structuredClone(c.transitionRender) : undefined,
         effects: c.effects.map((effect): Effect => ({
           id: effect.id,
           name: effect.name,
@@ -98,6 +214,8 @@ export function convertProjectCompositionToStore(
         })),
         transitionIn: c.transitionIn ? normalizeTransitionInstanceParams(structuredClone(c.transitionIn)) : undefined,
         transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
+        transitionSourceTimeOverride: c.transitionSourceTimeOverride,
+        transitionSourceHold: c.transitionSourceHold,
         colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
         nodeGraph: cloneClipNodeGraph(c.nodeGraph),
         masks: c.masks.map((mask): ClipMask => ({
@@ -214,6 +332,56 @@ export function convertProjectCompositionToStore(
       timelineData,
     };
   });
+}
+
+export function normalizeLoadedTransitionCompositions(): void {
+  const mediaStore = useMediaStore.getState();
+
+  for (const parentComposition of mediaStore.compositions) {
+    if (parentComposition.transitionComp?.kind === 'transition-comp' || !parentComposition.timelineData) continue;
+
+    const timelineClips = parentComposition.timelineData.clips.map(asTransitionTimelineClip);
+    for (const clip of timelineClips) {
+      if (!clip.transitionOut) continue;
+
+      ensureTransitionCompositionForPair({
+        outgoingClipId: clip.id,
+        transitionId: clip.transitionOut.id,
+        timelineClips,
+        serializableClips: parentComposition.timelineData.clips,
+        parentComposition,
+        compositions: useMediaStore.getState().compositions,
+        createComposition: useMediaStore.getState().createComposition,
+        updateComposition: useMediaStore.getState().updateComposition,
+        attachTransitionComposition: ({ outgoingClipId, incomingClipId, transitionId, compositionId }) => {
+          const currentParent = useMediaStore.getState().compositions.find((composition) => composition.id === parentComposition.id);
+          if (!currentParent?.timelineData) return;
+          useMediaStore.getState().updateComposition(parentComposition.id, {
+            timelineData: {
+              ...currentParent.timelineData,
+              clips: currentParent.timelineData.clips.map((candidate) => {
+                if (candidate.id === outgoingClipId && candidate.transitionOut?.id === transitionId) {
+                  return { ...candidate, transitionOut: { ...candidate.transitionOut, compositionId } };
+                }
+                if (candidate.id === incomingClipId && candidate.transitionIn?.id === transitionId) {
+                  return { ...candidate, transitionIn: { ...candidate.transitionIn, compositionId } };
+                }
+                return candidate;
+              }),
+            },
+          });
+        },
+      });
+    }
+  }
+
+  pruneInvalidTransitionCompositionReferences();
+  const attachedIds = collectAttachedTransitionCompositionIds(useMediaStore.getState().compositions);
+  for (const composition of useMediaStore.getState().compositions) {
+    if (composition.transitionComp?.kind === 'transition-comp' && !attachedIds.has(composition.id)) {
+      useMediaStore.getState().removeComposition(composition.id);
+    }
+  }
 }
 
 export async function hydrateActiveCompositionTimeline(

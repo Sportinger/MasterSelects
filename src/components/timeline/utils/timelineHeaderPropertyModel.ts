@@ -22,22 +22,10 @@ import {
   formatTimelineHeaderVectorAnimationPropertyValue,
   getTimelineHeaderVectorAnimationPropertyValue,
 } from './timelineHeaderVectorPropertyModel';
-import {
-  type HeaderKeyframe,
-  type KeyframeTrackClip,
-  usesCameraPropertyModel,
-} from './timelineHeaderPropertyTypes';
+import { type HeaderKeyframe, type KeyframeTrackClip, usesCameraPropertyModel } from './timelineHeaderPropertyTypes';
 
-export {
-  getHeaderPropertyLabel,
-  sortTimelineHeaderProperties,
-} from './timelineHeaderPropertyLabels';
-export {
-  type HeaderKeyframe,
-  type KeyframeTrackClip,
-  shouldHide3DOnlyProperties,
-  usesCameraPropertyModel,
-} from './timelineHeaderPropertyTypes';
+export { getHeaderPropertyLabel, sortTimelineHeaderProperties } from './timelineHeaderPropertyLabels';
+export { type HeaderKeyframe, type KeyframeTrackClip, shouldHide3DOnlyProperties, usesCameraPropertyModel } from './timelineHeaderPropertyTypes';
 
 export function getMaskPathValue(mask: ClipMask): NonNullable<Keyframe['pathValue']> {
   return {

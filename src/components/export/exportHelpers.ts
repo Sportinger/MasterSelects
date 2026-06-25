@@ -3,6 +3,13 @@
 import { Logger } from '../../services/logger';
 import { useTimelineStore } from '../../stores/timeline';
 import type { Layer } from '../../types';
+import {
+  createTransitionSourceClip,
+  DEFAULT_TRANSITION_PLACEMENT,
+  findActiveTransitionPlanForTrack,
+  type ActiveTransitionPlan,
+} from '../../stores/timeline/editOperations/transitionPlanner';
+import { createTimelineTransitionMediaDurationResolver } from '../../services/timeline/timelineTransitionMediaDurations';
 import { prepareClipsForExport, cleanupExportMode } from '../../engine/export/ClipPreparation';
 import {
   buildLayersAtTime as buildExportLayersAtTime,
@@ -10,6 +17,7 @@ import {
   initializeLayerBuilder,
 } from '../../engine/export/ExportLayerBuilder';
 import { preloadGaussianSplatsForExport, preload3DAssetsForExport } from '../../engine/export/preloadGaussianSplats';
+import { prepareTransitionCompositionsForExport } from '../../engine/export/prepareTransitionCompositionsForExport';
 import { seekAllClipsToTime, waitForAllVideosReady } from '../../engine/export/VideoSeeker';
 import { getFrameTolerance } from '../../engine/export/types';
 import type { ExportClipState, ExportMode, ExportSettings, FrameContext } from '../../engine/export/types';
@@ -87,6 +95,7 @@ export class FFmpegFrameRenderer {
       this.parallelDecoder = preparation.parallelDecoder;
       this.useParallelDecode = preparation.useParallelDecode;
       this.reportPreparedRuntimeResources(true);
+      await prepareTransitionCompositionsForExport();
 
       const { tracks } = useTimelineStore.getState();
       initializeLayerBuilder(tracks);
@@ -180,15 +189,46 @@ export class FFmpegFrameRenderer {
 
   private createFrameContext(time: number): FrameContext {
     const state = useTimelineStore.getState();
+    const getMediaDuration = createTimelineTransitionMediaDurationResolver();
     const clipsAtTime = state.getClipsAtTime(time);
+    const trackMap = new Map(state.tracks.map(track => [track.id, track]));
+    const clipsByTrack = new Map(clipsAtTime.map(clip => [clip.trackId, clip]));
+    const transitionParticipantsByTrack = new Map<string, ActiveTransitionPlan>();
+    const renderClipsById = new Map(clipsAtTime.map(clip => [clip.id, clip]));
+
+    for (const track of state.tracks) {
+      if (track.type !== 'video') continue;
+
+      const transition = findActiveTransitionPlanForTrack({
+        clips: state.clips,
+        trackId: track.id,
+        time,
+        placement: DEFAULT_TRANSITION_PLACEMENT,
+        edgePolicy: 'hold',
+        getMediaDuration,
+      });
+      if (!transition) continue;
+
+      transitionParticipantsByTrack.set(track.id, transition);
+      renderClipsById.set(
+        transition.outgoingClip.id,
+        createTransitionSourceClip(transition.outgoingClip, transition.plan.outgoing, time),
+      );
+      renderClipsById.set(
+        transition.incomingClip.id,
+        createTransitionSourceClip(transition.incomingClip, transition.plan.incoming, time),
+      );
+    }
 
     return {
       time,
       fps: this.options.fps,
       frameTolerance: this.frameTolerance,
       clipsAtTime,
-      trackMap: new Map(state.tracks.map(track => [track.id, track])),
-      clipsByTrack: new Map(clipsAtTime.map(clip => [clip.trackId, clip])),
+      renderClipsAtTime: Array.from(renderClipsById.values()),
+      trackMap,
+      clipsByTrack,
+      transitionParticipantsByTrack,
       getInterpolatedTransform: state.getInterpolatedTransform,
       getInterpolatedEffects: state.getInterpolatedEffects,
       getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,

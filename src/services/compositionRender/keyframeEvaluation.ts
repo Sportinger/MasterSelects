@@ -2,6 +2,10 @@ import type { ClipMask } from '../../types/masks';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
 import { createMaskEdgeFeatherProperty, createMaskPathProperty, parseMaskProperty } from '../../types/animationProperties';
+import {
+  getInterpolatedMaskPathValue,
+  getMaskPathValue,
+} from '../../stores/timeline/keyframes/pathKeyframeValues';
 import { getMaskEdgeFeather, setMaskEdgeFeatherValue } from '../../utils/maskEdgeFeathers';
 import {
   getInterpolatedClipTransform,
@@ -66,13 +70,15 @@ export function evaluateCompositionClipMasks(
     });
 
     const pathProperty = createMaskPathProperty(mask.id);
-    const pathKeyframe = [...maskKeyframes]
-      .filter((keyframe) => keyframe.property === pathProperty && keyframe.pathValue)
-      .sort((a, b) => b.time - a.time)
-      .find((keyframe) => keyframe.time <= localTime);
-    if (pathKeyframe?.pathValue) {
-      nextMask.closed = pathKeyframe.pathValue.closed;
-      nextMask.vertices = structuredClone(pathKeyframe.pathValue.vertices);
+    if (maskKeyframes.some((keyframe) => keyframe.property === pathProperty && keyframe.pathValue)) {
+      const pathValue = getInterpolatedMaskPathValue(
+        [...maskKeyframes],
+        pathProperty,
+        localTime,
+        getMaskPathValue(mask),
+      );
+      nextMask.closed = pathValue.closed;
+      nextMask.vertices = pathValue.vertices;
     }
 
     return nextMask;

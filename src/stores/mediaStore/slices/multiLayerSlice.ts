@@ -2,6 +2,7 @@
 // Resolume-style layer activation/deactivation
 
 import type { Composition, MediaSliceCreator } from '../types';
+import { isUserVisibleComposition } from '../compositionVisibility';
 
 export interface MultiLayerActions {
   activateOnLayer: (compositionId: string, layerIndex: number) => void;
@@ -41,7 +42,7 @@ function buildColumnLayerSlots(
 
   for (const [compId, slotIdx] of Object.entries(slotAssignments)) {
     if (slotIdx >= 0 && slotIdx < TOTAL_SLOTS) {
-      const comp = compositions.find(c => c.id === compId);
+      const comp = compositions.find(c => c.id === compId && isUserVisibleComposition(c));
       if (comp) {
         slotMap[slotIdx] = comp;
       }

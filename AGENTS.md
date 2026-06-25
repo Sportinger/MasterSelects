@@ -43,6 +43,9 @@ can be dispatched as headless workers via `codex exec` (gpt-5.5, xhigh
 reasoning, fast tier — the user-level Codex defaults) whenever parallel
 bounded work helps. For non-trivial fixes, get a Codex second opinion on the
 diagnosis or diff even when no workers are dispatched.
+For architecture plans and source reviews, the fastest useful review loop so
+far is 2 Codex read-only agents plus 2 `claude -p` read-only agents; Claude
+Opus 4.8 reviews have been practical for this codebase when available.
 
 | Role | Owns |
 |---|---|

@@ -56,8 +56,10 @@ export type TextBoundsNumericPropertyName = 'position.x' | 'position.y';
 export type TextBoundsNumericProperty = `textBounds.${TextBoundsNumericPropertyName}`;
 export type TextBoundsProperty = TextBoundsPathProperty | TextBoundsNumericProperty;
 
+export type TransitionRenderProperty = 'transitionRender.progress';
+
 // Combined animatable property type
-export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
+export type AnimatableProperty = TransformProperty | CameraProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
   return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight)$/.test(property);

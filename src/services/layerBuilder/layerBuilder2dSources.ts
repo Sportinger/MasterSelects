@@ -2,6 +2,7 @@ import type { BlendMode, Layer, TimelineClip } from '../../types';
 import { getLazyImageElementForClip } from '../timeline/lazyImageElements';
 import { textRenderer } from '../textRenderer';
 import { getClipTimeInfo } from './FrameContext';
+import { withLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
 import type { LayerBuilderProxyFrameSelection } from './layerBuilderProxyFrames';
@@ -36,7 +37,7 @@ function buildLayer2dSource(params: BuildLayer2dSourceParams): Layer {
     ? transform.opacity * params.opacityOverride
     : transform.opacity;
 
-  return {
+  return withLayerBuilderMaskProperties({
     id: `${params.ctx.activeCompId}_layer_${params.layerIndex}`,
     name: params.clip.name,
     sourceClipId: params.clip.id,
@@ -49,7 +50,7 @@ function buildLayer2dSource(params: BuildLayer2dSourceParams): Layer {
     position: transform.position,
     scale: transform.scale,
     rotation: transform.rotation,
-  };
+  }, params.clip, params.localTime);
 }
 
 export function getLayerBuilderRenderableImageElement(

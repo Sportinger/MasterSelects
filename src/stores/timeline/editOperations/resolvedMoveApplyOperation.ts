@@ -11,6 +11,10 @@ import {
   pruneInvalidClipTransitions,
   shouldClearTransitionPropertiesSelection,
 } from './transitionOperations';
+import {
+  ensureTransitionCompositionsForChangedClips,
+  removeDetachedTransitionCompositions,
+} from './transitionCompositionMaintenance';
 import type { TimelineEditOperationApplyContext } from './editOperationContext';
 import { hasOnlyNoopWarnings, resultFromWarnings, uniqueIds } from './editOperationResults';
 import type { MoveClipsResolvedApplyOperation, TimelineEditResult, TimelineEditWarning } from './types';
@@ -38,8 +42,9 @@ export function applyResolvedMoveClipsOperation(
   }
 
   if (!hasFallbackTracks) {
+    const previousClips = get().clips;
     const moveOperation = resolvedClipMovesToMoveClipsOperation(operation.id, operation.resolvedMoves);
-    const moveResult = applyMoveClipsOperation(moveOperation, get().clips, get().tracks);
+    const moveResult = applyMoveClipsOperation(moveOperation, previousClips, get().tracks);
     if (moveResult.changedClipIds.length === 0 || hasOnlyNoopWarnings(moveResult.warnings)) {
       return resultFromWarnings(operationId, moveResult.warnings);
     }
@@ -75,6 +80,8 @@ export function applyResolvedMoveClipsOperation(
           ? { propertiesSelection: null }
           : {}),
       });
+      removeDetachedTransitionCompositions(previousClips, prunedTransitions.clips);
+      ensureTransitionCompositionsForChangedClips(context.set, context.get, changedClipIds, previousClips);
       get().updateDuration();
       get().invalidateCache();
     } finally {
@@ -106,7 +113,8 @@ export function applyResolvedMoveClipsOperation(
     return resultFromWarnings(operationId, materialized.warnings);
   }
 
-  const moveResult = applyMoveClipsOperation(materialized.operation, get().clips, plannedTracks);
+  const previousClips = get().clips;
+  const moveResult = applyMoveClipsOperation(materialized.operation, previousClips, plannedTracks);
   if (moveResult.changedClipIds.length === 0 || hasOnlyNoopWarnings(moveResult.warnings)) {
     return resultFromWarnings(operationId, moveResult.warnings);
   }
@@ -144,6 +152,8 @@ export function applyResolvedMoveClipsOperation(
         ? { propertiesSelection: null }
         : {}),
     });
+    removeDetachedTransitionCompositions(previousClips, prunedTransitions.clips);
+    ensureTransitionCompositionsForChangedClips(context.set, context.get, changedClipIds, previousClips);
     get().updateDuration();
     get().invalidateCache();
 

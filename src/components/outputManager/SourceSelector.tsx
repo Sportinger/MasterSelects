@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useMediaStore } from '../../stores/mediaStore';
+import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import type { RenderSource } from '../../types/renderTarget';
 
 interface SourceSelectorProps {
@@ -31,7 +32,8 @@ function sourceLabel(source: RenderSource, compositions: { id: string; name: str
 export function SourceSelector({ currentSource, onChange }: SourceSelectorProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const compositions = useMediaStore((s) => s.compositions);
+  const allCompositions = useMediaStore((s) => s.compositions);
+  const compositions = allCompositions.filter(isUserVisibleComposition);
   const activeLayerSlots = useMediaStore((s) => s.activeLayerSlots);
 
   // Close on outside click
@@ -53,7 +55,7 @@ export function SourceSelector({ currentSource, onChange }: SourceSelectorProps)
   if (activeLayerSlots) {
     for (const [key, compId] of Object.entries(activeLayerSlots)) {
       const idx = Number(key);
-      const comp = compId ? compositions.find(c => c.id === compId) : null;
+      const comp = compId ? allCompositions.find(c => c.id === compId) : null;
       slotEntries.push({ index: idx, compName: comp?.name ?? null });
     }
     slotEntries.sort((a, b) => a.index - b.index);

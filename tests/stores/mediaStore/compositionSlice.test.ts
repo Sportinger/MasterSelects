@@ -246,6 +246,138 @@ describe('compositionSlice', () => {
     expect(store.getState().selectedIds).toEqual(['other-item']);
   });
 
+  it('removeComposition: removes nested hidden transition comp descendants', () => {
+    const firstHidden = store.getState().createComposition('Hidden Transition', {
+      transitionComp: {
+        kind: 'transition-comp',
+        parentCompositionId: 'comp-1',
+        parentTransitionId: 'transition-1',
+        parentOutgoingClipId: 'out',
+        parentIncomingClipId: 'in',
+        linkedOutgoingClipId: 'linked-out',
+        linkedIncomingClipId: 'linked-in',
+        innerTransitionId: '',
+        paddingBefore: 0,
+        paddingAfter: 0,
+        bodyStart: 0,
+        bodyEnd: 1,
+      },
+    });
+    const nestedHidden = store.getState().createComposition('Nested Hidden Transition', {
+      transitionComp: {
+        kind: 'transition-comp',
+        parentCompositionId: firstHidden.id,
+        parentTransitionId: 'transition-2',
+        parentOutgoingClipId: 'inner-out',
+        parentIncomingClipId: 'inner-in',
+        linkedOutgoingClipId: 'inner-linked-out',
+        linkedIncomingClipId: 'inner-linked-in',
+        innerTransitionId: '',
+        paddingBefore: 0,
+        paddingAfter: 0,
+        bodyStart: 0,
+        bodyEnd: 1,
+      },
+    });
+    store.setState({
+      selectedIds: [firstHidden.id, nestedHidden.id],
+      openCompositionIds: ['comp-1', firstHidden.id, nestedHidden.id],
+      slotAssignments: { [firstHidden.id]: 1, [nestedHidden.id]: 2 },
+      slotClipSettings: { [nestedHidden.id]: { trimIn: 0, trimOut: 1, endBehavior: 'hold' } },
+      selectedSlotCompositionId: nestedHidden.id,
+    });
+
+    store.getState().removeComposition('comp-1');
+    const compositionIds = store.getState().compositions.map((composition) => composition.id);
+
+    expect(compositionIds).not.toContain(firstHidden.id);
+    expect(compositionIds).not.toContain(nestedHidden.id);
+    expect(store.getState().selectedIds).toEqual([]);
+    expect(store.getState().openCompositionIds).toEqual([]);
+    expect(store.getState().slotAssignments).toEqual({});
+    expect(store.getState().slotClipSettings).toEqual({});
+    expect(store.getState().selectedSlotCompositionId).toBeNull();
+  });
+
+  it('removeComposition: removes hidden transition comps referenced by timeline even with stale backref', () => {
+    const parent: Composition = {
+      id: 'comp-1',
+      name: 'Parent',
+      type: 'composition',
+      parentId: null,
+      createdAt: 1000,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 60,
+      backgroundColor: '#000000',
+      timelineData: makeTimelineData([
+        {
+          id: 'out',
+          trackId: 'video-1',
+          name: 'Out',
+          startTime: 0,
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          sourceType: 'video',
+          transform: defaultTransform,
+          effects: [],
+          transitionOut: {
+            id: 'transition-1',
+            type: 'crossfade',
+            duration: 1,
+            linkedClipId: 'in',
+            compositionId: 'stale-hidden-transition',
+          },
+        },
+        {
+          id: 'in',
+          trackId: 'video-1',
+          name: 'In',
+          startTime: 5,
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          sourceType: 'video',
+          transform: defaultTransform,
+          effects: [],
+        },
+      ]),
+    };
+    const hidden: Composition = {
+      id: 'stale-hidden-transition',
+      name: 'Stale Hidden Transition',
+      type: 'composition',
+      parentId: null,
+      createdAt: 2000,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      duration: 1,
+      backgroundColor: '#000000',
+      transitionComp: {
+        kind: 'transition-comp',
+        parentCompositionId: 'wrong-parent',
+        parentTransitionId: 'transition-1',
+        parentOutgoingClipId: 'out',
+        parentIncomingClipId: 'in',
+        linkedOutgoingClipId: 'linked-out',
+        linkedIncomingClipId: 'linked-in',
+        innerTransitionId: '',
+        paddingBefore: 0,
+        paddingAfter: 0,
+        bodyStart: 0,
+        bodyEnd: 1,
+      },
+    };
+
+    store.setState({ compositions: [parent, hidden] });
+    store.getState().removeComposition('comp-1');
+
+    expect(store.getState().compositions).toEqual([]);
+  });
+
   it('removeComposition: cleans up slotAssignments', () => {
     const comp = store.getState().createComposition('Slotted');
     store.setState({ slotAssignments: { [comp.id]: 3 } });
@@ -754,6 +886,83 @@ describe('compositionSlice', () => {
     expect(store.getState().slotAssignments[comp.id]).toBeUndefined();
     // comp-1 slot assignment should remain
     expect(store.getState().slotAssignments['comp-1']).toBe(0);
+  });
+
+  it('removeComposition: strips removed transition comp refs from surviving timelines', () => {
+    const transitionCompId = 'transition-comp-1';
+    const parent: Composition = {
+      ...store.getState().compositions[0],
+      timelineData: makeTimelineData([
+        {
+          id: 'outgoing',
+          trackId: 'video-1',
+          name: 'Outgoing',
+          mediaFileId: 'media-out',
+          startTime: 0,
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          sourceType: 'video',
+          naturalDuration: 5,
+          transform: defaultTransform,
+          effects: [],
+          transitionOut: {
+            id: 'transition-1',
+            type: 'crossfade',
+            duration: 1,
+            linkedClipId: 'incoming',
+            compositionId: transitionCompId,
+          },
+        },
+        {
+          id: 'incoming',
+          trackId: 'video-1',
+          name: 'Incoming',
+          mediaFileId: 'media-in',
+          startTime: 5,
+          duration: 5,
+          inPoint: 0,
+          outPoint: 5,
+          sourceType: 'video',
+          naturalDuration: 5,
+          transform: defaultTransform,
+          effects: [],
+          transitionIn: {
+            id: 'transition-1',
+            type: 'crossfade',
+            duration: 1,
+            linkedClipId: 'outgoing',
+            compositionId: transitionCompId,
+          },
+        },
+      ]),
+    };
+    const transitionComp: Composition = {
+      ...parent,
+      id: transitionCompId,
+      name: 'Transition',
+      transitionComp: {
+        kind: 'transition-comp',
+        parentCompositionId: parent.id,
+        parentTransitionId: 'transition-1',
+        parentOutgoingClipId: 'outgoing',
+        parentIncomingClipId: 'incoming',
+        linkedOutgoingClipId: 'linked-out',
+        linkedIncomingClipId: 'linked-in',
+        innerTransitionId: '',
+        paddingBefore: 0,
+        paddingAfter: 0,
+        bodyStart: 0,
+        bodyEnd: 1,
+      },
+    };
+    store.setState({ compositions: [parent, transitionComp] });
+
+    store.getState().removeComposition(transitionCompId);
+
+    const clips = store.getState().compositions.find((composition) => composition.id === parent.id)?.timelineData?.clips ?? [];
+    expect(clips[0].transitionOut?.compositionId).toBeUndefined();
+    expect(clips[1].transitionIn?.compositionId).toBeUndefined();
   });
 
   // ─── updateComposition (additional edge cases) ──────────────────

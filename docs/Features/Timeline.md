@@ -313,6 +313,7 @@ The toolbar and wheel gestures still drive playback and navigation:
 - `J`, `K`, `L` shuttle reverse, pause, and forward.
 - `I` and `O` set in/out points.
 - `X` clears in/out.
+- Stop returns the playhead to the In point when one is set; otherwise it returns to timeline start.
 - `M` adds a marker at the playhead.
 - Right-clicking a marker opens marker transport and MIDI actions.
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.

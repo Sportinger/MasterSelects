@@ -95,6 +95,8 @@ function createTimelineClipCanvasWorkerCompositionMixdownWaveformResource(
   height: number,
   timeToPixel: (time: number) => number,
 ): TimelineClipCanvasWorkerPreparedClipResources['waveform'] | undefined {
+  if (clip.source?.type !== 'audio') return undefined;
+
   const waveform = clip.mixdownWaveform && clip.mixdownWaveform.length > 0
     ? clip.mixdownWaveform
     : clip.hasMixdownAudio && clip.waveform && clip.waveform.length > 0

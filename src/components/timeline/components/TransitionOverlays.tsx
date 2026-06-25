@@ -169,17 +169,9 @@ export function TransitionOverlays({
   const setTimelineToolPreview = useTimelineStore(state => state.setTimelineToolPreview);
   const editPreview = useTimelineStore(state => state.transitionEditPreview);
   const setTransitionEditPreview = useTimelineStore(state => state.setTransitionEditPreview);
-  const getSerializableState = useTimelineStore(state => state.getSerializableState);
   const invalidateCache = useTimelineStore(state => state.invalidateCache);
   const mediaFilesStoreValue = useMediaStore(state => Array.isArray(state.files) ? state.files : []);
-  const activeCompositionId = useMediaStore(state => state.activeCompositionId);
-  const compositionsStoreValue = useMediaStore(state => Array.isArray(state.compositions) ? state.compositions : []);
-  const createComposition = useMediaStore(state => state.createComposition);
-  const updateComposition = useMediaStore(state => state.updateComposition);
-  const openCompositionTab = useMediaStore(state => state.openCompositionTab);
   const mediaFiles = Array.isArray(mediaFilesStoreValue) ? mediaFilesStoreValue : EMPTY_MEDIA_FILES;
-  const compositions = Array.isArray(compositionsStoreValue) ? compositionsStoreValue : EMPTY_COMPOSITIONS;
-  const parentComposition = compositions.find((composition) => composition.id === activeCompositionId);
   const getMediaDuration = useMemo(() => createTransitionMediaDurationResolver(mediaFiles), [mediaFiles]);
   const resolveTrackHeight = (track: TimelineTrack) => getTrackHeight
     ? getTrackHeight(track)
@@ -619,17 +611,29 @@ export function TransitionOverlays({
         const handleOpenTransitionComposition = (event: MouseEvent | ReactPointerEvent<HTMLDivElement>) => {
           event.preventDefault();
           event.stopPropagation();
-          selectTransitionProperties(clipA.id, 'out', clipA.transitionOut!.id);
+          const transitionId = clipA.transitionOut?.id;
+          if (!transitionId) return;
+
+          const timelineState = useTimelineStore.getState();
+          const mediaState = useMediaStore.getState();
+          const latestClips = timelineState.clips;
+          const latestCompositions = Array.isArray(mediaState.compositions) ? mediaState.compositions : EMPTY_COMPOSITIONS;
+          const latestClip = latestClips.find((clip) => clip.id === clipA.id);
+          const latestTransition = latestClip?.transitionOut;
+          if (!latestTransition || latestTransition.id !== transitionId) return;
+
+          selectTransitionProperties(clipA.id, 'out', transitionId);
+
           openTransitionComposition({
             outgoingClipId: clipA.id,
-            transitionId: clipA.transitionOut!.id,
-            timelineClips: clips,
-            serializableClips: getSerializableState().clips,
-            parentComposition,
-            compositions,
-            createComposition,
-            updateComposition,
-            openCompositionTab,
+            transitionId,
+            timelineClips: latestClips,
+            serializableClips: timelineState.getSerializableState().clips,
+            parentComposition: latestCompositions.find((composition) => composition.id === mediaState.activeCompositionId),
+            compositions: latestCompositions,
+            createComposition: mediaState.createComposition,
+            updateComposition: mediaState.updateComposition,
+            openCompositionTab: mediaState.openCompositionTab,
             attachTransitionComposition: ({ outgoingClipId, incomingClipId, transitionId, compositionId }) => {
               useTimelineStore.setState((state) => ({
                 clips: state.clips.map((clip) => {
@@ -693,7 +697,8 @@ export function TransitionOverlays({
               }}
               onPointerDown={(event) => {
                 if (event.detail >= 2) {
-                  handleOpenTransitionComposition(event);
+                  event.preventDefault();
+                  event.stopPropagation();
                   return;
                 }
                 startTransitionMove(event, clipA, clipB);

@@ -70,8 +70,10 @@ export type { EngineStats } from './engineStats';
 export type { Keyframe } from './keyframes';
 export type {
   Layer,
+  LayerSourceRect,
   LayerSource,
   NestedCompositionData,
+  TransitionRenderState,
 } from './layers';
 export type {
   MathBaseObject,

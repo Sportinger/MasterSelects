@@ -50,6 +50,7 @@ import {
 } from '../../services/timeline/exportRuntimeReporting';
 import type { TimelineRuntimeAdmissionDecision } from '../../services/timeline/runtimeCoordinatorTypes';
 import { ExportPreviewPublisher } from './frameExporter/ExportPreviewPublisher';
+import { prepareTransitionCompositionsForExport } from './prepareTransitionCompositionsForExport';
 
 export class FrameExporter {
   private static readonly PREVIEW_FRAME_INTERVAL_MS = 0;
@@ -345,6 +346,7 @@ export class FrameExporter {
       this.exportMode = preparation.exportMode;
       reportExportClipStates(exportRunId, this.clipStates);
       this.reportExportRuntimeState(exportRunId, true);
+      await prepareTransitionCompositionsForExport();
 
       // Initialize layer builder cache (tracks don't change during export)
       initializeLayerBuilder(tracks);

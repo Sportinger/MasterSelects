@@ -7,6 +7,10 @@ import type { BaseLayerPropsLike, ExportClipStateLike } from './contracts';
 const log = Logger.create('ExportLayerBuilder');
 const FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER = 3;
 
+function getExportSourceClipId(clip: TimelineClip): string {
+  return (clip as TimelineClip & { exportSourceClipId?: string }).exportSourceClipId ?? clip.id;
+}
+
 export function buildVideoLayer(
   clip: TimelineClip,
   baseLayerProps: BaseLayerPropsLike,
@@ -91,16 +95,22 @@ export function buildNestedVideoLayer(
   clipStates: Map<string, ExportClipStateLike>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean,
+  sourceMediaTime?: number,
 ): Layer | null {
-  const nestedClipState = clipStates.get(nestedClip.id);
+  const sourceClipId = getExportSourceClipId(nestedClip);
+  const nestedClipState = clipStates.get(sourceClipId);
   if (useParallelDecode) {
     if (!parallelDecoder) {
       throw new Error(`FAST export failed: parallel decoder is not initialized for nested clip "${nestedClip.name}".`);
     }
-    if (parallelDecoder.hasClip(nestedClip.id)) {
-      const videoFrame = parallelDecoder.getFrameForClip(nestedClip.id, mainTimelineTime, {
-        toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
-      });
+    if (parallelDecoder.hasClip(sourceClipId)) {
+      const videoFrame = sourceMediaTime !== undefined
+        ? parallelDecoder.getFrameForClipSourceTime(sourceClipId, sourceMediaTime, {
+            toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+          })
+        : parallelDecoder.getFrameForClip(sourceClipId, mainTimelineTime, {
+            toleranceMultiplier: FAST_EXPORT_FRAME_LOOKUP_TOLERANCE_MULTIPLIER,
+          });
       if (videoFrame) {
         return {
           ...baseLayer,
@@ -108,6 +118,7 @@ export function buildNestedVideoLayer(
             type: 'video',
             videoElement: exportVideo,
             videoFrame,
+            mediaTime: sourceMediaTime,
           },
         };
       }
@@ -126,6 +137,7 @@ export function buildNestedVideoLayer(
           videoElement: exportVideo,
           videoFrame,
           webCodecsPlayer: nestedClipState.webCodecsPlayer,
+          mediaTime: sourceMediaTime,
         },
       };
     }
@@ -139,6 +151,7 @@ export function buildNestedVideoLayer(
         type: 'video',
         videoElement: exportVideo,
         webCodecsPlayer: nestedClipState?.webCodecsPlayer ?? undefined,
+        mediaTime: sourceMediaTime,
       },
     };
   }

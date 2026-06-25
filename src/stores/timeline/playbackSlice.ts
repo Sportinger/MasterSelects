@@ -12,7 +12,7 @@ import {
   stopInternalPosition,
   updateInternalPlaybackSpeed,
 } from '../../services/layerBuilder/PlayheadState';
-import { resolvePlaybackStartPosition } from './playbackRange';
+import { resolvePlaybackStartPosition, resolvePlaybackStopPosition } from './playbackRange';
 import { prewarmProxyFramesForTimelinePosition } from '../../services/proxyFramePrewarm';
 import {
   persistAudioLayerAdvancedMode,
@@ -460,9 +460,16 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
 
   stop: () => {
     stopTimelineAudioPlayback();
-    playheadState.position = 0;
+    const { duration, inPoint, scrollX } = get();
+    const stopPosition = resolvePlaybackStopPosition(inPoint, duration);
+    playheadState.position = stopPosition;
     stopInternalPosition();
-    set({ isPlaying: false, playheadPosition: 0, playbackWarmup: null, scrollX: 0 });
+    set({
+      isPlaying: false,
+      playheadPosition: stopPosition,
+      playbackWarmup: null,
+      scrollX: stopPosition === 0 ? 0 : scrollX,
+    });
     renderHostPort.setIsPlaying(false);
     renderHostPort.requestNewFrameRender();
   },

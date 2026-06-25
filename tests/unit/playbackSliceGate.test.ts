@@ -240,12 +240,13 @@ describe('playbackSlice HTML readiness gate', () => {
     expect(mediaStoreMock.sourceMonitorFileId).toBeNull();
   });
 
-  it('stop clears the internal playhead clock before resetting to the start', () => {
+  it('stop clears the internal playhead clock before resetting to the stop target', () => {
     const audio = {} as HTMLAudioElement;
     const state = createPlaybackTestStore({
       clips: [],
       playheadPosition: 23,
       duration: 60,
+      inPoint: 7,
       isPlaying: true,
       playbackWarmup: { requestId: 'warmup', startedAt: 0, targetTime: 23, pendingVideoCount: 0, totalVideoCount: 0 },
     } as Partial<TimelineStore>);
@@ -261,9 +262,9 @@ describe('playbackSlice HTML readiness gate', () => {
     state.stop();
 
     expect(state.isPlaying).toBe(false);
-    expect(state.playheadPosition).toBe(0);
+    expect(state.playheadPosition).toBe(7);
     expect(state.playbackWarmup).toBeNull();
-    expect(playheadState.position).toBe(0);
+    expect(playheadState.position).toBe(7);
     expect(playheadState.isUsingInternalPosition).toBe(false);
     expect(playheadState.playbackJustStarted).toBe(false);
     expect(playheadState.hasMasterAudio).toBe(false);

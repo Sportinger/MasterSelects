@@ -9,6 +9,10 @@ import {
   applyCompositionAudioMixdownToClips,
   setCompositionAudioMixdownGenerating,
 } from './compositionAudioMixdownClipState';
+import {
+  hasLinkedCompositionAudioClip,
+  isCompositionAudioClip,
+} from './compositionAudioClipLinks';
 import { getTimelineWarmupTimerDeps } from './timelineWarmupTimers';
 
 type TimerHandle = ReturnType<typeof setTimeout>;
@@ -67,21 +71,30 @@ function getTimerDeps(deps: CompositionAudioMixdownWarmupDeps): Required<Pick<Co
   return getTimelineWarmupTimerDeps();
 }
 
-function isCompositionAudioWarmupCandidate(clip: TimelineClip): boolean {
-  return Boolean(
-    clip.isComposition &&
-    clip.compositionId &&
-    !clip.mixdownBuffer &&
-    !clip.mixdownGenerating &&
-    (clip.source?.type === 'audio' || clip.source?.type === 'video')
-  );
+function isCompositionAudioWarmupCandidate(
+  clip: TimelineClip,
+  clips: readonly TimelineClip[],
+): boolean {
+  if (
+    !clip.isComposition ||
+    !clip.compositionId ||
+    clip.mixdownBuffer ||
+    clip.mixdownGenerating
+  ) {
+    return false;
+  }
+
+  if (isCompositionAudioClip(clip)) return true;
+
+  return clip.source?.type === 'video' && !hasLinkedCompositionAudioClip(clips, clip);
 }
 
 export function createCompositionAudioMixdownWarmupRequest(
   clip: TimelineClip,
   timelineSessionId: number,
+  clips: readonly TimelineClip[] = [clip],
 ): CompositionAudioMixdownWarmupRequest | null {
-  if (!isCompositionAudioWarmupCandidate(clip)) return null;
+  if (!isCompositionAudioWarmupCandidate(clip, clips)) return null;
   const key = getCompositionAudioMixdownKey(clip);
   if (!key) return null;
   return {
@@ -98,7 +111,7 @@ export function collectCompositionAudioMixdownWarmupRequests(
   const seen = new Set<string>();
 
   for (const clip of state.clips.toSorted((a, b) => a.startTime - b.startTime)) {
-    const request = createCompositionAudioMixdownWarmupRequest(clip, state.timelineSessionId);
+    const request = createCompositionAudioMixdownWarmupRequest(clip, state.timelineSessionId, state.clips);
     if (!request || seen.has(request.requestKey)) continue;
     seen.add(request.requestKey);
     requests.push(request);
@@ -134,9 +147,12 @@ export async function warmCompositionAudioMixdownRequest(
   if (existing) return existing;
 
   const warmup = (async (): Promise<CompositionAudioMixdownWarmupResult> => {
-    const clip = findCurrentClip(deps, request);
+    const currentState = deps.getWarmupState();
+    const clip = currentState.timelineSessionId === request.timelineSessionId
+      ? currentState.clips.find((candidate) => candidate.id === request.clipId) ?? null
+      : null;
     if (!clip) return { clipId: request.clipId, status: 'stale' };
-    const currentRequest = createCompositionAudioMixdownWarmupRequest(clip, request.timelineSessionId);
+    const currentRequest = createCompositionAudioMixdownWarmupRequest(clip, request.timelineSessionId, currentState.clips);
     if (!currentRequest) return { clipId: request.clipId, status: clip.mixdownBuffer ? 'ready' : 'skipped' };
     if (currentRequest.requestKey !== request.requestKey) {
       return { clipId: request.clipId, status: 'stale' };

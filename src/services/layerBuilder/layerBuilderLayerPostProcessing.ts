@@ -1,4 +1,5 @@
 import type { Layer, TimelineClip } from '../../types';
+import type { Keyframe } from '../../types/keyframes';
 import { renderClipAINodesToCanvas } from '../nodeGraph';
 import { getClipTimeInfo } from './FrameContext';
 import type { FrameContext } from './types';
@@ -7,19 +8,29 @@ function findLinkedClip(clip: TimelineClip, ctx: FrameContext): TimelineClip | n
   if (clip.linkedClipId) {
     return ctx.clips.find(candidate => candidate.id === clip.linkedClipId) ?? null;
   }
-
   return ctx.clips.find(candidate => candidate.linkedClipId === clip.id) ?? null;
 }
 
-export function addLayerBuilderMaskProperties(layer: Layer, clip: TimelineClip): void {
+export function addLayerBuilderMaskProperties(
+  layer: Layer,
+  clip: TimelineClip,
+  _localTime?: number,
+  _keyframes?: readonly Keyframe[],
+): void {
   if (clip.masks?.some(mask => mask.enabled !== false)) {
     layer.maskClipId = clip.id;
     layer.maskInvert = false;
   }
+  if (clip.sourceRect) layer.sourceRect = { ...clip.sourceRect };
 }
 
-export function withLayerBuilderMaskProperties(layer: Layer, clip: TimelineClip): Layer {
-  addLayerBuilderMaskProperties(layer, clip);
+export function withLayerBuilderMaskProperties(
+  layer: Layer,
+  clip: TimelineClip,
+  localTime?: number,
+  keyframes?: readonly Keyframe[],
+): Layer {
+  addLayerBuilderMaskProperties(layer, clip, localTime, keyframes);
   return layer;
 }
 

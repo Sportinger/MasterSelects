@@ -1,6 +1,7 @@
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { audioManager, audioStatusTracker } from '../../../services/audioManager';
 import { Logger } from '../../../services/logger';
+import { shouldUseInlineCompositionMixdown } from '../../../services/timeline/compositionAudioClipLinks';
 
 const log = Logger.create('useLayerSync');
 
@@ -128,7 +129,13 @@ export function syncLayerAudioPlayback({
   pauseInactiveAudioClips(clips, clipsAtTime);
 
   clipsAtTime.forEach((clip) => {
-    if (!clip.isComposition || !clip.mixdownAudio || !clip.hasMixdownAudio) return;
+    if (
+      !shouldUseInlineCompositionMixdown(clips, clip) ||
+      !clip.mixdownAudio ||
+      !clip.hasMixdownAudio
+    ) {
+      return;
+    }
 
     const audio = clip.mixdownAudio;
     const clipLocalTime = playheadPosition - clip.startTime;

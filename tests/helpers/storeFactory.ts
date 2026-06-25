@@ -40,7 +40,7 @@ import { createNodeGraphSlice } from '../../src/stores/timeline/nodeGraphSlice';
 import { createTimelineEditOperationSlice } from '../../src/stores/timeline/editOperations';
 import { createPositioningUtils } from '../../src/stores/timeline/positioningUtils';
 import { MAX_ZOOM, MIN_ZOOM } from '../../src/stores/timeline/constants';
-import { resolvePlaybackStartPosition } from '../../src/stores/timeline/playbackRange';
+import { resolvePlaybackStartPosition, resolvePlaybackStopPosition } from '../../src/stores/timeline/playbackRange';
 import { lockTimelineEditActions } from '../../src/stores/timeline/exportEditLock';
 import { runtimeAudioMeterBus } from '../../src/services/audio/runtimeAudioMeterBus';
 
@@ -184,7 +184,15 @@ export function createTestTimelineStore(overrides?: Partial<TimelineStore>) {
         set({ isPlaying: true, playheadPosition: playbackStartPosition });
       },
       pause: () => set({ isPlaying: false, playbackSpeed: 1 }),
-      stop: () => set({ isPlaying: false, playheadPosition: 0, scrollX: 0 }),
+      stop: () => {
+        const { inPoint, duration, scrollX } = get();
+        const stopPosition = resolvePlaybackStopPosition(inPoint, duration);
+        set({
+          isPlaying: false,
+          playheadPosition: stopPosition,
+          scrollX: stopPosition === 0 ? 0 : scrollX,
+        });
+      },
       setZoom: (zoom: number) => set({ zoom: Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)) }),
       toggleSnapping: () => set((state) => ({ snappingEnabled: !state.snappingEnabled })),
       setScrollX: (scrollX: number) => set({ scrollX: Math.max(0, scrollX) }),

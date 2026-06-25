@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import { useEngineStore } from '../../stores/engineStore';
 import { useMediaStore } from '../../stores/mediaStore';
+import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
 import { useDockStore } from '../../stores/dockStore';
 import { StatsOverlay } from './StatsOverlay';
@@ -40,6 +41,7 @@ function MultiPreviewStatsOverlay({
 
 export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
   const compositions = useMediaStore((s) => s.compositions);
+  const visibleCompositions = useMemo(() => compositions.filter(isUserVisibleComposition), [compositions]);
   const { previewQuality, setPreviewQuality } = useSettingsStore();
   const updatePanelData = useDockStore((s) => s.updatePanelData);
   const outputResolution = useSettingsStore((s) => s.outputResolution);
@@ -50,11 +52,11 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
   const sourceDropdownRef = useRef<HTMLDivElement>(null);
   const [highlightedSlot, setHighlightedSlot] = useState<number | null>(null);
 
-  const isAutoMode = data.sourceCompositionId !== null;
   const sourceComp = useMemo(
-    () => compositions.find((c) => c.id === data.sourceCompositionId),
-    [compositions, data.sourceCompositionId]
+    () => visibleCompositions.find((c) => c.id === data.sourceCompositionId),
+    [visibleCompositions, data.sourceCompositionId]
   );
+  const isAutoMode = sourceComp !== undefined;
 
   // Highlight slots on 1/2/3/4 key press (via shortcut registry)
   useEffect(() => {
@@ -152,7 +154,7 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
                 Custom
               </button>
               <div className="preview-comp-separator" />
-              {compositions.map((comp) => (
+              {visibleCompositions.map((comp) => (
                 <button
                   key={comp.id}
                   className={`preview-comp-option ${data.sourceCompositionId === comp.id ? 'active' : ''}`}
@@ -231,8 +233,8 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
               onCompositionChange={(compId) => handleSlotCompositionChange(index, compId)}
               highlighted={highlightedSlot === index}
               autoSource={
-                isAutoMode && data.sourceCompositionId
-                  ? { compositionId: data.sourceCompositionId, layerIndex: index }
+                isAutoMode && sourceComp
+                  ? { compositionId: sourceComp.id, layerIndex: index }
                   : null
               }
             />

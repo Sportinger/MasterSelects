@@ -10,6 +10,9 @@ export interface TransitionCompositionLink {
   linkedOutgoingClipId: string;
   linkedIncomingClipId: string;
   innerTransitionId: string;
+  templateType?: string;
+  templateVersion?: number;
+  templateParamsKey?: string;
   paddingBefore: number;
   paddingAfter: number;
   bodyStart: number;

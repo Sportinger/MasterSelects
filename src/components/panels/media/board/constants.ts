@@ -1,4 +1,4 @@
-import type { MediaBoardViewport } from './types';
+import type { MediaBoardRenderLod, MediaBoardViewport } from './types';
 
 export const BOARD_VIEWPORT_STORAGE_KEY = 'media-panel-board-viewport';
 export const BOARD_ORDER_STORAGE_KEY = 'media-panel-board-order';
@@ -51,6 +51,31 @@ export const MEDIA_BOARD_VIDEO_POSTER_FALLBACK_LIMIT = 16;
 export const MEDIA_BOARD_ORIGINAL_FOCUS_ZOOM = 4;
 export const MEDIA_BOARD_ORIGINAL_FOCUS_MARGIN_RATIO = 0.35;
 export const MEDIA_BOARD_UI_SCALE_CAP_ZOOM = 2.5;
+const MEDIA_BOARD_LOD_HYSTERESIS = 0.025;
+
+function isBelowLodThreshold(zoom: number, threshold: number, wasActive?: boolean): boolean {
+  if (wasActive === undefined) return zoom <= threshold;
+  return wasActive
+    ? zoom <= threshold + MEDIA_BOARD_LOD_HYSTERESIS
+    : zoom <= threshold - MEDIA_BOARD_LOD_HYSTERESIS;
+}
+
+export function getMediaBoardRenderLod(
+  zoom: number,
+  previous?: MediaBoardRenderLod,
+): MediaBoardRenderLod {
+  const overviewCanvas = isBelowLodThreshold(
+    zoom,
+    MEDIA_BOARD_OVERVIEW_CANVAS_ZOOM,
+    previous?.overviewCanvas,
+  );
+  return {
+    overviewCanvas,
+    compact: isBelowLodThreshold(zoom, MEDIA_BOARD_COMPACT_LOD_ZOOM, previous?.compact),
+    showImages: !overviewCanvas,
+    requestThumbnails: zoom >= MEDIA_BOARD_THUMBNAIL_REQUEST_MIN_ZOOM,
+  };
+}
 
 export function getMediaBoardUiScale(zoom: number): number {
   return Math.min(1, MEDIA_BOARD_UI_SCALE_CAP_ZOOM / Math.max(zoom, MEDIA_BOARD_PAN_ZOOM_MIN));

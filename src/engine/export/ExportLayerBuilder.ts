@@ -5,7 +5,6 @@ import type { Layer, NestedCompositionData } from '../../types/layers';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
 import type { ExportClipState, FrameContext } from './types';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
-import { assembleTransitionLayers } from '../../services/layerBuilder/transitionLayerAssembly';
 import {
   buildGaussianSplatSource,
   buildModelSource,
@@ -16,7 +15,10 @@ import {
 } from './layerBuilder/sourceLookup';
 import { getClipSourceWindowTime } from './layerBuilder/timing';
 import { buildBaseLayerProps } from './layerBuilder/baseLayers';
-import { buildNestedLayersForExport } from './layerBuilder/nestedLayers';
+import {
+  buildNestedLayersForExport,
+  buildTransitionCompositionLayerForExport,
+} from './layerBuilder/nestedLayers';
 import { buildTextLikeLayer, isTextLikeClipSource } from './layerBuilder/textLayers';
 import { buildVideoLayer } from './layerBuilder/videoLayers';
 
@@ -197,25 +199,19 @@ export function buildLayersAtTime(
 
     const activeTransition = transitionParticipantsByTrack?.get(track.id);
     if (activeTransition) {
-      layers.push(...assembleTransitionLayers({
-        plan: activeTransition.plan,
-        playheadPosition: ctx.time,
-        trackIndex,
-        outgoingClip: activeTransition.outgoingClip,
-        incomingClip: activeTransition.incomingClip,
-        buildClipLayer: (clip, _role, opacity) => buildExportLayerForClip(
-          clip,
-          trackIndex,
-          ctx,
-          clipStates,
-          parallelDecoder,
-          useParallelDecode,
-          opacity,
-        ),
-        outputSize: ctx.outputWidth && ctx.outputHeight
-          ? { width: ctx.outputWidth, height: ctx.outputHeight }
-          : undefined,
-      }));
+      const transitionCompLayer = buildTransitionCompositionLayerForExport({
+        activeTransition,
+        layerIndex: trackIndex,
+        parentCompositionId: 'export',
+        parentTime: ctx.time,
+        layerIdPrefix: 'export',
+        clipStates,
+        parallelDecoder,
+        useParallelDecode,
+      });
+      if (transitionCompLayer) {
+        layers.push(transitionCompLayer);
+      }
       continue;
     }
 

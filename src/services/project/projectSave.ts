@@ -22,6 +22,7 @@ import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyrami
 import { clonePersistedClipAudioState } from '../audio/clipAudioStatePersistence';
 import { cloneClipNodeGraph } from '../nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
+import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
   ProjectFlashBoardGenerationMetadata,
   ProjectFlashBoardGenerationRecord,
@@ -268,6 +269,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       inPoint: c.inPoint || 0,
       outPoint: c.outPoint || c.duration,
       transform: toProjectTransform(c.transform),
+      sourceRect: c.sourceRect ? structuredClone(c.sourceRect) : undefined,
+      transitionRender: c.transitionRender ? structuredClone(c.transitionRender) : undefined,
       effects: (c.effects || []).map((e) => ({
         id: e.id,
         type: e.type,
@@ -277,6 +280,8 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       })),
       transitionIn: c.transitionIn ? normalizeTransitionInstanceParams(structuredClone(c.transitionIn)) : undefined,
       transitionOut: c.transitionOut ? normalizeTransitionInstanceParams(structuredClone(c.transitionOut)) : undefined,
+      transitionSourceTimeOverride: c.transitionSourceTimeOverride,
+      transitionSourceHold: c.transitionSourceHold,
       colorCorrection: c.colorCorrection ? structuredClone(c.colorCorrection) : undefined,
       nodeGraph: cloneClipNodeGraph(c.nodeGraph),
       masks: (c.masks || []).map((m) => ({
@@ -484,10 +489,15 @@ export async function syncStoresToProject(): Promise<void> {
 
     // Save current timeline to active composition first
     if (mediaState.activeCompositionId) {
+      const activeCompositionId = mediaState.activeCompositionId;
       const timelineData = timelineStore.getSerializableState();
       useMediaStore.setState((state) => ({
-        compositions: state.compositions.map((c) =>
-          c.id === mediaState.activeCompositionId ? { ...c, timelineData } : c
+        compositions: syncTransitionCompositionTimelineToParent(
+          state.compositions.map((c) =>
+            c.id === activeCompositionId ? { ...c, timelineData } : c
+          ),
+          activeCompositionId,
+          timelineData,
         ),
       }));
     }

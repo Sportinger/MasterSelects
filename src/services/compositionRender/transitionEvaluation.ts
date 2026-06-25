@@ -2,12 +2,13 @@ import type { Layer } from '../../types/layers';
 import type { SerializableClip, TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
 import type { VectorAnimationClipSettings } from '../../types/vectorAnimation';
+import type { Composition } from '../../stores/mediaStore/types';
 import {
   DEFAULT_TRANSITION_PLACEMENT,
   findActiveTransitionPlanForTrack,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { assemblePreviewTransitionLayers } from '../layerBuilder/transitionLayerAssembly';
-import { buildEvaluatedClipLayer } from './layerEvaluation';
+import { buildTransitionNestedCompositionLayer } from '../layerBuilder/transitionNestedCompositionLayer';
+import type { BackgroundVideoPlaybackOptions } from './layerEvaluation';
 import type {
   CompositionMediaFile,
   CompositionSources,
@@ -63,6 +64,15 @@ export function buildCompositionTransitionLayersForTrack(params: {
   isActiveComposition: boolean;
   getVectorAnimationSettings: VectorSettingsReader;
   getClipKeyframes?: ClipKeyframesReader;
+  playbackOptions?: BackgroundVideoPlaybackOptions;
+  getComposition: (compositionId: string) => Composition | null | undefined;
+  isCompositionReady: (compositionId: string) => boolean;
+  prepareComposition: (compositionId: string) => void;
+  evaluateCompositionAtTime: (
+    compositionId: string,
+    time: number,
+    options?: { playbackOptions?: BackgroundVideoPlaybackOptions },
+  ) => Layer[];
 }): EvaluatedLayer[] | null {
   const {
     compositionId,
@@ -70,13 +80,12 @@ export function buildCompositionTransitionLayersForTrack(params: {
     track,
     trackIndex,
     clips,
-    sources,
     mediaFiles,
-    width,
-    height,
-    isActiveComposition,
-    getVectorAnimationSettings,
-    getClipKeyframes,
+    playbackOptions,
+    getComposition,
+    isCompositionReady,
+    prepareComposition,
+    evaluateCompositionAtTime,
   } = params;
   const transitionTimelineClips = clips.map(asTimelineClip);
   const mediaDurationById = new Map(mediaFiles.map((mediaFile) => [mediaFile.id, mediaFile.duration]));
@@ -90,26 +99,19 @@ export function buildCompositionTransitionLayersForTrack(params: {
   });
   if (!activeTransition) return null;
 
-  return assemblePreviewTransitionLayers({
-    plan: activeTransition.plan,
-    playheadPosition: time,
-    trackIndex,
-    outgoingClip: activeTransition.outgoingClip,
-    incomingClip: activeTransition.incomingClip,
-    buildClipLayer: (transitionClip, _role, opacity) => {
-      const source = sources.clipSources.get(transitionClip.id);
-      if (!source) return null;
-      return buildEvaluatedClipLayer({
-        compositionId,
-        time,
-        clipAtTime: transitionClip,
-        source,
-        isActiveComposition,
-        getVectorAnimationSettings,
-        getClipKeyframes,
-        opacityOverride: opacity,
-      }) as Layer;
+  const nestedLayer = buildTransitionNestedCompositionLayer({
+    activeTransition,
+    layerIndex: trackIndex,
+    parentCompositionId: compositionId,
+    parentTime: time,
+    layerIdPrefix: compositionId,
+    playbackOptions,
+    runtime: {
+      getComposition,
+      isCompositionReady,
+      prepareComposition,
+      evaluateCompositionAtTime,
     },
-    outputSize: { width, height },
-  }) as EvaluatedLayer[];
+  });
+  return nestedLayer ? [nestedLayer as EvaluatedLayer] : [];
 }

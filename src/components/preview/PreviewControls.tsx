@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { Composition } from '../../stores/mediaStore/types';
+import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import type { TimelineTrack } from '../../types';
 import type { PreviewPanelSource } from '../../types/dock';
 import {
@@ -60,6 +61,7 @@ export function PreviewControls({
   compositions,
   setPanelSource,
 }: PreviewControlsProps) {
+  const visibleCompositions = compositions.filter(isUserVisibleComposition);
   const renderLayerOptions = (compositionId: string | null) => {
     const videoTracks = getCompositionVideoTracks(
       compositionId,
@@ -168,7 +170,7 @@ export function PreviewControls({
                 {renderLayerOptions(null)}
                 <div className="preview-comp-separator" />
                 <div className="preview-comp-group-label">Compositions</div>
-                {compositions.map((comp) => (
+                {visibleCompositions.map((comp) => (
                   <React.Fragment key={comp.id}>
                     <button
                       className={`preview-comp-option ${

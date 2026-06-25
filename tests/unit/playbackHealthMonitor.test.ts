@@ -249,6 +249,31 @@ describe('PlaybackHealthMonitor', () => {
     expect(testEngine.requestRender).not.toHaveBeenCalled();
   });
 
+  it('does not treat nested composition RVFC handles as orphaned', () => {
+    const parentClip = {
+      ...createClip(createVideo()),
+      id: 'comp-clip',
+      isComposition: true,
+      nestedClips: [
+        {
+          ...createClip(createVideo()),
+          id: 'nested-1',
+        },
+      ],
+      nestedTracks: [],
+    } as unknown as TimelineClip;
+
+    hoisted.timelineState.clips = [parentClip];
+    videoSyncManager.getActiveRvfcClipIds.mockReturnValue(['nested-1', 'missing-clip']);
+
+    const monitor = new PlaybackHealthMonitor() as PlaybackHealthMonitorTestAccess;
+    monitor.checkHealth();
+
+    expect(videoSyncManager.cancelRvfcHandle).toHaveBeenCalledTimes(1);
+    expect(videoSyncManager.cancelRvfcHandle).toHaveBeenCalledWith('missing-clip');
+    expect(monitor.anomalies('RVFC_ORPHANED').map((event) => event.clipId)).toEqual(['missing-clip']);
+  });
+
   it('records high drop rate with the anomaly cooldown applied', () => {
     testEngine.getStats = vi.fn(() => ({
       drops: {
