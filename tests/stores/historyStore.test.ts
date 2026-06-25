@@ -1204,6 +1204,9 @@ describe('historyStore', () => {
 
     useHistoryStore.getState().captureSnapshot('a');
     useHistoryStore.getState().captureSnapshot('b');
+    // Explicit captures now suppress the trailing auto-capture fallback too;
+    // clear so this assertion isolates undo's own suppression call.
+    suppressFn.mockClear();
 
     useHistoryStore.getState().undo();
 
@@ -1211,6 +1214,23 @@ describe('historyStore', () => {
     expect(suppressFn).toHaveBeenCalledTimes(1);
 
     // Clean up: reset callbacks to avoid affecting other tests
+    setHistoryCallbacks({ flushPendingCapture: () => {}, suppressCaptures: () => {} });
+  });
+
+  it('explicit captureSnapshot suppresses the auto-capture fallback; isAutoCapture does not', () => {
+    const suppressFn = vi.fn();
+    setHistoryCallbacks({ flushPendingCapture: () => {}, suppressCaptures: suppressFn });
+
+    // Explicit (slice) capture → suppress the trailing debounced fallback so one
+    // edit is one undo step.
+    useHistoryStore.getState().captureSnapshot('explicit');
+    expect(suppressFn).toHaveBeenCalledTimes(1);
+
+    // The fallback path itself must NOT self-suppress, or it would swallow the
+    // next distinct auto-captured edit.
+    useHistoryStore.getState().captureSnapshot('auto', { isAutoCapture: true });
+    expect(suppressFn).toHaveBeenCalledTimes(1);
+
     setHistoryCallbacks({ flushPendingCapture: () => {}, suppressCaptures: () => {} });
   });
 

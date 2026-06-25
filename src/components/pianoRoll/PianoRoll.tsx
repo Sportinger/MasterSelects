@@ -19,6 +19,8 @@ import { PianoRollGridLines } from './PianoRollGridLines';
 import { buildPianoRollGrid } from './pianoRollGrid';
 import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
 import { resolvePianoRollToolAction, type PianoRollToolId } from './pianoRollToolShortcuts';
+import { duplicateNotesRight, hasPianoRollClipboard, pasteNotesAt, setPianoRollClipboard } from './pianoRollClipboard';
+import { redo, undo } from '../../stores/historyStore';
 
 // Two independent zoom axes, like Cubase (#249): horizontal = time scale
 // (px per second), vertical = note-row height (px per pitch). Both live in
@@ -205,6 +207,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   // (#249). Stable identity unless the tempo/meter map actually changes.
   const tempoMap = useTimelineStore(selectTempoMap);
   const addMidiNote = useTimelineStore((state) => state.addMidiNote);
+  const addMidiNotes = useTimelineStore((state) => state.addMidiNotes);
   const updateMidiNote = useTimelineStore((state) => state.updateMidiNote);
   const removeMidiNote = useTimelineStore((state) => state.removeMidiNote);
   const removeMidiNotes = useTimelineStore((state) => state.removeMidiNotes);
@@ -548,9 +551,66 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     };
   }, [dragActive, clipId, addMidiNote, updateMidiNote, removeMidiNote, localPoint, noteAtPx]);
 
+  // --- clipboard + history (#249) --------------------------------------------
+  // Copy/cut/paste/duplicate operate on the live selection and the shared
+  // module-level note clipboard. Each mutation routes through a batched store
+  // action (addMidiNotes/removeMidiNotes) so it collapses to ONE undo step.
+  // Reads go through getState() so the document key handler always sees fresh
+  // notes without re-binding on every edit.
+  const liveSelectedNotes = useCallback(() => {
+    const liveNotes = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.midiData?.notes ?? [];
+    const sel = selectedIdsRef.current;
+    return liveNotes.filter((n) => sel.has(n.id));
+  }, [clipId]);
+
+  const copySelection = useCallback(() => {
+    const picked = liveSelectedNotes();
+    if (picked.length > 0) setPianoRollClipboard(picked);
+  }, [liveSelectedNotes]);
+
+  const cutSelection = useCallback(() => {
+    const picked = liveSelectedNotes();
+    if (picked.length === 0) return;
+    setPianoRollClipboard(picked);
+    removeMidiNotes(clipId, picked.map((n) => n.id));
+    setSelectedIds(new Set());
+  }, [clipId, liveSelectedNotes, removeMidiNotes]);
+
+  const pasteClipboard = useCallback(() => {
+    if (!hasPianoRollClipboard()) return;
+    const live = useTimelineStore.getState();
+    const liveClip = live.clips.find((c) => c.id === clipId);
+    if (!liveClip || liveClip.source?.type !== 'midi') return;
+    // Anchor the earliest pasted note at the playhead's content time, clamped
+    // into the clip's content window so a paste with the playhead outside the
+    // clip still lands inside it (falls back to the window's left edge).
+    const playheadContent = clipLocalToContentTime(liveClip, live.playheadPosition - liveClip.startTime);
+    const anchor = clamp(playheadContent, liveClip.inPoint, liveClip.outPoint);
+    const newIds = addMidiNotes(clipId, pasteNotesAt(anchor));
+    if (newIds.length > 0) setSelectedIds(new Set(newIds));
+  }, [clipId, addMidiNotes]);
+
+  const duplicateSelection = useCallback(() => {
+    const picked = liveSelectedNotes();
+    if (picked.length === 0) return;
+    const newIds = addMidiNotes(clipId, duplicateNotesRight(picked));
+    if (newIds.length > 0) setSelectedIds(new Set(newIds));
+  }, [clipId, liveSelectedNotes, addMidiNotes]);
+
+  // Undo/redo: the store already captures a snapshot for every note edit, but the
+  // global Ctrl+Z handler lives on the MAIN window — its keydown never fires in
+  // this detached popup. So drive the shared history facade directly here. Stale
+  // selection ids left over after a restore are harmless: a removed note is never
+  // rendered or matched (selection is read as `selectedIds.has(note.id)` over the
+  // live notes), so no pruning pass is needed.
+  const runHistory = useCallback((op: 'undo' | 'redo') => {
+    if (op === 'undo') undo(); else redo();
+  }, []);
+
   // Popup keyboard shortcuts (#249). Bound to the popup's OWN document so keys
-  // fire inside the detached window. Two concerns: tool switching (1/2/3, via the
-  // shortcut seam) and deleting the selection (Delete/Backspace).
+  // fire inside the detached window. Concerns: tool switching (1/2/3, via the
+  // shortcut seam), delete (Delete/Backspace), clipboard (Ctrl+C/X/V), duplicate
+  // (Ctrl+D, Ctrl+B alias) and undo/redo (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y).
   useEffect(() => {
     const doc = gridRef.current?.ownerDocument ?? document;
     const onKey = (e: KeyboardEvent) => {
@@ -558,6 +618,20 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       // none today, but a rename/velocity input could land here later).
       const target = e.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+
+      // Ctrl/Cmd combos: clipboard, duplicate, undo/redo. Handled before the tool
+      // switch because the tool seam matches plain 1/2/3 (no modifiers) only.
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'z': e.preventDefault(); runHistory(e.shiftKey ? 'redo' : 'undo'); return;
+          case 'y': e.preventDefault(); runHistory('redo'); return;
+          case 'c': e.preventDefault(); copySelection(); return;
+          case 'x': e.preventDefault(); cutSelection(); return;
+          case 'v': e.preventDefault(); pasteClipboard(); return;
+          case 'd': case 'b': e.preventDefault(); duplicateSelection(); return;
+          default: break;
+        }
+      }
 
       // Tool switch. matchesCombo requires an exact modifier match, so Ctrl/Alt+1
       // etc. don't resolve here and fall through to any future global shortcut.
@@ -578,7 +652,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     };
     doc.addEventListener('keydown', onKey);
     return () => doc.removeEventListener('keydown', onKey);
-  }, [clipId, removeMidiNotes]);
+  }, [clipId, removeMidiNotes, copySelection, cutSelection, pasteClipboard, duplicateSelection, runHistory]);
 
   if (!clip || clip.source?.type !== 'midi') {
     return (

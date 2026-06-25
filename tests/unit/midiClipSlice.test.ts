@@ -62,4 +62,32 @@ describe('midiClipSlice note CRUD', () => {
     expect(notes).toHaveLength(1);
     expect(notes[0].pitch).toBe(62);
   });
+
+  it('batch-inserts notes with fresh ids and returns them in order', () => {
+    useTimelineStore.getState().addMidiNote('clip-midi-1', { pitch: 60, start: 0, duration: 1 });
+    const ids = useTimelineStore.getState().addMidiNotes('clip-midi-1', [
+      { pitch: 64, start: 1, duration: 0.5 },
+      { pitch: 67, start: 1.5, duration: 0.5 },
+    ]);
+    const notes = getNotes();
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2); // distinct ids
+    expect(notes).toHaveLength(3);
+    expect(ids.map(id => notes.find(n => n.id === id)?.pitch)).toEqual([64, 67]);
+  });
+
+  it('addMidiNotes clamps duration and velocity per note', () => {
+    const [id] = useTimelineStore.getState().addMidiNotes('clip-midi-1', [
+      { pitch: 60, start: 0, duration: 0, velocity: 5 },
+    ]);
+    const note = getNotes().find(n => n.id === id)!;
+    expect(note.duration).toBeGreaterThan(0); // floored to MIN_MIDI_NOTE_DURATION
+    expect(note.velocity).toBe(1);            // clamped to [0,1]
+  });
+
+  it('addMidiNotes ignores an empty batch', () => {
+    const ids = useTimelineStore.getState().addMidiNotes('clip-midi-1', []);
+    expect(ids).toEqual([]);
+    expect(getNotes()).toHaveLength(0);
+  });
 });

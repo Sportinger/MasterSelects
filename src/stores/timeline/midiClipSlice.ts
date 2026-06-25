@@ -125,6 +125,28 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     return noteId;
   },
 
+  addMidiNotes: (clipId, newNotes) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'midi' || newNotes.length === 0) return [];
+
+    // Build every note up front so the whole batch is one immutable insert and
+    // one history snapshot (piano-roll paste/duplicate). Content time may be
+    // negative on a left-extended clip — don't floor at 0 (see addMidiNote).
+    const created: MidiNote[] = newNotes.map(note => ({
+      id: generateMidiNoteId(),
+      pitch: clampPitch(note.pitch),
+      start: note.start,
+      duration: Math.max(MIN_MIDI_NOTE_DURATION, note.duration),
+      velocity: clampVelocity(note.velocity ?? 0.8),
+    }));
+
+    set({ clips: mapClipNotes(clips, clipId, notes => [...notes, ...created]) });
+    invalidateCache();
+    captureSnapshot(created.length === 1 ? 'Add MIDI note' : 'Paste MIDI notes');
+    return created.map(n => n.id);
+  },
+
   updateMidiNote: (clipId, noteId, patch, options) => {
     const { clips, invalidateCache } = get();
     const clip = clips.find(c => c.id === clipId);

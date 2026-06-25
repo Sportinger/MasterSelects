@@ -81,7 +81,7 @@ export const classCHardTargets = [
   { path: 'src/components/panels/SAM2Panel.tsx', maxCurrentHits: 28 },
   { path: 'src/components/panels/sam2/MatAnyoneFileHelpers.ts', maxCurrentHits: 4 },
   { path: 'src/components/panels/TextTab.tsx', maxCurrentHits: 2 },
-  { path: 'src/components/pianoRoll/PianoRoll.tsx', maxCurrentHits: 4 },
+  { path: 'src/components/pianoRoll/PianoRoll.tsx', maxCurrentHits: 11 }, // #249: 4 -> 11 (popup fresh-read pattern; see baseline note)
   { path: 'src/components/pianoRoll/PianoRollBoot.ts', maxCurrentHits: 1 },
   { path: 'src/components/preview/MaskOverlay.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/MultiPreviewSlot.tsx', maxCurrentHits: 4 },
@@ -294,6 +294,6 @@ export const getStateAccessPolicyBaselines = {
   classCHardTargetFileCount: 231,
   // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit)
   // -> 659 (packet 231 retired the dispatcher ceiling slack: 16 -> 11 actual)
-  // -> 658 (packet 237 retired one compositionRenderer hit).
-  classCHardTargetMaxHits: 657,
+  // -> 658 (237 retired a compositionRenderer hit) -> 664 (#249 piano-roll 4 -> 11).
+  classCHardTargetMaxHits: 664,
 } as const;
