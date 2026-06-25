@@ -36,6 +36,11 @@ const ZOOM_BUTTON_STEP = 1.4;      // multiplier per +/- button click
 
 const KEYBOARD_W = 48;     // px, left keyboard column
 const DEFAULT_CLICK_DURATION = 0.5; // seconds, note created by a plain click (no drag)
+// Below this row height the note name (e.g. "C#4") can't fit legibly, so it's
+// hidden; below this pixel width the note is too short to show even a clipped
+// name without looking like noise (#249 note labels).
+const MIN_NOTE_LABEL_ROW_H = 11;
+const MIN_NOTE_LABEL_WIDTH = 16;
 const PITCH_MIN = 21;      // A0
 const PITCH_MAX = 108;     // C8
 const PITCH_COUNT = PITCH_MAX - PITCH_MIN + 1;
@@ -692,6 +697,12 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const clipLocalPlayhead = playheadPosition - clip.startTime;
   const showPlayhead = clipLocalPlayhead >= 0 && clipLocalPlayhead <= clipDuration;
 
+  // Whether note-name labels are drawn inside note blocks. Today this is purely a
+  // zoom/fit decision (hide when rows are too short to read). FUTURE: a user
+  // "show note labels" preference should AND into this single flag — it's the one
+  // seam, so adding the toggle won't touch the note-render code (#249).
+  const showNoteLabels = rowH >= MIN_NOTE_LABEL_ROW_H;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#0f0f0f' }}>
       {/* Header */}
@@ -765,7 +776,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
             the left so the white surface shows behind/beside them, and adjacent
             white keys (B–C, E–F) get a seam like a real keyboard. Equal row
             heights keep every key aligned to its note row in the grid. */}
-        <div style={{ width: KEYBOARD_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: '#2b2b2b', borderRight: '1px solid #000' }}>
+        <div style={{ width: KEYBOARD_W, flexShrink: 0, position: 'sticky', left: 0, zIndex: 2, background: '#cccccc', borderRight: '1px solid #000' }}>
           {Array.from({ length: PITCH_COUNT }, (_, i) => {
             const pitch = PITCH_MAX - i;
             const black = isBlackKey(pitch);
@@ -789,10 +800,13 @@ export function PianoRoll({ clipId }: PianoRollProps) {
                   // Only light the row fill for WHITE keys. For a black key the
                   // row's right strip is the neighbouring white surface, so the
                   // highlight belongs on the black-key overlay alone, not the row.
-                  background: hovered && !black ? '#48587a' : '#2b2b2b',
+                  background: hovered && !black ? '#a9c2f0' : '#cccccc',
                   borderBottom: whiteSeam ? '1px solid #000' : 'none',
-                  color: '#9a9a9a',
-                  fontSize: 8,
+                  // Octave label (C-rows only) sits on the light white-key fill,
+                  // so it's pure black for contrast/readability (#249).
+                  color: '#000',
+                  fontSize: 9,
+                  fontWeight: 600,
                   lineHeight: `${rowH}px`,
                   textAlign: 'right',
                   paddingRight: 4,
@@ -807,10 +821,10 @@ export function PianoRoll({ clipId }: PianoRollProps) {
                         the white key BELOW it (pitch-1) owns the BOTTOM half —
                         split at the black key's middle seam. */}
                     {hoverPitch === pitch + 1 && (
-                      <div style={{ position: 'absolute', left: '62%', right: 0, top: 0, height: rowH / 2, background: '#48587a' }} />
+                      <div style={{ position: 'absolute', left: '62%', right: 0, top: 0, height: rowH / 2, background: '#a9c2f0' }} />
                     )}
                     {hoverPitch === pitch - 1 && (
-                      <div style={{ position: 'absolute', left: '62%', right: 0, top: rowH / 2, bottom: 0, background: '#48587a' }} />
+                      <div style={{ position: 'absolute', left: '62%', right: 0, top: rowH / 2, bottom: 0, background: '#a9c2f0' }} />
                     )}
                     {/* White-key seam running through the middle of this black
                         key — the boundary between the white keys above and below
@@ -913,6 +927,23 @@ export function PianoRoll({ clipId }: PianoRollProps) {
                   borderRadius: 2, boxSizing: 'border-box', cursor: noteCursor,
                 }}
               >
+                {/* Note-name label (e.g. "C#4"). Gated by row height + width so
+                    it never renders as illegible noise; pointer-transparent so it
+                    can't intercept drag/resize. */}
+                {showNoteLabels && width >= MIN_NOTE_LABEL_WIDTH && (
+                  <span
+                    style={{
+                      position: 'absolute', left: 3, top: 0, height: '100%',
+                      display: 'flex', alignItems: 'center',
+                      fontSize: 9, fontWeight: 600, lineHeight: 1, color: '#fff',
+                      textShadow: '0 1px 1px rgba(0,0,0,0.45)',
+                      whiteSpace: 'nowrap', overflow: 'hidden',
+                      maxWidth: 'calc(100% - 6px)', pointerEvents: 'none',
+                    }}
+                  >
+                    {pitchLabel(note.pitch)}
+                  </span>
+                )}
                 {/* Resize grip only in pointer mode — eraser/select own the body. */}
                 {tool === 'pointer' && (
                   <div
