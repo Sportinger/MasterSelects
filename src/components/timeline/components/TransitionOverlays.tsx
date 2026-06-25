@@ -4,11 +4,12 @@ import { useMemo } from 'react';
 import type { KeyboardEvent, MouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { useTimelineStore } from '../../../stores/timeline';
-import { useMediaStore } from '../../../stores/mediaStore';
+import { useMediaStore, type Composition, type MediaFile } from '../../../stores/mediaStore';
 import { getRuntimeTransition } from '../../../transitions';
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from '../../../stores/timeline/editOperations/transitionPlanner';
 import { buildTransitionToolPreviewGhostRanges } from '../../../stores/timeline/editOperations/transitionToolPreview';
 import { createTransitionMediaDurationResolver } from '../../../stores/timeline/editOperations/transitionMediaDurationResolver';
+import { openTransitionComposition } from '../../../services/timeline/transitionCompositionService';
 
 interface TransitionOverlaysProps {
   activeJunction: { trackId: string; junctionTime: number } | null;
@@ -28,6 +29,8 @@ const TRANSITION_SNAP_PX = 10;
 const TRANSITION_SNAP_SECONDS_MIN = 1 / 120;
 const TRANSITION_SNAP_SECONDS_MAX = 0.12;
 const TRANSITION_DRAG_ACTIVATION_PX = 2;
+const EMPTY_MEDIA_FILES: readonly MediaFile[] = [];
+const EMPTY_COMPOSITIONS: readonly Composition[] = [];
 
 interface TransitionHandleSnapLimits {
   incomingHandleAvailable: number;
@@ -166,7 +169,17 @@ export function TransitionOverlays({
   const setTimelineToolPreview = useTimelineStore(state => state.setTimelineToolPreview);
   const editPreview = useTimelineStore(state => state.transitionEditPreview);
   const setTransitionEditPreview = useTimelineStore(state => state.setTransitionEditPreview);
-  const mediaFiles = useMediaStore(state => state.files);
+  const getSerializableState = useTimelineStore(state => state.getSerializableState);
+  const invalidateCache = useTimelineStore(state => state.invalidateCache);
+  const mediaFilesStoreValue = useMediaStore(state => Array.isArray(state.files) ? state.files : []);
+  const activeCompositionId = useMediaStore(state => state.activeCompositionId);
+  const compositionsStoreValue = useMediaStore(state => Array.isArray(state.compositions) ? state.compositions : []);
+  const createComposition = useMediaStore(state => state.createComposition);
+  const updateComposition = useMediaStore(state => state.updateComposition);
+  const openCompositionTab = useMediaStore(state => state.openCompositionTab);
+  const mediaFiles = Array.isArray(mediaFilesStoreValue) ? mediaFilesStoreValue : EMPTY_MEDIA_FILES;
+  const compositions = Array.isArray(compositionsStoreValue) ? compositionsStoreValue : EMPTY_COMPOSITIONS;
+  const parentComposition = compositions.find((composition) => composition.id === activeCompositionId);
   const getMediaDuration = useMemo(() => createTransitionMediaDurationResolver(mediaFiles), [mediaFiles]);
   const resolveTrackHeight = (track: TimelineTrack) => getTrackHeight
     ? getTrackHeight(track)
@@ -603,6 +616,36 @@ export function TransitionOverlays({
           event.stopPropagation();
           selectTransitionProperties(clipA.id, 'out', clipA.transitionOut!.id);
         };
+        const handleOpenTransitionComposition = (event: MouseEvent | ReactPointerEvent<HTMLDivElement>) => {
+          event.preventDefault();
+          event.stopPropagation();
+          selectTransitionProperties(clipA.id, 'out', clipA.transitionOut!.id);
+          openTransitionComposition({
+            outgoingClipId: clipA.id,
+            transitionId: clipA.transitionOut!.id,
+            timelineClips: clips,
+            serializableClips: getSerializableState().clips,
+            parentComposition,
+            compositions,
+            createComposition,
+            updateComposition,
+            openCompositionTab,
+            attachTransitionComposition: ({ outgoingClipId, incomingClipId, transitionId, compositionId }) => {
+              useTimelineStore.setState((state) => ({
+                clips: state.clips.map((clip) => {
+                  if (clip.id === outgoingClipId && clip.transitionOut?.id === transitionId) {
+                    return { ...clip, transitionOut: { ...clip.transitionOut, compositionId } };
+                  }
+                  if (clip.id === incomingClipId && clip.transitionIn?.id === transitionId) {
+                    return { ...clip, transitionIn: { ...clip.transitionIn, compositionId } };
+                  }
+                  return clip;
+                }),
+              }));
+              invalidateCache();
+            },
+          });
+        };
 
         return (
           <div
@@ -612,6 +655,7 @@ export function TransitionOverlays({
             tabIndex={0}
             title={`${transitionName} ${displayDuration.toFixed(2)}s offset ${displayOffset.toFixed(2)}s`}
             onClick={handleSelect}
+            onDoubleClick={handleOpenTransitionComposition}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 handleSelect(event);
@@ -647,7 +691,13 @@ export function TransitionOverlays({
                 justifyContent: 'center',
                 cursor: editPreview?.transitionId === clipA.transitionOut.id ? 'grabbing' : 'grab',
               }}
-              onPointerDown={(event) => startTransitionMove(event, clipA, clipB)}
+              onPointerDown={(event) => {
+                if (event.detail >= 2) {
+                  handleOpenTransitionComposition(event);
+                  return;
+                }
+                startTransitionMove(event, clipA, clipB);
+              }}
             >
               <div
                 className="timeline-transition-resize-handle start"

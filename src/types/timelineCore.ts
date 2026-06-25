@@ -1,6 +1,22 @@
 import type { BlendMode } from './blendMode';
 import type { TransitionParamValue } from '../transitions';
 
+export interface TransitionCompositionLink {
+  kind: 'transition-comp';
+  parentCompositionId: string;
+  parentTransitionId: string;
+  parentOutgoingClipId: string;
+  parentIncomingClipId: string;
+  linkedOutgoingClipId: string;
+  linkedIncomingClipId: string;
+  innerTransitionId: string;
+  paddingBefore: number;
+  paddingAfter: number;
+  bodyStart: number;
+  bodyEnd: number;
+  materialized?: boolean;
+}
+
 // Transition stored on a clip (referencing transition module types)
 export interface TimelineTransition {
   id: string;
@@ -8,6 +24,7 @@ export interface TimelineTransition {
   duration: number;  // seconds
   offset?: number;  // seconds relative to the clip junction; positive moves the transition later
   linkedClipId: string;  // ID of the other clip in the transition
+  compositionId?: string;  // Optional editable transition composition rendered instead of the recipe
   params?: Record<string, TransitionParamValue>;
 }
 

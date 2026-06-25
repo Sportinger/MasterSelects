@@ -9,6 +9,7 @@ import type {
   Keyframe,
   MathSceneDefinition,
   SerializableClip,
+  TransitionOverlayClipDefinition,
 } from '../../../types';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
@@ -42,6 +43,7 @@ export interface ClipboardClipData {
   textProperties?: import('../../../types').TextClipProperties;
   text3DProperties?: import('../../../types').Text3DProperties;
   solidColor?: string;
+  transitionOverlay?: TransitionOverlayClipDefinition;
   mathScene?: MathSceneDefinition;
   motion?: MotionLayerDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;

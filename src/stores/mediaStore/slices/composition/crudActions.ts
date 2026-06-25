@@ -34,6 +34,7 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       duration,
       backgroundColor: settings?.backgroundColor ?? '#000000',
       timelineData: settings?.timelineData ?? createDefaultCompositionTimelineData(duration),
+      transitionComp: settings?.transitionComp ? structuredClone(settings.transitionComp) : undefined,
     };
 
     set((state) => ({ compositions: [...state.compositions, comp] }));

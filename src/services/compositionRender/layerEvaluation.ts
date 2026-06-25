@@ -1,5 +1,6 @@
 import type { Layer, LayerSource, NestedCompositionData } from '../../types/layers';
 import type { SerializableClip, TimelineClip, TimelineTrack } from '../../types/timeline';
+import type { Keyframe } from '../../types/keyframes';
 import { isVectorAnimationSourceType, type VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import { calculateSourceTime } from '../../utils/speedIntegration';
 import { getEffectiveScale } from '../../utils/transformScale';
@@ -11,6 +12,10 @@ import {
 import { proxyFrameCache } from '../proxyFrameCache';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
 import { getBackgroundSessionKey, getBaseLayerSource } from './sourceSetup';
+import {
+  evaluateCompositionClipMasks,
+  evaluateCompositionClipTransform,
+} from './keyframeEvaluation';
 import type {
   CompositionClipSourceEntry,
   CompositionInfo,
@@ -20,6 +25,7 @@ import type {
 } from './sourceTypes';
 
 type VectorSettingsReader = (clipId: string, localTime: number) => VectorAnimationClipSettings | undefined;
+type ClipKeyframesReader = (clipId: string) => readonly Keyframe[] | undefined;
 
 export function buildBackgroundVideoLayerSource(
   entry: CompositionClipSourceEntry,
@@ -53,24 +59,38 @@ export function buildEvaluatedClipLayer(params: {
   source: CompositionClipSourceEntry;
   isActiveComposition: boolean;
   getVectorAnimationSettings: VectorSettingsReader;
+  getClipKeyframes?: ClipKeyframesReader;
+  opacityOverride?: number;
 }): EvaluatedLayer {
-  const { compositionId, time, clipAtTime, source, isActiveComposition, getVectorAnimationSettings } = params;
+  const { compositionId, time, clipAtTime, source, isActiveComposition, getVectorAnimationSettings, getClipKeyframes, opacityOverride } = params;
   const timelineClip = clipAtTime as TimelineClip;
   const timelineLocalTime = time - clipAtTime.startTime;
-  const defaultSpeed = clipAtTime.speed ?? (clipAtTime.reversed ? -1 : 1);
-  const sourceTime = calculateSourceTime([], timelineLocalTime, defaultSpeed);
+  const sourceOverride = timelineClip.transitionSourceTimeOverride;
+  const defaultSpeed = timelineClip.transitionSourceHold
+    ? 0
+    : clipAtTime.speed ?? (clipAtTime.reversed ? -1 : 1);
+  const sourceTime = Number.isFinite(sourceOverride)
+    ? sourceOverride! - (defaultSpeed >= 0 ? (clipAtTime.inPoint || 0) : (clipAtTime.outPoint || source.naturalDuration))
+    : calculateSourceTime([], timelineLocalTime, defaultSpeed);
   const startPoint = defaultSpeed >= 0
     ? (clipAtTime.inPoint || 0)
     : (clipAtTime.outPoint || source.naturalDuration);
-  const clipTime = Math.max(0, Math.min(source.naturalDuration, startPoint + sourceTime));
+  const clipTime = Number.isFinite(sourceOverride)
+    ? Math.max(0, Math.min(source.naturalDuration, sourceOverride!))
+    : Math.max(0, Math.min(source.naturalDuration, startPoint + sourceTime));
 
-  const transform = clipAtTime.transform || {
+  const baseTransform = clipAtTime.transform || {
     position: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1 },
     rotation: { x: 0, y: 0, z: 0 },
     anchor: { x: 0.5, y: 0.5 },
     opacity: 1,
   };
+  const keyframes = isActiveComposition
+    ? getClipKeyframes?.(clipAtTime.id)
+    : (clipAtTime as SerializableClip).keyframes;
+  const transform = evaluateCompositionClipTransform(baseTransform, keyframes, timelineLocalTime);
+  const masks = evaluateCompositionClipMasks(clipAtTime.masks, keyframes, timelineLocalTime);
 
   let layerSource: EvaluatedLayer['source'] = null;
   if (source.videoElement) {
@@ -111,8 +131,8 @@ export function buildEvaluatedClipLayer(params: {
     clipId: clipAtTime.id,
     name: clipAtTime.name,
     visible: true,
-    opacity: transform.opacity ?? 1,
-    blendMode: 'normal',
+    opacity: (transform.opacity ?? 1) * (opacityOverride ?? 1),
+    blendMode: transform.blendMode || 'normal',
     source: layerSource,
     effects: clipAtTime.effects || [],
     position: transform.position || { x: 0, y: 0, z: 0 },
@@ -120,6 +140,7 @@ export function buildEvaluatedClipLayer(params: {
     rotation: typeof transform.rotation === 'number'
       ? transform.rotation
       : transform.rotation?.z || 0,
+    ...(masks?.some((mask) => mask.enabled !== false) ? { maskClipId: clipAtTime.id, maskInvert: false, masks } : {}),
   };
 }
 

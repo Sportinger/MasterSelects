@@ -36,6 +36,7 @@ export function useMaskShapeDraw(
 
   const handleShapeMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!selectedClip) return;
+    if (e.button !== 0) return;
     if (maskEditMode !== 'drawingRect' && maskEditMode !== 'drawingEllipse') return;
 
     const svg = svgRef.current;

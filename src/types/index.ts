@@ -126,8 +126,9 @@ export type {
   TimelineClipSourceRuntimeHandles,
   TimelineState,
   TimelineTrack,
+  TransitionOverlayClipDefinition,
 } from './timeline';
-export type { ClipTransform, TimelineTransition } from './timelineCore';
+export type { ClipTransform, TimelineTransition, TransitionCompositionLink } from './timelineCore';
 export type { TimelineSourceType } from './timelineSource';
 export type {
   VectorAnimationClipSettings,

@@ -314,6 +314,10 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       textProperties: c.textProperties || undefined,
       // Solid clip support
       solidColor: c.solidColor || undefined,
+      // Generated transition overlay support
+      transitionOverlay: c.transitionOverlay || c.source?.transitionOverlay
+        ? structuredClone(c.transitionOverlay ?? c.source?.transitionOverlay)
+        : undefined,
       // Math scene clip support
       mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
       // Motion design clip support
@@ -358,6 +362,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
       backgroundColor: comp.backgroundColor,
       folderId: comp.parentId,
       labelColor: comp.labelColor && comp.labelColor !== 'none' ? comp.labelColor : undefined,
+      transitionComp: comp.transitionComp ? structuredClone(comp.transitionComp) : undefined,
       tracks,
       clips,
       videoBakeRegions: timelineData?.videoBakeRegions

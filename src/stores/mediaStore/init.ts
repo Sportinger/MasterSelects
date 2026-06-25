@@ -14,6 +14,7 @@ import { audioAnalyzer } from '../../services/audioAnalyzer';
 import { compositionAudioMixer } from '../../services/compositionAudioMixer';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
 import { audioExtractor } from '../../engine/audio/AudioExtractor';
+import { syncTransitionCompositionTimelineToParent } from './slices/composition/transitionCompositionSync';
 
 const log = Logger.create('MediaStore');
 
@@ -173,8 +174,12 @@ function saveTimelineToActiveComposition(options: SaveTimelineToActiveCompositio
       didUpdate = true;
       signatures.set(activeCompositionId, nextSignature);
       return {
-        compositions: state.compositions.map((c: Composition) =>
-          c.id === activeCompositionId ? { ...c, timelineData } : c
+        compositions: syncTransitionCompositionTimelineToParent(
+          state.compositions.map((c: Composition) =>
+            c.id === activeCompositionId ? { ...c, timelineData } : c
+          ),
+          activeCompositionId,
+          timelineData,
         ),
       };
     });

@@ -9,7 +9,8 @@ import type {
 import type { ColorCorrectionState } from '../../../types/colorCorrection';
 import type { ClipNodeGraph } from '../../../types/nodeGraph';
 import type { MotionLayerDefinition } from '../../../types/motionDesign';
-import type { TimelineTransition } from '../../../types/timelineCore';
+import type { TransitionOverlayClipDefinition } from '../../../types/timeline';
+import type { TimelineTransition, TransitionCompositionLink } from '../../../types/timelineCore';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { MidiClipData, MidiInstrument } from '../../../types/midiClip';
 import type {
@@ -99,7 +100,7 @@ export interface ProjectClip {
   compositionId?: string;
 
   // Additional clip metadata (for restoration)
-  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
+  sourceType?: 'video' | 'audio' | 'image' | 'text' | 'solid' | 'model' | 'camera' | 'gaussian-avatar' | 'gaussian-splat' | 'splat-effector' | 'math-scene' | 'transition-overlay' | 'motion-shape' | 'motion-null' | 'motion-adjustment' | 'lottie' | 'rive' | 'midi';
   // MIDI clip note data (issue #182); wired into save/load in the persistence phase
   midiData?: MidiClipData;
   naturalDuration?: number;
@@ -124,6 +125,9 @@ export interface ProjectClip {
 
   // Solid clip support
   solidColor?: string;
+
+  // Generated transition overlay clip support
+  transitionOverlay?: TransitionOverlayClipDefinition;
 
   // Math scene clip support
   mathScene?: ProjectMathSceneDefinition;
@@ -156,6 +160,7 @@ export interface ProjectComposition {
   backgroundColor: string;
   folderId: string | null;
   labelColor?: string;
+  transitionComp?: TransitionCompositionLink;
 
   // Tracks and clips
   tracks: ProjectTrack[];

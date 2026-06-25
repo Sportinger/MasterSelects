@@ -1,6 +1,7 @@
 import type { TimelineClip } from './types';
 import type { SerializableClip } from '../../types';
 import { clonePersistedClipAudioState } from '../../services/audio/clipAudioStatePersistence';
+import { createTimelineTransitionOverlayCanvasRuntime } from '../../services/timeline/timelineGeneratedCanvasRuntime';
 import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
@@ -88,6 +89,7 @@ function createRestoredNestedClipCommon(
     is3D: serializedClip.is3D,
     meshType: serializedClip.meshType,
     text3DProperties,
+    transitionOverlay: serializedClip.transitionOverlay ? structuredClone(serializedClip.transitionOverlay) : undefined,
     isLoading: options.isLoading,
     needsReload: options.needsReload,
   };
@@ -237,6 +239,35 @@ export function createRestoredMathSceneClip(
   clip.waveformChannels = serializedClip.waveformChannels;
   mathSceneRenderer.renderClip(clip, options.renderTime ?? 0);
   return clip;
+}
+
+export function createRestoredTransitionOverlayClip(
+  serializedClip: SerializableClip,
+  clipId: string,
+  options: { width?: number; height?: number } = {},
+): TimelineClip | null {
+  if (serializedClip.sourceType !== 'transition-overlay' || !serializedClip.transitionOverlay) {
+    return null;
+  }
+
+  const canvas = createTimelineTransitionOverlayCanvasRuntime({
+    overlay: serializedClip.transitionOverlay,
+    dimensions: options,
+  });
+  return createRestoredNestedClipCommon(serializedClip, {
+    clipId,
+    name: serializedClip.name || 'Transition Overlay',
+    file: new File([JSON.stringify(serializedClip.transitionOverlay)], 'transition-overlay.json', { type: 'application/json' }),
+    source: {
+      type: 'transition-overlay',
+      textCanvas: canvas,
+      mediaFileId: serializedClip.mediaFileId || undefined,
+      naturalDuration: serializedClip.duration,
+      transitionOverlay: structuredClone(serializedClip.transitionOverlay),
+    },
+    isLoading: false,
+    needsReload: false,
+  });
 }
 
 export function createManagedRestoredImageUrl(clipId: string, file: File | Blob): string {

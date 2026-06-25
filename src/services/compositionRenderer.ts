@@ -7,12 +7,14 @@ import type {
   TimelineTrack,
   TimelineClip,
 } from '../types';
+import type { Keyframe } from '../types/keyframes';
 
 const log = Logger.create('CompositionRenderer');
 import { useMediaStore } from '../stores/mediaStore';
 import { useTimelineStore } from '../stores/timeline';
 import { textRenderer } from './textRenderer';
 import { isVectorAnimationSourceType } from '../types/vectorAnimation';
+import { createTimelineTransitionOverlayCanvasRuntime } from './timeline/timelineGeneratedCanvasRuntime';
 import {
   buildEvaluatedClipLayer,
   evaluateNestedComposition,
@@ -35,6 +37,7 @@ import type {
   CompositionSources,
   EvaluatedLayer,
 } from './compositionRender/sourceTypes';
+import { buildCompositionTransitionLayersForTrack } from './compositionRender/transitionEvaluation';
 export type { EvaluatedLayer } from './compositionRender/sourceTypes';
 
 class CompositionRendererService {
@@ -90,8 +93,9 @@ class CompositionRendererService {
     }
     log.debug(`prepareComposition: not ready, preparing...`);
 
-    const { activeCompositionId } = useMediaStore.getState();
-    const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
+    const mediaState = useMediaStore.getState();
+    const { activeCompositionId } = mediaState;
+    const composition = mediaState.compositions.find(c => c.id === compositionId);
 
     if (!composition) {
       log.warn(`Composition ${compositionId} not found`);
@@ -127,7 +131,7 @@ class CompositionRendererService {
 
     this.compositionSources.set(compositionId, sources);
 
-    const mediaFiles = useMediaStore.getState().files;
+    const mediaFiles = mediaState.files;
 
     // Load sources for all video/image clips
     const loadPromises: Promise<void>[] = [];
@@ -210,7 +214,7 @@ class CompositionRendererService {
           }
         }
 
-        if ((sourceType === 'text' || sourceType === 'math-scene' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
+        if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
           sources.clipSources.set(clip.id, {
             clipId: clip.id,
             type: sourceType,
@@ -255,7 +259,7 @@ class CompositionRendererService {
                 timelineClip.source
               ),
             });
-          } else if ((sourceType === 'text' || sourceType === 'math-scene' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
+          } else if ((sourceType === 'text' || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType)) && timelineClip.source.textCanvas) {
             sources.clipSources.set(clip.id, {
               clipId: clip.id,
               type: sourceType,
@@ -297,6 +301,22 @@ class CompositionRendererService {
             sources.clipSources.set(clip.id, entry);
             reportCompositionSource(compositionId, entry);
           }
+        }
+
+        if (sourceType === 'transition-overlay' && serializableClip.transitionOverlay) {
+          const textCanvas = createTimelineTransitionOverlayCanvasRuntime({
+            overlay: serializableClip.transitionOverlay,
+            dimensions: { width: composition.width, height: composition.height },
+          });
+          const entry: CompositionClipSourceEntry = {
+            clipId: clip.id,
+            compositionId,
+            type: 'transition-overlay',
+            textCanvas,
+            naturalDuration: clip.duration,
+          };
+          sources.clipSources.set(clip.id, entry);
+          reportCompositionSource(compositionId, entry);
         }
 
         continue;
@@ -406,8 +426,9 @@ class CompositionRendererService {
 
     sources.lastAccessTime = Date.now();
 
-    const { activeCompositionId } = useMediaStore.getState();
-    const composition = useMediaStore.getState().compositions.find(c => c.id === compositionId);
+    const mediaState = useMediaStore.getState();
+    const { activeCompositionId, files: mediaFiles } = mediaState;
+    const composition = mediaState.compositions.find(c => c.id === compositionId);
     if (!composition) {
       log.warn(`evaluateAtTime: composition not found ${compositionId}`);
       return [];
@@ -419,12 +440,14 @@ class CompositionRendererService {
 
     let clips: (SerializableClip | TimelineClip)[];
     let tracks: TimelineTrack[];
+    let activeClipKeyframes: Map<string, Keyframe[]> | undefined;
 
     if (isActiveComp) {
       // Active composition - use live data from timeline store
       const timelineState = useTimelineStore.getState();
       clips = timelineState.clips;
       tracks = timelineState.tracks;
+      activeClipKeyframes = timelineState.clipKeyframes;
     } else if (composition.timelineData) {
       // Non-active composition - use serialized data
       clips = composition.timelineData.clips || [];
@@ -449,9 +472,30 @@ class CompositionRendererService {
     const layers: EvaluatedLayer[] = [];
     const getVectorAnimationSettings = (clipId: string, localTime: number) =>
       useTimelineStore.getState().getInterpolatedVectorAnimationSettings(clipId, localTime);
+    const getClipKeyframes = (clipId: string) => activeClipKeyframes?.get(clipId);
 
     for (let trackIndex = videoTracks.length - 1; trackIndex >= 0; trackIndex--) {
       const track = videoTracks[trackIndex];
+      if (!track.visible) continue;
+
+      const transitionLayers = buildCompositionTransitionLayersForTrack({
+        compositionId,
+        time,
+        track,
+        trackIndex,
+        clips,
+        sources,
+        mediaFiles,
+        width: composition.width,
+        height: composition.height,
+        isActiveComposition: isActiveComp,
+        getVectorAnimationSettings,
+        getClipKeyframes,
+      });
+      if (transitionLayers) {
+        layers.push(...transitionLayers);
+        continue;
+      }
 
       // Find clip at current time on this track
       const clipAtTime = clips.find((c) =>
@@ -461,7 +505,6 @@ class CompositionRendererService {
       );
 
       if (!clipAtTime) continue;
-      if (!track.visible) continue;
 
       // Handle nested compositions
       const timelineClip = clipAtTime as TimelineClip;
@@ -493,6 +536,7 @@ class CompositionRendererService {
         source,
         isActiveComposition: isActiveComp,
         getVectorAnimationSettings,
+        getClipKeyframes,
       }));
     }
 

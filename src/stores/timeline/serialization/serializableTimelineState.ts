@@ -123,6 +123,9 @@ function createSerializableClip(
     textProperties: clip.textProperties,
     text3DProperties: clip.text3DProperties ?? dataOnlySource?.text3DProperties,
     solidColor: dataOnlySource?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+    transitionOverlay: dataOnlySource?.type === 'transition-overlay'
+      ? structuredClone(clip.transitionOverlay ?? dataOnlySource.transitionOverlay)
+      : undefined,
     vectorAnimationSettings: dataOnlySource?.vectorAnimationSettings,
     mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene
       ? structuredClone(clip.mathScene)

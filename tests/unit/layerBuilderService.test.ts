@@ -618,7 +618,7 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(layers[2]?.source).toMatchObject({ type: 'solid', color: '#ff0080' });
   });
 
-  it('sizes generated transition overlay canvases from the active preview composition', () => {
+  it('sizes generated transition overlay canvases from the active preview composition with the render cap', () => {
     const service = new LayerBuilderService();
 
     const mediaState = {
@@ -679,8 +679,8 @@ describe('LayerBuilderService paused visual provider selection', () => {
 
     expect(overlayLayers).toHaveLength(2);
     expect(overlayLayers[0]?.source?.type).toBe('solid');
-    expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(1280);
-    expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(720);
+    expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(960);
+    expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(540);
   });
 
   it('attaches wipe transition render metadata to the incoming layer', () => {

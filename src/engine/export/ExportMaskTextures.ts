@@ -45,6 +45,18 @@ function collectMaskClipIds(layers: Layer[], ids: Set<string>): void {
   }
 }
 
+function collectLayerMasks(layers: Layer[], masksByClipId: Map<string, ClipMask[]>): void {
+  for (const layer of layers) {
+    if (layer.maskClipId && layer.masks?.length) {
+      masksByClipId.set(layer.maskClipId, layer.masks);
+    }
+    const nestedLayers = layer.source?.nestedComposition?.layers;
+    if (nestedLayers?.length) {
+      collectLayerMasks(nestedLayers, masksByClipId);
+    }
+  }
+}
+
 function collectMaskClipLocalTimes(
   layers: Layer[],
   clipMap: Map<string, TimelineClip>,
@@ -86,6 +98,8 @@ export function syncExportMaskTextures(
   const clipMap = new Map<string, TimelineClip>();
   const timelineState = useTimelineStore.getState();
   collectClips(timelineState.clips, clipMap);
+  const layerMasksByClipId = new Map<string, ClipMask[]>();
+  collectLayerMasks(layers, layerMasksByClipId);
   const maskClipLocalTimes = new Map<string, number>();
   collectMaskClipLocalTimes(
     layers,
@@ -98,7 +112,7 @@ export function syncExportMaskTextures(
     const clip = clipMap.get(clipId);
     const masks = clip
       ? timelineState.getInterpolatedMasks(clipId, maskClipLocalTimes.get(clipId) ?? 0)
-      : undefined;
+      : layerMasksByClipId.get(clipId);
     if (!masks?.some(mask => mask.enabled !== false)) {
       exportMaskVersions.delete(clipId);
       host.removeMaskTexture(clipId);

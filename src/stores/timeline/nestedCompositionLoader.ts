@@ -22,6 +22,7 @@ import {
   createRestoredNestedCompositionClip,
   createRestoredNestedMediaClip,
   createRestoredPrimitiveMeshClip,
+  createRestoredTransitionOverlayClip,
   isRestoredSpatialSourceType,
   patchNestedClipInCompositionClip,
 } from './nestedRestore';
@@ -236,6 +237,12 @@ async function loadSubNestedClips(
       if (clip) {
         result.push(clip);
       }
+      continue;
+    }
+
+    if (sc.sourceType === 'transition-overlay' && sc.transitionOverlay) {
+      const clip = createRestoredTransitionOverlayClip(sc, generateNestedClipId(parentClipId, sc.id));
+      if (clip) result.push(clip);
       continue;
     }
 
@@ -464,6 +471,12 @@ export async function loadNestedClips(params: LoadNestedClipsParams): Promise<Ti
       }
       nestedClips.push(nestedClip);
 
+      continue;
+    }
+
+    if (serializedClip.sourceType === 'transition-overlay' && serializedClip.transitionOverlay) {
+      const nestedClip = createRestoredTransitionOverlayClip(serializedClip, generateNestedClipId(compClipId, serializedClip.id));
+      if (nestedClip) nestedClips.push(nestedClip);
       continue;
     }
 

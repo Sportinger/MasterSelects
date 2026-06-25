@@ -7,6 +7,7 @@ import {
   createTimelineMathSceneCanvasRuntime,
   createTimelineSolidCanvasRuntime,
   createTimelineTextCanvasRuntime,
+  createTimelineTransitionOverlayCanvasRuntime,
 } from '../../../services/timeline/timelineGeneratedCanvasRuntime';
 import type { useMediaStore } from '../../mediaStore';
 import {
@@ -159,6 +160,40 @@ export async function createLoadStateGeneratedClip(params: {
         naturalDuration: serializedClip.duration,
       },
       solidColor: serializedClip.solidColor,
+      ...applyCommonRestoredClipFields(serializedClip),
+      isLoading: false,
+    };
+  }
+
+  if (serializedClip.sourceType === 'transition-overlay' && serializedClip.transitionOverlay) {
+    const dimensions = activeCompositionDimensions(mediaStore);
+    const canvas = createTimelineTransitionOverlayCanvasRuntime({
+      overlay: serializedClip.transitionOverlay,
+      dimensions,
+    });
+
+    log.debug('Restored transition overlay clip', { clip: serializedClip.name });
+    return {
+      id: serializedClip.id,
+      trackId: serializedClip.trackId,
+      name: serializedClip.name || 'Transition Overlay',
+      file: new File([JSON.stringify(serializedClip.transitionOverlay)], 'transition-overlay.json', { type: 'application/json' }),
+      mediaFileId: serializedClip.mediaFileId || undefined,
+      signalAssetId: serializedClip.signalAssetId,
+      signalRefId: serializedClip.signalRefId,
+      signalRenderAdapterId: serializedClip.signalRenderAdapterId,
+      startTime: serializedClip.startTime,
+      duration: serializedClip.duration,
+      inPoint: serializedClip.inPoint,
+      outPoint: serializedClip.outPoint,
+      source: {
+        type: 'transition-overlay',
+        textCanvas: canvas,
+        mediaFileId: serializedClip.mediaFileId || undefined,
+        naturalDuration: serializedClip.duration,
+        transitionOverlay: structuredClone(serializedClip.transitionOverlay),
+      },
+      transitionOverlay: structuredClone(serializedClip.transitionOverlay),
       ...applyCommonRestoredClipFields(serializedClip),
       isLoading: false,
     };

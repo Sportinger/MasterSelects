@@ -113,6 +113,9 @@ export const createClipboardSlice: SliceCreator<ClipboardActions> = (set, get) =
             ? { ...clip.source.text3DProperties }
             : undefined,
         solidColor: dataOnlySource?.type === 'solid' ? (clip.solidColor || clip.name.replace('Solid ', '')) : undefined,
+        transitionOverlay: dataOnlySource?.type === 'transition-overlay'
+          ? structuredClone(clip.transitionOverlay ?? dataOnlySource.transitionOverlay)
+          : undefined,
         mathScene: dataOnlySource?.type === 'math-scene' && clip.mathScene
           ? structuredClone(clip.mathScene)
           : undefined,

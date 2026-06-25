@@ -98,6 +98,7 @@ export interface HistoryTimelineClipEditState {
   textProperties?: TimelineClip['textProperties'];
   text3DProperties?: TimelineClip['text3DProperties'];
   solidColor?: string;
+  transitionOverlay?: TimelineClip['transitionOverlay'];
   midiData?: TimelineClip['midiData'];
   vectorAnimationSettings?: SerializableClip['vectorAnimationSettings'];
   mathScene?: TimelineClip['mathScene'];
@@ -490,6 +491,7 @@ export function toHistoryTimelineClipEditState(
     textProperties: clip.textProperties,
     text3DProperties: clip.text3DProperties ?? clip.source?.text3DProperties,
     solidColor: clip.solidColor,
+    transitionOverlay: clip.transitionOverlay ?? clip.source?.transitionOverlay,
     midiData: clip.midiData,
     vectorAnimationSettings: clip.source?.vectorAnimationSettings,
     mathScene: clip.mathScene,

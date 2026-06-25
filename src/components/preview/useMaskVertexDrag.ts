@@ -257,8 +257,8 @@ export function useMaskVertexDrag(
           const vertexUpdates = dragState.current.startVertices.map(startVertex => ({
             id: startVertex.id,
             updates: {
-              x: Math.max(0, Math.min(1, startVertex.x + normalizedDx)),
-              y: Math.max(0, Math.min(1, startVertex.y + normalizedDy)),
+              x: startVertex.x + normalizedDx,
+              y: startVertex.y + normalizedDy,
             },
           }));
           useTimelineStore.getState().updateVertices(selectedClip.id, activeMask.id, vertexUpdates, true);

@@ -10,6 +10,7 @@ import type {
   TranscriptStatus,
   TranscriptWord,
 } from '../../types';
+import type { TransitionCompositionLink } from '../../types/timelineCore';
 import type { SplatEffectorSettings } from '../../types/splatEffector';
 import type { VectorAnimationMetadata, VectorAnimationProvider } from '../../types/vectorAnimation';
 import type { ShapePrimitive } from '../../types/motionDesign';
@@ -278,6 +279,7 @@ export interface Composition extends MediaItem {
   backgroundColor: string;
   timelineData?: CompositionTimelineData;
   camera?: CompositionCamera;
+  transitionComp?: TransitionCompositionLink;
 }
 
 // Folder for organization

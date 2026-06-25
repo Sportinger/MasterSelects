@@ -353,10 +353,10 @@ describe('ExportLayerBuilder', () => {
     const overlayLayers = lightSweepLayers
       .filter((layer) => layer.id.includes(':overlay:'));
     expect(lightSweepLayers.map((layer) => layer.sourceClipId ?? 'overlay')).toEqual([
+      'overlay',
+      'overlay',
       'incoming',
       'outgoing',
-      'overlay',
-      'overlay',
     ]);
     expect(overlayLayers).toHaveLength(2);
     expect(overlayLayers[0]?.blendMode).toBe('screen');
@@ -364,9 +364,9 @@ describe('ExportLayerBuilder', () => {
     expect(overlayLayers[1]?.opacity).toBeCloseTo(0.42, 2);
     expect(overlayLayers[0]?.source?.type).toBe('solid');
     expect(overlayLayers[0]?.source?.color).toBe('#fff7d2');
-    expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(1280);
-    expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(720);
-    expect(lightSweepLayers.at(-1)?.id).toContain(':overlay:');
+    expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(960);
+    expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(540);
+    expect(lightSweepLayers[0]?.id).toContain(':overlay:');
 
     for (const transitionType of ['chroma-leak', 'lens-flare', 'film-burn'] as const) {
       const layers = buildTransitionExportLayers({ transitionType }).layers;
@@ -376,8 +376,8 @@ describe('ExportLayerBuilder', () => {
       expect(generatedOverlays[0]?.blendMode).toBe('normal');
       expect(generatedOverlays[0]?.opacity).toBeGreaterThan(0);
       expect(generatedOverlays[0]?.source?.type).toBe('solid');
-      expect(generatedOverlays[0]?.source?.textCanvas?.width).toBe(1280);
-      expect(generatedOverlays[0]?.source?.textCanvas?.height).toBe(720);
+      expect(generatedOverlays[0]?.source?.textCanvas?.width).toBe(960);
+      expect(generatedOverlays[0]?.source?.textCanvas?.height).toBe(540);
     }
 
     const clipEffect = {

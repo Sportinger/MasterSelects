@@ -89,6 +89,10 @@ export function buildNestedLayerBuilderCanvasBackedSourceLayer(
     return textCanvas ? buildNestedTextSourceLayer(baseLayer, textCanvas) : null;
   }
 
+  if (nestedClip.source?.type === 'transition-overlay') {
+    return nestedClip.source.textCanvas ? buildNestedTextSourceLayer(baseLayer, nestedClip.source.textCanvas) : null;
+  }
+
   if (!isVectorAnimationSourceType(nestedClip.source?.type)) {
     return null;
   }

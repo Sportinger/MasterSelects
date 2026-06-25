@@ -25,6 +25,7 @@ function isVisualClipSourceType(sourceType: string | undefined): boolean {
     sourceType === 'gaussian-splat' ||
     sourceType === 'splat-effector' ||
     sourceType === 'math-scene' ||
+    sourceType === 'transition-overlay' ||
     sourceType === 'motion-shape' ||
     sourceType === 'motion-null' ||
     sourceType === 'motion-adjustment' ||

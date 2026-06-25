@@ -9,6 +9,8 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - Masks are stored on timeline clips as `ClipMask[]`.
 - The properties panel exposes rectangle, ellipse, and pen creation.
 - The preview overlay supports vertex selection, handle mode toggles, edge insertion, edge dragging, and whole-mask dragging.
+- Mask drawing and editing can extend into preview pasteboard space outside the visible content.
+- Mask outlines, vertices, handles, and hit areas keep screen-stable sizes while zooming the preview.
 - Whole-mask dragging uses an internal mask offset; visible shape animation is driven by the `Mask Path` stopwatch.
 - Mask outlines are projected through the active layer transform, so 2D and 3D movement, scale, and rotation keep the editable overlay aligned with the rendered mask.
 - When the mask tab is active, the normal preview Edit Mode toggle becomes navigation-only: wheel zoom and Alt/MMB pan stay available, but layer transform handles are disabled.
@@ -51,6 +53,7 @@ The properties panel exposes three creation flows:
 
 Rectangle and ellipse masks can be drawn directly on the preview by dragging.
 Pen mode adds points by clicking in the preview.
+Drawing is not limited to the visible clip pixels; points can be placed in pasteboard space around the content.
 Dragging while placing a pen point creates bezier handles.
 When the pen is near an existing edge, the overlay previews the inserted point; clicking inserts a vertex at that exact curve position.
 Clicking the first point closes the path once at least three vertices exist.
@@ -71,10 +74,13 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - Every visible mask renders its SVG outline over the preview.
 - The SVG overlay is sized to the displayed canvas, not the full preview wrapper, so pointer coordinates stay aligned when the preview is letterboxed.
 - Visible masks show vertex squares, selected-vertex highlights, bezier handle circles, and edge hit areas.
+- Vertex hit areas sit above edge hit areas so corner grabs prefer the vertex over the adjacent edge.
 - Selected bezier vertices always show their handles, including when the outline is hidden or a handle is currently zero-length.
 - Mask geometry is edited in layer-local UV space and projected to the preview with the current layer transform.
 - Whole-mask dragging moves the internal `position.x` and `position.y` offset, leaving the stored vertex topology unchanged.
 - Dragging an edge moves the two adjacent vertices together.
+- Holding Shift while dragging an edge snaps that edge horizontal or vertical, whichever is closer.
+- Holding Ctrl/Cmd while dragging an edge aligns the adjacent edges to their neighboring vertices. Shift and Ctrl/Cmd can be combined for constrained linear edge movement.
 - Clicking an edge with the pen tool inserts a new vertex.
 - Dragging a vertex moves that vertex.
 - Dragging a selected vertex with multiple vertices selected moves the selected vertices together.

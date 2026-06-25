@@ -1,7 +1,7 @@
 // MaskOverlay - SVG overlay for mask drawing and editing on preview canvas
 
 import './MaskOverlay.css';
-import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import { startBatch, endBatch } from '../../stores/historyStore';
@@ -15,7 +15,6 @@ import type { MaskVertexHandleMode } from '../../types/masks';
 import { MaskOverlayChrome } from './maskOverlay/MaskOverlayChrome';
 import {
   buildMaskPathValueWithVertexUpdates,
-  clamp01,
   getNearestMaskEdgeInsert,
 } from './maskOverlay/maskOverlayGeometry';
 import {
@@ -39,6 +38,7 @@ interface MaskOverlayProps {
   canvasHeight: number;
   displayWidth: number;
   displayHeight: number;
+  viewZoom: number;
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -50,7 +50,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHeight }: MaskOverlayProps) {
+function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, displayHeight, viewZoom }: MaskOverlayProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const suppressNextSvgClickRef = useRef(false);
   const [hoveredVertexId, setHoveredVertexId] = useState<string | null>(null);
@@ -120,10 +120,13 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
 
     const rect = svg.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
+    const viewBox = svg.viewBox.baseVal;
+    const viewBoxWidth = viewBox.width || canvasWidth;
+    const viewBoxHeight = viewBox.height || canvasHeight;
 
     return {
-      x: (e.clientX - rect.left) * (canvasWidth / rect.width),
-      y: (e.clientY - rect.top) * (canvasHeight / rect.height),
+      x: viewBox.x + ((e.clientX - rect.left) / rect.width) * viewBoxWidth,
+      y: viewBox.y + ((e.clientY - rect.top) / rect.height) * viewBoxHeight,
     };
   }, [canvasHeight, canvasWidth]);
 
@@ -134,10 +137,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
       ? unprojectCanvasToLayerUv(canvasPoint, projectionParams)
       : { x: canvasPoint.x / canvasWidth, y: canvasPoint.y / canvasHeight };
 
-    return {
-      x: clamp01(point.x),
-      y: clamp01(point.y),
-    };
+    return point;
   }, [canvasHeight, canvasWidth, getCanvasPoint, projectionParams]);
 
   const clientToLocalPoint = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -307,8 +307,8 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
       .map(vertex => ({
         id: vertex.id,
         updates: {
-          x: clamp01(vertex.x + dx),
-          y: clamp01(vertex.y + dy),
+          x: vertex.x + dx,
+          y: vertex.y + dy,
         },
       }));
 
@@ -499,6 +499,7 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
       canvasHeight={canvasHeight}
       displayWidth={displayWidth}
       displayHeight={displayHeight}
+      viewZoom={viewZoom}
       maskEditMode={maskEditMode}
       activeMask={activeMask}
       selectedVertexIds={selectedVertexIds}
@@ -529,3 +530,5 @@ export function MaskOverlay({ canvasWidth, canvasHeight, displayWidth, displayHe
     />
   );
 }
+
+export const MaskOverlay = memo(MaskOverlayComponent);

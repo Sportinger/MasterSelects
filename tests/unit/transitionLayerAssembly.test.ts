@@ -556,13 +556,6 @@ describe('transition layer assembly', () => {
     expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(512);
     expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(288);
     expect(layers[0]?.id).toContain(':overlay:');
-    expect(layers.find((layer) => layer.sourceClipId === 'clip-b')?.transitionRender).toEqual({
-      kind: 'soft-wipe',
-      direction: 'right',
-      progress: 0.5,
-      angle: 0.18,
-      feather: 0.1,
-    });
   });
 
   it('creates generated light leak overlay canvas layers above transition participants', () => {
@@ -590,6 +583,13 @@ describe('transition layer assembly', () => {
     expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(512);
     expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(288);
     expect(layers[0]?.id).toContain(':overlay:');
+    expect(layers.find((layer) => layer.sourceClipId === 'clip-b')?.transitionRender).toEqual({
+      kind: 'soft-wipe',
+      direction: 'right',
+      progress: 0.5,
+      angle: 0.18,
+      feather: 0.1,
+    });
   });
 
   it('creates generated chroma, flare, and burn overlay canvas layers above transition participants', () => {

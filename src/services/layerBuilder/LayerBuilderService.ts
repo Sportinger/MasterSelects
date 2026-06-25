@@ -50,6 +50,7 @@ import {
   type ActiveTransitionPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
 import { assemblePreviewTransitionLayers } from './transitionLayerAssembly';
+import { buildLayerBuilderTransitionCompositionLayer } from './layerBuilderTransitionComposition';
 
 const log = Logger.create('LayerBuilder');
 
@@ -307,6 +308,12 @@ export class LayerBuilderService {
 
       const activeTransition = this.getActiveTransitionForTrack(ctx, track.id);
       if (activeTransition) {
+        const transitionCompLayer = buildLayerBuilderTransitionCompositionLayer(activeTransition, layerIndex, ctx);
+        if (transitionCompLayer) {
+          layers.push(transitionCompLayer);
+          return;
+        }
+
         const activeComposition = ctx.compositionById.get(ctx.activeCompId);
         layers.push(...assemblePreviewTransitionLayers({
           plan: activeTransition.plan,

@@ -13,7 +13,8 @@ export function isTextLikeClipSource(clip: TimelineClip): boolean {
     clip.source?.type === 'text' ||
     clip.source?.type === 'solid' ||
     isVectorAnimationSourceType(clip.source?.type) ||
-    clip.source?.type === 'math-scene'
+    clip.source?.type === 'math-scene' ||
+    clip.source?.type === 'transition-overlay'
   );
 }
 

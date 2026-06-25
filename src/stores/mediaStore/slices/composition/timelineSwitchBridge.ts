@@ -11,6 +11,7 @@ import {
   calculateSyncedPlayhead,
   getCompositionSwitchDirection,
 } from './timelineNavigationPlanner';
+import { syncTransitionCompositionTimelineToParent } from './transitionCompositionSync';
 
 type MediaSliceSet = (
   partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)
@@ -45,8 +46,12 @@ export function doSetActiveComposition(
     }
     const timelineData = timelineStore.getSerializableState();
     set((state) => ({
-      compositions: state.compositions.map((c) =>
-        c.id === currentActiveId ? { ...c, timelineData } : c
+      compositions: syncTransitionCompositionTimelineToParent(
+        state.compositions.map((c) =>
+          c.id === currentActiveId ? { ...c, timelineData } : c
+        ),
+        currentActiveId,
+        timelineData,
       ),
     }));
     compositionRenderer.invalidateCompositionAndParents(currentActiveId);

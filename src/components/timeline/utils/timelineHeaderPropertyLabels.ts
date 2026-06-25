@@ -30,7 +30,7 @@ export function getHeaderPropertyLabel(
       feather: 'Feather',
       featherQuality: 'Quality',
     };
-    return `${maskName} ${labels[maskProperty.property] ?? maskProperty.property}`;
+    return `${maskName} ${labels[maskProperty.property] ?? maskProperty.property}`.replace(/\s+/g, ' ').trim();
   }
 
   const colorMeta = getTimelineHeaderColorPropertyMeta(prop, clip);
@@ -94,9 +94,18 @@ export function getHeaderPropertyLabel(
       band8k: '8kHz',
       band16k: '16kHz',
     };
-    return audioLabels[paramName] || paramName;
+    return audioLabels[paramName] || formatPropertyToken(paramName);
   }
-  return prop;
+  return formatPropertyToken(prop);
+}
+
+function formatPropertyToken(value: string): string {
+  return value
+    .replace(/^.*\./, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function sortTimelineHeaderProperties(

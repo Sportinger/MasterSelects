@@ -1,6 +1,7 @@
 import type { BlendMode } from './blendMode';
 import type { RuntimeColorGrade } from './colorCorrection';
 import type { Effect } from './effects';
+import type { ClipMask } from './masks';
 import type {
   GaussianSplatSequenceData,
   ModelSequenceData,
@@ -44,6 +45,7 @@ export interface Layer {
   maskFeatherQuality?: number;  // Blur quality: 0=low (9 samples), 1=medium (17), 2=high (25)
   maskInvert?: boolean;  // Whether to invert the mask, handled in GPU shader
   maskClipId?: string;  // Clip ID for looking up mask texture (consistent across systems)
+  masks?: ClipMask[]; // Optional nested/serialized masks for mask texture generation.
   sourceRect?: LayerSourceRect;  // Normalized source UV rect; defaults to full source.
   transitionRender?: TransitionRenderState;
 }

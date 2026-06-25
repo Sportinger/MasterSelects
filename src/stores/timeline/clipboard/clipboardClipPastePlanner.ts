@@ -2,7 +2,7 @@ import type { TimelineClip, TimelineTrack } from '../../../types';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { DEFAULT_SCENE_CAMERA_SETTINGS } from '../../mediaStore/types';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../../types/splatEffector';
-import { createTimelineMathSceneCanvasRuntime } from '../../../services/timeline/timelineGeneratedCanvasRuntime';
+import { createTimelineMathSceneCanvasRuntime, createTimelineTransitionOverlayCanvasRuntime } from '../../../services/timeline/timelineGeneratedCanvasRuntime';
 import { remapClipNodeGraphEffectIds } from '../../../services/nodeGraph';
 import type { ClipboardClipData, Keyframe } from '../types';
 
@@ -89,6 +89,7 @@ export function createPastedClipboardClipsPlan(
       textProperties: clipData.textProperties ? { ...clipData.textProperties } : undefined,
       text3DProperties,
       solidColor: clipData.solidColor,
+      transitionOverlay: clipData.transitionOverlay ? structuredClone(clipData.transitionOverlay) : undefined,
       mathScene: clipData.mathScene ? structuredClone(clipData.mathScene) : undefined,
       motion: clipData.motion ? structuredClone(clipData.motion) : undefined,
       thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
@@ -141,6 +142,7 @@ function clipRequiresAsyncMediaLoad(clipData: ClipboardClipData): boolean {
     clipData.sourceType !== 'text' &&
     clipData.sourceType !== 'solid' &&
     clipData.sourceType !== 'math-scene' &&
+    clipData.sourceType !== 'transition-overlay' &&
     !isPrimitiveMeshClip(clipData) &&
     clipData.sourceType !== 'camera' &&
     clipData.sourceType !== 'splat-effector' &&
@@ -201,6 +203,15 @@ function createPastedClipSource(
       mediaFileId: clipData.mediaFileId,
       naturalDuration: clipData.naturalDuration ?? clipData.duration,
       textCanvas: createTimelineMathSceneCanvasRuntime({ mathScene: clipData.mathScene, duration: clipData.duration }),
+    };
+  }
+  if (clipData.sourceType === 'transition-overlay' && clipData.transitionOverlay) {
+    return {
+      type: 'transition-overlay',
+      mediaFileId: clipData.mediaFileId,
+      naturalDuration: clipData.naturalDuration ?? clipData.duration,
+      textCanvas: createTimelineTransitionOverlayCanvasRuntime({ overlay: clipData.transitionOverlay }),
+      transitionOverlay: structuredClone(clipData.transitionOverlay),
     };
   }
   if (isMotionClip(clipData) && clipData.motion) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type React from 'react';
 
 import { renderHostPort } from '../../services/render/renderHostPort';
@@ -141,6 +141,27 @@ export function usePreviewMouseRouting({
   stopGaussianKeyboardMovement,
   viewPan,
 }: UsePreviewMouseRoutingOptions): PreviewMouseRoutingHandlers {
+  const panFrameRef = useRef<number | null>(null);
+  const pendingPanRef = useRef<PreviewPoint | null>(null);
+
+  const flushPendingPan = useCallback(() => {
+    if (panFrameRef.current !== null) {
+      window.cancelAnimationFrame(panFrameRef.current);
+      panFrameRef.current = null;
+    }
+    const pendingPan = pendingPanRef.current;
+    pendingPanRef.current = null;
+    if (pendingPan) {
+      setViewPan(pendingPan);
+    }
+  }, [setViewPan]);
+
+  useEffect(() => () => {
+    if (panFrameRef.current !== null) {
+      window.cancelAnimationFrame(panFrameRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isEditCameraOrthoPanning) return;
 
@@ -318,13 +339,23 @@ export function usePreviewMouseRouting({
     if (!isPanning) return;
     const dx = event.clientX - panStartRef.current.x;
     const dy = event.clientY - panStartRef.current.y;
-    setViewPan({ x: panStartRef.current.panX + dx, y: panStartRef.current.panY + dy });
+    pendingPanRef.current = { x: panStartRef.current.panX + dx, y: panStartRef.current.panY + dy };
+    if (panFrameRef.current !== null) return;
+    panFrameRef.current = window.requestAnimationFrame(() => {
+      panFrameRef.current = null;
+      const pendingPan = pendingPanRef.current;
+      pendingPanRef.current = null;
+      if (pendingPan) {
+        setViewPan(pendingPan);
+      }
+    });
   }, [isPanning, panStartRef, setViewPan]);
 
   const handleMouseUp = useCallback(() => {
+    flushPendingPan();
     setIsPanning(false);
     setIsEditCameraOrthoPanning(false);
-  }, [setIsEditCameraOrthoPanning, setIsPanning]);
+  }, [flushPendingPan, setIsEditCameraOrthoPanning, setIsPanning]);
 
   const resetView = useCallback(() => {
     setViewZoom(1);

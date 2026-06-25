@@ -12,6 +12,7 @@ export type TimelineSourceType =
   | 'gaussian-splat'
   | 'splat-effector'
   | 'math-scene'
+  | 'transition-overlay'
   | 'motion-shape'
   | 'motion-null'
   | 'motion-adjustment'

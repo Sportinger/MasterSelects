@@ -1,5 +1,6 @@
-import type { MathSceneDefinition, TextClipProperties, TimelineClip } from '../../types';
+import type { MathSceneDefinition, TextClipProperties, TimelineClip, TransitionOverlayClipDefinition } from '../../types';
 import { markDynamicCanvasUpdated } from '../canvasVersion';
+import { getTransitionOverlayCanvas } from '../layerBuilder/transitionOverlayCanvases';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import { textRenderer } from '../textRenderer';
 
@@ -134,6 +135,26 @@ export function createTimelineSolidCanvasRuntime(params: {
   markDynamicCanvasUpdated(canvas, 'solid');
 
   return canvas;
+}
+
+export function createTimelineTransitionOverlayCanvasRuntime(params: {
+  overlay: TransitionOverlayClipDefinition;
+  dimensions?: TimelineGeneratedCanvasDimensions;
+}): HTMLCanvasElement {
+  const canvas = getTransitionOverlayCanvas({
+    pattern: params.overlay.pattern,
+    color: params.overlay.color,
+    centerX: 0.5,
+    widthRatio: params.overlay.widthRatio,
+    softness: params.overlay.softness,
+    angle: params.overlay.angle,
+    outputSize: resolveCanvasDimensions(params.dimensions),
+  });
+
+  if (canvas) return canvas;
+  const fallback = getReusableCanvas(null, params.dimensions);
+  markDynamicCanvasUpdated(fallback, 'transition-overlay');
+  return fallback;
 }
 
 export function renderTimelineSolidCanvasRuntime(params: {

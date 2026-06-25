@@ -406,8 +406,11 @@
 }
 
 .property-label-row.flat .property-label {
-  flex-shrink: 0;
-  min-width: 45px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .property-label-row.flat.dragging {
@@ -427,6 +430,7 @@
 .property-keyframe-controls {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 1px;
   margin-left: auto;
 }
@@ -463,10 +467,15 @@
 }
 
 .property-value {
+  flex: 0 0 auto;
   font-size: 9px;
   color: var(--accent-timeline);
   font-family: monospace;
   min-width: 40px;
+  max-width: 52px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: right;
   cursor: ns-resize;
   padding: 0 4px;

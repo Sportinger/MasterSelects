@@ -158,6 +158,7 @@ export function convertProjectCompositionToStore(
         textProperties: c.textProperties,
         text3DProperties: c.text3DProperties,
         solidColor: c.solidColor,
+        transitionOverlay: c.transitionOverlay ? structuredClone(c.transitionOverlay) : undefined,
         mathScene: c.mathScene ? structuredClone(c.mathScene) : undefined,
         motion: c.motion ? structuredClone(c.motion) : undefined,
         vectorAnimationSettings: c.vectorAnimationSettings,
@@ -207,6 +208,7 @@ export function convertProjectCompositionToStore(
       frameRate: pc.frameRate,
       duration: pc.duration,
       backgroundColor: pc.backgroundColor,
+      transitionComp: pc.transitionComp ? structuredClone(pc.transitionComp) : undefined,
       timelineData,
     };
   });

@@ -393,7 +393,7 @@
 /* ========== MASK OVERLAY STYLES ========== */
 .mask-overlay-svg {
   pointer-events: auto;
-  z-index: 50;
+  z-index: 15;
   overflow: visible;
 }
 
