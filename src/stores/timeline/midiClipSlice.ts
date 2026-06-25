@@ -154,4 +154,18 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     invalidateCache();
     captureSnapshot('Delete MIDI note');
   },
+
+  removeMidiNotes: (clipId, noteIds) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'midi' || noteIds.length === 0) return;
+
+    // Batch delete so a multi-note selection collapses into ONE undo step
+    // (the piano-roll select tool's Delete). A per-note removeMidiNote loop
+    // would push N snapshots and require N undos.
+    const ids = new Set(noteIds);
+    set({ clips: mapClipNotes(clips, clipId, notes => notes.filter(n => !ids.has(n.id))) });
+    invalidateCache();
+    captureSnapshot(noteIds.length === 1 ? 'Delete MIDI note' : 'Delete MIDI notes');
+  },
 });

@@ -50,6 +50,7 @@ export interface MidiClipActions {
     options?: { captureHistory?: boolean },
   ) => void;
   removeMidiNote: (clipId: string, noteId: string) => void;
+  removeMidiNotes: (clipId: string, noteIds: string[]) => void;
 }
 
 export interface MathSceneClipActions {

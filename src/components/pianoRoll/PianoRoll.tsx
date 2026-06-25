@@ -7,6 +7,7 @@
 // and deleted via right-click. A live cursor mirrors the timeline playhead.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type Icon, IconEraser, IconMarquee2, IconPointer } from '@tabler/icons-react';
 import { useTimelineStore } from '../../stores/timeline';
 import { selectTempoMap } from '../../stores/timeline/selectors';
 import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
@@ -17,6 +18,7 @@ import { PianoRollRuler, PIANO_ROLL_RULER_H } from './PianoRollRuler';
 import { PianoRollGridLines } from './PianoRollGridLines';
 import { buildPianoRollGrid } from './pianoRollGrid';
 import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
+import { resolvePianoRollToolAction, type PianoRollToolId } from './pianoRollToolShortcuts';
 
 // Two independent zoom axes, like Cubase (#249): horizontal = time scale
 // (px per second), vertical = note-row height (px per pitch). Both live in
@@ -66,7 +68,19 @@ function yToPitch(y: number, rowH: number): number {
 type DragState =
   | { kind: 'create'; noteId: null; pitch: number; startTime: number }
   | { kind: 'move'; noteId: string; grabOffsetTime: number }
-  | { kind: 'resize'; noteId: string; startTime: number };
+  | { kind: 'resize'; noteId: string; startTime: number }
+  // Eraser swipe: delete any note the cursor passes over (#249 tool palette).
+  | { kind: 'erase' }
+  // Marquee select: rubber-band rectangle in grid-content pixels.
+  | { kind: 'marquee'; startX: number; startY: number }
+  // Group move: drag all selected notes together. `origins` snapshots each
+  // selected note's start/pitch at grab time so deltas apply from a fixed base.
+  | { kind: 'move-group'; anchorId: string; grabOffsetTime: number; origins: { id: string; start: number; pitch: number }[] };
+
+// Active editor tool (#249). Pointer = the original draw/move/resize behavior;
+// eraser deletes; select marquee-picks and group-moves notes. Shared id type so
+// the keyboard-shortcut seam and the palette can't drift.
+type Tool = PianoRollToolId;
 
 interface PendingNote {
   pitch: number;
@@ -76,10 +90,57 @@ interface PendingNote {
 
 interface PianoRollProps {
   clipId: string;
-  onRequestClose?: () => void;
 }
 
-export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
+// --- tool palette (#249) ---------------------------------------------------
+// Reuses the main timeline's Tabler tool icons and mirrors the
+// `.timeline-tool-button` look (24px, accent-blue active) so the piano-roll
+// palette is visually unified with the timeline. The popup can't reliably
+// inherit that CSS class (Vite injects app CSS as <style>, which the popup
+// boot doesn't mirror), so the matching style is applied inline here.
+const TOOL_ICON_SIZE = 18;
+const TOOL_ACCENT = '#2d8ceb';
+
+// Custom rubber/eraser mouse cursor for the eraser tool, so it's obvious the
+// click will delete. No native CSS keyword looks like an eraser, so we inline a
+// pink-rubber SVG as a data-URI cursor (hotspot at the eraser tip, ~5,19). Built
+// with encodeURIComponent so the markup stays readable; single quotes inside the
+// SVG are left untouched by the encoder.
+const ERASER_CURSOR_SVG =
+  "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>" +
+  "<g stroke='#f0f0f0' stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round'>" +
+  "<path fill='#2a2a2a' d='M19 20h-10.5l-4.21 -4.3a1 1 0 0 1 0 -1.41l10 -10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41l-9.2 9.3'/>" +
+  "<path fill='none' d='M18 13.3l-6.3 -6.3'/>" +
+  "</g></svg>";
+const ERASER_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(ERASER_CURSOR_SVG)}") 5 19, auto`;
+
+function ToolButton({ active, title, onClick, glyph: Glyph }: {
+  active: boolean; title: string; onClick: () => void; glyph: Icon;
+}) {
+  const [hover, setHover] = useState(false);
+  const background = active ? 'rgba(45,140,235,0.18)' : hover ? 'rgba(255,255,255,0.08)' : 'transparent';
+  const color = active ? TOOL_ACCENT : hover ? '#fff' : 'rgba(255,255,255,0.72)';
+  const borderColor = active ? 'rgba(45,140,235,0.45)' : 'transparent';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 24, height: 24, padding: 0, borderRadius: 3, cursor: 'pointer',
+        border: `1px solid ${borderColor}`, background, color,
+        transition: 'color 120ms ease, background-color 120ms ease, border-color 120ms ease',
+      }}
+    >
+      <Glyph size={TOOL_ICON_SIZE} stroke={2.2} aria-hidden />
+    </button>
+  );
+}
+
+export function PianoRoll({ clipId }: PianoRollProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gridRef = useRef<HTMLDivElement | null>(null);
   // The ruler track that slides under the viewport's horizontal scroll. Driven by
@@ -98,6 +159,17 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   const [dragActive, setDragActive] = useState(false);
   // Pitch under the cursor, so the matching key on the keyboard lights up (#249).
   const [hoverPitch, setHoverPitch] = useState<number | null>(null);
+
+  // Active tool + selection model (#249 tool palette). Refs mirror state so the
+  // document-level drag/key handlers read fresh values without re-binding.
+  const [tool, setTool] = useState<Tool>('pointer');
+  const toolRef = useRef(tool);
+  useEffect(() => { toolRef.current = tool; }, [tool]);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const selectedIdsRef = useRef(selectedIds);
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  // Live marquee rectangle in grid-content pixels (null when not selecting).
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   // Two independent zoom axes (#249). Refs mirror the state so the native wheel
   // handler reads fresh values without re-attaching the listener on every zoom.
@@ -127,6 +199,7 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
   const addMidiNote = useTimelineStore((state) => state.addMidiNote);
   const updateMidiNote = useTimelineStore((state) => state.updateMidiNote);
   const removeMidiNote = useTimelineStore((state) => state.removeMidiNote);
+  const removeMidiNotes = useTimelineStore((state) => state.removeMidiNotes);
   const setPlayheadPosition = useTimelineStore((state) => state.setPlayheadPosition);
 
   const clipDuration = clip?.duration ?? 0;
@@ -327,6 +400,26 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
     return { x: clientX - rect.left, y: clientY - rect.top };
   }, []);
 
+  // Topmost editable note whose rendered pixel box contains a grid-content point.
+  // Reads the live store + current zoom so the eraser/select hit-test matches what
+  // is actually drawn (#249). Returns the LAST-drawn match (notes draw in order).
+  const noteAtPx = useCallback((x: number, y: number): MidiNote | null => {
+    const liveClip = useTimelineStore.getState().clips.find((c) => c.id === clipId);
+    if (!liveClip || liveClip.source?.type !== 'midi') return null;
+    const ppx = pxPerSecRef.current;
+    const rh = rowHRef.current;
+    const liveNotes = liveClip.midiData?.notes ?? [];
+    for (let i = liveNotes.length - 1; i >= 0; i--) {
+      const n = liveNotes[i];
+      if (!isNoteStartInWindow(liveClip, n)) continue;
+      const left = contentTimeToClipLocal(liveClip, n.start) * ppx;
+      const width = Math.max(2, n.duration * ppx);
+      const top = pitchToY(n.pitch, rh);
+      if (x >= left && x <= left + width && y >= top && y <= top + rh) return n;
+    }
+    return null;
+  }, [clipId]);
+
   // --- global drag handling ---------------------------------------------------
   useEffect(() => {
     if (!dragActive) return;
@@ -355,6 +448,47 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
       if (drag.kind === 'resize') {
         const duration = Math.max(0.02, time - drag.startTime);
         updateMidiNote(clipId, drag.noteId, { duration }, { captureHistory: false });
+        return;
+      }
+      if (drag.kind === 'erase') {
+        const hit = noteAtPx(x, y);
+        if (hit) removeMidiNote(clipId, hit.id);
+        return;
+      }
+      if (drag.kind === 'move-group') {
+        const anchor = drag.origins.find((o) => o.id === drag.anchorId);
+        if (!anchor) return;
+        const newAnchorStart = Math.max(0, time - drag.grabOffsetTime);
+        const deltaTime = newAnchorStart - anchor.start;
+        const deltaPitch = yToPitch(y, rowHRef.current) - anchor.pitch;
+        for (const o of drag.origins) {
+          updateMidiNote(clipId, o.id, {
+            start: Math.max(0, o.start + deltaTime),
+            pitch: clamp(o.pitch + deltaPitch, PITCH_MIN, PITCH_MAX),
+          }, { captureHistory: false });
+        }
+        return;
+      }
+      if (drag.kind === 'marquee') {
+        const rx = Math.min(drag.startX, x);
+        const ry = Math.min(drag.startY, y);
+        const rw = Math.abs(x - drag.startX);
+        const rh = Math.abs(y - drag.startY);
+        setMarquee({ x: rx, y: ry, w: rw, h: rh });
+        const liveClip = useTimelineStore.getState().clips.find((c) => c.id === clipId);
+        const liveNotes = liveClip?.midiData?.notes ?? [];
+        const ppx = pxPerSecRef.current;
+        const rowPx = rowHRef.current;
+        const next = new Set<string>();
+        for (const n of liveNotes) {
+          if (!liveClip || !isNoteStartInWindow(liveClip, n)) continue;
+          const left = contentTimeToClipLocal(liveClip, n.start) * ppx;
+          const width = Math.max(2, n.duration * ppx);
+          const top = pitchToY(n.pitch, rowPx);
+          // Axis-aligned rectangle overlap.
+          if (left <= rx + rw && left + width >= rx && top <= ry + rh && top + rowPx >= ry) next.add(n.id);
+        }
+        setSelectedIds(next);
       }
     };
 
@@ -376,6 +510,15 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         if (note) {
           updateMidiNote(clipId, drag.noteId, { start: note.start }, { captureHistory: true });
         }
+      } else if (drag?.kind === 'move-group') {
+        // One history snapshot for the whole group move (live drag was silent).
+        const note = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.midiData?.notes
+          .find((n) => n.id === drag.anchorId);
+        if (note) {
+          updateMidiNote(clipId, drag.anchorId, { start: note.start }, { captureHistory: true });
+        }
+      } else if (drag?.kind === 'marquee') {
+        setMarquee(null);
       }
     };
 
@@ -390,7 +533,39 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
       doc.removeEventListener('mousemove', handleMove);
       doc.removeEventListener('mouseup', handleUp);
     };
-  }, [dragActive, clipId, addMidiNote, updateMidiNote, localPoint]);
+  }, [dragActive, clipId, addMidiNote, updateMidiNote, removeMidiNote, localPoint, noteAtPx]);
+
+  // Popup keyboard shortcuts (#249). Bound to the popup's OWN document so keys
+  // fire inside the detached window. Two concerns: tool switching (1/2/3, via the
+  // shortcut seam) and deleting the selection (Delete/Backspace).
+  useEffect(() => {
+    const doc = gridRef.current?.ownerDocument ?? document;
+    const onKey = (e: KeyboardEvent) => {
+      // Never steal keys from an editable field (future-proofing — the popup has
+      // none today, but a rename/velocity input could land here later).
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+
+      // Tool switch. matchesCombo requires an exact modifier match, so Ctrl/Alt+1
+      // etc. don't resolve here and fall through to any future global shortcut.
+      const nextTool = resolvePianoRollToolAction(e);
+      if (nextTool) {
+        e.preventDefault();
+        setTool(nextTool);
+        return;
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const sel = selectedIdsRef.current;
+        if (sel.size === 0) return;
+        e.preventDefault();
+        removeMidiNotes(clipId, Array.from(sel));
+        setSelectedIds(new Set());
+      }
+    };
+    doc.addEventListener('keydown', onKey);
+    return () => doc.removeEventListener('keydown', onKey);
+  }, [clipId, removeMidiNotes]);
 
   if (!clip || clip.source?.type !== 'midi') {
     return (
@@ -452,6 +627,68 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
     removeMidiNote(clipId, note.id);
   };
 
+  // --- tool-aware mousedown dispatch (#249) ----------------------------------
+  // Empty grid: pointer draws, eraser starts a swipe, select starts a marquee.
+  const handleGridMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (tool === 'pointer') { startCreate(e); return; }
+    const { x, y } = localPoint(e.clientX, e.clientY);
+    if (tool === 'eraser') {
+      const hit = noteAtPx(x, y);
+      if (hit) removeMidiNote(clipId, hit.id);
+      dragRef.current = { kind: 'erase' };
+      setDragActive(true);
+      e.preventDefault();
+      return;
+    }
+    // select: click on empty grid clears selection, then marquee builds a new one.
+    setSelectedIds(new Set());
+    dragRef.current = { kind: 'marquee', startX: x, startY: y };
+    setMarquee({ x, y, w: 0, h: 0 });
+    setDragActive(true);
+    e.preventDefault();
+  };
+
+  // A note body: pointer moves the single note, eraser deletes it (and keeps
+  // swiping), select picks it / group-moves the current selection.
+  const handleNoteMouseDown = (e: React.MouseEvent, note: MidiNote) => {
+    if (e.button !== 0) return;
+    if (tool === 'pointer') { startMove(e, note); return; }
+    e.stopPropagation();
+    e.preventDefault();
+    if (tool === 'eraser') {
+      removeMidiNote(clipId, note.id);
+      dragRef.current = { kind: 'erase' };
+      setDragActive(true);
+      return;
+    }
+    // select tool
+    if (e.shiftKey) {
+      // Toggle this note's membership; no drag.
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(note.id)) next.delete(note.id); else next.add(note.id);
+        return next;
+      });
+      return;
+    }
+    // Clicking an unselected note replaces the selection with just it; clicking
+    // a member keeps the whole selection. Either way we begin a group move.
+    let sel = selectedIdsRef.current;
+    if (!sel.has(note.id)) {
+      sel = new Set([note.id]);
+      setSelectedIds(sel);
+    }
+    const liveNotes = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.midiData?.notes ?? [];
+    const origins = liveNotes.filter((n) => sel.has(n.id)).map((n) => ({ id: n.id, start: n.start, pitch: n.pitch }));
+    const track = useTimelineStore.getState().tracks.find((t) => t.id === clip?.trackId);
+    previewMidiNote(track?.midiInstrument, note.pitch, note.velocity, clip?.trackId);
+    const { x } = localPoint(e.clientX, e.clientY);
+    const grabTime = clipLocalToContentTime(clip, x / pxPerSec);
+    dragRef.current = { kind: 'move-group', anchorId: note.id, grabOffsetTime: grabTime - note.start, origins };
+    setDragActive(true);
+  };
+
   const clipLocalPlayhead = playheadPosition - clip.startTime;
   const showPlayhead = clipLocalPlayhead >= 0 && clipLocalPlayhead <= clipDuration;
 
@@ -462,18 +699,19 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px',
         background: '#161616', borderBottom: '1px solid #2a2a2a', flexShrink: 0,
       }}>
-        <strong style={{ fontSize: 13, color: '#e0e0e0' }}>{clip.name || 'MIDI Clip'}</strong>
-        <span style={{ fontSize: 11, color: '#777' }}>{notes.length} notes · {clipDuration.toFixed(2)}s</span>
+        {/* Tool palette (#249): pointer = draw/move/resize, eraser = delete,
+            select = marquee + group-move. Styled to match the timeline palette. */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 3, padding: 2,
+          border: '1px solid rgba(255,255,255,0.08)', borderRadius: 5, background: 'rgba(0,0,0,0.18)',
+        }}>
+          <ToolButton active={tool === 'pointer'} title="Pointer — draw, move & resize notes (1)" onClick={() => setTool('pointer')} glyph={IconPointer} />
+          <ToolButton active={tool === 'eraser'} title="Eraser — click or swipe to delete notes (2)" onClick={() => setTool('eraser')} glyph={IconEraser} />
+          <ToolButton active={tool === 'select'} title="Select — marquee to select, drag to move, Del to remove (3)" onClick={() => setTool('select')} glyph={IconMarquee2} />
+        </div>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: '#666' }}>Drag to draw · drag note to move · right edge to resize · right-click to delete</span>
-        {onRequestClose && (
-          <button
-            onClick={onRequestClose}
-            style={{ background: '#333', color: '#ccc', border: '1px solid #444', borderRadius: 3, padding: '3px 10px', cursor: 'pointer', fontSize: 11 }}
-          >
-            Close
-          </button>
-        )}
+        <span style={{ fontSize: 11, color: '#777' }}>{notes.length} notes · {clipDuration.toFixed(2)}s</span>
+        <strong style={{ fontSize: 13, color: '#e0e0e0' }}>{clip.name || 'MIDI Clip'}</strong>
       </div>
 
       {/* Ruler row (#249 Phase 2): Bars + Time lanes, locked to the grid's time
@@ -598,10 +836,10 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
         {/* Grid */}
         <div
           ref={gridRef}
-          onMouseDown={startCreate}
+          onMouseDown={handleGridMouseDown}
           onMouseMove={updateHoverPitch}
           onMouseLeave={() => setHoverPitch(null)}
-          style={{ position: 'relative', width: contentWidth, height: gridH, flexShrink: 0, cursor: 'crosshair' }}
+          style={{ position: 'relative', width: contentWidth, height: gridH, flexShrink: 0, cursor: tool === 'pointer' ? 'default' : tool === 'eraser' ? ERASER_CURSOR : 'crosshair' }}
         >
           {/* Flat lane fill + sparse octave reference lines. We deliberately
               avoid any repeating pattern here (neither a per-row div stack nor a
@@ -659,23 +897,29 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
             const left = contentTimeToClipLocal(clip, note.start) * pxPerSec;
             const width = Math.max(2, note.duration * pxPerSec);
             const top = pitchToY(note.pitch, rowH);
+            const selected = selectedIds.has(note.id);
+            const noteCursor = tool === 'eraser' ? ERASER_CURSOR : tool === 'select' ? 'move' : 'grab';
             return (
               <div
                 key={note.id}
-                onMouseDown={(e) => startMove(e, note)}
+                onMouseDown={(e) => handleNoteMouseDown(e, note)}
                 onContextMenu={(e) => deleteNote(e, note)}
                 title={`${pitchLabel(note.pitch)} · ${note.duration.toFixed(2)}s`}
                 style={{
                   position: 'absolute', left, top, width, height: rowH - 1,
                   background: `rgba(120,170,255,${0.45 + note.velocity * 0.5})`,
-                  border: '1px solid rgba(180,210,255,0.9)',
-                  borderRadius: 2, boxSizing: 'border-box', cursor: 'grab',
+                  border: selected ? '1px solid #ffd54a' : '1px solid rgba(180,210,255,0.9)',
+                  boxShadow: selected ? '0 0 0 1px #ffd54a inset' : undefined,
+                  borderRadius: 2, boxSizing: 'border-box', cursor: noteCursor,
                 }}
               >
-                <div
-                  onMouseDown={(e) => startResize(e, note)}
-                  style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'ew-resize' }}
-                />
+                {/* Resize grip only in pointer mode — eraser/select own the body. */}
+                {tool === 'pointer' && (
+                  <div
+                    onMouseDown={(e) => startResize(e, note)}
+                    style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'ew-resize' }}
+                  />
+                )}
               </div>
             );
           })}
@@ -690,6 +934,15 @@ export function PianoRoll({ clipId, onRequestClose }: PianoRollProps) {
                 borderRadius: 2, boxSizing: 'border-box', pointerEvents: 'none',
               }}
             />
+          )}
+
+          {/* Marquee selection rectangle (#249 select tool) */}
+          {marquee && (
+            <div style={{
+              position: 'absolute', left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h,
+              background: 'rgba(255,213,74,0.12)', border: '1px solid rgba(255,213,74,0.8)',
+              boxSizing: 'border-box', pointerEvents: 'none',
+            }} />
           )}
 
           {/* Live playhead cursor */}
