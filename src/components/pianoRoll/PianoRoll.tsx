@@ -439,7 +439,11 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       // Map the cursor's screen offset to CONTENT time through the clip window
       // (#232), so note times stay anchored to the content, not the window edge.
       const liveInPoint = useTimelineStore.getState().clips.find((c) => c.id === clipId)?.inPoint ?? 0;
-      const time = Math.max(0, clipLocalToContentTime({ inPoint: liveInPoint }, x / pxPerSecRef.current));
+      // Floor at the window's left edge (inPoint), NOT 0: after a left-extend the
+      // clip's inPoint is negative (empty space before content origin 0), so that
+      // region is valid content time. Clamping to 0 snapped clicks back to the old
+      // origin; clamping to inPoint keeps notes inside the visible window (#249).
+      const time = Math.max(liveInPoint, clipLocalToContentTime({ inPoint: liveInPoint }, x / pxPerSecRef.current));
 
       if (drag.kind === 'create') {
         const next = { pitch: drag.pitch, start: drag.startTime, duration: Math.max(0.02, time - drag.startTime) };
@@ -448,7 +452,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
         return;
       }
       if (drag.kind === 'move') {
-        const newStart = Math.max(0, time - drag.grabOffsetTime);
+        const newStart = Math.max(liveInPoint, time - drag.grabOffsetTime);
         const newPitch = yToPitch(y, rowHRef.current);
         updateMidiNote(clipId, drag.noteId, { start: newStart, pitch: newPitch }, { captureHistory: false });
         return;
@@ -466,12 +470,12 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       if (drag.kind === 'move-group') {
         const anchor = drag.origins.find((o) => o.id === drag.anchorId);
         if (!anchor) return;
-        const newAnchorStart = Math.max(0, time - drag.grabOffsetTime);
+        const newAnchorStart = Math.max(liveInPoint, time - drag.grabOffsetTime);
         const deltaTime = newAnchorStart - anchor.start;
         const deltaPitch = yToPitch(y, rowHRef.current) - anchor.pitch;
         for (const o of drag.origins) {
           updateMidiNote(clipId, o.id, {
-            start: Math.max(0, o.start + deltaTime),
+            start: Math.max(liveInPoint, o.start + deltaTime),
             pitch: clamp(o.pitch + deltaPitch, PITCH_MIN, PITCH_MAX),
           }, { captureHistory: false });
         }
@@ -596,7 +600,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     if (e.button !== 0) return;
     const { x, y } = localPoint(e.clientX, e.clientY);
     const pitch = yToPitch(y, rowH);
-    const startTime = Math.max(0, clipLocalToContentTime(clip, x / pxPerSec));
+    // Floor at inPoint (the window's left edge), not 0 — see the handleMove note:
+    // a left-extended clip has negative inPoint, and that region is valid (#249).
+    const startTime = Math.max(clip.inPoint, clipLocalToContentTime(clip, x / pxPerSec));
     // Audible feedback for the note being drawn (issue #182, Phase 4) — routed
     // through the track's synth bus so preview respects its volume/pan.
     const track = useTimelineStore.getState().tracks.find((t) => t.id === clip?.trackId);

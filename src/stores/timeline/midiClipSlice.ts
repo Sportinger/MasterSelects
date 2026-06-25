@@ -110,7 +110,11 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     const newNote: MidiNote = {
       id: noteId,
       pitch: clampPitch(note.pitch),
-      start: Math.max(0, note.start),
+      // Content time can be NEGATIVE: extending a MIDI clip from the left pushes
+      // inPoint below the content origin (0), so the revealed space is valid
+      // content time. Don't floor at 0 — that would snap left-region notes back
+      // to the old origin (#249). The piano roll bounds placement to the window.
+      start: note.start,
       duration: Math.max(MIN_MIDI_NOTE_DURATION, note.duration),
       velocity: clampVelocity(note.velocity ?? 0.8),
     };
@@ -132,7 +136,8 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
         return {
           ...n,
           ...(patch.pitch !== undefined ? { pitch: clampPitch(patch.pitch) } : {}),
-          ...(patch.start !== undefined ? { start: Math.max(0, patch.start) } : {}),
+          // Negative content time is valid (left-extended clip) — don't floor at 0.
+          ...(patch.start !== undefined ? { start: patch.start } : {}),
           ...(patch.duration !== undefined ? { duration: Math.max(MIN_MIDI_NOTE_DURATION, patch.duration) } : {}),
           ...(patch.velocity !== undefined ? { velocity: clampVelocity(patch.velocity) } : {}),
         };
