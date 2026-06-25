@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   clearFlashBoardActiveGenerationSelection,
   ensureFlashBoardActiveGenerationBoard,
@@ -20,6 +20,7 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const hasGenerationBoard = useHasFlashBoardActiveGenerationBoard();
   const selectedRecordIds = useSelectedFlashBoardActiveGenerationRecordIds();
   const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
+  const refundDialogKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!hasGenerationBoard) {
@@ -47,7 +48,14 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
       }
 
       if (update.status === 'failed') {
-        failFlashBoardActiveGenerationRecord(recordId, update.error || 'Generation failed');
+        failFlashBoardActiveGenerationRecord(recordId, update.error || 'Generation failed', update.refund);
+        if (update.refund?.credits) {
+          const dialogKey = `${recordId}:${update.refund.jobId}:${update.refund.credits}`;
+          if (!refundDialogKeysRef.current.has(dialogKey)) {
+            refundDialogKeysRef.current.add(dialogKey);
+            window.alert(`Generation failed.\n\nRefunded ${update.refund.credits} credits.\nJob: ${update.refund.jobId}`);
+          }
+        }
         return;
       }
 

@@ -425,6 +425,10 @@ export function executeClipContextMenuTimelineCommand(input: {
     case 'unlink-clips':
       input.actions.unlinkClips([...input.targetClipIds]);
       return true;
+    case 'sync-via-audio':
+      if (!input.clipId) return false;
+      void input.actions.syncClipsViaAudio([...input.targetClipIds], input.clipId);
+      return true;
     case 'convert-solid-to-motion-shape':
       if (!input.clipId) return false;
       input.actions.convertSolidToMotionShape(input.clipId);
@@ -551,6 +555,7 @@ export async function executeClipContextMenuCommand(
       }
       if ([
         'delete-gap-at-clip-start',
+        'sync-via-audio',
         'convert-solid-to-motion-shape',
         'unlink-multicam-group',
         'toggle-reverse',
@@ -563,6 +568,9 @@ export async function executeClipContextMenuCommand(
         return false;
       }
       if (command.command === 'link-clips' && context.targetClipIds.length < 2) {
+        return false;
+      }
+      if (command.command === 'sync-via-audio' && context.targetClipIds.length < 2) {
         return false;
       }
       return executeClipContextMenuTimelineCommand({

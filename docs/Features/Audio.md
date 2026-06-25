@@ -144,8 +144,9 @@ Audio extraction for playback and export uses browser `decodeAudioData`, not MP4
 ## Multicam And Analysis
 
 - `audioAnalyzer` provides RMS level curves and downsampled fingerprints.
-- `audioSync` uses normalized cross-correlation to compute offsets.
-- `MulticamDialog` and `multicamStore` use those offsets for clip alignment.
+- `audioSync` uses normalized cross-correlation plus FFT-backed waveform/envelope correlation to compute offsets.
+- The Timeline clip context menu exposes Sync via Audio for selected clips with at least two audible sources; the command realigns the selected audio/video pairs and stores the result as a manual linked group.
+- `MulticamDialog` and `multicamStore` still use the legacy media-id offset path for the experimental multicam flow.
 - Transcript-based sync exists separately when clip transcripts are available.
 
 ## Composition Mixdown

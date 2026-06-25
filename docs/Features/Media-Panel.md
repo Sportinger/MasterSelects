@@ -68,6 +68,7 @@ Click the **+ Add** button for creating new items:
 
 #### Drag and Drop
 - Drag files directly from the OS file explorer into the Media Panel
+- Paste clipboard images or files with `Ctrl+V` while the Media Panel is hovered
 - Drag folders directly into the panel; nested folders are recreated inside the project
 - Multiple files supported
 - Attempts to acquire file handles via `getAsFileSystemHandle` for persistence

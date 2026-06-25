@@ -146,6 +146,7 @@ getTrackChildren()  // Query child tracks
 | Delete all gaps | Available from the empty timeline right-click menu; closes all gaps on unlocked visible tracks as one undoable operation. |
 | Fit comp to window | Available from the zoom controls and empty timeline right-click menu. |
 | Right-drag empty space or clips | Scrubs the playhead without opening the timeline context menu; context menus open only for a single right-click. |
+| Sync via Audio | Clip context menu action for selections with at least two audible clips; aligns selected audio/video pairs by waveform correlation and writes one manual linked group. |
 | Lift range | Available in the Cut flyout after drawing a Range Selection; removes the range and leaves a gap. |
 | Extract range | Available in the Cut flyout after drawing a Range Selection; removes the range and ripples following clips left. |
 | Copy | `Ctrl+C` copies selected keyframes first, otherwise selected clips. |
@@ -268,7 +269,7 @@ getTrackChildren()  // Query child tracks
 - Preview and export share the same transition planner and layer assembly. Wipe transitions use compositor transition metadata rather than clip effects.
 
 ### Multicam
-- Multiple selected clips can be combined into a linked multicam group.
+- The old clip context-menu Combine Multicam entry has been replaced by Sync via Audio for selected audio/video pairs.
 - Linked group movement preserves offsets so sync timing stays intact.
 
 ### Pick Whip Parenting

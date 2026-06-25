@@ -56,6 +56,7 @@ function renderMenu(params: {
   rippleDeleteSelection?: ReturnType<typeof vi.fn>;
   deleteClipSelection?: ReturnType<typeof vi.fn>;
   createSubcompositionFromSelection?: ReturnType<typeof vi.fn>;
+  syncClipsViaAudio?: ReturnType<typeof vi.fn>;
   copyClipEffects?: ReturnType<typeof vi.fn>;
   copyClipColor?: ReturnType<typeof vi.fn>;
 }) {
@@ -71,6 +72,7 @@ function renderMenu(params: {
   const rippleDeleteSelection = params.rippleDeleteSelection ?? vi.fn();
   const deleteClipSelection = params.deleteClipSelection ?? vi.fn();
   const createSubcompositionFromSelection = params.createSubcompositionFromSelection ?? vi.fn();
+  const syncClipsViaAudio = params.syncClipsViaAudio ?? vi.fn();
   const copyClipEffects = params.copyClipEffects ?? vi.fn();
   const copyClipColor = params.copyClipColor ?? vi.fn();
   const contextClipId = params.contextClipId ?? params.clips[0]?.id ?? 'missing-clip';
@@ -96,6 +98,7 @@ function renderMenu(params: {
       unlinkGroup={vi.fn()}
       linkClips={vi.fn()}
       unlinkClips={vi.fn()}
+      syncClipsViaAudio={syncClipsViaAudio}
       generateWaveformForClip={generateWaveformForClip}
       generateSpectrogramForClip={generateSpectrogramForClip}
       startClipStemSeparation={vi.fn().mockResolvedValue(null)}
@@ -125,6 +128,7 @@ function renderMenu(params: {
     rippleDeleteSelection,
     deleteClipSelection,
     createSubcompositionFromSelection,
+    syncClipsViaAudio,
     copyClipEffects,
     copyClipColor,
   };
@@ -300,6 +304,57 @@ describe('TimelineContextMenu regenerate menu', () => {
     expect(screen.queryByText(/WAV Audio Proxy/)).toBeNull();
     expect(screen.queryByText(/Waveform/)).toBeNull();
     expect(screen.queryByText(/Spectral/)).toBeNull();
+  });
+
+  it('shows sync via audio for multi-audio selections and hides the old multicam command', async () => {
+    const videoA = createClip({ id: 'clip-video-a', linkedClipId: 'clip-audio-a' });
+    const audioA = createClip({
+      id: 'clip-audio-a',
+      trackId: 'track-audio',
+      name: 'A (Audio)',
+      linkedClipId: 'clip-video-a',
+      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'media-a' },
+    });
+    const videoB = createClip({
+      id: 'clip-video-b',
+      mediaFileId: 'media-b',
+      linkedClipId: 'clip-audio-b',
+      source: { type: 'video', naturalDuration: 10, mediaFileId: 'media-b' },
+    });
+    const audioB = createClip({
+      id: 'clip-audio-b',
+      trackId: 'track-audio',
+      name: 'B (Audio)',
+      mediaFileId: 'media-b',
+      linkedClipId: 'clip-video-b',
+      source: { type: 'audio', naturalDuration: 10, mediaFileId: 'media-b' },
+    });
+    const syncClipsViaAudio = vi.fn(async () => null);
+
+    renderMenu({
+      clips: [videoA, audioA, videoB, audioB],
+      selectedClipIds: new Set(['clip-video-a', 'clip-video-b']),
+      syncClipsViaAudio,
+      mediaFile: {
+        id: 'media-a',
+        name: 'A.mp4',
+        type: 'video',
+        parentId: null,
+        createdAt: 1,
+        file: new File(['video'], 'A.mp4', { type: 'video/mp4' }),
+        url: 'blob:a',
+        duration: 10,
+        hasAudio: true,
+      } as MediaFile,
+    });
+
+    expect(screen.getByText('Sync via Audio')).toBeTruthy();
+    expect(screen.queryByText(/Combine Multicam/)).toBeNull();
+
+    fireEvent.click(screen.getByText('Sync via Audio'));
+    await Promise.resolve();
+
+    expect(syncClipsViaAudio).toHaveBeenCalledWith(['clip-video-a', 'clip-video-b'], 'clip-video-a');
   });
 
   it('keeps a disabled thumbnail regeneration command open when no source URL is available', () => {

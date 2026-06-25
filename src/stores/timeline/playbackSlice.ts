@@ -61,6 +61,10 @@ function waitForPlaybackWarmupFrame(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 16));
 }
 
+function getMediaStoreState() {
+  return useMediaStore.getState();
+}
+
 function getTransitionWarmupClipsAtTime(
   clips: readonly TimelineClip[],
   visibleVideoTrackIds: ReadonlySet<string>,
@@ -104,6 +108,13 @@ function getVisibleVideoTrackIds(tracks: readonly TimelineTrack[]): Set<string> 
       .filter((track) => track.type === 'video' && track.visible !== false)
       .map((track) => track.id)
   );
+}
+
+function closeSourceMonitorForTimelinePlayback(): void {
+  const { sourceMonitorFileId, setSourceMonitorFile } = getMediaStoreState();
+  if (sourceMonitorFileId) {
+    setSourceMonitorFile(null);
+  }
 }
 
 function getReversePrimeClipsAtTime(
@@ -223,7 +234,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     if (!latestState.isPlaying) {
       prewarmProxyFramesForTimelinePosition(
         latestState,
-        useMediaStore.getState().files,
+        getMediaStoreState().files,
         clampedPosition
       );
     }
@@ -246,6 +257,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       getInterpolatedSpeed,
     } = get();
     set({ playbackWarmup: null });
+    closeSourceMonitorForTimelinePlayback();
     const effectivePlaybackSpeed = typeof playbackSpeed === 'number' && Number.isFinite(playbackSpeed)
       ? playbackSpeed
       : 1;
@@ -615,7 +627,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     set({ duration: clampedDuration, durationLocked: true });
 
     // Sync to composition in media store so it persists
-    const { activeCompositionId, updateComposition } = useMediaStore.getState();
+    const { activeCompositionId, updateComposition } = getMediaStoreState();
     if (activeCompositionId) {
       updateComposition(activeCompositionId, { duration: clampedDuration });
     }

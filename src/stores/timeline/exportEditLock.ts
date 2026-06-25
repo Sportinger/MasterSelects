@@ -135,6 +135,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'unlinkGroup',
   'linkClips',
   'unlinkClips',
+  'syncClipsViaAudio',
   'addPendingDownloadClip',
   'completeDownload',
   'setDownloadError',

@@ -428,7 +428,8 @@ export function FlashBoardComposer({
   });
   const {
     canRestorePrompt, clearPromptRefineError, clearPromptRefineState, handleRefinePrompt,
-    handleRestorePromptBeforeAiRewrite, isRefiningPrompt, promptRefineError, promptRefineTitle,
+    handleDismissPromptBeforeAiRewrite, handleRestorePromptBeforeAiRewrite, isRefiningPrompt,
+    promptBeforeAiRewrite, promptRefineError, promptRefineTitle,
   } = useFlashBoardPromptRefineController({
     aspectRatio,
     canUseByoPromptRefiner,
@@ -585,7 +586,7 @@ export function FlashBoardComposer({
             onVoiceNameChange: setVoiceName,
           },
           isAudioMode, isElevenLabsMode,
-          isRefiningPrompt, isSunoMode, maxReferenceMedia, multiShots, prompt,
+          isRefiningPrompt, isSunoMode, maxReferenceMedia, multiShots, prompt, promptBeforeAiRewrite,
           promptInputRef, referenceMediaCount: effectiveReferenceMediaFileIds.length,
           sunoAudioReferenceActive: hasAudioReferenceInput, sunoAudioWeight,
           sunoNegativeTags, sunoStyle, sunoStyleLimit, sunoStyleWeight,
@@ -593,6 +594,7 @@ export function FlashBoardComposer({
           onAutosizeInput: resizePromptInput,
           onChatInputKeyDown: handleChatInputKeyDown, onChatPromptChange: handleChatPromptChange,
           onClearChatPrompt: handleClearChatPrompt, onClearPrompt: handleClearPrompt,
+          onDismissPromptBeforeAiRewrite: handleDismissPromptBeforeAiRewrite,
           onPromptChange: handlePromptChange, onRestorePromptBeforeAiRewrite: handleRestorePromptBeforeAiRewrite,
           onSunoAudioWeightChange: setSunoAudioWeight, onSunoNegativeTagsChange: handleSunoNegativeTagsChange,
           onSunoResetTuning: resetSunoTuning, onSunoStyleChange: handleSunoStyleChange,

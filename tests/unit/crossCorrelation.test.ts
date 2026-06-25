@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { crossCorrelate } from '../../src/services/audioSync';
+import { describe, it, expect, vi } from 'vitest';
+import { audioSync, crossCorrelate, findAudioSyncOffset } from '../../src/services/audioSync';
+import type { AudioFingerprint } from '../../src/services/audioAnalyzer';
 
 // Helper: create a simple signal
 function createSignal(length: number, fn: (i: number) => number): Float32Array {
@@ -465,5 +466,74 @@ describe('crossCorrelate', () => {
     const shifted = createSignal(500, (i) => -Math.abs(Math.sin((i - 3) * 0.05) + 0.5 * Math.cos((i - 3) * 0.13)));
     const { offset } = crossCorrelate(base, shifted, 10);
     expect(offset).toBe(3);
+  });
+});
+
+describe('findAudioSyncOffset', () => {
+  it('finds a target excerpt inside a longer master signal', () => {
+    const sampleRate = 100;
+    const master = createSignal(1200, (i) => {
+      const noise = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+      return (noise - Math.floor(noise)) * 2 - 1;
+    });
+    const targetStart = 345;
+    const target = master.slice(targetStart, targetStart + 420);
+
+    const result = findAudioSyncOffset(master, target, sampleRate);
+
+    expect(result).not.toBeNull();
+    expect(result?.offsetSamples).toBe(targetStart);
+    expect(result?.offsetSeconds).toBeCloseTo(targetStart / sampleRate, 5);
+  });
+
+  it('finds a target excerpt that starts before the master signal', () => {
+    const sampleRate = 100;
+    const source = createSignal(1400, (i) => {
+      const noise = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+      return (noise - Math.floor(noise)) * 2 - 1;
+    });
+    const masterStart = 500;
+    const targetStart = 350;
+    const master = source.slice(masterStart, masterStart + 600);
+    const target = source.slice(targetStart, targetStart + 600);
+
+    const result = findAudioSyncOffset(master, target, sampleRate);
+
+    expect(result).not.toBeNull();
+    expect(result?.offsetSamples).toBe(targetStart - masterStart);
+    expect(result?.offsetSeconds).toBeCloseTo((targetStart - masterStart) / sampleRate, 5);
+  });
+});
+
+describe('audioSync legacy clip offsets', () => {
+  it('derives offsets from already sliced visible clip ranges', async () => {
+    const sampleRate = 100;
+    const source = createSignal(2200, (i) => {
+      const noise = Math.sin(i * 7.123 + 19.19) * 10007.7;
+      return (noise - Math.floor(noise)) * 2 - 1;
+    });
+    const syncWithPrivateFingerprint = audioSync as unknown as {
+      getFingerprint: (mediaFileId: string, startTime?: number, duration?: number) => Promise<AudioFingerprint | null>;
+    };
+    const fingerprintSpy = vi
+      .spyOn(syncWithPrivateFingerprint, 'getFingerprint')
+      .mockImplementation(async (mediaFileId, startTime = 0, duration = 30) => {
+        const startSample = Math.round(startTime * sampleRate);
+        const endSample = startSample + Math.round(duration * sampleRate);
+        return { mediaFileId, data: source.slice(startSample, endSample), sampleRate };
+      });
+
+    try {
+      const offsets = await audioSync.syncMultipleClips(
+        { clipId: 'master', mediaFileId: 'master-media', inPoint: 5, duration: 8 },
+        [{ clipId: 'target', mediaFileId: 'target-media', inPoint: 8, duration: 8 }],
+      );
+
+      expect(offsets.get('master')).toBe(0);
+      expect(offsets.get('target')).toBeCloseTo(-3000, 5);
+    } finally {
+      fingerprintSpy.mockRestore();
+      audioSync.clearCache();
+    }
   });
 });

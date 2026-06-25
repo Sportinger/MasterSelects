@@ -6,11 +6,19 @@ import type { TimelineStore } from '../../src/stores/timeline/types';
 const getRuntimeFrameProvider = vi.fn();
 const requestNewFrameRender = vi.fn();
 
+const mediaStoreMock = vi.hoisted(() => ({
+  sourceMonitorFileId: null as string | null,
+  setSourceMonitorFile: vi.fn(),
+  updateComposition: vi.fn(),
+}));
+
 vi.mock('../../src/stores/mediaStore', () => ({
   useMediaStore: {
     getState: () => ({
       activeCompositionId: null,
-      updateComposition: vi.fn(),
+      sourceMonitorFileId: mediaStoreMock.sourceMonitorFileId,
+      setSourceMonitorFile: mediaStoreMock.setSourceMonitorFile,
+      updateComposition: mediaStoreMock.updateComposition,
     }),
   },
 }));
@@ -49,6 +57,12 @@ describe('playbackSlice HTML readiness gate', () => {
   beforeEach(() => {
     getRuntimeFrameProvider.mockReset();
     requestNewFrameRender.mockReset();
+    mediaStoreMock.sourceMonitorFileId = null;
+    mediaStoreMock.setSourceMonitorFile.mockReset();
+    mediaStoreMock.setSourceMonitorFile.mockImplementation((id: string | null) => {
+      mediaStoreMock.sourceMonitorFileId = id;
+    });
+    mediaStoreMock.updateComposition.mockReset();
     playheadState.position = 0;
     playheadState.isUsingInternalPosition = false;
     playheadState.playbackJustStarted = false;
@@ -206,6 +220,24 @@ describe('playbackSlice HTML readiness gate', () => {
 
     expect(state.playheadPosition).toBe(20);
     expect(playheadState.position).toBe(20);
+  });
+
+  it('closes the source monitor when timeline playback starts', async () => {
+    mediaStoreMock.sourceMonitorFileId = 'image-source';
+
+    const state = createPlaybackTestStore({
+      clips: [],
+      playheadPosition: 0,
+      duration: 60,
+      isPlaying: false,
+      playbackWarmup: null,
+    } as Partial<TimelineStore>);
+
+    await state.play();
+
+    expect(state.isPlaying).toBe(true);
+    expect(mediaStoreMock.setSourceMonitorFile).toHaveBeenCalledWith(null);
+    expect(mediaStoreMock.sourceMonitorFileId).toBeNull();
   });
 
   it('stop clears the internal playhead clock before resetting to the start', () => {

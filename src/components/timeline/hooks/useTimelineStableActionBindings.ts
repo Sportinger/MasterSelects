@@ -93,6 +93,7 @@ export function useTimelineStableActionBindings() {
     startClipStemSeparation: store.startClipStemSeparation,
     startRamPreview: store.startRamPreview,
     stop: store.stop,
+    syncClipsViaAudio: store.syncClipsViaAudio,
     toggleAudioFocusMode: store.toggleAudioFocusMode,
     toggleAudioLayerAdvancedMode: store.toggleAudioLayerAdvancedMode,
     toggleAudioRegionEditMarkers: store.toggleAudioRegionEditMarkers,

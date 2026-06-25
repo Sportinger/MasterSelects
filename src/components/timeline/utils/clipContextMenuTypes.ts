@@ -189,6 +189,7 @@ export type ClipContextMenuTimelineCommand =
   | 'delete-gap-at-clip-start'
   | 'link-clips'
   | 'unlink-clips'
+  | 'sync-via-audio'
   | 'convert-solid-to-motion-shape'
   | 'open-multicam-dialog'
   | 'unlink-multicam-group'
@@ -203,6 +204,7 @@ export interface ClipContextMenuTimelineActions {
   deleteGapAtTime: (time: number) => void;
   linkClips: (clipIds: string[]) => void;
   unlinkClips: (clipIds: string[]) => void;
+  syncClipsViaAudio: (clipIds: string[], masterClipId?: string) => Promise<unknown>;
   convertSolidToMotionShape: (clipId: string) => string | null;
   setMulticamDialogOpen: (open: boolean) => void;
   unlinkGroup: (clipId: string) => void;

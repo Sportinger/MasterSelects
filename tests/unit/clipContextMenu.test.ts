@@ -596,6 +596,7 @@ describe('clip context menu model', () => {
       deleteGapAtTime: vi.fn(),
       linkClips: vi.fn(),
       unlinkClips: vi.fn(),
+      syncClipsViaAudio: vi.fn(async () => null),
       convertSolidToMotionShape: vi.fn(() => 'motion-shape'),
       setMulticamDialogOpen: vi.fn(),
       unlinkGroup: vi.fn(),
@@ -623,6 +624,16 @@ describe('clip context menu model', () => {
       actions,
     })).toBe(true);
     expect(actions.linkClips).toHaveBeenCalledWith(['clip-a', 'clip-b']);
+
+    expect(executeClipContextMenuTimelineCommand({
+      command: 'sync-via-audio',
+      clip: clip('clip-a'),
+      clipId: 'clip-a',
+      targetClipIds: ['clip-a', 'clip-b'],
+      canExecute: true,
+      actions,
+    })).toBe(true);
+    expect(actions.syncClipsViaAudio).toHaveBeenCalledWith(['clip-a', 'clip-b'], 'clip-a');
 
     expect(executeClipContextMenuTimelineCommand({
       command: 'delete-clip',
@@ -653,6 +664,7 @@ describe('clip context menu model', () => {
       deleteGapAtTime: vi.fn(),
       linkClips: vi.fn(),
       unlinkClips: vi.fn(),
+      syncClipsViaAudio: vi.fn(async () => null),
       convertSolidToMotionShape: vi.fn(() => 'motion-shape'),
       setMulticamDialogOpen: vi.fn(),
       unlinkGroup: vi.fn(),

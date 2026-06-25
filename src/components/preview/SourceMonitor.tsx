@@ -11,6 +11,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react';
 import {
+  IconCrop,
   IconFlag,
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
@@ -125,6 +126,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
   const markedDuration = timelineDuration > 0
     ? Math.max(0, effectiveOutPoint - effectiveInPoint)
     : 0;
+  const showSourceTimingControls = !isImage && timelineDuration > 0;
   const timelineTicks = useMemo(() => createTimelineTicks(timelineDuration, fps), [fps, timelineDuration]);
   const audioWaveformStatus = useMemo(
     () => getAudioWaveformStatus(file, isAudio),
@@ -639,145 +641,149 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
         )}
       </div>
 
-      <div className="source-monitor-toolbar">
-        {timelineDuration > 0 && (
-          <div className="source-monitor-timeline-strip">
-            <div
-              className="source-monitor-timeline"
-              ref={timelineRef}
-              onPointerDown={(event) => startTimelineDrag('playhead', event)}
-              aria-label="Source timeline"
-            >
-              <div className="source-monitor-ruler">
-                {timelineTicks.map((tick) => (
-                  <span
-                    key={`${tick.time}-${tick.major ? 'major' : 'minor'}`}
-                    className={`source-monitor-ruler-tick ${tick.major ? 'major' : 'minor'}`}
-                    style={{ left: `${(tick.time / timelineDuration) * 100}%` }}
+      <div className={`source-monitor-toolbar ${!showSourceTimingControls ? 'source-monitor-toolbar-commands-only' : ''}`}>
+          {showSourceTimingControls && (
+            <div className="source-monitor-timeline-strip">
+              <div
+                className="source-monitor-timeline"
+                ref={timelineRef}
+                onPointerDown={(event) => startTimelineDrag('playhead', event)}
+                aria-label="Source timeline"
+              >
+                <div className="source-monitor-ruler">
+                  {timelineTicks.map((tick) => (
+                    <span
+                      key={`${tick.time}-${tick.major ? 'major' : 'minor'}`}
+                      className={`source-monitor-ruler-tick ${tick.major ? 'major' : 'minor'}`}
+                      style={{ left: `${(tick.time / timelineDuration) * 100}%` }}
+                    >
+                      {tick.label && <span>{tick.label}</span>}
+                    </span>
+                  ))}
+                </div>
+                <div className="source-monitor-timeline-track">
+                  {hasMarkedRange && (
+                    <div
+                      className="source-monitor-timeline-range"
+                      style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="source-monitor-mark-handle source-monitor-mark-in"
+                    style={{ left: `${rangeLeft}%` }}
+                    onPointerDown={(event) => startTimelineDrag('in', event)}
+                    title="Drag source In"
+                    aria-label="Drag source In"
                   >
-                    {tick.label && <span>{tick.label}</span>}
-                  </span>
-                ))}
-              </div>
-              <div className="source-monitor-timeline-track">
-                {hasMarkedRange && (
-                  <div
-                    className="source-monitor-timeline-range"
-                    style={{ left: `${rangeLeft}%`, width: `${rangeWidth}%` }}
-                  />
-                )}
-                <button
-                  type="button"
-                  className="source-monitor-mark-handle source-monitor-mark-in"
-                  style={{ left: `${rangeLeft}%` }}
-                  onPointerDown={(event) => startTimelineDrag('in', event)}
-                  title="Drag source In"
-                  aria-label="Drag source In"
-                >
-                  <span>I</span>
-                </button>
-                <button
-                  type="button"
-                  className="source-monitor-mark-handle source-monitor-mark-out"
-                  style={{ left: `${rangeRight}%` }}
-                  onPointerDown={(event) => startTimelineDrag('out', event)}
-                  title="Drag source Out"
-                  aria-label="Drag source Out"
-                >
-                  <span>O</span>
-                </button>
-                <div className="source-monitor-timeline-fill" style={{ width: `${progress}%` }} />
-                <div className="source-monitor-playhead" style={{ left: `${progress}%` }}>
-                  <span />
+                    <span>I</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="source-monitor-mark-handle source-monitor-mark-out"
+                    style={{ left: `${rangeRight}%` }}
+                    onPointerDown={(event) => startTimelineDrag('out', event)}
+                    title="Drag source Out"
+                    aria-label="Drag source Out"
+                  >
+                    <span>O</span>
+                  </button>
+                  <div className="source-monitor-timeline-fill" style={{ width: `${progress}%` }} />
+                  <div className="source-monitor-playhead" style={{ left: `${progress}%` }}>
+                    <span />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="source-monitor-control-row">
-          <div className="source-monitor-timecode source-monitor-timecode-current">
-            {formatTimecode(currentTime, fps)}
-          </div>
-
-          <div className="source-monitor-center-controls">
-            {timelineDuration > 0 && (
-              <div className="source-monitor-marks">
-                <button
-                  className={`btn btn-sm ${inPoint !== null ? 'btn-active' : ''}`}
-                  onClick={() => setSourceMonitorInPoint(currentTime)}
-                  title="Set source In"
-                >
-                  <IconFlag size={12} aria-hidden="true" />
-                  In
-                </button>
-                <button
-                  className={`btn btn-sm ${outPoint !== null ? 'btn-active' : ''}`}
-                  onClick={() => setSourceMonitorOutPoint(currentTime)}
-                  title="Set source Out"
-                >
-                  <IconFlag size={12} aria-hidden="true" />
-                  Out
-                </button>
-                <button
-                  className="btn btn-sm source-monitor-icon-btn"
-                  onClick={clearSourceMonitorInOut}
-                  disabled={inPoint === null && outPoint === null}
-                  title="Clear source In/Out"
-                  aria-label="Clear source In/Out"
-                >
-                  <IconX size={13} aria-hidden="true" />
-                </button>
+          <div className={`source-monitor-control-row ${!showSourceTimingControls ? 'source-monitor-control-row-commands-only' : ''}`}>
+            {showSourceTimingControls && (
+              <div className="source-monitor-timecode source-monitor-timecode-current">
+                {formatTimecode(currentTime, fps)}
               </div>
             )}
 
-            {isImage && (
-              <button
-                className={`btn btn-sm ${imageCrop.cropMode ? 'btn-active' : ''}`}
-                onClick={imageCrop.toggleImageCrop}
-                disabled={imageCrop.cropBusy}
-                title="Crop image"
-                aria-pressed={imageCrop.cropMode}
-              >
-                CROP
-              </button>
-            )}
+            <div className="source-monitor-center-controls">
+              {isImage && (
+                <button
+                  className={`btn btn-sm source-monitor-crop-btn ${imageCrop.cropMode ? 'btn-active' : ''}`}
+                  onClick={imageCrop.toggleImageCrop}
+                  title={imageCrop.cropMode ? 'Exit crop mode' : 'Crop image'}
+                  aria-label={imageCrop.cropMode ? 'Exit crop mode' : 'Crop image'}
+                >
+                  <IconCrop size={14} aria-hidden="true" />
+                  <span>Crop</span>
+                </button>
+              )}
 
-            {isPlayable && (
-              <div className="source-monitor-transport">
-                <button
-                  className="btn btn-sm source-monitor-icon-btn"
-                  onClick={stopSource}
-                  title="Stop"
-                  aria-label="Stop source"
-                >
-                  <IconPlayerStopFilled size={14} aria-hidden="true" />
-                </button>
-                <button
-                  className={`btn btn-sm source-monitor-icon-btn source-monitor-play-button ${isPlaying ? 'btn-active' : ''}`}
-                  onClick={isPlaying ? pauseSource : playSource}
-                  title={isPlaying ? 'Pause [Space]' : 'Play [Space]'}
-                  aria-label={isPlaying ? 'Pause source' : 'Play source'}
-                >
-                  {isPlaying
-                    ? <IconPlayerPauseFilled size={15} aria-hidden="true" />
-                    : <IconPlayerPlayFilled size={15} aria-hidden="true" />
-                  }
-                </button>
+              {showSourceTimingControls && (
+                <div className="source-monitor-marks">
+                  <button
+                    className={`btn btn-sm ${inPoint !== null ? 'btn-active' : ''}`}
+                    onClick={() => setSourceMonitorInPoint(currentTime)}
+                    title="Set source In"
+                  >
+                    <IconFlag size={12} aria-hidden="true" />
+                    In
+                  </button>
+                  <button
+                    className={`btn btn-sm ${outPoint !== null ? 'btn-active' : ''}`}
+                    onClick={() => setSourceMonitorOutPoint(currentTime)}
+                    title="Set source Out"
+                  >
+                    <IconFlag size={12} aria-hidden="true" />
+                    Out
+                  </button>
+                  <button
+                    className="btn btn-sm source-monitor-icon-btn"
+                    onClick={clearSourceMonitorInOut}
+                    disabled={inPoint === null && outPoint === null}
+                    title="Clear source In/Out"
+                    aria-label="Clear source In/Out"
+                  >
+                    <IconX size={13} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+
+              {showSourceTimingControls && isPlayable && (
+                <div className="source-monitor-transport">
+                  <button
+                    className="btn btn-sm source-monitor-icon-btn"
+                    onClick={stopSource}
+                    title="Stop"
+                    aria-label="Stop source"
+                  >
+                    <IconPlayerStopFilled size={14} aria-hidden="true" />
+                  </button>
+                  <button
+                    className={`btn btn-sm source-monitor-icon-btn source-monitor-play-button ${isPlaying ? 'btn-active' : ''}`}
+                    onClick={isPlaying ? pauseSource : playSource}
+                    title={isPlaying ? 'Pause [Space]' : 'Play [Space]'}
+                    aria-label={isPlaying ? 'Pause source' : 'Play source'}
+                  >
+                    {isPlaying
+                      ? <IconPlayerPauseFilled size={15} aria-hidden="true" />
+                      : <IconPlayerPlayFilled size={15} aria-hidden="true" />
+                    }
+                  </button>
+                </div>
+              )}
+
+              <SourceMonitorPlacementCommands
+                pendingPlacementMode={pendingPlacementMode}
+                onRunCommand={runSourcePlacementCommand}
+              />
+            </div>
+
+            {showSourceTimingControls && (
+              <div className="source-monitor-timecode source-monitor-timecode-duration">
+                {formatTimecode(markedDuration, fps)}
               </div>
             )}
-
-            <SourceMonitorPlacementCommands
-              pendingPlacementMode={pendingPlacementMode}
-              onRunCommand={runSourcePlacementCommand}
-            />
-          </div>
-
-          <div className="source-monitor-timecode source-monitor-timecode-duration">
-            {formatTimecode(markedDuration, fps)}
           </div>
         </div>
-      </div>
     </div>
   );
 }

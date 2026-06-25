@@ -1,6 +1,3 @@
-// TimelineContextMenu - Right-click context menu for timeline clips
-// Extracted from Timeline.tsx for better maintainability
-
 import { useEffect, useCallback } from 'react';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
@@ -68,6 +65,7 @@ interface TimelineContextMenuProps {
   unlinkGroup: (clipId: string) => void;
   linkClips: (clipIds: string[]) => void;
   unlinkClips: (clipIds: string[]) => void;
+  syncClipsViaAudio: (clipIds: string[], masterClipId?: string) => Promise<unknown>;
   generateWaveformForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
   generateSpectrogramForClip: (clipId: string, options?: GenerateClipAudioAnalysisOptions) => void;
   startClipStemSeparation: (clipId: string, options?: { force?: boolean }) => Promise<string | null>;
@@ -108,6 +106,7 @@ export function TimelineContextMenu({
   unlinkGroup,
   linkClips,
   unlinkClips,
+  syncClipsViaAudio,
   generateWaveformForClip,
   generateSpectrogramForClip,
   startClipStemSeparation,
@@ -195,7 +194,12 @@ export function TimelineContextMenu({
   } = menuModel;
   const isVideoMedia = mediaFile?.type === 'video' || isVideo;
   const canExportCurrentFrame = Boolean(clip && !isAudio && !isMidi);
-  const audibleAudioResolution = resolveAudibleAudioClip([...clipMap.values()], contextMenu.clipId);
+  const allClips = [...clipMap.values()];
+  const syncAudioClipIds = new Set(targetClipIds
+    .map((targetClipId) => resolveAudibleAudioClip(allClips, targetClipId)?.audioClip.id)
+    .filter((id): id is string => Boolean(id)));
+  const canSyncViaAudio = canModifyTargets && syncAudioClipIds.size >= 2;
+  const audibleAudioResolution = resolveAudibleAudioClip(allClips, contextMenu.clipId);
   const audibleAudioClip = audibleAudioResolution?.audioClip ?? null;
   const stemSeparationJob = audibleAudioClip ? clipStemSeparationJobs[audibleAudioClip.id] : undefined;
   const isStemSeparationActive = isActiveStemJobPhase(stemSeparationJob?.phase);
@@ -241,6 +245,7 @@ export function TimelineContextMenu({
     deleteGapAtTime,
     linkClips,
     unlinkClips,
+    syncClipsViaAudio,
     convertSolidToMotionShape,
     setMulticamDialogOpen,
     unlinkGroup,
@@ -248,7 +253,6 @@ export function TimelineContextMenu({
     createSubcompositionFromSelection,
     removeClip,
   };
-  const allClips = [...clipMap.values()];
   const commandContext: ClipContextMenuCommandExecutionContext = {
     clipId: contextMenu.clipId,
     clip,
@@ -572,9 +576,17 @@ export function TimelineContextMenu({
         Delete Gap at Clip Start
       </div>
 
-      {(targetClipIds.length >= 2 || hasClipLinkTarget) && (
+      {(targetClipIds.length >= 2 || hasClipLinkTarget || syncAudioClipIds.size >= 2) && (
         <>
           <div className="context-menu-separator" />
+          {syncAudioClipIds.size >= 2 && (
+            <div
+              className={`context-menu-item ${!canSyncViaAudio ? 'disabled' : ''}`}
+              onClick={() => runCommand({ kind: 'timeline', command: 'sync-via-audio', canExecute: canSyncViaAudio })}
+            >
+              Sync via Audio
+            </div>
+          )}
           {targetClipIds.length >= 2 && (
             <div
               className={`context-menu-item ${!canLinkClips ? 'disabled' : ''}`}
@@ -606,15 +618,6 @@ export function TimelineContextMenu({
         </>
       )}
 
-      {/* Multicam options */}
-      {selectedClipIds.size > 1 && (
-        <div
-          className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
-          onClick={() => runCommand({ kind: 'timeline', command: 'open-multicam-dialog', canExecute: canModifyTargets })}
-        >
-          Combine Multicam ({selectedClipIds.size} clips)
-        </div>
-      )}
       {clip?.linkedGroupId && !isManualLinkedGroupId(clip.linkedGroupId) && (
         <div
           className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}

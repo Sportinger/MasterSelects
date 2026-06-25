@@ -6,6 +6,7 @@ import { normalizeAudioEqParams } from '../../../src/engine/audio';
 import { useMediaStore } from '../../../src/stores/mediaStore';
 import { createNestedContentHash } from '../../../src/stores/timeline/clip/addCompClip';
 import { blobUrlManager } from '../../../src/stores/timeline/helpers/blobUrlManager';
+import { audioSync } from '../../../src/services/audioSync';
 
 describe('clipSlice', () => {
   let store: ReturnType<typeof createTestTimelineStore>;
@@ -2447,6 +2448,86 @@ describe('clipSlice', () => {
       expect(c1.linkedGroupId).toBeDefined();
       expect(c1.startTime).toBe(0);
       expect(c2.startTime).toBe(0); // clamped to 0 (Math.max(0, ...))
+    });
+  });
+
+  describe('syncClipsViaAudio', () => {
+    it('does not relink when audio sync returns no target alignment', async () => {
+      const clips = [
+        createMockClip({ id: 'video-master', trackId: 'video-1', linkedClipId: 'audio-master' }),
+        createMockClip({ id: 'audio-master', trackId: 'audio-1', linkedClipId: 'video-master', source: { type: 'audio', mediaFileId: 'media-master' } }),
+        createMockClip({ id: 'video-target', trackId: 'video-1', startTime: 4, linkedClipId: 'audio-target' }),
+        createMockClip({ id: 'audio-target', trackId: 'audio-1', startTime: 4, linkedClipId: 'video-target', source: { type: 'audio', mediaFileId: 'media-target' } }),
+      ];
+      store = createTestTimelineStore({ clips });
+      vi.spyOn(audioSync, 'syncTimelineClipsViaAudio').mockResolvedValue({
+        masterClipId: 'audio-master',
+        masterAudioClipId: 'audio-master',
+        alignments: [{
+          clipId: 'audio-master',
+          audioClipId: 'audio-master',
+          offsetSeconds: 0,
+          targetStartTime: 0,
+          peakRatio: null,
+          confidence: 'high',
+          method: 'waveform',
+        }],
+        failures: [{ clipId: 'audio-target', reason: 'No stable audio correlation peak found.' }],
+      });
+
+      await store.getState().syncClipsViaAudio(['video-master', 'video-target'], 'video-master');
+
+      const state = store.getState();
+      expect(state.clips.find(c => c.id === 'video-master')!.linkedGroupId).toBeUndefined();
+      expect(state.clips.find(c => c.id === 'audio-master')!.linkedGroupId).toBeUndefined();
+      expect(state.clips.find(c => c.id === 'video-target')!.startTime).toBe(4);
+      expect(state.clips.find(c => c.id === 'audio-target')!.startTime).toBe(4);
+    });
+
+    it('shifts the synced group right when an alignment would start before zero', async () => {
+      const clips = [
+        createMockClip({ id: 'video-master', trackId: 'video-1', linkedClipId: 'audio-master' }),
+        createMockClip({ id: 'audio-master', trackId: 'audio-1', linkedClipId: 'video-master', source: { type: 'audio', mediaFileId: 'media-master' } }),
+        createMockClip({ id: 'video-target', trackId: 'video-1', startTime: 4, linkedClipId: 'audio-target' }),
+        createMockClip({ id: 'audio-target', trackId: 'audio-1', startTime: 4, linkedClipId: 'video-target', source: { type: 'audio', mediaFileId: 'media-target' } }),
+      ];
+      store = createTestTimelineStore({ clips });
+      vi.spyOn(audioSync, 'syncTimelineClipsViaAudio').mockResolvedValue({
+        masterClipId: 'audio-master',
+        masterAudioClipId: 'audio-master',
+        alignments: [
+          {
+            clipId: 'audio-master',
+            audioClipId: 'audio-master',
+            offsetSeconds: 0,
+            targetStartTime: 0,
+            peakRatio: null,
+            confidence: 'high',
+            method: 'waveform',
+          },
+          {
+            clipId: 'audio-target',
+            audioClipId: 'audio-target',
+            offsetSeconds: -2,
+            targetStartTime: -2,
+            peakRatio: 1.2,
+            confidence: 'high',
+            method: 'waveform',
+          },
+        ],
+        failures: [],
+      });
+
+      await store.getState().syncClipsViaAudio(['video-master', 'video-target'], 'video-master');
+
+      const state = store.getState();
+      expect(state.clips.find(c => c.id === 'video-master')!.startTime).toBe(2);
+      expect(state.clips.find(c => c.id === 'audio-master')!.startTime).toBe(2);
+      expect(state.clips.find(c => c.id === 'video-target')!.startTime).toBe(0);
+      expect(state.clips.find(c => c.id === 'audio-target')!.startTime).toBe(0);
+      expect(state.clips.find(c => c.id === 'video-master')!.linkedGroupId).toBe(
+        state.clips.find(c => c.id === 'audio-target')!.linkedGroupId,
+      );
     });
   });
 
