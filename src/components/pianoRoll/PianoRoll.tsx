@@ -14,10 +14,11 @@ import { previewMidiNote } from '../../services/audio/midiPlaybackScheduler';
 import type { MidiNote } from '../../types/midiClip';
 import { computeGhostNotes } from './ghostNotes';
 import { PianoRollScrollbars, PIANO_ROLL_SCROLLBAR } from './PianoRollScrollbars';
-import { PianoRollRuler, PIANO_ROLL_RULER_H } from './PianoRollRuler';
+import { PianoRollRuler, PIANO_ROLL_RULER_H, PART_BORDER_COLOR } from './PianoRollRuler';
 import { PianoRollGridLines } from './PianoRollGridLines';
 import { buildPianoRollGrid } from './pianoRollGrid';
-import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow } from '../../services/midi/midiClipTiming';
+import { clipLocalToContentTime, contentTimeToClipLocal, isNoteStartInWindow, type MidiClipWindow } from '../../services/midi/midiClipTiming';
+import { computeTrimTiming, trimOriginalsFromClip, type TrimOriginals } from '../timeline/utils/clipTrimTiming';
 import { resolvePianoRollToolAction, type PianoRollToolId } from './pianoRollToolShortcuts';
 import { duplicateNotesRight, hasPianoRollClipboard, pasteNotesAt, setPianoRollClipboard } from './pianoRollClipboard';
 import { redo, undo } from '../../stores/historyStore';
@@ -49,6 +50,18 @@ const MIN_NOTE_LABEL_WIDTH = 16;
 const PITCH_MIN = 21;      // A0
 const PITCH_MAX = 108;     // C8
 const PITCH_COUNT = PITCH_MAX - PITCH_MIN + 1;
+
+// Cubase-style "outside the clip" margins (#249 clip-resize). Each side shows a
+// dimmed band, proportional to the clip length but bounded so a tiny clip still
+// has a grabbable handle and a huge clip doesn't drown in margin. marginPx scales
+// with the time zoom, so the geometry stays self-consistent under zoom.
+const MARGIN_FRACTION = 0.25;   // of the clip duration, per side
+const MIN_MARGIN_SEC = 0.5;
+const MARGIN_CAP_SEC = 4;
+// Trimmed-off notes (outside the window) are shown dimmed and non-editable so you
+// can see what falls outside the clip while resizing.
+const OUT_OF_WINDOW_NOTE_OPACITY = 0.32;
+const DIMMED_MARGIN_BG = 'rgba(0,0,0,0.45)';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -96,6 +109,16 @@ interface PendingNote {
   pitch: number;
   start: number;
   duration: number;
+}
+
+// Live clip-resize preview (#249). While a Time-ruler handle is dragged we hold
+// the in-progress window here and render the whole editor from it — matching the
+// main timeline's trim pattern (local drag state, ONE history commit on mouseup).
+interface ResizeDrag {
+  edge: 'left' | 'right';
+  inPoint: number;
+  outPoint: number;
+  startTime: number;
 }
 
 interface PianoRollProps {
@@ -170,6 +193,11 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   // Pitch under the cursor, so the matching key on the keyboard lights up (#249).
   const [hoverPitch, setHoverPitch] = useState<number | null>(null);
 
+  // Live clip-resize (#249). `resizeDrag` drives the rendered geometry during a
+  // drag; `resizeRef` holds the originals + grab anchor for the document handlers.
+  const [resizeDrag, setResizeDrag] = useState<ResizeDrag | null>(null);
+  const resizeRef = useRef<{ edge: 'left' | 'right'; orig: TrimOriginals; startClientX: number } | null>(null);
+
   // Active tool + selection model (#249 tool palette). Refs mirror state so the
   // document-level drag/key handlers read fresh values without re-binding.
   const [tool, setTool] = useState<Tool>('pointer');
@@ -219,29 +247,52 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const removeMidiNote = useTimelineStore((state) => state.removeMidiNote);
   const removeMidiNotes = useTimelineStore((state) => state.removeMidiNotes);
   const setPlayheadPosition = useTimelineStore((state) => state.setPlayheadPosition);
+  const applyTimelineEditOperation = useTimelineStore((state) => state.applyTimelineEditOperation);
 
-  const clipDuration = clip?.duration ?? 0;
-  // The piano roll is exactly the clip's real time span — no padding. Clip length
-  // rules the editor length (#232); resize the clip on the timeline for more room.
-  const contentWidth = clipDuration * pxPerSec;
+  // Effective window: the live clip, OR the in-progress resize preview while a
+  // Time-ruler handle is dragged (#249). ALL geometry below derives from these so
+  // the editor reflects the resize live; on mouseup it commits once and resizeDrag
+  // clears, falling back to the real clip values.
+  const effInPoint = resizeDrag ? resizeDrag.inPoint : (clip?.inPoint ?? 0);
+  const effOutPoint = resizeDrag ? resizeDrag.outPoint : (clip?.outPoint ?? 0);
+  const effStartTime = resizeDrag ? resizeDrag.startTime : (clip?.startTime ?? 0);
+  // The window the timing helpers read (inPoint/outPoint/startTime/duration).
+  const effWindow: MidiClipWindow = {
+    startTime: effStartTime,
+    inPoint: effInPoint,
+    outPoint: effOutPoint,
+    duration: effOutPoint - effInPoint,
+  };
+
+  const clipDuration = effWindow.duration;
+  const clipStartTime = effStartTime;
+  // The window is exactly the clip's real time span; the editor adds a dimmed
+  // "outside" margin on each side for resize context (#249).
+  const windowPx = clipDuration * pxPerSec;
+  const marginSec = clamp(clipDuration * MARGIN_FRACTION, MIN_MARGIN_SEC, MARGIN_CAP_SEC);
+  const marginPx = marginSec * pxPerSec;
+  // Full scrollable grid width: left margin + window + right margin. Replaces the
+  // old window-only contentWidth as the grid + ruler-inner + scrollbar extent.
+  const gridWidth = marginPx * 2 + windowPx;
   const gridH = PITCH_COUNT * rowH;
   const notes = clip?.midiData?.notes ?? [];
 
   // Tempo-synced ruler ticks + gridlines, computed ONCE here and shared by the
   // ruler and the gridlines so both use the identical absolute→pixel mapping and
-  // stay aligned by construction (#249). Keyed only on geometry/tempo — NOT on
-  // notes — so editing notes never recomputes the grid.
-  const clipStartTime = clip?.startTime ?? 0;
+  // stay aligned by construction (#249). The grid is built `marginSec` past each
+  // window edge so bars/beats/ticks continue under the dimmed margins. Keyed only
+  // on geometry/tempo — NOT on notes — so editing notes never recomputes the grid.
   const pianoRollGrid = useMemo(
     () => buildPianoRollGrid({
       tempoMap,
       clipStartTime,
       clipDuration,
       pxPerSec,
-      visibleStartPx: 0,
-      visibleWidthPx: contentWidth,
+      visibleStartPx: -marginPx,
+      visibleWidthPx: gridWidth,
+      marginSec,
     }),
-    [tempoMap, clipStartTime, clipDuration, pxPerSec, contentWidth],
+    [tempoMap, clipStartTime, clipDuration, pxPerSec, marginPx, gridWidth, marginSec],
   );
 
   // Read-only ghosts: notes from other MIDI clips that overlap this clip's
@@ -282,6 +333,19 @@ export function PianoRoll({ clipId }: PianoRollProps) {
 
   useLayoutEffect(() => { syncRulerScroll(); });
 
+  // On open, place the viewport at the clip START (skip the left "outside"
+  // margin) so the clip begins at the viewport's left edge, like before the
+  // margins existed (#249). Guarded so later marginPx changes (zoom/resize)
+  // don't snap the scroll back. syncRulerScroll keeps the ruler aligned.
+  const didInitScrollLeftRef = useRef(false);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || didInitScrollLeftRef.current) return;
+    didInitScrollLeftRef.current = true;
+    el.scrollLeft = marginPx;
+    syncRulerScroll();
+  }, [marginPx, syncRulerScroll]);
+
   const handleGridScroll = useCallback(() => {
     if (scrollRafRef.current !== null) return;
     scrollRafRef.current = requestAnimationFrame(() => {
@@ -304,11 +368,13 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     const track = rulerTrackRef.current;
     const el = scrollRef.current;
     if (!track || !el) return;
-    const localPx = clientX - track.getBoundingClientRect().left + el.scrollLeft;
+    // Grid pixel 0 is now the LEFT margin edge, so the clip window starts at
+    // marginPx; subtract it to get seconds from the window's left edge (#249).
+    const localPx = clientX - track.getBoundingClientRect().left + el.scrollLeft - marginPx;
     const localSeconds = localPx / pxPerSec;
     const absolute = clamp(clipStartTime + localSeconds, clipStartTime, clipStartTime + clipDuration);
     setPlayheadPosition(absolute);
-  }, [clipStartTime, clipDuration, pxPerSec, setPlayheadPosition]);
+  }, [clipStartTime, clipDuration, pxPerSec, marginPx, setPlayheadPosition]);
 
   const handleRulerMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -325,6 +391,62 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     doc.addEventListener('mousemove', onMove);
     doc.addEventListener('mouseup', onUp);
   }, [scrubToClientX]);
+
+  // --- clip resize from the Time-ruler handles (#249) ------------------------
+  // Cubase-style: drag a window-edge handle on the Time lane to retrim the MIDI
+  // clip. Follows the main timeline's trim pattern (useClipTrim): hold local drag
+  // state for live feedback, reuse the shared `computeTrimTiming` for the exact
+  // infinite-source clamps, and commit ONE history-aware `trim-clip` op on mouseup.
+  // The handle's own mousedown stops propagation so this doesn't also scrub.
+  const handleResizeStart = useCallback((edge: 'left' | 'right', e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const live = useTimelineStore.getState().clips.find((c) => c.id === clipId);
+    if (!live) return;
+    resizeRef.current = { edge, orig: trimOriginalsFromClip(live), startClientX: e.clientX };
+    const doc = rulerTrackRef.current?.ownerDocument ?? document;
+
+    // Source type / startTime / inPoint don't change during a drag, so reuse the
+    // clip captured at mousedown rather than re-reading the store every move.
+    const timingFor = (clientX: number) => {
+      const r = resizeRef.current;
+      if (!r) return null;
+      const deltaTime = (clientX - r.startClientX) / pxPerSecRef.current;
+      return computeTrimTiming(live, r.edge, r.orig, deltaTime);
+    };
+
+    const onMove = (ev: MouseEvent) => {
+      const r = resizeRef.current;
+      const t = timingFor(ev.clientX);
+      if (!r || !t) return;
+      setResizeDrag({ edge: r.edge, inPoint: t.newInPoint, outPoint: t.newOutPoint, startTime: t.newStartTime });
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      doc.removeEventListener('mousemove', onMove);
+      doc.removeEventListener('mouseup', onUp);
+      // Compute the final timing BEFORE clearing the ref — timingFor reads it.
+      const r = resizeRef.current;
+      const t = timingFor(ev.clientX);
+      resizeRef.current = null;
+      setResizeDrag(null);
+      if (!r || !t) return;
+      // Skip a no-op (a click that didn't move) so it never lands in history.
+      if (Math.abs(t.newInPoint - r.orig.inPoint) < 0.0001 && Math.abs(t.newOutPoint - r.orig.outPoint) < 0.0001) return;
+      applyTimelineEditOperation({
+        id: `pr-resize:${clipId}:${r.edge}`,
+        type: 'trim-clip',
+        clipId,
+        inPoint: t.newInPoint,
+        outPoint: t.newOutPoint,
+        ...(r.edge === 'left' ? { startTime: t.newStartTime } : {}),
+      }, { source: 'ui', historyLabel: 'Resize MIDI clip' });
+    };
+
+    doc.addEventListener('mousemove', onMove);
+    doc.addEventListener('mouseup', onUp);
+  }, [clipId, applyTimelineEditOperation]);
 
   // --- two-axis zoom (#249) ---------------------------------------------------
   // Shared by the Ctrl/Ctrl+Shift wheel gesture and the on-screen +/- buttons.
@@ -796,8 +918,16 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     setDragActive(true);
   };
 
-  const clipLocalPlayhead = playheadPosition - clip.startTime;
+  const clipLocalPlayhead = playheadPosition - effStartTime;
   const showPlayhead = clipLocalPlayhead >= 0 && clipLocalPlayhead <= clipDuration;
+
+  // Notes split for rendering: those whose start is inside the (effective) window
+  // are editable; those outside are shown dimmed in the margins for context while
+  // resizing (#249), but only if they're near enough to actually fall in a margin.
+  const inWindowNotes = notes.filter((note) => isNoteStartInWindow(effWindow, note));
+  const outOfWindowNotes = notes.filter((note) =>
+    !isNoteStartInWindow(effWindow, note) &&
+    note.start >= effInPoint - marginSec && note.start <= effOutPoint + marginSec);
 
   // Whether note-name labels are drawn inside note blocks. Today this is purely a
   // zoom/fit decision (hide when rows are too short to read). FUTURE: a user
@@ -846,12 +976,15 @@ export function PianoRoll({ clipId }: PianoRollProps) {
         >
           <div
             ref={rulerInnerRef}
-            style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: contentWidth, willChange: 'transform' }}
+            style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: gridWidth, willChange: 'transform' }}
           >
             <PianoRollRuler
               rulerTicks={pianoRollGrid.rulerTicks}
-              clipStartTime={clip.startTime}
+              clipStartTime={effStartTime}
+              clipDuration={clipDuration}
               pxPerSec={pxPerSec}
+              marginPx={marginPx}
+              onResizeStart={handleResizeStart}
             />
           </div>
         </div>
@@ -949,21 +1082,21 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           })}
         </div>
 
-        {/* Grid */}
-        <div
-          ref={gridRef}
-          onMouseDown={handleGridMouseDown}
-          onMouseMove={updateHoverPitch}
-          onMouseLeave={() => setHoverPitch(null)}
-          style={{ position: 'relative', width: contentWidth, height: gridH, flexShrink: 0, cursor: tool === 'pointer' ? 'default' : tool === 'eraser' ? ERASER_CURSOR : 'crosshair' }}
-        >
-          {/* Flat lane fill + sparse octave reference lines. We deliberately
-              avoid any repeating pattern here (neither a per-row div stack nor a
-              repeating-linear-gradient): on a tall composited layer the GPU
-              rasterizes in tiles and resets the gradient phase at tile edges,
-              which showed up as a single shade seam that moved on resize. A
-              solid fill can't seam, and fine per-semitone reference comes from
-              the keyboard strip; only the octave boundaries (each C) get a line. */}
+        {/* Grid + margins (#249 clip-resize). Outer layer is the full scrollable
+            width (window + a dimmed margin each side); it owns the full-width lane
+            fill, the tempo gridlines (shifted into the window by marginPx so they
+            sit under the ruler ticks and continue across the margins), the dimmed
+            "outside the clip" overlays and the read-only out-of-window notes. The
+            inner layer (gridRef, offset by marginPx) holds the EDITABLE window
+            content, so every existing mouse/draw calc keeps pixel 0 = clip start. */}
+        <div style={{ position: 'relative', width: gridWidth, height: gridH, flexShrink: 0 }}>
+          {/* Flat lane fill + sparse octave reference lines, full width. We
+              deliberately avoid any repeating pattern here (neither a per-row div
+              stack nor a repeating-linear-gradient): on a tall composited layer the
+              GPU rasterizes in tiles and resets the gradient phase at tile edges,
+              which showed up as a single shade seam that moved on resize. A solid
+              fill can't seam; fine per-semitone reference comes from the keyboard
+              strip; only the octave boundaries (each C) get a line. */}
           <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: gridH, background: '#181818' }} />
           {Array.from({ length: PITCH_COUNT }, (_, i) => {
             const pitch = PITCH_MAX - i;
@@ -977,15 +1110,52 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           })}
 
           {/* Tempo-synced bar / beat / sub gridlines (#249 Phase 3), positioned by
-              the same absolute→pixel mapping as the ruler so each line sits under
-              its ruler tick. Isolated, memoized child → unaffected by note edits. */}
+              the same absolute→pixel mapping as the ruler (offset by marginPx) so
+              each line sits under its ruler tick and runs through the margins.
+              Isolated, memoized child → unaffected by note edits. */}
           <PianoRollGridLines
             barLines={pianoRollGrid.barLines}
             beatLines={pianoRollGrid.beatLines}
             subLines={pianoRollGrid.subLines}
             height={gridH}
+            offsetX={marginPx}
           />
 
+          {/* Dimmed "outside the clip" margins (#249). Painted over the fill +
+              gridlines (so the grid shows through, dimmed) but under the notes. */}
+          <div style={{ position: 'absolute', top: 0, left: 0, width: marginPx, height: gridH, background: DIMMED_MARGIN_BG, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: 0, left: marginPx + windowPx, width: marginPx, height: gridH, background: DIMMED_MARGIN_BG, pointerEvents: 'none' }} />
+
+          {/* Trimmed-off notes that fall just outside the window — shown dimmed and
+              non-editable in the margins so you can see what's outside while
+              resizing (#249). Mapped in outer coords (marginPx + clip-local px). */}
+          {outOfWindowNotes.map((note) => (
+            <div
+              key={`oow-${note.id}`}
+              title={`${pitchLabel(note.pitch)} · outside clip`}
+              style={{
+                position: 'absolute',
+                left: marginPx + contentTimeToClipLocal(effWindow, note.start) * pxPerSec,
+                top: pitchToY(note.pitch, rowH),
+                width: Math.max(2, note.duration * pxPerSec),
+                height: rowH - 1,
+                background: `rgba(120,170,255,${0.45 + note.velocity * 0.5})`,
+                border: '1px solid rgba(180,210,255,0.6)',
+                borderRadius: 2, boxSizing: 'border-box',
+                opacity: OUT_OF_WINDOW_NOTE_OPACITY, pointerEvents: 'none',
+              }}
+            />
+          ))}
+
+          {/* Editable window content — inner layer offset by marginPx. gridRef
+              lives here so localPoint/hit-test math keeps pixel 0 = clip start. */}
+          <div
+            ref={gridRef}
+            onMouseDown={handleGridMouseDown}
+            onMouseMove={updateHoverPitch}
+            onMouseLeave={() => setHoverPitch(null)}
+            style={{ position: 'absolute', top: 0, left: marginPx, width: windowPx, height: gridH, cursor: tool === 'pointer' ? 'default' : tool === 'eraser' ? ERASER_CURSOR : 'crosshair' }}
+          >
           {/* Ghost notes from other overlapping MIDI clips — read-only (#232).
               Drawn before the real notes so editable notes always sit on top. */}
           {ghostNotes.map((ghost) => (
@@ -1008,9 +1178,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           ))}
 
           {/* Notes — only those whose start is inside the clip window are shown
-              and editable; notes outside it are preserved but hidden (#232). */}
-          {notes.filter((note) => isNoteStartInWindow(clip, note)).map((note) => {
-            const left = contentTimeToClipLocal(clip, note.start) * pxPerSec;
+              and editable; notes outside it render dimmed in the margins above. */}
+          {inWindowNotes.map((note) => {
+            const left = contentTimeToClipLocal(effWindow, note.start) * pxPerSec;
             const width = Math.max(2, note.duration * pxPerSec);
             const top = pitchToY(note.pitch, rowH);
             const selected = selectedIds.has(note.id);
@@ -1061,7 +1231,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           {pendingNote && (
             <div
               style={{
-                position: 'absolute', left: contentTimeToClipLocal(clip, pendingNote.start) * pxPerSec, top: pitchToY(pendingNote.pitch, rowH),
+                position: 'absolute', left: contentTimeToClipLocal(effWindow, pendingNote.start) * pxPerSec, top: pitchToY(pendingNote.pitch, rowH),
                 width: Math.max(2, pendingNote.duration * pxPerSec), height: rowH - 1,
                 background: 'rgba(120,170,255,0.5)', border: '1px solid rgba(180,210,255,0.9)',
                 borderRadius: 2, boxSizing: 'border-box', pointerEvents: 'none',
@@ -1082,12 +1252,19 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           {showPlayhead && (
             <div style={{ position: 'absolute', top: 0, left: clipLocalPlayhead * pxPerSec, width: 2, height: gridH, background: '#ff5252', pointerEvents: 'none' }} />
           )}
+          </div>
+
+          {/* Clip-boundary lines (#249) — solid full-height lines in the flag color
+              at the window start/end, so the limits are clear in the grid. Drawn
+              last (on top) and pointer-transparent so they never block editing. */}
+          <div style={{ position: 'absolute', top: 0, left: marginPx, width: 1, height: gridH, background: PART_BORDER_COLOR, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: 0, left: marginPx + windowPx, width: 1, height: gridH, background: PART_BORDER_COLOR, pointerEvents: 'none' }} />
         </div>
         </div>
 
         <PianoRollScrollbars
           scrollRef={scrollRef}
-          contentWidth={KEYBOARD_W + contentWidth}
+          contentWidth={KEYBOARD_W + gridWidth}
           contentHeight={gridH}
           onZoomTime={zoomTimeStep}
           onZoomNotes={zoomNotesStep}

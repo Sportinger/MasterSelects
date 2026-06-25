@@ -28,13 +28,16 @@ interface PianoRollGridLinesProps {
   beatLines: GridLine[];
   subLines: GridLine[];
   height: number;
+  /** Horizontal shift in px applied to every line — the clip-resize left margin
+   *  (#249), so the lines align with the marginPx-offset window. Defaults to 0. */
+  offsetX?: number;
 }
 
-function PianoRollGridLinesImpl({ barLines, beatLines, subLines, height }: PianoRollGridLinesProps) {
+function PianoRollGridLinesImpl({ barLines, beatLines, subLines, height, offsetX = 0 }: PianoRollGridLinesProps) {
   const line = (key: string, pixelX: number, color: string) => (
     <div
       key={key}
-      style={{ position: 'absolute', top: 0, left: pixelX, width: 1, height, background: color }}
+      style={{ position: 'absolute', top: 0, left: pixelX + offsetX, width: 1, height, background: color }}
     />
   );
   // Faint → strong paint order so bar lines sit visually on top of beats/subs.

@@ -56,6 +56,12 @@ export interface BuildPianoRollGridInput {
   visibleWidthPx: number;
   /** Lines per beat: 1 = beats (default), 2 = 1/8, 4 = 1/16, 3 = triplets, … */
   gridResolution?: number;
+  /**
+   * Seconds of "outside the clip" margin shown on each side (#249 clip-resize).
+   * When > 0, bars/beats/ticks are generated `marginSec` beyond each window edge
+   * so the grid keeps going under the dimmed margins. Defaults to 0 (window only).
+   */
+  marginSec?: number;
 }
 
 function sanitizePositive(value: number, fallback: number): number {
@@ -75,18 +81,26 @@ export function buildPianoRollGrid({
   visibleStartPx,
   visibleWidthPx,
   gridResolution = 1,
+  marginSec = 0,
 }: BuildPianoRollGridInput): PianoRollGrid {
   const safePxPerSec = sanitizePositive(pxPerSec, 1);
   const safeResolution = Math.max(1, Math.floor(sanitizePositive(gridResolution, 1)));
+  const safeMargin = Math.max(0, marginSec);
 
   // Absolute end of the clip window — the duration the timeline generators clamp
   // to. MUST be the absolute end (clipStartTime + clipDuration), not the clip-local
   // length, or every tick past the clip length is silently dropped (plan §5).
   const clipEndAbs = clipStartTime + Math.max(0, clipDuration);
+  // Generation span extends `safeMargin` past each window edge so the grid keeps
+  // going under the dimmed margins (#249). The generators themselves clamp the
+  // low end to absolute time 0, so the part of the left margin before t=0 stays
+  // blank (no musical time there) — that's correct, not a bug.
+  const rangeStartAbs = clipStartTime - safeMargin;
+  const rangeEndAbs = clipEndAbs + safeMargin;
 
-  // Visible pixel window → absolute-time window, clamped to the clip span.
-  const fromAbs = Math.max(clipStartTime, clipStartTime + visibleStartPx / safePxPerSec);
-  const toAbs = Math.min(clipEndAbs, clipStartTime + (visibleStartPx + visibleWidthPx) / safePxPerSec);
+  // Visible pixel window → absolute-time window, clamped to the (margin-widened) span.
+  const fromAbs = Math.max(rangeStartAbs, clipStartTime + visibleStartPx / safePxPerSec);
+  const toAbs = Math.min(rangeEndAbs, clipStartTime + (visibleStartPx + visibleWidthPx) / safePxPerSec);
 
   const toPixel = (time: number): number => (time - clipStartTime) * safePxPerSec;
 
@@ -95,7 +109,8 @@ export function buildPianoRollGrid({
   const subLines: GridLine[] = [];
 
   if (toAbs >= fromAbs) {
-    const lines = iterateBarBeatLines(tempoMap, fromAbs, toAbs);
+    // Bar/beat lines never exist before absolute time 0.
+    const lines = iterateBarBeatLines(tempoMap, Math.max(0, fromAbs), toAbs);
     for (const line of lines) {
       const gridLine: GridLine = { pixelX: toPixel(line.time), time: line.time };
       if (line.isBarStart) barLines.push(gridLine);
@@ -123,14 +138,14 @@ export function buildPianoRollGrid({
       zoom: safePxPerSec,
       startTime: fromAbs,
       endTime: toAbs,
-      duration: clipEndAbs,
+      duration: rangeEndAbs,
     }),
     time: createLinearLaneTicks({
       format: 'time',
       zoom: safePxPerSec,
       startTime: fromAbs,
       endTime: toAbs,
-      duration: clipEndAbs,
+      duration: rangeEndAbs,
       formatTime: formatTimelineClock,
     }),
   };

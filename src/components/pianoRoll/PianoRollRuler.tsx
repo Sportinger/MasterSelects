@@ -16,7 +16,7 @@
 // present in dev. Inline styles make the ruler self-contained and correct in dev,
 // production, and on Mesa (all-DOM, no canvas).
 
-import type { CSSProperties } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
 import type { RulerTick } from '../timeline/utils/timelineGrid';
 
 const RULER_LANE_H = 30;
@@ -49,14 +49,68 @@ const LABEL_BASE: CSSProperties = {
 interface PianoRollRulerProps {
   /** Bars + Time ticks (absolute-time `.time`), from `buildPianoRollGrid`. */
   rulerTicks: { bars: RulerTick[]; time: RulerTick[] };
-  /** Absolute timeline time of the clip window's left edge (grid pixel 0). */
+  /** Absolute timeline time of the clip window's left edge. */
   clipStartTime: number;
+  /** Clip window length in seconds (right handle = clipStartTime + clipDuration). */
+  clipDuration: number;
   /** Piano-roll horizontal zoom (pixels per second) — shared with the grid. */
   pxPerSec: number;
+  /** Left "outside the clip" margin in px — grid pixel 0 is the margin edge, so
+   *  every tick/handle is shifted right by this amount (#249 clip-resize). */
+  marginPx: number;
+  /** Start a clip resize by dragging a window-edge handle on the Time lane. */
+  onResizeStart: (edge: 'left' | 'right', event: ReactMouseEvent) => void;
 }
 
-export function PianoRollRuler({ rulerTicks, clipStartTime, pxPerSec }: PianoRollRulerProps) {
-  const toPixel = (time: number): number => (time - clipStartTime) * pxPerSec;
+// Cubase-style part-border tab (#249). Like Cubase's Key Editor, each window edge
+// gets a flag labelled "Start" / "End" flush to the edge with a thin boundary
+// line. The flag spans the FULL ruler height (both lanes) and the start flag
+// grows right from the line while the end flag grows left to it. Dragging it
+// resizes the clip; its mousedown stops propagation in the parent so it never
+// also scrubs. A wide invisible hit strip widens the grab tolerance.
+// Shared so the in-grid boundary lines use the exact flag color (#249).
+export const PART_BORDER_COLOR = '#3f7d6f';   // muted teal, like the Cubase part marker
+const TAB_BG = PART_BORDER_COLOR;
+const TAB_TEXT = '#eafff7';
+const HIT_W = 9;
+function ResizeTab({ leftPx, edge, onResizeStart }: {
+  leftPx: number; edge: 'left' | 'right'; onResizeStart: PianoRollRulerProps['onResizeStart'];
+}) {
+  const isLeft = edge === 'left';
+  const title = isLeft ? 'Drag to move the clip start' : 'Drag to resize the clip end';
+  return (
+    <div style={{ position: 'absolute', top: 0, left: leftPx, height: '100%', zIndex: 2 }}>
+      {/* Wide transparent grab strip centered on the edge. */}
+      <div
+        onMouseDown={(e) => onResizeStart(edge, e)}
+        title={title}
+        style={{ position: 'absolute', top: 0, left: -HIT_W / 2, width: HIT_W, height: '100%', cursor: 'default' }}
+      />
+      {/* Boundary line sitting exactly on the window edge — spans BOTH lanes. */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: 1, height: '100%', background: TAB_BG, pointerEvents: 'none' }} />
+      {/* The "Start"/"End" flag — only as tall as the Time lane (top), flush to
+          the edge: the start flag grows right from the line, the end flag left. */}
+      <div
+        onMouseDown={(e) => onResizeStart(edge, e)}
+        title={title}
+        style={{
+          position: 'absolute', top: 0, left: 0, height: RULER_LANE_H,
+          transform: isLeft ? undefined : 'translateX(-100%)',
+          display: 'flex', alignItems: 'center',
+          padding: '0 6px', fontSize: 10, fontWeight: 600, color: TAB_TEXT, background: TAB_BG,
+          cursor: 'default', userSelect: 'none', whiteSpace: 'nowrap',
+          borderTopRightRadius: isLeft ? 3 : 0, borderBottomRightRadius: isLeft ? 3 : 0,
+          borderTopLeftRadius: isLeft ? 0 : 3, borderBottomLeftRadius: isLeft ? 0 : 3,
+        }}
+      >
+        {isLeft ? 'Start' : 'End'}
+      </div>
+    </div>
+  );
+}
+
+export function PianoRollRuler({ rulerTicks, clipStartTime, clipDuration, pxPerSec, marginPx, onResizeStart }: PianoRollRulerProps) {
+  const toPixel = (time: number): number => (time - clipStartTime) * pxPerSec + marginPx;
 
   const renderLane = (
     key: string,
@@ -96,11 +150,15 @@ export function PianoRollRuler({ rulerTicks, clipStartTime, pxPerSec }: PianoRol
     </div>
   );
 
-  // Time lane on top (plain bg); Bars lane below (accent-tinted, like the timeline).
+  // Time lane on top (plain bg); Bars lane below (accent-tinted, like the
+  // timeline). The "Start"/"End" tabs are rendered last so they span the FULL
+  // ruler height across both lanes, flush to the window edges.
   return (
     <>
       {renderLane('time', rulerTicks.time, TIME_COLORS, false)}
       {renderLane('bars', rulerTicks.bars, BARS_COLORS, true, BARS_BG, BARS_ACCENT)}
+      <ResizeTab leftPx={toPixel(clipStartTime)} edge="left" onResizeStart={onResizeStart} />
+      <ResizeTab leftPx={toPixel(clipStartTime + clipDuration)} edge="right" onResizeStart={onResizeStart} />
     </>
   );
 }
