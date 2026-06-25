@@ -178,6 +178,13 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const selectedIdsRef = useRef(selectedIds);
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+
+  // Switching to the pointer (note-entry) tool drops any existing selection so a
+  // left-over marquee highlight doesn't linger while drawing notes (#249).
+  const selectTool = useCallback((next: Tool) => {
+    setTool(next);
+    if (next === 'pointer') setSelectedIds(new Set());
+  }, []);
   // Live marquee rectangle in grid-content pixels (null when not selecting).
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
@@ -638,7 +645,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       const nextTool = resolvePianoRollToolAction(e);
       if (nextTool) {
         e.preventDefault();
-        setTool(nextTool);
+        selectTool(nextTool);
         return;
       }
 
@@ -652,7 +659,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     };
     doc.addEventListener('keydown', onKey);
     return () => doc.removeEventListener('keydown', onKey);
-  }, [clipId, removeMidiNotes, copySelection, cutSelection, pasteClipboard, duplicateSelection, runHistory]);
+  }, [clipId, removeMidiNotes, copySelection, cutSelection, pasteClipboard, duplicateSelection, runHistory, selectTool]);
 
   if (!clip || clip.source?.type !== 'midi') {
     return (
@@ -800,9 +807,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           display: 'inline-flex', alignItems: 'center', gap: 3, padding: 2,
           border: '1px solid rgba(255,255,255,0.08)', borderRadius: 5, background: 'rgba(0,0,0,0.18)',
         }}>
-          <ToolButton active={tool === 'pointer'} title="Pointer — draw, move & resize notes (1)" onClick={() => setTool('pointer')} glyph={IconPointer} />
-          <ToolButton active={tool === 'eraser'} title="Eraser — click or swipe to delete notes (2)" onClick={() => setTool('eraser')} glyph={IconEraser} />
-          <ToolButton active={tool === 'select'} title="Select — marquee to select, drag to move, Del to remove (3)" onClick={() => setTool('select')} glyph={IconMarquee2} />
+          <ToolButton active={tool === 'pointer'} title="Pointer — draw, move & resize notes (1)" onClick={() => selectTool('pointer')} glyph={IconPointer} />
+          <ToolButton active={tool === 'eraser'} title="Eraser — click or swipe to delete notes (2)" onClick={() => selectTool('eraser')} glyph={IconEraser} />
+          <ToolButton active={tool === 'select'} title="Select — marquee to select, drag to move, Del to remove (3)" onClick={() => selectTool('select')} glyph={IconMarquee2} />
         </div>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: 11, color: '#777' }}>{notes.length} notes · {clipDuration.toFixed(2)}s</span>
