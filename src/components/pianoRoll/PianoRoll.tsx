@@ -35,7 +35,10 @@ const ZOOM_WHEEL_STEP = 1.15;      // multiplier per wheel notch
 const ZOOM_BUTTON_STEP = 1.4;      // multiplier per +/- button click
 
 const KEYBOARD_W = 48;     // px, left keyboard column
-const DEFAULT_CLICK_DURATION = 0.5; // seconds, note created by a plain click (no drag)
+// A plain click (no drag) makes a SHORT note; drag-and-release sizes longer
+// notes by the drag distance (#249). Kept visible/grabbable at default zoom
+// (0.1s ≈ 12px at 120 px/s).
+const CLICK_NOTE_DURATION = 0.1; // seconds, note created by a plain click (no drag)
 // Below this row height the note name (e.g. "C#4") can't fit legibly, so it's
 // hidden; below this pixel width the note is too short to show even a clipped
 // name without looking like noise (#249 note labels).
@@ -502,9 +505,10 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       dragRef.current = null;
       setDragActive(false);
       if (drag?.kind === 'create') {
-        const pending = pendingRef.current ?? { pitch: drag.pitch, start: drag.startTime, duration: DEFAULT_CLICK_DURATION };
-        // A near-zero drag is a plain click → give it a usable default length.
-        const duration = pending.duration <= 0.05 ? DEFAULT_CLICK_DURATION : pending.duration;
+        const pending = pendingRef.current ?? { pitch: drag.pitch, start: drag.startTime, duration: CLICK_NOTE_DURATION };
+        // A near-zero drag is a plain click → make a short note; an actual drag
+        // keeps its dragged length.
+        const duration = pending.duration <= 0.05 ? CLICK_NOTE_DURATION : pending.duration;
         addMidiNote(clipId, { ...pending, duration });
         pendingRef.current = null;
         setPendingNote(null);
