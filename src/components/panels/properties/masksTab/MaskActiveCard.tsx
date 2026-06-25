@@ -1,5 +1,5 @@
 import type { ShortcutActionId } from '../../../../services/shortcutTypes';
-import type { MaskNumericProperty } from "../../../../types/animationProperties";
+import type { MaskProperty } from "../../../../types/animationProperties";
 import type { ClipMask, MaskVertexHandleMode } from "../../../../types/masks";
 import { IconButton } from './IconButton';
 import { MaskEdgeSection } from './MaskEdgeSection';
@@ -15,6 +15,7 @@ interface MaskActiveCardProps {
   clipId: string;
   registry: MaskActiveCardShortcutRegistry;
   selectedHandleMode: MaskVertexHandleMode | 'mixed' | null;
+  selectedMaskEdgeId: string | null;
   selectedVertexDisplayCount: number;
   selectedVertexCount: number;
   onBatchEnd: () => void;
@@ -22,7 +23,8 @@ interface MaskActiveCardProps {
   onCycleSelectedHandles: () => void;
   onSetSelectedHandles: (mode: MaskVertexHandleMode) => void;
   closeMask: (clipId: string, maskId: string) => void;
-  setPropertyValue: (clipId: string, property: MaskNumericProperty, value: number) => void;
+  showMaskFeatherPreview: (maskId: string, edgeId?: string | null) => void;
+  setPropertyValue: (clipId: string, property: MaskProperty, value: number) => void;
   updateMask: (clipId: string, maskId: string, updates: Partial<ClipMask>) => void;
 }
 
@@ -36,8 +38,10 @@ export function MaskActiveCard({
   onSetSelectedHandles,
   registry,
   selectedHandleMode,
+  selectedMaskEdgeId,
   selectedVertexDisplayCount,
   selectedVertexCount,
+  showMaskFeatherPreview,
   setPropertyValue,
   updateMask,
 }: MaskActiveCardProps) {
@@ -93,6 +97,8 @@ export function MaskActiveCard({
         clipId={clipId}
         onBatchEnd={onBatchEnd}
         onBatchStart={onBatchStart}
+        selectedMaskEdgeId={selectedMaskEdgeId}
+        showMaskFeatherPreview={showMaskFeatherPreview}
         setPropertyValue={setPropertyValue}
       />
     </div>

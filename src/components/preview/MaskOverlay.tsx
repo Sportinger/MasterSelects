@@ -41,6 +41,13 @@ interface MaskOverlayProps {
   viewZoom: number;
 }
 
+type FeatherPreviewOverlay = {
+  maskId: string;
+  edgeId: string | null;
+  changedAt: number;
+  phase: 'in' | 'out';
+};
+
 function isTypingTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
@@ -56,6 +63,7 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
   const [hoveredVertexId, setHoveredVertexId] = useState<string | null>(null);
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string | null>(null);
   const [penInsertPreview, setPenInsertPreview] = useState<PenEdgeInsertPreview | null>(null);
+  const [featherPreviewOverlay, setFeatherPreviewOverlay] = useState<FeatherPreviewOverlay | null>(null);
 
   const {
     clips,
@@ -65,6 +73,8 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     maskEditMode,
     activeMaskId,
     selectedVertexIds,
+    selectedMaskEdgeId,
+    maskFeatherPreview,
     setMaskEditMode,
     deselectAllVertices,
     selectVertex,
@@ -147,6 +157,49 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
     } as MouseEvent;
     return getNormalizedPoint(syntheticPoint);
   }, [getNormalizedPoint]);
+
+  useEffect(() => {
+    if (!maskFeatherPreview) {
+      setFeatherPreviewOverlay(current => current ? { ...current, phase: 'out' } : current);
+      const clearTimer = window.setTimeout(() => {
+        setFeatherPreviewOverlay(null);
+      }, 500);
+      return () => {
+        window.clearTimeout(clearTimer);
+      };
+    }
+    const overlay: FeatherPreviewOverlay = {
+      maskId: maskFeatherPreview.maskId,
+      edgeId: maskFeatherPreview.edgeId,
+      changedAt: maskFeatherPreview.changedAt,
+      phase: 'in' as const,
+    };
+    setFeatherPreviewOverlay(current => ({
+      ...overlay,
+      phase: current?.maskId === overlay.maskId && current.edgeId === overlay.edgeId && current.phase === 'in'
+        ? current.phase
+        : 'in',
+    }));
+
+    const fadeOutTimer = window.setTimeout(() => {
+      setFeatherPreviewOverlay(current =>
+        current?.maskId === overlay.maskId && current.edgeId === overlay.edgeId
+          && current.changedAt === overlay.changedAt
+          ? { ...current, phase: 'out' }
+          : current
+      );
+    }, 500);
+    const clearTimer = window.setTimeout(() => {
+      setFeatherPreviewOverlay(current =>
+        current?.maskId === overlay.maskId && current.edgeId === overlay.edgeId && current.changedAt === overlay.changedAt ? null : current
+      );
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(fadeOutTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [maskFeatherPreview]);
 
   // Extracted hooks
   const suppressNextSvgClick = useCallback((didDrag: boolean) => {
@@ -363,6 +416,8 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
 
   // Handle clicking on first vertex to close path
   const handleFirstVertexClose = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+
     e.stopPropagation();
     e.preventDefault();
     if (!selectedClip || !activeMask) return;
@@ -503,6 +558,8 @@ function MaskOverlayComponent({ canvasWidth, canvasHeight, displayWidth, display
       maskEditMode={maskEditMode}
       activeMask={activeMask}
       selectedVertexIds={selectedVertexIds}
+      selectedMaskEdgeId={selectedMaskEdgeId}
+      featherPreview={featherPreviewOverlay?.maskId === activeMask?.id ? featherPreviewOverlay : null}
       hoveredVertexId={hoveredVertexId}
       hoveredEdgeKey={hoveredEdgeKey}
       penInsertPreview={penInsertPreview}

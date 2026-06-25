@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { DEFAULT_TEXT_3D_PROPERTIES, DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_SPLAT_EFFECTOR_SETTINGS } from '../../types/splatEffector';
 import { getInterpolatedClipTransform, interpolateKeyframes } from '../../utils/keyframeInterpolation';
+import { getMaskEdgeFeather } from '../../utils/maskEdgeFeathers';
 import type { AnimatableProperty } from '../../types/animationProperties';
 import type { Text3DProperties } from '../../types/text';
 import type { TimelineClip } from '../../types/timeline';
@@ -236,6 +237,10 @@ function resolveCustomMIDIParameterValue(clip: TimelineClip, property: string): 
 
     if (key === 'position.y') {
       return getFiniteNumber(mask.position?.y);
+    }
+
+    if (key.startsWith('edge.') && key.endsWith('.feather')) {
+      return getFiniteNumber(getMaskEdgeFeather(mask, key.slice('edge.'.length, -'.feather'.length)));
     }
   }
 

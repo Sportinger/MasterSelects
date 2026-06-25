@@ -2,8 +2,11 @@
 
 import { useRef, useCallback } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
-import { createMaskPathProperty, type ClipMask, type MaskPathKeyframeValue, type MaskVertex, type TimelineClip } from '../../types';
+import { createMaskPathProperty } from '../../types/animationProperties';
+import type { ClipMask, MaskPathKeyframeValue, MaskVertex } from '../../types/masks';
+import type { TimelineClip } from '../../types/timeline';
 import { startBatch, endBatch } from '../../stores/historyStore';
+import { createMaskEdgeId } from '../../utils/maskEdgeFeathers';
 
 type EdgeDragVertex = { id: string; x: number; y: number };
 
@@ -56,10 +59,11 @@ export function useMaskEdgeDrag(
   activeMask: ClipMask | undefined,
   clientToLocalPoint?: (clientX: number, clientY: number) => { x: number; y: number } | null,
 ) {
-  const { setMaskDragging } = useTimelineStore();
+  const { selectMaskEdge, setMaskDragging } = useTimelineStore();
 
   const edgeDragState = useRef<{
     isDragging: boolean;
+    didStartDrag: boolean;
     startX: number;
     startY: number;
     startLocalX: number;
@@ -70,6 +74,7 @@ export function useMaskEdgeDrag(
     nextB: EdgeDragVertex | null;
   }>({
     isDragging: false,
+    didStartDrag: false,
     startX: 0,
     startY: 0,
     startLocalX: 0,
@@ -81,6 +86,8 @@ export function useMaskEdgeDrag(
   });
 
   const handleEdgeMouseDown = useCallback((e: React.MouseEvent, vertexIdA: string, vertexIdB: string) => {
+    if (e.button !== 0) return;
+
     e.stopPropagation();
     e.preventDefault();
     if (!activeMask || !selectedClip) return;
@@ -91,6 +98,8 @@ export function useMaskEdgeDrag(
     const vB = activeMask.vertices[indexB];
     if (!vA || !vB) return;
 
+    selectMaskEdge(createMaskEdgeId(vertexIdA, vertexIdB));
+
     const previousA = activeMask.closed || indexA > 0
       ? activeMask.vertices[(indexA - 1 + activeMask.vertices.length) % activeMask.vertices.length]
       : null;
@@ -98,11 +107,10 @@ export function useMaskEdgeDrag(
       ? activeMask.vertices[(indexB + 1) % activeMask.vertices.length]
       : null;
 
-    startBatch('Move mask edge');
-    setMaskDragging(true);
     const startLocalPoint = clientToLocalPoint?.(e.clientX, e.clientY);
     edgeDragState.current = {
       isDragging: true,
+      didStartDrag: false,
       startX: e.clientX,
       startY: e.clientY,
       startLocalX: startLocalPoint?.x ?? 0,
@@ -153,6 +161,7 @@ export function useMaskEdgeDrag(
 
     const applyEdgeDrag = (clientX: number, clientY: number, shiftKey: boolean, alignAdjacentEdges: boolean) => {
       if (!edgeDragState.current.isDragging || !selectedClip || !activeMask) return;
+      if (!edgeDragState.current.didStartDrag) return;
 
       const svg = svgRef.current;
       if (!svg) return;
@@ -177,6 +186,14 @@ export function useMaskEdgeDrag(
       lastClientX = moveEvent.clientX;
       lastClientY = moveEvent.clientY;
 
+      if (!edgeDragState.current.didStartDrag) {
+        const moved = Math.hypot(moveEvent.clientX - edgeDragState.current.startX, moveEvent.clientY - edgeDragState.current.startY);
+        if (moved <= 2) return;
+        edgeDragState.current.didStartDrag = true;
+        startBatch('Move mask edge');
+        setMaskDragging(true);
+      }
+
       const now = performance.now();
       if (now - lastUpdate < 16) return;
       lastUpdate = now;
@@ -189,13 +206,16 @@ export function useMaskEdgeDrag(
     };
 
     const handleMouseUp = (upEvent: MouseEvent) => {
-      applyEdgeDrag(upEvent.clientX, upEvent.clientY, upEvent.shiftKey, upEvent.ctrlKey || upEvent.metaKey);
-      const store = useTimelineStore.getState();
-      store.invalidateCache();
-      store.setMaskDragging(false);
-      endBatch();
+      if (edgeDragState.current.didStartDrag) {
+        applyEdgeDrag(upEvent.clientX, upEvent.clientY, upEvent.shiftKey, upEvent.ctrlKey || upEvent.metaKey);
+        const store = useTimelineStore.getState();
+        store.invalidateCache();
+        store.setMaskDragging(false);
+        endBatch();
+      }
       edgeDragState.current = {
         isDragging: false,
+        didStartDrag: false,
         startX: 0,
         startY: 0,
         startLocalX: 0,
@@ -215,7 +235,7 @@ export function useMaskEdgeDrag(
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('keydown', handleKeyChange);
     window.addEventListener('keyup', handleKeyChange);
-  }, [activeMask, selectedClip, canvasWidth, canvasHeight, setMaskDragging, svgRef, clientToLocalPoint]);
+  }, [activeMask, selectedClip, canvasWidth, canvasHeight, selectMaskEdge, setMaskDragging, svgRef, clientToLocalPoint]);
 
   return { handleEdgeMouseDown };
 }

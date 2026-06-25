@@ -2,7 +2,9 @@
 
 import { useRef, useCallback } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
-import { createMaskPathProperty, type ClipMask, type MaskPathKeyframeValue, type MaskVertex, type TimelineClip } from '../../types';
+import { createMaskPathProperty } from '../../types/animationProperties';
+import type { ClipMask, MaskPathKeyframeValue, MaskVertex } from '../../types/masks';
+import type { TimelineClip } from '../../types/timeline';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { inferMaskVertexHandleMode } from '../../utils/maskVertexHandles';
 
@@ -55,6 +57,60 @@ function recordPathIfAnimated(clipId: string, mask: ClipMask, vertexUpdates: Arr
       historyLabel: 'Move mask vertices',
     },
   );
+}
+
+function lineIntersection(
+  pointA: { x: number; y: number },
+  directionA: { x: number; y: number },
+  pointB: { x: number; y: number },
+  directionB: { x: number; y: number },
+): { x: number; y: number } | null {
+  const determinant = directionA.x * directionB.y - directionA.y * directionB.x;
+  if (Math.abs(determinant) < 0.000001) return null;
+
+  const dx = pointB.x - pointA.x;
+  const dy = pointB.y - pointA.y;
+  const t = (dx * directionB.y - dy * directionB.x) / determinant;
+  return {
+    x: pointA.x + directionA.x * t,
+    y: pointA.y + directionA.y * t,
+  };
+}
+
+export function buildAngleLockedQuadVertexUpdates(
+  mask: ClipMask,
+  vertexId: string,
+  target: { x: number; y: number },
+): Array<{ id: string; updates: Partial<MaskVertex> }> | null {
+  if (!mask.closed || mask.vertices.length !== 4) return null;
+  const index = mask.vertices.findIndex(vertex => vertex.id === vertexId);
+  if (index < 0) return null;
+
+  const current = mask.vertices[index];
+  const previous = mask.vertices[(index + 3) % 4];
+  const next = mask.vertices[(index + 1) % 4];
+  const opposite = mask.vertices[(index + 2) % 4];
+  if (!current || !previous || !next || !opposite) return null;
+
+  const previousPoint = lineIntersection(
+    target,
+    { x: current.x - previous.x, y: current.y - previous.y },
+    opposite,
+    { x: previous.x - opposite.x, y: previous.y - opposite.y },
+  );
+  const nextPoint = lineIntersection(
+    target,
+    { x: next.x - current.x, y: next.y - current.y },
+    opposite,
+    { x: next.x - opposite.x, y: next.y - opposite.y },
+  );
+  if (!previousPoint || !nextPoint) return null;
+
+  return [
+    { id: current.id, updates: target },
+    { id: previous.id, updates: previousPoint },
+    { id: next.id, updates: nextPoint },
+  ];
 }
 
 export function useMaskVertexDrag(
@@ -121,6 +177,8 @@ export function useMaskVertexDrag(
     vertexId: string,
     handleType: 'vertex' | 'handleIn' | 'handleOut'
   ) => {
+    if (e.button !== 0) return;
+
     e.stopPropagation();
     e.preventDefault();
 
@@ -130,7 +188,7 @@ export function useMaskVertexDrag(
     if (!vertex) return;
 
     const currentSelection = useTimelineStore.getState().selectedVertexIds;
-    const addToSelection = handleType === 'vertex' && (e.ctrlKey || e.metaKey);
+    const addToSelection = false;
     const keepMultiSelection = handleType === 'vertex' && currentSelection.has(vertexId) && currentSelection.size > 1 && !addToSelection;
 
     if (addToSelection && currentSelection.has(vertexId)) {
@@ -213,7 +271,8 @@ export function useMaskVertexDrag(
       dragState.current.lastShiftState = isShiftPressed;
 
       if (dragState.current.handleType === 'vertex') {
-        if (isShiftPressed) {
+        const freeMove = moveEvent.ctrlKey || moveEvent.metaKey;
+        if (isShiftPressed && !freeMove) {
           const shiftDx = (moveEvent.clientX - dragState.current.shiftStartX) * scaleX;
           const normalizedShiftDx = shiftDx / canvasWidth;
           const scaleFactor = 1 + normalizedShiftDx * 5;
@@ -253,12 +312,24 @@ export function useMaskVertexDrag(
           const normalizedDy = localPoint
             ? localPoint.y - dragState.current.startLocalY
             : ((moveEvent.clientY - dragState.current.startY) * scaleY) / canvasHeight;
+          const axisLocked = freeMove && moveEvent.shiftKey
+            ? Math.abs(normalizedDx) >= Math.abs(normalizedDy)
+              ? { dx: normalizedDx, dy: 0 }
+              : { dx: 0, dy: normalizedDy }
+            : { dx: normalizedDx, dy: normalizedDy };
 
-          const vertexUpdates = dragState.current.startVertices.map(startVertex => ({
+          const target = {
+            x: dragState.current.startVertexX + axisLocked.dx,
+            y: dragState.current.startVertexY + axisLocked.dy,
+          };
+          const lockedUpdates = !freeMove && dragState.current.startVertices.length === 1
+            ? buildAngleLockedQuadVertexUpdates(activeMask, dragState.current.vertexId, target)
+            : null;
+          const vertexUpdates = lockedUpdates ?? dragState.current.startVertices.map(startVertex => ({
             id: startVertex.id,
             updates: {
-              x: startVertex.x + normalizedDx,
-              y: startVertex.y + normalizedDy,
+              x: startVertex.x + axisLocked.dx,
+              y: startVertex.y + axisLocked.dy,
             },
           }));
           useTimelineStore.getState().updateVertices(selectedClip.id, activeMask.id, vertexUpdates, true);

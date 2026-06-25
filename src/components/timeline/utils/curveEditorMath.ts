@@ -19,7 +19,7 @@ export function getPropertyDefaults(property: AnimatableProperty): { min: number
   if (maskProperty?.property === 'position.x' || maskProperty?.property === 'position.y') {
     return { min: -1, max: 1, fallbackPad: 0.05 };
   }
-  if (maskProperty?.property === 'feather') {
+  if (maskProperty?.property === 'feather' || maskProperty?.property === 'edgeFeather') {
     return { min: 0, max: 500, fallbackPad: 5 };
   }
   if (maskProperty?.property === 'featherQuality') {

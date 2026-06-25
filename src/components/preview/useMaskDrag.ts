@@ -2,7 +2,9 @@
 
 import { useRef, useCallback } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
-import { createMaskNumericProperty, type ClipMask, type TimelineClip } from '../../types';
+import { createMaskNumericProperty } from '../../types/animationProperties';
+import type { ClipMask } from '../../types/masks';
+import type { TimelineClip } from '../../types/timeline';
 import { startBatch, endBatch } from '../../stores/historyStore';
 
 export function useMaskDrag(
@@ -34,6 +36,8 @@ export function useMaskDrag(
   });
 
   const handleMaskDragStart = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+
     e.stopPropagation();
     e.preventDefault();
 

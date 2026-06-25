@@ -28,6 +28,7 @@ export function getHeaderPropertyLabel(
       'position.x': 'X',
       'position.y': 'Y',
       feather: 'Feather',
+      edgeFeather: 'Edge Feather',
       featherQuality: 'Quality',
     };
     return `${maskName} ${labels[maskProperty.property] ?? maskProperty.property}`.replace(/\s+/g, ' ').trim();

@@ -1,7 +1,8 @@
 
 import type { TimelineClip } from '../../types/timeline';
 import type { ClipMask, MaskPathKeyframeValue } from '../../types/masks';
-import { parseMaskProperty } from '../../types/animationProperties';
+import { createMaskEdgeFeatherProperty, parseMaskProperty } from '../../types/animationProperties';
+import { createMaskEdgeId, getMaskEdgeFeather, setMaskEdgeFeatherValue } from '../../utils/maskEdgeFeathers';
 import type { PropertyDescriptor } from '../../types/propertyRegistry';
 
 function getMaskPathValue(mask: ClipMask): MaskPathKeyframeValue {
@@ -57,6 +58,39 @@ export function getMaskDescriptorForPath(path: string, clip?: TimelineClip): Pro
     };
   }
 
+  if (parsed.property === 'edgeFeather') {
+    const edgeIndex = mask.vertices.findIndex((vertex, index) => {
+      const nextVertex = mask.vertices[index + 1] ?? (mask.closed ? mask.vertices[0] : undefined);
+      return nextVertex ? createMaskEdgeId(vertex.id, nextVertex.id) === parsed.edgeId : false;
+    });
+    if (edgeIndex < 0) return undefined;
+
+    return {
+      path,
+      label: `${mask.name} Edge ${edgeIndex + 1} Feather`,
+      group: 'Masks',
+      valueType: 'number',
+      animatable: true,
+      defaultValue: 0,
+      ui: { min: 0, max: 500, step: 0.1, aliases: [mask.name, 'edge feather'] },
+      read: (targetClip) => {
+        const targetMask = targetClip.masks?.find((candidate) => candidate.id === parsed.maskId);
+        return targetMask ? getMaskEdgeFeather(targetMask, parsed.edgeId) : undefined;
+      },
+      write: (targetClip, value) => ({
+        ...targetClip,
+        masks: targetClip.masks?.map((candidate) => (
+          candidate.id === parsed.maskId
+            ? {
+                ...candidate,
+                edgeFeathers: setMaskEdgeFeatherValue(candidate.edgeFeathers, parsed.edgeId, value as number),
+              }
+            : candidate
+        )),
+      }),
+    };
+  }
+
   const numericProperty = parsed.property as 'position.x' | 'position.y' | 'feather' | 'featherQuality';
   const labelByProperty: Record<typeof numericProperty, string> = {
     'position.x': `${mask.name} X`,
@@ -102,11 +136,18 @@ export function getMaskDescriptorForPath(path: string, clip?: TimelineClip): Pro
 }
 
 export function getMaskDescriptorsForClip(clip: TimelineClip): PropertyDescriptor[] {
-  return (clip.masks ?? []).flatMap((mask) => [
-    getMaskDescriptorForPath(`mask.${mask.id}.path`, clip),
-    getMaskDescriptorForPath(`mask.${mask.id}.position.x`, clip),
-    getMaskDescriptorForPath(`mask.${mask.id}.position.y`, clip),
-    getMaskDescriptorForPath(`mask.${mask.id}.feather`, clip),
-    getMaskDescriptorForPath(`mask.${mask.id}.featherQuality`, clip),
-  ].filter((descriptor): descriptor is PropertyDescriptor => Boolean(descriptor)));
+  return (clip.masks ?? []).flatMap((mask) => {
+    const edgeProperties = mask.vertices.flatMap((vertex, index) => {
+      const nextVertex = mask.vertices[index + 1] ?? (mask.closed ? mask.vertices[0] : undefined);
+      return nextVertex ? [createMaskEdgeFeatherProperty(mask.id, createMaskEdgeId(vertex.id, nextVertex.id))] : [];
+    });
+    return [
+      getMaskDescriptorForPath(`mask.${mask.id}.path`, clip),
+      getMaskDescriptorForPath(`mask.${mask.id}.position.x`, clip),
+      getMaskDescriptorForPath(`mask.${mask.id}.position.y`, clip),
+      getMaskDescriptorForPath(`mask.${mask.id}.feather`, clip),
+      getMaskDescriptorForPath(`mask.${mask.id}.featherQuality`, clip),
+      ...edgeProperties.map(property => getMaskDescriptorForPath(property, clip)),
+    ].filter((descriptor): descriptor is PropertyDescriptor => Boolean(descriptor));
+  });
 }

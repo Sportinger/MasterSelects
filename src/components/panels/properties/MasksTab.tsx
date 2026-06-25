@@ -20,14 +20,18 @@ interface MasksTabProps {
 export function MasksTab({ clipId, masks }: MasksTabProps) {
   const activeMaskId = useTimelineStore(state => state.activeMaskId);
   const selectedVertexIds = useTimelineStore(state => state.selectedVertexIds);
+  const selectedMaskEdgeId = useTimelineStore(state => state.selectedMaskEdgeId);
   const maskEditMode = useTimelineStore(state => state.maskEditMode);
   const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const selectedClip = useTimelineStore(state => state.clips.find(clip => clip.id === clipId));
   const clipKeyframesForMaskList = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYFRAMES);
+  const canPasteMask = useTimelineStore(state => state.clipboardMask !== null);
   const getInterpolatedMasks = useTimelineStore(state => state.getInterpolatedMasks);
   const {
     addRectangleMask,
     addEllipseMask,
+    copyClipMask,
+    pasteClipMask,
     setActiveMask,
     setMaskEditMode,
     setMaskPanelActive,
@@ -35,6 +39,7 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
     closeMask,
     selectVertices,
     setVertexHandleMode,
+    showMaskFeatherPreview,
     setPropertyValue,
   } = useTimelineStore.getState();
   const registry = getShortcutRegistry();
@@ -93,17 +98,24 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
     setMaskEditMode(mode);
   }, [setMaskEditMode]);
 
-  const editActiveMask = useCallback(() => {
+  const copyActiveMask = useCallback(() => {
     if (!activeMask) return;
-    setActiveMask(clipId, activeMask.id);
-    setMaskEditMode('editing');
-  }, [activeMask, clipId, setActiveMask, setMaskEditMode]);
+    copyClipMask(clipId, activeMask.id);
+  }, [activeMask, clipId, copyClipMask]);
+
+  const pasteMask = useCallback(() => {
+    pasteClipMask([clipId]);
+  }, [clipId, pasteClipMask]);
 
   useMaskKeybindings({
     activeMask,
+    canPasteMask,
     clipId,
     closeMask,
+    copyClipMask,
     cycleSelectedHandles,
+    maskEditMode,
+    pasteClipMask,
     registry,
     selectedVertexCount: selectedVertices.length,
     selectVertices,
@@ -120,12 +132,14 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
     >
       <MaskToolbar
         activeMask={activeMask}
+        canPasteMask={canPasteMask}
         maskEditMode={maskEditMode}
         registry={registry}
+        onCopyActiveMask={copyActiveMask}
         onCreateEllipse={createEllipse}
         onCreateRectangle={createRectangle}
-        onEditActiveMask={editActiveMask}
         onExitMaskMode={() => setMaskEditMode('none')}
+        onPasteMask={pasteMask}
         onStartDrawMode={startDrawMode}
       />
 
@@ -140,8 +154,10 @@ export function MasksTab({ clipId, masks }: MasksTabProps) {
           onSetSelectedHandles={setSelectedHandles}
           registry={registry}
           selectedHandleMode={selectedHandleMode}
+          selectedMaskEdgeId={selectedMaskEdgeId}
           selectedVertexDisplayCount={selectedVertexIds.size}
           selectedVertexCount={selectedVertices.length}
+          showMaskFeatherPreview={showMaskFeatherPreview}
           setPropertyValue={setPropertyValue}
           updateMask={updateMask}
         />

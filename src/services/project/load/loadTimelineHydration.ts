@@ -6,6 +6,7 @@ import { cloneClipNodeGraph } from '../../nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { fromProjectTransform } from '../transformSerialization';
 import { normalizeRulerLaneState } from '../../../timeline/tempo/rulerDefaults';
+import { hydrateMaskEdgeFeathers, hydrateMaskKeyframeProperty } from '../maskSerialization';
 import type { ProjectComposition, ProjectFile } from '../../projectFileService';
 import type { LabelColor } from '../../../stores/mediaStore/types';
 import type {
@@ -106,6 +107,7 @@ export function convertProjectCompositionToStore(
           inverted: mask.inverted,
           opacity: mask.opacity,
           feather: mask.feather,
+          edgeFeathers: hydrateMaskEdgeFeathers(mask),
           featherQuality: mask.featherQuality ?? 50,
           enabled: mask.enabled !== false,
           visible: mask.visible !== false,
@@ -125,7 +127,7 @@ export function convertProjectCompositionToStore(
         keyframes: (c.keyframes || []).map((keyframe): Keyframe => ({
           id: keyframe.id,
           clipId: c.id,
-          property: keyframe.property as Keyframe['property'],
+          property: hydrateMaskKeyframeProperty(keyframe.property, c.masks) as Keyframe['property'],
           time: keyframe.time,
           value: keyframe.value,
           pathValue: keyframe.pathValue

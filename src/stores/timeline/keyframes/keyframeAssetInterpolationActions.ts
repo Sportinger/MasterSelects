@@ -1,11 +1,12 @@
 import type { ClipMask } from '../../../types';
 import type { AnimatableProperty, KeyframeActions, SliceCreator } from '../types';
-import { createMaskPathProperty, createTextBoundsPathProperty } from '../../../types';
+import { createMaskEdgeFeatherProperty, createMaskPathProperty, createTextBoundsPathProperty, parseMaskProperty } from '../../../types';
 import {
   applyTextBoundsPathValue,
   cloneTextBoundsPath,
   getTextBoundsPathValue,
 } from '../../../services/textLayout';
+import { getMaskEdgeFeather, setMaskEdgeFeatherValue } from '../../../utils/maskEdgeFeathers';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import {
   getVectorAnimationStateNameAtIndex,
@@ -169,6 +170,7 @@ export const createKeyframeAssetInterpolationActions: SliceCreator<KeyframeAsset
     return clip.masks.map(mask => {
       let nextMask: ClipMask = {
         ...mask,
+        edgeFeathers: mask.edgeFeathers ? { ...mask.edgeFeathers } : undefined,
         position: { ...mask.position },
         vertices: mask.vertices.map(vertex => ({
           ...vertex,
@@ -204,6 +206,28 @@ export const createKeyframeAssetInterpolationActions: SliceCreator<KeyframeAsset
           interpolateKeyframes(maskKeyframes, featherQualityProperty, clipLocalTime, mask.featherQuality ?? 50),
         )));
       }
+
+      const edgeFeatherIds = new Set(Object.keys(mask.edgeFeathers ?? {}));
+      maskKeyframes.forEach((keyframe) => {
+        const parsed = parseMaskProperty(keyframe.property);
+        if (parsed?.property === 'edgeFeather' && parsed.maskId === mask.id) {
+          edgeFeatherIds.add(parsed.edgeId);
+        }
+      });
+      edgeFeatherIds.forEach((edgeId) => {
+        const edgeFeatherProperty = createMaskEdgeFeatherProperty(mask.id, edgeId) as AnimatableProperty;
+        if (!maskKeyframes.some(keyframe => keyframe.property === edgeFeatherProperty)) return;
+        nextMask.edgeFeathers = setMaskEdgeFeatherValue(
+          nextMask.edgeFeathers,
+          edgeId,
+          interpolateKeyframes(
+            maskKeyframes,
+            edgeFeatherProperty,
+            clipLocalTime,
+            getMaskEdgeFeather(mask, edgeId),
+          ),
+        );
+      });
 
       return nextMask;
     });

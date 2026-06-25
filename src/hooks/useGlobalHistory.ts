@@ -30,6 +30,8 @@ import {
 import { Logger } from '../services/logger';
 
 const log = Logger.create('History');
+const DEFAULT_HISTORY_CAPTURE_DELAY_MS = 150;
+const MASK_HISTORY_CAPTURE_IDLE_MS = 1000;
 
 function isHistoryCaptureSuppressed(): boolean {
   const historyState = useHistoryStore.getState();
@@ -223,6 +225,15 @@ export function createTimelineClipsHistorySignature(clips: TimelineClip[]): stri
   );
 }
 
+function createTimelineMasksHistorySignature(clips: TimelineClip[]): string {
+  return JSON.stringify(
+    clips.map(clip => ({
+      id: clip.id,
+      masks: normalizeValueForHistorySignature(clip.masks ?? [], CLIP_HISTORY_SIGNATURE_SKIP_KEYS),
+    }))
+  );
+}
+
 export function createMediaFilesHistorySignature(files: MediaFile[]): string {
   return JSON.stringify(
     files.map(file => normalizeValueForHistorySignature(file, MEDIA_FILE_HISTORY_SIGNATURE_SKIP_KEYS))
@@ -366,13 +377,13 @@ export function useGlobalHistory() {
   // Subscribe to store changes and capture snapshots
   useEffect(() => {
     // Debounced capture — stores timer ID and label so undo/redo can flush it
-    const debouncedCapture = (label: string) => {
+    const debouncedCapture = (label: string, delayMs = DEFAULT_HISTORY_CAPTURE_DELAY_MS) => {
       if (isHistoryDisabledForDebug()) return;
       if (pendingTimer.current) clearTimeout(pendingTimer.current);
-        pendingLabel.current = label;
-        pendingTimer.current = setTimeout(() => {
-          pendingTimer.current = null;
-          pendingLabel.current = '';
+      pendingLabel.current = label;
+      pendingTimer.current = setTimeout(() => {
+        pendingTimer.current = null;
+        pendingLabel.current = '';
 
         if (isHistoryCaptureSuppressed()) return;
 
@@ -384,7 +395,7 @@ export function useGlobalHistory() {
         if (now - lastCaptureTime.current < 100) return;
         lastCaptureTime.current = now;
         captureSnapshot(label);
-      }, 150);
+      }, delayMs);
     };
 
     if (isHistoryDisabledForDebug()) {
@@ -409,16 +420,22 @@ export function useGlobalHistory() {
         // and would cause expensive deep-clone snapshots every 150ms
         if (useTimelineStore.getState().maskDragging) return;
 
-        if (
-          curr.clips !== prev.clips &&
-          createTimelineClipsHistorySignature(curr.clips) !== createTimelineClipsHistorySignature(prev.clips)
-        ) {
-          if (curr.clips.length !== prev.clips.length) {
-            debouncedCapture(curr.clips.length > prev.clips.length ? 'Add clip' : 'Remove clip');
-          } else {
-            debouncedCapture('Modify clip');
+        if (curr.clips !== prev.clips) {
+          const currClipSignature = createTimelineClipsHistorySignature(curr.clips);
+          const prevClipSignature = createTimelineClipsHistorySignature(prev.clips);
+          if (currClipSignature !== prevClipSignature) {
+            if (curr.clips.length !== prev.clips.length) {
+              debouncedCapture(curr.clips.length > prev.clips.length ? 'Add clip' : 'Remove clip');
+            } else if (createTimelineMasksHistorySignature(curr.clips) !== createTimelineMasksHistorySignature(prev.clips)) {
+              debouncedCapture('Modify mask', MASK_HISTORY_CAPTURE_IDLE_MS);
+            } else {
+              debouncedCapture('Modify clip');
+            }
+            return;
           }
-        } else if (curr.tracks !== prev.tracks) {
+        }
+
+        if (curr.tracks !== prev.tracks) {
           debouncedCapture('Modify track');
         } else if (curr.clipKeyframes !== prev.clipKeyframes) {
           debouncedCapture('Modify keyframes');

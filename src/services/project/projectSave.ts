@@ -37,6 +37,7 @@ import {
   type ProjectFolder,
 } from '../projectFileService';
 import { toProjectTransform } from './transformSerialization';
+import { serializeMaskEdgeFeathers, serializeMaskKeyframeProperty } from './maskSerialization';
 import { normalizeRulerLaneState } from '../../timeline/tempo/rulerDefaults';
 import { shouldBlockDestructiveStoreSync } from './destructiveStoreSyncGuard';
 import {
@@ -62,7 +63,6 @@ export {
   isProjectStoreSyncInProgress,
   withProjectStoreSyncGuard,
 } from './projectStoreSyncGuard';
-
 export interface SaveCurrentProjectOptions {
   source?: 'manual' | 'autosave';
   label?: string;
@@ -286,6 +286,7 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         inverted: m.inverted || false,
         opacity: m.opacity ?? 1,
         feather: m.feather || 0,
+        edgeFeathers: serializeMaskEdgeFeathers(m),
         featherQuality: m.featherQuality ?? 50,
         enabled: m.enabled !== false,
         visible: m.visible !== false,
@@ -300,7 +301,10 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
         })),
         position: m.position || { x: 0, y: 0 },
       })),
-      keyframes: c.keyframes || [],
+      keyframes: (c.keyframes || []).map((keyframe) => ({
+        ...keyframe,
+        property: serializeMaskKeyframeProperty(keyframe.property, c.masks),
+      })),
       volume: c.volume ?? 1,
       audioEnabled: c.audioEnabled !== false,
       reversed: c.reversed || false,

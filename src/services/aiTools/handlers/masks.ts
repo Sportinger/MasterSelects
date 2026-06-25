@@ -37,6 +37,7 @@ export async function handleGetMasks(
         closed: m.closed,
         opacity: m.opacity,
         feather: m.feather,
+        edgeFeathers: m.edgeFeathers,
         featherQuality: m.featherQuality,
         inverted: m.inverted,
         enabled: m.enabled !== false,

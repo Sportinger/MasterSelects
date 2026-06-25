@@ -85,11 +85,18 @@ export interface ClipboardClipColorData {
   keyframes: Keyframe[];
 }
 
+export interface ClipboardClipMaskData {
+  sourceClipId: string;
+  mask: ClipMask;
+  keyframes: Keyframe[];
+}
+
 export interface ClipboardState {
   clipboardData: ClipboardClipData[] | null;
   clipboardKeyframes: ClipboardKeyframeData[] | null;
   clipboardEffects: ClipboardClipEffectsData | null;
   clipboardColor: ClipboardClipColorData | null;
+  clipboardMask: ClipboardClipMaskData | null;
 }
 
 export interface ClipboardActions {

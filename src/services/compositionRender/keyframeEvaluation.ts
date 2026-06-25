@@ -1,7 +1,8 @@
 import type { ClipMask } from '../../types/masks';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
-import { createMaskPathProperty } from '../../types/animationProperties';
+import { createMaskEdgeFeatherProperty, createMaskPathProperty, parseMaskProperty } from '../../types/animationProperties';
+import { getMaskEdgeFeather, setMaskEdgeFeatherValue } from '../../utils/maskEdgeFeathers';
 import {
   getInterpolatedClipTransform,
   interpolateKeyframes,
@@ -46,6 +47,23 @@ export function evaluateCompositionClipMasks(
         interpolateKeyframes(maskKeyframes, featherQualityProperty, localTime, mask.featherQuality ?? 50),
       )));
     }
+
+    const edgeFeatherIds = new Set(Object.keys(mask.edgeFeathers ?? {}));
+    maskKeyframes.forEach((keyframe) => {
+      const parsed = parseMaskProperty(keyframe.property);
+      if (parsed?.property === 'edgeFeather' && parsed.maskId === mask.id) {
+        edgeFeatherIds.add(parsed.edgeId);
+      }
+    });
+    edgeFeatherIds.forEach((edgeId) => {
+      const edgeFeatherProperty = createMaskEdgeFeatherProperty(mask.id, edgeId) as Keyframe['property'];
+      if (!maskKeyframes.some((keyframe) => keyframe.property === edgeFeatherProperty)) return;
+      nextMask.edgeFeathers = setMaskEdgeFeatherValue(
+        nextMask.edgeFeathers,
+        edgeId,
+        interpolateKeyframes(maskKeyframes, edgeFeatherProperty, localTime, getMaskEdgeFeather(mask, edgeId)),
+      );
+    });
 
     const pathProperty = createMaskPathProperty(mask.id);
     const pathKeyframe = [...maskKeyframes]

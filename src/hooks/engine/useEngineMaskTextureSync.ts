@@ -29,7 +29,11 @@ function getMaskShapeHash(masks: ClipMask[]): string {
       v.handleOut.y.toFixed(4),
     ].join(',')).join(';')}|` +
     `${m.position.x.toFixed(4)},${m.position.y.toFixed(4)}|` +
-    `${(m.feather || 0).toFixed(2)}|${m.featherQuality ?? 50}`
+    `${(m.feather || 0).toFixed(2)}|${m.featherQuality ?? 50}|` +
+    `${Object.entries(m.edgeFeathers ?? {})
+      .toSorted(([a], [b]) => a.localeCompare(b))
+      .map(([edgeId, feather]) => `${edgeId}:${feather.toFixed(2)}`)
+      .join(';')}`
   ).join('||');
 }
 

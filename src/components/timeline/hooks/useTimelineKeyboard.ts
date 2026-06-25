@@ -292,6 +292,8 @@ export function useTimelineKeyboard({
 
       // Copy
       if (registry.matches('edit.copy', e)) {
+        const timelineState = useTimelineStore.getState();
+        if (timelineState.maskPanelActive && timelineState.activeMaskId) return;
         e.preventDefault();
         if (selectedKeyframeIds.size > 0) {
           copyKeyframes();
@@ -303,6 +305,8 @@ export function useTimelineKeyboard({
 
       // Paste
       if (registry.matches('edit.paste', e)) {
+        const timelineState = useTimelineStore.getState();
+        if (timelineState.maskPanelActive && timelineState.hasClipboardMask()) return;
         e.preventDefault();
         pasteKeyframes();
         return;

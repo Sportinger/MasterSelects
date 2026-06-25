@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
 import { inferMaskVertexHandleMode } from '../../../utils/maskVertexHandles';
 import type { ClipMask } from "../../../types/masks";
+import { createMaskEdgeId, getMaskEdgeFeather } from '../../../utils/maskEdgeFeathers';
 import { getDisplayHandleEndpoint } from './maskOverlayGeometry';
 import type {
   CanvasMaskVertex,
@@ -10,6 +11,7 @@ import type {
 } from './maskOverlayTypes';
 
 type VertexMouseTarget = 'vertex' | 'handleIn' | 'handleOut';
+const FEATHER_PREVIEW_GRADIENT_STEPS = 32;
 
 interface MaskOverlayChromeProps {
   svgRef: RefObject<SVGSVGElement | null>;
@@ -21,6 +23,8 @@ interface MaskOverlayChromeProps {
   maskEditMode: string;
   activeMask: ClipMask | undefined;
   selectedVertexIds: Set<string>;
+  selectedMaskEdgeId: string | null;
+  featherPreview: { edgeId: string | null; changedAt: number; phase: 'in' | 'out' } | null;
   hoveredVertexId: string | null;
   hoveredEdgeKey: string | null;
   penInsertPreview: PenEdgeInsertPreview | null;
@@ -62,6 +66,8 @@ export function MaskOverlayChrome({
   maskEditMode,
   activeMask,
   selectedVertexIds,
+  selectedMaskEdgeId,
+  featherPreview,
   hoveredVertexId,
   hoveredEdgeKey,
   penInsertPreview,
@@ -105,6 +111,29 @@ export function MaskOverlayChrome({
   const insertCrossSize = 4 * unitsPerScreenPx;
   const minHandleLength = 24 * unitsPerScreenPx;
   const dashPattern = `${5 * unitsPerScreenPx},${5 * unitsPerScreenPx}`;
+  const featherPreviewAmount = activeMask && featherPreview
+    ? featherPreview.edgeId
+      ? getMaskEdgeFeather(activeMask, featherPreview.edgeId)
+      : activeMask.feather
+    : 0;
+  const featherPreviewPath = activeMask && featherPreview
+    ? featherPreview.edgeId
+      ? edgeSegments.find(seg => createMaskEdgeId(seg.idA, seg.idB) === featherPreview.edgeId)?.d ?? ''
+      : pathData
+    : '';
+  const featherPreviewRadius = Math.max(3 * unitsPerScreenPx, featherPreviewAmount * unitsPerScreenPx);
+  const showFeatherPreview = featherPreviewPath.length > 0 && featherPreviewAmount > 0;
+  const featherPreviewStrokes = showFeatherPreview
+    ? Array.from({ length: FEATHER_PREVIEW_GRADIENT_STEPS }, (_, index) => {
+        const step = index + 1;
+        const targetBefore = 0.5 * ((step - 1) / FEATHER_PREVIEW_GRADIENT_STEPS);
+        const targetAfter = 0.5 * (step / FEATHER_PREVIEW_GRADIENT_STEPS);
+        return {
+          opacity: 1 - ((1 - targetAfter) / (1 - targetBefore)),
+          strokeWidth: 2 * featherPreviewRadius * ((FEATHER_PREVIEW_GRADIENT_STEPS - index) / FEATHER_PREVIEW_GRADIENT_STEPS),
+        };
+      })
+    : [];
 
   return (
     <svg
@@ -150,7 +179,7 @@ export function MaskOverlayChrome({
       {activeMask?.closed && activeMask.visible && pathData && (
         <path
           d={pathData}
-          fill={activeMask.inverted ? 'rgba(45, 140, 235, 0.1)' : 'rgba(45, 140, 235, 0.15)'}
+          fill="transparent"
           stroke="none"
           pointerEvents={maskEditMode === 'editing' ? 'all' : 'none'}
           cursor="move"
@@ -169,6 +198,25 @@ export function MaskOverlayChrome({
           pointerEvents="none"
         />
       ))}
+
+      {showFeatherPreview && (
+        <g
+          className={`mask-feather-preview ${featherPreview?.phase === 'out' ? 'fade-out' : 'fade-in'}`}
+          pointerEvents="none"
+        >
+          {featherPreviewStrokes.map((stroke, index) => (
+            <path
+              key={`feather-gradient-${index}`}
+              d={featherPreviewPath}
+              fill="none"
+              stroke={`rgba(255, 0, 0, ${stroke.opacity})`}
+              strokeWidth={stroke.strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+        </g>
+      )}
 
       {maskEditMode === 'drawingPen' && penInsertPreview && (
         <g className="mask-edge-insert-preview" pointerEvents="none">
@@ -190,18 +238,20 @@ export function MaskOverlayChrome({
       )}
 
       {maskEditMode === 'editing' && activeMask && edgeSegments.map((seg) => {
-        const edgeKey = `${seg.idA}-${seg.idB}`;
+        const edgeKey = createMaskEdgeId(seg.idA, seg.idB);
+        const isSelectedEdge = selectedMaskEdgeId === edgeKey;
+        const isHoveredEdge = hoveredEdgeKey === edgeKey;
         return (
           <g
             key={`edge-${edgeKey}`}
             data-guided-target={`mask-edge:${activeMask.id}:${seg.fromIndex}:${seg.toIndex}`}
             data-guided-mask-edge={`${activeMask.id}:${seg.fromIndex}:${seg.toIndex}`}
           >
-            {hoveredEdgeKey === edgeKey && (
+            {(isHoveredEdge || isSelectedEdge) && (
               <path
                 d={seg.d}
                 fill="none"
-                stroke="rgba(255, 153, 0, 0.85)"
+                stroke={isSelectedEdge ? 'rgba(41, 151, 229, 0.95)' : 'rgba(255, 153, 0, 0.85)'}
                 strokeWidth={edgeHighlightWidth}
                 pointerEvents="none"
                 className="mask-edge-highlight"

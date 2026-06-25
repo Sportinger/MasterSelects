@@ -9,10 +9,13 @@ export interface MaskActions {
   setActiveMask: (clipId: string | null, maskId: string | null) => void;
   selectVertex: (vertexId: string, addToSelection?: boolean) => void;
   selectVertices: (vertexIds: string[]) => void;
+  selectMaskEdge: (edgeId: string | null) => void;
   deselectAllVertices: () => void;
+  showMaskFeatherPreview: (maskId: string, edgeId?: string | null) => void;
   addMask: (clipId: string, mask?: Partial<ClipMask>) => string;
   removeMask: (clipId: string, maskId: string) => void;
   updateMask: (clipId: string, maskId: string, updates: Partial<ClipMask>) => void;
+  setMaskEdgeFeather: (clipId: string, maskId: string, edgeId: string, feather: number) => void;
   reorderMasks: (clipId: string, fromIndex: number, toIndex: number) => void;
   getClipMasks: (clipId: string) => ClipMask[];
   addVertex: (clipId: string, maskId: string, vertex: Omit<MaskVertex, 'id'>, index?: number) => string;
@@ -28,4 +31,7 @@ export interface MaskActions {
   closeMask: (clipId: string, maskId: string) => void;
   addRectangleMask: (clipId: string) => string;
   addEllipseMask: (clipId: string) => string;
+  copyClipMask: (clipId: string, maskId: string) => void;
+  pasteClipMask: (targetClipIds?: string[]) => void;
+  hasClipboardMask: () => boolean;
 }

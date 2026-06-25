@@ -16,6 +16,8 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - When the mask tab is active, the normal preview Edit Mode toggle becomes navigation-only: wheel zoom and Alt/MMB pan stay available, but layer transform handles are disabled.
 - Mask outlines are only shown while the mask tab is open. Opening the tab activates the current mask for editing; leaving the tab hides the overlay again.
 - Mask path animation is exposed as one `Mask Path` stopwatch, not separate vertex X/Y stopwatches.
+- The active mask can be copied and pasted to another selected clip together with its mask keyframes, keeping keyframe times relative to the target clip start.
+- Individual mask edges can be selected and given their own edge feather value.
 - Mask changes are serialized with the project.
 
 ## Data Model
@@ -27,6 +29,7 @@ MasterSelects supports per-clip vector masks with preview-overlay editing, selec
 - `closed`
 - `opacity` (legacy/persisted, not rendered or exposed in the active panel)
 - `feather`
+- `edgeFeathers`
 - `featherQuality`
 - `inverted`
 - `mode`
@@ -79,10 +82,13 @@ The preview overlay is implemented in `src/components/preview/MaskOverlay.tsx`.
 - Mask geometry is edited in layer-local UV space and projected to the preview with the current layer transform.
 - Whole-mask dragging moves the internal `position.x` and `position.y` offset, leaving the stored vertex topology unchanged.
 - Dragging an edge moves the two adjacent vertices together.
+- Clicking an edge selects it. Clicking empty preview space clears vertex and edge selection.
 - Holding Shift while dragging an edge snaps that edge horizontal or vertical, whichever is closer.
 - Holding Ctrl/Cmd while dragging an edge aligns the adjacent edges to their neighboring vertices. Shift and Ctrl/Cmd can be combined for constrained linear edge movement.
 - Clicking an edge with the pen tool inserts a new vertex.
-- Dragging a vertex moves that vertex.
+- Dragging a single vertex on a closed four-point mask preserves the existing edge angles by moving the adjacent vertices with it.
+- Holding Ctrl/Cmd while dragging a vertex moves it freely.
+- Holding Ctrl/Cmd+Shift while dragging a vertex moves it freely on only the dominant X or Y axis.
 - Dragging a selected vertex with multiple vertices selected moves the selected vertices together.
 - Clicking a vertex selects it and keeps it selected until the selection changes.
 - Arrow keys nudge selected vertices. Shift increases the step; Alt uses a fine step.
@@ -104,11 +110,13 @@ The properties panel exposes the following controls per mask:
 
 - Name
 - Outline color
+- Copy and paste active mask
 - Mask Path stopwatch
 - Visibility toggle
 - Mode dropdown
 - Render enabled toggle
 - Feather
+- Edge Feather, shown when exactly one edge is selected
 - Feather quality
 - Inverted
 - Selected vertex handle mode
@@ -116,6 +124,8 @@ The properties panel exposes the following controls per mask:
 `featherQuality` is stored as a 1-100 value in the UI and defaults to `50` for new masks.
 Lower values use a lower-resolution CPU blur path for faster previews; higher values preserve more edge detail.
 Feather is applied per mask before mask-mode compositing, so a later subtract mask can still cut into an earlier feathered add mask.
+Edge Feather is stored per ordered edge and is copied, pasted, saved, loaded, previewed, and exported with the mask.
+Changing either mask Feather or Edge Feather shows a transient red SVG ramp over the affected edge/path: 50% red on the edge, fading to 0% at the feather radius. It fades in over 50 ms, stays stable while the value keeps changing, fades out immediately when dragging ends, and otherwise fades out over 500 ms after 500 ms without another change.
 Right-clicking a mask row, or clicking its color swatch, opens the outline color palette for that mask.
 Mask opacity is intentionally not exposed in the mask panel. Layer opacity is handled by the normal transform controls.
 
@@ -125,11 +135,15 @@ The active mask exposes a dedicated `Mask Path` stopwatch for `mask.{maskId}.pat
 That path keyframe stores the whole mask shape at once: all vertices, bezier handles, handle modes, and the closed/open state.
 This is the primary animation workflow for changing individual mask vertices over time.
 
-Mask feather and feather quality use the normal numeric keyframe workflow.
+Mask feather, per-edge feather, and feather quality use the normal numeric keyframe workflow.
+Per-edge feather keyframes use `mask.{maskId}.edge.{fromVertexId}->{toVertexId}.feather`; project save files remap the edge portion through vertex indexes so animated edge feather survives reloads.
 The underlying `mask.{maskId}.position.x` and `mask.{maskId}.position.y` properties stay supported for older projects and automation paths, but they are not exposed in the Mask tab.
+Copying a mask copies every `mask.{maskId}.*` keyframe. Pasting creates a new mask id and remaps all pasted mask keyframes to that id.
+Deleting a mask removes every keyframe and recording flag for that mask id.
 
 Editing a vertex, handle, edge, or keyboard-nudging selected vertices records a new path keyframe when the path stopwatch is active or path keyframes already exist.
 This matches the After Effects-style workflow where the mask path is one animatable property instead of one property per vertex.
+Static mask changes are also picked up by the global undo history. Mask-only changes use a 1 second idle debounce so slider and drag updates do not flood the history stack.
 
 Path interpolation can morph between different vertex counts.
 When a vertex exists on only one side of a keyframe segment, playback creates a temporary collapsed vertex on the nearest surviving neighbor and tweens it into, or out of, that point.
@@ -140,9 +154,10 @@ The open/closed state remains discrete and switches at the destination keyframe.
 Mask shortcuts are registered through the central shortcut registry:
 
 - `P`: Pen mask tool
-- `V`: Edit active mask path
 - `R`: Rectangle mask tool
 - `E`: Ellipse mask tool
+- `Ctrl/Cmd+C`: Copy active mask
+- `Ctrl/Cmd+V`: Paste copied mask to the selected clip
 - `Enter`: Close active mask path
 - `Alt+I`: Invert active mask
 - `Alt+H`: Toggle active mask outline
@@ -159,7 +174,7 @@ If a clip has enabled masks, `LayerBuilderService` sets the layer's mask lookup 
 Export layers set the same `maskClipId`, and `ExportMaskTextures` generates full-resolution mask textures for WebCodecs, FFmpeg, and single-frame export before each render pass.
 `MaskTextureManager` falls back to a white texture when no mask texture exists.
 The mask is sampled in layer-local `clampedUV`, which keeps the rendered mask attached to the layer through position, scale, rotation, and perspective transforms.
-Preview and export evaluate mask keyframes before generating mask textures, so animated mask paths and animated mask offsets render through the same GPU mask path as static masks.
+Preview and export evaluate mask keyframes before generating mask textures, so animated mask paths, animated mask offsets, and animated edge feather render through the same GPU mask path as static masks.
 When a 2D clip is promoted into the shared 3D scene as a plane, `NativeSceneRenderer` passes the same mask texture into the plane shader and samples it in plane UV space, so the mask follows 3D rotation and perspective instead of becoming a screen-space overlay.
 Per-mask opacity is ignored when generating the mask texture; layer opacity remains the opacity control.
 

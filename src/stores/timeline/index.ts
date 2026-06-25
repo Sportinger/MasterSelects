@@ -257,6 +257,8 @@ export const useTimelineStore = create<TimelineStore>()(
       maskPanelActive: false,
       activeMaskId: null as string | null,
       selectedVertexIds: new Set<string>(),
+      selectedMaskEdgeId: null as string | null,
+      maskFeatherPreview: null as { maskId: string; edgeId: string | null; changedAt: number } | null,
       maskDrawStart: null as { x: number; y: number } | null,
       maskDragging: false,
 
@@ -307,6 +309,7 @@ export const useTimelineStore = create<TimelineStore>()(
       clipboardKeyframes: null as import('./types').ClipboardKeyframeData[] | null,
       clipboardEffects: null as import('./types').ClipboardClipEffectsData | null,
       clipboardColor: null as import('./types').ClipboardClipColorData | null,
+      clipboardMask: null as import('./types').ClipboardClipMaskData | null,
 
       // AI action visual feedback (transient, not serialized)
       aiActionOverlays: [] as import('./types').AIActionOverlay[],
