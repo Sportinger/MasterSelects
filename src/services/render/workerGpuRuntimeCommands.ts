@@ -121,6 +121,13 @@ export type WorkerGpuTransitionRenderState =
       readonly progress: number;
     }
   | {
+      readonly kind: 'soft-wipe';
+      readonly direction: TransitionWipeDirection;
+      readonly progress: number;
+      readonly angle: number;
+      readonly feather: number;
+    }
+  | {
       readonly kind: 'shape-mask';
       readonly shape: TransitionShapeMask;
       readonly progress: number;

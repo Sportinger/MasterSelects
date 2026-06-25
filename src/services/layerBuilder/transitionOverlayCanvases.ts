@@ -21,7 +21,7 @@ interface TransitionOverlayCanvasInput {
 }
 
 const DEFAULT_OVERLAY_SIZE: TransitionOverlayCanvasSize = { width: 512, height: 288 };
-const MAX_OVERLAY_DIMENSION = 8192;
+const MAX_OVERLAY_RENDER_DIMENSION = 960;
 const MAX_OVERLAY_CACHE_PIXELS = 8192 * 8192;
 const overlayCanvasCache = new Map<string, OverlayCacheEntry>();
 let overlayCanvasCachePixels = 0;
@@ -31,12 +31,15 @@ function clamp01(value: number): number {
 }
 
 function normalizeOutputSize(outputSize: TransitionOverlayCanvasSize | undefined): TransitionOverlayCanvasSize {
-  const width = Math.round(outputSize?.width ?? DEFAULT_OVERLAY_SIZE.width);
-  const height = Math.round(outputSize?.height ?? DEFAULT_OVERLAY_SIZE.height);
+  const rawWidth = Math.round(outputSize?.width ?? DEFAULT_OVERLAY_SIZE.width);
+  const rawHeight = Math.round(outputSize?.height ?? DEFAULT_OVERLAY_SIZE.height);
+  const width = Math.max(1, Number.isFinite(rawWidth) ? rawWidth : DEFAULT_OVERLAY_SIZE.width);
+  const height = Math.max(1, Number.isFinite(rawHeight) ? rawHeight : DEFAULT_OVERLAY_SIZE.height);
+  const scale = Math.min(1, MAX_OVERLAY_RENDER_DIMENSION / Math.max(width, height));
 
   return {
-    width: Math.min(MAX_OVERLAY_DIMENSION, Math.max(1, Number.isFinite(width) ? width : DEFAULT_OVERLAY_SIZE.width)),
-    height: Math.min(MAX_OVERLAY_DIMENSION, Math.max(1, Number.isFinite(height) ? height : DEFAULT_OVERLAY_SIZE.height)),
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
   };
 }
 
@@ -150,39 +153,54 @@ function buildLightLeakCanvas(
 
   const leakCenterX = canvas.width * centerX;
   const leakWidth = canvas.width * Math.max(0.08, Math.min(0.75, bandWidthRatio));
-  const edgeGradient = context.createLinearGradient(leakCenterX - leakWidth, 0, leakCenterX + leakWidth, 0);
-  edgeGradient.addColorStop(0, toRgba(color, 0));
-  edgeGradient.addColorStop(Math.max(0.05, 0.38 - softness * 0.3), toRgba(color, 0.18));
-  edgeGradient.addColorStop(0.5, toRgba(color, 0.9));
-  edgeGradient.addColorStop(Math.min(0.95, 0.62 + softness * 0.3), toRgba(color, 0.14));
-  edgeGradient.addColorStop(1, toRgba(color, 0));
-  context.fillStyle = edgeGradient;
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  const span = Math.max(canvas.width, canvas.height) * 1.8;
+  const shoulder = Math.max(0.06, Math.min(0.5, softness));
 
   context.save();
   context.translate(leakCenterX, canvas.height * 0.5);
   context.rotate(angle);
-  const streakGradient = context.createLinearGradient(-leakWidth * 0.45, 0, leakWidth * 0.45, 0);
+
+  const edgeGradient = context.createLinearGradient(-leakWidth, 0, leakWidth, 0);
+  edgeGradient.addColorStop(0, toRgba(color, 0));
+  edgeGradient.addColorStop(Math.max(0.05, 0.34 - shoulder * 0.25), toRgba(color, 0.1));
+  edgeGradient.addColorStop(0.5, toRgba(color, 0.58));
+  edgeGradient.addColorStop(Math.min(0.95, 0.66 + shoulder * 0.25), toRgba(color, 0.08));
+  edgeGradient.addColorStop(1, toRgba(color, 0));
+  context.fillStyle = edgeGradient;
+  context.fillRect(-leakWidth, -span, leakWidth * 2, span * 2);
+
+  const streakGradient = context.createLinearGradient(-leakWidth * 0.58, 0, leakWidth * 0.58, 0);
   streakGradient.addColorStop(0, toRgba('#ffffff', 0));
-  streakGradient.addColorStop(0.5, toRgba('#ffffff', 0.32));
+  streakGradient.addColorStop(0.5, toRgba('#fff2c8', 0.13));
   streakGradient.addColorStop(1, toRgba('#ffffff', 0));
   context.fillStyle = streakGradient;
-  context.fillRect(-leakWidth * 0.45, -canvas.height, leakWidth * 0.9, canvas.height * 2);
+  context.fillRect(-leakWidth * 0.58, -span, leakWidth * 1.16, span * 2);
+
+  for (const [x, y, width, alpha] of [
+    [-0.18, -0.34, 0.22, 0.1],
+    [0.08, -0.08, 0.14, 0.12],
+    [0.2, 0.3, 0.2, 0.08],
+  ] as const) {
+    context.fillStyle = toRgba('#fff0bd', alpha);
+    context.fillRect(leakWidth * x, canvas.height * y, leakWidth * width, Math.max(1, canvas.height * 0.012));
+  }
   context.restore();
 
-  const bloomGradient = context.createRadialGradient(
-    leakCenterX + leakWidth * 0.12,
-    canvas.height * 0.22,
-    0,
-    leakCenterX + leakWidth * 0.12,
-    canvas.height * 0.22,
-    Math.max(canvas.width, canvas.height) * 0.34,
-  );
-  bloomGradient.addColorStop(0, toRgba('#ffffff', 0.26));
-  bloomGradient.addColorStop(0.36, toRgba(color, 0.22));
-  bloomGradient.addColorStop(1, toRgba(color, 0));
-  context.fillStyle = bloomGradient;
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  for (const [xOffset, yRatio, radius, whiteAlpha, colorAlpha] of [
+    [0.02, 0.16, 0.34, 0.2, 0.2],
+    [0.22, 0.5, 0.22, 0.12, 0.16],
+    [-0.1, 0.78, 0.18, 0.1, 0.12],
+  ] as const) {
+    const glowX = leakCenterX + leakWidth * xOffset;
+    const glowY = canvas.height * yRatio;
+    const glowRadius = Math.max(canvas.width, canvas.height) * radius;
+    const glow = context.createRadialGradient(glowX, glowY, 0, glowX, glowY, glowRadius);
+    glow.addColorStop(0, toRgba('#fff8d6', whiteAlpha));
+    glow.addColorStop(0.38, toRgba(color, colorAlpha));
+    glow.addColorStop(1, toRgba(color, 0));
+    context.fillStyle = glow;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   rememberCanvas(cacheKey, canvas);
   return canvas;

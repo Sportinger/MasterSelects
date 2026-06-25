@@ -8,22 +8,23 @@ note here when a plan still has unresolved gates or intentionally deferred work.
 
 | File | Status | Why It Stays Here |
 |---|---|---|
+| [Browser-Local-Background-Removal-Plan.md](./Browser-Local-Background-Removal-Plan.md) | Planning | Browser-local background removal is still open. |
 | [Native-Helper-Codec-Service.md](./Native-Helper-Codec-Service.md) | Draft plan | Native helper codec commands are not implemented server-side yet. |
-| [Kie-AI-Generation-Chatbox-Expansion.md](./Kie-AI-Generation-Chatbox-Expansion.md) | Active implementation | Tracks Kie.ai service expansion, Suno tuning control fix, and model-specific prompt-refiner profiles for FlashBoard. |
-| [Kie-AI-Magic-Wand-Research-Ledger.md](./Kie-AI-Magic-Wand-Research-Ledger.md) | Active source ledger | Source-backed June 2026 model guidance for FlashBoard prompt-refiner profiles. |
-| [Pixel-Particle-Disintegration-Fade-plan.md](./Pixel-Particle-Disintegration-Fade-plan.md) | Draft plan | The pixel-particle fade effect is future work and has an unchecked acceptance checklist. |
-| [Worker-First-Playback-Renderer.md](./Worker-First-Playback-Renderer.md) | Active architecture plan | Foundations and evidence tooling are merged, but Mac Safari/Firefox platform packages and later worker-renderer gates remain open. |
-| [Worker-First-Playback-Renderer-checklist.md](./Worker-First-Playback-Renderer-checklist.md) | Active checklist | Tracks merged packets plus remaining platform and debt gates. |
-| [Worker-First-Playback-Renderer-handoff.md](./Worker-First-Playback-Renderer-handoff.md) | Active handoff | Current execution handoff for the worker-first workstream. |
-| [Worker-WebGPU-Playback-Presentation.md](./Worker-WebGPU-Playback-Presentation.md) | Active focused plan | Direct strict `worker-gpu-only` WebGPU playback presentation plan, including parallel Codex packet waves and no CPU/software fallback route. |
-| [Playback.md](./Playback.md) | Supporting investigation note | Kept as context for the worker-first renderer until those remaining gates close. |
-| [Transition-suite-extra-plan.md](./Transition-suite-extra-plan.md) | Mostly implemented with deferred candidates | Current transition suite is implemented; deliberately planned items such as Datamosh, Smooth Cut/Flow, AI/neural transitions, Liquid Melt, and true panel/mesh effects remain unimplemented. |
 
 ## Recently Archived
 
 | File | New Location | Reason |
 |---|---|---|
+| `Kie-AI-Generation-Chatbox-Expansion.md` | [../completed/plans/Kie-AI-Generation-Chatbox-Expansion.md](../completed/plans/Kie-AI-Generation-Chatbox-Expansion.md) | Archived after docs triage; not active ongoing work. |
+| `Kie-AI-Magic-Wand-Research-Ledger.md` | [../completed/plans/Kie-AI-Magic-Wand-Research-Ledger.md](../completed/plans/Kie-AI-Magic-Wand-Research-Ledger.md) | Archived after docs triage; source ledger is historical context. |
+| `Pixel-Particle-Disintegration-Fade-plan.md` | [../completed/plans/Pixel-Particle-Disintegration-Fade-plan.md](../completed/plans/Pixel-Particle-Disintegration-Fade-plan.md) | V1 is implemented and verified; remaining notes are archive context. |
+| `Playback.md` | [../completed/plans/Playback.md](../completed/plans/Playback.md) | Archived with worker-first playback planning context. |
 | `Transition-suite-plan.md` | [../completed/plans/Transition-suite-plan.md](../completed/plans/Transition-suite-plan.md) | First-pass transition suite was merged and is now historical context. |
+| `Transition-suite-extra-plan.md` | [../completed/plans/Transition-suite-extra-plan.md](../completed/plans/Transition-suite-extra-plan.md) | Archived after docs triage; deferred candidates are not active unless reopened. |
+| `Worker-First-Playback-Renderer.md` | [../completed/plans/Worker-First-Playback-Renderer.md](../completed/plans/Worker-First-Playback-Renderer.md) | Archived after docs triage; worker-first renderer workstream is not active ongoing work. |
+| `Worker-First-Playback-Renderer-checklist.md` | [../completed/plans/Worker-First-Playback-Renderer-checklist.md](../completed/plans/Worker-First-Playback-Renderer-checklist.md) | Archived with worker-first playback planning context. |
+| `Worker-First-Playback-Renderer-handoff.md` | [../completed/plans/Worker-First-Playback-Renderer-handoff.md](../completed/plans/Worker-First-Playback-Renderer-handoff.md) | Archived with worker-first playback planning context. |
+| `Worker-WebGPU-Playback-Presentation.md` | [../completed/plans/Worker-WebGPU-Playback-Presentation.md](../completed/plans/Worker-WebGPU-Playback-Presentation.md) | Archived with worker-first playback planning context. |
 
 ## Cleanup Rule
 

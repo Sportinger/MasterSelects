@@ -511,6 +511,26 @@ describe('transition layer assembly', () => {
     expect(solidLayer?.source?.color).toBe('#ffffff');
   });
 
+  it('sizes generated solid transition layers to the output aspect', () => {
+    const layers = assembleTransitionLayers({
+      plan: createPlan([{ kind: 'solid', color: '#ffffff' }]),
+      playheadPosition: 1,
+      trackIndex: 0,
+      outgoingClip,
+      incomingClip,
+      buildClipLayer: (_clip, role) => createLayer(role),
+      outputSize: { width: 1920, height: 1080 },
+    });
+
+    const solidCanvas = layers.find((layer) =>
+      layer.source?.type === 'solid' &&
+      layer.id.includes(':solid:')
+    )?.source?.textCanvas;
+
+    expect(solidCanvas?.width).toBe(1920);
+    expect(solidCanvas?.height).toBe(1080);
+  });
+
   it('creates generated light sweep overlay canvas layers above transition participants', () => {
     const layers = assembleTransitionLayers({
       plan: createPlan(lightSweep.recipe),
@@ -535,7 +555,14 @@ describe('transition layer assembly', () => {
     expect(overlayLayers[0]?.source?.color).toBe('#fff7d2');
     expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(512);
     expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(288);
-    expect(layers.at(-1)?.id).toContain(':overlay:');
+    expect(layers[0]?.id).toContain(':overlay:');
+    expect(layers.find((layer) => layer.sourceClipId === 'clip-b')?.transitionRender).toEqual({
+      kind: 'soft-wipe',
+      direction: 'right',
+      progress: 0.5,
+      angle: 0.18,
+      feather: 0.1,
+    });
   });
 
   it('creates generated light leak overlay canvas layers above transition participants', () => {
@@ -556,13 +583,13 @@ describe('transition layer assembly', () => {
       layer.id.includes(':overlay:')
     );
 
-    expect(overlayLayers.length).toBe(2);
+    expect(overlayLayers.length).toBe(1);
     expect(overlayLayers[0]?.blendMode).toBe('screen');
     expect(overlayLayers[0]?.opacity).toBeGreaterThan(0);
     expect(overlayLayers[0]?.source?.color).toBe('#ffb36a');
     expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(512);
     expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(288);
-    expect(layers.at(-1)?.id).toContain(':overlay:');
+    expect(layers[0]?.id).toContain(':overlay:');
   });
 
   it('creates generated chroma, flare, and burn overlay canvas layers above transition participants', () => {
@@ -596,7 +623,7 @@ describe('transition layer assembly', () => {
       expect(overlayLayers[0]?.source?.color).toBe(color);
       expect(overlayLayers[0]?.source?.textCanvas?.width).toBe(960);
       expect(overlayLayers[0]?.source?.textCanvas?.height).toBe(540);
-      expect(layers.at(-1)?.id).toContain(':overlay:');
+      expect(layers[0]?.id).toContain(':overlay:');
     }
   });
 
@@ -618,16 +645,16 @@ describe('transition layer assembly', () => {
       layer.id.includes(':overlay:')
     )?.source?.textCanvas;
 
-    const first1280 = getOverlayCanvas(buildLayers(1280, 720));
-    const second1280 = getOverlayCanvas(buildLayers(1280, 720));
-    const first1920 = getOverlayCanvas(buildLayers(1920, 1080));
+    const first640 = getOverlayCanvas(buildLayers(640, 360));
+    const second640 = getOverlayCanvas(buildLayers(640, 360));
+    const first960 = getOverlayCanvas(buildLayers(960, 540));
 
-    expect(first1280?.width).toBe(1280);
-    expect(first1280?.height).toBe(720);
-    expect(second1280).toBe(first1280);
-    expect(first1920?.width).toBe(1920);
-    expect(first1920?.height).toBe(1080);
-    expect(first1920).not.toBe(first1280);
+    expect(first640?.width).toBe(640);
+    expect(first640?.height).toBe(360);
+    expect(second640).toBe(first640);
+    expect(first960?.width).toBe(960);
+    expect(first960?.height).toBe(540);
+    expect(first960).not.toBe(first640);
   });
 
   it('maps shape, clock, and center mask primitives into transition render state', () => {

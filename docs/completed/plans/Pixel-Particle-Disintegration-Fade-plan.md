@@ -1,3 +1,5 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 > Status: V1 implemented and runtime-verified for the main WebGPU compositor
 > path on 2026-06-22, with an explicit worker-gpu-only opacity-envelope fallback
 > policy. Keep this as ongoing verification context until the feature is moved

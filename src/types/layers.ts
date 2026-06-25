@@ -55,6 +55,13 @@ export type TransitionRenderState =
       progress: number;
     }
   | {
+      kind: 'soft-wipe';
+      direction: TransitionWipeDirection;
+      progress: number;
+      angle: number;
+      feather: number;
+    }
+  | {
       kind: 'shape-mask';
       shape: TransitionShapeMask;
       progress: number;

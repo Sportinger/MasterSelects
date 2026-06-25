@@ -1,6 +1,8 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 # Kie.ai Magic-Wand Research Ledger
 
-Status: active source ledger
+Original status before archive: active source ledger
 Updated: 2026-06-24
 
 Purpose: source-backed prompt guidance for FlashBoard magic-wand profiles. Keep

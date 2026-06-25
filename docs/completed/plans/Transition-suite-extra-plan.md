@@ -1,3 +1,5 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; deferred candidates are not active unless explicitly reopened.
+
 > Status: Transition Suite follow-up log with deferred candidates. The current
 > shipped suite is implemented, but deliberately planned items such as Datamosh,
 > Smooth Cut/Flow, AI/neural transitions, Liquid Melt, and true panel/mesh

@@ -37,6 +37,7 @@ export interface AssembleTransitionLayersInput {
 }
 
 const solidCanvasCache = new Map<string, HTMLCanvasElement>();
+const DEFAULT_SOLID_CANVAS_SIZE: TransitionOverlayCanvasSize = { width: 512, height: 288 };
 
 function clamp01(value: number): number {
   return Math.min(Math.max(value, 0), 1);
@@ -323,6 +324,16 @@ function createTransitionRenderState(
   if (!mask || mask.target !== target) return undefined;
 
   if (mask.mask === 'wipe') {
+    if (typeof mask.angle === 'number' || typeof mask.feather === 'number') {
+      return {
+        kind: 'soft-wipe',
+        direction: mask.direction,
+        progress,
+        angle: mask.angle ?? 0,
+        feather: mask.feather ?? 0.08,
+      };
+    }
+
     return {
       kind: 'wipe',
       direction: mask.direction,
@@ -381,19 +392,28 @@ function getOverlayPrimitives(recipe: readonly TransitionPrimitive[]): OverlayPr
   return recipe.filter((primitive): primitive is OverlayPrimitive => primitive.kind === 'overlay');
 }
 
-function getSolidCanvas(color: string): HTMLCanvasElement | null {
+function normalizeSolidCanvasSize(outputSize: TransitionOverlayCanvasSize | undefined): TransitionOverlayCanvasSize {
+  return {
+    width: Math.max(1, Math.round(outputSize?.width ?? DEFAULT_SOLID_CANVAS_SIZE.width)),
+    height: Math.max(1, Math.round(outputSize?.height ?? DEFAULT_SOLID_CANVAS_SIZE.height)),
+  };
+}
+
+function getSolidCanvas(color: string, outputSize: TransitionOverlayCanvasSize | undefined): HTMLCanvasElement | null {
   if (typeof document === 'undefined') return null;
-  const cached = solidCanvasCache.get(color);
+  const size = normalizeSolidCanvasSize(outputSize);
+  const cacheKey = `${color}:${size.width}x${size.height}`;
+  const cached = solidCanvasCache.get(cacheKey);
   if (cached) return cached;
 
   const canvas = document.createElement('canvas');
-  canvas.width = 2;
-  canvas.height = 2;
+  canvas.width = size.width;
+  canvas.height = size.height;
   const context = canvas.getContext('2d');
   if (!context) return null;
   context.fillStyle = color;
   context.fillRect(0, 0, canvas.width, canvas.height);
-  solidCanvasCache.set(color, canvas);
+  solidCanvasCache.set(cacheKey, canvas);
   return canvas;
 }
 
@@ -402,8 +422,9 @@ function createSolidLayer(
   opacity: number,
   plan: TransitionPlan,
   trackIndex: number,
+  outputSize: TransitionOverlayCanvasSize | undefined,
 ): Layer | null {
-  const canvas = getSolidCanvas(color);
+  const canvas = getSolidCanvas(color, outputSize);
   if (!canvas) return null;
 
   return {
@@ -555,6 +576,7 @@ export function assembleTransitionLayers({
     evaluateOpacity(recipe, 'solid', progress),
     plan,
     trackIndex,
+    outputSize,
   ) : null;
   const overlayLayers = getOverlayPrimitives(recipe)
     .map((primitive, index) => {
@@ -576,7 +598,10 @@ export function assembleTransitionLayers({
     })
     .filter((layer): layer is Layer => Boolean(layer));
 
-  const layers: Layer[] = [];
+  const layers: Layer[] = [
+    // LayerCollector consumes this array in reverse; transition overlays must render last.
+    ...overlayLayers,
+  ];
 
   if (incomingLayer) {
     const incomingTransitionLayer = withTransitionEffects(
@@ -649,8 +674,6 @@ export function assembleTransitionLayers({
   if (solidLayer) {
     layers.push(solidLayer);
   }
-  layers.push(...overlayLayers);
-
   return layers;
 }
 

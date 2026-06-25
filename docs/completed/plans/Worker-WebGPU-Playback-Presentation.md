@@ -1,6 +1,8 @@
+> Status: Archived from `docs/ongoing/` on 2026-06-25 after docs triage; historical planning context unless explicitly reopened.
+
 # Worker WebGPU Playback Presentation Plan
 
-Status: active focused plan for strict `worker-gpu-only` playback presentation.
+Original status before archive: active focused plan for strict `worker-gpu-only` playback presentation.
 Created: 2026-06-18
 Updated: 2026-06-18
 

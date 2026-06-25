@@ -85,6 +85,25 @@ fn getTransitionAlpha(uv: vec2f) -> f32 {
   if (layer.transitionType == 4u) {
     return select(0.0, 1.0, uv.y <= progress);
   }
+  if (layer.transitionType >= 27u && layer.transitionType <= 30u) {
+    let centeredSoft = uv - vec2f(0.5);
+    let angle = layer.transitionSeed;
+    let axisX = dot(centeredSoft, vec2f(cos(angle), sin(angle))) + 0.5;
+    let axisY = dot(centeredSoft, vec2f(-sin(angle), cos(angle))) + 0.5;
+    let feather = 0.08;
+    if (layer.transitionType == 27u) {
+      return 1.0 - smoothstep(progress - feather, progress + feather, axisX);
+    }
+    if (layer.transitionType == 28u) {
+      let edge = 1.0 - progress;
+      return smoothstep(edge - feather, edge + feather, axisX);
+    }
+    if (layer.transitionType == 29u) {
+      return 1.0 - smoothstep(progress - feather, progress + feather, axisY);
+    }
+    let edge = 1.0 - progress;
+    return smoothstep(edge - feather, edge + feather, axisY);
+  }
   let centered = uv - vec2f(0.5);
   if (layer.transitionType == 5u) {
     return select(0.0, 1.0, length(centered) <= progress * 0.70710678);

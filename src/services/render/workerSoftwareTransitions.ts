@@ -19,6 +19,12 @@ export function workerSoftwareTransitionFromLayer(layer: Layer): WorkerRenderSof
         direction: transition.direction,
         progress: clampedProgress(transition.progress),
       };
+    case 'soft-wipe':
+      return {
+        kind: 'wipe',
+        direction: transition.direction,
+        progress: clampedProgress(transition.progress),
+      };
     case 'shape-mask':
       return {
         kind: 'shape-mask',

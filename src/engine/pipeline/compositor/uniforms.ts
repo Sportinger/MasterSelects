@@ -27,6 +27,12 @@ function getTransitionType(layer: Layer): number {
     if (transition.direction === 'up') return 3;
     return 4;
   }
+  if (transition.kind === 'soft-wipe') {
+    if (transition.direction === 'right') return 27;
+    if (transition.direction === 'left') return 28;
+    if (transition.direction === 'down') return 29;
+    return 30;
+  }
 
   if (transition.kind === 'shape-mask') {
     if (transition.shape === 'circle') return 5;
@@ -105,9 +111,11 @@ export function writeLayerUniformData(
   uniformData[20] = inlineEffects?.saturation ?? 1;   // inlineSaturation (1 = no change)
   uniformDataU32[21] = inlineEffects?.invert ? 1 : 0; // inlineInvert (0 or 1)
   const transition = layer.transitionRender;
-  uniformDataU32[22] = getTransitionType(layer); // transitionType: 0=none, 1-4=wipe, 5-7/16-19=iris, 8=clock, 9-10=center, 11=noise, 12=blocks, 13=checker, 14-15/20-24=pattern, 25-26=distortion
+  uniformDataU32[22] = getTransitionType(layer); // transitionType: 0=none, 1-4=wipe, 5-7/16-19=iris, 8=clock, 9-10=center, 11=noise, 12=blocks, 13=checker, 14-15/20-24=pattern, 25-26=distortion, 27-30=soft wipe
   uniformData[23] = transition?.progress ?? 0;
-  uniformData[24] = transition?.kind === 'procedural-mask' || transition?.kind === 'distortion'
+  uniformData[24] = transition?.kind === 'soft-wipe'
+    ? transition.angle
+    : transition?.kind === 'procedural-mask' || transition?.kind === 'distortion'
     ? transition.seed ?? 0
     : 0;
   uniformData[25] = layer.sourceRect?.x ?? 0;
