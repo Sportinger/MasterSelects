@@ -626,6 +626,17 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       const target = e.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
 
+      // Space toggles transport. The popup shares the JS heap with the host, so we
+      // drive the same playback engine; play() starts from the current playhead —
+      // i.e. the live cursor in the roll (#249).
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        const transport = useTimelineStore.getState();
+        if (transport.isPlaying) transport.pause();
+        else void transport.play();
+        return;
+      }
+
       // Ctrl/Cmd combos: clipboard, duplicate, undo/redo. Handled before the tool
       // switch because the tool seam matches plain 1/2/3 (no modifiers) only.
       if (e.ctrlKey || e.metaKey) {
