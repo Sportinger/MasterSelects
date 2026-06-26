@@ -39,10 +39,16 @@ interface PianoRollScrollbarsProps {
   contentHeight: number;
   onZoomTime: (dir: 1 | -1) => void;
   onZoomNotes: (dir: 1 | -1) => void;
+  // Bottom inset of the VERTICAL bar. Defaults to the h-bar thickness; the
+  // controller-lane area grows it by the area height so the v-bar stops at the
+  // lane's top edge (the lane has no vertical scroll). The h-bar stays at
+  // bottom:0, correctly ending up below the lane.
+  verticalBottomInset?: number;
 }
 
 export function PianoRollScrollbars({
   scrollRef, contentWidth, contentHeight, onZoomTime, onZoomNotes,
+  verticalBottomInset = PIANO_ROLL_SCROLLBAR,
 }: PianoRollScrollbarsProps) {
   const [m, setM] = useState<Metrics>({ sx: 0, sy: 0, vw: 0, vh: 0, sw: 0, sh: 0 });
 
@@ -178,7 +184,7 @@ export function PianoRollScrollbars({
 
       {/* Vertical scrollbar (right): track on top, −/+ note-height zoom at the bottom end */}
       <div style={{
-        position: 'absolute', top: 0, right: 0, bottom: PIANO_ROLL_SCROLLBAR,
+        position: 'absolute', top: 0, right: 0, bottom: verticalBottomInset,
         width: PIANO_ROLL_SCROLLBAR, background: trackBg, borderLeft: '1px solid #222',
       }}>
         <div

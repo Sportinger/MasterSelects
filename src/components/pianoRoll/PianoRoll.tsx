@@ -22,6 +22,9 @@ import { computeTrimTiming, trimOriginalsFromClip, type TrimOriginals } from '..
 import { resolvePianoRollToolAction, type PianoRollToolId } from './pianoRollToolShortcuts';
 import { duplicateNotesRight, hasPianoRollClipboard, pasteNotesAt, setPianoRollClipboard } from './pianoRollClipboard';
 import { redo, undo } from '../../stores/historyStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { PianoRollControllerArea } from './controllerLanes/PianoRollControllerArea';
+import { velocityToColor } from './controllerLanes/pianoRollLaneTypes';
 
 // Two independent zoom axes, like Cubase (#249): horizontal = time scale
 // (px per second), vertical = note-row height (px per pitch). Both live in
@@ -192,6 +195,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   // The single playhead overlay's scroll-follower — slid by the same horizontal
   // scroll as the ruler so one continuous line spans the ruler band + the grid.
   const playheadFollowRef = useRef<HTMLDivElement | null>(null);
+  // The velocity/controller lane's scroll-follow track — slid by the same
+  // horizontal scroll as the ruler/playhead so its bars stay under their notes.
+  const velocityFollowRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const pendingRef = useRef<PendingNote | null>(null);
@@ -258,6 +264,11 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const setPlayheadPosition = useTimelineStore((state) => state.setPlayheadPosition);
   const applyTimelineEditOperation = useTimelineStore((state) => state.applyTimelineEditOperation);
 
+  // Controller-lane area (velocity, #249). Persisted visibility + height drive
+  // both this area's render and the grid viewport's bottom inset below.
+  const controllerArea = useSettingsStore((state) => state.pianoRollControllerArea);
+  const setControllerArea = useSettingsStore((state) => state.setPianoRollControllerArea);
+
   // Effective window: the live clip, OR the in-progress resize preview while a
   // Time-ruler handle is dragged (#249). ALL geometry below derives from these so
   // the editor reflects the resize live; on mouseup it commits once and resizeDrag
@@ -285,6 +296,12 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const gridWidth = marginPx * 2 + windowPx;
   const gridH = PITCH_COUNT * rowH;
   const notes = clip?.midiData?.notes ?? [];
+
+  // The docked controller-lane area sits above the horizontal scrollbar; when
+  // visible it grows the grid viewport's bottom inset by its height so the grid
+  // shrinks to make room (the area is rendered as a third band inside the body).
+  const controllerH = controllerArea.visible ? controllerArea.height : 0;
+  const viewportBottomInset = PIANO_ROLL_SCROLLBAR + controllerH;
 
   // Tempo-synced ruler ticks + gridlines, computed ONCE here and shared by the
   // ruler and the gridlines so both use the identical absolute→pixel mapping and
@@ -318,6 +335,24 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     if (el) el.scrollTop = Math.max(0, pitchToY(72, rowHRef.current) - el.clientHeight / 2 + rowHRef.current);
   }, []);
 
+  // Keep the keyboard filling the note area when the VIEWPORT grows (window
+  // resize, or hiding/shrinking the velocity lane). A row height that was the
+  // minimum for a shorter viewport would now leave dead space below the keys, so
+  // bump rowH up to the new "whole piano fits" floor. Observes the scroll
+  // viewport's box (which doesn't change on zoom, so there's no feedback loop).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const enforce = () => {
+      const minRowH = clamp(el.clientHeight / PITCH_COUNT, MIN_ROW_H, MAX_ROW_H);
+      setRowH((cur) => (cur < minRowH ? minRowH : cur));
+    };
+    enforce();
+    const ro = new ResizeObserver(enforce);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Restore cursor-anchored scroll after a zoom resizes the grid content.
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -342,6 +377,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     // the same horizontal scroll, so it stays glued to the grid without state.
     const ph = playheadFollowRef.current;
     if (el && ph) ph.style.transform = `translateX(${-el.scrollLeft}px)`;
+    // The controller-lane bars ride the same scroll so they stay under their notes.
+    const vf = velocityFollowRef.current;
+    if (el && vf) vf.style.transform = `translateX(${-el.scrollLeft}px)`;
   }, []);
 
   useLayoutEffect(() => { syncRulerScroll(); });
@@ -486,7 +524,12 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   const zoomNotesTo = useCallback((newRowH: number, anchorClientY: number) => {
     const el = scrollRef.current;
     if (!el) return;
-    const clamped = clamp(newRowH, MIN_ROW_H, MAX_ROW_H);
+    // Cap zoom-OUT so the full keyboard never shrinks below the note-area
+    // viewport — i.e. the lowest zoom is "whole piano fits", with no dead space
+    // below the keys. The dynamic floor is viewportH / PITCH_COUNT (so 88 rows
+    // exactly fill the visible height), bounded by the absolute MIN/MAX.
+    const minRowH = clamp(el.clientHeight / PITCH_COUNT, MIN_ROW_H, MAX_ROW_H);
+    const clamped = clamp(newRowH, minRowH, MAX_ROW_H);
     const oldRowH = rowHRef.current;
     if (clamped === oldRowH) return;
     const rect = el.getBoundingClientRect();
@@ -512,9 +555,21 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   }, [zoomNotesTo]);
 
   // Ctrl+wheel = time zoom; Ctrl+Shift+wheel = note-height zoom, both pointer-
-  // anchored. The native, non-passive listener is mandatory: it preventDefaults
-  // the gesture so the browser never page-zooms the popup (the app's usePageZoom
-  // guard lives in the main window and never runs in this detached document).
+  // anchored. Shared by the grid and the controller lane so a Ctrl+wheel over the
+  // velocity bars zooms identically (the lane passes the raw event through).
+  const handleZoomWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 1 / ZOOM_WHEEL_STEP : ZOOM_WHEEL_STEP;
+    if (e.shiftKey) {
+      zoomNotesTo(rowHRef.current * factor, e.clientY);
+    } else {
+      zoomTimeTo(pxPerSecRef.current * factor, e.clientX);
+    }
+  }, [zoomTimeTo, zoomNotesTo]);
+
+  // The native, non-passive listener is mandatory: it preventDefaults the gesture
+  // so the browser never page-zooms the popup (the app's usePageZoom guard lives
+  // in the main window and never runs in this detached document).
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -522,13 +577,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
 
     const handleWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      const factor = e.deltaY > 0 ? 1 / ZOOM_WHEEL_STEP : ZOOM_WHEEL_STEP;
-      if (e.shiftKey) {
-        zoomNotesTo(rowHRef.current * factor, e.clientY);
-      } else {
-        zoomTimeTo(pxPerSecRef.current * factor, e.clientX);
-      }
+      handleZoomWheel(e);
     };
 
     // Block the browser's Ctrl+wheel zoom over the popup chrome outside the
@@ -543,7 +592,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
       el.removeEventListener('wheel', handleWheel);
       doc.removeEventListener('wheel', handleDocWheel, { capture: true } as EventListenerOptions);
     };
-  }, [zoomTimeTo, zoomNotesTo]);
+  }, [handleZoomWheel]);
 
   // --- coordinate helpers (relative to the scrollable grid content) ----------
   const localPoint = useCallback((clientX: number, clientY: number) => {
@@ -974,6 +1023,22 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           <ToolButton active={tool === 'select'} title="Select — marquee to select, drag to move, Del to remove (3)" onClick={() => selectTool('select')} glyph={IconMarquee2} />
         </div>
         <span style={{ flex: 1 }} />
+        {/* Show/hide the controller-lane (velocity) area; the flag persists. */}
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setControllerArea({ visible: !controllerArea.visible })}
+          title={controllerArea.visible ? 'Hide the velocity lane' : 'Show the velocity lane'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 8px',
+            borderRadius: 3, cursor: 'pointer', fontSize: 11, fontWeight: 600, outline: 'none',
+            border: `1px solid ${controllerArea.visible ? 'rgba(45,140,235,0.45)' : 'rgba(255,255,255,0.12)'}`,
+            background: controllerArea.visible ? 'rgba(45,140,235,0.18)' : 'transparent',
+            color: controllerArea.visible ? TOOL_ACCENT : 'rgba(255,255,255,0.72)',
+          }}
+        >
+          Velocity
+        </button>
         <span style={{ fontSize: 11, color: '#777' }}>{notes.length} notes · {clipDuration.toFixed(2)}s</span>
         <strong style={{ fontSize: 13, color: '#e0e0e0' }}>{clip.name || 'MIDI Clip'}</strong>
       </div>
@@ -1032,7 +1097,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           onScroll={handleGridScroll}
           style={{
             position: 'absolute', top: 0, left: 0,
-            right: PIANO_ROLL_SCROLLBAR, bottom: PIANO_ROLL_SCROLLBAR,
+            right: PIANO_ROLL_SCROLLBAR, bottom: viewportBottomInset,
             display: 'flex', overflow: 'auto', scrollbarWidth: 'none',
           }}
         >
@@ -1169,7 +1234,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
                 top: pitchToY(note.pitch, rowH),
                 width: Math.max(2, note.duration * pxPerSec),
                 height: rowH - 1,
-                background: `rgba(120,170,255,${0.45 + note.velocity * 0.5})`,
+                background: velocityToColor(note.velocity),
                 border: '1px solid rgba(180,210,255,0.6)',
                 borderRadius: 2, boxSizing: 'border-box',
                 opacity: OUT_OF_WINDOW_NOTE_OPACITY, pointerEvents: 'none',
@@ -1223,7 +1288,7 @@ export function PianoRoll({ clipId }: PianoRollProps) {
                 title={`${pitchLabel(note.pitch)} · ${note.duration.toFixed(2)}s`}
                 style={{
                   position: 'absolute', left, top, width, height: rowH - 1,
-                  background: `rgba(120,170,255,${0.45 + note.velocity * 0.5})`,
+                  background: velocityToColor(note.velocity),
                   border: selected ? '1px solid #ffd54a' : '1px solid rgba(180,210,255,0.9)',
                   boxShadow: selected ? '0 0 0 1px #ffd54a inset' : undefined,
                   borderRadius: 2, boxSizing: 'border-box', cursor: noteCursor,
@@ -1294,6 +1359,27 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           contentHeight={gridH}
           onZoomTime={zoomTimeStep}
           onZoomNotes={zoomNotesStep}
+          verticalBottomInset={viewportBottomInset}
+        />
+
+        {/* Controller-lane area (velocity, #249): a third band inside the body,
+            docked above the horizontal scrollbar. The grid viewport's bottom inset
+            grew by its height (above), so it doesn't overlap the grid; the playhead
+            overlay continues straight down through it. */}
+        <PianoRollControllerArea
+          clipId={clipId}
+          gridWidth={gridWidth}
+          marginPx={marginPx}
+          pxPerSec={pxPerSec}
+          effWindow={effWindow}
+          inWindowNotes={inWindowNotes}
+          outOfWindowNotes={outOfWindowNotes}
+          selectedIds={selectedIds}
+          updateMidiNote={updateMidiNote}
+          velocityFollowRef={velocityFollowRef}
+          scrollRef={scrollRef}
+          onZoomWheel={handleZoomWheel}
+          keyboardWidth={KEYBOARD_W}
         />
       </div>
 
