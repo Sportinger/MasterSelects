@@ -38,6 +38,12 @@ const ZOOM_WHEEL_STEP = 1.15;      // multiplier per wheel notch
 const ZOOM_BUTTON_STEP = 1.4;      // multiplier per +/- button click
 
 const KEYBOARD_W = 48;     // px, left keyboard column
+// Playhead accent — concrete hex of the timeline's --accent-timeline, so the
+// piano-roll playhead reads identically to the main timeline (the popup can't
+// resolve the app's CSS variables in dev, hence inline like the rest of this UI).
+const PLAYHEAD_ACCENT = '#2997E5';
+const PLAYHEAD_HEAD_SIZE = 14; // px width of the grab head (≈ .playhead-head)
+const PLAYHEAD_HEAD_H = 20;    // px height of the grab head — a little longer
 // A plain click (no drag) makes a SHORT note; drag-and-release sizes longer
 // notes by the drag distance (#249). Kept visible/grabbable at default zoom
 // (0.1s ≈ 12px at 120 px/s).
@@ -183,6 +189,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
   // The clipped ruler-track viewport (its left edge = grid pixel 0 on screen),
   // used to map a scrub's clientX back to clip-local pixels.
   const rulerTrackRef = useRef<HTMLDivElement | null>(null);
+  // The single playhead overlay's scroll-follower — slid by the same horizontal
+  // scroll as the ruler so one continuous line spans the ruler band + the grid.
+  const playheadFollowRef = useRef<HTMLDivElement | null>(null);
   const scrollRafRef = useRef<number | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const pendingRef = useRef<PendingNote | null>(null);
@@ -329,6 +338,10 @@ export function PianoRoll({ clipId }: PianoRollProps) {
     const el = scrollRef.current;
     const inner = rulerInnerRef.current;
     if (el && inner) inner.style.transform = `translateX(${-el.scrollLeft}px)`;
+    // The single continuous playhead overlay (ruler + grid in one element) rides
+    // the same horizontal scroll, so it stays glued to the grid without state.
+    const ph = playheadFollowRef.current;
+    if (el && ph) ph.style.transform = `translateX(${-el.scrollLeft}px)`;
   }, []);
 
   useLayoutEffect(() => { syncRulerScroll(); });
@@ -920,6 +933,14 @@ export function PianoRoll({ clipId }: PianoRollProps) {
 
   const clipLocalPlayhead = playheadPosition - effStartTime;
   const showPlayhead = clipLocalPlayhead >= 0 && clipLocalPlayhead <= clipDuration;
+  // Whole-pixel SCREEN x for the playhead (track frame, where the ruler's
+  // translateX layer and the grid both live). marginPx is fractional, so we round
+  // the final screen position — not the grid-frame offset — to keep the 2px line
+  // crisp and identical in width across the grid (native-scrolled) and the ruler
+  // (translateX-composited) layers, which otherwise anti-alias a fractional
+  // position to different apparent widths. The grid line subtracts marginPx to
+  // re-enter its own frame (gridRef is offset by marginPx).
+  const playheadScreenX = Math.round(marginPx + clipLocalPlayhead * pxPerSec);
 
   // Notes split for rendering: those whose start is inside the (effective) window
   // are editable; those outside are shown dimmed in the margins for context while
@@ -957,6 +978,9 @@ export function PianoRoll({ clipId }: PianoRollProps) {
         <strong style={{ fontSize: 13, color: '#e0e0e0' }}>{clip.name || 'MIDI Clip'}</strong>
       </div>
 
+      {/* Ruler + body share one positioned wrapper so the playhead can be ONE
+          continuous element spanning both — see the overlay at the end. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {/* Ruler row (#249 Phase 2): Bars + Time lanes, locked to the grid's time
           zoom and reading the shared TempoMap so labels match the main timeline.
           Sits OUTSIDE the scroll viewport — a corner spacer covers the keyboard
@@ -972,11 +996,17 @@ export function PianoRoll({ clipId }: PianoRollProps) {
         <div
           ref={rulerTrackRef}
           onMouseDown={handleRulerMouseDown}
-          style={{ position: 'relative', flex: 1, overflow: 'hidden', cursor: 'ew-resize' }}
+          style={{ position: 'relative', flex: 1, overflow: 'hidden', cursor: 'pointer' }}
         >
           <div
             ref={rulerInnerRef}
-            style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: gridWidth, willChange: 'transform' }}
+            // No `willChange: transform` here: promoting this to its own GPU
+            // compositing layer makes the playhead's ruler line rasterize with
+            // different edge anti-aliasing than its grid line (which paints into
+            // the main layer), so the single continuous line looks like two
+            // different thicknesses on Mesa. The imperative translateX scroll still
+            // works without the hint; the ticks are cheap, so we don't need it.
+            style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: gridWidth }}
           >
             <PianoRollRuler
               rulerTicks={pianoRollGrid.rulerTicks}
@@ -1248,10 +1278,6 @@ export function PianoRoll({ clipId }: PianoRollProps) {
             }} />
           )}
 
-          {/* Live playhead cursor */}
-          {showPlayhead && (
-            <div style={{ position: 'absolute', top: 0, left: clipLocalPlayhead * pxPerSec, width: 2, height: gridH, background: '#ff5252', pointerEvents: 'none' }} />
-          )}
           </div>
 
           {/* Clip-boundary lines (#249) — solid full-height lines in the flag color
@@ -1269,6 +1295,40 @@ export function PianoRoll({ clipId }: PianoRollProps) {
           onZoomTime={zoomTimeStep}
           onZoomNotes={zoomNotesStep}
         />
+      </div>
+
+      {/* Single continuous playhead — ONE element spanning the ruler band AND the
+          grid, so there is no seam or gap at their border. (Two separate halves —
+          one in the ruler's transform layer, one in the natively-scrolled grid —
+          could never meet cleanly: different pixel snapping plus the ruler's 1px
+          bottom border left a visible vertical gap.) The overlay is clipped to
+          start just after the keyboard column and is slid by the same horizontal
+          scroll as the ruler via playheadFollowRef (see syncRulerScroll). The line
+          is pointer-transparent; only the head grabs, scrubbing through the ruler's
+          own handleRulerMouseDown — and it sits on top (zIndex 40) so the playhead
+          always wins over the Start/End resize tabs. */}
+      {showPlayhead && (
+        <div style={{
+          position: 'absolute', top: 0, bottom: PIANO_ROLL_SCROLLBAR,
+          left: KEYBOARD_W + 1, right: PIANO_ROLL_SCROLLBAR,
+          overflow: 'hidden', pointerEvents: 'none', zIndex: 40,
+        }}>
+          <div ref={playheadFollowRef} style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: gridWidth }}>
+            <div style={{ position: 'absolute', top: 0, bottom: 0, left: playheadScreenX - 1, width: 2, background: PLAYHEAD_ACCENT }} />
+            <div
+              title="Drag to move the playhead"
+              onMouseDown={handleRulerMouseDown}
+              style={{
+                position: 'absolute', top: 0, left: playheadScreenX,
+                width: PLAYHEAD_HEAD_SIZE, height: PLAYHEAD_HEAD_H,
+                marginLeft: -(PLAYHEAD_HEAD_SIZE / 2),
+                background: PLAYHEAD_ACCENT, borderRadius: 2,
+                cursor: 'grab', pointerEvents: 'auto',
+              }}
+            />
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
