@@ -7,22 +7,12 @@ import type { ClipTrimState } from '../types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 import type { TimelineToolId, TimelineToolPreview, TimelineToolPreviewGhostRange } from '../../../stores/timeline/types';
 import { LAYER_BUILDER_CONSTANTS } from '../../../services/layerBuilder/types';
-import {
-  canLoopExtendTimelineVectorClip,
-  isInfiniteTimelineSourceType,
-} from '../utils/clipSourceTiming';
 import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
+import { computeTrimTiming, trimOriginalsFromClip } from '../utils/clipTrimTiming';
 
 const EPSILON = 0.0001;
 // Pixel radius within which a trim edge snaps to a clip edge / playhead / marker.
 const TRIM_SNAP_PIXELS = 12;
-
-interface TrimOriginals {
-  startTime: number;
-  duration: number;
-  inPoint: number;
-  outPoint: number;
-}
 
 interface TrimSnapContext {
   enabled: boolean;
@@ -165,64 +155,6 @@ function adjustTrimDelta(
   }
 
   return { delta: rawDelta, snapTime: null };
-}
-
-// Clamp a trim delta to a clip's own bounds and return the resulting timing.
-// Works for any clip from its current state, so multi-select followers each clamp
-// independently ("only as much as each clip can").
-function computeTrimTiming(
-  clip: TimelineClip,
-  edge: 'left' | 'right',
-  orig: TrimOriginals,
-  deltaTime: number,
-) {
-  const maxDuration = isInfiniteTimelineSourceType(clip.source?.type)
-    ? Number.MAX_SAFE_INTEGER
-    : (clip.source?.naturalDuration || orig.duration);
-
-  let newStartTime = orig.startTime;
-  let newInPoint = orig.inPoint;
-  let newOutPoint = orig.outPoint;
-
-  if (edge === 'left') {
-    const maxTrim = orig.duration - MIN_CLIP_DURATION;
-    const minTrim = isInfiniteTimelineSourceType(clip.source?.type)
-      ? -orig.startTime
-      : -orig.inPoint;
-    const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
-    newStartTime = orig.startTime + clampedDelta;
-    newInPoint = orig.inPoint + clampedDelta;
-  } else {
-    const maxExtend = canLoopExtendTimelineVectorClip(clip)
-      ? Number.MAX_SAFE_INTEGER
-      : maxDuration - orig.outPoint;
-    const minTrim = -(orig.duration - MIN_CLIP_DURATION);
-    const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
-    newOutPoint = orig.outPoint + clampedDelta;
-  }
-
-  const resultEdge: 'start' | 'end' = edge === 'left' ? 'start' : 'end';
-  const targetTime = resultEdge === 'start'
-    ? Math.max(0, newStartTime)
-    : clip.startTime + (newOutPoint - clip.inPoint);
-
-  return {
-    edge: resultEdge,
-    targetTime,
-    newStartTime: Math.max(0, newStartTime),
-    newInPoint,
-    newOutPoint,
-    newDuration: Math.max(MIN_CLIP_DURATION, newOutPoint - newInPoint),
-  };
-}
-
-function trimOriginalsFromClip(clip: TimelineClip): TrimOriginals {
-  return {
-    startTime: clip.startTime,
-    duration: clip.duration,
-    inPoint: clip.inPoint,
-    outPoint: clip.outPoint,
-  };
 }
 
 export function shouldIncludeLinkedTrim(

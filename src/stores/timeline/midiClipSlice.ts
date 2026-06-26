@@ -110,7 +110,11 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     const newNote: MidiNote = {
       id: noteId,
       pitch: clampPitch(note.pitch),
-      start: Math.max(0, note.start),
+      // Content time can be NEGATIVE: extending a MIDI clip from the left pushes
+      // inPoint below the content origin (0), so the revealed space is valid
+      // content time. Don't floor at 0 — that would snap left-region notes back
+      // to the old origin (#249). The piano roll bounds placement to the window.
+      start: note.start,
       duration: Math.max(MIN_MIDI_NOTE_DURATION, note.duration),
       velocity: clampVelocity(note.velocity ?? 0.8),
     };
@@ -119,6 +123,28 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     invalidateCache();
     captureSnapshot('Add MIDI note');
     return noteId;
+  },
+
+  addMidiNotes: (clipId, newNotes) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'midi' || newNotes.length === 0) return [];
+
+    // Build every note up front so the whole batch is one immutable insert and
+    // one history snapshot (piano-roll paste/duplicate). Content time may be
+    // negative on a left-extended clip — don't floor at 0 (see addMidiNote).
+    const created: MidiNote[] = newNotes.map(note => ({
+      id: generateMidiNoteId(),
+      pitch: clampPitch(note.pitch),
+      start: note.start,
+      duration: Math.max(MIN_MIDI_NOTE_DURATION, note.duration),
+      velocity: clampVelocity(note.velocity ?? 0.8),
+    }));
+
+    set({ clips: mapClipNotes(clips, clipId, notes => [...notes, ...created]) });
+    invalidateCache();
+    captureSnapshot(created.length === 1 ? 'Add MIDI note' : 'Paste MIDI notes');
+    return created.map(n => n.id);
   },
 
   updateMidiNote: (clipId, noteId, patch, options) => {
@@ -132,7 +158,8 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
         return {
           ...n,
           ...(patch.pitch !== undefined ? { pitch: clampPitch(patch.pitch) } : {}),
-          ...(patch.start !== undefined ? { start: Math.max(0, patch.start) } : {}),
+          // Negative content time is valid (left-extended clip) — don't floor at 0.
+          ...(patch.start !== undefined ? { start: patch.start } : {}),
           ...(patch.duration !== undefined ? { duration: Math.max(MIN_MIDI_NOTE_DURATION, patch.duration) } : {}),
           ...(patch.velocity !== undefined ? { velocity: clampVelocity(patch.velocity) } : {}),
         };
@@ -153,5 +180,19 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
     set({ clips: mapClipNotes(clips, clipId, notes => notes.filter(n => n.id !== noteId)) });
     invalidateCache();
     captureSnapshot('Delete MIDI note');
+  },
+
+  removeMidiNotes: (clipId, noteIds) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'midi' || noteIds.length === 0) return;
+
+    // Batch delete so a multi-note selection collapses into ONE undo step
+    // (the piano-roll select tool's Delete). A per-note removeMidiNote loop
+    // would push N snapshots and require N undos.
+    const ids = new Set(noteIds);
+    set({ clips: mapClipNotes(clips, clipId, notes => notes.filter(n => !ids.has(n.id))) });
+    invalidateCache();
+    captureSnapshot(noteIds.length === 1 ? 'Delete MIDI note' : 'Delete MIDI notes');
   },
 });

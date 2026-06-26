@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 import type { TimelineClip, Keyframe } from '../../../types';
-import { createTimelineGridPlan } from '../utils/timelineGrid';
+import { createTimelineGridPlan, formatTimelineClock } from '../utils/timelineGrid';
 
 interface UseTimelineHelpersProps {
   zoom: number;
@@ -23,13 +23,8 @@ export function useTimelineHelpers({ zoom, frameRate, clips, getClipKeyframes }:
   const gridInterval = gridPlan.minorIntervalSeconds;
   const gridSize = gridPlan.timeIntervalPixels;
 
-  // Format time as MM:SS.ms
-  const formatTime = useCallback((seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    const ms = Math.floor((seconds % 1) * 100);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
-  }, []);
+  // Format time as MM:SS.cc (shared with the piano-roll Time lane, issue #249 §6).
+  const formatTime = useCallback((seconds: number) => formatTimelineClock(seconds), []);
 
   // Parse time string (MM:SS.ms or SS.ms or just seconds) back to seconds
   const parseTime = useCallback((timeStr: string): number | null => {

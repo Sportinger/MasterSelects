@@ -84,7 +84,11 @@ export interface HistoryState {
   isApplying: boolean;
   batchId: number | null;
   batchLabel: string | null;
-  captureSnapshot: (label: string) => void;
+  // `options.isAutoCapture` marks the change-subscription fallback path (see
+  // useGlobalHistory). An explicit (non-auto) capture additionally suppresses the
+  // trailing debounced auto-capture that the SAME edit's store mutation schedules
+  // — otherwise one explicit edit yields TWO undo steps (immediate + fallback).
+  captureSnapshot: (label: string, options?: { isAutoCapture?: boolean }) => void;
   undo: () => HistoryOperationResult | null;
   redo: () => HistoryOperationResult | null;
   canUndo: () => boolean;

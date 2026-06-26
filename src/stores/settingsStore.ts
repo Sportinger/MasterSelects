@@ -63,6 +63,22 @@ export {
 
 const log = Logger.create('SettingsStore');
 
+// Piano-roll controller-lane area (#249). Forward-compatible: `lanes` is an
+// ordered list of lane-type ids (see pianoRollLaneTypes.ts) so future CC /
+// pitchbend lanes persist without a schema change. Velocity is the only entry
+// today. Both the show/hide flag and the area height survive across sessions.
+export interface PianoRollControllerAreaState {
+  visible: boolean;   // show the lane area under the grid (default true)
+  height: number;     // px height of the whole area (clamped on resize)
+  lanes: string[];    // ordered lane-type ids shown; default ['velocity']
+}
+
+const DEFAULT_PIANO_ROLL_CONTROLLER_AREA: PianoRollControllerAreaState = {
+  visible: true,
+  height: 96,
+  lanes: ['velocity'],
+};
+
 function persistChangelogStateToProject(
   showChangelogOnStartup: boolean,
   lastSeenChangelogVersion: string | null,
@@ -173,6 +189,9 @@ interface SettingsState {
   // Playback engine mode
   webCodecsEnabled: boolean;  // true = WebCodecs, false = HTML Video
 
+  // Piano-roll controller-lane area (velocity + future CC lanes, #249)
+  pianoRollControllerArea: PianoRollControllerAreaState;
+
   // UI state
   isSettingsOpen: boolean;
 
@@ -235,6 +254,7 @@ interface SettingsState {
   setLastSeenChangelogVersion: (version: string | null) => void;
   markChangelogSeen: (version: string) => void;
   setWebCodecsEnabled: (enabled: boolean) => void;
+  setPianoRollControllerArea: (patch: Partial<PianoRollControllerAreaState>) => void;
   openSettings: () => void;
   closeSettings: () => void;
   toggleSettings: () => void;
@@ -314,6 +334,7 @@ export const useSettingsStore = create<SettingsState>()(
       showChangelogOnStartup: true, // Show changelog dialog on every startup
       lastSeenChangelogVersion: null, // Latest app version whose changelog was acknowledged
       webCodecsEnabled: false, // Default to HTML Video
+      pianoRollControllerArea: { ...DEFAULT_PIANO_ROLL_CONTROLLER_AREA },
       isSettingsOpen: false,
 
       // Output settings
@@ -569,6 +590,11 @@ export const useSettingsStore = create<SettingsState>()(
         flags.disableHtmlPreviewFallback = enabled;
         set({ webCodecsEnabled: enabled });
       },
+      setPianoRollControllerArea: (patch) => {
+        set((state) => ({
+          pianoRollControllerArea: { ...state.pianoRollControllerArea, ...patch },
+        }));
+      },
       openSettings: () => set({ isSettingsOpen: true }),
       closeSettings: () => set({ isSettingsOpen: false }),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen })),
@@ -678,6 +704,7 @@ export const useSettingsStore = create<SettingsState>()(
         outputResolution: state.outputResolution,
         fps: state.fps,
         webCodecsEnabled: state.webCodecsEnabled,
+        pianoRollControllerArea: state.pianoRollControllerArea,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
