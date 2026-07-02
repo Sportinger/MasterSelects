@@ -15,6 +15,7 @@ import {
   type FlashBoardChatProvider,
   type FlashBoardOpenAiReasoningEffort,
 } from '../../../services/flashboard/FlashBoardChatService';
+import { appendFlashBoardPromptHistoryEntry } from '../../../stores/flashboardStore/activeGenerationRecords';
 import {
   checkLemonadeHealth,
   type LemonadeModelInfo,
@@ -229,6 +230,7 @@ export function useFlashBoardChatController({
       ...current,
       ...optimisticMessages,
     ]);
+    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: effectiveChatPrompt });
 
     try {
       const response = await sendFlashBoardChatMessage({

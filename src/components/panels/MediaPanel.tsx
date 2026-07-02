@@ -21,6 +21,7 @@ import { useMediaPanelSourceReveal } from './media/panel/useMediaPanelSourceReve
 import { useMediaPanelStoreBindings } from './media/panel/useMediaPanelStoreBindings';
 import { useMediaBoardAnnotationState } from './media/board/useMediaBoardAnnotationState';
 import { useMediaBoardController } from './media/board/useMediaBoardController';
+import { useMediaPanelPreviewTooltip } from './media/panel/useMediaPanelPreviewTooltip';
 
 import { useMediaStore } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
@@ -61,6 +62,7 @@ export function MediaPanel() {
 
   // Actions from getState() - stable, no subscription needed
   const {
+    importFile,
     importFiles,
     importFilesWithPicker,
     importFilesWithHandles,
@@ -284,6 +286,7 @@ export function MediaPanel() {
     handleItemDoubleClick,
     handleContextMenu,
     handleToggleAiPromptReferences,
+    handleCopyPrompt,
     handleRegenerateMediaThumbnails,
     handleRegenerateMediaAudioProxy,
     handleRegenerateMediaWaveform,
@@ -293,6 +296,7 @@ export function MediaPanel() {
     handlePasteItems,
     mediaContextExplorerHandlers,
     mediaContextLocalHandlers,
+    mediaContextFrameExtractionHandlers,
     handleBadgeClick,
   } = useMediaPanelCommandBindings({
     fileInputRef,
@@ -311,6 +315,7 @@ export function MediaPanel() {
     setSolidSettingsDialog,
     getAiReferenceMediaFileIds: () => useFlashBoardStore.getState().composer.referenceMediaFileIds ?? [],
     updateAiReferenceMediaFileIds: (referenceMediaFileIds) => updateFlashBoardComposer({ referenceMediaFileIds }),
+    importFile,
     importFiles,
     importFilesWithHandles,
     importFilesWithPicker,
@@ -397,6 +402,7 @@ export function MediaPanel() {
     classicListViewport,
     sortItems,
   });
+  const mediaPreviewTooltip = useMediaPanelPreviewTooltip({ itemsById: allProjectItemsById });
 
   const {
     renderClassicRow,
@@ -445,6 +451,7 @@ export function MediaPanel() {
     handleExternalDropImport,
     handleItemClick,
     handleItemDoubleClick,
+    getSlotGridProgress: getTimelineSlotGridProgress,
     internalDragId,
     isMediaSearchActive,
     mediaBoardAnnotations,
@@ -522,11 +529,7 @@ export function MediaPanel() {
     openRelinkDialog,
     closeRelinkDialog,
   } = useMediaPanelRelinkStatus(files);
-  const mediaPanelClassName = [
-    'media-panel',
-    woodThemeEnabled ? 'wood' : '',
-    isExternalDragOver ? 'drop-target' : '',
-  ].filter(Boolean).join(' ');
+  const mediaPanelClassName = ['media-panel', woodThemeEnabled ? 'wood' : '', isExternalDragOver ? 'drop-target' : ''].filter(Boolean).join(' ');
 
   return (
     <div
@@ -535,10 +538,10 @@ export function MediaPanel() {
       onDrop={handleRootDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onMouseMove={handleMediaPanelMouseMove}
+      onMouseMove={(event) => { handleMediaPanelMouseMove(event); mediaPreviewTooltip.handleMouseMove(event); }}
+      onMouseLeave={mediaPreviewTooltip.handleMouseLeave}
       onClick={() => { if (contextMenu) closeContextMenu(); }}
     >
-      {/* Header */}
       <MediaPanelHeader
         query={mediaSearchQuery}
         onQueryChange={setMediaSearchQuery}
@@ -565,7 +568,6 @@ export function MediaPanel() {
         onNewMathScene={handleNewMathScene}
         onNewMotionShape={handleNewMotionShape}
       />
-      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -620,6 +622,7 @@ export function MediaPanel() {
         }}
         renderBoard={renderMediaBoardView}
       />
+      {mediaPreviewTooltip.element}
 
       <MediaPanelOverlayMounts
         floatingTexts={floatingTexts}
@@ -647,6 +650,7 @@ export function MediaPanel() {
           onImport: handleImport,
           onPaste: handlePasteItems,
           onToggleAiPromptReferences: handleToggleAiPromptReferences,
+          onCopyPrompt: handleCopyPrompt,
           onStartRename: startRename,
           onMoveToFolder: mediaContextLocalHandlers.onMoveToFolder,
           onOpenCompositionSettings: openCompositionSettings,
@@ -658,6 +662,7 @@ export function MediaPanel() {
           onRegenerateAudioProxy: handleRegenerateMediaAudioProxy,
           onRegenerateWaveform: handleRegenerateMediaWaveform,
           onRegenerateSpectrogram: handleRegenerateMediaSpectrogram,
+          onExtractVideoFrame: mediaContextFrameExtractionHandlers.onExtractVideoFrame,
           onDownloadMediaFile: mediaContextExplorerHandlers.onDownloadMediaFile,
           onShowRawInExplorer: mediaContextExplorerHandlers.onShowRawInExplorer,
           onShowProxyInExplorer: mediaContextExplorerHandlers.onShowProxyInExplorer,

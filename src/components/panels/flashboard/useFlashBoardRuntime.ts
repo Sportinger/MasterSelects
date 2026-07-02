@@ -4,6 +4,7 @@ import {
   ensureFlashBoardActiveGenerationBoard,
   failFlashBoardActiveGenerationRecord,
   updateFlashBoardActiveGenerationJob,
+  useFlashBoardActiveGenerationRecords,
   useHasFlashBoardActiveGenerationBoard,
   useRemoveFlashBoardActiveGenerationRecord,
   useSelectedFlashBoardActiveGenerationRecordIds,
@@ -18,6 +19,7 @@ interface FlashBoardRuntimeOptions {
 export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
   const { enableKeyboardDelete = true } = options;
   const hasGenerationBoard = useHasFlashBoardActiveGenerationBoard();
+  const activeGenerationRecords = useFlashBoardActiveGenerationRecords();
   const selectedRecordIds = useSelectedFlashBoardActiveGenerationRecordIds();
   const removeGenerationRecord = useRemoveFlashBoardActiveGenerationRecord();
   const refundDialogKeysRef = useRef<Set<string>>(new Set());
@@ -70,6 +72,24 @@ export function useFlashBoardRuntime(options: FlashBoardRuntimeOptions = {}) {
       flashBoardJobService.setUpdateCallback(null);
     };
   }, []);
+
+  useEffect(() => {
+    activeGenerationRecords.forEach((record) => {
+      const request = record.request;
+      const remoteTaskId = record.job?.remoteTaskId;
+      const isResumable = request
+        && remoteTaskId
+        && !record.result
+        && (record.job?.status === 'queued' || record.job?.status === 'processing');
+      if (isResumable) {
+        flashBoardJobService.resume({
+          recordId: record.id,
+          request,
+          remoteTaskId,
+        });
+      }
+    });
+  }, [activeGenerationRecords]);
 
   useEffect(() => {
     if (!enableKeyboardDelete) {

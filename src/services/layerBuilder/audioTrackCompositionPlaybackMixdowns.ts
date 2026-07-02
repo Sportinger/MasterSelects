@@ -15,9 +15,10 @@ export class AudioTrackCompositionPlaybackMixdownManager {
   ensureCompositionAudioPlaybackElement(
     clip: TimelineClip,
     attachTo: 'source' | 'mixdown',
+    clips: readonly TimelineClip[],
   ): HTMLAudioElement | null {
     if (!clip.isComposition || !clip.compositionId) return null;
-    if (attachTo === 'mixdown' && !shouldUseInlineCompositionMixdown(useTimelineStore.getState().clips, clip)) {
+    if (attachTo === 'mixdown' && !shouldUseInlineCompositionMixdown(clips, clip)) {
       return null;
     }
 

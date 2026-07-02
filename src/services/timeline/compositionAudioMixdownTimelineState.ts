@@ -15,18 +15,19 @@ export function applyCompositionAudioMixdownToTimelineClip(
   result: CompositionAudioMixdownRequestResult,
   options: { audioElement?: HTMLAudioElement } = {},
 ): void {
-  if (options.audioElement) {
-    const previousClip = useTimelineStore.getState().clips.find((clip) => clip.id === clipId);
-    const previousElement = getCompositionMixdownPlaybackElement(previousClip);
-    if (previousElement && previousElement !== options.audioElement) {
-      detachLegacyTimelineMediaElement(previousElement, {
-        disposeAudioRouting: true,
-        revokeObjectUrls: true,
-      });
+  useTimelineStore.setState((state) => {
+    if (options.audioElement) {
+      const previousElement = getCompositionMixdownPlaybackElement(
+        state.clips.find((clip) => clip.id === clipId),
+      );
+      if (previousElement && previousElement !== options.audioElement) {
+        detachLegacyTimelineMediaElement(previousElement, {
+          disposeAudioRouting: true,
+          revokeObjectUrls: true,
+        });
+      }
     }
-  }
 
-  useTimelineStore.setState((state) => ({
-    clips: applyCompositionAudioMixdownToClips(state.clips, clipId, result, options),
-  }));
+    return { clips: applyCompositionAudioMixdownToClips(state.clips, clipId, result, options) };
+  });
 }

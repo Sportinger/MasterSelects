@@ -32,6 +32,7 @@ interface FlashBoardPromptEditorProps {
   prompt: string;
   promptBeforeAiRewrite: string | null;
   promptInputRef: RefObject<HTMLTextAreaElement | null>;
+  promptRefineTitle: string;
   referenceMediaCount: number;
   sunoNegativeTags: string;
   sunoStyle: string;
@@ -46,7 +47,9 @@ interface FlashBoardPromptEditorProps {
   onClearChatPrompt: () => void;
   onClearPrompt: () => void;
   onDismissPromptBeforeAiRewrite: () => void;
+  onOpenPromptBook: () => void;
   onPromptChange: (value: string) => void;
+  onRefinePrompt: () => void | Promise<void>;
   onRestorePromptBeforeAiRewrite: () => void;
   onSunoNegativeTagsChange: (value: string) => void;
   onSunoAudioWeightChange: (value: number) => void;
@@ -71,6 +74,7 @@ export function FlashBoardPromptEditor({
   prompt,
   promptBeforeAiRewrite,
   promptInputRef,
+  promptRefineTitle,
   referenceMediaCount,
   sunoNegativeTags,
   sunoStyle,
@@ -85,7 +89,9 @@ export function FlashBoardPromptEditor({
   onClearChatPrompt,
   onClearPrompt,
   onDismissPromptBeforeAiRewrite,
+  onOpenPromptBook,
   onPromptChange,
+  onRefinePrompt,
   onRestorePromptBeforeAiRewrite,
   onSunoNegativeTagsChange,
   onSunoAudioWeightChange,
@@ -118,6 +124,19 @@ export function FlashBoardPromptEditor({
             placeholder="Ask about the prompt, model choice, or next variation..."
             rows={3}
           />
+          <button
+            className="fb-bubble-history"
+            type="button"
+            onClick={onOpenPromptBook}
+            title="Prompt history"
+            aria-label="Prompt history"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.55" aria-hidden="true">
+              <path d="M3.4 4.8A5.6 5.6 0 1 1 2.6 9" />
+              <path d="M3.4 1.9v2.9H.8" />
+              <path d="M8 4.8v3.5l2.2 1.3" />
+            </svg>
+          </button>
           <button
             className="fb-bubble-close"
             type="button"
@@ -253,6 +272,19 @@ export function FlashBoardPromptEditor({
           </button>
         )}
         <button
+          className="fb-bubble-history"
+          type="button"
+          onClick={onOpenPromptBook}
+          title="Prompt history"
+          aria-label="Prompt history"
+        >
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.55" aria-hidden="true">
+            <path d="M3.4 4.8A5.6 5.6 0 1 1 2.6 9" />
+            <path d="M3.4 1.9v2.9H.8" />
+            <path d="M8 4.8v3.5l2.2 1.3" />
+          </svg>
+        </button>
+        <button
           className="fb-bubble-close"
           type="button"
           onClick={onClearPrompt}
@@ -260,6 +292,23 @@ export function FlashBoardPromptEditor({
         >
           &times;
         </button>
+        {!isElevenLabsMode && (
+          <button
+            className={`fb-bubble-wand ${isRefiningPrompt ? 'is-loading' : ''}`}
+            type="button"
+            onClick={onRefinePrompt}
+            disabled={isRefiningPrompt}
+            title={isRefiningPrompt ? 'Refining prompt...' : promptRefineTitle}
+            aria-label="Refine prompt"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.45" aria-hidden="true">
+              <path d="M5.5 12.5 13 5" />
+              <path d="m10.8 3.2 2 2" />
+              <path d="M2.8 1.6 3.3 3l1.5.5-1.5.5-.5 1.4L2.3 4 1 3.5 2.3 3l.5-1.4Z" />
+              <path d="m11.8 9.7.4 1.1 1.1.4-1.1.4-.4 1.1-.4-1.1-1.1-.4 1.1-.4.4-1.1Z" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {referenceMediaCount > 0 && (

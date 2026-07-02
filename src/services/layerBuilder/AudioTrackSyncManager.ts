@@ -335,7 +335,7 @@ export class AudioTrackSyncManager {
 
       const needsSourceElement = !stemSeparation || shouldUseSourceAudio;
       const compositionAudioElement = needsSourceElement
-        ? this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'source')
+        ? this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'source', ctx.clips)
         : null;
       const sourceAudioProxy = needsSourceElement ? this.getAudioProxyElementForClip(clip) : null;
       const sourceAudioElement = sourceAudioProxy ?? compositionAudioElement ?? this.getClipAudioElement(clip);
@@ -499,7 +499,7 @@ export class AudioTrackSyncManager {
         continue;
       }
       const mixdownAudio = clip.mixdownAudio ??
-        this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'mixdown');
+        this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'mixdown', ctx.clips);
       if (!mixdownAudio || clip.hasMixdownAudio === false) continue;
 
       const timeInfo = getClipTimeInfo(ctx, clip);

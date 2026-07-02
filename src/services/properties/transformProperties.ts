@@ -84,8 +84,8 @@ export function registerTransformProperties(registry: PropertyRegistry): void {
       'scale.all',
       'Scale',
       1,
-      (clip) => clip.transform.scale.all ?? clip.transform.scale.x,
-      (clip, value) => updateTransform(clip, { scale: { all: value, x: value, y: value, z: clip.transform.scale.z } }),
+      (clip) => clip.transform.scale.all ?? 1,
+      (clip, value) => updateTransform(clip, { scale: { all: value } }),
       { step: 0.01, aliases: ['size'] },
     ),
     createTransformDescriptor(

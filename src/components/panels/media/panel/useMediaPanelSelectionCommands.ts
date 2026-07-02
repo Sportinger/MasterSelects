@@ -107,6 +107,25 @@ async function readClipboardImageFiles(): Promise<File[]> {
   return files;
 }
 
+async function copyTextToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    try {
+      textarea.select();
+      document.execCommand('copy');
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
+}
+
 async function regenerateTimelineSourceThumbnails(mediaFile: MediaFile): Promise<void> {
   if (mediaFile.type !== 'video') return;
 
@@ -212,6 +231,7 @@ export function useMediaPanelSelectionCommands({
     boardPosition?: { x: number; y: number },
   ) => void;
   handleToggleAiPromptReferences: (mediaFileIds: string[]) => void;
+  handleCopyPrompt: (prompt: string) => void;
   handleRegenerateMediaThumbnails: (mediaFile: MediaFile) => void;
   handleRegenerateMediaAudioProxy: (mediaFile: MediaFile, force: boolean) => void;
   handleRegenerateMediaWaveform: (mediaFile: MediaFile) => void;
@@ -311,6 +331,17 @@ export function useMediaPanelSelectionCommands({
     setGenerativeTrayExpanded(true);
     closeContextMenu();
   }, [closeContextMenu, getAiReferenceMediaFileIds, setGenerativeTrayExpanded, updateAiReferenceMediaFileIds]);
+
+  const handleCopyPrompt = useCallback((prompt: string) => {
+    void copyTextToClipboard(prompt).then(() => {
+      showFloatingText('Copied');
+    }).catch((error) => {
+      log.warn('Failed to copy generation prompt', { error });
+      showFloatingText('Clipboard blocked');
+    }).finally(() => {
+      closeContextMenu();
+    });
+  }, [closeContextMenu, showFloatingText]);
 
   const handleRegenerateMediaThumbnails = useCallback((mediaFile: MediaFile) => {
     void (async () => {
@@ -499,6 +530,7 @@ export function useMediaPanelSelectionCommands({
     handleItemDoubleClick,
     handleContextMenu,
     handleToggleAiPromptReferences,
+    handleCopyPrompt,
     handleRegenerateMediaThumbnails,
     handleRegenerateMediaAudioProxy,
     handleRegenerateMediaWaveform,

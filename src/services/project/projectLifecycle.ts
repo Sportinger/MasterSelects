@@ -9,6 +9,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import {
   resetFlashBoardActiveGenerationState,
   subscribeFlashBoardActiveGenerationRecords,
+  subscribeFlashBoardComposerState,
+  subscribeFlashBoardPromptHistory,
 } from '../../stores/flashboardStore/activeGenerationRecords';
 import { useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
@@ -326,6 +328,12 @@ export function setupAutoSync(): void {
   registerAutoSyncDisposer(useMIDIStore.subscribe((state) => state.parameterBindings, handleMIDIProjectStateChange));
 
   registerAutoSyncDisposer(subscribeFlashBoardActiveGenerationRecords(() => {
+    markProjectDirtyAndMaybeSave();
+  }));
+  registerAutoSyncDisposer(subscribeFlashBoardComposerState(() => {
+    markProjectDirtyAndMaybeSave();
+  }));
+  registerAutoSyncDisposer(subscribeFlashBoardPromptHistory(() => {
     markProjectDirtyAndMaybeSave();
   }));
 

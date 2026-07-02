@@ -12,6 +12,7 @@ export const useFlashBoardStore = create<FlashBoardStore>()(
     activeGenerationRecords: [],
     selectedActiveGenerationRecordIds: [],
     composer: createDefaultFlashBoardComposer(),
+    promptHistory: [],
     hoveredComposerReference: null,
 
     ...createUiSlice(set),

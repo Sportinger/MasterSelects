@@ -44,6 +44,13 @@ interface FlashBoardProviderRunnerContext {
   resolveHostedReferenceMedia: (mediaFileId: string) => Promise<GenerationReferenceMedia>;
 }
 
+interface FlashBoardProviderResumeContext {
+  request: FlashBoardGenerationRequest;
+  remoteTaskId: string;
+  abortController: AbortController;
+  onProcessing: (update: FlashBoardProviderProcessingUpdate) => void;
+}
+
 function sanitizeForFilename(value: string, maxLen = 32): string {
   return value
     .replace(/[^a-zA-Z0-9 -]/g, '')
@@ -97,6 +104,98 @@ export async function runFlashBoardProviderJob(
   }
 
   return runVideoJob(context);
+}
+
+export async function resumeFlashBoardProviderJob({
+  request,
+  remoteTaskId,
+  abortController,
+  onProcessing,
+}: FlashBoardProviderResumeContext): Promise<FlashBoardProviderRunnerResult> {
+  applyFlashBoardProviderApiKeys(request);
+  onProcessing({ status: 'processing', remoteTaskId });
+
+  if (request.providerId === SUNO_PROVIDER_ID || request.providerId === SUNO_SOUNDS_PROVIDER_ID) {
+    const pollInterval = request.providerId === SUNO_SOUNDS_PROVIDER_ID ? 30000 : 10000;
+    const task = request.service === 'cloud'
+      ? await cloudAiService.pollSunoMusicTaskUntilComplete(
+        remoteTaskId,
+        (currentTask) => {
+          if (abortController.signal.aborted) throw new Error('Canceled');
+          onProcessing({ status: 'processing', progress: currentTask.progress, remoteTaskId });
+        },
+        pollInterval,
+        900000,
+        abortController.signal,
+      )
+      : await sunoService.pollMusicTaskUntilComplete(
+        remoteTaskId,
+        (currentTask) => {
+          if (abortController.signal.aborted) throw new Error('Canceled');
+          onProcessing({ status: 'processing', progress: currentTask.progress, remoteTaskId });
+        },
+        pollInterval,
+        900000,
+        abortController.signal,
+      );
+    const audioUrl = task.results?.[0]?.audioUrl;
+    if (task.status === 'completed' && audioUrl) {
+      return { status: 'completed', progress: 1, remoteTaskId, assetUrl: audioUrl, mediaType: 'audio' };
+    }
+    return {
+      status: 'failed',
+      error: task.error || 'Suno generation finished without an audio URL.',
+      refund: task.refund,
+      remoteTaskId,
+    };
+  }
+
+  if (request.outputType === 'audio' || request.service === 'elevenlabs') {
+    return { status: 'failed', error: 'Speech generation cannot be resumed after reload.', remoteTaskId };
+  }
+
+  if (request.outputType === 'image' || request.providerId === 'nano-banana-2') {
+    const imageProvider = getFlashBoardImageProvider(request.service);
+    if (!imageProvider) {
+      return { status: 'failed', error: `${request.providerId} is not available through ${request.service}`, remoteTaskId };
+    }
+    const result = await imageProvider.pollImageTaskUntilComplete(
+      remoteTaskId,
+      (task) => {
+        if (abortController.signal.aborted) throw new Error('Canceled');
+        onProcessing({ status: 'processing', progress: task.progress, remoteTaskId });
+      },
+      5000,
+    );
+    if (result.status === 'completed' && (result.imageUrl || result.videoUrl)) {
+      return { status: 'completed', assetUrl: result.imageUrl ?? result.videoUrl, mediaType: 'image', remoteTaskId };
+    }
+    return { status: 'failed', error: result.error || 'Image generation failed', refund: result.refund, remoteTaskId };
+  }
+
+  const pollInterval = request.service === 'piapi' ? 5000 : 15000;
+  const service = request.service === 'piapi'
+    ? piApiService
+    : request.service === 'kieai'
+      ? kieAiService
+      : cloudAiService;
+  const task = await service.pollTaskUntilComplete(
+    remoteTaskId,
+    (currentTask) => {
+      if (abortController.signal.aborted) throw new Error('Canceled');
+      onProcessing({ status: 'processing', progress: currentTask.progress, remoteTaskId });
+    },
+    pollInterval,
+  );
+
+  if (task.status === 'completed' && task.videoUrl) {
+    return { status: 'completed', assetUrl: task.videoUrl, mediaType: 'video', remoteTaskId };
+  }
+  if (task.status === 'failed') {
+    return { status: 'failed', error: task.error || 'Generation failed', refund: task.refund, remoteTaskId };
+  }
+
+  return null;
 }
 
 async function runSunoMusicJob({

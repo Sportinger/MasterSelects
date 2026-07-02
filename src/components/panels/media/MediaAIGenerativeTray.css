@@ -64,7 +64,7 @@
   flex-direction: column;
   gap: 8px;
   width: min(340px, calc(100% - 20px));
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .media-ai-tray-expanded.is-collapsed {
@@ -78,6 +78,10 @@
   border: 1px solid var(--border-color);
   border-radius: 18px;
   background: var(--bg-elevated, #252536);
+}
+
+.media-ai-tray-expanded > * {
+  pointer-events: auto;
 }
 
 .media-ai-tray-expanded:has(.fb-bubble.has-references) {
@@ -207,14 +211,14 @@
 }
 
 .media-ai-tray-expanded .fb-bubble.has-references > .fb-bubble-bar.has-inline-submenu {
-  height: 74px;
-  min-height: 74px;
+  height: calc(var(--fb-inline-submenu-height, 60px) + 14px);
+  min-height: calc(var(--fb-inline-submenu-height, 60px) + 14px);
 }
 
 .media-ai-tray-expanded .fb-bubble.has-references > .fb-bubble-bar.has-inline-submenu .fb-popover {
   top: 4px;
   bottom: auto;
-  height: 60px;
+  height: var(--fb-inline-submenu-height, 60px);
   padding-left: 10px;
 }
 
@@ -263,6 +267,22 @@
   width: 74px;
   height: var(--media-ai-tray-reference-height);
   aspect-ratio: auto;
+}
+
+.media-ai-tray-expanded .fb-bubble.has-references .fb-reference-slot-grid {
+  --fb-reference-slot-size: 68px;
+  gap: 6px;
+}
+
+.media-ai-tray-expanded .fb-bubble.has-references .fb-reference-slot-grid .fb-reference-card {
+  flex: 0 0 var(--fb-reference-slot-size);
+  width: var(--fb-reference-slot-size);
+  height: var(--fb-reference-slot-size);
+  aspect-ratio: 1;
+}
+
+.media-ai-tray-expanded .fb-bubble.has-references .fb-reference-slot-grid .fb-reference-slot-label {
+  font-size: 18px;
 }
 
 .media-ai-tray-expanded .fb-bubble.has-references .fb-reference-number {
@@ -342,6 +362,12 @@
     flex-basis: 74px;
     width: 74px;
     height: 74px;
+  }
+
+  .media-ai-tray-expanded .fb-bubble.has-references .fb-reference-slot-grid .fb-reference-card {
+    flex-basis: var(--fb-reference-slot-size);
+    width: var(--fb-reference-slot-size);
+    height: var(--fb-reference-slot-size);
   }
 }
 
@@ -700,10 +726,14 @@
 .media-ai-generation-preview span:first-child {
   position: absolute;
   left: 7px;
+  right: 7px;
   bottom: 6px;
+  overflow: hidden;
   color: var(--text-primary);
   font-size: 10px;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .media-ai-generation-preview.has-thumbnail span:first-child {
@@ -802,11 +832,12 @@
 
 .media-ai-generation-timers {
   position: absolute;
-  top: 4px;
+  top: 50%;
   right: 9px;
   z-index: 0;
   display: grid;
   justify-items: end;
+  transform: translateY(-50%);
   text-align: right;
   pointer-events: none;
 }
@@ -905,6 +936,15 @@
 
 .media-ai-generation-retry {
   right: 30px;
+}
+
+.media-ai-generation-cancel {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.media-ai-generation-cancel:hover {
+  background: rgba(255, 100, 100, 0.24);
+  color: #fff;
 }
 
 .media-ai-generation-retry svg {

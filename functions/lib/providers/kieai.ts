@@ -168,7 +168,7 @@ export function normalizeHostedKlingParams(value: unknown): HostedVideoParams | 
     aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '16:9',
     duration: normalizedDuration,
     endImageUrl: !multiShots && typeof value.endImageUrl === 'string' && value.endImageUrl.trim() ? value.endImageUrl.trim() : undefined,
-    mode: value.mode === 'pro' ? 'pro' : 'std',
+    mode: value.mode === 'pro' || value.mode === '4K' ? value.mode : 'std',
     multiPrompt,
     multiShots,
     prompt,

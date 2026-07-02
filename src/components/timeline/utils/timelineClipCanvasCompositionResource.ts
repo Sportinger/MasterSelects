@@ -189,6 +189,6 @@ export function createTimelineClipCanvasWorkerCompositionVisualsResource(input: 
     segmentRects: createTimelineClipCanvasWorkerCompositionSegmentRects(clip),
     segmentThumbnailStrip: createTimelineClipCanvasWorkerCompositionSegmentThumbnailStripResource(input),
     mixdownWaveform: input.mixdownWaveform,
-    mixdownGenerating: clip.source?.type === 'audio' ? clip.mixdownGenerating : false,
+    mixdownGenerating: clip.mixdownGenerating,
   };
 }

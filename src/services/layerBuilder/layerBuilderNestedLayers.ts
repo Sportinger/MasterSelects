@@ -154,7 +154,7 @@ export function buildNestedCompositionSourceLayer(
 
   return {
     ...baseLayer,
-    source: { type: 'image', nestedComposition: nestedCompData },
+    source: { type: 'image', mediaTime: nestedClipLocalTime, nestedComposition: nestedCompData },
   };
 }
 

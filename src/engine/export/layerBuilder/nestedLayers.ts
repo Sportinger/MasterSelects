@@ -1,5 +1,5 @@
 import type { TimelineClip } from '../../../stores/timeline/types';
-import { useMediaStore } from '../../../stores/mediaStore';
+import type { Composition, MediaFile } from '../../../stores/mediaStore/types';
 import { DEFAULT_TRANSFORM } from '../../../stores/timeline/constants';
 import {
   DEFAULT_TRANSITION_PLACEMENT,
@@ -29,6 +29,11 @@ import { buildTextLikeLayer, isTextLikeClipSource } from './textLayers';
 import { buildNestedVideoLayer } from './videoLayers';
 
 const MAX_EXPORT_NESTING_DEPTH = 4;
+
+export interface ExportNestedMediaState {
+  mediaFiles: MediaFile[];
+  mediaCompositions: Composition[];
+}
 
 function createPlaceholderFile(name: string): File {
   return typeof File !== 'undefined'
@@ -91,8 +96,9 @@ function tagLinkedExportSourceClipIds(
   clips: TimelineClip[],
   activeTransition: ActiveTransitionPlan,
   compositionId: string,
+  mediaCompositions: Composition[],
 ): void {
-  const composition = useMediaStore.getState().compositions.find(candidate => candidate.id === compositionId);
+  const composition = mediaCompositions.find(candidate => candidate.id === compositionId);
   const link = composition?.transitionComp;
   if (link?.kind !== 'transition-comp') return;
 
@@ -114,6 +120,8 @@ export function buildTransitionCompositionLayerForExport(params: {
   clipStates: Map<string, ExportClipStateLike>;
   parallelDecoder: ParallelDecodeManager | null;
   useParallelDecode: boolean;
+  mediaFiles: MediaFile[];
+  mediaCompositions: Composition[];
   depth?: number;
 }): Layer | null {
   const {
@@ -125,17 +133,18 @@ export function buildTransitionCompositionLayerForExport(params: {
     clipStates,
     parallelDecoder,
     useParallelDecode,
+    mediaFiles,
+    mediaCompositions,
     depth = 0,
   } = params;
   const transition = activeTransition.outgoingClip.transitionOut;
   const compositionId = transition?.compositionId;
   if (!transition || !compositionId || compositionId === parentCompositionId) return null;
 
-  const mediaState = useMediaStore.getState();
-  const composition = mediaState.compositions.find(candidate => candidate.id === compositionId);
+  const composition = mediaCompositions.find(candidate => candidate.id === compositionId);
   if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') return null;
 
-  const mediaFileById = new Map(mediaState.files.map(file => [file.id, file]));
+  const mediaFileById = new Map(mediaFiles.map(file => [file.id, file]));
   const compositionTime = getTransitionCompositionTime(activeTransition, composition, parentTime);
   const nestedTimeline = hydrateTransitionCompositionTimeline({
     composition,
@@ -143,7 +152,7 @@ export function buildTransitionCompositionLayerForExport(params: {
     mediaFileById,
     resolveSource: createExportTransitionSourceResolver(clipStates),
   });
-  tagLinkedExportSourceClipIds(nestedTimeline.clips, activeTransition, composition.id);
+  tagLinkedExportSourceClipIds(nestedTimeline.clips, activeTransition, composition.id, mediaCompositions);
 
   const duration = Math.max(0.0001, composition.timelineData.duration ?? composition.duration);
   const syntheticClip: TimelineClip = {
@@ -171,6 +180,8 @@ export function buildTransitionCompositionLayerForExport(params: {
     clipStates,
     parallelDecoder,
     useParallelDecode,
+    mediaFiles,
+    mediaCompositions,
     depth + 1,
   );
 
@@ -193,6 +204,8 @@ export function buildNestedLayersForExport(
   clipStates: Map<string, ExportClipStateLike>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean,
+  mediaFiles: MediaFile[],
+  mediaCompositions: Composition[],
   depth: number = 0,
 ): Layer[] {
   if (!clip.nestedClips || !clip.nestedTracks || depth >= MAX_EXPORT_NESTING_DEPTH) return [];
@@ -200,7 +213,6 @@ export function buildNestedLayersForExport(
   const nestedVideoTracks = clip.nestedTracks.filter(t => t.type === 'video');
   const nestedAnyVideoSolo = nestedVideoTracks.some(t => t.solo);
   const layers: Layer[] = [];
-  const mediaState = useMediaStore.getState();
 
   for (let i = 0; i < nestedVideoTracks.length; i++) {
     const nestedTrack = nestedVideoTracks[i];
@@ -214,7 +226,7 @@ export function buildNestedLayersForExport(
       placement: DEFAULT_TRANSITION_PLACEMENT,
       edgePolicy: 'hold',
       getMediaDuration: (mediaFileId) =>
-        mediaState.files.find((file) => file.id === mediaFileId)?.duration,
+        mediaFiles.find((file) => file.id === mediaFileId)?.duration,
     });
     if (activeTransition) {
       const transitionLayer = buildTransitionCompositionLayerForExport({
@@ -226,6 +238,8 @@ export function buildNestedLayersForExport(
         clipStates,
         parallelDecoder,
         useParallelDecode,
+        mediaFiles,
+        mediaCompositions,
         depth,
       });
       if (transitionLayer) {
@@ -251,6 +265,8 @@ export function buildNestedLayersForExport(
       clipStates,
       parallelDecoder,
       useParallelDecode,
+      mediaFiles,
+      mediaCompositions,
       depth,
     );
     if (nestedLayer) {
@@ -268,6 +284,8 @@ function buildNestedLayerForExport(
   clipStates: Map<string, ExportClipStateLike>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean,
+  mediaFiles: MediaFile[],
+  mediaCompositions: Composition[],
   depth: number,
 ): Layer | null {
   const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime);
@@ -281,6 +299,8 @@ function buildNestedLayerForExport(
       clipStates,
       parallelDecoder,
       useParallelDecode,
+      mediaFiles,
+      mediaCompositions,
       depth + 1,
     );
 
@@ -308,7 +328,7 @@ function buildNestedLayerForExport(
   }
 
   const exportVideo = getExportVideoElement(nestedClip, clipStates);
-  if (exportVideo) {
+  if (nestedClip.source?.type === 'video') {
     const nestedClipTime = getNestedClipSourceTime(nestedClip, nestedClipLocalTime);
     return buildNestedVideoLayer(
       nestedClip,

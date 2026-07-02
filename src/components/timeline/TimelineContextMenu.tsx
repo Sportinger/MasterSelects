@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore';
@@ -12,6 +12,7 @@ import { thumbnailCacheService } from '../../services/thumbnailCacheService';
 import { captureCurrentPreviewFrameJpegBlob } from '../../services/previewFrameCapture';
 import { Logger } from '../../services/logger';
 import { downloadBlob } from '../../engine/export';
+import { flashBoardMediaBridge } from '../../services/flashboard/FlashBoardMediaBridge';
 import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
 import { resolveAudibleAudioClip, resolveAudibleAudioClipId } from '../../services/audio/audioClipResolution';
 import { isManualLinkedGroupId } from '../../stores/timeline/helpers/idGenerator';
@@ -32,6 +33,7 @@ import {
 } from '../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('TimelineContextMenu');
+const COPY_PROMPT_TOAST_MS = 900;
 
 function getFrameExportFilename(clip: TimelineClip | null | undefined, playheadPosition: number): string {
   const baseName = (clip?.name ?? 'current-frame')
@@ -39,6 +41,25 @@ function getFrameExportFilename(clip: TimelineClip | null | undefined, playheadP
     .replace(/[<>:"/\\|?*]/g, '_')
     .trim() || 'current-frame';
   return `${baseName.slice(0, 80)}_frame_${Math.max(0, playheadPosition).toFixed(2).replace('.', '_')}s.jpg`;
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    try {
+      textarea.select();
+      document.execCommand('copy');
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
 }
 
 interface TimelineContextMenuProps {
@@ -126,6 +147,24 @@ export function TimelineContextMenu({
 }: TimelineContextMenuProps) {
   const { menuRef: contextMenuRef, adjustedPosition: contextMenuPosition } = useContextMenuPosition(contextMenu);
   const playheadPosition = useTimelineStore((state) => state.playheadPosition);
+  const [showCopiedPromptToast, setShowCopiedPromptToast] = useState(false);
+  const copiedPromptTimeoutRef = useRef<number | null>(null);
+  const confirmPromptCopied = useCallback(() => {
+    setShowCopiedPromptToast(true);
+    if (copiedPromptTimeoutRef.current !== null) {
+      window.clearTimeout(copiedPromptTimeoutRef.current);
+    }
+    copiedPromptTimeoutRef.current = window.setTimeout(() => {
+      setShowCopiedPromptToast(false);
+      copiedPromptTimeoutRef.current = null;
+    }, COPY_PROMPT_TOAST_MS);
+  }, []);
+
+  useEffect(() => () => {
+    if (copiedPromptTimeoutRef.current !== null) {
+      window.clearTimeout(copiedPromptTimeoutRef.current);
+    }
+  }, []);
 
   // Get the media file for a clip
   const getMediaFileForClip = useCallback(
@@ -162,10 +201,16 @@ export function TimelineContextMenu({
     };
   }, [contextMenu, setContextMenu]);
 
-  if (!contextMenu) return null;
+  const copiedPromptToast = showCopiedPromptToast ? (
+    <div className="timeline-copy-prompt-toast" role="status" aria-live="polite">Copied</div>
+  ) : null;
+
+  if (!contextMenu) return copiedPromptToast;
 
   const mediaFile = getMediaFileForClip(contextMenu.clipId);
   const clip = clipMap.get(contextMenu.clipId);
+  const generationPrompt = mediaFile ? (flashBoardMediaBridge.getMetadata(mediaFile.id)?.prompt.trim() ?? '') : '';
+  const canCopyGenerationPrompt = generationPrompt.length > 0;
   const canPasteEffects = hasClipboardEffects();
   const canPasteColor = hasClipboardColor();
   const menuModel = createClipContextMenuModel({
@@ -286,6 +331,8 @@ export function TimelineContextMenu({
       downloadBlob(blob, getFrameExportFilename(clip, playheadPosition));
       return true;
     },
+    writeClipboardText: copyTextToClipboard,
+    onCopyPromptComplete: confirmPromptCopied,
     showInExplorer,
     notify: (message: string) => alert(message),
     downloadRawFile: downloadClipContextMenuRawFile,
@@ -303,17 +350,19 @@ export function TimelineContextMenu({
   };
 
   return (
-    <div
-      ref={contextMenuRef}
-      className="timeline-context-menu"
-      style={{
-        position: 'fixed',
-        left: contextMenuPosition?.x ?? contextMenu.x,
-        top: contextMenuPosition?.y ?? contextMenu.y,
-        zIndex: 10000,
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <>
+      {copiedPromptToast}
+      <div
+        ref={contextMenuRef}
+        className="timeline-context-menu"
+        style={{
+          position: 'fixed',
+          left: contextMenuPosition?.x ?? contextMenu.x,
+          top: contextMenuPosition?.y ?? contextMenu.y,
+          zIndex: 10000,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
       {isMidi && clip && (
         <>
           <div
@@ -502,6 +551,18 @@ export function TimelineContextMenu({
           </div>
         </>
       )}
+
+      <div className="context-menu-separator" />
+      <div
+        className={`context-menu-item ${!canCopyGenerationPrompt ? 'disabled' : ''}`}
+        onClick={() => runCommand({
+          kind: 'copy-generation-prompt',
+          prompt: generationPrompt,
+          canExecute: canCopyGenerationPrompt,
+        })}
+      >
+        Copy Prompt
+      </div>
 
       <div className="context-menu-separator" />
       <div className="context-menu-item has-submenu" onMouseEnter={handleSubmenuHover} onMouseLeave={handleSubmenuLeave}>
@@ -725,6 +786,7 @@ export function TimelineContextMenu({
       >
         Delete Clip From Timeline
       </div>
-    </div>
+      </div>
+    </>
   );
 }

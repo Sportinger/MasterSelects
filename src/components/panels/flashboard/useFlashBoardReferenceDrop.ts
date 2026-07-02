@@ -3,6 +3,15 @@ import { getExternalDragPayload } from '../../timeline/utils/externalDragSession
 
 const MEDIA_FILE_DRAG_MIME = 'application/x-media-file-id';
 const MEDIA_PANEL_ITEM_DRAG_MIME = 'application/x-media-panel-item';
+const SLOT_DROP_HANDLED = Symbol('flashboardSlotDropHandled');
+
+type SlotHandledDragEvent = DragEvent<HTMLDivElement> & {
+  [SLOT_DROP_HANDLED]?: boolean;
+};
+
+function isSlotDropTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest('.fb-reference-slot-grid'));
+}
 
 interface ReferenceDropMediaFile {
   type?: string;
@@ -69,8 +78,15 @@ export function useFlashBoardReferenceDrop({
       setIsReferenceDragOver(false);
     }
   }, []);
+  const clearReferenceDragOver = useCallback(() => {
+    setIsReferenceDragOver(false);
+  }, []);
 
   const handleReferenceDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if ((event as SlotHandledDragEvent)[SLOT_DROP_HANDLED] || isSlotDropTarget(event.target)) {
+      return;
+    }
+
     if (!hasReferenceDragType(event.dataTransfer)) {
       return;
     }
@@ -101,9 +117,15 @@ export function useFlashBoardReferenceDrop({
   ]);
 
   return {
+    clearReferenceDragOver,
+    getReferenceMediaFileIdsFromTransfer,
     handleReferenceDragLeave,
     handleReferenceDragOver,
     handleReferenceDrop,
+    hasReferenceDragType,
     isReferenceDragOver,
+    markSlotDropHandled: (event: DragEvent<HTMLDivElement>) => {
+      (event as SlotHandledDragEvent)[SLOT_DROP_HANDLED] = true;
+    },
   };
 }

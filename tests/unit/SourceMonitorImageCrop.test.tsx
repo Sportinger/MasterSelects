@@ -15,6 +15,10 @@ function leftPx(element: HTMLElement): number {
   return Number.parseFloat(element.style.left);
 }
 
+function topPx(element: HTMLElement): number {
+  return Number.parseFloat(element.style.top);
+}
+
 function widthPx(element: HTMLElement): number {
   return Number.parseFloat(element.style.width);
 }
@@ -122,6 +126,47 @@ describe('SourceMonitorImageCrop', () => {
     fireEvent.click(getByText('1:1'));
 
     await waitFor(() => expect(widthPx(cropBox)).toBe(heightPx(cropBox)));
+  });
+
+  it('keeps the opposite corner fixed when resizing a locked-aspect crop', async () => {
+    const { container, getByText } = render(
+      <SourceMonitorImageCrop
+        file={{ id: 'image-1', name: 'image.jpg', url: 'blob:image' } as never}
+        busy={false}
+        error={null}
+        onApply={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const stage = container.querySelector('.source-monitor-image-crop') as HTMLElement;
+    const image = container.querySelector('img') as HTMLImageElement;
+    stage.getBoundingClientRect = vi.fn(() => ({ left: 0, top: 0, width: 500, height: 400 } as DOMRect));
+    image.getBoundingClientRect = vi.fn(() => ({ left: 50, top: 50, width: 400, height: 300 } as DOMRect));
+    setImageReady(image);
+    fireEvent.load(image);
+
+    const cropBox = await waitFor(() => {
+      const box = container.querySelector('.source-monitor-image-crop-box') as HTMLElement | null;
+      expect(box).toBeTruthy();
+      return box!;
+    });
+    fireEvent.click(getByText('1:1'));
+
+    await waitFor(() => expect(widthPx(cropBox)).toBe(heightPx(cropBox)));
+    const initialRight = leftPx(cropBox) + widthPx(cropBox);
+    const initialBottom = topPx(cropBox) + heightPx(cropBox);
+    const nwHandle = cropBox.querySelector('.source-monitor-image-crop-handle.nw') as HTMLElement;
+
+    fireEvent.pointerDown(nwHandle, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(document, { clientX: 40, clientY: 0 });
+    fireEvent.pointerUp(document);
+
+    await waitFor(() => {
+      expect(widthPx(cropBox)).toBe(heightPx(cropBox));
+      expect(leftPx(cropBox) + widthPx(cropBox)).toBeCloseTo(initialRight);
+      expect(topPx(cropBox) + heightPx(cropBox)).toBeCloseTo(initialBottom);
+    });
   });
 
   it('keeps crop dragging live after the first pointerup', async () => {

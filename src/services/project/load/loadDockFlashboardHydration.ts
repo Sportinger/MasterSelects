@@ -9,20 +9,27 @@ import {
   resetFlashBoardActiveGenerationState,
   type FlashBoardActiveGenerationRecord,
 } from '../../../stores/flashboardStore/activeGenerationRecords';
+import { createDefaultFlashBoardComposer } from '../../../stores/flashboardStore/defaults';
 import { useExportStore } from '../../../stores/exportStore';
 import { useMIDIStore } from '../../../stores/midiStore';
 import { hydrateHistoryStateFromProject } from '../../../stores/historyStore';
 import { flashBoardMediaBridge } from '../../flashboard/FlashBoardMediaBridge';
 import type {
   FlashBoardGenerationRequest,
+  FlashBoardComposerModelSettings,
+  FlashBoardComposerState,
   FlashBoardJobState,
   FlashBoardMediaType,
   FlashBoardOutputType,
+  FlashBoardPromptHistoryEntry,
   FlashBoardResult,
   FlashBoardService,
 } from '../../../stores/flashboardStore/types';
 import type {
+  ProjectFlashBoardComposerModelSettings,
+  ProjectFlashBoardComposerState,
   ProjectFlashBoardGenerationRecord,
+  ProjectFlashBoardPromptHistoryEntry,
   ProjectFlashBoardState,
 } from '../types/flashboard.types';
 import type { ProjectFile } from '../../projectFileService';
@@ -81,6 +88,102 @@ function normalizeFlashBoardRequest(
   };
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((id): id is string => typeof id === 'string')
+    : [];
+}
+
+function normalizeNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function normalizeFlashBoardComposerModelSettings(
+  settings: ProjectFlashBoardComposerModelSettings | undefined,
+): FlashBoardComposerModelSettings {
+  if (!settings) return {};
+
+  return {
+    version: typeof settings.version === 'string' ? settings.version : undefined,
+    mode: typeof settings.mode === 'string' ? settings.mode : undefined,
+    duration: normalizeNumber(settings.duration),
+    aspectRatio: typeof settings.aspectRatio === 'string' ? settings.aspectRatio : undefined,
+    imageSize: typeof settings.imageSize === 'string' ? settings.imageSize : undefined,
+    generateAudio: typeof settings.generateAudio === 'boolean' ? settings.generateAudio : undefined,
+    multiShots: typeof settings.multiShots === 'boolean' ? settings.multiShots : undefined,
+  };
+}
+
+function normalizeFlashBoardComposerModelSettingsByKey(
+  value: ProjectFlashBoardComposerState['modelSettingsByKey'],
+): Record<string, FlashBoardComposerModelSettings> {
+  if (!value || typeof value !== 'object') return {};
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key.trim().length > 0)
+      .map(([key, settings]) => [key, normalizeFlashBoardComposerModelSettings(settings)]),
+  );
+}
+
+function normalizeFlashBoardComposer(
+  composer: ProjectFlashBoardComposerState | undefined,
+): FlashBoardComposerState {
+  const defaults = createDefaultFlashBoardComposer();
+  if (!composer) return defaults;
+  const service = composer.service ? normalizeFlashBoardService(composer.service) : normalizeFlashBoardService(defaults.service);
+
+  return {
+    ...defaults,
+    ...composer,
+    service,
+    outputType: normalizeFlashBoardOutputType(composer.outputType, service) ?? defaults.outputType,
+    mode: typeof composer.mode === 'string' ? composer.mode : defaults.mode,
+    duration: normalizeNumber(composer.duration) ?? defaults.duration,
+    aspectRatio: typeof composer.aspectRatio === 'string' ? composer.aspectRatio : defaults.aspectRatio,
+    imageSize: typeof composer.imageSize === 'string' ? composer.imageSize : defaults.imageSize,
+    generateAudio: typeof composer.generateAudio === 'boolean' ? composer.generateAudio : defaults.generateAudio,
+    multiShots: typeof composer.multiShots === 'boolean' ? composer.multiShots : defaults.multiShots,
+    multiPrompt: Array.isArray(composer.multiPrompt)
+      ? composer.multiPrompt.filter((shot) => (
+        typeof shot.index === 'number'
+        && typeof shot.prompt === 'string'
+        && typeof shot.duration === 'number'
+      ))
+      : defaults.multiPrompt,
+    referenceMediaFileIds: normalizeStringArray(composer.referenceMediaFileIds),
+    modelSettingsByKey: normalizeFlashBoardComposerModelSettingsByKey(composer.modelSettingsByKey),
+  };
+}
+
+function normalizeFlashBoardPromptHistoryEntry(
+  entry: ProjectFlashBoardPromptHistoryEntry,
+): FlashBoardPromptHistoryEntry | null {
+  if (
+    (entry.kind !== 'generation' && entry.kind !== 'chat')
+    || typeof entry.prompt !== 'string'
+    || !entry.prompt.trim()
+  ) {
+    return null;
+  }
+
+  const createdAt = new Date(entry.createdAt).getTime();
+  return {
+    id: typeof entry.id === 'string' && entry.id.trim() ? entry.id : crypto.randomUUID(),
+    kind: entry.kind,
+    prompt: entry.prompt.trim(),
+    createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+  };
+}
+
+function normalizeFlashBoardPromptHistory(
+  history: ProjectFlashBoardState['promptHistory'],
+): FlashBoardPromptHistoryEntry[] {
+  return Array.isArray(history)
+    ? history.map(normalizeFlashBoardPromptHistoryEntry).filter((entry): entry is FlashBoardPromptHistoryEntry => entry !== null)
+    : [];
+}
+
 function normalizeFlashBoardResult(result: FlashBoardResult | undefined): FlashBoardResult | undefined {
   if (!result) return undefined;
   return { ...result, mediaType: normalizeFlashBoardMediaType(result.mediaType) };
@@ -91,10 +194,11 @@ function normalizeFlashBoardJob(
 ): FlashBoardJobState | undefined {
   if (!job) return undefined;
 
-  const interrupted = job.status === 'queued' || job.status === 'processing';
+  const resumable = (job.status === 'queued' || job.status === 'processing') && Boolean(job.remoteTaskId);
+  const interrupted = (job.status === 'queued' || job.status === 'processing') && !job.remoteTaskId;
   return {
     ...job,
-    status: interrupted ? 'failed' : job.status,
+    status: interrupted ? 'failed' : resumable ? 'processing' : job.status,
     error: interrupted && !job.error ? 'Job interrupted by reload' : job.error,
   };
 }
@@ -114,7 +218,11 @@ function normalizeFlashBoardGenerationRecord(
 }
 
 function hydrateFlashBoardGenerationRecordsFromProject(data: ProjectFlashBoardState): void {
-  hydrateFlashBoardActiveGenerationRecords(data.generationRecords.map(normalizeFlashBoardGenerationRecord));
+  hydrateFlashBoardActiveGenerationRecords(
+    data.generationRecords.map(normalizeFlashBoardGenerationRecord),
+    normalizeFlashBoardComposer(data.composer),
+    normalizeFlashBoardPromptHistory(data.promptHistory),
+  );
 }
 
 export async function hydrateDockFlashboardAndWorkspaceFromProject(projectData: ProjectFile): Promise<void> {

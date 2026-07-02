@@ -268,7 +268,7 @@ export function buildFlashBoardPromptRefinerInstructions(
     'Success criteria:',
     '- Preserve the user intent and improve specificity, clarity, and model fit.',
     '- Use the supplied reference images as evidence. Do not invent identity, text, brands, logos, objects, or composition details that are not visible or requested.',
-    '- Keep useful REF labels such as REF 1 or START when the downstream model should use a specific reference.',
+    '- Keep useful REF labels when the downstream model should use a specific reference; for START/END video frames, do not restate that they are first/last frames or describe their visible content.',
     '- Return a final prompt only; no analysis, no alternatives, no markdown.',
     '- The final prompt must be in English even when the user draft is not.',
     '- Do not mention OpenAI, GPT, prompt rewriting, or this refinement step.',
@@ -307,12 +307,21 @@ export function buildFlashBoardPromptRefinerUserText(
   references: PromptReferenceDescriptor[],
 ): string {
   const outputType = getOutputTypeLabel(input.entry);
+  const hasTimelineFrameReference = outputType === 'video'
+    && references.some((reference) => reference.role === 'start' || reference.role === 'end');
   const referenceLines = references.length > 0
     ? references.map((reference) => {
         const mediaType = reference.mediaType ? ` ${reference.mediaType}` : '';
         return `- ${reference.label} (${reference.role}${mediaType}): ${reference.displayName}`;
       }).join('\n')
     : '- none';
+  const videoReferenceGuidance = hasTimelineFrameReference
+    ? [
+        '',
+        'Frame-anchor prompt rule:',
+        '- START/END images are already supplied to the video model. Do not describe their visible content and do not write "Use START" or "Use END" instructions. Focus on motion, camera behavior, timing, continuity, and what happens between the supplied frames.',
+      ].join('\n')
+    : '';
 
   if (isSunoTarget(input)) {
     return [
@@ -355,6 +364,7 @@ export function buildFlashBoardPromptRefinerUserText(
     '',
     'Reference images supplied in order:',
     referenceLines,
+    videoReferenceGuidance,
     '',
     'Return JSON with a single field named "prompt".',
   ].join('\n');

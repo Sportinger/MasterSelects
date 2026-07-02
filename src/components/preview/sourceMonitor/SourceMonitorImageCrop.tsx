@@ -136,6 +136,38 @@ function fitCropBoxToAspect(crop: CropBox, imageBox: CropBox, aspectRatio: numbe
   }, imageBox);
 }
 
+function getAspectLockedResizeBox(
+  mode: CropHandle,
+  start: CropBox,
+  imageBox: CropBox,
+  dx: number,
+  dy: number,
+  aspectRatio: number,
+): CropBox {
+  const anchorX = mode.includes('w') ? start.x + start.width : start.x;
+  const anchorY = mode.includes('n') ? start.y + start.height : start.y;
+  const horizontalSign = mode.includes('e') ? 1 : -1;
+  const verticalSign = mode.includes('s') ? 1 : -1;
+  const requestedWidth = start.width + horizontalSign * dx;
+  const requestedHeight = start.height + verticalSign * dy;
+  const widthDrives = Math.abs(requestedWidth - start.width) >= Math.abs(requestedHeight - start.height);
+  const maxWidth = horizontalSign > 0 ? imageBox.x + imageBox.width - anchorX : anchorX - imageBox.x;
+  const maxHeight = verticalSign > 0 ? imageBox.y + imageBox.height - anchorY : anchorY - imageBox.y;
+  const maxAspectWidth = Math.min(maxWidth, maxHeight * aspectRatio);
+  const minAspectWidth = Math.min(maxAspectWidth, Math.max(MIN_CROP_SIZE, MIN_CROP_SIZE * aspectRatio));
+  let width = widthDrives ? requestedWidth : requestedHeight * aspectRatio;
+
+  width = clamp(width, minAspectWidth, maxAspectWidth);
+  const height = width / aspectRatio;
+
+  return {
+    x: horizontalSign > 0 ? anchorX : anchorX - width,
+    y: verticalSign > 0 ? anchorY : anchorY - height,
+    width,
+    height,
+  };
+}
+
 function getResizedCropBox(
   mode: CropHandle,
   start: CropBox,
@@ -144,6 +176,10 @@ function getResizedCropBox(
   dy: number,
   aspectRatio: number | null,
 ): CropBox {
+  if (aspectRatio !== null) {
+    return getAspectLockedResizeBox(mode, start, imageBox, dx, dy, aspectRatio);
+  }
+
   let left = start.x;
   let right = start.x + start.width;
   let top = start.y;
@@ -168,7 +204,7 @@ function getResizedCropBox(
     width: right - left,
     height: bottom - top,
   };
-  return aspectRatio === null ? resized : fitCropBoxToAspect(resized, imageBox, aspectRatio);
+  return resized;
 }
 
 function cropBoxToNaturalSelection(crop: CropBox, imageBox: CropBox, image: HTMLImageElement): SourceMonitorImageCropSelection {

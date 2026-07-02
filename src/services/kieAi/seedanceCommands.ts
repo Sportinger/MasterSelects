@@ -101,7 +101,7 @@ export async function createSeedanceVideoTask(
     duration: normalizeSeedanceDuration(params.duration),
     resolution: normalizeSeedanceResolution(params.provider, params.mode),
     aspect_ratio: params.aspectRatio || '16:9',
-    generate_audio: useMultimodalReferenceMode ? false : Boolean(params.sound),
+    generate_audio: Boolean(params.sound),
     return_last_frame: false,
     web_search: false,
   };

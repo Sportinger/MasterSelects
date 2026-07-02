@@ -58,6 +58,14 @@ export interface ImportGeneratedMediaResult {
   mediaFileId: string;
 }
 
+export type CatalogReferenceInputKind =
+  | 'start-frame'
+  | 'end-frame'
+  | 'image-reference'
+  | 'video-reference'
+  | 'audio-reference'
+  | 'video-input';
+
 export interface CatalogEntry {
   service: FlashBoardService;
   providerId: string;
@@ -65,8 +73,11 @@ export interface CatalogEntry {
   description: string;
   versions: string[];
   modes: string[];
+  modeLabels?: Record<string, string>;
+  modeControlLabel?: string;
   durations: number[];
   aspectRatios: string[];
+  referenceInputKinds?: CatalogReferenceInputKind[];
   supportsTextToVideo: boolean;
   supportsImageToVideo: boolean;
   supportsTextToImage?: boolean;

@@ -10,6 +10,7 @@ import type {
   FlashBoardActiveGenerationRecord,
   FlashBoardComposerState,
   FlashBoardJobState,
+  FlashBoardPromptHistoryEntry,
 } from '../stores/flashboardStore';
 import type { Composition, MediaFile } from '../stores/mediaStore/types';
 import type { TimelineClip } from '../types';
@@ -100,6 +101,14 @@ function normalizeFlashBoardComposerForHistory(composer: FlashBoardComposerState
     endMediaFileId: composer.endMediaFileId ?? null,
     referenceMediaFileIds: composer.referenceMediaFileIds ?? [],
   };
+}
+
+function normalizeFlashBoardPromptHistoryForHistory(promptHistory: FlashBoardPromptHistoryEntry[]) {
+  return promptHistory.map((entry) => ({
+    kind: entry.kind,
+    prompt: entry.prompt,
+    createdAt: entry.createdAt,
+  }));
 }
 
 function normalizeCompositionTimelineForHistory(timelineData: Composition['timelineData']) {
@@ -515,6 +524,7 @@ export function useGlobalHistory() {
       (state) => ({
         activeGenerationRecords: state.activeGenerationRecords,
         composer: state.composer,
+        promptHistory: state.promptHistory,
       }),
       (curr, prev) => {
         if (isHistoryCaptureSuppressed()) return;
@@ -531,6 +541,12 @@ export function useGlobalHistory() {
             JSON.stringify(normalizeFlashBoardRecordsForHistory(prev.activeGenerationRecords))
         ) {
           debouncedCapture('Modify generation records');
+        } else if (
+          curr.promptHistory !== prev.promptHistory &&
+          JSON.stringify(normalizeFlashBoardPromptHistoryForHistory(curr.promptHistory)) !==
+            JSON.stringify(normalizeFlashBoardPromptHistoryForHistory(prev.promptHistory))
+        ) {
+          debouncedCapture('Modify prompt history');
         }
       },
       { equalityFn: shallowEqual, fireImmediately: false }

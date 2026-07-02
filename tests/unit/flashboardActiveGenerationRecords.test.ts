@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useFlashBoardStore } from '../../src/stores/flashboardStore';
 import {
+  appendFlashBoardPromptHistoryEntry,
   ensureFlashBoardActiveGenerationBoard,
   failFlashBoardActiveGenerationRecord,
   completeFlashBoardActiveGenerationRecord,
   getFlashBoardActiveGenerationRecord,
   getFlashBoardActiveGenerationRecords,
+  getFlashBoardPromptHistory,
   hydrateFlashBoardActiveGenerationRecords,
   resetFlashBoardActiveGenerationState,
   selectFlashBoardActiveGenerationRecords,
@@ -38,6 +40,7 @@ describe('FlashBoard active generation record adapter', () => {
       activeGenerationRecords: [generationRecord],
       selectedActiveGenerationRecordIds: [],
       composer: createDefaultFlashBoardComposer(),
+      promptHistory: [],
       hoveredComposerReference: null,
     });
   });
@@ -148,6 +151,7 @@ describe('FlashBoard active generation record adapter', () => {
     expect(useFlashBoardStore.getState()).toMatchObject({
       activeGenerationRecords: [],
       selectedActiveGenerationRecordIds: [],
+      promptHistory: [],
       hoveredComposerReference: null,
     });
   });
@@ -192,10 +196,47 @@ describe('FlashBoard active generation record adapter', () => {
       job: { status: 'queued' },
     });
     expect(getFlashBoardActiveGenerationRecords()).toContainEqual(record);
+    expect(getFlashBoardPromptHistory()).toMatchObject([
+      { kind: 'generation', prompt: 'New prompt' },
+    ]);
     expect(submitSpy).toHaveBeenCalledWith({
       recordId: record?.id,
       request,
     });
+  });
+
+  it('stores project prompt history and moves reused prompts to the top', () => {
+    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: '  Ask for variants  ' });
+    appendFlashBoardPromptHistoryEntry({ kind: 'generation', prompt: 'Clean canvas' });
+    appendFlashBoardPromptHistoryEntry({ kind: 'chat', prompt: 'Ask for variants' });
+
+    expect(getFlashBoardPromptHistory()).toMatchObject([
+      { kind: 'chat', prompt: 'Ask for variants' },
+      { kind: 'generation', prompt: 'Clean canvas' },
+    ]);
+  });
+
+  it('stores multishot prompts when the generation is submitted', () => {
+    vi.spyOn(flashBoardJobService, 'submit').mockReturnValue(null);
+
+    submitFlashBoardActiveGenerationRequest({
+      service: 'kieai',
+      providerId: 'kling-3.0',
+      version: '3.0',
+      outputType: 'video',
+      prompt: '',
+      multiShots: true,
+      multiPrompt: [
+        { index: 1, prompt: 'Opening shot', duration: 2 },
+        { index: 2, prompt: 'Closing shot', duration: 3 },
+      ],
+      referenceMediaFileIds: [],
+    });
+
+    expect(getFlashBoardPromptHistory()).toMatchObject([
+      { kind: 'generation', prompt: 'Opening shot' },
+      { kind: 'generation', prompt: 'Closing shot' },
+    ]);
   });
 
   it('returns undefined for unknown records', () => {

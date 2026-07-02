@@ -46,6 +46,7 @@ export function createTransitionNestedCompositionLayer(params: {
     blendMode: 'normal',
     source: {
       type: 'image',
+      mediaTime: compositionTime,
       nestedComposition: {
         compositionId: composition.id,
         layers: nestedLayers,

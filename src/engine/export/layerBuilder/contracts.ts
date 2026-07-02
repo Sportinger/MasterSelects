@@ -1,5 +1,6 @@
 import type { TimelineClip, TimelineTrack } from '../../../stores/timeline/types';
 import type { ActiveTransitionPlan } from '../../../stores/timeline/editOperations/transitionPlanner';
+import type { Composition, MediaFile } from '../../../stores/mediaStore/types';
 import type { BlendMode } from '../../../types/blendMode';
 import type { RuntimeColorGrade } from '../../../types/colorCorrection';
 import type { Effect } from '../../../types/effects';
@@ -50,6 +51,8 @@ export interface FrameContextLike {
   trackMap: Map<string, TimelineTrack>;
   clipsByTrack: Map<string, TimelineClip>;
   transitionParticipantsByTrack?: Map<string, ActiveTransitionPlan>;
+  mediaFiles?: MediaFile[];
+  mediaCompositions?: Composition[];
   getInterpolatedTransform: (clipId: string, localTime: number) => ClipTransform;
   getInterpolatedEffects: (clipId: string, localTime: number) => Effect[];
   getInterpolatedColorCorrection: (clipId: string, localTime: number) => RuntimeColorGrade | undefined;

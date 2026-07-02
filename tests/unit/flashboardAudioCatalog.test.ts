@@ -183,12 +183,32 @@ describe('FlashBoard audio catalog contract', () => {
   it('exposes current Kie.ai video utilities and premium video providers', () => {
     const entries = getCatalogEntries();
 
+    expect(entries.find((candidate) => (
+      candidate.service === 'kieai' && candidate.providerId === 'kling-3.0'
+    ))).toMatchObject({
+      outputType: 'video',
+      modes: ['std', 'pro', '4K'],
+      modeLabels: { std: '720p', pro: '1080p', '4K': '4K' },
+      modeControlLabel: 'Resolution',
+      referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
+      maxReferenceMedia: 3,
+    });
+    expect(entries.find((candidate) => (
+      candidate.service === 'cloud' && candidate.providerId === 'cloud-kling'
+    ))).toMatchObject({
+      modes: ['std', 'pro', '4K'],
+      modeLabels: { std: '720p', pro: '1080p', '4K': '4K' },
+      referenceInputKinds: ['start-frame', 'end-frame', 'image-reference', 'video-reference'],
+    });
     expect(entries.find((candidate) => candidate.providerId === 'veo-3.1')).toMatchObject({
       service: 'kieai',
       outputType: 'video',
       supportsTextToVideo: true,
       supportsImageToVideo: true,
       modes: ['veo3_fast', 'veo3', 'veo3_lite'],
+      modeLabels: { veo3_fast: 'Fast', veo3: 'Quality', veo3_lite: 'Lite' },
+      referenceInputKinds: ['start-frame', 'end-frame', 'image-reference'],
+      maxReferenceMedia: 3,
       promptRefinerProfile: 'veo',
     });
     expect(entries.find((candidate) => candidate.providerId === 'runway-video')).toMatchObject({
@@ -197,6 +217,8 @@ describe('FlashBoard audio catalog contract', () => {
       durations: [5, 10],
       modes: ['720p', '1080p'],
       aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+      referenceInputKinds: ['start-frame', 'image-reference'],
+      maxReferenceMedia: 1,
       promptRefinerProfile: 'runway',
     });
     expect(entries.find((candidate) => (

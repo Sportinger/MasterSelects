@@ -206,7 +206,7 @@ export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerPar
     layers: nestedLayers,
     width: composition?.width || 1920,
     height: composition?.height || 1080,
-    currentTime: ctx.playheadPosition,
+    currentTime: timeInfo.clipTime,
     sceneClips: clip.nestedClips,
     sceneTracks: clip.nestedTracks,
   };
@@ -219,7 +219,7 @@ export function buildLayerBuilderNestedCompLayer(params: BuildNestedCompLayerPar
       ? transform.opacity * opacityOverride
       : transform.opacity,
     blendMode: transform.blendMode as BlendMode,
-    source: { type: 'image', nestedComposition: nestedCompData },
+    source: { type: 'image', mediaTime: timeInfo.clipTime, nestedComposition: nestedCompData },
     effects: ctx.getInterpolatedEffects(clip.id, timeInfo.clipTime),
     colorCorrection: ctx.getInterpolatedColorCorrection(clip.id, timeInfo.clipTime),
     position: transform.position,

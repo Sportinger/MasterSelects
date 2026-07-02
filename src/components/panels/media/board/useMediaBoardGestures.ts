@@ -43,6 +43,7 @@ export interface UseMediaBoardGesturesOptions {
   ) => { groupId: string | null; position: MediaBoardGroupOffset } | null;
   getMediaBoardPlacementAtPoint: (point: { x: number; y: number }) => MediaBoardNodePlacement | null;
   getMediaBoardTopLevelMoveIds: (itemIds: string[]) => string[];
+  getSlotGridProgress: () => number;
   handleContextMenu: MediaBoardContextMenuHandler;
   handleItemClick: (itemId: string, event: ReactMouseEvent) => void;
   handleItemDoubleClick: (item: MediaBoardItem) => void | Promise<void>;
@@ -78,6 +79,7 @@ export function useMediaBoardGestures({
   getMediaBoardInsertTarget,
   getMediaBoardPlacementAtPoint,
   getMediaBoardTopLevelMoveIds,
+  getSlotGridProgress,
   handleContextMenu,
   handleItemClick,
   handleItemDoubleClick,
@@ -226,6 +228,7 @@ export function useMediaBoardGestures({
     commitMediaBoardOrderChange,
     getMediaBoardInsertTarget,
     getMediaBoardTopLevelMoveIds,
+    getSlotGridProgress,
     mediaBoardItemIds,
     mediaBoardLayout,
     mediaBoardPlacementsById,

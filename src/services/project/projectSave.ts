@@ -11,8 +11,11 @@ import { useDockStore } from '../../stores/dockStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
   getFlashBoardActiveGenerationRecords,
+  getFlashBoardComposerState,
+  getFlashBoardPromptHistory,
   type FlashBoardActiveGenerationRecord,
 } from '../../stores/flashboardStore/activeGenerationRecords';
+import type { FlashBoardComposerState, FlashBoardPromptHistoryEntry } from '../../stores/flashboardStore/types';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
 import { recordHistoryEvent, serializeHistoryStateForProject } from '../../stores/historyStore';
@@ -24,8 +27,10 @@ import { cloneClipNodeGraph } from '../nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
+  ProjectFlashBoardComposerState,
   ProjectFlashBoardGenerationMetadata,
   ProjectFlashBoardGenerationRecord,
+  ProjectFlashBoardPromptHistoryEntry,
   ProjectFlashBoardState,
 } from './types/flashboard.types';
 import {
@@ -391,23 +396,70 @@ function convertCompositions(compositions: Composition[]): ProjectComposition[] 
 function serializeFlashBoardGenerationRecord(
   record: FlashBoardActiveGenerationRecord,
 ): ProjectFlashBoardGenerationRecord {
-  let job: ProjectFlashBoardGenerationRecord['job'];
-  if (record.job) {
-    const { remoteTaskId: _remoteTaskId, ...rest } = record.job;
-    job = rest;
-  }
-
   return {
     id: record.id,
     createdAt: new Date(record.createdAt).toISOString(),
     updatedAt: new Date(record.updatedAt).toISOString(),
     request: record.request,
-    job,
+    job: record.job,
     result: record.result,
   };
 }
 
-function serializeFlashBoardState(records: FlashBoardActiveGenerationRecord[]): ProjectFlashBoardState {
+function serializeFlashBoardComposerState(
+  composer: FlashBoardComposerState,
+): ProjectFlashBoardComposerState {
+  return {
+    isOpen: composer.isOpen,
+    service: composer.service,
+    providerId: composer.providerId,
+    version: composer.version,
+    outputType: composer.outputType,
+    mode: composer.mode,
+    duration: composer.duration,
+    aspectRatio: composer.aspectRatio,
+    imageSize: composer.imageSize,
+    generateAudio: composer.generateAudio,
+    multiShots: composer.multiShots,
+    multiPrompt: composer.multiPrompt,
+    voiceId: composer.voiceId,
+    voiceName: composer.voiceName,
+    languageOverride: composer.languageOverride,
+    languageCode: composer.languageCode,
+    outputFormat: composer.outputFormat,
+    voiceSettings: composer.voiceSettings,
+    sunoCustomMode: composer.sunoCustomMode,
+    sunoInstrumental: composer.sunoInstrumental,
+    sunoStyle: composer.sunoStyle,
+    sunoTitle: composer.sunoTitle,
+    sunoNegativeTags: composer.sunoNegativeTags,
+    sunoVocalGender: composer.sunoVocalGender,
+    sunoStyleWeight: composer.sunoStyleWeight,
+    sunoWeirdnessConstraint: composer.sunoWeirdnessConstraint,
+    sunoAudioWeight: composer.sunoAudioWeight,
+    startMediaFileId: composer.startMediaFileId,
+    endMediaFileId: composer.endMediaFileId,
+    referenceMediaFileIds: composer.referenceMediaFileIds,
+    modelSettingsByKey: composer.modelSettingsByKey,
+  };
+}
+
+function serializeFlashBoardPromptHistoryEntry(
+  entry: FlashBoardPromptHistoryEntry,
+): ProjectFlashBoardPromptHistoryEntry {
+  return {
+    id: entry.id,
+    kind: entry.kind,
+    prompt: entry.prompt,
+    createdAt: new Date(entry.createdAt).toISOString(),
+  };
+}
+
+function serializeFlashBoardState(
+  records: FlashBoardActiveGenerationRecord[],
+  composer: FlashBoardComposerState,
+  promptHistory: FlashBoardPromptHistoryEntry[],
+): ProjectFlashBoardState {
   const generationMetadataByMediaId: Record<string, ProjectFlashBoardGenerationMetadata> = {};
 
   for (const record of records) {
@@ -419,6 +471,7 @@ function serializeFlashBoardState(records: FlashBoardActiveGenerationRecord[]): 
         version: record.request.version,
         outputType: record.request.outputType,
         mediaType: record.result.mediaType,
+        originalPrompt: record.request.originalPrompt,
         prompt: record.request.prompt,
         negativePrompt: record.request.negativePrompt,
         duration: record.request.duration,
@@ -452,6 +505,8 @@ function serializeFlashBoardState(records: FlashBoardActiveGenerationRecord[]): 
 
   return {
     version: 1,
+    composer: serializeFlashBoardComposerState(composer),
+    promptHistory: promptHistory.map(serializeFlashBoardPromptHistoryEntry),
     generationRecords: records.map(serializeFlashBoardGenerationRecord),
     generationMetadataByMediaId,
   };
@@ -672,12 +727,11 @@ export async function syncStoresToProject(): Promise<void> {
       projectData.mathSceneItems = freshState.mathSceneItems;
       projectData.motionShapeItems = freshState.motionShapeItems;
 
-      const flashBoardGenerationRecords = getFlashBoardActiveGenerationRecords();
-      if (flashBoardGenerationRecords.length > 0) {
-        projectData.flashboard = serializeFlashBoardState(flashBoardGenerationRecords);
-      } else {
-        delete projectData.flashboard;
-      }
+      projectData.flashboard = serializeFlashBoardState(
+        getFlashBoardActiveGenerationRecords(),
+        getFlashBoardComposerState(),
+        getFlashBoardPromptHistory(),
+      );
     }
 
     log.info(' Synced stores to project');

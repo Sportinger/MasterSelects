@@ -202,6 +202,7 @@ getTrackChildren()  // Query child tracks
 - Normal Select-mode drops still use gap-aware placement. Position/Overwrite intentionally keeps the requested drop time and lets the kernel trim/delete the affected target range.
 - Insert, Overwrite, Replace, Fit to Fill, Append, Place on Top, and Ripple Overwrite are enabled when the Media Panel or Source Monitor exposes a current source item. The commands resolve the source, prepare the affected range through the placement operation, then create the new clip on the target track.
 - Replace, Fit to Fill, and Ripple Overwrite prefer the selected timeline range or selected compatible target clip. Insert and Overwrite use the playhead. Append uses the end of the compatible target track, and Place on Top uses a free upper video track or creates one.
+- New visual media clips keep the default 100% scale; users resize or fit them manually in the Properties panel when needed.
 - Source Monitor In/Out marks constrain the placement source duration and source in point. Clearing the marks returns placement to the full source duration.
 - Source Monitor exposes a full-width source timeline with ruler, playhead, draggable In/Out handles, audio-file playback, and direct Insert, Overwrite, Replace, Fit, Append, and Top buttons, so source edit commands are available outside the timeline tool flyout.
 - Clicking a track header targets that video or audio track for source edits and clip paste. Clicking the same highlighted track again clears that target.

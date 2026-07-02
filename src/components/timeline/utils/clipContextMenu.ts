@@ -395,6 +395,41 @@ export function executeClipContextMenuClipboardCommand(input: {
   }
 }
 
+async function writeTextToClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    // Fall back below.
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  try {
+    textarea.select();
+    document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+export async function executeClipContextMenuCopyPrompt(input: {
+  prompt: string;
+  canExecute: boolean;
+  writeClipboardText?: (text: string) => Promise<void>;
+  onCopied?: () => void;
+}): Promise<boolean> {
+  const prompt = input.prompt.trim();
+  if (!input.canExecute || !prompt) return false;
+
+  await (input.writeClipboardText ?? writeTextToClipboard)(prompt);
+  input.onCopied?.();
+  return true;
+}
+
 export function getClipContextMenuDeleteGapTime(clip: ClipContextMenuClipLike | null | undefined): number {
   return Math.max(0, (clip?.startTime ?? 0) - 0.0005);
 }
@@ -602,5 +637,12 @@ export async function executeClipContextMenuCommand(
       });
     case 'export-current-frame':
       return context.exportCurrentFrame();
+    case 'copy-generation-prompt':
+      return executeClipContextMenuCopyPrompt({
+        prompt: command.prompt,
+        canExecute: command.canExecute,
+        writeClipboardText: context.writeClipboardText,
+        onCopied: context.onCopyPromptComplete,
+      });
   }
 }

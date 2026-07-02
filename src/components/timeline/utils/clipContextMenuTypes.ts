@@ -175,6 +175,11 @@ export type ClipContextMenuCommandDescriptor =
   | {
       kind: 'export-current-frame';
       canExecute: boolean;
+    }
+  | {
+      kind: 'copy-generation-prompt';
+      prompt: string;
+      canExecute: boolean;
     };
 
 export type ClipContextMenuClipboardCommand =
@@ -236,6 +241,8 @@ export interface ClipContextMenuCommandExecutionContext {
   setAudioDisplayMode: (mode: ClipContextMenuAudioDisplayMode) => void;
   loadTranscriber: ClipContextMenuTranscribeLoader;
   exportCurrentFrame: () => Promise<boolean>;
+  writeClipboardText?: (text: string) => Promise<void>;
+  onCopyPromptComplete?: () => void;
   showInExplorer: ClipContextMenuShowInExplorerHandler;
   notify: (message: string) => void;
   downloadRawFile: (file: File | Blob, name: string) => void;

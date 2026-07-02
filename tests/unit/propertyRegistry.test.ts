@@ -3,6 +3,7 @@ import type { ClipTransform, SerializableClip, TimelineClip } from '../../src/ty
 import { createDefaultMotionLayerDefinition } from '../../src/types/motionDesign';
 import { PropertyRegistry } from '../../src/services/properties/PropertyRegistry';
 import { registerCoreProperties } from '../../src/services/properties/registerCoreProperties';
+import { getEffectiveScale } from '../../src/utils/transformScale';
 
 function makeTransform(overrides?: Partial<ClipTransform>): ClipTransform {
   return {
@@ -49,6 +50,16 @@ describe('PropertyRegistry', () => {
     const updated = registry.writeValue<number>(clip, 'position.x', 42);
     expect(updated.transform.position.x).toBe(42);
     expect(clip.transform.position.x).toBe(12);
+  });
+
+  it('writes scale.all as the uniform multiplier without overwriting axis scale', () => {
+    const registry = createRegistry();
+    const clip = makeClip({ transform: makeTransform({ scale: { x: 1, y: 1 } }) });
+
+    const updated = registry.writeValue<number>(clip, 'scale.all', 2);
+
+    expect(updated.transform.scale).toEqual({ x: 1, y: 1, all: 2 });
+    expect(getEffectiveScale(updated.transform.scale)).toEqual({ x: 2, y: 2 });
   });
 
   it('searches registered labels and aliases', () => {

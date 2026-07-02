@@ -29,6 +29,7 @@ interface BuildFlashBoardGenerationRequestInput {
   mode: string;
   multiShots: boolean;
   normalizedMultiPrompt: FlashBoardMultiShotPrompt[];
+  originalPrompt?: string | null;
   outputFormat: string;
   providerId: string;
   selectedEntry: FlashBoardGenerationRequestEntry;
@@ -73,6 +74,7 @@ export function buildFlashBoardGenerationRequest({
   mode,
   multiShots,
   normalizedMultiPrompt,
+  originalPrompt,
   outputFormat,
   providerId,
   selectedEntry,
@@ -97,6 +99,10 @@ export function buildFlashBoardGenerationRequest({
     || providerId === 'cloud-elevenlabs-tts'
   );
   const modeSupportedForAudio = isAudioRequest && selectedEntry.modes.length > 0;
+  const trimmedOriginalPrompt = originalPrompt?.trim();
+  const requestOriginalPrompt = trimmedOriginalPrompt && trimmedOriginalPrompt !== effectivePrompt.trim()
+    ? trimmedOriginalPrompt
+    : undefined;
 
   return {
     service,
@@ -104,6 +110,7 @@ export function buildFlashBoardGenerationRequest({
     version,
     outputType: selectedEntry.outputType ?? 'video',
     mode: isAudioRequest && !modeSupportedForAudio ? undefined : mode,
+    originalPrompt: requestOriginalPrompt,
     prompt: effectivePrompt,
     duration: isAudioRequest ? undefined : duration,
     aspectRatio: isAudioRequest ? undefined : aspectRatio,

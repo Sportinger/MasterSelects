@@ -774,16 +774,55 @@ function getKlingReferenceToken(index: number): string {
   return `ref_${index + 1}`;
 }
 
+interface KlingReferenceElement {
+  description: string;
+  element_input_urls: string[];
+  name: string;
+}
+
+function createKlingReferenceElements(
+  references: Array<HostedReferenceMedia & { url: string }>,
+): KlingReferenceElement[] {
+  const elements: KlingReferenceElement[] = [];
+  const imageReferences = references
+    .filter((reference) => reference.mediaType === 'image')
+    .slice(0, 4);
+
+  if (imageReferences.length >= 2) {
+    elements.push({
+      description: imageReferences
+        .map((reference, index) => reference.label || `Reference ${index + 1}`)
+        .join(', '),
+      element_input_urls: imageReferences.map((reference) => reference.url),
+      name: getKlingReferenceToken(elements.length),
+    });
+  }
+
+  for (const reference of references) {
+    if (reference.mediaType !== 'video' || elements.length >= 3) {
+      continue;
+    }
+
+    elements.push({
+      description: reference.label || `Reference ${elements.length + 1}`,
+      element_input_urls: [reference.url],
+      name: getKlingReferenceToken(elements.length),
+    });
+  }
+
+  return elements;
+}
+
 function applyKlingReferenceTokens(
   prompt: string,
-  references: Array<HostedReferenceMedia & { url: string }>,
+  elements: KlingReferenceElement[],
 ): string {
-  if (references.length === 0) {
+  if (elements.length === 0) {
     return prompt;
   }
 
   let nextPrompt = prompt;
-  const tokens = references.map((_, index) => getKlingReferenceToken(index));
+  const tokens = elements.map((element) => element.name);
 
   tokens.forEach((token, index) => {
     const pattern = new RegExp(`\\bREF\\s*${index + 1}\\b`, 'gi');
@@ -800,17 +839,13 @@ function applyKlingReferenceTokens(
 
 function addHostedKlingReferenceInput(
   input: Record<string, unknown>,
-  references: Array<HostedReferenceMedia & { url: string }>,
+  elements: KlingReferenceElement[],
 ): void {
-  if (references.length === 0) {
+  if (elements.length === 0) {
     return;
   }
 
-  input.kling_elements = references.map((reference, index) => ({
-    name: getKlingReferenceToken(index),
-    description: reference.label || `Reference ${index + 1}`,
-    element_input_urls: [reference.url],
-  }));
+  input.kling_elements = elements;
 }
 
 function isSeedanceProvider(provider: string | undefined): provider is typeof SEEDANCE_2_PROVIDER_ID | typeof SEEDANCE_2_FAST_PROVIDER_ID {
@@ -846,11 +881,13 @@ export function calculateHostedKlingCost(
   sound: boolean,
   multiShots = false,
 ): number {
-  const normalizedMode = mode === 'pro' ? 'pro' : 'std';
+  const normalizedMode = mode === 'pro' || mode === '4K' ? mode : 'std';
   const durationSeconds = Math.max(3, Math.min(15, Math.floor(duration)));
   const effectiveSound = multiShots ? true : sound;
   const baseCost =
-    normalizedMode === 'pro'
+    normalizedMode === '4K'
+      ? durationSeconds * 67
+      : normalizedMode === 'pro'
       ? durationSeconds * (effectiveSound ? 27 : 18)
       : durationSeconds * (effectiveSound ? 20 : 14);
 
@@ -913,7 +950,8 @@ export async function createHostedKlingTask(
       .filter((reference) => reference.mediaType === 'image' || reference.mediaType === 'video')
       .slice(0, 3),
   );
-  const prompt = applyKlingReferenceTokens(params.prompt, elementReferences);
+  const referenceElements = createKlingReferenceElements(elementReferences);
+  const prompt = applyKlingReferenceTokens(params.prompt, referenceElements);
 
   if (params.startImageUrl) {
     imageUrls.push(await uploadImage(env, params.startImageUrl));
@@ -926,7 +964,7 @@ export async function createHostedKlingTask(
   const input: Record<string, unknown> = {
     aspect_ratio: params.aspectRatio ?? '16:9',
     duration: String(params.duration),
-    mode: params.mode === 'pro' ? 'pro' : 'std',
+    mode: params.mode === 'pro' || params.mode === '4K' ? params.mode : 'std',
     multi_shots: Boolean(params.multiShots),
     prompt,
     sound: effectiveSound,
@@ -939,11 +977,11 @@ export async function createHostedKlingTask(
   if (multiPrompt) {
     input.multi_prompt = multiPrompt.map((shot) => ({
       ...shot,
-      prompt: applyKlingReferenceTokens(shot.prompt, elementReferences),
+      prompt: applyKlingReferenceTokens(shot.prompt, referenceElements),
     }));
   }
 
-  addHostedKlingReferenceInput(input, elementReferences);
+  addHostedKlingReferenceInput(input, referenceElements);
 
   const payload = await kieAiJsonRequest<KieAiCreateTaskResponse>(env, '/api/v1/jobs/createTask', 'POST', {
     input,
@@ -1085,7 +1123,7 @@ export async function createHostedSeedanceTask(
   const input: Record<string, unknown> = {
     aspect_ratio: params.aspectRatio ?? '16:9',
     duration: normalizeSeedanceDuration(params.duration),
-    generate_audio: hasReferenceMedia ? false : Boolean(params.sound),
+    generate_audio: Boolean(params.sound),
     prompt: params.prompt,
     resolution: normalizeSeedanceResolution(provider, params.mode),
     return_last_frame: false,

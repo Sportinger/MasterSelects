@@ -2,6 +2,7 @@ export interface FlashBoardStoreState {
   activeGenerationRecords: FlashBoardActiveGenerationRecord[];
   selectedActiveGenerationRecordIds: string[];
   composer: FlashBoardComposerState;
+  promptHistory: FlashBoardPromptHistoryEntry[];
   hoveredComposerReference: FlashBoardHoveredComposerReference | null;
 }
 
@@ -9,6 +10,7 @@ export const FLASHBOARD_STORE_STATE_KEYS = [
   'activeGenerationRecords',
   'selectedActiveGenerationRecordIds',
   'composer',
+  'promptHistory',
   'hoveredComposerReference',
 ] as const satisfies readonly (keyof FlashBoardStoreState)[];
 
@@ -18,6 +20,7 @@ export const FLASHBOARD_ACTIVE_GENERATION_STATE_KEYS = [
   'activeGenerationRecords',
   'selectedActiveGenerationRecordIds',
   'composer',
+  'promptHistory',
   'hoveredComposerReference',
 ] as const satisfies readonly FlashBoardStoreStateKey[];
 
@@ -52,6 +55,25 @@ export interface FlashBoardMultiShotPrompt {
   duration: number;
 }
 
+export type FlashBoardPromptHistoryKind = 'generation' | 'chat';
+
+export interface FlashBoardPromptHistoryEntry {
+  id: string;
+  kind: FlashBoardPromptHistoryKind;
+  prompt: string;
+  createdAt: number;
+}
+
+export interface FlashBoardComposerModelSettings {
+  version?: string;
+  mode?: string;
+  duration?: number;
+  aspectRatio?: string;
+  imageSize?: string;
+  generateAudio?: boolean;
+  multiShots?: boolean;
+}
+
 export interface FlashBoardComposerState {
   isOpen: boolean;
   generateAudio: boolean;
@@ -61,6 +83,10 @@ export interface FlashBoardComposerState {
   providerId?: string;
   version?: string;
   outputType?: FlashBoardOutputType;
+  mode?: string;
+  duration?: number;
+  aspectRatio?: string;
+  imageSize?: string;
   voiceId?: string;
   voiceName?: string;
   languageOverride?: boolean;
@@ -79,6 +105,7 @@ export interface FlashBoardComposerState {
   startMediaFileId?: string;
   endMediaFileId?: string;
   referenceMediaFileIds: string[];
+  modelSettingsByKey?: Record<string, FlashBoardComposerModelSettings>;
 }
 
 export type FlashBoardComposerReferenceRole = 'start' | 'end' | 'reference';
@@ -104,6 +131,7 @@ export interface FlashBoardGenerationRequest {
   version: string;
   outputType?: FlashBoardOutputType;
   mode?: string;
+  originalPrompt?: string;
   prompt: string;
   negativePrompt?: string;
   duration?: number;
@@ -163,6 +191,7 @@ export interface FlashBoardGenerationMetadata {
   version: string;
   outputType?: FlashBoardOutputType;
   mediaType?: FlashBoardMediaType;
+  originalPrompt?: string;
   prompt: string;
   negativePrompt?: string;
   duration?: number;

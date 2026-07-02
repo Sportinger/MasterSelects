@@ -131,14 +131,22 @@ async function seekSequentialMode(
 
       for (const nestedClip of getRenderableNestedClips(clip, nestedTime)) {
         if (nestedClip.source?.type === 'video') {
+          const nestedClipTime = getNestedVideoClipTime(nestedClip, nestedTime);
+          const nestedState = clipStates.get(nestedClip.id);
+
+          if (nestedState?.isSequential && nestedState.webCodecsPlayer) {
+            seekPromises.push(nestedState.webCodecsPlayer.seekDuringExport(nestedClipTime).then(() => {
+              updateRuntimePlaybackTime(nestedState?.runtimeSource, nestedClipTime, 'export');
+            }));
+            continue;
+          }
+
           const nestedVideo = getExportVideoElement(
             nestedClip.id,
             clipStates,
             nestedClip.source?.videoElement
           );
           if (nestedVideo) {
-            const nestedClipTime = getNestedVideoClipTime(nestedClip, nestedTime);
-            const nestedState = clipStates.get(nestedClip.id);
             seekPromises.push(seekVideo(nestedVideo, nestedClipTime).then(() => {
               updateRuntimePlaybackTime(nestedState?.runtimeSource, nestedClipTime, 'export');
             }));
@@ -149,10 +157,7 @@ async function seekSequentialMode(
     }
 
     // Handle regular video clips
-    const exportVideo = clip.source?.type === 'video'
-      ? getExportVideoElement(clip.id, clipStates, clip.source.videoElement)
-      : null;
-    if (clip.source?.type === 'video' && exportVideo) {
+    if (clip.source?.type === 'video') {
       const clipLocalTime = time - clip.startTime;
 
       // Calculate clip time (handles speed keyframes and reversed clips)
@@ -173,7 +178,11 @@ async function seekSequentialMode(
         seekPromises.push(clipState.webCodecsPlayer.seekDuringExport(clipTime).then(() => {
           updateRuntimePlaybackTime(clipState.runtimeSource, clipTime, 'export');
         }));
-      } else {
+        continue;
+      }
+
+      const exportVideo = getExportVideoElement(clip.id, clipStates, clip.source.videoElement);
+      if (exportVideo) {
         // PRECISE MODE: HTMLVideoElement seeking
         seekPromises.push(seekVideo(exportVideo, clipTime).then(() => {
           updateRuntimePlaybackTime(clipState?.runtimeSource, clipTime, 'export');

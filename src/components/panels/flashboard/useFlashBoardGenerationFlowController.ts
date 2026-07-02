@@ -40,6 +40,7 @@ interface UseFlashBoardGenerationFlowControllerInput {
   mode: string;
   multiShots: boolean;
   normalizedMultiPrompt: FlashBoardMultiShotPrompt[];
+  originalPrompt?: string | null;
   outputFormat: string;
   providerId: string;
   selectedEntry?: CatalogEntry;
@@ -90,6 +91,7 @@ export function useFlashBoardGenerationFlowController({
   mode,
   multiShots,
   normalizedMultiPrompt,
+  originalPrompt,
   outputFormat,
   providerId,
   selectedEntry,
@@ -125,15 +127,19 @@ export function useFlashBoardGenerationFlowController({
     }
 
     const nextPatch = buildFlashBoardComposerSyncPatch({
+      aspectRatio,
       composer,
+      duration,
       effectiveGenerateAudio,
       effectiveReferenceMediaFileIds,
+      imageSize,
       isAudioMode,
       isElevenLabsMode,
       isSunoMode,
       languageCode,
       languageOverride,
       maxReferenceMedia,
+      mode,
       multiShots,
       normalizedMultiPrompt,
       outputFormat,
@@ -160,15 +166,19 @@ export function useFlashBoardGenerationFlowController({
       updateComposer(nextPatch);
     }
   }, [
+    aspectRatio,
     composer,
+    duration,
     effectiveGenerateAudio,
     effectiveReferenceMediaFileIds,
+    imageSize,
     isAudioMode,
     isElevenLabsMode,
     isSunoMode,
     languageCode,
     languageOverride,
     maxReferenceMedia,
+    mode,
     multiShots,
     normalizedMultiPrompt,
     outputFormat,
@@ -199,6 +209,7 @@ export function useFlashBoardGenerationFlowController({
     ));
 
     if (entry) {
+      const savedSettings = composer.modelSettingsByKey?.[`${newService}:${newId}`];
       const transition = buildFlashBoardProviderTransition({
         currentAspectRatio: aspectRatio,
         currentDuration: duration,
@@ -229,14 +240,48 @@ export function useFlashBoardGenerationFlowController({
         voiceSettings,
         clampReferenceMediaFileIds,
       });
+      const savedVersion = savedSettings?.version && entry.versions.includes(savedSettings.version)
+        ? savedSettings.version
+        : undefined;
+      const savedMode = savedSettings?.mode && entry.modes.includes(savedSettings.mode)
+        ? savedSettings.mode
+        : undefined;
+      const savedDuration = typeof savedSettings?.duration === 'number' && entry.durations.includes(savedSettings.duration)
+        ? savedSettings.duration
+        : undefined;
+      const savedAspectRatio = savedSettings?.aspectRatio && entry.aspectRatios.includes(savedSettings.aspectRatio)
+        ? savedSettings.aspectRatio
+        : undefined;
+      const savedImageSize = savedSettings?.imageSize && entry.imageSizes?.includes(savedSettings.imageSize)
+        ? savedSettings.imageSize
+        : undefined;
+      const savedGenerateAudio = typeof savedSettings?.generateAudio === 'boolean'
+        && !transition.isAudio
+        && entry.supportsGenerateAudio
+        ? savedSettings.generateAudio
+        : undefined;
+      const nextVersion = savedVersion ?? transition.nextVersion;
+      const nextMode = savedMode ?? transition.nextMode;
+      const nextDuration = savedDuration ?? transition.nextDuration;
+      const nextAspectRatio = savedAspectRatio ?? transition.nextAspectRatio;
+      const nextImageSize = savedImageSize ?? transition.nextImageSize;
 
-      setVersion(transition.nextVersion);
-      if (transition.nextMode !== undefined) setMode(transition.nextMode);
-      if (transition.nextDuration !== undefined) setDuration(transition.nextDuration);
-      if (transition.nextAspectRatio !== undefined) setAspectRatio(transition.nextAspectRatio);
-      if (transition.nextImageSize !== undefined) setImageSize(transition.nextImageSize);
+      setVersion(nextVersion);
+      if (nextMode !== undefined) setMode(nextMode);
+      if (nextDuration !== undefined) setDuration(nextDuration);
+      if (nextAspectRatio !== undefined) setAspectRatio(nextAspectRatio);
+      if (nextImageSize !== undefined) setImageSize(nextImageSize);
+      if (savedGenerateAudio !== undefined) setGenerateAudio(savedGenerateAudio);
 
-      updateComposer(transition.composerPatch);
+      updateComposer({
+        ...transition.composerPatch,
+        version: nextVersion,
+        mode: nextMode ?? mode,
+        duration: nextDuration ?? duration,
+        aspectRatio: nextAspectRatio ?? aspectRatio,
+        imageSize: nextImageSize ?? imageSize,
+        generateAudio: savedGenerateAudio ?? transition.composerPatch.generateAudio,
+      });
     }
 
     closePopover();
@@ -244,6 +289,7 @@ export function useFlashBoardGenerationFlowController({
     aspectRatio,
     closePopover,
     composer.endMediaFileId,
+    composer.modelSettingsByKey,
     composer.referenceMediaFileIds,
     composer.startMediaFileId,
     duration,
@@ -257,6 +303,7 @@ export function useFlashBoardGenerationFlowController({
     outputFormat,
     setAspectRatio,
     setDuration,
+    setGenerateAudio,
     setImageSize,
     setMode,
     setProviderId,
@@ -298,6 +345,7 @@ export function useFlashBoardGenerationFlowController({
       mode,
       multiShots,
       normalizedMultiPrompt,
+      originalPrompt,
       outputFormat,
       providerId,
       selectedEntry,
@@ -332,6 +380,7 @@ export function useFlashBoardGenerationFlowController({
     mode,
     multiShots,
     normalizedMultiPrompt,
+    originalPrompt,
     outputFormat,
     providerId,
     selectedEntry,

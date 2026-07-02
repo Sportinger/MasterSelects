@@ -40,6 +40,7 @@ export interface UseMediaBoardControllerOptions {
   handleExternalDropImport: (dataTransfer: DataTransfer, folderId: string | null) => Promise<void>;
   handleItemClick: (itemId: string, event: React.MouseEvent) => void;
   handleItemDoubleClick: (item: ProjectItem) => void | Promise<void>;
+  getSlotGridProgress: () => number;
   internalDragId: string | null;
   isMediaSearchActive: boolean;
   mediaBoardAnnotations: MediaBoardAnnotation[];
@@ -82,6 +83,7 @@ export function useMediaBoardController({
   handleExternalDropImport,
   handleItemClick,
   handleItemDoubleClick,
+  getSlotGridProgress,
   internalDragId,
   isMediaSearchActive,
   mediaBoardAnnotations,
@@ -148,6 +150,7 @@ export function useMediaBoardController({
     getMediaBoardInsertTarget: layout.getMediaBoardInsertTarget,
     getMediaBoardPlacementAtPoint: layout.getMediaBoardPlacementAtPoint,
     getMediaBoardTopLevelMoveIds: layout.getMediaBoardTopLevelMoveIds,
+    getSlotGridProgress,
     handleContextMenu,
     handleItemClick,
     handleItemDoubleClick,

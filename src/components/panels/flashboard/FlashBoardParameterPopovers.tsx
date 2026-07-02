@@ -19,6 +19,7 @@ interface FlashBoardParameterPopoversProps {
   durationOptions: DurationPopoverOption[];
   imageSizeOptions: ParameterPopoverOption[];
   modeOptions: ParameterPopoverOption[];
+  modeTitle?: string;
   onAspectRatioChange: (value: string) => void;
   onClosePopover: (popover: ParameterPopoverType) => void;
   onDurationChange: (value: number) => void;
@@ -86,6 +87,7 @@ export function FlashBoardParameterPopovers({
   durationOptions,
   imageSizeOptions,
   modeOptions,
+  modeTitle = 'Mode',
   onAspectRatioChange,
   onClosePopover,
   onDurationChange,
@@ -132,7 +134,7 @@ export function FlashBoardParameterPopovers({
 
       {activePopover === 'mode' && modeOptions.length > 0 && (
         <div className="fb-popover">
-          <div className="fb-popover-title">Mode</div>
+          <div className="fb-popover-title">{modeTitle}</div>
           <div className="fb-popover-pills">
             {modeOptions.map((option) => renderPopoverOption(option, () => {
               onModeChange(option.id);

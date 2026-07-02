@@ -5,7 +5,7 @@ import type { SubmitGenerationJobInput, SubmitGenerationJobResult } from './type
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
-import { runFlashBoardProviderJob } from './FlashBoardProviderRunners';
+import { resumeFlashBoardProviderJob, runFlashBoardProviderJob } from './FlashBoardProviderRunners';
 
 const log = Logger.create('FlashBoardJob');
 
@@ -167,6 +167,31 @@ class FlashBoardJobService {
 
   retry(recordId: string, request: FlashBoardGenerationRequest): void {
     this.submit({ recordId, request });
+  }
+
+  resume(input: { recordId: string; request: FlashBoardGenerationRequest; remoteTaskId: string }): void {
+    if (
+      this.running.some((job) => job.recordId === input.recordId)
+      || this.queue.some((job) => job.recordId === input.recordId)
+    ) {
+      return;
+    }
+
+    const request = resolveEffectiveRequest(input.request);
+    const abortController = new AbortController();
+    this.running.push({
+      recordId: input.recordId,
+      remoteTaskId: input.remoteTaskId,
+      service: request.service,
+      abortController,
+    });
+    this.onUpdate?.(input.recordId, { status: 'processing', remoteTaskId: input.remoteTaskId });
+    void this.resumeJob({
+      recordId: input.recordId,
+      request,
+      remoteTaskId: input.remoteTaskId,
+      abortController,
+    });
   }
 
   getQueueLength(): number {
@@ -365,6 +390,39 @@ class FlashBoardJobService {
       const message = err instanceof Error ? err.message : 'Unknown error';
       log.error(`Job failed for record ${recordId}:`, message);
       this.onUpdate?.(recordId, { status: 'failed', error: message });
+    }
+
+    this.processQueue();
+  }
+
+  private async resumeJob(input: {
+    recordId: string;
+    request: FlashBoardGenerationRequest;
+    remoteTaskId: string;
+    abortController: AbortController;
+  }): Promise<void> {
+    const { recordId, request, remoteTaskId, abortController } = input;
+
+    try {
+      assertPersonalApiKeyAccess(request);
+      const result = await resumeFlashBoardProviderJob({
+        request,
+        remoteTaskId,
+        abortController,
+        onProcessing: (update) => {
+          this.onUpdate?.(recordId, update);
+        },
+      });
+      this.running = this.running.filter(r => r.recordId !== recordId);
+      if (result) {
+        this.onUpdate?.(recordId, result);
+      }
+    } catch (err: unknown) {
+      this.running = this.running.filter(r => r.recordId !== recordId);
+      if (abortController.signal.aborted) return;
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      log.error(`Job resume failed for record ${recordId}:`, message);
+      this.onUpdate?.(recordId, { status: 'failed', error: message, remoteTaskId });
     }
 
     this.processQueue();

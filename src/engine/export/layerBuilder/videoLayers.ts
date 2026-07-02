@@ -22,9 +22,6 @@ export function buildVideoLayer(
 ): Layer | null {
   const clipState = clipStates.get(clip.id);
   const video = clipState?.preciseVideoElement ?? clip.source?.videoElement ?? null;
-  if (!video) {
-    return null;
-  }
 
   if (useParallelDecode) {
     if (!parallelDecoder) {
@@ -43,7 +40,7 @@ export function buildVideoLayer(
           ...baseLayerProps,
           source: {
             type: 'video',
-            videoElement: video,
+            ...(video ? { videoElement: video } : {}),
             videoFrame: videoFrame,
             mediaTime: sourceMediaTime,
           },
@@ -61,7 +58,7 @@ export function buildVideoLayer(
         ...baseLayerProps,
         source: {
           type: 'video',
-          videoElement: video,
+          ...(video ? { videoElement: video } : {}),
           videoFrame,
           webCodecsPlayer: clipState.webCodecsPlayer,
           mediaTime: sourceMediaTime,
@@ -69,6 +66,10 @@ export function buildVideoLayer(
       };
     }
     throw new Error(`FAST export failed: sequential decode frame not available for clip "${clip.name}" at ${time.toFixed(3)}s.`);
+  }
+
+  if (!video) {
+    return null;
   }
 
   if (video.readyState >= 2) {
@@ -90,7 +91,7 @@ export function buildVideoLayer(
 export function buildNestedVideoLayer(
   nestedClip: TimelineClip,
   baseLayer: BaseLayerPropsLike,
-  exportVideo: HTMLVideoElement,
+  exportVideo: HTMLVideoElement | null,
   mainTimelineTime: number,
   clipStates: Map<string, ExportClipStateLike>,
   parallelDecoder: ParallelDecodeManager | null,
@@ -116,7 +117,7 @@ export function buildNestedVideoLayer(
           ...baseLayer,
           source: {
             type: 'video',
-            videoElement: exportVideo,
+            ...(exportVideo ? { videoElement: exportVideo } : {}),
             videoFrame,
             mediaTime: sourceMediaTime,
           },
@@ -134,7 +135,7 @@ export function buildNestedVideoLayer(
         ...baseLayer,
         source: {
           type: 'video',
-          videoElement: exportVideo,
+          ...(exportVideo ? { videoElement: exportVideo } : {}),
           videoFrame,
           webCodecsPlayer: nestedClipState.webCodecsPlayer,
           mediaTime: sourceMediaTime,
@@ -144,7 +145,7 @@ export function buildNestedVideoLayer(
     throw new Error(`FAST export failed: sequential decode frame not available for nested clip "${nestedClip.name}" at ${mainTimelineTime.toFixed(3)}s.`);
   }
 
-  if (exportVideo.readyState >= 2) {
+  if (exportVideo && exportVideo.readyState >= 2) {
     return {
       ...baseLayer,
       source: {
@@ -156,6 +157,6 @@ export function buildNestedVideoLayer(
     };
   }
 
-  log.warn(`Nested clip "${nestedClip.name}" video not ready (readyState=${exportVideo.readyState}), skipping frame`);
+  log.warn(`Nested clip "${nestedClip.name}" video not ready (readyState=${exportVideo?.readyState ?? 'missing'}), skipping frame`);
   return null;
 }

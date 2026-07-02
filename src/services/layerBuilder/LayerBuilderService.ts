@@ -49,6 +49,7 @@ import {
   findActiveTransitionPlanForTrack,
   type ActiveTransitionPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
+import { ensureTransitionCompositionsForActiveTimeline } from '../../stores/timeline/editOperations/transitionCompositionMaintenance';
 import { buildLayerBuilderTransitionCompositionLayer } from './layerBuilderTransitionComposition';
 
 const log = Logger.create('LayerBuilder');
@@ -107,6 +108,14 @@ export class LayerBuilderService {
    * Main entry point - called from render loop
    */
   buildLayersFromStore(): Layer[] {
+    const repairedTransitionComps = ensureTransitionCompositionsForActiveTimeline(
+      useTimelineStore.setState,
+      useTimelineStore.getState,
+    );
+    if (repairedTransitionComps) {
+      this.invalidateCache();
+    }
+
     // Create frame context (single store read)
     const ctx = createFrameContext();
     hydrateTimelineMediaWindow(ctx);

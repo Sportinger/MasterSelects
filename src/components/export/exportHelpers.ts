@@ -2,6 +2,7 @@
 
 import { Logger } from '../../services/logger';
 import { useTimelineStore } from '../../stores/timeline';
+import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import type { Layer } from '../../types';
 import {
   createTransitionSourceClip,
@@ -63,6 +64,8 @@ export class FFmpegFrameRenderer {
   private runtimeRunId: string | null = null;
   private runtimeRunReported = false;
   private lastRuntimeReportMs = Number.NEGATIVE_INFINITY;
+  private mediaFiles: MediaFile[] = [];
+  private mediaCompositions: Composition[] = [];
 
   constructor(options: FFmpegFrameRendererOptions) {
     this.options = options;
@@ -94,6 +97,8 @@ export class FFmpegFrameRenderer {
       this.clipStates = preparation.clipStates;
       this.parallelDecoder = preparation.parallelDecoder;
       this.useParallelDecode = preparation.useParallelDecode;
+      this.mediaFiles = preparation.mediaFiles;
+      this.mediaCompositions = preparation.mediaCompositions;
       this.reportPreparedRuntimeResources(true);
       await prepareTransitionCompositionsForExport();
 
@@ -121,6 +126,8 @@ export class FFmpegFrameRenderer {
       this.releaseRuntimeResources();
       this.parallelDecoder = null;
       this.useParallelDecode = false;
+      this.mediaFiles = [];
+      this.mediaCompositions = [];
       throw error;
     }
   }
@@ -181,6 +188,8 @@ export class FFmpegFrameRenderer {
 
     this.parallelDecoder = null;
     this.useParallelDecode = false;
+    this.mediaFiles = [];
+    this.mediaCompositions = [];
     this.initialized = false;
     this.cleanedUp = true;
 
@@ -229,6 +238,8 @@ export class FFmpegFrameRenderer {
       trackMap,
       clipsByTrack,
       transitionParticipantsByTrack,
+      mediaFiles: this.mediaFiles,
+      mediaCompositions: this.mediaCompositions,
       getInterpolatedTransform: state.getInterpolatedTransform,
       getInterpolatedEffects: state.getInterpolatedEffects,
       getInterpolatedColorCorrection: state.getInterpolatedColorCorrection,

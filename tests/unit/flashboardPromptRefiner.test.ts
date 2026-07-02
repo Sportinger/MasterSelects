@@ -188,6 +188,28 @@ describe('FlashBoardPromptRefiner', () => {
     expect(instructions).toContain('Sound generation is enabled');
   });
 
+  it('tells video prompt refinement not to redescribe supplied start and end frames', () => {
+    const userText = buildFlashBoardPromptRefinerUserText({
+      prompt: 'make it move naturally from one drawing to the other',
+      entry: klingEntry,
+      service: klingEntry.service,
+      providerId: klingEntry.providerId,
+      mode: 'pro',
+      duration: 5,
+      aspectRatio: '16:9',
+      imageSize: '720p',
+      generateAudio: false,
+      multiShots: false,
+    }, [
+      { role: 'start', label: 'START', displayName: 'first-frame.png', mediaType: 'image' },
+      { role: 'end', label: 'END', displayName: 'last-frame.png', mediaType: 'image' },
+    ]);
+
+    expect(userText).toContain('START/END images are already supplied');
+    expect(userText).toContain('Do not describe their visible content');
+    expect(userText).toContain('what happens between');
+  });
+
   it('builds Seedance 2 prompt guidance around multimodal and audio-driven references', () => {
     const instructions = buildFlashBoardPromptRefinerInstructions({
       entry: seedanceEntry,

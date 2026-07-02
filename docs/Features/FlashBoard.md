@@ -2,7 +2,7 @@
 
 # FlashBoard
 
-FlashBoard is the AI generation runtime behind the Media Panel's bottom-right prompt tray. Its compact composer supports text-to-video, image-to-video, image generation, ElevenLabs text-to-speech, and Suno music generation, with direct import into the Media Pool.
+FlashBoard is the AI generation runtime behind the Media Panel's bottom-right prompt tray. Its compact composer supports text-to-video, image-to-video, image generation, ElevenLabs text-to-speech, and Suno music generation, with direct import into the Media Pool. Projects persist the last selected model plus per-model generation settings. Prompt refinement treats START and END frame references as supplied video anchors and focuses on the motion between them instead of redescribing the images.
 
 > **Status:** Implemented. The compact composer is active inside Media, queued, persisted with the project, and connected to the current AI provider catalog.
 
@@ -28,11 +28,11 @@ The Media Panel generator tray offers two collapsed launch actions: `Generate` o
 FlashBoard is composed of:
 
 - `MediaAIGenerativeTray` - Media Panel bottom-right expand/collapse shell
-- `MediaAIGenerationQueue` - compact Media Panel preview cards for queued, processing, failed, and canceled generation nodes
+- `MediaAIGenerationQueue` - compact Media Panel preview cards for queued, processing, failed, and canceled generation nodes, including model/settings labels and local cancellation for running AI jobs
 - `useFlashBoardRuntime` - board initialization plus queue/import callbacks
 - `FlashBoardComposer` - provider/output selection, separate generate/chat prompt windows, ordered media reference cards, compact chat controls, text-to-speech or music editing, durations, aspect ratio, image size, multi-shot setup, audio voice settings, and Suno song controls
 
-Boards are persisted inside the project state. The active board is restored on project load, and generation metadata is serialized alongside the board state.
+Boards are persisted inside the project state. The active board is restored on project load, generation metadata is serialized alongside the board state, and the prompt book keeps the project's generated and chat prompts available for review and copy. Prompt book generation pages group outputs by user prompt, show the Magic Wand prompt when one produced the final request, and preview generated images/videos directly on the page.
 
 ---
 
@@ -101,7 +101,7 @@ The compact composer exposes the richer FlashBoard catalog.
 8. Suno music and Suno Sounds jobs use Cloudflare `/api/ai/audio` in production, where the server calls Kie.ai with `KIEAI_API_KEY`, spends hosted credits, polls the task until a generated audio URL is available, then imports the downloaded audio. Non-production BYO jobs can still call Kie.ai with the local default key. Suno Sounds uses the same audio import path after polling and does not expose the Suno Music lyrics/style/tuning controls.
 9. On success, `FlashBoardMediaBridge` imports the asset into the Media Pool and marks the node complete.
 
-Kie.ai Market video/image tasks are asynchronous. A successful create call only returns a `taskId`; FlashBoard polls `GET /api/v1/jobs/recordInfo?taskId=...` and maps Kie states such as `waiting`, `queuing`, `generating`, `success`, and `fail` into local job states. Flux Kontext, Veo, and Runway use dedicated Kie create/status endpoints because their result schemas differ from Market jobs. The local `canceled` state only means MasterSelects stopped tracking the node; Kie.ai does not currently expose a documented Market task cancel endpoint, so the Kie logs page and provider record responses remain the server-side source of truth.
+Kie.ai Market video/image tasks are asynchronous. A successful create call only returns a `taskId`; FlashBoard polls `GET /api/v1/jobs/recordInfo?taskId=...` and maps Kie states such as `waiting`, `queuing`, `generating`, `success`, and `fail` into local job states. Running remote task IDs are persisted with the project; after reload, FlashBoard resumes polling resumable image/video/Suno jobs and imports the result if the provider finished while the app was closed. Flux Kontext, Veo, and Runway use dedicated Kie create/status endpoints because their result schemas differ from Market jobs. The local `canceled` state only means MasterSelects stopped tracking the node; Kie.ai does not currently expose a documented Market task cancel endpoint, so the Kie logs page and provider record responses remain the server-side source of truth.
 
 Image generation is handled alongside video generation. The code path resolves previewable reference images from media files, including thumbnails for video sources or a captured frame when needed. The compact composer also accepts media-panel image, video, and audio references through right-click or drag-and-drop; Kie.ai and Cloud Seedance jobs upload local files through Kie.ai file hosting and map them to provider-specific inputs such as Nano Banana `image_input`, Kling `kling_elements`, or Seedance multimodal reference URL arrays. Seedance 2.0 standard exposes 480p, 720p, and 1080p; Seedance 2.0 Fast exposes 480p and 720p. Both use `reference_audio_urls` for audio-driven sync. Because Kie.ai treats Seedance first/last-frame mode and multimodal reference mode as mutually exclusive, any Seedance request with generic references sends IN/OUT images as image references with prompt guidance instead of `first_frame_url` / `last_frame_url`.
 
@@ -121,9 +121,9 @@ Completed assets are imported under:
 - `AI Gen / Images`
 - `AI Gen / Audio`
 
-The bridge stores generation metadata keyed by imported media file ID so project save/restore can round-trip the generated asset provenance. The imported asset can be dragged to the timeline or inserted directly at the playhead. Audio nodes use the same external drag payload as Media Panel audio and route to audio tracks.
+The bridge stores generation metadata keyed by imported media file ID so project save/restore can round-trip the generated asset provenance. The imported asset can be dragged to the timeline or inserted directly at the playhead, and generated media items and timeline clips expose `Copy Prompt` in their context menus when prompt metadata exists. Audio nodes use the same external drag payload as Media Panel audio and route to audio tracks.
 
-Media Panel image, video, and audio files can also be dragged onto the prompt composer to append them to the ordered reference strip. Right-clicking supported media files in Classic, Icons, or Board view toggles the same reference state and opens the generator tray.
+Media Panel image, video, and audio files can also be dragged onto the prompt composer to append them to the ordered reference strip or assign visible IN/OUT/REF/VID/AUD ghost slots, with a short ghost-to-card transition on drop. Right-clicking supported media files in Classic, Icons, or Board view toggles the same reference state and opens the generator tray. In Board view, right-button dragging media onto the expanded FlashBoard composer uses the highlighted ghost slot when one is targeted, otherwise appends references without moving the board item. Double-clicking a reference card opens that media in the Source Monitor.
 
 ---
 

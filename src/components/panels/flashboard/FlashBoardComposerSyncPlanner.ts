@@ -1,4 +1,5 @@
 import type {
+  FlashBoardComposerModelSettings,
   FlashBoardComposerState,
   FlashBoardMultiShotPrompt,
   FlashBoardOutputType,
@@ -12,15 +13,19 @@ interface FlashBoardComposerSyncEntry {
 }
 
 interface BuildFlashBoardComposerSyncPatchInput {
+  aspectRatio: string;
   composer: FlashBoardComposerState;
+  duration: number;
   effectiveGenerateAudio: boolean;
   effectiveReferenceMediaFileIds: string[];
+  imageSize: string;
   isAudioMode: boolean;
   isElevenLabsMode: boolean;
   isSunoMode: boolean;
   languageCode: string;
   languageOverride: boolean;
   maxReferenceMedia?: number;
+  mode: string;
   multiShots: boolean;
   normalizedMultiPrompt: FlashBoardMultiShotPrompt[];
   outputFormat: string;
@@ -61,16 +66,37 @@ function areMultiPromptsEqual(
   ));
 }
 
+function getModelSettingsKey(service: FlashBoardComposerState['service'], providerId: string): string {
+  return `${service ?? ''}:${providerId}`;
+}
+
+function areModelSettingsEqual(
+  left: FlashBoardComposerModelSettings | undefined,
+  right: FlashBoardComposerModelSettings,
+): boolean {
+  return left?.version === right.version
+    && left?.mode === right.mode
+    && left?.duration === right.duration
+    && left?.aspectRatio === right.aspectRatio
+    && left?.imageSize === right.imageSize
+    && left?.generateAudio === right.generateAudio
+    && left?.multiShots === right.multiShots;
+}
+
 export function buildFlashBoardComposerSyncPatch({
+  aspectRatio,
   composer,
+  duration,
   effectiveGenerateAudio,
   effectiveReferenceMediaFileIds,
+  imageSize,
   isAudioMode,
   isElevenLabsMode,
   isSunoMode,
   languageCode,
   languageOverride,
   maxReferenceMedia,
+  mode,
   multiShots,
   normalizedMultiPrompt,
   outputFormat,
@@ -100,6 +126,10 @@ export function buildFlashBoardComposerSyncPatch({
   if (composer.providerId !== providerId) nextPatch.providerId = providerId;
   if (composer.version !== version) nextPatch.version = version;
   if (composer.outputType !== nextOutputType) nextPatch.outputType = nextOutputType;
+  if (composer.mode !== mode) nextPatch.mode = mode;
+  if (composer.duration !== duration) nextPatch.duration = duration;
+  if (composer.aspectRatio !== aspectRatio) nextPatch.aspectRatio = aspectRatio;
+  if (composer.imageSize !== imageSize) nextPatch.imageSize = imageSize;
   if (composer.generateAudio !== effectiveGenerateAudio) nextPatch.generateAudio = effectiveGenerateAudio;
   if (composer.multiShots !== multiShots) nextPatch.multiShots = multiShots;
   if (!areMultiPromptsEqual(composer.multiPrompt, nextComposerMultiPrompt)) {
@@ -158,6 +188,26 @@ export function buildFlashBoardComposerSyncPatch({
     && composer.referenceMediaFileIds !== effectiveReferenceMediaFileIds
   ) {
     nextPatch.referenceMediaFileIds = effectiveReferenceMediaFileIds;
+  }
+
+  const modelSettings: FlashBoardComposerModelSettings = {
+    version,
+    mode,
+    duration,
+    aspectRatio,
+    imageSize,
+    generateAudio: effectiveGenerateAudio,
+    multiShots,
+  };
+  const modelSettingsKey = getModelSettingsKey(service, providerId);
+  if (
+    providerId
+    && !areModelSettingsEqual(composer.modelSettingsByKey?.[modelSettingsKey], modelSettings)
+  ) {
+    nextPatch.modelSettingsByKey = {
+      ...(composer.modelSettingsByKey ?? {}),
+      [modelSettingsKey]: modelSettings,
+    };
   }
 
   return nextPatch;

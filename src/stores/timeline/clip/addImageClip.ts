@@ -1,8 +1,8 @@
 // Image clip addition - extracted from addClip
 // Handles image file loading and thumbnail generation
 
-import type { TimelineClip } from '../../../types';
-import { DEFAULT_TRANSFORM, calculateNativeScale } from '../constants';
+import type { TimelineClip } from '../../../types/timeline';
+import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { startTimelineImageHydration } from '../../../services/timeline/imageRuntimeHydrator';
 import { generateImageThumbnail } from '../helpers/thumbnailHelpers';
@@ -66,14 +66,9 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
   const thumbnail = generateImageThumbnail(img);
   const thumbnails = thumbnail ? [thumbnail] : [];
 
-  // Calculate native pixel scale so content appears at actual size
-  const nativeScale = (img.naturalWidth && img.naturalHeight)
-    ? calculateNativeScale(img.naturalWidth, img.naturalHeight)
-    : { x: 1, y: 1 };
-
   updateClip(clip.id, {
     source: { type: 'image', imageUrl, naturalDuration: clip.duration, mediaFileId },
-    transform: { ...DEFAULT_TRANSFORM, scale: nativeScale },
+    transform: { ...DEFAULT_TRANSFORM },
     thumbnails,
     isLoading: false,
   });

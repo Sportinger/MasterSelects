@@ -558,6 +558,31 @@ input[type="checkbox"] {
   background: transparent;
 }
 
+.timeline-copy-prompt-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 10001;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: timeline-copy-prompt-toast 900ms ease-out forwards;
+}
+
+@keyframes timeline-copy-prompt-toast {
+  0% { opacity: 0; transform: translate(-50%, 6px); }
+  15% { opacity: 1; transform: translate(-50%, 0); }
+  80% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); }
+}
+
 .context-menu-item.danger {
   color: var(--danger);
 }

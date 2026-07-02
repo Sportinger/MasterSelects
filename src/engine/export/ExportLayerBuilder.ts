@@ -3,6 +3,7 @@
 import { Logger } from '../../services/logger';
 import type { Layer, NestedCompositionData } from '../../types/layers';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
+import { useMediaStore } from '../../stores/mediaStore';
 import type { ExportClipState, FrameContext } from './types';
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import {
@@ -11,7 +12,6 @@ import {
   buildMotionSource,
   getCompositionSize,
   getExportImageElement,
-  getExportVideoElement,
 } from './layerBuilder/sourceLookup';
 import { getClipSourceWindowTime } from './layerBuilder/timing';
 import { buildBaseLayerProps } from './layerBuilder/baseLayers';
@@ -23,6 +23,11 @@ import { buildTextLikeLayer, isTextLikeClipSource } from './layerBuilder/textLay
 import { buildVideoLayer } from './layerBuilder/videoLayers';
 
 const log = Logger.create('ExportLayerBuilder');
+
+type FrameContextWithMedia = FrameContext & {
+  mediaFiles: NonNullable<FrameContext['mediaFiles']>;
+  mediaCompositions: NonNullable<FrameContext['mediaCompositions']>;
+};
 
 // Cache video tracks and solo state at export start (don't change during export)
 let cachedVideoTracks: TimelineTrack[] | null = null;
@@ -49,7 +54,7 @@ function withOpacityOverride<T extends { opacity: number }>(baseLayerProps: T, o
 function buildExportLayerForClip(
   clip: TimelineClip,
   trackIndex: number,
-  ctx: FrameContext,
+  ctx: FrameContextWithMedia,
   clipStates: Map<string, ExportClipState>,
   parallelDecoder: ParallelDecodeManager | null,
   useParallelDecode: boolean,
@@ -75,7 +80,9 @@ function buildExportLayerForClip(
       time,
       clipStates,
       parallelDecoder,
-      useParallelDecode
+      useParallelDecode,
+      ctx.mediaFiles,
+      ctx.mediaCompositions
     );
 
     if (nestedLayers.length > 0) {
@@ -103,7 +110,7 @@ function buildExportLayerForClip(
   }
 
   // Handle video clips
-  if (clip.source?.type === 'video' && getExportVideoElement(clip, clipStates)) {
+  if (clip.source?.type === 'video') {
     const sourceMediaTime = getClipSourceWindowTime(clip, clipLocalTime, ctx);
     return buildVideoLayer(
       clip,
@@ -179,6 +186,10 @@ export function buildLayersAtTime(
   useParallelDecode: boolean
 ): Layer[] {
   const { clipsByTrack, transitionParticipantsByTrack } = ctx;
+  const mediaState = ctx.mediaFiles && ctx.mediaCompositions ? null : useMediaStore.getState();
+  const mediaFiles = ctx.mediaFiles ?? mediaState?.files ?? [];
+  const mediaCompositions = ctx.mediaCompositions ?? mediaState?.compositions ?? [];
+  const layerContext: FrameContextWithMedia = { ...ctx, mediaFiles, mediaCompositions };
   const layers: Layer[] = [];
 
   if (!cachedVideoTracks) {
@@ -208,6 +219,8 @@ export function buildLayersAtTime(
         clipStates,
         parallelDecoder,
         useParallelDecode,
+        mediaFiles,
+        mediaCompositions,
       });
       if (transitionCompLayer) {
         layers.push(transitionCompLayer);
@@ -222,7 +235,7 @@ export function buildLayersAtTime(
     const layer = buildExportLayerForClip(
       clip,
       trackIndex,
-      ctx,
+      layerContext,
       clipStates,
       parallelDecoder,
       useParallelDecode,

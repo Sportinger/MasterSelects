@@ -620,22 +620,15 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     };
   },
 
-  splitAllClipsAtTime: (time, trackIds) => get().applyTimelineEditOperation({
-    id: `split-all-at-time:${time}`,
-    type: 'split-all-at-time',
-    time,
-    trackIds,
-    includeLinked: true,
-  }, { source: 'ui', historyLabel: 'Split all clips at time' }),
+  splitAllClipsAtTime: (time, trackIds) => get().applyTimelineEditOperation(
+    { id: `split-all-at-time:${time}`, type: 'split-all-at-time', time, trackIds, includeLinked: true },
+    { source: 'ui', historyLabel: 'Split all clips at time' },
+  ),
 
-  selectClipsFromTime: (time, options = {}) => get().applyTimelineEditOperation({
-    id: `select-clips-from-time:${time}`,
-    type: 'select-clips-from-time',
-    time,
-    direction: options.direction ?? 'forward',
-    trackIds: options.trackIds,
-    includeLinked: options.includeLinked ?? true,
-  }, { source: 'ui', historyLabel: 'Select clips from time' }),
+  selectClipsFromTime: (time, options = {}) => get().applyTimelineEditOperation(
+    { id: `select-clips-from-time:${time}`, type: 'select-clips-from-time', time, direction: options.direction ?? 'forward', trackIds: options.trackIds, includeLinked: options.includeLinked ?? true },
+    { source: 'ui', historyLabel: 'Select clips from time' },
+  ),
 
   rippleDeleteSelection: (clipIds) => get().applyTimelineEditOperation({
     id: `ripple-delete-selection:${Date.now()}`,
@@ -651,12 +644,10 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     includeLinked: true,
   }, { source: 'ui', historyLabel: 'Delete clips' }),
 
-  deleteGapAtTime: (time, trackIds) => get().applyTimelineEditOperation({
-    id: `delete-gap-at-time:${time}`,
-    type: 'delete-gap-at-time',
-    time,
-    trackIds,
-  }, { source: 'ui', historyLabel: 'Delete gap' }),
+  deleteGapAtTime: (time, trackIds) => get().applyTimelineEditOperation(
+    { id: `delete-gap-at-time:${time}`, type: 'delete-gap-at-time', time, trackIds },
+    { source: 'ui', historyLabel: 'Delete gap' },
+  ),
 
   deleteAllGaps: (trackIds, startTime) => get().applyTimelineEditOperation({
     id: `delete-all-gaps:${Date.now()}`,
@@ -696,15 +687,13 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     rippleDelta: options.rippleDelta,
   }, { source: options.source ?? 'ui', historyLabel: options.historyLabel ?? 'Prepare timeline placement' }),
 
-  liftTimelineRange: () => get().applyTimelineEditOperation({
-    id: `lift-range:${Date.now()}`,
-    type: 'lift-range',
-    includeLinked: true,
-  }, { source: 'ui', historyLabel: 'Lift range' }),
+  liftTimelineRange: () => get().applyTimelineEditOperation(
+    { id: `lift-range:${Date.now()}`, type: 'lift-range', includeLinked: true },
+    { source: 'ui', historyLabel: 'Lift range' },
+  ),
 
-  extractTimelineRange: () => get().applyTimelineEditOperation({
-    id: `extract-range:${Date.now()}`,
-    type: 'extract-range',
-    includeLinked: true,
-  }, { source: 'ui', historyLabel: 'Extract range' }),
+  extractTimelineRange: () => get().applyTimelineEditOperation(
+    { id: `extract-range:${Date.now()}`, type: 'extract-range', includeLinked: true },
+    { source: 'ui', historyLabel: 'Extract range' },
+  ),
 });

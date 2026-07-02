@@ -5,6 +5,7 @@ import {
   executeClipContextMenuAudioAnalysisRegeneration,
   executeClipContextMenuAudioProxyRegeneration,
   executeClipContextMenuClipboardCommand,
+  executeClipContextMenuCopyPrompt,
   executeClipContextMenuLabelColor,
   executeClipContextMenuProxyGeneration,
   executeClipContextMenuShowInExplorer,
@@ -580,6 +581,37 @@ describe('clip context menu model', () => {
       actions,
     })).toBe(false);
     expect(actions.pasteClipEffects).not.toHaveBeenCalled();
+  });
+
+  it('copies generation prompts to the system clipboard only when prompt data exists', async () => {
+    const writeClipboardText = vi.fn(async () => undefined);
+    const onCopied = vi.fn();
+
+    await expect(executeClipContextMenuCopyPrompt({
+      prompt: '  A cinematic generated shot.  ',
+      canExecute: true,
+      writeClipboardText,
+      onCopied,
+    })).resolves.toBe(true);
+
+    expect(writeClipboardText).toHaveBeenCalledWith('A cinematic generated shot.');
+    expect(onCopied).toHaveBeenCalledTimes(1);
+
+    await expect(executeClipContextMenuCopyPrompt({
+      prompt: '',
+      canExecute: true,
+      writeClipboardText,
+      onCopied,
+    })).resolves.toBe(false);
+    await expect(executeClipContextMenuCopyPrompt({
+      prompt: 'Has prompt but disabled',
+      canExecute: false,
+      writeClipboardText,
+      onCopied,
+    })).resolves.toBe(false);
+
+    expect(writeClipboardText).toHaveBeenCalledTimes(1);
+    expect(onCopied).toHaveBeenCalledTimes(1);
   });
 
   it('derives delete-gap command time from the clip start', () => {

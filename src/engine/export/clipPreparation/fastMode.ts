@@ -3,7 +3,7 @@ import type { TimelineClip } from '../../../stores/timeline/types';
 import type { MediaFile } from '../../../stores/mediaStore/types';
 import { releaseReservedExportFrameProvider, reserveExportFrameProvider } from '../../../services/timeline/exportRuntimeReporting';
 import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
-import type { ClipPreparationResult, ExportClipState } from '../ClipPreparation';
+import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import {
   createExportPreparationAdmissionError,
   createRuntimeBindingPlan,
@@ -25,7 +25,7 @@ export async function initializeFastMode(
   fps: number,
   exportRunId: string | undefined,
   endPrepare: () => void
-): Promise<ClipPreparationResult> {
+): Promise<ClipPreparationModeResult> {
   const { WebCodecsPlayer } = await import('../../WebCodecsPlayer');
   const fileDataCache: ClipFileDataCache = new Map();
   const initializeSequentialClip = async (clip: TimelineClip): Promise<void> => {
