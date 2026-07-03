@@ -292,10 +292,8 @@ export const getStateAccessPolicyBaselines = {
   // 192 ->193(218) ->196(227) ->199(231) ->203(239) ->205(246) ->206(253/254)
   // ->207(259) ->208(267) ->212(279) ->216(287) ->230(audio mixer) ->231(2.3.3) ->236(transition nested comps).
   classCHardTargetFileCount: 236,
-  // 669 -> 665 (packet 188 Preview cut) -> 664 (packet 209 retired one hit)
-  // -> 659 (packet 231 retired the dispatcher ceiling slack: 16 -> 11 actual)
-  // -> 658 (packet 237 retired one compositionRenderer hit)
-  // -> 657 (packet 291 export layerBuilder site) -> 664 (staging transition
-  // nested comps) -> 673 (#249 piano-roll 4 -> 13, merged into staging).
+  // 669 -> 665 (188) -> 664 (209) -> 659 (231) -> 658 (237) -> 657 (291)
+  // -> 664 (staging transition nested comps)
+  // -> 673 (#249 piano-roll 4 -> 13, merged into staging).
   classCHardTargetMaxHits: 673,
 } as const;
